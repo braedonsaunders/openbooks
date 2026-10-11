@@ -11,9 +11,9 @@ import type { ApiField, ResolvedApiType } from "./registry-data.ts";
 // through an org-scoped resolver and refuses unknown ids — the API writer
 // must fail closed the same way, with a tenant-opaque 404.
 const { createRecord, updateRecord } = await import("./writers.ts");
-const { db, withBypass, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
+const { db, withBypass, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  "@openbooks/engine/src/testing/fixtures.ts"
+  "@openbooks/engine/testing/fixtures"
 );
 
 const DB = !!process.env.OPENBOOKS_DB_URL;

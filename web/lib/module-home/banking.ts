@@ -1,12 +1,12 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { addCalendarDays, businessToday, weekStartsEndingOn } from '@openbooks/engine/src/platform/business-date.ts'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { addCalendarDays, businessToday, weekStartsEndingOn } from '@openbooks/engine/platform/business-date/module'
+import { db } from '@openbooks/engine/platform/db'
 import { BANK_KINDS } from "../document-kinds.ts";
 import { bankAccountMembership } from '../banking-accounts'
 import { statementBookExpr } from '../gl-summary'
 import { lineFunctional, presentationCurrency, presentationRates } from '../fx-presentation'
-import { add, cmp, mulDecimal, neg, sum, toUnits } from '@openbooks/engine/src/money/money.ts'
+import { add, cmp, mulDecimal, neg, sum, toUnits } from '@openbooks/engine/money/money'
 
 /**
  * Banking module home — one light round trip for the workspace landing

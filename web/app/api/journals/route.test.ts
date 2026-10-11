@@ -158,7 +158,7 @@ stubModules({
        if (!state.inserted || id !== state.requestKey) return null
        return { doc: { id, org_id: orgId, kind: 'journal', document_number: 'JE-000007' }, lines: [] }
      }`,
-    "@openbooks/engine/src/platform/business-date.ts": `export async function businessToday() { return globalThis[Symbol.for('openbooks.journals-route-test')].clockDate }
+    "@openbooks/engine/platform/business-date/module": `export async function businessToday() { return globalThis[Symbol.for('openbooks.journals-route-test')].clockDate }
      export { isIsoCalendarDate } from '${ISO_DATE_URL}'`,
   },
 });

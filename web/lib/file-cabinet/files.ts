@@ -7,7 +7,7 @@ import { deriveExtension, resolveReadScope, visibleFolderPredicate, visibleFileP
 import { type FileMutationAudit, viewerFileGate, viewerFolderGate, lockCabinetAuthorization, runMutation } from './mutation'
 import { createHash } from 'node:crypto'
 import { sql, type SQL } from 'drizzle-orm'
-import { db, inDbTransaction, type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
+import { db, inDbTransaction, type SqlExecutor } from '@openbooks/engine/platform/db'
 import { activeStorageKind, deleteS3Blobs, enqueueStorageCleanupStandalone, fileCabinetObjectKey, getS3Blob, putS3Blob, refuseMaskedStorageKind } from '../file-storage'
 import { recordFileEvent } from '../file-audit'
 

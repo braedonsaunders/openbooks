@@ -37,9 +37,9 @@ registerHooks({
   },
 });
 const { GET } = await import("./route.ts");
-const { db, withBypassContext } = (await import(root + "engine/src/platform/db.ts")) as typeof import("@openbooks/engine/src/platform/db.ts");
+const { db, withBypassContext } = (await import("@openbooks/engine/platform/db")) as typeof import("@openbooks/engine/platform/db");
 const { sql } = await import(root + "node_modules/drizzle-orm/index.js");
-const { createScratchOrg, dropScratchOrg } = (await import(root + "engine/src/testing/fixtures.ts")) as typeof import("@openbooks/engine/src/testing/fixtures.ts");
+const { createScratchOrg, dropScratchOrg } = (await import("@openbooks/engine/testing/fixtures")) as typeof import("@openbooks/engine/testing/fixtures");
 const { PAYROLL_RESTRICTED_PARTY_LABEL } = (await import(root + "web/lib/payroll-confidentiality.ts")) as typeof import("@/lib/payroll-confidentiality.ts");
 
 const NET_A = "4842.17";

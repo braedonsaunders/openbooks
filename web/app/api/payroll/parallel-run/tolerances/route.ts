@@ -3,13 +3,13 @@ import { defineRoute } from '@/lib/api/route'
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { parseJsonBody } from "@/lib/api/json"
 import { NextResponse } from 'next/server'
-import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
-import { PayrollError } from "@openbooks/engine/src/payroll/error.ts";
+import { normalizeMoney } from '@openbooks/engine/money/money'
+import { PayrollError } from "@openbooks/engine/payroll/error";
 import {
   deleteParallelTolerance,
   parallelTolerances,
   saveParallelTolerance,
-} from '@openbooks/engine/src/payroll/parallel-run-store.ts'
+} from '@openbooks/engine/payroll/parallel-run-store'
 import { canonicalDecimal } from '../../../../../lib/exact-decimal'
 import { moneyRefusal } from '../../../../../lib/payroll-decimal-refusal'
 import '../../../../../lib/feature-gates';

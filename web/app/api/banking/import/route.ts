@@ -18,8 +18,8 @@ import {
   type ParsedStatement,
   type ParsedStatementLine,
   type SkippedStatementRow,
-} from '@openbooks/engine/src/banking/banking.ts'
-import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
+} from '@openbooks/engine/banking/banking'
+import { normalizeMoney } from '@openbooks/engine/money/money'
 import { canonicalDecimal } from '../../../../lib/exact-decimal'
 import { moneyRefusal } from '../../../../lib/payroll-decimal-refusal'
 

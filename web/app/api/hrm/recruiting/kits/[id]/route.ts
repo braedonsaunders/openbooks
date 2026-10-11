@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import {
   deleteKit,
   setKitActive,
-} from "@openbooks/engine/src/hrm/recruiting/kits.ts";
+} from "@openbooks/engine/hrm/recruiting/kits";
 
 import { recruitingErrorResponse } from "../../_lib";
 import { setKitActiveBody } from "../bodies";

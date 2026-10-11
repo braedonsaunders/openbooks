@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm'
 import { resolveIdempotentReplay } from '@openbooks/engine/records/idempotent-replay'
-import type { SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
+import type { SqlExecutor } from '@openbooks/engine/platform/db'
 
 // The narrowest runner every caller already satisfies: full transaction
 // executors (routes, setupWriteTransaction) and SqlExecutor-typed helpers

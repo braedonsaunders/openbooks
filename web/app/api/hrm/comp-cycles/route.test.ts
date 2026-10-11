@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import nodeTest from "node:test";
 import { NextResponse } from "next/server";
-import { CompensationError } from "@openbooks/engine/src/hrm/compensation/errors.ts";
+import { CompensationError } from "@openbooks/engine/hrm/compensation/errors";
 
 interface RouteState {
   gate: { user: { id: string; orgId: string } } | { status: number };
@@ -140,7 +140,7 @@ const mockUrls = new Map<string, string>([
   ["../../../../../../../lib/features", "mock:authz"],
   ["@/lib/authz", "mock:authz"],
   ["@/lib/feature-gates", "mock:authz"],
-  ["@openbooks/engine/src/hrm/compensation/cycles.ts", "mock:cycles"],
+  ["@openbooks/engine/hrm/compensation/cycles", "mock:cycles"],
 ]);
 
 let collectionRoute: typeof import("./route.ts") | undefined;

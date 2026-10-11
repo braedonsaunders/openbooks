@@ -2,7 +2,7 @@ import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { notFound } from "@/lib/api/responses";
 import { NextResponse } from "next/server";
-import { retractFeedback } from "@openbooks/engine/src/hrm/performance/feedback.ts";
+import { retractFeedback } from "@openbooks/engine/hrm/performance/feedback";
 
 import { isFeatureEnabled } from "../../../../../../lib/features";
 import { performanceErrorResponse } from "../../../review-cycles/_lib";

@@ -1,4 +1,4 @@
-import { settingContributionSchema } from '@openbooks/engine/src/extensions/contribution-schemas.ts'
+import { settingContributionSchema } from '@openbooks/engine/extensions/contribution-schemas'
 /** Values and effective-dated history are owned by the engine projection service. */
 export { settingContributionSchema }
 

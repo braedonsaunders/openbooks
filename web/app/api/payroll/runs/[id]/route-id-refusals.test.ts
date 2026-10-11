@@ -102,7 +102,7 @@ const mockSources = new Map<string, string>([
     'mock:payroll-run-adjustments',
     `
       export async function recordPayRunHolidayHours() { throw new Error('not under test') }
-      export { canonicalAdjustmentHours } from ${JSON.stringify(import.meta.resolve('@openbooks/engine/src/payroll/run-adjustments.ts'))}
+      export { canonicalAdjustmentHours } from ${JSON.stringify(import.meta.resolve('@openbooks/engine/payroll/run-adjustments'))}
       const state = globalThis[Symbol.for('openbooks.payroll-run-id-refusals-test')]
       export async function mutatePayRunAdjustment(input) { state.adjustmentCalls.push(input); return { changed: true } }
       export class PayRunAdjustmentIdempotencyConflict extends Error {}
@@ -117,19 +117,19 @@ const mockSources = new Map<string, string>([
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === '@openbooks/engine/src/platform/db.ts') return { url: 'mock:db', shortCircuit: true }
-    if (['@openbooks/engine/src/payroll/run-calculation.ts', '@openbooks/engine/src/payroll/run-commit.ts', '@openbooks/engine/src/payroll/run-lifecycle.ts'].includes(specifier)) return { url: 'mock:payroll-run', shortCircuit: true }
-    if (specifier === '@openbooks/engine/src/payroll/payment.ts') return { url: 'mock:payroll-payment', shortCircuit: true }
-    if (specifier === '@openbooks/engine/src/payroll/readiness.ts') return { url: 'mock:payroll-readiness', shortCircuit: true }
-    if (specifier === '@openbooks/engine/src/payroll/approval.ts') return { url: 'mock:payroll-approval', shortCircuit: true }
-    if (specifier === '@openbooks/engine/src/flows/index.ts') return { url: 'mock:flows', shortCircuit: true }
-    if (specifier === '@openbooks/engine/src/payroll/run-adjustments.ts') {
+    if (specifier === '@openbooks/engine/platform/db') return { url: 'mock:db', shortCircuit: true }
+    if (['@openbooks/engine/payroll/run-calculation', '@openbooks/engine/payroll/run-commit', '@openbooks/engine/payroll/run-lifecycle'].includes(specifier)) return { url: 'mock:payroll-run', shortCircuit: true }
+    if (specifier === '@openbooks/engine/payroll/payment') return { url: 'mock:payroll-payment', shortCircuit: true }
+    if (specifier === '@openbooks/engine/payroll/readiness') return { url: 'mock:payroll-readiness', shortCircuit: true }
+    if (specifier === '@openbooks/engine/payroll/approval') return { url: 'mock:payroll-approval', shortCircuit: true }
+    if (specifier === '@openbooks/engine/flows/module') return { url: 'mock:flows', shortCircuit: true }
+    if (specifier === '@openbooks/engine/payroll/run-adjustments') {
       return { url: 'mock:payroll-run-adjustments', shortCircuit: true }
     }
-    if (specifier === '@openbooks/engine/src/payroll/holiday-attestations.ts') {
+    if (specifier === '@openbooks/engine/payroll/holiday-attestations') {
       return { url: 'mock:payroll-holiday-attestations', shortCircuit: true }
     }
-    if (specifier === '@openbooks/engine/src/payroll/scope.ts') return { url: 'mock:payroll-scope', shortCircuit: true }
+    if (specifier === '@openbooks/engine/payroll/scope') return { url: 'mock:payroll-scope', shortCircuit: true }
     if (specifier.endsWith('/lib/payroll-outputs')) return { url: 'mock:payroll-outputs', shortCircuit: true }
     if (specifier.endsWith('/lib/payroll-evidence')) return { url: 'mock:payroll-evidence', shortCircuit: true }
     if (specifier.endsWith('/lib/feature-gates')) return { url: 'mock:feature-gates', shortCircuit: true }

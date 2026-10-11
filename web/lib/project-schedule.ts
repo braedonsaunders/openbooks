@@ -1,13 +1,13 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { db, withOrgTransaction, type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
-import { lockAndCheckOrgFeature } from '@openbooks/engine/src/organization/org-feature-lock.ts'
+import { db, withOrgTransaction, type SqlExecutor } from '@openbooks/engine/platform/db'
+import { lockAndCheckOrgFeature } from '@openbooks/engine/organization/org-feature-lock'
 import {
   lockProjectForScope,
   ScopeNotFoundError,
   withScopeSnapshot,
-} from '@openbooks/engine/src/organization/subsidiary-scope.ts'
-import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
+} from '@openbooks/engine/organization/scope'
+import { normalizeMoney } from '@openbooks/engine/money/money'
 import type {
   ScheduleData,
   ScheduleDependency,
@@ -16,15 +16,15 @@ import type {
 } from '@braedonsaunders/appkit-scheduling'
 import { wouldCreateDependencyCycle } from '@braedonsaunders/appkit-scheduling'
 import { canonicalDecimal, compareDecimal, isPositiveDecimal } from './exact-decimal'
-import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
+import { isIsoCalendarDate } from '@openbooks/engine/platform/business-date/module'
 import { isUuid } from './list-params'
 import { acquireFeatureGateLock, isFeatureEnabled } from './features'
-import { HrmQualificationError } from '@openbooks/engine/src/hrm/qualifications/errors.ts'
+import { HrmQualificationError } from '@openbooks/engine/hrm/qualifications/errors'
 import {
   gateScheduleAssignment,
   noteWarnedDispatch,
   refuseBlockedDispatch,
-} from '@openbooks/engine/src/hrm/qualifications/gating.ts'
+} from '@openbooks/engine/hrm/qualifications/gating'
 
 /**
  * Project schedule persistence.

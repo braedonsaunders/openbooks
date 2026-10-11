@@ -1,8 +1,8 @@
 import 'server-only'
 
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { normalizeMoney, toUnits } from '@openbooks/engine/src/money/money.ts'
+import { db } from '@openbooks/engine/platform/db'
+import { normalizeMoney, toUnits } from '@openbooks/engine/money/money'
 import type { BudgetDimensions } from './budgets'
 import { PNL_TYPES } from './account-types'
 import { canonicalDecimal } from './exact-decimal'

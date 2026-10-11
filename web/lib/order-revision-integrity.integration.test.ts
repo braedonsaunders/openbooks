@@ -12,9 +12,9 @@ registerHooks({ resolve(specifier, context, next) {
   if (specifier === "./auth" && context.parentURL?.endsWith("/web/lib/authz.ts")) return { shortCircuit: true, url: "data:text/javascript,export async function currentUser(){return globalThis.__orderRevisionUser.user}" };
   return next(specifier,context);
 }});
-const { db, withBypassContext, withOrg, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
+const { db, withBypassContext, withOrg, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { sql } = await import("drizzle-orm");
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
 const { makeGET, makePATCH, makeDELETE, makeConvertPOST } = await import("../app/api/_order/handlers");
 const request = (method: string, body?: unknown) => new Request("http://audit.local/api/sales-orders", { method, ...(body === undefined ? {} : { body: JSON.stringify(body) }) });
 

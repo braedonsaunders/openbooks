@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { pageSpecSchema, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { supplementalContributionSchema } from '@openbooks/engine/src/extensions/contribution-schemas.ts'
+import { supplementalContributionSchema } from '@openbooks/engine/extensions/contribution-schemas'
 import { validateAgainstRegistries } from '../page-spec-validate'
 import { WIDGET_NAMES, FRAME_NAMES } from '../../components/viewspec/registry-names'
 import { WIDGET_CONTRACTS } from '../../components/viewspec/widget-contracts'

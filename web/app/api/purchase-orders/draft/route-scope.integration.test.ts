@@ -48,9 +48,9 @@ const hooks = registerHooks({
   },
 })
 
-const { withBypassContext, db } = await import('@openbooks/engine/src/platform/db.ts')
+const { withBypassContext, db } = await import('@openbooks/engine/platform/db')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
-  '@openbooks/engine/src/testing/fixtures.ts'
+  '@openbooks/engine/testing/fixtures'
 )
 const { POST: postPurchase } = await import('./route.ts')
 const { POST: postSales } = await import('../../sales-orders/draft/route.ts')

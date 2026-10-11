@@ -1,5 +1,5 @@
 import 'server-only'
-import { db, type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
+import { db, type SqlExecutor } from '@openbooks/engine/platform/db'
 import { NEUTRAL_INDUSTRY_KEY } from './industry-keys'
 
 /**

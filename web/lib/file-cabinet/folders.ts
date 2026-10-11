@@ -6,7 +6,7 @@ import { resolveReadScope, visibleFolderPredicate, visibleFileRowPredicate, reco
 import { retainedFileEvidence } from './files'
 import { type FileMutationAudit, viewerFolderGate, lockCabinetAuthorization, runMutation } from './mutation'
 import { sql, type SQL } from 'drizzle-orm'
-import { db, inDbTransaction, type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
+import { db, inDbTransaction, type SqlExecutor } from '@openbooks/engine/platform/db'
 import { deleteS3Blobs } from '../file-storage'
 import { recordFileEvent } from '../file-audit'
 

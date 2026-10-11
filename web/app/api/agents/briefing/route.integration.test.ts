@@ -14,9 +14,9 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context);
 } });
 const { sql } = await import('drizzle-orm');
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts');
-const { businessToday } = await import('@openbooks/engine/src/platform/business-date.ts');
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts');
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db');
+const { businessToday } = await import('@openbooks/engine/platform/business-date/module');
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures');
 const { createConversation, appendMessage } = await import('../../../../lib/ai-conversations');
 const { getAuthz } = await import('../../../../lib/authz');
 const { GET, POST } = await import('./route');

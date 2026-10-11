@@ -9,7 +9,7 @@ const state: { authz: unknown } = { authz: null }
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[testStateKey] = state
 
 const mockAuthz = `
-  import { subsidiaryScopeAllows } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
+  import { subsidiaryScopeAllows } from '@openbooks/engine/organization/scope'
   export { subsidiaryScopeAllows }
   const state = globalThis[Symbol.for('openbooks.timesheets-view-scope-test')]
   export async function requirePermission() { return state.authz }
@@ -53,8 +53,8 @@ const hooks = registerHooks({
 
 const { loadTimesheets } = await import('./view.ts') as typeof import('./view.ts')
 hooks.deregister()
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
 
 async function addEmployee(orgId: string, name: string, subsidiaryId: string): Promise<string> {
   const id = randomUUID()

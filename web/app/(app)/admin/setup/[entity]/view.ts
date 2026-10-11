@@ -7,8 +7,8 @@ import { notFound } from 'next/navigation'
 import { sql } from 'drizzle-orm'
 import { getLocale, getTranslations } from 'next-intl/server'
 import { decimalLabel } from '../../../../../lib/format'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { TAX_RETURN_PACKS } from '@openbooks/engine/src/tax/seed-tax-forms.ts'
+import { db } from '@openbooks/engine/platform/db'
+import { TAX_RETURN_PACKS } from '@openbooks/engine/tax/seed-tax-forms'
 import { ensureAiRailsSettingsForOrg } from '@openbooks/engine/hrm/ai/settings'
 import {
   badge,

@@ -1,6 +1,6 @@
 "use client";
 import { GroupComponentFields } from "./GroupComponentFields";
-import type { GroupComponentInput } from "@openbooks/engine/src/assets/group-component.ts";
+import type { GroupComponentInput } from "@openbooks/engine/assets/group-component";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";

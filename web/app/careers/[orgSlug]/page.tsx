@@ -1,7 +1,7 @@
 import { notFound } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
-import { db, withOrgContext } from '@openbooks/engine/src/platform/db.ts'
+import { db, withOrgContext } from '@openbooks/engine/platform/db'
 import { isFeatureEnabled } from '../../../lib/features'
 import { orgSlugFor, resolveOrgBySlug } from '../../../lib/recruiting-public'
 import { CareersApplyForm } from './CareersApplyForm'

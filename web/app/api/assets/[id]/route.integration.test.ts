@@ -1,4 +1,4 @@
-import { documentRevisionSql } from '@openbooks/engine/src/records/revision.ts';
+import { documentRevisionSql } from '@openbooks/engine/records/revision';
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
@@ -48,11 +48,11 @@ const hooks = registerHooks({
 const routeUrl = "./route.ts?asset-basis-posting-race-test";
 const { PATCH, DELETE } = (await import(routeUrl)) as typeof import("./route.ts");
 
-const { db } = await import("@openbooks/engine/src/platform/db.ts");
-const { buildSchedule } = await import("@openbooks/engine/src/assets/depreciation.ts");
-const { disposeAsset, remeasureAsset } = await import("@openbooks/engine/src/assets/asset-lifecycle.ts");
+const { db } = await import("@openbooks/engine/platform/db");
+const { buildSchedule } = await import("@openbooks/engine/assets/depreciation");
+const { disposeAsset, remeasureAsset } = await import("@openbooks/engine/assets/asset-lifecycle");
 const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } = await import(
-  "@openbooks/engine/src/testing/fixtures.ts",
+  "@openbooks/engine/testing/fixtures",
 );
 
 

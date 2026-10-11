@@ -56,11 +56,11 @@ stubModules({
     "../../../../../lib/authz": `
       export async function guardRootSubsidiaryScope() { return null }
     `,
-    "@openbooks/engine/src/payroll/error.ts": `
+    "@openbooks/engine/payroll/error": `
       export class PayrollError extends Error {}
     `,
-    "@openbooks/engine/src/payroll/packs.ts": `
-      import { PayrollError } from '@openbooks/engine/src/payroll/error.ts'
+    "@openbooks/engine/payroll/packs": `
+      import { PayrollError } from '@openbooks/engine/payroll/error'
       export class PayrollPackError extends PayrollError {}
       export class PayrollJurisdictionError extends PayrollPackError {}
       export function payrollPack(country) {
@@ -78,9 +78,9 @@ stubModules({
       export function payrollTaxYearCoverage() { return [] }
       export function payrollTaxYearForDate() { return { taxYear: 2026 } }
     `,
-    "@openbooks/engine/src/payroll/statutory-rates.ts": `
+    "@openbooks/engine/payroll/statutory-rates": `
       const state = globalThis[Symbol.for('openbooks.payroll-rates-route-test')]
-      const { PayrollPackError } = await import('@openbooks/engine/src/payroll/packs.ts')
+      const { PayrollPackError } = await import('@openbooks/engine/payroll/packs')
       export async function deleteStatutoryRate(orgId, actorId, id) {
         state.deleteAttempts.push(id)
         if (state.deleteResult === 'missing') return false
@@ -93,20 +93,20 @@ stubModules({
         return { id: 'rate-1', values: {} }
       }
     `,
-    "@openbooks/engine/src/platform/db.ts": withPlatformDbTestSurface(`
+    "@openbooks/engine/platform/db": withPlatformDbTestSurface(`
       export const db = { execute: async () => ({ rows: [] }) }
     `),
     "drizzle-orm": `
       export function sql() { return {} }
     `,
-    "@openbooks/engine/src/payroll/filing.ts": `
+    "@openbooks/engine/payroll/filing": `
       export async function listFilingAccounts() { return [] }
     `,
-    "@openbooks/engine/src/payroll/readiness.ts": `
+    "@openbooks/engine/payroll/readiness": `
       export async function installedPayrollCountries() { return ['CA'] }
       export async function payrollStatutoryRateGaps() { return [] }
     `,
-    "@openbooks/engine/src/platform/business-date.ts": `
+    "@openbooks/engine/platform/business-date/module": `
       export function businessToday() { return '2026-09-19' }
     `,
   },

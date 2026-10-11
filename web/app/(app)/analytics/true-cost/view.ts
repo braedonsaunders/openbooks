@@ -1,5 +1,5 @@
 import 'server-only';
-import { OverheadCalculationError } from "@openbooks/engine/src/projects/overhead-rates.ts";
+import { OverheadCalculationError } from "@openbooks/engine/projects/overhead-rates";
 
 import { getLocale, getTranslations } from 'next-intl/server'
 import { frame, page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'

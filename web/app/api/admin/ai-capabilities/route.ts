@@ -2,12 +2,12 @@ import { defineRoute } from "@/lib/api/route";
 
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { db } from "@openbooks/engine/platform/db";
 import {
   listCapabilities,
   syncCapabilitiesForOrg,
   updateCapabilityForOrg,
-} from "@openbooks/engine/src/hrm/ai/governance.ts";
+} from "@openbooks/engine/hrm/ai/governance";
 import { aiRailsErrorResponse } from "../../../../lib/ai-rails";
 import { guardPermission } from "../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../lib/features";

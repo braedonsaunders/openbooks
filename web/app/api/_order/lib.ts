@@ -1,9 +1,9 @@
 import 'server-only'
-import { documentRevisionCounterSql } from '@openbooks/engine/src/records/revision.ts'
+import { documentRevisionCounterSql } from '@openbooks/engine/records/revision'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { add, mul, normalizeMoney, sum } from '@openbooks/engine/src/money/money.ts'
-import { computeLineTaxes } from '@openbooks/engine/src/tax/tax.ts'
+import { db } from '@openbooks/engine/platform/db'
+import { add, mul, normalizeMoney, sum } from '@openbooks/engine/money/money'
+import { computeLineTaxes } from '@openbooks/engine/tax/tax'
 import { taxProfileMap, type TaxProfiles } from "../../../lib/bills.ts";
 import { canonicalDecimal } from '../../../lib/exact-decimal'
 import { subsidiaryVisibleFilter } from '../../../lib/subsidiaries'

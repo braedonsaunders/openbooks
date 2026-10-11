@@ -10,8 +10,8 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context);
 } });
 const { sql } = await import("drizzle-orm");
-const { db } = await import("@openbooks/engine/src/platform/db.ts");
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
+const { db } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
 const { resolveActiveEnv, accessibleProductionOrgs, rebaseUuid } = await import("./org-access");
 const { currentUser, makeEnvToken, SESSION_COOKIE, ACTIVE_ENV_COOKIE_NAME } = await import("./auth");
 const { sessionSigningInput } = await import("./auth-token-format");
@@ -77,8 +77,8 @@ const orgAccessPermissionCases = [{ label: "sandbox access permissions", registe
 const assert: typeof import("node:assert/strict") = (await import("node:assert/strict")).default;
 const test = (await import("node:test")).default;
 const { sql } = await import("drizzle-orm");
-const { db } = await import("@openbooks/engine/src/platform/db.ts");
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
+const { db } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
 const { resolveActiveEnv, rebaseUuid } = await import("./org-access");
 
 

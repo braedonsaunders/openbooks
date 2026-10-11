@@ -1,8 +1,8 @@
 import { defineRoute } from "@/lib/api/route";
 
 import { NextResponse } from "next/server";
-import { createRequisition } from "@openbooks/engine/src/hrm/recruiting/requisitions.ts";
-import { listRequisitions } from "@openbooks/engine/src/hrm/recruiting/recruiting-read.ts";
+import { createRequisition } from "@openbooks/engine/hrm/recruiting/requisitions";
+import { listRequisitions } from "@openbooks/engine/hrm/recruiting/recruiting-read";
 
 import { recruitingErrorResponse } from "../_lib";
 import { createRequisitionBody } from "./bodies";

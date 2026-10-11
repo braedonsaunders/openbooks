@@ -3,9 +3,9 @@ import { readExportWindow, transferId, transferWhere, transferOrder, transferLim
 /** Usage records and derived SaaS metrics data-io resources. */
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
-import { ingestUsageRecords, type IngestUsageRecordInput } from '@openbooks/engine/src/billing/usage/records.ts'
-import { UsageBillingError } from '@openbooks/engine/src/billing/usage/errors.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
+import { ingestUsageRecords, type IngestUsageRecordInput } from '@openbooks/engine/billing/usage/records'
+import { UsageBillingError } from '@openbooks/engine/billing/usage/errors'
 import type { CellValue, ImportMode, ResourceDescriptor, ResourceField, WriteOutcome } from './types'
 import type { DataResource, WriteCtx } from './resource-core'
 import {

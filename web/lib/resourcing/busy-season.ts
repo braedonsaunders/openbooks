@@ -1,16 +1,16 @@
 import 'server-only'
 import { notFound } from 'next/navigation'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { add, cmp, neg } from '@openbooks/engine/src/money/money.ts'
-import { addCalendarDays } from '@openbooks/engine/src/platform/business-date.ts'
-import { ResourcingRefusal } from '@openbooks/engine/src/resourcing/errors.ts'
+import { db } from '@openbooks/engine/platform/db'
+import { add, cmp, neg } from '@openbooks/engine/money/money'
+import { addCalendarDays } from '@openbooks/engine/platform/business-date/module'
+import { ResourcingRefusal } from '@openbooks/engine/resourcing/errors'
 import {
   assertPlannableCapacity,
   type AvailabilityFigure,
-} from '@openbooks/engine/src/resourcing/availability.ts'
-import { readAvailability } from '@openbooks/engine/src/resourcing/availability-read.ts'
-import { assertSundayWindow } from '@openbooks/engine/src/resourcing/weeks.ts'
+} from '@openbooks/engine/resourcing/availability'
+import { readAvailability } from '@openbooks/engine/resourcing/availability-read'
+import { assertSundayWindow } from '@openbooks/engine/resourcing/weeks'
 import { loadDemandWeeks } from './demand.ts'
 import { loadStaffablePeople, type StaffablePerson } from './queries.ts'
 import { subsidiaryVisibleFilter } from '../subsidiaries.ts'

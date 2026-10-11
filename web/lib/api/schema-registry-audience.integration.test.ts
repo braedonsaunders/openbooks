@@ -5,8 +5,8 @@ import { sql } from 'drizzle-orm'
 
 const { loadApiSchema } = await import('./schema-registry.ts')
 const { generateOpenApiSpec } = await import('./openapi-server.ts')
-const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/platform/db')
+const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import('@openbooks/engine/testing/fixtures')
 
 test(
   'API schema hides custom record types outside the caller audience',

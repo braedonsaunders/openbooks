@@ -1,6 +1,6 @@
 import 'server-only'
 import { sql, type SQL } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/db'
 
 export class ReportCurrencyBasisError extends Error {
   constructor() {

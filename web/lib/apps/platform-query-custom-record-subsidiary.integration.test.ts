@@ -4,9 +4,9 @@ import test from 'node:test'
 import { sql } from 'drizzle-orm'
 
 const { createAppPlatformAdapter } = await import('./platform.ts')
-const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/platform/db')
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  '@openbooks/engine/src/testing/fixtures.ts',
+  '@openbooks/engine/testing/fixtures',
 )
 
 test(

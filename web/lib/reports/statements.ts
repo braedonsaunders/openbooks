@@ -1,6 +1,6 @@
 import "server-only";
 import { sql } from "drizzle-orm";
-import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
 import { functionalReportReader } from "./currency-basis";
 import { payrollOriginSql } from "../payroll-confidentiality";
 import { glActivityBuckets, glSummaryEligibleDims, bucketSubsidiaryFilter, statementBookExpr } from "../gl-summary";

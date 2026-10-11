@@ -1,5 +1,5 @@
 import { resolvePreset, type DateRange } from "@openbooks/reports";
-import { addMonthsClamped } from "@openbooks/engine/src/platform/civil-date.ts";
+import { addMonthsClamped } from "@openbooks/engine/platform/civil-date";
 
 /**
  * Date-window inputs shared by every range-taking assistant tool. The model

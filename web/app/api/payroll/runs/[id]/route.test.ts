@@ -65,7 +65,7 @@ const mockSources = new Map<string, string>([
     'mock:payroll-run',
     `
       const state = globalThis[Symbol.for('openbooks.payroll-run-delete-test')]
-      import { PayrollError } from ${JSON.stringify(import.meta.resolve("@openbooks/engine/src/payroll/error.ts"))}
+      import { PayrollError } from ${JSON.stringify(import.meta.resolve("@openbooks/engine/payroll/error"))}
       export async function calculatePayRun() { throw new Error('not under test') }
       export async function commitPayRun() { throw new Error('not under test') }
       export async function previewPayRunGl() { throw new Error('not under test') }
@@ -90,8 +90,8 @@ const mockSources = new Map<string, string>([
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === '@openbooks/engine/src/platform/db.ts') return { url: 'mock:db', shortCircuit: true }
-    if (['@openbooks/engine/src/payroll/run-calculation.ts', '@openbooks/engine/src/payroll/run-commit.ts', '@openbooks/engine/src/payroll/run-lifecycle.ts'].includes(specifier)) {
+    if (specifier === '@openbooks/engine/platform/db') return { url: 'mock:db', shortCircuit: true }
+    if (['@openbooks/engine/payroll/run-calculation', '@openbooks/engine/payroll/run-commit', '@openbooks/engine/payroll/run-lifecycle'].includes(specifier)) {
       return { url: 'mock:payroll-run', shortCircuit: true }
     }
     if (specifier.endsWith('/lib/feature-gates')) return { url: 'mock:feature-gates', shortCircuit: true }

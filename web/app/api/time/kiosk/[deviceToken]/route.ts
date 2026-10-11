@@ -2,11 +2,11 @@ import { apiErrorResponse } from '@/lib/api/error-response'
 import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import { withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
+import { withOrgTransaction } from '@openbooks/engine/platform/db'
 import { isUuid } from '../../../../../lib/list-params'
-import { identifyByPin, kioskClockEvent, resolveKioskByToken } from '@openbooks/engine/src/hrm/field-time/kiosk.ts'
-import { FieldTimeError } from '@openbooks/engine/src/hrm/field-time/errors.ts'
-import { lockActiveKioskToken } from '@openbooks/engine/src/hrm/field-time/kiosk-token-lock.ts'
+import { identifyByPin, kioskClockEvent, resolveKioskByToken } from '@openbooks/engine/hrm/field-time/kiosk'
+import { FieldTimeError } from '@openbooks/engine/hrm/field-time/errors'
+import { lockActiveKioskToken } from '@openbooks/engine/hrm/field-time/kiosk-token-lock'
 
 export const runtime = 'nodejs'
 
@@ -95,7 +95,7 @@ export async function PUT(req: Request, ctx: { params: Promise<{ deviceToken: st
   if (!PHOTO_TYPES.has(contentType)) return bad(`Unsupported photo type ${contentType || 'unknown'} — use JPEG, PNG, WebP or HEIC`, 415)
   if (file.size > PHOTO_MAX_BYTES || file.size === 0) return bad('The photo must be non-empty and under 10 MB', 413)
   try {
-    const { ensureOrgClockPhotoFolder } = await import('@openbooks/engine/src/hrm/field-time/photos.ts')
+    const { ensureOrgClockPhotoFolder } = await import('@openbooks/engine/hrm/field-time/photos')
     const { createFile } = await import('../../../../../lib/file-cabinet')
     // The device carries no session: the folder read and the file write run
     // scoped to the kiosk's org, or under FORCE RLS the folder lookup

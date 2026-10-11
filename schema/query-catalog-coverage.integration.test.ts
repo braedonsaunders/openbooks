@@ -2,9 +2,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "../engine/src/platform/db.ts";
-import { loadCatalog } from "../engine/src/sandbox/catalog.ts";
-import { TENANT_TABLE_POLICIES } from "../engine/src/sandbox/tenant-table-policies.ts";
+import { db } from "@openbooks/engine/platform/db";
+import { loadCatalog } from "@openbooks/engine/testing/sandbox/catalog";
+import { TENANT_TABLE_POLICIES } from "@openbooks/engine/testing/sandbox/tenant-table-policies";
 
 type Category = { prefixes: string[]; reason: string };
 

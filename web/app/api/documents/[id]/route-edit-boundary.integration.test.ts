@@ -20,7 +20,7 @@ registerHooks({
     // route file's relative import. Identical sources share one module
     // instance across both spellings.
     if (specifier === '../../../../lib/authz' || specifier === '@/lib/authz') return virtual(`
-      import { permissionSetCovers } from '@openbooks/engine/src/organization/permissions.ts';
+      import { permissionSetCovers } from '@openbooks/engine/organization/permissions';
       export async function getAuthz() {
         const s = globalThis.__documentEditBoundaryState;
         return { user: { orgId: s.orgId, id: s.actorId, isSuperAdmin: false }, permissions: new Set(['ap.read', 'ap.create', 'ap.post']), allowedSubsidiaryIds: null };
@@ -42,10 +42,10 @@ registerHooks({
     return next(specifier, context)
   },
 })
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
 const { sql } = await import('drizzle-orm')
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
-const { documentRevisionCounterSql } = await import("../../../../../engine/src/records/revision.ts");
+const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
+const { documentRevisionCounterSql } = await import("@openbooks/engine/records/revision");
 const { PATCH } = await import('./route.ts')
 
 async function makeDraftBill(org: { orgId: string; subsidiaryId: string; date: string; accounts: { cogs: string } }): Promise<string> {

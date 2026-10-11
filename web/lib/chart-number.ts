@@ -1,4 +1,4 @@
-import { canonicalDecimal, compareDecimal } from '@openbooks/engine/src/money/exact-decimal.ts'
+import { canonicalDecimal, compareDecimal } from '@openbooks/engine/money/decimal'
 
 /**
  * One-way projection for chart axes only. Ledger strings remain the source of

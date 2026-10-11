@@ -1,19 +1,19 @@
-import { approveFixtureRouting, createManufacturingOperator } from "@openbooks/engine/src/testing/manufacturing.ts";
+import { approveFixtureRouting, createManufacturingOperator } from "@openbooks/engine/testing/manufacturing";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, withBypassContext } from "@openbooks/engine/src/platform/db.ts";
-import type { SqlExecutor } from "@openbooks/engine/src/platform/db.ts";
-import { createScratchOrg, dropScratchOrg, seedFlowActors } from "@openbooks/engine/src/testing/fixtures.ts";
-import { receiveInventory } from "@openbooks/engine/src/inventory/movements.ts";
-import { buildAssembly } from "@openbooks/engine/src/inventory/assembly.ts";
-import { getOnHand } from "@openbooks/engine/src/inventory/position.ts";
-import { issueMaterials } from "@openbooks/engine/src/manufacturing/materials.ts";
-import { createRouting, createRoutingOperation } from "@openbooks/engine/src/manufacturing/routings.ts";
-import { createWorkCenter } from "@openbooks/engine/src/manufacturing/work-centers.ts";
-import { createWorkOrder, releaseWorkOrder } from "@openbooks/engine/src/manufacturing/work-orders.ts";
+import { db, withBypassContext } from "@openbooks/engine/platform/db";
+import type { SqlExecutor } from "@openbooks/engine/platform/db";
+import { createScratchOrg, dropScratchOrg, seedFlowActors } from "@openbooks/engine/testing/fixtures";
+import { receiveInventory } from "@openbooks/engine/inventory/movements";
+import { buildAssembly } from "@openbooks/engine/inventory/assembly";
+import { getOnHand } from "@openbooks/engine/testing/inventory/position";
+import { issueMaterials } from "@openbooks/engine/manufacturing/materials";
+import { createRouting, createRoutingOperation } from "@openbooks/engine/manufacturing/routings";
+import { createWorkCenter } from "@openbooks/engine/manufacturing/work-centers";
+import { createWorkOrder, releaseWorkOrder } from "@openbooks/engine/manufacturing/work-orders";
 
 const state: { user: { orgId: string; id: string }; allowedSubsidiaryIds: Set<string> | null } = {
   user: { orgId: "", id: "" },

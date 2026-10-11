@@ -13,19 +13,19 @@ import type { TrueCostSetupData } from '../../../../../lib/analytics/true-cost-s
 import { can, getAuthz, guardRootSubsidiaryScope } from '../../../../../lib/authz'
 import { FeatureUnavailable } from '@/components/feature-unavailable'
 import { currentPublishedRates } from '../../../../../lib/overhead-publish'
-import { businessToday, parseIsoDate } from '@openbooks/engine/src/platform/business-date.ts'
+import { businessToday, parseIsoDate } from '@openbooks/engine/platform/business-date/module'
 import { trueCostData } from '../../../../../lib/analytics/true-cost-data'
 import { isFeatureEnabled } from '../../../../../lib/features'
 import {
   countUnappliedOverheadTime,
   listOverheadApplications,
-} from '@openbooks/engine/src/allocations/overhead-post.ts'
+} from '@openbooks/engine/allocations/overhead-post'
 import {
   getOverheadSystemRuleEvidence,
   overheadApplicationSettings,
   type OverheadSystemRuleEvidence,
-} from '@openbooks/engine/src/allocations/overhead-sync.ts'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+} from '@openbooks/engine/allocations/overhead-sync'
+import { db } from '@openbooks/engine/platform/db'
 import { sql } from 'drizzle-orm'
 import type { OverheadPolicy, OverheadStep } from './view'
 

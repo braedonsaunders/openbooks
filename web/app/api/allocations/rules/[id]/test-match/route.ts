@@ -3,14 +3,14 @@ import { defineRoute } from "@/lib/api/route";
 import { z } from "zod";
 import { parseJsonBody } from '@/lib/api/json';
 import { NextResponse } from 'next/server'
-import { fromUnits, toUnits } from '../../../../../../../engine/src/money/money.ts'
+import { fromUnits, toUnits } from '@openbooks/engine/money/money'
 import {
   getRuleDetail,
   getRuleVersion,
   matchLine,
   type AccountGroupResolver,
-} from '../../../../../../../engine/src/allocations/index.ts'
-import { resolveAccountGroups } from '../../../../../../../engine/src/records/account-groups.ts'
+} from '@openbooks/engine/allocations/runtime'
+import { resolveAccountGroups } from '@openbooks/engine/records/account-groups'
 import { allocationErrorResponse, requireRuleId } from '../../../_lib.ts'
 
 export const runtime = 'nodejs'

@@ -1,8 +1,8 @@
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { resDemandLines } from "@openbooks/schema";
-import { createDemandLine } from "@openbooks/engine/src/resourcing/demand-lines.ts";
-import { db, withOrgTransaction } from "@openbooks/engine/src/platform/db.ts";
+import { createDemandLine } from "@openbooks/engine/resourcing/demand-lines";
+import { db, withOrgTransaction } from "@openbooks/engine/platform/db";
 import { created } from "@/lib/api/responses";
 import { defineRoute } from "@/lib/api/route";
 import { idempotentResourcingCreate } from "../_idempotent";

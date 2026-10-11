@@ -5,14 +5,14 @@ import type { SessionUser } from '../auth';
 import type { Authz } from '../authz';
 
 const { sql } = await import('drizzle-orm');
-const { db, withBypassContext, withOrgContext } = await import('../../../engine/src/platform/db.ts');
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db');
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  '../../../engine/src/testing/fixtures.ts'
+  '@openbooks/engine/testing/fixtures'
 );
 const { createDriver, createDriverValue } = await import(
-  '../../../engine/src/allocations/driver-admin.ts'
+  '@openbooks/engine/allocations/driver-admin'
 );
-const { postProjectGlEntry } = await import('../../../engine/src/projects/recognition.ts');
+const { postProjectGlEntry } = await import('@openbooks/engine/projects/recognition');
 const { executeAssistantTool } = await import('./registry');
 
 const DB = !!process.env.OPENBOOKS_DB_URL;

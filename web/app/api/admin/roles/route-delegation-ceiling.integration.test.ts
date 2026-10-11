@@ -3,12 +3,12 @@ import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, withBypass } from "@openbooks/engine/src/platform/db.ts";
-import { actorAllowedSubsidiaryIds } from "@openbooks/engine/src/organization/actor-subsidiaries.ts";
+import { db, withBypass } from "@openbooks/engine/platform/db";
+import { actorAllowedSubsidiaryIds } from "@openbooks/engine/organization/actor-subsidiaries";
 import {
   createScratchOrg,
   dropScratchOrg,
-} from "@openbooks/engine/src/testing/fixtures.ts";
+} from "@openbooks/engine/testing/fixtures";
 
 // Delegation-ceiling suite for /api/admin/roles against the real schema.
 //

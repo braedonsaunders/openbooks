@@ -1,6 +1,6 @@
 import "server-only";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { db } from "@openbooks/engine/platform/db";
 import { sealSecret, SecretIntegrityError, unsealSecret } from "../secrets";
 import {
   isAiProvider,
@@ -19,21 +19,21 @@ import {
   type ContinuousCloseAgentKey,
   type ContinuousCloseDetectorPolicy,
   type ContinuousClosePolicy,
-} from "@openbooks/engine/src/continuous-close/continuous-close.ts";
-import { serializeContinuousCloseDetectors } from "@openbooks/engine/src/agents/continuous-close-config.ts";
-import { fromUnits, toUnits } from "@openbooks/engine/src/money/money.ts";
+} from "@openbooks/engine/continuous-close/continuous-close";
+import { serializeContinuousCloseDetectors } from "@openbooks/engine/agents/continuous-close-config";
+import { fromUnits, toUnits } from "@openbooks/engine/money/money";
 import {
   normalizeStoredDocumentCapture,
   type DocumentCaptureSettings,
   type StoredDocumentCapture,
-} from "@openbooks/engine/src/payables/ap-capture-config.ts";
-import { DEFAULT_INVOICE_MODEL, validateAzureDocumentEndpoint } from "@openbooks/engine/src/payables/ap-capture.ts";
-import { type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
+} from "@openbooks/engine/payables/ap-capture-config";
+import { DEFAULT_INVOICE_MODEL, validateAzureDocumentEndpoint } from "@openbooks/engine/payables/ap-capture";
+import { type SqlExecutor } from '@openbooks/engine/platform/db'
 import {
   acquireOrgFeatureGateLock,
   lockAndCheckOrgFeature,
-} from '@openbooks/engine/src/organization/org-feature-lock.ts'
-import { isUuid } from "@openbooks/engine/src/platform/uuid.ts";
+} from '@openbooks/engine/organization/org-feature-lock'
+import { isUuid } from "@openbooks/engine/platform/identifiers";
 
 /**
  * AI provider configuration for OpenBooks' organization-scoped tenancy model. The config

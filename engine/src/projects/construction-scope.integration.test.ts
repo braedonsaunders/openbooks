@@ -11,8 +11,8 @@ registerHooks({ resolve(specifier, context, next) {
 }})
 
 const { sql } = await import('drizzle-orm')
-const { db } = await import('@openbooks/engine/src/platform/db.ts')
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { db } = await import('@openbooks/engine/platform/db')
+const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import('@openbooks/engine/testing/fixtures')
 const { BUILTIN_PROJECT_TYPES } = await import('@openbooks/schema')
 const { randomUUID } = await import('node:crypto')
 const { createPayApplication, submitPayApplication } = await import('./construction-billing.ts')

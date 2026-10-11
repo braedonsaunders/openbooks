@@ -1,9 +1,9 @@
 import 'server-only'
 
 import { getTranslations } from 'next-intl/server'
-import { HrmDocumentsError } from '@openbooks/engine/src/hrm/documents/errors.ts'
-import { listOwnDocuments } from '@openbooks/engine/src/hrm/documents/documents.ts'
-import { listOwnExports } from '@openbooks/engine/src/hrm/documents/dsar.ts'
+import { HrmDocumentsError } from '@openbooks/engine/hrm/documents/errors'
+import { listOwnDocuments } from '@openbooks/engine/hrm/documents/documents'
+import { listOwnExports } from '@openbooks/engine/hrm/documents/dsar'
 import { loadOrRefuse, type PageRefusal } from '../load-or-refuse'
 import { meTabs } from './self-service'
 import { getAuthz, type Authz } from '../authz'

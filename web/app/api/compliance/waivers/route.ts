@@ -3,12 +3,12 @@ import { defineRoute } from '@/lib/api/route'
 import { parseJsonBody } from "@/lib/api/json"
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { businessToday, isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
+import { db } from '@openbooks/engine/platform/db'
+import { businessToday, isIsoCalendarDate } from '@openbooks/engine/platform/business-date/module'
 import { guardSubsidiaryScope } from '@/lib/authz';
 import { guardComplianceFeature } from '@/lib/compliance'
 import { complianceWriteFailure } from '@/lib/compliance-errors'
-import { loadApplicableRequirement } from '@openbooks/engine/src/compliance/compliance.ts'
+import { loadApplicableRequirement } from '@openbooks/engine/compliance/compliance'
 import { isUuid } from '@/lib/list-params'
 import { notFound } from "@/lib/api/responses";
 

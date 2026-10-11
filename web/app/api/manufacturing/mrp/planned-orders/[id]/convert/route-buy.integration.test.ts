@@ -16,11 +16,11 @@ const hooks = registerHooks({ resolve(specifier, context, next) {
 } });
 const routeSpecifier: string = "./route.ts?mrp-buy-route-test";
 const { POST } = await import(routeSpecifier) as typeof import("./route.ts");
-const { db, withBypassContext } = await import("@openbooks/engine/src/platform/db.ts");
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
-const { runMrp, confirmPlannedOrder } = await import("@openbooks/engine/src/manufacturing/mrp.ts");
-const { upsertItemPolicy } = await import("@openbooks/engine/src/manufacturing/item-policies.ts");
-const { businessToday } = await import("@openbooks/engine/src/platform/business-date.ts");
+const { db, withBypassContext } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
+const { runMrp, confirmPlannedOrder } = await import("@openbooks/engine/manufacturing/mrp");
+const { upsertItemPolicy } = await import("@openbooks/engine/manufacturing/item-policies");
+const { businessToday } = await import("@openbooks/engine/platform/business-date/module");
 const tx = <T>(work: (runner: Parameters<Parameters<typeof db.transaction>[0]>[0]) => Promise<T>) => withBypassContext(() => db.transaction(work));
 const plus = (day: string, count: number) => { const date = new Date(`${day}T00:00:00Z`); date.setUTCDate(date.getUTCDate() + count); return date.toISOString().slice(0, 10); };
 

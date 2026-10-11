@@ -1,23 +1,23 @@
 import "server-only";
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { add, cmp } from "@openbooks/engine/src/money/money.ts";
-import { canonicalDecimal } from "@openbooks/engine/src/money/exact-decimal.ts";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { add, cmp } from "@openbooks/engine/money/money";
+import { canonicalDecimal } from "@openbooks/engine/money/decimal";
+import { db } from "@openbooks/engine/platform/db";
 import {
   assertDropShippingFeature,
   applyDropShipConfirmationInventory,
   attachDropShipPurchaseOrderInTx,
   DropShipRefusal,
   type DropShipLinePair,
-} from "@openbooks/engine/src/sales/drop-ship.ts";
+} from "@openbooks/engine/sales/drop-ship";
 import { receivePurchaseOrderInTx, fulfillSalesOrderInTx } from "./order-cycle";
 import { createApplicationOrder } from "./application/orders";
 import { assertApplicationPermission, assertSubsidiaryAccess, type ApplicationContext } from "./application/context";
 import { invalidInput, notFound } from "./application/errors";
 import { isUuid } from "./list-params";
-import { isIsoCalendarDate, businessToday } from "@openbooks/engine/src/platform/business-date.ts";
-import { openQuantitySql } from "@openbooks/engine/src/records/order-line-remainders.ts";
+import { isIsoCalendarDate, businessToday } from "@openbooks/engine/platform/business-date/module";
+import { openQuantitySql } from "@openbooks/engine/records/order-line-remainders";
 import { fromQuantityUnits, orderLineAmount, toQuantityUnits } from "./order-cycle-math";
 
 type Tx = Parameters<Parameters<typeof db.transaction>[0]>[0];
@@ -103,7 +103,7 @@ export async function routeSalesOrderLine(
     salesOrderLineId: input.salesOrderLineId,
     allowedSubsidiaryIds: context.authz.allowedSubsidiaryIds,
   };
-  const engine = await import("@openbooks/engine/src/sales/drop-ship.ts");
+  const engine = await import("@openbooks/engine/sales/drop-ship");
   if (input.routed) await engine.routeDropShipLine(routeInput);
   else await engine.unrouteDropShipLine(routeInput);
   return { routed: input.routed };

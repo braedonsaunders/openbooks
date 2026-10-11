@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { defineRoute } from "@/lib/api/route";
-import { postPaymentRun } from "@openbooks/engine/src/payments/run-posting.ts";
+import { postPaymentRun } from "@openbooks/engine/payments/run-posting";
 import { isUuid } from '../../../../../../lib/list-params'
 import { guardPaymentRunPermission, paymentErrorResponse } from '../../../lib'
 import { notFound } from "@/lib/api/responses";

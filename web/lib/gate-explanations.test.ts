@@ -62,7 +62,7 @@ const hooks = registerHooks({
       return { shortCircuit: true, format: "module", url: "data:text/javascript," + encodeURIComponent(AVAILABILITY_MOCK) };
     }
     // authz-core reads grants through the public database facade.
-    if (specifier === "@openbooks/engine/src/platform/db.ts" || specifier === "@openbooks/engine/platform/database") {
+    if (specifier === "@openbooks/engine/platform/db" || specifier === "@openbooks/engine/platform/database") {
       return { shortCircuit: true, format: "module", url: "data:text/javascript," + encodeURIComponent(DB_MOCK) };
     }
     if (

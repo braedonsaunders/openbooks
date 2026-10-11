@@ -28,9 +28,9 @@ registerHooks({
   },
 })
 
-const { db, withBypass, withOrgContext } = await import(root + 'engine/src/platform/db.ts') as typeof import('../../engine/src/platform/db.ts')
+const { db, withBypass, withOrgContext } = await import('@openbooks/engine/platform/db') as typeof import('@openbooks/engine/platform/db')
 const { sql } = await import(root + 'node_modules/drizzle-orm/index.js') as typeof import('drizzle-orm')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(root + 'engine/src/testing/fixtures.ts') as typeof import('../../engine/src/testing/fixtures.ts')
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures') as typeof import('@openbooks/engine/testing/fixtures')
 // The overview LOADER, not its rendered tree: the roster, the vitals, and
 // the rates banner are all loader-resolved data, so the loader output is
 // the thing under test (same rationale as banking-book-pages).

@@ -1,7 +1,7 @@
 import "server-only";
 import { sql } from "drizzle-orm";
-import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
+import { db } from "@openbooks/engine/platform/db";
 import { statementBookExpr } from "../gl-summary";
 
 export type FinancialTrendRow = {

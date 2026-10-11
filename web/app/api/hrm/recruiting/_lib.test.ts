@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { NextResponse } from "next/server";
-import { HrmAuthorizationError } from "@openbooks/engine/src/hrm/authorization.ts";
-import { HrmChangeRequestError } from "@openbooks/engine/src/hrm/change-requests.ts";
-import { CompensationError } from "@openbooks/engine/src/hrm/compensation/errors.ts";
-import { HrmPositionError } from "@openbooks/engine/src/hrm/positions.ts";
-import { RecruitingError } from "@openbooks/engine/src/hrm/recruiting/errors.ts";
+import { HrmAuthorizationError } from "@openbooks/engine/hrm/authorization";
+import { HrmChangeRequestError } from "@openbooks/engine/hrm/change-requests/operations";
+import { CompensationError } from "@openbooks/engine/hrm/compensation/errors";
+import { HrmPositionError } from "@openbooks/engine/hrm/positions";
+import { RecruitingError } from "@openbooks/engine/hrm/recruiting/errors";
 import { recruitingErrorResponse } from "./_lib.ts";
 
 async function bodyOf(response: NextResponse): Promise<{ error: string }> {

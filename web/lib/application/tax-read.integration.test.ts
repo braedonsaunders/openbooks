@@ -3,8 +3,8 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 
-const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
-const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
 const { getApplicationTaxReturn } = await import("./tax-read");
 const { ApplicationError } = await import("./errors");
 type ApplicationContext = import("./context").ApplicationContext;

@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { BUILT_IN_REPORT_DEFINITIONS } from '@openbooks/reports'
-import { NONPROFIT_REPORTS } from '@openbooks/engine/src/reports/catalog-reports.ts'
+import { NONPROFIT_REPORTS } from '@openbooks/engine/testing/reports/catalog-reports'
 
 // The hub serves the seeded catalog: package built-ins plus the nonprofit
 // board reports seeded alongside them. Walking only the package half flags

@@ -3,15 +3,15 @@ import { randomUUID } from 'node:crypto'
 import { setTimeout as delay } from 'node:timers/promises'
 import test from 'node:test'
 import pg from 'pg'
-const { db, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypassContext } = await import('@openbooks/engine/platform/db')
 const { sql } = await import('drizzle-orm')
 const { BUILTIN_PROJECT_TYPES } = await import('@openbooks/schema')
-const { createScratchOrg, createScratchUser, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { createScratchOrg, createScratchUser, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
 const { generateInvoiceFromBillingRequest } = await import('./billing')
 const { createBillingRequest } = await import('./billing-requests')
 const { computeBillTotals, taxProfileMap } = await import("./bills.ts");
-const { submitAndReleaseIfUngated } = await import('@openbooks/engine/src/flows/submit.ts')
-const { postDocument } = await import("@openbooks/engine/src/ledger/posting-document.ts");
+const { submitAndReleaseIfUngated } = await import('@openbooks/engine/flows/submit')
+const { postDocument } = await import("@openbooks/engine/ledger/posting-document");
 
 type Org = Awaited<ReturnType<typeof createScratchOrg>>
 type Fixture = { org: Org; actor: string; project: string }
@@ -420,7 +420,7 @@ test('project-charge component billing preserves large exact decimals through JS
 const consolidatedRows = [
   { label: "project charges", register: async () => {
         const { spawnSync }=await import("node:child_process");
-        const { env }=await import("@openbooks/engine/src/platform/db.ts");
+        const { env }=await import("@openbooks/engine/platform/db");
         function runIntegrationSource(source: string): void {
           const result = spawnSync(
             process.execPath,

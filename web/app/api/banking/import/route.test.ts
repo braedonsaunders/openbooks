@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
-import { decodeStatementSourceText as engineDecodeStatementSourceText } from '../../../../../engine/src/banking/banking.ts'
+import { decodeStatementSourceText as engineDecodeStatementSourceText } from '@openbooks/engine/banking/banking'
 import { stubModules } from '../../../../testing/stub-modules'
 
 interface ImportCall {
@@ -119,7 +119,7 @@ const mockSources = new Map<string, string>([
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === '@openbooks/engine/src/banking/banking.ts') {
+    if (specifier === '@openbooks/engine/banking/banking') {
       return { url: 'mock:banking', shortCircuit: true }
     }
     if (specifier === '../../../../lib/feature-gates') {

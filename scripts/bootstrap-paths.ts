@@ -3,7 +3,7 @@ import { createHash } from "node:crypto"
 import { dirname, join } from "node:path"
 import { fileURLToPath } from "node:url"
 import { type RuntimeDatabaseConfig } from "./bootstrap-roles.ts"
-import { env, pool } from "../engine/src/platform/db.ts"
+import { env, pool } from "@openbooks/engine/platform/db"
 
 export const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..");
 export const migrationsDir = join(repoRoot, "schema", "migrations");

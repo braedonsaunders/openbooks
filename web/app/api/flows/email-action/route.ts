@@ -1,14 +1,14 @@
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db, withBypassContext, withOrgContext } from '@openbooks/engine/src/platform/db.ts'
+import { db, withBypassContext, withOrgContext } from '@openbooks/engine/platform/db'
 import {
   decideGate,
   EMAIL_TOKEN_TTL_MS,
   verifyEmailActionToken,
   GateError,
   type EmailActionClaims,
-} from '@openbooks/engine/src/flows/index.ts'
+} from '@openbooks/engine/flows/module'
 import { subsidiaryScopeAllows } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { allowedSubsidiaryIds } from '../../../../lib/subsidiaries'

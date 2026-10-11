@@ -13,7 +13,7 @@ import { sql, type SQL } from "drizzle-orm";
 // subledger postings out, reversed entries in) lives in the companion
 // journal-scope-agreement.integration.test.ts, which needs a fixture
 // database. Only server-only is stubbed; query building is offline.
-const { db } = await import("@openbooks/engine/src/platform/db.ts");
+const { db } = await import("@openbooks/engine/platform/db");
 const { JOURNAL_ENTRY_TABLE, journalEntryWhere, journalScopeWhere } = await import("./journal-entries.ts");
 const { defaultListView } = await import("@openbooks/customization");
 

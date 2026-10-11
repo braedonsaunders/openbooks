@@ -13,8 +13,8 @@ const _hooks = registerHooks({
     if (specifier === "@/lib/feature-gates")
       return { shortCircuit: true, url: "mock:lease-auth" };
     if (
-      specifier === "@openbooks/engine/src/revenue/leases.ts" ||
-      specifier === "@openbooks/engine/src/revenue/lease-changes.ts"
+      specifier === "@openbooks/engine/revenue/leases" ||
+      specifier === "@openbooks/engine/revenue/lease-changes"
     )
       return { shortCircuit: true, url: "mock:lease-commands" };
     if (specifier === "@/lib/api/json")

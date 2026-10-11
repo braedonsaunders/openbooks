@@ -22,9 +22,9 @@ const hooks = registerHooks({
 });
 
 const { POST } = await import("./route.ts");
-const { db, withBypassContext } = await import("@openbooks/engine/src/platform/db.ts");
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
-const { createWorkOrder } = await import("@openbooks/engine/src/manufacturing/work-orders.ts");
+const { db, withBypassContext } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
+const { createWorkOrder } = await import("@openbooks/engine/manufacturing/work-orders");
 
 test("work-order completion validates options before applying lifecycle rules", async () => {
   const org = await withBypassContext(() => createScratchOrg());

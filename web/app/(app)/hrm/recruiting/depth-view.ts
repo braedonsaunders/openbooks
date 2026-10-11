@@ -1,33 +1,33 @@
 import 'server-only'
 
 import type { getTranslations } from 'next-intl/server'
-import { listInterviewerPools, listUpcomingInterviews } from '@openbooks/engine/src/hrm/recruiting/scheduling.ts'
+import { listInterviewerPools, listUpcomingInterviews } from '@openbooks/engine/hrm/recruiting/scheduling'
 import {
   listOffersWithSignature,
   listOfferVersions,
   offerSignatureState,
-} from '@openbooks/engine/src/hrm/recruiting/offers-signing.ts'
+} from '@openbooks/engine/hrm/recruiting/offers-signing'
 import {
   listPostingEvents,
   listPostings,
-} from '@openbooks/engine/src/hrm/recruiting/postings.ts'
+} from '@openbooks/engine/hrm/recruiting/postings'
 import {
   listPoolMembers,
   listTalentPools,
-} from '@openbooks/engine/src/hrm/recruiting/pools.ts'
+} from '@openbooks/engine/hrm/recruiting/pools'
 import {
   listKitAttributes,
   listKitQuestions,
   loadKit,
-} from '@openbooks/engine/src/hrm/recruiting/kits.ts'
+} from '@openbooks/engine/hrm/recruiting/kits'
 import {
   readScorecardsForInterview,
   scorecardSummary,
-} from '@openbooks/engine/src/hrm/recruiting/scorecards.ts'
-import { listCandidateConsents } from '@openbooks/engine/src/hrm/recruiting/retention.ts'
-import { RecruitingError } from '@openbooks/engine/src/hrm/recruiting/errors.ts'
-import { HrmAuthorizationError } from '@openbooks/engine/src/hrm/authorization.ts'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+} from '@openbooks/engine/hrm/recruiting/scorecards'
+import { listCandidateConsents } from '@openbooks/engine/hrm/recruiting/retention'
+import { RecruitingError } from '@openbooks/engine/hrm/recruiting/errors'
+import { HrmAuthorizationError } from '@openbooks/engine/hrm/authorization'
+import { db } from '@openbooks/engine/platform/db'
 
 /**
  * Drawer absence vs failure, shared with the openings loader: a typed
@@ -40,7 +40,7 @@ export function isRecruitingAbsence(error: unknown): boolean {
   if (error instanceof HrmAuthorizationError) return true
   return error instanceof RecruitingError && error.code === 'NOT_FOUND'
 }
-import { businessTimeZone } from '@openbooks/engine/src/platform/business-date.ts'
+import { businessTimeZone } from '@openbooks/engine/platform/business-date/module'
 import { sql } from 'drizzle-orm'
 import { can, type Authz } from '../../../../lib/authz'
 

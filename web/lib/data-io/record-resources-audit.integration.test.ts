@@ -8,9 +8,9 @@ import type { FormSection } from '@openbooks/forms-core'
 // audit_log evidence — only the import_jobs run row records the batch.
 // Every updated or created row must carry its own actor + before/after
 // evidence (same source:'import' shape as the setup import resource).
-const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/platform/db')
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  '@openbooks/engine/src/testing/fixtures.ts'
+  '@openbooks/engine/testing/fixtures'
 )
 const { recordResource } = await import('./record-resources.ts')
 

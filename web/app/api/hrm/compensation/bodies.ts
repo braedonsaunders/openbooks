@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { civilDateInput } from "@/lib/api/civil-date";
-import { canonicalDecimal, isPositiveDecimal } from "@openbooks/engine/src/money/exact-decimal.ts";
+import { canonicalDecimal, isPositiveDecimal } from "@openbooks/engine/money/decimal";
 import { isUuid } from "../../../../lib/list-params";
 import { decimalNullRefusal, suppliedValue } from "../../../../lib/payroll-decimal-refusal";
 import { COMPENSATION_PERCENTAGE_INPUTS } from "./percentage-inputs";

@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/db'
 import { page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../../../lib/authz'
 import { INDUSTRIES, canSwitchIndustry } from '../../../../../lib/industries'
@@ -14,8 +14,8 @@ import {
   isTaxPosition,
   isTeamSize,
 } from '../../../../../lib/workspace-profile'
-import { installablePayrollPackSummaries } from '@openbooks/engine/src/payroll/packs.ts'
-import { canonicalTimeZone, countryTimeZoneDirectory, listCanonicalTimeZones } from '@openbooks/engine/src/platform/time-zone.ts'
+import { installablePayrollPackSummaries } from '@openbooks/engine/payroll/packs'
+import { canonicalTimeZone, countryTimeZoneDirectory, listCanonicalTimeZones } from '@openbooks/engine/platform/time-zone'
 import { COUNTRY_CODES } from '../../../../../lib/countries'
 import type { SetupWizard } from './SetupWizard'
 import { setupLaunchActions, type SetupLaunchAction } from '@/lib/setup-launch-actions'

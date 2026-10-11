@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import type { ReactElement } from 'react'
 import { renderToStaticMarkup } from 'react-dom/server'
-import { add } from '@openbooks/engine/src/money/money.ts'
+import { add } from '@openbooks/engine/money/money'
 import type { UtilizationData } from '../../../../lib/analytics/utilization-data'
 
 const React = await import('react')

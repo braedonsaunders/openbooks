@@ -3,10 +3,10 @@ import { defineRoute } from "@/lib/api/route";
 import { parseJsonBody, uuidId } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import { registerKiosk, revokeKiosk, setWorkerPin } from '@openbooks/engine/src/hrm/field-time/kiosk.ts'
-import { FieldTimeError } from '@openbooks/engine/src/hrm/field-time/errors.ts'
-import { ScopeNotFoundError, UnrestrictedScopeError } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
-import { subsidiaryVisibleFilter } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
+import { registerKiosk, revokeKiosk, setWorkerPin } from '@openbooks/engine/hrm/field-time/kiosk'
+import { FieldTimeError } from '@openbooks/engine/hrm/field-time/errors'
+import { ScopeNotFoundError, UnrestrictedScopeError } from '@openbooks/engine/organization/scope'
+import { subsidiaryVisibleFilter } from '@openbooks/engine/organization/scope'
 import { isUuid } from '../../../../lib/list-params'
 
 export const runtime = 'nodejs'
@@ -18,7 +18,7 @@ function bad(error: string, status = 422) {
 /** GET → kiosk devices (never token hashes — those never leave the vault). */
 async function legacyGET(request: Request, ctx: { params: Promise<unknown> }, injectedGate?: Authz | null) {
   const gate = injectedGate as Authz;
-  const { db } = await import('@openbooks/engine/src/platform/db.ts')
+  const { db } = await import('@openbooks/engine/platform/db')
   const { sql } = await import('drizzle-orm')
   const visibleProject = gate.allowedSubsidiaryIds === null
     ? sql``

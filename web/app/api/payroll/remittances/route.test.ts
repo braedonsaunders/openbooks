@@ -54,10 +54,10 @@ const mockSources = new Map<string, string>([
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     // '@/lib/api/json' is not mocked: never double the validation boundary.
-    if (specifier === '@openbooks/engine/src/payroll/remittance.ts') {
+    if (specifier === '@openbooks/engine/payroll/remittance') {
       return { url: 'mock:payroll-remittance', shortCircuit: true }
     }
-    if (['@openbooks/engine/src/payroll/error.ts', '@openbooks/engine/src/payroll/fences.ts', '@openbooks/engine/src/payroll/run-allocation.ts', '@openbooks/engine/src/payroll/run-calculation-evidence.ts', '@openbooks/engine/src/payroll/run-calculation.ts', '@openbooks/engine/src/payroll/run-calendar.ts', '@openbooks/engine/src/payroll/run-commit.ts', '@openbooks/engine/src/payroll/run-contracts.ts', '@openbooks/engine/src/payroll/run-lifecycle.ts', '@openbooks/engine/src/payroll/run-protection.ts', '@openbooks/engine/src/payroll/run-setup.ts', '@openbooks/engine/src/payroll/run-stub-records.ts', '@openbooks/engine/src/payroll/scope.ts'].includes(specifier)) return { url: 'mock:payroll-run', shortCircuit: true }
+    if (['@openbooks/engine/payroll/error', '@openbooks/engine/testing/payroll/fences', '@openbooks/engine/testing/payroll/run-allocation', '@openbooks/engine/payroll/run-calculation-evidence', '@openbooks/engine/payroll/run-calculation', '@openbooks/engine/payroll/run-calendar', '@openbooks/engine/payroll/run-commit', '@openbooks/engine/payroll/run-contracts', '@openbooks/engine/payroll/run-lifecycle', '@openbooks/engine/testing/payroll/run-protection', '@openbooks/engine/payroll/run-setup', '@openbooks/engine/testing/payroll/run-stub-records', '@openbooks/engine/payroll/scope'].includes(specifier)) return { url: 'mock:payroll-run', shortCircuit: true }
     if (specifier.endsWith('/lib/feature-gates')) return { url: 'mock:feature-gates', shortCircuit: true }
     if (specifier === '../subsidiary-scope') return { url: 'mock:subsidiary-scope', shortCircuit: true }
     return nextResolve(specifier, context)

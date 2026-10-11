@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation'
-import { verifyDocumentSignerToken } from '@openbooks/engine/src/hrm/documents/tokens.ts'
-import { readTokenDocument } from '@openbooks/engine/src/hrm/documents/documents.ts'
+import { verifyDocumentSignerToken } from '@openbooks/engine/hrm/documents/tokens'
+import { readTokenDocument } from '@openbooks/engine/hrm/documents/documents'
 import { SignDocumentForm } from './SignDocumentForm'
 
 export const dynamic = 'force-dynamic'

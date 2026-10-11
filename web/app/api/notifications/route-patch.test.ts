@@ -44,6 +44,10 @@ const mockSources = new Map<string, string>([
   [
     "mock:db",
     `
+      export function inExecutorTransaction() { throw new Error('unexpected inExecutorTransaction in route boundary test') }
+      export function orgContext() { throw new Error('unexpected orgContext in route boundary test') }
+      export function withTransactionSavepoint() { throw new Error('unexpected withTransactionSavepoint in route boundary test') }
+
       const state = globalThis[Symbol.for('openbooks.notifications-route-test')]
       const sqlText = globalThis.openbooksSqlTextNotifications
       export const db = {
@@ -86,7 +90,7 @@ const mockSources = new Map<string, string>([
 ]);
 
 const mockUrls = new Map<string, string>([
-  ["@openbooks/engine/src/platform/db.ts", "mock:db"],
+  ["@openbooks/engine/platform/db", "mock:db"],
   ["../../../lib/authz", "mock:authz"],
   ["@/lib/authz", "mock:authz"],
   ["@/lib/feature-gates", "mock:feature-gates"],

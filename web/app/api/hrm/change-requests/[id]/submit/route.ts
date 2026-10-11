@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { submitChangeRequest } from "@openbooks/engine/src/hrm/change-requests.ts";
+import { submitChangeRequest } from "@openbooks/engine/hrm/change-requests/operations";
 import { isUuid } from "../../../../../../lib/list-params";
 import { changeRequestErrorResponse } from "../../_lib";
 import { submitChangeRequestBody } from "../../bodies";
@@ -23,7 +23,7 @@ export const POST = defineRoute({
       // action and an active code; with none declared, classification is
       // optional. The validator reads that from the database itself.
       const { validateSubmitActionReason } =
-        await import("@openbooks/engine/src/automations/action-reasons.ts");
+        await import("@openbooks/engine/automations/action-reasons");
       const { automationErrorResponse } =
         await import("../../../../automations/_lib");
       try {

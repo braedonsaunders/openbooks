@@ -1,26 +1,26 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { sql } from 'drizzle-orm'
-import type { ScratchOrg } from '../../engine/src/testing/fixtures.ts'
+import type { ScratchOrg } from '@openbooks/engine/testing/fixtures'
 import type { Authz } from './authz.ts'
 
 // The shared test preset stubs the RSC `server-only` marker, so every
 // module that (even transitively) imports it loads dynamically below —
 // the same seam as web/lib/custom-reports-open-ar.integration.test.ts.
-const { db, pool, withBypass, withOrgContext } = await import('../../engine/src/platform/db.ts')
+const { db, pool, withBypass, withOrgContext } = await import('@openbooks/engine/platform/db')
 const { createScratchOrg, createScratchUser, dropScratchOrg, seedApprovalFlow } = await import(
-  '../../engine/src/testing/fixtures.ts'
+  '@openbooks/engine/testing/fixtures'
 )
 const { REPORT_ENTITY_MAP } = await import('../../packages/reports/src/entities.ts')
 const { runCustomQuery } = await import('../../packages/reports/src/run.ts')
 const { BUILT_IN_REPORT_DEFINITION_MAP } = await import('../../packages/reports/src/built-ins.ts')
 const { canRunReportEntity, hiddenReportEntityKeys } = await import('./report-authz.ts')
 const { createChangeRequestDraft, submitChangeRequest } = await import(
-  '../../engine/src/hrm/change-requests.ts'
+  '@openbooks/engine/hrm/change-requests/operations'
 )
 const { HRM_CHANGE_REQUEST_SUBJECT_KIND } = await import('../../schema/src/hrm-change-requests.ts')
-const { decideGate } = await import('../../engine/src/flows/gates.ts')
-const { installEngineSeams } = await import('../../engine/src/composition/install.ts')
+const { decideGate } = await import('@openbooks/engine/testing/flows/gates')
+const { installEngineSeams } = await import('@openbooks/engine/composition/install')
 
 // Gate releases run through the installed engine seams (C13/C14); without
 // this the gates strand on a not-registered refusal instead of releasing.
@@ -67,7 +67,7 @@ async function enableEveryHrmReportFeature(orgId: string): Promise<void> {
   // HR-21's switches went missing here.
   const { HRM_REPORT_ENTITIES } = await import('@openbooks/reports')
   const { FEATURE_BY_KEY, featureRequirements } = await import(
-    '../../engine/src/organization/feature-registry.ts'
+    '@openbooks/engine/organization/feature-registry'
   )
   // Close over the REQUIREMENT GRAPH, not just the declared keys. A
   // module is off while a feature it requires is off, and the

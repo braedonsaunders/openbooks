@@ -12,10 +12,10 @@ import { vendorComplianceStatus } from "./compliance.ts";
  * businessToday), not the UTC date of the instant.
  */
 const { db, withBypassContext, withOrgContext } = await import(
-  "@openbooks/engine/src/platform/db.ts"
+  "@openbooks/engine/platform/db"
 );
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
-  "@openbooks/engine/src/testing/fixtures.ts"
+  "@openbooks/engine/testing/fixtures"
 );
 
 const DB = !!process.env.OPENBOOKS_DB_URL;

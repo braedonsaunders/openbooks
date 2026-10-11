@@ -15,8 +15,8 @@
  * number and re-checks identity under lock.
  */
 import { sql } from "drizzle-orm";
-import { db, withOrg } from "../../engine/src/platform/db.ts";
-import { isUuid } from "../../engine/src/platform/uuid.ts";
+import { db, withOrg } from "@openbooks/engine/platform/db";
+import { isUuid } from "@openbooks/engine/platform/identifiers";
 
 export interface ImportTicket {
   sourceId: string;

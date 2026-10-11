@@ -1,7 +1,7 @@
 import { defineRoute } from '@/lib/api/route'
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { resolveFlag } from "@openbooks/engine/src/hrm/ai/anomalies.ts";
+import { resolveFlag } from "@openbooks/engine/hrm/ai/anomalies";
 import { aiRailsErrorResponse } from "../../../../../lib/ai-rails";
 import { can } from "../../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../../lib/features";

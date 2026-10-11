@@ -2,7 +2,7 @@ import { defineRoute } from '@/lib/api/route'
 import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { listFlags, runAnomalyScan } from "@openbooks/engine/src/hrm/ai/anomalies.ts";
+import { listFlags, runAnomalyScan } from "@openbooks/engine/hrm/ai/anomalies";
 import { aiRailsErrorResponse } from "../../../../lib/ai-rails";
 import { can } from "../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../lib/features";
@@ -43,7 +43,7 @@ export const GET = defineRoute({
     return value !== null && (values as readonly string[]).includes(value) ? value : undefined;
   };
   try {
-    const { db } = await import("@openbooks/engine/src/platform/db.ts");
+    const { db } = await import("@openbooks/engine/platform/db");
     const flags = await listFlags(db, {
       orgId: gate.user.orgId,
       actorId: gate.user.id,
@@ -71,7 +71,7 @@ export const POST = defineRoute({
     const body = parsedBody.data;
     try {
       if (body.action === "compute_baselines") {
-        const { computeAnomalyBaselines } = await import("@openbooks/engine/src/hrm/ai/anomalies.ts");
+        const { computeAnomalyBaselines } = await import("@openbooks/engine/hrm/ai/anomalies");
         const result = await computeAnomalyBaselines({
           orgId: gate.user.orgId,
           actorId: gate.user.id,

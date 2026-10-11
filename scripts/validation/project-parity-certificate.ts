@@ -40,19 +40,19 @@ import { execFileSync } from "node:child_process";
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { sql } from "drizzle-orm";
-import { db, withOrgContext } from "../../engine/src/platform/db.ts";
-import { isUuid } from "../../engine/src/platform/uuid.ts";
-import { addCalendarDays } from "../../engine/src/platform/civil-date.ts";
-import { fromUnits, normalizeDecimal, roundDiv, toUnits } from "../../engine/src/money/money.ts";
+import { db, withOrgContext } from "@openbooks/engine/platform/db";
+import { isUuid } from "@openbooks/engine/platform/identifiers";
+import { addCalendarDays } from "@openbooks/engine/platform/civil-date";
+import { fromUnits, normalizeDecimal, roundDiv, toUnits } from "@openbooks/engine/money/money";
 import {
   emptyPopulationGate,
   evaluateCrewGate,
   isEmptyCrewPopulation,
   isEmptyPopulation,
 } from "./parity-gates.ts";
-import { sourceClient } from "../../engine/src/sync/source-client.ts";
-import { resolveProjectFinancials } from "../../engine/src/projects/financials.ts";
-import { loadProjectType } from "../../engine/src/projects/type.ts";
+import { sourceClient } from "@openbooks/engine/sync/source-client";
+import { resolveProjectFinancials } from "@openbooks/engine/projects/financials";
+import { loadProjectType } from "@openbooks/engine/projects/type";
 import { retry } from "./retry.ts";
 
 type JsonRow = Record<string, unknown>;

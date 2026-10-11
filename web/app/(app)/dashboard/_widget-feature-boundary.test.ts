@@ -30,7 +30,7 @@ registerHooks({
     if (s === './_metrics' && (c.parentURL?.endsWith('/_edit-canvas.tsx') || c.parentURL?.endsWith('/dashboard/actions.ts'))) {
       return wrap('web/app/(app)/dashboard/_metrics.ts', `export async function loadDashboardMetrics(authz,ids){globalThis.__dashboardFeatureBoundary.metrics.push(ids);return {}}`)
     }
-    if (s === '@openbooks/engine/src/platform/db.ts' && c.parentURL?.endsWith('/dashboard/actions.ts')) {
+    if (s === '@openbooks/engine/platform/db' && c.parentURL?.endsWith('/dashboard/actions.ts')) {
       return { shortCircuit: true, url: 'data:text/javascript,' + encodeURIComponent(`export const db={async transaction(fn){return fn({async execute(query){globalThis.__dashboardFeatureBoundary.writes.push(query);return {rows:[]}}})}}`) }
     }
     if (s === 'next/cache') return { shortCircuit: true, url: 'data:text/javascript,export function revalidatePath(){}' }

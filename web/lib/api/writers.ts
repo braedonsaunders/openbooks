@@ -4,18 +4,18 @@ import {
   db,
   orgContext,
   withOrgTransaction,
-} from "@openbooks/engine/src/platform/db.ts";
-import { runTriggerScripts } from "@openbooks/engine/src/scripting/scripting.ts";
-import { postDocument } from "@openbooks/engine/src/ledger/posting-document.ts";
-import { PostingError } from "@openbooks/engine/src/journal/posting-contracts.ts";
-import { ControlAccountsIncompleteError } from "@openbooks/engine/src/records/control-accounts.ts";
-import { submitAndReleaseIfUngated } from "@openbooks/engine/src/flows/index.ts";
+} from "@openbooks/engine/platform/db";
+import { runTriggerScripts } from "@openbooks/engine/scripting/scripting";
+import { postDocument } from "@openbooks/engine/ledger/posting-document";
+import { PostingError } from "@openbooks/engine/journal/contracts";
+import { ControlAccountsIncompleteError } from "@openbooks/engine/records/control-accounts";
+import { submitAndReleaseIfUngated } from "@openbooks/engine/flows/module";
 import {
   deleteDocument,
   DeleteError,
-} from "@openbooks/engine/src/ledger/document-delete.ts";
-import { ScopeNotFoundError } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
-import { FixedAssetEquipmentLinkConflict, refuseFixedAssetRehomeWithEquipment } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
+} from "@openbooks/engine/ledger/document-delete";
+import { ScopeNotFoundError } from "@openbooks/engine/organization/scope";
+import { FixedAssetEquipmentLinkConflict, refuseFixedAssetRehomeWithEquipment } from "@openbooks/engine/organization/scope";
 import {
   resolveDefaultValue,
   type FieldValueMap,
@@ -25,7 +25,7 @@ import type { SessionUser } from "../auth";
 import { ensurePartyRoleRow } from "../party-roles";
 import { ApprovalRoutingError } from "../approval-routing-error";
 import { nextDocumentNumber } from "../bills.ts";
-import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
 import { findUnownedCustomReferences, loadFieldDefs, validateCustomValues } from "../custom-fields";
 import { allowedSubsidiaryIds as loadAllowedSubsidiaryIds } from "../subsidiaries";
 import {
@@ -47,12 +47,12 @@ import {
   type RecordStatus,
 } from "../record-schema";
 import { applyDocumentEdit, createDocumentDraft, isDocKindEnabled, precomputeDocumentTotalsForCreate } from "../documents.ts";
-import { controlDeps, loadDocument, loadDocumentEditCurrent } from "../../../engine/src/ledger/document-service.ts";
-import { documentRevisionCounterSql } from "../../../engine/src/records/revision.ts";
-import { DocumentEditError } from "../../../engine/src/records/document-edit-policy.ts";
-import { type DocumentEditCurrent, type DocumentEditInput } from "../../../engine/src/ledger/document-input.ts";
+import { controlDeps, loadDocument, loadDocumentEditCurrent } from "@openbooks/engine/ledger/document-service";
+import { documentRevisionCounterSql } from "@openbooks/engine/records/revision";
+import { DocumentEditError } from "@openbooks/engine/records/document-edit-policy";
+import { type DocumentEditCurrent, type DocumentEditInput } from "@openbooks/engine/ledger/document-input";
 import { isFeatureEnabled } from "../features";
-import { isDocumentRevisionToken } from "@openbooks/engine/src/records/revision.ts";
+import { isDocumentRevisionToken } from "@openbooks/engine/records/revision";
 import { auditSetupChange } from "../setup/audit";
 import { validateEntityBody } from "./validate";
 import {
@@ -68,7 +68,7 @@ import {
   type ApiField,
   type ResolvedApiType,
 } from "./schema-registry";
-import { isUuid } from "@openbooks/engine/src/platform/uuid.ts";
+import { isUuid } from "@openbooks/engine/platform/identifiers";
 
 /**
  * The generic write engine behind /api/v1/records. Every writer reuses the

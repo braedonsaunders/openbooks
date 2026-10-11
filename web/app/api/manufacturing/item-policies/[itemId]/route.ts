@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { db } from "@openbooks/engine/src/platform/db.ts";
-import { getItemPolicy, upsertItemPolicy, type ItemPolicyInput } from "@openbooks/engine/src/manufacturing/item-policies.ts";
+import { db } from "@openbooks/engine/platform/db";
+import { getItemPolicy, upsertItemPolicy, type ItemPolicyInput } from "@openbooks/engine/manufacturing/item-policies";
 import { defineRoute } from "@/lib/api/route";
 import { notFound } from "@/lib/api/responses";
 import { manufacturingTransaction } from "../../_transaction";

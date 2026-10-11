@@ -4,8 +4,8 @@ import { randomUUID } from 'node:crypto';
 import { registerHooks } from 'node:module';
 import test from 'node:test';
 import { sql } from 'drizzle-orm';
-import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts';
-import { createScratchOrg, dropScratchOrg, type ScratchOrg } from '@openbooks/engine/src/testing/fixtures.ts';
+import { db, withOrgTransaction } from '@openbooks/engine/platform/db';
+import { createScratchOrg, dropScratchOrg, type ScratchOrg } from '@openbooks/engine/testing/fixtures';
 
 const state: { gate: { user: { orgId: string; id: string } } | null } = { gate: null };
 Object.assign(globalThis, { __specializedSetupEvidence: state });
@@ -137,7 +137,7 @@ for (const method of ['POST','PATCH'] as const) {
   const org=await createScratchOrg();
   try {
    const actorId=await authenticate(org);
-   const {startReconciliation}=await import('@openbooks/engine/src/banking/banking.ts');
+   const {startReconciliation}=await import('@openbooks/engine/banking/banking');
    await db.execute(sql`update accounts set reconcilable=true,currency_restriction='CAD' where org_id=${org.orgId} and id=${org.accounts.bank}`);
    await startReconciliation({accountId:org.accounts.bank,throughDate:org.date,statementBalance:'100'},{orgId:org.orgId,userId:actorId, allowedSubsidiaryIds: null });
    const body={code:'NEW_PRIMARY',name:'New primary',isPrimary:true,isActive:true};
@@ -158,7 +158,7 @@ test('book-switch preview enforces history while renaming the current primary re
  const org=await createScratchOrg();
  try {
   const actorId=await authenticate(org);
-  const {startReconciliation}=await import('@openbooks/engine/src/banking/banking.ts');
+  const {startReconciliation}=await import('@openbooks/engine/banking/banking');
   const {saveSetupBook}=await import('./setup/books');
   const {SETUP_ENTITY_BY_KEY}=await import('./setup/registry');
   await db.execute(sql`update accounts set reconcilable=true,currency_restriction='CAD' where org_id=${org.orgId} and id=${org.accounts.bank}`);
@@ -177,7 +177,7 @@ test('the first reconciliation and primary reassignment serialize on the shared 
  let holding:Promise<unknown>|undefined,attempt:Promise<Response>|undefined;
  try {
   const actorId=await authenticate(org);
-  const {startReconciliation}=await import('@openbooks/engine/src/banking/banking.ts');
+  const {startReconciliation}=await import('@openbooks/engine/banking/banking');
   await db.execute(sql`update accounts set reconcilable=true,currency_restriction='CAD' where org_id=${org.orgId} and id=${org.accounts.bank}`);
   let ready:()=>void=()=>{};
   const started=new Promise<void>(resolve=>{ready=resolve;});

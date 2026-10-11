@@ -1,17 +1,17 @@
 import 'server-only'
 import { cache } from 'react'
 import { sql, type SQL } from 'drizzle-orm'
-import { activePostingPrimaryBookId } from '@openbooks/engine/src/platform/accounting-books.ts'
-import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
-import { db, type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
-import { orderedNetOfCancelledSql } from '@openbooks/engine/src/records/order-line-remainders.ts'
+import { activePostingPrimaryBookId } from '@openbooks/engine/platform/accounting-books'
+import { businessToday } from '@openbooks/engine/platform/business-date/module'
+import { db, type SqlExecutor } from '@openbooks/engine/platform/db'
+import { orderedNetOfCancelledSql } from '@openbooks/engine/records/order-line-remainders'
 
-import { FEATURES, featureEnabled, type FeatureState } from '@openbooks/engine/src/organization/feature-registry.ts'
-import { acquireOrgFeatureGateLock } from '@openbooks/engine/src/organization/org-feature-lock.ts'
-export { FEATURES, FEATURE_BY_KEY, featureEnabled, featureRequirements, type FeatureDef, type FeatureState } from '@openbooks/engine/src/organization/feature-registry.ts'
+import { FEATURES, featureEnabled, type FeatureState } from '@openbooks/engine/organization/feature-registry'
+import { acquireOrgFeatureGateLock } from '@openbooks/engine/organization/org-feature-lock'
+export { FEATURES, FEATURE_BY_KEY, featureEnabled, featureRequirements, type FeatureDef, type FeatureState } from '@openbooks/engine/organization/feature-registry'
 // One source defines the fence identity: the engine module below. This
 // switchboard re-exports its key so every importer keeps working.
-export { featureGateLockKey } from '@openbooks/engine/src/organization/org-feature-lock.ts'
+export { featureGateLockKey } from '@openbooks/engine/organization/org-feature-lock'
 
 import {
   featureEnabledFromState,

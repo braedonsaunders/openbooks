@@ -12,8 +12,8 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier,context);
 }});
 const { sql } = await import('drizzle-orm');
-const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
 const { randomUUID }=await import('node:crypto');
 const {createBillingRequest}=await import('./billing-requests');
 const {generateInvoiceFromBillingRequest}=await import('./billing');
@@ -102,10 +102,10 @@ for(const scenario of ['hidden cost','concurrent time','project move']) {
 
 const consolidatedRows = [
   { label: "billing milestone provenance", register: async () => {
-        const { db, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
+        const { db, withBypassContext } = await import('@openbooks/engine/platform/db')
         const { sql } = await import('drizzle-orm')
         const { BUILTIN_PROJECT_TYPES } = await import('@openbooks/schema')
-        const { createScratchOrg, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+        const { createScratchOrg, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
         const { generateInvoiceFromBillingRequest } = await import('./billing')
         const { createBillingRequest } = await import('./billing-requests')
 
@@ -167,9 +167,9 @@ const consolidatedRows = [
         // misspelled type must refuse — silently persisting the default (or none)
         // would issue the customer a packet nobody asked for, or no packet where
         // the approver required one.
-        const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+        const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
         const { sql } = await import('drizzle-orm')
-        const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+        const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
         const { createBillingRequest } = await import('./billing-requests')
         const DB = !!process.env.OPENBOOKS_DB_URL
 
@@ -222,10 +222,10 @@ const consolidatedRows = [
         })
   } },
   { label: "billing not to exceed", register: async () => {
-        const { db, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
+        const { db, withBypassContext } = await import('@openbooks/engine/platform/db')
         const { sql } = await import('drizzle-orm')
         const { BUILTIN_PROJECT_TYPES } = await import('@openbooks/schema')
-        const { createScratchOrg, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+        const { createScratchOrg, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
         const { generateInvoiceFromBillingRequest } = await import('./billing')
         const { createBillingRequest } = await import('./billing-requests')
 
@@ -281,9 +281,9 @@ const consolidatedRows = [
         })
   } },
   { label: "billing currency", register: async () => {
-        const { db, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
+        const { db, withBypassContext } = await import('@openbooks/engine/platform/db')
         const { sql } = await import('drizzle-orm')
-        const { createScratchOrg, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+        const { createScratchOrg, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
         const { generateInvoiceFromBillingRequest } = await import('./billing')
         const { createBillingRequest } = await import('./billing-requests')
 
@@ -334,9 +334,9 @@ const consolidatedRows = [
         }
   } },
   { label: "billing per item provenance", register: async () => {
-        const { db, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
+        const { db, withBypassContext } = await import('@openbooks/engine/platform/db')
         const { sql } = await import('drizzle-orm')
-        const { createScratchOrg, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+        const { createScratchOrg, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
         const { generateInvoiceFromBillingRequest } = await import('./billing')
         const { createBillingRequest } = await import('./billing-requests')
 
@@ -395,8 +395,8 @@ const billingTimeSelectionCases = [
           return next(specifier,context);
         }});
         const { sql } = await import('drizzle-orm');
-        const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
-        const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
+        const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
+        const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
         const { randomUUID } = await import('node:crypto');
         const { PATCH } = await import('../app/api/billing-requests/[id]/route');
         const { POST } = await import('../app/api/billing-requests/[id]/create-invoice/route');
@@ -485,8 +485,8 @@ const billingTimeSelectionCases = [
           },
         })
         const { sql } = await import('drizzle-orm')
-        const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
-        const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+        const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
+        const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
         const { randomUUID } = await import('node:crypto')
         const { createBillingRequest } = await import('./billing-requests')
         const { generateInvoiceFromBillingRequest } = await import('./billing')
@@ -570,8 +570,8 @@ const billingTimeSelectionCases = [
           },
         })
         const { sql } = await import('drizzle-orm')
-        const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
-        const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+        const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
+        const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
         const { randomUUID } = await import('node:crypto')
         const { createBillingRequest } = await import('./billing-requests')
         const { generateInvoiceFromBillingRequest } = await import('./billing')
@@ -711,8 +711,8 @@ const billingRateAndTaxCases = [
         // the card assignment selects WHICH adjustments apply, and each
         // adjustment's own targets select WHICH lines they measure.
         const { sql } = await import('drizzle-orm')
-        const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
-        const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+        const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
+        const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
         const { randomUUID } = await import('node:crypto')
         const { createBillingRequest } = await import('./billing-requests')
         const { generateInvoiceFromBillingRequest } = await import('./billing')
@@ -1224,9 +1224,9 @@ const billingRateAndTaxCases = [
         // bills.ts is a server-only service; the marker package gates only RSC
         // bundling, so shim it to exercise the production service directly.
         const { computeBillTotalsWithProvider, taxProfileMap } = await import('./bills.ts')
-        const { saveTaxRateProviderConfig } = await import('@openbooks/engine/src/tax/rate-providers.ts')
-        const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
-        const { db, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
+        const { saveTaxRateProviderConfig } = await import('@openbooks/engine/tax/rate-providers')
+        const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
+        const { db, withBypassContext } = await import('@openbooks/engine/platform/db')
 
         const DB = !!process.env.OPENBOOKS_DB_URL
 

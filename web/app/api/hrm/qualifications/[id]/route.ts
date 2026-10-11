@@ -1,11 +1,11 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { db } from "@openbooks/engine/platform/db";
 import {
   listQualificationEvents,
   loadQualification,
-} from "@openbooks/engine/src/hrm/qualifications/qualifications.ts";
+} from "@openbooks/engine/hrm/qualifications/qualifications";
 import { qualificationErrorResponse } from "../_lib";
 /** One qualification with its evidence trail (drawer reads this). */
 export const GET = defineRoute({

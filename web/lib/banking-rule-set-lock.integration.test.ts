@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import test from 'node:test'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/db'
 import { lockBankMatchRuleSet } from './banking-rule-set-lock'
 
 const DB = !!process.env.OPENBOOKS_DB_URL

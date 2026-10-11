@@ -4,15 +4,15 @@ import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/db'
 import {
   lockProjectForScope,
   ScopeNotFoundError,
   subsidiaryVisibleFilter,
-} from '@openbooks/engine/src/organization/subsidiary-scope.ts'
+} from '@openbooks/engine/organization/scope'
 import { guardSubsidiaryScope } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
-import { FieldTimeError } from '@openbooks/engine/src/hrm/field-time/errors.ts'
+import { FieldTimeError } from '@openbooks/engine/hrm/field-time/errors'
 import { notFound } from "@/lib/api/responses";
 
 

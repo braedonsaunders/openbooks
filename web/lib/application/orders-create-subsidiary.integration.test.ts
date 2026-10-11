@@ -6,8 +6,8 @@ import test from "node:test";
 // draft the same key cannot GET/list: the subsidiary is required (explicit)
 // or derived (single visible subsidiary), otherwise refused.
 const { sql } = await import("drizzle-orm");
-const { db, withBypassContext } = await import("@openbooks/engine/src/platform/db.ts");
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
+const { db, withBypassContext } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
 const { createApplicationOrder } = await import("./orders.ts");
 const { ApplicationError } = await import("./errors.ts");
 type ApplicationContext = import("./context.ts").ApplicationContext;

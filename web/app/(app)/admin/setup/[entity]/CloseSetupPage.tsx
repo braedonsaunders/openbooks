@@ -3,7 +3,7 @@ import { requirePermission } from "../../../../../lib/authz";
 import { guardCloseScope } from "../../../../../lib/close-scope";
 import { sql } from "drizzle-orm";
 import { getTranslations } from "next-intl/server";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { db } from "@openbooks/engine/platform/db";
 import {
   BUILT_IN_REPORT_DEFINITIONS,
   STANDARD_STATEMENT_DEFINITIONS,
@@ -30,7 +30,7 @@ import type {
   SetupRoleRow,
   SetupUserRow,
 } from "./CloseSetupWorkspace";
-import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
 import { isFeatureEnabled, subsidiaryFeatureEnabled } from "../../../../../lib/features";
 
 const PER_PAGE = 20;

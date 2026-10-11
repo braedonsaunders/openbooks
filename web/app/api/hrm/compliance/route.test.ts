@@ -92,7 +92,7 @@ const mockSources = new Map<string, string>([
 const mockUrls = new Map<string, string>([
   ["../../../../../lib/authz", "mock:authz"],
   ["../../../../../lib/features", "mock:features"],
-  ["@openbooks/engine/src/hrm/construction/findings.ts", "mock:service"],
+  ["@openbooks/engine/hrm/construction/findings", "mock:service"],
   ["../_lib", "mock:lib"],
 ]);
 

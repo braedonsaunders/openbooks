@@ -4,7 +4,7 @@ import { defineRoute } from "@/lib/api/route";
 import { z } from "zod";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/db'
 import { guardUnrestrictedScope } from '../../../../../../lib/authz'
 import { createFile, deleteFile, ensureAttachmentsRoot } from '../../../../../../lib/file-cabinet'
 

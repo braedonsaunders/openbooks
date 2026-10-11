@@ -1,8 +1,8 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { loadPaymentDocument, openItemsForParty } from "@openbooks/engine/src/payments/payment-queries.ts";
-import { PAYMENT_KIND_SIDE, type PaymentKind } from "@openbooks/engine/src/payments/payment-contracts.ts";
+import { db } from '@openbooks/engine/platform/db'
+import { loadPaymentDocument, openItemsForParty } from "@openbooks/engine/payments/payment-queries";
+import { PAYMENT_KIND_SIDE, type PaymentKind } from "@openbooks/engine/payments/payment-contracts";
 import type { OpenItemClient } from '../app/(app)/payments/PaymentDrawer'
 import {
   RelatedTransactionDrawerClient,
@@ -21,7 +21,7 @@ import { DOC_KINDS, createPermission, postPermission, readPermission } from "../
 import { isDocKindEnabled, taxCodeOptions, taxGroupOptions } from "../lib/documents.ts";
 import { listScopedAccountOptions, listScopedCardOptions, listScopedPartyOptions } from '../lib/scoped-options'
 import { dimensionOptions as reportDimensionOptions } from '../lib/reports/filters'
-import { loadDocument } from "../../engine/src/ledger/document-service.ts";
+import { loadDocument } from "@openbooks/engine/ledger/document-service";
 import { canRecallExpenseReport, loadExpenseReport } from '../lib/expenses'
 import { loadJournalDoc } from '../lib/journals'
 import { customSegmentOptions } from '../lib/segments'

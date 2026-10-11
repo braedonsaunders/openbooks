@@ -22,11 +22,11 @@ registerHooks({
     return next(specifier, context)
   },
 })
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
 const { sql } = await import('drizzle-orm')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
 type ScratchOrg = Awaited<ReturnType<typeof createScratchOrg>>
-const { postDocument } = await import('@openbooks/engine/src/ledger/posting-document.ts')
+const { postDocument } = await import('@openbooks/engine/ledger/posting-document')
 const { POST } = await import('./route')
 
 const request = (body: unknown) => new Request('http://return-to-draft.local/api/documents/actions', { method: 'POST', body: JSON.stringify(body) })

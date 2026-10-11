@@ -3,16 +3,16 @@ import { defineRoute } from '@/lib/api/route';
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { runRecordFlows } from '@openbooks/engine/src/flows/index.ts'
+import { db } from '@openbooks/engine/platform/db'
+import { runRecordFlows } from '@openbooks/engine/flows/module'
 import { can, getAuthz, guardSubsidiaryScope, subsidiariesInScope } from '../../../lib/authz'
 import { isUuid } from '../../../lib/list-params'
 import { isFeatureEnabled } from '../../../lib/features'
 import { DocumentCreateConflict, createDocument, isDocKindEnabled } from "../../../lib/documents.ts";
-import { DocumentEditError } from "../../../../engine/src/records/document-edit-policy.ts";
-import { loadDocument } from "../../../../engine/src/ledger/document-service.ts";
+import { DocumentEditError } from "@openbooks/engine/records/document-edit-policy";
+import { loadDocument } from "@openbooks/engine/ledger/document-service";
 import { createPermission, isDocumentCreateKind } from "../../../lib/document-kinds.ts";
-import type { DocumentEditInput } from "../../../../engine/src/ledger/document-input.ts";
+import type { DocumentEditInput } from "@openbooks/engine/ledger/document-input";
 import { notFound } from "@/lib/api/responses";
 const jsonObjectSchema = z.record(z.string(), z.json());
 const documentLineSchema = z.object({

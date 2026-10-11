@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import { createHash, randomBytes } from 'node:crypto';
 import test from 'node:test';
 import { sql } from 'drizzle-orm';
-import { db, withBypassContext } from '@openbooks/engine/src/platform/db.ts';
-import { createScratchOrg, dropScratchOrg, seedFlowActors } from '@openbooks/engine/src/testing/fixtures.ts';
+import { db, withBypassContext } from '@openbooks/engine/platform/db';
+import { createScratchOrg, dropScratchOrg, seedFlowActors } from '@openbooks/engine/testing/fixtures';
 
 for (const scenario of ['pending login', 'pending enrollment', 'revoked enrollment'] as const) {
   test(`password reset invalidates ${scenario} from the previous credential`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
@@ -86,8 +86,8 @@ const consolidatedRows = [
         const { registerHooks } = await import("node:module");
         const test = (await import("node:test")).default;
         const { sql } = await import("drizzle-orm");
-        const { db, withBypass, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
-        const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
+        const { db, withBypass, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
+        const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
         const deliveries: string[] = [];
         const key = Symbol.for("openbooks.reset-concurrency-test");
         (globalThis as typeof globalThis & Record<symbol, unknown>)[key] = deliveries;
@@ -107,7 +107,7 @@ const consolidatedRows = [
                 }
               `)}` };
             }
-            if (context.parentURL?.includes("auth-reset.ts") && specifier === "@openbooks/engine/src/delivery/email-config.ts") {
+            if (context.parentURL?.includes("auth-reset.ts") && specifier === "@openbooks/engine/delivery/email-config/module") {
               return { shortCircuit: true, url: `data:text/javascript,${encodeURIComponent(`
                 export async function resolveOrgEmailTransport() {
                   await new Promise(resolve => setTimeout(resolve,100));
@@ -257,8 +257,8 @@ const consolidatedRows = [
         const { registerHooks } = await import("node:module");
         const test = (await import("node:test")).default;
         const { sql } = await import("drizzle-orm");
-        const { db, withBypass, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
-        const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
+        const { db, withBypass, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
+        const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
         const deliveriesKey = Symbol.for("openbooks.reset-delivery-order-test");
         const gateKey = Symbol.for("openbooks.reset-delivery-order-gate");
         const enteredKey = Symbol.for("openbooks.reset-delivery-order-entered");
@@ -288,7 +288,7 @@ const consolidatedRows = [
                 }
               `)}` };
             }
-            if (context.parentURL?.includes("auth-reset.ts") && specifier === "@openbooks/engine/src/delivery/email-config.ts") {
+            if (context.parentURL?.includes("auth-reset.ts") && specifier === "@openbooks/engine/delivery/email-config/module") {
               return { shortCircuit: true, url: `data:text/javascript,${encodeURIComponent(`
                 export async function resolveOrgEmailTransport() { return {provider:'isolated'}; }
                 export const insertEmailLog = async () => 'isolated-log';
@@ -410,8 +410,8 @@ const consolidatedRows = [
         const { registerHooks } = await import("node:module");
         const test = (await import("node:test")).default;
         const { sql } = await import("drizzle-orm");
-        const { db, withBypass } = await import("@openbooks/engine/src/platform/db.ts");
-        const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
+        const { db, withBypass } = await import("@openbooks/engine/platform/db");
+        const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
         const { hashPassword, verifyPassword } = await import("./auth-password");
         const state = {
           hashes: 0,
@@ -508,7 +508,7 @@ const authCredentialCases = [
         const assert: typeof import("node:assert/strict") = (await import("node:assert/strict")).default;
         const test = (await import("node:test")).default;
         const { sql } = await import("drizzle-orm");
-        const { db, withBypassContext } = await import("@openbooks/engine/src/platform/db.ts");
+        const { db, withBypassContext } = await import("@openbooks/engine/platform/db");
         const { login } = await import("./auth");
 
         const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -551,8 +551,8 @@ const authCredentialCases = [
         const { createHash, randomBytes, randomUUID } = await import("node:crypto");
         const test = (await import("node:test")).default;
         const { sql } = await import("drizzle-orm");
-        const { db, withBypass, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
-        const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
+        const { db, withBypass, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
+        const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
         for (const method of ["reset", "begin MFA", "confirm MFA"] as const) {
           for (const expires of [true, false]) {
             test(`${method} ${expires ? "refuses a credential expiring" : "accepts an unexpired credential"} while waiting for its user lock`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
@@ -672,10 +672,10 @@ const authCredentialCases = [
         // reaching any route, while a live one passes through. Tokens are minted
         // with the same HMAC scheme the proxy verifies, against real session rows.
         const { db, withBypassContext: withBypass } = await import(
-          "@openbooks/engine/src/platform/db.ts"
+          "@openbooks/engine/platform/db"
         );
         const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-          "@openbooks/engine/src/testing/fixtures.ts"
+          "@openbooks/engine/testing/fixtures"
         );
         const { proxy } = await import("../proxy.ts");
         const { sessionSigningInput } = await import("./auth-token-format.ts");
@@ -773,8 +773,8 @@ const authCredentialCases = [
         const { randomBytes, randomUUID } = await import("node:crypto");
         const test = (await import("node:test")).default;
         const { sql } = await import("drizzle-orm");
-        const { db, withBypass, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
-        const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
+        const { db, withBypass, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
+        const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
         async function seedSessions(orgId: string) {
           return withBypassContext(async () => {
             const userId = (await seedFlowActors(orgId)).adminId;
@@ -934,8 +934,8 @@ const assert: typeof import("node:assert/strict") = (await import("node:assert/s
 const { randomBytes, randomUUID } = await import("node:crypto");
 const test = (await import("node:test")).default;
 const { sql } = await import("drizzle-orm");
-const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
 for (const action of ["mfa_enabled", "mfa_disabled", "mfa_recovery_rotated"] as const) {
   for (const failAudit of [false, true]) {
     test(`${action} ${failAudit ? "rolls back when its audit write fails" : "retains attributable non-secret audit evidence"}`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
@@ -1053,8 +1053,8 @@ const consolidatedRows = [
         const { randomBytes } = await import("node:crypto");
         const test = (await import("node:test")).default;
         const { sql } = await import("drizzle-orm");
-        const { db, withBypass, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
-        const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
+        const { db, withBypass, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
+        const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
         for (const method of ["password", "new OIDC identity", "mapped OIDC identity"] as const) {
           test(`${method} observes MFA enabled while its user lock is pending`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
             const org = await withBypassContext(() => createScratchOrg());
@@ -1186,8 +1186,8 @@ const consolidatedRows = [
         const { randomBytes, randomUUID } = await import("node:crypto");
         const test = (await import("node:test")).default;
         const { sql } = await import("drizzle-orm");
-        const { db, withBypassContext } = await import("@openbooks/engine/src/platform/db.ts");
-        const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
+        const { db, withBypassContext } = await import("@openbooks/engine/platform/db");
+        const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
         const CONTEXT = { networkAddress: "127.0.0.1", userAgent: "mfa reauth refusal regression" };
 
         async function seedMfaUser(orgId: string, password: string) {
@@ -1303,8 +1303,8 @@ const consolidatedRows = [
         const { randomBytes, randomUUID } = await import("node:crypto");
         const test = (await import("node:test")).default;
         const { sql } = await import("drizzle-orm");
-        const { db, withBypass, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
-        const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
+        const { db, withBypass, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
+        const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
         const CONTEXT = { networkAddress: "127.0.0.1", userAgent: "mfa session liveness regression" };
 
         async function seedMfaUser(orgId: string, password: string) {
@@ -1469,8 +1469,8 @@ const consolidatedRows = [
         const { randomBytes, randomUUID } = await import("node:crypto");
         const test = (await import("node:test")).default;
         const { sql } = await import("drizzle-orm");
-        const { db, withBypassContext } = await import("@openbooks/engine/src/platform/db.ts");
-        const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
+        const { db, withBypassContext } = await import("@openbooks/engine/platform/db");
+        const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
         const CONTEXT = { networkAddress: "127.0.0.1", userAgent: "mfa tamper regression" };
 
         /**

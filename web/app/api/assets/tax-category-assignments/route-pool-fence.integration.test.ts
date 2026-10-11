@@ -19,10 +19,10 @@ registerHooks({
     return next(specifier, context);
   },
 });
-const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
-const { installTaxDepreciationPack } = await import("@openbooks/engine/src/tax-returns/depreciation-packs.ts");
-const { lockAssetTaxLifecycle } = await import("@openbooks/engine/src/organization/asset-tax-fence.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
+const { installTaxDepreciationPack } = await import("@openbooks/engine/tax-returns/depreciation-packs");
+const { lockAssetTaxLifecycle } = await import("@openbooks/engine/organization/asset-tax-fence");
 const routeUrl = "./route.ts?asset-tax-pool-fence-test";
 const { PATCH } = (await import(routeUrl)) as typeof import("./route.ts");
 

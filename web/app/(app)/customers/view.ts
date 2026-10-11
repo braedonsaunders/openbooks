@@ -20,7 +20,7 @@ import { resolveAsOf } from '../../../lib/cash/core'
 import { customersHome, type CustomerExposureRow, type CustomersHome } from '../../../lib/module-home/customers'
 import { MissingRatesError, type RatesBlockedNotice } from '../../../lib/consolidation'
 import { getMoneyFormatter } from '@/lib/money-server'
-import { cmp, mulDecimal } from '@openbooks/engine/src/money/money.ts'
+import { cmp, mulDecimal } from '@openbooks/engine/money/money'
 import { customerGroupTabs } from '../../../components/module-home/group-tabs'
 import type { DirectoryItem } from '../../../components/module-home/ui'
 

@@ -72,11 +72,11 @@ registerHooks({
     // file name, never the bracketed directory.
     if (
       parent.includes("SetupEntitySection.tsx") &&
-      (specifier === "@openbooks/engine/src/platform/db.ts" ||
+      (specifier === "@openbooks/engine/platform/db" ||
         specifier.endsWith("/lib/features") ||
         specifier.endsWith("/lib/setup/ref-options"))
     ) {
-      if (specifier === "@openbooks/engine/src/platform/db.ts") {
+      if (specifier === "@openbooks/engine/platform/db") {
         return {
           shortCircuit: true,
           format: "module",

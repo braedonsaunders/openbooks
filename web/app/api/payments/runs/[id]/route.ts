@@ -2,9 +2,9 @@ import { NextResponse } from 'next/server'
 import { defineRoute } from "@/lib/api/route";
 import { sql } from 'drizzle-orm'
 import { z } from 'zod'
-import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
-import { cancelPaymentRun } from "@openbooks/engine/src/payments/run-cancellation.ts";
-import { paymentRunReadiness } from "@openbooks/engine/src/payments/run-readiness.ts";
+import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
+import { cancelPaymentRun } from "@openbooks/engine/payments/run-cancellation";
+import { paymentRunReadiness } from "@openbooks/engine/payments/run-readiness";
 import { subsidiaryVisibleFilter } from '../../../../../lib/subsidiaries'
 import { isUuid } from '../../../../../lib/list-params'
 import { parseJsonBody } from '../../../../../lib/api/json'

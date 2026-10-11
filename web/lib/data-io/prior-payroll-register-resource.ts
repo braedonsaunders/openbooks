@@ -2,7 +2,7 @@ import { importRowError } from './row-error'
 import { readExportWindow, transferId, transferWhere, transferOrder, transferLimit, finishExportPage } from './export-page'
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/db'
 import {
   comparableSlots,
   savePriorStub,
@@ -12,8 +12,8 @@ import {
   TOTAL_FIELD_KEYS,
   type ComparableSlot,
   type PriorStubWrite,
-} from '@openbooks/engine/src/payroll/parallel-run-store.ts'
-import { lockAndCheckOrgFeature } from '@openbooks/engine/src/organization/org-feature-lock.ts'
+} from '@openbooks/engine/payroll/parallel-run-store'
+import { lockAndCheckOrgFeature } from '@openbooks/engine/organization/org-feature-lock'
 import {
   SOURCE_COLUMNS_KEY,
   UNMAPPED_COLUMNS_KEY,

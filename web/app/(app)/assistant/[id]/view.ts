@@ -10,7 +10,7 @@ import {
   ownsConversation,
   recentMessages,
 } from '../../../../lib/ai-conversations'
-import { isUuid } from '@openbooks/engine/src/platform/uuid.ts'
+import { isUuid } from '@openbooks/engine/platform/identifiers'
 
 /**
  * One deep-linkable assistant conversation, split into a loader and a spec.

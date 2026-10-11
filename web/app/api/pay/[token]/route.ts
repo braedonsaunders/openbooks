@@ -1,8 +1,8 @@
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { randomUUID } from "node:crypto";
 import { NextResponse } from "next/server";
-import { appBaseUrl } from "@openbooks/engine/src/flows/email-tokens.ts";
-import { PaymentAcceptanceError, createCheckoutSession, paymentLinkOrgId } from "@openbooks/engine/src/payments/acceptance.ts";
+import { appBaseUrl } from "@openbooks/engine/flows/email-tokens";
+import { PaymentAcceptanceError, createCheckoutSession, paymentLinkOrgId } from "@openbooks/engine/payments/acceptance/operations";
 import { isFeatureEnabled } from "../../../../lib/features";
 import { notFound } from "@/lib/api/responses";
 

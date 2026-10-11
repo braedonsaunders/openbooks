@@ -1,4 +1,4 @@
-import { updateUsageMeter } from "@openbooks/engine/src/billing/usage/records.ts";
+import { updateUsageMeter } from "@openbooks/engine/billing/usage/records";
 import { defineRoute } from "@/lib/api/route";
 import { z } from "zod";
 

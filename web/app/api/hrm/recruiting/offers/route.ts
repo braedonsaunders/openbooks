@@ -1,7 +1,7 @@
 import { defineRoute } from "@/lib/api/route";
 
 import { NextResponse } from "next/server";
-import { createOffer } from "@openbooks/engine/src/hrm/recruiting/offers.ts";
+import { createOffer } from "@openbooks/engine/hrm/recruiting/offers";
 
 import { recruitingErrorResponse } from "../_lib";
 import { createOfferBody } from "./bodies";

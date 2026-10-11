@@ -39,7 +39,7 @@ const mockSources = new Map<string, string>([
   [
     'mock:db',
     `
-      export * from '${import.meta.resolve('@openbooks/engine/src/platform/db.ts')}'
+      export * from '${import.meta.resolve('@openbooks/engine/platform/db')}'
       const state = globalThis[Symbol.for('openbooks.payroll-runs-route-test')]
       const sqlText = globalThis.openbooksPayrollRunsSqlText
       export const db = {
@@ -111,9 +111,9 @@ const mockSources = new Map<string, string>([
 
 const mockUrls = new Map<string, string>([
   ['@/lib/api/json', new URL('../../../../lib/api/json.ts', import.meta.url).href],
-  ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
-  ['@openbooks/engine/src/payroll/error.ts', 'mock:payroll-run'],
-  ['@openbooks/engine/src/payroll/run-lifecycle.ts', 'mock:payroll-run'],
+  ['@openbooks/engine/platform/db', 'mock:db'],
+  ['@openbooks/engine/payroll/error', 'mock:payroll-run'],
+  ['@openbooks/engine/payroll/run-lifecycle', 'mock:payroll-run'],
   ['../../../../lib/feature-gates', 'mock:feature-gates'],
   ['@/lib/feature-gates', 'mock:feature-gates'],
   ['../../../../lib/authz', 'mock:authz'],

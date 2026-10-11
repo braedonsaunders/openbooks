@@ -1,14 +1,14 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from "@/lib/api/error-response";
-import { LeaseError } from "@openbooks/engine/src/revenue/leases.ts";
+import { LeaseError } from "@openbooks/engine/revenue/leases";
 import { sql } from "drizzle-orm";
 import { leasePostSchema } from "../../_schema";
 import { NextResponse } from "next/server";
-import { subsidiaryScopeAllows } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
+import { subsidiaryScopeAllows } from "@openbooks/engine/organization/scope";
 import { isUuid } from "@/lib/list-params";
-import { db } from "@openbooks/engine/src/platform/db.ts";
-import { postDueLeaseSchedules } from "@openbooks/engine/src/revenue/leases.ts";
+import { db } from "@openbooks/engine/platform/db";
+import { postDueLeaseSchedules } from "@openbooks/engine/revenue/leases";
 export const runtime = "nodejs";
 export const POST = defineRoute({
   permission: "assets.manage",

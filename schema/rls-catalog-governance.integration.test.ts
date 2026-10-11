@@ -40,7 +40,7 @@ import { sql } from "drizzle-orm";
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
-type EngineDb = typeof import("../engine/src/platform/db.ts");
+type EngineDb = typeof import("@openbooks/engine/platform/db");
 
 /**
  * Org-scoped tables deliberately outside the ENABLE + FORCE + policy
@@ -188,7 +188,7 @@ async function leadingOrgIndexViolations(db: EngineDb["db"]): Promise<string[]> 
 }
 
 test("every org_id table carries a usable index led by org_id", { skip: !DB }, async () => {
-  const [{ db }] = await Promise.all([import("../engine/src/platform/db.ts")]);
+  const [{ db }] = await Promise.all([import("@openbooks/engine/platform/db")]);
   const violations = await leadingOrgIndexViolations(db);
   assert.deepEqual(
     violations,
@@ -198,7 +198,7 @@ test("every org_id table carries a usable index led by org_id", { skip: !DB }, a
 });
 
 test("the leading-index test fires and clears with the index", { skip: !DB }, async () => {
-  const [{ db }] = await Promise.all([import("../engine/src/platform/db.ts")]);
+  const [{ db }] = await Promise.all([import("@openbooks/engine/platform/db")]);
   const table = `org_idx_probe_${randomUUID().slice(0, 8).replace(/-/g, "")}`;
   await db.execute(sql`create table public.${sql.raw(table)} (id uuid, org_id uuid)`);
   try {
@@ -220,7 +220,7 @@ test("the leading-index test fires and clears with the index", { skip: !DB }, as
 });
 
 test("every org_id table is tenant-isolated at the catalog level", { skip: !DB }, async () => {
-  const [{ db }] = await Promise.all([import("../engine/src/platform/db.ts")]);
+  const [{ db }] = await Promise.all([import("@openbooks/engine/platform/db")]);
   const violations = await catalogViolations(db);
   assert.deepEqual(
     violations,
@@ -230,7 +230,7 @@ test("every org_id table is tenant-isolated at the catalog level", { skip: !DB }
 });
 
 test("every org-less table is globally justified or parent-isolated", { skip: !DB }, async () => {
-  const [{ db }] = await Promise.all([import("../engine/src/platform/db.ts")]);
+  const [{ db }] = await Promise.all([import("@openbooks/engine/platform/db")]);
   const violations = await orgLessViolations(db);
   assert.deepEqual(
     violations,
@@ -240,7 +240,7 @@ test("every org-less table is globally justified or parent-isolated", { skip: !D
 });
 
 test("the org-less test fires on an unwired table without org_id", { skip: !DB }, async () => {
-  const [{ db }] = await Promise.all([import("../engine/src/platform/db.ts")]);
+  const [{ db }] = await Promise.all([import("@openbooks/engine/platform/db")]);
   const table = `t18_rls_orgless_probe_${randomUUID().slice(0, 8).replace(/-/g, "")}`;
   await db.execute(sql`create table public.${sql.raw(table)} (id uuid)`);
   try {
@@ -255,7 +255,7 @@ test("the org-less test fires on an unwired table without org_id", { skip: !DB }
 });
 
 test("the org-less test passes a parent-scoped child table", { skip: !DB }, async () => {
-  const [{ db }] = await Promise.all([import("../engine/src/platform/db.ts")]);
+  const [{ db }] = await Promise.all([import("@openbooks/engine/platform/db")]);
   const table = `t18_rls_child_probe_${randomUUID().slice(0, 8).replace(/-/g, "")}`;
   await db.execute(sql`create table public.${sql.raw(table)} (id uuid, owner_id uuid)`);
   try {
@@ -274,7 +274,7 @@ test("the org-less test passes a parent-scoped child table", { skip: !DB }, asyn
 });
 
 test("the catalog test fires on an unwired org-scoped table", { skip: !DB }, async () => {
-  const [{ db }] = await Promise.all([import("../engine/src/platform/db.ts")]);
+  const [{ db }] = await Promise.all([import("@openbooks/engine/platform/db")]);
   const table = `t33_rls_probe_${randomUUID().slice(0, 8).replace(/-/g, "")}`;
   await db.execute(sql`create table public.${sql.raw(table)} (id uuid, org_id uuid)`);
   try {
@@ -291,8 +291,8 @@ test("the catalog test fires on an unwired org-scoped table", { skip: !DB }, asy
 test("G1/G2/G3 tables hide foreign rows and NULL-org rows from tenants", { skip: !DB }, async () => {
   const [{ db, withBypass, withOrg }, { createScratchOrg, dropScratchOrg, seedFlowActors }] =
     await Promise.all([
-      import("../engine/src/platform/db.ts"),
-      import("../engine/src/testing/fixtures.ts"),
+      import("@openbooks/engine/platform/db"),
+      import("@openbooks/engine/testing/fixtures"),
     ]);
   const orgA = await createScratchOrg();
   const orgB = await createScratchOrg();

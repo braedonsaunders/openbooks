@@ -3,7 +3,7 @@ import { defineRoute } from '@/lib/api/route'
 import { NextResponse } from "next/server";
 import { z } from 'zod'
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { db } from "@openbooks/engine/platform/db";
 import type { Authz } from "@/lib/authz";
 import { presentationCurrency } from "@/lib/fx-presentation";
 import { ANALYTICS_DASHBOARD_MAP } from "@/lib/analytics/dashboard-catalog";

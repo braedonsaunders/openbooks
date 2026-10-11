@@ -49,7 +49,7 @@ stubModules({
   authz: false,
   features: false,
   extra: {
-    "@openbooks/engine/src/platform/db.ts": `
+    "@openbooks/engine/platform/db": `
       const state = globalThis[Symbol.for('openbooks.compliance-record-action-allowlist-test')]
       const sqlText = globalThis.openbooksSqlTextComplianceAllow
       function respond(kind, query) {

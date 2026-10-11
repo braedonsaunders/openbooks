@@ -1,12 +1,12 @@
-import { isDocumentRevisionToken } from "@openbooks/engine/src/records/revision.ts";
+import { isDocumentRevisionToken } from "@openbooks/engine/records/revision";
 import { NextResponse } from 'next/server';
-import { ScopeNotFoundError } from '@openbooks/engine/src/organization/subsidiary-scope.ts';
+import { ScopeNotFoundError } from '@openbooks/engine/organization/scope';
 import type { Authz } from './authz';
 import type { SqlExecutor } from '@openbooks/engine/platform/database';
 import { isUuid } from './list-params';
 import { overallItemQuantities, resolveLinePriceBasis, selectPostableOrderLines, type OrderLineInput } from '../app/api/_order/line-selection';
-import { cmp } from '@openbooks/engine/src/money/money.ts';
-import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts';
+import { cmp } from '@openbooks/engine/money/money';
+import { isIsoCalendarDate } from '@openbooks/engine/platform/business-date/module';
 import { documentWorkDatesRefusal } from '@openbooks/engine/records/work-period';
 import { listScopedAccountOptions, listScopedDepartmentOptions, listScopedPartyOptions, listScopedProjectOptions } from './scoped-options';
 import { notFound } from './api/responses';
@@ -37,10 +37,10 @@ export interface OrderEditContext {
 
 export interface OrderEditServices {
   platform: {
-    db: typeof import('@openbooks/engine/src/platform/db.ts').db;
-    withOrgTransaction: typeof import('@openbooks/engine/src/platform/db.ts').withOrgTransaction;
+    db: typeof import('@openbooks/engine/platform/db').db;
+    withOrgTransaction: typeof import('@openbooks/engine/platform/db').withOrgTransaction;
     sql: typeof import('drizzle-orm').sql;
-    documentRevisionCounterSql: typeof import('@openbooks/engine/src/records/revision.ts').documentRevisionCounterSql;
+    documentRevisionCounterSql: typeof import('@openbooks/engine/records/revision').documentRevisionCounterSql;
   };
   authz: Pick<typeof import('./authz'), 'guardSubsidiaryScope'>;
   order: Pick<typeof import('../app/api/_order/lib'), 'computeOrderTotals' | 'exactOrderMoney' | 'loadOrder' | 'orderTaxProfileMap'>;
@@ -49,9 +49,9 @@ export interface OrderEditServices {
   segments: Pick<typeof import('./segments'), 'segmentRegistry' | 'validateExtraDims'>;
   crm: Pick<typeof import('@openbooks/engine/crm/crm'), 'promoteCrmAccount'>;
   features: Pick<typeof import('./features'), 'isFeatureEnabled' | 'subsidiaryFeatureEnabled'>;
-  flows: Pick<typeof import('@openbooks/engine/src/flows/index.ts'), 'submitAndReleaseIfUngated'>;
-  sales: Pick<typeof import('@openbooks/engine/src/sales/sales-orders.ts'), 'issueSalesOrder' | 'SalesOrderIssueError'>;
-  documentVoid: Pick<typeof import('@openbooks/engine/src/ledger/document-void.ts'), 'DocumentVoidError' | 'requestDocumentVoid'>;
+  flows: Pick<typeof import('@openbooks/engine/flows/module'), 'submitAndReleaseIfUngated'>;
+  sales: Pick<typeof import('@openbooks/engine/sales/sales-orders'), 'issueSalesOrder' | 'SalesOrderIssueError'>;
+  documentVoid: Pick<typeof import('@openbooks/engine/ledger/document-void'), 'DocumentVoidError' | 'requestDocumentVoid'>;
   signing: Pick<typeof import('@openbooks/engine/billing/quote-to-cash'), 'voidSignatureRequestsForSubject' | 'QUOTE_SUBJECT_TABLE'>;
 }
 

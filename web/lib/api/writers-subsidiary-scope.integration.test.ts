@@ -10,9 +10,9 @@ const { deleteRecord, updateRecord } = await import("./writers.ts");
 const { createAppPlatformAdapter } = await import("../apps/platform.ts");
 const { loadApiSchema, resolveApiType } = await import("./schema-registry.ts");
 const { db, env, withBypass, withOrgContext } =
-  await import("@openbooks/engine/src/platform/db.ts");
+  await import("@openbooks/engine/platform/db");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } =
-  await import("@openbooks/engine/src/testing/fixtures.ts");
+  await import("@openbooks/engine/testing/fixtures");
 
 // Subsidiary scope gates only types carrying a subsidiary_id field (the
 // platform list/get paths check `fields.some(f => f.name === 'subsidiary_id')`
@@ -142,7 +142,7 @@ test(
       return { org: created, actorId: actor, branch };
     });
 
-    const { documentRevisionCounterSql } = await import("@openbooks/engine/src/records/revision.ts");
+    const { documentRevisionCounterSql } = await import("@openbooks/engine/records/revision");
     const revisionOf = async (id: string) => {
       const rows = await db.execute<{ revision: string }>(sql`
         select ${documentRevisionCounterSql(sql`revision_seq`)} as revision

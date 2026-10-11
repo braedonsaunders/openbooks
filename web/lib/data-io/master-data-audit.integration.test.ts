@@ -6,9 +6,9 @@ import { sql } from 'drizzle-orm'
 // no before-image on updates, no after-image at all. An import that rewrites
 // a master row must carry the same before/after evidence as the setup import
 // resource.
-const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/platform/db')
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  '@openbooks/engine/src/testing/fixtures.ts'
+  '@openbooks/engine/testing/fixtures'
 )
 const { MASTER_BY_KEY, masterResource } = await import('./master-data-resources.ts')
 

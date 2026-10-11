@@ -75,7 +75,7 @@ stubModules({
       export function guardUnrestrictedScope() { return null }
     `,
     "../../../../../../lib/list-params": `export function isUuid() { return true }`,
-    "@openbooks/engine/src/platform/db.ts": `
+    "@openbooks/engine/platform/db": `
       const state = globalThis[Symbol.for('openbooks.filing-export-route-test')]
       const sqlText = globalThis.openbooksSqlTextFilingExport
       export const db = {
@@ -95,7 +95,7 @@ stubModules({
         },
       }
     `,
-    "@openbooks/engine/src/platform/business-date.ts": `export async function businessToday() { return '2026-08-24' }`,
+    "@openbooks/engine/platform/business-date/module": `export async function businessToday() { return '2026-08-24' }`,
     "next-intl/server": `export async function getTranslations() { return (key) => key }`,
     "../../../../../../lib/export": `
       const NextResponse = globalThis.openbooksFilingExportNextResponse

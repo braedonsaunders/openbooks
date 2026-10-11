@@ -2,15 +2,15 @@ import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import test from 'node:test'
 const { sql } = await import('drizzle-orm')
-const { db, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
-const { postDocument } = await import("@openbooks/engine/src/ledger/posting-document.ts");
-const { requestDocumentVoid } = await import('@openbooks/engine/src/ledger/document-void.ts')
-const { runRevenueRecognition } = await import('@openbooks/engine/src/revenue/recognition.ts')
-const { cancelRevenueRecognitionForInvoice } = await import('@openbooks/engine/src/ledger/revenue-recognition-cancellation.ts')
+const { db, withBypass, withOrgContext } = await import('@openbooks/engine/platform/db')
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
+const { postDocument } = await import("@openbooks/engine/ledger/posting-document");
+const { requestDocumentVoid } = await import('@openbooks/engine/ledger/document-void')
+const { runRevenueRecognition } = await import('@openbooks/engine/revenue/recognition')
+const { cancelRevenueRecognitionForInvoice } = await import('@openbooks/engine/ledger/revenue-recognition-cancellation')
 const { customerData } = await import('./customer-data')
 const { profitAndLoss } = await import('../reports/statements')
-const { add, neg } = await import('@openbooks/engine/src/money/money.ts')
+const { add, neg } = await import('@openbooks/engine/money/money')
 
 const DB = !!process.env.OPENBOOKS_DB_URL
 const JULY = { from: '2026-07-01', to: '2026-07-31', label: 'July 2026' }

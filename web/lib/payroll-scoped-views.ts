@@ -1,22 +1,22 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
 import {
   entitlementOpenings,
   type EntitlementOpeningsResult,
-} from '@openbooks/engine/src/payroll/entitlements-openings.ts'
+} from '@openbooks/engine/payroll/entitlements-openings'
 import {
   openingBalancesForYear,
   type OpeningBalanceYear,
-} from '@openbooks/engine/src/payroll/opening-balances.ts'
+} from '@openbooks/engine/payroll/opening-balances'
 import {
   payrollRemittanceSummary,
   type RemittanceGroup,
-} from '@openbooks/engine/src/payroll/remittance.ts'
+} from '@openbooks/engine/payroll/remittance'
 import {
   orgYearEndFilings,
   type YearEndFilingSection,
-} from '@openbooks/engine/src/payroll/yearend.ts'
+} from '@openbooks/engine/payroll/yearend'
 import {
   guardPayrollYearEndFilings,
   guardRemittancePeriod,

@@ -13,7 +13,7 @@ import { useBusinessToday } from '../../../../../components/business-date-provid
 import { exportCsv } from '../../_ui/exportCsv'
 import { useAnalyticsMoney, useRatioFormat, ratioNumber } from '../../_ui/format'
 import { decimalRatio } from '../../../../../lib/reports/decimals'
-import { cmp } from '@openbooks/engine/src/money/money.ts'
+import { cmp } from '@openbooks/engine/money/money'
 import { divideDecimal, multiplyDecimal } from '@openbooks/engine/money'
 
 const STATUS_STYLE: Record<BudgetRow['status'], string> = {

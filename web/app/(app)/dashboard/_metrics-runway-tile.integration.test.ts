@@ -1,3 +1,4 @@
+import { resolveEngineSpecifier } from '../../../testing/engine-resolve-hooks.ts'
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
@@ -20,21 +21,18 @@ registerHooks({
     // second db pool without the test bypass). Pin them to this checkout —
     // the same modules a real install resolves — process-wide, so the
     // loader under test and its transitive engine imports agree.
-    if (specifier.startsWith("@openbooks/engine/src/")) {
-      return nextResolve(
-        new URL(`../../../../engine/${specifier.slice("@openbooks/engine/".length)}`, import.meta.url).href,
-        context,
-      );
-    }
+
+    const engineUrl = resolveEngineSpecifier(specifier);
+    if (engineUrl) return nextResolve(engineUrl, context);
     return nextResolve(specifier, context);
   },
 });
 
 const { sql } = await import("drizzle-orm");
-const { db, withBypass, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
-const { toUnits } = await import("@openbooks/engine/src/money/money.ts");
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
-const { withSimClock: pinClock } = await import("@openbooks/engine/src/platform/clock.ts");
+const { db, withBypass, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { toUnits } = await import("@openbooks/engine/money/money");
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
+const { withSimClock: pinClock } = await import("@openbooks/engine/testing/platform/clock");
 const { MissingExchangeRateError } = await import("@/lib/fx-presentation.ts");
 const { cashPosition } = await import("@/lib/cash/cash-position.ts");
 const { analyticsConfig } = await import("@/lib/analytics/config.ts");

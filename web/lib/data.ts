@@ -1,9 +1,9 @@
 import "server-only";
 import { cache } from "react";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { db } from "@openbooks/engine/platform/db";
 import { PAYROLL_RESTRICTED_PARTY_LABEL, collapseRestrictedPayrollLines } from "./payroll-confidentiality";
-import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
 import { fiscalYearOf, fiscalYearRangeFor } from "@openbooks/reports";
 import { fiscalStartMonth } from "./fiscal";
 import { statementBookExpr } from "./gl-summary";

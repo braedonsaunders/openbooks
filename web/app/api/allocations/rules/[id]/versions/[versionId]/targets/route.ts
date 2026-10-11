@@ -7,7 +7,7 @@ import {
   getRuleVersion,
   replaceTargets,
   type AllocationTargetInput,
-} from '../../../../../../../../../engine/src/allocations/index.ts'
+} from '@openbooks/engine/allocations/runtime'
 import { allocationWriteErrorResponse, requireRevision, requireRuleId } from '../../../../../_lib.ts'
 import { notFound } from "@/lib/api/responses";
 

@@ -1,10 +1,10 @@
 import 'server-only'
 
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
-import { salesOrderScope } from '@openbooks/engine/src/sales/backorders.ts'
-import { getFulfillmentDocument, type FulfillmentKind } from '@openbooks/engine/src/sales/fulfillment.ts'
+import { db } from '@openbooks/engine/platform/db'
+import { businessToday } from '@openbooks/engine/platform/business-date/module'
+import { salesOrderScope } from '@openbooks/engine/sales/backorders'
+import { getFulfillmentDocument, type FulfillmentKind } from '@openbooks/engine/sales/fulfillment/module'
 import type {
   FulfillmentDrawerData,
   NewPickListData,

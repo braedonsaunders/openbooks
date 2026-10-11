@@ -25,8 +25,8 @@ registerHooks({
     return next(specifier, context);
   },
 });
-const { withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
+const { withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
 const { POST } = await import("./route.ts");
 
 async function fixture() {

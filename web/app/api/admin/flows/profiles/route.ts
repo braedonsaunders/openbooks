@@ -1,6 +1,6 @@
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from 'next/server'
-import { listFlowSubjectProfiles } from '@openbooks/engine/src/flows/index.ts'
+import { listFlowSubjectProfiles } from '@openbooks/engine/flows/module'
 import { flowSubjectGroup } from './groups.ts'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 

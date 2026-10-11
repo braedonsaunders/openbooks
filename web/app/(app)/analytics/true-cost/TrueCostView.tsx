@@ -18,7 +18,7 @@ import {
   TrendingDown, TrendingUp, UserRound, Wand2, Gauge as GaugeIcon, Download,
 } from 'lucide-react'
 import { cn, Select, Drawer } from '@openbooks/ui'
-import { add, cmp as compareMoney, div, mulDecimal, neg } from '@openbooks/engine/src/money/money.ts'
+import { add, cmp as compareMoney, div, mulDecimal, neg } from '@openbooks/engine/money/money'
 import type { CustomCategory, TrueCostData, TrueCostProfile } from '../../../../lib/analytics/true-cost-data'
 import type { RateFormat } from '../../../../lib/analytics/true-cost-engine'
 import { KpiCard } from '../_ui/KpiCard'

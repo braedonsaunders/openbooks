@@ -1,7 +1,7 @@
 import { defineRoute } from '@/lib/api/route';
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/db'
 import { isReportUuidParam } from '../../../../../lib/report-filters'
 import { getAuthz, can } from '../../../../../lib/authz'
 import { PAYROLL_RESTRICTED_PARTY_LABEL, collapseRestrictedPayrollLines } from '../../../../../lib/payroll-confidentiality'

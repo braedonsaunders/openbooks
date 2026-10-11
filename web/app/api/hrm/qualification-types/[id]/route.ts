@@ -1,8 +1,8 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { db } from "@openbooks/engine/src/platform/db.ts";
-import { updateQualificationType } from "@openbooks/engine/src/hrm/qualifications/types.ts";
+import { db } from "@openbooks/engine/platform/db";
+import { updateQualificationType } from "@openbooks/engine/hrm/qualifications/types";
 import { qualificationErrorResponse } from "../../qualifications/_lib";
 import { updateQualificationTypeBody } from "../../qualifications/bodies";
 /** Retire or correct a qualification type (code is immutable). */

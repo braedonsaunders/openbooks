@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import { randomUUID } from 'node:crypto'
 import test from 'node:test'
-import { withSimClock } from '@openbooks/engine/src/platform/clock.ts'
+import { withSimClock } from '@openbooks/engine/testing/platform/clock'
 
 type CancelBehavior =
   | { mode: 'cancelled' }
@@ -134,9 +134,9 @@ const mockUrls = new Map<string, string>([
   ['../../../../lib/features', mockUrl('features')],
   ['@/lib/feature-gates', mockUrl('features')],
   ['../../../../lib/documents.ts', mockUrl('documents')],
-  ['@openbooks/engine/src/ledger/revenue-recognition-cancellation.ts', mockUrl('revenue-recognition')],
-  ['@openbooks/engine/src/ledger/document-void.ts', mockUrl('document-void')],
-  ['@openbooks/engine/src/platform/db.ts', mockUrl('db')],
+  ['@openbooks/engine/ledger/revenue-recognition-cancellation', mockUrl('revenue-recognition')],
+  ['@openbooks/engine/ledger/document-void', mockUrl('document-void')],
+  ['@openbooks/engine/platform/db', mockUrl('db')],
 ])
 
 registerHooks({

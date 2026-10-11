@@ -1,6 +1,6 @@
 'use client'
 import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "@openbooks/ui"
-import { cmp } from '@openbooks/engine/src/money/money.ts'
+import { cmp } from '@openbooks/engine/money/money'
 
 import { useMoney } from '@/components/money-provider'
 import { useState } from 'react'

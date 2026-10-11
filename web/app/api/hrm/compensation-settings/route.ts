@@ -4,7 +4,7 @@ import { z } from "zod";
 import {
   compensationSettingsDocument,
   updateCompensationSettings,
-} from "@openbooks/engine/src/hrm/compensation/architecture.ts";
+} from "@openbooks/engine/hrm/compensation/architecture";
 import { compensationErrorResponse } from "../compensation/_lib";
 import { COMPENSATION_PERCENTAGE_INPUTS } from "../compensation/percentage-inputs";
 /**

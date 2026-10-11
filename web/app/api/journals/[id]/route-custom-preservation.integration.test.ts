@@ -59,9 +59,9 @@ registerHooks({
 
 const patchRouteUrl = "./route.ts?journal-custom-test";
 const { PATCH } = (await import(patchRouteUrl)) as typeof import("./route.ts");
-const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
-const { documentRevisionCounterSql } = await import("../../../../../engine/src/records/revision.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
+const { documentRevisionCounterSql } = await import("@openbooks/engine/records/revision");
 
 
 function patchRequest(id: string, body: unknown): { req: Request; ctx: { params: Promise<{ id: string }> } } {

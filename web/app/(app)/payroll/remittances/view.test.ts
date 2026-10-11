@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { stubModules } from '../../../../testing/stub-modules'
-import { PayrollError } from '@openbooks/engine/src/payroll/error.ts'
-import type { RemittanceGroup } from '@openbooks/engine/src/payroll/remittance.ts'
+import { PayrollError } from '@openbooks/engine/payroll/error'
+import type { RemittanceGroup } from '@openbooks/engine/payroll/remittance'
 
 const state: { error: Error | null; groups: RemittanceGroup[] | null } = { error: null, groups: [] }
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[Symbol.for('remittances-page-test')] = state
@@ -14,7 +14,7 @@ stubModules({
   authz: false,
   features: false,
   extra: {
-    '@openbooks/engine/src/platform/business-date.ts': "export async function businessToday(){ return '2026-09-13' }",
+    '@openbooks/engine/platform/business-date/module': "export async function businessToday(){ return '2026-09-13' }",
     '../../../../lib/authz': "export async function requirePermission(){ return { user: { orgId: 'test' } } }; export function can(){ return true }",
     '../../../../lib/feature-gates': 'export async function requireFeatureEnabled(){}',
     '../../../../components/module-home/group-tabs': 'export async function groupTabs(){ return [] }',

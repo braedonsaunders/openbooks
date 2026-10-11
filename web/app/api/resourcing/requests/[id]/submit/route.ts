@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { submitResourceRequest } from "@openbooks/engine/src/resourcing/requests.ts";
+import { submitResourceRequest } from "@openbooks/engine/resourcing/requests";
 import { defineRoute } from "@/lib/api/route";
 
 const Params = z.object({ id: z.string().uuid() }).strict();

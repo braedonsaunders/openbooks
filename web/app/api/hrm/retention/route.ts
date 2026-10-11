@@ -1,10 +1,10 @@
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
 import {
   getRetentionOverview,
   getTurnover,
-} from "@openbooks/engine/src/hrm/performance/performance-read.ts";
+} from "@openbooks/engine/hrm/performance/performance-read";
 
 import { isUuid } from "../../../../lib/list-params";
 import { performanceErrorResponse } from "../review-cycles/_lib";

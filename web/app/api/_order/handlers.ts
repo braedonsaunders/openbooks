@@ -1,9 +1,9 @@
-import { documentRevisionCounterSql } from "@openbooks/engine/src/records/revision.ts"
+import { documentRevisionCounterSql } from "@openbooks/engine/records/revision"
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
-import { deleteDocument, DeleteError } from '@openbooks/engine/src/ledger/document-delete.ts'
-import { ScopeNotFoundError } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
+import { deleteDocument, DeleteError } from '@openbooks/engine/ledger/document-delete'
+import { ScopeNotFoundError } from '@openbooks/engine/organization/scope'
 import { guardFeaturePermission } from '../../../lib/feature-gates'
 import { can, guardSubsidiaryScope } from '../../../lib/authz'
 import { isUuid } from '../../../lib/list-params'
@@ -17,10 +17,10 @@ import { computeOrderTotals, exactOrderMoney, loadOrder, orderTaxProfileMap } fr
 import { persistLineTaxComponents } from '../../../lib/bills.ts'
 import { activeStockLocations, profiledItemIds, resolveLineStockLocation } from '../../../lib/stock-locations'
 import { segmentRegistry, validateExtraDims } from '../../../lib/segments'
-import { promoteCrmAccount } from '@openbooks/engine/src/crm/crm.ts'
-import { submitAndReleaseIfUngated } from '@openbooks/engine/src/flows/index.ts'
-import { issueSalesOrder, SalesOrderIssueError } from '@openbooks/engine/src/sales/sales-orders.ts'
-import { DocumentVoidError, requestDocumentVoid } from '@openbooks/engine/src/ledger/document-void.ts'
+import { promoteCrmAccount } from '@openbooks/engine/crm/crm'
+import { submitAndReleaseIfUngated } from '@openbooks/engine/flows/module'
+import { issueSalesOrder, SalesOrderIssueError } from '@openbooks/engine/sales/sales-orders'
+import { DocumentVoidError, requestDocumentVoid } from '@openbooks/engine/ledger/document-void'
 import { QUOTE_SUBJECT_TABLE, voidSignatureRequestsForSubject } from '@openbooks/engine/billing/quote-to-cash'
 export type { OrderHandlerConfig } from '../../../lib/order-draft-edit'
 

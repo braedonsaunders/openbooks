@@ -2,9 +2,9 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 const { sql } = await import('drizzle-orm');
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts');
-const { createScratchOrg, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts');
-const { documentRevisionSql } = await import('@openbooks/engine/src/records/revision.ts');
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db');
+const { createScratchOrg, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures');
+const { documentRevisionSql } = await import('@openbooks/engine/records/revision');
 const { installApp } = await import('./store');
 const base = { type:'custom_field',targetTable:'parties',key:'review_field',label:'Review field',fieldType:'text',config:{} };
 function bundle(field: Record<string,unknown>, version='1.0.0') {

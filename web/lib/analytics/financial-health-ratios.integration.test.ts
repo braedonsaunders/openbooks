@@ -3,9 +3,9 @@ import { randomUUID } from 'node:crypto'
 import test from 'node:test'
 
 const { sql } = await import('drizzle-orm')
-const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
-const { mulDecimal, mulRatio } = await import('@openbooks/engine/src/money/money.ts')
+const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/platform/db')
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
+const { mulDecimal, mulRatio } = await import('@openbooks/engine/money/money')
 const { financialHealth } = await import('./financial-health')
 const { saveRatioInput } = await import('./ratio-inputs')
 const { decimalRatio } = await import('../reports/decimals')

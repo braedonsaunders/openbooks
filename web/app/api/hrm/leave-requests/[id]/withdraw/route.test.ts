@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import nodeTest from "node:test";
 import { NextResponse } from "next/server";
-import { LeaveError } from "@openbooks/engine/src/hrm/leave-errors.ts";
+import { LeaveError } from "@openbooks/engine/hrm/leave-errors";
 
 /**
  * Withdraw boundary: the reason is required by the REAL body parser, and
@@ -68,7 +68,7 @@ const mockSources = new Map<string, string>([
 const mockUrls = new Map<string, string>([
   ["../../../../../../lib/authz", "mock:authz"],
   ["../../../../../../lib/features", "mock:authz"],
-  ["@openbooks/engine/src/hrm/leave.ts", "mock:service"],
+  ["@openbooks/engine/hrm/leave", "mock:service"],
   ["@/lib/authz", "mock:authz"],
   ["@/lib/feature-gates", "mock:authz"],
 ]);

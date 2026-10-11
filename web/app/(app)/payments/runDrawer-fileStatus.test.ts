@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { existsSync, readdirSync, readFileSync } from "node:fs";
 import test from "node:test";
-import { PAYMENT_FILE_STATUSES } from "@openbooks/engine/src/payments/file-statuses.ts";
+import { PAYMENT_FILE_STATUSES } from "@openbooks/engine/testing/payments/file-statuses";
 import { paymentFiles } from "../../../../schema/src/payment-operations.ts";
 
 /**

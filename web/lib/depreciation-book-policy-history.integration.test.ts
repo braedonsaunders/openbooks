@@ -3,9 +3,9 @@ import { randomUUID } from 'node:crypto';
 import { registerHooks } from 'node:module';
 import test from 'node:test';
 import { sql } from 'drizzle-orm';
-import { db } from '@openbooks/engine/src/platform/db.ts';
-import { buildSchedule, runDepreciation } from '@openbooks/engine/src/assets/depreciation.ts';
-import { createScratchOrg, dropScratchOrg, seedFlowActors, type ScratchOrg } from '@openbooks/engine/src/testing/fixtures.ts';
+import { db } from '@openbooks/engine/platform/db';
+import { buildSchedule, runDepreciation } from '@openbooks/engine/assets/depreciation';
+import { createScratchOrg, dropScratchOrg, seedFlowActors, type ScratchOrg } from '@openbooks/engine/testing/fixtures';
 
 const state: { gate: { user: { orgId: string; id: string } } | null } = { gate: null };
 Object.assign(globalThis, { __depreciationBookHistory: state });

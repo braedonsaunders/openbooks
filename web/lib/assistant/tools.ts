@@ -1,9 +1,9 @@
 import "server-only";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
-import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
-import { abs as absMoney, add as addMoney, cmp as compareMoney } from "@openbooks/engine/src/money/money.ts";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
+import { abs as absMoney, add as addMoney, cmp as compareMoney } from "@openbooks/engine/money/money";
+import { db } from "@openbooks/engine/platform/db";
 import { can, subsidiaryScopeAllows, type Authz } from "../authz";
 import { accountsWithBalances, entryDetail } from "../data";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
@@ -20,11 +20,11 @@ import { openItems } from "../cash/open-items";
 import { normalizeMoneyValue } from "../cash/core";
 import { truncateText, type AssistantToolDef, type ToolResult } from "./types";
 import { dateInput, num, orgToday, rangeInputFields, resolveToolRange, uuidInput, type RangeArgs } from "./tools-shared";
-import { CONTINUOUS_CLOSE_AGENT_KEYS } from "@openbooks/engine/src/agents/continuous-close-config.ts";
+import { CONTINUOUS_CLOSE_AGENT_KEYS } from "@openbooks/engine/agents/continuous-close-config";
 import { loadWorkItemAccess, readableContinuousCloseAgents } from "../continuous-close";
 import { budgetScenarioOptions, budgetVsActualView } from "../budget-report";
 import { projectCostSummary } from "../project-costing";
-import { documentRevisionCounterSql } from "../../../engine/src/records/revision.ts";
+import { documentRevisionCounterSql } from "@openbooks/engine/records/revision";
 import { isDocKindEnabled } from "../documents.ts";
 import { isFeatureEnabled } from "../features";
 

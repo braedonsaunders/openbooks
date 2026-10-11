@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { isIsoCalendarDate } from "@openbooks/engine/src/platform/business-date.ts";
+import { isIsoCalendarDate } from "@openbooks/engine/platform/business-date/module";
 import { exactMoney } from "@/lib/api/json";
 import { compareDecimal } from "@/lib/exact-decimal";
 const date = z

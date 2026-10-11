@@ -4,13 +4,13 @@ import { crmActivityScope, crmSubjectVisible, lockCrmLinkSubject } from '../../.
 import { parseJsonBody } from "@/lib/api/json"
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/db'
 import '../../../../../lib/feature-gates';
 import { isUuid } from '../../../../../lib/list-params'
 import { loadActivity } from '../../../../../lib/crm'
 import { findUnownedCustomReferences, loadFieldDefs, unknownCustomFieldKey, validateCustomValues } from '../../../../../lib/custom-fields'
 import { isIsoTimestamp } from '../../../../../lib/crm-dates'
-import { documentRevisionSql, isDocumentRevisionToken } from '@openbooks/engine/src/records/revision.ts'
+import { documentRevisionSql, isDocumentRevisionToken } from '@openbooks/engine/records/revision'
 import { notFound } from "@/lib/api/responses";
 
 const KINDS = ['task', 'call', 'event', 'email', 'note'] as const

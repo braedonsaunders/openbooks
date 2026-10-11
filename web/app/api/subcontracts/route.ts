@@ -2,8 +2,8 @@ import { apiErrorResponse } from '@/lib/api/error-response'
 import { parseJsonBody, uuidId } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { sql, type SQL } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
-import { ScopeNotFoundError, lockProjectForScope, withScopeSnapshot } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
+import { db } from "@openbooks/engine/platform/db";
+import { ScopeNotFoundError, lockProjectForScope, withScopeSnapshot } from "@openbooks/engine/organization/scope";
 import {
   SubcontractConflictError,
   SubcontractError,
@@ -27,8 +27,8 @@ import {
   updateVendorPayApplicationLines,
   voidSubcontractChangeOrder,
   voidVendorPayApplication,
-} from "@openbooks/engine/src/projects/subcontracts.ts";
-import { normalizeMoney } from "@openbooks/engine/src/money/money.ts";
+} from "@openbooks/engine/projects/subcontracts";
+import { normalizeMoney } from "@openbooks/engine/money/money";
 import { guardPermission, guardSubsidiaryScope } from "../../../lib/authz";
 import { canonicalDecimal } from "../../../lib/exact-decimal";
 import { moneyRefusal } from "../../../lib/payroll-decimal-refusal";

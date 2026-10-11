@@ -30,7 +30,7 @@ const hooks = registerHooks({
 
     if (specifier === 'next-intl/server') return { shortCircuit: true, url: 'mock:email-page-intl' }
     if (specifier === '../../../../lib/authz') return { shortCircuit: true, url: 'mock:email-page-authz' }
-    if (specifier === '@openbooks/engine/src/delivery/email-config.ts') {
+    if (specifier === '@openbooks/engine/delivery/email-config/module') {
       return { shortCircuit: true, url: 'mock:email-page-config' }
     }
     return nextResolve(specifier, context)

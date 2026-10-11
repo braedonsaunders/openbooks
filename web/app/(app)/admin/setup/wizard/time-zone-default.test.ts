@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { countryTimeZoneDirectory, listCanonicalTimeZones } from '@openbooks/engine/src/platform/time-zone.ts'
+import { countryTimeZoneDirectory, listCanonicalTimeZones } from '@openbooks/engine/platform/time-zone'
 import { defaultBusinessTimeZone, sameTimeZone } from './time-zone-default'
 
 const directory = countryTimeZoneDirectory(['US', 'CA', 'JP', 'AQ', 'BV'])

@@ -167,3 +167,39 @@ test("stronglyConnected finds cycles and leaves acyclic modules as singletons", 
   const sizes = sccs.map((c) => c.length).sort();
   assert.deepEqual(sizes, [1, 2]);
 });
+
+test("named contracts retain module dependencies instead of bypassing the graph", () => {
+  const root = scaffold(MANIFEST, {
+    ...FILES,
+    "records/numbering.ts": 'import { db } from "../platform/db.ts"; import { pay } from "@openbooks/engine/payments/commands"; export const next = () => pay(db);',
+  });
+  try {
+    writeFileSync(join(root, 'engine/package.json'), JSON.stringify({ exports: { './payments/commands': './src/payments/payment-example.ts' } }));
+    assert.match(analyze(root).problems.join('\n'), /module "records" imports .* from module "payments", which it does not declare/);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test("relative web imports and CommonJS or type-query dependency escapes are refused", () => {
+  for (const source of [
+    'import "../../../web/lib/auth.ts";',
+    'require("../../../web/lib/auth.ts");',
+    'type Auth = import("../../../web/lib/auth.ts").Auth;',
+  ]) {
+    const root = scaffold(MANIFEST, { ...FILES, 'platform/escape.ts': source });
+    try { assert.match(analyze(root).problems.join('\n'), /engine code must not import the web app/); }
+    finally { rmSync(root, { recursive: true, force: true }); }
+  }
+  const root = scaffold(MANIFEST, { ...FILES, 'records/escape.ts': 'require("../payments/payment-example.ts");' });
+  try { assert.match(analyze(root).problems.join('\n'), /module "records" imports .* from module "payments", which it does not declare/); }
+  finally { rmSync(root, { recursive: true, force: true }); }
+});
+
+test("runtime dependencies belong to the engine package rather than an ambient web install", () => {
+  const root = scaffold(MANIFEST, { ...FILES, 'platform/parse.ts': 'import { z } from "zod"; export const input = z.string();' });
+  try {
+    writeFileSync(join(root, 'engine/package.json'), JSON.stringify({ exports: { './platform/db': './src/platform/db.ts' }, dependencies: {} }));
+    assert.match(analyze(root).problems.join('\n'), /dependency "zod" must be declared by engine\/package.json/);
+    writeFileSync(join(root, 'engine/package.json'), JSON.stringify({ dependencies: { zod: '*' } }));
+    assert.deepEqual(analyze(root).problems.filter(problem => problem.includes('dependency "zod"')), []);
+  } finally { rmSync(root, { recursive: true, force: true }); }
+});

@@ -1,4 +1,4 @@
-import { retireUsageRatingPlan } from "@openbooks/engine/src/billing/usage/rating-plans.ts";
+import { retireUsageRatingPlan } from "@openbooks/engine/billing/usage/rating-plans";
 import { defineRoute } from "@/lib/api/route";
 import { z } from "zod";
 

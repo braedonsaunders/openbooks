@@ -1,13 +1,13 @@
 import { NextResponse } from "next/server";
-import { HrmAuthorizationError } from "@openbooks/engine/src/hrm/authorization.ts";
+import { HrmAuthorizationError } from "@openbooks/engine/hrm/authorization";
 import { hrmAuthorizationResponse } from "../../../../lib/api/record-not-found";
-import { UnrestrictedScopeError } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
+import { UnrestrictedScopeError } from "@openbooks/engine/organization/scope";
 import {
   HrmDocumentsError,
   HrmOrgChartError,
   HrmSurveysError,
-} from "@openbooks/engine/src/hrm/documents/errors.ts";
-import { isMaskedFileContentError } from "@openbooks/engine/src/platform/file-storage.ts";
+} from "@openbooks/engine/hrm/documents/errors";
+import { isMaskedFileContentError } from "@openbooks/engine/platform/file-storage";
 
 /**
  * Shared error mapping for /api/hrm/document-templates, /api/hrm/documents,

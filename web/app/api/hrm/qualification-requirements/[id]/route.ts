@@ -1,8 +1,8 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { db, withOrgTransaction } from "@openbooks/engine/src/platform/db.ts";
-import { removeRequirement } from "@openbooks/engine/src/hrm/qualifications/requirements.ts";
+import { db, withOrgTransaction } from "@openbooks/engine/platform/db";
+import { removeRequirement } from "@openbooks/engine/hrm/qualifications/requirements";
 import { qualificationErrorResponse } from "../../qualifications/_lib";
 /** Remove a dispatch requirement (zero matched rows refuse). */
 export const DELETE = defineRoute({

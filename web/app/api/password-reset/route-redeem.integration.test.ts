@@ -3,8 +3,8 @@ import { registerHooks } from "node:module";
 import test from "node:test";
 import { NextRequest } from "next/server";
 import { sql } from "drizzle-orm";
-import { db, withBypassContext } from "@openbooks/engine/src/platform/db.ts";
-import { createScratchOrg, createScratchUser, dropScratchOrg } from "@openbooks/engine/src/testing/fixtures.ts";
+import { db, withBypassContext } from "@openbooks/engine/platform/db";
+import { createScratchOrg, createScratchUser, dropScratchOrg } from "@openbooks/engine/testing/fixtures";
 
 // Redeeming a live set-password link from a
 // browser on 127.0.0.1 answered 403 while localhost passed — the origin
@@ -30,7 +30,7 @@ registerHooks({
         export async function sendVia() { return { kind: 'sent', providerMessageId: 'isolated' }; }
       `);
     }
-    if (parent.includes("auth-reset.ts") && specifier === "@openbooks/engine/src/delivery/email-config.ts") {
+    if (parent.includes("auth-reset.ts") && specifier === "@openbooks/engine/delivery/email-config/module") {
       return virtual(`
         const state = globalThis[Symbol.for('openbooks.password-reset-redeem-integration')];
         export async function resolveOrgEmailTransport() { return state.transport ? { provider: 'isolated' } : null; }

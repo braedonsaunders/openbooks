@@ -3,9 +3,9 @@ import { NextResponse } from "next/server";
 import { defineRoute } from '@/lib/api/route'
 import { z } from 'zod'
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
-import { PaymentAcceptanceError, voidPaymentLink } from "@openbooks/engine/src/payments/acceptance.ts";
-import { ScopeNotFoundError } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
+import { db } from "@openbooks/engine/platform/db";
+import { PaymentAcceptanceError, voidPaymentLink } from "@openbooks/engine/payments/acceptance/operations";
+import { ScopeNotFoundError } from "@openbooks/engine/organization/scope";
 import { guardPermission, guardSubsidiaryScope } from "../../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../../lib/features";
 import { isUuid } from "../../../../../lib/list-params";

@@ -3,15 +3,15 @@ import { defineRoute } from '@/lib/api/route';
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { and, eq, sql } from 'drizzle-orm'
-import { db, schema, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
-import { returnDocumentToDraft, ReturnToDraftError, submitAndReleaseIfUngated, withdrawDocumentSubmission, WithdrawSubmissionError, VENDOR_BILL_APPROVAL_REQUIRED_MESSAGE } from '@openbooks/engine/src/flows/index.ts'
+import { db, schema, withOrgTransaction } from '@openbooks/engine/platform/db'
+import { returnDocumentToDraft, ReturnToDraftError, submitAndReleaseIfUngated, withdrawDocumentSubmission, WithdrawSubmissionError, VENDOR_BILL_APPROVAL_REQUIRED_MESSAGE } from '@openbooks/engine/flows/module'
 import { documentKindPermissions } from '@openbooks/engine/records/document-kind-permissions'
 import { ScopeNotFoundError } from '@openbooks/engine/organization/scope'
-import { postDocument } from "@openbooks/engine/src/ledger/posting-document.ts";
-import { runPostDocumentEffects } from "@openbooks/engine/src/ledger/posting-dispatch.ts";
+import { postDocument } from "@openbooks/engine/ledger/posting-document";
+import { runPostDocumentEffects } from "@openbooks/engine/ledger/posting-dispatch";
 import { getAuthz, can, guardSubsidiaryScope, type Authz } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
-import { controlDeps } from "../../../../../engine/src/ledger/document-service.ts";
+import { controlDeps } from "@openbooks/engine/ledger/document-service";
 import { DOC_KINDS, createPermission, postPermission } from "../../../../lib/document-kinds.ts";
 import { canReadDocumentKind } from "../../../../lib/flow-subject-authz.ts";
 import { ApprovalRoutingError } from '../../../../lib/approval-routing-error'
@@ -75,7 +75,7 @@ async function attachPayRunEvidence(
   allowedSubsidiaryIds?: Authz['allowedSubsidiaryIds'],
 ): Promise<void> {
   if (kind !== 'pay_run') return
-  const { payRunApprovalState } = await import('@openbooks/engine/src/payroll/approval.ts')
+  const { payRunApprovalState } = await import('@openbooks/engine/payroll/approval')
   if (!(await payRunApprovalState(orgId, documentId)).policyExists) return
   const { assemblePayRunEvidence } = await import('../../../../lib/payroll-evidence')
   await assemblePayRunEvidence(orgId, userId, documentId, allowedSubsidiaryIds)
@@ -327,7 +327,7 @@ export const POST = defineRoute({
               { status: 422 },
             )
           }
-          const { replayTerminalPostingEffect, PostingEffectsReplayError } = await import('@openbooks/engine/src/ledger/posting-effects.ts')
+          const { replayTerminalPostingEffect, PostingEffectsReplayError } = await import('@openbooks/engine/ledger/posting-effects')
           try {
             await replayTerminalPostingEffect({ orgId: user.orgId, id: gate.effectId, actorId: user.id, reason })
           } catch (e) {

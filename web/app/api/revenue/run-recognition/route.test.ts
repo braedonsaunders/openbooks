@@ -110,9 +110,9 @@ const mockUrls = new Map<string, string>([
   ['@/lib/authz', mockUrl('authz')],
   ['../../../../lib/features', mockUrl('features')],
   ['@/lib/feature-gates', mockUrl('features')],
-  ['@openbooks/engine/src/platform/business-date.ts', mockUrl('business-date')],
-  ['@openbooks/engine/src/projects/revenue.ts', mockUrl('project-revenue')],
-  ['@openbooks/engine/src/revenue/recognition.ts', mockUrl('revenue-recognition')],
+  ['@openbooks/engine/platform/business-date/module', mockUrl('business-date')],
+  ['@openbooks/engine/projects/revenue', mockUrl('project-revenue')],
+  ['@openbooks/engine/revenue/recognition', mockUrl('revenue-recognition')],
   // The shared error mapper reaches the same engine module through a
   // relative specifier; it must see the same double or instanceof splits.
   ['../../engine/src/revenue/recognition.ts', mockUrl('revenue-recognition')],

@@ -6,7 +6,7 @@ import {
   changeEnrollment,
   endEnrollment,
   withdrawUnusedEnrollment,
-} from "@openbooks/engine/src/hrm/benefits/enrollments.ts";
+} from "@openbooks/engine/hrm/benefits/enrollments";
 
 import { isUuid } from "../../../../../lib/list-params";
 import { benefitsErrorResponse } from "../../benefits/_lib";

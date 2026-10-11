@@ -52,8 +52,8 @@ const hooks = registerHooks({
 const postRouteUrl = "./route.ts?parties-create-integration";
 const { POST } = (await import(postRouteUrl)) as typeof import("./route.ts");
 
-const { db } = await import("@openbooks/engine/src/platform/db.ts");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
+const { db } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
 
 
 function postRequest(key: string, body: unknown): Request {

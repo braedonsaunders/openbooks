@@ -1,13 +1,13 @@
 import "server-only";
 import { z } from "zod";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { db } from "@openbooks/engine/platform/db";
 import {
   getFulfillmentDocument,
   listFulfillmentDocuments,
   PICK_LIST_KIND,
   SHIPMENT_KIND,
   type FulfillmentKind,
-} from "@openbooks/engine/src/sales/fulfillment.ts";
+} from "@openbooks/engine/sales/fulfillment/module";
 import type { Authz } from "../authz";
 import { isFeatureEnabled } from "../features";
 import type { AssistantToolDef, ToolResult } from "./types";

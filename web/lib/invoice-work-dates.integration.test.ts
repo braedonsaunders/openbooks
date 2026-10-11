@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import test from 'node:test'
-const { db, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypassContext } = await import('@openbooks/engine/platform/db')
 const { sql } = await import('drizzle-orm')
-const { createScratchOrg, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
-const { createDocument } = await import('@openbooks/engine/src/ledger/document-write.ts')
-const { loadDocument } = await import('@openbooks/engine/src/ledger/document-service.ts')
+const { createScratchOrg, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
+const { createDocument } = await import('@openbooks/engine/documents/write')
+const { loadDocument } = await import('@openbooks/engine/ledger/document-service')
 const { generateInvoiceFromBillingRequest } = await import('./billing')
 const { createBillingRequest } = await import('./billing-requests')
 

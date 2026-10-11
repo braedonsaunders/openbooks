@@ -6,8 +6,8 @@ import { z } from 'zod'
 import {
   createRuleWithInitialDraft,
   listRuleHeads,
-} from '../../../../../engine/src/allocations/index.ts'
-import { businessToday } from '../../../../../engine/src/platform/business-date.ts'
+} from '@openbooks/engine/allocations/runtime'
+import { businessToday } from '@openbooks/engine/platform/business-date/module'
 import { guardUnrestrictedScope } from '../../../../lib/authz'
 import { allocationErrorResponse } from '../_lib.ts'
 

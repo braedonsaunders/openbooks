@@ -59,12 +59,12 @@ registerHooks({
     return next(specifier, context);
   },
 });
-const { db, withBypassContext } = await import("@openbooks/engine/src/platform/db.ts");
+const { db, withBypassContext } = await import("@openbooks/engine/platform/db");
 const { sql } = await import("drizzle-orm");
-const { withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
-const { importSettlementBatch, parseStripeBalanceTransactions, postSettlementBatch } = await import("@openbooks/engine/src/payments/psp-settlement.ts");
+const { withOrgContext } = await import("@openbooks/engine/platform/db");
+const { importSettlementBatch, parseStripeBalanceTransactions, postSettlementBatch } = await import("@openbooks/engine/payments/psp-settlement");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  "@openbooks/engine/src/testing/fixtures.ts"
+  "@openbooks/engine/testing/fixtures"
 );
 const { POST } = await import("./route.ts");
 

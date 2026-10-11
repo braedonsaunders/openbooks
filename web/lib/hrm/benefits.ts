@@ -4,18 +4,18 @@ import type { BenefitElectDialogStrings } from '../../app/(app)/me/islands'
 
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/db'
 import {
   listEnrollmentWindows,
   listEnrollmentPlanOptions,
   listEnrollments,
   type EnrollmentSummary,
   type EnrollmentWindowSummary,
-} from '@openbooks/engine/src/hrm/benefits/benefits-read.ts'
+} from '@openbooks/engine/hrm/benefits/benefits-read'
 import { listBenefitsProgramCatalog, listBenefitsProgramActivity } from '@openbooks/engine/hrm/benefits'
 import { getMoneyFormatter } from '../money-server'
-import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
-import { benefitsCockpit } from '@openbooks/engine/src/hrm/benefits/benefits-read.ts'
+import { businessToday } from '@openbooks/engine/platform/business-date/module'
+import { benefitsCockpit } from '@openbooks/engine/hrm/benefits/benefits-read'
 import { can, type Authz } from '../authz'
 import type { DirectoryItem } from '../../components/module-home/ui'
 import { hrmGroupTabs } from '../../components/module-home/group-tabs'

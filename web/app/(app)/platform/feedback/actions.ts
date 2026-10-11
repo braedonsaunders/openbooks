@@ -2,7 +2,7 @@
 
 import { revalidatePath } from 'next/cache'
 import { verifyGithubIssueAccess } from '@braedonsaunders/appkit-feedback'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/db'
 import { lockSuperAdminActor, requireSuperAdmin } from '../../../../lib/super-admin'
 import { recordFeedbackSettingsAudit } from '../../../../lib/feedback/audit'
 import {

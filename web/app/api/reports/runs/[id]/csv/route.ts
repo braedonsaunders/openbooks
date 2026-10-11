@@ -1,10 +1,10 @@
 import { defineRoute } from '@/lib/api/route';
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/db'
 import { isUuid } from '../../../../../../lib/list-params'
 import { reportArtifactAccessDetail } from '../../../../../../lib/report-execution-context'
-import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
+import { businessToday } from '@openbooks/engine/platform/business-date/module'
 import { notFound } from "@/lib/api/responses";
 
 

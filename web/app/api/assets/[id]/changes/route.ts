@@ -3,13 +3,13 @@ import { apiErrorResponse } from "@/lib/api/error-response";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { db } from "@openbooks/engine/platform/db";
 import {
   lockScopeRow,
   ScopeNotFoundError,
-} from "@openbooks/engine/src/organization/subsidiary-scope.ts";
-import { proposeAssetChange } from "@openbooks/engine/src/assets/asset-changes.ts";
-import { isIsoCalendarDate } from "@openbooks/engine/src/platform/business-date.ts";
+} from "@openbooks/engine/organization/scope";
+import { proposeAssetChange } from "@openbooks/engine/assets/asset-changes";
+import { isIsoCalendarDate } from "@openbooks/engine/platform/business-date/module";
 import { exactMoney, parseJsonBody } from "@/lib/api/json";
 import { isUuid } from "@/lib/list-params";
 

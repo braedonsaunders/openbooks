@@ -1,5 +1,5 @@
 import type { FormLayoutConfig } from '@openbooks/customization'
-import type { FulfillmentDocumentView } from '@openbooks/engine/src/sales/fulfillment.ts'
+import type { FulfillmentDocumentView } from '@openbooks/engine/sales/fulfillment/module'
 import type { CustomFieldDefClient } from '../../../components/custom-field-inputs'
 
 /** A carrier a draft shipment may name (web/lib/fulfillment.ts). */

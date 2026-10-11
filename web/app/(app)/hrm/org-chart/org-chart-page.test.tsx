@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { randomUUID } from 'node:crypto'
-import type { OrgChart, OrgChartNode } from '@openbooks/engine/src/hrm/org-chart.ts'
-import { EMPTY_ORG_CHART_LAYOUT, type OrgChartLayout } from '@openbooks/engine/src/hrm/org-chart-layout-schema.ts'
+import type { OrgChart, OrgChartNode } from '@openbooks/engine/hrm/org-chart/operations'
+import { EMPTY_ORG_CHART_LAYOUT, type OrgChartLayout } from '@openbooks/engine/testing/hrm/org-chart-layout-schema'
 import { chartEdges, canConnectManager } from './graph'
 
 const { bootJsdomEnvironment } = await import('../../../../testing/jsdom-env')

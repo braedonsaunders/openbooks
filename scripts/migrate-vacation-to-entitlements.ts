@@ -33,8 +33,8 @@
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { sql } from "drizzle-orm";
-import { db, pool, withBypassContext, withOrg } from "../engine/src/platform/db.ts";
-import { add, cmp, neg, roundMoney, sum } from "../engine/src/money/money.ts";
+import { db, pool, withBypassContext, withOrg } from "@openbooks/engine/platform/db";
+import { add, cmp, neg, roundMoney, sum } from "@openbooks/engine/money/money";
 
 const args = process.argv.slice(2);
 const apply = args.includes("--apply");

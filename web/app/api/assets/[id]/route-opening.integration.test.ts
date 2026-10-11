@@ -53,11 +53,11 @@ const {
   FIXED_ASSET_BUILT_IN_EXPR,
 } = await import("../../../../lib/customization/entity-list-query/fixed-assets.ts");
 
-const { db } = await import("@openbooks/engine/src/platform/db.ts");
-const { documentRevisionSql } = await import("@openbooks/engine/src/records/revision.ts");
-const { buildSchedule, runDepreciation } = await import("@openbooks/engine/src/assets/depreciation.ts");
+const { db } = await import("@openbooks/engine/platform/db");
+const { documentRevisionSql } = await import("@openbooks/engine/records/revision");
+const { buildSchedule, runDepreciation } = await import("@openbooks/engine/assets/depreciation");
 const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } = await import(
-  "@openbooks/engine/src/testing/fixtures.ts"
+  "@openbooks/engine/testing/fixtures"
 );
 
 

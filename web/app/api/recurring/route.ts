@@ -13,13 +13,13 @@ import {
   runScheduleCatchUp,
   toDateArrayLiteral,
   type CatchUpMode,
-} from "@openbooks/engine/src/billing/recurring.ts";
+} from "@openbooks/engine/billing/recurring";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { db } from "@openbooks/engine/platform/db";
 import { can } from "../../../lib/authz";
 import { defineRoute } from "../../../lib/api/route";
-import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
 import { disabledDocKinds, isDocKindEnabled } from "../../../lib/documents.ts";
 
 export const runtime = "nodejs";

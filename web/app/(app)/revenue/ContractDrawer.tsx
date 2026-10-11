@@ -15,7 +15,7 @@ import {
   TableRow,
   UrlDrawer,
 } from "@openbooks/ui";
-import { add, neg, sum } from "@openbooks/engine/src/money/money.ts";
+import { add, neg, sum } from "@openbooks/engine/money/money";
 import { PrepaidBreakageButton } from './PrepaidBreakageButton'
 import { CancelRecognitionButton } from "./CancelRecognitionButton";
 import { ReconcileLegacyButton } from "./ReconcileLegacyButton";
@@ -25,7 +25,7 @@ import { ModifyContractButton } from "./ModifyContractButton";
 import {
   financialChangeEventLabel,
   financialChangeStatusLabel,
-} from "@openbooks/engine/src/platform/financial-change-labels.ts";
+} from "@openbooks/engine/platform/financial-change-labels";
 import type { RevenueModificationOptions, ContractPayload } from "./_lib";
 import type { MoneyFormatter } from "@/lib/money-format";
 

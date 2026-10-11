@@ -2,11 +2,11 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, withBypass } from "@openbooks/engine/src/platform/db.ts";
+import { db, withBypass } from "@openbooks/engine/platform/db";
 import {
   createScratchOrg,
   dropScratchOrg,
-} from "@openbooks/engine/src/testing/fixtures.ts";
+} from "@openbooks/engine/testing/fixtures";
 
 const { validateReferences, BANK_ACCOUNT_TYPE } = await import("./category-references.ts");
 

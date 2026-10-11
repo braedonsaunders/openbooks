@@ -6,15 +6,15 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
+import { db } from '@openbooks/engine/platform/db'
+import { businessToday } from '@openbooks/engine/platform/business-date/module'
 import {
   insertEmailLog,
   markEmailFailed,
   markEmailSent,
   markEmailUncertain,
   resolveOrgEmailTransport,
-} from '@openbooks/engine/src/delivery/email-config.ts'
+} from '@openbooks/engine/delivery/email-config/module'
 import { deriveEmailDeliveryKey, documentEmail, isValidEmailAddress, sendVia } from '@openbooks/emails'
 import { can, subsidiaryScopeAllows } from '../../../../../../lib/authz'
 import { isUuid } from '../../../../../../lib/list-params'

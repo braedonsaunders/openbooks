@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { HrmAuthorizationError } from "@openbooks/engine/src/hrm/authorization.ts";
+import { HrmAuthorizationError } from "@openbooks/engine/hrm/authorization";
 import { hrmAuthorizationResponse } from "./record-not-found.ts";
 
 test("record visibility failures share one response while missing grants remain forbidden", async () => {

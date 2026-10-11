@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm'
-import type { SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
+import type { SqlExecutor } from '@openbooks/engine/platform/db'
 
 /**
  * Account row a schedule binds to, read under the account row lock.

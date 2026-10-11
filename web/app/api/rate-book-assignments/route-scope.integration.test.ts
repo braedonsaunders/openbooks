@@ -35,11 +35,11 @@ registerHooks({
   },
 });
 const { db, withBypassContext, withOrgContext } = await import(
-  "@openbooks/engine/src/platform/db.ts"
+  "@openbooks/engine/platform/db"
 );
 const { sql } = await import("drizzle-orm");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  "@openbooks/engine/src/testing/fixtures.ts"
+  "@openbooks/engine/testing/fixtures"
 );
 const { GET, POST, PATCH, DELETE } = await import("./route.ts");
 const { withAuthzContext } = await import('../../../lib/authz-context.ts');

@@ -46,8 +46,8 @@ registerHooks({
 
 const { POST } = (await import("./route.ts?migration-go-live")) as typeof import("./route.ts");
 
-const { withBypassContext, withOrgTransaction, db, env } = await import("@openbooks/engine/src/platform/db.ts");
-const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
+const { withBypassContext, withOrgTransaction, db, env } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
 const { resolveAuthzByUserId } = await import("@/lib/authz");
 const { readMigrationPlan, updateMigrationPlan } = await import("@/lib/migration/plan");
 

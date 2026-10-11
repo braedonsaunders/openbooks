@@ -37,7 +37,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "../engine/src/platform/db.ts";
+import { db } from "@openbooks/engine/platform/db";
 
 const LEDGER_TABLES = ["journal_lines", "document_lines", "time_entries"];
 

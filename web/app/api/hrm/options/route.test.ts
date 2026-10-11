@@ -140,10 +140,10 @@ const mockSources = new Map<string, string>([
 
 const mockUrls = new Map<string, string>([
   ["../../../../lib/feature-gates", "mock:feature-gates"],
-  ["@openbooks/engine/src/hrm/authorization.ts", "mock:authz-engine"],
-  ["@openbooks/engine/src/hrm/employment-read.ts", "mock:service"],
-  ["@openbooks/engine/src/hrm/positions-read.ts", "mock:service"],
-  ["@openbooks/engine/src/hrm/leave-read.ts", "mock:leave-read"],
+  ["@openbooks/engine/hrm/authorization", "mock:authz-engine"],
+  ["@openbooks/engine/hrm/employment-read", "mock:service"],
+  ["@openbooks/engine/hrm/positions-read", "mock:service"],
+  ["@openbooks/engine/hrm/leave-read", "mock:leave-read"],
 ]);
 
 registerHooks({

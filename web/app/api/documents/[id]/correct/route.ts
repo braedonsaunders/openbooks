@@ -3,7 +3,7 @@ import { defineRoute } from '@/lib/api/route';
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
 import { DocumentVoidError, DocumentEditError, type DocumentEditInput } from '@openbooks/engine/documents'
 import { can, getAuthz, guardSubsidiaryScope, subsidiariesInScope } from '../../../../../lib/authz'
 import { createPermission, DOC_KINDS, postPermission } from "../../../../../lib/document-kinds.ts";

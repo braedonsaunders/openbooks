@@ -8,7 +8,7 @@ import {
   parallelComparisons,
   parallelTolerances,
   priorRegisters,
-} from '@openbooks/engine/src/payroll/parallel-run-store.ts'
+} from '@openbooks/engine/payroll/parallel-run-store'
 import { can, guardRootSubsidiaryScope, requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { notFound } from 'next/navigation'

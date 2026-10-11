@@ -9,7 +9,7 @@ import test, { after } from 'node:test'
 import {
   assertTaxYear as realAssertTaxYear,
   OpeningBalanceSaveError as RealOpeningBalanceSaveError,
-} from '@openbooks/engine/src/payroll/opening-balances.ts'
+} from '@openbooks/engine/payroll/opening-balances'
 
 /**
  * F3-25: the adoption grid replayed full-row payloads from its stale loader
@@ -101,8 +101,8 @@ const mockSources = new Map<string, string>([
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === '@openbooks/engine/src/platform/db.ts') return { url: 'mock:db', shortCircuit: true }
-    if (specifier === '@openbooks/engine/src/payroll/opening-balances.ts' && context.parentURL?.includes('/app/api/payroll/opening-balances/route.ts')) {
+    if (specifier === '@openbooks/engine/platform/db') return { url: 'mock:db', shortCircuit: true }
+    if (specifier === '@openbooks/engine/payroll/opening-balances' && context.parentURL?.includes('/app/api/payroll/opening-balances/route.ts')) {
       return { url: 'mock:opening-balances', shortCircuit: true }
     }
     if (specifier.endsWith('/lib/authz')) return { url: realAuthzUrl, shortCircuit: true }

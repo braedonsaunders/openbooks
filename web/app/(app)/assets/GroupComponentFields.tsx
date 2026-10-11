@@ -1,7 +1,7 @@
 "use client";
 import { useTranslations } from "next-intl";
 import { Button, Input, Label } from "@openbooks/ui";
-import type { GroupComponentInput } from "@openbooks/engine/src/assets/group-component.ts";
+import type { GroupComponentInput } from "@openbooks/engine/assets/group-component";
 /** Native field composition shared with the surrounding asset workpaper. */
 export function GroupComponentFields({
   value,

@@ -8,8 +8,8 @@ import { sql } from "drizzle-orm";
 // truthiness — so a stored false displays "Yes". The descriptor must extract
 // a real boolean. SQL builders and storage are real; only the server-only
 // seam is stubbed.
-const { db } = await import("@openbooks/engine/src/platform/db.ts");
-const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
+const { db } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
 const { columnDescriptors, DOCUMENT_BUILT_IN_EXPR } = await import("./list-query.ts");
 const { defaultListView } = await import("@openbooks/customization");
 

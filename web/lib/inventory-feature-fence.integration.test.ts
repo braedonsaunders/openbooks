@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { createScratchOrg, dropScratchOrg } from '@openbooks/engine/src/testing/fixtures.ts'
-import { issueInventory, receiveInventory } from '@openbooks/engine/src/inventory/movements.ts'
-import { assertInventoryOffHoldsNoStock } from '@openbooks/engine/src/inventory/profile-policy.ts'
+import { db } from '@openbooks/engine/platform/db'
+import { createScratchOrg, dropScratchOrg } from '@openbooks/engine/testing/fixtures'
+import { issueInventory, receiveInventory } from '@openbooks/engine/inventory/movements'
+import { assertInventoryOffHoldsNoStock } from '@openbooks/engine/inventory/profile-policy'
 import { featureDisableBlocked, featureDisableStatuses } from './features'
 
 /**

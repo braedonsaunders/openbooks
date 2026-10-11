@@ -37,12 +37,12 @@ registerHooks({
     return next(specifier, context)
   },
 })
-const { db, withOrgContext, withOrg } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withOrgContext, withOrg } = await import('@openbooks/engine/platform/db')
 const { sql } = await import('drizzle-orm')
-const { createScratchOrg, createScratchUser, dropScratchOrg, seedPostingAccount } = await import('@openbooks/engine/src/testing/fixtures.ts')
-const { postDocument } = await import('@openbooks/engine/src/ledger/posting-document.ts')
+const { createScratchOrg, createScratchUser, dropScratchOrg, seedPostingAccount } = await import('@openbooks/engine/testing/fixtures')
+const { postDocument } = await import('@openbooks/engine/ledger/posting-document')
 const { GET, POST } = await import('./route.ts')
-const { installTrustedTestDatabaseBypass } = await import('@openbooks/engine/src/testing/database-bypass.ts')
+const { installTrustedTestDatabaseBypass } = await import('@openbooks/engine/testing/database-bypass')
 installTrustedTestDatabaseBypass()
 
 const CASHIER = ['cash_sales.read', 'cash_sales.create', 'cash_sales.post', 'cash_sales.deposit']

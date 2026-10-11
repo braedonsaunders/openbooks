@@ -47,7 +47,7 @@ const _hooks = registerHooks({
     if (specifier === '../../../../lib/customization/gates') {
       return { shortCircuit: true, url: 'mock:gates' }
     }
-    if (specifier === '@openbooks/engine/src/platform/db.ts') {
+    if (specifier === '@openbooks/engine/platform/db') {
       return { shortCircuit: true, url: 'mock:db' }
     }
     return nextResolve(specifier, context)

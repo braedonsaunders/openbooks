@@ -2,10 +2,10 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, withBypassContext, withOrgContext } from "@openbooks/engine/src/platform/db.ts";
-import { createPickList, releasePickList } from "@openbooks/engine/src/sales/fulfillment.ts";
-import { createScratchOrg, createScratchUser, dropScratchOrg, type ScratchOrg } from "@openbooks/engine/src/testing/fixtures.ts";
-import { issueInventory, receiveInventory } from "@openbooks/engine/src/inventory/movements.ts";
+import { db, withBypassContext, withOrgContext } from "@openbooks/engine/platform/db";
+import { createPickList, releasePickList } from "@openbooks/engine/sales/fulfillment/module";
+import { createScratchOrg, createScratchUser, dropScratchOrg, type ScratchOrg } from "@openbooks/engine/testing/fixtures";
+import { issueInventory, receiveInventory } from "@openbooks/engine/inventory/movements";
 import { deleteSetupRecord } from "./write.ts";
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);

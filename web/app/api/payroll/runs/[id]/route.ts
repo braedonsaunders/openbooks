@@ -1,28 +1,28 @@
 import { defineRoute } from '@/lib/api/route'
 import { z } from 'zod'
 import { apiErrorResponse } from '@/lib/api/error-response'
-import { lockAndCheckPayrollRunPopulation } from "@openbooks/engine/src/payroll/scope.ts";
+import { lockAndCheckPayrollRunPopulation } from "@openbooks/engine/payroll/scope";
 import { parseJsonBody } from "@/lib/api/json"
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
-import { acknowledgePayRunRefusals, commitPayRun, previewPayRunGl } from "@openbooks/engine/src/payroll/run-commit.ts";
-import { calculatePayRun } from "@openbooks/engine/src/payroll/run-calculation.ts";
-import { attributePayRunEntity, discardPayRun } from "@openbooks/engine/src/payroll/run-lifecycle.ts";
-import { PayrollError } from "@openbooks/engine/src/payroll/error.ts";
-import { recordPayRunPayment } from '@openbooks/engine/src/payroll/payment.ts'
-import { assertPayRunNotStale } from '@openbooks/engine/src/payroll/readiness.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
+import { acknowledgePayRunRefusals, commitPayRun, previewPayRunGl } from "@openbooks/engine/payroll/run-commit";
+import { calculatePayRun } from "@openbooks/engine/payroll/run-calculation";
+import { attributePayRunEntity, discardPayRun } from "@openbooks/engine/payroll/run-lifecycle";
+import { PayrollError } from "@openbooks/engine/payroll/error";
+import { recordPayRunPayment } from '@openbooks/engine/payroll/payment'
+import { assertPayRunNotStale } from '@openbooks/engine/payroll/readiness'
 import { resolvePayrollProfileEmploymentLinks } from '@openbooks/engine/payroll/profile-employment'
 import {
   assertPayRunApprovalReleased, payRunApprovalState,
-} from '@openbooks/engine/src/payroll/approval.ts'
-import { submitForApproval } from '@openbooks/engine/src/flows/index.ts'
+} from '@openbooks/engine/payroll/approval'
+import { submitForApproval } from '@openbooks/engine/flows/module'
 import { rendererStatusResponse } from '../../../../../lib/api/pdf-renderer'
 import { emailRunStubs } from '../../../../../lib/payroll-outputs'
 import { assemblePayRunEvidence } from '../../../../../lib/payroll-evidence'
-import { canonicalAdjustmentHours, mutatePayRunAdjustment, recordPayRunHolidayHours, payRunBulkAdjustmentId, PayRunAdjustmentIdempotencyConflict } from '@openbooks/engine/src/payroll/run-adjustments.ts'
-import { storedHolidayEligibilityForRun } from '@openbooks/engine/src/payroll/holiday-attestations.ts'
-import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
+import { canonicalAdjustmentHours, mutatePayRunAdjustment, recordPayRunHolidayHours, payRunBulkAdjustmentId, PayRunAdjustmentIdempotencyConflict } from '@openbooks/engine/payroll/run-adjustments'
+import { storedHolidayEligibilityForRun } from '@openbooks/engine/payroll/holiday-attestations'
+import { normalizeMoney } from '@openbooks/engine/money/money'
 import '../../../../../lib/feature-gates';
 import { aiRailsErrorResponse } from '../../../../../lib/ai-rails'
 import { guardSubsidiaryScope } from '../../../../../lib/authz'
@@ -738,7 +738,7 @@ export const POST = defineRoute({
           select period_start::text as "periodStart", period_end::text as "periodEnd"
             from pay_runs where org_id = ${gate.user.orgId} and document_id = ${id}`)).rows[0]
         if (period) {
-          const { checkPayrollFinalizeAllowed } = await import('@openbooks/engine/src/hrm/ai/anomalies.ts')
+          const { checkPayrollFinalizeAllowed } = await import('@openbooks/engine/hrm/ai/anomalies')
           try {
             await checkPayrollFinalizeAllowed(db, { orgId: gate.user.orgId, periodFrom: period.periodStart, periodTo: period.periodEnd })
           } catch (e) {

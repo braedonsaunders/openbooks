@@ -1,10 +1,10 @@
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { db, withOrgTransaction } from "@openbooks/engine/src/platform/db.ts";
+import { db, withOrgTransaction } from "@openbooks/engine/platform/db";
 import {
   listQualifications,
   recordQualification,
-} from "@openbooks/engine/src/hrm/qualifications/qualifications.ts";
+} from "@openbooks/engine/hrm/qualifications/qualifications";
 import { qualificationErrorResponse } from "./_lib";
 import { qualificationStatusFilter, recordQualificationBody } from "./bodies";
 /** The worker qualification ledger: list (derived status at read) and record. */

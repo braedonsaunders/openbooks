@@ -27,7 +27,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "../../../engine/src/platform/db.ts";
+import { db } from "@openbooks/engine/platform/db";
 
 const KERNEL_TABLES = ["allocation_rule_targets", "allocation_lineage", "allocation_runs"];
 

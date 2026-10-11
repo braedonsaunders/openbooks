@@ -4,7 +4,7 @@ import { pathToFileURL } from 'node:url'
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import * as React from 'react'
-import type { ScratchOrg } from '../../../../../../engine/src/testing/fixtures.ts'
+import type { ScratchOrg } from '@openbooks/engine/testing/fixtures'
 
 const repo = process.cwd()
 const root = pathToFileURL(repo + '/').href
@@ -44,16 +44,16 @@ registerHooks({
   },
 })
 
-const { db, withBypassContext, withOrgContext } = await import(root + 'engine/src/platform/db.ts') as typeof import('../../../../../../engine/src/platform/db.ts')
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db') as typeof import('@openbooks/engine/platform/db')
 const { sql } = await import(root + 'node_modules/drizzle-orm/index.js') as typeof import('drizzle-orm')
-const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import(root + 'engine/src/testing/fixtures.ts')
+const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import('@openbooks/engine/testing/fixtures')
 const { readEntityListPage } = await import(root + 'web/lib/list/entity-reader.ts') as typeof import('../../../../../lib/list/entity-reader.ts')
 const { allowedSubsidiaryIds } = await import(root + 'web/lib/subsidiaries.ts') as typeof import('../../../../../lib/subsidiaries.ts')
 const { loadPspUnmatched } = await import(root + 'web/app/(app)/banking/payouts/unmatched/view.ts') as typeof import('./view.ts')
 const { GET: suggestionGet } = await import(root + 'web/app/api/psp/settlement-lines/[id]/suggestion/route.ts') as typeof import('../../../../../../web/app/api/psp/settlement-lines/[id]/suggestion/route.ts')
 const { POST: approvePost } = await import(root + 'web/app/api/psp/settlement-lines/[id]/approve/route.ts') as typeof import('../../../../../../web/app/api/psp/settlement-lines/[id]/approve/route.ts')
 const { POST: settlementsPost } = await import(root + 'web/app/api/psp/settlements/route.ts') as typeof import('../../../../../../web/app/api/psp/settlements/route.ts')
-const { importSettlementBatch } = await import(root + 'engine/src/payments/psp-settlement.ts') as typeof import('../../../../../../engine/src/payments/psp-settlement.ts')
+const { importSettlementBatch } = await import('@openbooks/engine/payments/psp-settlement') as typeof import('@openbooks/engine/payments/psp-settlement')
 
 /**
  * The unmatched payout queue through the web layers: the list, the row

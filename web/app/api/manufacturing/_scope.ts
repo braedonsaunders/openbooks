@@ -1,5 +1,5 @@
 import { guardSubsidiaryScope, type Authz } from "@/lib/authz";
-import type { RoutingSubsidiaryScope } from "@openbooks/engine/src/manufacturing/routings.ts";
+import type { RoutingSubsidiaryScope } from "@openbooks/engine/manufacturing/routings";
 
 export function guardRoutingSubsidiaryScope(authz: Authz, routing: RoutingSubsidiaryScope): Response | null {
   for (const operation of routing.operations ?? []) {

@@ -1,5 +1,5 @@
-import { DOCUMENT_REVISION_PATTERN, isDocumentRevisionToken } from '@openbooks/engine/src/records/revision.ts';
-import { createPermission, documentReadPermission } from '@openbooks/engine/src/records/document-kind-permissions.ts';
+import { DOCUMENT_REVISION_PATTERN, isDocumentRevisionToken } from '@openbooks/engine/records/revision';
+import { createPermission, documentReadPermission } from '@openbooks/engine/records/document-kind-permissions';
 export { DOCUMENT_REVISION_PATTERN, isDocumentRevisionToken };
 
 /**

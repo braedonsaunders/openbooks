@@ -38,11 +38,11 @@ registerHooks({
     return resolved;
   },
 });
-const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { sql } = await import("drizzle-orm");
 const { randomUUID } = await import("node:crypto");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  "@openbooks/engine/src/testing/fixtures.ts"
+  "@openbooks/engine/testing/fixtures"
 );
 const { POST } = await import("./reject/route.ts");
 

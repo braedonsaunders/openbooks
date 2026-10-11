@@ -33,12 +33,12 @@ const routeUrl = './route.ts?prepare-scope'
 const { POST } = (await import(routeUrl)) as typeof import('./route.ts')
 hooks.deregister()
 
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
 const { sql } = await import('drizzle-orm')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
-const { computeTaxReturn } = await import('@openbooks/engine/src/tax-returns/return.ts')
-const { markTaxFilingFiled } = await import('@openbooks/engine/src/tax-returns/filing.ts')
-const { postDocument } = await import('@openbooks/engine/src/ledger/posting-document.ts')
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
+const { computeTaxReturn } = await import('@openbooks/engine/tax-returns/return')
+const { markTaxFilingFiled } = await import('@openbooks/engine/tax-returns/filing')
+const { postDocument } = await import('@openbooks/engine/ledger/posting-document')
 
 
 type ScratchOrg = Awaited<ReturnType<typeof createScratchOrg>>

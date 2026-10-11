@@ -8,9 +8,9 @@ import type { FormSection } from '@openbooks/forms-core'
 // status column, but status changes belong to the native record PATCH with
 // its audited reason. An export→reimport round-trip of an inactive record
 // must update its data and leave it inactive.
-const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/platform/db')
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  '@openbooks/engine/src/testing/fixtures.ts'
+  '@openbooks/engine/testing/fixtures'
 )
 const { recordResource } = await import('./record-resources.ts')
 

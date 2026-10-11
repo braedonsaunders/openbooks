@@ -7,8 +7,8 @@ import { parse, TYPE } from '@formatjs/icu-messageformat-parser'
 import type { MessageFormatElement } from '@formatjs/icu-messageformat-parser'
 import { LOCALES } from '../i18n/config.ts'
 import { allReportEntities } from '@openbooks/reports'
-import { PAYROLL_COUNTRY_PACKS } from '@openbooks/engine/src/payroll/packs.ts'
-import { COUNTRY_TAX_PACKS } from '@openbooks/engine/src/country-tax-packs/index.ts'
+import { PAYROLL_COUNTRY_PACKS } from '@openbooks/engine/payroll/packs'
+import { COUNTRY_TAX_PACKS } from '@openbooks/engine/country-tax-packs'
 import {
   flattenCatalog,
   generateFallbackManifest,

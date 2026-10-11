@@ -12,20 +12,20 @@ import { isUuid } from "@/lib/list-params";
 // exactly once. Direct async style (no spawned children): the canonical
 // runner owns lifecycle and typecheck covers this file.
 const { db, withBypassContext, withOrg, withOrgContext } = await import(
-  "@openbooks/engine/src/platform/db.ts"
+  "@openbooks/engine/platform/db"
 );
-const { postDocument } = await import("@openbooks/engine/src/ledger/posting-document.ts");
+const { postDocument } = await import("@openbooks/engine/ledger/posting-document");
 const { loadDocument, loadDocumentEditCurrent } = await import(
-  "@openbooks/engine/src/ledger/document-service.ts"
+  "@openbooks/engine/ledger/document-service"
 );
 const { applyDocumentEdit, createPostedCorrectionDraft } = await import("./documents.ts");
-const { deleteDocument } = await import("@openbooks/engine/src/ledger/document-delete.ts");
-const { toUnits } = await import("@openbooks/engine/src/money/money.ts");
+const { deleteDocument } = await import("@openbooks/engine/ledger/document-delete");
+const { toUnits } = await import("@openbooks/engine/money/money");
 const { convertOrder, createOrderDraft, receivePurchaseOrder } = await import("./order-cycle.ts");
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
-  "@openbooks/engine/src/testing/fixtures.ts"
+  "@openbooks/engine/testing/fixtures"
 );
-import type { DocumentLineInput } from "@openbooks/engine/src/ledger/document-input.ts";
+import type { DocumentLineInput } from "@openbooks/engine/ledger/document-input";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -828,13 +828,13 @@ const consolidatedRows = [
         // applyDocumentEdit is server-only code exercised through the same module
         // hooks as the neighbouring documents suites.
         const { sql } = await import("drizzle-orm");
-        const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
+        const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
         const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
-          "@openbooks/engine/src/testing/fixtures.ts"
+          "@openbooks/engine/testing/fixtures"
         );
-        const { applyDocumentEdit } = await import("./documents.ts"), { DocumentEditError } = await import("../../engine/src/records/document-edit-policy.ts"), { loadDocument, loadDocumentEditCurrent } = await import("../../engine/src/ledger/document-service.ts");
-        const { postDocument } = await import("@openbooks/engine/src/ledger/posting-document.ts");
-        const { submitAndReleaseIfUngated } = await import("@openbooks/engine/src/flows/submit.ts");
+        const { applyDocumentEdit } = await import("./documents.ts"), { DocumentEditError } = await import("@openbooks/engine/records/document-edit-policy"), { loadDocument, loadDocumentEditCurrent } = await import("@openbooks/engine/ledger/document-service");
+        const { postDocument } = await import("@openbooks/engine/ledger/posting-document");
+        const { submitAndReleaseIfUngated } = await import("@openbooks/engine/flows/submit");
 
         const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -1302,17 +1302,17 @@ const consolidatedRows = [
         // from callers and re-attaches only its own trusted keys, and inventoryReturn
         // was not one of them. These tests drive the real save path.
         const { db, withBypassContext, withOrg, withOrgContext } = await import(
-          "@openbooks/engine/src/platform/db.ts"
+          "@openbooks/engine/platform/db"
         );
-        const { postDocument } = await import("@openbooks/engine/src/ledger/posting-document.ts");
+        const { postDocument } = await import("@openbooks/engine/ledger/posting-document");
         const { loadDocument, loadDocumentEditCurrent } = await import(
-          "@openbooks/engine/src/ledger/document-service.ts"
+          "@openbooks/engine/ledger/document-service"
         );
         const { applyDocumentEdit } = await import("./documents.ts");
-        const { receiveInventory } = await import("@openbooks/engine/src/inventory/movements.ts");
-        const { getOnHand } = await import("@openbooks/engine/src/inventory/position.ts");
+        const { receiveInventory } = await import("@openbooks/engine/inventory/movements");
+        const { getOnHand } = await import("@openbooks/engine/testing/inventory/position");
         const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
-          "@openbooks/engine/src/testing/fixtures.ts"
+          "@openbooks/engine/testing/fixtures"
         );
 
 
@@ -1711,9 +1711,9 @@ const consolidatedRows = [
         // validation must accept the column's own scale.
 
         const { sql } = await import("drizzle-orm");
-        const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
-        const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
-        const { applyDocumentEdit } = await import("./documents.ts"), { DocumentEditError } = await import("../../engine/src/records/document-edit-policy.ts"), { loadDocumentEditCurrent } = await import("../../engine/src/ledger/document-service.ts");
+        const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
+        const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
+        const { applyDocumentEdit } = await import("./documents.ts"), { DocumentEditError } = await import("@openbooks/engine/records/document-edit-policy"), { loadDocumentEditCurrent } = await import("@openbooks/engine/ledger/document-service");
 
         const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -1855,9 +1855,9 @@ const consolidatedRows = [
         // picker is empty, and the service boundary must refuse that shape the same
         // way it refuses clearing a required party.
         const { sql } = await import("drizzle-orm");
-        const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
-        const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
-        const { applyDocumentEdit } = await import("./documents.ts"), { DocumentEditError } = await import("../../engine/src/records/document-edit-policy.ts"), { loadDocumentEditCurrent } = await import("../../engine/src/ledger/document-service.ts");
+        const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
+        const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
+        const { applyDocumentEdit } = await import("./documents.ts"), { DocumentEditError } = await import("@openbooks/engine/records/document-edit-policy"), { loadDocumentEditCurrent } = await import("@openbooks/engine/ledger/document-service");
 
         const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -2038,33 +2038,33 @@ const salesInvoiceCurrencyCases = [{ label: "sales-invoice-currency-exposure", r
 const assert: typeof import("node:assert/strict") = (await import("node:assert/strict")).default;
 const { randomUUID } = await import("node:crypto");
 const test = (await import("node:test")).default;
-type ScratchOrg = import("@openbooks/engine/src/testing/fixtures.ts").ScratchOrg;
+type ScratchOrg = import("@openbooks/engine/testing/fixtures").ScratchOrg;
 // applyDocumentEdit + convertOrder are server-only code exercised through the
 // same module hooks as the neighbouring documents suites.
 const { sql } = await import("drizzle-orm");
-const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
 const {
   createScratchOrg,
   createScratchUser,
   dropScratchOrg,
-} = await import("@openbooks/engine/src/testing/fixtures.ts");
+} = await import("@openbooks/engine/testing/fixtures");
 const { convertOrder } = await import("./order-cycle.ts");
 const { applyDocumentEdit } = await import("./documents.ts");
-const { DocumentEditError } = await import("../../engine/src/records/document-edit-policy.ts");
-const { loadDocumentEditCurrent } = await import("../../engine/src/ledger/document-service.ts");
+const { DocumentEditError } = await import("@openbooks/engine/records/document-edit-policy");
+const { loadDocumentEditCurrent } = await import("@openbooks/engine/ledger/document-service");
 const { issueSalesOrder, SalesOrderIssueError } = await import(
-  "@openbooks/engine/src/sales/sales-orders.ts"
+  "@openbooks/engine/sales/sales-orders"
 );
-const { postDocument } = await import("@openbooks/engine/src/ledger/posting-document.ts");
-const { deleteDocument } = await import("@openbooks/engine/src/ledger/document-delete.ts");
+const { postDocument } = await import("@openbooks/engine/ledger/posting-document");
+const { deleteDocument } = await import("@openbooks/engine/ledger/document-delete");
 const { createPaymentDocument, updateDraftPayment } = await import(
-  "@openbooks/engine/src/payments/payment-documents.ts"
+  "@openbooks/engine/payments/payment-documents"
 );
 const { postPaymentWithApplications } = await import(
-  "@openbooks/engine/src/payments/payment-posting.ts"
+  "@openbooks/engine/payments/payment-posting"
 );
 const { sameCurrencyAllocation } = await import(
-  "@openbooks/engine/src/payments/settlement-policy.ts"
+  "@openbooks/engine/payments/settlement-policy"
 );
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -2466,30 +2466,30 @@ const consolidatedRows = [
         // applyDocumentEdit + convertOrder are server-only code exercised through the
         // same module hooks as the neighbouring documents suites.
         const { sql } = await import("drizzle-orm");
-        const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
+        const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
         const {
           createScratchOrg,
           createScratchUser,
           dropScratchOrg,
-        } = await import("@openbooks/engine/src/testing/fixtures.ts");
+        } = await import("@openbooks/engine/testing/fixtures");
 
         const { convertOrder } = await import("./order-cycle.ts");
         const { applyDocumentEdit } = await import("./documents.ts");
-        const { DocumentEditError } = await import("../../engine/src/records/document-edit-policy.ts");
-        const { loadDocumentEditCurrent } = await import("../../engine/src/ledger/document-service.ts");
+        const { DocumentEditError } = await import("@openbooks/engine/records/document-edit-policy");
+        const { loadDocumentEditCurrent } = await import("@openbooks/engine/ledger/document-service");
         const { issueSalesOrder, SalesOrderIssueError } = await import(
-          "@openbooks/engine/src/sales/sales-orders.ts"
+          "@openbooks/engine/sales/sales-orders"
         );
-        const { postDocument } = await import("@openbooks/engine/src/ledger/posting-document.ts");
-        const { deleteDocument } = await import("@openbooks/engine/src/ledger/document-delete.ts");
+        const { postDocument } = await import("@openbooks/engine/ledger/posting-document");
+        const { deleteDocument } = await import("@openbooks/engine/ledger/document-delete");
         const { createPaymentDocument, updateDraftPayment } = await import(
-          "@openbooks/engine/src/payments/payment-documents.ts"
+          "@openbooks/engine/payments/payment-documents"
         );
         const { postPaymentWithApplications } = await import(
-          "@openbooks/engine/src/payments/payment-posting.ts"
+          "@openbooks/engine/payments/payment-posting"
         );
         const { sameCurrencyAllocation } = await import(
-          "@openbooks/engine/src/payments/settlement-policy.ts"
+          "@openbooks/engine/payments/settlement-policy"
         );
 
         const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -2960,8 +2960,8 @@ for (const row of documentRevisionCases) await row.register();
 const currencyRegistryCases = [{ label: "currency registry document to statement chain", register: async () => {
   const { partnerStatement } = await import('./reports/registers.ts');
   const { exportDataToCsv, partnerStatementExportData } = await import('./report-pdf.ts');
-  const { createPaymentDocument, updateDraftPayment } = await import('@openbooks/engine/src/payments/payment-documents.ts');
-  const { postPaymentWithApplications } = await import('@openbooks/engine/src/payments/payment-posting.ts');
+  const { createPaymentDocument, updateDraftPayment } = await import('@openbooks/engine/payments/payment-documents');
+  const { postPaymentWithApplications } = await import('@openbooks/engine/payments/payment-posting');
   const atLedgerScale = (total: string) => total.includes('.') ? total.padEnd(total.indexOf('.') + 5, '0') : `${total}.0000`;
   const translate = (key: string) => key;
   for (const [currency, fxRate, total, paid, open, baseOpen, baseTotal] of [

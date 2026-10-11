@@ -3,20 +3,20 @@
 import { createHash } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { db } from "@openbooks/engine/platform/db";
 import { enqueueSandboxOp } from "@openbooks/jobs";
 import {
   applyChangeSet,
   approveChangeSet,
   buildChangeSet,
   reviewChangeSet,
-} from "@openbooks/engine/src/sandbox/promote.ts";
+} from "@openbooks/engine/sandbox/promote";
 import { getAuthz } from "../../../../lib/authz";
 import { can } from "../../../../lib/authz";
 import { isUuid } from "../../../../lib/list-params";
-import { validateSandboxCutoff } from "@openbooks/engine/src/sandbox/lifecycle.ts";
-import { validateSandboxCadence } from "@openbooks/engine/src/sandbox/cadence.ts";
-import { validateSandboxTier } from "@openbooks/engine/src/sandbox/clone.ts";
+import { validateSandboxCutoff } from "@openbooks/engine/sandbox/lifecycle";
+import { validateSandboxCadence } from "@openbooks/engine/sandbox/cadence";
+import { validateSandboxTier } from "@openbooks/engine/sandbox/clone";
 import type { PromotionTransition } from "../../../../lib/sandbox-promotion";
 
 function assertUuid(value: string, label: string): void {

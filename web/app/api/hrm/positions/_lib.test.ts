@@ -8,8 +8,8 @@ process.env.OPENBOOKS_DB_URL = "";
 process.env.OPENBOOKS_MIGRATION_DB_URL = "";
 
 const { positionErrorResponse } = await import("./_lib.ts");
-const { HrmAuthorizationError } = await import("@openbooks/engine/src/hrm/authorization.ts");
-const { HrmPositionError } = await import("@openbooks/engine/src/hrm/positions.ts");
+const { HrmAuthorizationError } = await import("@openbooks/engine/hrm/authorization");
+const { HrmPositionError } = await import("@openbooks/engine/hrm/positions");
 
 test("every position refusal code maps to its status with the message intact", () => {
   const cases: Array<[string, number]> = [

@@ -74,7 +74,7 @@ const mockUrls = new Map<string, string>([
   ["../../../../../../lib/features", "mock:features"],
   ["@/lib/authz", "mock:authz"],
   ["@/lib/feature-gates", "mock:authz"],
-  ["@openbooks/engine/src/hrm/leave.ts", "mock:service"],
+  ["@openbooks/engine/hrm/leave", "mock:service"],
 ]);
 
   const hooks = registerHooks({

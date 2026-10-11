@@ -1,7 +1,7 @@
 import "server-only";
 import { businessToday } from "@openbooks/engine/platform/business-date";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { db } from "@openbooks/engine/platform/db";
 import { isFeatureEnabled } from "../features";
 import { clamp } from "../list-params";
 import { subsidiaryVisibleFilter } from "../subsidiaries";

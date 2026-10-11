@@ -53,7 +53,7 @@ stubModules({
         return state.features.includes(key)
       }
     `,
-    "@openbooks/engine/src/billing/metrics/metrics-normalization-service.ts": `
+    "@openbooks/engine/billing/metrics/metrics-normalization-service": `
       const state = globalThis[Symbol.for('openbooks.metrics-normalization-approve-test')]
       class UsageBillingError extends Error {
         constructor(code, message, remedy, options) {

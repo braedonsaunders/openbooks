@@ -20,9 +20,9 @@ registerHooks({
 })
 
 const { sql } = await import('drizzle-orm')
-const { db, withBypass } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypass } = await import('@openbooks/engine/platform/db')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
-  '@openbooks/engine/src/testing/fixtures.ts'
+  '@openbooks/engine/testing/fixtures'
 )
 const { platformGrants } = await import('../../../../lib/platform-admin.ts')
 

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { registerHooks } from "node:module";
 import test from "node:test";
-import { env } from "@openbooks/engine/src/platform/db.ts";
+import { env } from "@openbooks/engine/platform/db";
 
 function runIntegrationSource(source: string): void {
   const result = spawnSync(

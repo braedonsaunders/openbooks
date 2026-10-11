@@ -1,7 +1,7 @@
 import { z } from "zod";
-import { convertPlannedOrder, getPlannedOrder, markBuyPlannedOrderConverted } from "@openbooks/engine/src/manufacturing/mrp.ts";
-import { ManufacturingError } from "@openbooks/engine/src/manufacturing/errors.ts";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { convertPlannedOrder, getPlannedOrder, markBuyPlannedOrderConverted } from "@openbooks/engine/manufacturing/mrp";
+import { ManufacturingError } from "@openbooks/engine/manufacturing/errors";
+import { db } from "@openbooks/engine/platform/db";
 import { can, guardSubsidiaryScope } from "@/lib/authz";
 import { defineRoute } from "@/lib/api/route";
 import { createOrderDraft } from "@/lib/order-cycle";

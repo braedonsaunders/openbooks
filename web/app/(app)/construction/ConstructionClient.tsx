@@ -26,7 +26,7 @@ import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { cmp } from "@openbooks/engine/src/money/money.ts";
+import { cmp } from "@openbooks/engine/money/money";
 
 export interface ApplicationIncomeAccount {
   id: string;

@@ -4,40 +4,40 @@ import { getLocale, getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { compensationArchitectureSummary, compensationWageSummary, type CompensationWageSummary } from '@openbooks/engine/hrm/compensation'
 import { formatDecimal } from '../money-format'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
+import { db } from '@openbooks/engine/platform/db'
+import { businessToday } from '@openbooks/engine/platform/business-date/module'
 import {
   listCycles,
   listCycleLines,
   cyclePacing,
   getCycle,
-} from '@openbooks/engine/src/hrm/compensation/cycles.ts'
+} from '@openbooks/engine/hrm/compensation/cycles'
 import {
   compaRatioFor,
-} from '@openbooks/engine/src/hrm/compensation/bands.ts'
+} from '@openbooks/engine/hrm/compensation/bands'
 import {
   compensationSettings,
-} from '@openbooks/engine/src/hrm/compensation/architecture.ts'
+} from '@openbooks/engine/hrm/compensation/architecture'
 import {
   listPlans,
   listPlanLines,
   listPlanLinesForPlans,
   type PlanLineDTO,
-} from '@openbooks/engine/src/hrm/compensation/headcount-plans.ts'
+} from '@openbooks/engine/hrm/compensation/headcount-plans'
 import {
   latestGapSnapshot,
-} from '@openbooks/engine/src/hrm/compensation/pay-transparency.ts'
+} from '@openbooks/engine/hrm/compensation/pay-transparency'
 import {
   listStatements,
-} from '@openbooks/engine/src/hrm/compensation/statements.ts'
-import { CompensationError } from '@openbooks/engine/src/hrm/compensation/errors.ts'
-import { HrmAuthorizationError, loadApprovalPerson, loadOwnEmploymentIds } from '@openbooks/engine/src/hrm/authorization.ts'
+} from '@openbooks/engine/hrm/compensation/statements'
+import { CompensationError } from '@openbooks/engine/hrm/compensation/errors'
+import { HrmAuthorizationError, loadApprovalPerson, loadOwnEmploymentIds } from '@openbooks/engine/hrm/authorization'
 import { can, getAuthz, type Authz } from '../authz'
 import { mergeHref } from '../list-params'
 import { hrmGroupTabs } from '../../components/module-home/group-tabs'
 import { isFeatureEnabled } from '../features'
 import { requireFeatureEnabled } from '../feature-gates'
-import { cmp } from '@openbooks/engine/src/money/money.ts'
+import { cmp } from '@openbooks/engine/money/money'
 import { planTotalCost } from './compensation-money'
 import type { PayRateBasis } from '@openbooks/engine/projects/pay-rate-basis'
 

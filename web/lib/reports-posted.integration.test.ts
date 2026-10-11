@@ -496,7 +496,7 @@ test("ledger-backed detail reports read one accounting book (omitted means prima
 
 const consolidatedRows = [
   { label: "reports register truncation", register: async () => {
-        const { env }=await import("@openbooks/engine/src/platform/db.ts");
+        const { env }=await import("@openbooks/engine/platform/db");
         test("truncated ledger and party registers retain complete closing balances", { skip: !env.OPENBOOKS_DB_URL }, () => {
           const source = `
             import assert from "node:assert/strict";
@@ -669,8 +669,8 @@ const generalLedgerCases = [
         const test = (await import("node:test")).default;
         const root = pathToFileURL(process.cwd() + "/").href;
         const { sql } = await import("drizzle-orm");
-        const { db, withBypassContext, withOrgContext } = (await import(root + "engine/src/platform/db.ts")) as typeof import("@openbooks/engine/src/platform/db.ts");
-        const { createScratchOrg, dropScratchOrg } = (await import(root + "engine/src/testing/fixtures.ts")) as typeof import("@openbooks/engine/src/testing/fixtures.ts");
+        const { db, withBypassContext, withOrgContext } = (await import("@openbooks/engine/platform/db")) as typeof import("@openbooks/engine/platform/db");
+        const { createScratchOrg, dropScratchOrg } = (await import("@openbooks/engine/testing/fixtures")) as typeof import("@openbooks/engine/testing/fixtures");
         const { glActivityBuckets } = (await import(root + "web/lib/gl-summary.ts")) as typeof import("./gl-summary");
 
         test(

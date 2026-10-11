@@ -35,7 +35,7 @@
 import { realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { sql } from "drizzle-orm";
-import { db, pool, withBypassContext } from "../engine/src/platform/db.ts";
+import { db, pool, withBypassContext } from "@openbooks/engine/platform/db";
 import {
   describeSealedBlob,
   KeyedFingerprintError,
@@ -43,9 +43,9 @@ import {
   sealSecret,
   unsealSecret,
   type SecretScope,
-} from "../engine/src/platform/secrets.ts";
-import { planFingerprintReseal } from "../engine/src/payroll/yearend-amendments.ts";
-import type { PayrollFilingReported } from "../engine/src/payroll/filing-registry.ts";
+} from "@openbooks/engine/platform/secrets";
+import { planFingerprintReseal } from "@openbooks/engine/payroll/yearend-amendments";
+import type { PayrollFilingReported } from "@openbooks/engine/payroll/filing-registry";
 import { sealSecret as sealEmailSecret, unsealLegacyEmailSecret } from "@openbooks/emails";
 
 const args = process.argv.slice(2);

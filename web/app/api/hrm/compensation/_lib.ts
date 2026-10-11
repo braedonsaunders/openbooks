@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
-import { HrmAuthorizationError } from "@openbooks/engine/src/hrm/authorization.ts";
+import { HrmAuthorizationError } from "@openbooks/engine/hrm/authorization";
 import { hrmAuthorizationResponse } from "../../../../lib/api/record-not-found";
-import { UnrestrictedScopeError } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
-import { CompensationError } from "@openbooks/engine/src/hrm/compensation/errors.ts";
-import { RecruitingError } from "@openbooks/engine/src/hrm/recruiting/errors.ts";
+import { UnrestrictedScopeError } from "@openbooks/engine/organization/scope";
+import { CompensationError } from "@openbooks/engine/hrm/compensation/errors";
+import { RecruitingError } from "@openbooks/engine/hrm/recruiting/errors";
 
 /**
  * Shared error mapping for /api/hrm/compensation/*. Engine refusals reach

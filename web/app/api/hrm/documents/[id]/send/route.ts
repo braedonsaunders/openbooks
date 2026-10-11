@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { sendDocument } from "@openbooks/engine/src/hrm/documents/documents.ts";
+import { sendDocument } from "@openbooks/engine/hrm/documents/documents";
 import { deliverSignatureInvitations } from "../../../../../../lib/hrm/document-delivery";
 import { hrmDocumentsErrorResponse } from "../../_lib";
 import { resolveAppBaseUrl } from "../../route";

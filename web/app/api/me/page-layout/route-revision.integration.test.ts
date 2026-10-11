@@ -54,10 +54,10 @@ registerHooks({
 
 const routeUrl = "./route.ts?page-layout-revision-integration";
 const { GET, PUT } = (await import(routeUrl)) as typeof import("./route.ts");
-const { db } = await import("@openbooks/engine/src/platform/db.ts");
+const { db } = await import("@openbooks/engine/platform/db");
 const { mergePageLayouts } = await import("../../../../lib/page-layout-shared.ts");
 const { createScratchOrg, createScratchUser } = await import(
-  "@openbooks/engine/src/testing/fixtures.ts"
+  "@openbooks/engine/testing/fixtures"
 );
 
 const PAGE = "banking-accounts";

@@ -1,10 +1,10 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from "@/lib/api/error-response";
-import { LeaseError } from "@openbooks/engine/src/revenue/leases.ts";
+import { LeaseError } from "@openbooks/engine/revenue/leases";
 import { NextResponse } from "next/server";
 import { isUuid } from "@/lib/list-params";
-import { commenceLease } from "@openbooks/engine/src/revenue/leases.ts";
+import { commenceLease } from "@openbooks/engine/revenue/leases";
 export const runtime = "nodejs";
 export const POST = defineRoute({
   permission: "assets.manage",

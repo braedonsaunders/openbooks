@@ -1,4 +1,4 @@
-import { cmp, normalizeMoney } from '@openbooks/engine/src/money/money.ts'
+import { cmp, normalizeMoney } from '@openbooks/engine/money/money'
 import { canonicalDecimal } from '../exact-decimal'
 
 /** Canonical lease charge input; reject values that crossed a JS number first. */

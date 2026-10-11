@@ -117,7 +117,7 @@ stubModules({
   authz: false,
   features: false,
   extra: {
-    "@openbooks/engine/src/platform/db.ts": mockDb,
+    "@openbooks/engine/platform/db": mockDb,
     "../../../../lib/feature-gates": `export async function guardFeaturePermission() {
        return {
          user: { orgId: '${ORG_ID}', id: '${USER_ID}' },

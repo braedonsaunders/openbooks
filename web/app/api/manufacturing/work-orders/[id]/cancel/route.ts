@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { cancelWorkOrder } from "@openbooks/engine/src/manufacturing/work-orders.ts";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { cancelWorkOrder } from "@openbooks/engine/manufacturing/work-orders";
+import { db } from "@openbooks/engine/platform/db";
 import { defineRoute } from "@/lib/api/route";
 import { manufacturingTransaction } from "../../../_transaction";
 import { loadScopedWorkOrder } from "../../_scope";

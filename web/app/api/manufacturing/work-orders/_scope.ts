@@ -1,5 +1,5 @@
-import { getWorkOrder } from "@openbooks/engine/src/manufacturing/work-orders.ts";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { getWorkOrder } from "@openbooks/engine/manufacturing/work-orders";
+import { db } from "@openbooks/engine/platform/db";
 import { guardSubsidiaryScope, type Authz } from "@/lib/authz";
 import { notFound } from "@/lib/api/responses";
 

@@ -22,14 +22,14 @@ import {
   getOneOnOne,
   listOneOnOneDirectory,
   listOneOnOnes,
-} from '@openbooks/engine/src/hrm/performance/one-on-ones.ts'
-import { listOpenRequestsForParty } from '@openbooks/engine/src/hrm/performance/feedback.ts'
+} from '@openbooks/engine/hrm/performance/one-on-ones'
+import { listOpenRequestsForParty } from '@openbooks/engine/hrm/performance/feedback'
 import { getAuthz } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { meTabs } from '../../../../lib/hrm/self-service'
-import { loadApprovalPerson } from '@openbooks/engine/src/hrm/authorization.ts'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { businessTimeZone, formatInZone, formatTimeInZone } from '@openbooks/engine/src/platform/business-date.ts'
+import { loadApprovalPerson } from '@openbooks/engine/hrm/authorization'
+import { db } from '@openbooks/engine/platform/db'
+import { businessTimeZone, formatInZone, formatTimeInZone } from '@openbooks/engine/platform/business-date/module'
 
 /**
  * Me 1:1s — upcoming and past conversations with the agenda drawer

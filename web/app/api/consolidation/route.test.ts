@@ -67,10 +67,10 @@ const routeUrl = "./route.ts?consolidation-route";
 const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
 
 const { db } = await import(
-  "@openbooks/engine/src/platform/db.ts"
+  "@openbooks/engine/platform/db"
 );
 const { createScratchOrg, dropScratchOrg } = await import(
-  "@openbooks/engine/src/testing/fixtures.ts"
+  "@openbooks/engine/testing/fixtures"
 );
 
 type ScratchOrg = Awaited<ReturnType<typeof createScratchOrg>>;

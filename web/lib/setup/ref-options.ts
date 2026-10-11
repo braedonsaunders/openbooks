@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm'
 import { setupReadSource } from './read-shape'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/db'
 import { featureEnabled, resolvedFeatureState } from '../features'
 import { subsidiaryVisibleFilter } from '../subsidiaries'
 import { SETUP_ENTITY_BY_KEY, refTargetPicker, toSnake, type SetupEntity, type SetupRefSource } from './registry'

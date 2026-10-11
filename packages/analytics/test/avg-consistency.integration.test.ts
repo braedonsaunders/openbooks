@@ -2,9 +2,9 @@ import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import test from 'node:test'
 import { REPORT_ENTITY_MAP, runCustomQuery } from '@openbooks/reports'
-import { pool } from '@openbooks/engine/src/platform/db.ts'
-import { postProjectGlEntry } from '@openbooks/engine/src/projects/recognition.ts'
-import { createScratchOrg, createScratchUser, dropScratchOrg } from '@openbooks/engine/src/testing/fixtures.ts'
+import { pool } from '@openbooks/engine/platform/db'
+import { postProjectGlEntry } from '@openbooks/engine/projects/recognition'
+import { createScratchOrg, createScratchUser, dropScratchOrg } from '@openbooks/engine/testing/fixtures'
 import { runInsightQuery } from '../src/execute.ts'
 
 test('report and insight averages preserve the same monetary precision', async () => {

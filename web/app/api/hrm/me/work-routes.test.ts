@@ -82,7 +82,7 @@ const mockUrls = new Map<string, string>([
   ["../../../../../../lib/authz", "mock:authz"],
   ["../../../../../lib/features", "mock:features"],
   ["../../../../../../lib/features", "mock:features"],
-  ["@openbooks/engine/src/hrm/self-service/my-work.ts", "mock:my-work"],
+  ["@openbooks/engine/hrm/self-service/my-work", "mock:my-work"],
 ]);
 
 let reviewsRoute: typeof import("./reviews/route.ts") | undefined;
@@ -219,7 +219,7 @@ test("a missing feature flag 404s before any service runs", async () => {
   test("an unlinked login is refused as a 403 with the remedy intact", async () => {
     reset();
     const { SelfServiceError } = await import(
-      "@openbooks/engine/src/hrm/self-service/actor.ts"
+      "@openbooks/engine/hrm/self-service/actor"
     );
     routeState.serviceThrow = new SelfServiceError(
       "NO_LINK",
@@ -235,7 +235,7 @@ test("a missing feature flag 404s before any service runs", async () => {
   test("another person's review id is refused by identity, never acted on", async () => {
     reset();
     const { HrmPerformanceError } = await import(
-      "@openbooks/engine/src/hrm/performance/errors.ts"
+      "@openbooks/engine/hrm/performance/errors"
     );
     routeState.serviceThrow = new HrmPerformanceError(
       "FORBIDDEN",
@@ -252,7 +252,7 @@ test("a missing feature flag 404s before any service runs", async () => {
 
   test("a closed window refuses elect as a 400 with the remedy intact", async () => {
     reset();
-    const { BenefitsError } = await import("@openbooks/engine/src/hrm/benefits/errors.ts");
+    const { BenefitsError } = await import("@openbooks/engine/hrm/benefits/errors");
     routeState.serviceThrow = new BenefitsError(
       "REFUSED",
       "enrollment window is closed — elect inside an open window, or record a life event with a reason",
@@ -266,7 +266,7 @@ test("a missing feature flag 404s before any service runs", async () => {
 
   test("another person's employment id is refused as a 403", async () => {
     reset();
-    const { HrmAuthorizationError } = await import("@openbooks/engine/src/hrm/authorization.ts");
+    const { HrmAuthorizationError } = await import("@openbooks/engine/hrm/authorization");
     routeState.serviceThrow = new HrmAuthorizationError(
       "Benefit elections from the Me workspace elect only against your own employment — ask a manager holding hrm.benefits.manage to act on your behalf.",
     );

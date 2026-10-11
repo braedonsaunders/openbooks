@@ -23,7 +23,7 @@ import {
   releaseMigrationClient,
   sanitizeMigrationContent,
 } from "./bootstrap-migration-client.ts";
-import { env, longPool, pool } from "../engine/src/platform/db.ts";
+import { env, longPool, pool } from "@openbooks/engine/platform/db";
 
 const DB = !!env.OPENBOOKS_DB_URL;
 

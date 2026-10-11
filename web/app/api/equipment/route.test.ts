@@ -173,7 +173,7 @@ stubModules({
   authz: true,
   features: false,
   extra: {
-    "@openbooks/engine/src/platform/db.ts": mockDb,
+    "@openbooks/engine/platform/db": mockDb,
     "@/lib/feature-gates": `const state = globalThis[Symbol.for('openbooks.equipment-create-route-test')]
      export async function guardFeaturePermission() {
        return {

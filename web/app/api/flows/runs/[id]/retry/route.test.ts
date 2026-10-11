@@ -123,8 +123,8 @@ const mockUrls = new Map<string, string>([
   ["drizzle-orm", "mock:drizzle"],
   ["@/lib/feature-gates", "mock:feature-gates"],
   ["../../../../../../lib/feature-gates", "mock:feature-gates"],
-  ["@openbooks/engine/src/flows/index.ts", "mock:engine"],
-  ["@openbooks/engine/src/platform/db.ts", "mock:db"],
+  ["@openbooks/engine/flows/module", "mock:engine"],
+  ["@openbooks/engine/platform/db", "mock:db"],
   ["../../../_lib", "mock:lib"],
   ["../../../../../../lib/authz", "mock:authz"],
 ]);

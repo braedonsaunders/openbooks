@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 
-const { env, withBypassContext } = await import("@openbooks/engine/src/platform/db.ts");
+const { env, withBypassContext } = await import("@openbooks/engine/platform/db");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  "@openbooks/engine/src/testing/fixtures.ts"
+  "@openbooks/engine/testing/fixtures"
 );
 const { executeAssistantTool } = await import("./registry");
 const DB = !!env.OPENBOOKS_DB_URL;

@@ -7,16 +7,16 @@ import {
   db,
   withBypassContext,
   withOrgContext,
-} from "@openbooks/engine/src/platform/db.ts";
+} from "@openbooks/engine/platform/db";
 import {
   createScratchOrg,
   dropScratchOrg,
-} from "@openbooks/engine/src/testing/fixtures.ts";
-import { createWarehouseOperator } from "@openbooks/engine/src/testing/warehouse-execution.ts";
+} from "@openbooks/engine/testing/fixtures";
+import { createWarehouseOperator } from "@openbooks/engine/testing/warehouse-execution";
 import {
   createStockCount,
   startStockCount,
-} from "@openbooks/engine/src/inventory/stock-counts.ts";
+} from "@openbooks/engine/inventory/stock-counts";
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 const session = { orgId: "", actorId: "" };

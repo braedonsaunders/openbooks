@@ -10,8 +10,8 @@ registerHooks({
 })
 
 const { sql } = await import('drizzle-orm')
-const { db, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { db, withBypass, withOrgContext } = await import('@openbooks/engine/platform/db')
+const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
 const { openItems } = await import('./open-items.ts')
 
 type ScratchOrg = Awaited<ReturnType<typeof createScratchOrg>>

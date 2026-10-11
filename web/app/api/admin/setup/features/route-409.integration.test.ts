@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, withBypassContext } from "@openbooks/engine/src/platform/db.ts";
-import { createScratchOrg, createScratchUser, dropScratchOrg } from "@openbooks/engine/src/testing/fixtures.ts";
+import { db, withBypassContext } from "@openbooks/engine/platform/db";
+import { createScratchOrg, createScratchUser, dropScratchOrg } from "@openbooks/engine/testing/fixtures";
 
 // Disabling REST API while MCP access depends on it answers 409
 // with no user-visible feedback. Capture the REAL refusal body first so the

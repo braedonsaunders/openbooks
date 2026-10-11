@@ -1,10 +1,10 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { activePostingPrimaryBookId } from '@openbooks/engine/src/platform/accounting-books.ts'
-import { addMonthsStart, businessToday, startOfMonth } from '@openbooks/engine/src/platform/business-date.ts'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { subsidiaryVisibleFilter } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
-import { fromUnits, roundDiv, toUnits } from '@openbooks/engine/src/money/money.ts'
+import { activePostingPrimaryBookId } from '@openbooks/engine/platform/accounting-books'
+import { addMonthsStart, businessToday, startOfMonth } from '@openbooks/engine/platform/business-date/module'
+import { db } from '@openbooks/engine/platform/db'
+import { subsidiaryVisibleFilter } from '@openbooks/engine/organization/scope'
+import { fromUnits, roundDiv, toUnits } from '@openbooks/engine/money/money'
 
 /**
  * Expense-reports dashboard — the /expenses cockpit's data. This is the

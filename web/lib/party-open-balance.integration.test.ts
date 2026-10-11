@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 const { sql } = await import('drizzle-orm');
 const { randomUUID } = await import('node:crypto');
-const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
-const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
 const { loadParty } = await import("../app/api/parties/_lib");
 const enabled = { skip: !process.env.OPENBOOKS_DB_URL };
 
@@ -71,8 +71,8 @@ const partyRevisionCases = [
           return next(specifier,context);
         }});
         const { sql } = await import('drizzle-orm');
-        const { db, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
-        const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
+        const { db, withOrgContext } = await import("@openbooks/engine/platform/db");
+        const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
         const { PATCH, GET } = await import("../app/api/parties/[id]/route");
         const { loadParty } = await import("../app/api/parties/_lib");
         for (const operation of ['read', 'save', 'stale']) {
@@ -152,10 +152,10 @@ const partyDrawerCases = [
         const { randomUUID } = await import('node:crypto');
         const test = (await import('node:test')).default;
         const { sql } = await import('drizzle-orm')
-        const { db, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
-        const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
-        const { postDocument } = await import("@openbooks/engine/src/ledger/posting-document.ts");
-        const { loadDocument } = await import("../../engine/src/ledger/document-service.ts");
+        const { db, withBypass, withOrgContext } = await import('@openbooks/engine/platform/db')
+        const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
+        const { postDocument } = await import("@openbooks/engine/ledger/posting-document");
+        const { loadDocument } = await import("@openbooks/engine/ledger/document-service");
         const { loadPdfRecordValues } = await import('./pdf-templates/values')
 
         /**

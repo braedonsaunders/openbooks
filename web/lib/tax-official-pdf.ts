@@ -1,5 +1,5 @@
 import { PDFDocument, PDFName } from 'pdf-lib'
-import type { TaxReturnBox } from '@openbooks/engine/src/tax-returns/return.ts'
+import type { TaxReturnBox } from '@openbooks/engine/tax-returns/return'
 import { formatDecimal } from './money-format'
 
 /**

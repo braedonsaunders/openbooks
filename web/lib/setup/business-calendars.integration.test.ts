@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { randomUUID } from 'node:crypto'
-const { db, env, withBypass } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, env, withBypass } = await import('@openbooks/engine/platform/db')
 const { sql } = await import('drizzle-orm')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
 const { createSetupRecord, updateSetupRecord, deleteSetupRecord } = await import('./write.ts')
 const { businessCalendarFor, businessCalendarOver, BusinessCalendarMissingError, SubsidiaryCalendarMismatchError } = await import('@openbooks/engine/payroll/business-calendars')
 

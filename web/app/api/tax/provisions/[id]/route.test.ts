@@ -44,7 +44,7 @@ stubModules({
   extra: {
     "../../../../../lib/authz": authzStub,
     "@/lib/authz": authzStub,
-    "@openbooks/engine/src/tax-returns/income-tax-provision.ts": `
+    "@openbooks/engine/tax-returns/income-tax-provision": `
       const state = globalThis[Symbol.for('openbooks.tax-provision-route-test')]
       export async function getProvisionRun(orgId, runId, allowedSubsidiaryIds) {
         state.calls.push({ orgId, runId, allowedSubsidiaryIds })

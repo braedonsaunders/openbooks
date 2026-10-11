@@ -2,13 +2,13 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { db } from "@openbooks/engine/platform/db";
 import {
   assertDedicatedFixtureDatabase,
   createScratchOrg,
   createScratchUser,
   dropScratchOrg,
-} from "@openbooks/engine/src/testing/fixtures.ts";
+} from "@openbooks/engine/testing/fixtures";
 import { resolveApprovalSubjects, type ApprovalSubjectText } from "./approval-subjects.ts";
 
 /**

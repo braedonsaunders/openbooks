@@ -10,8 +10,8 @@
  * A write that matches zero rows is a failure, not a success.
  */
 import { sql } from "drizzle-orm";
-import { db } from "../../engine/src/platform/db.ts";
-import { lockScopeRows } from "../../engine/src/organization/subsidiary-scope.ts";
+import { db } from "@openbooks/engine/platform/db";
+import { lockScopeRows } from "@openbooks/engine/organization/scope";
 
 export interface SourceLink {
   sourceRef: string;

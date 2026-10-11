@@ -2,12 +2,12 @@ import { sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
 import { Alert, Badge } from '@openbooks/ui'
 import { notFound } from 'next/navigation'
-import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { businessToday } from '@openbooks/engine/platform/business-date/module'
+import { db } from '@openbooks/engine/platform/db'
 import {
   previewDerivedRule,
   type DerivedRulePreview,
-} from '@openbooks/engine/src/payroll/derived-earnings.ts'
+} from '@openbooks/engine/payroll/derived-earnings'
 import { DateRangeFilter } from '../../../../../components/date-range-filter'
 import { ListFilterSelect } from '../../../../../components/list-filter-select'
 import { pickString } from '../../../../../lib/list-params'

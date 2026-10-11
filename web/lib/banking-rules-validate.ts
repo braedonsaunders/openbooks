@@ -1,4 +1,4 @@
-import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
+import { normalizeMoney } from '@openbooks/engine/money/money'
 import { canonicalDecimal, compareDecimal } from './exact-decimal'
 import { isUuid } from './list-params'
 import type {

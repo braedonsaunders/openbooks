@@ -4,9 +4,9 @@ import test from "node:test";
 import { registerHooks } from "node:module";
 import type { Authz } from "./authz";
 import { sql } from "drizzle-orm";
-import { db, pool, withBypassContext, withOrgContext } from "@openbooks/engine/src/platform/db.ts";
-import { laborClearingReconciliation, postPayrollVariance } from "@openbooks/engine/src/projects/labor-costing.ts";
-import { createScratchOrg, dropScratchOrg, seedFlowActors, type ScratchOrg } from "@openbooks/engine/src/testing/fixtures.ts";
+import { db, pool, withBypassContext, withOrgContext } from "@openbooks/engine/platform/db";
+import { laborClearingReconciliation, postPayrollVariance } from "@openbooks/engine/projects/labor-costing/operations";
+import { createScratchOrg, dropScratchOrg, seedFlowActors, type ScratchOrg } from "@openbooks/engine/testing/fixtures";
 
 const enabled = !!process.env.OPENBOOKS_DB_URL;
 const periodStart = "2026-07-01";

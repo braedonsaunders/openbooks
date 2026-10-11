@@ -22,7 +22,7 @@ const permState: PermState = { authz: null };
 
 const mockAuthz = `
   import { NextResponse } from 'next/server';
-  import { permissionSetCovers } from '@openbooks/engine/src/organization/permissions.ts';
+  import { permissionSetCovers } from '@openbooks/engine/organization/permissions';
   const state = globalThis[Symbol.for('openbooks.nav-permission-test')]
   export async function guardPermission(permission) {
     if (!state.authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
@@ -53,9 +53,9 @@ registerHooks({
 
 const routeUrl = "./route.ts?nav-permission-test";
 const { PUT } = (await import(routeUrl)) as typeof import("./route.ts");
-const { db } = await import("@openbooks/engine/src/platform/db.ts");
+const { db } = await import("@openbooks/engine/platform/db");
 const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import(
-  "@openbooks/engine/src/testing/fixtures.ts"
+  "@openbooks/engine/testing/fixtures"
 );
 
 const CONFIG = {

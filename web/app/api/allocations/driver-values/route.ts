@@ -7,7 +7,7 @@ import {
   DriverAdminError,
   createDriverValue,
   listDriverValues,
-} from "../../../../../engine/src/allocations/driver-admin.ts";
+} from "@openbooks/engine/allocations/driver-admin";
 
 export const runtime = "nodejs";
 

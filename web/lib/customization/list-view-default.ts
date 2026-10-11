@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { type db } from "@openbooks/engine/src/platform/db.ts";
+import { type db } from "@openbooks/engine/platform/db";
 
 /** `db.transaction`'s handle — `SqlExecutor` is the pool `execute` and is not assignable from `tx`. */
 export type ListViewDefaultExecutor = Pick<

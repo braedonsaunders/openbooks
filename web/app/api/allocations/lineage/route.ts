@@ -3,7 +3,7 @@ import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from "next/server";
 import { isUuid } from "../../../../lib/list-params";
-import { RunQueryError, queryLineage } from "../../../../../engine/src/allocations/run-queries.ts";
+import { RunQueryError, queryLineage } from "@openbooks/engine/allocations/run-queries";
 
 export const runtime = "nodejs";
 

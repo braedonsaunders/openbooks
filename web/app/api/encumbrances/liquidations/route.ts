@@ -4,7 +4,7 @@ import { uuidId } from '../../../../lib/api/json'
 import { guardPermission, guardSubsidiaryScope } from '../../../../lib/authz'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import { encumbranceSubsidiaryId, linkEncumbranceDocumentLine } from '@openbooks/engine/src/nonprofit/encumbrances.ts'
+import { encumbranceSubsidiaryId, linkEncumbranceDocumentLine } from '@openbooks/engine/nonprofit/encumbrances'
 
 export const runtime = 'nodejs'
 

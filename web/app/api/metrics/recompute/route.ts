@@ -1,4 +1,4 @@
-import { recomputeSaasMetrics } from "@openbooks/engine/src/billing/metrics/metrics-ledger.ts";
+import { recomputeSaasMetrics } from "@openbooks/engine/billing/metrics/metrics-ledger";
 import { defineRoute } from "@/lib/api/route";
 import { z } from "zod";
 

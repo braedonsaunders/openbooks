@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 
-const { db, withBypass, env } = await import("@openbooks/engine/src/platform/db.ts");
+const { db, withBypass, env } = await import("@openbooks/engine/platform/db");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  "@openbooks/engine/src/testing/fixtures.ts"
+  "@openbooks/engine/testing/fixtures"
 );
 const { createConversation, deleteConversation } = await import("../ai-conversations.ts");
 const { createDbOwnedRunStore } = await import("./owned-runs-db.ts");

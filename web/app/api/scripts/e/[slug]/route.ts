@@ -1,7 +1,7 @@
 import { defineRoute } from '@/lib/api/route'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import { runEndpointScript } from '@openbooks/engine/src/scripting/scripting.ts'
+import { runEndpointScript } from '@openbooks/engine/scripting/scripting'
 import type { Authz } from '@/lib/authz'
 
 export const runtime = 'nodejs'

@@ -22,11 +22,11 @@ registerHooks({
   },
 });
 const { sql } = await import("drizzle-orm");
-const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
-const { seedAdoption, calculatedRun } = await import("@openbooks/engine/src/payroll/filing-test-fixtures.ts");
-const { dropScratchOrgReporting } = await import("@openbooks/engine/src/testing/fixtures.ts");
-const { commitPayRun } = await import("@openbooks/engine/src/payroll/run-commit.ts");
-const { recordPayRunPayment } = await import("@openbooks/engine/src/payroll/payment.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { seedAdoption, calculatedRun } = await import("@openbooks/engine/testing/payroll/filing-test-fixtures");
+const { dropScratchOrgReporting } = await import("@openbooks/engine/testing/fixtures");
+const { commitPayRun } = await import("@openbooks/engine/payroll/run-commit");
+const { recordPayRunPayment } = await import("@openbooks/engine/payroll/payment");
 const { POST } = await import("../app/api/payroll/runs/[id]/route");
 
 test("payroll payment API carries the caller's scope to historical liability authorization", {

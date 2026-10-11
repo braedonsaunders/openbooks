@@ -1,6 +1,6 @@
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { fileProfileChangeRequest } from "@openbooks/engine/src/hrm/self-service/profile-changes.ts";
+import { fileProfileChangeRequest } from "@openbooks/engine/hrm/self-service/profile-changes";
 import { meErrorResponse } from "../_lib";
 import { fileProfileChangeBody } from "../bodies";
 /**

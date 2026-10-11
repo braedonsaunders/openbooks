@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import {
   createKit,
   listKits,
-} from "@openbooks/engine/src/hrm/recruiting/kits.ts";
+} from "@openbooks/engine/hrm/recruiting/kits";
 
 import { recruitingErrorResponse } from "../_lib";
 import { createKitBody } from "./bodies";

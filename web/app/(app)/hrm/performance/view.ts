@@ -25,17 +25,17 @@ import {
   listCycleProgress,
   listGoals,
   listMyReviews,
-} from '@openbooks/engine/src/hrm/performance/performance-read.ts'
+} from '@openbooks/engine/hrm/performance/performance-read'
 import { isUuid } from '@/lib/list-params'
 import {getCycleManagement,listCycleScopeOptions,listReviewWorklist} from '@openbooks/engine/hrm/performance'
-import { listReviewTemplates } from '@openbooks/engine/src/hrm/performance/review-cycles.ts'
-import { listExitRecords } from '@openbooks/engine/src/hrm/performance/exits.ts'
-import { HrmPerformanceError } from '@openbooks/engine/src/hrm/performance/errors.ts'
+import { listReviewTemplates } from '@openbooks/engine/hrm/performance/review-cycles'
+import { listExitRecords } from '@openbooks/engine/hrm/performance/exits'
+import { HrmPerformanceError } from '@openbooks/engine/hrm/performance/errors'
 import {
   HrmAuthorizationError,
   loadApprovalPerson,
-} from '@openbooks/engine/src/hrm/authorization.ts'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+} from '@openbooks/engine/hrm/authorization'
+import { db } from '@openbooks/engine/platform/db'
 import {
   loadAiDraftButton,
   loadAiDraftDrawer,

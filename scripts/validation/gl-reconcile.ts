@@ -32,8 +32,8 @@
  * --allow-empty explicitly accepts the empty population.
  */
 import { sql } from "drizzle-orm";
-import { db } from "../../engine/src/platform/db.ts";
-import { sourceClient } from "../../engine/src/sync/source-client.ts";
+import { db } from "@openbooks/engine/platform/db";
+import { sourceClient } from "@openbooks/engine/sync/source-client";
 import { retry } from "./retry.ts";
 import {
   alignMoneyBuckets,
@@ -50,7 +50,7 @@ import {
   sourcePlQuery,
   verdictsDiffer,
   type BucketVerdict,
-} from "../../engine/src/sync/gl-reconcile-source-queries.ts";
+} from "@openbooks/engine/sync/gl-reconcile-source-queries";
 
 const ORG = process.argv.find((a) => a.startsWith("--org="))?.split("=")[1]
   ?? process.env.RECONCILE_ORG ?? (process.env.PROD_ORG ?? (() => { throw new Error("PROD_ORG is required"); })());

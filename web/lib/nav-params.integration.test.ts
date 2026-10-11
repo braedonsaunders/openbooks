@@ -6,7 +6,7 @@ import test from 'node:test'
 import { randomUUID } from 'node:crypto'
 import * as React from 'react'
 import { stubModules } from '../testing/stub-modules.ts'
-import type { ScratchOrg } from '../../engine/src/testing/fixtures.ts'
+import type { ScratchOrg } from '@openbooks/engine/testing/fixtures'
 const repo = process.cwd()
 const root = pathToFileURL(repo + '/').href
 const state: { user: import('./auth').SessionUser | null } = { user: null }
@@ -28,16 +28,16 @@ registerHooks({
   },
 })
 
-const { db, withBypassContext, withOrgContext } = await import(root + 'engine/src/platform/db.ts') as typeof import('../../engine/src/platform/db.ts')
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db') as typeof import('@openbooks/engine/platform/db')
 const { sql } = await import(root + 'node_modules/drizzle-orm/index.js') as typeof import('drizzle-orm')
-const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import(root + 'engine/src/testing/fixtures.ts')
+const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import('@openbooks/engine/testing/fixtures')
 // The loaders, not rendered trees: the toggle hrefs, the Back href and the
 // drawer-opener href are loader-resolved strings, so the loader output is
 // the thing under test (same rationale as banking-source-evidence-pages).
 const { loadPartners } = await import(root + 'web/app/(app)/reports/partners/view.ts')
 const { loadStatement } = await import(root + 'web/app/(app)/reports/statements/[partyId]/view.ts')
 const { loadStatementPicker } = await import(root + 'web/app/(app)/reports/statements/view.ts')
-const { postDocument } = await import(root + 'engine/src/ledger/public.ts') as typeof import('../../engine/src/ledger/public.ts')
+const { postDocument } = await import('@openbooks/engine/documents') as typeof import('@openbooks/engine/documents')
 const { loadBankingAccount } = await import(root + 'web/app/(app)/banking/[accountId]/view.ts')
 
 function hrefParams(href: string): URLSearchParams {

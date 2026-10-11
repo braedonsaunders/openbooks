@@ -4,7 +4,7 @@ import { z } from "zod";
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
-import { TaxFilingError, markTaxFilingFiled } from '@openbooks/engine/src/tax-returns/filing.ts'
+import { TaxFilingError, markTaxFilingFiled } from '@openbooks/engine/tax-returns/filing'
 import { guardUnrestrictedScope } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
 import { TAX_FILING_WRITE_PERMISSION } from '../../../../../lib/tax-filing-permission'

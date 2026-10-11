@@ -15,7 +15,7 @@ const database = 'data:text/javascript,' + encodeURIComponent(`
 const hooks = registerHooks({
   resolve(specifier, context, next) {
     if (specifier === 'server-only') return { url: 'data:text/javascript,export {}', shortCircuit: true }
-    if (specifier === '@openbooks/engine/src/platform/db.ts' && context.parentURL?.includes('/web/lib/org-access.ts')) return { url: database, shortCircuit: true }
+    if (specifier === '@openbooks/engine/platform/db' && context.parentURL?.includes('/web/lib/org-access.ts')) return { url: database, shortCircuit: true }
     return next(specifier, context)
   },
 })

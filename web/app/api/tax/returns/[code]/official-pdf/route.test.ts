@@ -71,7 +71,7 @@ stubModules({
         return state.restricted ? { status: 403, json: async () => ({ error: 'requires unrestricted subsidiary access' }) } : null
       }
     `,
-    "@openbooks/engine/src/platform/db.ts": `
+    "@openbooks/engine/platform/db": `
       const state = globalThis[Symbol.for('openbooks.tax-official-pdf-route-test')]
       const sqlText = (query) => {
         const chunks = query?.queryChunks

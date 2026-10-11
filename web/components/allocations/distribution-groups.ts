@@ -13,7 +13,7 @@
  * floats, never `Number(amount)` arithmetic.
  */
 
-import { add, apportion, cmp, fromUnits, mulPercent, sum, toUnits } from '@openbooks/engine/src/money/money.ts'
+import { add, apportion, cmp, fromUnits, mulPercent, sum, toUnits } from '@openbooks/engine/money/money'
 
 /** Minimal row shape the group model reads. LineGrid rows and drawer LineRows both satisfy it. */
 export interface DistributionGroupRow {

@@ -34,9 +34,9 @@ registerHooks({
     return next(specifier, context);
   },
 });
-const { db, withBypassContext } = await import("@openbooks/engine/src/platform/db.ts");
+const { db, withBypassContext } = await import("@openbooks/engine/platform/db");
 const { sql } = await import("drizzle-orm");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
+const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
 const { POST, PATCH, DELETE } = await import("./route");
 const { BUILTIN_PROJECT_TYPES } = await import("@openbooks/schema");
 
@@ -59,7 +59,7 @@ test("native project-type commands load under the React server runtime without a
       assert.equal(React.createContext, undefined, 'the native command must use the server React export');
       const route = await import('./web/app/api/admin/setup/project-types/route.ts');
       for (const method of ['POST', 'PATCH', 'DELETE']) assert.equal(typeof route[method], 'function', method);
-      const { pool } = await import('./engine/src/platform/db.ts');
+      const { pool } = await import('@openbooks/engine/platform/db');
       await pool.end();
     `,
   });

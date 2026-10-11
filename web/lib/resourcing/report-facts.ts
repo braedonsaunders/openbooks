@@ -1,10 +1,10 @@
 import 'server-only'
 
 import { and, eq, inArray, sql } from 'drizzle-orm'
-import { add, mul } from '@openbooks/engine/src/money/money.ts'
-import { laborCostingSettings, laborFxRate, convertLaborWage, convertFixedLaborComponents, resolveWage, computeCostRate } from '@openbooks/engine/src/projects/labor-costing.ts'
-import { weekStartOf } from '@openbooks/engine/src/resourcing/weeks.ts'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { add, mul } from '@openbooks/engine/money/money'
+import { laborCostingSettings, laborFxRate, convertLaborWage, convertFixedLaborComponents, resolveWage, computeCostRate } from '@openbooks/engine/projects/labor-costing/operations'
+import { weekStartOf } from '@openbooks/engine/resourcing/weeks'
+import { db } from '@openbooks/engine/platform/db'
 import { projects, parties, subsidiaries } from '@openbooks/schema'
 import {
   MAX_AGGREGATE_MEASURES,

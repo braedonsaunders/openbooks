@@ -1,7 +1,7 @@
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { z } from 'zod'
 import { NextResponse } from "next/server";
-import { runUserSql, UserSqlRefusal, validateUserSql } from "@openbooks/engine/src/platform/sqlapi.ts";
+import { runUserSql, UserSqlRefusal, validateUserSql } from "@openbooks/engine/platform/sqlapi";
 import { defineRoute } from '@/lib/api/route'
 import { can } from '@/lib/authz'
 import { hasUnrestrictedQueryScope } from "../../../lib/query-console-access";

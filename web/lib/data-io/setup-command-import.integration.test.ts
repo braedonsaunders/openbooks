@@ -6,8 +6,8 @@ import { sql } from 'drizzle-orm'
 const { setupDescriptor, setupResource } = (await import('./setup-resources.ts')) as typeof import('./setup-resources.ts')
 const { SETUP_ENTITIES, SETUP_ENTITY_BY_KEY } = await import('../setup/registry.ts')
 
-const { db } = await import('@openbooks/engine/src/platform/db.ts')
-const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { db } = await import('@openbooks/engine/platform/db')
+const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import('@openbooks/engine/testing/fixtures')
 
 const DB = { skip: !process.env.OPENBOOKS_DB_URL }
 
@@ -51,7 +51,7 @@ test('account map imports close the prior open row through the command and audit
     const actorId = await createScratchUser(org.orgId, 'Map Import Admin', 'admin')
     await setImportFeatures(org.orgId, { salesChannels: true })
     const channelId = await seedChannel(org.orgId, actorId, 'Maple Shop')
-    const { upsertAccountMap } = await import('@openbooks/engine/src/commerce/account-maps.ts')
+    const { upsertAccountMap } = await import('@openbooks/engine/testing/commerce/account-maps')
     await upsertAccountMap(org.orgId, actorId, {
       channelId,
       role: 'revenue',

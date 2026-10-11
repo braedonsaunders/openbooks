@@ -1,6 +1,6 @@
-import { ControlAccountsIncompleteError } from '@openbooks/engine/src/records/control-accounts.ts'
-import { PostingError } from "@openbooks/engine/src/journal/posting-contracts.ts";
-import { PayrollError } from '@openbooks/engine/src/payroll/error.ts'
+import { ControlAccountsIncompleteError } from '@openbooks/engine/records/control-accounts'
+import { PostingError } from "@openbooks/engine/journal/contracts";
+import { PayrollError } from '@openbooks/engine/payroll/error'
 import { InventoryError, InventoryOwnershipError } from '@openbooks/engine/inventory/contracts/module'
 
 /**

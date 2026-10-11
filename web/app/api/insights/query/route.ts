@@ -6,7 +6,7 @@ import { NextResponse } from "next/server";
 import { getTranslations } from "next-intl/server";
 import { REPORT_ENTITY_MAP } from "@openbooks/reports";
 import { isFeatureEnabled } from "@/lib/features";
-import { pool } from "@openbooks/engine/src/platform/db.ts";
+import { pool } from "@openbooks/engine/platform/db";
 import {
   InsightDenominationError,
   runInsightQuery,
@@ -27,7 +27,7 @@ import {
   insightCompileErrorMessage,
   insightLabelResolver,
 } from "../../../../lib/insight-labels";
-import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
 import { fiscalStartMonth } from "@/lib/fiscal";
 import { normalizeQuery } from "../_lib";
 // Legacy callers still send allowedSubsidiaryIds in the body. It is accepted

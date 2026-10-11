@@ -22,9 +22,9 @@ registerHooks({
     return next(specifier, context)
   },
 })
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
 const { sql } = await import('drizzle-orm')
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
 const { GET, POST } = await import('./route.ts')
 
 test('backorders route: feature fence, position, cancel refusal and out-of-scope 404', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {

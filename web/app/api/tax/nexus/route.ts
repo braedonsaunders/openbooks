@@ -2,7 +2,7 @@ import type { Authz } from "@/lib/authz";
 import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
-import { computeUsNexusStatus } from '@openbooks/engine/src/tax-returns/us-nexus-ledger.ts'
+import { computeUsNexusStatus } from '@openbooks/engine/tax-returns/us-nexus-ledger'
 import { guardSubsidiaryScope } from '../../../../lib/authz'
 
 export const runtime = 'nodejs'

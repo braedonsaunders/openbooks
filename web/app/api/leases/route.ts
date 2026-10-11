@@ -1,8 +1,8 @@
 import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from "@/lib/api/error-response";
-import { LeaseError } from "@openbooks/engine/src/revenue/leases.ts";
+import { LeaseError } from "@openbooks/engine/revenue/leases";
 import { NextResponse } from "next/server";
-import { createLeaseAgreement } from "@openbooks/engine/src/revenue/leases.ts";
+import { createLeaseAgreement } from "@openbooks/engine/revenue/leases";
 import { leaseSchema } from "./_schema";
 export const runtime = "nodejs";
 export const POST = defineRoute({

@@ -3,7 +3,7 @@ import { defineRoute } from "@/lib/api/route";
 
 import { NextResponse } from "next/server";
 import { sql, type SQL } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { db } from "@openbooks/engine/platform/db";
 import { getAuthz } from "../../../lib/authz";
 import { isLocale } from "../../../i18n/config";
 import { isNavMode } from "../../../lib/nav-mode";

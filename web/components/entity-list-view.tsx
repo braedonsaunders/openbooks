@@ -7,7 +7,7 @@ import Link from 'next/link'
 import { Eye } from 'lucide-react'
 import { getTranslations } from 'next-intl/server'
 import { sql, type SQL } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/db'
 import { Badge, EmptyState, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
 import { getRecordType, listColumnMeta, recordTypeForFeatureState } from '@openbooks/customization'
 import { isFeatureEnabled } from '../lib/features'
@@ -24,7 +24,7 @@ import { loadFieldDefs } from '../lib/custom-fields'
 import { AmbiguousListViewDefaultError, resolveListView } from '../lib/customization/resolve'
 import { displayListViewName } from '../lib/customization/display'
 import { columnDescriptors, type ListColDesc } from '../lib/customization/list-query'
-import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
+import { businessToday } from '@openbooks/engine/platform/business-date/module'
 import {
   customerBaseJoins,
   customerBuiltInExpr,

@@ -1,6 +1,6 @@
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { submitMySelfAssessment } from "@openbooks/engine/src/hrm/self-service/my-work.ts";
+import { submitMySelfAssessment } from "@openbooks/engine/hrm/self-service/my-work";
 import { meErrorResponse } from "../../_lib";
 import { submitSelfAssessmentBody } from "../../bodies";
 /**

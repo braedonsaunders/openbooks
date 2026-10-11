@@ -16,12 +16,12 @@ stubModules({
   features: false,
 })
 
-const { db, env, withBypass } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, env, withBypass } = await import('@openbooks/engine/platform/db')
 const { sql } = await import('drizzle-orm')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
-  '@openbooks/engine/src/testing/fixtures.ts'
+  '@openbooks/engine/testing/fixtures'
 )
-const { FieldTimeError } = await import('@openbooks/engine/src/hrm/field-time/errors.ts')
+const { FieldTimeError } = await import('@openbooks/engine/hrm/field-time/errors')
 const { loadClockPageData } = await import('./view.ts')
 
 // A correct refusal thrown out of render reaches the operator as generic

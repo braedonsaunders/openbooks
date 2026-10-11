@@ -3,9 +3,9 @@ import { randomUUID } from 'node:crypto'
 import test from 'node:test'
 
 const { sql } = await import('drizzle-orm')
-const { db, env, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
-const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import('@openbooks/engine/src/testing/fixtures.ts')
-const { ResourcingRefusal } = await import('@openbooks/engine/src/resourcing/errors.ts')
+const { db, env, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
+const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import('@openbooks/engine/testing/fixtures')
+const { ResourcingRefusal } = await import('@openbooks/engine/resourcing/errors')
 const { loadBench, loadResourcingBoard } = await import('./queries.ts')
 
 function written(result: { rowCount: number | null }, label: string, expected = 1): void {

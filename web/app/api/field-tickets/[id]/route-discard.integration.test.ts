@@ -51,9 +51,9 @@ const deleteRouteUrl = "./route.ts?fieldticket-discard-test";
 const routeModule = (await import(deleteRouteUrl)) as typeof import("./route.ts") & Record<string, unknown>;
 hooks.deregister();
 
-const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  "@openbooks/engine/src/testing/fixtures.ts"
+  "@openbooks/engine/testing/fixtures"
 );
 const { createFieldTicket, loadFieldTicket } = await import("../../../../lib/field-tickets.ts");
 

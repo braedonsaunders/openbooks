@@ -7,7 +7,7 @@ import { registerHooks } from 'node:module'
 // run for real. react cache keys on arguments, so every case uses its own org.
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === '@openbooks/engine/src/platform/db.ts') {
+    if (specifier === '@openbooks/engine/platform/db') {
       return {
         shortCircuit: true,
         format: 'module',

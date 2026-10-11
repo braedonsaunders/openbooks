@@ -2,7 +2,7 @@ import { apiErrorResponse } from '@/lib/api/error-response'
 import { z } from 'zod';
 import { defineRoute } from '@/lib/api/route';
 import { NextResponse } from 'next/server'
-import { excludePossibleDuplicates } from '@openbooks/engine/src/banking/banking.ts'
+import { excludePossibleDuplicates } from '@openbooks/engine/banking/banking'
 import { isUuid } from '../../../../../lib/list-params'
 const POSTBodySchema1 = z.object({ action: z.literal('exclude-duplicates'), accountId: z.string().uuid(), reason: z.string().trim().min(1) });
 

@@ -3,8 +3,8 @@ import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import pg from 'pg';
 import { sql } from 'drizzle-orm';
-import { db, withBypassContext } from '../engine/src/platform/db.ts';
-import { createScratchOrg, dropScratchOrg } from '../engine/src/testing/fixtures.ts';
+import { db, withBypassContext } from '@openbooks/engine/platform/db';
+import { createScratchOrg, dropScratchOrg } from '@openbooks/engine/testing/fixtures';
 
 const DB = { skip: !process.env.OPENBOOKS_DB_URL || !process.env.OPENBOOKS_RUNTIME_DB_URL || !process.env.OPENBOOKS_TEST_ADMIN_DB_URL };
 const backstop = readFileSync(new URL('./migrations/environments.sql', import.meta.url), 'utf8');

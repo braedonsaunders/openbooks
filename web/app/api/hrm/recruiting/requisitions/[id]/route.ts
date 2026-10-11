@@ -8,8 +8,8 @@ import {
   openRequisition,
   resumeRequisition,
   reviseRequisition,
-} from "@openbooks/engine/src/hrm/recruiting/requisitions.ts";
-import { getRequisitionDetail } from "@openbooks/engine/src/hrm/recruiting/recruiting-read.ts";
+} from "@openbooks/engine/hrm/recruiting/requisitions";
+import { getRequisitionDetail } from "@openbooks/engine/hrm/recruiting/recruiting-read";
 
 import { isUuid } from "../../../../../../lib/list-params";
 import { recruitingErrorResponse } from "../../_lib";

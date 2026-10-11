@@ -84,7 +84,7 @@ stubModules({
       export function guardRootSubsidiaryScope() { return null }
       export function guardUnrestrictedScope() { return null }
     `,
-    "@openbooks/engine/src/tax-returns/return.ts": `
+    "@openbooks/engine/tax-returns/return": `
       const state = globalThis[Symbol.for('openbooks.tax-return-export-route-test')]
       export async function computeTaxReturn(orgId, formCode, from, to, adjustments, opts) {
         state.calls.push({ orgId, formCode, from, to, adjustments, opts: opts ?? null })
@@ -95,7 +95,7 @@ stubModules({
         }
       }
     `,
-    "@openbooks/engine/src/platform/db.ts": `
+    "@openbooks/engine/platform/db": `
       const sqlText = (query) => {
         const chunks = query?.queryChunks
         if (!Array.isArray(chunks)) return ''
@@ -125,7 +125,7 @@ stubModules({
       export function currentRequestOrgResolver() { return null }
       export function ambientTenantOrgId() { return null }
     `,
-    "@openbooks/engine/src/platform/business-date.ts": `
+    "@openbooks/engine/platform/business-date/module": `
       export async function businessToday() { return '2026-07-31' }
       export function civilDateFromParts() { throw new Error('unexpected civil date') }
     `,

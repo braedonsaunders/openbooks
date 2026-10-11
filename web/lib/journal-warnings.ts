@@ -1,10 +1,10 @@
 import "server-only";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { db } from "@openbooks/engine/platform/db";
 import {
   budgetaryControlWarnings,
   type BudgetaryControlWarning,
-} from "@openbooks/engine/src/nonprofit/encumbrances.ts";
+} from "@openbooks/engine/nonprofit/encumbrances";
 import type { ExactDecimal } from "./statement-format";
 
 export interface PartylessControlLine {

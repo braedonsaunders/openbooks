@@ -3,7 +3,7 @@ import test from 'node:test'
 import { packageVersionPresentation } from './payroll-compensation-packages'
 import { setupAggregatePayload, setupDomainPayload } from './domain-payload'
 import { definitionSchema } from '../../app/api/payroll/compensation-packages/contracts'
-import { validateCompensationPackage } from '@openbooks/engine/src/payroll/compensation-package.ts'
+import { validateCompensationPackage } from '@openbooks/engine/testing/payroll/compensation-package'
 
 const orgId = '10000000-0000-4000-8000-000000000001', componentId = '10000000-0000-4000-8000-000000000002'
 const pack = { id: '10000000-0000-4000-8000-000000000003', subsidiaryId: '10000000-0000-4000-8000-000000000004', code: 'POLICY', name: 'Employer policy', description: null, country: 'CA', currency: 'CAD', currencyMinorUnits: 2, status: 'active' as const, revision: 1 }

@@ -28,11 +28,11 @@ registerHooks({
   },
 })
 const { db, pool, withBypassContext, withOrgContext } =
-  await import('@openbooks/engine/src/platform/db.ts')
+  await import('@openbooks/engine/platform/db')
 const { sql } = await import('drizzle-orm')
 const { createScratchOrg, createScratchUser, dropScratchOrg } =
-  await import('@openbooks/engine/src/testing/fixtures.ts')
-const { ensureCrmDefaults } = await import('@openbooks/engine/src/crm/crm.ts')
+  await import('@openbooks/engine/testing/fixtures')
+const { ensureCrmDefaults } = await import('@openbooks/engine/crm/crm')
 const { PATCH: opportunityEdit } =
   await import('../app/api/crm/opportunities/[id]/route')
 const { PATCH: activityEdit, DELETE: activityDelete } =
@@ -46,7 +46,7 @@ const request = (body: unknown) =>
   new Request('http://crm.local', { method: 'PATCH', body: JSON.stringify(body) })
 const params = (id: string) => ({ params: Promise.resolve({ id }) })
 const { loadActivity } = await import('./crm')
-const { documentRevisionSql } = await import('@openbooks/engine/src/records/revision.ts')
+const { documentRevisionSql } = await import('@openbooks/engine/records/revision')
 // The account PATCH requires the profile's current revision token (79b64f876).
 const accountToken = async (orgId: string, partyId: string) =>
   (await db.execute<{ revision: string }>(sql`select ${documentRevisionSql(sql`updated_at`)} as revision

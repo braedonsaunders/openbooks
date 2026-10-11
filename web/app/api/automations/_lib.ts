@@ -1,10 +1,10 @@
 import { NextResponse } from "next/server";
-import { AutomationContractError } from "@openbooks/engine/src/automations/triggers.ts";
-import { AutomationServiceError, AutomationVersionConflictError } from "@openbooks/engine/src/automations/services.ts";
-import { AutomationExecuteError } from "@openbooks/engine/src/automations/execute.ts";
-import { ApprovalPolicyError } from "@openbooks/engine/src/automations/approvals.ts";
-import { ActionReasonError } from "@openbooks/engine/src/automations/action-reasons.ts";
-import { EventVerbError } from "@openbooks/engine/src/automations/event-verbs.ts";
+import { AutomationContractError } from "@openbooks/engine/automations/triggers";
+import { AutomationServiceError, AutomationVersionConflictError } from "@openbooks/engine/automations/services";
+import { AutomationExecuteError } from "@openbooks/engine/automations/execute";
+import { ApprovalPolicyError } from "@openbooks/engine/automations/approvals";
+import { ActionReasonError } from "@openbooks/engine/automations/action-reasons";
+import { EventVerbError } from "@openbooks/engine/automations/event-verbs";
 
 /**
  * Shared error mapping for /api/automations/* and the HRM verb

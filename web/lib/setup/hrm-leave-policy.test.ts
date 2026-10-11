@@ -3,7 +3,7 @@ import { test } from 'node:test'
 import {
   accrualEarned,
   carryoverApplied,
-} from '@openbooks/engine/src/hrm/leave-math.ts'
+} from '@openbooks/engine/hrm/leave-math'
 import {
   leavePolicyRuleProblem,
   normalizeHrmLeavePolicyInput,

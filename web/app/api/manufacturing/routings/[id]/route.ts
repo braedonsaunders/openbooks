@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { db } from "@openbooks/engine/src/platform/db.ts";
-import { getRouting, updateRouting, type RoutingInput } from "@openbooks/engine/src/manufacturing/routings.ts";
+import { db } from "@openbooks/engine/platform/db";
+import { getRouting, updateRouting, type RoutingInput } from "@openbooks/engine/manufacturing/routings";
 import { guardRoutingSubsidiaryScope } from "../../_scope";
 import { defineRoute } from "@/lib/api/route";
 import { notFound } from "@/lib/api/responses";

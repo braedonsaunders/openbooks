@@ -58,8 +58,8 @@ registerHooks({
 
 const createRouteUrl = "./route.ts?journal-create-accountless-test";
 const { POST } = (await import(createRouteUrl)) as typeof import("./route.ts");
-const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
 
 
 test(

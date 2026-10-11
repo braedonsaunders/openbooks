@@ -2,9 +2,9 @@ import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import test from 'node:test'
 const { sql } = await import('drizzle-orm')
-const { cmp } = await import('@openbooks/engine/src/money/money.ts')
-const { db, env, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { cmp } = await import('@openbooks/engine/money/money')
+const { db, env, withBypassContext } = await import('@openbooks/engine/platform/db')
+const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
 const { loadRetainerKpis } = await import('./retainer-kpis.ts')
 
 test('retainer KPIs balance per currency through posted drawdowns only', { skip: !env.OPENBOOKS_DB_URL }, async () => {

@@ -4,13 +4,13 @@ import { apiErrorResponse } from '@/lib/api/error-response'
 import { parseJsonBody } from '@/lib/api/json'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { businessToday } from '@openbooks/engine/platform/business-date/module'
+import { db } from '@openbooks/engine/platform/db'
 import {
   canFurnishRecipientCopies,
   InformationReturnError,
   stampRecipientCopiesPrinted,
-} from '@openbooks/engine/src/compliance/information-returns.ts'
+} from '@openbooks/engine/compliance/information-returns'
 import { rendererUnavailableResponse } from '@/lib/api/pdf-renderer'
 import { guardSubsidiaryScope } from '@/lib/authz';
 import { guardInformationReturnsFeature, loadInformationReturnFilingScope } from '@/lib/compliance'

@@ -6,8 +6,8 @@ import { stubModules } from '../testing/stub-modules.ts'
 stubModules({ intl: true, navigation: false, authz: false, features: false })
 
 const { sql } = await import('drizzle-orm')
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
+const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
 const { searchOperationalRecords, resolveRecentOperationalRecords } = await import('./search-records.ts')
 
 type Reader = Parameters<typeof searchOperationalRecords>[0]

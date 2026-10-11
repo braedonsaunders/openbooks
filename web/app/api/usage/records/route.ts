@@ -1,4 +1,4 @@
-import { ingestUsageRecords, listUsageRecords } from "@openbooks/engine/src/billing/usage/records.ts";
+import { ingestUsageRecords, listUsageRecords } from "@openbooks/engine/billing/usage/records";
 import { defineRoute } from "@/lib/api/route";
 import { created } from "@/lib/api/responses";
 import { z } from "zod";

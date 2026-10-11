@@ -103,7 +103,7 @@ const hooks = registerHooks({
       authzRealUrl = nextResolve(specifier, context).url
       return { url: 'mock:setup-wizard-authz', shortCircuit: true }
     }
-    if (specifier === '@openbooks/engine/src/platform/db.ts') {
+    if (specifier === '@openbooks/engine/platform/db') {
       dbRealUrl = nextResolve(specifier, context).url
       return { url: 'mock:setup-wizard-db', shortCircuit: true }
     }

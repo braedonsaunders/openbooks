@@ -1,8 +1,8 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { documentRevisionCounterSql } from '@openbooks/engine/src/records/revision.ts'
-import { subsidiaryVisibleFilter } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
+import { db } from '@openbooks/engine/platform/db'
+import { documentRevisionCounterSql } from '@openbooks/engine/records/revision'
+import { subsidiaryVisibleFilter } from '@openbooks/engine/organization/scope'
 
 /**
  * Recall eligibility for an expense report: a pending_approval

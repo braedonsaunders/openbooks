@@ -50,11 +50,11 @@ registerHooks({
     return next(specifier, context);
   },
 });
-const { db, pool, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
+const { db, pool, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { sql } = await import("drizzle-orm");
-const { createScratchOrg, dropScratchOrg, createScratchUser } = await import("@openbooks/engine/src/testing/fixtures.ts");
-const { waitForLockWaiter } = await import("@openbooks/engine/src/testing/lock-wait.ts");
-const { runDueSubscriptions } = await import("@openbooks/engine/src/billing/subscription-billing.ts");
+const { createScratchOrg, dropScratchOrg, createScratchUser } = await import("@openbooks/engine/testing/fixtures");
+const { waitForLockWaiter } = await import("@openbooks/engine/testing/lock-wait");
+const { runDueSubscriptions } = await import("@openbooks/engine/billing/subscription-billing");
 const { POST } = await import("./route.ts");
 
 async function fixture(): Promise<{ orgId: string; subscriptionId: string; subsidiaryId: string }> {

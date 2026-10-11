@@ -16,6 +16,10 @@ import {
 
 function fixture(files) {
   const root = mkdtempSync(join(tmpdir(), "openbooks-mock-surface-"));
+  const exports = Object.fromEntries(Object.keys(files)
+    .filter(file => file.startsWith("engine/src/") && file.endsWith(".ts"))
+    .map(file => [`./${file.slice("engine/src/".length, -3)}`, `./${file.slice("engine/".length)}`]));
+  files = { "engine/package.json": JSON.stringify({ exports }), ...files };
   for (const [relative, content] of Object.entries(files)) {
     const path = join(root, relative);
     mkdirSync(join(path, ".."), { recursive: true });
@@ -31,14 +35,14 @@ export function registerRequestOrgResolver() {}
 export type OrgCtx = { orgId: string };
 `;
 
-const SUBS = `import { db, withBypassContext } from "@openbooks/engine/src/platform/db.ts";
-import type { OrgCtx } from "@openbooks/engine/src/platform/db.ts";
+const SUBS = `import { db, withBypassContext } from "@openbooks/engine/platform/db";
+import type { OrgCtx } from "@openbooks/engine/platform/db";
 export async function subsidiaryOptions() {
   return withBypassContext(async () => db);
 }
 `;
 
-const ROUTE = `import { db } from "@openbooks/engine/src/platform/db.ts";
+const ROUTE = `import { db } from "@openbooks/engine/platform/db";
 import { subsidiaryOptions } from "../lib/subs.ts";
 export async function GET() {
   await subsidiaryOptions();
@@ -74,7 +78,7 @@ test("route loads", async () => { await GET(); });
 `;
 }
 
-const MAP_WIRING = `    const mocked = new Map([["@openbooks/engine/src/platform/db.ts", "mock:db"]]).get(specifier);
+const MAP_WIRING = `    const mocked = new Map([["@openbooks/engine/platform/db", "mock:db"]]).get(specifier);
     if (mocked) return { url: mocked, shortCircuit: true };`;
 
 test("import parsing keeps the exported name across aliases and drops types", () => {
@@ -328,7 +332,7 @@ test("a dynamically-reached missing export warns instead of failing", () => {
     "engine/src/platform/db.ts": DB,
     "web/lib/subs.ts": SUBS,
     "web/app/route.test.ts": mockTest("      export function registerRequestOrgResolver() {}\n", MAP_WIRING),
-    "web/app/route.ts": `import { db } from "@openbooks/engine/src/platform/db.ts";
+    "web/app/route.ts": `import { db } from "@openbooks/engine/platform/db";
 export async function GET(flag) {
   if (flag) {
     const { subsidiaryOptions } = await import("../lib/subs.ts");
@@ -390,12 +394,12 @@ export async function GET() { return parseJsonBody; }
 `;
 
 const MONEY_REEXPORT_TEST = hookedTest("money",
-  'export * from "@openbooks/engine/src/money/money.ts"',
-  `    const mocked = new Map([["@openbooks/engine/src/money/money.ts", "mock:money"]]).get(specifier);
+  'export * from "@openbooks/engine/money/money"',
+  `    const mocked = new Map([["@openbooks/engine/money/money", "mock:money"]]).get(specifier);
     if (mocked) return { url: mocked, shortCircuit: true };`,
 );
 
-const MONEY_ROUTE = `import { normalizeMoney } from "@openbooks/engine/src/money/money.ts";
+const MONEY_ROUTE = `import { normalizeMoney } from "@openbooks/engine/money/money";
 export async function GET() { return normalizeMoney; }
 `;
 

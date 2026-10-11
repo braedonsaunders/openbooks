@@ -1,9 +1,9 @@
 import { notFound } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
-import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
-import { listKioskWorkers, resolveKioskByToken } from '@openbooks/engine/src/hrm/field-time/kiosk.ts'
-import { FieldTimeError } from '@openbooks/engine/src/hrm/field-time/errors.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
+import { listKioskWorkers, resolveKioskByToken } from '@openbooks/engine/hrm/field-time/kiosk'
+import { FieldTimeError } from '@openbooks/engine/hrm/field-time/errors'
 import { KioskTerminal } from '../../../components/field-time/KioskTerminal'
 
 export const dynamic = 'force-dynamic'

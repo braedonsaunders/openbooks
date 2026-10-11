@@ -3,8 +3,8 @@ import 'server-only'
 import { getTranslations } from 'next-intl/server'
 import { notFound } from 'next/navigation'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { getFund } from '@openbooks/engine/src/nonprofit/funds.ts'
+import { db } from '@openbooks/engine/platform/db'
+import { getFund } from '@openbooks/engine/nonprofit/funds'
 import {
   page,
   pageHeader,

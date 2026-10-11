@@ -28,9 +28,9 @@ stubModules({
   features: `const s=globalThis[Symbol.for('openbooks.audit-record-route-test')];export async function isFeatureEnabled(){return s.featureOn}`,
   extra: {
     "server-only": "",
-    "@openbooks/engine/src/platform/db.ts": `
+    "@openbooks/engine/platform/db": `
       import { PgDialect } from ${JSON.stringify(import.meta.resolve('drizzle-orm/pg-core'))}
-      export * from ${JSON.stringify(import.meta.resolve('@openbooks/engine/src/platform/db.ts'))}
+      export * from ${JSON.stringify(import.meta.resolve('@openbooks/engine/platform/db'))}
       const state = globalThis[Symbol.for('openbooks.audit-record-route-test')]
       export const db = {
         async execute(query) {

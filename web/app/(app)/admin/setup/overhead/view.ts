@@ -1,10 +1,10 @@
 import 'server-only';
-import { OverheadCalculationError } from "@openbooks/engine/src/projects/overhead-rates.ts";
+import { OverheadCalculationError } from "@openbooks/engine/projects/overhead-rates";
 
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
-import { businessToday, parseIsoDate } from '@openbooks/engine/src/platform/business-date.ts'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { businessToday, parseIsoDate } from '@openbooks/engine/platform/business-date/module'
+import { db } from '@openbooks/engine/platform/db'
 import { requirePermission } from '../../../../../lib/authz'
 import { trueCostData } from '../../../../../lib/analytics/true-cost-data'
 import { trueCostSetupData, type TrueCostSetupData } from '../../../../../lib/analytics/true-cost-setup-data'

@@ -1,7 +1,7 @@
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { db } from "@openbooks/engine/platform/db";
 import {
   PARTY_PICKER_KINDS,
   type PartyPickerKind,

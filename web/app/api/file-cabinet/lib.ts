@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db, type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
+import { db, type SqlExecutor } from '@openbooks/engine/platform/db'
 import { can, getAuthz, subsidiaryScopeAllows, type Authz } from '../../../lib/authz'
 import { accessAtLeast, fileAccessLevel, folderAccessLevel, getFile, listAttachments, type AttachedFile, type AccessLevel, type FileViewer } from '../../../lib/file-cabinet'
 

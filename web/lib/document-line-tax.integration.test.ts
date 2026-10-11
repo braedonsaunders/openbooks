@@ -9,11 +9,11 @@ import { stubModules } from "../testing/stub-modules.ts";
 stubModules({ intl: true, navigation: false, authz: false, features: false });
 
 const { sql } = await import("drizzle-orm");
-const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
-  "@openbooks/engine/src/testing/fixtures.ts"
+  "@openbooks/engine/testing/fixtures"
 );
-const { saveMarketplaceFacilitator } = await import("@openbooks/engine/src/tax/marketplace-facilitators.ts");
+const { saveMarketplaceFacilitator } = await import("@openbooks/engine/testing/tax/marketplace-facilitators");
 const { API_RECORD_TYPES, toResolved } = await import("./api/registry-data.ts");
 const { createRecord, updateRecord } = await import("./api/writers.ts");
 

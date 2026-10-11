@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { HrmAuthorizationError } from "@openbooks/engine/src/hrm/authorization.ts";
+import { HrmAuthorizationError } from "@openbooks/engine/hrm/authorization";
 import { hrmAuthorizationResponse } from "../../../../lib/api/record-not-found";
-import { HrmPositionError } from "@openbooks/engine/src/hrm/positions.ts";
+import { HrmPositionError } from "@openbooks/engine/hrm/positions";
 
 /**
  * Shared error mapping for /api/hrm/positions/*. Engine refusals reach the

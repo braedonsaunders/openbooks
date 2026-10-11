@@ -1,7 +1,7 @@
 import "server-only";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { db } from "@openbooks/engine/platform/db";
 import type { Authz } from "../authz";
 import type { AssistantToolDef, ToolResult } from "./types";
 import { assistantListPage, capList, uuidInput } from "./tools-shared";

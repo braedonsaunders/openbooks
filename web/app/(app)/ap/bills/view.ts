@@ -3,7 +3,7 @@ import 'server-only'
 
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/db'
 import {
   page,
   pageHeader,
@@ -16,7 +16,7 @@ import { can, requirePermission } from '../../../../lib/authz'
 import { AP_KINDS, DOC_KINDS, isDocumentCreateKind } from "../../../../lib/document-kinds.ts";
 import { accountOptions, createDocumentSeed, dimensionOptions, taxCodeOptions, taxGroupOptions } from "../../../../lib/documents.ts";
 import { listScopedPartyOptionsWithCurrent } from "../../../../lib/scoped-options";
-import { loadDocument } from "../../../../../engine/src/ledger/document-service.ts";
+import { loadDocument } from "@openbooks/engine/ledger/document-service";
 import { loadFieldDefs } from '../../../../lib/custom-fields'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { isMultiSubsidiary, subsidiaryOptions, subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'

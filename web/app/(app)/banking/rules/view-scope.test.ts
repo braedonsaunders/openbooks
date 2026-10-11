@@ -18,7 +18,7 @@ const hooks = registerHooks({
       export const page = () => ({}); export const pageHeader = () => ({});
       export const ref = () => ({}); export const widget = () => ({}); export const widgetBlock = () => ({});
     `);
-    if (specifier === "@openbooks/engine/src/platform/db.ts") return virtual(`
+    if (specifier === "@openbooks/engine/platform/db") return virtual(`
       const state = globalThis.__bankRuleViewScopeState;
       export const db = { execute: async () => { state.queries += 1; return { rows: [] }; } };
       export async function withBypassContext(work) { return work(); }

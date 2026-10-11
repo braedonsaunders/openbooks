@@ -10,7 +10,7 @@ import { sql, type SQL } from "drizzle-orm";
 // is stubbed. Row-shape coverage lives in the companion
 // employees-where-fail-closed.integration.test.ts, which needs a fixture
 // database.
-const { db } = await import("@openbooks/engine/src/platform/db.ts");
+const { db } = await import("@openbooks/engine/platform/db");
 const {
   employeeBaseJoins,
   employeeBuiltInExpr,

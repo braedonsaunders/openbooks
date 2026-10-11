@@ -10,14 +10,14 @@ import test from 'node:test'
 // filing URL must see "not found", never the filing. (Was FilingDetail.scope
 // source pins on the loadFiling call.)
 
-const { db, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypassContext } = await import('@openbooks/engine/platform/db')
 const { sql } = await import('drizzle-orm')
 const {
   createScratchOrg,
   createScratchUser,
   dropScratchOrg,
-} = await import('@openbooks/engine/src/testing/fixtures.ts')
-const { ensureFiling } = await import('@openbooks/engine/src/compliance/information-returns.ts')
+} = await import('@openbooks/engine/testing/fixtures')
+const { ensureFiling } = await import('@openbooks/engine/compliance/information-returns')
 const { loadFiling } = await import('../../../../lib/compliance')
 
 async function seedFilings() {

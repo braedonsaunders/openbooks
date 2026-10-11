@@ -5,15 +5,15 @@ import { crmOpportunityScope, crmSharedScope } from '../../../../../lib/crm-scop
 import { jsonObject, parseJsonBody, validateJsonBody } from "@/lib/api/json"
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { promoteCrmAccount } from '@openbooks/engine/src/crm/crm.ts'
+import { db } from '@openbooks/engine/platform/db'
+import { promoteCrmAccount } from '@openbooks/engine/crm/crm'
 import {
   computeOpportunityTotals,
   validateContributionTotal,
   validateOpportunityStageTransition,
   type OpportunityStagePolicy,
   type OpportunityStageRefusal,
-} from '@openbooks/engine/src/crm/crm-math.ts'
+} from '@openbooks/engine/crm/crm-math'
 import { guardPermission } from '../../../../../lib/authz'
 import '../../../../../lib/feature-gates';
 import { isFeatureEnabled } from '../../../../../lib/features'
@@ -23,7 +23,7 @@ import { findUnownedCustomReferences, loadFieldDefs, unknownCustomFieldKey, vali
 import { isIsoCalendarDate } from '../../../../../lib/crm-dates'
 import { canonicalDecimal, compareDecimal } from '../../../../../lib/exact-decimal'
 import { moneyRefusal } from '../../../../../lib/payroll-decimal-refusal'
-import { documentRevisionCounterSql, isDocumentRevisionToken } from '@openbooks/engine/src/records/revision.ts'
+import { documentRevisionCounterSql, isDocumentRevisionToken } from '@openbooks/engine/records/revision'
 import { normalizeMoney, wholeDigits } from '@openbooks/engine/money'
 import { notFound } from "@/lib/api/responses";
 

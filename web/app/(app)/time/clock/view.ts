@@ -3,7 +3,7 @@ import 'server-only'
 
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/db'
 import { registeredListTable } from '../../../../lib/list/prepared-spec'
 import {
   badge,
@@ -21,10 +21,10 @@ import { can, requirePermission } from '../../../../lib/authz'
 import { timeCommandGrants } from '../../../../lib/time-workspace'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { loadOrRefuse, type PageRefusal } from '../../../../lib/load-or-refuse'
-import { FieldTimeError } from '@openbooks/engine/src/hrm/field-time/errors.ts'
-import { myClockDay, resolveOwnParty } from '@openbooks/engine/src/hrm/field-time/reads.ts'
-import { loadFieldTimeSettings } from '@openbooks/engine/src/hrm/field-time/settings.ts'
-import { ensureClockPhotoFolder } from '@openbooks/engine/src/hrm/field-time/photos.ts'
+import { FieldTimeError } from '@openbooks/engine/hrm/field-time/errors'
+import { myClockDay, resolveOwnParty } from '@openbooks/engine/hrm/field-time/reads'
+import { loadFieldTimeSettings } from '@openbooks/engine/hrm/field-time/settings'
+import { ensureClockPhotoFolder } from '@openbooks/engine/hrm/field-time/photos'
 
 /**
  * The field clock page — the phone is the primary device. One state

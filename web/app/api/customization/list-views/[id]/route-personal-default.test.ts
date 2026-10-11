@@ -51,7 +51,7 @@ registerHooks({
   resolve(specifier, context, nextResolve) {
     const parent = context.parentURL ?? ''
     if (specifier === '@/lib/authz') return { shortCircuit: true, format: 'module', url: 'mock:authz-personal-default-patch' }
-    if (specifier === '@openbooks/engine/src/platform/db.ts' && parent.includes('customization/list-views')) {
+    if (specifier === '@openbooks/engine/platform/db' && parent.includes('customization/list-views')) {
       return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export const db = { execute: (...a) => globalThis[Symbol.for("openbooks.list-view-personal-default-patch-test")].db.execute(...a), transaction: (...a) => globalThis[Symbol.for("openbooks.list-view-personal-default-patch-test")].db.transaction(...a) }' }
     }
     if (

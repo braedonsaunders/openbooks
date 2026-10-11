@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
-import { engineSourceSpecifier } from "../../../../../testing/engine-resolve-hooks.ts";
+import { canonicalEngineSpecifier } from "../../../../../testing/engine-resolve-hooks.ts";
 import { registerHooks } from "node:module";
 import nodeTest from "node:test";
 import { NextResponse } from "next/server";
-import { LeaveError } from "@openbooks/engine/src/hrm/leave-errors.ts";
+import { LeaveError } from "@openbooks/engine/hrm/leave-errors";
 
 /**
  * Absence-detail boundary behind the calendar entry. Readers and
@@ -71,12 +71,12 @@ const mockUrls = new Map<string, string>([
   ["@/lib/authz", "mock:authz"],
   ["@/lib/features", "mock:features"],
   ["@/lib/feature-gates", "mock:authz"],
-  ["@openbooks/engine/src/hrm/attendance.ts", "mock:service"],
+  ["@openbooks/engine/hrm/attendance", "mock:service"],
 ]);
 
 const hooks = registerHooks({
   resolve(specifier, _context, nextResolve) {
-    const mocked = mockUrls.get(specifier) ?? mockUrls.get(engineSourceSpecifier(specifier) ?? '');
+    const mocked = mockUrls.get(specifier) ?? mockUrls.get(canonicalEngineSpecifier(specifier) ?? '');
     if (mocked) return { url: mocked, shortCircuit: true };
     return nextResolve(specifier);
   },

@@ -4,8 +4,8 @@ import { apiErrorResponse } from '@/lib/api/error-response'
 import { guardCloseScope } from "@/lib/close-scope";
 
 import { NextResponse } from "next/server";
-import { startCloseRun } from "@openbooks/engine/src/close/run-start.ts";
-import { CloseError } from "@openbooks/engine/src/periods/period-policy.ts";
+import { startCloseRun } from "@openbooks/engine/close/run-start";
+import { CloseError } from "@openbooks/engine/periods/period-policy";
 
 import { isUuid } from "../../../../lib/list-params";
 

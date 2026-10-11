@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { generateRetainerInvoice } from "@openbooks/engine/src/resourcing/retainer-billing.ts";
+import { generateRetainerInvoice } from "@openbooks/engine/resourcing/retainer-billing";
 import { defineRoute } from "@/lib/api/route";
 
 const Params = z.object({ id: z.string().uuid() });

@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { findMrpRunRecord, listMrpRuns, runMrp } from "@openbooks/engine/src/manufacturing/mrp.ts";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { findMrpRunRecord, listMrpRuns, runMrp } from "@openbooks/engine/manufacturing/mrp";
+import { db } from "@openbooks/engine/platform/db";
 import { guardSubsidiaryScope } from "@/lib/authz";
 import { defineRoute } from "@/lib/api/route";
 import { idempotentManufacturingCreate } from "../../_idempotent";

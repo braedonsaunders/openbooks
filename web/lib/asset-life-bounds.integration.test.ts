@@ -3,9 +3,9 @@ import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 import { registerHooks } from 'node:module';
 import { sql } from 'drizzle-orm';
-import { documentRevisionSql } from '@openbooks/engine/src/records/revision.ts';
-import { db } from '@openbooks/engine/src/platform/db.ts';
-import { createScratchOrg, dropScratchOrg, seedFlowActors, type ScratchOrg } from '@openbooks/engine/src/testing/fixtures.ts';
+import { documentRevisionSql } from '@openbooks/engine/records/revision';
+import { db } from '@openbooks/engine/platform/db';
+import { createScratchOrg, dropScratchOrg, seedFlowActors, type ScratchOrg } from '@openbooks/engine/testing/fixtures';
 
 async function seedAsset(org: ScratchOrg) {
   const actorId = (await seedFlowActors(org.orgId)).adminId;

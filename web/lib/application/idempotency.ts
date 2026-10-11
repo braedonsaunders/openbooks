@@ -5,7 +5,7 @@ import {
   orgContext,
   withOrgContext,
   withOrgTransaction,
-} from "@openbooks/engine/src/platform/db.ts";
+} from "@openbooks/engine/platform/db";
 import type { ApplicationContext } from "./context";
 import { insertApiKeyEvent, markClaimedCommandEvidence } from "./api-key-audit";
 import { conflict, invalidInput } from "./errors";

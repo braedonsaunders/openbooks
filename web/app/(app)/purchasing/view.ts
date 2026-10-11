@@ -1,4 +1,4 @@
-import { cmp, mulDecimal } from '@openbooks/engine/src/money/money.ts'
+import { cmp, mulDecimal } from '@openbooks/engine/money/money'
 import 'server-only'
 
 import { redirect } from 'next/navigation'

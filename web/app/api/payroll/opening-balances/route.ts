@@ -4,10 +4,10 @@ import { defineRoute } from '@/lib/api/route'
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { parseJsonBody } from "@/lib/api/json"
 import { NextResponse } from 'next/server'
-import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
-import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
-import { PayrollError } from "@openbooks/engine/src/payroll/error.ts";
-import { ScopeNotFoundError } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
+import { businessToday } from '@openbooks/engine/platform/business-date/module'
+import { normalizeMoney } from '@openbooks/engine/money/money'
+import { PayrollError } from "@openbooks/engine/payroll/error";
+import { ScopeNotFoundError } from "@openbooks/engine/organization/scope";
 import {
   assertTaxYear,
   declaredAccountOpeningBaseFields,
@@ -16,8 +16,8 @@ import {
   OpeningBalanceSaveError,
   saveOpeningBalances,
   type OpeningBalanceWrite,
-} from '@openbooks/engine/src/payroll/opening-balances.ts'
-import { US_STATES } from '@openbooks/engine/src/payroll/us/rates.ts'
+} from '@openbooks/engine/payroll/opening-balances'
+import { US_STATES } from '@openbooks/engine/payroll/us/rates'
 import { canonicalDecimal } from '../../../../lib/exact-decimal'
 import { moneyRefusal } from '../../../../lib/payroll-decimal-refusal'
 import '../../../../lib/feature-gates';
@@ -26,7 +26,7 @@ import '../../../../lib/list-params';
 import {
   saveItSurtaxSaldoCarryIns,
   SurtaxSaldoSaveError,
-} from '@openbooks/engine/src/payroll/it/saldo-carryins.ts'
+} from '@openbooks/engine/payroll/it/saldo-carryins'
 import { notFound } from "@/lib/api/responses";
 
 const openingAmount = z.string().superRefine((value, ctx) => {

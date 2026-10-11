@@ -126,8 +126,8 @@ const forecastMocks = new Map<string, string>([
 const forecastUrls = new Map<string, string>([
   ['../../../../lib/authz', 'mock:authz'],
   ['next-intl/server', 'mock:intl'],
-  ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
-  ['@openbooks/engine/src/platform/business-date.ts', 'mock:business-date'],
+  ['@openbooks/engine/platform/db', 'mock:db'],
+  ['@openbooks/engine/platform/business-date/module', 'mock:business-date'],
   ['../../../../lib/crm', 'mock:crm'],
   ['../../../../lib/money-server', 'mock:money'],
   ['../../../../components/module-home/group-tabs', 'mock:tabs'],
@@ -249,7 +249,7 @@ const boardMocks = new Map<string, string>([
 const boardUrls = new Map<string, string>([
   ['../../../../lib/authz', 'mock-board:authz'],
   ['next-intl/server', 'mock-board:intl'],
-  ['@openbooks/engine/src/platform/db.ts', 'mock-board:db'],
+  ['@openbooks/engine/platform/db', 'mock-board:db'],
   ['../../../../lib/crm', 'mock-board:crm-lib'],
   ['../../../../lib/features', 'mock-board:features'],
   ['../../../../components/module-home/group-tabs', 'mock-board:tabs'],

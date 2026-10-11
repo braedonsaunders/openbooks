@@ -22,8 +22,8 @@ type Seed = { orgId: string; actorId: string; employmentId: string };
 
 async function seed(): Promise<Seed> {
   const [{ db }, { createScratchOrg, createScratchUser }] = await Promise.all([
-    import("../engine/src/platform/db.ts"),
-    import("../engine/src/testing/fixtures.ts"),
+    import("@openbooks/engine/platform/db"),
+    import("@openbooks/engine/testing/fixtures"),
   ]);
   const org = await createScratchOrg();
   assert.ok(org.customerId && org.subsidiaryId, "scratch org must seed a party and a subsidiary");
@@ -61,8 +61,8 @@ async function submittedRequest(run: { execute: (q: unknown) => Promise<unknown>
 }
 
 test("a submitted request refuses DELETE without the amend allowance and clears with it", { skip: !DB, timeout: 120_000 }, async (t) => {
-  const { db } = await import("../engine/src/platform/db.ts");
-  const { dropScratchOrgReporting } = await import("../engine/src/testing/fixtures.ts");
+  const { db } = await import("@openbooks/engine/platform/db");
+  const { dropScratchOrgReporting } = await import("@openbooks/engine/testing/fixtures");
   const s = await seed();
   t.after(async () => {
     await dropScratchOrgReporting(s.orgId);
@@ -98,8 +98,8 @@ test("a submitted request refuses DELETE without the amend allowance and clears 
 });
 
 test("fixture teardown clears an organisation that holds a committed submitted request", { skip: !DB, timeout: 120_000 }, async () => {
-  const { db } = await import("../engine/src/platform/db.ts");
-  const { dropScratchOrgReporting } = await import("../engine/src/testing/fixtures.ts");
+  const { db } = await import("@openbooks/engine/platform/db");
+  const { dropScratchOrgReporting } = await import("@openbooks/engine/testing/fixtures");
   const s = await seed();
   // Committed on purpose: this is the state that pinned scratch orgs before 0188.
   const id = await submittedRequest(db, s);

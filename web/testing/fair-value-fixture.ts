@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { sql } from 'drizzle-orm'
-import { db, withOrgContext } from '@openbooks/engine/src/platform/db.ts'
-import { createScratchOrg, createScratchUser, dropScratchOrgReporting } from '@openbooks/engine/src/testing/fixtures.ts'
+import { db, withOrgContext } from '@openbooks/engine/platform/db'
+import { createScratchOrg, createScratchUser, dropScratchOrgReporting } from '@openbooks/engine/testing/fixtures'
 import { resolveAuthzByUserId } from '../lib/authz-core.ts'
 import { withAuthzContext } from '../lib/authz-context.ts'
 

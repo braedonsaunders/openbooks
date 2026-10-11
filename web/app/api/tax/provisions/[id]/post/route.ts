@@ -4,8 +4,8 @@ import { z } from "zod";
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
-import { IncomeTaxProvisionError, postProvisionRun } from "@openbooks/engine/src/tax-returns/income-tax-provision.ts";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { IncomeTaxProvisionError, postProvisionRun } from "@openbooks/engine/tax-returns/income-tax-provision";
+import { db } from "@openbooks/engine/platform/db";
 import { guardUnrestrictedScope } from "../../../../../../lib/authz";
 import { isUuid } from "../../../../../../lib/list-params";
 import { notFound } from "@/lib/api/responses";

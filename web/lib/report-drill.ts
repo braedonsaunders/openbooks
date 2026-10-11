@@ -1,7 +1,7 @@
 import { isPeriodPreset } from '@openbooks/reports'
 import type { StatementBasis, StatementDimFilter, StatementMode } from './statement-matrix'
 import type { AgingBucket, AgingCurrencyBasis, AgingSide } from './reports'
-import { isUuid } from '@openbooks/engine/src/platform/uuid.ts'
+import { isUuid } from '@openbooks/engine/platform/identifiers'
 
 /** Namespaced so the drill flyout does not rewrite a report page's period. */
 export const REPORT_DRILL_PERIOD_PARAM = 'reportDrillPeriod'

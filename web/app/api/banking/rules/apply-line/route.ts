@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { defineRoute } from '@/lib/api/route';
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
-import { PostingError } from "@openbooks/engine/src/journal/posting-contracts.ts";
+import { PostingError } from "@openbooks/engine/journal/contracts";
 import { isUuid } from '../../../../../lib/list-params'
 import { applyRuleToLine, JournalPostingDeniedError } from '../../../../../lib/banking-rules'
 const POSTBodySchema1 = z.object({ statementLineId: z.string().uuid(), ruleId: z.string().uuid(), reconciliationId: z.string().uuid().optional() });

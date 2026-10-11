@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server'
 import {
   RevenueRecognitionError,
   StaleRecognitionPreviewError,
-} from '../../engine/src/revenue/recognition.ts'
+} from '@openbooks/engine/revenue/recognition'
 
 /**
  * Named revenue-recognition refusals (closed period, unconfigured accounts,

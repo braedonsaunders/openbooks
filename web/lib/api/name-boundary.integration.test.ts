@@ -50,10 +50,10 @@ const engineScopeUrl = new URL(
   import.meta.url,
 ).href;
 const { withBypassContext: withBypass } = await import(
-  "@openbooks/engine/src/platform/db.ts"
+  "@openbooks/engine/platform/db"
 );
 const { createScratchOrg, dropScratchOrg } = await import(
-  "@openbooks/engine/src/testing/fixtures.ts"
+  "@openbooks/engine/testing/fixtures"
 );
 
 const routes = [
@@ -105,7 +105,7 @@ test("name-bearing routes refuse a non-string name with the field path", async (
       permissions: new Set(["*"]),
       allowedSubsidiaryIds: null,
     };
-    const { db } = await import("@openbooks/engine/src/platform/db.ts");
+    const { db } = await import("@openbooks/engine/platform/db");
     // Most of these PATCH routes read the row before parsing, so each needs
     // a real id to reach the shared boundary. Feature-gated routes also need
     // the projects feature switched on for the scratch org.

@@ -10,22 +10,22 @@ import { isUuid } from '@/lib/list-params'
 // marker package gates only RSC bundling; shimming it to an empty module lets
 // these tests exercise the production services directly. node's test runner
 // isolates each file in its own process, so the hook cannot leak elsewhere.
-const { applyDocumentEdit, createPostedCorrectionDraft, runPostedCorrectionDraftFlows, validateEditableDocumentLines } = await import("./documents.ts"), { buildReversalLinkEvidence, DocumentEditError, runDocumentVersionedTransaction, validateCorrectionReason } = await import("../../engine/src/records/document-edit-policy.ts"), { loadDocumentEditCurrent } = await import("../../engine/src/ledger/document-service.ts");
+const { applyDocumentEdit, createPostedCorrectionDraft, runPostedCorrectionDraftFlows, validateEditableDocumentLines } = await import("./documents.ts"), { buildReversalLinkEvidence, DocumentEditError, runDocumentVersionedTransaction, validateCorrectionReason } = await import("@openbooks/engine/records/document-edit-policy"), { loadDocumentEditCurrent } = await import("@openbooks/engine/ledger/document-service");
 const { computeBillTotals } = await import("./bills.ts");
 const { createRecord } = await import('./api/writers.ts')
-const { saveTaxRateProviderConfig } = await import('@openbooks/engine/src/tax/rate-providers.ts')
-const { withSimClock } = await import('@openbooks/engine/src/platform/clock.ts')
+const { saveTaxRateProviderConfig } = await import('@openbooks/engine/tax/rate-providers')
+const { withSimClock } = await import('@openbooks/engine/testing/platform/clock')
 const {
   DocumentVoidError,
   requestDocumentVoid,
-} = await import('@openbooks/engine/src/ledger/document-void.ts')
-const { db, env, pool, withBypass, withOrgContext, withOrgTransaction } = await import('@openbooks/engine/src/platform/db.ts')
-const { postDocument } = await import("@openbooks/engine/src/ledger/posting-document.ts");
+} = await import('@openbooks/engine/ledger/document-void')
+const { db, env, pool, withBypass, withOrgContext, withOrgTransaction } = await import('@openbooks/engine/platform/db')
+const { postDocument } = await import("@openbooks/engine/ledger/posting-document");
 const {
   createScratchOrg,
   dropScratchOrg,
   seedFlowActors,
-} = await import('@openbooks/engine/src/testing/fixtures.ts')
+} = await import('@openbooks/engine/testing/fixtures')
 const { createApplicationRecord } = await import('./application/records.ts')
 const { correctPostedDocument } = await import('./application/documents.ts')
 

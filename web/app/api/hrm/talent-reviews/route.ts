@@ -5,7 +5,7 @@ import {
   listTalentReviews,
   nineBoxForCycle,
   recordTalentReview,
-} from "@openbooks/engine/src/hrm/performance/talent.ts";
+} from "@openbooks/engine/hrm/performance/talent";
 
 import { isFeatureEnabled } from "../../../../lib/features";
 import { isUuid } from "../../../../lib/list-params";

@@ -3,15 +3,15 @@ import { z } from "zod";
 import { isoDate, parseJsonBody, uuidId } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { db } from "@openbooks/engine/platform/db";
 import {
   previewDepreciation,
   runDepreciation,
-} from "@openbooks/engine/src/assets/depreciation.ts";
+} from "@openbooks/engine/assets/depreciation";
 import {
   businessToday,
   isIsoCalendarDate,
-} from "@openbooks/engine/src/platform/business-date.ts";
+} from "@openbooks/engine/platform/business-date/module";
 import { depreciationFailure } from "../../../../lib/assets/depreciation-error-response";
 import { isUuid } from "../../../../lib/list-params";
 

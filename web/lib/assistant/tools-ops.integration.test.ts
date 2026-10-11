@@ -8,8 +8,8 @@ import { stubModules } from '../../testing/stub-modules.ts'
 stubModules({ intl: true, navigation: false, authz: false, features: false });
 
 const { sql } = await import('drizzle-orm')
-const { withBypassContext, db, env, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { withBypassContext, db, env, withOrgContext } = await import('@openbooks/engine/platform/db')
+const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
 const { executeAssistantTool } = await import('./registry')
 
 function authzFor(orgId: string, permissions: string[]): Authz {
@@ -174,7 +174,7 @@ test('assistant report runs and deliveries surface with visibility filtering, is
   const orgB = await withBypassContext(() => (createScratchOrg()))
   try {
     const runId = randomUUID()
-    const { ensureReportDefinitions } = await import('@openbooks/engine/src/reports/ensure-report-definitions.ts')
+    const { ensureReportDefinitions } = await import('@openbooks/engine/reports/ensure-report-definitions')
     await withOrgContext(orgA.orgId, async () => {
       const authz = authzFor(orgA.orgId, READER)
       // Seed the built-in catalog (same seeding the product paths use), then

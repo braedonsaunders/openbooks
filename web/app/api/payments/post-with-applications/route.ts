@@ -3,17 +3,17 @@ import { NextResponse } from 'next/server'
 import { defineRoute } from '@/lib/api/route'
 import { sql } from 'drizzle-orm'
 import { z } from 'zod'
-import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
-import { lockLedgerSetupFence } from '@openbooks/engine/src/organization/ledger-setup-fence.ts'
-import { PaymentRevisionConflictError } from "@openbooks/engine/src/payments-core/payment-errors.ts";
-import { postPaymentWithApplications } from "@openbooks/engine/src/payments/payment-posting.ts";
-import { updateDraftPayment } from "@openbooks/engine/src/payments/payment-documents.ts";
-import { type PaymentKind } from "@openbooks/engine/src/payments/payment-contracts.ts";
-import { submitAndReleaseIfUngated } from '@openbooks/engine/src/flows/index.ts'
-import { runPostDocumentEffects } from "@openbooks/engine/src/ledger/posting-dispatch.ts";
-import { lockScopeRow, ScopeNotFoundError } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
+import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
+import { lockLedgerSetupFence } from '@openbooks/engine/organization/ledger-setup'
+import { PaymentRevisionConflictError } from "@openbooks/engine/payments-core/payment-errors";
+import { postPaymentWithApplications } from "@openbooks/engine/payments/payment-posting";
+import { updateDraftPayment } from "@openbooks/engine/payments/payment-documents";
+import { type PaymentKind } from "@openbooks/engine/payments/payment-contracts";
+import { submitAndReleaseIfUngated } from '@openbooks/engine/flows/module'
+import { runPostDocumentEffects } from "@openbooks/engine/ledger/posting-dispatch";
+import { lockScopeRow, ScopeNotFoundError } from "@openbooks/engine/organization/scope";
 import { can, getAuthz, guardSubsidiaryScope } from '../../../../lib/authz'
-import { DocumentEditError, requireDocumentEditRevision } from "../../../../../engine/src/records/document-edit-policy.ts";
+import { DocumentEditError, requireDocumentEditRevision } from "@openbooks/engine/records/document-edit-policy";
 import { exactMoney, nullableUuidId, parseJsonBody, uuidId } from '../../../../lib/api/json'
 import { assertAllocationTargetsInScope, paymentErrorResponse, paymentPermission } from '../lib'
 import { ApprovalRoutingError } from '../../../../lib/approval-routing-error'

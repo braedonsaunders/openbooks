@@ -223,14 +223,14 @@ const mockSources = new Map<string, string>([
 ])
 
 const mockUrls = new Map<string, string>([
-  ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
+  ['@openbooks/engine/platform/db', 'mock:db'],
   ['@/lib/authz', 'mock:authz'],
   ['../../../../lib/authz', 'mock:authz'],
   ['@/lib/feature-gates', 'mock:authz'],
   ['@/lib/custom-record-report-catalog', 'mock:catalog'],
   ['../../../../lib/report-authz', 'mock:report-authz'],
   ['../../../../lib/custom-reports', 'mock:custom-reports'],
-  ['@openbooks/engine/src/reports/ensure-report-definitions.ts', 'mock:ensure-definitions'],
+  ['@openbooks/engine/reports/ensure-report-definitions', 'mock:ensure-definitions'],
 ])
 
 registerHooks({
@@ -238,7 +238,7 @@ registerHooks({
     if (specifier === '@/lib/api/json') {
       return { shortCircuit: true, url: new URL('../../../../lib/api/json.ts', import.meta.url).href }
     }
-    if (specifier === '@openbooks/engine/src/platform/canonical-json.ts') {
+    if (specifier === '@openbooks/engine/platform/canonical-json') {
       return {
         shortCircuit: true,
         url: new URL('../../../../../engine/src/platform/canonical-json.ts', import.meta.url).href,

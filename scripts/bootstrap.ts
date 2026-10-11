@@ -5,9 +5,9 @@ import { runUpgradeCheckMain, migrate } from "./bootstrap/migrate"
 import { ensureOrg, seedCurrencies, ensureRootSubsidiary, seedRoles, seedAdmin, ensureFirstPlatformAdmin } from "./bootstrap/seed"
 import { sql } from "drizzle-orm"
 import { precreatedRolesEnabled, verifyPrecreatedRoles, verifyPrecreatedObjectAccess, verifyRuntimeOwnership } from "./bootstrap-roles.ts"
-import { db, env, longPool, pool, withBypassContext } from "../engine/src/platform/db.ts"
-import { provisionOrganizationDefaults } from "../engine/src/provisioning/organization-provisioning.ts"
-import { provisionPayrollPackDefaults } from "../engine/src/payroll/run-setup.ts"
+import { db, env, longPool, pool, withBypassContext } from "@openbooks/engine/platform/db"
+import { provisionOrganizationDefaults } from "@openbooks/engine/provisioning/organization-provisioning"
+import { provisionPayrollPackDefaults } from "@openbooks/engine/payroll/run-setup"
 
 async function main(): Promise<void> {
   const verifyBackupAccess = process.argv.includes("--verify");

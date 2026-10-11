@@ -1,6 +1,6 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/db'
 import {
   type DashboardLayoutData,
 } from '@openbooks/schema'
@@ -25,7 +25,7 @@ import {
 import { resolvePersona } from './_persona'
 import { personaDefaultLayout } from './_persona-layout'
 import { widgetFeatureOn } from './widget-features'
-import { qualificationSourceAvailable } from '@openbooks/engine/src/inbox/adapters/hrm-qualification-alert.ts'
+import { qualificationSourceAvailable } from '@openbooks/engine/inbox/adapters/hrm-qualification-alert'
 
 type DashboardDefault = {
   layout: DashboardLayoutData

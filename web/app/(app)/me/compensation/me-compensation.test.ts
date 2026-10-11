@@ -78,8 +78,8 @@ test("every locale carries the empty and refusal copy translated", () => {
 });
 
 test("the English no-link remedy matches the engine refusal word for word", async () => {
-  const { actorPartyOf, SelfServiceError } = await import("../../../../../engine/src/hrm/self-service/actor.ts");
-  type Executor = Pick<import("../../../../../engine/src/platform/db.ts").SqlExecutor, "execute">;
+  const { actorPartyOf, SelfServiceError } = await import("@openbooks/engine/hrm/self-service/actor");
+  type Executor = Pick<import("@openbooks/engine/platform/db").SqlExecutor, "execute">;
   const exec = {
     execute: async () => ({ rows: [] as { partyId: string | null }[] }),
   } as unknown as Executor;

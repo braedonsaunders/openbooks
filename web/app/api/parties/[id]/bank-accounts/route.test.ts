@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { engineSourceSpecifier } from '../../../../../testing/engine-resolve-hooks.ts'
+import { canonicalEngineSpecifier } from '../../../../../testing/engine-resolve-hooks.ts'
 import { registerHooks } from 'node:module'
 import test, { after } from 'node:test'
 import { NextResponse } from 'next/server'
@@ -199,33 +199,33 @@ const mockUrls = new Map<string, string>([
   ['../../../../../lib/authz', mockUrl('authz')],
   ['../../../../../lib/features', mockUrl('features')],
   ['../../../../../lib/countries', mockUrl('countries')],
-  ['@openbooks/engine/src/platform/db.ts', mockUrl('db')],
-  ['@openbooks/engine/src/payments/payment-accounts.ts', mockUrl('payments')],
-  ['@openbooks/engine/src/payments/payment-contracts.ts', mockUrl('payments')],
-  ['@openbooks/engine/src/payments/payment-documents.ts', mockUrl('payments')],
-  ['@openbooks/engine/src/payments-core/payment-errors.ts', mockUrl('payments')],
-  ['@openbooks/engine/src/payments/payment-posting.ts', mockUrl('payments')],
-  ['@openbooks/engine/src/payments/payment-queries.ts', mockUrl('payments')],
-  ['@openbooks/engine/src/payments/payment-return.ts', mockUrl('payments')],
-  ['@openbooks/engine/src/payments-core/rail-cpa005.ts', mockUrl('payments')],
-  ['@openbooks/engine/src/payments-core/rail-nacha.ts', mockUrl('payments')],
-  ['@openbooks/engine/src/payments-core/rail-sepa.ts', mockUrl('payments')],
-  ['@openbooks/engine/src/payments-core/rail-cemtex.ts', mockUrl('payments')],
-  ['@openbooks/engine/src/payments-core/rail-settings.ts', mockUrl('payments')],
-  ['@openbooks/engine/src/payments/run-cancellation.ts', mockUrl('payments')],
-  ['@openbooks/engine/src/payments/run-creation.ts', mockUrl('payments')],
-  ['@openbooks/engine/src/payments/run-files.ts', mockUrl('payments')],
-  ['@openbooks/engine/src/payments/run-posting.ts', mockUrl('payments')],
-  ['@openbooks/engine/src/payments/run-readiness.ts', mockUrl('payments')],
-  ['@openbooks/engine/src/payments/settlement-policy.ts', mockUrl('payments')],
-  ['@openbooks/engine/src/flows/run.ts', mockUrl('flows')],
-  ['@openbooks/engine/src/flows/bank-accounts-adapter.ts', mockUrl('bank-account-adapter')],
-  ['@openbooks/engine/src/platform/business-date.ts', mockUrl('business-date')],
+  ['@openbooks/engine/platform/db', mockUrl('db')],
+  ['@openbooks/engine/payments/payment-accounts', mockUrl('payments')],
+  ['@openbooks/engine/payments/payment-contracts', mockUrl('payments')],
+  ['@openbooks/engine/payments/payment-documents', mockUrl('payments')],
+  ['@openbooks/engine/payments-core/payment-errors', mockUrl('payments')],
+  ['@openbooks/engine/payments/payment-posting', mockUrl('payments')],
+  ['@openbooks/engine/payments/payment-queries', mockUrl('payments')],
+  ['@openbooks/engine/testing/payments/payment-return', mockUrl('payments')],
+  ['@openbooks/engine/testing/payments-core/rail-cpa005', mockUrl('payments')],
+  ['@openbooks/engine/testing/payments-core/rail-nacha', mockUrl('payments')],
+  ['@openbooks/engine/testing/payments-core/rail-sepa', mockUrl('payments')],
+  ['@openbooks/engine/testing/payments-core/rail-cemtex', mockUrl('payments')],
+  ['@openbooks/engine/payments-core/rail-settings', mockUrl('payments')],
+  ['@openbooks/engine/payments/run-cancellation', mockUrl('payments')],
+  ['@openbooks/engine/payments/run-creation', mockUrl('payments')],
+  ['@openbooks/engine/testing/payments/run-files', mockUrl('payments')],
+  ['@openbooks/engine/payments/run-posting', mockUrl('payments')],
+  ['@openbooks/engine/payments/run-readiness', mockUrl('payments')],
+  ['@openbooks/engine/payments/settlement-policy', mockUrl('payments')],
+  ['@openbooks/engine/flows/run', mockUrl('flows')],
+  ['@openbooks/engine/flows/bank-accounts-adapter', mockUrl('bank-account-adapter')],
+  ['@openbooks/engine/platform/business-date/module', mockUrl('business-date')],
 ])
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    const mocked = mockUrls.get(specifier) ?? mockUrls.get(engineSourceSpecifier(specifier) ?? '')
+    const mocked = mockUrls.get(specifier) ?? mockUrls.get(canonicalEngineSpecifier(specifier) ?? '')
     if (mocked) return { url: mocked, shortCircuit: true }
     return nextResolve(specifier, context)
   },

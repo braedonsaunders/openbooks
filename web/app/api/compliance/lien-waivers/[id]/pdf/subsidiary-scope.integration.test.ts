@@ -49,9 +49,9 @@ const pdfUrl = './route.ts?lw-pdf-scope'
 const { GET: waiverPdf } = (await import(pdfUrl)) as typeof import('./route.ts')
 hooks.deregister()
 
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
 const { sql } = await import('drizzle-orm')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
 
 
 const params = (id: string) => ({ params: Promise.resolve({ id }) })

@@ -7,13 +7,13 @@ const routeState = { manage: false, setup: false, features: {} as Record<string,
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = routeState;
 const realAuthzUrl = import.meta.resolve("@/lib/authz");
 const realFeaturesUrl = import.meta.resolve("@/lib/features");
-const realPlatformDbUrl = import.meta.resolve("@openbooks/engine/src/platform/db.ts");
+const realPlatformDbUrl = import.meta.resolve("@openbooks/engine/platform/db");
 const authzStub = `const s = globalThis[Symbol.for('openbooks.setup-command-route-test')]; const perms = () => new Set([...(s.manage ? ['funds.manage'] : []), ...(s.setup ? ['admin.setup.manage'] : [])]); export async function getAuthz() { return { user: { orgId: 'org-1', id: 'user-1' }, permissions: perms(), allowedSubsidiaryIds: null }; } export async function guardPermission(p) { const a = await getAuthz(); if (!a.permissions.has(p)) return new Response(null, { status: 403 }); return a; } export { can } from ${JSON.stringify(realAuthzUrl)};`;
 const featuresStub = `export * from ${JSON.stringify(realFeaturesUrl)}; export async function resolvedFeatureState() { return globalThis[Symbol.for('openbooks.setup-command-route-test')].features; }`;
 const dbStub = `export * from ${JSON.stringify(realPlatformDbUrl)}; const fail = () => { throw new Error("no database in this test") }; const bomb = new Proxy({}, { get: fail }); export const db = bomb; export const inDbTransaction = (...a) => fail(); export const withOrgTransaction = (...a) => fail(); export const withOrgContext = (...a) => fail();`;
 registerHooks({
   resolve(s, c, n) {
-    const u = s === "@/lib/authz" || s === "../authz" || s === "../../../../../lib/authz" ? "mock:cmd-authz" : s === "@/lib/features" || s === "../features" ? "mock:cmd-features" : s === "@openbooks/engine/src/platform/db.ts" ? "mock:cmd-db" : null;
+    const u = s === "@/lib/authz" || s === "../authz" || s === "../../../../../lib/authz" ? "mock:cmd-authz" : s === "@/lib/features" || s === "../features" ? "mock:cmd-features" : s === "@openbooks/engine/platform/db" ? "mock:cmd-db" : null;
     return u ? { shortCircuit: true, format: "module", url: u } : n(s, c);
   },
   load(u, c, n) {

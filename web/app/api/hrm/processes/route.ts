@@ -3,8 +3,8 @@ import { NextResponse } from "next/server";
 import {
   listProcesses,
   type ProcessSegment,
-} from "@openbooks/engine/src/hrm/processes-read.ts";
-import { openProcess } from "@openbooks/engine/src/hrm/processes.ts";
+} from "@openbooks/engine/hrm/processes-read";
+import { openProcess } from "@openbooks/engine/hrm/processes/operations";
 
 import { isUuid } from "../../../../lib/list-params";
 import { processErrorResponse } from "./_lib";

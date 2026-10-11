@@ -32,9 +32,9 @@ const databaseUrl = process.env.OPENBOOKS_DB_URL
 const migrationSql = await import('node:fs').then(({ readFileSync }) =>
   readFileSync('schema/migrations/generated/0067_insights_home_uniqueness.sql', 'utf8'),
 )
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
 const { sql } = await import('drizzle-orm')
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import('@openbooks/engine/testing/fixtures')
 
 test('stored home resolution prefers personal, then role, then system dashboards', { skip: !databaseUrl }, async () => {
   const org = await withBypassContext(() => createScratchOrg())

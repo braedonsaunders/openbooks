@@ -1,13 +1,13 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { CommerceError } from "@openbooks/engine/src/commerce/errors.ts";
-import { ConsolidationError } from "@openbooks/engine/src/consolidation/consolidation.ts";
-import { PostingError } from "@openbooks/engine/src/journal/posting-contracts.ts";
-import { PeriodClosedError } from "@openbooks/engine/src/periods/period-policy.ts";
-import { InventoryError } from "@openbooks/engine/src/inventory/contracts.ts";
-import { PaymentRevisionConflictError } from "@openbooks/engine/src/payments-core/payment-errors.ts";
-import { PayrollError } from "@openbooks/engine/src/payroll/error.ts";
-import { TemporalError } from "@openbooks/engine/src/hrm/temporal.ts";
+import { CommerceError } from "@openbooks/engine/testing/commerce/errors";
+import { ConsolidationError } from "@openbooks/engine/consolidation/consolidation";
+import { PostingError } from "@openbooks/engine/journal/contracts";
+import { PeriodClosedError } from "@openbooks/engine/periods/period-policy";
+import { InventoryError } from "@openbooks/engine/inventory/contracts/module";
+import { PaymentRevisionConflictError } from "@openbooks/engine/payments-core/payment-errors";
+import { PayrollError } from "@openbooks/engine/payroll/error";
+import { TemporalError } from "@openbooks/engine/hrm/temporal";
 import { guardSubsidiaryScope } from "../authz.ts";
 import { conflict, created, notFound, postingRefusal, unprocessable } from "./responses.ts";
 

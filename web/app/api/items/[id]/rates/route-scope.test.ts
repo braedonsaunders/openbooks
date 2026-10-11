@@ -22,7 +22,7 @@ stubModules({
   authz: false,
   features: false,
   extra: {
-    "@openbooks/engine/src/platform/db.ts": `
+    "@openbooks/engine/platform/db": `
       const state = globalThis[Symbol.for('openbooks.item-rates-scope-test')]
       export const db = {
         async execute() {

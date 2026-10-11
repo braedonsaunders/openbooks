@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import test, { after } from 'node:test'
-import type { YearEndFilingSection } from '@openbooks/engine/src/payroll/yearend.ts'
+import type { YearEndFilingSection } from '@openbooks/engine/payroll/yearend'
 import type { FilingLifecycle, FilingRowReview } from '../app/(app)/payroll/_ui/filing-amendments.tsx'
 import { stubModules } from '../testing/stub-modules.ts'
 import { bootJsdomEnvironment } from '../testing/jsdom-env.ts'
@@ -74,8 +74,8 @@ const routeMocks = new Map<string, string>([
 const routeUrls = new Map<string, string>([
   ['../../../../../lib/feature-gates', mockUrl('feature-gates')],
   ['@/lib/feature-gates', mockUrl('feature-gates')],
-  ['@openbooks/engine/src/payroll/yearend.ts', mockUrl('yearend')],
-  ['@openbooks/engine/src/payroll/yearend-amendments.ts', mockUrl('yearend-amendments')],
+  ['@openbooks/engine/payroll/yearend', mockUrl('yearend')],
+  ['@openbooks/engine/payroll/yearend-amendments', mockUrl('yearend-amendments')],
 ])
 
 await bootJsdomEnvironment({ url: "http://localhost:4800/", matchMediaMatches: false });
@@ -92,7 +92,7 @@ const routeHooks = registerHooks({
   // real guard) resolves the real module, so owned-module wiring stays
   // real and the stub never has to track the engine's exports.
   if (
-    specifier === '@openbooks/engine/src/payroll/yearend.ts' &&
+    specifier === '@openbooks/engine/payroll/yearend' &&
     !String(context.parentURL ?? '').includes('payroll/year-end/amendments/route.ts')
   ) {
     return nextResolve(specifier, context)

@@ -4,10 +4,10 @@ import test from "node:test";
 // server-only guards page loaders against client bundling; the shared test
 // preset stubs it so the pure helper loads under plain node.
 
-const { FieldTimeError } = await import("@openbooks/engine/src/hrm/field-time/errors.ts");
-const { SelfServiceError } = await import("@openbooks/engine/src/hrm/self-service/actor.ts");
+const { FieldTimeError } = await import("@openbooks/engine/hrm/field-time/errors");
+const { SelfServiceError } = await import("@openbooks/engine/hrm/self-service/actor");
 const { HrmDocumentsError, HrmSurveysError } = await import(
-  "@openbooks/engine/src/hrm/documents/errors.ts"
+  "@openbooks/engine/hrm/documents/errors"
 );
 const { loadOrRefuse } = await import("./load-or-refuse.ts");
 

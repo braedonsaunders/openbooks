@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { resolveScanResult } from '@openbooks/engine/src/inventory/item-identifiers.ts'
+import { db } from '@openbooks/engine/platform/db'
+import { resolveScanResult } from '@openbooks/engine/inventory/item-identifiers'
 import { uuidId } from '@/lib/api/json'
 import { defineRoute } from '@/lib/api/route'
 

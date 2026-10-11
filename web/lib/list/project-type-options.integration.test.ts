@@ -15,10 +15,10 @@ stubModules({ intl: true, navigation: { pathname: '/projects' }, authz: false, f
   } });
 
 const { sql } = await import("drizzle-orm");
-const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
-const { installTrustedTestDatabaseBypass } = await import("@openbooks/engine/src/testing/database-bypass.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { installTrustedTestDatabaseBypass } = await import("@openbooks/engine/testing/database-bypass");
 const { BUILTIN_PROJECT_TYPES } = await import("@openbooks/schema");
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
 const { entityListSource } = await import("./entity-sources.ts");
 const { EntityListView } = await import("../../components/entity-list-view.tsx");
 

@@ -7,10 +7,10 @@ import { Client } from "pg";
 // subsidiary but never the correction body's `subsidiaryId`, so a restricted
 // actor could re-home the replacement draft into an entity outside its scope.
 const { sql } = await import("drizzle-orm");
-const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
-const { postDocument } = await import("@openbooks/engine/src/ledger/posting-document.ts");
-const { documentRevisionCounterSql } = await import("@openbooks/engine/src/records/revision.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
+const { postDocument } = await import("@openbooks/engine/ledger/posting-document");
+const { documentRevisionCounterSql } = await import("@openbooks/engine/records/revision");
 const { correctPostedDocument, postJournalDocument } = await import("./documents.ts");
 const { ApplicationError } = await import("./errors.ts");
 type ApplicationContext = import("./context.ts").ApplicationContext;

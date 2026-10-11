@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import {
   listSurveys,
   saveSurvey,
-} from "@openbooks/engine/src/hrm/surveys/surveys.ts";
+} from "@openbooks/engine/hrm/surveys/surveys";
 import { hrmDocumentsErrorResponse } from "../documents/_lib";
 import { saveSurveyBody } from "./bodies";
 export function resolveAppBaseUrl(req: Request): string {

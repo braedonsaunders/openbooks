@@ -3,17 +3,17 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 
 const { sql } = await import("drizzle-orm");
-const { db, withBypassContext } = await import("@openbooks/engine/src/platform/db.ts");
+const { db, withBypassContext } = await import("@openbooks/engine/platform/db");
 const {
   createScratchOrg,
   createScratchUser,
   dropScratchOrg,
-} = await import("@openbooks/engine/src/testing/fixtures.ts");
-import type { ScratchOrg } from "@openbooks/engine/src/testing/fixtures.ts";
+} = await import("@openbooks/engine/testing/fixtures");
+import type { ScratchOrg } from "@openbooks/engine/testing/fixtures";
 const { convertOrder } = await import("./order-cycle.ts");
-const { postDocument } = await import("@openbooks/engine/src/ledger/posting-document.ts");
-const { loadTaxProfileConfig, persistLineTaxComponents } = await import("@openbooks/engine/src/tax/persist.ts");
-const { computeLineTaxes } = await import("@openbooks/engine/src/tax/tax.ts");
+const { postDocument } = await import("@openbooks/engine/ledger/posting-document");
+const { loadTaxProfileConfig, persistLineTaxComponents } = await import("@openbooks/engine/tax/persist");
+const { computeLineTaxes } = await import("@openbooks/engine/tax/tax");
 
 async function seedOrderWithoutLineAccount(
   org: ScratchOrg,
@@ -109,8 +109,8 @@ const consolidatedRows = [
         // of inventing CAD — the same rule the canonical order create enforces, so a
         // draft can never silently book foreign-currency intent as domestic.
         const { sql } = await import("drizzle-orm");
-        const { db, withBypassContext } = await import("@openbooks/engine/src/platform/db.ts");
-        const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
+        const { db, withBypassContext } = await import("@openbooks/engine/platform/db");
+        const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
         const { createOrderDraft, OrderDraftError } = await import("./order-cycle.ts");
 
 
@@ -153,18 +153,18 @@ const consolidatedRows = [
   } },
   { label: "order billed unwind", register: async () => {
         const { sql } = await import("drizzle-orm");
-        const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
+        const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
         const {
           createScratchOrg,
           createScratchUser,
           dropScratchOrg,
-        } = await import("@openbooks/engine/src/testing/fixtures.ts");
+        } = await import("@openbooks/engine/testing/fixtures");
 
         const { convertOrder } = await import("./order-cycle.ts");
-        const { requestDocumentVoid } = await import("@openbooks/engine/src/ledger/document-void.ts");
-        const { deleteDocument } = await import("@openbooks/engine/src/ledger/document-delete.ts");
-        const { postDocument } = await import("@openbooks/engine/src/ledger/posting-document.ts");
-        const { materializeCapture } = await import("@openbooks/engine/src/payables/ap-capture-service.ts");
+        const { requestDocumentVoid } = await import("@openbooks/engine/ledger/document-void");
+        const { deleteDocument } = await import("@openbooks/engine/ledger/document-delete");
+        const { postDocument } = await import("@openbooks/engine/ledger/posting-document");
+        const { materializeCapture } = await import("@openbooks/engine/payables/ap-capture-service");
 
         async function seedOrder(
           org: ScratchOrg,
@@ -457,15 +457,15 @@ const consolidatedRows = [
   } },
   { label: "order convert release concurrency", register: async () => {
         const { sql } = await import("drizzle-orm");
-        const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
+        const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
         const {
           createScratchOrg,
           createScratchUser,
           dropScratchOrg,
-        } = await import("@openbooks/engine/src/testing/fixtures.ts");
+        } = await import("@openbooks/engine/testing/fixtures");
 
         const { convertOrder } = await import("./order-cycle.ts");
-        const { deleteDocument } = await import("@openbooks/engine/src/ledger/document-delete.ts");
+        const { deleteDocument } = await import("@openbooks/engine/ledger/document-delete");
 
         // F26: conversion vs draft-child deletion must take source-order locks in the
         // same header-before-lines order. convertOrder (web/lib/order-cycle.ts,
@@ -709,8 +709,8 @@ const orderLifecycleCases = [
         const test = (await import('node:test')).default;
         const { setTimeout: delay } = await import('node:timers/promises');
         const { sql } = await import('drizzle-orm');
-        const { db, withBypassContext, withOrg, withOrgContext, withOrgTransaction } = await import('@openbooks/engine/src/platform/db.ts');
-        const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import('@openbooks/engine/src/testing/fixtures.ts');
+        const { db, withBypassContext, withOrg, withOrgContext, withOrgTransaction } = await import('@openbooks/engine/platform/db');
+        const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import('@openbooks/engine/testing/fixtures');
         type Authz = import('./authz').Authz;
         const state: { gate: Authz | null; pause: (() => Promise<void>) | null } = { gate: null, pause: null }
         Object.assign(globalThis, { __orderScopeRead: state })

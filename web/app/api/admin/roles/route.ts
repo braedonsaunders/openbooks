@@ -3,19 +3,19 @@ import { defineRoute } from "@/lib/api/route";
 
 import { NextResponse } from "next/server";
 import { sql, type SQL } from "drizzle-orm";
-import { db, withOrgTransaction, withTransactionSavepoint } from "@openbooks/engine/src/platform/db.ts";
-import { seedDashboardDefaultsForOrg } from "@openbooks/engine/src/provisioning/dashboard-defaults.ts";
-import { EMPLOYEE_SELF_SERVICE_BASELINE, permissionsOutsideCeiling, withSelfServiceBaseline } from "@openbooks/engine/src/organization/permissions.ts";
+import { db, withOrgTransaction, withTransactionSavepoint } from "@openbooks/engine/platform/db";
+import { seedDashboardDefaultsForOrg } from "@openbooks/engine/provisioning/dashboard-defaults";
+import { EMPLOYEE_SELF_SERVICE_BASELINE, permissionsOutsideCeiling, withSelfServiceBaseline } from "@openbooks/engine/organization/permissions";
 import {
   grantedRestrictionWithinCoverage,
   grantedScopeSetWithinCoverage,
   loadSubsidiaryGrantCoverage,
   resolveRestrictionEditScopes,
   type SubsidiaryGrantCoverage,
-} from "@openbooks/engine/src/organization/actor-subsidiaries.ts";
+} from "@openbooks/engine/organization/actor-subsidiaries";
 import type { SubsidiaryRestriction } from "@openbooks/schema";
 import { type Authz, guardPermission } from "../../../../lib/authz";
-import { listActiveExtensionContributions } from "@openbooks/engine/src/extensions/projections.ts";
+import { listActiveExtensionContributions } from "@openbooks/engine/extensions/projections";
 import { PERMISSION_CATALOGUE } from "../../../../lib/permissions";
 import { isUuid } from "../../../../lib/list-params";
 

@@ -47,10 +47,10 @@ const hooks = registerHooks({
 const { POST } = (await import("./route.ts")) as typeof import("./route.ts");
 const { PATCH } = (await import("./[id]/route.ts")) as typeof import("./[id]/route.ts");
 
-const { db } = await import("@openbooks/engine/src/platform/db.ts");
-const { documentRevisionSql } = await import("@openbooks/engine/src/records/revision.ts");
+const { db } = await import("@openbooks/engine/platform/db");
+const { documentRevisionSql } = await import("@openbooks/engine/records/revision");
 const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } = await import(
-  "@openbooks/engine/src/testing/fixtures.ts",
+  "@openbooks/engine/testing/fixtures",
 );
 
 interface Fixture {

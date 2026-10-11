@@ -44,10 +44,10 @@ stubModules({
       export async function guardInformationReturnsFeature() { return null }
       export async function loadInformationReturnFilingScope() { return { subsidiaryId: null } }
     `,
-    "@openbooks/engine/src/platform/business-date.ts": `
+    "@openbooks/engine/platform/business-date/module": `
       export async function businessToday() { return "2026-08-28" }
     `,
-    "@openbooks/engine/src/platform/db.ts": `
+    "@openbooks/engine/platform/db": `
       const state = globalThis[Symbol.for("openbooks.information-return-export-route-test")]
       export const db = {
         async execute() {
@@ -86,7 +86,7 @@ stubModules({
         },
       }
     `,
-    "@openbooks/engine/src/compliance/information-returns.ts": `
+    "@openbooks/engine/compliance/information-returns": `
       export function formDefinition() {
         return { boxes: [{ number: "1", key: "nec1" }] }
       }

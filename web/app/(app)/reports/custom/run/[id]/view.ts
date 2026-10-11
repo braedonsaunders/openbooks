@@ -3,8 +3,8 @@ import 'server-only'
 
 import { notFound, redirect } from 'next/navigation'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { payrollSubsidiaryScopeFilter } from '@openbooks/engine/src/payroll/scope.ts'
+import { db } from '@openbooks/engine/platform/db'
+import { payrollSubsidiaryScopeFilter } from '@openbooks/engine/payroll/scope'
 import { getTranslations } from 'next-intl/server'
 import {
   pagination,

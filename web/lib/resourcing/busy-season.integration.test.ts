@@ -2,10 +2,10 @@ import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import test from 'node:test'
 const { sql } = await import('drizzle-orm')
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
-const { upsertAssignment } = await import('@openbooks/engine/src/resourcing/assignments.ts')
-const { ResourcingRefusal } = await import('@openbooks/engine/src/resourcing/errors.ts')
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
+const { upsertAssignment } = await import('@openbooks/engine/resourcing/assignments')
+const { ResourcingRefusal } = await import('@openbooks/engine/resourcing/errors')
 const { loadBusySeason } = await import('./busy-season.ts')
 
 const enabled = { skip: !process.env.OPENBOOKS_DB_URL }

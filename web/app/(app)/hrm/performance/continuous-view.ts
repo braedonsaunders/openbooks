@@ -15,16 +15,16 @@ import {
   calibrationPotentialOptions,
   getCalibrationSession,
   listCalibrationSessions,
-} from '@openbooks/engine/src/hrm/performance/calibration.ts'
-import { HrmPerformanceError } from '@openbooks/engine/src/hrm/performance/errors.ts'
-import { getFeedbackSettings } from '@openbooks/engine/src/hrm/performance/feedback.ts'
-import { listCycleProgress } from '@openbooks/engine/src/hrm/performance/performance-read.ts'
+} from '@openbooks/engine/hrm/performance/calibration'
+import { HrmPerformanceError } from '@openbooks/engine/hrm/performance/errors'
+import { getFeedbackSettings } from '@openbooks/engine/hrm/performance/feedback'
+import { listCycleProgress } from '@openbooks/engine/hrm/performance/performance-read'
 import {
   listSuccessionPlans,
   listTalentDirectory,
   listTalentReviews,
   nineBoxForCycle,
-} from '@openbooks/engine/src/hrm/performance/talent.ts'
+} from '@openbooks/engine/hrm/performance/talent'
 import type { Authz } from '../../../../lib/authz'
 import { registeredListTable } from '../../../../lib/list/prepared-spec'
 import { translateTalentCode } from './talent-labels.ts'

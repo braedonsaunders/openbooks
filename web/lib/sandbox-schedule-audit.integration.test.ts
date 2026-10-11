@@ -18,10 +18,10 @@ registerHooks({
   },
 });
 
-const { db } = await import(root + "engine/src/platform/db.ts");
+const { db } = await import("@openbooks/engine/platform/db");
 const { sql } = await import(root + "node_modules/drizzle-orm/index.js");
-const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import(root + "engine/src/testing/fixtures.ts");
-const { createSandbox, deleteSandbox } = await import(root + "engine/src/sandbox/lifecycle.ts");
+const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import("@openbooks/engine/testing/fixtures");
+const { createSandbox, deleteSandbox } = await import("@openbooks/engine/sandbox/lifecycle");
 const { setScheduleAction } = await import(root + "web/app/(app)/admin/sandboxes/actions.ts");
 
 test("sandbox refresh schedule changes leave actor-attributed audit evidence", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {

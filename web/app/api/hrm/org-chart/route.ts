@@ -4,8 +4,8 @@ import { NextResponse } from "next/server";
 import {
   loadDirectory,
   loadOrgChart,
-} from "@openbooks/engine/src/hrm/org-chart.ts";
-import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
+} from "@openbooks/engine/hrm/org-chart/operations";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
 import { guardPermission } from "../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../lib/features";
 import { hrmDocumentsErrorResponse } from "../documents/_lib";

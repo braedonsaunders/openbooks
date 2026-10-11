@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import { UsageBillingError } from "@openbooks/engine/src/billing/usage/errors.ts";
+import { UsageBillingError } from "@openbooks/engine/billing/usage/errors";
 import { applicationContextFromSession } from "@/lib/application/context";
 import { ApplicationError } from "@/lib/application/errors";
 import { executeIdempotent } from "@/lib/application/idempotency";

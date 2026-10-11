@@ -48,9 +48,9 @@ registerHooks({
 
 const routeUrl = "./route.ts?nav-array-binding-test";
 const { PUT } = (await import(routeUrl)) as typeof import("./route.ts");
-const { db } = await import("@openbooks/engine/src/platform/db.ts");
+const { db } = await import("@openbooks/engine/platform/db");
 const { createScratchOrg, createScratchUser } = await import(
-  "@openbooks/engine/src/testing/fixtures.ts"
+  "@openbooks/engine/testing/fixtures"
 );
 
 interface NavConfigLike {
@@ -217,6 +217,6 @@ test("a module-only nav config skips the app catalog check and still round-trips
 
 /** Teardown failures must not replace an in-flight assertion error. */
 async function dropScratchOrgReportingSafe(orgId: string): Promise<void> {
-  const { dropScratchOrgReporting } = await import("@openbooks/engine/src/testing/fixtures.ts");
+  const { dropScratchOrgReporting } = await import("@openbooks/engine/testing/fixtures");
   await dropScratchOrgReporting(orgId);
 }

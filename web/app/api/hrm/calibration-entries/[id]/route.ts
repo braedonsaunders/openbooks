@@ -6,7 +6,7 @@ import {
   revertEntry,
   setCalibratedRating,
   setPotential,
-} from "@openbooks/engine/src/hrm/performance/calibration.ts";
+} from "@openbooks/engine/hrm/performance/calibration";
 
 import { isFeatureEnabled } from "../../../../../lib/features";
 import { performanceErrorResponse } from "../../review-cycles/_lib";

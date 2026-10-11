@@ -37,7 +37,7 @@ stubModules({
   authz: false,
   features: false,
   extra: {
-    "@openbooks/engine/src/platform/db.ts": `
+    "@openbooks/engine/platform/db": `
       const sqlText = globalThis.openbooksSqlTextProjectDate
       const before = {
         key: 'custom', name: 'Custom', description: null, is_active: true,
@@ -60,7 +60,7 @@ stubModules({
         },
       }
     `,
-    "@openbooks/engine/src/projects/financial-profile-versions.ts": `
+    "@openbooks/engine/projects/financial-profile-versions": `
       const state = globalThis[Symbol.for('openbooks.project-types-patch-date-test')]
       export function canonicalizeProjectFinancialProfile(profile) { return structuredClone(profile) }
       export function assertValidProjectFinancialProfile(_profile) {}
@@ -69,7 +69,7 @@ stubModules({
         return { id: 'version-1', effectiveFrom: input.effectiveFrom, effectiveTo: null }
       }
     `,
-    "@openbooks/engine/src/platform/business-date.ts": "export async function businessToday() { return '2026-08-31' }",
+    "@openbooks/engine/platform/business-date/module": "export async function businessToday() { return '2026-08-31' }",
     "../../../../../lib/authz": `
       export async function guardPermission() {
         return {

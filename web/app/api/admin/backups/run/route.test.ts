@@ -83,10 +83,10 @@ const mockSources = new Map<string, string>([
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "@openbooks/engine/src/platform/db.ts") {
+    if (specifier === "@openbooks/engine/platform/db") {
       return { url: "mock:db", shortCircuit: true };
     }
-    if (specifier === "@openbooks/engine/src/platform/file-storage.ts") {
+    if (specifier === "@openbooks/engine/platform/file-storage") {
       return { url: "mock:file-storage", shortCircuit: true };
     }
     if (specifier === "@openbooks/jobs") {

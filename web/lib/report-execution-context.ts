@@ -1,7 +1,7 @@
 import 'server-only'
 import { AsyncLocalStorage } from 'node:async_hooks'
 import { sql } from 'drizzle-orm'
-import { db, withBypassContext } from '@openbooks/engine/src/platform/db.ts'
+import { db, withBypassContext } from '@openbooks/engine/platform/db'
 import { getAuthz, resolveUserAuthz, can, type Authz } from './authz'
 import { canRunReportEntity, canRunReportStatement, reportEntityPermission } from './report-authz'
 import type { SessionUser } from './auth'

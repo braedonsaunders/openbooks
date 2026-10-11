@@ -7,7 +7,7 @@ import { revokeRuntimeFunctionExecute } from "../bootstrap-function-denials.ts"
 import { sql } from "drizzle-orm"
 import pg from "pg"
 import { constrainedSchemaOwnerRefusal, verifyReadRoleAssumption, type RuntimeDatabaseConfig } from "../bootstrap-roles.ts"
-import { db, env, pool } from "../../engine/src/platform/db.ts"
+import { db, env, pool } from "@openbooks/engine/platform/db"
 import { connectMigrationClient, describeBootstrapMigrationFailure, releaseMigrationClient } from "../bootstrap-migration-client.ts"
 
 

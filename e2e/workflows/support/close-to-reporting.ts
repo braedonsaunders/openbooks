@@ -35,7 +35,7 @@
 import { expect, type APIRequestContext } from "@playwright/test";
 import { createHash } from "node:crypto";
 import { inflateSync } from "node:zlib";
-import { canonicalJson } from "../../../engine/src/platform/canonical-json.ts";
+import { canonicalJson } from "@openbooks/engine/platform/canonical-json";
 import { withIdempotencyKey } from "../idempotency";
 
 export const ADMIN_EMAIL = process.env.E2E_EMAIL ?? "e2e@openbooks.test";

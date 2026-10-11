@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import {
   computeGapSnapshot,
   latestGapSnapshot,
-} from "@openbooks/engine/src/hrm/compensation/pay-transparency.ts";
+} from "@openbooks/engine/hrm/compensation/pay-transparency";
 import { compensationErrorResponse } from "../compensation/_lib";
 import { generateSnapshotBody } from "../compensation/bodies";
 /**

@@ -89,9 +89,9 @@ registerHooks({
       return { shortCircuit: true, format: "module", url: `data:text/javascript,${encodeURIComponent(`export { guardUnrestrictedScope } from ${JSON.stringify(real)}; const state = globalThis[Symbol.for('openbooks.analytics-config-write-guard-test')]; export async function guardPermission() { return { user: { orgId: 'org-1', id: 'user-1', roles: [] }, permissions: new Set(['*']), allowedSubsidiaryIds: state.allowedSubsidiaryIds }; }`)}` };
     }
     // Presentation currency reads through the analytics reader's public database entry.
-    if (specifier === "@openbooks/engine/src/platform/db.ts" ||
+    if (specifier === "@openbooks/engine/platform/db" ||
       (specifier === "@openbooks/engine/platform/database" && context.parentURL?.endsWith("/analytics/query.ts"))) {
-      dbRealUrl ||= nextResolve("@openbooks/engine/src/platform/db.ts", context).url
+      dbRealUrl ||= nextResolve("@openbooks/engine/platform/db", context).url
       return { url: "mock:db", shortCircuit: true }
     }
     const mocked = mockUrls.get(specifier);

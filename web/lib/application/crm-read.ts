@@ -1,6 +1,6 @@
 import "server-only";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { db } from "@openbooks/engine/platform/db";
 import { normalizeMoneyValue } from "../cash/core";
 import { loadCrmAccount, loadOpportunity } from "../crm";
 import { crmOpportunityScope, crmSharedScope } from "../crm-scope";

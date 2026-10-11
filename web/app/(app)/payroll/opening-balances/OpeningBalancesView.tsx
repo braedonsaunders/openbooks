@@ -16,7 +16,7 @@ import { Badge, Button, Drawer, FieldHelp, Label, Select } from '@openbooks/ui'
 import {
   canonicalDecimal,
   isZeroDecimal,
-} from '@openbooks/engine/src/money/exact-decimal.ts'
+} from '@openbooks/engine/money/decimal'
 import { apiJson, ApiResponseError } from '../../../../lib/api-error'
 import { PagedTable } from '../../../../components/paged-table'
 import { RecordTabs } from '../../../../components/module-home/record-tabs'
@@ -25,7 +25,7 @@ import { PeriodOpeningForm, type PeriodOpeningDraft } from './PeriodOpeningForm'
 import type {
   OpeningBalanceRow,
   OpeningBalanceYear,
-} from '@openbooks/engine/src/payroll/opening-balances.ts'
+} from '@openbooks/engine/payroll/opening-balances'
 
 interface FieldDescriptor {
   key: string

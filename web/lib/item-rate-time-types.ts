@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { cmp, normalizeMoney } from '@openbooks/engine/src/money/money.ts'
+import { db } from '@openbooks/engine/platform/db'
+import { cmp, normalizeMoney } from '@openbooks/engine/money/money'
 import { parseItemRateDecimal } from './item-rate-numerics'
 import { isUuid } from './list-params'
 

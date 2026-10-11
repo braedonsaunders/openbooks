@@ -19,8 +19,8 @@ registerHooks({
 })
 
 const { sql } = await import('drizzle-orm')
-const { db, env, pool, withBypass } = await import('@openbooks/engine/src/platform/db.ts')
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { db, env, pool, withBypass } = await import('@openbooks/engine/platform/db')
+const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
 const { InsightDenominationError, runInsightQuery } = await import('../src/execute')
 
 const TAG_BASE = 'G8CURR-BASE-'

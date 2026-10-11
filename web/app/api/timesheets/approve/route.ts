@@ -4,7 +4,7 @@ import { isoDate, uuidId } from "@/lib/api/json";
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { isUuid } from "../../../../lib/list-params";
-import { ScopeNotFoundError } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
+import { ScopeNotFoundError } from "@openbooks/engine/organization/scope";
 import { approveSubmittedTimeEntries } from "../../../../lib/time-approval";
 import { TimeApprovalRefusal } from "../../../../lib/time-approval-refusal";
 import { TimeWorkTargetError } from "@openbooks/engine/projects/time-work-target";

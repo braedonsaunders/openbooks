@@ -49,9 +49,9 @@ const routeUrl = "./route.ts?pdf-template-patch-bool-test";
 const { PATCH } = (await import(routeUrl)) as typeof import("./route.ts");
 after(() => hooks.deregister());
 
-const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { createScratchOrg, createScratchUser } = await import(
-  "@openbooks/engine/src/testing/fixtures.ts"
+  "@openbooks/engine/testing/fixtures"
 );
 
 const TEMPLATE_ID = "00000000-0000-4000-8000-000000000031";

@@ -5,8 +5,8 @@ import { NextResponse } from 'next/server'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { can } from '../../../../../lib/authz'
 import { postPermission } from '../../../../../lib/document-kinds'
-import { postDocument } from '@openbooks/engine/src/ledger/posting-document.ts'
-import { paymentControlDeps } from '@openbooks/engine/src/payments/payment-accounts.ts'
+import { postDocument } from '@openbooks/engine/ledger/posting-document'
+import { paymentControlDeps } from '@openbooks/engine/payments/payment-accounts'
 import {
   approveBatch,
   postBatch,
@@ -14,9 +14,9 @@ import {
   setBatchLines,
   submitBatch,
   withdrawBatch,
-} from '@openbooks/engine/src/hrm/field-time/crew.ts'
-import { getBatchDetail } from '@openbooks/engine/src/hrm/field-time/reads.ts'
-import { FieldTimeError } from '@openbooks/engine/src/hrm/field-time/errors.ts'
+} from '@openbooks/engine/hrm/field-time/crew'
+import { getBatchDetail } from '@openbooks/engine/hrm/field-time/reads'
+import { FieldTimeError } from '@openbooks/engine/hrm/field-time/errors'
 
 export const runtime = 'nodejs'
 

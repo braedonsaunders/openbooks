@@ -7,7 +7,7 @@ import { can, requirePermission } from '../../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../../lib/feature-gates'
 import { isFeatureEnabled } from '../../../../../lib/features'
 import { isUuid } from '../../../../../lib/list-params'
-import { listAutomations, listAutomationRuns } from '@openbooks/engine/src/automations/services.ts'
+import { listAutomations, listAutomationRuns } from '@openbooks/engine/automations/services'
 import type { BuilderAutomation, BuilderRun } from './AutomationBuilder'
 
 /**

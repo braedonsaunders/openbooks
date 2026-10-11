@@ -1,4 +1,4 @@
-import { mulRate } from "@openbooks/engine/src/money/money.ts";
+import { mulRate } from "@openbooks/engine/money/money";
 
 /** Convert a source rate-card amount into the project's functional currency
  * using decimal money arithmetic (never a JavaScript float). */

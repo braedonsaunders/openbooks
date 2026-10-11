@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { updateAutomation } from "@openbooks/engine/src/automations/services.ts";
+import { updateAutomation } from "@openbooks/engine/automations/services";
 import { isUuid } from "../../../../lib/list-params";
 import { patchAutomationBody } from "../bodies";
 import { automationErrorResponse } from "../_lib";
@@ -25,7 +25,7 @@ export const GET = defineRoute({
       );
     try {
       const { listAutomations } =
-        await import("@openbooks/engine/src/automations/services.ts");
+        await import("@openbooks/engine/automations/services");
       const automations = await listAutomations(gate.user.orgId, gate.user.id);
       const automation = automations.find((a) => a.id === id);
       if (!automation)

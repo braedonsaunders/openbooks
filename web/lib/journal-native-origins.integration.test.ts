@@ -12,9 +12,9 @@ import { randomUUID } from 'node:crypto'
  * the entry).
  */
 const root = pathToFileURL(process.cwd() + '/').href
-const { db, withBypassContext } = (await import(root + 'engine/src/platform/db.ts')) as typeof import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypassContext } = (await import('@openbooks/engine/platform/db')) as typeof import('@openbooks/engine/platform/db')
 const { sql } = await import(root + 'node_modules/drizzle-orm/index.js')
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = (await import(root + 'engine/src/testing/fixtures.ts')) as typeof import('@openbooks/engine/src/testing/fixtures.ts')
+const { createScratchOrg, dropScratchOrg, seedFlowActors } = (await import('@openbooks/engine/testing/fixtures')) as typeof import('@openbooks/engine/testing/fixtures')
 const { JOURNAL_ENTRY_TABLE } = (await import(root + 'web/lib/customization/entity-list-query/journal-entries.ts')) as typeof import('./customization/entity-list-query/journal-entries.ts')
 const { journalScopeWhere } = (await import(root + 'web/lib/customization/entity-list-query/journal-entries.ts')) as typeof import('./customization/entity-list-query/journal-entries.ts')
 
@@ -128,9 +128,9 @@ const consolidatedRows = [
          * can pin it on the record, instead of widening the aging gap unannounced.
          */
         const root = pathToFileURL(process.cwd() + '/').href
-        const { db, withBypassContext } = (await import(root + 'engine/src/platform/db.ts')) as typeof import('@openbooks/engine/src/platform/db.ts')
+        const { db, withBypassContext } = (await import('@openbooks/engine/platform/db')) as typeof import('@openbooks/engine/platform/db')
         const { sql } = await import(root + 'node_modules/drizzle-orm/index.js')
-        const { createScratchOrg, dropScratchOrg } = (await import(root + 'engine/src/testing/fixtures.ts')) as typeof import('@openbooks/engine/src/testing/fixtures.ts')
+        const { createScratchOrg, dropScratchOrg } = (await import('@openbooks/engine/testing/fixtures')) as typeof import('@openbooks/engine/testing/fixtures')
         const { partylessControlLines } = (await import(root + 'web/lib/journal-warnings.ts')) as typeof import('./journal-warnings')
 
         type ScratchOrg = Awaited<ReturnType<typeof createScratchOrg>>
@@ -187,8 +187,8 @@ const journalSearchCases = [
         // orphaned origin='payroll' with no document link) searched total zero even
         // though the dashboard shows them. An exact entry number must always
         // resolve its entry — the same bypass the documents legs already have.
-        const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
-        const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
+        const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
+        const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
         const { globalSearch } = await import("./search");
 
         const skip = !process.env.OPENBOOKS_DB_URL;

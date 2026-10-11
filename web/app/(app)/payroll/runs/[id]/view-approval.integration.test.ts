@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-const { db, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypassContext } = await import('@openbooks/engine/platform/db')
 const { sql } = await import('drizzle-orm')
-const { seedAdoption } = await import('@openbooks/engine/src/payroll/filing-test-fixtures.ts')
-const { dropScratchOrgReporting } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { seedAdoption } = await import('@openbooks/engine/testing/payroll/filing-test-fixtures')
+const { dropScratchOrgReporting } = await import('@openbooks/engine/testing/fixtures')
 const { withPayRunReadSnapshot } = await import('./view')
 
 test('payroll loader reads keep one repeatable snapshot across concurrent updates', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {

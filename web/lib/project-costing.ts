@@ -1,10 +1,10 @@
 import 'server-only'
 import { sql, type SQL } from 'drizzle-orm'
-import { db, orgContext, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
-import { add, fromUnits, neg, normalizeMoney, toUnits } from '@openbooks/engine/src/money/money.ts'
+import { db, orgContext, withOrgTransaction } from '@openbooks/engine/platform/db'
+import { add, fromUnits, neg, normalizeMoney, toUnits } from '@openbooks/engine/money/money'
 import { directSubcontractOpenCommitment } from './subcontract-commitments'
 import { pgTextArrayLiteral } from './pg-array'
-import { orderedNetOfCancelledSql } from '@openbooks/engine/src/records/order-line-remainders.ts'
+import { orderedNetOfCancelledSql } from '@openbooks/engine/records/order-line-remainders'
 
 /**
  * Job-costing rollup for a single project — the heart of project accounting.

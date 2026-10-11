@@ -21,10 +21,10 @@ stubModules({
       export async function guardPayrollFilingData() { return null }
       export async function guardPayrollFilingRowIds() { return null }
     `,
-    "@openbooks/engine/src/payroll/yearend.ts": `
+    "@openbooks/engine/payroll/yearend": `
       export async function orgYearEndFilings() { return [] }
     `,
-    "@openbooks/engine/src/payroll/filing-registry.ts": `
+    "@openbooks/engine/payroll/filing-registry": `
       export function yearEndFiling(country, filing) {
         return {
           label: \`\${country} \${filing}\`,
@@ -32,49 +32,49 @@ stubModules({
         }
       }
     `,
-    "@openbooks/engine/src/payroll/packs.ts": `
+    "@openbooks/engine/payroll/packs": `
       export class PayrollPackError extends Error {}
     `,
-    "@openbooks/engine/src/payroll/error.ts": `
+    "@openbooks/engine/payroll/error": `
       export class PayrollError extends Error {}
     `,
-    "@openbooks/engine/src/payroll/fences.ts": `
+    "@openbooks/engine/testing/payroll/fences": `
       export class PayrollError extends Error {}
     `,
-    "@openbooks/engine/src/payroll/run-allocation.ts": `
+    "@openbooks/engine/testing/payroll/run-allocation": `
       export class PayrollError extends Error {}
     `,
-    "@openbooks/engine/src/payroll/run-calculation-evidence.ts": `
+    "@openbooks/engine/payroll/run-calculation-evidence": `
       export class PayrollError extends Error {}
     `,
-    "@openbooks/engine/src/payroll/run-calculation.ts": `
+    "@openbooks/engine/payroll/run-calculation": `
       export class PayrollError extends Error {}
     `,
-    "@openbooks/engine/src/payroll/run-calendar.ts": `
+    "@openbooks/engine/payroll/run-calendar": `
       export class PayrollError extends Error {}
     `,
-    "@openbooks/engine/src/payroll/run-commit.ts": `
+    "@openbooks/engine/payroll/run-commit": `
       export class PayrollError extends Error {}
     `,
-    "@openbooks/engine/src/payroll/run-contracts.ts": `
+    "@openbooks/engine/payroll/run-contracts": `
       export class PayrollError extends Error {}
     `,
-    "@openbooks/engine/src/payroll/run-lifecycle.ts": `
+    "@openbooks/engine/payroll/run-lifecycle": `
       export class PayrollError extends Error {}
     `,
-    "@openbooks/engine/src/payroll/run-protection.ts": `
+    "@openbooks/engine/testing/payroll/run-protection": `
       export class PayrollError extends Error {}
     `,
-    "@openbooks/engine/src/payroll/run-setup.ts": `
+    "@openbooks/engine/payroll/run-setup": `
       export class PayrollError extends Error {}
     `,
-    "@openbooks/engine/src/payroll/run-stub-records.ts": `
+    "@openbooks/engine/testing/payroll/run-stub-records": `
       export class PayrollError extends Error {}
     `,
-    "@openbooks/engine/src/payroll/scope.ts": `
+    "@openbooks/engine/payroll/scope": `
       export class PayrollError extends Error {}
     `,
-    "@openbooks/engine/src/platform/business-date.ts": `
+    "@openbooks/engine/platform/business-date/module": `
       export async function businessToday() { return '2026-09-19' }
     `,
     "../../../../../lib/export": `

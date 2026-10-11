@@ -46,18 +46,18 @@ registerHooks({
 const routeUrl = "./route.ts?statement-delete-route-test";
 const { DELETE } = (await import(routeUrl)) as typeof import("./route.ts");
 
-const { db } = await import("@openbooks/engine/src/platform/db.ts");
+const { db } = await import("@openbooks/engine/platform/db");
 const {
   createScratchOrg,
   dropScratchOrg,
   seedFlowActors,
-} = await import("@openbooks/engine/src/testing/fixtures.ts");
+} = await import("@openbooks/engine/testing/fixtures");
 type ScratchOrg = Awaited<ReturnType<typeof createScratchOrg>>;
 const {
   createMatch,
   importStatement,
   startReconciliation,
-} = await import("@openbooks/engine/src/banking/banking.ts");
+} = await import("@openbooks/engine/banking/banking");
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 

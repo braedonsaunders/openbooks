@@ -214,7 +214,7 @@ const mockSources = new Map<string, string>([
 ])
 
 const mockUrls = new Map<string, string>([
-  ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
+  ['@openbooks/engine/platform/db', 'mock:db'],
   ['../../../../lib/authz', 'mock:authz'],
   ['@/lib/authz', 'mock:authz'],
 ])
@@ -227,7 +227,7 @@ registerHooks({
         shortCircuit: true,
       }
     }
-    if (specifier === '@openbooks/engine/src/platform/canonical-json.ts') {
+    if (specifier === '@openbooks/engine/platform/canonical-json') {
       return {
         url: new URL(
           '../../../../../engine/src/platform/canonical-json.ts',

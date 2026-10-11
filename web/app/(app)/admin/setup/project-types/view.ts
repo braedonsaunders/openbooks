@@ -1,8 +1,8 @@
 import 'server-only'
 
 import { sql } from 'drizzle-orm'
-import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { businessToday } from '@openbooks/engine/platform/business-date/module'
+import { db } from '@openbooks/engine/platform/db'
 import { page, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission } from '../../../../../lib/authz'
 import { requireProjectsFeature } from '../../../../../lib/projects-gate'

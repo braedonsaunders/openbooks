@@ -36,7 +36,7 @@ stubModules({
   authz: false,
   features: false,
   extra: {
-    "@openbooks/engine/src/platform/db.ts": `
+    "@openbooks/engine/platform/db": `
       const state = globalThis[Symbol.for('openbooks.statement-send-test')]
       // Render static SQL text the way drizzle nests it: raw strings, static
       // text inside { value: [...] } chunks, nested fragments, and scalar
@@ -71,8 +71,8 @@ stubModules({
         },
       }
     `,
-    "@openbooks/engine/src/platform/business-date.ts": `export async function businessToday() { return '2026-07-15' }`,
-    "@openbooks/engine/src/delivery/email-config.ts": `
+    "@openbooks/engine/platform/business-date/module": `export async function businessToday() { return '2026-07-15' }`,
+    "@openbooks/engine/delivery/email-config/module": `
       export async function insertEmailLog() { return 'log-1' }
       export async function markEmailFailed() {}
       export async function markEmailSent() {}

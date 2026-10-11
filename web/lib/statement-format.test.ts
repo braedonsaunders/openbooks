@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { toUnits as moneyToUnits } from '@openbooks/engine/src/money/money.ts'
+import { toUnits as moneyToUnits } from '@openbooks/engine/money/money'
 import {
   decimalAdd,
   decimalCmp,

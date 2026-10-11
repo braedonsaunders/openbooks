@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { AllocationRunError } from '../../../../engine/src/allocations/period-run.ts'
+import { AllocationRunError } from '@openbooks/engine/allocations/period-run'
 import { allocationRunErrorResponse } from '../../../lib/allocations-run-error.ts'
 
 test('allocation run refusals map missing records uniformly and preserve domain messages', async () => {
@@ -30,7 +30,7 @@ test('unexpected allocation write defects stay a generic 500', async () => {
 
 test('configuration-write denials hide missing and out-of-scope behind one bare 404', async () => {
   const { allocationWriteErrorResponse } = await import('../../../lib/allocations-run-error.ts')
-  const { AllocationRuleError } = await import('../../../../engine/src/allocations/index.ts')
+  const { AllocationRuleError } = await import('@openbooks/engine/allocations/runtime')
   const denied = await allocationWriteErrorResponse(new AllocationRuleError('NOT_FOUND', 'not found'))
   assert.equal(denied.status, 404)
   assert.deepEqual(await denied.json(), { error: 'not_found' })

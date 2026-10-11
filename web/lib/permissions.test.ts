@@ -4,7 +4,7 @@ import test from 'node:test'
 import {
   INVENTORY_ACTION_PERMISSIONS,
   INVENTORY_ADVANCED_ACTION_PERMISSIONS,
-} from '@openbooks/engine/src/organization/permissions.ts'
+} from '@openbooks/engine/organization/permissions'
 import { stubModules } from '../testing/stub-modules.ts'
 import {
   BUILT_IN_ROLES,
@@ -64,7 +64,7 @@ const mockedSpecifiers = new Map<string, string>([
   // the scripted gate must be reachable under that exact specifier or the
   // real chain runs and every request answers 401.
   ['@/lib/authz', 'mock:authz'],
-  ['@openbooks/engine/src/delivery/email-config.ts', 'mock:email-config'],
+  ['@openbooks/engine/delivery/email-config/module', 'mock:email-config'],
 ])
 
 const mockSources = new Map<string, string>([
@@ -343,10 +343,10 @@ const provisionPostSources = new Map<string, string>([
 
 const provisionPostHooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === '@openbooks/engine/src/platform/db.ts' || specifier === '@openbooks/engine/platform/database' || (specifier === '../platform/db.ts' && context.parentURL?.endsWith('/organization/extension-permission-availability.ts'))) {
+    if (specifier === '@openbooks/engine/platform/db' || specifier === '@openbooks/engine/platform/database' || (specifier === '../platform/db.ts' && context.parentURL?.endsWith('/organization/extension-permission-availability.ts'))) {
       return { url: 'mock:provision-post-db', shortCircuit: true }
     }
-    if (specifier === '@openbooks/engine/src/tax-returns/income-tax-provision.ts') {
+    if (specifier === '@openbooks/engine/tax-returns/income-tax-provision') {
       return { url: 'mock:provision-post-engine', shortCircuit: true }
     }
     // authz.ts reaches these siblings as './auth'/'./subsidiaries'; the

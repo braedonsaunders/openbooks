@@ -1,7 +1,7 @@
-import { cancelDispatchRuns, dispatchFailureReason, runRecordFlows } from "@openbooks/engine/src/flows/index.ts";
+import { cancelDispatchRuns, dispatchFailureReason, runRecordFlows } from "@openbooks/engine/flows/module";
 import type { TriggerEvent } from "@openbooks/forms-core";
-import { ManufacturingError } from "@openbooks/engine/src/manufacturing/errors.ts";
-import { WORK_ORDER_SUBJECT_KIND } from "@openbooks/engine/src/flows/manufacturing-adapter.ts";
+import { ManufacturingError } from "@openbooks/engine/manufacturing/errors";
+import { WORK_ORDER_SUBJECT_KIND } from "@openbooks/engine/flows/manufacturing-adapter";
 
 export async function dispatchWorkOrderFlow(
   event: TriggerEvent,

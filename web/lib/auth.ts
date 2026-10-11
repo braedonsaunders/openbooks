@@ -13,7 +13,7 @@ import {
   db,
   withBypass,
   withBypassContext,
-} from "@openbooks/engine/src/platform/db.ts";
+} from "@openbooks/engine/platform/db";
 import { homeEnvironment, resolveActiveEnv } from "./org-access";
 import { setRequestOrg } from "./request-org";
 import { sealSecret, SecretIntegrityError, unsealSecret } from "./secrets";

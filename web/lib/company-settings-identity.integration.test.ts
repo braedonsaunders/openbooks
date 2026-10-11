@@ -9,9 +9,9 @@ import test from 'node:test'
  * and audit before/after state; the settings read the assistant uses
  * returns all of it.
  */
-const { db, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypassContext } = await import('@openbooks/engine/platform/db')
 const { sql } = await import('drizzle-orm')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
 const { readCompanySettings, updateCompanySettings } = await import('./company-settings')
 
 const skip = !process.env.OPENBOOKS_DB_URL

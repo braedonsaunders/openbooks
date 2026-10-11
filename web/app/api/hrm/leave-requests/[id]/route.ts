@@ -2,14 +2,14 @@ import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { notFound } from "@/lib/api/responses";
 import { NextResponse } from "next/server";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { db } from "@openbooks/engine/platform/db";
 import {
   getLeaveRequest,
   getOwnLeaveRequest,
   leaveToday,
   payrollBankBalances,
   timeBalanceAsOf,
-} from "@openbooks/engine/src/hrm/leave-read.ts";
+} from "@openbooks/engine/hrm/leave-read";
 import { can } from "../../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../../lib/features";
 import { isUuid } from "../../../../../lib/list-params";

@@ -36,9 +36,9 @@ stubModules({
 const viewUrl = './view.ts?custom-record-view-scope-test'
 const { loadRecordModule } = (await import(viewUrl)) as typeof import('./view.ts')
 
-const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/platform/db')
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  '@openbooks/engine/src/testing/fixtures.ts',
+  '@openbooks/engine/testing/fixtures',
 )
 
 test(

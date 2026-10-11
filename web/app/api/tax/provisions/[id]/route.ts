@@ -2,7 +2,7 @@ import type { Authz } from "@/lib/authz";
 import { defineRoute } from "@/lib/api/route";
 import { z } from "zod";
 import { NextResponse } from "next/server";
-import { getProvisionRun } from "@openbooks/engine/src/tax-returns/income-tax-provision.ts";
+import { getProvisionRun } from "@openbooks/engine/tax-returns/income-tax-provision";
 import { isUuid } from "../../../../../lib/list-params";
 import { notFound } from "@/lib/api/responses";
 

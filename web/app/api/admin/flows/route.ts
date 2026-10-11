@@ -3,15 +3,15 @@ import { defineRoute } from "@/lib/api/route";
 
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { documentRevisionSql } from '@openbooks/engine/src/records/revision.ts'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { documentRevisionSql } from '@openbooks/engine/records/revision'
+import { db } from '@openbooks/engine/platform/db'
 import {
   boardAuthority,
   getBoard,
 } from "@openbooks/engine/schedule-boards/boards";
 import { scheduleBoardTimerGraph } from "@openbooks/engine/flows/schedule-board-adapter";
 import { emptyAutomationGraph } from '@openbooks/forms-core'
-import { flowSubjectProfileForOrg, lintFlowGraphForSubject, listFlowSubjectProfiles } from '@openbooks/engine/src/flows/index.ts'
+import { flowSubjectProfileForOrg, lintFlowGraphForSubject, listFlowSubjectProfiles } from '@openbooks/engine/flows/module'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 
 import { filterFlowRunSubjectsToScope } from '../../flows/_lib'

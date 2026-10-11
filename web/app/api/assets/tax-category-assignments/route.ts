@@ -2,8 +2,8 @@ import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
-import { lockAssetCategoryTaxLifecycle } from "@openbooks/engine/src/organization/asset-tax-fence.ts";
+import { db } from "@openbooks/engine/platform/db";
+import { lockAssetCategoryTaxLifecycle } from "@openbooks/engine/organization/asset-tax-fence";
 import { guardUnrestrictedScope } from "../../../../lib/authz";
 import { isUuid } from "../../../../lib/list-params";
 const patchBodySchema0 = z.strictObject({

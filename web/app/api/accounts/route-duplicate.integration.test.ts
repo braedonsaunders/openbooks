@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { isUuid } from "@openbooks/engine/src/platform/uuid.ts";
+import { isUuid } from "@openbooks/engine/platform/identifiers";
 
 // A duplicate account number must refuse with the holding account named:
 // the 422 carries details { existingAccountId, existingAccountName,
@@ -44,8 +44,8 @@ registerHooks({
 
 const { POST } = await import("./route.ts?account-duplicate-post");
 const { PATCH } = await import("./[id]/route.ts?account-duplicate-patch");
-const { withBypassContext, db } = await import("@openbooks/engine/src/platform/db.ts");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
+const { withBypassContext, db } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
 
 function postRequest(key: string, body: unknown): Request {
   return new Request("http://localhost/api/accounts", {

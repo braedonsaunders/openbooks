@@ -29,10 +29,10 @@ registerHooks({
 });
 
 const { sql } = await import('drizzle-orm')
-const { db, env, withBypass, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
-const { markEntryReversed, postEntry } = await import('@openbooks/engine/src/journal/post-entry.ts')
-const { reversalJournalLines } = await import('@openbooks/engine/src/records/reversal-journal-lines.ts')
+const { db, env, withBypass, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
+const { markEntryReversed, postEntry } = await import('@openbooks/engine/testing/journal/post-entry')
+const { reversalJournalLines } = await import('@openbooks/engine/testing/records/reversal-journal-lines')
 const { loadReportDrillData } = await import('./report-drill-data')
 const { transactionDetail } = await import('./reports/transaction-detail')
 const { profitAndLossView } = await import('./statement-matrix')

@@ -35,7 +35,7 @@ const catalogMessages = {
   common: JSON.parse(readFileSync(new URL('../../../../messages/en/common.json', import.meta.url), 'utf8')),
   ui: JSON.parse(readFileSync(new URL('../../../../messages/en/ui.json', import.meta.url), 'utf8')),
 }
-import type { RemittanceGroup } from '../../../../../engine/src/payroll/remittance.ts'
+import type { RemittanceGroup } from '@openbooks/engine/payroll/remittance'
 Object.assign(globalThis, { React })
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 20))

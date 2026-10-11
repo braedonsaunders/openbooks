@@ -3,12 +3,12 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 
 const { sql } = await import("drizzle-orm");
-const { db } = await import("@openbooks/engine/src/platform/db.ts");
+const { db } = await import("@openbooks/engine/platform/db");
 const {
   createScratchOrg,
   dropScratchOrgReporting,
   seedFlowActors,
-} = await import("@openbooks/engine/src/testing/fixtures.ts");
+} = await import("@openbooks/engine/testing/fixtures");
 const { createSetupRecord } = await import("./write.ts");
 
 const DB = !!process.env.OPENBOOKS_DB_URL;

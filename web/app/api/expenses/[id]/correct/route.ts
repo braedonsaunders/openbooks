@@ -3,14 +3,14 @@ import { defineRoute } from '@/lib/api/route';
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
 import { lockedDocumentScopeDenied } from '../../../../../lib/document-scope.ts'
 import {
   DocumentVoidError,
   requestDocumentVoid,
-} from '@openbooks/engine/src/ledger/document-void.ts'
+} from '@openbooks/engine/ledger/document-void'
 import { can, guardSubsidiaryScope } from '../../../../../lib/authz'
-import { DocumentEditError, requireDocumentEditRevision, validateCorrectionReason } from "../../../../../../engine/src/records/document-edit-policy.ts";
+import { DocumentEditError, requireDocumentEditRevision, validateCorrectionReason } from "@openbooks/engine/records/document-edit-policy";
 import { type ExpenseCorrectionBody, createExpenseCorrectionDraft } from '../../../../../lib/expense-edit'
 import { isUuid } from '../../../../../lib/list-params'
 import { notFound } from "@/lib/api/responses";

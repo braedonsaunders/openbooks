@@ -2,9 +2,9 @@ import 'server-only'
 import { crmOpportunityScope, crmSharedScope, crmActivityScope } from './crm-scope'
 import { sql, type SQL } from 'drizzle-orm'
 import { subsidiaryVisibleFilter } from './subsidiaries'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { withScopeSnapshot } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
-import { documentRevisionCounterSql, documentRevisionSql, isDocumentRevisionToken } from '@openbooks/engine/src/records/revision.ts'
+import { db } from '@openbooks/engine/platform/db'
+import { withScopeSnapshot } from '@openbooks/engine/organization/scope'
+import { documentRevisionCounterSql, documentRevisionSql, isDocumentRevisionToken } from '@openbooks/engine/records/revision'
 import { isDocKindEnabled } from "./documents.ts";
 import { isIsoCalendarDate } from './crm-dates'
 

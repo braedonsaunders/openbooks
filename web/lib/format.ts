@@ -209,4 +209,4 @@ export function formatCivilDate(isoDate: string, locale: string): string {
     timeZone: "UTC",
   });
 }
-import { fixedDecimal } from '@openbooks/engine/src/money/exact-decimal.ts'
+import { fixedDecimal } from '@openbooks/engine/money/decimal'

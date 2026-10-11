@@ -2,7 +2,7 @@ import "server-only";
 import { redirect } from "next/navigation";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
-import type { SqlExecutor } from "@openbooks/engine/src/platform/db.ts";
+import type { SqlExecutor } from "@openbooks/engine/platform/db";
 import { can, getAuthz, resolveUserAuthz, type Authz } from "./authz";
 import { accessDeniedHref } from "./gate-targets";
 

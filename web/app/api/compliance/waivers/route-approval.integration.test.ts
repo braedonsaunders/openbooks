@@ -65,11 +65,11 @@ const hooks = registerHooks({
 
 const { POST } = (await import("./route.ts")) as typeof import("./route.ts");
 const { PATCH } = (await import("./[id]/route.ts")) as typeof import("./[id]/route.ts");
-const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
-  "@openbooks/engine/src/testing/fixtures.ts"
+  "@openbooks/engine/testing/fixtures"
 );
-const { vendorComplianceStatus } = await import("@openbooks/engine/src/compliance/compliance.ts");
+const { vendorComplianceStatus } = await import("@openbooks/engine/compliance/compliance");
 test.after(() => hooks.deregister());
 
 

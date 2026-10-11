@@ -2,12 +2,12 @@ import 'server-only'
 
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/db'
 import {
   HrmChangeRequestError,
   listChangeRequests,
-} from '@openbooks/engine/src/hrm/change-requests.ts'
-import { HrmAuthorizationError } from '@openbooks/engine/src/hrm/authorization.ts'
+} from '@openbooks/engine/hrm/change-requests/operations'
+import { HrmAuthorizationError } from '@openbooks/engine/hrm/authorization'
 import { can, type Authz } from '../authz'
 import { setupSectionParams } from '../list-params'
 import { hrmGroupTabs } from '../../components/module-home/group-tabs'

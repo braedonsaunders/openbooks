@@ -3,9 +3,9 @@ import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { z } from 'zod'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { deliverRunToSftp } from '@openbooks/engine/src/sftp/import-job.ts'
-import { PaymentError } from "@openbooks/engine/src/payments-core/payment-errors.ts";
+import { db } from '@openbooks/engine/platform/db'
+import { deliverRunToSftp } from '@openbooks/engine/sftp/import-job'
+import { PaymentError } from "@openbooks/engine/payments-core/payment-errors";
 import { isUuid } from '../../../../../../lib/list-params'
 import { unexpectedServerError } from '../../../../../../lib/api/unexpected'
 import { parseJsonBody, uuidId } from '../../../../../../lib/api/json'

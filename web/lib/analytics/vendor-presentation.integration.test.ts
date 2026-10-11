@@ -10,9 +10,9 @@ registerHooks({
 })
 
 const { sql } = await import('drizzle-orm')
-const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
-const { withSimClock: pinClock } = await import('@openbooks/engine/src/platform/clock.ts')
-const { assertDedicatedFixtureDatabase, createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/platform/db')
+const { withSimClock: pinClock } = await import('@openbooks/engine/testing/platform/clock')
+const { assertDedicatedFixtureDatabase, createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
 const { voidReportDocument } = await import('../../testing/document-void.ts')
 const { vendorData } = await import('./vendor-data')
 const { projectVendorDashboard } = await import('./overview-projection')
@@ -99,7 +99,7 @@ test('vendor overview bounds chart rows without changing translated portfolio to
       for (const tab of ['payment', 'scorecard', 'matrix', 'vendors', 'configuration']) {
         assert.strictEqual(withAnalyticsRead({ ...read, tab }, () => projectVendorDashboard(full)), full)
       }
-      const { registerQueryObserver } = await import('@openbooks/engine/src/platform/query-observer.ts')
+      const { registerQueryObserver } = await import('@openbooks/engine/platform/query-observer')
       for (const tab of ['overview', 'payment', 'scorecard', 'matrix', 'vendors']) {
         const statements: string[] = []
         const close = registerQueryObserver(statement => statements.push(statement))

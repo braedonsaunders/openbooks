@@ -12,9 +12,9 @@ import { sql } from 'drizzle-orm'
 const { listRecordTypes, listRecords, getRecord, createApplicationRecord, updateApplicationRecord, normalizeDocumentRecordRevisions } = await import('./records.ts')
 const { resolveEntityLabels: resolveEntityLabelsFromModule } = await import('../records.ts')
 const { ApplicationError } = await import('./errors.ts')
-const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/platform/db')
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  '@openbooks/engine/src/testing/fixtures.ts'
+  '@openbooks/engine/testing/fixtures'
 )
 
 interface SeededDocument {

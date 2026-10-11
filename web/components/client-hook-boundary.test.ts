@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
-import { INBOX_KINDS } from '../../engine/src/inbox/kinds'
+import { INBOX_KINDS } from '@openbooks/engine/inbox/kinds'
 import { LOCALES } from '../i18n/config'
 
 const webRoot = join(dirname(fileURLToPath(import.meta.url)), '..')

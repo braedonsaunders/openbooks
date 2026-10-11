@@ -5,15 +5,15 @@ import {
   hrmSurveyInvitationEmail,
   sendVia,
 } from "@openbooks/emails";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { db } from "@openbooks/engine/platform/db";
 import {
   insertEmailLog,
   markEmailFailed,
   markEmailSent,
   markEmailUncertain,
   resolveOrgEmailTransport,
-} from "@openbooks/engine/src/delivery/email-config.ts";
-import { writeNotification } from "@openbooks/engine/src/inbox/adapters/notification.ts";
+} from "@openbooks/engine/delivery/email-config/module";
+import { writeNotification } from "@openbooks/engine/inbox/adapters/notification";
 
 /**
  * HR-19 invitation delivery (route-side).

@@ -10,10 +10,10 @@ import type { Authz } from "../../../lib/authz";
  * "Receive & post" otherwise. The loader resolves the flag so the drawer
  * never promises a direct posting a flow will intercept.
  */
-const { db, withBypassContext } = await import("@openbooks/engine/src/platform/db.ts");
+const { db, withBypassContext } = await import("@openbooks/engine/platform/db");
 const { sql } = await import("drizzle-orm");
 const { createScratchOrg, dropScratchOrg } = await import(
-  "@openbooks/engine/src/testing/fixtures.ts"
+  "@openbooks/engine/testing/fixtures"
 );
 const { loadPaymentFlyout } = await import("./payment-flyout");
 

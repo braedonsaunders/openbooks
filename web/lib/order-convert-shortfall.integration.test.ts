@@ -3,14 +3,14 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 
 const { sql } = await import("drizzle-orm");
-const { db, withBypassContext } = await import("@openbooks/engine/src/platform/db.ts");
-const { sum, toUnits } = await import("@openbooks/engine/src/money/money.ts");
+const { db, withBypassContext } = await import("@openbooks/engine/platform/db");
+const { sum, toUnits } = await import("@openbooks/engine/money/money");
 const {
   createScratchOrg,
   createScratchUser,
   dropScratchOrg,
-} = await import("@openbooks/engine/src/testing/fixtures.ts");
-import type { ScratchOrg } from "@openbooks/engine/src/testing/fixtures.ts";
+} = await import("@openbooks/engine/testing/fixtures");
+import type { ScratchOrg } from "@openbooks/engine/testing/fixtures";
 const {
   ConversionError,
   convertOrder,

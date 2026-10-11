@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { AiRailsError } from "@openbooks/engine/src/hrm/ai/errors.ts";
+import { AiRailsError } from "@openbooks/engine/hrm/ai/errors";
 
 // ./ai-rails.ts rides ./authz, which opens with `import "server-only"` —
 // the package throws at load outside a Server Component. Stub it the way

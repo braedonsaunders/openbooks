@@ -47,19 +47,19 @@ const routeUrl = "./route.ts?asset-reverse-event-test";
 const { GET, POST } = (await import(routeUrl)) as typeof import("./route.ts");
 hooks.deregister();
 
-const { db } = await import("@openbooks/engine/src/platform/db.ts");
-const { buildSchedule } = await import("@openbooks/engine/src/assets/depreciation.ts");
-const { disposeAsset, remeasureAsset } = await import("@openbooks/engine/src/assets/asset-lifecycle.ts");
-const { proposeAssetChange, applyAssetChange } = await import("@openbooks/engine/src/assets/asset-changes.ts");
-import type { AssetChangeInput } from "@openbooks/engine/src/assets/asset-changes.ts";
-const { submitFinancialChange } = await import("@openbooks/engine/src/flows/financial-changes-adapter.ts");
-const { decideGate } = await import("@openbooks/engine/src/flows/gates.ts");
+const { db } = await import("@openbooks/engine/platform/db");
+const { buildSchedule } = await import("@openbooks/engine/assets/depreciation");
+const { disposeAsset, remeasureAsset } = await import("@openbooks/engine/assets/asset-lifecycle");
+const { proposeAssetChange, applyAssetChange } = await import("@openbooks/engine/assets/asset-changes");
+import type { AssetChangeInput } from "@openbooks/engine/assets/asset-changes";
+const { submitFinancialChange } = await import("@openbooks/engine/flows/financial-changes-adapter");
+const { decideGate } = await import("@openbooks/engine/testing/flows/gates");
 const {
   createScratchOrg,
   dropScratchOrgReporting,
   seedFlowActors,
   seedApprovalFlow,
-} = await import("@openbooks/engine/src/testing/fixtures.ts");
+} = await import("@openbooks/engine/testing/fixtures");
 
 
 interface Fixture {

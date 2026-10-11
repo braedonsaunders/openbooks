@@ -6,8 +6,8 @@ import type { SessionUser } from "./auth";
 
 // Same module-graph shim as the other assistant DB tests.
 const { sql } = await import("drizzle-orm");
-const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
-const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
 const { appendMessage, createConversation, deleteConversation, listConversations, recentMessages } =
   await import("./ai-conversations");
 
@@ -115,8 +115,8 @@ const consolidatedRows = [
   { label: "ai conversations pagination", register: async () => {
         // Same module-graph shim as the other assistant DB tests.
         const { sql } = await import("drizzle-orm");
-        const { db } = await import("@openbooks/engine/src/platform/db.ts");
-        const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
+        const { db } = await import("@openbooks/engine/platform/db");
+        const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
         const { appendMessage, createConversation, recentMessages, olderMessages } =
           await import("./ai-conversations");
 

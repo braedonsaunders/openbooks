@@ -48,10 +48,10 @@ registerHooks({
     return next(specifier, context)
   },
 })
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
-const { env } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
+const { env } = await import('@openbooks/engine/platform/db')
 const { sql } = await import('drizzle-orm')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
 const { BASE_CURRENCY_SETTINGS_HREF, baseCurrencyNotice, hasBaseCurrency } = await import('./base-currency')
 const { loadProjectProfitability, projectProfitabilitySpec } = await import('../../app/(app)/reports/project-profitability/view')
 const { loadBudgetReport, budgetReportSpec } = await import('../../app/(app)/reports/budget/view')

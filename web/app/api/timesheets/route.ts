@@ -6,13 +6,13 @@ import { defineRoute } from "@/lib/api/route";
 import { notFound, unprocessable } from "@/lib/api/responses";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
-import { db, withOrgTransaction } from "@openbooks/engine/src/platform/db.ts";
+import { db, withOrgTransaction } from "@openbooks/engine/platform/db";
 import {
   lockScopeRow,
   lockScopeRows,
   ScopeNotFoundError,
-} from "@openbooks/engine/src/organization/subsidiary-scope.ts";
-import { normalizeMoney } from "@openbooks/engine/src/money/money.ts";
+} from "@openbooks/engine/organization/scope";
+import { normalizeMoney } from "@openbooks/engine/money/money";
 import {
   checkProjectsWriteEnabled,
   isFeatureEnabled,
@@ -29,7 +29,7 @@ import { runTimeApprovalEffects } from "../../../lib/time-approval";
 import { TimeApprovalRefusal } from "../../../lib/time-approval-refusal";
 import { apiErrorResponse } from "@/lib/api/error-response";
 import { canonicalDecimal, compareDecimal } from "../../../lib/exact-decimal";
-import { canonicalJson } from "@openbooks/engine/src/platform/canonical-json.ts";
+import { canonicalJson } from "@openbooks/engine/platform/canonical-json";
 import { lockTimeWorkOrderTarget } from "@openbooks/engine/projects/time-work-target";
 import {
   isIsoDate,

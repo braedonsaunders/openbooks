@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import type { TaxReturnResult } from '@openbooks/engine/src/tax-returns/return.ts'
+import type { TaxReturnResult } from '@openbooks/engine/tax-returns/return'
 import {
   fmtFacsimileAmount,
   renderTaxFormFacsimileBody,

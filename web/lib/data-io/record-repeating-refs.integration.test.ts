@@ -9,9 +9,9 @@ import { sql } from 'drizzle-orm'
 // validateRecordData — a file carrying another org's party/account uuid (or a
 // dangling one) persists a cross-tenant pointer the HTTP write path refuses.
 const { getResource } = await import('./resources.ts')
-const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/platform/db')
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  '@openbooks/engine/src/testing/fixtures.ts',
+  '@openbooks/engine/testing/fixtures',
 )
 
 test(

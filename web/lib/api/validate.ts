@@ -1,5 +1,5 @@
 import "server-only";
-import { normalizeMoney } from "@openbooks/engine/src/money/money.ts";
+import { normalizeMoney } from "@openbooks/engine/money/money";
 import { canonicalDecimal } from "../exact-decimal";
 import { isUuid } from "../list-params";
 import type { ApiField } from "./schema-registry";

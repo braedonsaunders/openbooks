@@ -16,7 +16,7 @@ import { useBusinessToday } from '../../../../components/business-date-provider'
 import { useDirtyClose } from '../../../../lib/use-dirty-close'
 import { optionalScanResolver } from '../../../../lib/scan'
 import { readApiErrorMessage } from '../../../../lib/api-error'
-import type { StockCountDetail, StockCountSummary } from '@openbooks/engine/src/inventory/stock-count-queries.ts'
+import type { StockCountDetail, StockCountSummary } from '@openbooks/engine/inventory/stock-count-queries'
 
 const field = 'space-y-1.5'
 const OPEN_NEW_COUNT = 'openbooks:inventory-new-count'

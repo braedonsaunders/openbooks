@@ -33,12 +33,12 @@ test('the English no-link remedy matches the engine refusal word for word', asyn
   // actorPartyOf against an empty users read (a stubbed database, not a
   // stubbed module) and compare the thrown message with the catalog.
   const { actorPartyOf, SelfServiceError } = await import(
-    '../../engine/src/hrm/self-service/actor.ts'
+    '@openbooks/engine/hrm/self-service/actor'
   )
   // Hand-rolled database double in the house style (engine hrm tests fake
   // the executor the same way); import type is erased, so no pool is built.
   type Executor = Pick<
-    import('../../engine/src/platform/db.ts').SqlExecutor,
+    import('@openbooks/engine/platform/db').SqlExecutor,
     'execute'
   >
   const exec = {

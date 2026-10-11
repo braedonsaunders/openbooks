@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import {
   createJobLevel,
   listJobLevels,
-} from "@openbooks/engine/src/hrm/compensation/architecture.ts";
+} from "@openbooks/engine/hrm/compensation/architecture";
 import { isUuid } from "../../../../lib/list-params";
 import { compensationErrorResponse } from "../compensation/_lib";
 import { createLevelBody } from "../compensation/bodies";

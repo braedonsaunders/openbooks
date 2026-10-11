@@ -10,13 +10,13 @@ import test from 'node:test'
 // legal entities' vendors, never another entity's rows. (Was Vendors.scope
 // source pins on the scope arguments.)
 
-const { db, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypassContext } = await import('@openbooks/engine/platform/db')
 const { sql } = await import('drizzle-orm')
 const {
   createScratchOrg,
   createScratchUser,
   dropScratchOrg,
-} = await import('@openbooks/engine/src/testing/fixtures.ts')
+} = await import('@openbooks/engine/testing/fixtures')
 const {
   loadComplianceMatrix,
   loadVendorCertificates,

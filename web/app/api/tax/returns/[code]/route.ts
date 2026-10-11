@@ -3,7 +3,7 @@ import { defineRoute } from "@/lib/api/route";
 import { z } from "zod";
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
-import { computeTaxReturn } from '@openbooks/engine/src/tax-returns/return.ts'
+import { computeTaxReturn } from '@openbooks/engine/tax-returns/return'
 import { guardSubsidiaryScope } from '../../../../../lib/authz'
 import { parseReturnScopeQuery, returnScopeOpts } from '@/lib/tax-return-scope'
 import { AdjustmentParamError, parseAdjustments } from './tax-return-params'

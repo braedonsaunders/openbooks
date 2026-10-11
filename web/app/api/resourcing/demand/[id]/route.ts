@@ -1,9 +1,9 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { departments, resDemandLines } from "@openbooks/schema";
-import { deleteDemandLine, updateDemandLine } from "@openbooks/engine/src/resourcing/demand-lines.ts";
-import { ScopeNotFoundError } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { deleteDemandLine, updateDemandLine } from "@openbooks/engine/resourcing/demand-lines";
+import { ScopeNotFoundError } from "@openbooks/engine/organization/scope";
+import { db } from "@openbooks/engine/platform/db";
 import { defineRoute } from "@/lib/api/route";
 import { validateDemandCustomValues } from "../_custom";
 

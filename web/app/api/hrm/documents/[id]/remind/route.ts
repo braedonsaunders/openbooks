@@ -2,7 +2,7 @@ import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
-import { remindDocument } from "@openbooks/engine/src/hrm/documents/documents.ts";
+import { remindDocument } from "@openbooks/engine/hrm/documents/documents";
 import { applicationContextFromSession } from "../../../../../../lib/application/context";
 import { executeIdempotent } from "../../../../../../lib/application/idempotency";
 import { deliverSignatureInvitations } from "../../../../../../lib/hrm/document-delivery";

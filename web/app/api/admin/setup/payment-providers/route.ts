@@ -4,16 +4,16 @@ import { apiErrorResponse } from '@/lib/api/error-response'
 
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
-import { db, orgContext, withOrgTransaction } from "@openbooks/engine/src/platform/db.ts";
+import { db, orgContext, withOrgTransaction } from "@openbooks/engine/platform/db";
 import {
   PaymentAcceptanceError,
   configSecrets,
   normalizeAcceptanceProviderSettings,
   saveAcceptanceConfig,
   testAcceptanceConnection,
-} from "@openbooks/engine/src/payments/acceptance.ts";
-import { businessToday, isIsoCalendarDate } from "@openbooks/engine/src/platform/business-date.ts";
-import { normalizeMoney } from "@openbooks/engine/src/money/money.ts";
+} from "@openbooks/engine/payments/acceptance/operations";
+import { businessToday, isIsoCalendarDate } from "@openbooks/engine/platform/business-date/module";
+import { normalizeMoney } from "@openbooks/engine/money/money";
 import { guardPermission, guardUnrestrictedScope } from "../../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../../lib/features";
 import { isUuid } from "../../../../../lib/list-params";

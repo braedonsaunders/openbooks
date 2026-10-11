@@ -1,3 +1,4 @@
+import { resolveEngineSpecifier } from '../../testing/engine-resolve-hooks.ts'
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
@@ -18,12 +19,9 @@ registerHooks({
     // second db pool without the test bypass). Pin them to this checkout —
     // the same modules a real install resolves — process-wide, so the
     // readers under test and their transitive engine imports agree.
-    if (specifier.startsWith("@openbooks/engine/src/")) {
-      return nextResolve(
-        new URL(`../../../engine/${specifier.slice("@openbooks/engine/".length)}`, import.meta.url).href,
-        context,
-      );
-    }
+
+    const engineUrl = resolveEngineSpecifier(specifier);
+    if (engineUrl) return nextResolve(engineUrl, context);
     return nextResolve(specifier, context);
   },
 });
@@ -32,9 +30,9 @@ const { sql } = await import("drizzle-orm");
 // Fixture writes cross the maintenance boundary (withBypass); the readers
 // under test run tenant-scoped through withOrgContext — the same RLS
 // posture as a production request via setRequestOrg.
-const { db, withBypass, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
-const { toUnits } = await import("@openbooks/engine/src/money/money.ts");
-const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
+const { db, withBypass, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { toUnits } = await import("@openbooks/engine/money/money");
+const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
 const { agingByParty, agingDetail } = await import("./aging.ts");
 const { openItems } = await import("../cash/open-items.ts");
 

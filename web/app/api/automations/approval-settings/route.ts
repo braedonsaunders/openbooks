@@ -1,7 +1,7 @@
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { saveApprovalSettings } from "@openbooks/engine/src/automations/services.ts";
-import { loadApprovalSettings } from "@openbooks/engine/src/automations/approvals.ts";
+import { saveApprovalSettings } from "@openbooks/engine/automations/services";
+import { loadApprovalSettings } from "@openbooks/engine/automations/approvals";
 import { approvalSettingsBody } from "../bodies";
 import { automationErrorResponse } from "../_lib";
 

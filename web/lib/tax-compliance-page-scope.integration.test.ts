@@ -38,10 +38,10 @@ registerHooks({
   },
 })
 const { sql } = await import('drizzle-orm')
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
-const { computeProvisionRun, getProvisionRun } = await import('@openbooks/engine/src/tax-returns/income-tax-provision.ts')
-const { ensureFiling } = await import('@openbooks/engine/src/compliance/information-returns.ts')
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
+const { computeProvisionRun, getProvisionRun } = await import('@openbooks/engine/tax-returns/income-tax-provision')
+const { ensureFiling } = await import('@openbooks/engine/compliance/information-returns')
 const { default: TaxPage } = await import('../app/(app)/tax/page')
 // The page LOADER. Every fact this test checks — which entities' totals the
 // run projects to, and whether Post is offered — is decided in the loader;
@@ -253,8 +253,8 @@ const taxProfileCases = [
         const test = (await import('node:test')).default;
         const { randomUUID } = await import('node:crypto');
         const { sql } = await import('drizzle-orm');
-        const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts');
-        const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts');
+        const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db');
+        const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures');
         const { taxProfileMap, computeBillTotals } = await import("./bills.ts");
         for (const mode of ['inactive component', 'unrated component', 'lapsed component', 'complete group', 'zero component'] as const) {
           test(`tax profile validity: ${mode}`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {

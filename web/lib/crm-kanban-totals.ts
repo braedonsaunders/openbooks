@@ -1,4 +1,4 @@
-import { cmp, sum } from '@openbooks/engine/src/money/money.ts'
+import { cmp, sum } from '@openbooks/engine/money/money'
 
 export interface KanbanMoneyRow {
   currency: string

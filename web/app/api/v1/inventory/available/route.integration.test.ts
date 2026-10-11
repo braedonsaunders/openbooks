@@ -5,14 +5,14 @@ import test from "node:test";
 // GET /api/v1/inventory/available — on hand, committed and available from
 // the availability engine, plus incoming from approved purchase orders.
 const { db, withBypassContext, withOrgContext } = await import(
-  "@openbooks/engine/src/platform/db.ts"
+  "@openbooks/engine/platform/db"
 );
 const { sql } = await import("drizzle-orm");
-const { toUnits } = await import("@openbooks/engine/src/money/money.ts");
+const { toUnits } = await import("@openbooks/engine/money/money");
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
-  "@openbooks/engine/src/testing/fixtures.ts"
+  "@openbooks/engine/testing/fixtures"
 );
-const { receiveInventory } = await import("@openbooks/engine/src/inventory/movements.ts");
+const { receiveInventory } = await import("@openbooks/engine/inventory/movements");
 const { generateApiKey } = await import("../../../../../lib/api-auth.ts");
 const { v1CreateOrder, v1IssueOrder } = await import("../../../../../lib/api/v1-orders.ts");
 const { GET } = await import("./route.ts");

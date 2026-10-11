@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { getTracer } from "next/dist/server/lib/trace/tracer";
 import { AppRenderSpan } from "next/dist/server/lib/trace/constants";
-import { startTelemetry, stopTelemetry } from "@openbooks/engine/src/platform/telemetry.ts";
+import { startTelemetry, stopTelemetry } from "@openbooks/engine/platform/telemetry";
 import { createRenderProfile } from "./render-profile";
 
 test("native Next render completion reaches the local profile without a collector and excludes request data", async () => {

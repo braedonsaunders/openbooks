@@ -1,12 +1,12 @@
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/db'
 import {
   reconcileLegacyObligationProvenance,
   RevenueRecognitionError,
-} from '@openbooks/engine/src/revenue/recognition.ts'
-import { ScopeNotFoundError } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
+} from '@openbooks/engine/revenue/recognition'
+import { ScopeNotFoundError } from '@openbooks/engine/organization/scope'
 import { defineRoute } from '@/lib/api/route'
 import { parseJsonBody } from '@/lib/api/json'
 import { isUuid } from '@/lib/list-params'

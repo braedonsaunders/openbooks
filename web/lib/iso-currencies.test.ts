@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { SUPPORTED_CURRENCIES } from '@openbooks/engine/src/fx/currencies.ts'
+import { SUPPORTED_CURRENCIES } from '@openbooks/engine/fx/currencies'
 import { currencyDisplayName, currencyOptions, ISO_CURRENCIES } from './iso-currencies.ts'
 
 const LOCALES = ['de', 'en', 'es', 'fr', 'ja', 'pt-BR', 'zh']

@@ -31,10 +31,10 @@ registerHooks({
   },
 })
 
-const { db, withBypassContext, withOrgContext } = await import(root + 'engine/src/platform/db.ts') as typeof import('../../engine/src/platform/db.ts')
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db') as typeof import('@openbooks/engine/platform/db')
 const { sql } = await import(root + 'node_modules/drizzle-orm/index.js') as typeof import('drizzle-orm')
-const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import(root + 'engine/src/testing/fixtures.ts') as typeof import('../../engine/src/testing/fixtures.ts')
-const { startReconciliation, importStatement, createMatch } = await import(root + 'engine/src/banking/banking.ts')
+const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import('@openbooks/engine/testing/fixtures') as typeof import('@openbooks/engine/testing/fixtures')
+const { startReconciliation, importStatement, createMatch } = await import('@openbooks/engine/banking/banking')
 // The page's LOADER, not its rendered tree.
 //
 // This test asserts which book and which currency the page's queries use, and

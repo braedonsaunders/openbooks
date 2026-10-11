@@ -5,15 +5,15 @@ import { sql } from 'drizzle-orm'
 
 const { redeemStoredValueForInvoice } = await import('./stored-value.ts')
 const { ApplicationError } = await import('./errors.ts')
-const { db, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypass, withOrgContext } = await import('@openbooks/engine/platform/db')
 const { createScratchOrg, createScratchUser, dropScratchOrg, seedPostingAccount } = await import(
-  '@openbooks/engine/src/testing/fixtures.ts',
+  '@openbooks/engine/testing/fixtures',
 )
-const { actorAllowedSubsidiaryIds } = await import('@openbooks/engine/src/organization/actor-subsidiaries.ts')
-const { createProgram, issueStoredValue, lookupStoredValueByCode } = await import('@openbooks/engine/src/stored-value/accounts.ts')
-const { postDocument } = await import('@openbooks/engine/src/ledger/posting-document.ts')
-const { toUnits } = await import('@openbooks/engine/src/money/money.ts')
-const { utcDateFromParts } = await import('@openbooks/engine/src/platform/civil-date.ts')
+const { actorAllowedSubsidiaryIds } = await import('@openbooks/engine/organization/actor-subsidiaries')
+const { createProgram, issueStoredValue, lookupStoredValueByCode } = await import('@openbooks/engine/stored-value/accounts')
+const { postDocument } = await import('@openbooks/engine/ledger/posting-document')
+const { toUnits } = await import('@openbooks/engine/money/money')
+const { utcDateFromParts } = await import('@openbooks/engine/platform/civil-date')
 
 const DB = !!process.env.OPENBOOKS_DB_URL
 

@@ -2,7 +2,7 @@ import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 
 import { NextResponse } from "next/server";
-import { getCandidateDetail } from "@openbooks/engine/src/hrm/recruiting/recruiting-read.ts";
+import { getCandidateDetail } from "@openbooks/engine/hrm/recruiting/recruiting-read";
 
 import { isUuid } from "../../../../../../lib/list-params";
 import { recruitingErrorResponse } from "../../_lib";

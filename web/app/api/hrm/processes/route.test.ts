@@ -86,9 +86,9 @@ const mockSources = new Map<string, string>([
 stubModules({
   authz: mockSources.get('mock:authz')!, features: mockSources.get('mock:authz')!,
   extra: {
-    '@openbooks/engine/src/hrm/processes.ts': mockSources.get('mock:processes-service')!,
+    '@openbooks/engine/hrm/processes/operations': mockSources.get('mock:processes-service')!,
     '@openbooks/engine/hrm/processes': mockSources.get('mock:processes-service')!,
-    '@openbooks/engine/src/hrm/processes-read.ts': mockSources.get('mock:processes-read-service')!,
+    '@openbooks/engine/hrm/processes-read': mockSources.get('mock:processes-read-service')!,
     '@/lib/feature-gates': mockSources.get('mock:authz')!,
   },
 });
@@ -268,7 +268,7 @@ test("a missing feature flag 404s before any service runs", async () => {
 
   test("a service refusal reaches the caller with its message intact", async () => {
 
-    const { HrmProcessError } = await import("@openbooks/engine/src/hrm/processes.ts");
+    const { HrmProcessError } = await import("@openbooks/engine/hrm/processes/operations");
     routeState.serviceThrow = new HrmProcessError(
       "DUPLICATE_OPEN",
       "an open onboarding process already exists for this employment — complete or cancel it before opening another",
@@ -297,7 +297,7 @@ test("designer and approval submission honor feature and permission refusals",as
  const submitted=await invokePost(submitRoute, {}, {stepId:STEP_ID});assert.equal(submitted.status,403);assert.deepEqual(routeState.calls,[])
 })
 test("designer publication carries the domain refusal and its actual remedy to the operator",async()=>{
- reset();const {HrmProcessError}=await import('@openbooks/engine/src/hrm/processes.ts');routeState.serviceThrow=new HrmProcessError('REFUSED','Another editor saved this draft — reload the latest revision before applying your changes. Your edits have not been overwritten.')
+ reset();const {HrmProcessError}=await import('@openbooks/engine/hrm/processes/operations');routeState.serviceThrow=new HrmProcessError('REFUSED','Another editor saved this draft — reload the latest revision before applying your changes. Your edits have not been overwritten.')
  const response=await invokePost(designerRoute, {action:'publish',templateId:PROCESS_ID,revision:1,reason:'Reviewed checklist'});assert.equal(response.status,422);assert.deepEqual(await response.json(),{error:(routeState.serviceThrow as Error).message})
 })
 test("approval submission forwards acknowledged form evidence through the self-service boundary",async()=>{

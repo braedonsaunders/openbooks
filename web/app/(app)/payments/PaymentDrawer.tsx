@@ -30,7 +30,7 @@ import { ApprovalHistory } from '../../../components/approval-history'
 import { promptDialog } from '../../../lib/prompt'
 import { StoredValueTendersSection, type CustomerCreditOption, type TenderDraft } from './StoredValueTendersSection'
 import type { FormLayoutConfig, HeaderFieldPlacement } from '@openbooks/customization'
-import { cmp, divRate, formatMoney, mulRate, normalizeMoney, sum } from '@openbooks/engine/src/money/money.ts'
+import { cmp, divRate, formatMoney, mulRate, normalizeMoney, sum } from '@openbooks/engine/money/money'
 
 /**
  * Shared payment/receipt flyout. side='ap' → vendor payment applying open

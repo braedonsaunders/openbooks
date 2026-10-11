@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { PostingError } from '@openbooks/engine/src/journal/posting-contracts.ts'
-import { PeriodClosedError } from '@openbooks/engine/src/periods/period-policy.ts'
+import { PostingError } from '@openbooks/engine/journal/contracts'
+import { PeriodClosedError } from '@openbooks/engine/periods/period-policy'
 import { defineRoute } from './route.ts'
 
 // A domain refusal thrown from a handler must answer 4xx through the route

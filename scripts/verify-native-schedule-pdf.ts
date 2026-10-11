@@ -1,6 +1,6 @@
 import { writeFile } from 'node:fs/promises';
-import { renderSchedulePdf } from '../engine/src/schedule-boards/distribution-report.ts';
-import type { ScheduleDistributionPreview } from '../engine/src/schedule-boards/distribution.ts';
+import { renderSchedulePdf } from '@openbooks/engine/testing/schedule-boards/distribution-report';
+import type { ScheduleDistributionPreview } from '@openbooks/engine/schedule-boards/distribution';
 
 // The deployed worker must render the same unified schedule document as interactive delivery.
 const recipient = {

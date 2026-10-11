@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
-import { db, withBypassContext } from "@openbooks/engine/src/platform/db.ts";
-import { RecruitingError } from "@openbooks/engine/src/hrm/recruiting/errors.ts";
-import { applyViaPosting } from "@openbooks/engine/src/hrm/recruiting/postings.ts";
+import { db, withBypassContext } from "@openbooks/engine/platform/db";
+import { RecruitingError } from "@openbooks/engine/hrm/recruiting/errors";
+import { applyViaPosting } from "@openbooks/engine/hrm/recruiting/postings";
 
 /**
  * Public-apply org resolution. The posting id is public (it rides

@@ -8,11 +8,11 @@ import { stubModules } from '../../testing/stub-modules.ts'
 // refusal path maps no rows, so no catalog copy is needed.
 stubModules({ navigation: {}, intl: 'export async function getTranslations() { const f = (key) => key; f.has = () => false; return f }', authz: false, features: false });
 
-const { env, withBypass } = await import('@openbooks/engine/src/platform/db.ts')
+const { env, withBypass } = await import('@openbooks/engine/platform/db')
 const { sql } = await import('drizzle-orm')
-const { db } = await import('@openbooks/engine/src/platform/db.ts')
+const { db } = await import('@openbooks/engine/platform/db')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
-  '@openbooks/engine/src/testing/fixtures.ts'
+  '@openbooks/engine/testing/fixtures'
 )
 const { loadMeDocumentsHome } = await import('./me-documents.ts')
 

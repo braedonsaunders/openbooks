@@ -16,12 +16,12 @@ export {
   isPublicUnicastAddress,
   resolveVerifiedAddresses,
   type AddressLookup,
-} from "@openbooks/engine/src/connectors/ssrf-guard.ts";
+} from "@openbooks/engine/connectors/ssrf-guard";
 
 import {
   connectorUrlRefusal,
   type AddressLookup,
-} from "@openbooks/engine/src/connectors/ssrf-guard.ts";
+} from "@openbooks/engine/connectors/ssrf-guard";
 
 export const CALLBACK_OWNED_CONFIG_KEYS = [
   "realmId",

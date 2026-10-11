@@ -1,6 +1,6 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { validateProgramCandidate } from '@openbooks/engine/src/stored-value/accounts.ts'
+import { validateProgramCandidate } from '@openbooks/engine/stored-value/accounts'
 import type { SetupEntityValidationHook } from './types'
 
 type CurrentProgram = {

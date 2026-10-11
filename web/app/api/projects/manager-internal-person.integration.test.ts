@@ -51,12 +51,12 @@ const hooks = registerHooks({
 const postRouteUrl = "./route.ts?projects-manager-integration";
 const { POST } = (await import(postRouteUrl)) as typeof import("./route.ts");
 
-const { db } = await import("@openbooks/engine/src/platform/db.ts");
+const { db } = await import("@openbooks/engine/platform/db");
 const { createScratchOrg, dropScratchOrg, seedFlowActors, seedActiveEmployment } = await import(
-  "@openbooks/engine/src/testing/fixtures.ts"
+  "@openbooks/engine/testing/fixtures"
 );
 const { listInternalPersonOptions } = await import(
-  "@openbooks/engine/src/organization/internal-person.ts"
+  "@openbooks/engine/organization/internal-person"
 );
 
 function postRequest(key: string, body: unknown): Request {

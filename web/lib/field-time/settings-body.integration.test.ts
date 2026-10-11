@@ -10,9 +10,9 @@ import { fieldTimeSettingsBody, normalizeFieldTimeSettingsBody } from './setting
 import {
   loadFieldTimeSettings,
   validateFieldTimeSettings,
-} from '@openbooks/engine/src/hrm/field-time/settings.ts'
-import { db, withBypassContext } from '@openbooks/engine/src/platform/db.ts'
-import { createScratchOrg, dropScratchOrg } from '@openbooks/engine/src/testing/fixtures.ts'
+} from '@openbooks/engine/hrm/field-time/settings'
+import { db, withBypassContext } from '@openbooks/engine/platform/db'
+import { createScratchOrg, dropScratchOrg } from '@openbooks/engine/testing/fixtures'
 
 test('a saved full rule set loads back through the clock gate', async () => {
   await withBypassContext(async () => {

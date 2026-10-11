@@ -1,14 +1,14 @@
 import "server-only";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { db } from "@openbooks/engine/platform/db";
 import {
   DocumentVoidError,
   requestDocumentVoid,
 } from "@openbooks/engine/documents";
-import { submitAndReleaseIfUngated } from "@openbooks/engine/src/flows/index.ts";
-import { ControlAccountsIncompleteError } from "@openbooks/engine/src/records/control-accounts.ts";
+import { submitAndReleaseIfUngated } from "@openbooks/engine/flows/module";
+import { ControlAccountsIncompleteError } from "@openbooks/engine/records/control-accounts";
 import { postDocument } from "@openbooks/engine/documents";
-import { PostingError } from "@openbooks/engine/src/journal/posting-contracts.ts";
+import { PostingError } from "@openbooks/engine/journal/contracts";
 import { controlDeps, loadDocument } from "@openbooks/engine/documents";
 import { DocumentEditError } from "@openbooks/engine/documents";
 import type { DocumentEditInput } from "@openbooks/engine/documents";

@@ -63,7 +63,7 @@ const mockUrls = new Map<string, string>([
   ['../../../../../lib/features', 'mock:features'],
   ['@/lib/features', 'mock:features'],
   ['@/lib/authz', 'mock:authz'],
-  ['@openbooks/engine/src/hrm/ai/anomalies.ts', 'mock:anomalies'],
+  ['@openbooks/engine/hrm/ai/anomalies', 'mock:anomalies'],
 ])
 
 // The route imports the body parser through the `@/` alias, which the plain

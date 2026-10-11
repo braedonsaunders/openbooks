@@ -1,6 +1,6 @@
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { listRetentionActions } from "@openbooks/engine/src/hrm/documents/retention.ts";
+import { listRetentionActions } from "@openbooks/engine/hrm/documents/retention";
 import { hrmDocumentsErrorResponse } from "../documents/_lib";
 export const GET = defineRoute({
   permission: "hrm.documents.read",

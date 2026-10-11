@@ -1,5 +1,5 @@
 import "server-only";
-import { businessToday, isIsoCalendarDate } from "@openbooks/engine/src/platform/business-date.ts";
+import { businessToday, isIsoCalendarDate } from "@openbooks/engine/platform/business-date/module";
 import { can } from "../authz";
 import { normalizeMoneyValue } from "../cash/core";
 import { clamp, isUuid } from "../list-params";

@@ -36,7 +36,7 @@ export const ambientBypassWithoutTransaction = () => false;`;
 registerHooks({
   resolve(specifier, context, next) {
     if (
-      specifier === "@openbooks/engine/src/platform/db.ts" ||
+      specifier === "@openbooks/engine/platform/db" ||
       specifier === "../platform/db.ts"
     ) {
       return { shortCircuit: true, format: "module", url: "mock:platform-db" };
@@ -72,7 +72,7 @@ registerHooks({
 });
 
 const { DecisionFailedError, GateError, ReleaseError, causeKindOf } = await import(
-  "@openbooks/engine/src/flows/index.ts"
+  "@openbooks/engine/flows/module"
 );
 const { gateErrorResponse } = await import("./_lib.ts");
 

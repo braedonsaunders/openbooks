@@ -1,4 +1,4 @@
-import { isUuid } from "@openbooks/engine/src/platform/uuid.ts";
+import { isUuid } from "@openbooks/engine/platform/identifiers";
 
 export type ParsedSessionToken = {
   sessionId: string;

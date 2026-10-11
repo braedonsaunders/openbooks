@@ -3,9 +3,9 @@ import { randomUUID } from 'node:crypto'
 import test from 'node:test'
 
 // Exercise the unchanged route with native permissions, feature state and validation.
-const { db } = await import('@openbooks/engine/src/platform/db.ts')
+const { db } = await import('@openbooks/engine/platform/db')
 const { sql } = await import('drizzle-orm')
-const { dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
 const { createFairValueFixture, callFairValueRoute } = await import('../../../../../testing/fair-value-fixture.ts')
 let current: Awaited<ReturnType<typeof createFairValueFixture>>
 

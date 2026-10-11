@@ -2,18 +2,18 @@ import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { z } from 'zod'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/db'
 import {
   applyStandaloneCredits,
   creditSettlementState,
   unapplyCreditSettlement,
-} from '@openbooks/engine/src/payments/credit-settlement.ts'
-import { CreditApplicationConflictError } from '@openbooks/engine/src/payments-core/payment-errors.ts'
+} from '@openbooks/engine/payments/credit-settlement'
+import { CreditApplicationConflictError } from '@openbooks/engine/payments-core/payment-errors'
 import { exactMoney, isoDate, parseJsonBody, uuidId } from '@/lib/api/json'
 import { guardPermission, guardSubsidiaryScope } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
 import { paymentErrorResponse } from '../lib'
-import { ScopeNotFoundError } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
+import { ScopeNotFoundError } from '@openbooks/engine/organization/scope'
 import { notFound } from "@/lib/api/responses";
 import { defineRoute } from '@/lib/api/route'
 

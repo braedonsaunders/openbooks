@@ -5,7 +5,7 @@ import { useMoney } from '@/components/money-provider'
 import { useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useLocale, useTranslations } from "next-intl";
-import { cmp as compareMoney } from '@openbooks/engine/src/money/money.ts'
+import { cmp as compareMoney } from '@openbooks/engine/money/money'
 import { overdueOpenPct } from './overdue-pct'
 import {
   Wallet,

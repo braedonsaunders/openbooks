@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
-import { HrmAuthorizationError } from "@openbooks/engine/src/hrm/authorization.ts";
+import { HrmAuthorizationError } from "@openbooks/engine/hrm/authorization";
 import { hrmAuthorizationResponse } from "../../../../lib/api/record-not-found";
-import { UnrestrictedScopeError } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
-import { HrmConstructionError } from "@openbooks/engine/src/hrm/construction/errors.ts";
+import { UnrestrictedScopeError } from "@openbooks/engine/organization/scope";
+import { HrmConstructionError } from "@openbooks/engine/hrm/construction/errors";
 
 /**
  * Shared error mapping for /api/hrm/compliance-adjacent routes. Engine

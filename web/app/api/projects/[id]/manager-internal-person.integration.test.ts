@@ -12,8 +12,8 @@ registerHooks({
   },
 })
 const { sql } = await import('drizzle-orm')
-const { db, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { db, withOrgContext } = await import('@openbooks/engine/platform/db')
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
 const { randomUUID } = await import('node:crypto')
 const header = await import('./route')
 

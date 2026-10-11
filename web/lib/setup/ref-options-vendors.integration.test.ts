@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import test from 'node:test'
-const { db, env, withBypass } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, env, withBypass } = await import('@openbooks/engine/platform/db')
 const { sql } = await import('drizzle-orm')
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
 const { SETUP_ENTITY_BY_KEY } = await import('./registry.ts')
 const { loadRefOptions } = await import('./ref-options.ts')
 

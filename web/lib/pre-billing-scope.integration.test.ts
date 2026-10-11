@@ -1,10 +1,10 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import test from 'node:test'
-const { db, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypassContext } = await import('@openbooks/engine/platform/db')
 const { sql } = await import('drizzle-orm')
 const { BUILTIN_PROJECT_TYPES } = await import('@openbooks/schema')
-const { createScratchOrg, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { createScratchOrg, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
 const wip = await import('./pre-billing')
 
 /**
@@ -244,10 +244,10 @@ test('a project rehome out of scope hides the worksheet from reads and writes', 
 
 const consolidatedRows = [
   { label: "wip contract capacity kinds", register: async () => {
-        const { db, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
+        const { db, withBypassContext } = await import('@openbooks/engine/platform/db')
         const { sql } = await import('drizzle-orm')
         const { BUILTIN_PROJECT_TYPES } = await import('@openbooks/schema')
-        const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+        const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
         const wip = await import('./pre-billing')
 
         const enabled = { skip: !process.env.OPENBOOKS_DB_URL }
@@ -292,10 +292,10 @@ const consolidatedRows = [
         })
   } },
   { label: "wip prebill line revision", register: async () => {
-        const { db, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
+        const { db, withBypassContext } = await import('@openbooks/engine/platform/db')
         const { sql } = await import('drizzle-orm')
         const { BUILTIN_PROJECT_TYPES } = await import('@openbooks/schema')
-        const { createScratchOrg, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+        const { createScratchOrg, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
         const wip = await import('./pre-billing')
 
         const enabled = { skip: !process.env.OPENBOOKS_DB_URL }
@@ -354,10 +354,10 @@ const consolidatedRows = [
         })
   } },
   { label: "wip billing credits", register: async () => {
-        const { db, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
+        const { db, withBypassContext } = await import('@openbooks/engine/platform/db')
         const { sql } = await import('drizzle-orm')
         const { BUILTIN_PROJECT_TYPES } = await import('@openbooks/schema')
-        const { createScratchOrg, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+        const { createScratchOrg, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
         const wip = await import('./pre-billing')
 
         const enabled = { skip: !process.env.OPENBOOKS_DB_URL }
@@ -402,10 +402,10 @@ const consolidatedRows = [
         })
   } },
   { label: "wip prebill numbering", register: async () => {
-        const { db, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
+        const { db, withBypassContext } = await import('@openbooks/engine/platform/db')
         const { sql } = await import('drizzle-orm')
         const { BUILTIN_PROJECT_TYPES } = await import('@openbooks/schema')
-        const { createScratchOrg, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+        const { createScratchOrg, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
         const wip = await import('./pre-billing')
 
         /**
@@ -467,10 +467,10 @@ const consolidatedRows = [
         })
   } },
   { label: "wip convert rounding", register: async () => {
-        const { db, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
+        const { db, withBypassContext } = await import('@openbooks/engine/platform/db')
         const { sql } = await import('drizzle-orm')
         const { BUILTIN_PROJECT_TYPES } = await import('@openbooks/schema')
-        const { createScratchOrg, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+        const { createScratchOrg, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
         const wip = await import('./pre-billing')
 
         /**
@@ -535,10 +535,10 @@ const consolidatedRows = [
         })
   } },
   { label: "wip account policy", register: async () => {
-        const { db, withBypassContext, withOrg, withOrgTransaction } = await import('@openbooks/engine/src/platform/db.ts')
+        const { db, withBypassContext, withOrg, withOrgTransaction } = await import('@openbooks/engine/platform/db')
         const { sql } = await import('drizzle-orm')
         const { BUILTIN_PROJECT_TYPES } = await import('@openbooks/schema')
-        const { createScratchOrg, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+        const { createScratchOrg, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
         const wip = await import('./pre-billing')
 
         const enabled = { skip: !process.env.OPENBOOKS_DB_URL }
@@ -650,10 +650,10 @@ const consolidatedRows = [
         }))
   } },
   { label: "wip billing feature gate", register: async () => {
-        const { db, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
+        const { db, withBypassContext } = await import('@openbooks/engine/platform/db')
         const { sql } = await import('drizzle-orm')
         const { BUILTIN_PROJECT_TYPES } = await import('@openbooks/schema')
-        const { createScratchOrg, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+        const { createScratchOrg, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
         const { createPrebill, PreBillingError } = await import('./pre-billing')
 
         test('Pre-billing service refuses direct creation when Pre-billing is disabled', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
@@ -721,9 +721,9 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context)
 }})
 const { sql } = await import('drizzle-orm')
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
 const { BUILTIN_PROJECT_TYPES } = await import('@openbooks/schema')
-const { createScratchOrg, createScratchUser, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { createScratchOrg, createScratchUser, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
 const wip = await import('./pre-billing')
 const headerRoute = await import('../app/api/projects/[id]/route')
 const enabled = { skip: !process.env.OPENBOOKS_DB_URL }
@@ -795,10 +795,10 @@ const consolidatedRows = [
         const assert: typeof import("node:assert/strict") = (await import("node:assert/strict")).default;
         const { randomUUID } = await import("node:crypto");
         const test = (await import("node:test")).default;
-        const { db, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
+        const { db, withBypassContext } = await import('@openbooks/engine/platform/db')
         const { sql } = await import('drizzle-orm')
         const { BUILTIN_PROJECT_TYPES } = await import('@openbooks/schema')
-        const { createScratchOrg, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+        const { createScratchOrg, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
         const wip = await import('./pre-billing')
 
         const enabled = { skip: !process.env.OPENBOOKS_DB_URL }

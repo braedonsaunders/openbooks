@@ -5,7 +5,7 @@ import {
   declineOfferSigning,
   readOfferForSigning,
   signOffer,
-} from "@openbooks/engine/src/hrm/recruiting/offers-signing.ts";
+} from "@openbooks/engine/hrm/recruiting/offers-signing";
 import { recruitingErrorResponse } from "../../../hrm/recruiting/_lib";
 import { signOfferBody } from "./bodies";
 

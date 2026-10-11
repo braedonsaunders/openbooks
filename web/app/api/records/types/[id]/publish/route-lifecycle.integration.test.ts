@@ -48,9 +48,9 @@ const publishUrl = './route.ts?record-type-lifecycle-publish'
 const typeUrl = '../route.ts?record-type-lifecycle-type'
 const { POST } = (await import(publishUrl)) as typeof import('./route.ts')
 const { DELETE } = (await import(typeUrl)) as typeof import('../route.ts')
-const { db, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypass, withOrgContext } = await import('@openbooks/engine/platform/db')
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  '@openbooks/engine/src/testing/fixtures.ts'
+  '@openbooks/engine/testing/fixtures'
 )
 
 const publishableFields = [{

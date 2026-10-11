@@ -20,8 +20,8 @@ import {
   widgetCell,
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
-import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
-import { FORM_TYPES } from '@openbooks/engine/src/compliance/information-returns.ts'
+import { businessToday } from '@openbooks/engine/platform/business-date/module'
+import { FORM_TYPES } from '@openbooks/engine/compliance/information-returns'
 import { can, requirePermission } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
 import {

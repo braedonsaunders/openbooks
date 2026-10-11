@@ -4,19 +4,19 @@ import { apiErrorResponse } from '@/lib/api/error-response'
 import { exactMoney, parseJsonBody } from "@/lib/api/json"
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
-import { withScopeSnapshot } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
-import { getDocumentCaptureSettings } from '@openbooks/engine/src/payables/ap-capture-config.ts'
-import type { NormalizedCapture } from '@openbooks/engine/src/payables/ap-capture.ts'
-import { resolveAndValidateCapture } from '@openbooks/engine/src/payables/ap-capture-service.ts'
-import { documentRevisionCounterSql, isDocumentRevisionToken } from '@openbooks/engine/src/records/revision.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
+import { withScopeSnapshot } from '@openbooks/engine/organization/scope'
+import { getDocumentCaptureSettings } from '@openbooks/engine/payables/ap-capture-config'
+import type { NormalizedCapture } from '@openbooks/engine/payables/ap-capture'
+import { resolveAndValidateCapture } from '@openbooks/engine/payables/ap-capture-service'
+import { documentRevisionCounterSql, isDocumentRevisionToken } from '@openbooks/engine/records/revision'
 import { guardSubsidiaryScope } from '../../../../lib/authz';
 import { isDocKindEnabled } from "../../../../lib/documents.ts";
 import { isFeatureEnabled } from '../../../../lib/features'
 import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
 import { notFound } from "@/lib/api/responses";
-import { isUuid } from '@openbooks/engine/src/platform/uuid.ts'
-import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
+import { isUuid } from '@openbooks/engine/platform/identifiers'
+import { isIsoCalendarDate } from '@openbooks/engine/platform/business-date/module'
 
 const normalizedText = (max: number) => z.preprocess(
   (value) => typeof value === 'string' && value.trim() === '' ? null : value,

@@ -3,13 +3,13 @@ import { notFound } from '@/lib/api/responses'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { sql } from 'drizzle-orm'
-import { businessToday, isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { businessToday, isIsoCalendarDate } from '@openbooks/engine/platform/business-date/module'
+import { db } from '@openbooks/engine/platform/db'
 import {
   lockProjectForScope,
   ScopeNotFoundError,
   withScopeSnapshot,
-} from '@openbooks/engine/src/organization/subsidiary-scope.ts'
+} from '@openbooks/engine/organization/scope'
 import { can, guardSubsidiaryScope, type Authz } from '../../../lib/authz'
 import { isUuid } from '../../../lib/list-params'
 import { uuidId } from '@/lib/api/json-schema'

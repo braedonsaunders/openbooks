@@ -21,20 +21,20 @@ const checklistState: {
 
 const checklistHooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === '@openbooks/engine/src/platform/business-date.ts') {
+    if (specifier === '@openbooks/engine/platform/business-date/module') {
       return { shortCircuit: true, url: 'data:text/javascript,export async function businessToday() { return "2026-09-24" }' }
     }
-    if (specifier === '@openbooks/engine/src/platform/db.ts') {
+    if (specifier === '@openbooks/engine/platform/db') {
       return { shortCircuit: true, url: 'data:text/javascript,export const db = { async execute() { return { rows: [] } } }' }
     }
-    if (specifier === '@openbooks/engine/src/payroll/readiness.ts') {
+    if (specifier === '@openbooks/engine/payroll/readiness') {
       return {
         shortCircuit: true,
         url: 'data:text/javascript,export async function installedPayrollCountries() { return ["US"] }'
           + '; export async function payrollPopulationRegions() { return [] }',
       }
     }
-    if (specifier === '@openbooks/engine/src/payroll/packs.ts') {
+    if (specifier === '@openbooks/engine/payroll/packs') {
       return {
         shortCircuit: true,
         url: `data:text/javascript,export { payrollTaxYearForDate } from ${JSON.stringify(new URL("../../engine/src/payroll/pack-tax-years.ts", import.meta.url).href)}; export async function packSlotState(orgId, installed, settings, regions) {
@@ -43,7 +43,7 @@ const checklistHooks = registerHooks({
         }`,
       }
     }
-    if (specifier === '@openbooks/engine/src/payroll/run-setup.ts') {
+    if (specifier === '@openbooks/engine/payroll/run-setup') {
       return {
         shortCircuit: true,
         url: `data:text/javascript,export async function payrollSettings() {
@@ -53,7 +53,7 @@ const checklistHooks = registerHooks({
         }`,
       }
     }
-    if (specifier === '@openbooks/engine/src/payroll/run-calendar.ts') {
+    if (specifier === '@openbooks/engine/payroll/run-calendar') {
       return { shortCircuit: true, url: 'data:text/javascript,export function nextPeriodAfter() { return null }' }
     }
     return nextResolve(specifier, context)

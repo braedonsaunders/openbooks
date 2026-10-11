@@ -77,7 +77,7 @@ const mockSources = new Map<string, string>([
 const SELF_URL = new URL(import.meta.url).href
 const mockUrl = (name: string) => `${SELF_URL}?mock=${name}`
 const mockUrls = new Map<string, string>([
-  ['@openbooks/engine/src/platform/db.ts', mockUrl('db')],
+  ['@openbooks/engine/platform/db', mockUrl('db')],
   ['@/lib/authz', mockUrl('authz')],
   ['../../../lib/authz', mockUrl('authz')],
 ])

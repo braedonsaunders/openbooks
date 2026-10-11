@@ -3,9 +3,9 @@ import { randomUUID } from 'node:crypto'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
 import { sql } from 'drizzle-orm'
-import { confirmFixturePick } from '@openbooks/engine/src/testing/warehouse-execution.ts'
-import { db, withBypassContext } from '@openbooks/engine/src/platform/db.ts'
-import { createScratchOrg, dropScratchOrg, seedFlowActors, type ScratchOrg } from '@openbooks/engine/src/testing/fixtures.ts'
+import { confirmFixturePick } from '@openbooks/engine/testing/warehouse-execution'
+import { db, withBypassContext } from '@openbooks/engine/platform/db'
+import { createScratchOrg, dropScratchOrg, seedFlowActors, type ScratchOrg } from '@openbooks/engine/testing/fixtures'
 
 /**
  * The distribution modules' OFF state, one fence for every surface: with the
@@ -59,17 +59,17 @@ const { resolveNav } = await import('./nav/resolve')
 const { resolvedFeatureState } = await import('./features')
 const { canRunTool } = await import('./assistant/gate')
 const { WAREHOUSE_TOOLS } = await import('./assistant/tools-warehouses')
-const { receiveInventory } = await import('@openbooks/engine/src/inventory/movements.ts')
-const { resolvePutawayLocation } = await import('@openbooks/engine/src/inventory/putaway.ts')
-const warehouses = await import('@openbooks/engine/src/inventory/warehouses.ts')
-const availability = await import('@openbooks/engine/src/inventory/availability.ts')
-const { replenishmentProposals } = await import('@openbooks/engine/src/inventory/replenishment.ts')
+const { receiveInventory } = await import('@openbooks/engine/inventory/movements')
+const { resolvePutawayLocation } = await import('@openbooks/engine/inventory/putaway')
+const warehouses = await import('@openbooks/engine/inventory/warehouses')
+const availability = await import('@openbooks/engine/inventory/availability')
+const { replenishmentProposals } = await import('@openbooks/engine/inventory/replenishment')
 const { loadAvailability } = await import('../app/(app)/reports/availability/view')
 const { loadReplenishment } = await import('../app/(app)/reports/replenishment/view')
 const { loadReportsHub } = await import('../app/(app)/reports/view')
 const statementExport = await import('../app/api/reports/statement/[kind]/export/route')
 const scanResolveRoute = await import('../app/api/scan/resolve/route')
-const itemIdentifiers = await import('@openbooks/engine/src/inventory/item-identifiers.ts')
+const itemIdentifiers = await import('@openbooks/engine/inventory/item-identifiers')
 const { optionalScanResolver } = await import('./scan')
 const returnsRoute = await import('../app/api/returns/route')
 const returnRoute = await import('../app/api/returns/[id]/route')
@@ -79,7 +79,7 @@ const returnRejectRoute = await import('../app/api/returns/[id]/reject/route')
 const returnEmailRoute = await import('../app/api/returns/[id]/email/route')
 const returnSourcesRoute = await import('../app/api/returns/sources/route')
 const { loadReturns } = await import('../app/(app)/returns/view')
-const returnEngine = await import('@openbooks/engine/src/sales/returns.ts')
+const returnEngine = await import('@openbooks/engine/sales/returns')
 const { RETURNS_TOOLS } = await import('./assistant/tools-returns')
 const pickRoutes = await import('../app/api/picks/route')
 const pickRoute = await import('../app/api/picks/[id]/route')
@@ -99,10 +99,10 @@ const { loadPurchaseOrders } = await import('../app/(app)/purchase-orders/view')
 const { enabledListSource } = await import('./list/sources')
 const { guardReportEntity, hiddenReportEntityKeys } = await import('./report-authz')
 const { FULFILLMENT_TOOLS } = await import('./assistant/tools-fulfillment')
-const fulfillment = await import('@openbooks/engine/src/sales/fulfillment.ts')
-const { backorderPosition, cancelOrderLineRemainder } = await import('@openbooks/engine/src/sales/backorders.ts')
-const { salesOrderLineRemainders } = await import('@openbooks/engine/src/records/order-line-remainders.ts')
-const dropShipEngine = await import('@openbooks/engine/src/sales/drop-ship.ts')
+const fulfillment = await import('@openbooks/engine/sales/fulfillment/module')
+const { backorderPosition, cancelOrderLineRemainder } = await import('@openbooks/engine/sales/backorders')
+const { salesOrderLineRemainders } = await import('@openbooks/engine/records/order-line-remainders')
+const dropShipEngine = await import('@openbooks/engine/sales/drop-ship')
 const dropShipServices = await import('./drop-ship.ts')
 const dropShipRoute = await import('../app/api/sales-orders/[id]/drop-ship/route')
 const dropShipPurchaseOrderRoute = await import('../app/api/sales-orders/[id]/drop-ship/purchase-orders/route')

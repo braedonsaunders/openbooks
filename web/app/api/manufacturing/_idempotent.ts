@@ -1,8 +1,8 @@
 import { lockManufacturingManageAuthority } from "@openbooks/engine/manufacturing/authority";
 import { assertManufacturingFeature } from "@openbooks/engine/manufacturing/gate";
 import { sql } from "drizzle-orm";
-import { ManufacturingError, ManufacturingIdempotencyConflictError } from "@openbooks/engine/src/manufacturing/errors.ts";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { ManufacturingError, ManufacturingIdempotencyConflictError } from "@openbooks/engine/manufacturing/errors";
+import { db } from "@openbooks/engine/platform/db";
 import { claimIdempotentCreate, resolveIdempotentReplay } from "@/lib/api/idempotency";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;

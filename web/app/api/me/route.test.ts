@@ -59,7 +59,7 @@ stubModules({
   authz: false,
   features: false,
   extra: {
-    "@openbooks/engine/src/platform/db.ts": `
+    "@openbooks/engine/platform/db": `
       const state = globalThis[Symbol.for('openbooks.me-route-test')]
       const sqlText = globalThis.openbooksSqlTextMe
       const classify = (text) => text.includes('update users') ? 'user' : text.includes('insert into audit_log') ? 'audit' : null

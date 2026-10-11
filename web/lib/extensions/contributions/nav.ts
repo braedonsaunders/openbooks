@@ -1,4 +1,4 @@
-import { navContributionSchema } from '@openbooks/engine/src/extensions/contribution-schemas.ts'
+import { navContributionSchema } from '@openbooks/engine/extensions/contribution-schemas'
 /** The installer and manifest use this same registry-validated schema. */
 export { navContributionSchema }
 

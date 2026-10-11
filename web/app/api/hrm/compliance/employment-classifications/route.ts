@@ -1,7 +1,7 @@
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { db } from "@openbooks/engine/src/platform/db.ts";
-import { assignClassification } from "@openbooks/engine/src/hrm/construction/classifications.ts";
+import { db } from "@openbooks/engine/platform/db";
+import { assignClassification } from "@openbooks/engine/hrm/construction/classifications";
 import { constructionErrorResponse } from "../_lib";
 import { assignClassificationBody } from "../bodies";
 /** Employment classifications: bitemporal assignment with history. */

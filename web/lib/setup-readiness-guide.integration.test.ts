@@ -36,9 +36,9 @@ registerHooks({
 })
 Object.assign(globalThis, { __readinessGuideState: state })
 
-const { db, withBypassContext, withOrgContext } = (await import(root + 'engine/src/platform/db.ts')) as typeof import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypassContext, withOrgContext } = (await import('@openbooks/engine/platform/db')) as typeof import('@openbooks/engine/platform/db')
 const { sql } = await import(root + 'node_modules/drizzle-orm/index.js')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = (await import(root + 'engine/src/testing/fixtures.ts')) as typeof import('@openbooks/engine/src/testing/fixtures.ts')
+const { createScratchOrg, createScratchUser, dropScratchOrg } = (await import('@openbooks/engine/testing/fixtures')) as typeof import('@openbooks/engine/testing/fixtures')
 const { loadSetupReadiness } = (await import(root + 'web/app/(app)/admin/setup/readiness/view.ts')) as typeof import('../app/(app)/admin/setup/readiness/view')
 
 test('readiness guide copy resolves through admin.setup.guide, never hardcoded', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {

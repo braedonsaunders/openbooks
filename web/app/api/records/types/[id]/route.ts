@@ -3,8 +3,8 @@ import { defineRoute } from "@/lib/api/route";
 
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
-import { documentRevisionSql, isDocumentRevisionToken } from '@openbooks/engine/src/records/revision.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
+import { documentRevisionSql, isDocumentRevisionToken } from '@openbooks/engine/records/revision'
 import { guardPermission } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
 import { hasSubsidiaryField, loadRecordTypeById } from '../../../../../lib/records'

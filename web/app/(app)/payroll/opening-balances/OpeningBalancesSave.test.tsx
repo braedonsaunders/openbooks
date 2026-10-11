@@ -46,7 +46,7 @@ const { act } = await import('react')
 const { NextIntlClientProvider } = await import('next-intl')
 const messages = (await import('../../../../messages/en')).default
 const { OpeningBalancesView } = await import('./OpeningBalancesView')
-const { CA_PERIOD_OPENING_TREATMENT } = await import('@openbooks/engine/src/payroll/canada/period-openings.ts')
+const { CA_PERIOD_OPENING_TREATMENT } = await import('@openbooks/engine/testing/payroll/canada/period-openings')
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30))
 

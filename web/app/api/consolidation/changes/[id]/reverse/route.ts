@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { authorizeChange } from "@/app/api/accounting/changes/_authorization";
 import { parseJsonBody } from "@/lib/api/json";
-import { proposeLossOfControlReversal } from "@openbooks/engine/src/consolidation/loss-of-control.ts";
+import { proposeLossOfControlReversal } from "@openbooks/engine/consolidation/loss-of-control";
 export const POST = defineRoute({
   permission: 'close.run',
   feature: 'multiSubsidiary',

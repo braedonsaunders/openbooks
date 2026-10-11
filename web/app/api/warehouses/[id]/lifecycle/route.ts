@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/db'
 import {
   activateWarehouse,
   getWarehouse,
   retireWarehouse,
   suspendWarehouse,
-} from '@openbooks/engine/src/inventory/warehouses.ts'
+} from '@openbooks/engine/inventory/warehouses'
 import { uuidId } from '@/lib/api/json'
 import { notFound } from '@/lib/api/responses'
 import { defineRoute } from '@/lib/api/route'

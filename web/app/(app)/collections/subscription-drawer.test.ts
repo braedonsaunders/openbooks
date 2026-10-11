@@ -91,7 +91,7 @@ const hooks = registerHooks({
     if (mock) return { url: mock, shortCircuit: true }
     // The fence itself is the real shared helper, never a copy.
     if (specifier === '../../../lib/subsidiaries') {
-      return nextResolve('@openbooks/engine/src/organization/subsidiary-scope.ts', context)
+      return nextResolve('@openbooks/engine/organization/scope', context)
     }
     const resolved = nextResolve(specifier, context)
     if (resolved.url.endsWith('/engine/src/platform/db.ts')) return { url: 'mock:db', shortCircuit: true }

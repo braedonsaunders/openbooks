@@ -1,6 +1,6 @@
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { isIsoCalendarDate } from "@openbooks/engine/src/platform/business-date.ts";
+import { isIsoCalendarDate } from "@openbooks/engine/platform/business-date/module";
 import { isUuid } from "../../../../lib/list-params";
 import { can } from "../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../lib/features";

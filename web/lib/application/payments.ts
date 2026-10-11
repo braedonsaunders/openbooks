@@ -1,16 +1,16 @@
 import "server-only";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
-import { lockLedgerSetupFence } from "@openbooks/engine/src/organization/ledger-setup-fence.ts";
-import { submitAndReleaseIfUngated } from "@openbooks/engine/src/flows/index.ts";
-import { createPaymentDocument, updateDraftPayment } from "@openbooks/engine/src/payments/payment-documents.ts";
-import { loadPaymentDocument } from "@openbooks/engine/src/payments/payment-queries.ts";
-import { PaymentError } from "@openbooks/engine/src/payments-core/payment-errors.ts";
-import { postPaymentWithApplications } from "@openbooks/engine/src/payments/payment-posting.ts";
-import { type AllocationInput } from "@openbooks/engine/src/payments/settlement-policy.ts";
-import { type PaymentKind } from "@openbooks/engine/src/payments/payment-contracts.ts";
-import { lockScopeRow, ScopeNotFoundError } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
-import { PostingError } from "@openbooks/engine/src/journal/posting-contracts.ts";
+import { db } from "@openbooks/engine/platform/db";
+import { lockLedgerSetupFence } from "@openbooks/engine/organization/ledger-setup";
+import { submitAndReleaseIfUngated } from "@openbooks/engine/flows/module";
+import { createPaymentDocument, updateDraftPayment } from "@openbooks/engine/payments/payment-documents";
+import { loadPaymentDocument } from "@openbooks/engine/payments/payment-queries";
+import { PaymentError } from "@openbooks/engine/payments-core/payment-errors";
+import { postPaymentWithApplications } from "@openbooks/engine/payments/payment-posting";
+import { type AllocationInput } from "@openbooks/engine/payments/settlement-policy";
+import { type PaymentKind } from "@openbooks/engine/payments/payment-contracts";
+import { lockScopeRow, ScopeNotFoundError } from "@openbooks/engine/organization/scope";
+import { PostingError } from "@openbooks/engine/journal/contracts";
 import { isUuid } from "../list-params";
 import type { ApplicationContext } from "./context";
 import {

@@ -3,8 +3,8 @@ import { registerHooks } from "node:module";
 import test from "node:test";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { PaymentRevisionConflictError } from "@openbooks/engine/src/payments-core/payment-errors.ts";
-import { PayrollError } from "@openbooks/engine/src/payroll/error.ts";
+import { PaymentRevisionConflictError } from "@openbooks/engine/payments-core/payment-errors";
+import { PayrollError } from "@openbooks/engine/payroll/error";
 
 const invalidated: string[] = [];
 Object.assign(globalThis, { __analyticsInvalidations: invalidated });

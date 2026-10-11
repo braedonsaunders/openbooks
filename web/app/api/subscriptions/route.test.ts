@@ -7,12 +7,12 @@ import {
   normalizeSubscriptionCadence,
   normalizeSubscriptionMoney,
   resolveNextBillOnUpdate,
-} from "../../../../engine/src/billing/subscription-billing.ts";
+} from "@openbooks/engine/billing/subscription-billing";
 import {
   assertUnrestrictedScope,
   UNRESTRICTED_SCOPE_REQUIRED,
   UnrestrictedScopeError,
-} from "../../../../engine/src/organization/subsidiary-scope.ts";
+} from "@openbooks/engine/organization/scope";
 
 interface RouteState {
   queries: unknown[];
@@ -126,7 +126,7 @@ stubModules({
     "@/lib/feature-gates": `const state = globalThis[Symbol.for('openbooks.subscription-route-test')]
       export async function guardFeaturePermission() { return state.authz }
     `,
-    "@openbooks/engine/src/platform/db.ts": `
+    "@openbooks/engine/platform/db": `
       const state = globalThis[Symbol.for('openbooks.subscription-route-test')]
       const sqlText = globalThis.openbooksSubscriptionSqlText
       const response = (query) => {
@@ -169,7 +169,7 @@ stubModules({
       }
       export async function withBypassContext(work) { return work() }
     `,
-    "@openbooks/engine/src/billing/subscription-billing.ts": `
+    "@openbooks/engine/billing/subscription-billing": `
       const state = globalThis[Symbol.for('openbooks.subscription-route-test')]
       export const SubscriptionError = state.SubscriptionError
       export const normalizeSubscriptionCadence = (...args) => state.normalizeSubscriptionCadence(...args)
@@ -196,7 +196,7 @@ stubModules({
         return { invoiceId: 'invoice-2', documentNumber: 'INV-0002', posted: false, amount: '42.0000' }
       }
     `,
-    "@openbooks/engine/src/platform/business-date.ts": "export async function businessToday() { return '2026-08-26' }",
+    "@openbooks/engine/platform/business-date/module": "export async function businessToday() { return '2026-08-26' }",
     "../../../lib/features": "export async function isFeatureEnabled() { return true }",
   },
 });

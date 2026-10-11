@@ -20,7 +20,7 @@
 // bare @openbooks/* to the main checkout, so a relative import binds this
 // checkout everywhere (the same reason open-items.ts imports records
 // relatively).
-import { fromUnits, roundDiv } from "../../../engine/src/money/money.ts";
+import { fromUnits, roundDiv } from "@openbooks/engine/money/money";
 
 type Token =
   | { type: 'number'; value: string; pos: number }

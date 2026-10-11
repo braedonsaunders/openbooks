@@ -1,11 +1,11 @@
 import "server-only";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { db } from "@openbooks/engine/platform/db";
 // Relative (not the bare workspace specifier): worktree node_modules resolves
 // bare @openbooks/* to the main checkout, so a relative import binds this
 // checkout everywhere.
-import { ACCOUNT_CLASS_TYPES } from "../../../engine/src/records/account-types.ts";
-import { isUuid } from "@openbooks/engine/src/platform/uuid.ts";
+import { ACCOUNT_CLASS_TYPES } from "@openbooks/engine/records/account-types";
+import { isUuid } from "@openbooks/engine/platform/identifiers";
 
 /** The single asset type that counts as a bank account for the register. */
 export const BANK_ACCOUNT_TYPE = "asset_bank";

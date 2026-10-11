@@ -7,7 +7,7 @@ import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Badge, Button, Input, Label, SearchSelect, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
-import { sum } from '@openbooks/engine/src/money/money.ts'
+import { sum } from '@openbooks/engine/money/money'
 import { SortTh } from '../../../components/sortable-th'
 import { readApiErrorMessage } from '../../../lib/api-error'
 /**

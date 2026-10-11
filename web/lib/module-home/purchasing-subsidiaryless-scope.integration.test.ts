@@ -6,10 +6,10 @@ import test from 'node:test'
 stubModules({ intl: true })
 
 const { sql } = await import('drizzle-orm')
-const { toUnits } = await import('@openbooks/engine/src/money/money.ts')
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
-const { withSimClock: pinClock } = await import('@openbooks/engine/src/platform/clock.ts')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { toUnits } = await import('@openbooks/engine/money/money')
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
+const { withSimClock: pinClock } = await import('@openbooks/engine/testing/platform/clock')
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
 const { purchasingHome } = await import('./purchasing')
 
 /**

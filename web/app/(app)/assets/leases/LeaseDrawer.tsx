@@ -29,7 +29,7 @@ import { useDirtyClose } from "@/lib/use-dirty-close";
 import {
   financialChangeEventLabel,
   financialChangeStatusLabel,
-} from "@openbooks/engine/src/platform/financial-change-labels.ts";
+} from "@openbooks/engine/platform/financial-change-labels";
 import type { LeasePayload, LeaseDisplay } from "./_lib";
 import { enumLabel } from "@/lib/enum-label";
 type Option = { value: string; label: string };

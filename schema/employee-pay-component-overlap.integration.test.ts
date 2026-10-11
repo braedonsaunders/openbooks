@@ -34,8 +34,8 @@ function pgMessage(error: unknown): string {
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
-type EngineDb = typeof import("../engine/src/platform/db.ts");
-type EngineFixtures = typeof import("../engine/src/testing/fixtures.ts");
+type EngineDb = typeof import("@openbooks/engine/platform/db");
+type EngineFixtures = typeof import("@openbooks/engine/testing/fixtures");
 
 type Harness = {
   db: EngineDb["db"];
@@ -47,9 +47,9 @@ type Harness = {
 
 async function setup(): Promise<Harness> {
   const [{ db, withBypassContext }, { createScratchOrg, dropScratchOrg }, { seedPayrollComponents }] = await Promise.all([
-    import("../engine/src/platform/db.ts"),
-    import("../engine/src/testing/fixtures.ts"),
-    import("../engine/src/payroll/run-setup.ts"),
+    import("@openbooks/engine/platform/db"),
+    import("@openbooks/engine/testing/fixtures"),
+    import("@openbooks/engine/payroll/run-setup"),
   ]);
   const org = await createScratchOrg();
   try {

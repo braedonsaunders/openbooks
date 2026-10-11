@@ -19,7 +19,7 @@ import {
 } from '@braedonsaunders/appkit-viewspec'
 import { guardRootSubsidiaryScope, requirePermission } from '../../../../../../lib/authz'
 import { notFound } from 'next/navigation'
-import { isContinuousCloseAgentKey } from '@openbooks/engine/src/continuous-close/continuous-close.ts'
+import { isContinuousCloseAgentKey } from '@openbooks/engine/continuous-close/continuous-close'
 import { dateTime } from '../../../../../../lib/format'
 import {
   AGENT_RUN_STATUSES,

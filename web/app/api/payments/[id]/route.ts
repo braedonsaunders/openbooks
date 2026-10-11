@@ -3,16 +3,16 @@ import { NextResponse } from 'next/server'
 import { defineRoute } from '@/lib/api/route'
 import { sql } from 'drizzle-orm'
 import { z } from 'zod'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { loadPaymentDocument } from "@openbooks/engine/src/payments/payment-queries.ts";
-import { PaymentRevisionConflictError } from "@openbooks/engine/src/payments-core/payment-errors.ts";
-import { updateDraftPayment } from "@openbooks/engine/src/payments/payment-documents.ts";
-import { type PaymentKind } from "@openbooks/engine/src/payments/payment-contracts.ts";
-import { deleteDocument, DeleteError } from '@openbooks/engine/src/ledger/document-delete.ts'
-import { assertAnyPermission, ScopeNotFoundError } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
+import { db } from '@openbooks/engine/platform/db'
+import { loadPaymentDocument } from "@openbooks/engine/payments/payment-queries";
+import { PaymentRevisionConflictError } from "@openbooks/engine/payments-core/payment-errors";
+import { updateDraftPayment } from "@openbooks/engine/payments/payment-documents";
+import { type PaymentKind } from "@openbooks/engine/payments/payment-contracts";
+import { deleteDocument, DeleteError } from '@openbooks/engine/ledger/document-delete'
+import { assertAnyPermission, ScopeNotFoundError } from '@openbooks/engine/organization/scope'
 import { can, getAuthz, guardSubsidiaryScope, type Authz } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
-import { DocumentEditError, requireDocumentEditRevision } from "../../../../../engine/src/records/document-edit-policy.ts";
+import { DocumentEditError, requireDocumentEditRevision } from "@openbooks/engine/records/document-edit-policy";
 import { exactMoney, isoDate, nullableUuidId, parseJsonBody, uuidId } from '../../../../lib/api/json'
 import { paymentErrorResponse, assertAllocationTargetsInScope, paymentPermission } from '../lib'
 import { notFound } from "@/lib/api/responses";

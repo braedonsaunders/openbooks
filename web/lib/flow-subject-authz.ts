@@ -1,12 +1,12 @@
 import 'server-only'
 
 import type { AutomationPlan } from '@openbooks/forms-core'
-import { getFlowAdapter } from '@openbooks/engine/src/flows/registry.ts'
+import { getFlowAdapter } from '@openbooks/engine/flows/registry'
 import {
   documentRouteEditPermission,
   documentRouteReadPermission,
-} from '@openbooks/engine/src/records/document-kind-permissions.ts'
-import type { FlowSubjectPermissions } from '@openbooks/engine/src/flows/types.ts'
+} from '@openbooks/engine/records/document-kind-permissions'
+import type { FlowSubjectPermissions } from '@openbooks/engine/flows/types'
 import { can, type Authz } from './authz'
 import { createPermission } from './document-kinds'
 

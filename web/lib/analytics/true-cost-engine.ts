@@ -10,13 +10,13 @@ import { toChartNumber } from '../chart-number';
  * method. Category types beyond expense (time / manual / derived / formula)
  * use the same calculation pipeline.
  */
-import { add, cmp, div, fromUnits, mulDecimal, mulPercent, roundDiv, roundMoney, toUnits } from "@openbooks/engine/src/money/money.ts";
+import { add, cmp, div, fromUnits, mulDecimal, mulPercent, roundDiv, roundMoney, toUnits } from "@openbooks/engine/money/money";
 import {
   deriveOverheadOverallRate,
   deriveOverheadDeptComposite,
   deriveOverheadDisplayRate,
   OverheadCalculationError,
-  quantizeOverheadMoney } from "@openbooks/engine/src/projects/overhead-rates.ts";
+  quantizeOverheadMoney } from "@openbooks/engine/projects/overhead-rates";
 
 /* ─────────────────────────────────────────────── constants ── */
 

@@ -7,9 +7,9 @@ import { sql } from 'drizzle-orm'
 // aging: a primary $500 invoice plus a secondary-book $500 mirror used to
 // age as $1,000, because the control residual summed journal lines across
 // every book while the document side rebuilt only each posted entry.
-const { db, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypass, withOrgContext } = await import('@openbooks/engine/platform/db')
 const { createScratchOrg, dropScratchOrg } = await import(
-  '@openbooks/engine/src/testing/fixtures.ts'
+  '@openbooks/engine/testing/fixtures'
 )
 const { agingByParty, agingDetail, agingDetailPage } = await import('./aging.ts')
 const { partnerStatement } = await import('./registers.ts')

@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { getExtensionSettings, listActiveExtensionContributions, updateExtensionSetting } from '@openbooks/engine/src/extensions/projections.ts'
+import { getExtensionSettings, listActiveExtensionContributions, updateExtensionSetting } from '@openbooks/engine/extensions/projections'
 import type { SetupEntity } from './types'
 
 /** Installed apps that declare at least one setting: one Setup page each, ordered by name. */

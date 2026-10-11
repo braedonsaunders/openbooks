@@ -30,8 +30,8 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import pg from "pg";
-import { withBypassContext } from "@openbooks/engine/src/platform/db.ts";
-import { createScratchOrg, dropScratchOrg } from "@openbooks/engine/src/testing/fixtures.ts";
+import { withBypassContext } from "@openbooks/engine/platform/db";
+import { createScratchOrg, dropScratchOrg } from "@openbooks/engine/testing/fixtures";
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 const here = dirname(fileURLToPath(import.meta.url));

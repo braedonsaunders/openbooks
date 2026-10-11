@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
-import { authorizeUrl, type DynamicsApp } from '@openbooks/engine/src/connectors/dynamics.ts'
-import { SecretIntegrityError, unsealJson } from '@openbooks/engine/src/platform/secrets.ts'
-import { getConnection } from '@openbooks/engine/src/sync/connection.ts'
+import { authorizeUrl, type DynamicsApp } from '@openbooks/engine/connectors/dynamics'
+import { SecretIntegrityError, unsealJson } from '@openbooks/engine/platform/secrets'
+import { getConnection } from '@openbooks/engine/sync/connection'
 import { defineRoute } from '@/lib/api/route'
 import { storageIdentityError } from '../../../_storage-identity'
 import {

@@ -5,7 +5,7 @@ import { timeStatsSource, fetchHistoryHours, planHistoryWindows } from "./utiliz
 import { isFeatureEnabled } from "../features";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/platform/database";
-import { add, cmp, div, mulDecimal, neg } from "@openbooks/engine/src/money/money.ts";
+import { add, cmp, div, mulDecimal, neg } from "@openbooks/engine/money/money";
 import { loadWorkSchedules, pickWorkSchedule, scheduledHoursBetween } from "@openbooks/engine/payroll/work-schedules";
 import { flowRates } from "../fx-presentation";
 import { analyticsConfig } from "./config";

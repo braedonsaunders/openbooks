@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import nodeTest from "node:test";
 import { NextResponse } from "next/server";
-import { BenefitsError } from "@openbooks/engine/src/hrm/benefits/errors.ts";
+import { BenefitsError } from "@openbooks/engine/hrm/benefits/errors";
 
 /**
  * Election dependent-link boundary: link and unlink ride one POST with a
@@ -72,7 +72,7 @@ const mockSources = new Map<string, string>([
 const mockUrls = new Map<string, string>([
   ["../../../../../../lib/authz", "mock:authz"],
   ["../../../../../../lib/features", "mock:authz"],
-  ["@openbooks/engine/src/hrm/benefits/dependents.ts", "mock:service"],
+  ["@openbooks/engine/hrm/benefits/dependents", "mock:service"],
   ["@/lib/authz", "mock:authz"],
   ["@/lib/feature-gates", "mock:authz"],
 ]);

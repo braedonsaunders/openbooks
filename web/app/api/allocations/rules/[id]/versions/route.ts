@@ -3,7 +3,7 @@ import { defineRoute } from "@/lib/api/route";
 import { z } from "zod";
 import { parseJsonBody } from '@/lib/api/json';
 import { NextResponse } from 'next/server'
-import { createDraftVersion } from '../../../../../../../engine/src/allocations/index.ts'
+import { createDraftVersion } from '@openbooks/engine/allocations/runtime'
 import { guardUnrestrictedScope } from '../../../../../../lib/authz'
 import { allocationWriteErrorResponse, requireRuleId } from '../../../_lib.ts'
 

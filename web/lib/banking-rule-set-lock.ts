@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm'
-import { db, orgContext, type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
+import { db, orgContext, type SqlExecutor } from '@openbooks/engine/platform/db'
 
 /**
  * Serialize rule-set edits with each bulk apply decision for this tenant.

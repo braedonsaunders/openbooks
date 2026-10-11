@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { openItemsForParty } from "@openbooks/engine/src/payments/payment-queries.ts";
+import { db } from '@openbooks/engine/platform/db'
+import { openItemsForParty } from "@openbooks/engine/payments/payment-queries";
 import { guardPermission, guardSubsidiaryScope } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
 import { paymentErrorResponse } from '../lib'

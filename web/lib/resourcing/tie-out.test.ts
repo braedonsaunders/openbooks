@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { registerHooks } from 'node:module'
 import { resAssignments } from '@openbooks/schema'
-import { buildResourcingForecast } from '@openbooks/engine/src/resourcing/forecast.ts'
+import { buildResourcingForecast } from '@openbooks/engine/resourcing/forecast'
 import { stubModules } from '../../testing/stub-modules'
 
 const week = '2026-10-04'
@@ -25,7 +25,7 @@ stubModules({ extra: {
   }`,
 } })
 registerHooks({ resolve(specifier, context, next) {
-  if (specifier === '@openbooks/engine/src/platform/db.ts' && context.parentURL?.endsWith('/tie-out.ts')) {
+  if (specifier === '@openbooks/engine/platform/db' && context.parentURL?.endsWith('/tie-out.ts')) {
     return { shortCircuit: true, url: 'data:text/javascript,' + encodeURIComponent(`export const db = {
       select() { return { from() { return { innerJoin() { return { where: async () => [] } } } } } },
       execute() { throw new Error('Missing availability must not query absence evidence') }

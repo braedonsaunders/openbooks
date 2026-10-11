@@ -20,8 +20,8 @@ registerHooks({
     return next(specifier, context)
   },
 })
-const { withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { withOrgContext } = await import('@openbooks/engine/platform/db')
+const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
 const { GET } = await import('./route.ts')
 
 async function fixture() {

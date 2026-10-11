@@ -1,5 +1,5 @@
 import 'server-only'
-import { registerFlowApprovalReleaseHandler } from '@openbooks/engine/src/flows/index.ts'
+import { registerFlowApprovalReleaseHandler } from '@openbooks/engine/flows/module'
 
 /**
  * Web-owned flow approval releases, registered at boot by

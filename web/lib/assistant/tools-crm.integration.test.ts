@@ -5,8 +5,8 @@ import type { SessionUser } from '../auth';
 import type { ApplicationContext } from '../application/context';
 
 const { sql } = await import('drizzle-orm');
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts');
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts');
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db');
+const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures');
 const { executeAssistantTool } = await import('./registry');
 const applicationCrm = await import('../application/crm-read');
 

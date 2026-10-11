@@ -27,10 +27,10 @@ registerHooks({
   },
 });
 
-const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { sql } = await import("drizzle-orm");
 type SQL = import("drizzle-orm").SQL;
-const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import("@openbooks/engine/src/testing/fixtures.ts");
+const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import("@openbooks/engine/testing/fixtures");
 const { POST } = await import("./demand/route.ts");
 const { PATCH } = await import("./demand/[id]/route.ts");
 const enabled = { skip: !process.env.OPENBOOKS_DB_URL };

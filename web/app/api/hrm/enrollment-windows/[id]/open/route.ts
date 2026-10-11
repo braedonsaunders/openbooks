@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { openEnrollmentWindow } from "@openbooks/engine/src/hrm/benefits/windows.ts";
+import { openEnrollmentWindow } from "@openbooks/engine/hrm/benefits/windows";
 import { isUuid } from "../../../../../../lib/list-params";
 import { benefitsErrorResponse } from "../../../benefits/_lib";
 import { emptyBody } from "../../bodies";

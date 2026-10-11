@@ -27,8 +27,8 @@ registerHooks({
 });
 
 const { sql } = await import('drizzle-orm');
-const { db, withOrgContext, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts');
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts');
+const { db, withOrgContext, withBypassContext } = await import('@openbooks/engine/platform/db');
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures');
 const { loadHrmHome } = await import('../../../lib/hrm/home.ts');
 const { setFeatures } = await import('@openbooks/engine/testing/hrm');
 const { hrmViewTabGroups } = await import('../../../lib/hrm/workspace-tabs.ts');

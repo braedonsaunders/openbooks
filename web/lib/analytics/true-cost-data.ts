@@ -7,8 +7,8 @@ import { statementBookExpr } from "../gl-summary";
 import { isFeatureEnabled } from "../features";
 import { getMoneyFormatter } from '../money-server'
 import { sql } from "drizzle-orm";
-import { utcDateFromParts } from "@openbooks/engine/src/platform/business-date.ts";
-import { add, cmp, div, fromUnits, mulDecimal, mulRatio, neg, normalizeMoney, roundDiv, toUnits } from "@openbooks/engine/src/money/money.ts";
+import { utcDateFromParts } from "@openbooks/engine/platform/business-date/module";
+import { add, cmp, div, fromUnits, mulDecimal, mulRatio, neg, normalizeMoney, roundDiv, toUnits } from "@openbooks/engine/money/money";
 import {
   deriveOverheadCategoryDeptRates,
   deriveOverheadOverallRate,
@@ -20,7 +20,7 @@ import {
   quantizeOverheadMoney,
   type OverheadPublishBlocker,
   type OverheadRefusalCode,
-} from "@openbooks/engine/src/projects/overhead-rates.ts";
+} from "@openbooks/engine/projects/overhead-rates";
 import { flowRates } from "../fx-presentation";
 import { analyticsConfig } from "./config";
 import { resolveAccountGroupDimensions } from "../account-groups";

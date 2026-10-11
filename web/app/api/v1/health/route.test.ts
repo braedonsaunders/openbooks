@@ -32,7 +32,7 @@ const SELF_URL = new URL(import.meta.url).href
 const mockUrl = (name: string) => `${SELF_URL}?mock=${name}`
 
 const mockUrls = new Map<string, string>([
-  ['@openbooks/engine/src/platform/db.ts', mockUrl('db')],
+  ['@openbooks/engine/platform/db', mockUrl('db')],
   ['@openbooks/jobs', mockUrl('jobs')],
 ])
 

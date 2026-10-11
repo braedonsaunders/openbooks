@@ -27,9 +27,9 @@ const _hooks = registerHooks({
       return { shortCircuit: true, url: "mock:asset-scope-db-dependency" };
     if (specifier === "@/lib/feature-gates")
       return { shortCircuit: true, url: "mock:asset-change-route-auth" };
-    if (specifier === "@openbooks/engine/src/assets/asset-changes.ts")
+    if (specifier === "@openbooks/engine/assets/asset-changes")
       return { shortCircuit: true, url: "mock:asset-change-route-domain" };
-    if (specifier === "@openbooks/engine/src/platform/db.ts")
+    if (specifier === "@openbooks/engine/platform/db")
       return {
         shortCircuit: true,
         url: "mock:asset-change-route-db",

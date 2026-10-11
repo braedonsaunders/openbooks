@@ -22,11 +22,11 @@ registerHooks({
     return next(specifier, context)
   },
 })
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
 const { sql } = await import('drizzle-orm')
 const { createScratchOrg, createScratchUser, dropScratchOrg, seedDraftDocument, seedFlowActors } =
-  await import('@openbooks/engine/src/testing/fixtures.ts')
-const { submitForApproval } = await import('@openbooks/engine/src/flows/submit.ts')
+  await import('@openbooks/engine/testing/fixtures')
+const { submitForApproval } = await import('@openbooks/engine/flows/submit')
 const { GET: stateOf, POST: setup } = await import('./route.ts')
 const { PATCH: patch } = await import('../[id]/route.ts')
 

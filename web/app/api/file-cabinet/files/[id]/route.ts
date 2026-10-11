@@ -2,7 +2,7 @@ import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from "@/lib/api/error-response";
 import { NextResponse } from "next/server";
-import { inDbTransaction } from "@openbooks/engine/src/platform/db.ts";
+import { inDbTransaction } from "@openbooks/engine/platform/db";
 import {
   deleteFile,
   getFile,

@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, withOrgContext } from "@openbooks/engine/src/platform/db.ts";
-import { createScratchOrg, createScratchUser, dropScratchOrg } from "@openbooks/engine/src/testing/fixtures.ts";
+import { db, withOrgContext } from "@openbooks/engine/platform/db";
+import { createScratchOrg, createScratchUser, dropScratchOrg } from "@openbooks/engine/testing/fixtures";
 
 interface StorageState {
   actor: { id: string; orgId: string } | null;
@@ -65,7 +65,7 @@ registerHooks({
 
 const routeUrl = "./route.ts?backup-delete-integration";
 const { DELETE } = await import(routeUrl) as typeof import("./route.ts");
-const { backupObjectKey } = await import("@openbooks/engine/src/backup/backup.ts");
+const { backupObjectKey } = await import("@openbooks/engine/backup/backup");
 test("manual deletion purges the stored object and retains actor-attributed ledger evidence", async () => {
   const org = await createScratchOrg();
   const actorId = await createScratchUser(org.orgId, "Backup Administrator", "admin");

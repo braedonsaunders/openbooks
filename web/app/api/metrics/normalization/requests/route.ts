@@ -1,4 +1,4 @@
-import { createNormalizationRequest } from "@openbooks/engine/src/billing/metrics/metrics-normalization-service.ts";
+import { createNormalizationRequest } from "@openbooks/engine/billing/metrics/metrics-normalization-service";
 import { defineRoute } from "@/lib/api/route";
 import { z } from "zod";
 

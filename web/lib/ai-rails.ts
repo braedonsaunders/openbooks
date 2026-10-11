@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { AiRailsError } from "@openbooks/engine/src/hrm/ai/errors.ts";
+import { AiRailsError } from "@openbooks/engine/hrm/ai/errors";
 import { can, getAuthz, type Authz } from "./authz";
-import { isUuid } from "@openbooks/engine/src/platform/uuid.ts";
+import { isUuid } from "@openbooks/engine/platform/identifiers";
 
 /**
  * Shared HTTP plumbing for the HR-21 AI rails routes. Engine refusals

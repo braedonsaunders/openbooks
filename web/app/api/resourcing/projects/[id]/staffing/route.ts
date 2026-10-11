@@ -1,9 +1,9 @@
 import { z } from "zod";
 import { and, eq, sql } from "drizzle-orm";
 import { projects } from "@openbooks/schema";
-import { db } from "@openbooks/engine/src/platform/db.ts";
-import { addCalendarDays, businessToday } from "@openbooks/engine/src/platform/business-date.ts";
-import { weekStartOf } from "@openbooks/engine/src/resourcing/weeks.ts";
+import { db } from "@openbooks/engine/platform/db";
+import { addCalendarDays, businessToday } from "@openbooks/engine/platform/business-date/module";
+import { weekStartOf } from "@openbooks/engine/resourcing/weeks";
 import { defineRoute } from "@/lib/api/route";
 import { notFound } from "@/lib/api/responses";
 import { loadPlanVsActual } from "@/lib/resourcing/tie-out";

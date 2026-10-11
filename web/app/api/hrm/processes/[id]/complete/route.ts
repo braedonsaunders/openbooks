@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { completeProcess } from "@openbooks/engine/src/hrm/processes.ts";
+import { completeProcess } from "@openbooks/engine/hrm/processes/operations";
 
 import { isUuid } from "../../../../../../lib/list-params";
 import { processErrorResponse } from "../../_lib";

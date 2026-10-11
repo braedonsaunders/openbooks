@@ -4,7 +4,7 @@ import { uploadCabinetAttachment } from '@openbooks/engine/platform/record-attac
 import { RETAINED_ATTACHMENT, lockRetainedAttachmentTarget } from './files'
 import { type FileMutationAudit, runMutation } from './mutation'
 import { sql } from 'drizzle-orm'
-import { db, type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
+import { db, type SqlExecutor } from '@openbooks/engine/platform/db'
 import { recordFileEvent } from '../file-audit'
 
 // --- file attachments (links to records) ------------------------------------

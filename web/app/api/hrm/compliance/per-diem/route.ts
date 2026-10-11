@@ -1,7 +1,7 @@
 import { defineRoute } from "@/lib/api/route";
 import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { db } from "@openbooks/engine/platform/db";
 import {
   approveEntry,
   computeForWeek,
@@ -10,7 +10,7 @@ import {
   listEntries,
   listPolicies,
   voidEntry,
-} from "@openbooks/engine/src/hrm/construction/per-diem.ts";
+} from "@openbooks/engine/hrm/construction/per-diem";
 import { constructionErrorResponse } from "../_lib";
 import {
   computeWeekBody,

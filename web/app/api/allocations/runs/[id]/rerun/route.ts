@@ -6,7 +6,7 @@ import { parseJsonBody } from "../../../../../../lib/api/json";
 import { gateCan, missingPermission } from "../../../../../../lib/allocations-gate";
 import { requireVisibleAllocationRun } from "../../../../../../lib/allocations-scope";
 import { isUuid } from "../../../../../../lib/list-params";
-import { rerunAllocationRun } from "../../../../../../../engine/src/allocations/period-run.ts";
+import { rerunAllocationRun } from "@openbooks/engine/allocations/period-run";
 import { allocationRunErrorResponse } from "../../../_lib.ts";
 import { notFound } from "@/lib/api/responses";
 

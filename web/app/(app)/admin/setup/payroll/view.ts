@@ -17,7 +17,7 @@ import { pickString } from '../../../../../lib/list-params'
 import { SETUP_ENTITY_BY_KEY } from '../../../../../lib/setup/registry'
 import { PAY_DERIVED_RULES_ENTITY } from '../../../../../lib/setup/payroll-derived-rules'
 import { PAYROLL_HOLIDAYS_ENTITY } from '../../../../../lib/setup/payroll-holidays'
-import { PAYROLL_COUNTRY_PACKS } from '@openbooks/engine/src/payroll/packs.ts'
+import { PAYROLL_COUNTRY_PACKS } from '@openbooks/engine/payroll/packs'
 import { launcherDataFor, type PayrollLauncherData } from './sections'
 
 /**

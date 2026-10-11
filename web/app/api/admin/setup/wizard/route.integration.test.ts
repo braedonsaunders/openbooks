@@ -54,10 +54,10 @@ registerHooks({
 const routeUrl = "./route.ts?period-staging-regression-test";
 const { PUT } = (await import(routeUrl)) as typeof import("./route.ts");
 const { db, withBypassContext, withOrgContext } = await import(
-  "@openbooks/engine/src/platform/db.ts"
+  "@openbooks/engine/platform/db"
 );
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
-  "@openbooks/engine/src/testing/fixtures.ts"
+  "@openbooks/engine/testing/fixtures"
 );
 
 const ADVISORY_CLASS = 21470;

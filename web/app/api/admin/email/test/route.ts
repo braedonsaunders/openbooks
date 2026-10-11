@@ -4,7 +4,7 @@ import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from 'next/server'
 
 import { deriveEmailDeliveryKey, sendVia, isValidEmailAddress } from '@openbooks/emails'
-import { insertEmailLog, markEmailFailed, markEmailSent, markEmailUncertain, resolveOrgEmailTransportDetailed } from '@openbooks/engine/src/delivery/email-config.ts'
+import { insertEmailLog, markEmailFailed, markEmailSent, markEmailUncertain, resolveOrgEmailTransportDetailed } from '@openbooks/engine/delivery/email-config/module'
 
 const requestBodySchema = z.object({ to: z.string().trim().min(1).max(320) });
 

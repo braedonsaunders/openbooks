@@ -9,13 +9,13 @@ import {
   type WorklistBudget,
   type WorklistDocument,
   type WorklistTimesheet,
-} from "@openbooks/engine/src/flows/approval-worklist.ts";
+} from "@openbooks/engine/flows/approval-worklist";
 import {
   decideGate,
   gateDecisionCapability,
   GateError,
   type WorklistGate,
-} from "@openbooks/engine/src/flows/index.ts";
+} from "@openbooks/engine/flows/module";
 import { can, type Authz } from "../authz";
 import { isFeatureEnabled } from "../features";
 import { isUuid } from "../list-params";

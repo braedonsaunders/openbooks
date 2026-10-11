@@ -1,8 +1,8 @@
 import "server-only";
 import { createHash } from "node:crypto";
 import { sql, type SQL } from "drizzle-orm";
-import { db, withBypassContext } from "@openbooks/engine/src/platform/db.ts";
-import { permissionSetCovers, resolveEffectivePermissions } from "@openbooks/engine/src/organization/permissions.ts";
+import { db, withBypassContext } from "@openbooks/engine/platform/db";
+import { permissionSetCovers, resolveEffectivePermissions } from "@openbooks/engine/organization/permissions";
 import { pgTextArrayLiteral } from "./pg-array";
 
 /**

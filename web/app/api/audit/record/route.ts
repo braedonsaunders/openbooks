@@ -1,8 +1,8 @@
 import { defineRoute } from '@/lib/api/route'
 import { NextResponse } from 'next/server';
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { assertAnyPermission, ScopeNotFoundError } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
+import { db } from '@openbooks/engine/platform/db'
+import { assertAnyPermission, ScopeNotFoundError } from '@openbooks/engine/organization/scope'
 import { can, guardSubsidiaryScope } from '../../../../lib/authz';
 import { isFeatureEnabled } from '../../../../lib/features'
 import { isUuid } from '../../../../lib/list-params'

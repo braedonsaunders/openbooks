@@ -57,9 +57,9 @@ const routeUrl = "./route.ts?alloc-options";
 const optionsRoute = (await import(routeUrl)) as typeof import("./route.ts");
 after(() => hooks.deregister());
 
-const { db } = await import("../../../../../engine/src/platform/db.ts");
+const { db } = await import("@openbooks/engine/platform/db");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  "../../../../../engine/src/testing/fixtures.ts"
+  "@openbooks/engine/testing/fixtures"
 );
 import { sql } from "drizzle-orm";
 

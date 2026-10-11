@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
-import { readOfferForSigning } from '@openbooks/engine/src/hrm/recruiting/offers-signing.ts'
+import { readOfferForSigning } from '@openbooks/engine/hrm/recruiting/offers-signing'
 import { isFeatureEnabled } from '../../../lib/features'
 import { resolvePublicOrgFeatures } from '../../../lib/recruiting-public'
 import { OfferSignForm } from './OfferSignForm'

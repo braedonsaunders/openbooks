@@ -52,9 +52,9 @@ const setGateOrg = (orgId: string) => {
   }
 }
 
-const { db, withBypass } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypass } = await import('@openbooks/engine/platform/db')
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  '@openbooks/engine/src/testing/fixtures.ts'
+  '@openbooks/engine/testing/fixtures'
 )
 const { GET } = await import('../app/api/analytics/drill/route.ts')
 

@@ -2,8 +2,8 @@ import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import test from 'node:test'
 const { sql } = await import('drizzle-orm')
-const { db, env, withBypass, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { db, env, withBypass, withBypassContext } = await import('@openbooks/engine/platform/db')
+const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
 const { balanceSheetView } = await import('./statement-matrix.ts')
 const { balanceSheet, trialBalance } = await import('./reports/statements.ts')
 const { decimalAdd } = await import('./statement-format.ts')
@@ -360,9 +360,9 @@ const consolidatedRows = [
          * calendar quarters ("Q1 2026") and groups fiscal straddlers wrongly.
          */
         const root = pathToFileURL(process.cwd() + '/').href
-        const { db, withBypassContext, withOrgContext } = (await import(root + 'engine/src/platform/db.ts')) as typeof import('@openbooks/engine/src/platform/db.ts')
+        const { db, withBypassContext, withOrgContext } = (await import('@openbooks/engine/platform/db')) as typeof import('@openbooks/engine/platform/db')
         const { sql } = await import(root + 'node_modules/drizzle-orm/index.js')
-        const { createScratchOrg, dropScratchOrg } = (await import(root + 'engine/src/testing/fixtures.ts')) as typeof import('@openbooks/engine/src/testing/fixtures.ts')
+        const { createScratchOrg, dropScratchOrg } = (await import('@openbooks/engine/testing/fixtures')) as typeof import('@openbooks/engine/testing/fixtures')
         const { statementMatrix, PNL_TYPES } = (await import(root + 'web/lib/statement-matrix.ts')) as typeof import('./statement-matrix')
 
         test('quarter breakout follows the org fiscal start month, not January', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
@@ -429,10 +429,10 @@ const consolidatedRows = [
          * byte-identical to calendar math.
          */
         const root = pathToFileURL(process.cwd() + '/').href
-        const { db, withBypassContext, withOrgContext } = (await import(root + 'engine/src/platform/db.ts')) as typeof import('@openbooks/engine/src/platform/db.ts')
+        const { db, withBypassContext, withOrgContext } = (await import('@openbooks/engine/platform/db')) as typeof import('@openbooks/engine/platform/db')
         const { sql } = await import(root + 'node_modules/drizzle-orm/index.js')
-        const { createScratchOrg, createScratchUser, dropScratchOrg } = (await import(root + 'engine/src/testing/fixtures.ts')) as typeof import('@openbooks/engine/src/testing/fixtures.ts')
-        const { generateAccountingPeriods } = (await import(root + "engine/src/close/calendar.ts")) as typeof import("@openbooks/engine/src/close/calendar.ts");
+        const { createScratchOrg, createScratchUser, dropScratchOrg } = (await import('@openbooks/engine/testing/fixtures')) as typeof import('@openbooks/engine/testing/fixtures')
+        const { generateAccountingPeriods } = (await import("@openbooks/engine/close/calendar")) as typeof import("@openbooks/engine/close/calendar");
         const { statementMatrix, PNL_TYPES } = (await import(root + 'web/lib/statement-matrix.ts')) as typeof import('./statement-matrix')
         const { resolvePeriod } = (await import(root + 'web/lib/periods.ts')) as typeof import('./periods')
 
@@ -736,10 +736,10 @@ const consolidatedRows = [
          * comparative and says so in the column label.
          */
         const root = pathToFileURL(process.cwd() + '/').href
-        const { db, withBypassContext, withOrgContext } = (await import(root + 'engine/src/platform/db.ts')) as typeof import('@openbooks/engine/src/platform/db.ts')
-        const { toUnits } = (await import(root + 'engine/src/money/money.ts')) as typeof import('@openbooks/engine/src/money/money.ts')
+        const { db, withBypassContext, withOrgContext } = (await import('@openbooks/engine/platform/db')) as typeof import('@openbooks/engine/platform/db')
+        const { toUnits } = (await import('@openbooks/engine/money/money')) as typeof import('@openbooks/engine/money/money')
         const { sql } = await import(root + 'node_modules/drizzle-orm/index.js')
-        const { createScratchOrg, dropScratchOrg } = (await import(root + 'engine/src/testing/fixtures.ts')) as typeof import('@openbooks/engine/src/testing/fixtures.ts')
+        const { createScratchOrg, dropScratchOrg } = (await import('@openbooks/engine/testing/fixtures')) as typeof import('@openbooks/engine/testing/fixtures')
         const { profitAndLoss } = (await import(root + 'web/lib/reports.ts')) as typeof import('./reports')
         const { priorAccountingWindow, profitAndLossView } = (await import(root + 'web/lib/statement-matrix.ts')) as typeof import('./statement-matrix')
 
@@ -976,10 +976,10 @@ const consolidatedRows = [
         );
   } },
   { label: "statement matrix precision", register: async () => {
-        type ScratchOrg = import("@openbooks/engine/src/testing/fixtures.ts").ScratchOrg;
+        type ScratchOrg = import("@openbooks/engine/testing/fixtures").ScratchOrg;
         const { sql } = await import('drizzle-orm')
-        const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
-        const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+        const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/platform/db')
+        const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
 
         const { resolveSubsidiaryView } = await import('./consolidation')
         const { statementMatrix } = await import('./statement-matrix')
@@ -1097,9 +1097,9 @@ const consolidatedRows = [
                 type StatementSubsidiaryContext = import("./statement-matrix").StatementSubsidiaryContext;
                 const { sql } = await import("drizzle-orm");
                 const { db, env, withBypass, withOrgContext } =
-                  await import("@openbooks/engine/src/platform/db.ts");
+                  await import("@openbooks/engine/platform/db");
                 const { createScratchOrg, dropScratchOrg } =
-                  await import("@openbooks/engine/src/testing/fixtures.ts");
+                  await import("@openbooks/engine/testing/fixtures");
                 const { statementMatrix } = await import("./statement-matrix");
 
 
@@ -1239,8 +1239,8 @@ const consolidatedRows = [
                 const { randomUUID } = await import("node:crypto");
                 const test = (await import("node:test")).default;
                 const { sql } = await import('drizzle-orm')
-                const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
-                const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+                const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/platform/db')
+                const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
                 const { statementMatrix } = await import('./statement-matrix')
 
                 /**
@@ -1343,10 +1343,10 @@ const statementActivityCases = [
          * not tie to the clicked cell. The drill must mirror the matrix engine.
          */
         const root = pathToFileURL(process.cwd() + '/').href
-        const { db, withBypassContext, withOrgContext } = (await import(root + 'engine/src/platform/db.ts')) as typeof import('@openbooks/engine/src/platform/db.ts')
-        const { toUnits } = (await import(root + 'engine/src/money/money.ts')) as typeof import('@openbooks/engine/src/money/money.ts')
+        const { db, withBypassContext, withOrgContext } = (await import('@openbooks/engine/platform/db')) as typeof import('@openbooks/engine/platform/db')
+        const { toUnits } = (await import('@openbooks/engine/money/money')) as typeof import('@openbooks/engine/money/money')
         const { sql } = await import(root + 'node_modules/drizzle-orm/index.js')
-        const { createScratchOrg, createScratchUser, dropScratchOrg } = (await import(root + 'engine/src/testing/fixtures.ts')) as typeof import('@openbooks/engine/src/testing/fixtures.ts')
+        const { createScratchOrg, createScratchUser, dropScratchOrg } = (await import('@openbooks/engine/testing/fixtures')) as typeof import('@openbooks/engine/testing/fixtures')
         const { statementMatrix, PNL_TYPES } = (await import(root + 'web/lib/statement-matrix.ts')) as typeof import('./statement-matrix')
         const { transactionDetail } = (await import(root + 'web/lib/reports/transaction-detail.ts')) as typeof import('./reports/transaction-detail')
 
@@ -1420,8 +1420,8 @@ const statementActivityCases = [
         const { randomUUID } = await import('node:crypto');
         const test = (await import('node:test')).default;
         const { sql } = await import('drizzle-orm')
-        const { db, env, withBypass, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
-        const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+        const { db, env, withBypass, withBypassContext } = await import('@openbooks/engine/platform/db')
+        const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
         const { trialBalance } = await import('./reports/statements.ts')
 
         /**
@@ -1482,9 +1482,9 @@ const partnerStatementCases = [
         const { randomUUID } = await import('node:crypto');
         const test = (await import('node:test')).default;
         const { sql } = await import('drizzle-orm')
-        const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
-        const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
-        const { postDocument } = await import("@openbooks/engine/src/ledger/posting-document.ts");
+        const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/platform/db')
+        const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
+        const { postDocument } = await import("@openbooks/engine/ledger/posting-document");
         const { partnerStatement } = await import('./reports/registers')
 
         /**
@@ -1534,7 +1534,7 @@ const multiBookStatementsCases = [{ label: "multi-book-statements", register: as
 const assert: typeof import("node:assert/strict") = (await import("node:assert/strict")).default;
 const { spawnSync } = await import("node:child_process");
 const test = (await import("node:test")).default;
-const { env } = await import("@openbooks/engine/src/platform/db.ts");
+const { env } = await import("@openbooks/engine/platform/db");
 test(
   "statements answer per accounting book across summary, raw, and trial-balance paths",
   { skip: !env.OPENBOOKS_DB_URL },

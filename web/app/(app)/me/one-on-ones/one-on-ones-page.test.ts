@@ -11,7 +11,7 @@ import test from 'node:test'
 // Load the REAL zone formatters before the hooks below replace the module:
 // the mock isolates only businessTimeZone (the database read); the pure
 // formatters stay real so the copy cannot drift from the original.
-const realZone = await import('../../../../../engine/src/platform/business-date.ts')
+const realZone = await import('@openbooks/engine/platform/business-date/module')
 
 const stateKey = Symbol.for('openbooks.me-one-on-ones-page-test')
 const routeState = {
@@ -117,10 +117,10 @@ const mockUrls = new Map<string, string>([
   ['../../../../lib/feature-gates', 'mock:features'],
   ['../../../../lib/hrm/self-service', 'mock:self-service'],
   ['next-intl/server', 'mock:intl'],
-  ['@openbooks/engine/src/hrm/performance/one-on-ones.ts', 'mock:one-on-ones'],
-  ['@openbooks/engine/src/hrm/performance/feedback.ts', 'mock:feedback'],
-  ['@openbooks/engine/src/platform/business-date.ts', 'mock:business-date'],
-  ['@openbooks/engine/src/hrm/authorization.ts', 'mock:approval-person'],
+  ['@openbooks/engine/hrm/performance/one-on-ones', 'mock:one-on-ones'],
+  ['@openbooks/engine/hrm/performance/feedback', 'mock:feedback'],
+  ['@openbooks/engine/platform/business-date/module', 'mock:business-date'],
+  ['@openbooks/engine/hrm/authorization', 'mock:approval-person'],
 ])
 
 registerHooks({

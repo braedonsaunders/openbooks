@@ -2,7 +2,7 @@ import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { db } from "@openbooks/engine/platform/db";
 import { cmp, normalizeDecimal, normalizeMoney, wholeDigits } from "@openbooks/engine/money";
 import { isUuid } from "../../../../lib/list-params";
 import {
@@ -11,7 +11,7 @@ import {
   validateCustomValues,
 } from "../../../../lib/custom-fields";
 import { canonicalDecimal, compareDecimal } from "../../../../lib/exact-decimal";
-import { isIsoCalendarDate } from "@openbooks/engine/src/platform/business-date.ts";
+import { isIsoCalendarDate } from "@openbooks/engine/platform/business-date/module";
 import { isFeatureEnabled } from "../../../../lib/features";
 import {
   ADJUSTMENT_CALCULATIONS,

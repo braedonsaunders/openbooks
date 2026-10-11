@@ -9,7 +9,7 @@ stubModules({ authz: { source: `
   export async function guardPermission(permission) { state.permission = permission; return state.denial ?? { user: { orgId: 'org-1', id: 'user-1' } }; }
   export function guardUnrestrictedScope() { return state.restricted ? new Response('restricted', { status: 403 }) : null; }
 ` }, extra: {
-  '@openbooks/engine/src/sync/connection.ts': `
+  '@openbooks/engine/sync/connection': `
     const state = globalThis.__mappingOptionsRoute;
     export async function getConnection(org, id) { state.reads.push(org + ':' + id); return state.exists ? { source: 'netsuite', config: {} } : null; }
     export function buildSource() { return { mappingOptions: async (field, parent) => {

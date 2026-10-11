@@ -1,6 +1,6 @@
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { requestPayInformation } from "@openbooks/engine/src/hrm/compensation/pay-transparency.ts";
+import { requestPayInformation } from "@openbooks/engine/hrm/compensation/pay-transparency";
 
 import { compensationErrorResponse } from "../compensation/_lib";
 import { requestPayInfoBody } from "../compensation/bodies";

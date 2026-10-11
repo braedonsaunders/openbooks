@@ -11,15 +11,15 @@ import { randomUUID } from 'node:crypto'
  * before fund accounting (no fund) reads as the default fund's appropriation.
  */
 const root = pathToFileURL(process.cwd() + '/').href
-const { db, withBypass, withBypassContext, withOrgContext } = (await import(root + 'engine/src/platform/db.ts')) as typeof import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypass, withBypassContext, withOrgContext } = (await import('@openbooks/engine/platform/db')) as typeof import('@openbooks/engine/platform/db')
 const { sql } = await import(root + 'node_modules/drizzle-orm/index.js')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = (await import(root + 'engine/src/testing/fixtures.ts')) as typeof import('@openbooks/engine/src/testing/fixtures.ts')
-const { provisionFundAccounting } = (await import(root + 'engine/src/nonprofit/provision.ts')) as typeof import('@openbooks/engine/src/nonprofit/provision.ts')
-const { budgetaryControlProvider } = (await import(root + 'engine/src/nonprofit/encumbrances.ts')) as typeof import('@openbooks/engine/src/nonprofit/encumbrances.ts')
-const { NonprofitPostingError } = (await import(root + 'engine/src/nonprofit/errors.ts')) as typeof import('@openbooks/engine/src/nonprofit/errors.ts')
-const { installEngineSeams } = (await import(root + 'engine/src/composition/install.ts')) as typeof import('@openbooks/engine/src/composition/install.ts')
-const { clearBalancingLegProviders, registerBalancingLegProvider } = (await import(root + 'engine/src/journal/balancing-hooks.ts')) as typeof import('@openbooks/engine/src/journal/balancing-hooks.ts')
-const { postEntry } = (await import(root + 'engine/src/journal/post-entry.ts')) as typeof import('@openbooks/engine/src/journal/post-entry.ts')
+const { createScratchOrg, createScratchUser, dropScratchOrg } = (await import('@openbooks/engine/testing/fixtures')) as typeof import('@openbooks/engine/testing/fixtures')
+const { provisionFundAccounting } = (await import('@openbooks/engine/testing/nonprofit/provision')) as typeof import('@openbooks/engine/testing/nonprofit/provision')
+const { budgetaryControlProvider } = (await import('@openbooks/engine/nonprofit/encumbrances')) as typeof import('@openbooks/engine/nonprofit/encumbrances')
+const { NonprofitPostingError } = (await import('@openbooks/engine/nonprofit/errors')) as typeof import('@openbooks/engine/nonprofit/errors')
+const { installEngineSeams } = (await import('@openbooks/engine/composition/install')) as typeof import('@openbooks/engine/composition/install')
+const { clearBalancingLegProviders, registerBalancingLegProvider } = (await import('@openbooks/engine/testing/journal/balancing-hooks')) as typeof import('@openbooks/engine/testing/journal/balancing-hooks')
+const { postEntry } = (await import('@openbooks/engine/testing/journal/post-entry')) as typeof import('@openbooks/engine/testing/journal/post-entry')
 const { saveBudgetCells } = (await import(root + 'web/lib/budget-mutations.ts')) as typeof import('./budget-mutations')
 
 test('a budget saved through the worksheet writer is the cell fund control enforces', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {

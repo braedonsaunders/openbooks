@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
-import { HrmAuthorizationError } from "@openbooks/engine/src/hrm/authorization.ts";
+import { HrmAuthorizationError } from "@openbooks/engine/hrm/authorization";
 import { hrmAuthorizationResponse } from "../../../../lib/api/record-not-found";
-import { UnrestrictedScopeError } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
-import { BenefitsError } from "@openbooks/engine/src/hrm/benefits/errors.ts";
+import { UnrestrictedScopeError } from "@openbooks/engine/organization/scope";
+import { BenefitsError } from "@openbooks/engine/hrm/benefits/errors";
 
 /**
  * Shared error mapping for /api/hrm/enrollment-windows, /api/hrm/enrollments,

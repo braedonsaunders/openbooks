@@ -3,8 +3,8 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 
 const { sql } = await import("drizzle-orm");
-const { db, withBypassContext } = await import("@openbooks/engine/src/platform/db.ts");
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
+const { db, withBypassContext } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
 const { DOCUMENT_BUILT_IN_EXPR, PAYMENT_BUILT_IN_EXPR } = await import("./list-query.ts");
 
 /**

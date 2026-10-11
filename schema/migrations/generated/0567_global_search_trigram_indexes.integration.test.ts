@@ -28,7 +28,7 @@ import {
   releaseMigrationClient,
   sanitizeMigrationContent,
 } from "../../../scripts/bootstrap-migration-client.ts";
-import { assertDedicatedFixtureDatabase, hasEphemeralDatabaseMarker } from "../../../engine/src/testing/fixtures.ts";
+import { assertDedicatedFixtureDatabase, hasEphemeralDatabaseMarker } from "@openbooks/engine/testing/fixtures";
 
 const PROBE_FILENAME = "generated/0999_0567_search_index_probe.sql";
 const PROBE_DIGEST = "0567-search-index-probe";

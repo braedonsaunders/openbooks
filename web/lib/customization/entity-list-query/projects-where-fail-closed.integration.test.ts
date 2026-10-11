@@ -7,8 +7,8 @@ import { sql } from "drizzle-orm";
 // a raw throw and the whole page 500s. The builder must fail such filters
 // closed to an empty row set. SQL builders and storage are real; only
 // server-only is stubbed.
-const { db } = await import("@openbooks/engine/src/platform/db.ts");
-const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
+const { db } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
 const { projectWhere } = await import("./projects.ts");
 const { defaultListView } = await import("@openbooks/customization");
 

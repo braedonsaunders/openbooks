@@ -1,4 +1,4 @@
-import { reverseUsageRecord } from "@openbooks/engine/src/billing/usage/records.ts";
+import { reverseUsageRecord } from "@openbooks/engine/billing/usage/records";
 import { defineRoute } from "@/lib/api/route";
 import { z } from "zod";
 

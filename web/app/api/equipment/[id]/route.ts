@@ -3,15 +3,15 @@ import { z } from 'zod'
 import { exactMoney, parseJsonBody } from "@/lib/api/json"
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/db'
 import { cmp, normalizeMoney, wholeDigits } from '@openbooks/engine/money'
 import '../../../../lib/feature-gates';
 import { isFeatureEnabled } from '../../../../lib/features'
 import { isUuid } from '../../../../lib/list-params'
 import { canonicalDecimal, compareDecimal } from '../../../../lib/exact-decimal'
-import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
+import { isIsoCalendarDate } from '@openbooks/engine/platform/business-date/module'
 import { loadEquipment, loadEquipmentInWrite } from '../_lib'
-import { ScopeNotFoundError, lockScopeRows } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
+import { ScopeNotFoundError, lockScopeRows } from '@openbooks/engine/organization/scope'
 import { notFound } from "@/lib/api/responses";
 
 const requestBodySchema = z.object({

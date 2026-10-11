@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import {
   addSuccessionCandidate,
   removeSuccessionCandidate,
-} from "@openbooks/engine/src/hrm/performance/talent.ts";
+} from "@openbooks/engine/hrm/performance/talent";
 import { performanceErrorResponse } from "../../../review-cycles/_lib";
 import { addSuccessionCandidateBody } from "../../../talent-reviews/bodies";
 import { z } from "zod";

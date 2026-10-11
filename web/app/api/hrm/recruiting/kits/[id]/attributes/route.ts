@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { addKitAttribute } from "@openbooks/engine/src/hrm/recruiting/kits.ts";
+import { addKitAttribute } from "@openbooks/engine/hrm/recruiting/kits";
 
 import { recruitingErrorResponse } from "../../../_lib";
 import { createAttributeBody } from "../../bodies";

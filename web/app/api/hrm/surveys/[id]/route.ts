@@ -6,7 +6,7 @@ import {
   closeSurvey,
   getSurvey,
   openSurvey,
-} from "@openbooks/engine/src/hrm/surveys/surveys.ts";
+} from "@openbooks/engine/hrm/surveys/surveys";
 import { deliverSurveyInvitations } from "../../../../../lib/hrm/document-delivery";
 import { hrmDocumentsErrorResponse } from "../../documents/_lib";
 import { resolveAppBaseUrl } from "../route";

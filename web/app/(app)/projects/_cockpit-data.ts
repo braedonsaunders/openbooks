@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { recognitionAccounts } from '@openbooks/engine/src/projects/recognition.ts'
+import { db } from '@openbooks/engine/platform/db'
+import { recognitionAccounts } from '@openbooks/engine/projects/recognition'
 import { projectBudgetComparison } from '@openbooks/engine/projects/budget-baselines'
 import { projectTimeSummary, projectUnbilled } from '../../../lib/project-costing'
 import { resolveProjectFinancials } from '../../../lib/project-financials'
@@ -8,14 +8,14 @@ import { loadProjectType } from '../../../lib/project-type'
 import { listBillableFieldTickets, listBillingRequests } from '../../../lib/billing-requests'
 import { resolveInvoicingPreference } from '../../../lib/invoicing-preference'
 // HR-20 begin: crew-today rows for the cockpit.
-import { crewToday } from '@openbooks/engine/src/hrm/field-time/reads.ts'
+import { crewToday } from '@openbooks/engine/hrm/field-time/reads'
 // HR-20 end
 import { isFeatureEnabled } from '../../../lib/features'
 import { listScopedPartyOptions } from '../../../lib/scoped-options'
 import type { ProjectCockpitData } from './ProjectDrawer'
-import { formatMoney, mulPercent, sum } from '@openbooks/engine/src/money/money.ts'
-import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
-import { activePostingPrimaryBookId } from '@openbooks/engine/src/platform/accounting-books.ts'
+import { formatMoney, mulPercent, sum } from '@openbooks/engine/money/money'
+import { businessToday } from '@openbooks/engine/platform/business-date/module'
+import { activePostingPrimaryBookId } from '@openbooks/engine/platform/accounting-books'
 import { subsidiaryVisibleFilter } from '../../../lib/subsidiaries'
 
 /**

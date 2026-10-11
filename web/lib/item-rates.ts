@@ -1,11 +1,11 @@
 import { versionScopePredicate } from '@openbooks/engine/projects/billing-pricing'
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
-import { lockScopeRows, ScopeNotFoundError } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
-import { isLegacyProvenance } from '@openbooks/engine/src/platform/legacy-provenance.ts'
-import { cmp, mul, normalizeDecimal } from '@openbooks/engine/src/money/money.ts'
-import { priceItemRate, priceSelectedRateUnit, type PricingPolicy, type RatePrice, type RateTier } from '@openbooks/engine/src/sales/item-rate-pricing.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
+import { lockScopeRows, ScopeNotFoundError } from '@openbooks/engine/organization/scope'
+import { isLegacyProvenance } from '@openbooks/engine/platform/legacy-provenance'
+import { cmp, mul, normalizeDecimal } from '@openbooks/engine/money/money'
+import { priceItemRate, priceSelectedRateUnit, type PricingPolicy, type RatePrice, type RateTier } from '@openbooks/engine/sales/item-rate-pricing'
 import { convertBillRate } from './item-rate-currency'
 
 /**

@@ -15,7 +15,7 @@ import { ApprovalActions } from '@/components/approval-actions'
 import { ApprovalHistory } from '@/components/approval-history'
 import { confirmDialog } from '../../../lib/confirm'
 import { readApiErrorMessage } from '../../../lib/api-error'
-import { isZero, sum } from '@openbooks/engine/src/money/money.ts'
+import { isZero, sum } from '@openbooks/engine/money/money'
 /**
  * Payment-run flyout: instructions, EFT readiness, and the two explicit
  * actions — CPA-005 file download (draft → exported) and posting the run's

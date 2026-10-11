@@ -70,12 +70,12 @@ const rerunRoute = (await import(rerunUrl)) as typeof import("./[id]/rerun/route
 const lineageUrl = "../lineage/route.ts?alloc-runs";
 const lineageRoute = (await import(lineageUrl)) as typeof import("../lineage/route.ts");
 
-const { db } = await import("../../../../../engine/src/platform/db.ts");
+const { db } = await import("@openbooks/engine/platform/db");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  "../../../../../engine/src/testing/fixtures.ts"
+  "@openbooks/engine/testing/fixtures"
 );
 const { postProjectGlEntry } = await import(
-  "../../../../../engine/src/projects/recognition.ts"
+  "@openbooks/engine/projects/recognition"
 );
 
 

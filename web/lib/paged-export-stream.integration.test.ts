@@ -37,10 +37,10 @@ registerHooks({
 });
 
 const { db, withBypassContext, withOrgContext, withOrgTransaction } = await import(
-  "@openbooks/engine/src/platform/db.ts"
+  "@openbooks/engine/platform/db"
 );
 const { sql } = await import("drizzle-orm");
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
 const { withReportAuthz } = await import("./report-execution-context");
 const { executeReportAllPages, streamPagedReportCsv, streamPagedReportXlsx } = await import("./custom-reports");
 const { exportDataToCsv, exportDataToXlsx, runResultToExportData } = await import("./report-pdf");

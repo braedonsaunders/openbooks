@@ -10,12 +10,12 @@ const { payrollOpeningBalancesResource } = (await import(
 )) as typeof import("./payroll-opening-balances-resource.ts");
 
 const { sql } = await import("drizzle-orm");
-const { db, withBypassContext } = await import("@openbooks/engine/src/platform/db.ts");
+const { db, withBypassContext } = await import("@openbooks/engine/platform/db");
 const {
   createScratchOrg,
   dropScratchOrgReporting,
   seedFlowActors,
-} = await import("@openbooks/engine/src/testing/fixtures.ts");
+} = await import("@openbooks/engine/testing/fixtures");
 
 /**
  * Opening-balance import guards: the resource used to save each file row

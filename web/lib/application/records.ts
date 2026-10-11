@@ -1,6 +1,6 @@
 import "server-only";
 import { sql, type SQL } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { db } from "@openbooks/engine/platform/db";
 import {
   loadApiSchema,
   resolveApiType,
@@ -10,7 +10,7 @@ import {
 } from "../api/schema-registry";
 import { createRecord, deleteRecord, updateRecord, type WriteResult } from "../api/writers";
 import { clamp, isUuid } from "../list-params";
-import { documentRevisionProjection, normalizeDocumentRecordRevisions } from "../../../engine/src/records/document-edit-policy.ts";
+import { documentRevisionProjection, normalizeDocumentRecordRevisions } from "@openbooks/engine/records/document-edit-policy";
 import { pgTextArrayLiteral } from "../pg-array";
 import type { ApplicationContext } from "./context";
 import {
@@ -57,7 +57,7 @@ async function typeAudienceVisible(
   );
 }
 
-export { normalizeDocumentRecordRevisions } from "../../../engine/src/records/document-edit-policy.ts";
+export { normalizeDocumentRecordRevisions } from "@openbooks/engine/records/document-edit-policy";
 
 async function scopeFor(
   context: ApplicationContext,

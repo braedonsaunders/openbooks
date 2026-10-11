@@ -8,9 +8,9 @@ import { sql } from 'drizzle-orm'
 // legal entities — or two accounts named 'Cash' — share every label the old
 // post-filter compared, so an A-scoped export carried B's full row
 // (email, phone, legal name, custom fields).
-const { db, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypass, withOrgContext } = await import('@openbooks/engine/platform/db')
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  '@openbooks/engine/src/testing/fixtures.ts'
+  '@openbooks/engine/testing/fixtures'
 )
 const { getResource } = await import('./resources.ts')
 

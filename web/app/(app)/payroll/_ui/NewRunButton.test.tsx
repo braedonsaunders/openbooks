@@ -32,8 +32,8 @@ const mockModules = new Map<string, string>([
 ])
 const testHooks = registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === '@openbooks/engine/src/platform/db.ts') return { shortCircuit: true, url: 'mock:db' }
-    if (specifier === '@openbooks/engine/src/platform/business-date.ts') return { shortCircuit: true, url: 'mock:today' }
+    if (specifier === '@openbooks/engine/platform/db') return { shortCircuit: true, url: 'mock:db' }
+    if (specifier === '@openbooks/engine/platform/business-date/module') return { shortCircuit: true, url: 'mock:today' }
     if (specifier === 'next-intl/server') return { shortCircuit: true, url: 'mock:intl' }
     if (specifier === '../../../../lib/authz' && context.parentURL?.includes('/payroll/runs/view.ts')) return { shortCircuit: true, url: 'mock:authz' }
     if (specifier === '../../../../lib/feature-gates' && context.parentURL?.includes('/payroll/runs/view.ts')) return { shortCircuit: true, url: 'mock:feature' }

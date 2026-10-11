@@ -2,7 +2,7 @@ import 'server-only'
 
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/db'
 import {
   page,
   pageHeader,
@@ -14,7 +14,7 @@ import {
 } from '@braedonsaunders/appkit-viewspec'
 import { can, requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
-import { subsidiaryVisibleFilter } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
+import { subsidiaryVisibleFilter } from '@openbooks/engine/organization/scope'
 
 /**
  * The field-time setup surface: declared rules, kiosks with token

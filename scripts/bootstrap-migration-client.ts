@@ -19,7 +19,7 @@
  * bootstrap.ts runs main() on import; tests import this module directly.
  */
 import pg from "pg";
-import { connectBypassLongClient, longPool } from "../engine/src/platform/db.ts";
+import { connectBypassLongClient, longPool } from "@openbooks/engine/platform/db";
 
 export async function connectMigrationClient(options?: { bypass?: boolean }): Promise<pg.PoolClient> {
   const client = options?.bypass ? await connectBypassLongClient() : await longPool.connect();

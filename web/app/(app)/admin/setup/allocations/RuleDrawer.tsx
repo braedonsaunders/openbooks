@@ -24,7 +24,7 @@ import {
 } from '@openbooks/ui'
 import { SplitLinesEditor } from '../../../../../components/allocations/SplitLinesEditor'
 import type { AllocationLine } from '../../../../../components/allocations/split-lines-model'
-import type { AllocationRuleTarget, AllocationRuleVersion } from '@openbooks/engine/src/allocations/types.ts'
+import type { AllocationRuleTarget, AllocationRuleVersion } from '@openbooks/engine/allocations/types'
 import { confirmDialog } from '../../../../../lib/confirm'
 import { ApiResponseError, throwApiErrorIfNotOk } from '../../../../../lib/api-error'
 import {

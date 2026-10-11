@@ -1,4 +1,4 @@
-import type { AppHostAdapters, AppPlatformAdapter, AppStorageAdapter } from "@openbooks/engine/src/apps/runtime.ts";
+import type { AppHostAdapters, AppPlatformAdapter, AppStorageAdapter } from "@openbooks/engine/apps/runtime";
 
 /** Remove every mutating host capability before a manifest-declared read-only tool runs. */
 export function readOnlyAppHostAdapters(adapters: AppHostAdapters): AppHostAdapters {

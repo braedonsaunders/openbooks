@@ -1,13 +1,13 @@
 import "server-only";
 import { z } from "zod";
-import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
 import {
   propertyManagementWorkspace,
   securityDepositReconciliation,
-} from "@openbooks/engine/src/property/management.ts";
-import { add, cmp, sum } from "@openbooks/engine/src/money/money.ts";
+} from "@openbooks/engine/property/management";
+import { add, cmp, sum } from "@openbooks/engine/money/money";
 import { isFeatureEnabled } from "../features";
-import { withOrgContext } from "@openbooks/engine/src/platform/db.ts";
+import { withOrgContext } from "@openbooks/engine/platform/db";
 import type { AssistantToolDef, ToolResult } from "./types";
 import { truncateText } from "./types";
 import { assistantListPage, dateInput, money, uuidInput, numberValue, capList, decimalText } from "./tools-shared";

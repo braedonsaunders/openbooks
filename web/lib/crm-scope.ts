@@ -1,5 +1,5 @@
 import { sql, type SQL } from 'drizzle-orm'
-import type { SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
+import type { SqlExecutor } from '@openbooks/engine/platform/db'
 
 export function crmSharedScope(
   column: SQL,

@@ -1,6 +1,6 @@
 import "server-only";
-import { countInbox, listInbox, type InboxItem, type InboxKind, type InboxListContext, type InboxSourceNotice } from "@openbooks/engine/src/inbox/index.ts";
-import { businessTimeZone, businessToday } from "@openbooks/engine/src/platform/business-date.ts";
+import { countInbox, listInbox, type InboxItem, type InboxKind, type InboxListContext, type InboxSourceNotice } from "@openbooks/engine/inbox/runtime";
+import { businessTimeZone, businessToday } from "@openbooks/engine/platform/business-date/module";
 import { approveSubmittedTimeEntries } from "./time-approval";
 import { can, type Authz } from "./authz";
 import { isFeatureEnabled } from "./features";

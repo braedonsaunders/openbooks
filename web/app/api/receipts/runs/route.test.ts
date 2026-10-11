@@ -55,7 +55,7 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
-    '@openbooks/engine/src/payments/direct-debit.ts',
+    '@openbooks/engine/payments/direct-debit',
     `
       const state = globalThis[Symbol.for('openbooks.receipts-runs-route-test')]
       const SUB_A = '${SUB_A}'
@@ -86,7 +86,7 @@ const mockSources = new Map<string, string>([
 const mockUrls = new Map<string, string>([
   ['@/lib/authz', 'mock:authz'],
   ['@/app/api/payments/lib', 'mock:payment-errors'],
-  ['@openbooks/engine/src/payments/direct-debit.ts', '@openbooks/engine/src/payments/direct-debit.ts'],
+  ['@openbooks/engine/payments/direct-debit', '@openbooks/engine/payments/direct-debit'],
 ])
 
 const hooks = registerHooks({

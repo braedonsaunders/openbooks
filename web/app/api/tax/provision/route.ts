@@ -4,7 +4,7 @@ import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
-import { isTaxProvisionSelection, packInstallationStatuses, provisionTaxPacks } from '@openbooks/engine/src/tax/pack-provisioning.ts'
+import { isTaxProvisionSelection, packInstallationStatuses, provisionTaxPacks } from '@openbooks/engine/tax/pack-provisioning'
 import { guardUnrestrictedScope } from '../../../../lib/authz'
 
 export const runtime = 'nodejs'

@@ -5,11 +5,11 @@ import test from "node:test";
 // POST /api/v1/customers/upsert — match by id, external reference, email,
 // or unambiguous name; anything ambiguous is refused naming the remedy.
 const { db, withBypassContext, withOrgContext } = await import(
-  "@openbooks/engine/src/platform/db.ts"
+  "@openbooks/engine/platform/db"
 );
 const { sql } = await import("drizzle-orm");
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
-  "@openbooks/engine/src/testing/fixtures.ts"
+  "@openbooks/engine/testing/fixtures"
 );
 const { generateApiKey } = await import("../../../../lib/api-auth.ts");
 const { POST } = await import("./upsert/route.ts");

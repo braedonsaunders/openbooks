@@ -1,6 +1,6 @@
 import 'server-only';
 import { validateCustomFieldDefinitionShape } from '@openbooks/customization';
-import { RESERVED_DOCUMENT_FIELD_KEYS } from '@openbooks/engine/src/flows/documents-adapter.ts';
+import { RESERVED_DOCUMENT_FIELD_KEYS } from '@openbooks/engine/flows/documents-adapter';
 import { validateCustomFieldConfig } from './custom-field-config';
 import type { CustomFieldDef } from './custom-fields';
 

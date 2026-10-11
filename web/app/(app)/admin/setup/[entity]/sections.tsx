@@ -6,7 +6,7 @@ import { loadHomeAnnouncementRows } from '../../../../../lib/setup/home-announce
 import Link from 'next/link'
 import { sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/db'
 import { projectRuleSlotPrefills } from '../../../../../lib/setup/hrm-rule-slots'
 import { Badge, Button } from '@openbooks/ui'
 import { requirePermission } from '../../../../../lib/authz'

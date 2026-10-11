@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/db'
 import {
   fulfillmentDocumentScope,
   getFulfillmentDocument,
   setShipmentCarrier,
   setShipmentCartons,
-} from '@openbooks/engine/src/sales/fulfillment.ts'
+} from '@openbooks/engine/sales/fulfillment/module'
 import { uuidId } from '@/lib/api/json'
 import { notFound } from '@/lib/api/responses'
 import { defineRoute } from '@/lib/api/route'

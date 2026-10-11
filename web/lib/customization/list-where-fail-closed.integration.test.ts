@@ -9,8 +9,8 @@ import type { FilterClause } from "@openbooks/customization";
 // date throw and the whole list page 500s. The canonical WHERE must fail
 // those closed to an empty row set instead. SQL builders and storage are
 // real; only the server-only seam is stubbed.
-const { db } = await import("@openbooks/engine/src/platform/db.ts");
-const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
+const { db } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
 const { documentWhere } = await import("./list-query.ts");
 const { defaultListView } = await import("@openbooks/customization");
 

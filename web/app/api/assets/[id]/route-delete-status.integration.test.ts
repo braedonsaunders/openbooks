@@ -50,10 +50,10 @@ const routeUrl = "./route.ts?asset-delete-status-test";
 const { DELETE } = (await import(routeUrl)) as typeof import("./route.ts");
 after(() => hooks.deregister());
 
-const { db } = await import("@openbooks/engine/src/platform/db.ts");
-const { buildSchedule } = await import("@openbooks/engine/src/assets/depreciation.ts");
+const { db } = await import("@openbooks/engine/platform/db");
+const { buildSchedule } = await import("@openbooks/engine/assets/depreciation");
 const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } = await import(
-  "@openbooks/engine/src/testing/fixtures.ts"
+  "@openbooks/engine/testing/fixtures"
 );
 
 

@@ -2,7 +2,7 @@ import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
-import { withdrawChangeRequest } from "@openbooks/engine/src/hrm/change-requests.ts";
+import { withdrawChangeRequest } from "@openbooks/engine/hrm/change-requests/operations";
 import { guardPermission } from "../../../../../../lib/authz";
 import { isUuid } from "../../../../../../lib/list-params";
 import { changeRequestErrorResponse } from "../../_lib";

@@ -4,8 +4,8 @@ import test from 'node:test'
 import { sql } from 'drizzle-orm'
 import type { ApplicationContext } from './context'
 
-const { db, env, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { db, env, withBypassContext } = await import('@openbooks/engine/platform/db')
+const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import('@openbooks/engine/testing/fixtures')
 const { draftExtension, discardExtensionDraft, getExtensionDraft, activateExtensionDraft, describeExtensionVocabulary, getExtensionPackage, previewExtensionPage } = await import('./extensions')
 const { getAppByKey, installApp } = await import('../apps/store')
 
@@ -114,8 +114,8 @@ test('extension draft isolation, exact review, atomic activation and immutable r
     assert.equal((await db.execute(sql`select id from audit_log where org_id=${org.orgId} and table_name='extension_drafts' and row_id=${proposal.draftId}`)).rows.length, 1)
     await assert.rejects(() => db.execute(sql`update app_files set content='{}' where org_id=${org.orgId} and version_id=${app!.activeVersionId} and path='frontend/ui.json'`), (error:unknown)=>String((error as {cause?:Error}).cause).includes('immutable'))
     assert.equal((await db.execute(sql`select id from custom_field_defs where org_id=${org.orgId} and key='inspection_note'`)).rows.length,1)
-    const {listActiveExtensionContributions,getExtensionSettings}=await import('@openbooks/engine/src/extensions/projections.ts')
-    const {extensionPermissionAvailability}=await import('@openbooks/engine/src/organization/extension-permission-availability.ts')
+    const {listActiveExtensionContributions,getExtensionSettings}=await import('@openbooks/engine/extensions/projections')
+    const {extensionPermissionAvailability}=await import('@openbooks/engine/testing/organization/extension-permission-availability')
     const {loadPageSpec}=await import('../page-specs')
     const activeContributions=await listActiveExtensionContributions(org.orgId)
     assert.equal(activeContributions.length,3)

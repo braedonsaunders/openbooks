@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { getAutomationRun } from "@openbooks/engine/src/automations/services.ts";
+import { getAutomationRun } from "@openbooks/engine/automations/services";
 import { isUuid } from "../../../../../lib/list-params";
 import { automationErrorResponse } from "../../_lib";
 

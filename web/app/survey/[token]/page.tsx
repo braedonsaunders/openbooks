@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation'
-import { hashHrmToken, verifySurveyInvitationToken } from '@openbooks/engine/src/hrm/documents/tokens.ts'
-import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
+import { hashHrmToken, verifySurveyInvitationToken } from '@openbooks/engine/hrm/documents/tokens'
+import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
 import { sql } from 'drizzle-orm'
 import { SurveyRespondForm } from './SurveyRespondForm'
 

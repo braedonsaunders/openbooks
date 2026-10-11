@@ -2,7 +2,7 @@ import { defineRoute } from "@/lib/api/route";
 
 import { NextResponse } from "next/server";
 import { sql, type SQL } from "drizzle-orm";
-import { db, withOrgTransaction } from "@openbooks/engine/src/platform/db.ts";
+import { db, withOrgTransaction } from "@openbooks/engine/platform/db";
 import { guardFeaturePermission } from "../../../../lib/feature-gates";
 import { generateApiKey } from "../../../../lib/api-auth";
 import {
@@ -13,11 +13,11 @@ import {
   permissionsOutsideCeiling,
   resolveEffectivePermissions,
   resolveKeyScopeAuthority,
-} from "@openbooks/engine/src/organization/permissions.ts";
+} from "@openbooks/engine/organization/permissions";
 import {
   actorAllowedSubsidiaryIds,
   subsidiaryScopeWithinCeiling,
-} from "@openbooks/engine/src/organization/actor-subsidiaries.ts";
+} from "@openbooks/engine/organization/actor-subsidiaries";
 import { isUuid } from "../../../../lib/list-params";
 import { z } from "zod";
 

@@ -3,13 +3,13 @@ import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
-import { toUnits } from "@openbooks/engine/src/money/money.ts";
+import { db } from "@openbooks/engine/platform/db";
+import { toUnits } from "@openbooks/engine/money/money";
 import {
   createScratchOrg,
   createScratchUser,
   dropScratchOrg,
-} from "@openbooks/engine/src/testing/fixtures.ts";
+} from "@openbooks/engine/testing/fixtures";
 
 const state = { user: { orgId: "", id: "" } };
 Object.assign(globalThis, { __poReceiveAudit: state });

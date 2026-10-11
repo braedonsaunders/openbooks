@@ -9,7 +9,7 @@ import test from "node:test";
 import {
   createScratchOrg,
   dropScratchOrg,
-} from "../../engine/src/testing/fixtures.ts";
+} from "@openbooks/engine/testing/fixtures";
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 const CERTIFICATE =

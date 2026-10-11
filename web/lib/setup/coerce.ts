@@ -8,13 +8,13 @@
  * parameter values. This is the same whitelist that keeps the generic API safe.
  */
 
-import { normalizeDecimal, toUnits } from '@openbooks/engine/src/money/money.ts'
-import { isIsoCalendarDate } from '@openbooks/engine/src/platform/iso-date.ts'
+import { normalizeDecimal, toUnits } from '@openbooks/engine/money/money'
+import { isIsoCalendarDate } from '@openbooks/engine/platform/iso-date'
 import { SETUP_ENTITY_BY_KEY, setupFieldOptions, setupFieldVisible, toSnake, type SetupEntity, type SetupField } from './registry'
 import { coveredSlotFields } from './hrm-rule-slots'
 import { normalizeCountryCode } from '../countries'
 import { canonicalDecimal, compareDecimal } from '../exact-decimal'
-import { isUuid } from '@openbooks/engine/src/platform/uuid.ts'
+import { isUuid } from '@openbooks/engine/platform/identifiers'
 import { decimalNullRefusal } from '../payroll-decimal-refusal'
 
 /** Setup decimals include FX rates (numeric(19,10)) as well as ledger money. */

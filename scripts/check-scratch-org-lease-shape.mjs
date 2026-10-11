@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
@@ -90,8 +90,13 @@ function collectIntegrationFiles(root) {
 
 function importTargetsFixtures(specifier, importer, root, fixturesPath) {
   let target;
-  if (specifier.startsWith("@openbooks/engine/src/")) {
-    target = join(root, "engine/src", specifier.slice("@openbooks/engine/src/".length));
+  if (specifier.startsWith("@openbooks/engine/")) {
+    const packageFile = join(root, "engine/package.json");
+    if (!existsSync(packageFile)) return false;
+    const exports = JSON.parse(readFileSync(packageFile, "utf8")).exports ?? {};
+    const contract = exports[`./${specifier.slice("@openbooks/engine/".length)}`];
+    if (typeof contract !== "string") return false;
+    target = join(root, "engine", contract);
   } else if (specifier.startsWith("./") || specifier.startsWith("../")) {
     target = resolve(dirname(importer), specifier.split("?")[0]);
   } else {

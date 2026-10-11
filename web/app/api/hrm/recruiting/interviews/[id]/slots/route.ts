@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import {
   listInterviewSlots,
   proposeSlots,
-} from "@openbooks/engine/src/hrm/recruiting/scheduling.ts";
+} from "@openbooks/engine/hrm/recruiting/scheduling";
 
 import { recruitingErrorResponse } from "../../../_lib";
 import { proposeSlotsBody } from "./bodies";

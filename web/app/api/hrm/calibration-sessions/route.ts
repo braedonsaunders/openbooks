@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import {
   createCalibrationSession,
   listCalibrationSessions,
-} from "@openbooks/engine/src/hrm/performance/calibration.ts";
+} from "@openbooks/engine/hrm/performance/calibration";
 import { isUuid } from "../../../../lib/list-params";
 import { performanceErrorResponse } from "../review-cycles/_lib";
 import { createCalibrationSessionBody } from "./bodies";

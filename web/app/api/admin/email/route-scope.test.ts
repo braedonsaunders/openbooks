@@ -26,7 +26,7 @@ registerHooks({
       `
       return { format: 'module', source, shortCircuit: true, url: `data:text/javascript,${encodeURIComponent(source)}` }
     }
-    if (specifier === '@openbooks/engine/src/delivery/email-config.ts') {
+    if (specifier === '@openbooks/engine/delivery/email-config/module') {
       const source = `
         const state = globalThis[Symbol.for('openbooks.admin-email-scope-test')];
         export class OrgEmailConfigConflictError extends Error {}

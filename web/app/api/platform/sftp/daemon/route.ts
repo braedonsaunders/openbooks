@@ -4,13 +4,13 @@ import { defineRoute } from '@/lib/api/route'
 import { z } from "zod";
 import { NextResponse } from "next/server";
 import { createHash } from "node:crypto";
-import { db, withBypassContext } from "@openbooks/engine/src/platform/db.ts";
+import { db, withBypassContext } from "@openbooks/engine/platform/db";
 import {
   ensureSftpServer,
   loadDaemonConfig,
   sftpDaemonConfigAuditSnapshot,
   updateDaemonConfig,
-} from "@openbooks/engine/src/sftp/manager.ts";
+} from "@openbooks/engine/sftp/manager";
 import { auditSetupChange } from "../../../../../lib/setup/audit";
 import { sftpStartupFailureText } from "../../../../../lib/sftp-daemon";
 import { guardSuperAdmin, lockSuperAdminActor, SuperAdminAuthorityError } from "../../../../../lib/super-admin";

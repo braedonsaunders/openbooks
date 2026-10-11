@@ -1,8 +1,8 @@
 import 'server-only'
 
 import { eq, sql } from 'drizzle-orm'
-import { db, withBypass, withBypassContext } from '@openbooks/engine/src/platform/db.ts'
-import { sealSecret, SecretIntegrityError, unsealSecret } from '@openbooks/engine/src/platform/secrets.ts'
+import { db, withBypass, withBypassContext } from '@openbooks/engine/platform/db'
+import { sealSecret, SecretIntegrityError, unsealSecret } from '@openbooks/engine/platform/secrets'
 import { PLATFORM_SETTINGS_ID, platformSettings } from '@openbooks/schema'
 
 /**

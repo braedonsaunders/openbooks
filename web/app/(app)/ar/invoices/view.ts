@@ -2,14 +2,14 @@ import 'server-only'
 
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/db'
 import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { isUuid, pickString } from '../../../../lib/list-params'
 import { can, requirePermission } from '../../../../lib/authz'
 import { AR_KINDS, DOC_KINDS, isDocumentCreateKind } from "../../../../lib/document-kinds.ts";
 import { accountOptions, createDocumentSeed, dimensionOptions, taxCodeOptions, taxGroupOptions } from "../../../../lib/documents.ts";
 import { listScopedPartyOptionsWithCurrent } from "../../../../lib/scoped-options";
-import { loadDocument } from "../../../../../engine/src/ledger/document-service.ts";
+import { loadDocument } from "@openbooks/engine/ledger/document-service";
 import type { DocKindConfig } from '../../../../lib/document-kinds'
 import { loadFieldDefs } from '../../../../lib/custom-fields'
 import { isMultiSubsidiary, subsidiaryOptions } from '../../../../lib/subsidiaries'

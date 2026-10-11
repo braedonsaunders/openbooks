@@ -17,7 +17,7 @@ import { readApiErrorMessage } from "@/lib/api-error";
 import type {
   RevenueModificationInput,
   RevenueModificationPromise,
-} from "@openbooks/engine/src/revenue/contract-modifications.ts";
+} from "@openbooks/engine/revenue/contract-modifications";
 import type { ContractPayload, RevenueModificationOptions } from "./_lib";
 type Group = RevenueModificationInput["groups"][number];
 function Field({

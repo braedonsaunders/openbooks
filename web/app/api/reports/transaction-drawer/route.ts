@@ -3,7 +3,7 @@ import { NextResponse } from 'next/server'
 import { getAuthz } from '../../../../lib/authz'
 import { loadRelatedTransactionDrawerData } from '../../../../components/related-transaction-drawer'
 import { notFound } from "@/lib/api/responses";
-import { isUuid } from '@openbooks/engine/src/platform/uuid.ts'
+import { isUuid } from '@openbooks/engine/platform/identifiers'
 
 
 export const runtime = 'nodejs'

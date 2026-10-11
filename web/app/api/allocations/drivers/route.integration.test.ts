@@ -70,9 +70,9 @@ const listRoute = (await import(listUrl)) as typeof import("./route.ts");
 const itemRoute = (await import(itemUrl)) as typeof import("./[id]/route.ts");
 const previewRoute = (await import(previewUrl)) as typeof import("./preview/route.ts");
 
-const { db } = await import("../../../../../engine/src/platform/db.ts");
+const { db } = await import("@openbooks/engine/platform/db");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  "../../../../../engine/src/testing/fixtures.ts"
+  "@openbooks/engine/testing/fixtures"
 );
 
 

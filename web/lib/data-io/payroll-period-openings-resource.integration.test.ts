@@ -3,9 +3,9 @@ import test from 'node:test'
 import { randomUUID } from 'node:crypto'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/platform/database'
-import { DB, withHarness } from '@openbooks/engine/src/testing/hrm-harness.ts'
+import { DB, withHarness } from '@openbooks/engine/testing/hrm-harness'
 import { payrollPeriodOpeningsResource } from './payroll-period-openings-resource'
-import { setupPeriodOpeningFixture, periodOpeningInput } from '@openbooks/engine/src/testing/payroll-period-openings-fixture.ts'
+import { setupPeriodOpeningFixture, periodOpeningInput } from '@openbooks/engine/testing/payroll-period-openings-fixture'
 
 async function setup() {
   const fixture = await setupPeriodOpeningFixture(), native = periodOpeningInput(fixture)

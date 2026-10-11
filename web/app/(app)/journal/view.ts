@@ -2,7 +2,7 @@ import 'server-only'
 
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/db'
 import {
   page,
   pageHeader,
@@ -17,7 +17,7 @@ import { can, requirePermission } from '../../../lib/authz'
 import { loadFieldDefs } from '../../../lib/custom-fields'
 import { isMultiSubsidiary, subsidiaryOptions } from '../../../lib/subsidiaries'
 import { loadJournalDoc } from '../../../lib/journals'
-import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
+import { businessToday } from '@openbooks/engine/platform/business-date/module'
 import { JOURNAL_ENTRY_TABLE, journalScopeWhere, journalDraftScopeWhere } from '../../../lib/customization/entity-list-query/journal-entries'
 import { resolveFormLayout } from '../../../lib/customization/resolve'
 import { customSegmentOptions } from '../../../lib/segments'

@@ -2,7 +2,7 @@
 import 'server-only'
 import { type FileViewer, type AccessLevel, ACCESS_BY_RANK, maxAccess, grantAppliesTo } from './types'
 import { sql, type SQL } from 'drizzle-orm'
-import { db, type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
+import { db, type SqlExecutor } from '@openbooks/engine/platform/db'
 
 // --- helpers ----------------------------------------------------------------
 

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { simulateAutomation } from "@openbooks/engine/src/automations/simulator.ts";
+import { simulateAutomation } from "@openbooks/engine/automations/simulator";
 import { isFeatureEnabled } from "../../../../../lib/features";
 import { isUuid } from "../../../../../lib/list-params";
 import { simulateAutomationBody } from "../../bodies";

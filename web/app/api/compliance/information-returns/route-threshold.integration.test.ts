@@ -24,9 +24,9 @@ registerHooks({
     return next(specifier, context)
   },
 })
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
 const { sql } = await import('drizzle-orm')
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
 const { POST } = await import('./route.ts')
 
 async function fixture() {
@@ -99,7 +99,7 @@ test('POST still files with a column-maximum threshold and identical read-back',
 test('POST refuses the current tax year as not yet completed', async () => {
   const { org } = await fixture()
   try {
-    const { businessToday } = await import('@openbooks/engine/src/platform/business-date.ts')
+    const { businessToday } = await import('@openbooks/engine/platform/business-date/module')
     const currentYear = Number((await withOrgContext(state.orgId, () => businessToday(state.orgId))).slice(0, 4))
     const result = await post({ taxYear: currentYear, formType: '1099-NEC' })
     assert.equal(result.status, 422, JSON.stringify(result.json))

@@ -129,9 +129,9 @@ const mockSources = new Map<string, string>([
 ]);
 
 const mockUrls = new Map<string, string>([
-  ["@openbooks/engine/src/platform/db.ts", "mock:db"],
-  ["@openbooks/engine/src/organization/subsidiary-scope.ts", "mock:subsidiary-scope"],
-  ["@openbooks/engine/src/projects/subcontracts.ts", "mock:subcontracts"],
+  ["@openbooks/engine/platform/db", "mock:db"],
+  ["@openbooks/engine/organization/scope", "mock:subsidiary-scope"],
+  ["@openbooks/engine/projects/subcontracts", "mock:subcontracts"],
   ["../../../lib/authz", "mock:authz"],
   ["../../../lib/features", "mock:features"],
   ["../../../lib/subcontracts-gate", "mock:subcontracts-gate"],

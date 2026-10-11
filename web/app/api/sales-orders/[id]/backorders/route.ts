@@ -1,11 +1,11 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/db'
 import {
   backorderPosition,
   cancelOrderLineRemainder,
   salesOrderScope,
-} from '@openbooks/engine/src/sales/backorders.ts'
+} from '@openbooks/engine/sales/backorders'
 import { guardSubsidiaryScope } from '@/lib/authz'
 import { defineRoute } from '@/lib/api/route'
 import { notFound } from '@/lib/api/responses'

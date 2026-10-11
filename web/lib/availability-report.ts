@@ -1,15 +1,15 @@
 import 'server-only'
 
 import { getTranslations } from 'next-intl/server'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { isZero } from '@openbooks/engine/src/money/money.ts'
-import { listWarehouses } from '@openbooks/engine/src/inventory/warehouses.ts'
+import { db } from '@openbooks/engine/platform/db'
+import { isZero } from '@openbooks/engine/money/money'
+import { listWarehouses } from '@openbooks/engine/inventory/warehouses'
 import {
   listAvailableToPromise,
   releasableBackorders,
   type AvailabilityRefusal,
-} from '@openbooks/engine/src/inventory/availability.ts'
-import { replenishmentProposals } from '@openbooks/engine/src/inventory/replenishment.ts'
+} from '@openbooks/engine/inventory/availability'
+import { replenishmentProposals } from '@openbooks/engine/inventory/replenishment'
 import type { Authz } from './authz'
 import { isFeatureEnabled } from './features'
 import type { ExportData } from './report-pdf'

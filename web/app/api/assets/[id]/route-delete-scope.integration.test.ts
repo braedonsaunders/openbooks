@@ -50,9 +50,9 @@ const hooks = registerHooks({
 const routeUrl = "./route.ts?asset-delete-scope-test";
 const { DELETE } = (await import(routeUrl)) as typeof import("./route.ts");
 
-const { db, pool } = await import("@openbooks/engine/src/platform/db.ts");
+const { db, pool } = await import("@openbooks/engine/platform/db");
 const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } = await import(
-  "@openbooks/engine/src/testing/fixtures.ts"
+  "@openbooks/engine/testing/fixtures"
 );
 
 

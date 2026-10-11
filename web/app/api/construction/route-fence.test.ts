@@ -46,6 +46,8 @@ const mockSources = new Map<string, string>([
   [
     'mock:db',
     `
+      export function withTransactionSavepoint() { throw new Error('unexpected withTransactionSavepoint in route boundary test') }
+
       const state = globalThis[Symbol.for('openbooks.construction-fence-test')]
       const sqlText = globalThis.openbooksSqlTextConstruction
       const respond = (kind, text) => {
@@ -135,7 +137,7 @@ const mockSources = new Map<string, string>([
 }
 
 const mockUrls = new Map<string, string>([
-  ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
+  ['@openbooks/engine/platform/db', 'mock:db'],
   ['../../../lib/authz', 'mock:authz'],
   ['@/lib/authz', 'mock:authz'],
 ])
@@ -150,7 +152,7 @@ const _hooks = registerHooks({
     // engine helpers (business clocks, type defaults) would run their reads
     // on a real connection.
     if (
-      specifier === '@openbooks/engine/src/platform/db.ts' ||
+      specifier === '@openbooks/engine/platform/db' ||
       specifier.endsWith('/platform/db.ts') ||
       (specifier === './db.ts' && context.parentURL?.includes('/engine/src/platform/'))
     ) {
@@ -177,7 +179,7 @@ const { featureGateLockKey: webFenceKey } = (await import('../../../lib/features
   featureGateLockKey: (orgId: string) => string
 }
 const { featureGateLockKey: engineFenceKey } = (await import(
-  '@openbooks/engine/src/organization/org-feature-lock.ts'
+  '@openbooks/engine/organization/org-feature-lock'
 )) as { featureGateLockKey: (orgId: string) => string }
 
 function reset(): void {

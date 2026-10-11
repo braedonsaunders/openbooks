@@ -3,7 +3,7 @@ import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
-import { PERMISSION_GROUPS } from '../../engine/src/organization/permissions.ts'
+import { PERMISSION_GROUPS } from '@openbooks/engine/organization/permissions'
 
 // The role editor renders every permission through its catalogue labelKey
 // (admin.<labelKey>). A permission added to the catalogue without a message

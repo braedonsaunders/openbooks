@@ -4,14 +4,14 @@ import { NextResponse } from 'next/server'
 import { randomBytes } from 'node:crypto'
 import { sql } from 'drizzle-orm'
 import { z } from 'zod'
-import { db, type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
-import { encryptSecret, revokeSftpSessions, sftpServerAuditSnapshot, type SftpServerAuditRow } from '@openbooks/engine/src/sftp/manager.ts'
-import { findRootOverlap, rootOverlapRefusal } from '@openbooks/engine/src/sftp/roots.ts'
+import { db, type SqlExecutor } from '@openbooks/engine/platform/db'
+import { encryptSecret, revokeSftpSessions, sftpServerAuditSnapshot, type SftpServerAuditRow } from '@openbooks/engine/sftp/manager'
+import { findRootOverlap, rootOverlapRefusal } from '@openbooks/engine/sftp/roots'
 import { auditSetupChange } from '../../../../../lib/setup/audit'
 import { pgErrorCode } from '../../../../../lib/setup/coerce'
 import { guardUnrestrictedScope } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
-import { sftpImportScheduleRunLockKey } from '@openbooks/engine/src/sftp/import-job.ts'
+import { sftpImportScheduleRunLockKey } from '@openbooks/engine/sftp/import-job'
 import { notFound } from "@/lib/api/responses";
 const PATCHBodySchema1 = z.discriminatedUnion('action', [
   z.object({ action: z.literal('toggle'), isActive: z.boolean().optional() }),

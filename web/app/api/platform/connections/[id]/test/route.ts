@@ -2,11 +2,11 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { db } from "@openbooks/engine/platform/db";
 import {
   buildSource,
   type ConnectionRow,
-} from "@openbooks/engine/src/sync/connection.ts";
+} from "@openbooks/engine/sync/connection";
 import { storageIdentityError } from "../../_storage-identity";
 import { connectionConfigUrlRefusal } from "../../_connector-guard";
 import { notFound } from "@/lib/api/responses";

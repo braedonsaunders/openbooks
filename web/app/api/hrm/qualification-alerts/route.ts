@@ -1,7 +1,7 @@
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { db } from "@openbooks/engine/src/platform/db.ts";
-import { listAlerts } from "@openbooks/engine/src/hrm/qualifications/alerts.ts";
+import { db } from "@openbooks/engine/platform/db";
+import { listAlerts } from "@openbooks/engine/hrm/qualifications/alerts";
 import { qualificationErrorResponse } from "../qualifications/_lib";
 /** Fired expiry alerts (the scan writes them; the inbox consumes them). */
 export const GET = defineRoute({

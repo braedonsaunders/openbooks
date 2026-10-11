@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
-import { UnrestrictedScopeError } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
-import { HrmAuthorizationError } from "@openbooks/engine/src/hrm/authorization.ts";
+import { UnrestrictedScopeError } from "@openbooks/engine/organization/scope";
+import { HrmAuthorizationError } from "@openbooks/engine/hrm/authorization";
 import { hrmAuthorizationResponse } from "../../../../lib/api/record-not-found";
-import { HrmChangeRequestError } from "@openbooks/engine/src/hrm/change-requests.ts";
-import { CompensationError } from "@openbooks/engine/src/hrm/compensation/errors.ts";
-import { HrmPositionError } from "@openbooks/engine/src/hrm/positions.ts";
-import { RecruitingError } from "@openbooks/engine/src/hrm/recruiting/errors.ts";
-import { DuplicateProspectError } from "@openbooks/engine/src/hrm/recruiting/candidates.ts";
+import { HrmChangeRequestError } from "@openbooks/engine/hrm/change-requests/operations";
+import { CompensationError } from "@openbooks/engine/hrm/compensation/errors";
+import { HrmPositionError } from "@openbooks/engine/hrm/positions";
+import { RecruitingError } from "@openbooks/engine/hrm/recruiting/errors";
+import { DuplicateProspectError } from "@openbooks/engine/hrm/recruiting/candidates";
 
 /**
  * Shared error mapping for /api/hrm/recruiting/*. Engine refusals reach the

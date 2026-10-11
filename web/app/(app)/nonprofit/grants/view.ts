@@ -2,7 +2,7 @@ import 'server-only'
 
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/db'
 import {
   page,
   pageHeader,
@@ -12,15 +12,15 @@ import {
   widgetBlock,
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
-import { assertUnrestrictedScope, UnrestrictedScopeError } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
+import { assertUnrestrictedScope, UnrestrictedScopeError } from '@openbooks/engine/organization/scope'
 import {
   getGrantBudget,
   getGrantTerms,
   listGrantActivity,
   listGrantDrawdowns,
   listGrantReports,
-} from '@openbooks/engine/src/nonprofit/grants.ts'
-import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
+} from '@openbooks/engine/nonprofit/grants'
+import { businessToday } from '@openbooks/engine/platform/business-date/module'
 import { can, requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { isUuid, pickString } from '../../../../lib/list-params'

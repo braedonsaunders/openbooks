@@ -3,12 +3,12 @@ import { defineRoute } from "@/lib/api/route";
 
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
 import { uploadAndAttach } from '../../../../lib/file-cabinet'
 import { resolveFieldTicketLockId } from '../../../../lib/field-ticket-lock'
 import { validateSigningRequest, verifySigningToken } from '../../../../lib/field-ticket-token'
 import { acquireFeatureGateLock } from '../../../../lib/features'
-import { lockAndCheckOrgFeature } from '@openbooks/engine/src/organization/org-feature-lock.ts'
+import { lockAndCheckOrgFeature } from '@openbooks/engine/organization/org-feature-lock'
 import { dbWriteErrorResponse } from '@/lib/api/db-errors'
 import { notFound } from "@/lib/api/responses";
 

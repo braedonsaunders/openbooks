@@ -3,10 +3,10 @@ import { defineRoute } from "@/lib/api/route";
 import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/db'
 import { guardUnrestrictedScope } from '../../../../lib/authz'
-import { validateFieldTimeSettings } from '@openbooks/engine/src/hrm/field-time/settings.ts'
-import { FieldTimeError } from '@openbooks/engine/src/hrm/field-time/errors.ts'
+import { validateFieldTimeSettings } from '@openbooks/engine/hrm/field-time/settings'
+import { FieldTimeError } from '@openbooks/engine/hrm/field-time/errors'
 import { fieldTimeSettingsBody, normalizeFieldTimeSettingsBody } from '../../../../lib/field-time/settings-body'
 
 export const runtime = 'nodejs'

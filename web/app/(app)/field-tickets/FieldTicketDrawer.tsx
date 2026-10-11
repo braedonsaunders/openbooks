@@ -15,8 +15,8 @@ import type { ScheduledWork } from '@openbooks/engine/schedule-boards/prefill'
 import { fillTicketFromSchedule } from '@/lib/field-ticket-schedule-fill'
 import { Badge, Button, Input, Label, SearchSelect, Select, Textarea, cn } from '@openbooks/ui'
 import { defaultFormLayout, type FormLayoutConfig, type HeaderFieldPlacement } from '@openbooks/customization'
-import { add } from '@openbooks/engine/src/money/money.ts'
-import { addCalendarDays, parseIsoDate } from '@openbooks/engine/src/platform/civil-date.ts'
+import { add } from '@openbooks/engine/money/money'
+import { addCalendarDays, parseIsoDate } from '@openbooks/engine/platform/civil-date'
 import {
   executeDocumentSave,
   persistedDocumentRevision,

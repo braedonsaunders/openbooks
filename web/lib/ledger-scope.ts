@@ -3,7 +3,7 @@ import { sql, type SQL } from 'drizzle-orm'
 // Relative (not the bare workspace specifier): worktree node_modules resolves
 // bare @openbooks/* to the main checkout, so engine predicates must bind this
 // checkout by path — a bare import would scope reads by main's code.
-import { apOpenAccountScope as sharedApOpenAccountScope } from '../../engine/src/records/open-item-scopes.ts'
+import { apOpenAccountScope as sharedApOpenAccountScope } from '@openbooks/engine/records/open-item-scopes'
 
 /**
  * The one shared answer to "which ACCOUNTS carry open payables/receivables"

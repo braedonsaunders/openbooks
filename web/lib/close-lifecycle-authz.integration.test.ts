@@ -29,10 +29,10 @@ registerHooks({
     return next(specifier, context)
   },
 })
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
 const { sql } = await import('drizzle-orm')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
-const { startCloseRun } = await import("@openbooks/engine/src/close/run-start.ts");
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
+const { startCloseRun } = await import("@openbooks/engine/close/run-start");
 const { POST: create } = await import('../app/api/close/runs/route')
 const { POST: action } = await import('../app/api/close/runs/[id]/route')
 const { GET: binder } = await import('../app/api/close/runs/[id]/binder/route')
@@ -198,9 +198,9 @@ const closeRunCases = [
         const { POST } = (await import(routeUrl)) as typeof import("../app/api/close/runs/route.ts");
         hooks.deregister();
 
-        const { withBypassContext, db, env } = await import("@openbooks/engine/src/platform/db.ts");
+        const { withBypassContext, db, env } = await import("@openbooks/engine/platform/db");
         const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-          "@openbooks/engine/src/testing/fixtures.ts",
+          "@openbooks/engine/testing/fixtures",
         );
 
         const DB = !!env.OPENBOOKS_DB_URL;

@@ -29,10 +29,10 @@ const { loadBlockedBills, loadComplianceMatrix, loadComplianceOverview } =
   (await import(libUrl)) as typeof import('./compliance.ts')
 hooks.deregister()
 
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
-const { mulRate } = await import('@openbooks/engine/src/money/money.ts')
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
+const { mulRate } = await import('@openbooks/engine/money/money')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
-  '@openbooks/engine/src/testing/fixtures.ts'
+  '@openbooks/engine/testing/fixtures'
 )
 
 const DB = !!process.env.OPENBOOKS_DB_URL
@@ -344,9 +344,9 @@ const { loadFilings, loadInformationReturnReadiness } =
   (await import(libUrl)) as typeof import('./compliance.ts')
 hooks.deregister()
 
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
-  '@openbooks/engine/src/testing/fixtures.ts'
+  '@openbooks/engine/testing/fixtures'
 )
 
 const DB = !!process.env.OPENBOOKS_DB_URL

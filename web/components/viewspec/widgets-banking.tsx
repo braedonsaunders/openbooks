@@ -34,7 +34,7 @@ import { StatementDrawer } from '../../app/(app)/banking/[accountId]/StatementDr
 import { Button } from '@openbooks/ui'
 import Link from 'next/link'
 import { num, str, type WidgetRenderer } from './widget-props'
-import { toUnits } from '@openbooks/engine/src/money/money.ts'
+import { toUnits } from '@openbooks/engine/money/money'
 
 function moneyString(props: Record<string, unknown>, key: string): string {
   const value = str(props, key)

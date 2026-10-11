@@ -1,4 +1,4 @@
-import { createUsageMeter, listUsageMeters } from "@openbooks/engine/src/billing/usage/records.ts";
+import { createUsageMeter, listUsageMeters } from "@openbooks/engine/billing/usage/records";
 import { defineRoute } from "@/lib/api/route";
 import { z } from "zod";
 import { idempotentUsageCreate } from "../_idempotent";

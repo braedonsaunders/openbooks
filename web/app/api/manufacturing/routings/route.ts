@@ -1,7 +1,7 @@
 import { lockManufacturingRoutingAuthority } from "@openbooks/engine/manufacturing/authority";
 import { z } from "zod";
-import { db } from "@openbooks/engine/src/platform/db.ts";
-import { createRouting, getRouting, type RoutingInput } from "@openbooks/engine/src/manufacturing/routings.ts";
+import { db } from "@openbooks/engine/platform/db";
+import { createRouting, getRouting, type RoutingInput } from "@openbooks/engine/manufacturing/routings";
 import { defineRoute } from "@/lib/api/route";
 import { created } from "@/lib/api/responses";
 import { idempotentManufacturingCreate } from "../_idempotent";

@@ -16,8 +16,8 @@ import {
   Scale, Search, Table2, Target, TrendingDown, TrendingUp, Trophy,
   UserRound, Users, LayoutGrid, Grid3X3 } from 'lucide-react'
 import { cn, Select, Drawer, Badge } from '@openbooks/ui'
-import { abs as absMoney, add, cmp as compareMoney, div, mulDecimal, neg } from '@openbooks/engine/src/money/money.ts'
-import { divideDecimal } from '@openbooks/engine/src/money/exact-decimal.ts'
+import { abs as absMoney, add, cmp as compareMoney, div, mulDecimal, neg } from '@openbooks/engine/money/money'
+import { divideDecimal } from '@openbooks/engine/money/decimal'
 import type { MoneyValue } from '../../../../lib/money-format'
 import type { UtilizationData, UGroupRow } from '../../../../lib/analytics/utilization-data'
 import { KpiCard } from '../_ui/KpiCard'

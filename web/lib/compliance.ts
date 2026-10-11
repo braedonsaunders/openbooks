@@ -2,8 +2,8 @@ import 'server-only'
 import { redirect } from 'next/navigation'
 import { NextResponse } from 'next/server'
 import { sql, type SQL } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { formatMoney, mulRate, sum } from '@openbooks/engine/src/money/money.ts'
+import { db } from '@openbooks/engine/platform/db'
+import { formatMoney, mulRate, sum } from '@openbooks/engine/money/money'
 import {
   evaluateBillsForRelease,
   evaluateVendorCompliance,
@@ -16,16 +16,16 @@ import {
   type RequirementFinding,
   type RequirementPolicy,
   type WaiverRecord
-} from '@openbooks/engine/src/compliance/compliance.ts'
-import { businessTimeZone, businessToday, formatInZone } from '@openbooks/engine/src/platform/business-date.ts'
-import { isLegacyProvenance } from '@openbooks/engine/src/platform/legacy-provenance.ts'
+} from '@openbooks/engine/compliance/compliance'
+import { businessTimeZone, businessToday, formatInZone } from '@openbooks/engine/platform/business-date/module'
+import { isLegacyProvenance } from '@openbooks/engine/platform/legacy-provenance'
 import { addMoney, ZERO_MONEY } from './cash/core'
 import { openItems } from './cash/open-items'
 import { featureRequiredHref } from './gate-targets'
 import {
   GENERAL_THRESHOLD_CHANGE_YEAR,
   INFORMATION_RETURN_FORMS,
-} from '@openbooks/engine/src/compliance/information-returns.ts'
+} from '@openbooks/engine/compliance/information-returns'
 import type { LienWaiverFormData } from './lien-waiver-form'
 import { isFeatureEnabled } from './features'
 

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { registerHooks } from 'node:module'
 import { randomUUID } from 'node:crypto'
-import { env } from '@openbooks/engine/src/platform/db.ts'
+import { env } from '@openbooks/engine/platform/db'
 import type { SessionUser } from '../../../../lib/auth'
 
 /**
@@ -22,8 +22,8 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context)
 }})
 const { sql } = await import('drizzle-orm')
-const { db, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { db, withOrgContext } = await import('@openbooks/engine/platform/db')
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
 const { POST: setBillable } = await import('./route')
 const { POST: submitWeek } = await import('../submit/route')
 const { POST: approveWeek } = await import('../approve/route')

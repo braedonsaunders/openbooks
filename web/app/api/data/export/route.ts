@@ -4,7 +4,7 @@ import { parseJsonBody } from "@/lib/api/json";
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
+import { businessToday } from '@openbooks/engine/platform/business-date/module'
 import { can } from '../../../../lib/authz'
 import { getResource } from '../../../../lib/data-io/resources'
 import { ExportRowLimitError } from '../../../../lib/data-io/resource-core'

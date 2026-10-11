@@ -2,7 +2,7 @@ import { defineRoute } from "@/lib/api/route";
 import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { signOwnDocument } from "@openbooks/engine/src/hrm/documents/documents.ts";
+import { signOwnDocument } from "@openbooks/engine/hrm/documents/documents";
 import { guardPermission } from "../../../../../../lib/authz";
 import { hrmDocumentsErrorResponse } from "../../_lib";
 const signOwnBody = z.object({ name: z.string().trim().min(1).max(120) });

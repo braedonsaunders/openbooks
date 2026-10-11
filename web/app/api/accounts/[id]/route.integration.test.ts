@@ -65,8 +65,8 @@ registerHooks({
 const routeUrl = "./route.ts?account-hierarchy-test";
 const { GET, PATCH } = (await import(routeUrl)) as typeof import("./route.ts");
 
-const { withBypassContext, db } = await import("@openbooks/engine/src/platform/db.ts");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
+const { withBypassContext, db } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 

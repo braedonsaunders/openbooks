@@ -2,9 +2,9 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { sql } from 'drizzle-orm'
 
-const { db, withBypass } = await import('../../../../engine/src/platform/db.ts')
-const { createScratchOrg, dropScratchOrg } = await import('../../../../engine/src/testing/fixtures.ts')
-const { makeEffectiveInterval, makeRecordedRevision, resolveAsOf } = await import('../../../../engine/src/hrm/temporal.ts')
+const { db, withBypass } = await import('@openbooks/engine/platform/db')
+const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
+const { makeEffectiveInterval, makeRecordedRevision, resolveAsOf } = await import('@openbooks/engine/hrm/temporal')
 const { employeeBaseJoins } = await import('./employment-directory.ts')
 
 const TODAY = '2026-09-24'

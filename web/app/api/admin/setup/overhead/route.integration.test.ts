@@ -54,10 +54,10 @@ registerHooks({
 });
 
 const { POST } = (await import("./route.ts")) as typeof import("./route.ts");
-const { db, withBypassContext } = await import("@openbooks/engine/src/platform/db.ts");
+const { db, withBypassContext } = await import("@openbooks/engine/platform/db");
 const { BUILTIN_PROJECT_TYPES } = await import("@openbooks/schema");
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
-  "@openbooks/engine/src/testing/fixtures.ts"
+  "@openbooks/engine/testing/fixtures"
 );
 
 

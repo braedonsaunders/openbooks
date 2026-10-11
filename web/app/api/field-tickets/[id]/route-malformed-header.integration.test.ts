@@ -53,9 +53,9 @@ const patchRouteUrl = "./route.ts?fieldticket-malformed-header-test";
 const { PATCH } = (await import(patchRouteUrl)) as typeof import("./route.ts");
 hooks.deregister();
 
-const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  "@openbooks/engine/src/testing/fixtures.ts"
+  "@openbooks/engine/testing/fixtures"
 );
 const { createFieldTicket, loadFieldTicket } = await import("../../../../lib/field-tickets.ts");
 

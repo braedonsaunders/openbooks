@@ -56,8 +56,8 @@ import {
 } from "./page-layouts";
 import { orgVitals } from "./vitals";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
-import { UUID_RE } from "@openbooks/engine/src/platform/uuid.ts";
+import { db } from "@openbooks/engine/platform/db";
+import { UUID_RE } from "@openbooks/engine/platform/identifiers";
 import { FEATURES, featureEnabled, resolvedFeatureState } from "../features";
 import { applyFeatureChanges, normalizeFeatureChanges } from "../features-admin";
 import { readCompanySettings, updateCompanySettings } from "../company-settings";

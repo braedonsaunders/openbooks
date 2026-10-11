@@ -45,10 +45,10 @@ registerHooks({
   },
 });
 
-const { db, withBypassContext } = await import("@openbooks/engine/src/platform/db.ts");
+const { db, withBypassContext } = await import("@openbooks/engine/platform/db");
 const { sql } = await import("drizzle-orm");
 const { createScratchOrg, dropScratchOrg, seedFlowActors, seedDraftDocument } = await import(
-  "@openbooks/engine/src/testing/fixtures.ts"
+  "@openbooks/engine/testing/fixtures"
 );
 const { GET } = await import("./route.ts");
 

@@ -131,10 +131,10 @@ const mockSources = new Map<string, string>([
     // nothing to isolate, so a hand copy could only drift. businessToday
     // stays pinned — the explicit export shadows the re-exported one.
     'mock:business-date',
-    `export * from "@openbooks/engine/src/platform/business-date.ts"
+    `export * from "@openbooks/engine/platform/business-date/module"
       export async function businessToday() { return '2026-07-22' }`,
   ],
-  // '@openbooks/engine/src/money/money.ts' is deliberately NOT mocked: a
+  // '@openbooks/engine/money/money' is deliberately NOT mocked: a
   // hand double of the money kernel decides amounts with floats the real
   // kernel refuses on principle, so the assertions below used to pin
   // float-shaped behavior. The real bigint kernel loads through tsx.
@@ -186,10 +186,10 @@ registerHooks({
     }
     const mocks: Record<string, string> = {
       'drizzle-orm': 'mock:drizzle-orm',
-      '@openbooks/engine/src/platform/db.ts': 'mock:db',
-      '@openbooks/engine/src/payroll/packs.ts': 'mock:packs',
-      '@openbooks/engine/src/platform/business-date.ts': 'mock:business-date',
-      '@openbooks/engine/src/payroll/cheques.ts': 'mock:payroll-cheques',
+      '@openbooks/engine/platform/db': 'mock:db',
+      '@openbooks/engine/payroll/packs': 'mock:packs',
+      '@openbooks/engine/platform/business-date/module': 'mock:business-date',
+      '@openbooks/engine/payroll/cheques': 'mock:payroll-cheques',
       '../money-format': 'mock:money-format',
       '../locale': 'mock:locale',
       './catalog': 'mock:catalog',

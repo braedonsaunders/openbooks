@@ -2,12 +2,12 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db, withBypassContext, withOrgContext } from "@openbooks/engine/src/platform/db.ts";
+import { db, withBypassContext, withOrgContext } from "@openbooks/engine/platform/db";
 import {
   createScratchOrg,
   dropScratchOrg,
   seedFlowActors,
-} from "@openbooks/engine/src/testing/fixtures.ts";
+} from "@openbooks/engine/testing/fixtures";
 import { releaseTimesheetWeekApproval } from "./timesheet-approval-release.ts";
 
 /**

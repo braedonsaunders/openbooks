@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { readdirSync, readFileSync } from 'node:fs'
 import test from 'node:test'
-import { CONTROL_ACCOUNT_ROLES } from '@openbooks/engine/src/records/control-accounts.ts'
+import { CONTROL_ACCOUNT_ROLES } from '@openbooks/engine/records/control-accounts'
 
 const messages = new URL('../messages/', import.meta.url)
 for (const locale of readdirSync(messages, { withFileTypes: true }).filter((entry) => entry.isDirectory())) {

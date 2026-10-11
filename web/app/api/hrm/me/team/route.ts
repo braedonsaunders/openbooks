@@ -1,6 +1,6 @@
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { getTeamView } from "@openbooks/engine/src/hrm/self-service/team-read.ts";
+import { getTeamView } from "@openbooks/engine/hrm/self-service/team-read";
 import { meErrorResponse } from "../_lib";
 /**
  * The caller's direct-report team as of today: roster, open steps assigned

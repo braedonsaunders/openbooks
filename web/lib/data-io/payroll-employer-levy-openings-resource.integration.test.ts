@@ -10,22 +10,22 @@ const { payrollEmployerLevyOpeningsResource } = (await import(
 )) as typeof import("./payroll-employer-levy-openings-resource.ts");
 
 const { sql } = await import("drizzle-orm");
-const { db, withBypassContext } = await import("@openbooks/engine/src/platform/db.ts");
-const { cmp } = await import("@openbooks/engine/src/money/money.ts");
-const { employerLevyOpeningsForYear } = await import("@openbooks/engine/src/payroll/opening-balances.ts");
-const { PAYROLL_COUNTRY_PACKS } = await import("@openbooks/engine/src/payroll/packs.ts");
-const { setPackSlotAccount } = await import("@openbooks/engine/src/payroll/packs.ts");
-const { seedPayrollComponents } = await import("@openbooks/engine/src/payroll/run-setup.ts");
-const { calculatePayRun } = await import("@openbooks/engine/src/payroll/run-calculation.ts");
-const { createPayRun } = await import("@openbooks/engine/src/payroll/run-lifecycle.ts");
-const { seedOntarioEhtFixture } = await import("@openbooks/engine/src/payroll/filing-test-fixtures.ts");
+const { db, withBypassContext } = await import("@openbooks/engine/platform/db");
+const { cmp } = await import("@openbooks/engine/money/money");
+const { employerLevyOpeningsForYear } = await import("@openbooks/engine/payroll/opening-balances");
+const { PAYROLL_COUNTRY_PACKS } = await import("@openbooks/engine/payroll/packs");
+const { setPackSlotAccount } = await import("@openbooks/engine/payroll/packs");
+const { seedPayrollComponents } = await import("@openbooks/engine/payroll/run-setup");
+const { calculatePayRun } = await import("@openbooks/engine/payroll/run-calculation");
+const { createPayRun } = await import("@openbooks/engine/payroll/run-lifecycle");
+const { seedOntarioEhtFixture } = await import("@openbooks/engine/testing/payroll/filing-test-fixtures");
 const {
   createScratchOrg,
   dropScratchOrgReporting,
   seedFlowActors,
   seedWorkerEmployment,
   seedVacationTerms,
-} = await import("@openbooks/engine/src/testing/fixtures.ts");
+} = await import("@openbooks/engine/testing/fixtures");
 
 /**
  * The employer carry-in's missing arm: `saveEmployerLevyOpening` existed and

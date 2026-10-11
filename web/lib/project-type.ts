@@ -4,4 +4,4 @@ export {
   coarseBillingMethod,
   loadProjectType,
   type ResolvedProjectType,
-} from '@openbooks/engine/src/projects/type.ts'
+} from '@openbooks/engine/projects/type'

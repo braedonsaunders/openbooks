@@ -40,9 +40,9 @@ registerHooks({
   },
 });
 
-const { db, withBypassContext } = await import("@openbooks/engine/src/platform/db.ts");
+const { db, withBypassContext } = await import("@openbooks/engine/platform/db");
 const { sql } = await import("drizzle-orm");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
+const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
 const { GET, POST } = await import("./route.ts");
 
 test("a subsidiary-restricted HR actor cannot change org-wide feedback policy", async () => {

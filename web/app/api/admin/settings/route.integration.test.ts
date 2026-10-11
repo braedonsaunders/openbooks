@@ -68,11 +68,11 @@ registerHooks({
 
 const routeUrl = "./route.ts?accounting-policy-boundary-test";
 const { GET, PUT } = (await import(routeUrl)) as typeof import("./route.ts");
-const { CONTROL_ACCOUNT_ROLES } = await import("@openbooks/engine/src/records/control-accounts.ts");
+const { CONTROL_ACCOUNT_ROLES } = await import("@openbooks/engine/records/control-accounts");
 const { db, withBypass, withBypassContext, withOrgContext } =
-  await import("@openbooks/engine/src/platform/db.ts");
+  await import("@openbooks/engine/platform/db");
 const { createScratchOrg, createScratchUser, dropScratchOrg } =
-  await import("@openbooks/engine/src/testing/fixtures.ts");
+  await import("@openbooks/engine/testing/fixtures");
 
 
 /** Drizzle wraps driver errors, so PostgreSQL messages live on `cause`. */

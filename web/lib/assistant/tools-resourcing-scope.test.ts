@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { withBypassContext } from "@openbooks/engine/src/platform/db.ts";
-import { createScratchOrg, createScratchUser, dropScratchOrgReporting } from "@openbooks/engine/src/testing/fixtures.ts";
+import { withBypassContext } from "@openbooks/engine/platform/db";
+import { createScratchOrg, createScratchUser, dropScratchOrgReporting } from "@openbooks/engine/testing/fixtures";
 import type { SessionUser } from "../auth.ts";
 import type { Authz } from "../authz.ts";
 import { isFeatureEnabled } from "../features.ts";

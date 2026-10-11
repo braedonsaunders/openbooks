@@ -18,8 +18,8 @@ registerHooks({
   },
 });
 const { sql } = await import("drizzle-orm");
-const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
 const { listScopedAccountOptions } = await import('./scoped-options');
 const { PATCH } = await import("../app/api/accounts/[id]/route");
 const { POST } = await import("../app/api/accounts/route");
@@ -99,8 +99,8 @@ const accountListCases = [
         const { randomUUID } = await import('node:crypto');
         const test = (await import('node:test')).default;
         const { sql } = await import('drizzle-orm');
-        const { db, env, withBypass } = await import('@openbooks/engine/src/platform/db.ts')
-        const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+        const { db, env, withBypass } = await import('@openbooks/engine/platform/db')
+        const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
         const { accountBaseJoins } = await import('./customization/entity-list-query/accounts.ts')
 
         test('account list balances exclude journal lines outside the caller subsidiary scope', { skip: !env.OPENBOOKS_DB_URL }, async () => {

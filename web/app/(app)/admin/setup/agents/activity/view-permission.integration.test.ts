@@ -14,7 +14,7 @@ const loaderState: LoaderState = { user: null, permissions: new Set() };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = loaderState;
 
 const mockAuthz = `
-  import { permissionSetCovers } from '@openbooks/engine/src/organization/permissions.ts';
+  import { permissionSetCovers } from '@openbooks/engine/organization/permissions';
   const state = globalThis[Symbol.for('openbooks.agents-activity-loader-test')]
   export async function requirePermission(permission) {
     if (!state.user) throw new Error('NEXT_REDIRECT:/login');
@@ -62,9 +62,9 @@ const hooks = registerHooks({
 const { loadAgentsActivity } = await import("./view.ts");
 hooks.deregister();
 
-const { withBypassContext } = await import("@openbooks/engine/src/platform/db.ts");
+const { withBypassContext } = await import("@openbooks/engine/platform/db");
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
-  "@openbooks/engine/src/testing/fixtures.ts"
+  "@openbooks/engine/testing/fixtures"
 );
 const { CONTINUOUS_CLOSE_AGENT_KEYS, runSetupAgentNow, saveSetupAgentPolicy } = await import(
   "../../../../../../lib/setup/agents.ts"

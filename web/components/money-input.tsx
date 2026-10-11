@@ -2,8 +2,8 @@
 
 import { useState } from 'react'
 import { Input } from '@openbooks/ui'
-import { canonicalDecimal } from '@openbooks/engine/src/money/exact-decimal.ts'
-import { decimalNullCause, decimalNullRefusal } from '@openbooks/engine/src/money/decimal-refusal.ts'
+import { canonicalDecimal } from '@openbooks/engine/money/decimal'
+import { decimalNullCause, decimalNullRefusal } from '@openbooks/engine/money/decimal-refusal'
 
 /**
  * One operator-typed money (or hours) answer, refused with a named cause

@@ -70,7 +70,7 @@ const mockUrl = (name: string) => `${SELF_URL}?mock=${name}`
 
 const mockUrls = new Map<string, string>([
   ['@/lib/authz', mockUrl('authz')],
-  ['@openbooks/engine/src/platform/db.ts', mockUrl('db')],
+  ['@openbooks/engine/platform/db', mockUrl('db')],
   ['@openbooks/pdf', mockUrl('pdf')],
   ['../../../../lib/authz', mockUrl('authz')],
   ['../../../../lib/documents.ts', mockUrl('documents')],

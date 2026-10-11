@@ -10,8 +10,8 @@ registerHooks({
   },
 })
 const { sql } = await import('drizzle-orm')
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
-const { createScratchOrg, dropScratchOrgReporting } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
+const { createScratchOrg, dropScratchOrgReporting } = await import('@openbooks/engine/testing/fixtures')
 const { loadPdfRecordValues } = await import('./values')
 
 const DB = !!process.env.OPENBOOKS_DB_URL

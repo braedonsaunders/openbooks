@@ -1,7 +1,7 @@
 import 'server-only'
 import { getLocale } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/db'
 import type React from 'react'
 import type { DashboardLayoutData } from '@openbooks/schema'
 import type { Authz } from '@/lib/authz'

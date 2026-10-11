@@ -1,14 +1,14 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
 import {
   closePosition,
   revisePosition,
   writePositionFunding,
-} from "@openbooks/engine/src/hrm/positions.ts";
-import { getPositionAsOf } from "@openbooks/engine/src/hrm/positions-read.ts";
-import { isCivilDate } from "@openbooks/engine/src/hrm/temporal.ts";
+} from "@openbooks/engine/hrm/positions";
+import { getPositionAsOf } from "@openbooks/engine/hrm/positions-read";
+import { isCivilDate } from "@openbooks/engine/hrm/temporal";
 import { isUuid } from "../../../../../lib/list-params";
 import { positionErrorResponse } from "../_lib";
 import { patchPositionBody } from "../bodies";

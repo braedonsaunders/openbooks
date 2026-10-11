@@ -1,12 +1,12 @@
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
-import { db, withOrgTransaction } from "@openbooks/engine/src/platform/db.ts";
-import { ScopeNotFoundError } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
+import { db, withOrgTransaction } from "@openbooks/engine/platform/db";
+import { ScopeNotFoundError } from "@openbooks/engine/organization/scope";
 import {
   gateDecisionCapability,
   getFlowAdapter,
-} from "@openbooks/engine/src/flows/index.ts";
+} from "@openbooks/engine/flows/module";
 import { lockFlowSubjectScope, requireFlowsRecordReader } from "../_lib";
 import { can } from "../../../../lib/authz";
 import { canReadFlowSubject } from "../../../../lib/flow-subject-authz";

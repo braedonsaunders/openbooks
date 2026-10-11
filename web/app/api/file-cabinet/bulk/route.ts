@@ -11,7 +11,7 @@ import {
   moveFile,
   moveFolder,
 } from "../../../../lib/file-cabinet";
-import { inDbTransaction } from "@openbooks/engine/src/platform/db.ts";
+import { inDbTransaction } from "@openbooks/engine/platform/db";
 import { isUuid } from "../../../../lib/list-params";
 import { fileViewer } from "../lib";
 const itemIds = z.array(z.string().uuid("selection ids must be valid UUIDs")).max(500).default([]);

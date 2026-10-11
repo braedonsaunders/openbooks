@@ -95,7 +95,7 @@ function workspaceDir(name) {
   return workspaceDirs.get(name)
 }
 
-function resolveImport(from, specifier) {
+export function resolveImport(from, specifier) {
   let base
   if (specifier.startsWith('.')) base = join(dirname(from), specifier)
   else if (specifier.startsWith('@/') && from.startsWith('web/')) base = join('web', specifier.slice(2))
@@ -103,7 +103,11 @@ function resolveImport(from, specifier) {
     const match = /^(@openbooks\/[^/]+)\/(.+)$/.exec(specifier)
     const dir = match && workspaceDir(match[1])
     if (!dir) return undefined
-    base = join(dir, match[2])
+    const exports = JSON.parse(readFileSync(resolve(ROOT, dir, 'package.json'), 'utf8')).exports
+    const contract = exports?.[`./${match[2]}`]
+    if (typeof contract === 'string') base = join(dir, contract)
+    else if (dir === 'engine') return undefined
+    else base = join(dir, match[2])
   }
   const stem = base.replace(/\.js$/, '')
   for (const candidate of [base, ...SOURCE_EXTENSIONS.map((ext) => stem + ext), ...SOURCE_EXTENSIONS.map((ext) => join(base, `index${ext}`))]) {

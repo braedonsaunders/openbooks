@@ -1,13 +1,13 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { db, schema, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
-import { subsidiaryScopeAllows, subsidiaryVisibleFilter } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
+import { db, schema, withOrgTransaction } from '@openbooks/engine/platform/db'
+import { subsidiaryScopeAllows, subsidiaryVisibleFilter } from '@openbooks/engine/organization/scope'
 import { nextDocumentNumber } from "./bills.ts";
 import { resolveOrgId } from './org-scope'
-import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
+import { businessToday } from '@openbooks/engine/platform/business-date/module'
 import { allowedSubsidiaryIds as resolveAllowedSubsidiaryIds } from './subsidiaries'
-import { isUuid } from '@openbooks/engine/src/platform/uuid.ts'
-import { documentRevisionCounterSql } from '@openbooks/engine/src/records/revision.ts'
+import { isUuid } from '@openbooks/engine/platform/identifiers'
+import { documentRevisionCounterSql } from '@openbooks/engine/records/revision'
 
 export interface CreateDraftJournalOptions {
   /** Explicit legal entity requested by the caller (omitted = choose a default). */

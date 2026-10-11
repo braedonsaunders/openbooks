@@ -94,7 +94,7 @@ registerHooks({
     if (specifier === "@/lib/authz" || (specifier === "../../../../../lib/authz" && isEntityRoute)) {
       return { url: "mock:authz", shortCircuit: true };
     }
-    if (specifier === "@openbooks/engine/src/platform/db.ts" || specifier.endsWith("/platform/db.ts")) {
+    if (specifier === "@openbooks/engine/platform/db" || specifier.endsWith("/platform/db.ts")) {
       return { url: "mock:db", shortCircuit: true };
     }
     return nextResolve(specifier, context);

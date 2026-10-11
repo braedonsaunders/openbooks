@@ -5,7 +5,7 @@ import { z } from "zod";
 import {
   getFeedbackSettings,
   setFeedbackSettings,
-} from "@openbooks/engine/src/hrm/performance/feedback.ts";
+} from "@openbooks/engine/hrm/performance/feedback";
 import { guardUnrestrictedScope } from "../../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../../lib/features";
 import { performanceErrorResponse } from "../../review-cycles/_lib";

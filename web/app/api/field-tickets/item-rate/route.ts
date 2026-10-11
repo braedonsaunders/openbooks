@@ -1,14 +1,14 @@
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { divRate, mul } from '@openbooks/engine/src/money/money.ts'
+import { db } from '@openbooks/engine/platform/db'
+import { divRate, mul } from '@openbooks/engine/money/money'
 import { guardSubsidiaryScope } from '../../../../lib/authz'
 import { defineRoute } from '../../../../lib/api/route'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { isUuid } from '../../../../lib/list-params'
 import { resolveItemRate } from '../../../../lib/item-rates'
-import { ScopeNotFoundError } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
+import { ScopeNotFoundError } from '@openbooks/engine/organization/scope'
 import { notFound } from "@/lib/api/responses";
 
 

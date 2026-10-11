@@ -34,9 +34,9 @@ const hooks = registerHooks({
 test.after(() => hooks.deregister())
 
 const { sql } = await import('drizzle-orm')
-const { db, env, withBypass } = await import('@openbooks/engine/src/platform/db.ts')
-const { withSimClock: pinClock } = await import('@openbooks/engine/src/platform/clock.ts')
-const { createScratchOrg, dropScratchOrg, assertDedicatedFixtureDatabase } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { db, env, withBypass } = await import('@openbooks/engine/platform/db')
+const { withSimClock: pinClock } = await import('@openbooks/engine/testing/platform/clock')
+const { createScratchOrg, dropScratchOrg, assertDedicatedFixtureDatabase } = await import('@openbooks/engine/testing/fixtures')
 const { compareDecimal } = await import('@openbooks/engine/money/decimal')
 const { spendVelocityData } = await import('./spend-velocity-data')
 // The data layer pulls in web/lib/auth, whose request-org module registers
@@ -44,7 +44,7 @@ const { spendVelocityData } = await import('./spend-velocity-data')
 // trusted test bypass. Outside a request that resolver denies everything,
 // so scratch reads come back empty. Re-assert the bypass here, after every
 // import, so this file sees its own fixtures.
-const { installTrustedTestDatabaseBypass } = await import('@openbooks/engine/src/testing/database-bypass.ts')
+const { installTrustedTestDatabaseBypass } = await import('@openbooks/engine/testing/database-bypass')
 installTrustedTestDatabaseBypass()
 
 const D = '2026-07-14'

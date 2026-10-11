@@ -31,7 +31,7 @@ registerHooks({
     if (specifier === 'next/headers') return { shortCircuit: true, url: 'mock:headers' }
     const owned = /\/web\/lib\/(locale|org-scope)\.ts$/.test(context.parentURL ?? '')
     if (specifier === './auth' && owned) return { shortCircuit: true, url: 'mock:auth' }
-    if (specifier === '@openbooks/engine/src/platform/db.ts' && owned) return { shortCircuit: true, url: 'mock:db' }
+    if (specifier === '@openbooks/engine/platform/db' && owned) return { shortCircuit: true, url: 'mock:db' }
     return nextResolve(specifier, context)
   },
   load(url, context, nextLoad) {

@@ -2,7 +2,7 @@ import 'server-only'
 
 import { getTranslations } from 'next-intl/server'
 import { notFound } from 'next/navigation'
-import { getFundRelease } from '@openbooks/engine/src/nonprofit/releases.ts'
+import { getFundRelease } from '@openbooks/engine/nonprofit/releases'
 import {
   page,
   pageHeader,

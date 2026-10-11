@@ -3,8 +3,8 @@ import { randomUUID } from 'node:crypto'
 import test from 'node:test'
 
 const { sql } = await import('drizzle-orm')
-const { db } = await import('@openbooks/engine/src/platform/db.ts')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { db } = await import('@openbooks/engine/platform/db')
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
 const { attachExisting, deleteFile, ensureApCaptureRoot, fileAccessLevel, folderAccessLevel, getFile, getFileBlob, getFolder, getFolderTree, listFiles, listFolderContents, moveFile, setGrant } = await import('./file-cabinet')
 const { buildZip, filesZipManifest, folderZipManifest, MAX_ZIP_FILES } = await import('./file-zip')
 
@@ -305,9 +305,9 @@ const consolidatedRows = [
         const test = (await import("node:test")).default;
         const pg = (await import("pg")).default;
         const { sql } = await import('drizzle-orm')
-        const { db } = await import('@openbooks/engine/src/platform/db.ts')
-        const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
-        const { postDocument } = await import("@openbooks/engine/src/ledger/posting-document.ts");
+        const { db } = await import('@openbooks/engine/platform/db')
+        const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
+        const { postDocument } = await import("@openbooks/engine/ledger/posting-document");
         const { attachExisting, detachAttachment, getAttachmentLink } = await import('./file-cabinet')
 
         test('detachAttachment retains links to posted documents and audits permitted detaches', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
@@ -371,8 +371,8 @@ const consolidatedRows = [
         const { randomUUID } = await import("node:crypto");
         const test = (await import("node:test")).default;
         const { sql } = await import('drizzle-orm')
-        const { db } = await import('@openbooks/engine/src/platform/db.ts')
-        const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+        const { db } = await import('@openbooks/engine/platform/db')
+        const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
         const { deleteFile, deleteFolder, restoreFolder } = await import('./file-cabinet')
 
         /**
@@ -434,8 +434,8 @@ const consolidatedRows = [
         type Authz = import("./authz").Authz;
         type FileViewer = import("./file-cabinet").FileViewer;
         const { sql } = await import('drizzle-orm')
-        const { db, withBypass } = await import('@openbooks/engine/src/platform/db.ts')
-        const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+        const { db, withBypass } = await import('@openbooks/engine/platform/db')
+        const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
         const {
           createFile,
           deleteFile,
@@ -593,7 +593,7 @@ const consolidatedRows = [
         const assert: typeof import("node:assert/strict") = (await import("node:assert/strict")).default;
         const { spawnSync } = await import("node:child_process");
         const test = (await import("node:test")).default;
-        const { env } = await import("@openbooks/engine/src/platform/db.ts");
+        const { env } = await import("@openbooks/engine/platform/db");
         /**
          * Regression coverage for the purge check/delete race: an attachment that is
          * committed while a purge is in flight must block the purge, never be deleted
@@ -682,7 +682,7 @@ const consolidatedRows = [
         const assert: typeof import("node:assert/strict") = (await import("node:assert/strict")).default;
         const { spawnSync } = await import("node:child_process");
         const test = (await import("node:test")).default;
-        const { env } = await import("@openbooks/engine/src/platform/db.ts");
+        const { env } = await import("@openbooks/engine/platform/db");
         /**
          * Regression coverage for the nested private-folder boundary defect in
          * web/lib/file-cabinet.ts: owning a private folder anywhere on the ancestor

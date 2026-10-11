@@ -6,7 +6,7 @@ import { automationErrorResponse } from './_lib'
 import {
   AutomationServiceError,
   AutomationVersionConflictError,
-} from '@openbooks/engine/src/automations/services.ts'
+} from '@openbooks/engine/automations/services'
 
 test('a version conflict answers 409 with the stored version carried', async () => {
   const res = automationErrorResponse(new AutomationVersionConflictError(7))

@@ -1,7 +1,7 @@
 import 'server-only'
 import { and, asc, eq, sql } from 'drizzle-orm'
 import { projects, resAssignments } from '@openbooks/schema'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/db'
 import { isFeatureEnabled } from '../features'
 import { subsidiaryVisibleFilter } from '../subsidiaries'
 

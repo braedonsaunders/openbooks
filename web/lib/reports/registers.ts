@@ -1,11 +1,11 @@
 import "server-only";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { db } from "@openbooks/engine/platform/db";
 import { PAYROLL_RESTRICTED_PARTY_LABEL, collapseRestrictedPayrollLines } from "../payroll-confidentiality";
 // Never ../authz here: that module pulls next/navigation, which breaks
 // plain-node consumers of the ledger readers (spawned test children
 // without the react-server condition) — same rule as payroll-confidentiality.
-import { subsidiaryScopeAllows, subsidiaryVisibleFilter } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
+import { subsidiaryScopeAllows, subsidiaryVisibleFilter } from "@openbooks/engine/organization/scope";
 import { functionalReportReader } from "./currency-basis";
 import { statementBookExpr } from "../gl-summary";
 import { resolveOrgId } from "../org-scope";

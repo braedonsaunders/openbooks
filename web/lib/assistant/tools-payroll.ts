@@ -1,10 +1,10 @@
-import { payrollRunPopulationScopeFilter } from "@openbooks/engine/src/payroll/scope.ts";
+import { payrollRunPopulationScopeFilter } from "@openbooks/engine/payroll/scope";
 import "server-only";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
-import { payRunReadiness, payrollSetupState } from "@openbooks/engine/src/payroll/readiness.ts";
-import { entitlementBalances } from "@openbooks/engine/src/payroll/entitlements.ts";
+import { db } from "@openbooks/engine/platform/db";
+import { payRunReadiness, payrollSetupState } from "@openbooks/engine/payroll/readiness";
+import { entitlementBalances } from "@openbooks/engine/payroll/entitlements/operations";
 import { isFeatureEnabled } from "../features";
 import { subsidiaryScopeAllows } from "../authz";
 import { subsidiaryVisibleFilter } from "../subsidiaries";

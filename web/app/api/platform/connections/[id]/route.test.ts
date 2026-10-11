@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { engineSourceSpecifier } from "../../../../../testing/engine-resolve-hooks.ts";
+import { canonicalEngineSpecifier } from "../../../../../testing/engine-resolve-hooks.ts";
 import { registerHooks } from "node:module";
 import test from "node:test";
 
@@ -191,19 +191,19 @@ const CONTRACT_MOCKS: Record<string, string> = {
 
 const hooks = registerHooks({
   resolve(rawSpecifier, context, nextResolve) {
-    const specifier = engineSourceSpecifier(rawSpecifier) ?? rawSpecifier;
+    const specifier = canonicalEngineSpecifier(rawSpecifier) ?? rawSpecifier;
     const mocked = CONTRACT_MOCKS[rawSpecifier] ?? CONTRACT_MOCKS[specifier] ??
       (specifier === "../../../../../lib/authz"
           ? "mock:authz"
-          : specifier === "@openbooks/engine/src/platform/db.ts"
+          : specifier === "@openbooks/engine/platform/db"
             ? "mock:db"
-            : specifier === "@openbooks/engine/src/sync/connection.ts"
+            : specifier === "@openbooks/engine/sync/connection"
               ? "mock:connection"
-              : specifier === "@openbooks/engine/src/platform/secrets.ts"
+              : specifier === "@openbooks/engine/platform/secrets"
                 ? "mock:secrets"
-                : specifier === "@openbooks/engine/src/platform/business-date.ts"
+                : specifier === "@openbooks/engine/platform/business-date/module"
                   ? "mock:business-date"
-                  : specifier === "@openbooks/engine/src/sync/mirror-schedule.ts"
+                  : specifier === "@openbooks/engine/testing/sync/mirror-schedule"
                     ? "mock:mirror"
                     : specifier === "@openbooks/schema/src/connections.ts"
                       ? "mock:audit"

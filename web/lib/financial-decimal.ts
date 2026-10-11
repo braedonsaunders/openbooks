@@ -1,4 +1,4 @@
-import { roundDiv, toUnits } from '@openbooks/engine/src/money/money.ts'
+import { roundDiv, toUnits } from '@openbooks/engine/money/money'
 
 /** Exact financial ratio rendered as a decimal percent with two places. */
 export function marginPercentText(margin: string, revenue: string): string | null {

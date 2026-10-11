@@ -2,17 +2,17 @@ import assert from "node:assert/strict";
 import { createHmac, randomUUID } from "node:crypto";
 import test, { after, before } from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "../../../../../../engine/src/platform/db.ts";
+import { db } from "@openbooks/engine/platform/db";
 import {
   ACCEPTANCE_ADAPTERS,
   PAYMENT_WEBHOOK_ITEM_MALFORMED_LOG_EVENT,
-} from "../../../../../../engine/src/payments/acceptance.ts";
-import { sealJson } from "../../../../../../engine/src/platform/secrets.ts";
+} from "@openbooks/engine/payments/acceptance/operations";
+import { sealJson } from "@openbooks/engine/platform/secrets";
 import {
   createScratchOrg,
   createScratchUser,
   dropScratchOrg,
-} from "../../../../../../engine/src/testing/fixtures.ts";
+} from "@openbooks/engine/testing/fixtures";
 import { POST } from "./route.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;

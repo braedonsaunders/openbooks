@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-const { db, env, withBypass } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, env, withBypass } = await import('@openbooks/engine/platform/db')
 const { sql } = await import('drizzle-orm')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
-const { installTestExtension } = await import('@openbooks/engine/src/testing/extension-packages.ts')
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
+const { installTestExtension } = await import('@openbooks/engine/testing/extension-packages')
 const { loadPageSpec } = await import('./page-specs.ts')
 
 test('page resolution excludes disabled extensions and stale projections even if the page row remains active', { skip: !env.OPENBOOKS_DB_URL }, async () => {

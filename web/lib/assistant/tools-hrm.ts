@@ -4,60 +4,60 @@ import { z } from "zod";
 import {
   listEnrollmentWindows,
   listEnrollments,
-} from "@openbooks/engine/src/hrm/benefits/benefits-read.ts";
-import { CompensationError } from "@openbooks/engine/src/hrm/compensation/errors.ts";
-import { BenefitsError } from "@openbooks/engine/src/hrm/benefits/errors.ts";
+} from "@openbooks/engine/hrm/benefits/benefits-read";
+import { CompensationError } from "@openbooks/engine/hrm/compensation/errors";
+import { BenefitsError } from "@openbooks/engine/hrm/benefits/errors";
 import {
   listLeaveRequests,
   listLeaveTypes,
   timeBalanceAsOf,
-} from "@openbooks/engine/src/hrm/leave-read.ts";
-import { LeaveError } from "@openbooks/engine/src/hrm/leave-errors.ts";
-import { HrmQualificationError } from "@openbooks/engine/src/hrm/qualifications/errors.ts";
+} from "@openbooks/engine/hrm/leave-read";
+import { LeaveError } from "@openbooks/engine/hrm/leave-errors";
+import { HrmQualificationError } from "@openbooks/engine/hrm/qualifications/errors";
 // HR-19 begin: documents/surveys refusals (feature off, undeclared
 // category, token replay, suppression) reach the caller intact — both
 // error classes live in the documents errors module.
-import { HrmDocumentsError, HrmSurveysError } from "@openbooks/engine/src/hrm/documents/errors.ts";
+import { HrmDocumentsError, HrmSurveysError } from "@openbooks/engine/hrm/documents/errors";
 // HR-19 end
-import { SelfServiceError } from "@openbooks/engine/src/hrm/self-service/actor.ts";
-import { getMyProfile } from "@openbooks/engine/src/hrm/self-service/self-read.ts";
+import { SelfServiceError } from "@openbooks/engine/hrm/self-service/actor";
+import { getMyProfile } from "@openbooks/engine/hrm/self-service/self-read";
 import {
   getMyBenefitsWorkspace,
   getMyReviewWorkspace,
-} from "@openbooks/engine/src/hrm/self-service/my-work.ts";
-import { HrmProcessError } from "@openbooks/engine/src/hrm/processes.ts";
-import { getProcess, listProcesses } from "@openbooks/engine/src/hrm/processes-read.ts";
+} from "@openbooks/engine/hrm/self-service/my-work";
+import { HrmProcessError } from "@openbooks/engine/hrm/processes/operations";
+import { getProcess, listProcesses } from "@openbooks/engine/hrm/processes-read";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { db } from "@openbooks/engine/platform/db";
 import {
   EmploymentReadError,
   findEmploymentsByParty,
   getEmploymentAsOf,
   getHeadcountAsOf,
   loadEmploymentChangeRequests,
-} from "@openbooks/engine/src/hrm/employment-read.ts";
-import { HrmAuthorizationError } from "@openbooks/engine/src/hrm/authorization.ts";
-import { HrmPositionError } from "@openbooks/engine/src/hrm/positions.ts";
+} from "@openbooks/engine/hrm/employment-read";
+import { HrmAuthorizationError } from "@openbooks/engine/hrm/authorization";
+import { HrmPositionError } from "@openbooks/engine/hrm/positions";
 // HR-13 begin: construction read services for the two compliance tools.
-import { listFindings } from "@openbooks/engine/src/hrm/construction/findings.ts";
-import { listRuns } from "@openbooks/engine/src/hrm/construction/certified.ts";
-import { HrmConstructionError } from "@openbooks/engine/src/hrm/construction/errors.ts";
+import { listFindings } from "@openbooks/engine/hrm/construction/findings";
+import { listRuns } from "@openbooks/engine/hrm/construction/certified";
+import { HrmConstructionError } from "@openbooks/engine/hrm/construction/errors";
 // HR-13 end
-import { HrmPerformanceError } from "@openbooks/engine/src/hrm/performance/errors.ts";
+import { HrmPerformanceError } from "@openbooks/engine/hrm/performance/errors";
 import {
   getCycleDetail,
   getRetentionOverview,
   getTurnover,
   listCycleProgress,
-} from "@openbooks/engine/src/hrm/performance/performance-read.ts";
-import { getVacancyAsOf } from "@openbooks/engine/src/hrm/positions-read.ts";
-import { RecruitingError } from "@openbooks/engine/src/hrm/recruiting/errors.ts";
+} from "@openbooks/engine/hrm/performance/performance-read";
+import { getVacancyAsOf } from "@openbooks/engine/hrm/positions-read";
+import { RecruitingError } from "@openbooks/engine/hrm/recruiting/errors";
 import {
   getRequisitionDetail,
   listRequisitions,
-} from "@openbooks/engine/src/hrm/recruiting/recruiting-read.ts";
-import { AmbiguousRevisionError, TemporalError } from "@openbooks/engine/src/hrm/temporal.ts";
-import { listInbox } from "@openbooks/engine/src/inbox/index.ts";
+} from "@openbooks/engine/hrm/recruiting/recruiting-read";
+import { AmbiguousRevisionError, TemporalError } from "@openbooks/engine/hrm/temporal";
+import { listInbox } from "@openbooks/engine/inbox/runtime";
 import { inboxContext } from "../inbox-context";
 import { isFeatureEnabled } from "../features";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
@@ -770,7 +770,7 @@ const hrmRecruiting: AssistantToolDef = {
       // seats — private notes never ride this shape).
       if (a.interviewId) {
         const { scorecardSummary } = await import(
-          "@openbooks/engine/src/hrm/recruiting/scorecards.ts"
+          "@openbooks/engine/hrm/recruiting/scorecards"
         );
         const summary = await scorecardSummary({
           orgId: authz.user.orgId,
@@ -783,7 +783,7 @@ const hrmRecruiting: AssistantToolDef = {
       // HR-18 begin: offer signature state (state only, never the letter).
       if (a.offerId) {
         const { offerSignatureState } = await import(
-          "@openbooks/engine/src/hrm/recruiting/offers-signing.ts"
+          "@openbooks/engine/hrm/recruiting/offers-signing"
         );
         const state = await offerSignatureState({
           orgId: authz.user.orgId,
@@ -804,7 +804,7 @@ const hrmRecruiting: AssistantToolDef = {
         // Recruiting is off.
         let postings: { boardKey: string; status: string; applyCount: number }[] | undefined;
         if (a.includePostings === true) {
-          const { listPostings } = await import("@openbooks/engine/src/hrm/recruiting/postings.ts");
+          const { listPostings } = await import("@openbooks/engine/hrm/recruiting/postings");
           postings = (
             await listPostings({
               orgId: authz.user.orgId,
@@ -1370,9 +1370,9 @@ const hrmCompensation: AssistantToolDef = {
     if (!(await isFeatureEnabled(authz.user.orgId, "hrmCompensation"))) return { ok: false, error: HRM_FEATURE_OFF };
     const a = raw as { employmentId?: string; asOf?: string };
     try {
-      const { listPayBands } = await import("@openbooks/engine/src/hrm/compensation/bands.ts");
-      const { listCycles } = await import("@openbooks/engine/src/hrm/compensation/cycles.ts");
-      const { listPlans } = await import("@openbooks/engine/src/hrm/compensation/headcount-plans.ts");
+      const { listPayBands } = await import("@openbooks/engine/hrm/compensation/bands");
+      const { listCycles } = await import("@openbooks/engine/hrm/compensation/cycles");
+      const { listPlans } = await import("@openbooks/engine/hrm/compensation/headcount-plans");
       const { orgToday: todayOf } = await import("./tools-shared");
       const asOf = a.asOf ?? (await todayOf(authz.user.orgId));
       const [bands, cycles, plans] = await Promise.all([
@@ -1391,7 +1391,7 @@ const hrmCompensation: AssistantToolDef = {
       let placement: { employmentId: string; placement: string; compaRatio: string | null } | null = null;
       if (a.employmentId) {
         try {
-          const { compaRatioFor } = await import("@openbooks/engine/src/hrm/compensation/bands.ts");
+          const { compaRatioFor } = await import("@openbooks/engine/hrm/compensation/bands");
           const placed = await compaRatioFor(authz.user.orgId, authz.user.id, a.employmentId, asOf);
           placement = { employmentId: a.employmentId, placement: placed.band ? placed.placement : "no_band", compaRatio: placed.compaRatio };
         } catch (error) {
@@ -1428,7 +1428,7 @@ const hrmPayEquity: AssistantToolDef = {
     void raw;
     if (!(await isFeatureEnabled(authz.user.orgId, "hrmCompensation"))) return { ok: false, error: HRM_FEATURE_OFF };
     try {
-      const { latestGapSnapshot } = await import("@openbooks/engine/src/hrm/compensation/pay-transparency.ts");
+      const { latestGapSnapshot } = await import("@openbooks/engine/hrm/compensation/pay-transparency");
       const snapshot = await latestGapSnapshot({ orgId: authz.user.orgId, actorId: authz.user.id });
       if (!snapshot) return { ok: true, data: { snapshot: null, href: "/hrm/compensation/equity" } };
       return {
@@ -1480,7 +1480,7 @@ const automationsStatus: AssistantToolDef = {
     const a = raw as { status?: string; limit?: number };
     const limit = Math.min(a.limit ?? 25, 100);
     try {
-      const { listAutomations } = await import("@openbooks/engine/src/automations/services.ts");
+      const { listAutomations } = await import("@openbooks/engine/automations/services");
       const automations = await listAutomations(authz.user.orgId, authz.user.id);
       const runs = (
         await db.execute<{
@@ -1553,7 +1553,7 @@ const hrmQualifications: AssistantToolDef = {
     if (!(await isFeatureEnabled(authz.user.orgId, "hrmCertifications"))) return { ok: false, error: HRM_FEATURE_OFF };
     const a = raw as { employmentId?: string; typeId?: string; status?: string };
     try {
-      const { listQualifications } = await import("@openbooks/engine/src/hrm/qualifications/qualifications.ts");
+      const { listQualifications } = await import("@openbooks/engine/hrm/qualifications/qualifications");
       const held = await listQualifications(db, {
         orgId: authz.user.orgId,
         actorId: authz.user.id,
@@ -1606,7 +1606,7 @@ const hrmDispatchCheck: AssistantToolDef = {
     if (!a.employmentId) return { ok: false, error: "employment_required" };
     if (!a.subjectKind || !a.subjectId) return { ok: false, error: "subject_required" };
     try {
-      const { checkAssignment } = await import("@openbooks/engine/src/hrm/qualifications/gating.ts");
+      const { checkAssignment } = await import("@openbooks/engine/hrm/qualifications/gating");
       const verdict = await checkAssignment(db, {
         orgId: authz.user.orgId,
         actorId: authz.user.id,
@@ -1664,9 +1664,9 @@ const hrmDocuments: AssistantToolDef = {
     const a = raw as { status?: string; categoryKey?: string };
     try {
       const { listDocuments, listOwnDocuments } = await import(
-        "@openbooks/engine/src/hrm/documents/documents.ts"
+        "@openbooks/engine/hrm/documents/documents"
       );
-      const manages = await import("@openbooks/engine/src/organization/actor-permissions.ts").then((m) =>
+      const manages = await import("@openbooks/engine/organization/actor-permissions").then((m) =>
         m.actorHasPermission(db, authz.user.orgId, authz.user.id, "hrm.documents.read"),
       );
       const documents = manages
@@ -1719,7 +1719,7 @@ const hrmSurveyResults: AssistantToolDef = {
     const a = raw as { surveyId?: string };
     if (!a.surveyId) return { ok: false, error: "survey_required" };
     try {
-      const { getSurveyResults } = await import("@openbooks/engine/src/hrm/surveys/responses.ts");
+      const { getSurveyResults } = await import("@openbooks/engine/hrm/surveys/responses");
       const results = await getSurveyResults({
         orgId: authz.user.orgId,
         actorId: authz.user.id,
@@ -1764,8 +1764,8 @@ const hrmOrgChart: AssistantToolDef = {
     if (!(await isFeatureEnabled(authz.user.orgId, "hrm"))) return { ok: false, error: HRM_FEATURE_OFF };
       const a = raw as { asOf?: string; search?: string; page?: number };
     try {
-      const { loadDirectory, loadOrgChart } = await import("@openbooks/engine/src/hrm/org-chart.ts");
-      const { businessToday } = await import("@openbooks/engine/src/platform/business-date.ts");
+      const { loadDirectory, loadOrgChart } = await import("@openbooks/engine/hrm/org-chart/operations");
+      const { businessToday } = await import("@openbooks/engine/platform/business-date/module");
       const asOf = a.asOf ?? (await businessToday(authz.user.orgId));
       const [chart, directory] = await Promise.all([
         loadOrgChart({ orgId: authz.user.orgId, actorId: authz.user.id, asOf }),
@@ -1828,7 +1828,7 @@ const hrmOneOnOnes: AssistantToolDef = {
     const limit = Math.min(a.limit ?? 50, 200);
     try {
       const { listOneOnOnes } = await import(
-        "@openbooks/engine/src/hrm/performance/one-on-ones.ts"
+        "@openbooks/engine/hrm/performance/one-on-ones"
       );
       const ones = await listOneOnOnes({
         orgId: authz.user.orgId,
@@ -1877,7 +1877,7 @@ const hrmFeedback: AssistantToolDef = {
     const a = raw as { subjectEmploymentId?: string; kind?: (typeof feedbackKinds)[number]; limit?: number };
     const limit = Math.min(a.limit ?? 50, 200);
     try {
-      const { listFeedback } = await import("@openbooks/engine/src/hrm/performance/feedback.ts");
+      const { listFeedback } = await import("@openbooks/engine/hrm/performance/feedback");
       const rows = await listFeedback({
         orgId: authz.user.orgId,
         actorId: authz.user.id,
@@ -1924,7 +1924,7 @@ const hrmCalibration: AssistantToolDef = {
     const a = raw as { sessionId?: string; cycleId?: string };
     try {
       const { getCalibrationSession, listCalibrationSessions } = await import(
-        "@openbooks/engine/src/hrm/performance/calibration.ts"
+        "@openbooks/engine/hrm/performance/calibration"
       );
       if (a.sessionId) {
         const session = await getCalibrationSession({
@@ -1982,7 +1982,7 @@ HRM_TOOLS.push(inboxItems);
 // service — the model phrases and drafts, the services compute. Each tool
 // logs its decision to the governance ledger: mutating paths log inside
 // their service, pure-read paths log here before returning.
-import { AiRailsError as Hr21AiRailsError } from "@openbooks/engine/src/hrm/ai/errors.ts";
+import { AiRailsError as Hr21AiRailsError } from "@openbooks/engine/hrm/ai/errors";
 
 function hr21Refusal(error: unknown): ToolResult {
   if (error instanceof Hr21AiRailsError) return { ok: false, error: error.message };
@@ -2024,7 +2024,7 @@ const hrmExplainPay: AssistantToolDef = {
     if (gated) return gated;
     const a = raw as { employmentId: string; stubId?: string };
     try {
-      const { explainPay } = await import("@openbooks/engine/src/hrm/ai/explain-pay.ts");
+      const { explainPay } = await import("@openbooks/engine/hrm/ai/explain-pay");
       const trace = await explainPay(db, {
         orgId: authz.user.orgId,
         actorId: authz.user.id,
@@ -2115,7 +2115,7 @@ const payrollAnomalies: AssistantToolDef = {
       if (gated) return gated;
     }
     try {
-      const ai = await import("@openbooks/engine/src/hrm/ai/anomalies.ts");
+      const ai = await import("@openbooks/engine/hrm/ai/anomalies");
       if (a.action === "scan") {
         if (!a.periodFrom || !a.periodTo) return { ok: false, error: "periodFrom and periodTo are required to scan" };
         const summary = await ai.scanAnomalies(db, {
@@ -2138,7 +2138,7 @@ const payrollAnomalies: AssistantToolDef = {
           status: a.status ?? "open",
           employmentId: a.employmentId,
         });
-        const { logDecision } = await import("@openbooks/engine/src/hrm/ai/governance.ts");
+        const { logDecision } = await import("@openbooks/engine/hrm/ai/governance");
         await logDecision(db, {
           orgId: authz.user.orgId,
           actorId: authz.user.id,
@@ -2207,7 +2207,7 @@ const aiDraft: AssistantToolDef = {
     if (gated) return gated;
     const a = raw as { kind: (typeof draftKinds)[number]; subjectId: string };
     try {
-      const { draftWithEvidence } = await import("@openbooks/engine/src/hrm/ai/drafting.ts");
+      const { draftWithEvidence } = await import("@openbooks/engine/hrm/ai/drafting");
       const draft = await draftWithEvidence({
         orgId: authz.user.orgId,
         actorId: authz.user.id,
@@ -2257,7 +2257,7 @@ const nlReport: AssistantToolDef = {
       const { REPORT_ENTITY_MAP } = await import("@openbooks/reports");
       const { hiddenReportEntityKeys } = await import("../report-authz");
       const { canRunReportEntity } = await import("../report-authz");
-      const { validateNlDefinition } = await import("@openbooks/engine/src/hrm/ai/nl-reports.ts");
+      const { validateNlDefinition } = await import("@openbooks/engine/hrm/ai/nl-reports");
       const hidden = new Set(await hiddenReportEntityKeys(authz));
       const catalog = Object.values(REPORT_ENTITY_MAP)
         .filter((e) => !hidden.has(e.key))
@@ -2286,7 +2286,7 @@ const nlReport: AssistantToolDef = {
       }, 5);
       const rows = preview.groups.flatMap((g) => g.rows.slice(0, 5)).slice(0, 5);
       if (a.action === "preview") {
-        const { logDecision } = await import("@openbooks/engine/src/hrm/ai/governance.ts");
+        const { logDecision } = await import("@openbooks/engine/hrm/ai/governance");
         await logDecision(db, {
           orgId: authz.user.orgId,
           actorId: authz.user.id,
@@ -2306,7 +2306,7 @@ const nlReport: AssistantToolDef = {
           note: "Preview only — nothing saved. Ask to save it as a view.",
         };
       }
-      const { saveNlDraft } = await import("@openbooks/engine/src/hrm/ai/nl-reports.ts");
+      const { saveNlDraft } = await import("@openbooks/engine/hrm/ai/nl-reports");
       const saved = await saveNlDraft(db, {
         orgId: authz.user.orgId,
         actorId: authz.user.id,

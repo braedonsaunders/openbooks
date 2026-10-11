@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { setLegalHold } from "@openbooks/engine/src/hrm/documents/documents.ts";
+import { setLegalHold } from "@openbooks/engine/hrm/documents/documents";
 import { hrmDocumentsErrorResponse } from "../../_lib";
 import { holdDocumentBody } from "../../bodies";
 export const POST = defineRoute({

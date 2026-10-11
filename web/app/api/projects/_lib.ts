@@ -1,7 +1,7 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
-import { documentRevisionSql } from '@openbooks/engine/src/records/revision.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
+import { documentRevisionSql } from '@openbooks/engine/records/revision'
 import { loadFieldDefs, type CustomFieldDef } from '../../../lib/custom-fields'
 import { subsidiaryVisibleFilter } from '../../../lib/subsidiaries'
 

@@ -8,9 +8,9 @@ import { sql } from 'drizzle-orm'
 // but its content hash still identifies the design byte-for-byte). Every
 // issuance channel records this same object.
 
-const { db, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypassContext } = await import('@openbooks/engine/platform/db')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
-  '@openbooks/engine/src/testing/fixtures.ts'
+  '@openbooks/engine/testing/fixtures'
 )
 const { resolvePdfTemplate } = await import('./store')
 

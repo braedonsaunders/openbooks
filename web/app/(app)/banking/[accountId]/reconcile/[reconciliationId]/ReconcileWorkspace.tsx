@@ -1,6 +1,6 @@
 'use client'
 
-import { sum } from '@openbooks/engine/src/money/money.ts'
+import { sum } from '@openbooks/engine/money/money'
 import { useMoney } from '@/components/money-provider'
 import type { MoneyValue } from '@/lib/money-format'
 import { readApiErrorMessage } from '@/lib/api-error'

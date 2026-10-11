@@ -3,9 +3,9 @@ import { createHash, createHmac, randomBytes, randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
 import { test } from "node:test";
 import { sql } from "drizzle-orm";
-import { db, env, pool, withBypassContext, withOrgContext } from "@openbooks/engine/src/platform/db.ts";
-import { resolveKeyScopeAuthority } from "@openbooks/engine/src/organization/permissions.ts";
-import { createScratchOrg, dropScratchOrg } from "@openbooks/engine/src/testing/fixtures.ts";
+import { db, env, pool, withBypassContext, withOrgContext } from "@openbooks/engine/platform/db";
+import { resolveKeyScopeAuthority } from "@openbooks/engine/organization/permissions";
+import { createScratchOrg, dropScratchOrg } from "@openbooks/engine/testing/fixtures";
 
 /**
  * Regression coverage for the empty-scopes defect in the API-key contract:

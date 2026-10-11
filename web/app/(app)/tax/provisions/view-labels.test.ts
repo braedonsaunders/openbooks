@@ -79,7 +79,7 @@ const mockSources = new Map<string, string>([
 
 const mockUrls = new Map<string, string>([
   ['../../../../lib/data', 'mock:data'],
-  ['@openbooks/engine/src/tax-returns/income-tax-provision.ts', 'mock:provision'],
+  ['@openbooks/engine/tax-returns/income-tax-provision', 'mock:provision'],
   ['@braedonsaunders/appkit-viewspec', 'mock:viewspec'],
 ])
 

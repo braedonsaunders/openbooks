@@ -1,7 +1,7 @@
 import { lockManufacturingRoutingAuthority } from "@openbooks/engine/manufacturing/authority";
 import { z } from "zod";
-import { db } from "@openbooks/engine/src/platform/db.ts";
-import { createNextRoutingVersion, getRouting } from "@openbooks/engine/src/manufacturing/routings.ts";
+import { db } from "@openbooks/engine/platform/db";
+import { createNextRoutingVersion, getRouting } from "@openbooks/engine/manufacturing/routings";
 import { guardRoutingSubsidiaryScope } from "../../../_scope";
 import { defineRoute } from "@/lib/api/route";
 import { created, notFound } from "@/lib/api/responses";

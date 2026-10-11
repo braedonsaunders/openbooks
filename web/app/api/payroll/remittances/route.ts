@@ -3,9 +3,9 @@ import { defineRoute } from '@/lib/api/route'
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { parseJsonBody } from "@/lib/api/json"
 import { NextResponse } from 'next/server'
-import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
-import { createRemittanceBill, payrollRemittanceSummary } from '@openbooks/engine/src/payroll/remittance.ts'
-import { PayrollError } from "@openbooks/engine/src/payroll/error.ts";
+import { isIsoCalendarDate } from '@openbooks/engine/platform/business-date/module'
+import { createRemittanceBill, payrollRemittanceSummary } from '@openbooks/engine/payroll/remittance'
+import { PayrollError } from "@openbooks/engine/payroll/error";
 import '../../../../lib/feature-gates';
 import { isUuid } from '../../../../lib/list-params'
 import { suppliedValue } from '../../../../lib/payroll-decimal-refusal'

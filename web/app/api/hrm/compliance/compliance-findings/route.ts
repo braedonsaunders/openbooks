@@ -1,11 +1,11 @@
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { db } from "@openbooks/engine/platform/db";
 import {
   acknowledgeFinding,
   listFindings,
   resolveFinding,
-} from "@openbooks/engine/src/hrm/construction/findings.ts";
+} from "@openbooks/engine/hrm/construction/findings";
 import { constructionErrorResponse } from "../_lib";
 import { findingActionBody } from "../bodies";
 /** Compliance findings: list, acknowledge, resolve. */

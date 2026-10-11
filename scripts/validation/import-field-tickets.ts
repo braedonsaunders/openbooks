@@ -23,7 +23,7 @@
  */
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { sql } from "drizzle-orm";
-import { db } from "../../engine/src/platform/db.ts";
+import { db } from "@openbooks/engine/platform/db";
 import {
   assertImportOrgId,
   importFieldTickets,

@@ -5,9 +5,9 @@ import {
   observedHolidays,
   statutoryHolidayPayRule,
   type ObservedHoliday,
-} from '@openbooks/engine/src/payroll/holidays.ts'
-import { declaredJurisdictions } from '@openbooks/engine/src/payroll/packs.ts'
-import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
+} from '@openbooks/engine/payroll/holidays'
+import { declaredJurisdictions } from '@openbooks/engine/payroll/packs'
+import { businessToday } from '@openbooks/engine/platform/business-date/module'
 import { ListFilterSelect } from '../../../../../components/list-filter-select'
 import { pickString } from '../../../../../lib/list-params'
 

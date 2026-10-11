@@ -3,9 +3,9 @@ import { NextResponse } from "next/server";
 import {
   addCompetencyLevel,
   createCompetency,
-} from "@openbooks/engine/src/hrm/performance/competencies.ts";
+} from "@openbooks/engine/hrm/performance/competencies";
 import { apiErrorResponse } from "@/lib/api/error-response";
-import { HrmPerformanceError } from "@openbooks/engine/src/hrm/performance/errors.ts";
+import { HrmPerformanceError } from "@openbooks/engine/hrm/performance/errors";
 import { performanceErrorResponse } from "../review-cycles/_lib";
 import {
   addCompetencyLevelBody,

@@ -2,9 +2,9 @@ import { NextResponse } from "next/server";
 import { z } from "zod";
 import { parseJsonBody } from "../../../../../lib/api/json";
 import { defineRoute } from "../../../../../lib/api/route";
-import { previewAllocationRun } from "../../../../../../engine/src/allocations/period-run.ts";
-import { allocationServiceDeps } from "../../../../../../engine/src/allocations/service.ts";
-import { previewPinError } from "../../../../../../engine/src/organization/allocation-scope.ts";
+import { previewAllocationRun } from "@openbooks/engine/allocations/period-run";
+import { allocationServiceDeps } from "@openbooks/engine/allocations/service";
+import { previewPinError } from "@openbooks/engine/organization/allocation-scope";
 import { isUuid } from "../../../../../lib/list-params";
 import { allocationRunErrorResponse } from "../../_lib.ts";
 

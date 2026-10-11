@@ -21,7 +21,7 @@ type Search = Record<string, string | string[] | undefined>
  * Postgres "invalid input syntax for type uuid" error instead of a clean 404.
  * Re-exported from the engine so web and engine apply one definition.
  */
-export { isUuid } from '@openbooks/engine/src/platform/uuid.ts'
+export { isUuid } from '@openbooks/engine/platform/identifiers'
 
 export function parseListParams<S extends string>(
   searchParams: Search,

@@ -3,7 +3,7 @@ import { defineRoute } from "@/lib/api/route";
 import { z } from "zod";
 import { convertToModelMessages, generateText, type UIMessage } from "ai";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { db } from "@openbooks/engine/platform/db";
 import { can } from "../../../../lib/authz";
 import { AIDisabledError, getModel } from "../../../../lib/assistant/client";
 import { getOrgAiConfig } from "../../../../lib/assistant/ai-config";
@@ -44,7 +44,7 @@ import {
 } from "../../../../lib/assistant/conversation-memory";
 import { scheduleAutoTitle } from "../../../../lib/assistant/conversation-title";
 import { moduleOfTool } from "../../../../lib/assistant/tool-router";
-import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
 import { orgFiscalContext } from "../../../../lib/fiscal";
 import { resolvedFeatureState } from "../../../../lib/features";
 import {
@@ -54,7 +54,7 @@ import {
   recentMessages,
 } from "../../../../lib/ai-conversations";
 import { loadFindingContext } from "../../../../lib/agents/finding-context";
-import { isUuid } from "@openbooks/engine/src/platform/uuid.ts";
+import { isUuid } from "@openbooks/engine/platform/identifiers";
 import { CONVERSATION_SCOPES, conversationScope } from "../../../../lib/assistant/conversation-scopes";
 import { migrationModeSection } from "../../../../lib/assistant/migration-prompt";
 import { loadMigrationJourney } from "../../../../lib/migration/journey";

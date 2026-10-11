@@ -71,8 +71,8 @@ const mockUrls = new Map<string, string>([
   ["../../../../../lib/feature-gates", "mock:gates"],
   ["@/lib/authz", "mock:gates"],
   ["@/lib/feature-gates", "mock:gates"],
-  ["@openbooks/engine/src/hrm/employment-read.ts", "mock:service"],
-  ["@openbooks/engine/src/platform/business-date.ts", "mock:business-date"],
+  ["@openbooks/engine/hrm/employment-read", "mock:service"],
+  ["@openbooks/engine/platform/business-date/module", "mock:business-date"],
 ]);
 
   const hooks = registerHooks({
@@ -143,7 +143,7 @@ test("a caller with neither grant keeps the employment denial", async () => {
 
 test("an employment outside scope is the same not-found response as an absent record", async () => {
   reset();
-  const { HrmAuthorizationError } = await import("@openbooks/engine/src/hrm/authorization.ts");
+  const { HrmAuthorizationError } = await import("@openbooks/engine/hrm/authorization");
   routeState.serviceError = new HrmAuthorizationError(
     "Employment is not visible in this organization and legal-entity scope.",
   );

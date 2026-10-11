@@ -1,8 +1,8 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { db, withOrgTransaction } from "@openbooks/engine/src/platform/db.ts";
-import { renewQualification } from "@openbooks/engine/src/hrm/qualifications/qualifications.ts";
+import { db, withOrgTransaction } from "@openbooks/engine/platform/db";
+import { renewQualification } from "@openbooks/engine/hrm/qualifications/qualifications";
 import { qualificationErrorResponse } from "../../_lib";
 import { renewQualificationBody } from "../../bodies";
 /** Renewal writes a NEW row linked to the old one — never an overwrite. */

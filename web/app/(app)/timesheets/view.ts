@@ -15,7 +15,7 @@ import { loadFieldDefs } from '../../../lib/custom-fields'
 import { loadOpenFlagsForWeek, type WeekFlagChip } from '../../../lib/hrm/ai-rails'
 import { loadTimePolicy } from '../../../lib/time-policy'
 // HR-20: approver flag chips over the week's clock pairs.
-import { approvalFlags } from '@openbooks/engine/src/hrm/field-time/reads.ts'
+import { approvalFlags } from '@openbooks/engine/hrm/field-time/reads'
 import { TIMESHEET_WEEK_SUBJECT_KIND } from '@openbooks/engine/flows/timesheet-weeks-adapter'
 import { subsidiaryVisibleFilter } from '../../../lib/subsidiaries'
 import {

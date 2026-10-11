@@ -2,24 +2,24 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
-import { toUnits } from "@openbooks/engine/src/money/money.ts";
+import { db } from "@openbooks/engine/platform/db";
+import { toUnits } from "@openbooks/engine/money/money";
 import {
   createScratchOrg,
   createScratchUser,
   dropScratchOrg,
-} from "@openbooks/engine/src/testing/fixtures.ts";
-import { postDocument } from "@openbooks/engine/src/ledger/posting-document.ts";
+} from "@openbooks/engine/testing/fixtures";
+import { postDocument } from "@openbooks/engine/ledger/posting-document";
 import {
   DocumentVoidError,
   requestDocumentVoid,
   requestReceiptVoidWithDependents,
-} from "@openbooks/engine/src/ledger/document-void.ts";
+} from "@openbooks/engine/ledger/document-void";
 import {
   correctReceiptRemainder,
   listReceiptVoidBlockers,
-} from "@openbooks/engine/src/inventory/receipt-void-dependents.ts";
-import { getOnHand } from "@openbooks/engine/src/inventory/position.ts";
+} from "@openbooks/engine/inventory/receipt-void-dependents";
+import { getOnHand } from "@openbooks/engine/testing/inventory/position";
 import {
   createOrderDraft,
   fulfillSalesOrder,

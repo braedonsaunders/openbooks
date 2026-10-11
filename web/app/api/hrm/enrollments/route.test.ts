@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import nodeTest from "node:test";
 import { NextResponse } from "next/server";
-import { BenefitsError } from "@openbooks/engine/src/hrm/benefits/errors.ts";
-import { HrmAuthorizationError } from "@openbooks/engine/src/hrm/authorization.ts";
+import { BenefitsError } from "@openbooks/engine/hrm/benefits/errors";
+import { HrmAuthorizationError } from "@openbooks/engine/hrm/authorization";
 
 /**
  * Enrollment collection boundary: GET lists (employment, mine, filters),
@@ -96,9 +96,9 @@ const mockUrls = new Map<string, string>([
   ["../../../../lib/features", "mock:authz"],
   ["@/lib/authz", "mock:authz"],
   ["@/lib/feature-gates", "mock:authz"],
-  ["@openbooks/engine/src/hrm/benefits/enrollments.ts", "mock:service"],
-  ["@openbooks/engine/src/hrm/benefits/benefits-read.ts", "mock:read"],
-  ["@openbooks/engine/src/platform/db.ts", "mock:read"],
+  ["@openbooks/engine/hrm/benefits/enrollments", "mock:service"],
+  ["@openbooks/engine/hrm/benefits/benefits-read", "mock:read"],
+  ["@openbooks/engine/platform/db", "mock:read"],
 ]);
 
   const hooks = registerHooks({

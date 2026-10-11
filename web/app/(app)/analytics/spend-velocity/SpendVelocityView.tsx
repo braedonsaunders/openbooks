@@ -16,7 +16,7 @@ import {
   TrendingUp, UserRound, PiggyBank, Gauge as GaugeIcon, Download,
 } from 'lucide-react'
 import { cn, Select, Badge } from '@openbooks/ui'
-import { cmp as compareMoney } from '@openbooks/engine/src/money/money.ts'
+import { cmp as compareMoney } from '@openbooks/engine/money/money'
 import type { SpendVelocityData, VelocityRow } from '../../../../lib/analytics/spend-velocity-data'
 import { KpiCard } from '../_ui/KpiCard'
 import { Panel } from '../_ui/Panel'

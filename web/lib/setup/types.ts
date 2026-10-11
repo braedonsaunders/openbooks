@@ -1,6 +1,6 @@
 /** Setup-registry descriptor types and pure helpers (split from registry.ts; pure moves only). */
-import type { SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
-import { featureEnabled, type FeatureState } from '@openbooks/engine/src/organization/feature-registry.ts'
+import type { SqlExecutor } from '@openbooks/engine/platform/db'
+import { featureEnabled, type FeatureState } from '@openbooks/engine/organization/feature-registry'
 
 export type SetupFieldKind =
   | 'text'

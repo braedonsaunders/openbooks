@@ -1,4 +1,4 @@
-import { fromUnits, toUnits } from '../../../../../../engine/src/money/money.ts'
+import { fromUnits, toUnits } from '@openbooks/engine/money/money'
 import { canonicalDecimal, compareDecimal, isPositiveDecimal } from '../../../../../lib/exact-decimal'
 import {
   blankDefinitionForm,

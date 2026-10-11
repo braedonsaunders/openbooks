@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import nodeTest from "node:test";
 import { NextResponse } from "next/server";
-import { HrmAuthorizationError } from "@openbooks/engine/src/hrm/authorization.ts";
+import { HrmAuthorizationError } from "@openbooks/engine/hrm/authorization";
 
 /**
  * Detail boundary: managers read through the employment gate,
@@ -90,7 +90,7 @@ const mockSources = new Map<string, string>([
 const mockUrls = new Map<string, string>([
   ["../../../../../lib/authz", "mock:authz"],
   ["../../../../../lib/features", "mock:authz"],
-  ["@openbooks/engine/src/hrm/leave-read.ts", "mock:service"],
+  ["@openbooks/engine/hrm/leave-read", "mock:service"],
   ["@/lib/authz", "mock:authz"],
   ["@/lib/feature-gates", "mock:authz"],
 ]);

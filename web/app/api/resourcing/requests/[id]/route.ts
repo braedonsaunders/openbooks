@@ -1,8 +1,8 @@
 import { and, eq, inArray } from "drizzle-orm";
 import { z } from "zod";
 import { projects, resRequests } from "@openbooks/schema";
-import { updateResourceRequestDraft } from "@openbooks/engine/src/resourcing/requests.ts";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { updateResourceRequestDraft } from "@openbooks/engine/resourcing/requests";
+import { db } from "@openbooks/engine/platform/db";
 import { defineRoute } from "@/lib/api/route";
 import { findUnownedCustomReferences, loadFieldDefs, unknownCustomFieldKey, validateCustomValues } from "@/lib/custom-fields";
 

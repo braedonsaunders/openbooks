@@ -2,13 +2,13 @@ import { defineRoute } from '@/lib/api/route';
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { db } from "@openbooks/engine/platform/db";
 import {
   LossOfControlProposalError,
   loadLossOfControlProposalData,
   proposeLossOfControl,
-} from "@openbooks/engine/src/consolidation/loss-of-control.ts";
-import { isIsoCalendarDate } from "@openbooks/engine/src/platform/business-date.ts";
+} from "@openbooks/engine/consolidation/loss-of-control";
+import { isIsoCalendarDate } from "@openbooks/engine/platform/business-date/module";
 import { exactMoney, parseJsonBody } from "@/lib/api/json";
 import { isUuid } from "@/lib/list-params";
 export const runtime = "nodejs";

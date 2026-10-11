@@ -3,7 +3,7 @@
 import { useTranslations } from 'next-intl'
 import { useViewerFormat } from '@/lib/viewer-format'
 import { InsightChart } from '@openbooks/analytics/viz'
-import { abs as moneyAbs, add as moneyAdd, cmp as moneyCmp, neg as moneyNeg } from '@openbooks/engine/src/money/money.ts'
+import { abs as moneyAbs, add as moneyAdd, cmp as moneyCmp, neg as moneyNeg } from '@openbooks/engine/money/money'
 import { escapeTooltipHtml, toChartNumber, useAnalyticsMoney } from './format'
 
 /** Loose ECharts option shape — mirrors the analytics package's own alias. */

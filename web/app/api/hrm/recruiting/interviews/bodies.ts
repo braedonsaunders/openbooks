@@ -1,6 +1,6 @@
 import { z } from "zod";
 import { isUuid } from "../../../../../lib/list-params";
-import { isIsoInstantWithOffset } from "@openbooks/engine/src/hrm/recruiting/input.ts";
+import { isIsoInstantWithOffset } from "@openbooks/engine/hrm/recruiting/input";
 
 /** Typed request bodies for /api/hrm/recruiting/interviews/*. */
 const uuid = z.string().refine(isUuid, "must be a valid id");

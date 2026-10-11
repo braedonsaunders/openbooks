@@ -30,7 +30,7 @@ import {
   xlsxResponse,
 } from "../../../../../lib/export";
 import { decimalCmp, decimalSum } from "../../../../../lib/statement-format";
-import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
 import { notFound } from "@/lib/api/responses";
 
 export const runtime = "nodejs";

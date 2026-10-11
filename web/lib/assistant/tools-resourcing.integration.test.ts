@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db, withBypassContext } from "@openbooks/engine/src/platform/db.ts";
-import { createScratchOrg, createScratchUser, dropScratchOrgReporting } from "@openbooks/engine/src/testing/fixtures.ts";
-import { upsertAssignment } from "@openbooks/engine/src/resourcing/assignments.ts";
+import { db, withBypassContext } from "@openbooks/engine/platform/db";
+import { createScratchOrg, createScratchUser, dropScratchOrgReporting } from "@openbooks/engine/testing/fixtures";
+import { upsertAssignment } from "@openbooks/engine/resourcing/assignments";
 import type { Authz } from "../authz.ts";
 
 const { RESOURCING_TOOLS } = await import("./tools-resourcing.ts");

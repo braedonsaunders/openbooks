@@ -1,10 +1,10 @@
 import 'server-only'
 
 import { sql, type SQL } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/db'
 import { acquireFeatureGateLock, isFeatureEnabled } from './features'
-import { lockAndCheckOrgFeature } from '@openbooks/engine/src/organization/org-feature-lock.ts'
-import { documentRevisionSql, isDocumentRevisionToken } from '@openbooks/engine/src/records/revision.ts'
+import { lockAndCheckOrgFeature } from '@openbooks/engine/organization/org-feature-lock'
+import { documentRevisionSql, isDocumentRevisionToken } from '@openbooks/engine/records/revision'
 import {
   assertTaskTransition,
   ProjectWorkBreakdownError,

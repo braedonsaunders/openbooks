@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import {
   CompensationError,
   MERIT_CYCLES_NEED_PAYROLL,
-} from "@openbooks/engine/src/hrm/compensation/errors.ts";
+} from "@openbooks/engine/hrm/compensation/errors";
 import { isFeatureEnabled } from "../../../../lib/features";
 import { notFound } from "@/lib/api/responses";
 import { compensationErrorResponse } from "../compensation/_lib";

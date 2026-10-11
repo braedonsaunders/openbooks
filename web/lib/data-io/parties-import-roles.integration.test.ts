@@ -6,9 +6,9 @@ import { sql } from 'drizzle-orm'
 // stays canonical, every named role becomes a native role row, and the
 // export reads those rows back — so an exported file re-imports losslessly
 // and a re-import never mints a duplicate role.
-const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/platform/db')
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  '@openbooks/engine/src/testing/fixtures.ts'
+  '@openbooks/engine/testing/fixtures'
 )
 const { MASTER_BY_KEY, masterResource } = await import('./master-data-resources.ts')
 

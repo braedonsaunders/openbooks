@@ -43,6 +43,9 @@ const mockSources = new Map<string, string>([
   [
     'mock:db',
     `
+      export function inExecutorTransaction() { throw new Error('unexpected inExecutorTransaction in route boundary test') }
+      export function orgContext() { throw new Error('unexpected orgContext in route boundary test') }
+
       const state = globalThis[Symbol.for('openbooks.journal-route-test')]
       const sqlText = globalThis.openbooksSqlTextJournal
       const record = (kind, query) => {
@@ -112,8 +115,8 @@ const mockSources = new Map<string, string>([
 ])
 
 const mockUrls = new Map<string, string>([
-  ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
-  ['@openbooks/engine/src/records/transaction-audit.ts', 'mock:transaction-audit'],
+  ['@openbooks/engine/platform/db', 'mock:db'],
+  ['@openbooks/engine/records/transaction-audit', 'mock:transaction-audit'],
   ['@/lib/authz', 'mock:authz'],
   ['../../../../lib/authz', 'mock:authz'],
   ['../../../../lib/journals', 'mock:journals-loader'],

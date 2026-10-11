@@ -13,9 +13,9 @@ registerHooks({
 })
 
 const { sql } = await import('drizzle-orm')
-const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
-const { createScratchOrg, dropScratchOrg, assertDedicatedFixtureDatabase } = await import('@openbooks/engine/src/testing/fixtures.ts')
-const { JULY, withTrueCostOrg } = await import('@openbooks/engine/src/testing/true-cost-fixtures.ts')
+const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/platform/db')
+const { createScratchOrg, dropScratchOrg, assertDedicatedFixtureDatabase } = await import('@openbooks/engine/testing/fixtures')
+const { JULY, withTrueCostOrg } = await import('@openbooks/engine/testing/true-cost-fixtures')
 const { trueCostData } = await import('./true-cost-data')
 const { withAnalyticsRead } = await import('./read-context')
 
@@ -618,7 +618,7 @@ test('Setup retains current allocation and publication facts without reading the
         where id = ${priorEntry} and org_id = ${seeded.org.orgId} returning id`)
       assert.equal(posted.rows.length, 1)
     })
-    const { registerQueryObserver } = await import('@openbooks/engine/src/platform/query-observer.ts')
+    const { registerQueryObserver } = await import('@openbooks/engine/platform/query-observer')
     const captured: string[][] = []
     const read = async (includePriorComparison: boolean) => {
       const statements: string[] = []

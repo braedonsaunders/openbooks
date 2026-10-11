@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import test from 'node:test'
-import { pool } from '@openbooks/engine/src/platform/db.ts'
-import { createScratchOrg } from '@openbooks/engine/src/testing/fixtures.ts'
+import { pool } from '@openbooks/engine/platform/db'
+import { createScratchOrg } from '@openbooks/engine/testing/fixtures'
 import { analyticsFiscalPeriodOptions } from './fiscal-period-options'
 
 async function insertPeriod(orgId: string, calendarId: string, period: {

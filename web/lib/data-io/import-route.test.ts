@@ -77,7 +77,7 @@ const mockSources = new Map<string, string>([
   [
     'mock:db',
     `
-      export * from ${JSON.stringify(import.meta.resolve('@openbooks/engine/src/platform/db.ts'))}
+      export * from ${JSON.stringify(import.meta.resolve('@openbooks/engine/platform/db'))}
       const state = globalThis[Symbol.for('openbooks.data-import-route-test')]
       export const schema = {
         documents: Symbol.for('openbooks.data-import-route-test.documents'),
@@ -312,8 +312,8 @@ const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     const mockUrl = new Map([
       ['drizzle-orm', 'mock:drizzle'],
-      ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
-      ['@openbooks/engine/src/ledger/posting-document.ts', 'mock:posting'],
+      ['@openbooks/engine/platform/db', 'mock:db'],
+      ['@openbooks/engine/ledger/posting-document', 'mock:posting'],
       ['../../../engine/src/ledger/document-service.ts', 'mock:documents'],
       ['../bills.ts', 'mock:documents'],
       ['./resource-core', 'mock:resource-core'],

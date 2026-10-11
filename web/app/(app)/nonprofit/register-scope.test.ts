@@ -6,7 +6,7 @@ import { pathToFileURL } from 'node:url'
 import assert from 'node:assert/strict'
 import { sql } from 'drizzle-orm'
 import test from 'node:test'
-import type { ScratchOrg } from '@openbooks/engine/src/testing/fixtures.ts'
+import type { ScratchOrg } from '@openbooks/engine/testing/fixtures'
 const root = pathToFileURL(process.cwd() + '/').href
 const state: { user: import('../../../lib/auth').SessionUser | null } = { user: null }
 Object.assign(globalThis, { __registerScope: state, __encDetailCalls: 0 })
@@ -16,7 +16,7 @@ registerHooks({
     if ((s === './auth' || s.endsWith('/lib/auth')) && c.parentURL?.includes('/web/') && !c.parentURL.includes('/web/lib/auth.ts')) {
       return { shortCircuit: true, url: 'data:text/javascript,' + encodeURIComponent(`export * from ${JSON.stringify(root + 'web/lib/auth.ts')};export async function currentUser(){return globalThis.__registerScope.user;}`) }
     }
-    if (s === '@openbooks/engine/src/nonprofit/encumbrances.ts') return { shortCircuit: true, url: 'mock:enc-detail-counter' }
+    if (s === '@openbooks/engine/nonprofit/encumbrances') return { shortCircuit: true, url: 'mock:enc-detail-counter' }
     const app = resolveAppModule(s, c, next, root)
     if (app) return app
     return next(s, c)
@@ -29,9 +29,9 @@ registerHooks({
 // Translations are request-scoped framework output: stub only next-intl while
 // authz, feature flags, and the database stay real.
 stubModules({ intl: true })
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
-const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import('@openbooks/engine/src/testing/fixtures.ts')
-const { createEncumbrance } = await import('@openbooks/engine/src/nonprofit/encumbrances.ts')
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
+const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import('@openbooks/engine/testing/fixtures')
+const { createEncumbrance } = await import('@openbooks/engine/nonprofit/encumbrances')
 const { getAuthz } = await import('../../../lib/authz.ts')
 const { nonprofitGroupTabs } = await import('../../../components/module-home/group-tabs.ts')
 const { loadGrants, grantsSpec } = await import('./grants/view.ts')

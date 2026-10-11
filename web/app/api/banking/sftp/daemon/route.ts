@@ -1,6 +1,6 @@
 import { defineRoute } from '@/lib/api/route';
 import { NextResponse } from 'next/server'
-import { loadDaemonConfig, hostKeyFingerprint } from '@openbooks/engine/src/sftp/manager.ts'
+import { loadDaemonConfig, hostKeyFingerprint } from '@openbooks/engine/sftp/manager'
 
 export const runtime = 'nodejs'
 

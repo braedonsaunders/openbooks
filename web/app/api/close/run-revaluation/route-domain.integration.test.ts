@@ -23,9 +23,9 @@ registerHooks({
     return next(specifier, context)
   },
 })
-const { db, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withOrgContext } = await import('@openbooks/engine/platform/db')
 const { sql } = await import('drizzle-orm')
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import('@openbooks/engine/testing/fixtures')
 const { POST } = await import('./route.ts')
 
 async function fixture() {

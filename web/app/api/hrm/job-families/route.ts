@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import {
   createJobFamily,
   listJobFamilies,
-} from "@openbooks/engine/src/hrm/compensation/architecture.ts";
+} from "@openbooks/engine/hrm/compensation/architecture";
 
 import { compensationErrorResponse } from "../compensation/_lib";
 import { createFamilyBody } from "../compensation/bodies";

@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { sql } from 'drizzle-orm'
-import { db, withBypassContext, withOrgContext } from '@openbooks/engine/src/platform/db.ts'
-import { createScratchOrg, dropScratchOrg } from '@openbooks/engine/src/testing/fixtures.ts'
+import { db, withBypassContext, withOrgContext } from '@openbooks/engine/platform/db'
+import { createScratchOrg, dropScratchOrg } from '@openbooks/engine/testing/fixtures'
 import type { ApplicationContext } from './context'
 import { ApplicationError } from './errors'
 

@@ -6,7 +6,7 @@ import { toast } from 'sonner'
 import { Button, Input, Label, Select, Textarea } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../../../lib/api-error'
 import { promptDialog } from '../../../../lib/prompt'
-import { civilDateTimeToInstant } from '@openbooks/engine/src/platform/time-zone.ts'
+import { civilDateTimeToInstant } from '@openbooks/engine/platform/time-zone'
 
 /**
  * Recruiting action islands: small client forms posting through the same

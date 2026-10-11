@@ -1,7 +1,7 @@
 import 'server-only'
-import { approveBatch, rejectBatch } from '@openbooks/engine/src/hrm/field-time/crew.ts'
-import { actorAllowedSubsidiaryIds } from '@openbooks/engine/src/organization/actor-subsidiaries.ts'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { approveBatch, rejectBatch } from '@openbooks/engine/hrm/field-time/crew'
+import { actorAllowedSubsidiaryIds } from '@openbooks/engine/organization/actor-subsidiaries'
+import { db } from '@openbooks/engine/platform/db'
 
 /**
  * Apply a flow gate's decision to a crew time batch.

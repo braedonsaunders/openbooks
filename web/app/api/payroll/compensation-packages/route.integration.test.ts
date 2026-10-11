@@ -22,8 +22,8 @@ registerHooks({ resolve(specifier, context, next) {
 } })
 
 const { db, withOrgContext, withBypassContext } = await import('@openbooks/engine/platform/database')
-const { DB, setupHarness, withHarness, seedEmployment } = await import('@openbooks/engine/src/testing/hrm-harness.ts')
-const { seedPayrollSchedule, seedPayrollProfile } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { DB, setupHarness, withHarness, seedEmployment } = await import('@openbooks/engine/testing/hrm-harness')
+const { seedPayrollSchedule, seedPayrollProfile } = await import('@openbooks/engine/testing/fixtures')
 const { sql } = await import('drizzle-orm')
 const collection = await import('./route')
 const versionRoute = await import('./[id]/versions/route')

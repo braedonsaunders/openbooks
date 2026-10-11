@@ -91,7 +91,7 @@ const mockSources = new Map<string, string>([
   [
     'mock:db',
     `
-      export * from '${import.meta.resolve('@openbooks/engine/src/platform/db.ts')}'
+      export * from '${import.meta.resolve('@openbooks/engine/platform/db')}'
       const state = globalThis[Symbol.for('openbooks.item-costing-route-test')]
       const sqlText = globalThis.openbooksSqlText
       const sqlParams = globalThis.openbooksSqlParams
@@ -221,7 +221,7 @@ const mockSources = new Map<string, string>([
 ])
 
 const mockUrls = new Map<string, string>([
-  ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
+  ['@openbooks/engine/platform/db', 'mock:db'],
   ['../../../../../lib/feature-gates', 'mock:feature-gates'],
   ['@/lib/feature-gates', 'mock:feature-gates'],
   ['../../../../../lib/authz', 'mock:authz'],
@@ -232,7 +232,7 @@ const hooks = registerHooks({
     // Next.js-style aliases forwarded to the real modules they point at
     // (web/lib/api/json.ts etc. relative to this web/lib test file).
     // Swap the persistence and authorization seams for scripted doubles.
-    if (specifier === '@openbooks/engine/src/platform/db.ts'
+    if (specifier === '@openbooks/engine/platform/db'
       || specifier.endsWith('/lib/feature-gates')
       || specifier === '../../../../../lib/authz') {
       return { url: mockUrls.get(specifier)!, shortCircuit: true }

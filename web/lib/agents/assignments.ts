@@ -1,9 +1,9 @@
 import "server-only";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { db } from "@openbooks/engine/platform/db";
 import { can, subsidiaryScopeAllows, type Authz } from "../authz";
 import { canReadContinuousCloseAgent, loadWorkItemAccess } from "../continuous-close";
-import { isUuid } from "@openbooks/engine/src/platform/uuid.ts";
+import { isUuid } from "@openbooks/engine/platform/identifiers";
 
 /**
  * Assignment & SLA for workbench findings (migration 0153): assign a finding

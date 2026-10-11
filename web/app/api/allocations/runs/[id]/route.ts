@@ -3,8 +3,8 @@ import { NextResponse } from "next/server";
 import { defineRoute } from "../../../../../lib/api/route";
 import { z } from "zod";
 import { isUuid } from "../../../../../lib/list-params";
-import { RunQueryError, getRun } from "../../../../../../engine/src/allocations/run-queries.ts";
-import { allocationScopeVisible } from "../../../../../../engine/src/organization/allocation-scope.ts";
+import { RunQueryError, getRun } from "@openbooks/engine/allocations/run-queries";
+import { allocationScopeVisible } from "@openbooks/engine/organization/allocation-scope";
 import { notFound } from "@/lib/api/responses";
 
 

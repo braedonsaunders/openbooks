@@ -1,8 +1,8 @@
 import { defineRoute } from "@/lib/api/route";
 import { notFound } from "@/lib/api/responses";
 import { NextResponse } from "next/server";
-import { createCycle } from "@openbooks/engine/src/hrm/performance/review-cycles.ts";
-import { listCycleProgress } from "@openbooks/engine/src/hrm/performance/performance-read.ts";
+import { createCycle } from "@openbooks/engine/hrm/performance/review-cycles";
+import { listCycleProgress } from "@openbooks/engine/hrm/performance/performance-read";
 
 import { isFeatureEnabled } from "../../../../lib/features";
 import { performanceErrorResponse } from "./_lib";

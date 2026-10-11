@@ -2,10 +2,10 @@ import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
-import { createScratchOrg, dropScratchOrg, seedFlowActors } from "@openbooks/engine/src/testing/fixtures.ts";
-import { receiveInventory } from "@openbooks/engine/src/inventory/movements.ts";
-import { postLandedCostVoucher, reverseLandedCostVoucher } from "@openbooks/engine/src/inventory/landed-cost.ts";
+import { db } from "@openbooks/engine/platform/db";
+import { createScratchOrg, dropScratchOrg, seedFlowActors } from "@openbooks/engine/testing/fixtures";
+import { receiveInventory } from "@openbooks/engine/inventory/movements";
+import { postLandedCostVoucher, reverseLandedCostVoucher } from "@openbooks/engine/inventory/landed-cost";
 
 const state = { user: { orgId: "", id: "" } };
 Object.assign(globalThis, { __landedPagingAudit: state });

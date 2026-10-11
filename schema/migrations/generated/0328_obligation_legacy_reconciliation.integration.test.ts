@@ -33,12 +33,12 @@ import {
   snapshotTableCatalog,
   type CatalogQuery,
   type TableCatalogSnapshot,
-} from "../../../engine/src/testing/migration-catalog.ts";
-import { db } from "../../../engine/src/platform/db.ts";
+} from "@openbooks/engine/testing/migration-catalog";
+import { db } from "@openbooks/engine/platform/db";
 import {
   createScratchOrg,
   dropScratchOrg,
-} from "../../../engine/src/testing/fixtures.ts";
+} from "@openbooks/engine/testing/fixtures";
 
 const PROBE_FILENAME = "generated/0999_g54_0328_probe.sql";
 const PROBE_DIGEST = "g54-0328-probe";

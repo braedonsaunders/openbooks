@@ -1,3 +1,4 @@
+import { resolveEngineSpecifier } from '../../../testing/engine-resolve-hooks.ts'
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
@@ -20,27 +21,24 @@ registerHooks({
     // Worktree node_modules is a symlink to the main checkout's install, so
     // bare @openbooks self-imports would resolve to MAIN-checkout code (a
     // second db pool without the test bypass). Pin them to this checkout.
-    if (specifier.startsWith("@openbooks/engine/src/")) {
-      return nextResolve(
-        new URL(`../../../../engine/${specifier.slice("@openbooks/engine/".length)}`, import.meta.url).href,
-        context,
-      );
-    }
+
+    const engineUrl = resolveEngineSpecifier(specifier);
+    if (engineUrl) return nextResolve(engineUrl, context);
     return nextResolve(specifier, context);
   },
 });
 
 const { sql } = await import("drizzle-orm");
-const { db, env, withBypass, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
-const { withSimClock: pinClock } = await import("@openbooks/engine/src/platform/clock.ts");
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
-const { postDocument } = await import("@openbooks/engine/src/ledger/posting-document.ts");
+const { db, env, withBypass, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { withSimClock: pinClock } = await import("@openbooks/engine/testing/platform/clock");
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
+const { postDocument } = await import("@openbooks/engine/ledger/posting-document");
 const { customerData, customerSummaryData, rankAtRiskCustomers } = await import("@/lib/analytics/customer-data.ts");
 const { loadCustomerWidgetMetrics } = await import("./_metrics-customers.ts");
 const { loadDashboardMetrics } = await import("./_metrics.ts");
 const { canSeeWidget } = await import("./_widget-access.ts");
 type Authz = import("@/lib/authz.ts").Authz;
-type ScratchOrg = import("@openbooks/engine/src/testing/fixtures.ts").ScratchOrg;
+type ScratchOrg = import("@openbooks/engine/testing/fixtures").ScratchOrg;
 
 const P = { from: "2026-04-01", to: "2026-06-30", label: "Q2 2026" };
 const TODAY = "2026-07-15";

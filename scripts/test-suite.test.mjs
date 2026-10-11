@@ -112,3 +112,10 @@ test('partition arguments preserve Node option values and refuse filenames befor
     assert.equal(result.stdout, '')
   }
 })
+
+test('fixture ownership follows named engine contracts without reopening source paths', async () => {
+  const { resolveImport } = await import('./test-suite.mjs');
+  assert.equal(resolveImport('web/lib/example.test.ts', '@openbooks/engine/testing/fixtures'), 'engine/src/testing/fixtures.ts');
+  assert.equal(resolveImport('web/lib/example.test.ts', '@openbooks/engine/platform/database'), 'engine/src/platform/public-database.ts');
+  assert.equal(resolveImport('web/lib/example.test.ts', '@openbooks/engine/src/testing/fixtures.ts'), undefined);
+});

@@ -4,7 +4,7 @@ import { defineRoute } from "@/lib/api/route";
 import { pgTextArrayLiteral } from "@/lib/pg-array";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/db'
 import { guardPermission, type Authz } from '../../../../lib/authz'
 import { MODULE_BY_KEY, type OrgNavConfig } from '../../../../lib/nav/registry'
 import { LOCAL_NAVIGATION } from '@openbooks/engine/navigation'

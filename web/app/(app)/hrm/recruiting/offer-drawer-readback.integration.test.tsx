@@ -29,13 +29,13 @@ registerHooks({
 
 const { renderToString } = await import("react-dom/server");
 const { sql } = await import("drizzle-orm");
-const { db } = await import("@openbooks/engine/src/platform/db.ts");
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
-const { createRequisition, openRequisition } = await import("@openbooks/engine/src/hrm/recruiting/requisitions.ts");
-const { createCandidate } = await import("@openbooks/engine/src/hrm/recruiting/candidates.ts");
-const { createApplication } = await import("@openbooks/engine/src/hrm/recruiting/applications.ts");
-const { createOffer } = await import("@openbooks/engine/src/hrm/recruiting/offers.ts");
-const { getOfferDetail, getCandidateDetail } = await import("@openbooks/engine/src/hrm/recruiting/recruiting-read.ts");
+const { db } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
+const { createRequisition, openRequisition } = await import("@openbooks/engine/hrm/recruiting/requisitions");
+const { createCandidate } = await import("@openbooks/engine/hrm/recruiting/candidates");
+const { createApplication } = await import("@openbooks/engine/hrm/recruiting/applications");
+const { createOffer } = await import("@openbooks/engine/hrm/recruiting/offers");
+const { getOfferDetail, getCandidateDetail } = await import("@openbooks/engine/hrm/recruiting/recruiting-read");
 const { OfferDrawerBody, CandidateDrawerBody } = await import("./sections.tsx");
 
 const DB = !!process.env.OPENBOOKS_DB_URL;

@@ -85,7 +85,7 @@ const mockSources = new Map<string, string>([
       export function xlsxResponse() { return new Response('') }
     `,
   ],
-  ['mock:business-date', `export * from '${import.meta.resolve('@openbooks/engine/src/platform/business-date.ts')}'
+  ['mock:business-date', `export * from '${import.meta.resolve('@openbooks/engine/platform/business-date/module')}'
     export async function businessToday() { return '2026-08-28' }`],
   ['mock:features', `export async function isFeatureEnabled() { return true }`],
   ['mock:projects-gate', `export async function guardProjectsFeature() { return null }`],
@@ -108,7 +108,7 @@ const mockUrls = new Map<string, string>([
   ['../../../../../../lib/report-filters', 'mock:report-filters'],
   ['../../../../../../lib/report-labels', 'mock:report-labels'],
   ['../../../../../../lib/export', 'mock:export'],
-  ['@openbooks/engine/src/platform/business-date.ts', 'mock:business-date'],
+  ['@openbooks/engine/platform/business-date/module', 'mock:business-date'],
   ['../../../../../../lib/features', 'mock:features'],
   ['../../../../../../lib/projects-gate', 'mock:projects-gate'],
   ['../../../../../../lib/general-ledger-pdf', 'mock:general-ledger-pdf'],

@@ -1,6 +1,6 @@
 import "server-only";
 import { sql, type SQL } from "drizzle-orm";
-import { uuidArray } from "@openbooks/engine/src/organization/subsidiaries.ts";
+import { uuidArray } from "@openbooks/engine/organization/subsidiaries";
 
 /**
  * Subject lineage joins for workbench readers. Account findings resolve

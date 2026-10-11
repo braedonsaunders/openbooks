@@ -2,8 +2,8 @@ import { queryAppRecords } from './query'
 import 'server-only'
 
 import { sql, type SQL } from 'drizzle-orm'
-import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
-import type { AppPlatformAdapter } from '@openbooks/engine/src/apps/runtime.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
+import type { AppPlatformAdapter } from '@openbooks/engine/apps/runtime'
 import type { SessionUser } from '@/lib/auth'
 import { pgTextArrayLiteral } from '@/lib/pg-array'
 import { permissionSetCovers } from '@/lib/permissions'
@@ -19,7 +19,7 @@ import { createRecord, deleteRecord, updateRecord, type WriteResult } from '@/li
 import {
   documentRevisionProjection,
   normalizeDocumentRecordRevisions,
-} from '@openbooks/engine/src/records/document-edit-policy.ts'
+} from '@openbooks/engine/records/document-edit-policy'
 import { isUuid } from '@/lib/list-params'
 import { inTypeAudience, loadRecordTypeByKey, recordVisibleInSubsidiaryFenceSql } from '@/lib/records'
 

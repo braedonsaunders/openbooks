@@ -2,9 +2,9 @@ import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import test from 'node:test'
 
-const { db, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypassContext } = await import('@openbooks/engine/platform/db')
 const { sql } = await import('drizzle-orm')
-const { createScratchOrg, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { createScratchOrg, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
 const { createFieldTicket, FieldTicketNotFoundError } = await import('./field-tickets')
 
 test('Field Ticket service refuses direct creation when Field Tickets is disabled', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
@@ -35,9 +35,9 @@ test('Field Ticket service refuses direct creation when Field Tickets is disable
 
 const consolidatedRows = [
   { label: "field ticket crew approved", register: async () => {
-        const { db, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
+        const { db, withBypassContext } = await import('@openbooks/engine/platform/db')
         const { sql } = await import('drizzle-orm')
-        const { createScratchOrg, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+        const { createScratchOrg, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
         const { addTicketLine, createFieldTicket, saveCrewGrid, loadFieldTicket, updateTicketHeader, FieldTicketError } = await import('./field-tickets')
 
         const enabled = { skip: !process.env.OPENBOOKS_DB_URL }
@@ -202,9 +202,9 @@ const consolidatedRows = [
         })
   } },
   { label: "field ticket header date", register: async () => {
-        const { db, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
+        const { db, withBypassContext } = await import('@openbooks/engine/platform/db')
         const { sql } = await import('drizzle-orm')
-        const { createScratchOrg, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+        const { createScratchOrg, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
         const { createFieldTicket, loadFieldTicket, updateTicketHeader, FieldTicketError } = await import('./field-tickets')
 
         const enabled = { skip: !process.env.OPENBOOKS_DB_URL }
@@ -246,9 +246,9 @@ const consolidatedRows = [
         })
   } },
   { label: "field ticket crew ownership", register: async () => {
-        const { db, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
+        const { db, withBypassContext } = await import('@openbooks/engine/platform/db')
         const { sql } = await import('drizzle-orm')
-        const { createScratchOrg, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+        const { createScratchOrg, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
         const { createFieldTicket, saveCrewGrid, loadFieldTicket, FieldTicketError } = await import('./field-tickets')
 
         /**

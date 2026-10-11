@@ -1,7 +1,7 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
 import { NextResponse } from 'next/server'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/db'
 import type { Authz } from './authz'
 import { insightVisibilitySql } from './insight-access'
 import { auditSetupChange } from './setup/audit'

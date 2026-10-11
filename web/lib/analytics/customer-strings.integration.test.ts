@@ -6,10 +6,10 @@ import test from 'node:test'
 import { createTranslator } from 'next-intl'
 
 const { sql } = await import('drizzle-orm')
-const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
-const { withSimClock: pinClock } = await import('@openbooks/engine/src/platform/clock.ts')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
-const { postDocument } = await import("@openbooks/engine/src/ledger/posting-document.ts");
+const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/platform/db')
+const { withSimClock: pinClock } = await import('@openbooks/engine/testing/platform/clock')
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
+const { postDocument } = await import("@openbooks/engine/ledger/posting-document");
 const { customerStrings } = await import('./customer-strings.ts')
 const { customerData } = await import('./customer-data.ts')
 

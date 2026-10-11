@@ -2,8 +2,8 @@ import 'server-only'
 
 import { sql } from 'drizzle-orm'
 import { randomUUID } from 'node:crypto'
-import { canonicalJson } from '@openbooks/engine/src/platform/canonical-json.ts'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { canonicalJson } from '@openbooks/engine/platform/canonical-json'
+import { db } from '@openbooks/engine/platform/db'
 
 /**
  * HR-15 home announcements: an admin-authored list with audience scope and

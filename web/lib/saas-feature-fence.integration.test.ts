@@ -4,20 +4,20 @@ import { registerHooks } from 'node:module'
 import test from 'node:test'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db, withBypassContext, withOrgContext } from '@openbooks/engine/src/platform/db.ts'
-import { createScratchOrg, createScratchUser, dropScratchOrg } from '@openbooks/engine/src/testing/fixtures.ts'
-import { UsageBillingError } from '@openbooks/engine/src/billing/usage/errors.ts'
-import { createPrepaidGrant } from '@openbooks/engine/src/billing/usage/prepaid.ts'
-import { commitRateRun } from '@openbooks/engine/src/billing/usage/rate-run.ts'
-import { createUsageMeter, ingestUsageRecords } from '@openbooks/engine/src/billing/usage/records.ts'
+import { db, withBypassContext, withOrgContext } from '@openbooks/engine/platform/db'
+import { createScratchOrg, createScratchUser, dropScratchOrg } from '@openbooks/engine/testing/fixtures'
+import { UsageBillingError } from '@openbooks/engine/billing/usage/errors'
+import { createPrepaidGrant } from '@openbooks/engine/billing/usage/prepaid'
+import { commitRateRun } from '@openbooks/engine/billing/usage/rate-run'
+import { createUsageMeter, ingestUsageRecords } from '@openbooks/engine/billing/usage/records'
 import {
   createSubscriptionUsageLink,
   createUsageRatingPlan,
   createUsageRatingPlanVersion,
   publishUsagePlanVersion,
   replaceUsageRatingBands,
-} from '@openbooks/engine/src/billing/usage/rating-plans.ts'
-import { recomputeSaasMetrics, saasMetricsScanTargets } from '@openbooks/engine/src/billing/metrics/metrics-ledger.ts'
+} from '@openbooks/engine/billing/usage/rating-plans'
+import { recomputeSaasMetrics, saasMetricsScanTargets } from '@openbooks/engine/billing/metrics/metrics-ledger'
 import { REPORT_ENTITIES, BUILT_IN_REPORT_DEFINITION_MAP } from '@openbooks/reports'
 import { availableReportEntities } from './report-builder-catalog.ts'
 import type { Authz } from './authz.ts'

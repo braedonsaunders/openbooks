@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { StoredValueError } from '@openbooks/engine/stored-value'
-import { ConsolidationError } from '@openbooks/engine/src/consolidation/consolidation.ts'
-import { PostingError } from '@openbooks/engine/src/journal/posting-contracts.ts'
-import { PeriodClosedError } from '@openbooks/engine/src/periods/period-policy.ts'
+import { ConsolidationError } from '@openbooks/engine/consolidation/consolidation'
+import { PostingError } from '@openbooks/engine/journal/contracts'
+import { PeriodClosedError } from '@openbooks/engine/periods/period-policy'
 import { apiErrorResponse } from './error-response'
 import { readApiErrorMessage } from '../api-error'
 

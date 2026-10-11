@@ -1,17 +1,17 @@
 import "server-only";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
-import { attestOwnerManagedClose, requestCloseApproval } from "@openbooks/engine/src/close/approvals.ts";
-import { closeApprovedRun, publishCloseRun } from "@openbooks/engine/src/close/run-completion.ts";
-import { CloseError, type CloseModule } from "@openbooks/engine/src/periods/period-policy.ts";
-import { decidePeriodReopen, requestPeriodReopen } from "@openbooks/engine/src/close/reopening.ts";
-import { refreshCloseRun } from "@openbooks/engine/src/close/run-automation.ts";
-import { startCloseRun } from "@openbooks/engine/src/close/run-start.ts";
+import { db } from "@openbooks/engine/platform/db";
+import { attestOwnerManagedClose, requestCloseApproval } from "@openbooks/engine/close/approvals";
+import { closeApprovedRun, publishCloseRun } from "@openbooks/engine/close/run-completion";
+import { CloseError, type CloseModule } from "@openbooks/engine/periods/period-policy";
+import { decidePeriodReopen, requestPeriodReopen } from "@openbooks/engine/close/reopening";
+import { refreshCloseRun } from "@openbooks/engine/close/run-automation";
+import { startCloseRun } from "@openbooks/engine/close/run-start";
 import {
   RevaluationError,
   RevaluationFeatureDisabledError,
   runRevaluation,
-} from "@openbooks/engine/src/close/fx-revaluation.ts";
+} from "@openbooks/engine/close/fx-revaluation";
 import { can } from "../authz";
 import type { ApplicationContext } from "./context";
 import { assertApplicationPermission, assertSubsidiaryAccess } from "./context";

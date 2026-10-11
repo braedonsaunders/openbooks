@@ -30,8 +30,8 @@ stubModules({
       export async function guardPayrollFilingRowIds() { return null }
       export async function guardPayrollFilingData() { return null }
     `,
-    "@openbooks/engine/src/platform/db.ts": `
-      export * from ${JSON.stringify(import.meta.resolve('@openbooks/engine/src/platform/db.ts'))}
+    "@openbooks/engine/platform/db": `
+      export * from ${JSON.stringify(import.meta.resolve('@openbooks/engine/platform/db'))}
       const state = globalThis[Symbol.for('openbooks.payroll-year-end-artifact-test')]
       export const db = {
         execute() {
@@ -43,12 +43,12 @@ stubModules({
     "drizzle-orm": `
       export function sql() { return {} }
     `,
-    "@openbooks/engine/src/payroll/yearend-amendments.ts": `
+    "@openbooks/engine/payroll/yearend-amendments": `
       export async function filingArtifact() {
         throw new Error('filingArtifact must not run for a shape refusal')
       }
     `,
-    "@openbooks/engine/src/payroll/yearend.ts": `
+    "@openbooks/engine/payroll/yearend": `
       export async function orgYearEndFilings() { return [] }
     `,
   },

@@ -97,9 +97,9 @@ const { PATCH: PLATFORM_PATCH } = (await import(daemonUrl)) as typeof import(
 );
 
 const { db, env, withBypass, withBypassContext, withOrgContext } =
-  await import("@openbooks/engine/src/platform/db.ts");
+  await import("@openbooks/engine/platform/db");
 const { createScratchOrg, createScratchUser, dropScratchOrg } =
-  await import("@openbooks/engine/src/testing/fixtures.ts");
+  await import("@openbooks/engine/testing/fixtures");
 
 // Creating a server resolves storage through the production selector, which
 // requires an absolute shared OPENBOOKS_DATA_DIR (refuses by name

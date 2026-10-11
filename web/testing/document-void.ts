@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto'
 import { sql } from 'drizzle-orm'
-import { requestDocumentVoid } from '@openbooks/engine/src/ledger/document-void.ts'
-import { db, withBypassContext } from '@openbooks/engine/src/platform/db.ts'
-import { createScratchUser } from '@openbooks/engine/src/testing/fixtures.ts'
+import { requestDocumentVoid } from '@openbooks/engine/ledger/document-void'
+import { db, withBypassContext } from '@openbooks/engine/platform/db'
+import { createScratchUser } from '@openbooks/engine/testing/fixtures'
 
 export async function voidScratchDocument(args: {
   orgId: string

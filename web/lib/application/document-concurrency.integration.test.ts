@@ -8,11 +8,11 @@ type IdempotencyHarness = Awaited<ReturnType<typeof buildIdempotencyHarness>>;
 async function buildIdempotencyHarness() {
   const { sql } = await import("drizzle-orm");
   const { randomUUID } = await import("node:crypto");
-  const { db, pool, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
+  const { db, pool, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
   const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
-    "@openbooks/engine/src/testing/fixtures.ts"
+    "@openbooks/engine/testing/fixtures"
   );
-  const { requestDocumentVoid } = await import("@openbooks/engine/src/ledger/document-void.ts");
+  const { requestDocumentVoid } = await import("@openbooks/engine/ledger/document-void");
   const { executeIdempotent } = await import("./idempotency.ts");
 
   const org = await withBypassContext(() => createScratchOrg());
@@ -399,7 +399,7 @@ test("a duplicate-key void storm stays exact-once and leaves the request pool re
       `unrelated queries must not queue behind void duplicates (worst canary ${worstCanary}ms)`,
     );
 
-    const { withOrgContext: scopedRead } = await import("@openbooks/engine/src/platform/db.ts");
+    const { withOrgContext: scopedRead } = await import("@openbooks/engine/platform/db");
     const status = await scopedRead(h.org.orgId, () => h.db.execute<{ status: string; void_requested_at: Date | null }>(h.sql`
       select status, void_requested_at from documents where id = ${documentId}
     `));

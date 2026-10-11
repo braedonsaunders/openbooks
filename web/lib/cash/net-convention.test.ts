@@ -13,7 +13,7 @@ test("every account type in the universe maps to exactly one convention", () => 
       },
     });
     const { netConvention, orientNetTotal } = await import("./web/lib/cash/core.ts");
-    const { ACCOUNT_CLASS_TYPES } = await import("./engine/src/records/account-types.ts");
+    const { ACCOUNT_CLASS_TYPES } = await import("@openbooks/engine/records/account-types");
     const mapped = new Map();
     for (const [cls, types] of Object.entries(ACCOUNT_CLASS_TYPES)) {
       for (const type of types) {

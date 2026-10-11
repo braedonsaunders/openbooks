@@ -3,7 +3,7 @@ import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
 
 import { NextResponse } from 'next/server'
-import { RevaluationError, RevaluationFeatureDisabledError, runRevaluation } from '@openbooks/engine/src/close/fx-revaluation.ts'
+import { RevaluationError, RevaluationFeatureDisabledError, runRevaluation } from '@openbooks/engine/close/fx-revaluation'
 
 import { isUuid } from '../../../../lib/list-params'
 import { notFound } from "@/lib/api/responses";

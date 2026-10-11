@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-const { db, env, withBypass } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, env, withBypass } = await import('@openbooks/engine/platform/db')
 const { sql } = await import('drizzle-orm')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
-const { installTestExtension, disableTestExtension } = await import('@openbooks/engine/src/testing/extension-packages.ts')
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
+const { installTestExtension, disableTestExtension } = await import('@openbooks/engine/testing/extension-packages')
 const { loadExtensionSettingRows, saveExtensionSettingRow, extensionSettingDrawerEntity } = await import('./extension-settings.ts')
 const { SETUP_ENTITY_BY_KEY } = await import('./registry.ts')
 

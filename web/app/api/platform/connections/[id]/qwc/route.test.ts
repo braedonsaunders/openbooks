@@ -33,8 +33,8 @@ const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     const mocks: Record<string, string> = {
       "@/lib/authz": "mock:authz",
-      "@openbooks/engine/src/sync/connection.ts": "mock:connection",
-      "@openbooks/engine/src/flows/email-tokens.ts": "mock:email-tokens",
+      "@openbooks/engine/sync/connection": "mock:connection",
+      "@openbooks/engine/flows/email-tokens": "mock:email-tokens",
       "next-intl/server": "mock:i18n",
     };
     const url = mocks[specifier];

@@ -6,16 +6,16 @@ import { defineRoute } from '@/lib/api/route'
 import { z } from "zod";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
-import { db, schema } from "@openbooks/engine/src/platform/db.ts";
-import { sealJson } from "@openbooks/engine/src/platform/secrets.ts";
+import { db, schema } from "@openbooks/engine/platform/db";
+import { sealJson } from "@openbooks/engine/platform/secrets";
 import {
   listConnections,
   sourceType,
   SOURCE_TYPES,
   validateSourceConfig,
   validateSourceSecret,
-} from "@openbooks/engine/src/sync/connection.ts";
-import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
+} from "@openbooks/engine/sync/connection";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
 import { connectionAuditChanges } from "@openbooks/schema/src/connections.ts";
 import { guardPermission, guardUnrestrictedScope } from "../../../../lib/authz";
 import {

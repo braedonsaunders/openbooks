@@ -30,3 +30,9 @@ test("allows per-test leases across multiple top-level cases", () => {
   const result = checkTree(tree('import test, { beforeEach } from "node:test"; import * as fixtures from "./testing/fixtures.ts"; beforeEach(async () => { await fixtures.buildScratchOrg() }); test("first", () => {}); test("second", () => {});'));
   assert.deepEqual(result.violations, []);
 });
+
+test("named fixture contracts preserve lease ownership checks", () => {
+  const root = tree('import test, { before } from "node:test"; import { createScratchOrg } from "@openbooks/engine/testing/fixtures"; before(async () => { await createScratchOrg() }); test("first", () => {}); test("second", () => {});');
+  writeFileSync(join(root, 'engine/package.json'), JSON.stringify({ exports: { './testing/fixtures': './src/testing/fixtures.ts' } }));
+  assert.equal(checkTree(root).violations.length, 1);
+});

@@ -53,9 +53,9 @@ const postUrl = "./route.ts?pdf-template-default-post";
 const idUrl = "./[id]/route.ts?pdf-template-default-id";
 const { POST } = (await import(postUrl)) as typeof import("./route.ts");
 const { PATCH } = (await import(idUrl)) as typeof import("./[id]/route.ts");
-const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
-  "@openbooks/engine/src/testing/fixtures.ts"
+  "@openbooks/engine/testing/fixtures"
 );
 const { resolvePdfTemplate } = await import("../../../lib/pdf-templates/store");
 test.after(() => hooks.deregister());

@@ -4,7 +4,7 @@ import { pathToFileURL } from 'node:url'
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import * as React from 'react'
-import type { ScratchOrg } from '../../engine/src/testing/fixtures.ts'
+import type { ScratchOrg } from '@openbooks/engine/testing/fixtures'
 import { stubModules } from '../testing/stub-modules.ts'
 const repo = process.cwd()
 const root = pathToFileURL(repo + '/').href
@@ -28,9 +28,9 @@ registerHooks({
   },
 })
 
-const { db, withBypassContext, withOrgContext } = await import(root + 'engine/src/platform/db.ts') as typeof import('../../engine/src/platform/db.ts')
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db') as typeof import('@openbooks/engine/platform/db')
 const { sql } = await import(root + 'node_modules/drizzle-orm/index.js') as typeof import('drizzle-orm')
-const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import(root + 'engine/src/testing/fixtures.ts')
+const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import('@openbooks/engine/testing/fixtures')
 // The loaders (plus the setup shell), not rendered trees: each refusal is a
 // loader-resolved redirect, so the thrown NEXT_REDIRECT digest is the thing
 // under test. Real authz, real navigation — only identity is scripted.

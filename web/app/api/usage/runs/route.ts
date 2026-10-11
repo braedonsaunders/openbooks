@@ -1,4 +1,4 @@
-import { commitRateRun, listRateRuns } from "@openbooks/engine/src/billing/usage/rate-run.ts";
+import { commitRateRun, listRateRuns } from "@openbooks/engine/billing/usage/rate-run";
 import { defineRoute } from "@/lib/api/route";
 import { z } from "zod";
 

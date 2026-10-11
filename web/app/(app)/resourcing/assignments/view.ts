@@ -1,7 +1,7 @@
 import "server-only";
 import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from "@braedonsaunders/appkit-viewspec";
-import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
-import { weekStartOf } from "@openbooks/engine/src/resourcing/weeks.ts";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
+import { weekStartOf } from "@openbooks/engine/resourcing/weeks";
 import { can, requirePermission } from "../../../../lib/authz";
 import { requireFeatureEnabled } from "../../../../lib/feature-gates";
 import { isUuid, pickString } from "../../../../lib/list-params";

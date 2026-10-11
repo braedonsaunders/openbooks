@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import { cn } from '@openbooks/ui'
-import { cmp as compareExactMoney } from '@openbooks/engine/src/money/money.ts'
+import { cmp as compareExactMoney } from '@openbooks/engine/money/money'
 
 /**
  * Tiny sortable-table helper shared by analytics tables. `useSort` keeps the

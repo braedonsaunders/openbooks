@@ -14,7 +14,7 @@ import type {
   DimensionFilters,
   DynamicTarget,
   UntaggableDimension,
-} from '../../../../../../engine/src/allocations/types.ts'
+} from '@openbooks/engine/allocations/types'
 import {
   allocationTargetBasisFromLine,
   type AllocationLine,

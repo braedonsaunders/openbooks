@@ -9,15 +9,15 @@ import { applyProvisionAssessment } from "@openbooks/engine/provisions";
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from "@/lib/api/error-response";
-import { applyAssetGroupValuation } from "@openbooks/engine/src/assets/group-valuations.ts";
+import { applyAssetGroupValuation } from "@openbooks/engine/assets/group-valuations";
 import {
   applyLossOfControl,
   applyLossOfControlReversal,
-} from "@openbooks/engine/src/consolidation/loss-of-control.ts";
+} from "@openbooks/engine/consolidation/loss-of-control";
 import { NextResponse } from "next/server";
-import { applyAssetChange } from "@openbooks/engine/src/assets/asset-changes.ts";
-import { applyLeaseChange } from "@openbooks/engine/src/revenue/lease-changes.ts";
-import { applyRevenueModification } from "@openbooks/engine/src/revenue/contract-modifications.ts";
+import { applyAssetChange } from "@openbooks/engine/assets/asset-changes";
+import { applyLeaseChange } from "@openbooks/engine/revenue/lease-changes";
+import { applyRevenueModification } from "@openbooks/engine/revenue/contract-modifications";
 import { authorizeChange } from "../../_authorization";
 import { applyHolidayObligation } from "@openbooks/engine/payroll/holiday-obligations";
 import { db } from "@openbooks/engine/platform/db";

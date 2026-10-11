@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import test from "node:test";
-import { EMAIL_TOKEN_TTL_MS } from "@openbooks/engine/src/flows/email-tokens.ts";
+import { EMAIL_TOKEN_TTL_MS } from "@openbooks/engine/flows/email-tokens";
 
 interface EmailActionState {
   token: string;
@@ -133,8 +133,8 @@ const mockSources = new Map<string, string>([
 ]);
 
 const mockUrls = new Map<string, string>([
-  ["@openbooks/engine/src/platform/db.ts", "mock:db"],
-  ["@openbooks/engine/src/flows/index.ts", "mock:flows"],
+  ["@openbooks/engine/platform/db", "mock:db"],
+  ["@openbooks/engine/flows/module", "mock:flows"],
   ["../../../../lib/features", "mock:features"],
   ["../../../../lib/subsidiaries", "mock:subsidiaries"],
   ["../_lib", "mock:lib"],

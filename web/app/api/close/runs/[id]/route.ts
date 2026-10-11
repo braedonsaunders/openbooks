@@ -4,10 +4,10 @@ import { apiErrorResponse } from '@/lib/api/error-response'
 import { guardCloseScope } from "@/lib/close-scope";
 
 import { NextResponse } from "next/server";
-import { attestOwnerManagedClose, requestCloseApproval } from "@openbooks/engine/src/close/approvals.ts";
-import { closeApprovedRun, publishCloseRun } from "@openbooks/engine/src/close/run-completion.ts";
-import { CloseError } from "@openbooks/engine/src/periods/period-policy.ts";
-import { refreshCloseRun } from "@openbooks/engine/src/close/run-automation.ts";
+import { attestOwnerManagedClose, requestCloseApproval } from "@openbooks/engine/close/approvals";
+import { closeApprovedRun, publishCloseRun } from "@openbooks/engine/close/run-completion";
+import { CloseError } from "@openbooks/engine/periods/period-policy";
+import { refreshCloseRun } from "@openbooks/engine/close/run-automation";
 import { guardFeaturePermission } from "../../../../../lib/feature-gates";
 import { isFeatureEnabled } from "../../../../../lib/features";
 import { isUuid } from "../../../../../lib/list-params";

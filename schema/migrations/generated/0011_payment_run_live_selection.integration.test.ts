@@ -3,15 +3,15 @@ import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "../../../engine/src/platform/db.ts";
-import { createPaymentRun } from "../../../engine/src/payments/run-creation.ts";
-import { PaymentError } from "../../../engine/src/payments-core/payment-errors.ts";
-import { postDocument } from "../../../engine/src/ledger/posting-document.ts";
+import { db } from "@openbooks/engine/platform/db";
+import { createPaymentRun } from "@openbooks/engine/payments/run-creation";
+import { PaymentError } from "@openbooks/engine/payments-core/payment-errors";
+import { postDocument } from "@openbooks/engine/ledger/posting-document";
 import {
   createScratchOrg,
   createScratchUser,
   dropScratchOrg,
-} from "../../../engine/src/testing/fixtures.ts";
+} from "@openbooks/engine/testing/fixtures";
 
 const migrationSql = readFileSync(
   new URL("./0011_payment_run_live_selection.sql", import.meta.url),

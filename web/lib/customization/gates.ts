@@ -1,5 +1,5 @@
 import 'server-only'
-import type { SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
+import type { SqlExecutor } from '@openbooks/engine/platform/db'
 import { NextResponse } from 'next/server'
 import {
   RECORD_TYPE_BY_KEY,

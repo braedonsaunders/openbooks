@@ -33,10 +33,10 @@ registerHooks({ resolve(specifier, context, nextResolve) {
 } });
 
 const { sql } = await import("drizzle-orm");
-const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
-const { waitForLockWaiter } = await import("@openbooks/engine/src/testing/lock-wait.ts");
-const { createSubcontract } = await import("@openbooks/engine/src/projects/subcontracts.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
+const { waitForLockWaiter } = await import("@openbooks/engine/testing/lock-wait");
+const { createSubcontract } = await import("@openbooks/engine/projects/subcontracts");
 const { GET, POST } = await import("./route.ts");
 
 

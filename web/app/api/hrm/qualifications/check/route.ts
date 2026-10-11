@@ -1,7 +1,7 @@
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { db, withOrgTransaction } from "@openbooks/engine/src/platform/db.ts";
-import { checkAssignment } from "@openbooks/engine/src/hrm/qualifications/gating.ts";
+import { db, withOrgTransaction } from "@openbooks/engine/platform/db";
+import { checkAssignment } from "@openbooks/engine/hrm/qualifications/gating";
 import { qualificationErrorResponse } from "../_lib";
 import { checkAssignmentBody } from "../bodies";
 /** The gate as a read: verdict for one employment against one subject. */

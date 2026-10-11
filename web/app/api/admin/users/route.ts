@@ -8,16 +8,16 @@ import {
   type SqlExecutor,
   withOrgTransaction,
   withTransactionSavepoint,
-} from "@openbooks/engine/src/platform/db.ts";
-import { permissionsOutsideCeiling, resolveEffectivePermissions } from "@openbooks/engine/src/organization/permissions.ts";
+} from "@openbooks/engine/platform/db";
+import { permissionsOutsideCeiling, resolveEffectivePermissions } from "@openbooks/engine/organization/permissions";
 import {
   grantedRestrictionWithinCoverage,
   loadSubsidiaryGrantCoverage,
   resolveRoleGrantPolicies,
   type SubsidiaryGrantCoverage,
-} from "@openbooks/engine/src/organization/actor-subsidiaries.ts";
+} from "@openbooks/engine/organization/actor-subsidiaries";
 import type { SubsidiaryRestriction } from "@openbooks/schema";
-import { subsidiaryVisibleFilter } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
+import { subsidiaryVisibleFilter } from "@openbooks/engine/organization/scope";
 import { guardPermission, subsidiaryScopeAllows, type Authz } from "../../../../lib/authz";
 import { authRequestContext, normalizeLoginEmail } from "../../../../lib/auth-policy";
 import { InviteIssuanceRefusedError, issueInviteSetPasswordLink, setPasswordUrl } from "../../../../lib/auth-reset";

@@ -246,8 +246,8 @@ const mockSources = new Map<string, string>([
 ])
 
 const mockUrls = new Map<string, string>([
-  ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
-  ['@openbooks/engine/src/scripting/scripting.ts', 'mock:scripting'],
+  ['@openbooks/engine/platform/db', 'mock:db'],
+  ['@openbooks/engine/scripting/scripting', 'mock:scripting'],
   ['@/lib/authz', 'mock:authz'],
   ['../../../../../lib/authz', 'mock:authz'],
   ['../../../../../lib/records', 'mock:records'],

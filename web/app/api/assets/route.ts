@@ -2,9 +2,9 @@ import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
-import { db } from "@openbooks/engine/src/platform/db.ts";
-import { cmp } from "@openbooks/engine/src/money/money.ts";
-import { isIsoCalendarDate } from "@openbooks/engine/src/platform/business-date.ts";
+import { db } from "@openbooks/engine/platform/db";
+import { cmp } from "@openbooks/engine/money/money";
+import { isIsoCalendarDate } from "@openbooks/engine/platform/business-date/module";
 import { exactMoney, isoDate } from "../../../lib/api/json";
 import { isUuid } from "../../../lib/list-params";
 import {

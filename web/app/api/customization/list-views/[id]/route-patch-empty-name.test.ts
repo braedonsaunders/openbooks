@@ -68,7 +68,7 @@ const mockDb = `
 const _hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     const parent = context.parentURL ?? ''
-    if (specifier === '@openbooks/engine/src/platform/db.ts' && parent.includes('customization/list-views')) {
+    if (specifier === '@openbooks/engine/platform/db' && parent.includes('customization/list-views')) {
       return { shortCircuit: true, format: 'module', url: 'mock:list-empty-name-db' }
     }
     if (specifier === '@/lib/authz') {

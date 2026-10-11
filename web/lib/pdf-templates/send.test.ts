@@ -249,15 +249,15 @@ registerHooks({  resolve(specifier, context, nextResolve) {
     // Pin the package specifier to this worktree's email-config so a shared
     // node_modules that resolves @openbooks/engine elsewhere cannot silently
     // exercise a different checkout's markEmail* helpers.
-    if (specifier === '@openbooks/engine/src/delivery/email-config.ts') {
+    if (specifier === '@openbooks/engine/delivery/email-config/module') {
       return { url: emailConfigUrl, shortCircuit: true }
     }
     const mocks: Record<string, string> = {
       'drizzle-orm': 'mock:drizzle-orm',
-      '@openbooks/engine/src/platform/db.ts': 'mock:db',
+      '@openbooks/engine/platform/db': 'mock:db',
       '@openbooks/emails': 'mock:emails',
-      '@openbooks/engine/src/platform/business-date.ts': 'mock:business-date',
-      '@openbooks/engine/src/flows/email-tokens.ts': 'mock:email-tokens',
+      '@openbooks/engine/platform/business-date/module': 'mock:business-date',
+      '@openbooks/engine/flows/email-tokens': 'mock:email-tokens',
       '@openbooks/pdf': 'mock:openbooks-pdf',
       '../features': 'mock:features',
       '../authz': 'mock:authz',
@@ -290,7 +290,7 @@ registerHooks({  resolve(specifier, context, nextResolve) {
 const sendModuleUrl = './send.ts?attribution-test'
 const { sendRecordPdfEmail } = await import(sendModuleUrl) as typeof import('./send.ts')
 const { insertEmailLog, markEmailFailed, markEmailSent, markEmailUncertain } = await import(
-  '../../../engine/src/delivery/email-config.ts'
+  '@openbooks/engine/delivery/email-config/module'
 )
 
 function reset(): void {

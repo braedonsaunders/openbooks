@@ -15,9 +15,9 @@ import { randomUUID } from 'node:crypto'
  * exactly as before (no phantom rows).
  */
 const root = pathToFileURL(process.cwd() + '/').href
-const { db, withBypassContext, withOrgContext } = (await import(root + 'engine/src/platform/db.ts')) as typeof import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypassContext, withOrgContext } = (await import('@openbooks/engine/platform/db')) as typeof import('@openbooks/engine/platform/db')
 const { sql } = await import(root + 'node_modules/drizzle-orm/index.js')
-const { createScratchOrg, dropScratchOrg } = (await import(root + 'engine/src/testing/fixtures.ts')) as typeof import('@openbooks/engine/src/testing/fixtures.ts')
+const { createScratchOrg, dropScratchOrg } = (await import('@openbooks/engine/testing/fixtures')) as typeof import('@openbooks/engine/testing/fixtures')
 const { agingByParty, agingDetail } = (await import(root + 'web/lib/reports/aging.ts')) as typeof import('./reports/aging')
 
 type ScratchOrg = Awaited<ReturnType<typeof createScratchOrg>>
@@ -165,9 +165,9 @@ test('AP residual presents credit-normal control positive and names the vendor',
 const consolidatedRows = [
   { label: "aging cutover open balance", register: async () => {
         const { sql } = await import('drizzle-orm')
-        const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
-        const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
-        const { postDocument } = await import("@openbooks/engine/src/ledger/posting-document.ts");
+        const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/platform/db')
+        const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
+        const { postDocument } = await import("@openbooks/engine/ledger/posting-document");
         const { agingByParty, agingDetail } = await import('./reports/aging')
 
         /**
@@ -254,9 +254,9 @@ const assert: typeof import("node:assert/strict") = (await import("node:assert/s
 const { randomUUID } = await import("node:crypto");
 const test = (await import("node:test")).default;
 const {sql}=await import('drizzle-orm');
-const {db,withBypassContext,withOrgContext}=await import('@openbooks/engine/src/platform/db.ts');
-const {createScratchOrg,dropScratchOrgReporting:dropScratchOrg}=await import('@openbooks/engine/src/testing/fixtures.ts');
-const { postDocument } = await import("@openbooks/engine/src/ledger/posting-document.ts");
+const {db,withBypassContext,withOrgContext}=await import('@openbooks/engine/platform/db');
+const {createScratchOrg,dropScratchOrgReporting:dropScratchOrg}=await import('@openbooks/engine/testing/fixtures');
+const { postDocument } = await import("@openbooks/engine/ledger/posting-document");
 const {openItems}=await import('./cash/open-items');
 const {agingByParty,agingDetail}=await import('./reports/aging');
 /**

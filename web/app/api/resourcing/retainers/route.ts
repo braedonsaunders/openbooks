@@ -1,8 +1,8 @@
 import { and, eq } from "drizzle-orm";
 import { z } from "zod";
 import { resRetainers } from "@openbooks/schema";
-import { createRetainer } from "@openbooks/engine/src/resourcing/retainers.ts";
-import { db, withOrgTransaction } from "@openbooks/engine/src/platform/db.ts";
+import { createRetainer } from "@openbooks/engine/resourcing/retainers";
+import { db, withOrgTransaction } from "@openbooks/engine/platform/db";
 import { created, unprocessable } from "@/lib/api/responses";
 import { defineRoute } from "@/lib/api/route";
 import { idempotentResourcingCreate } from "../_idempotent";

@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { documentRevisionCounterSql } from "@openbooks/engine/src/records/revision.ts";
+import { documentRevisionCounterSql } from "@openbooks/engine/records/revision";
 
 const stateKey = Symbol.for("openbooks.quote-crm-lifecycle-test");
 interface GateState {
@@ -42,25 +42,25 @@ const hooks = registerHooks({
 });
 
 const { db, withBypassContext, withOrgContext } = await import(
-  "@openbooks/engine/src/platform/db.ts"
+  "@openbooks/engine/platform/db"
 );
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
-  "@openbooks/engine/src/testing/fixtures.ts"
+  "@openbooks/engine/testing/fixtures"
 );
 const { ensureCrmDefaults, promoteCrmAccount } = await import(
-  "@openbooks/engine/src/crm/crm.ts"
+  "@openbooks/engine/crm/crm"
 );
 const { createOrder } = await import("./create.ts");
 const { makePATCH, orderEditServices } = await import("./handlers.ts");
 const { applyOrderEdit, OrderEditError } = await import("../../../lib/order-draft-edit.ts");
-const { CrmLifecycleRefusalError } = await import("@openbooks/engine/src/crm/crm.ts");
+const { CrmLifecycleRefusalError } = await import("@openbooks/engine/crm/crm");
 const { convertOrder } = await import("../../../lib/order-cycle.ts");
-const { postDocument } = await import("@openbooks/engine/src/ledger/posting-document.ts");
+const { postDocument } = await import("@openbooks/engine/ledger/posting-document");
 const { createPaymentDocument, updateDraftPayment } = await import(
-  "@openbooks/engine/src/payments/payment-documents.ts"
+  "@openbooks/engine/payments/payment-documents"
 );
 const { postPaymentWithApplications } = await import(
-  "@openbooks/engine/src/payments/payment-posting.ts"
+  "@openbooks/engine/payments/payment-posting"
 );
 hooks.deregister();
 

@@ -3,7 +3,7 @@ import test from 'node:test'
 import { registerHooks } from 'node:module'
 import type { Authz } from '@/lib/authz'
 
-const realPlatformDbUrl = import.meta.resolve('@openbooks/engine/src/platform/db.ts')
+const realPlatformDbUrl = import.meta.resolve('@openbooks/engine/platform/db')
 const realFxUrl = new URL('../../../lib/fx-presentation.ts', import.meta.url).href
 const { stubModules } = await import('../../../testing/stub-modules')
 // Payroll reads as enabled here (the attention suite below needs the
@@ -32,14 +32,14 @@ registerHooks({
       `)
     }
     if (specifier === './_persona-copy') return virtual('export const celebrationDetail = () => ""; export const teamNudgeTexts = () => []')
-    if (specifier === '@openbooks/engine/src/platform/db.ts') return virtual(`export * from ${JSON.stringify(realPlatformDbUrl)}; export const db = { execute: async () => ({ rows: [] }) }`)
-    if (specifier === '@openbooks/engine/src/platform/business-date.ts') return virtual('export const businessToday = async () => "2026-09-24"')
-    if (specifier === '@openbooks/engine/src/inbox/index.ts') return virtual('export const countInbox = async () => 0; export const listInbox = async () => [{id:"item-1"}];')
-    if (specifier === '@openbooks/engine/src/inbox/adapters/hrm-qualification-alert.ts') return virtual('export const qualificationSourceAvailable = async () => false')
-    if (specifier === '@openbooks/engine/src/hrm/employment-read.ts') return virtual('export const findEmploymentsByParty = async () => []')
-    if (specifier === '@openbooks/engine/src/hrm/authorization.ts') return virtual('export const loadApprovalPerson = async () => ({partyId:null}); export const loadTeamEmploymentIdsForManager = async () => []')
-    if (specifier === '@openbooks/engine/src/hrm/performance/performance-read.ts') return virtual('export const listMyReviews = async () => ({asReviewer:[],asSubject:[]})')
-    if (specifier === '@openbooks/engine/src/hrm/leave-read.ts') return virtual('export const listLeaveTypes = async () => []; export const timeBalanceAsOf = async () => null')
+    if (specifier === '@openbooks/engine/platform/db') return virtual(`export * from ${JSON.stringify(realPlatformDbUrl)}; export const db = { execute: async () => ({ rows: [] }) }`)
+    if (specifier === '@openbooks/engine/platform/business-date/module') return virtual('export const businessToday = async () => "2026-09-24"')
+    if (specifier === '@openbooks/engine/inbox/runtime') return virtual('export const countInbox = async () => 0; export const listInbox = async () => [{id:"item-1"}];')
+    if (specifier === '@openbooks/engine/inbox/adapters/hrm-qualification-alert') return virtual('export const qualificationSourceAvailable = async () => false')
+    if (specifier === '@openbooks/engine/hrm/employment-read') return virtual('export const findEmploymentsByParty = async () => []')
+    if (specifier === '@openbooks/engine/hrm/authorization') return virtual('export const loadApprovalPerson = async () => ({partyId:null}); export const loadTeamEmploymentIdsForManager = async () => []')
+    if (specifier === '@openbooks/engine/hrm/performance/performance-read') return virtual('export const listMyReviews = async () => ({asReviewer:[],asSubject:[]})')
+    if (specifier === '@openbooks/engine/hrm/leave-read') return virtual('export const listLeaveTypes = async () => []; export const timeBalanceAsOf = async () => null')
     if (specifier === '@/lib/setup/home-announcements') return virtual('export const liveHomeAnnouncements = async () => []')
     if (specifier === '@/lib/inbox-context') return virtual('export const inboxContext = async () => ({}); export const INBOX_TASK_KINDS = []; export const inboxCounts = async () => { throw new Error("The admin attention metric must not query inbox totals") }')
     // The cockpit is doubled per case through a mode flag: the FX refusal

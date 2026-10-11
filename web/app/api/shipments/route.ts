@@ -1,6 +1,6 @@
 import { z } from 'zod'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { createShipment, fulfillmentDocumentScope } from '@openbooks/engine/src/sales/fulfillment.ts'
+import { db } from '@openbooks/engine/platform/db'
+import { createShipment, fulfillmentDocumentScope } from '@openbooks/engine/sales/fulfillment/module'
 import { isoDate, uuidId } from '@/lib/api/json'
 import { created, notFound } from '@/lib/api/responses'
 import { defineRoute } from '@/lib/api/route'

@@ -9,12 +9,12 @@ import {
   DriverAdminError,
   getDimensionValueLabels,
   vectorShares,
-} from "../../../../../../engine/src/allocations/driver-admin.ts";
+} from "@openbooks/engine/allocations/driver-admin";
 import {
   DriverNotAvailableError,
   previewDriverVector,
-} from "../../../../../../engine/src/allocations/drivers.ts";
-import { allocationServiceDeps } from "../../../../../../engine/src/allocations/service.ts";
+} from "@openbooks/engine/allocations/drivers";
+import { allocationServiceDeps } from "@openbooks/engine/allocations/service";
 
 export const runtime = "nodejs";
 

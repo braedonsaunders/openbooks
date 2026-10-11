@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import * as web from "./account-types.ts";
-import * as engine from "@openbooks/engine/src/records/account-types.ts";
+import * as engine from "@openbooks/engine/records/account-types";
 
 // The web module is a re-export: every universe must be identical to the
 // engine source, so consolidation, postings and statements can never drift

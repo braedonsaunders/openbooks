@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import {
   createCycle,
   listCycles,
-} from "@openbooks/engine/src/hrm/compensation/cycles.ts";
+} from "@openbooks/engine/hrm/compensation/cycles";
 
 import { compensationErrorResponse } from "../compensation/_lib";
 import { meritCyclesPayrollRefusal } from "./_gate";

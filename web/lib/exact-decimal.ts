@@ -5,4 +5,4 @@ export {
   isPositiveDecimal,
   fixedDecimal,
   divideDecimal,
-} from '@openbooks/engine/src/money/exact-decimal.ts'
+} from '@openbooks/engine/money/decimal'

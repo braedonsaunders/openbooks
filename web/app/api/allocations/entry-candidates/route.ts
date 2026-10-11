@@ -1,10 +1,10 @@
 import type { Authz } from "@/lib/authz";
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from 'next/server'
-import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
-import { listEntryRulesInEffect, matchLine, selectRule } from '@openbooks/engine/src/allocations/match.ts'
-import type { LineCoordinate, RuleInEffect } from '@openbooks/engine/src/allocations/types.ts'
-import { resolveAccountGroups } from '@openbooks/engine/src/records/account-groups.ts'
+import { businessToday } from '@openbooks/engine/platform/business-date/module'
+import { listEntryRulesInEffect, matchLine, selectRule } from '@openbooks/engine/allocations/match'
+import type { LineCoordinate, RuleInEffect } from '@openbooks/engine/allocations/types'
+import { resolveAccountGroups } from '@openbooks/engine/records/account-groups'
 import { allocationRuleScopeVisible } from '../../../../lib/allocations-scope'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { isUuid } from '../../../../lib/list-params'

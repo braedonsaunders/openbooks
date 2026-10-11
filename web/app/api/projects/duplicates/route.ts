@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { findDuplicateProjects } from "@openbooks/engine/src/projects/merge.ts";
+import { findDuplicateProjects } from "@openbooks/engine/projects/merge";
 import { defineRoute } from '@/lib/api/route'
 
 /** List duplicate-project groups (same source ref, name+customer, job number). */

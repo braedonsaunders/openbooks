@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { HrmAuthorizationError } from "@openbooks/engine/src/hrm/authorization.ts";
-import { HrmDocumentsError } from "@openbooks/engine/src/hrm/documents/errors.ts";
-import { UnrestrictedScopeError } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
-import { MaskedFileContentError } from "@openbooks/engine/src/platform/file-storage.ts";
+import { HrmAuthorizationError } from "@openbooks/engine/hrm/authorization";
+import { HrmDocumentsError } from "@openbooks/engine/hrm/documents/errors";
+import { UnrestrictedScopeError } from "@openbooks/engine/organization/scope";
+import { MaskedFileContentError } from "@openbooks/engine/platform/file-storage";
 import { hrmDocumentsErrorResponse } from "./_lib.ts";
 
 test("computed refusals map to statuses with the message intact", async () => {

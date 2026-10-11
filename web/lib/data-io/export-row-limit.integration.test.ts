@@ -7,9 +7,9 @@ import { sql } from 'drizzle-orm'
 // Synthetic scratch orgs only; probe rows are bulk-deleted before teardown so
 // the drop stays fast, then the fixture removes the org.
 process.env.OPENBOOKS_TEST_EXPORT_ROW_LIMIT = '500'
-const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/platform/db')
 const { createScratchOrg, dropScratchOrg } = await import(
-  '@openbooks/engine/src/testing/fixtures.ts'
+  '@openbooks/engine/testing/fixtures'
 )
 const { MASTER_BY_KEY, masterResource } = await import('./master-data-resources.ts')
 const { ExportRowLimitError, MAX_EXPORT_ROWS } = await import('./resource-core.ts')

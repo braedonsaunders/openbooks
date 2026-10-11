@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import {
   listExports,
   requestExport,
-} from "@openbooks/engine/src/hrm/documents/dsar.ts";
+} from "@openbooks/engine/hrm/documents/dsar";
 import { guardPermission } from "../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../lib/features";
 import { hrmDocumentsErrorResponse } from "../documents/_lib";

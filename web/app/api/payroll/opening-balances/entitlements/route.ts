@@ -4,14 +4,14 @@ import { defineRoute } from '@/lib/api/route'
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { parseJsonBody } from "@/lib/api/json"
 import { NextResponse } from 'next/server'
-import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
-import { PayrollError } from "@openbooks/engine/src/payroll/error.ts";
+import { normalizeMoney } from '@openbooks/engine/money/money'
+import { PayrollError } from "@openbooks/engine/payroll/error";
 import {
   assertMovementDate,
   EntitlementOpeningSaveError,
   saveEntitlementOpenings,
   type EntitlementOpeningWrite,
-} from '@openbooks/engine/src/payroll/entitlements.ts'
+} from '@openbooks/engine/payroll/entitlements/operations'
 import { canonicalDecimal } from '../../../../../lib/exact-decimal'
 import { moneyRefusal } from '../../../../../lib/payroll-decimal-refusal'
 import '../../../../../lib/feature-gates';

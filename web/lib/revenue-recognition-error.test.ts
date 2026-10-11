@@ -3,7 +3,7 @@ import test from 'node:test'
 import {
   RevenueRecognitionError,
   StaleRecognitionPreviewError,
-} from '../../engine/src/revenue/recognition.ts'
+} from '@openbooks/engine/revenue/recognition'
 import { revenueRecognitionErrorResponse } from './revenue-recognition-error.ts'
 
 test('revenue domain refusals keep the named engine message at 422', async () => {

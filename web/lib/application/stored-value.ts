@@ -1,22 +1,22 @@
 import "server-only";
 import { sql } from "drizzle-orm";
-import { db, withOrgContext, withOrgTransaction } from "@openbooks/engine/src/platform/db.ts";
-import { toUnits } from "@openbooks/engine/src/money/money.ts";
-import { lockLedgerSetupFence } from "@openbooks/engine/src/organization/ledger-setup-fence.ts";
-import { lockScopeRow } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
-import { submitAndReleaseIfUngated } from "@openbooks/engine/src/flows/index.ts";
-import { createPaymentDocument, updateDraftPayment } from "@openbooks/engine/src/payments/payment-documents.ts";
-import { openItemsForParty } from "@openbooks/engine/src/payments/payment-queries.ts";
-import { sameCurrencyAllocation } from "@openbooks/engine/src/payments/settlement-policy.ts";
-import { postPaymentWithApplications } from "@openbooks/engine/src/payments/payment-posting.ts";
-import { PaymentError } from "@openbooks/engine/src/payments-core/payment-errors.ts";
-import { PostingError } from "@openbooks/engine/src/journal/posting-contracts.ts";
+import { db, withOrgContext, withOrgTransaction } from "@openbooks/engine/platform/db";
+import { toUnits } from "@openbooks/engine/money/money";
+import { lockLedgerSetupFence } from "@openbooks/engine/organization/ledger-setup";
+import { lockScopeRow } from "@openbooks/engine/organization/scope";
+import { submitAndReleaseIfUngated } from "@openbooks/engine/flows/module";
+import { createPaymentDocument, updateDraftPayment } from "@openbooks/engine/payments/payment-documents";
+import { openItemsForParty } from "@openbooks/engine/payments/payment-queries";
+import { sameCurrencyAllocation } from "@openbooks/engine/payments/settlement-policy";
+import { postPaymentWithApplications } from "@openbooks/engine/payments/payment-posting";
+import { PaymentError } from "@openbooks/engine/payments-core/payment-errors";
+import { PostingError } from "@openbooks/engine/journal/contracts";
 import { hashStoredValueCode } from "@openbooks/engine/stored-value";
 import {
   lookupStoredValueByCode,
   resolveStoredValueTender,
-} from "@openbooks/engine/src/stored-value/accounts.ts";
-import { StoredValueError } from "@openbooks/engine/src/stored-value/errors.ts";
+} from "@openbooks/engine/stored-value/accounts";
+import { StoredValueError } from "@openbooks/engine/stored-value/errors";
 import { isUuid } from "../list-params";
 import type { ApplicationContext } from "./context";
 import { assertApplicationPermission, assertSubsidiaryAccess } from "./context";

@@ -5,11 +5,11 @@ import { parseJsonBody } from "@/lib/api/json"
 import { uuidId } from "@/lib/api/json-schema"
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
-import { lockLedgerSetupFence } from '@openbooks/engine/src/organization/ledger-setup-fence.ts'
-import { payrollSettings, seedPayrollComponents, statutoryHolidayPayEnabled } from "@openbooks/engine/src/payroll/run-setup.ts";
+import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
+import { lockLedgerSetupFence } from '@openbooks/engine/organization/ledger-setup'
+import { payrollSettings, seedPayrollComponents, statutoryHolidayPayEnabled } from "@openbooks/engine/payroll/run-setup";
 import { PAYROLL_ACCOUNT_SETTING_KEYS } from "@openbooks/engine/payroll/settings-references";
-import { type PayrollSubsidiaryScope } from "@openbooks/engine/src/payroll/scope.ts";
+import { type PayrollSubsidiaryScope } from "@openbooks/engine/payroll/scope";
 import {
   declaredRemittanceFrequencySettingsKeys,
   declaredRemittanceVendorSettingsKeys,
@@ -18,10 +18,10 @@ import {
   packSlotState, PAYROLL_COUNTRY_PACKS, PayrollPackError, setPackSlotAccount, uninstallPayrollPack,
   remittanceFrequencyBand,
   remittanceScheduleForFrequencyKey,
-} from '@openbooks/engine/src/payroll/packs.ts'
+} from '@openbooks/engine/payroll/packs'
 import { assertValidPasswordExpression, pdfEncryptionAvailable } from '@openbooks/pdf'
-import { payrollPaymentMethodSettings } from '@openbooks/engine/src/payroll/payment-method.ts'
-import { payrollSetupState } from '@openbooks/engine/src/payroll/readiness.ts'
+import { payrollPaymentMethodSettings } from '@openbooks/engine/payroll/payment-method'
+import { payrollSetupState } from '@openbooks/engine/payroll/readiness'
 import { STUB_PASSWORD_TOKENS, stubPasswordPolicy } from '../../../../lib/payroll-outputs'
 import '../../../../lib/feature-gates';
 import { guardRootSubsidiaryScope } from '../../../../lib/authz'

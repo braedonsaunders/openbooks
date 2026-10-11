@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/db'
 import type { SetupEntity } from './types'
 import { NUMBER_SEQUENCE_READ_COLUMNS } from './number-sequence-position'
 

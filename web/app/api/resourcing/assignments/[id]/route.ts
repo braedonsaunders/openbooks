@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { deleteAssignment } from "@openbooks/engine/src/resourcing/assignments.ts";
+import { deleteAssignment } from "@openbooks/engine/resourcing/assignments";
 import { defineRoute } from "@/lib/api/route";
 
 const Params = z.object({ id: z.string().uuid() }).strict();

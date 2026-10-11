@@ -27,7 +27,7 @@ Object.assign(globalThis, { __healthFiscalQuery: (query: Parameters<InstanceType
 
 const mocks: Record<string, string> = {
   "server-only": "export {}",
-  "@openbooks/engine/src/platform/db.ts": `export function ambientTenantOrgId(){return null} export function registerRequestOrgResolver(){} export async function withBypassContext(work){return work()} export const db={async execute(query){
+  "@openbooks/engine/platform/db": `export function ambientTenantOrgId(){return null} export function registerRequestOrgResolver(){} export async function withBypassContext(work){return work()} export const db={async execute(query){
     const text = globalThis.__healthFiscalQuery(query);
     // The fiscal-period series reads journal lines without the monthly rollup
     // and without a dimension join; every other ledger read in this module
@@ -50,7 +50,7 @@ const mocks: Record<string, string> = {
     revenueGrowth:null,breakevenRevenue:null,operatingLeverage:null,rule40:null}}}`,
 };
 registerHooks({ resolve(specifier, context, next) {
-  if (specifier === "@openbooks/engine/platform/database" && context.parentURL?.endsWith("/analytics/query.ts")) specifier = "@openbooks/engine/src/platform/db.ts";
+  if (specifier === "@openbooks/engine/platform/database" && context.parentURL?.endsWith("/analytics/query.ts")) specifier = "@openbooks/engine/platform/db";
   // Relative doubles stand in for web/lib siblings only; a package's own `./config` stays real.
   if (specifier in mocks && (!specifier.startsWith(".") || context.parentURL?.includes("/web/lib/"))) return { shortCircuit: true, url: 'data:text/javascript,' + encodeURIComponent(mocks[specifier]!) };
   return next(specifier, context);

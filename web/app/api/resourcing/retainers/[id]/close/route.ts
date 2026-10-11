@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { closeRetainer } from "@openbooks/engine/src/resourcing/retainers.ts";
+import { closeRetainer } from "@openbooks/engine/resourcing/retainers";
 import { defineRoute } from "@/lib/api/route";
 
 const Params = z.object({ id: z.string().uuid() }).strict();

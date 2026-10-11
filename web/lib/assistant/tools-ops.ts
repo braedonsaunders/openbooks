@@ -1,9 +1,9 @@
 import "server-only";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
-import { listConnections } from "@openbooks/engine/src/sync/connection.ts";
-import { listSandboxes } from "@openbooks/engine/src/sandbox/index.ts";
+import { db } from "@openbooks/engine/platform/db";
+import { listConnections } from "@openbooks/engine/sync/connection";
+import { listSandboxes } from "@openbooks/engine/sandbox/runtime";
 import { PDF_RECORD_TYPE_BY_KEY } from "../pdf-templates/catalog";
 import { getVisiblePdfTemplate, listVisiblePdfTemplates } from "../pdf-templates/store";
 import { loadReportDefinition } from "../custom-reports";

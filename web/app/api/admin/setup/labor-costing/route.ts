@@ -7,10 +7,10 @@ import { apiErrorResponse } from '@/lib/api/error-response'
 
 import { NextResponse } from 'next/server'
 import { sql, type SQL } from 'drizzle-orm'
-import { businessToday, isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
-import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
+import { businessToday, isIsoCalendarDate } from '@openbooks/engine/platform/business-date/module'
+import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
 import { lockAndCheckOrgFeature } from '@openbooks/engine/organization/org-feature-lock'
-import { lockLedgerSetupFence } from '@openbooks/engine/src/organization/ledger-setup-fence.ts'
+import { lockLedgerSetupFence } from '@openbooks/engine/organization/ledger-setup'
 import {
   can,
   guardPermission,
@@ -27,14 +27,14 @@ import {
   parseLaborCostComponents,
   postPayrollVariance,
   type LaborCostComponent,
-} from '@openbooks/engine/src/projects/labor-costing.ts'
+} from '@openbooks/engine/projects/labor-costing/operations'
 import {
   laborCostRateScopeLock,
   supersedeLaborCostRate,
-} from '@openbooks/engine/src/projects/labor-cost-rates.ts'
-import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
+} from '@openbooks/engine/projects/labor-cost-rates'
+import { normalizeMoney } from '@openbooks/engine/money/money'
 import { PAY_RATE_BASES } from '@openbooks/engine/projects/pay-rate-basis'
-import { decimalNullRefusal } from '@openbooks/engine/src/money/decimal-refusal.ts'
+import { decimalNullRefusal } from '@openbooks/engine/money/decimal-refusal'
 import { canonicalDecimal, compareDecimal } from '../../../../../lib/exact-decimal'
 import { isFeatureEnabled } from '../../../../../lib/features'
 import { acquireOrgFeatureGateLock } from '@openbooks/engine/organization/org-feature-lock'

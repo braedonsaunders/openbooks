@@ -74,7 +74,7 @@ const mockSources = new Map<string, string>([
 ])
 
 const mockUrls = new Map<string, string>([
-  ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
+  ['@openbooks/engine/platform/db', 'mock:db'],
   ['../../../../lib/file-cabinet', 'mock:file-cabinet'],
   ['../../../../lib/field-ticket-lock', 'mock:lock'],
   ['../../../../lib/field-ticket-token', 'mock:token'],
@@ -127,7 +127,7 @@ const pageMocks = new Map<string, string>([
   ['mock:page-navigation', `export function notFound() { throw new Error('PAGE_NOT_FOUND') }`],
 ])
 const pageUrls = new Map<string, string>([
-  ['@openbooks/engine/src/platform/db.ts', 'mock:page-db'],
+  ['@openbooks/engine/platform/db', 'mock:page-db'],
   ['../../../../lib/field-ticket-token', 'mock:page-token'],
   ['../../../../lib/features', 'mock:page-features'],
   ['../../../../lib/field-tickets', 'mock:page-ticket'],

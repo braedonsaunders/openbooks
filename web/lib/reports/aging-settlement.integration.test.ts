@@ -22,13 +22,13 @@ import { randomUUID } from 'node:crypto'
  * every view reads 3,000.
  */
 const root = pathToFileURL(process.cwd() + '/').href
-const { db, withBypassContext, withOrgContext } = (await import(root + 'engine/src/platform/db.ts')) as typeof import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypassContext, withOrgContext } = (await import('@openbooks/engine/platform/db')) as typeof import('@openbooks/engine/platform/db')
 const { sql } = await import(root + 'node_modules/drizzle-orm/index.js')
-const { createScratchOrg, dropScratchOrg } = (await import(root + 'engine/src/testing/fixtures.ts')) as typeof import('@openbooks/engine/src/testing/fixtures.ts')
+const { createScratchOrg, dropScratchOrg } = (await import('@openbooks/engine/testing/fixtures')) as typeof import('@openbooks/engine/testing/fixtures')
 type ScratchOrg = Awaited<ReturnType<typeof createScratchOrg>>
 const { agingByParty, agingDetail } = (await import(root + 'web/lib/reports/aging.ts')) as typeof import('./aging')
 const { partyRegister, partnerStatement } = (await import(root + 'web/lib/reports/registers.ts')) as typeof import('./registers')
-const { postDocument } = (await import(root + 'engine/src/ledger/posting-document.ts')) as typeof import('@openbooks/engine/src/ledger/posting-document.ts')
+const { postDocument } = (await import('@openbooks/engine/ledger/posting-document')) as typeof import('@openbooks/engine/ledger/posting-document')
 
 const AS_OF = '2026-04-30'
 

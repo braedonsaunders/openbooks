@@ -1,4 +1,4 @@
-import { pool } from "../../engine/src/platform/db.ts";
+import { pool } from "@openbooks/engine/platform/db";
 
 /** Keep private maintenance authority outside business-object ownership.
  * Automatic provisioning applies only to empty privileged installations. */

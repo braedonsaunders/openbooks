@@ -3,10 +3,10 @@ import { spawnSync } from 'node:child_process'
 import { randomUUID } from 'node:crypto'
 import test from 'node:test'
 const { sql } = await import('drizzle-orm')
-const { withBypass, withBypassContext, db, env } = await import('@openbooks/engine/src/platform/db.ts')
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import('@openbooks/engine/src/testing/fixtures.ts')
-const { importStatement, startReconciliation } = await import('@openbooks/engine/src/banking/banking.ts')
-const { ScopeNotFoundError } = await import('@openbooks/engine/src/organization/subsidiary-scope.ts')
+const { withBypass, withBypassContext, db, env } = await import('@openbooks/engine/platform/db')
+const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import('@openbooks/engine/testing/fixtures')
+const { importStatement, startReconciliation } = await import('@openbooks/engine/banking/banking')
+const { ScopeNotFoundError } = await import('@openbooks/engine/organization/scope')
 const {
   addJournalMatchFromLine,
   applyRuleToLine,

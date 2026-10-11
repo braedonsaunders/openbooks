@@ -29,9 +29,9 @@ stubModules({
 const viewUrl = './view.ts?record-type-view-scope-test'
 const { loadRecordTypes } = (await import(viewUrl)) as typeof import('./view.ts')
 
-const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/platform/db')
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  '@openbooks/engine/src/testing/fixtures.ts',
+  '@openbooks/engine/testing/fixtures',
 )
 
 function typeAuthz(actorId: string, orgId: string, allowedSubsidiaryIds: ReadonlySet<string> | null) {

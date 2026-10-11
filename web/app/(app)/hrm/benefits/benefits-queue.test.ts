@@ -47,8 +47,8 @@ stubModules({
         export async function previewIncentiveSettlement() { throw new Error('Simulation was not requested') }
       `,
     './benefits-reports': 'export async function loadBenefitsReportLinks() { return [] }',
-    '@openbooks/engine/src/platform/business-date.ts': "export async function businessToday() { return '2026-09-22'; } export function utcDateFromParts() { throw new Error('unstubbed'); }",
-    '@openbooks/engine/src/hrm/benefits/benefits-read.ts': `export async function listEnrollmentWindows(db, orgId, actorId, filter) {
+    '@openbooks/engine/platform/business-date/module': "export async function businessToday() { return '2026-09-22'; } export function utcDateFromParts() { throw new Error('unstubbed'); }",
+    '@openbooks/engine/hrm/benefits/benefits-read': `export async function listEnrollmentWindows(db, orgId, actorId, filter) {
               const s = globalThis.__benefitsReads;
               const windows = (s && s.windows) || [];
               if (filter && filter.status) return windows.filter((w) => w.status === filter.status);
@@ -63,7 +63,7 @@ stubModules({
             export async function benefitsCockpit() {
               return { openWindows: [], pendingCount: 0, missingCount: 0 };
             }`,
-    '@openbooks/engine/src/platform/db.ts': databaseSource,
+    '@openbooks/engine/platform/db': databaseSource,
     '@openbooks/engine/platform/database': databaseSource,
   },
 })

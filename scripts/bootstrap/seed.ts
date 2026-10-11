@@ -1,15 +1,15 @@
 /** Organization, currency, subsidiary, role, and admin seeding for installation bootstrap. */
 import { randomBytes, scryptSync } from "node:crypto"
 import { sql } from "drizzle-orm"
-import { db, env } from "../../engine/src/platform/db.ts"
+import { db, env } from "@openbooks/engine/platform/db"
 import {
   ensureRootSubsidiary as ensureOrganizationRootSubsidiary,
   insertOrganizationRecord,
   seedBuiltInRolesForNewOrganization,
   seedOrganizationLedgerFoundation,
   validateOrganizationIdentity,
-} from "../../engine/src/provisioning/create-organization.ts"
-import { SUPPORTED_CURRENCIES } from "../../engine/src/fx/currencies.ts"
+} from "@openbooks/engine/provisioning/create-organization"
+import { SUPPORTED_CURRENCIES } from "@openbooks/engine/fx/currencies"
 
 /**
  * The first organization of a fresh installation, from ORG_NAME,

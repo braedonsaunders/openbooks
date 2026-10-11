@@ -61,9 +61,9 @@ registerHooks({
 
 const routeUrl = "./route.ts?close-run-date-test";
 const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
-const { db, withBypass, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
+const { db, withBypass, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  "@openbooks/engine/src/testing/fixtures.ts"
+  "@openbooks/engine/testing/fixtures"
 );
 
 interface Fixture {

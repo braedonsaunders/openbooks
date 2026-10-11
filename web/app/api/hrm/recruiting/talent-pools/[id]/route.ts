@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { deleteTalentPool } from "@openbooks/engine/src/hrm/recruiting/pools.ts";
+import { deleteTalentPool } from "@openbooks/engine/hrm/recruiting/pools";
 
 import { recruitingErrorResponse } from "../../_lib";
 

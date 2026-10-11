@@ -2,8 +2,8 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import type { PoolClient } from 'pg'
 import { sql } from 'drizzle-orm'
-import { withBypassContext, db, pool, withOrg  } from '@openbooks/engine/src/platform/db.ts'
-import { createScratchOrg, dropScratchOrg } from '@openbooks/engine/src/testing/fixtures.ts'
+import { withBypassContext, db, pool, withOrg  } from '@openbooks/engine/platform/db'
+import { createScratchOrg, dropScratchOrg } from '@openbooks/engine/testing/fixtures'
 
 
 const { guardPayrollEmployees } = await import('./subsidiary-scope.ts')

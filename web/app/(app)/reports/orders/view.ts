@@ -3,8 +3,8 @@ import 'server-only'
 import { sql } from 'drizzle-orm'
 import { getLocale, getTranslations } from 'next-intl/server'
 import { formatCount, formatPercent01 } from '../../../../lib/format'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { orderedNetOfCancelledSql } from '@openbooks/engine/src/records/order-line-remainders.ts'
+import { db } from '@openbooks/engine/platform/db'
+import { orderedNetOfCancelledSql } from '@openbooks/engine/records/order-line-remainders'
 import {
   column,
   drill,

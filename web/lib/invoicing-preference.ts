@@ -1,6 +1,6 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/db'
 import type { InvoicingPreference } from '@openbooks/schema'
 import { loadProjectType } from './project-type'
 

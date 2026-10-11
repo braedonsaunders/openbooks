@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import {
   closePosting,
   pausePosting,
-} from "@openbooks/engine/src/hrm/recruiting/postings.ts";
+} from "@openbooks/engine/hrm/recruiting/postings";
 
 import { recruitingErrorResponse } from "../../_lib";
 import { transitionPostingBody } from "../bodies";

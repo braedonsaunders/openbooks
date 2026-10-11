@@ -9,8 +9,8 @@ import {
   runAutoElimination,
   runCombinedConsolidation,
   runOwnershipConsolidation,
-} from '@openbooks/engine/src/consolidation/consolidation.ts'
-import { withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
+} from '@openbooks/engine/consolidation/consolidation'
+import { withOrgTransaction } from '@openbooks/engine/platform/db'
 import { isUuid } from '../../../lib/list-params'
 const POSTBodySchema1 = z.discriminatedUnion('action', [
   z.object({ action: z.literal('derive-rates'), periodId: z.string().uuid() }),

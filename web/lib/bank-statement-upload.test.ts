@@ -114,7 +114,7 @@ const reactHarness = createReactHookHarness()
 } as unknown as typeof import('react')
 
 const mockUrls = new Map<string, string>([
-  ['@openbooks/engine/src/banking/banking.ts', 'mock:banking'],
+  ['@openbooks/engine/banking/banking', 'mock:banking'],
   ['../../../../lib/feature-gates', 'mock:feature-gates'],
   ['@/lib/feature-gates', 'mock:feature-gates'],
   ['@/components/money-provider', 'mock:money-provider'],

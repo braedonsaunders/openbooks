@@ -3,7 +3,7 @@ import 'server-only'
 import { type FileViewer } from './types'
 import { resolveReadScope, visibleFolderPredicate, visibleFilePredicate, recordScopeFilePredicate, recordScopeFolderPredicate } from './visibility'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/db'
 
 // --- trash ------------------------------------------------------------------
 

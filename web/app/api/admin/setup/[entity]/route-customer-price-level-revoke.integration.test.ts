@@ -48,9 +48,9 @@ registerHooks({
 
 const routeUrl = "./route.ts?assignments-revoke-route-test";
 const { PATCH } = (await import(routeUrl)) as typeof import("./route.ts");
-const { db, withBypassContext } = await import("@openbooks/engine/src/platform/db.ts");
+const { db, withBypassContext } = await import("@openbooks/engine/platform/db");
 const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import(
-  "@openbooks/engine/src/testing/fixtures.ts"
+  "@openbooks/engine/testing/fixtures"
 );
 
 

@@ -58,7 +58,7 @@ stubModules({
     `,
   },
   extra: {
-    "@openbooks/engine/src/platform/db.ts": withPlatformDbTestSurface(`
+    "@openbooks/engine/platform/db": withPlatformDbTestSurface(`
       const state = globalThis[Symbol.for('openbooks.project-detail-route-test')]
       export const db = {
         execute: async (query) => {

@@ -1,10 +1,10 @@
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { db, withOrgTransaction } from "@openbooks/engine/src/platform/db.ts";
+import { db, withOrgTransaction } from "@openbooks/engine/platform/db";
 import {
   listRequirements,
   setRequirement,
-} from "@openbooks/engine/src/hrm/qualifications/requirements.ts";
+} from "@openbooks/engine/hrm/qualifications/requirements";
 import { qualificationErrorResponse } from "../qualifications/_lib";
 import { setRequirementBody } from "../qualifications/bodies";
 /** Dispatch requirements: what a subject demands. */

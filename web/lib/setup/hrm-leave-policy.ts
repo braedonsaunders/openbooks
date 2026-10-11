@@ -1,10 +1,10 @@
 import {
   accrualEarned,
   carryoverApplied,
-} from "@openbooks/engine/src/hrm/leave-math.ts";
+} from "@openbooks/engine/hrm/leave-math";
 import {} from "./coerce.ts";
 import { foldWholeNumber } from "./whole-number";
-import { isUuid } from "@openbooks/engine/src/platform/uuid.ts";
+import { isUuid } from "@openbooks/engine/platform/identifiers";
 
 /**
  * HRM leave-policy rule normalization (pure — no server imports, so unit

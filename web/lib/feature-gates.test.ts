@@ -4,7 +4,7 @@ import assert from 'node:assert/strict'
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { readingPagePairs } from './page-source'
 import test from 'node:test'
-import { FEATURES } from '@openbooks/engine/src/organization/feature-registry.ts'
+import { FEATURES } from '@openbooks/engine/organization/feature-registry'
 
 /** Feature gates are verified per exposed surface, because a gate on one
  * route does not prove that another page or API is protected. */

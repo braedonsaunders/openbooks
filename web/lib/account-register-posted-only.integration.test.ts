@@ -1,9 +1,9 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import test from 'node:test'
-const { db, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypassContext } = await import('@openbooks/engine/platform/db')
 const { sql } = await import('drizzle-orm')
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
 const { accountRegister } = await import('./reports/registers.ts')
 
 // The register's lines and its independent totals read the same posted
@@ -101,12 +101,12 @@ const consolidatedRows = [
           import.meta.url,
         ).href;
         const { db, withBypassContext: withBypass } = await import(
-          "@openbooks/engine/src/platform/db.ts"
+          "@openbooks/engine/platform/db"
         );
         const { createScratchOrg, dropScratchOrg } = await import(
-          "@openbooks/engine/src/testing/fixtures.ts"
+          "@openbooks/engine/testing/fixtures"
         );
-        const { businessToday } = await import("@openbooks/engine/src/platform/business-date.ts");
+        const { businessToday } = await import("@openbooks/engine/platform/business-date/module");
         const { GET } = await import("../app/api/accounts/[id]/register/route.ts");
 
         function pdfContentText(pdf: Buffer): string {
@@ -249,8 +249,8 @@ const consolidatedRows = [
   } },
   { label: "account register subsidiary", register: async () => {
         const { sql } = await import('drizzle-orm')
-        const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
-        const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+        const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/platform/db')
+        const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
         const { accountRegister, partyRegister } = await import('./reports/registers')
 
         test('account registers scope both lines and totals within a visible intercompany header', { skip: !env.OPENBOOKS_DB_URL }, async () => {

@@ -1,8 +1,8 @@
 import "server-only";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
-import { reconciliationTotals } from "@openbooks/engine/src/banking/banking.ts";
+import { db } from "@openbooks/engine/platform/db";
+import { reconciliationTotals } from "@openbooks/engine/banking/banking";
 import { isFeatureEnabled } from "../features";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
 import type { AssistantToolDef, ToolResult } from "./types";

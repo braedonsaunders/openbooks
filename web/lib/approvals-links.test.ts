@@ -34,7 +34,7 @@ export const withTransactionSavepoint = (...args) => fail();`;
 registerHooks({
   resolve(specifier, context, next) {
     if (
-      specifier === "@openbooks/engine/src/platform/db.ts" ||
+      specifier === "@openbooks/engine/platform/db" ||
       specifier === "../platform/db.ts"
     ) {
       return { shortCircuit: true, format: "module", url: "mock:approval-links-db" };
@@ -50,7 +50,7 @@ registerHooks({
 });
 
 const { getFlowAdapter, listFlowSubjectProfiles } = await import(
-  "@openbooks/engine/src/flows/registry.ts"
+  "@openbooks/engine/flows/registry"
 );
 const { approvalRecordHref } = await import("./approvals-links.ts");
 

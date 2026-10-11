@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import nodeTest from "node:test";
 import { NextResponse } from "next/server";
-import { DuplicateProspectError } from "@openbooks/engine/src/hrm/recruiting/candidates.ts";
-import { RecruitingError } from "@openbooks/engine/src/hrm/recruiting/errors.ts";
+import { DuplicateProspectError } from "@openbooks/engine/hrm/recruiting/candidates";
+import { RecruitingError } from "@openbooks/engine/hrm/recruiting/errors";
 
 interface RouteState {
   denied: boolean;
@@ -56,7 +56,7 @@ const mockSources = new Map<string, string>([
 const mockUrls = new Map<string, string>([
   ["../../../../../lib/authz", "mock:authz"],
   ["../../../../../lib/features", "mock:authz"],
-  ["@openbooks/engine/src/hrm/recruiting/applications.ts", "mock:service"],
+  ["@openbooks/engine/hrm/recruiting/applications", "mock:service"],
   ["@/lib/authz", "mock:authz"],
   ["@/lib/feature-gates", "mock:authz"],
 ]);

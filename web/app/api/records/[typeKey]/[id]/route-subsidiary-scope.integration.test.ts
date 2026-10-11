@@ -42,9 +42,9 @@ const routeUrl = './route.ts?custom-record-detail-scope-test'
 const { GET, PATCH } = (await import(routeUrl)) as typeof import('./route.ts')
 const custom_record_detail_scope_listUrl = '../route.ts?custom-record-detail-scope-list'
 const { GET: LIST } = (await import(custom_record_detail_scope_listUrl)) as typeof import('../route.ts')
-const { db, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypass, withOrgContext } = await import('@openbooks/engine/platform/db')
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  '@openbooks/engine/src/testing/fixtures.ts',
+  '@openbooks/engine/testing/fixtures',
 )
 
 test(

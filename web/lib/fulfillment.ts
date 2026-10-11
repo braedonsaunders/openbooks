@@ -1,7 +1,7 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { subsidiaryVisibleFilter } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
+import { db } from '@openbooks/engine/platform/db'
+import { subsidiaryVisibleFilter } from '@openbooks/engine/organization/scope'
 
 /** A carrier a draft shipment may name, with the service levels it offers. */
 export interface CarrierOption {

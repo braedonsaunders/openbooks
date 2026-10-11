@@ -5,7 +5,7 @@ import test from 'node:test'
 import type { SessionUser } from '../auth'
 import { sql } from 'drizzle-orm'
 import { db, withBypassContext, withOrgContext } from '@openbooks/engine/platform/database'
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from '@openbooks/engine/src/testing/fixtures.ts'
+import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from '@openbooks/engine/testing/fixtures'
 import { employeeWorkerCompResource } from './employee-worker-comp-resource'
 
 const session: { user: SessionUser | null } = { user: null }

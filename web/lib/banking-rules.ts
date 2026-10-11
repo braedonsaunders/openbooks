@@ -1,15 +1,15 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
-import { db, schema, withOrgTransaction, withTransactionSavepoint } from '@openbooks/engine/src/platform/db.ts'
-import { fromUnits, toUnits } from '@openbooks/engine/src/money/money.ts'
+import { businessToday } from '@openbooks/engine/platform/business-date/module'
+import { db, schema, withOrgTransaction, withTransactionSavepoint } from '@openbooks/engine/platform/db'
+import { fromUnits, toUnits } from '@openbooks/engine/money/money'
 import { PostingError } from '@openbooks/engine/journal/contracts'
 import { typedRefusal } from './api/error-response'
-import { postDocument } from "@openbooks/engine/src/ledger/posting-document.ts";
-import { submitAndReleaseIfUngated } from '@openbooks/engine/src/flows/index.ts'
-import { startReconciliation, createMatchWithJournal, excludeStatementLine, statementComparisonSign } from '@openbooks/engine/src/banking/banking.ts'
-import { ScopeNotFoundError, subsidiaryScopeAllows } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
-import { controlDeps } from "../../engine/src/ledger/document-service.ts";
+import { postDocument } from "@openbooks/engine/ledger/posting-document";
+import { submitAndReleaseIfUngated } from '@openbooks/engine/flows/module'
+import { startReconciliation, createMatchWithJournal, excludeStatementLine, statementComparisonSign } from '@openbooks/engine/banking/banking'
+import { ScopeNotFoundError, subsidiaryScopeAllows } from '@openbooks/engine/organization/scope'
+import { controlDeps } from "@openbooks/engine/ledger/document-service";
 import { can, resolveAuthzByUserId } from "./authz";
 import { nextDocumentNumber } from "./bills.ts";
 import { lockBankMatchRuleSet } from './banking-rule-set-lock'

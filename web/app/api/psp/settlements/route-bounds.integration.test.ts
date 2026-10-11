@@ -28,10 +28,10 @@ registerHooks({
     return next(specifier, context);
   },
 });
-const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { sql } = await import("drizzle-orm");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
-const { importSettlementBatch, postSettlementBatch } = await import("@openbooks/engine/src/payments/psp-settlement.ts");
+const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
+const { importSettlementBatch, postSettlementBatch } = await import("@openbooks/engine/payments/psp-settlement");
 const { POST } = await import("./route.ts");
 
 async function fixture(): Promise<{ orgId: string; batchId: string; date: string }> {

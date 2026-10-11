@@ -6,9 +6,9 @@ import { sql } from "drizzle-orm";
 // marker so it loads under the plain runner, then import the unit under test.
 const { resolveNav } = await import("./resolve.ts");
 
-const { db } = await import("@openbooks/engine/src/platform/db.ts");
+const { db } = await import("@openbooks/engine/platform/db");
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
-  "@openbooks/engine/src/testing/fixtures.ts"
+  "@openbooks/engine/testing/fixtures"
 );
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
-import { seedFlowActors, type ScratchOrg } from "@openbooks/engine/src/testing/fixtures.ts";
+import { db } from "@openbooks/engine/platform/db";
+import { seedFlowActors, type ScratchOrg } from "@openbooks/engine/testing/fixtures";
 
 type SetupSession = { gate: { user: { orgId: string; id: string } } | null };
 type Method = "POST" | "PATCH" | "DELETE";

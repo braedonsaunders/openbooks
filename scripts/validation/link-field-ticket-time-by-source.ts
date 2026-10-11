@@ -18,8 +18,8 @@
 import { createHash, randomUUID } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { sql } from "drizzle-orm";
-import { db, withOrg } from "../../engine/src/platform/db.ts";
-import { isUuid } from "../../engine/src/platform/uuid.ts";
+import { db, withOrg } from "@openbooks/engine/platform/db";
+import { isUuid } from "@openbooks/engine/platform/identifiers";
 import {
   applyTimeTicketLinks,
   classifyTimeTicketLinks,

@@ -3,9 +3,9 @@ import { z } from 'zod'
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { releasePayRunBankFile } from '@openbooks/engine/src/payroll/bank-file-artifact.ts'
-import { PayrollError } from "@openbooks/engine/src/payroll/error.ts";
+import { db } from '@openbooks/engine/platform/db'
+import { releasePayRunBankFile } from '@openbooks/engine/payroll/bank-file-artifact'
+import { PayrollError } from "@openbooks/engine/payroll/error";
 import '../../../../../../../lib/feature-gates';
 import { guardSubsidiaryScope } from '../../../../../../../lib/authz'
 import { isUuid } from '../../../../../../../lib/list-params'

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 // Only the RSC bundling marker is replaced; policy and error translation are real.
-const { DocumentEditError } = await import('@openbooks/engine/src/records/document-edit-policy.ts')
+const { DocumentEditError } = await import('@openbooks/engine/records/document-edit-policy')
 const { domainFailure } = await import('./application/documents.ts')
 const { ApplicationError } = await import('./application/errors.ts')
 

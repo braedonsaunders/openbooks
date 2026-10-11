@@ -5,7 +5,7 @@ import { isoDate, uuidId } from "@/lib/api/json";
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
-import { db, withOrgTransaction } from "@openbooks/engine/src/platform/db.ts";
+import { db, withOrgTransaction } from "@openbooks/engine/platform/db";
 import { isUuid } from "../../../../lib/list-params";
 import {
   canReopenWeek,

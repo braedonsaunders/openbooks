@@ -4,8 +4,8 @@ import { randomUUID } from 'node:crypto'
 import { registerHooks } from 'node:module'
 import { sql } from 'drizzle-orm'
 registerHooks({ resolve(s,c,n) { if(s==='server-only') return {url:'data:text/javascript,export{}',shortCircuit:true}; return n(s,c) } })
-const { withBypassContext, db, pool } = await import('@openbooks/engine/src/platform/db.ts')
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { withBypassContext, db, pool } = await import('@openbooks/engine/platform/db')
+const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
 const { createAppPlatformAdapter } = await import('./platform')
 const { reportEntityCatalog, validateCatalogReportQuery } = await import('../custom-record-report-catalog')
 

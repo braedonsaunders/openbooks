@@ -226,9 +226,9 @@ registerHooks({
       (specifier === "@/lib/authz" && context.parentURL?.includes("/web/lib/api/route.ts"))
     ) {
       const modules: Record<string, string> = {
-        "@openbooks/engine/src/platform/db.ts": "mock:project-types-db",
-        "@openbooks/engine/src/projects/financial-profile-versions.ts": "mock:project-types-financial-profile",
-        "@openbooks/engine/src/platform/business-date.ts": "mock:project-types-business-date",
+        "@openbooks/engine/platform/db": "mock:project-types-db",
+        "@openbooks/engine/projects/financial-profile-versions": "mock:project-types-financial-profile",
+        "@openbooks/engine/platform/business-date/module": "mock:project-types-business-date",
         "../../../../../lib/authz": "mock:project-types-authz",
         "@/lib/authz": "mock:project-types-authz",
         "../../../../../lib/projects-gate": "mock:project-types-gate",

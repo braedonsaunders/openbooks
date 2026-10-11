@@ -77,7 +77,7 @@ stubModules({
   authz: false,
   features: false,
   extra: {
-    "@openbooks/engine/src/platform/db.ts": `
+    "@openbooks/engine/platform/db": `
       const state = globalThis[Symbol.for('openbooks.party-route-hold-test')]
       const sqlText = globalThis.openbooksSqlTextParty
       const record = (query) => {

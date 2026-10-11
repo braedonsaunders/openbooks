@@ -1,10 +1,10 @@
-import { documentRevisionCounterSql, isDocumentRevisionToken } from "@openbooks/engine/src/records/revision.ts"
+import { documentRevisionCounterSql, isDocumentRevisionToken } from "@openbooks/engine/records/revision"
 import 'server-only'
 import { createHash, randomUUID } from 'node:crypto'
 import { sql } from 'drizzle-orm'
-import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
 import { nextDocumentNumber, persistLineTaxComponents } from "./bills.ts";
-import { allocateDocumentNumber } from "@openbooks/engine/src/records/numbering.ts";
+import { allocateDocumentNumber } from "@openbooks/engine/records/numbering";
 import { claimIdempotentCreate, resolveIdempotentReplay } from "./api/idempotency";
 import {
   ORDER_KINDS,
@@ -13,8 +13,8 @@ import {
   type OrderKind,
   CONVERSION_TARGETS,
 } from './order-kinds'
-import { promoteCrmAccount } from '@openbooks/engine/src/crm/crm.ts'
-import { add, cmp, mulRatio, neg, sum } from '@openbooks/engine/src/money/money.ts'
+import { promoteCrmAccount } from '@openbooks/engine/crm/crm'
+import { add, cmp, mulRatio, neg, sum } from '@openbooks/engine/money/money'
 import { kitComponentQuantities, loadKitComponents } from '@openbooks/engine/inventory'
 import { lineRequiresReceipt } from '@openbooks/engine/records/stock-receipt'
 import {
@@ -26,16 +26,16 @@ import {
 } from './order-cycle-math'
 import { overReceiptAllowanceUnits, resolveOverReceiptTolerance } from './purchase-over-receipt'
 import { isFeatureEnabled } from './features'
-import { businessToday, isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
-import { applyPurchaseReceiptInventory } from "@openbooks/engine/src/inventory/documents-purchasing.ts";
+import { businessToday, isIsoCalendarDate } from '@openbooks/engine/platform/business-date/module'
+import { applyPurchaseReceiptInventory } from "@openbooks/engine/inventory/documents-purchasing";
 import { linkedBillReceivedCover } from "@openbooks/engine/inventory/bill-matchable-lines";
-import { applySalesFulfillmentInventoryIssues } from "@openbooks/engine/src/inventory/documents-sales.ts";
-import { assertStockLocationAdmitsSubsidiary } from "@openbooks/engine/src/inventory/profile-policy.ts";
-import { InventoryError, InventoryOwnershipError, UnitConversionError } from "@openbooks/engine/src/inventory/contracts.ts";
+import { applySalesFulfillmentInventoryIssues } from "@openbooks/engine/inventory/documents-sales";
+import { assertStockLocationAdmitsSubsidiary } from "@openbooks/engine/inventory/profile-policy";
+import { InventoryError, InventoryOwnershipError, UnitConversionError } from "@openbooks/engine/inventory/contracts/module";
 import { WarehouseRefusal } from "@openbooks/engine/inventory/warehouses";
-import { loadSubsidiaryContext } from '@openbooks/engine/src/organization/subsidiaries.ts'
-import { issueSalesOrder } from '@openbooks/engine/src/sales/sales-orders.ts'
-import { openQuantitySql, orderedNetOfCancelledSql } from '@openbooks/engine/src/records/order-line-remainders.ts'
+import { loadSubsidiaryContext } from '@openbooks/engine/organization/subsidiaries'
+import { issueSalesOrder } from '@openbooks/engine/sales/sales-orders'
+import { openQuantitySql, orderedNetOfCancelledSql } from '@openbooks/engine/records/order-line-remainders'
 import { receivedNotBilledMissingMessage, resolveReceivedNotBilledAccount } from '@openbooks/engine/records/control-accounts'
 import { activeStockLocations, resolveLineStockLocation } from './stock-locations'
 import { ensureDefaultWarehouse } from '@openbooks/engine/inventory/warehouses'

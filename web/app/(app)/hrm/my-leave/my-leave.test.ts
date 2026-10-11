@@ -79,14 +79,14 @@ registerHooks({
         url: "data:text/javascript,export async function hrmGroupTabs() { return []; }",
       };
     }
-    if (owned && specifier === "@openbooks/engine/src/platform/business-date.ts") {
+    if (owned && specifier === "@openbooks/engine/platform/business-date/module") {
       return {
         shortCircuit: true,
         format: "module",
         url: "data:text/javascript,export async function businessToday() { return '2026-09-22'; } export function utcDateFromParts() { throw new Error('unstubbed'); }",
       };
     }
-    if (owned && specifier === "@openbooks/engine/src/hrm/leave-read.ts") {
+    if (owned && specifier === "@openbooks/engine/hrm/leave-read") {
       return {
         shortCircuit: true,
         format: "module",
@@ -108,7 +108,7 @@ registerHooks({
           ),
       };
     }
-    if (owned && specifier === "@openbooks/engine/src/hrm/attendance.ts") {
+    if (owned && specifier === "@openbooks/engine/hrm/attendance") {
       return {
         shortCircuit: true,
         format: "module",
@@ -125,7 +125,7 @@ registerHooks({
     // identity lookup itself resolves to no employments: the real lookup
     // would refuse against the stubbed database, which these tests never
     // exercise — identity refusal stays covered by the engine scope tests.
-    if (owned && specifier === "@openbooks/engine/src/hrm/authorization.ts") {
+    if (owned && specifier === "@openbooks/engine/hrm/authorization") {
       return {
         shortCircuit: true,
         format: "module",
@@ -137,7 +137,7 @@ registerHooks({
           ),
       };
     }
-    if (owned && specifier === "@openbooks/engine/src/platform/db.ts") {
+    if (owned && specifier === "@openbooks/engine/platform/db") {
       return {
         shortCircuit: true,
         format: "module",
@@ -149,7 +149,7 @@ registerHooks({
 });
 
 const { loadMyLeave } = await import("../../../../lib/hrm/leave.ts");
-const { LeaveError } = await import("@openbooks/engine/src/hrm/leave-errors.ts");
+const { LeaveError } = await import("@openbooks/engine/hrm/leave-errors");
 
 const gap = globalThis as Record<string, unknown>;
 

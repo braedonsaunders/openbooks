@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { createHash, createHmac, randomUUID } from 'node:crypto'
 import test from 'node:test'
 import { PgDialect } from 'drizzle-orm/pg-core'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/db'
 import { sessionSigningInput } from '../auth-token-format'
 
 const { validateSessionToken } = await import('../auth')

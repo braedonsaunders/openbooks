@@ -1,4 +1,4 @@
-import { fromUnits, toUnits } from '@openbooks/engine/src/money/money.ts'
+import { fromUnits, toUnits } from '@openbooks/engine/money/money'
 
 export {QUANTITY_SCALE,fromQuantityUnits,toQuantityUnits} from '@openbooks/engine/money/quantity'
 import {fromQuantityUnits,toQuantityUnits} from '@openbooks/engine/money/quantity'

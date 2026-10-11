@@ -10,10 +10,10 @@ registerHooks({
 })
 
 const { sql } = await import('drizzle-orm')
-const { toUnits } = await import('@openbooks/engine/src/money/money.ts')
-const { withBypassContext, db, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
-const { withSimClock: pinClock } = await import('@openbooks/engine/src/platform/clock.ts')
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { toUnits } = await import('@openbooks/engine/money/money')
+const { withBypassContext, db, withBypass, withOrgContext } = await import('@openbooks/engine/platform/db')
+const { withSimClock: pinClock } = await import('@openbooks/engine/testing/platform/clock')
+const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
 const { purchasingHome } = await import('./purchasing')
 const { openItems, summariseSide, buildWeekGrid } = await import('../cash/core.ts')
 

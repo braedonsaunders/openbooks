@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { sql } from 'drizzle-orm'
-import { db, type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
+import { db, type SqlExecutor } from '@openbooks/engine/platform/db'
 import { DOC_KIND_FEATURE } from '../document-kinds'
 import { featureEnabled, orgFeatureState } from '../features'
 

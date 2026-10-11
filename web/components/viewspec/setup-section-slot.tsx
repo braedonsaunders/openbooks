@@ -1,8 +1,8 @@
 import 'server-only'
 
 import { isUuid } from '../../lib/list-params'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { listSchedules } from '@openbooks/engine/src/hrm/construction/rates.ts'
+import { db } from '@openbooks/engine/platform/db'
+import { listSchedules } from '@openbooks/engine/hrm/construction/rates'
 import { can, getAuthz } from '../../lib/authz'
 import { SETUP_ENTITY_BY_KEY } from '../../lib/setup/registry'
 import { SetupEntitySection } from '../../app/(app)/admin/setup/[entity]/SetupEntitySection'

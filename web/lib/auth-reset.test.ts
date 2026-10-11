@@ -147,10 +147,10 @@ registerHooks({
   resolve(specifier, context, nextResolve) {
     const mocks: Record<string, string> = {
       "drizzle-orm": "mock:drizzle-orm",
-      "@openbooks/engine/src/platform/db.ts": "mock:db",
+      "@openbooks/engine/platform/db": "mock:db",
       "@openbooks/emails": "mock:emails",
-      "@openbooks/engine/src/delivery/email-config.ts": "mock:email-config",
-      "@openbooks/engine/src/flows/email-tokens.ts": "mock:email-tokens",
+      "@openbooks/engine/delivery/email-config/module": "mock:email-config",
+      "@openbooks/engine/flows/email-tokens": "mock:email-tokens",
       "./auth": "mock:auth",
       "./auth-policy": "mock:auth-policy",
     };

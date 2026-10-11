@@ -1,6 +1,6 @@
 import "server-only";
 import { sql } from "drizzle-orm";
-import { db, withOrg } from "@openbooks/engine/src/platform/db.ts";
+import { db, withOrg } from "@openbooks/engine/platform/db";
 import { parseReportQuery } from "../report-filters";
 import { resolvePeriod } from "../periods";
 import { canAccessReportDefinition, withReportAuthz } from "../report-execution-context";

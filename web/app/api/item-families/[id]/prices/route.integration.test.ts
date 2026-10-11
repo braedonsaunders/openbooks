@@ -49,9 +49,9 @@ const routeUrl = './route.ts?family-prices-route-integration'
 const { GET, POST } = (await import(routeUrl)) as typeof import('./route.ts')
 after(() => hooks.deregister())
 
-const { db, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
-const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } = await import('@openbooks/engine/src/testing/fixtures.ts')
-const { createItemFamily, generateFamilyVariants } = await import('@openbooks/engine/src/inventory/item-families.ts')
+const { db, withBypassContext } = await import('@openbooks/engine/platform/db')
+const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } = await import('@openbooks/engine/testing/fixtures')
+const { createItemFamily, generateFamilyVariants } = await import('@openbooks/engine/testing/inventory/item-families')
 const { resolveItemPrice } = await import('../../../../../lib/item-pricing.ts')
 
 async function fixture() {

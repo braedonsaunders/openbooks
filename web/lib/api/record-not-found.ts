@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { HrmAuthorizationError } from "@openbooks/engine/src/hrm/authorization.ts";
+import { HrmAuthorizationError } from "@openbooks/engine/hrm/authorization";
 import { notFound } from "./responses.ts";
 
 /** Hide HRM subjects uniformly while retaining named 403s for missing grants. */

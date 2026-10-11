@@ -3,18 +3,18 @@ import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from "@/lib/api/error-response";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { db } from "@openbooks/engine/platform/db";
 import {
   documentRevisionSql,
   isDocumentRevisionToken,
-} from "@openbooks/engine/src/records/revision.ts";
-import { buildAllSchedulesWithRunner } from "@openbooks/engine/src/assets/depreciation.ts";
+} from "@openbooks/engine/records/revision";
+import { buildAllSchedulesWithRunner } from "@openbooks/engine/assets/depreciation";
 import {
   FixedAssetEquipmentLinkConflict,
   refuseFixedAssetRehomeWithEquipment,
-} from "@openbooks/engine/src/organization/subsidiary-scope.ts";
-import { cmp } from "@openbooks/engine/src/money/money.ts";
-import { isIsoCalendarDate } from "@openbooks/engine/src/platform/business-date.ts";
+} from "@openbooks/engine/organization/scope";
+import { cmp } from "@openbooks/engine/money/money";
+import { isIsoCalendarDate } from "@openbooks/engine/platform/business-date/module";
 import { subsidiaryVisibleFilter } from "../../../../lib/subsidiaries";
 import { isUuid } from "../../../../lib/list-params";
 import {

@@ -1,8 +1,8 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
-import { lockScopeRows, subsidiaryScopeAllows } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
-import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
+import { lockScopeRows, subsidiaryScopeAllows } from '@openbooks/engine/organization/scope'
+import { normalizeMoney } from '@openbooks/engine/money/money'
 
 export type ProjectTimeDimension = 'employee' | 'item' | 'task'
 

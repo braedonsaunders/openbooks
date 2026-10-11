@@ -48,9 +48,9 @@ registerHooks({
 
 const routeUrl = "./route.ts?bom-generic-refusal-route-test";
 const { DELETE, PATCH, POST } = (await import(routeUrl)) as typeof import("./route.ts");
-const { db, withBypassContext } = await import("@openbooks/engine/src/platform/db.ts");
+const { db, withBypassContext } = await import("@openbooks/engine/platform/db");
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
-  "@openbooks/engine/src/testing/fixtures.ts"
+  "@openbooks/engine/testing/fixtures"
 );
 const { createSetupRecord, deleteSetupRecord, preflightSetupWrite, updateSetupRecord } = await import(
   "../../../../../lib/setup/write.ts"

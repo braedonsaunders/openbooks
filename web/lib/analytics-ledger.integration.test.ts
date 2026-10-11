@@ -10,8 +10,8 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context);
 } });
 const { sql } = await import('drizzle-orm');
-const { db, withOrgContext, withBypassContext, withBypass } = await import('@openbooks/engine/src/platform/db.ts');
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts');
+const { db, withOrgContext, withBypassContext, withBypass } = await import('@openbooks/engine/platform/db');
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures');
 const { vendorData } = await import('./analytics/vendor-data');
 const { spendVelocityData } = await import('./analytics/spend-velocity-data');
 const { customerData, customerProfitability } = await import('./analytics/customer-data');
@@ -332,7 +332,7 @@ for(const scenario of ['in-period payment','future payment','future application'
 }}] as const; for (const row of customerCutoffCases) await row.register();
 
 const calendarCases = [{ label: "analytics-calendar", register: async () => {
-const {withBypass,withOrgContext} = await import('@openbooks/engine/src/platform/db.ts');
+const {withBypass,withOrgContext} = await import('@openbooks/engine/platform/db');
 const {healthData} = await import('./analytics/health-data');
 const {financialHealth} = await import('./analytics/financial-health');
 const {customerData} = await import('./analytics/customer-data');
@@ -342,7 +342,7 @@ const {spendVelocityData} = await import('./analytics/spend-velocity-data');
 // Every analytics reader accepts the leap-day-adjacent ranges and returns the
 // requested period unchanged. Empty scratch orgs make its zero-valued
 // aggregate defaults independently observable.
-const { inclusiveCalendarDays } = await import('@openbooks/engine/src/platform/civil-date.ts')
+const { inclusiveCalendarDays } = await import('@openbooks/engine/platform/civil-date')
 
 const ranges = [
   { from: '2024-02-01', to: '2024-02-29' },
@@ -508,9 +508,9 @@ const consolidatedRows = [
          * hours-based burden rate.
          */
         const root = pathToFileURL(process.cwd() + '/').href
-        const { db, withBypassContext, withOrgContext } = (await import(root + 'engine/src/platform/db.ts')) as typeof import('@openbooks/engine/src/platform/db.ts')
+        const { db, withBypassContext, withOrgContext } = (await import('@openbooks/engine/platform/db')) as typeof import('@openbooks/engine/platform/db')
         const { sql } = await import(root + 'node_modules/drizzle-orm/index.js')
-        const { createScratchOrg, dropScratchOrg } = (await import(root + 'engine/src/testing/fixtures.ts')) as typeof import('@openbooks/engine/src/testing/fixtures.ts')
+        const { createScratchOrg, dropScratchOrg } = (await import('@openbooks/engine/testing/fixtures')) as typeof import('@openbooks/engine/testing/fixtures')
         const { trueCostData } = (await import(root + 'web/lib/analytics/true-cost-data.ts')) as typeof import('./analytics/true-cost-data')
 
         test('true cost labour bases count approved time only', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
@@ -564,14 +564,14 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context);
 } });
 const { sql } = await import('drizzle-orm');
-const { db, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts');
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts');
+const { db, withBypass, withOrgContext } = await import('@openbooks/engine/platform/db');
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures');
 const { getAuthz } = await import('./authz');
 const { customerData, customerProfitability, isProfitLeak } = await import('./analytics/customer-data');
 const { analyticsConfig } = await import('./analytics/config');
 const { vendorData } = await import('./analytics/vendor-data');
 const { spendVelocityData } = await import('./analytics/spend-velocity-data');
-const { add } = await import('@openbooks/engine/src/money/money.ts');
+const { add } = await import('@openbooks/engine/money/money');
 // The page LOADERS. The `page` boundary below asks whether the page applies
 // the reader's subsidiary scope, and that decision lives in the loader — the
 // spec only names where the resolved data is drawn. Reading the loader output

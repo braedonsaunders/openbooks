@@ -9,8 +9,8 @@ import { formatTicketHours } from '../../../../lib/format'
 import { PagedTable, type PagedColumn } from '../../../../components/paged-table'
 import { ListFilterSelect } from '../../../../components/list-filter-select'
 import { nextCell, boardCell, type CellArrow, type CellPosition } from '../../../../lib/resourcing/board-cells'
-import { sum } from '@openbooks/engine/src/money/money.ts'
-import type { PersonWeekForecast } from '@openbooks/engine/src/resourcing/forecast.ts'
+import { sum } from '@openbooks/engine/money/money'
+import type { PersonWeekForecast } from '@openbooks/engine/resourcing/forecast'
 import type { ResourcingBoard } from '../../../../lib/resourcing/queries'
 
 type Assignment = ResourcingBoard['rows'][number]

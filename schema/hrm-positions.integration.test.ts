@@ -2,11 +2,11 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import type { PoolClient } from "pg";
-import { db, pool, withOrgContext } from "../engine/src/platform/db.ts";
+import { db, pool, withOrgContext } from "@openbooks/engine/platform/db";
 import {
   createScratchOrg,
   dropScratchOrg,
-} from "../engine/src/testing/fixtures.ts";
+} from "@openbooks/engine/testing/fixtures";
 
 const skip = !process.env.OPENBOOKS_DB_URL;
 

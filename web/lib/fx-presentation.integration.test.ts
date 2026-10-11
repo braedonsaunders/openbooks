@@ -2,8 +2,8 @@ import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import test from 'node:test'
 import { sql } from 'drizzle-orm'
-import { db, withOrgContext } from '@openbooks/engine/src/platform/db.ts'
-import { mulDecimal } from '@openbooks/engine/src/money/money.ts'
+import { db, withOrgContext } from '@openbooks/engine/platform/db'
+import { mulDecimal } from '@openbooks/engine/money/money'
 import { presentationAmountSql, withPresentationCurrencyRead } from './fx-presentation'
 
 test('SQL presentation matches exact bigint conversion at positive and negative ties and beyond safe integers', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
@@ -20,8 +20,8 @@ test('SQL presentation matches exact bigint conversion at positive and negative 
 })
 
 test('batched dated rates preserve preceding coverage, inverse quotes and direct ties', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
-  const { withBypass } = await import('@openbooks/engine/src/platform/db.ts')
+  const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
+  const { withBypass } = await import('@openbooks/engine/platform/db')
   const { flowRates, MissingExchangeRateError } = await import('./fx-presentation')
   const org = await withBypass(() => createScratchOrg())
   try {

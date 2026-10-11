@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
-import { germanInvoice } from '@openbooks/engine/src/einvoice/test-fixtures.ts'
+import { germanInvoice } from '@openbooks/engine/testing/einvoice/test-fixtures'
 import { computeEInvoiceAmounts, type EInvoice } from '@openbooks/engine/einvoice'
 import { compileTemplateHtml, renderTemplate } from '@openbooks/pdf'
 import { PDF_RECORD_TYPE_BY_KEY } from './catalog.ts'

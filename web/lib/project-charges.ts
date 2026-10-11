@@ -1,22 +1,22 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { inDbTransaction, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
+import { inDbTransaction, withOrgTransaction } from '@openbooks/engine/platform/db'
 import {
   lockEquipmentProjectScope,
   lockProjectForScope,
   ScopeNotFoundError,
-} from '@openbooks/engine/src/organization/subsidiary-scope.ts'
-import { postDocument } from "@openbooks/engine/src/ledger/posting-document.ts";
-import { submitAndReleaseIfUngated } from '@openbooks/engine/src/flows/index.ts'
-import { cmp, div, isZero, mul, normalizeMoney, sum } from '@openbooks/engine/src/money/money.ts'
+} from '@openbooks/engine/organization/scope'
+import { postDocument } from "@openbooks/engine/ledger/posting-document";
+import { submitAndReleaseIfUngated } from '@openbooks/engine/flows/module'
+import { cmp, div, isZero, mul, normalizeMoney, sum } from '@openbooks/engine/money/money'
 import { nextDocumentNumber } from "./bills.ts";
-import { controlDeps } from "../../engine/src/ledger/document-service.ts";
+import { controlDeps } from "@openbooks/engine/ledger/document-service";
 import { resolveItemRate } from './item-rates'
-import type { RatePrice } from '@openbooks/engine/src/sales/item-rate-pricing.ts'
+import type { RatePrice } from '@openbooks/engine/sales/item-rate-pricing'
 import { canonicalDecimal } from './exact-decimal'
 import { acquireFeatureGateLock, isFeatureEnabled } from './features'
-import { lockAndCheckOrgFeature } from '@openbooks/engine/src/organization/org-feature-lock.ts'
-import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
+import { lockAndCheckOrgFeature } from '@openbooks/engine/organization/org-feature-lock'
+import { businessToday } from '@openbooks/engine/platform/business-date/module'
 import { isUuid } from './list-params'
 
 const INVENTORY_ITEM_KINDS = new Set(['inventory', 'assembly', 'kit'])

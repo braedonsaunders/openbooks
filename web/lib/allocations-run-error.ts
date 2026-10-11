@@ -1,5 +1,5 @@
 import type { NextResponse } from 'next/server'
-import { AllocationRuleError, AllocationRunError } from '../../engine/src/allocations/index.ts'
+import { AllocationRuleError, AllocationRunError } from '@openbooks/engine/allocations/runtime'
 import { notFound } from '@/lib/api/responses'
 import { apiErrorResponse } from './api/error-response'
 

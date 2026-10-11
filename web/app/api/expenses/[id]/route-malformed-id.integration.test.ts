@@ -43,8 +43,8 @@ registerHooks({
     return next(specifier, context)
   },
 })
-const { withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { withOrgContext } = await import('@openbooks/engine/platform/db')
+const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
 const { GET, PATCH, DELETE } = await import('./route.ts')
 // The route's web/lib chain (documents → org-scope → auth → request-org)
 // registers the app RLS resolver at import time, replacing the preloaded
@@ -52,7 +52,7 @@ const { GET, PATCH, DELETE } = await import('./route.ts')
 // web imports so scratch fixtures keep their documented cross-org authority;
 // the route calls under test scope themselves explicitly (withOrgContext)
 // and are unaffected.
-const { installTrustedTestDatabaseBypass } = await import('@openbooks/engine/src/testing/database-bypass.ts')
+const { installTrustedTestDatabaseBypass } = await import('@openbooks/engine/testing/database-bypass')
 installTrustedTestDatabaseBypass()
 
 async function fixture() {

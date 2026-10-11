@@ -129,11 +129,11 @@ const mockSources = new Map<string, string>([
 const mockUrls = new Map<string, string>([
   ["../../../../lib/feature-gates", "mock:feature-gates"],
   ["@/lib/feature-gates", "mock:feature-gates"],
-  ["@openbooks/engine/src/assets/depreciation.ts", "mock:builder"],
+  ["@openbooks/engine/assets/depreciation", "mock:builder"],
 ]);
 
 function mockedUrl(specifier: string): string | null {
-  if (specifier === "@openbooks/engine/src/platform/db.ts") return "mock:db";
+  if (specifier === "@openbooks/engine/platform/db") return "mock:db";
   if (/(^|\/)platform\/db\.ts$/.test(specifier)) return "mock:db";
   return mockUrls.get(specifier) ?? null;
 }

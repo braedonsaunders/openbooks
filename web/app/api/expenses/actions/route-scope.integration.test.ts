@@ -22,10 +22,10 @@ registerHooks({
     return next(specifier, context)
   },
 })
-const { db, pool, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, pool, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
 const { createScratchOrg, createScratchUser, dropScratchOrg } =
-  await import('@openbooks/engine/src/testing/fixtures.ts')
-const { documentRevisionCounterSql } = await import('@openbooks/engine/src/records/revision.ts')
+  await import('@openbooks/engine/testing/fixtures')
+const { documentRevisionCounterSql } = await import('@openbooks/engine/records/revision')
 const { POST } = await import('./route')
 
 function asUser(id: string, orgId: string): SessionUser {

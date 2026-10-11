@@ -6,9 +6,9 @@ import {
   declineOffer,
   sendOffer,
   withdrawOffer,
-} from "@openbooks/engine/src/hrm/recruiting/offers.ts";
-import { acceptOfferAsHire } from "@openbooks/engine/src/hrm/recruiting/hire.ts";
-import { getOfferDetail } from "@openbooks/engine/src/hrm/recruiting/recruiting-read.ts";
+} from "@openbooks/engine/hrm/recruiting/offers";
+import { acceptOfferAsHire } from "@openbooks/engine/hrm/recruiting/hire";
+import { getOfferDetail } from "@openbooks/engine/hrm/recruiting/recruiting-read";
 
 import { isUuid } from "../../../../../../lib/list-params";
 import { recruitingErrorResponse } from "../../_lib";

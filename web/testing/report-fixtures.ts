@@ -1,8 +1,8 @@
 import { randomUUID } from 'node:crypto'
 import { sql } from 'drizzle-orm'
-import { db, withBypassContext } from '@openbooks/engine/src/platform/db.ts'
+import { db, withBypassContext } from '@openbooks/engine/platform/db'
 
-type ScratchOrg = import('@openbooks/engine/src/testing/fixtures.ts').ScratchOrg
+type ScratchOrg = import('@openbooks/engine/testing/fixtures').ScratchOrg
 
 export async function seedFeatureDisableBookScope(org: ScratchOrg) {
   const bookId = randomUUID()

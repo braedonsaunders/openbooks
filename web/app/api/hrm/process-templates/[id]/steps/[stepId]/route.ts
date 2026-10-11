@@ -5,7 +5,7 @@ import { NextResponse } from "next/server";
 import {
   deleteProcessTemplateStep,
   upsertProcessTemplateStep,
-} from "@openbooks/engine/src/hrm/processes.ts";
+} from "@openbooks/engine/hrm/processes/operations";
 import { guardPermission } from "../../../../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../../../../lib/features";
 import { isUuid } from "../../../../../../../lib/list-params";

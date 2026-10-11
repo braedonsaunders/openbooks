@@ -54,7 +54,7 @@ stubModules({
       export function guardRootSubsidiaryScope() { return null }
       export function guardUnrestrictedScope() { return null }
     `,
-    "@openbooks/engine/src/tax-returns/return.ts": `
+    "@openbooks/engine/tax-returns/return": `
       const state = globalThis[Symbol.for('openbooks.tax-return-route-test')]
       export async function computeTaxReturn(orgId, formCode, from, to, adjustments, opts) {
         state.calls.push({ orgId, formCode, from, to, adjustments, opts })

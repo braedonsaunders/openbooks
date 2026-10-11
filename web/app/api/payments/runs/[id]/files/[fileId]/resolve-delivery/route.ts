@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { defineRoute } from "@/lib/api/route";
 import { z } from 'zod'
-import { resolveUncertainDelivery } from '@openbooks/engine/src/payments/operations.ts'
+import { resolveUncertainDelivery } from '@openbooks/engine/payments/operations'
 import { isUuid } from '@/lib/list-params'
 import { parseJsonBody } from '@/lib/api/json'
 import { guardPaymentRunPermission, paymentErrorResponse } from '@/app/api/payments/lib'

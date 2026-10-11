@@ -25,4 +25,4 @@ export {
   unsealJson,
   unsealSecret,
   type SecretScope,
-} from "@openbooks/engine/src/platform/secrets.ts";
+} from "@openbooks/engine/platform/secrets";

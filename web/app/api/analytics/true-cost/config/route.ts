@@ -4,8 +4,8 @@ import { parseJsonBody } from "@/lib/api/json"
 import { NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
-import { normalizeMoney } from "@openbooks/engine/src/money/money.ts";
+import { db } from "@openbooks/engine/platform/db";
+import { normalizeMoney } from "@openbooks/engine/money/money";
 import "../../../../../lib/feature-gates";
 import { guardUnrestrictedScope } from "../../../../../lib/authz";
 import { canonicalDecimal, compareDecimal } from "../../../../../lib/exact-decimal";

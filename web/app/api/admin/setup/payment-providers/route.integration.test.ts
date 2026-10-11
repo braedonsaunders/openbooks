@@ -73,9 +73,9 @@ registerHooks({
 
 const routeUrl = "./route.ts?payment-providers-boundary-test";
 const { GET, POST } = (await import(routeUrl)) as typeof import("./route.ts");
-const { db } = await import("@openbooks/engine/src/platform/db.ts");
+const { db } = await import("@openbooks/engine/platform/db");
 const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import(
-  "@openbooks/engine/src/testing/fixtures.ts"
+  "@openbooks/engine/testing/fixtures"
 );
 
 interface Fixture {

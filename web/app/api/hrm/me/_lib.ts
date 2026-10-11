@@ -1,9 +1,9 @@
 import { NextResponse } from "next/server";
-import { HrmAuthorizationError } from "@openbooks/engine/src/hrm/authorization.ts";
-import { HrmChangeRequestError } from "@openbooks/engine/src/hrm/change-requests.ts";
-import { SelfServiceError } from "@openbooks/engine/src/hrm/self-service/actor.ts";
-import { HrmPerformanceError } from "@openbooks/engine/src/hrm/performance/errors.ts";
-import { BenefitsError } from "@openbooks/engine/src/hrm/benefits/errors.ts";
+import { HrmAuthorizationError } from "@openbooks/engine/hrm/authorization";
+import { HrmChangeRequestError } from "@openbooks/engine/hrm/change-requests/operations";
+import { SelfServiceError } from "@openbooks/engine/hrm/self-service/actor";
+import { HrmPerformanceError } from "@openbooks/engine/hrm/performance/errors";
+import { BenefitsError } from "@openbooks/engine/hrm/benefits/errors";
 import { changeRequestErrorResponse } from "../change-requests/_lib.ts";
 
 /**

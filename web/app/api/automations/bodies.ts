@@ -4,7 +4,7 @@ import {
   automationConditions,
   automationRules,
   automationTrigger,
-} from "@openbooks/engine/src/automations/triggers.ts";
+} from "@openbooks/engine/automations/triggers";
 
 const uuid = z.string().uuid("must be a valid id");
 

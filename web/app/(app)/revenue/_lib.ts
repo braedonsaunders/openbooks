@@ -1,9 +1,9 @@
 import type { breakageGrantOptions, ContractPosition } from '@openbooks/engine/revenue'
 import { contractPosition } from '@openbooks/engine/revenue'
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { db } from "@openbooks/engine/platform/db";
 import { subsidiaryVisibleFilter } from "@/lib/subsidiaries";
-import { add } from "@openbooks/engine/src/money/money.ts";
+import { add } from "@openbooks/engine/money/money";
 
 export type ScheduleLineRow = {
   period_name: string;

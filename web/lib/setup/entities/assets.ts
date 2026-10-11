@@ -1,7 +1,7 @@
 /** Setup-registry assets entities (split from registry.ts; pure moves only). */
 import type { SetupEntity } from '../types'
 import { POOL_METHODS, TAX_DEPRECIATION_MODELS, MACRS_SYSTEMS, MACRS_METHODS, TAX_DEPRECIATION_CONVENTIONS, DEPRECIATION_METHODS, DEPRECIATION_CONVENTIONS, END_OF_LIFE } from '../options'
-import { MAX_DEPRECIATION_PERIODS } from '@openbooks/engine/src/assets/depreciation-limits.ts'
+import { MAX_DEPRECIATION_PERIODS } from '@openbooks/engine/assets/depreciation-limits'
 
 export const ASSET_ENTITIES: SetupEntity[] = [
   // --- Assets --------------------------------------------------------------

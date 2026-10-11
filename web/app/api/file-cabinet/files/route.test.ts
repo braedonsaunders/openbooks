@@ -3,8 +3,8 @@ import { registerHooks } from 'node:module'
 import test from 'node:test'
 import { randomUUID } from 'node:crypto'
 import { sql } from 'drizzle-orm'
-import { db, env } from '@openbooks/engine/src/platform/db.ts'
-import { createScratchOrg, dropScratchOrg } from '@openbooks/engine/src/testing/fixtures.ts'
+import { db, env } from '@openbooks/engine/platform/db'
+import { createScratchOrg, dropScratchOrg } from '@openbooks/engine/testing/fixtures'
 
 const stateKey = Symbol.for('openbooks.file-upload-route-test')
 const state = { authz: null as {

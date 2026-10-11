@@ -6,7 +6,7 @@ import {
   getGoal,
   setGoalStatus,
   updateGoalProgress,
-} from "@openbooks/engine/src/hrm/performance/goals.ts";
+} from "@openbooks/engine/hrm/performance/goals";
 import { isUuid } from "../../../../../lib/list-params";
 import { performanceErrorResponse } from "../../review-cycles/_lib";
 import { patchGoalBody } from "../../goals/bodies";

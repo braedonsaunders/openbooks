@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { toUnits } from "../../engine/src/money/money.ts";
+import { toUnits } from "@openbooks/engine/money/money";
 import {
   emptyPopulationGate,
   evaluateCrewGate,

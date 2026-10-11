@@ -49,11 +49,11 @@ import { dirname, join, resolve } from "node:path";
 import {
   declaredPayrollTaxYears,
   payrollTaxYearSupport,
-} from "../engine/src/payroll/packs.ts";
+} from "@openbooks/engine/payroll/packs";
 import type {
   PayrollEditionScaffold,
   PayrollTaxYearSupport,
-} from "../engine/src/payroll/tax-years.ts";
+} from "@openbooks/engine/payroll/tax-years";
 
 /** This checkout — where a real rollover writes, and the `--root` default. */
 const REPO_ROOT = resolve(import.meta.dirname, "..");

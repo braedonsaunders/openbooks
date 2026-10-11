@@ -13,11 +13,11 @@ const { stubModules } = await import("../../../testing/stub-modules");
 stubModules({ intl: true });
 
 const { sql } = await import("drizzle-orm");
-const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
-const { createScratchOrg, dropScratchOrg, seedApprovalFlow, seedDraftDocument, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
-const { submitForApproval } = await import("@openbooks/engine/src/flows/submit.ts");
-const { OUTBOUND_PAYMENT_RUN_SUBJECT_KIND } = await import("@openbooks/engine/src/flows/payment-runs-adapter.ts");
-const { submitPaymentRun } = await import("@openbooks/engine/src/payments/operations.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, dropScratchOrg, seedApprovalFlow, seedDraftDocument, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
+const { submitForApproval } = await import("@openbooks/engine/flows/submit");
+const { OUTBOUND_PAYMENT_RUN_SUBJECT_KIND } = await import("@openbooks/engine/testing/flows/payment-runs-adapter");
+const { submitPaymentRun } = await import("@openbooks/engine/payments/operations");
 const { loadDashboardMetrics } = await import("./_metrics.ts");
 type Authz = import("@/lib/authz.ts").Authz;
 

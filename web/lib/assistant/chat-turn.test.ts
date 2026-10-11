@@ -6,7 +6,7 @@ import type { SessionUser } from "../auth";
 // Same module-graph shim as tool-schema-lint: the registry is server-only
 // and transitively imported app modules use the `@/` alias.
 const { buildChatTurn, chatCatalogTiers, createChatPrepareStep } = await import("./registry");
-const { FEATURES } = await import("@openbooks/engine/src/organization/feature-registry.ts");
+const { FEATURES } = await import("@openbooks/engine/organization/feature-registry");
 const { activateTurnModules } = await import("./tool-router");
 
 /**

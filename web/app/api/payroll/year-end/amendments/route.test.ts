@@ -84,7 +84,7 @@ const mockSources = new Map<string, string>([
   [
     'mock:db',
     `
-      export * from '${import.meta.resolve('@openbooks/engine/src/platform/db.ts')}'
+      export * from '${import.meta.resolve('@openbooks/engine/platform/db')}'
       export const db = { execute: async () => ({ rows: [{ rowId: '${ROW_A}' }] }) }
     `,
   ],
@@ -142,12 +142,12 @@ const mockUrls = new Map<string, string>([
   ['../../../../../lib/feature-gates', 'mock:feature-gates'],
   ['@/lib/feature-gates', 'mock:feature-gates'],
   ['../../subsidiary-scope', 'mock:subsidiary-scope'],
-  ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
+  ['@openbooks/engine/platform/db', 'mock:db'],
   ['drizzle-orm', 'mock:drizzle'],
-  ['@openbooks/engine/src/payroll/packs.ts', 'mock:packs'],
-  ['@openbooks/engine/src/payroll/error.ts', 'mock:payroll-error'],
-  ['@openbooks/engine/src/payroll/yearend.ts', 'mock:yearend'],
-  ['@openbooks/engine/src/payroll/yearend-amendments.ts', 'mock:amendments'],
+  ['@openbooks/engine/payroll/packs', 'mock:packs'],
+  ['@openbooks/engine/payroll/error', 'mock:payroll-error'],
+  ['@openbooks/engine/payroll/yearend', 'mock:yearend'],
+  ['@openbooks/engine/payroll/yearend-amendments', 'mock:amendments'],
 ])
 
 const hooks = registerHooks({

@@ -5,7 +5,7 @@ import {
   listSuccessionPlans,
   setSuccessionPlanNotes,
   setSuccessionPlanStatus,
-} from "@openbooks/engine/src/hrm/performance/talent.ts";
+} from "@openbooks/engine/hrm/performance/talent";
 import { performanceErrorResponse } from "../review-cycles/_lib";
 import { createSuccessionPlanBody, patchSuccessionPlanBody } from "./bodies";
 /**

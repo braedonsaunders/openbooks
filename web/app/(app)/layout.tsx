@@ -18,7 +18,7 @@ import { resolveNavMode, userNavModePreference } from '../../lib/nav-mode-resolv
 import { orgInfo } from '../../lib/data'
 import { orgFeatureState, featureEnabled } from '../../lib/features'
 import { isFeedbackReady } from '../../lib/feedback/config'
-import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
+import { businessToday } from '@openbooks/engine/platform/business-date/module'
 import { BusinessDateProvider } from '../../components/business-date-provider'
 import { MoneyProvider } from '../../components/money-provider'
 import { OnboardingWizard } from '../../components/onboarding-wizard'

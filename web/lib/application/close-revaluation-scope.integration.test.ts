@@ -7,8 +7,8 @@ import test from "node:test";
 // entries and no idempotency-key row. Only server-only is stubbed; the
 // application function and the engine run for real.
 const { sql } = await import("drizzle-orm");
-const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
 const { runPeriodRevaluation } = await import("./close.ts");
 const { ApplicationError } = await import("./errors.ts");
 type ApplicationContext = import("./context.ts").ApplicationContext;

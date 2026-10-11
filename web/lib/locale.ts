@@ -1,11 +1,11 @@
 import "server-only";
 import { cache } from "react";
 import { sql } from "drizzle-orm";
-import { db, withBypassContext, withOrgContext } from "@openbooks/engine/src/platform/db.ts";
+import { db, withBypassContext, withOrgContext } from "@openbooks/engine/platform/db";
 import { currentSession, currentUser } from "./auth";
 import { requestAuthzContext } from "./authz-context";
 import { DEFAULT_LOCALE, isLocale, type Locale } from "../i18n/config";
-import { canonicalTimeZone } from "@openbooks/engine/src/platform/time-zone.ts";
+import { canonicalTimeZone } from "@openbooks/engine/platform/time-zone";
 
 /**
  * Request-optional active user: outside a request scope (background jobs,

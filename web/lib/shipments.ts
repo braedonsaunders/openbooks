@@ -1,6 +1,6 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/db'
 import {
   FulfillmentRefusal,
   getFulfillmentDocument,
@@ -13,7 +13,7 @@ import {
   markEmailSent,
   markEmailUncertain,
   resolveOrgEmailTransport,
-} from '@openbooks/engine/src/delivery/email-config.ts'
+} from '@openbooks/engine/delivery/email-config/module'
 import { deriveEmailDeliveryKey, sendVia, shipmentTrackingEmail } from '@openbooks/emails'
 import { findUnownedCustomReferences, loadFieldDefs, validateCustomValues } from './custom-fields'
 import { loadKitComponents } from '@openbooks/engine/inventory'

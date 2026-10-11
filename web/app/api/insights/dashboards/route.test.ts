@@ -61,12 +61,12 @@ stubModules({
   features: false,
   extra: {
     "@/lib/insight-mutations": `
-    import { db } from '@openbooks/engine/src/platform/db.ts'
+    import { db } from '@openbooks/engine/platform/db'
     export async function mutateInsight(_authz, _table, _id, _action, work) {
       return db.transaction ? db.transaction(tx => work(tx, null)) : work(db, null)
     }
   `,
-    "@openbooks/engine/src/platform/db.ts": `
+    "@openbooks/engine/platform/db": `
       const state = globalThis[Symbol.for('openbooks.dashboard-route-test')]
       const sqlText = globalThis.openbooksSqlTextDashboard
       const record = (kind, query) => {

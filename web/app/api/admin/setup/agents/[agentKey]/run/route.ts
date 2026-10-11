@@ -2,7 +2,7 @@ import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
-import { UnrestrictedScopeError } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
+import { UnrestrictedScopeError } from '@openbooks/engine/organization/scope'
 import { guardFeaturePermission } from '../../../../../../../lib/feature-gates'
 import { runSetupAgentNow } from '../../../../../../../lib/setup/agents'
 

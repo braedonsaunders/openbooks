@@ -13,8 +13,8 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context);
 } });
 const { sql } = await import("drizzle-orm");
-const { db, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
-const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import("@openbooks/engine/src/testing/fixtures.ts");
+const { db, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import("@openbooks/engine/testing/fixtures");
 const methodsRoute = await import("../app/api/autopay/methods/route");
 const policyRoute = await import("../app/api/autopay/policy/route");
 const retryRoute = await import("../app/api/autopay/attempts/[id]/retry/route");

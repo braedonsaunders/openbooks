@@ -1,13 +1,13 @@
 import 'server-only'
 import { sql, type SQL } from 'drizzle-orm'
-import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { PayrollError } from '@openbooks/engine/src/payroll/error.ts'
-import { nextPeriodAfter } from "@openbooks/engine/src/payroll/run-calendar.ts";
-import { payrollSettings } from "@openbooks/engine/src/payroll/run-setup.ts";
-import { payrollSubsidiaryScopeFilter, type PayrollSubsidiaryScope } from "@openbooks/engine/src/payroll/scope.ts";
-import { installedPayrollCountries, payrollPopulationRegions } from '@openbooks/engine/src/payroll/readiness.ts'
-import { packSlotState, payrollTaxYearForDate } from '@openbooks/engine/src/payroll/packs.ts'
+import { businessToday } from '@openbooks/engine/platform/business-date/module'
+import { db } from '@openbooks/engine/platform/db'
+import { PayrollError } from '@openbooks/engine/payroll/error'
+import { nextPeriodAfter } from "@openbooks/engine/payroll/run-calendar";
+import { payrollSettings } from "@openbooks/engine/payroll/run-setup";
+import { payrollSubsidiaryScopeFilter, type PayrollSubsidiaryScope } from "@openbooks/engine/payroll/scope";
+import { installedPayrollCountries, payrollPopulationRegions } from '@openbooks/engine/payroll/readiness'
+import { packSlotState, payrollTaxYearForDate } from '@openbooks/engine/payroll/packs'
 import { add, mulDecimal } from '@openbooks/engine/money'
 import { flowRates } from '../fx-presentation'
 import {

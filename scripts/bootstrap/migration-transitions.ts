@@ -3,7 +3,7 @@ import { migrationsDir, sha256 } from "../bootstrap-paths"
 import { type MigrationLedgerClient } from "./governed-views"
 import { readFileSync, readdirSync } from "node:fs"
 import { join } from "node:path"
-import { pool } from "../../engine/src/platform/db.ts"
+import { pool } from "@openbooks/engine/platform/db"
 
 
 type MigrationFilenameIdentity = {

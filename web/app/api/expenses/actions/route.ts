@@ -3,18 +3,18 @@ import { defineRoute } from '@/lib/api/route';
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
-import { SubmitError, submitAndReleaseIfUngated } from '@openbooks/engine/src/flows/index.ts'
-import { ExpenseValidationError } from '@openbooks/engine/src/records/expense-validation.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
+import { SubmitError, submitAndReleaseIfUngated } from '@openbooks/engine/flows/module'
+import { ExpenseValidationError } from '@openbooks/engine/records/expense-validation'
 import {
   ControlAccountsIncompleteError,
   loadRequiredControlAccounts,
-} from '@openbooks/engine/src/records/control-accounts.ts'
-import { postDocument } from "@openbooks/engine/src/ledger/posting-document.ts";
-import { PostingError } from "@openbooks/engine/src/journal/posting-contracts.ts";
+} from '@openbooks/engine/records/control-accounts'
+import { postDocument } from "@openbooks/engine/ledger/posting-document";
+import { PostingError } from "@openbooks/engine/journal/contracts";
 import { can, getAuthz, guardSubsidiaryScope, subsidiaryScopeAllows, type Authz } from '../../../../lib/authz'
-import { DocumentEditError, requireDocumentEditRevision } from "../../../../../engine/src/records/document-edit-policy.ts";
-import { documentRevisionCounterSql } from "../../../../../engine/src/records/revision.ts";
+import { DocumentEditError, requireDocumentEditRevision } from "@openbooks/engine/records/document-edit-policy";
+import { documentRevisionCounterSql } from "@openbooks/engine/records/revision";
 import { isFeatureEnabled } from '../../../../lib/features'
 import { isUuid } from '../../../../lib/list-params'
 import { ApprovalRoutingError } from '../../../../lib/approval-routing-error'

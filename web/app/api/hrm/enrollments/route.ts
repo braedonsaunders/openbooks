@@ -4,12 +4,12 @@ import { NextResponse } from "next/server";
 import {
   electEnrollment,
   waiveEnrollment,
-} from "@openbooks/engine/src/hrm/benefits/enrollments.ts";
+} from "@openbooks/engine/hrm/benefits/enrollments";
 import {
   listEnrollments,
   myEnrollments,
-} from "@openbooks/engine/src/hrm/benefits/benefits-read.ts";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+} from "@openbooks/engine/hrm/benefits/benefits-read";
+import { db } from "@openbooks/engine/platform/db";
 import { guardPermission } from "../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../lib/features";
 import { isUuid } from "../../../../lib/list-params";

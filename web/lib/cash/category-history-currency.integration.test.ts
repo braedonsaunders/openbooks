@@ -2,12 +2,12 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, withBypass, withOrgContext } from "@openbooks/engine/src/platform/db.ts";
-import { daysInCivilMonth } from "@openbooks/engine/src/platform/civil-date.ts";
+import { db, withBypass, withOrgContext } from "@openbooks/engine/platform/db";
+import { daysInCivilMonth } from "@openbooks/engine/platform/civil-date";
 import {
   createScratchOrg,
   dropScratchOrg,
-} from "@openbooks/engine/src/testing/fixtures.ts";
+} from "@openbooks/engine/testing/fixtures";
 
 const { categoryWeekly } = await import("./core.ts");
 

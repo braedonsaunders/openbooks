@@ -12,11 +12,11 @@ import {
   saveTaxRateProviderConfig,
   type ProviderDocumentKind,
   type TaxRateProviderKey,
-} from "@openbooks/engine/src/tax/rate-providers.ts";
+} from "@openbooks/engine/tax/rate-providers";
 import { guardUnrestrictedScope } from "../../../../lib/authz";
 import { canonicalDecimal } from "../../../../lib/exact-decimal";
 import { moneyRefusal } from "../../../../lib/payroll-decimal-refusal";
-import { normalizeMoney } from "@openbooks/engine/src/money/money.ts";
+import { normalizeMoney } from "@openbooks/engine/money/money";
 import { z } from "zod";
 
 export const runtime = "nodejs";

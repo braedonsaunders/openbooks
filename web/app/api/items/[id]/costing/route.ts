@@ -4,14 +4,14 @@ import { nullableUuidId, uuidId, nullableExactMoney } from "@/lib/api/json";
 import { z } from 'zod'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { lockAndCheckOrgFeature } from '@openbooks/engine/src/organization/org-feature-lock.ts'
-import { documentRevisionSql, isDocumentRevisionToken } from '@openbooks/engine/src/records/revision.ts'
+import { db } from '@openbooks/engine/platform/db'
+import { lockAndCheckOrgFeature } from '@openbooks/engine/organization/org-feature-lock'
+import { documentRevisionSql, isDocumentRevisionToken } from '@openbooks/engine/records/revision'
 import { normalizeMoney, wholeDigits } from '@openbooks/engine/money'
-import { InventoryError, CostingPolicyChangeBlockedError } from "@openbooks/engine/src/inventory/contracts.ts";
-import { inventoryOffsetAccountProblem } from "@openbooks/engine/src/inventory/journal.ts";
-import { assertCostingAccountChangeAllowed, assertCostingPolicyChangeAllowed, lockItemInventoryProfile, parseCostingMethod, parseTrackingMode, parseUnitConversions } from "@openbooks/engine/src/inventory/profile-policy.ts";
-import { revalueOpenLayersToStandardCost } from "@openbooks/engine/src/inventory/revaluation.ts";
+import { InventoryError, CostingPolicyChangeBlockedError } from "@openbooks/engine/inventory/contracts/module";
+import { inventoryOffsetAccountProblem } from "@openbooks/engine/inventory/journal";
+import { assertCostingAccountChangeAllowed, assertCostingPolicyChangeAllowed, lockItemInventoryProfile, parseCostingMethod, parseTrackingMode, parseUnitConversions } from "@openbooks/engine/inventory/profile-policy";
+import { revalueOpenLayersToStandardCost } from "@openbooks/engine/inventory/revaluation";
 import { loadCompanyReceivedNotBilledAccount } from "@openbooks/engine/records/control-accounts";
 import { lineRequiresReceipt } from "@openbooks/engine/records/stock-receipt";
 import { isUuid } from '../../../../../lib/list-params'

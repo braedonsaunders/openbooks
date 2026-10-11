@@ -4,9 +4,9 @@ import { parseJsonBody } from "@/lib/api/json"
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { apCaptureReprocessJobId, enqueueApCapture } from '@openbooks/jobs'
-import { db, type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
-import { lockScopeRows, ScopeNotFoundError } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
-import { materializeCapture, type ActivatedCaptureRule } from '@openbooks/engine/src/payables/ap-capture-service.ts'
+import { db, type SqlExecutor } from '@openbooks/engine/platform/db'
+import { lockScopeRows, ScopeNotFoundError } from '@openbooks/engine/organization/scope'
+import { materializeCapture, type ActivatedCaptureRule } from '@openbooks/engine/payables/ap-capture-service'
 import '../../../../lib/authz';
 import { parseBulkActionIds } from '../../../../lib/api/bulk-ids'
 import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'

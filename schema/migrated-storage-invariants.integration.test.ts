@@ -26,12 +26,12 @@ import {
   migrationRunsWithoutTransaction,
   sanitizeMigrationContent,
 } from "../scripts/bootstrap-migration-client.ts";
-import { pool } from "../engine/src/platform/db.ts";
+import { pool } from "@openbooks/engine/platform/db";
 import {
   createScratchOrg,
   createScratchUser,
   dropScratchOrg,
-} from "../engine/src/testing/fixtures.ts";
+} from "@openbooks/engine/testing/fixtures";
 
 function isConstraintViolation(error: unknown, pattern: RegExp): boolean {
   if (!(error instanceof Error)) return false;

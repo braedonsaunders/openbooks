@@ -4,7 +4,7 @@ import { apiErrorResponse } from '@/lib/api/error-response'
 
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/db'
 import {
   FX_PROVIDER_MANIFESTS,
   FxProviderError,
@@ -13,7 +13,7 @@ import {
   saveFxProviderConfig,
   type FxProviderKey,
   type FxSyncSchedule,
-} from '@openbooks/engine/src/fx/providers.ts'
+} from '@openbooks/engine/fx/providers'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 
 const requestBodySchema = z.object({

@@ -5,17 +5,17 @@ import { guardCloseScope } from "@/lib/close-scope";
 
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
-import { CLOSE_MODULES, CloseError, type CloseModule } from "@openbooks/engine/src/periods/period-policy.ts";
-import { consumeReopenRequestsForClosedModules, decidePeriodReopen, extendReopenRequest, recloseApprovedReopen, reopenDecisionPreview, requestPeriodReopen } from "@openbooks/engine/src/close/reopening.ts";
-import { generateAccountingPeriods } from "@openbooks/engine/src/close/calendar.ts";
-import { closePeriodAllModules, setPeriodLockState } from "@openbooks/engine/src/periods/period-locks.ts";
+import { db } from "@openbooks/engine/platform/db";
+import { CLOSE_MODULES, CloseError, type CloseModule } from "@openbooks/engine/periods/period-policy";
+import { consumeReopenRequestsForClosedModules, decidePeriodReopen, extendReopenRequest, recloseApprovedReopen, reopenDecisionPreview, requestPeriodReopen } from "@openbooks/engine/close/reopening";
+import { generateAccountingPeriods } from "@openbooks/engine/close/calendar";
+import { closePeriodAllModules, setPeriodLockState } from "@openbooks/engine/periods/period-locks";
 import { auditBankingModuleClose, bankingCloseStatus, bankingUnmatchedStatementLines, evaluateBankingModuleClose } from "@openbooks/engine/close/banking-close";
 import { can, getAuthz, guardSubsidiaryScope } from "../../../../lib/authz";
 import { isUuid } from "../../../../lib/list-params";
 import { isFeatureEnabled } from "../../../../lib/features";
 import { isValidEmailAddress } from "@openbooks/emails";
-import { isIsoCalendarDate } from "@openbooks/engine/src/platform/business-date.ts";
+import { isIsoCalendarDate } from "@openbooks/engine/platform/business-date/module";
 import { canonicalDecimal } from "../../../../lib/exact-decimal";
 import { moneyRefusal } from "../../../../lib/payroll-decimal-refusal";
 

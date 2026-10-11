@@ -8,7 +8,7 @@ import {
   listUserDelegations,
   revokeDelegation,
   DelegationError,
-} from '@openbooks/engine/src/flows/index.ts'
+} from '@openbooks/engine/flows/module'
 import { requireFlowsSession } from '../_lib'
 import { isUuid } from '../../../../lib/list-params'
 

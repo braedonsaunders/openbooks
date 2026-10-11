@@ -1,4 +1,4 @@
-import { previewRateRun } from "@openbooks/engine/src/billing/usage/rate-run.ts";
+import { previewRateRun } from "@openbooks/engine/billing/usage/rate-run";
 import { defineRoute } from "@/lib/api/route";
 import { z } from "zod";
 

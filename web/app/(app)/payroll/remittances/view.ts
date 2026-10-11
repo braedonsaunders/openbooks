@@ -1,8 +1,8 @@
 import 'server-only'
 
 import { getTranslations } from 'next-intl/server'
-import { PayrollError } from '@openbooks/engine/src/payroll/error.ts'
-import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
+import { PayrollError } from '@openbooks/engine/payroll/error'
+import { businessToday } from '@openbooks/engine/platform/business-date/module'
 import {
   page,
   pageHeader,
@@ -16,7 +16,7 @@ import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { pickString } from '../../../../lib/list-params'
 import { groupTabs } from '../../../../components/module-home/group-tabs'
 import { scopedRemittanceSummary } from '../../../../lib/payroll-scoped-views'
-import type { RemittanceGroup } from '@openbooks/engine/src/payroll/remittance.ts'
+import type { RemittanceGroup } from '@openbooks/engine/payroll/remittance'
 
 /**
  * Payroll remittances, split into a loader and a spec.

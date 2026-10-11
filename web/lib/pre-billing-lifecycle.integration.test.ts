@@ -1,11 +1,11 @@
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import test from 'node:test'
-const { db, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypassContext } = await import('@openbooks/engine/platform/db')
 const { sql } = await import('drizzle-orm')
 const { BUILTIN_PROJECT_TYPES } = await import('@openbooks/schema')
-const { createScratchOrg, seedFlowActors, seedApprovalFlow, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
-const { decideGate } = await import('@openbooks/engine/src/flows/gates.ts')
+const { createScratchOrg, seedFlowActors, seedApprovalFlow, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
+const { decideGate } = await import('@openbooks/engine/testing/flows/gates')
 const { consumePortalLink, issuePortalReviewInvite, portalBillingReview } = await import('@openbooks/engine/portal')
 const { registerFlowApprovalReleaseHandlers } = await import('./flow-approval-releases')
 const wip = await import('./pre-billing')

@@ -50,9 +50,9 @@ type FixtureDocument = { kind: 'customer_invoice' | 'customer_payment'; posting_
 
 /** Filtered hidden component measures, monthly formula 20.00%, undefined divide-by-zero label, grand 30.00%. */
 test('filtered formula totals, undefined labels and CSV match the in-memory producer', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const { db, pool, withBypassContext, withOrgContext } = await import(root + 'engine/src/platform/db.ts') as typeof import('@openbooks/engine/src/platform/db.ts')
+  const { db, pool, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db') as typeof import('@openbooks/engine/platform/db')
   const { sql } = await import(root + 'node_modules/drizzle-orm/index.js')
-  const { createScratchOrg, dropScratchOrg } = await import(root + 'engine/src/testing/fixtures.ts') as typeof import('@openbooks/engine/src/testing/fixtures.ts')
+  const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures') as typeof import('@openbooks/engine/testing/fixtures')
   const org = await withBypassContext(() => createScratchOrg())
   const documents: FixtureDocument[] = [
     { kind: 'customer_invoice', posting_date: '2026-01-12', currency: 'CAD', total: '100.0000' },

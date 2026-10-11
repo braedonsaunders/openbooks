@@ -4,9 +4,9 @@ import { exactMoney, parseJsonBody } from "@/lib/api/json"
 import { NextResponse } from "next/server";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
-import { cmp as compareMoney, normalizeMoney } from "@openbooks/engine/src/money/money.ts";
-import { businessToday, isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
+import { db } from "@openbooks/engine/platform/db";
+import { cmp as compareMoney, normalizeMoney } from "@openbooks/engine/money/money";
+import { businessToday, isIsoCalendarDate } from '@openbooks/engine/platform/business-date/module'
 import { guardUnrestrictedScope } from "../../../../../lib/authz";
 import { canonicalDecimal } from "../../../../../lib/exact-decimal";
 import type { ForecastCategory } from "../../../../../lib/analytics/cashflow-data";

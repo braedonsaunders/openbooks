@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
-import { createDirectDebitRun } from '@openbooks/engine/src/payments/direct-debit.ts'
+import { createDirectDebitRun } from '@openbooks/engine/payments/direct-debit'
 import { defineRoute } from '@/lib/api/route'
 import { isoDate, parseJsonBody, uuidId } from '@/lib/api/json'
 import { paymentErrorResponse } from '@/app/api/payments/lib'

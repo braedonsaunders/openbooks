@@ -1,6 +1,6 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { db, withOrgTransaction, type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
+import { db, withOrgTransaction, type SqlExecutor } from '@openbooks/engine/platform/db'
 import { subsidiaryVisibleFilter } from '../../../lib/subsidiaries'
 
 async function loadEquipmentRows(

@@ -173,12 +173,12 @@ const _hooks = registerHooks({
     // Re-export the REAL platform db and override only `db`: the authz graph
     // above needs the module's other exports (bypass contexts, ambient org),
     // and listing them by hand would be a list that can only omit.
-    if (specifier === "@openbooks/engine/src/platform/db.ts") {
+    if (specifier === "@openbooks/engine/platform/db") {
       const real = nextResolve(specifier, context).url;
       const source = `export * from ${JSON.stringify(real)};\n${dbDoubleBody}`;
       return { url: `data:text/javascript,${encodeURIComponent(source)}`, shortCircuit: true };
     }
-    if (specifier === "@openbooks/engine/src/platform/canonical-json.ts") {
+    if (specifier === "@openbooks/engine/platform/canonical-json") {
       return {
         url: new URL(
           "../../../../engine/src/platform/canonical-json.ts",

@@ -1,10 +1,10 @@
 import 'server-only'
 
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
+import { db } from '@openbooks/engine/platform/db'
+import { businessToday } from '@openbooks/engine/platform/business-date/module'
 import { PNL_TYPES } from './account-types'
-import { subsidiaryVisibleFilter } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
+import { subsidiaryVisibleFilter } from '@openbooks/engine/organization/scope'
 import { effectiveExtraDimsSql, loadBudgetSegments, resolveBudgetExtraDims, type BudgetSegment } from '@openbooks/engine/budgets/dimensions'
 
 export const BUDGET_KINDS = ['budget', 'forecast'] as const

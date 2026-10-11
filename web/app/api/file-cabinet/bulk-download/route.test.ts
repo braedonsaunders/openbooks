@@ -58,7 +58,7 @@ const _hooks = registerHooks({
   resolve(specifier, _context, nextResolve) {
     const mocked = new Map<string, string>([
       ['@/lib/authz', 'mock:authz'],
-      ['@openbooks/engine/src/platform/business-date.ts', 'mock:business-date'],
+      ['@openbooks/engine/platform/business-date/module', 'mock:business-date'],
       ['../../../../lib/file-zip', 'mock:file-zip'],
       ['../lib', 'mock:cabinet-lib'],
     ]).get(specifier)

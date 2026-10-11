@@ -1,14 +1,14 @@
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
-import { submitResponse } from "@openbooks/engine/src/hrm/surveys/responses.ts";
-import { hashHrmToken, verifySurveyInvitationToken } from "@openbooks/engine/src/hrm/documents/tokens.ts";
-import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
+import { submitResponse } from "@openbooks/engine/hrm/surveys/responses";
+import { hashHrmToken, verifySurveyInvitationToken } from "@openbooks/engine/hrm/documents/tokens";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
 import { hrmDocumentsErrorResponse } from "../../../hrm/documents/_lib";
 import { submitAnswersBody } from "../../../hrm/surveys/bodies";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
-import { withOrgTransaction } from "@openbooks/engine/src/platform/db.ts";
+import { db } from "@openbooks/engine/platform/db";
+import { withOrgTransaction } from "@openbooks/engine/platform/db";
 
 /**
  * Public survey response endpoint — invitation-token authenticated, no

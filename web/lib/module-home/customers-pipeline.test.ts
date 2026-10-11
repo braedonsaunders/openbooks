@@ -14,10 +14,10 @@ registerHooks({
     if (specifier === 'drizzle-orm' && context.parentURL?.startsWith('data:')) {
       return next(root + 'node_modules/drizzle-orm/index.js', context)
     }
-    if (specifier === '@openbooks/engine/src/platform/db.ts') {
+    if (specifier === '@openbooks/engine/platform/db') {
       return virtual('export const db = globalThis.__customersPipelineDb')
     }
-    if (specifier === '@openbooks/engine/src/platform/business-date.ts') {
+    if (specifier === '@openbooks/engine/platform/business-date/module') {
       // businessToday and weekStartsEndingOn are impure (clock/DB) and stay
       // stubbed; addCalendarDays is pure civil arithmetic — the real one,
       // never a copy, so the test cannot drift from the calendar.

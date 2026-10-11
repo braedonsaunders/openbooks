@@ -72,7 +72,7 @@ const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     const mockUrl = new Map([
       ['drizzle-orm', 'mock:drizzle'],
-      ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
+      ['@openbooks/engine/platform/db', 'mock:db'],
       ['../records', 'mock:records'],
       ['./resource-core', 'mock:resource-core'],
     ]).get(specifier)
@@ -184,8 +184,8 @@ async function catalogModules() {
   const { SETUP_ENTITY_BY_KEY, SETUP_ENTITIES } = await import('../setup/registry.ts')
   const { resolvedFeatureState } = await import('../features.ts')
   const { sql } = await import('drizzle-orm')
-  const { db } = await import('@openbooks/engine/src/platform/db.ts')
-  const { createScratchOrg, dropScratchOrgReporting } = await import('@openbooks/engine/src/testing/fixtures.ts')
+  const { db } = await import('@openbooks/engine/platform/db')
+  const { createScratchOrg, dropScratchOrgReporting } = await import('@openbooks/engine/testing/fixtures')
   return { getResource, listResources, SETUP_ENTITY_BY_KEY, SETUP_ENTITIES, resolvedFeatureState, sql, db, createScratchOrg, dropScratchOrgReporting }
 }
 

@@ -1,12 +1,12 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { addCalendarDays, businessToday } from '@openbooks/engine/src/platform/business-date.ts'
-import { documentBalanceDueLateral } from '@openbooks/engine/src/records/balance-due.ts'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { orgFeatureEnabled } from '@openbooks/engine/src/organization/org-feature-lock.ts'
-import { add, cmp, isZero, mul, neg, sum } from '@openbooks/engine/src/money/money.ts'
-import { amountInWords } from '@openbooks/engine/src/payroll/cheques.ts'
-import { incomeTaxWithholdingSystemKeys } from '@openbooks/engine/src/payroll/packs.ts'
+import { addCalendarDays, businessToday } from '@openbooks/engine/platform/business-date/module'
+import { documentBalanceDueLateral } from '@openbooks/engine/records/balance-due'
+import { db } from '@openbooks/engine/platform/db'
+import { orgFeatureEnabled } from '@openbooks/engine/organization/org-feature-lock'
+import { add, cmp, isZero, mul, neg, sum } from '@openbooks/engine/money/money'
+import { amountInWords } from '@openbooks/engine/payroll/cheques'
+import { incomeTaxWithholdingSystemKeys } from '@openbooks/engine/payroll/packs'
 import { createMoneyFormatter, type MoneyFormatter } from '../money-format'
 import { resolveLocale } from '../locale'
 import { subsidiaryVisibleFilter } from '../subsidiaries'
@@ -16,7 +16,7 @@ import { orgIdentityMergeValues, type OrgIdentityRow } from './org-identity'
 import { loadFieldTicket } from '../field-tickets'
 import { buildPayStubStatement, toStatementLine, type StatementRow } from './pay-stub-statement'
 import { canonicalDecimal } from '../exact-decimal'
-import type { FulfillmentDocumentView } from '@openbooks/engine/src/sales/fulfillment.ts'
+import type { FulfillmentDocumentView } from '@openbooks/engine/sales/fulfillment/module'
 
 /**
  * The value loader — shapes a real record into the merge map a PDF template
@@ -672,7 +672,7 @@ async function loadShipmentValues(
 ): Promise<PdfRecordValues | null> {
   // Loaded on demand: the fulfilment engine brings the Flows and inventory
   // graph with it, which no other record type's print needs.
-  const { FulfillmentRefusal, getFulfillmentDocument } = await import('@openbooks/engine/src/sales/fulfillment.ts')
+  const { FulfillmentRefusal, getFulfillmentDocument } = await import('@openbooks/engine/sales/fulfillment/module')
   let shipment: FulfillmentDocumentView | null
   try {
     shipment = await getFulfillmentDocument(db, orgId, id, scope)

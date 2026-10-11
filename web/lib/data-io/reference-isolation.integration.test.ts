@@ -15,13 +15,13 @@ const { MASTER_BY_KEY, masterResource } = (await import('./master-data-resources
 const { propertyDataResource } = (await import('./property-resources.ts')) as typeof import(
   './property-resources.ts'
 )
-const { recordSecurityDeposit } = (await import('@openbooks/engine/src/property/management.ts')) as typeof import(
-  '@openbooks/engine/src/property/management.ts'
+const { recordSecurityDeposit } = (await import('@openbooks/engine/property/management')) as typeof import(
+  '@openbooks/engine/property/management'
 )
 
-const { db } = await import('@openbooks/engine/src/platform/db.ts')
-const { createScratchOrg, dropScratchOrgReporting } = await import('@openbooks/engine/src/testing/fixtures.ts')
-const { seedFlowActors } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { db } = await import('@openbooks/engine/platform/db')
+const { createScratchOrg, dropScratchOrgReporting } = await import('@openbooks/engine/testing/fixtures')
+const { seedFlowActors } = await import('@openbooks/engine/testing/fixtures')
 
 /**
  * Import references are tenant data: a file carrying another org's UUID must

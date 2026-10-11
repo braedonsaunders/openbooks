@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server'
-import { orgYearEndFilings } from '@openbooks/engine/src/payroll/yearend.ts'
+import { orgYearEndFilings } from '@openbooks/engine/payroll/yearend'
 import { defineRoute } from '@/lib/api/route'
 import { payrollYearRefusal } from '../../../../lib/payroll-year'
 import { guardPayrollYearEndFilings } from '../subsidiary-scope'

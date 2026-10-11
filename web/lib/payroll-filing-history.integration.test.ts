@@ -3,14 +3,14 @@ import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, withBypassContext, withOrgContext } from "@openbooks/engine/src/platform/db.ts";
-import { commitPayRun } from "@openbooks/engine/src/payroll/run-commit.ts";
-import { dropScratchOrgReporting } from "@openbooks/engine/src/testing/fixtures.ts";
+import { db, withBypassContext, withOrgContext } from "@openbooks/engine/platform/db";
+import { commitPayRun } from "@openbooks/engine/payroll/run-commit";
+import { dropScratchOrgReporting } from "@openbooks/engine/testing/fixtures";
 import {
   seedAdoption,
   calculatedRun,
   markLegacy,
-} from "@openbooks/engine/src/payroll/filing-test-fixtures.ts";
+} from "@openbooks/engine/testing/payroll/filing-test-fixtures";
 // Session-boundary fixture for the remittance route's real authorization
 // chain. The route resolves its caller through defineRoute →
 // guardFeaturePermission → guardPermission → getAuthz → currentUser, which
@@ -245,14 +245,14 @@ const consolidatedRows = [
           },
         });
         const { sql } = await import("drizzle-orm");
-        const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
+        const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
         const { seedAdoption, calculatedRun } =
-          await import("@openbooks/engine/src/payroll/filing-test-fixtures.ts");
+          await import("@openbooks/engine/testing/payroll/filing-test-fixtures");
         const { dropScratchOrgReporting } =
-          await import("@openbooks/engine/src/testing/fixtures.ts");
-        const { commitPayRun } = await import("@openbooks/engine/src/payroll/run-commit.ts");
+          await import("@openbooks/engine/testing/fixtures");
+        const { commitPayRun } = await import("@openbooks/engine/payroll/run-commit");
         const { orgYearEndFilings } =
-          await import("@openbooks/engine/src/payroll/yearend.ts");
+          await import("@openbooks/engine/payroll/yearend");
         const {
           guardPayrollYearEndFilings,
           guardPayrollFilingData,
@@ -424,11 +424,11 @@ const consolidatedRows = [
           },
         });
         const { sql } = await import("drizzle-orm");
-        const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
+        const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
         const { seedAdoption } =
-          await import("@openbooks/engine/src/payroll/filing-test-fixtures.ts");
+          await import("@openbooks/engine/testing/payroll/filing-test-fixtures");
         const { dropScratchOrgReporting } =
-          await import("@openbooks/engine/src/testing/fixtures.ts");
+          await import("@openbooks/engine/testing/fixtures");
         const { guardPayrollFilingRowIds, guardPayrollFilingData, payrollRowScope } =
           await import("../app/api/payroll/subsidiary-scope");
 
@@ -565,13 +565,13 @@ const payrollFilingScopeCases = [
           },
         });
         const { sql } = await import("drizzle-orm");
-        const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
+        const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
         const { seedAdoption } =
-          await import("@openbooks/engine/src/payroll/filing-test-fixtures.ts");
+          await import("@openbooks/engine/testing/payroll/filing-test-fixtures");
         const { dropScratchOrgReporting } =
-          await import("@openbooks/engine/src/testing/fixtures.ts");
+          await import("@openbooks/engine/testing/fixtures");
         const { form941Worksheet } =
-          await import("@openbooks/engine/src/payroll/yearend.ts");
+          await import("@openbooks/engine/payroll/yearend");
         const { guardPayrollFilingRowIds, guardPayrollFilingData, payrollRowScope } =
           await import("../app/api/payroll/subsidiary-scope");
         test(
@@ -774,16 +774,16 @@ const payrollFilingScopeCases = [
         // scripted via establishFilingSession, and the gate below shapes just
         // the direct scopedRemittanceSummary calls.
         const { sql } = await import("drizzle-orm");
-        const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
+        const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
         const { seedAdoption, calculatedRun } =
-          await import("@openbooks/engine/src/payroll/filing-test-fixtures.ts");
+          await import("@openbooks/engine/testing/payroll/filing-test-fixtures");
         const { dropScratchOrgReporting } =
-          await import("@openbooks/engine/src/testing/fixtures.ts");
-        const { commitPayRun } = await import("@openbooks/engine/src/payroll/run-commit.ts");
+          await import("@openbooks/engine/testing/fixtures");
+        const { commitPayRun } = await import("@openbooks/engine/payroll/run-commit");
         const { guardRemittancePeriod } =
           await import("../app/api/payroll/subsidiary-scope");
         const { payrollRemittanceSummary, createRemittanceBill } =
-          await import("@openbooks/engine/src/payroll/remittance.ts");
+          await import("@openbooks/engine/payroll/remittance");
 
         const { scopedRemittanceSummary } = await import("./payroll-scoped-views");
 
@@ -1104,13 +1104,13 @@ const payrollFilingScopeCases = [
           },
         });
         const { sql } = await import("drizzle-orm");
-        const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
+        const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
         const { seedAdoption, calculatedRun, seedRoeIssuanceFixture } =
-          await import("@openbooks/engine/src/payroll/filing-test-fixtures.ts");
+          await import("@openbooks/engine/testing/payroll/filing-test-fixtures");
         const { dropScratchOrgReporting } =
-          await import("@openbooks/engine/src/testing/fixtures.ts");
-        const { commitPayRun } = await import("@openbooks/engine/src/payroll/run-commit.ts");
-        const { roeRecord } = await import("@openbooks/engine/src/payroll/yearend.ts");
+          await import("@openbooks/engine/testing/fixtures");
+        const { commitPayRun } = await import("@openbooks/engine/payroll/run-commit");
+        const { roeRecord } = await import("@openbooks/engine/payroll/yearend");
         const { guardPayrollFilingRowIds, guardPayrollFilingData } =
           await import("../app/api/payroll/subsidiary-scope");
         const { POST } = await import("../app/api/payroll/year-end/file/route");

@@ -10,9 +10,9 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context);
 } });
 const { sql } = await import("drizzle-orm");
-const { add } = await import("@openbooks/engine/src/money/money.ts");
-const { db, withOrgContext, withBypassContext } = await import("@openbooks/engine/src/platform/db.ts");
-const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
+const { add } = await import("@openbooks/engine/money/money");
+const { db, withOrgContext, withBypassContext } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
 const { healthData } = await import("./analytics/health-data");
 const { customerData, customerProfitability } = await import("./analytics/customer-data");
 const { profitAndLoss } = await import("./reports/statements");
@@ -204,8 +204,8 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context);
 } });
 const { sql } = await import("drizzle-orm");
-const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
 const { getAuthz } = await import("./authz");
 const { healthData } = await import("./analytics/health-data");
 // The page LOADER. This asks whether the page applies the reader's

@@ -1,10 +1,10 @@
 import "server-only";
 import { sql } from "drizzle-orm";
-import type { SqlExecutor } from "@openbooks/engine/src/platform/db.ts";
-import { lockScopeRow, ScopeNotFoundError } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
+import type { SqlExecutor } from "@openbooks/engine/platform/db";
+import { lockScopeRow, ScopeNotFoundError } from "@openbooks/engine/organization/scope";
 import { cmp, normalizeMoney, toUnits, wholeDigits } from "@openbooks/engine/money";
-import { isIsoCalendarDate } from "@openbooks/engine/src/platform/business-date.ts";
-import { depreciationPeriodCount } from "@openbooks/engine/src/assets/depreciation-limits.ts";
+import { isIsoCalendarDate } from "@openbooks/engine/platform/business-date/module";
+import { depreciationPeriodCount } from "@openbooks/engine/assets/depreciation-limits";
 import { isUuid } from "../../../lib/list-params";
 import { canonicalDecimal } from "../../../lib/exact-decimal";
 import {

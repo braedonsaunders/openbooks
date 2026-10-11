@@ -26,7 +26,7 @@ const agingState: {
 
 const reportsIndexUrl = new URL('./reports.ts', import.meta.url).href
 const reportPdfUrl = new URL('./report-pdf.ts', import.meta.url).href
-const dbUrl = import.meta.resolve('@openbooks/engine/src/platform/db.ts')
+const dbUrl = import.meta.resolve('@openbooks/engine/platform/db')
 const consolidationUrl = new URL('./consolidation.ts', import.meta.url).href
 const executionContextUrl = new URL('./report-execution-context.ts', import.meta.url).href
 
@@ -130,7 +130,7 @@ const mockUrls = new Map<string, string>([
   ['./periods', mockUrl('periods')],
   ['./reports', mockUrl('reports')],
   ['./report-pdf', mockUrl('report-pdf')],
-  ['@openbooks/engine/src/platform/db.ts', mockUrl('db')],
+  ['@openbooks/engine/platform/db', mockUrl('db')],
 ])
 
 const hooks = registerHooks({

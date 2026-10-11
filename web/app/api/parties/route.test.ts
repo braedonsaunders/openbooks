@@ -140,7 +140,7 @@ const mockSources = new Map<string, string>([
 ]);
 
 const mockUrls = new Map<string, string>([
-  ["@openbooks/engine/src/platform/db.ts", "mock:db"],
+  ["@openbooks/engine/platform/db", "mock:db"],
   ["@/lib/authz", "mock:authz"],
   // canonical-json.ts is a pure module with no imports of its own: there is
   // nothing to isolate, and a copy could only drift from the hashing the
@@ -156,7 +156,7 @@ const hooks = registerHooks({
     // canonical-json.ts is a pure module with no imports of its own: there is
     // nothing to isolate, and a copy could only drift from the hashing the
     // audit evidence is reproduced with. It loads for real.
-    if (specifier === "@openbooks/engine/src/platform/canonical-json.ts") {
+    if (specifier === "@openbooks/engine/platform/canonical-json") {
       return {
         url: new URL(
           "../../../../engine/src/platform/canonical-json.ts",

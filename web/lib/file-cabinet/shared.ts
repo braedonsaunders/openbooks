@@ -1,6 +1,6 @@
 /** Split from web/lib/file-cabinet.ts; moved without behavior changes. */
 import 'server-only'
-import { type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
+import { type SqlExecutor } from '@openbooks/engine/platform/db'
 import { enqueueStorageCleanup, fileCabinetObjectKey } from '../file-storage'
 
 export async function enqueueCabinetCleanup(

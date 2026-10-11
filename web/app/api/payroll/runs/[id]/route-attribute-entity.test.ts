@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { env } from "@openbooks/engine/src/platform/db.ts";
+import { env } from "@openbooks/engine/platform/db";
 
 /**
  * POST attribute-entity — the remedy the remittance refusal names.
@@ -64,12 +64,12 @@ const hooks = registerHooks({
 const runUrl = "./route.ts?payroll-run-attribute-entity";
 const { POST: postRun } = (await import(runUrl)) as typeof import("./route.ts");
 
-const { db, withBypass, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
+const { db, withBypass, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  "@openbooks/engine/src/testing/fixtures.ts"
+  "@openbooks/engine/testing/fixtures"
 );
-const { createPayRun } = await import("@openbooks/engine/src/payroll/run-lifecycle.ts");
-const { recurringBenefitsRunSource } = await import("@openbooks/engine/src/payroll/benefit-plan-inputs.ts");
+const { createPayRun } = await import("@openbooks/engine/payroll/run-lifecycle");
+const { recurringBenefitsRunSource } = await import("@openbooks/engine/testing/payroll/benefit-plan-inputs");
 
 // Production scopes every route read through the request org; the mocked
 // authz stands in for the request here, so each route call runs inside the

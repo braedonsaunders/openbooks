@@ -11,7 +11,7 @@
  * the harness announces what it is about to touch before it touches it.
  */
 import { sql } from "drizzle-orm";
-import { db } from "../../engine/src/platform/db.ts";
+import { db } from "@openbooks/engine/platform/db";
 import { retry } from "./retry.ts";
 
 export interface TargetOrg {

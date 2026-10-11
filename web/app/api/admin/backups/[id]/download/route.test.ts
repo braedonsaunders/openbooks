@@ -54,8 +54,8 @@ const exportUrl = new URL("../../../../../../lib/export.ts", import.meta.url).hr
 const mockUrls = new Map([
   ["@/lib/authz", "mock:authz"],
   ["../../../../../../lib/authz", "mock:authz"],
-  ["@openbooks/engine/src/platform/db.ts", "mock:db"],
-  ["@openbooks/engine/src/backup/backup.ts", "mock:backup"],
+  ["@openbooks/engine/platform/db", "mock:db"],
+  ["@openbooks/engine/backup/backup", "mock:backup"],
 ]);
 
 registerHooks({

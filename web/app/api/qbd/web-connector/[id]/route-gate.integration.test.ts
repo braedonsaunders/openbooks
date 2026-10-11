@@ -18,10 +18,10 @@ function receiveEnvelope(ticket: string, response: string): string {
 }
 
 test("a legitimate large receiveResponseXML with a valid ticket still works", async () => {
-  const { db, schema } = await import("@openbooks/engine/src/platform/db.ts");
-  const { sealJson } = await import("@openbooks/engine/src/platform/secrets.ts");
-  const { authenticateWebConnector } = await import("@openbooks/engine/src/qbd/bridge.ts");
-  const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
+  const { db, schema } = await import("@openbooks/engine/platform/db");
+  const { sealJson } = await import("@openbooks/engine/platform/secrets");
+  const { authenticateWebConnector } = await import("@openbooks/engine/qbd/bridge");
+  const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
   const { sql } = await import("drizzle-orm");
   const org = await createScratchOrg();
   const password = "soap-gate-test-password-123";

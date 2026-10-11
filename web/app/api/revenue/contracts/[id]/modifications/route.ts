@@ -1,14 +1,14 @@
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { proposeRevenueModification } from "@openbooks/engine/src/revenue/contract-modifications.ts";
-import { isIsoCalendarDate } from "@openbooks/engine/src/platform/business-date.ts";
+import { proposeRevenueModification } from "@openbooks/engine/revenue/contract-modifications";
+import { isIsoCalendarDate } from "@openbooks/engine/platform/business-date/module";
 import { defineRoute } from "@/lib/api/route";
 import { parseJsonBody } from "@/lib/api/json";
 import { isUuid } from "@/lib/list-params";
 import { canonicalDecimal } from "@/lib/exact-decimal";
 import { moneyRefusal } from "@/lib/payroll-decimal-refusal";
-import { normalizeMoney } from "@openbooks/engine/src/money/money.ts";
+import { normalizeMoney } from "@openbooks/engine/money/money";
 
 function monetaryInput(field: string) {
   return z.string({ error: `${field} must be a decimal string` }).transform((raw, ctx) => {

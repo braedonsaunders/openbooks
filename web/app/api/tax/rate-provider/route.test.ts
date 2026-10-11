@@ -27,7 +27,7 @@ const mocks = new Map<string, string>([
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === "../../../../lib/authz" || specifier === "@/lib/authz") return { shortCircuit: true, url: "mock:authz" };
-    if (specifier === "@openbooks/engine/src/tax/rate-providers.ts") {
+    if (specifier === "@openbooks/engine/tax/rate-providers") {
       return { shortCircuit: true, url: "mock:rate-providers" };
     }
     return nextResolve(specifier, context);

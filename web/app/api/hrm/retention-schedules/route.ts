@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import {
   listSchedules,
   saveSchedule,
-} from "@openbooks/engine/src/hrm/documents/retention.ts";
+} from "@openbooks/engine/hrm/documents/retention";
 import { hrmDocumentsErrorResponse } from "../documents/_lib";
 import { saveScheduleBody } from "./bodies";
 export const GET = defineRoute({

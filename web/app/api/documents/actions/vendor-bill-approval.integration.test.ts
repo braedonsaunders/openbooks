@@ -24,11 +24,11 @@ registerHooks({
     return next(specifier, context)
   },
 })
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
 const { sql } = await import('drizzle-orm')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
-const { seedApprovalFlow } = await import('@openbooks/engine/src/testing/fixtures.ts')
-const { VENDOR_BILL_APPROVAL_REQUIRED_MESSAGE } = await import('@openbooks/engine/src/flows/index.ts')
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
+const { seedApprovalFlow } = await import('@openbooks/engine/testing/fixtures')
+const { VENDOR_BILL_APPROVAL_REQUIRED_MESSAGE } = await import('@openbooks/engine/flows/module')
 const { POST } = await import('./route')
 
 const AUTO_RELEASE_REASON = 'released without approval: no approval flow configured'

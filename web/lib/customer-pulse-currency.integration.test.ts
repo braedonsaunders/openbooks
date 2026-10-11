@@ -3,9 +3,9 @@ import { randomUUID } from 'node:crypto'
 import test from 'node:test'
 import type { CustomerPulseSections } from './customer-pulse.ts'
 const { sql } = await import('drizzle-orm')
-const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
-const { postDocument } = await import('@openbooks/engine/src/ledger/posting-document.ts')
+const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/platform/db')
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
+const { postDocument } = await import('@openbooks/engine/ledger/posting-document')
 const { loadCustomerPulse } = await import('./customer-pulse.ts')
 
 const FULL: CustomerPulseSections = { ar: true, crm: true, projects: true }

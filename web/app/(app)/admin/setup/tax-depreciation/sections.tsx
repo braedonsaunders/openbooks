@@ -2,7 +2,7 @@ import 'server-only'
 
 import { PageHeader } from '@openbooks/ui'
 import { ModuleHomeTabs } from '@/components/module-home/tabs'
-import type { TaxDepreciationPack } from '@openbooks/engine/src/tax-returns/depreciation-packs.ts'
+import type { TaxDepreciationPack } from '@openbooks/engine/tax-returns/depreciation-packs'
 import { TaxDepreciationSetup } from '../../../../../components/viewspec/native-widgets.client'
 
 /** Shared setup header and body adapters, composed from the native page components. */

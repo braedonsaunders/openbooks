@@ -1,8 +1,8 @@
 import { defineRoute } from '@/lib/api/route'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
-import { entitlementBalances } from '@openbooks/engine/src/payroll/entitlements.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
+import { entitlementBalances } from '@openbooks/engine/payroll/entitlements/operations'
 import '../../../../lib/feature-gates';
 import { guardSubsidiaryScope } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'

@@ -43,10 +43,10 @@ const { GET } = (await import("./route.ts")) as {
   GET: (req: Request) => Promise<Response>;
 };
 const { sql } = await import("drizzle-orm");
-const { db } = await import("@openbooks/engine/src/platform/db.ts");
+const { db } = await import("@openbooks/engine/platform/db");
 const { createScratchOrg, dropScratchOrg } = (await import(
-  "../../../../../engine/src/testing/fixtures.ts"
-)) as typeof import("../../../../../engine/src/testing/fixtures.ts");
+  "@openbooks/engine/testing/fixtures"
+)) as typeof import("@openbooks/engine/testing/fixtures");
 
 test("scripts delivery refuses an unauthenticated caller", async () => {
   routeState.authz = null;

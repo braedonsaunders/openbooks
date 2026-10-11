@@ -50,8 +50,8 @@ stubModules({
   authz: false,
   features: false,
   extra: {
-    "@openbooks/engine/src/platform/db.ts": `
-      export * from ${JSON.stringify(import.meta.resolve('@openbooks/engine/src/platform/db.ts'))}
+    "@openbooks/engine/platform/db": `
+      export * from ${JSON.stringify(import.meta.resolve('@openbooks/engine/platform/db'))}
       const state = globalThis[Symbol.for('openbooks.rate-book-assignment-route-test')]
       const sqlText = globalThis.openbooksRateBookSqlText
       const clone = (row) => ({ ...row })
@@ -130,7 +130,7 @@ stubModules({
         },
       }
     `,
-    "@openbooks/engine/src/platform/business-date.ts": `export async function businessToday() { return '2026-08-26' }
+    "@openbooks/engine/platform/business-date/module": `export async function businessToday() { return '2026-08-26' }
     export function isIsoCalendarDate(value) {
       if (typeof value !== 'string' || !/^\\d{4}-\\d{2}-\\d{2}$/.test(value)) return false
       const date = new Date(value + 'T00:00:00.000Z')

@@ -129,8 +129,8 @@ const mockSources = new Map<string, string>([
 ]);
 
 const mockUrls = new Map<string, string>([
-  ["@openbooks/engine/src/platform/db.ts", "mock:db"],
-  ["@openbooks/engine/src/crm/crm.ts", "mock:crm"],
+  ["@openbooks/engine/platform/db", "mock:db"],
+  ["@openbooks/engine/crm/crm", "mock:crm"],
   ["../../../../lib/feature-gates", "mock:feature-gates"],
   // defineRoute resolves the gate through the production alias, not through
   // the route's own side-effect import above, so the scripted gate must be

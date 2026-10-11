@@ -1,6 +1,6 @@
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { competencyProfileForEmployment } from "@openbooks/engine/src/hrm/performance/competencies.ts";
+import { competencyProfileForEmployment } from "@openbooks/engine/hrm/performance/competencies";
 import { isUuid } from "../../../../lib/list-params";
 import { performanceErrorResponse } from "../review-cycles/_lib";
 /**

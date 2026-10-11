@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import test, { after, before } from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "../engine/src/platform/db.ts";
-import { describeSealedBlob, sealSecret } from "../engine/src/platform/secrets.ts";
-import { createScratchOrg, dropScratchOrg } from "../engine/src/testing/fixtures.ts";
+import { db } from "@openbooks/engine/platform/db";
+import { describeSealedBlob, sealSecret } from "@openbooks/engine/platform/secrets";
+import { createScratchOrg, dropScratchOrg } from "@openbooks/engine/testing/fixtures";
 import { planReseal, rotateDataKey, rotateOrgSettings } from "./rotate-data-key.ts";
 
 const K1_HEX = "01".repeat(32);

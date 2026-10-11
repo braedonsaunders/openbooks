@@ -1,6 +1,6 @@
 'use client'
 
-import type { ScanField, ScanResolution } from '@openbooks/engine/src/inventory/item-identifiers.ts'
+import type { ScanField, ScanResolution } from '@openbooks/engine/inventory/item-identifiers'
 
 export type ScanAttempt =
   | { ok: true; value: string; label: string; unit: string | null }

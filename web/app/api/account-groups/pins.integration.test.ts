@@ -53,9 +53,9 @@ const hooks = registerHooks({
 const routeUrl = new URL("./[id]/pins/route.ts?account-group-pins-test", import.meta.url).href;
 const { POST, DELETE } = (await import(routeUrl)) as typeof import("./[id]/pins/route.ts");
 
-const { withBypassContext, db, pool } = await import("@openbooks/engine/src/platform/db.ts");
+const { withBypassContext, db, pool } = await import("@openbooks/engine/platform/db");
 const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } = await import(
-  "@openbooks/engine/src/testing/fixtures.ts"
+  "@openbooks/engine/testing/fixtures"
 );
 
 function errorChain(error: unknown): string {

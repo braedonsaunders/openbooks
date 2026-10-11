@@ -1,6 +1,6 @@
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { automationRecipes } from "@openbooks/engine/src/automations/services.ts";
+import { automationRecipes } from "@openbooks/engine/automations/services";
 import { automationErrorResponse } from "../_lib";
 
 

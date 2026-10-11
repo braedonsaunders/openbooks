@@ -1,7 +1,7 @@
 /** Setup-registry revenue entities (split from registry.ts; pure moves only). */
 import type { SetupEntity } from '../types'
 import { RECOGNITION_METHODS, START_DATE_SOURCES, END_DATE_SOURCES } from '../options'
-import { MAX_RECOGNITION_INITIAL_PERCENT, MAX_RECOGNITION_TERM_MONTHS, MIN_RECOGNITION_INITIAL_PERCENT, MIN_RECOGNITION_PERIOD_OFFSET, MIN_RECOGNITION_TERM_MONTHS } from '@openbooks/engine/src/revenue/recognition-limits.ts'
+import { MAX_RECOGNITION_INITIAL_PERCENT, MAX_RECOGNITION_TERM_MONTHS, MIN_RECOGNITION_INITIAL_PERCENT, MIN_RECOGNITION_PERIOD_OFFSET, MIN_RECOGNITION_TERM_MONTHS } from '@openbooks/engine/revenue/recognition-limits'
 
 export const REVENUE_ENTITIES: SetupEntity[] = [
   // --- Revenue recognition -------------------------------------------------

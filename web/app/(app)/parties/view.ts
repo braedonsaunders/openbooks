@@ -3,7 +3,7 @@ import 'server-only'
 import { registeredListTable } from '../../../lib/list/prepared-spec'
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/db'
 import {
   pagination,
   badge,

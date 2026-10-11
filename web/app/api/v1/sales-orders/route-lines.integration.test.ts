@@ -5,11 +5,11 @@ import test from "node:test";
 // Full order create through POST /api/v1/sales-orders, line replacement, and
 // issue — the same drawer writer end to end, with the storefront dedupe key.
 const { db, withBypassContext, withOrgContext } = await import(
-  "@openbooks/engine/src/platform/db.ts"
+  "@openbooks/engine/platform/db"
 );
 const { sql } = await import("drizzle-orm");
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
-  "@openbooks/engine/src/testing/fixtures.ts"
+  "@openbooks/engine/testing/fixtures"
 );
 const { generateApiKey } = await import("../../../../lib/api-auth.ts");
 const { v1CreateOrder, v1IssueOrder, v1ReplaceOrderLines } = await import(

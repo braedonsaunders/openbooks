@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/db'
 import type { Authz } from '@/lib/authz'
 import { onboardingStatus } from '@/lib/onboarding'
 

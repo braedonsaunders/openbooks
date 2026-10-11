@@ -3,7 +3,7 @@ import 'server-only'
 import { type FileViewer, type AccessLevel, accessAtLeast } from './types'
 import { folderAccessLevel, fileAccessLevel } from './visibility'
 import { sql } from 'drizzle-orm'
-import { inDbTransaction, type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
+import { inDbTransaction, type SqlExecutor } from '@openbooks/engine/platform/db'
 
 /**
  * Attribution for a mutating verb's audit evidence. When passed, the verb

@@ -56,9 +56,9 @@ registerHooks({
 
 const { loadTrueCost } = await import('./view.ts')
 const { sql } = await import('drizzle-orm')
-const { db, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypass, withOrgContext } = await import('@openbooks/engine/platform/db')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
-  '@openbooks/engine/src/testing/fixtures.ts'
+  '@openbooks/engine/testing/fixtures'
 )
 
 function sessionUser(orgId: string, userId: string): unknown {

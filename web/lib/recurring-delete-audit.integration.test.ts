@@ -31,10 +31,10 @@ registerHooks({
     return next(specifier, context);
   },
 });
-const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
-const { withSimClock } = await import("@openbooks/engine/src/platform/clock.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { withSimClock } = await import("@openbooks/engine/testing/platform/clock");
 const { sql } = await import("drizzle-orm");
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
 const detail = await import("../app/api/recurring/[id]/route");
 
 const request = (method: string) => new Request("http://audit.local/api/recurring/x", { method });

@@ -86,7 +86,7 @@ const mockSources = new Map<string, string>([
   [
     "mock:lib",
     `
-      import { ScopeNotFoundError } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
+      import { ScopeNotFoundError } from '@openbooks/engine/organization/scope'
       const state = globalThis[Symbol.for('openbooks.flow-record-state-route-test')]
       export async function requireFlowsRecordReader() {
         return { authz: state.authz, flowsEnabled: state.flowsEnabled }
@@ -114,8 +114,8 @@ const mockSources = new Map<string, string>([
 ]);
 
 const mockUrls = new Map<string, string>([
-  ["@openbooks/engine/src/platform/db.ts", "mock:db"],
-  ["@openbooks/engine/src/flows/index.ts", "mock:flows"],
+  ["@openbooks/engine/platform/db", "mock:db"],
+  ["@openbooks/engine/flows/module", "mock:flows"],
   ["../_lib", "mock:lib"],
   ["../../../../lib/authz", "mock:authz"],
   ["@/lib/authz", "mock:authz"],

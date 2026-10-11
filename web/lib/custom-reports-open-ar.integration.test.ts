@@ -11,9 +11,9 @@ import { randomUUID } from 'node:crypto'
  * open lines, and date measures must render as dates.
  */
 const root = pathToFileURL(process.cwd() + '/').href
-const { db, pool, withBypassContext, withOrgContext } = (await import(root + 'engine/src/platform/db.ts')) as typeof import('@openbooks/engine/src/platform/db.ts')
+const { db, pool, withBypassContext, withOrgContext } = (await import('@openbooks/engine/platform/db')) as typeof import('@openbooks/engine/platform/db')
 const { sql } = await import(root + 'node_modules/drizzle-orm/index.js')
-const { createScratchOrg, dropScratchOrg } = (await import(root + 'engine/src/testing/fixtures.ts')) as typeof import('@openbooks/engine/src/testing/fixtures.ts')
+const { createScratchOrg, dropScratchOrg } = (await import('@openbooks/engine/testing/fixtures')) as typeof import('@openbooks/engine/testing/fixtures')
 // runCustomQuery directly: the web executeReport wrapper needs a Next
 // request scope (cookies) for locale/feature prep, which tests lack.
 const { runCustomQuery } = (await import(root + 'packages/reports/src/run.ts')) as typeof import('@openbooks/reports')

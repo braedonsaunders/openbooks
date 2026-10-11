@@ -5,9 +5,9 @@ import test from 'node:test'
 // Only an approved (issued) purchase order converts: convertOrder used to
 // reject only draft/voided, so a pending_approval order converted into a
 // vendor bill before it was ever issued.
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
 const { sql } = await import('drizzle-orm')
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
 const { convertOrder, ConversionError } = await import('../../../../../lib/order-cycle')
 
 test('convert refuses a pending_approval purchase order', async () => {

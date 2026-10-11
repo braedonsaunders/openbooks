@@ -14,8 +14,8 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context);
 } });
 const { sql } = await import("drizzle-orm");
-const { db, pool, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
-const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import("@openbooks/engine/src/testing/fixtures.ts");
+const { db, pool, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import("@openbooks/engine/testing/fixtures");
 const { POST, PATCH } = await import("../app/api/admin/scripts/route");
 const { DELETE } = await import("../app/api/admin/scripts/[id]/route");
 
@@ -154,7 +154,7 @@ const scriptLifecycleCases = [{ label: "script lifecycle cursor", register: () =
   const control: { afterRun: (() => Promise<void>) | null } = { afterRun: null };
   Object.assign(globalThis, { __scriptLifecycleRun: control });
   const hooks = registerHooks({ resolve(specifier, context, next) {
-    if (specifier === '@openbooks/engine/src/scripting/scripting.ts' && decodeURIComponent(context.parentURL ?? '').endsWith('/scripts/[id]/run/route.ts')) {
+    if (specifier === '@openbooks/engine/scripting/scripting' && decodeURIComponent(context.parentURL ?? '').endsWith('/scripts/[id]/run/route.ts')) {
       const actual = JSON.stringify(root + 'engine/src/scripting/scripting.ts');
       return { shortCircuit: true, url: 'data:text/javascript,' + encodeURIComponent(`export * from ${actual};import {runScheduledScript as run} from ${actual};export async function runScheduledScript(...args){const result=await run(...args);await globalThis.__scriptLifecycleRun.afterRun?.();return result}`) };
     }

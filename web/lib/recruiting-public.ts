@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm'
-import { db, withBypassContext } from '@openbooks/engine/src/platform/db.ts'
+import { db, withBypassContext } from '@openbooks/engine/platform/db'
 
 /**
  * Public recruiting helpers (HR-18): org resolution for the sessionless

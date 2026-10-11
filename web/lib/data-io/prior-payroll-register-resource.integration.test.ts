@@ -9,12 +9,12 @@ const { priorPayrollRegisterResource } = (await import(
 )) as typeof import("./prior-payroll-register-resource.ts");
 
 const { sql } = await import("drizzle-orm");
-const { db, withBypassContext } = await import("@openbooks/engine/src/platform/db.ts");
+const { db, withBypassContext } = await import("@openbooks/engine/platform/db");
 const {
   createScratchOrg,
   dropScratchOrgReporting,
   seedFlowActors,
-} = await import("@openbooks/engine/src/testing/fixtures.ts");
+} = await import("@openbooks/engine/testing/fixtures");
 
 test("prior register imports refuse when the caller scope is missing", async () => {
   const resource = priorPayrollRegisterResource("scope-required-org");

@@ -1,6 +1,6 @@
 import "server-only";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { db } from "@openbooks/engine/platform/db";
 import { isFeatureEnabled } from "../features";
 import { normalizeSectionsInput } from "../record-schema";
 import { inTypeAudience } from "../records";

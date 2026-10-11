@@ -33,15 +33,15 @@ registerHooks({
 });
 
 const { db, withBypassContext, withOrgTransaction } = await import(
-  "@openbooks/engine/src/platform/db.ts"
+  "@openbooks/engine/platform/db"
 );
 const { sql } = await import("drizzle-orm");
-const { withSimClock } = await import("@openbooks/engine/src/platform/clock.ts");
+const { withSimClock } = await import("@openbooks/engine/testing/platform/clock");
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
-  "@openbooks/engine/src/testing/fixtures.ts"
+  "@openbooks/engine/testing/fixtures"
 );
 const { builtInReportDefinitionId, executeReport, loadReportDefinition } = await import("./custom-reports.ts");
-const { salesOrderLineRemainders } = await import("@openbooks/engine/src/records/order-line-remainders.ts");
+const { salesOrderLineRemainders } = await import("@openbooks/engine/records/order-line-remainders");
 const { toQuantityUnits } = await import("./order-cycle-math.ts");
 const { withReportAuthz } = await import("./report-execution-context.ts");
 const { GET } = await import("../app/api/reports/definitions/[id]/export/route.ts");

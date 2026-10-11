@@ -4,14 +4,14 @@ import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { z } from 'zod'
-import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
-import { sum, toUnits } from '@openbooks/engine/src/money/money.ts'
-import { deleteDocument, DeleteError } from '@openbooks/engine/src/ledger/document-delete.ts'
-import { lockScopeRow, ScopeNotFoundError, subsidiaryScopeAllows, subsidiaryVisibleFilter } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
-import { captureTransactionAuditSnapshot, recordTransactionAudit } from '@openbooks/engine/src/records/transaction-audit.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
+import { sum, toUnits } from '@openbooks/engine/money/money'
+import { deleteDocument, DeleteError } from '@openbooks/engine/ledger/document-delete'
+import { lockScopeRow, ScopeNotFoundError, subsidiaryScopeAllows, subsidiaryVisibleFilter } from '@openbooks/engine/organization/scope'
+import { captureTransactionAuditSnapshot, recordTransactionAudit } from '@openbooks/engine/records/transaction-audit'
 import { guardPermission, guardSubsidiaryScope, subsidiariesInScope } from '../../../../lib/authz'
-import { DocumentEditError, requireDocumentEditRevision, runDocumentVersionedTransaction } from "../../../../../engine/src/records/document-edit-policy.ts";
-import { documentRevisionCounterSql } from "../../../../../engine/src/records/revision.ts";
+import { DocumentEditError, requireDocumentEditRevision, runDocumentVersionedTransaction } from "@openbooks/engine/records/document-edit-policy";
+import { documentRevisionCounterSql } from "@openbooks/engine/records/revision";
 import { loadJournalDoc } from '../../../../lib/journals'
 import { isUuid } from '../../../../lib/list-params'
 import { findUnownedCustomReferences, loadFieldDefs, validateCustomValues } from '../../../../lib/custom-fields'

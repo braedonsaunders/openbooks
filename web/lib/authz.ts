@@ -6,10 +6,10 @@ import {
   type SubsidiaryScopeOptions,
   UNRESTRICTED_SCOPE_REQUIRED,
   UnrestrictedScopeError,
-} from "@openbooks/engine/src/organization/subsidiary-scope.ts";
+} from "@openbooks/engine/organization/scope";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { db } from "@openbooks/engine/platform/db";
 import { currentUser } from "./auth";
 import { requestAuthzContext } from "./authz-context";
 import { can, resolveUserAuthz, type Authz } from "./authz-core";
@@ -21,7 +21,7 @@ import { notFound } from "@/lib/api/responses";
 export {
   subsidiaryScopeAllows,
   type SubsidiaryScopeOptions,
-} from "@openbooks/engine/src/organization/subsidiary-scope.ts";
+} from "@openbooks/engine/organization/scope";
 
 /**
  * Server-side authorization on top of the existing HMAC-cookie session.

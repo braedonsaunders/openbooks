@@ -90,13 +90,13 @@ const hooks = registerHooks({
     if (specifier === '../../../../../lib/features' || specifier === '../features') {
       return { url: 'mock:features', shortCircuit: true }
     }
-    if (specifier === '@openbooks/engine/src/platform/db.ts') {
+    if (specifier === '@openbooks/engine/platform/db') {
       return { url: 'mock:db', shortCircuit: true }
     }
-    if (['@openbooks/engine/src/payroll/fences.ts', '@openbooks/engine/src/payroll/run-allocation.ts', '@openbooks/engine/src/payroll/run-calculation-evidence.ts', '@openbooks/engine/src/payroll/run-calculation.ts', '@openbooks/engine/src/payroll/run-calendar.ts', '@openbooks/engine/src/payroll/run-commit.ts', '@openbooks/engine/src/payroll/run-contracts.ts', '@openbooks/engine/src/payroll/run-lifecycle.ts', '@openbooks/engine/src/payroll/run-protection.ts', '@openbooks/engine/src/payroll/run-setup.ts', '@openbooks/engine/src/payroll/run-stub-records.ts', '@openbooks/engine/src/payroll/scope.ts'].includes(specifier)) {
+    if (['@openbooks/engine/testing/payroll/fences', '@openbooks/engine/testing/payroll/run-allocation', '@openbooks/engine/payroll/run-calculation-evidence', '@openbooks/engine/payroll/run-calculation', '@openbooks/engine/payroll/run-calendar', '@openbooks/engine/payroll/run-commit', '@openbooks/engine/payroll/run-contracts', '@openbooks/engine/payroll/run-lifecycle', '@openbooks/engine/testing/payroll/run-protection', '@openbooks/engine/payroll/run-setup', '@openbooks/engine/testing/payroll/run-stub-records', '@openbooks/engine/payroll/scope'].includes(specifier)) {
       return { url: 'mock:payroll-run', shortCircuit: true }
     }
-    if (specifier === '@openbooks/engine/src/payroll/filing-registry.ts') {
+    if (specifier === '@openbooks/engine/payroll/filing-registry') {
       return { url: 'mock:payroll-filing-registry', shortCircuit: true }
     }
     return nextResolve(specifier, context)

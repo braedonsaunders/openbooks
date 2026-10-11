@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import type { ScheduledWork } from '@openbooks/engine/src/schedule-boards/prefill.ts'
+import type { ScheduledWork } from '@openbooks/engine/schedule-boards/prefill'
 import { fillTicketFromSchedule } from './field-ticket-schedule-fill.ts'
 
 const input = { projectId: 'project', days: ['2026-10-08', '2026-10-09'], timeTypeId: 'regular' }

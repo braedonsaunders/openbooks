@@ -65,12 +65,12 @@ registerHooks({
 })
 
 const { sql } = await import('drizzle-orm')
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
-  '@openbooks/engine/src/testing/fixtures.ts'
+  '@openbooks/engine/testing/fixtures'
 )
 const { randomUUID } = await import('node:crypto')
-const { ensureCrmDefaults } = await import('@openbooks/engine/src/crm/crm.ts')
+const { ensureCrmDefaults } = await import('@openbooks/engine/crm/crm')
 const { GET } = await import('./route.ts')
 const { NextRequest } = await import('next/server')
 

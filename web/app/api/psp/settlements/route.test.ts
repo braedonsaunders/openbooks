@@ -4,7 +4,7 @@ import test from "node:test";
 // Static imports resolve before the hook install below, so this is the real
 // pure SQL predicate — the route's scope double delegates to it instead of
 // reimplementing it.
-import { subsidiaryVisibleFilter as realSubsidiaryVisibleFilter } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
+import { subsidiaryVisibleFilter as realSubsidiaryVisibleFilter } from "@openbooks/engine/organization/scope";
 
 interface DomainCall {
   action: "saveConfig" | "import" | "post" | "reverse";
@@ -332,12 +332,12 @@ const mockSources = new Map<string, string>([
 ]);
 
 const mockUrls = new Map<string, string>([
-  ["@openbooks/engine/src/platform/db.ts", "mock:db"],
-  ["@openbooks/engine/src/payments/psp-settlement.ts", "mock:psp-settlement"],
+  ["@openbooks/engine/platform/db", "mock:db"],
+  ["@openbooks/engine/payments/psp-settlement", "mock:psp-settlement"],
   ["@openbooks/engine/payments/settlement", "mock:psp-settlement"],
   ["@openbooks/engine/commerce", "mock:commerce"],
-  ["@openbooks/engine/src/organization/subsidiary-scope.ts", "mock:psp-settlement"],
-  ["@openbooks/engine/src/platform/business-date.ts", "mock:business-date"],
+  ["@openbooks/engine/organization/scope", "mock:psp-settlement"],
+  ["@openbooks/engine/platform/business-date/module", "mock:business-date"],
   ["../../../../lib/authz", "mock:authz"],
   ["@/lib/authz", "mock:authz"],
   ["../../../../lib/feature-gates", "mock:feature-gates"],

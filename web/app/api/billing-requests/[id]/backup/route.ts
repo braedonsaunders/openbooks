@@ -3,7 +3,7 @@ import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/db'
 import { guardPermission } from '../../../../../lib/authz'
 import { rendererUnavailableResponse } from '../../../../../lib/api/pdf-renderer'
 import { isUuid } from '../../../../../lib/list-params'

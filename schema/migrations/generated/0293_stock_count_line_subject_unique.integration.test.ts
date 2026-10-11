@@ -43,15 +43,15 @@ import {
   snapshotTableCatalog,
   type CatalogQuery,
   type TableCatalogSnapshot,
-} from "../../../engine/src/testing/migration-catalog.ts";
-import { db } from "../../../engine/src/platform/db.ts";
-import { createStockCount } from "../../../engine/src/inventory/stock-counts.ts";
-import { receiveInventory } from "../../../engine/src/inventory/movements.ts";
+} from "@openbooks/engine/testing/migration-catalog";
+import { db } from "@openbooks/engine/platform/db";
+import { createStockCount } from "@openbooks/engine/inventory/stock-counts";
+import { receiveInventory } from "@openbooks/engine/inventory/movements";
 import {
   createScratchOrg,
   dropScratchOrg,
   type ScratchOrg,
-} from "../../../engine/src/testing/fixtures.ts";
+} from "@openbooks/engine/testing/fixtures";
 
 const PROBE_FILENAME = "generated/0999_g43_0293_probe.sql";
 const PROBE_DIGEST = "g43-0293-probe";

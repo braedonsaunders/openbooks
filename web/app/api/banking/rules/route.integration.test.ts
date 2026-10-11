@@ -84,9 +84,9 @@ const deleteRouteUrl = "./[id]/route.ts?banking-rules-delete-test";
 const { DELETE } = (await import(deleteRouteUrl)) as typeof import("./[id]/route.ts");
 
 const { db, withBypass, withOrgContext } =
-  await import("@openbooks/engine/src/platform/db.ts");
+  await import("@openbooks/engine/platform/db");
 const { createScratchOrg, createScratchUser, dropScratchOrg } =
-  await import("@openbooks/engine/src/testing/fixtures.ts");
+  await import("@openbooks/engine/testing/fixtures");
 
 
 type RuleSnapshot = {

@@ -7,8 +7,8 @@ import { sql } from "drizzle-orm";
 // header; the AR list's service-party filter finds the payer invoices
 // holding one child's lines. SQL builders and storage are real; only the
 // server-only seam is stubbed.
-const { db } = await import("@openbooks/engine/src/platform/db.ts");
-const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
+const { db } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
 const { invoiceServicePartyWhere } = await import("./list-query.ts");
 const { defaultListView } = await import("@openbooks/customization");
 

@@ -4,14 +4,14 @@ import { apiErrorResponse } from '@/lib/api/error-response'
 import { parseJsonBody } from "@/lib/api/json"
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/db'
 import {
   finalizeFiling,
   InformationReturnError,
   markFilingFiled,
   recomputeFiling,
   voidFiling,
-} from '@openbooks/engine/src/compliance/information-returns.ts'
+} from '@openbooks/engine/compliance/information-returns'
 import { can, guardSubsidiaryScope } from '@/lib/authz';
 import { guardInformationReturnsFeature, loadInformationReturnFilingScope } from '@/lib/compliance'
 import { complianceWriteFailure } from '@/lib/compliance-errors'

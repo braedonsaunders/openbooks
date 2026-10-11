@@ -13,9 +13,9 @@ const { loadProjectCockpit } = (await import("./_cockpit-data.ts")) as typeof im
   "./_cockpit-data.ts"
 );
 
-const { db, withOrgTransaction } = await import("@openbooks/engine/src/platform/db.ts");
+const { db, withOrgTransaction } = await import("@openbooks/engine/platform/db");
 const { createScratchOrg, dropScratchOrg } = await import(
-  "@openbooks/engine/src/testing/fixtures.ts"
+  "@openbooks/engine/testing/fixtures"
 );
 
 const fixedPrice = BUILTIN_PROJECT_TYPES.find((t) => t.key === "fixed_price")!;

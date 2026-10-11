@@ -3,9 +3,9 @@ import { z } from 'zod';
 import { defineRoute } from '@/lib/api/route';
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { startReconciliation } from '@openbooks/engine/src/banking/banking.ts'
-import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
+import { db } from '@openbooks/engine/platform/db'
+import { startReconciliation } from '@openbooks/engine/banking/banking'
+import { normalizeMoney } from '@openbooks/engine/money/money'
 import { isUuid } from '../../../../lib/list-params'
 import { canonicalDecimal } from '../../../../lib/exact-decimal'
 import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'

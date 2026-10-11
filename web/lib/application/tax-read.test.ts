@@ -41,7 +41,7 @@ const mockDb = `
 
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "@openbooks/engine/src/platform/db.ts") {
+    if (specifier === "@openbooks/engine/platform/db") {
       return { shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(mockDb) };
     }
     // The filing-catalog filter in tax-returns/return.ts reaches the same

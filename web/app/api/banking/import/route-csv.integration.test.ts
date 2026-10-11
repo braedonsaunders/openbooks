@@ -44,9 +44,9 @@ const hooks = registerHooks({
 const routeUrl = "./route.ts?bank-import-csv-test";
 const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
 
-const { db, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
+const { db, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  "@openbooks/engine/src/testing/fixtures.ts"
+  "@openbooks/engine/testing/fixtures"
 );
 
 const MAPPING = { date: 0, amount: 1, description: 2 };

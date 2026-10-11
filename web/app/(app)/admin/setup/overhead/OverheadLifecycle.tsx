@@ -15,7 +15,7 @@ import {
   mul as mulMoney,
   neg as negMoney,
   roundMoney,
-} from '@openbooks/engine/src/money/money.ts'
+} from '@openbooks/engine/money/money'
 
 export interface DriftRow {
   id: string

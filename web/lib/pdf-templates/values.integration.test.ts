@@ -3,8 +3,8 @@ import { randomUUID } from 'node:crypto'
 import test from 'node:test'
 
 const { sql } = await import('drizzle-orm')
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
+const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
 const { findSamplePdfRecordId, loadPdfRecordValues } = await import('./values')
 
 /**
@@ -112,8 +112,8 @@ test('loadPdfRecordValues enforces the caller scope in the load itself', { skip:
  * billed amount beside it is nonzero. The day cells reconcile the same way.
  */
 test('field-ticket hours print exact decimals that reconcile to the billed amount', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const { withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
-  const { seedFlowActors } = await import('@openbooks/engine/src/testing/fixtures.ts')
+  const { withBypassContext } = await import('@openbooks/engine/platform/db')
+  const { seedFlowActors } = await import('@openbooks/engine/testing/fixtures')
   const { createFieldTicket } = await import('../field-tickets')
   await withBypassContext(async () => {
     const org = await createScratchOrg()
@@ -157,8 +157,8 @@ test('field-ticket hours print exact decimals that reconcile to the billed amoun
  * record type — never a silent blank.
  */
 test('field-ticket merge values populate the customer party address', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
-  const { withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
-  const { seedFlowActors } = await import('@openbooks/engine/src/testing/fixtures.ts')
+  const { withBypassContext } = await import('@openbooks/engine/platform/db')
+  const { seedFlowActors } = await import('@openbooks/engine/testing/fixtures')
   const { createFieldTicket } = await import('../field-tickets')
   await withBypassContext(async () => {
     const org = await createScratchOrg()

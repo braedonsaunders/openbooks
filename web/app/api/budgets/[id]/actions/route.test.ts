@@ -96,7 +96,7 @@ const mockSources = new Map<string, string>([
   [
     'mock:db',
     `
-      export * from '${import.meta.resolve('@openbooks/engine/src/platform/db.ts')}'
+      export * from '${import.meta.resolve('@openbooks/engine/platform/db')}'
       const state = globalThis[Symbol.for('openbooks.budget-actions-route-test')]
       const sqlText = globalThis.openbooksBudgetSqlText
       export const db = {
@@ -126,7 +126,7 @@ const mockSources = new Map<string, string>([
 
 // Never double the shared JSON validation boundary: the real module loads.
 const mockUrls = new Map<string, string>([
-  ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
+  ['@openbooks/engine/platform/db', 'mock:db'],
   ['../../../../../lib/authz', 'mock:authz'],
   ['../../../../../lib/feature-gates', 'mock:feature-gates'],
   ['@/lib/feature-gates', 'mock:feature-gates'],
@@ -161,7 +161,7 @@ let POST: typeof import('./route.ts')['POST']
 const vitestModule = 'vitest' as string
 if (process.env.VITEST) {
   const { vi } = await import(vitestModule)
-  vi['mock']('@openbooks/engine/src/platform/db.ts', () => ({
+  vi['mock']('@openbooks/engine/platform/db', () => ({
     db: {
       transaction: async (work: (tx: { execute: (query: unknown) => Promise<{ rows: Record<string, unknown>[] }> }) => unknown) =>
         work({ execute: async (query) => mockedQuery(query) }),

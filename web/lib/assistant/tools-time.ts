@@ -1,7 +1,7 @@
 import "server-only";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { db } from "@openbooks/engine/platform/db";
 import { isFeatureEnabled } from "../features";
 import { can, subsidiaryScopeAllows } from "../authz";
 import { projectUnbilled } from "../project-costing";
@@ -566,7 +566,7 @@ const timeClockStatus: AssistantToolDef = {
       return { ok: false, error: FIELD_TIME_FEATURE_ERROR };
     }
     const a = raw as z.infer<typeof timeClockStatusSchema>;
-    const { myClockDay, teamClockedIn } = await import("@openbooks/engine/src/hrm/field-time/reads.ts");
+    const { myClockDay, teamClockedIn } = await import("@openbooks/engine/hrm/field-time/reads");
     const { orgToday } = await import("./tools-shared");
     try {
       if ((a.scope ?? "own") === "team") {
@@ -606,7 +606,7 @@ const crewBatches: AssistantToolDef = {
       return { ok: false, error: FIELD_TIME_FEATURE_ERROR };
     }
     const a = raw as z.infer<typeof crewBatchesSchema>;
-    const { listCrewBatches } = await import("@openbooks/engine/src/hrm/field-time/reads.ts");
+    const { listCrewBatches } = await import("@openbooks/engine/hrm/field-time/reads");
     try {
       const batches = await listCrewBatches(authz.user.orgId, {
         status: a.status ?? null,

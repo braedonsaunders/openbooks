@@ -2,12 +2,12 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { sql } from "drizzle-orm";
-import { db, withOrgContext } from "../engine/src/platform/db.ts";
-import { withSimClock } from "../engine/src/platform/clock.ts";
-import { DB, setupHarness, withHarness } from "../engine/src/testing/hrm-harness.ts";
-import { drainExportQueue, requestExport } from "../engine/src/hrm/documents/dsar.ts";
-import { createRetentionRule } from "../engine/src/hrm/recruiting/retention.ts";
-import { clearWorkerDuties, registerWorkerDuty, runWorkerDuties } from "../engine/src/scheduling/duties.ts";
+import { db, withOrgContext } from "@openbooks/engine/platform/db";
+import { withSimClock } from "@openbooks/engine/testing/platform/clock";
+import { DB, setupHarness, withHarness } from "@openbooks/engine/testing/hrm-harness";
+import { drainExportQueue, requestExport } from "@openbooks/engine/hrm/documents/dsar";
+import { createRetentionRule } from "@openbooks/engine/hrm/recruiting/retention";
+import { clearWorkerDuties, registerWorkerDuty, runWorkerDuties } from "@openbooks/engine/scheduling/duties";
 import {
   runHrmOrganizationDuty,
   runRetentionDuty,

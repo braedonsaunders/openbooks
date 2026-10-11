@@ -1,5 +1,5 @@
-import type { PersonWeekForecast } from "@openbooks/engine/src/resourcing/forecast.ts";
-import { add } from "@openbooks/engine/src/money/money.ts";
+import type { PersonWeekForecast } from "@openbooks/engine/resourcing/forecast";
+import { add } from "@openbooks/engine/money/money";
 import { formatTicketHours } from "../format.ts";
 
 export const NO_CAPACITY_REMEDY =

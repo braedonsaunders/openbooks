@@ -1,14 +1,14 @@
 import "server-only";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { db } from "@openbooks/engine/platform/db";
 import {
   addCalendarDays,
   addMonthsStart,
   businessToday,
   isIsoCalendarDate,
   startOfMonth,
-} from "@openbooks/engine/src/platform/business-date.ts";
+} from "@openbooks/engine/platform/business-date/module";
 import { isFeatureEnabled } from "../features";
 import {
   calculateForecast,

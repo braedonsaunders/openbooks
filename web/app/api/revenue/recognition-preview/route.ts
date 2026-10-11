@@ -1,14 +1,14 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { z } from 'zod'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/db'
 import {
   obligationAttribution,
   previewRevenueRecognition,
   revenueContractAttribution,
-} from '@openbooks/engine/src/revenue/recognition.ts'
-import { subsidiaryScopeAllows } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
-import { businessToday, isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
+} from '@openbooks/engine/revenue/recognition'
+import { subsidiaryScopeAllows } from '@openbooks/engine/organization/scope'
+import { businessToday, isIsoCalendarDate } from '@openbooks/engine/platform/business-date/module'
 import { defineRoute } from '../../../../lib/api/route'
 import { isUuid } from '../../../../lib/list-params'
 import { revenueRecognitionErrorResponse } from '../../../../lib/revenue-recognition-error'

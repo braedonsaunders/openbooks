@@ -4,12 +4,12 @@ import { registerHooks } from "node:module";
 import { pathToFileURL } from "node:url";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, withBypass } from "@openbooks/engine/src/platform/db.ts";
-import { actorAllowedSubsidiaryIds } from "@openbooks/engine/src/organization/actor-subsidiaries.ts";
+import { db, withBypass } from "@openbooks/engine/platform/db";
+import { actorAllowedSubsidiaryIds } from "@openbooks/engine/organization/actor-subsidiaries";
 import {
   createScratchOrg,
   dropScratchOrg,
-} from "@openbooks/engine/src/testing/fixtures.ts";
+} from "@openbooks/engine/testing/fixtures";
 import { UNUSABLE_PASSWORD_HASH } from "./invite";
 
 // Delegation-ceiling suite for /api/admin/users against the real schema.
@@ -73,7 +73,7 @@ registerHooks({
         }
       `);
     }
-    if (parent.includes("auth-reset.ts") && specifier === "@openbooks/engine/src/delivery/email-config.ts") {
+    if (parent.includes("auth-reset.ts") && specifier === "@openbooks/engine/delivery/email-config/module") {
       return virtual(`
         export async function resolveOrgEmailTransport() { return { provider: 'isolated' }; }
         export async function insertEmailLog(row) { return 'isolated-log'; }

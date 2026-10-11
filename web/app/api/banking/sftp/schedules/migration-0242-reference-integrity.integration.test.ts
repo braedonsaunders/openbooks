@@ -26,13 +26,13 @@ import { sql } from "drizzle-orm";
  */
 
 const { db, pool, withBypass } =
-  await import("@openbooks/engine/src/platform/db.ts");
+  await import("@openbooks/engine/platform/db");
 const {
   assertFixtureDatabase,
   createScratchOrg,
   createScratchUser,
   dropScratchOrg,
-} = await import("@openbooks/engine/src/testing/fixtures.ts");
+} = await import("@openbooks/engine/testing/fixtures");
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 

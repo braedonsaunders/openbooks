@@ -4,19 +4,19 @@ import { apiErrorResponse } from '@/lib/api/error-response'
 
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { lockAndCheckOrgFeature } from '@openbooks/engine/src/organization/org-feature-lock.ts'
+import { db } from '@openbooks/engine/platform/db'
+import { lockAndCheckOrgFeature } from '@openbooks/engine/organization/org-feature-lock'
 import {
   computeScheduledScriptNextRunAt,
   INVALID_SCHEDULED_SCRIPT_CRON_CODE,
   scriptSaveRefusal,
-} from '@openbooks/engine/src/scripting/scripting.ts'
-import { validateScriptConfiguration as validate, type ScriptValidationError as ValidationError } from '@openbooks/engine/src/scripting/script-config.ts'
+} from '@openbooks/engine/scripting/scripting'
+import { validateScriptConfiguration as validate, type ScriptValidationError as ValidationError } from '@openbooks/engine/scripting/script-config'
 import {
   assertProductionEnvForScheduledScript,
   SCHEDULED_SCRIPT_NON_PRODUCTION_CODE,
   ScheduledScriptNonProductionError,
-} from '@openbooks/engine/src/scripting/scheduled-env.ts'
+} from '@openbooks/engine/scripting/scheduled-env'
 
 import { isUuid } from '../../../../lib/list-params'
 import { notFound } from "@/lib/api/responses";

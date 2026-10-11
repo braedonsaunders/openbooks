@@ -1,3 +1,4 @@
+import { resolveEngineSpecifier } from '../../../testing/engine-resolve-hooks.ts'
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import { registerHooks } from 'node:module';
@@ -15,18 +16,18 @@ const engineRoot = new URL('../../../../engine/', import.meta.url).href;
 const state: { user: SessionUser | null } = { user: null };
 Object.assign(globalThis, { __pmUnitBoundState: state });
 registerHooks({ resolve(specifier, context, next) {
-  // Bare @openbooks/engine/src/* resolves cross-checkout to main; pin the
+  // Resolve package contracts against this checkout; pin the
   // worktree copy. Package subpath exports (@openbooks/engine/money) keep
   // their own resolution.
-  if (specifier.startsWith('@openbooks/engine/src/')) {
-    return next(new URL(specifier.slice('@openbooks/engine/'.length), engineRoot).href, context);
-  }
+
   if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) return { shortCircuit: true, url: 'data:text/javascript,export async function currentUser(){return globalThis.__pmUnitBoundState.user}' };
+  const engineUrl = resolveEngineSpecifier(specifier);
+  if (engineUrl) return next(engineUrl, context);
   return next(specifier, context);
 } });
 const { sql } = await import('drizzle-orm');
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts');
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts');
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db');
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures');
 const { POST } = await import('./route.ts');
 
 async function fixture() {

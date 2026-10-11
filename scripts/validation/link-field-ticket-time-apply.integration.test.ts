@@ -7,12 +7,12 @@ import { join } from "node:path";
 import { fileURLToPath } from "node:url";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, withOrg, withOrgTransaction } from "../../engine/src/platform/db.ts";
+import { db, withOrg, withOrgTransaction } from "@openbooks/engine/platform/db";
 import {
   createScratchOrg,
   createScratchUser,
   dropScratchOrg,
-} from "../../engine/src/testing/fixtures.ts";
+} from "@openbooks/engine/testing/fixtures";
 import {
   applyTimeTicketLinks,
   classifyTimeTicketLinks,

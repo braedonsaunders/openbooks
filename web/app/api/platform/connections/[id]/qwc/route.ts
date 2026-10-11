@@ -2,9 +2,9 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { defineRoute } from '@/lib/api/route'
 import { getTranslations } from 'next-intl/server'
-import { appBaseUrl } from '@openbooks/engine/src/flows/email-tokens.ts'
-import { getConnection, QBD_WEB_CONNECTOR_REGIONS } from '@openbooks/engine/src/sync/connection.ts'
-import { xmlEscape } from '@openbooks/engine/src/qbd/qbxml.ts'
+import { appBaseUrl } from '@openbooks/engine/flows/email-tokens'
+import { getConnection, QBD_WEB_CONNECTOR_REGIONS } from '@openbooks/engine/sync/connection'
+import { xmlEscape } from '@openbooks/engine/qbd/qbxml'
 import { storageIdentityError } from '../../_storage-identity'
 import { notFound } from "@/lib/api/responses";
 

@@ -1,7 +1,7 @@
 import { defineRoute } from "@/lib/api/route";
 import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { db } from "@openbooks/engine/platform/db";
 import {
   addScheduleLine,
   createSchedule,
@@ -9,7 +9,7 @@ import {
   listSchedules,
   resolveWage,
   updateScheduleScope,
-} from "@openbooks/engine/src/hrm/construction/rates.ts";
+} from "@openbooks/engine/hrm/construction/rates";
 import { constructionErrorResponse } from "../_lib";
 import {
   addScheduleLineBody,

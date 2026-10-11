@@ -47,17 +47,17 @@ stubModules({
         return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: null }
       }
     `,
-    "@openbooks/engine/src/ledger/posting-document.ts": `
+    "@openbooks/engine/ledger/posting-document": `
       const state = globalThis[Symbol.for('openbooks.crew-batch-post-test')]
       export async function postDocument(documentId) {
         state.postedDocuments.push(documentId)
         return 'entry-1'
       }
     `,
-    "@openbooks/engine/src/payments/payment-accounts.ts": `
+    "@openbooks/engine/payments/payment-accounts": `
       export async function paymentControlDeps() { return {} }
     `,
-    "@openbooks/engine/src/hrm/field-time/crew.ts": `
+    "@openbooks/engine/hrm/field-time/crew": `
       const state = globalThis[Symbol.for('openbooks.crew-batch-post-test')]
       export async function approveBatch() { throw new Error('not under test') }
       export async function postBatch() {
@@ -69,7 +69,7 @@ stubModules({
       export async function submitBatch() { throw new Error('not under test') }
       export async function withdrawBatch() { throw new Error('not under test') }
     `,
-    "@openbooks/engine/src/hrm/field-time/reads.ts": `
+    "@openbooks/engine/hrm/field-time/reads": `
       export async function getBatchDetail() { return { id: '${BATCH_ID}' } }
     `,
   },

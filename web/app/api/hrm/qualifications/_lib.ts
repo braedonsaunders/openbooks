@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
-import { HrmAuthorizationError } from "@openbooks/engine/src/hrm/authorization.ts";
-import { HrmQualificationError } from "@openbooks/engine/src/hrm/qualifications/errors.ts";
+import { HrmAuthorizationError } from "@openbooks/engine/hrm/authorization";
+import { HrmQualificationError } from "@openbooks/engine/hrm/qualifications/errors";
 import { hrmAuthorizationResponse } from "../../../../lib/api/record-not-found";
 
 /**

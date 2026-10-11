@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { waiveMaterial } from "@openbooks/engine/src/manufacturing/completion.ts";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { waiveMaterial } from "@openbooks/engine/manufacturing/completion";
+import { db } from "@openbooks/engine/platform/db";
 import { can } from "@/lib/authz";
 import { defineRoute } from "@/lib/api/route";
 import { manufacturingTransaction } from "../../../../../_transaction";

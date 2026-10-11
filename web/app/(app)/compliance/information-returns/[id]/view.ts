@@ -2,7 +2,7 @@ import 'server-only'
 
 import { notFound } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
-import { formDefinition } from '@openbooks/engine/src/compliance/information-returns.ts'
+import { formDefinition } from '@openbooks/engine/compliance/information-returns'
 import { page, pageHeader, ref, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { can, requirePermission } from '../../../../../lib/authz'
 import { loadFiling, requireInformationReturnsFeature } from '../../../../../lib/compliance'

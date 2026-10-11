@@ -45,10 +45,10 @@ const { GET: copies } = (await import(copiesUrl)) as typeof import('./copies/rou
 const { PATCH: editRecipient } = (await import(recipientUrl)) as typeof import('./recipients/[recipientId]/route.ts')
 hooks.deregister()
 
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
 const { sql } = await import('drizzle-orm')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
-const { ensureFiling } = await import('@openbooks/engine/src/compliance/information-returns.ts')
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
+const { ensureFiling } = await import('@openbooks/engine/compliance/information-returns')
 
 
 const json = (body: unknown) =>

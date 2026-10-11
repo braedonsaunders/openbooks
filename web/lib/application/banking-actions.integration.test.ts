@@ -8,8 +8,8 @@ import test from "node:test";
 // permission refusal, subsidiary restriction, feature-off, and cross-org
 // isolation.
 const { sql } = await import("drizzle-orm");
-const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
 const { applicationTool, executeApplicationTool } = await import("./tool-catalog.ts");
 type ApplicationContext = import("./context.ts").ApplicationContext;
 

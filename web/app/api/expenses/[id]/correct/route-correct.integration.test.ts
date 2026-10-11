@@ -35,17 +35,17 @@ registerHooks({
   },
 })
 const { sql } = await import('drizzle-orm')
-const { db, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
-const { documentRevisionCounterSql } = await import('@openbooks/engine/src/records/revision.ts')
-const { submitAndReleaseIfUngated } = await import('@openbooks/engine/src/flows/submit.ts')
-const { postDocument } = await import("@openbooks/engine/src/ledger/posting-document.ts");
+const { db, withOrgContext } = await import('@openbooks/engine/platform/db')
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
+const { documentRevisionCounterSql } = await import('@openbooks/engine/records/revision')
+const { submitAndReleaseIfUngated } = await import('@openbooks/engine/flows/submit')
+const { postDocument } = await import("@openbooks/engine/ledger/posting-document");
 const { POST } = await import('./route.ts')
 // The route's web/lib chain (documents → org-scope → auth → request-org)
 // registers the app RLS resolver at import time, replacing the preloaded
 // trusted-test boundary for this process (see route-recall). Re-install it
 // AFTER the web imports; the route scopes itself explicitly.
-const { installTrustedTestDatabaseBypass } = await import('@openbooks/engine/src/testing/database-bypass.ts')
+const { installTrustedTestDatabaseBypass } = await import('@openbooks/engine/testing/database-bypass')
 installTrustedTestDatabaseBypass()
 
 function as(actorId: string, permissions: string[] = ['expenses.create', 'ap.post']) {

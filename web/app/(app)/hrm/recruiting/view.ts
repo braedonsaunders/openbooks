@@ -18,13 +18,13 @@ import {
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/db'
 import {
   getCandidateDetail,
   getOfferDetail,
   getRequisitionDetail,
   listRequisitions,
-} from '@openbooks/engine/src/hrm/recruiting/recruiting-read.ts'
+} from '@openbooks/engine/hrm/recruiting/recruiting-read'
 import { listActiveJobDescriptions } from '@openbooks/engine/hrm/recruiting/job-descriptions'
 import { hrmGroupTabs } from '../../../../components/module-home/group-tabs'
 import { can, requirePermission, type Authz } from '../../../../lib/authz'
@@ -67,8 +67,8 @@ import {
   rootSubsidiary,
   subsidiaryUiOptions,
 } from '../../../../lib/subsidiaries'
-import { businessTimeZone } from '@openbooks/engine/src/platform/business-date.ts'
-import { requireOwnRequisitionForHiringManager } from '@openbooks/engine/src/hrm/authorization.ts'
+import { businessTimeZone } from '@openbooks/engine/platform/business-date/module'
+import { requireOwnRequisitionForHiringManager } from '@openbooks/engine/hrm/authorization'
 import type { RecruitingCreateProps } from './RecruitingCreateForm'
 import type {
   CandidateDrawerData,

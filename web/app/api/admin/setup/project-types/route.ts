@@ -4,14 +4,14 @@ import { apiErrorResponse } from '@/lib/api/error-response'
 
 import { NextResponse } from 'next/server'
 import { sql, type SQL } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/db'
 import {
   assertValidProjectFinancialProfile,
   canonicalizeProjectFinancialProfile,
   publishProjectFinancialProfileInTransaction,
-} from '@openbooks/engine/src/projects/financial-profile-versions.ts'
+} from '@openbooks/engine/projects/financial-profile-versions'
 import type { FinancialProfile } from '@openbooks/schema'
-import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
+import { businessToday } from '@openbooks/engine/platform/business-date/module'
 import { guardPermission, guardUnrestrictedScope } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
 import { guardProjectsFeature } from '../../../../../lib/projects-gate'

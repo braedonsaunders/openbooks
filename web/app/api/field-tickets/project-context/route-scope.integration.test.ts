@@ -49,7 +49,7 @@ const hooks = registerHooks({
         }
       `)
     }
-    if (specifier === '@openbooks/engine/src/platform/db.ts') {
+    if (specifier === '@openbooks/engine/platform/db') {
       const real = nextResolve(specifier, context).url
       return module_(`
         export * from ${JSON.stringify(real)};

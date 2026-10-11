@@ -2,7 +2,7 @@ import 'server-only'
 
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/db'
 import {
   column,
   drill,
@@ -24,9 +24,9 @@ import { can, requirePermission } from '../../../lib/authz'
 import { requireFeatureEnabled } from '../../../lib/feature-gates'
 import { isFeatureEnabled } from '../../../lib/features'
 import type { ReportDrillTarget } from '../../../lib/report-drill'
-import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
-import { loadFundCoverageTieout, fundLedgerDrillScope } from '@openbooks/engine/src/nonprofit/statements.ts'
-import { NonprofitError } from '@openbooks/engine/src/nonprofit/errors.ts'
+import { businessToday } from '@openbooks/engine/platform/business-date/module'
+import { loadFundCoverageTieout, fundLedgerDrillScope } from '@openbooks/engine/nonprofit/statements'
+import { NonprofitError } from '@openbooks/engine/nonprofit/errors'
 import { getMoneyFormatter } from '../../../lib/money-server'
 import { nonprofitGroupTabs } from '../../../components/module-home/group-tabs'
 import type { DirectoryItem } from '../../../components/module-home/ui'

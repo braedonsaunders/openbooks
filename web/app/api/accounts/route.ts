@@ -2,11 +2,11 @@ import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { db } from "@openbooks/engine/platform/db";
 import {
   lockScopeRow,
   ScopeNotFoundError,
-} from "@openbooks/engine/src/organization/subsidiary-scope.ts";
+} from "@openbooks/engine/organization/scope";
 import { ACCOUNT_TYPES } from "@openbooks/schema";
 import {
   guardSubsidiaryScope,

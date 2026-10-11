@@ -2,11 +2,11 @@ import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { db } from "@openbooks/engine/platform/db";
 import {
   BackupStorageDeleteError,
   purgeBackupRun,
-} from "@openbooks/engine/src/backup/backup.ts";
+} from "@openbooks/engine/backup/backup";
 import { guardPermission } from "../../../../../lib/authz";
 import { isUuid } from "../../../../../lib/list-params";
 import { notFound } from "@/lib/api/responses";

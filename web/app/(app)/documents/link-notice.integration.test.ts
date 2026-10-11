@@ -56,9 +56,9 @@ registerHooks({
 })
 
 const { loadDocuments } = await import('./view.ts')
-const { db } = await import('../../../../engine/src/platform/db.ts')
+const { db } = await import('@openbooks/engine/platform/db')
 const { createScratchOrg, dropScratchOrg, createScratchUser } = await import(
-  '../../../../engine/src/testing/fixtures.ts'
+  '@openbooks/engine/testing/fixtures'
 )
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL)

@@ -10,8 +10,8 @@ registerHooks({
 })
 
 const { sql } = await import('drizzle-orm')
-const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/platform/db')
+const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
 const { sentinelData } = await import('./sentinel-data')
 const { analyticsConfig } = await import('./config.ts')
 const { withAnalyticsRead } = await import('./read-context')

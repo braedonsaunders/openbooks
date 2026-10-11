@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import {
   linkCompetency,
   setSectionCompetency,
-} from "@openbooks/engine/src/hrm/performance/competencies.ts";
+} from "@openbooks/engine/hrm/performance/competencies";
 
 import { isFeatureEnabled } from "../../../../lib/features";
 import { performanceErrorResponse } from "../review-cycles/_lib";

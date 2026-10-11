@@ -1,4 +1,4 @@
-import { getContractPricingSubsidiary, setContractPricing } from "@openbooks/engine/src/revenue/recognition-transaction-price.ts";
+import { getContractPricingSubsidiary, setContractPricing } from "@openbooks/engine/revenue/recognition-transaction-price";
 import { defineRoute } from "@/lib/api/route";
 import { guardSubsidiaryScope } from "@/lib/authz";
 import { notFound } from "@/lib/api/responses";

@@ -15,12 +15,12 @@ const _hooks = registerHooks({
         shortCircuit: true,
         url: "mock:asset-group-valuation-route-auth",
       };
-    if (specifier === "@openbooks/engine/src/assets/group-valuations.ts")
+    if (specifier === "@openbooks/engine/assets/group-valuations")
       return {
         shortCircuit: true,
         url: "mock:asset-group-valuation-route-domain",
       };
-    if (specifier === "@openbooks/engine/src/platform/db.ts")
+    if (specifier === "@openbooks/engine/platform/db")
       return {
         shortCircuit: true,
         url: "data:text/javascript,export const db={execute:async()=>({rows:[]})}",

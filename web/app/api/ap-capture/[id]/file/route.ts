@@ -3,8 +3,8 @@ import { z } from 'zod'
 import { apiErrorResponse } from '@/lib/api/error-response'
 import 'next/server';
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { withScopeSnapshot } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
+import { db } from '@openbooks/engine/platform/db'
+import { withScopeSnapshot } from '@openbooks/engine/organization/scope'
 import { can } from '../../../../../lib/authz';
 import { isMaskedFileContentError } from '../../../../../lib/file-storage'
 import { getFileBlob } from '../../../../../lib/file-cabinet'

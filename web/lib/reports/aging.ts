@@ -1,12 +1,12 @@
 import "server-only";
 import { sql, type SQL } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { db } from "@openbooks/engine/platform/db";
 import { statementBookExpr } from "../gl-summary";
-import { mulDecimal } from "@openbooks/engine/src/money/money.ts";
+import { mulDecimal } from "@openbooks/engine/money/money";
 // Relative (not the bare workspace specifier): worktree node_modules resolves
 // bare @openbooks/* to the main checkout, so a new engine module would not
 // resolve until merge; a relative import binds this checkout everywhere.
-import { AP_OPEN_ITEM_KINDS, AR_OPEN_ITEM_KINDS } from "../../../engine/src/records/open-item-kinds.ts";
+import { AP_OPEN_ITEM_KINDS, AR_OPEN_ITEM_KINDS } from "@openbooks/engine/records/open-item-kinds";
 import { resolveOrgId } from "../org-scope";
 import { presentationCurrency, presentationRates, presentationSpotRatesSql, presentationAmountSql } from "../fx-presentation";
 import { decimalAdd, decimalCmp, decimalNeg, type ExactDecimal } from "../statement-format";

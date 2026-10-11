@@ -1,4 +1,4 @@
-import { approveAndExecuteNormalizationRequest } from "@openbooks/engine/src/billing/metrics/metrics-normalization-service.ts";
+import { approveAndExecuteNormalizationRequest } from "@openbooks/engine/billing/metrics/metrics-normalization-service";
 import { defineRoute } from "@/lib/api/route";
 import { can, getAuthz } from "@/lib/authz";
 import { NextResponse } from "next/server";

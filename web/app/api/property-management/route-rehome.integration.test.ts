@@ -28,9 +28,9 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context);
 } });
 const { sql } = await import('drizzle-orm');
-const { db, pool, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts');
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts');
-const { createManagedProperty, createPropertyUnit } = await import('@openbooks/engine/src/property/management.ts');
+const { db, pool, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db');
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures');
+const { createManagedProperty, createPropertyUnit } = await import('@openbooks/engine/property/management');
 const { GET, POST } = await import('./route.ts');
 const { GET: reconGET } = await import('./deposit-reconciliation/route.ts');
 

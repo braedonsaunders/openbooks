@@ -9,8 +9,8 @@ import test from 'node:test'
 // the shared test hooks.
 const { reportBookSelection, ReportBookSelectionError } = await import('../../../lib/report-books.ts')
 const { sql } = await import('drizzle-orm')
-const { db, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { db, withBypass, withOrgContext } = await import('@openbooks/engine/platform/db')
+const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
 
 
 test('a one-book org resolves its primary book with no selection', async () => {

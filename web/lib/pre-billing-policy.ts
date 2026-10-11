@@ -1,5 +1,5 @@
 import type { FinancialProfile, InvoicingProfile } from '@openbooks/schema'
-import { add, cmp, mul, mulPercent, neg, normalizeMoney } from '@openbooks/engine/src/money/money.ts'
+import { add, cmp, mul, mulPercent, neg, normalizeMoney } from '@openbooks/engine/money/money'
 
 export type PreBillingPolicyVersion = {
   id: string | null

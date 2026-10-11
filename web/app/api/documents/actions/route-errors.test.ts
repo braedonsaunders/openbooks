@@ -5,11 +5,11 @@ import test from 'node:test'
 // failure map is pure (no DB, no session), but the route module drags the
 
 const { toActionFailure } = await import('./action-failure')
-const { PostingError } = await import("@openbooks/engine/src/journal/posting-contracts.ts");
-const { ControlAccountsIncompleteError } = await import('@openbooks/engine/src/records/control-accounts.ts')
-const { PayrollError } = await import('@openbooks/engine/src/payroll/error.ts')
-const { InventoryError, InventoryOwnershipError } = await import('@openbooks/engine/src/inventory/contracts.ts')
-const { PostingEffectsReplayError } = await import('@openbooks/engine/src/ledger/posting-effects.ts')
+const { PostingError } = await import("@openbooks/engine/journal/contracts");
+const { ControlAccountsIncompleteError } = await import('@openbooks/engine/records/control-accounts')
+const { PayrollError } = await import('@openbooks/engine/payroll/error')
+const { InventoryError, InventoryOwnershipError } = await import('@openbooks/engine/inventory/contracts/module')
+const { PostingEffectsReplayError } = await import('@openbooks/engine/ledger/posting-effects')
 const { postingRefusal } = await import('@/lib/api/responses')
 
 test('typed refusals keep their message as a 422', () => {

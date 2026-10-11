@@ -17,11 +17,11 @@ registerHooks({
     return next(specifier, context)
   },
 })
-const { db, pool, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, pool, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
 const { sql } = await import('drizzle-orm')
-const { resolveCertificate, payrollCertificate } = await import('@openbooks/engine/src/payroll/certificates.ts')
-const { requireUsFederalAlienStatus } = await import('@openbooks/engine/src/payroll/us/employee-facts.ts')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { resolveCertificate, payrollCertificate } = await import('@openbooks/engine/payroll/certificates')
+const { requireUsFederalAlienStatus } = await import('@openbooks/engine/testing/payroll/us/employee-facts')
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
 const { GET, POST, PATCH, DELETE } = await import('./route')
 const { readApiErrorMessage } = await import('../../../../lib/api-error')
 

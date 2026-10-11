@@ -1,11 +1,11 @@
 import "server-only";
 import { sql } from "drizzle-orm";
 import { projectTasks, projects, resAssignments } from "@openbooks/schema";
-import type { AvailabilityFigure } from "@openbooks/engine/src/resourcing/availability.ts";
-import { readAvailability } from "@openbooks/engine/src/resourcing/availability-read.ts";
-import { sum } from "@openbooks/engine/src/money/money.ts";
-import { addCalendarDays } from "@openbooks/engine/src/platform/business-date.ts";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import type { AvailabilityFigure } from "@openbooks/engine/resourcing/availability";
+import { readAvailability } from "@openbooks/engine/resourcing/availability-read";
+import { sum } from "@openbooks/engine/money/money";
+import { addCalendarDays } from "@openbooks/engine/platform/business-date/module";
+import { db } from "@openbooks/engine/platform/db";
 import { subsidiaryVisibleFilter } from "../subsidiaries.ts";
 import { loadFieldDefs } from "../custom-fields.ts";
 

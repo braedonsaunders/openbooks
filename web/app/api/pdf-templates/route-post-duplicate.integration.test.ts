@@ -54,9 +54,9 @@ const hooks = registerHooks({
 const routeUrl = "./route.ts?pdf-template-post-duplicate-test";
 const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
 
-const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { createScratchOrg, createScratchUser } = await import(
-  "@openbooks/engine/src/testing/fixtures.ts"
+  "@openbooks/engine/testing/fixtures"
 );
 
 async function seed(): Promise<{ orgId: string; actorId: string }> {

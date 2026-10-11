@@ -15,9 +15,9 @@ import {
   type BillingTiming,
   type Interval,
   type RenewalPolicy,
-} from "@openbooks/engine/src/billing/advanced-subscriptions.ts";
-import { normalizeMoney } from "@openbooks/engine/src/money/money.ts";
-import { UnrestrictedScopeError } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
+} from "@openbooks/engine/billing/advanced-subscriptions";
+import { normalizeMoney } from "@openbooks/engine/money/money";
+import { UnrestrictedScopeError } from "@openbooks/engine/organization/scope";
 import { guardUnrestrictedScope } from "../../../../lib/authz";
 import { canonicalDecimal } from "../../../../lib/exact-decimal";
 import { moneyRefusal } from "../../../../lib/payroll-decimal-refusal";

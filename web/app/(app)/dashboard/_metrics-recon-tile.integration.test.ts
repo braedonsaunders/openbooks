@@ -1,3 +1,4 @@
+import { resolveEngineSpecifier } from '../../../testing/engine-resolve-hooks.ts'
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
@@ -10,22 +11,19 @@ stubModules({ intl: "export async function getTranslations(){return (key)=>key};
 registerHooks({
   resolve(specifier, context, nextResolve) {
 
-    if (specifier.startsWith("@openbooks/engine/src/")) {
-      return nextResolve(
-        new URL(`../../../../engine/${specifier.slice("@openbooks/engine/".length)}`, import.meta.url).href,
-        context,
-      );
-    }
+
+    const engineUrl = resolveEngineSpecifier(specifier);
+    if (engineUrl) return nextResolve(engineUrl, context);
     return nextResolve(specifier, context);
   },
 });
 
 const { sql } = await import("drizzle-orm");
-const { db, withBypass, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
+const { db, withBypass, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
 const { loadDashboardMetrics } = await import("./_metrics.ts");
 type Authz = import("@/lib/authz.ts").Authz;
-type ScratchOrg = import("@openbooks/engine/src/testing/fixtures.ts").ScratchOrg;
+type ScratchOrg = import("@openbooks/engine/testing/fixtures").ScratchOrg;
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 

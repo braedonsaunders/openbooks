@@ -5,7 +5,7 @@ import { z } from "zod";
 import {
   resolveSourceDeletion,
   SourceDeletionResolutionError,
-} from "@openbooks/engine/src/sync/source-deletions.ts";
+} from "@openbooks/engine/sync/source-deletions";
 import { storageIdentityError } from "../../../_storage-identity";
 import { notFound } from "@/lib/api/responses";
 

@@ -4,7 +4,7 @@ import type { ListViewConfig, FilterClause } from "@openbooks/customization";
 import type { EntityAdhoc } from "./adhoc";
 import { statementBookExpr } from "../../gl-summary";
 import { pushCustomFieldFilter, uuidOrFalse } from "../list-query";
-import { subsidiaryVisibleFilter } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
+import { subsidiaryVisibleFilter } from "@openbooks/engine/organization/scope";
 
 /* ------------------------------------------------------------------ */
 /* Accounts                                                            */

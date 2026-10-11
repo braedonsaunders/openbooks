@@ -20,7 +20,7 @@ stubModules({
     "../subsidiary-scope": `
       export async function guardPayrollYearEndFilings() { return null }
     `,
-    "@openbooks/engine/src/payroll/yearend.ts": `
+    "@openbooks/engine/payroll/yearend": `
       export async function orgYearEndFilings() { return [] }
     `,
   },

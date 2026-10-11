@@ -60,9 +60,9 @@ const _hooks = registerHooks({
 const routeUrl = './route.ts?file-cabinet-bulk'
 const { POST } = (await import(routeUrl)) as typeof import('./route.ts')
 
-const { db } = await import('@openbooks/engine/src/platform/db.ts')
+const { db } = await import('@openbooks/engine/platform/db')
 const { createScratchOrg, dropScratchOrg } = await import(
-  '@openbooks/engine/src/testing/fixtures.ts'
+  '@openbooks/engine/testing/fixtures'
 )
 
 function gate(orgId: string, userId: string, permissions: string[]) {

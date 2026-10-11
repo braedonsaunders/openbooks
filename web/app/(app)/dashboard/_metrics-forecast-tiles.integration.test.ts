@@ -1,3 +1,4 @@
+import { resolveEngineSpecifier } from '../../../testing/engine-resolve-hooks.ts'
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
@@ -17,27 +18,24 @@ registerHooks({
     // second db pool without the test bypass). Pin them to this checkout —
     // the same modules a real install resolves — process-wide, so the
     // loader under test and its transitive engine imports agree.
-    if (specifier.startsWith("@openbooks/engine/src/")) {
-      return nextResolve(
-        new URL(`../../../../engine/${specifier.slice("@openbooks/engine/".length)}`, import.meta.url).href,
-        context,
-      );
-    }
+
+    const engineUrl = resolveEngineSpecifier(specifier);
+    if (engineUrl) return nextResolve(engineUrl, context);
     return nextResolve(specifier, context);
   },
 });
 
 const { sql } = await import("drizzle-orm");
-const { db, withBypass, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
-const { toUnits } = await import("@openbooks/engine/src/money/money.ts");
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
-const { withSimClock: pinClock } = await import("@openbooks/engine/src/platform/clock.ts");
+const { db, withBypass, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { toUnits } = await import("@openbooks/engine/money/money");
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
+const { withSimClock: pinClock } = await import("@openbooks/engine/testing/platform/clock");
 const { arPosition } = await import("@/lib/cash/ar-position.ts");
 const { apPosition } = await import("@/lib/cash/ap-position.ts");
 const { loadDashboardMetrics } = await import("./_metrics.ts");
 const { canSeeWidget } = await import("./_widget-access.ts");
 type Authz = import("@/lib/authz.ts").Authz;
-type ScratchOrg = import("@openbooks/engine/src/testing/fixtures.ts").ScratchOrg;
+type ScratchOrg = import("@openbooks/engine/testing/fixtures").ScratchOrg;
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 const TODAY = "2026-07-15";

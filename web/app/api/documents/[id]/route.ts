@@ -6,21 +6,21 @@ import { parseJsonBody } from "@/lib/api/json";
 import { isDocumentRevisionToken } from "@/lib/api/registry-data";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
-import { deleteDocument, DeleteError } from '@openbooks/engine/src/ledger/document-delete.ts'
-import { ScopeNotFoundError } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
-import { checkFlowLock, userRoleKeys } from '@openbooks/engine/src/flows/index.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
+import { deleteDocument, DeleteError } from '@openbooks/engine/ledger/document-delete'
+import { ScopeNotFoundError } from '@openbooks/engine/organization/scope'
+import { checkFlowLock, userRoleKeys } from '@openbooks/engine/flows/module'
 import { getAuthz, can, guardSubsidiaryScope, subsidiariesInScope } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { isUuid } from '../../../../lib/list-params'
 import { applyDocumentEdit, isDocKindEnabled } from "../../../../lib/documents.ts";
-import { DOCUMENT_EDIT_VERSION_REQUIRED, DocumentEditError } from "../../../../../engine/src/records/document-edit-policy.ts";
-import { documentRevisionCounterSql } from "../../../../../engine/src/records/revision.ts";
-import { loadDocument } from "../../../../../engine/src/ledger/document-service.ts";
+import { DOCUMENT_EDIT_VERSION_REQUIRED, DocumentEditError } from "@openbooks/engine/records/document-edit-policy";
+import { documentRevisionCounterSql } from "@openbooks/engine/records/revision";
+import { loadDocument } from "@openbooks/engine/ledger/document-service";
 import { DOC_KINDS, createPermission } from "../../../../lib/document-kinds.ts";
 import { canReadDocumentKind } from "../../../../lib/flow-subject-authz.ts";
 import { lockedDocumentScopeDenied } from "../../../../lib/document-scope.ts";
-import { type DocumentEditCurrent, type DocumentEditInput } from "../../../../../engine/src/ledger/document-input.ts";
+import { type DocumentEditCurrent, type DocumentEditInput } from "@openbooks/engine/ledger/document-input";
 import { notFound } from "@/lib/api/responses";
 const PATCHBodySchema1 = documentEditBodySchema.refine((body) => Object.keys(body).length > 0, { message: "At least one field must be provided." });
 

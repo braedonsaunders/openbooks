@@ -9,15 +9,15 @@
  */
 import { readFile } from "node:fs/promises";
 import { parseArgs } from "node:util";
-import { pool, withOrgTransaction } from "../engine/src/platform/db.ts";
+import { pool, withOrgTransaction } from "@openbooks/engine/platform/db";
 import {
   reconcilePayrollFilingAccounts,
   type PayrollFilingReconciliation,
-} from "../engine/src/payroll/filing-reconciliation.ts";
+} from "@openbooks/engine/payroll/filing-reconciliation";
 import {
   reconcilePayrollLiabilityAccounts,
   type PayrollLiabilityReconciliation,
-} from "../engine/src/payroll/liability-reconciliation.ts";
+} from "@openbooks/engine/payroll/liability-reconciliation";
 
 type Reconcile = (input: { orgId: string; actorId: string; rows: unknown[] }) => Promise<number>;
 

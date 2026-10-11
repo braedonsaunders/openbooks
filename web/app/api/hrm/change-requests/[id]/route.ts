@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import {
   getChangeRequest,
   updateChangeRequestPayload,
-} from "@openbooks/engine/src/hrm/change-requests.ts";
+} from "@openbooks/engine/hrm/change-requests/operations";
 import { isUuid } from "../../../../../lib/list-params";
 import { changeRequestErrorResponse } from "../_lib";
 import { patchChangeRequestBody } from "../bodies";

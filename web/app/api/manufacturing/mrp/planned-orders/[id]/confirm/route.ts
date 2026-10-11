@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { confirmPlannedOrder, getPlannedOrder } from "@openbooks/engine/src/manufacturing/mrp.ts";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { confirmPlannedOrder, getPlannedOrder } from "@openbooks/engine/manufacturing/mrp";
+import { db } from "@openbooks/engine/platform/db";
 import { guardSubsidiaryScope } from "@/lib/authz";
 import { defineRoute } from "@/lib/api/route";
 import { manufacturingTransaction } from "../../../../_transaction";

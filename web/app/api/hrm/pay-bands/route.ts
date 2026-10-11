@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import {
   createPayBand,
   listPayBands,
-} from "@openbooks/engine/src/hrm/compensation/bands.ts";
+} from "@openbooks/engine/hrm/compensation/bands";
 
 import { isUuid } from "../../../../lib/list-params";
 import { compensationErrorResponse } from "../compensation/_lib";

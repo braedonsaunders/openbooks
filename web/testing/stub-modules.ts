@@ -235,7 +235,7 @@ export function stubModules(options: StubModulesOptions = {}): void {
 
   registerHooks({
     resolve(specifier, context, next) {
-      if (platformDbOverride !== undefined && specifier === "@openbooks/engine/src/platform/db.ts") {
+      if (platformDbOverride !== undefined && specifier === "@openbooks/engine/platform/db") {
         return virtual(platformDbOverride);
       }
       if (navigation !== null && specifier === "next/navigation") {

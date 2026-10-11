@@ -9,4 +9,4 @@ export {
   moneyRefusal,
   suppliedValue,
   type DecimalNullCause,
-} from "@openbooks/engine/src/money/decimal-refusal.ts";
+} from "@openbooks/engine/money/decimal-refusal";

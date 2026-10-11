@@ -6,7 +6,7 @@ import { NextResponse } from 'next/server'
 import {
   InformationReturnError,
   updateFilingRecipient,
-} from '@openbooks/engine/src/compliance/information-returns.ts'
+} from '@openbooks/engine/compliance/information-returns'
 import { guardSubsidiaryScope } from '@/lib/authz';
 import { guardInformationReturnsFeature, loadInformationReturnFilingScope } from '@/lib/compliance'
 import { complianceWriteFailure } from '@/lib/compliance-errors'

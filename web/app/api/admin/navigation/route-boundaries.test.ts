@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { registerHooks } from 'node:module'
 import { PgDialect } from 'drizzle-orm/pg-core'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/db'
 import type { OrgNavConfig } from '../../../../lib/nav/registry'
 
 const guardKey = Symbol.for('openbooks.navigation.boundary.guard')
@@ -17,7 +17,7 @@ registerHooks({
   load(url, context, next) {
     if (url === 'mock:navigation-boundary-guard') return { shortCircuit: true, format: 'module', source: `
       import { NextResponse } from 'next/server';
-      import { permissionSetCovers } from '@openbooks/engine/src/organization/permissions.ts';
+      import { permissionSetCovers } from '@openbooks/engine/organization/permissions';
       export async function guardPermission(key) {
         const authz = globalThis[Symbol.for('openbooks.navigation.boundary.guard')];
         return permissionSetCovers(authz.permissions, key) ? authz : NextResponse.json({error: 'missing permission: '+key}, {status:403});

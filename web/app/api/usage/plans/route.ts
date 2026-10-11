@@ -1,4 +1,4 @@
-import { createUsageRatingPlan, listUsageRatingPlans } from "@openbooks/engine/src/billing/usage/rating-plans.ts";
+import { createUsageRatingPlan, listUsageRatingPlans } from "@openbooks/engine/billing/usage/rating-plans";
 import { defineRoute } from "@/lib/api/route";
 import { idempotentUsageCreate } from "../_idempotent";
 import { z } from "zod";

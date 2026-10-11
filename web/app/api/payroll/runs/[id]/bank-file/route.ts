@@ -5,20 +5,20 @@ import { apiErrorResponse } from '@/lib/api/error-response'
 import { parseJsonBody } from "@/lib/api/json"
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/db'
 import {
   PAYROLL_BANK_FILE_FORMATS,
   payRunBankFilePopulation,
   payrollBankProfiles,
-} from '@openbooks/engine/src/payroll/bank-file.ts'
+} from '@openbooks/engine/payroll/bank-file'
 import {
   generatePayRunBankFile,
   listPayRunBankFiles,
   payRunBankFileAudit,
   payRunBankFileEntitlement,
-} from '@openbooks/engine/src/payroll/bank-file-artifact.ts'
-import { PayrollError } from "@openbooks/engine/src/payroll/error.ts";
-import { SandboxEgressError } from '@openbooks/engine/src/organization/sandbox-guard.ts'
+} from '@openbooks/engine/payroll/bank-file-artifact'
+import { PayrollError } from "@openbooks/engine/payroll/error";
+import { SandboxEgressError } from '@openbooks/engine/organization/sandbox-guard'
 import '../../../../../../lib/feature-gates';
 import { guardSubsidiaryScope } from '../../../../../../lib/authz'
 import { isUuid } from '../../../../../../lib/list-params'

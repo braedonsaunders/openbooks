@@ -3,16 +3,16 @@ import { defineRoute } from '@/lib/api/route'
 import { parseJsonBody } from '@/lib/api/json'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
-import { nextNumber } from "@openbooks/engine/src/payments/payment-documents.ts";
+import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
+import { nextNumber } from "@openbooks/engine/payments/payment-documents";
 import '@/lib/authz';
 import { complianceSubsidiaryFilter, guardLienWaiverFeature, loadLienWaivers } from '@/lib/compliance'
 import { complianceWriteFailure } from '@/lib/compliance-errors'
 import { isUuid, pickString } from '@/lib/list-params'
 import { normalizeMoney, wholeDigits } from '@openbooks/engine/money'
-import { isIso4217CurrencyCode } from '@openbooks/engine/src/fx/currencies.ts'
-import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
-import { normalizeSubdivisionCode } from '@openbooks/engine/src/compliance/lien-jurisdictions.ts'
+import { isIso4217CurrencyCode } from '@openbooks/engine/fx/currencies'
+import { isIsoCalendarDate } from '@openbooks/engine/platform/business-date/module'
+import { normalizeSubdivisionCode } from '@openbooks/engine/compliance/lien-jurisdictions'
 import { canonicalDecimal } from '@/lib/exact-decimal'
 import { moneyRefusal } from '@/lib/payroll-decimal-refusal'
 

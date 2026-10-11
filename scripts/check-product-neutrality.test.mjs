@@ -83,9 +83,7 @@ test('catalog cognate pins may quote connector-namespace keys', () => {
   assert.equal(isConnectorPath('web/messages/catalog-parity.test.ts'), true)
 })
 
-test('the implementation-import budget may name connector paths without admitting adjacent product files', () => {
-  assert.deepEqual(auditPublicSnapshot(['scripts/engine-internal-imports.json']), [])
-  assert.equal(isConnectorPath('scripts/engine-internal-imports.json.ts'), false)
+test('product translations remain outside connector namespaces', () => {
   assert.equal(isConnectorPath('web/messages/en/admin.json'), false)
 })
 

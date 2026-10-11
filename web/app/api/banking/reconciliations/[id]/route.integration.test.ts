@@ -3,9 +3,9 @@ import { randomUUID } from 'node:crypto'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
 import { sql } from 'drizzle-orm'
-import { withBypassContext, db  } from '@openbooks/engine/src/platform/db.ts'
-import { autoMatch, importStatement, markReconciled, startReconciliation } from '@openbooks/engine/src/banking/banking.ts'
-import { createScratchOrg, dropScratchOrg, seedFlowActors } from '@openbooks/engine/src/testing/fixtures.ts'
+import { withBypassContext, db  } from '@openbooks/engine/platform/db'
+import { autoMatch, importStatement, markReconciled, startReconciliation } from '@openbooks/engine/banking/banking'
+import { createScratchOrg, dropScratchOrg, seedFlowActors } from '@openbooks/engine/testing/fixtures'
 import type { Authz } from '../../../../../lib/authz'
 
 const enabled = !!process.env.OPENBOOKS_DB_URL

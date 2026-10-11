@@ -4,10 +4,10 @@ import { jsonObject, parseJsonBody, validateJsonBody } from "@/lib/api/json";
 
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { documentRevisionSql, isDocumentRevisionToken } from '@openbooks/engine/src/records/revision.ts'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { documentRevisionSql, isDocumentRevisionToken } from '@openbooks/engine/records/revision'
+import { db } from '@openbooks/engine/platform/db'
 import { automationGraphSchema } from '@openbooks/forms-core'
-import { flowSubjectProfileForOrg, lintFlowGraphForSubject } from '@openbooks/engine/src/flows/index.ts'
+import { flowSubjectProfileForOrg, lintFlowGraphForSubject } from '@openbooks/engine/flows/module'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 
 import { filterFlowRunSubjectsToScope } from '../../../flows/_lib'

@@ -1,3 +1,4 @@
+import { resolveEngineSpecifier } from '../../../testing/engine-resolve-hooks.ts'
 import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { registerHooks } from 'node:module'
@@ -6,21 +7,18 @@ import { sql } from 'drizzle-orm'
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier.startsWith('@openbooks/engine/src/')) {
-      return nextResolve(
-        new URL(`../../../../engine/${specifier.slice('@openbooks/engine/'.length)}`, import.meta.url).href,
-        context,
-      )
-    }
+
     if (context.parentURL?.includes('/schema/src/') && /^\.{1,2}\//.test(specifier) && !/\.[cm]?tsx?$/.test(specifier)) {
       return nextResolve(new URL(`${specifier}.ts`, context.parentURL).href, context)
     }
+    const engineUrl = resolveEngineSpecifier(specifier);
+    if (engineUrl) return nextResolve(engineUrl, context);
     return nextResolve(specifier, context)
   },
 })
 
-const { db, withBypass } = await import('@openbooks/engine/src/platform/db.ts')
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { db, withBypass } = await import('@openbooks/engine/platform/db')
+const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
 const { loadAccount } = await import('./_lib.ts')
 
 test('URL drawer account reads hide out-of-scope subsidiaries and retain shared chart accounts', async () => {

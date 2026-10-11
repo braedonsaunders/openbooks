@@ -1,12 +1,12 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { db, schema, withOrgTransaction, type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
-import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
-import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
+import { db, schema, withOrgTransaction, type SqlExecutor } from '@openbooks/engine/platform/db'
+import { isIsoCalendarDate } from '@openbooks/engine/platform/business-date/module'
+import { normalizeMoney } from '@openbooks/engine/money/money'
 import { computeBillTotals, nextDocumentNumber, persistLineTaxComponents, taxProfileMap } from "./bills.ts";
-import { type BillLineInput } from "../../engine/src/ledger/document-input.ts";
-import { assertNoExistingDocumentCorrection, buildReversalLinkEvidence, DocumentEditError, requireDocumentEditRevision, runDocumentVersionedTransaction, validateCorrectionReason } from "../../engine/src/records/document-edit-policy.ts";
-import { documentRevisionCounterSql } from "../../engine/src/records/revision.ts";
+import { type BillLineInput } from "@openbooks/engine/ledger/document-input";
+import { assertNoExistingDocumentCorrection, buildReversalLinkEvidence, DocumentEditError, requireDocumentEditRevision, runDocumentVersionedTransaction, validateCorrectionReason } from "@openbooks/engine/records/document-edit-policy";
+import { documentRevisionCounterSql } from "@openbooks/engine/records/revision";
 import { validateEditableDocumentLines } from "./documents.ts";
 import { findUnownedCustomReferences, loadFieldDefs, validateCustomValues } from './custom-fields'
 import { canonicalDecimal } from './exact-decimal'

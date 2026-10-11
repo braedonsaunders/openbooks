@@ -2,14 +2,14 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { BUILT_IN_ROLES } from "@openbooks/engine/src/organization/permissions.ts";
-import { db, withBypassContext, withOrgContext } from "@openbooks/engine/src/platform/db.ts";
+import { BUILT_IN_ROLES } from "@openbooks/engine/organization/permissions";
+import { db, withBypassContext, withOrgContext } from "@openbooks/engine/platform/db";
 import {
   createScratchOrg,
   dropScratchOrg,
   seedFlowActors,
   type ScratchOrg,
-} from "@openbooks/engine/src/testing/fixtures.ts";
+} from "@openbooks/engine/testing/fixtures";
 import type { ApplicationContext } from "./context";
 import type { Authz } from "../authz";
 import type { SessionUser } from "../auth";

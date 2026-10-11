@@ -11,14 +11,14 @@ type DsoCall = { side: string; asOf: string; subIds: string[] | undefined; orgId
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[callsKey] = [] as DsoCall[]
 const mocks = new Map([
   ['server-only', 'export {}'],
-  ['@openbooks/engine/src/platform/db.ts', `
+  ['@openbooks/engine/platform/db', `
     export const db = { execute: async () => {
       // One canned row satisfies the org-currency lookup every dashboard
       // call ends with.
       return { rows: [{ baseCurrency: 'CAD' }] }
     } }
   `],
-  ['@openbooks/engine/src/platform/business-date.ts', `
+  ['@openbooks/engine/platform/business-date/module', `
     export async function businessToday() { return '2026-08-28' }
     export function addCalendarDays() { return '2026-08-21' }
     export function weekStartsEndingOn() { return ['2026-08-24'] }

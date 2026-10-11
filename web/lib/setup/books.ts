@@ -1,8 +1,8 @@
 import 'server-only'
 
 import { sql } from 'drizzle-orm'
-import type { SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
-import { lockLedgerSetupFence } from '@openbooks/engine/src/organization/ledger-setup-fence.ts'
+import type { SqlExecutor } from '@openbooks/engine/platform/db'
+import { lockLedgerSetupFence } from '@openbooks/engine/organization/ledger-setup'
 import { claimSetupCreate } from '../api/idempotency'
 import { auditSetupChange as audit } from './audit'
 import { coerceBoolean } from './coerce'

@@ -1,19 +1,19 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { db, withOrg } from '@openbooks/engine/src/platform/db.ts'
-import { utcDateFromParts } from '@openbooks/engine/src/platform/business-date.ts'
-import { lockAndCheckOrgFeature } from '@openbooks/engine/src/organization/org-feature-lock.ts'
-import { submitForApproval } from '@openbooks/engine/src/flows/index.ts'
+import { db, withOrg } from '@openbooks/engine/platform/db'
+import { utcDateFromParts } from '@openbooks/engine/platform/business-date/module'
+import { lockAndCheckOrgFeature } from '@openbooks/engine/organization/org-feature-lock'
+import { submitForApproval } from '@openbooks/engine/flows/module'
 import {
   captureFieldTicketLaborEvidence,
   type FieldTicketLaborEvidenceLine,
-} from '@openbooks/engine/src/projects/field-ticket-labor-evidence.ts'
-import { mul, div, isZero, add, sum, cmp, normalizeMoney } from '@openbooks/engine/src/money/money.ts'
+} from '@openbooks/engine/projects/field-ticket-labor-evidence'
+import { mul, div, isZero, add, sum, cmp, normalizeMoney } from '@openbooks/engine/money/money'
 import { recordFieldTicketProgressInTransaction } from '@openbooks/engine/projects/progress'
-import { businessToday, isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
+import { businessToday, isIsoCalendarDate } from '@openbooks/engine/platform/business-date/module'
 import { nextDocumentNumber } from "./bills.ts";
-import { documentRevisionCounterSql } from "../../engine/src/records/revision.ts";
-import { runDocumentVersionedTransaction } from "../../engine/src/records/document-edit-policy.ts";
+import { documentRevisionCounterSql } from "@openbooks/engine/records/revision";
+import { runDocumentVersionedTransaction } from "@openbooks/engine/records/document-edit-policy";
 import { canonicalDecimal } from './exact-decimal'
 import { unpricedLaborHours as fieldTicketUnpricedHours } from './field-ticket-totals'
 import { acquireFeatureGateLock, checkProjectsWriteEnabled, isFeatureEnabled } from './features'
@@ -22,8 +22,8 @@ import { resolveItemRate, snapshotTimeBillRates } from './item-rates'
 import { getS3Blob } from './file-storage'
 import { can, resolveAuthzByUserId, subsidiaryScopeAllows } from './authz'
 import { postPermission } from './document-kinds'
-import { lockEquipmentProjectScope, resolveDraftSubsidiary, ScopeNotFoundError } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
-import { isUuid } from '@openbooks/engine/src/platform/uuid.ts'
+import { lockEquipmentProjectScope, resolveDraftSubsidiary, ScopeNotFoundError } from '@openbooks/engine/organization/scope'
+import { isUuid } from '@openbooks/engine/platform/identifiers'
 
 /**
  * Field tickets — the signed crew timesheet for T&M work (the industry's

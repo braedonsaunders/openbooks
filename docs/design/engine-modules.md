@@ -60,3 +60,34 @@ file's current home.
 
 Operation ownership and transaction boundaries are described in
 [Financial operation boundaries](financial-operation-boundaries.md).
+
+## Package boundary
+
+The engine package exports explicit, named contracts. Application adapters,
+workers, scripts, shared packages and their tests import these contracts through
+`@openbooks/engine/<contract>`. Relative filesystem imports into the engine and
+`@openbooks/engine/src/...` are prohibited. There is no wildcard source export
+and no implementation-import exception ledger.
+
+Contracts remain narrow operation, policy, type or runtime entrypoints. A package
+export maps to its owning module without combining independent server and browser
+import graphs. Changing an implementation filename changes the package mapping,
+not its callers. Adding an exported function or a new entrypoint is a public API
+decision: prefer an existing command or read contract, retain its authorization
+and transaction semantics, and keep pure contracts separate from database code.
+
+Test support uses the `testing/` namespace and may be imported only by test
+consumers. Test loaders resolve the same package export map as Node; they do not
+reopen private source paths. They preserve the identity of shared pools, context
+storage and error classes.
+
+`check:engine-public-api` checks every external source file, including tests and
+operational scripts, and validates all export targets. The module graph checker
+resolves named package imports as well as relative imports, so a public contract
+cannot bypass dependency declarations or cycle detection. Both checks parse
+TypeScript syntax, including dynamic imports, CommonJS requires and type queries.
+
+The engine declares its own package dependencies, including validation and SSH
+transport libraries. Production source may not rely on dependencies installed
+only by the web workspace. The boundary check rejects undeclared dependencies
+and direct web/framework imports, including relative paths and file URLs.

@@ -96,7 +96,7 @@ registerHooks({
         url: "data:text/javascript,export async function hrmGroupTabs() { return []; }",
       };
     }
-    if (owned && specifier === "@openbooks/engine/src/hrm/change-requests.ts") {
+    if (owned && specifier === "@openbooks/engine/hrm/change-requests/operations") {
       return {
         shortCircuit: true,
         format: "module",
@@ -117,7 +117,7 @@ registerHooks({
     // the loader's instanceof catch keeps working. Stubbing an error-class
     // module would split the class identity and every refusal test would
     // see the error propagate instead of converting to data.
-    if (owned && specifier === "@openbooks/engine/src/platform/db.ts") {
+    if (owned && specifier === "@openbooks/engine/platform/db") {
       return {
         shortCircuit: true,
         format: "module",
@@ -133,7 +133,7 @@ const { resolveQueueStatus, segmentOfServiceStatus } = await import(
   "../../../../lib/hrm/queue-status.ts"
 );
 const { HrmAuthorizationError } = await import(
-  "@openbooks/engine/src/hrm/authorization.ts"
+  "@openbooks/engine/hrm/authorization"
 );
 
 const gap = globalThis as Record<string, unknown>;

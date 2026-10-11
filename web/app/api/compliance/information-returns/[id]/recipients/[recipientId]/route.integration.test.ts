@@ -85,14 +85,14 @@ const { POST } = (await import(postRouteUrl)) as typeof import("../../route.ts")
 // Unmatched specifiers still forward to the real modules, so the later
 // database and fixture imports below are unaffected.
 
-const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
 const {
   ensureFiling,
   finalizeFiling,
   markFilingFiled,
   recomputeFiling,
-} = await import("@openbooks/engine/src/compliance/information-returns.ts");
-const { createScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
+} = await import("@openbooks/engine/compliance/information-returns");
+const { createScratchOrg } = await import("@openbooks/engine/testing/fixtures");
 
 
 interface ComputedFiling {
@@ -528,6 +528,6 @@ test("no caller outside the engine service can reach the information-return tabl
 
 /** Teardown failures must not replace an in-flight assertion error. */
 async function dropScratchOrgReportingSafe(orgId: string): Promise<void> {
-  const { dropScratchOrgReporting } = await import("@openbooks/engine/src/testing/fixtures.ts");
+  const { dropScratchOrgReporting } = await import("@openbooks/engine/testing/fixtures");
   await dropScratchOrgReporting(orgId);
 }

@@ -86,9 +86,9 @@ const hooks = registerHooks({
 const routeUrl = "./route.ts?timesheets-reject";
 const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
 
-const { withBypassContext, db } = await import("@openbooks/engine/src/platform/db.ts");
+const { withBypassContext, db } = await import("@openbooks/engine/platform/db");
 const { createScratchOrg, createScratchUser, dropScratchOrg, seedActiveEmployment } = await import(
-  "@openbooks/engine/src/testing/fixtures.ts"
+  "@openbooks/engine/testing/fixtures"
 );
 
 const WEEK = "2026-07-12";

@@ -13,7 +13,7 @@ import { useMoney } from '@/components/money-provider'
 import { readApiErrorMessage } from '@/lib/api-error'
 import { minorToMajorText } from '@/lib/money-format'
 import { fulfillmentRequest } from '../_fulfillment/fulfillment-client'
-import type { ReturnAuthorization } from '@openbooks/engine/src/sales/returns.ts'
+import type { ReturnAuthorization } from '@openbooks/engine/sales/returns'
 
 type Props = {
   authorization: ReturnAuthorization

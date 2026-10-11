@@ -25,7 +25,7 @@ const routeState: RouteState = { authz: null };
 
 const mockAuthz = `
   import { NextResponse } from 'next/server';
-  import { permissionSetCovers } from '@openbooks/engine/src/organization/permissions.ts';
+  import { permissionSetCovers } from '@openbooks/engine/organization/permissions';
   const state = globalThis[Symbol.for('openbooks.ir-copies-furnish-test')]
   export async function guardPermission(permission) {
     if (!state.authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 });
@@ -80,13 +80,13 @@ const hooks = registerHooks({
 const routeUrl = "./route.ts?ir-copies-furnish-test";
 const { GET, POST } = (await import(routeUrl)) as typeof import("./route.ts");
 
-const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
 const {
   ensureFiling,
   finalizeFiling,
   recomputeFiling,
-} = await import("@openbooks/engine/src/compliance/information-returns.ts");
-const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
+} = await import("@openbooks/engine/compliance/information-returns");
+const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
 
 type Org = Awaited<ReturnType<typeof createScratchOrg>>;
 

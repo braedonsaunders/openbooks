@@ -3,8 +3,8 @@ import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, pool } from "@openbooks/engine/src/platform/db.ts";
-import { createScratchOrg, dropScratchOrg, seedFlowActors } from "@openbooks/engine/src/testing/fixtures.ts";
+import { db, pool } from "@openbooks/engine/platform/db";
+import { createScratchOrg, dropScratchOrg, seedFlowActors } from "@openbooks/engine/testing/fixtures";
 
 /**
  * Inventory writes lock the count / transfer order / voucher row and recheck
@@ -47,7 +47,7 @@ async function fixture() {
   const hidden = randomUUID();
   await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country) values (${hidden},${org.orgId},${org.subsidiaryId},'Hidden entity','CAD','CA')`);
   await db.execute(sql`insert into stock_locations(id,org_id,location_id,code,kind,is_active) values (${randomUUID()},${org.orgId},${org.locationId},'TRANSIT-SCOPE','transit',true)`);
-  const { receiveInventory } = await import("@openbooks/engine/src/inventory/movements.ts");
+  const { receiveInventory } = await import("@openbooks/engine/inventory/movements");
   await receiveInventory(org.orgId, actor, { itemId: org.items.fifo, stockLocationId: org.stockLocationId, quantity: "5", unitCost: "10", subsidiaryId: org.subsidiaryId, offsetAccountId: org.accounts.clearing, date: org.date });
   return { org, actor, hidden };
 }

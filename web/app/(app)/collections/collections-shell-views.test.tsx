@@ -16,7 +16,7 @@ stubModules({
     'next/link':
       `export default function Link(p){return globalThis.React.createElement('a',{href:p.href,'aria-current':p['aria-current'],className:p.className},p.children)}`,
     'server-only': `export {}`,
-    '@openbooks/engine/src/platform/db.ts':
+    '@openbooks/engine/platform/db':
       `export const db = { execute: async () => ({ rows: [] }) }`,
     '@openbooks/engine/payments/autopay':
       `export async function findCardsExpiringSoon(){return []}` +

@@ -52,9 +52,9 @@ const hooks = registerHooks({
   },
 })
 
-const { withBypassContext, db } = await import('@openbooks/engine/src/platform/db.ts')
+const { withBypassContext, db } = await import('@openbooks/engine/platform/db')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
-  '@openbooks/engine/src/testing/fixtures.ts'
+  '@openbooks/engine/testing/fixtures'
 )
 const { POST } = await import('./route.ts')
 // The factory's lazy session-gate import runs on every request, so the hook

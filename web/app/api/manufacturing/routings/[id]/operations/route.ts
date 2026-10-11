@@ -1,8 +1,8 @@
 import { lockManufacturingRoutingAuthority } from "@openbooks/engine/manufacturing/authority";
 import { z } from "zod";
-import { db } from "@openbooks/engine/src/platform/db.ts";
-import { createRoutingOperation, getRouting, type RoutingOperationInput } from "@openbooks/engine/src/manufacturing/routings.ts";
-import { getWorkCenter } from "@openbooks/engine/src/manufacturing/work-centers.ts";
+import { db } from "@openbooks/engine/platform/db";
+import { createRoutingOperation, getRouting, type RoutingOperationInput } from "@openbooks/engine/manufacturing/routings";
+import { getWorkCenter } from "@openbooks/engine/manufacturing/work-centers";
 import { guardRoutingSubsidiaryScope } from "../../../_scope";
 import { guardSubsidiaryScope } from "@/lib/authz";
 import { defineRoute } from "@/lib/api/route";

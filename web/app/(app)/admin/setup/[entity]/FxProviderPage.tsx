@@ -1,6 +1,6 @@
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { readFxProviderConfigView } from '@openbooks/engine/src/fx/providers.ts'
+import { db } from '@openbooks/engine/platform/db'
+import { readFxProviderConfigView } from '@openbooks/engine/fx/providers'
 import { FxProviderForm } from '../../../../../components/viewspec/native-widgets.client'
 
 export async function FxProviderPage({ orgId }: { orgId: string }) {

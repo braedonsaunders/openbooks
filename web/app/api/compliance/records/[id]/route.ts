@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { parseJsonBody } from "@/lib/api/json"
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/db'
 import { normalizeMoney, wholeDigits } from '@openbooks/engine/money'
 import { can, guardSubsidiaryScope } from '@/lib/authz';
 import { guardComplianceFeature } from '@/lib/compliance'
@@ -11,7 +11,7 @@ import { complianceWriteFailure } from '@/lib/compliance-errors'
 import { isUuid } from '@/lib/list-params'
 import { canonicalDecimal } from '@/lib/exact-decimal'
 import { moneyRefusal } from '@/lib/payroll-decimal-refusal'
-import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
+import { isIsoCalendarDate } from '@openbooks/engine/platform/business-date/module'
 import { notFound } from "@/lib/api/responses";
 
 // Keep numeric text at the JSON boundary; optionalCoverageMoney below owns the

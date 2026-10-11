@@ -48,9 +48,9 @@ registerHooks({
 
 const routeUrl = './route.ts?custom-record-draft-validation-test'
 const { POST } = (await import(routeUrl)) as typeof import('./route.ts')
-const { db, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypass, withOrgContext } = await import('@openbooks/engine/platform/db')
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  '@openbooks/engine/src/testing/fixtures.ts',
+  '@openbooks/engine/testing/fixtures',
 )
 
 async function seedType(orgId: string, actorId: string, fields: unknown): Promise<string> {

@@ -1,6 +1,6 @@
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { getMyRequests } from "@openbooks/engine/src/hrm/self-service/self-read.ts";
+import { getMyRequests } from "@openbooks/engine/hrm/self-service/self-read";
 import { meErrorResponse } from "../_lib";
 /**
  * The caller's own change requests, newest first — the overview's pending

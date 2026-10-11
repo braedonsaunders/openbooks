@@ -26,13 +26,13 @@ registerHooks({
 });
 
 const { sql } = await import("drizzle-orm");
-const { withBypassContext, db, withBypass, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
+const { withBypassContext, db, withBypass, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
-  "@openbooks/engine/src/testing/fixtures.ts"
+  "@openbooks/engine/testing/fixtures"
 );
 const { loadDashboardMetrics } = await import("./_metrics.ts");
 type Authz = import("@/lib/authz.ts").Authz;
-type ScratchOrg = import("@openbooks/engine/src/testing/fixtures.ts").ScratchOrg;
+type ScratchOrg = import("@openbooks/engine/testing/fixtures").ScratchOrg;
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 

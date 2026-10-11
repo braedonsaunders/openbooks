@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
 import { guardPermission, guardSubsidiaryScope } from "../../../../../lib/authz";
 import { rendererUnavailableResponse } from "../../../../../lib/api/pdf-renderer";
 import { unexpectedServerError } from "../../../../../lib/api/unexpected";

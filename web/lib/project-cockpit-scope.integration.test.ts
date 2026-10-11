@@ -2,9 +2,9 @@ import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import test from 'node:test'
 import { getRecordType } from '@openbooks/customization'
-const { db, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypassContext } = await import('@openbooks/engine/platform/db')
 const { sql } = await import('drizzle-orm')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
 const { loadProject } = await import('../app/api/projects/_lib')
 
 /**
@@ -62,9 +62,9 @@ const projectFeatureCases = [
           return next(specifier, context);
         } });
         const { sql } = await import("drizzle-orm");
-        const { db, env } = await import("@openbooks/engine/src/platform/db.ts");
-        const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
-        const { waitForLockWaiter } = await import("@openbooks/engine/src/testing/lock-wait.ts");
+        const { db, env } = await import("@openbooks/engine/platform/db");
+        const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
+        const { waitForLockWaiter } = await import("@openbooks/engine/testing/lock-wait");
         const { PUT } = await import("../app/api/projects/[id]/percent-complete/route");
 
         test("project percent-complete refuses a Projects disable committed while its write waits", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
@@ -112,8 +112,8 @@ const projectFeatureCases = [
         const { randomUUID } = await import('node:crypto');
         const test = (await import('node:test')).default;
         const { sql } = await import('drizzle-orm')
-        const { db, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
-        const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+        const { db, withBypassContext } = await import('@openbooks/engine/platform/db')
+        const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
         const { createWorkBreakdownTask } = await import('./project-work-breakdown')
         const { ProjectWorkBreakdownError } = await import('./project-work-breakdown-validation')
 
@@ -172,9 +172,9 @@ const projectSubcontractCases = [
           "./subcontracts-gate.ts"
         );
 
-        const { db, withBypassContext } = await import("@openbooks/engine/src/platform/db.ts");
+        const { db, withBypassContext } = await import("@openbooks/engine/platform/db");
         const { createScratchOrg, dropScratchOrg } = await import(
-          "@openbooks/engine/src/testing/fixtures.ts"
+          "@openbooks/engine/testing/fixtures"
         );
 
         async function setFeatures(orgId: string, features: Record<string, unknown>): Promise<void> {
@@ -224,8 +224,8 @@ const assert: typeof import("node:assert/strict") = (await import("node:assert/s
 const { randomUUID } = await import("node:crypto");
 const test = (await import("node:test")).default;
 const { sql } = await import('drizzle-orm')
-const { db } = await import('@openbooks/engine/src/platform/db.ts')
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { db } = await import('@openbooks/engine/platform/db')
+const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
 const { projectCostSummary } = await import('./project-costing.ts')
 
 test('project cost actuals and account detail stay in the primary book', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
@@ -262,8 +262,8 @@ test('project cost actuals and account detail stay in the primary book', { skip:
 const consolidatedRows = [
   { label: "project costing unbilled precision", register: async () => {
         const { sql } = await import('drizzle-orm')
-        const { db } = await import('@openbooks/engine/src/platform/db.ts')
-        const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+        const { db } = await import('@openbooks/engine/platform/db')
+        const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
         const { projectUnbilled } = await import('./project-costing.ts')
 
         test('project unbilled labor rounds fractional rate products to ledger precision', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
@@ -297,8 +297,8 @@ const assert: typeof import("node:assert/strict") = (await import("node:assert/s
 const { randomUUID } = await import("node:crypto");
 const test = (await import("node:test")).default;
 const { sql } = await import('drizzle-orm')
-const { db, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { db, withBypassContext } = await import('@openbooks/engine/platform/db')
+const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
 const { rankProjects } = await import('./project-ranking')
 const { marginPercentText } = await import('./financial-decimal')
 
@@ -343,7 +343,7 @@ test('project ranking counts only purchase order commitments visible to the call
 const consolidatedRows = [
   { label: "project dimension inheritance", register: async () => {
         const { spawnSync }=await import("node:child_process");
-        const { env }=await import("@openbooks/engine/src/platform/db.ts");
+        const { env }=await import("@openbooks/engine/platform/db");
         test(
           "project financials inherit header scope while preserving line overrides",
           { skip: !env.OPENBOOKS_DB_URL },
@@ -581,9 +581,9 @@ const consolidatedRows = [
         const assert: typeof import("node:assert/strict") = (await import("node:assert/strict")).default;
         const { randomUUID } = await import("node:crypto");
         const test = (await import("node:test")).default;
-        const { db, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
+        const { db, withBypassContext } = await import('@openbooks/engine/platform/db')
         const { sql } = await import('drizzle-orm')
-        const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+        const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
         const { createScheduleTask, ScheduleError } = await import('./project-schedule')
 
         test('project schedule service refuses direct task creation when scheduling is disabled', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
@@ -616,9 +616,9 @@ const consolidatedRows = [
         const assert: typeof import("node:assert/strict") = (await import("node:assert/strict")).default;
         const { randomUUID } = await import("node:crypto");
         const test = (await import("node:test")).default;
-        const { db, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
+        const { db, withBypassContext } = await import('@openbooks/engine/platform/db')
         const { sql } = await import('drizzle-orm')
-        const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+        const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
         const { updateScheduleTask, ScheduleError } = await import('./project-schedule')
 
         const enabled = { skip: !process.env.OPENBOOKS_DB_URL }
@@ -688,9 +688,9 @@ const consolidatedRows = [
         const assert: typeof import("node:assert/strict") = (await import("node:assert/strict")).default;
         const { randomUUID } = await import("node:crypto");
         const test = (await import("node:test")).default;
-        const { db, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
+        const { db, withBypassContext } = await import('@openbooks/engine/platform/db')
         const { sql } = await import('drizzle-orm')
-        const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+        const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
         const { updateScheduleTask, ScheduleError } = await import('./project-schedule')
 
         const enabled = { skip: !process.env.OPENBOOKS_DB_URL }
@@ -761,8 +761,8 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier,context);
 }});
 const { sql } = await import('drizzle-orm');
-const { db, withOrg } = await import("@openbooks/engine/src/platform/db.ts");
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
+const { db, withOrg } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
 const { createWorkBreakdownTask, loadWorkBreakdownTasks, updateWorkBreakdownTask } = await import('./project-work-breakdown');
 const { parseExpectedTaskVersion } = await import('./project-work-breakdown-validation');
 const { randomUUID } = await import('node:crypto');
@@ -827,12 +827,12 @@ const subcontractTransitionCases = [{ label: "subcontract transition validation"
   const { registerHooks } = await import("node:module");
   const mockSources = new Map<string, string>([
     ["mock:authz", `export * from ${JSON.stringify(new URL('./authz.ts', import.meta.url).href)};export async function guardPermission(permission){if(permission!=='ap.create')throw Error('unexpected subcontract permission: '+permission);return {user:{orgId:'org-1',id:'user-1'},permissions:new Set(['ap.create']),allowedSubsidiaryIds:null}}`],
-    ["mock:db", `export * from ${JSON.stringify(import.meta.resolve('@openbooks/engine/src/platform/db.ts'))};export const db={async execute(){throw Error('database work should not run for invalid transitions')},async transaction(){throw Error('transaction work should not run for invalid transitions')}}`],
+    ["mock:db", `export * from ${JSON.stringify(import.meta.resolve('@openbooks/engine/platform/db'))};export const db={async execute(){throw Error('database work should not run for invalid transitions')},async transaction(){throw Error('transaction work should not run for invalid transitions')}}`],
     ["mock:subcontracts", `const state=globalThis[Symbol.for('openbooks.subcontract-transition-route-test')];export * from ${JSON.stringify(new URL('../../engine/src/projects/subcontracts.ts',import.meta.url).href)};export async function transitionSubcontract(){state.transitionCalls++;throw Error('invalid input must not reach the transition engine')}`],
   ]);
   const mockUrls = new Map<string, string>([
     ["../../../lib/authz", "mock:authz"],
-    ["@openbooks/engine/src/platform/db.ts", "mock:db"], ["@openbooks/engine/src/projects/subcontracts.ts", "mock:subcontracts"],
+    ["@openbooks/engine/platform/db", "mock:db"], ["@openbooks/engine/projects/subcontracts", "mock:subcontracts"],
   ]);
   const hooks = registerHooks({
     resolve(specifier, context, next) { const mock = mockUrls.get(specifier); return mock ? { url: mock, shortCircuit: true } : next(specifier, context) },

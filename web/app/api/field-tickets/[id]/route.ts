@@ -5,11 +5,11 @@ import { rendererUnavailableResponse } from '@/lib/api/pdf-renderer'
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/db'
 import { guardSubsidiaryScope, type Authz } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
 import { isFeatureEnabled } from '../../../../lib/features'
-import { DocumentEditError, requireDocumentEditRevision } from "../../../../../engine/src/records/document-edit-policy.ts";
+import { DocumentEditError, requireDocumentEditRevision } from "@openbooks/engine/records/document-edit-policy";
 import {
   addTicketLine,
   discardEmptyTicketDraft,

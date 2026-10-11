@@ -13,7 +13,7 @@ const acceptanceUrl = pathToFileURL(process.cwd() + "/engine/src/payments/accept
 registerHooks({
   resolve(specifier, context, next) {
     if (
-      specifier === "@openbooks/engine/src/payments/acceptance.ts" &&
+      specifier === "@openbooks/engine/payments/acceptance/operations" &&
       context.parentURL?.includes("/api/pay/")
     ) {
       return {

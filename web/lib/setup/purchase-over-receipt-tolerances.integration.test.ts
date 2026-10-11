@@ -7,9 +7,9 @@ import { sql } from "drizzle-orm";
 // Features is not re-gated; the entity rides the orders feature): writes go
 // through the generic setup machinery, so every row stores its reason and
 // the before/after audit, and out-of-range values refuse before any write.
-const { db } = await import("@openbooks/engine/src/platform/db.ts");
+const { db } = await import("@openbooks/engine/platform/db");
 const { createScratchOrg, dropScratchOrg } = await import(
-  "@openbooks/engine/src/testing/fixtures.ts"
+  "@openbooks/engine/testing/fixtures"
 );
 const { SETUP_ENTITY_BY_KEY } = await import("./registry.ts");
 const { createSetupRecord, updateSetupRecord } = await import("./write.ts");

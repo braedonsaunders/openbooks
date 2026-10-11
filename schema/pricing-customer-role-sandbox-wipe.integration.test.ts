@@ -40,8 +40,8 @@ function pgMessage(error: unknown): string {
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
-type EngineDb = typeof import("../engine/src/platform/db.ts");
-type EngineFixtures = typeof import("../engine/src/testing/fixtures.ts");
+type EngineDb = typeof import("@openbooks/engine/platform/db");
+type EngineFixtures = typeof import("@openbooks/engine/testing/fixtures");
 
 let harness: {
   db: EngineDb["db"];
@@ -52,8 +52,8 @@ let harness: {
 async function ctx() {
   if (!harness) {
     const [{ db, withOrg }, { createScratchOrg }] = await Promise.all([
-      import("../engine/src/platform/db.ts"),
-      import("../engine/src/testing/fixtures.ts"),
+      import("@openbooks/engine/platform/db"),
+      import("@openbooks/engine/testing/fixtures"),
     ]);
     const org = await createScratchOrg();
     harness = { db, withOrg, org };
@@ -159,7 +159,7 @@ test("a production tenant is never wiped by a stray wipe GUC", { skip: !DB }, as
 if (DB) {
   test.after(async () => {
     if (!harness) return;
-    const { dropScratchOrg } = await import("../engine/src/testing/fixtures.ts");
+    const { dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
     await dropScratchOrg(harness.org.orgId);
     harness = null;
   });

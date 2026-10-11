@@ -18,8 +18,8 @@ const filingState: { pdfStamps: unknown[] } = { pdfStamps: [] }
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[filingKey] = filingState
 
 const reportPdfUrl = new URL('./report-pdf.ts', import.meta.url).href
-const businessDateUrl = import.meta.resolve('@openbooks/engine/src/platform/business-date.ts')
-const dbUrl = import.meta.resolve('@openbooks/engine/src/platform/db.ts')
+const businessDateUrl = import.meta.resolve('@openbooks/engine/platform/business-date/module')
+const dbUrl = import.meta.resolve('@openbooks/engine/platform/db')
 
 function sqlText(query: unknown): string {
   const chunks = (query as { queryChunks?: unknown[] })?.queryChunks
@@ -98,7 +98,7 @@ const mockUrl = (name: string) => `${SELF_URL}?mock=${name}`
 const mockUrls = new Map<string, string>([
   ['../../../../../../lib/authz', mockUrl('authz')],
   ['@/lib/authz', mockUrl('authz')],
-  ['@openbooks/engine/src/platform/db.ts', mockUrl('db')],
+  ['@openbooks/engine/platform/db', mockUrl('db')],
   ['../../../../../../lib/report-pdf', mockUrl('report-pdf')],
 ])
 
@@ -106,7 +106,7 @@ stubModules({ intl: true, navigation: false, authz: false, features: false });
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === '@openbooks/engine/src/platform/business-date.ts') {
+    if (specifier === '@openbooks/engine/platform/business-date/module') {
       return {
         shortCircuit: true,
         url: `data:text/javascript,export * from '${businessDateUrl}'; export async function businessToday() { return '${STAMP}' }`,

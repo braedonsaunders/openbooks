@@ -1,7 +1,7 @@
 import { randomBytes, timingSafeEqual } from "node:crypto";
 import { NextResponse } from "next/server";
-import { appBaseUrl } from "@openbooks/engine/src/flows/email-tokens.ts";
-import { sealJson, unsealJson } from "@openbooks/engine/src/platform/secrets.ts";
+import { appBaseUrl } from "@openbooks/engine/flows/email-tokens";
+import { sealJson, unsealJson } from "@openbooks/engine/platform/secrets";
 import { secureCookiesEnabled } from "../../../../../lib/auth-policy";
 import { guardPermission, guardUnrestrictedScope } from "../../../../../lib/authz";
 

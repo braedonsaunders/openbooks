@@ -1,8 +1,8 @@
 import 'server-only'
 
 import { getTranslations } from 'next-intl/server'
-import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
-import { isCivilDate } from '@openbooks/engine/src/hrm/temporal.ts'
+import { businessToday } from '@openbooks/engine/platform/business-date/module'
+import { isCivilDate } from '@openbooks/engine/hrm/temporal'
 import { loadDirectory } from '@openbooks/engine/hrm/org-chart'
 import { loadOrgChartWorkspace } from '@openbooks/engine/hrm/org-chart'
 import { hrmGroupTabs } from '../../components/module-home/group-tabs'

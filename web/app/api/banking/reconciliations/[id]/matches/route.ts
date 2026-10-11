@@ -2,7 +2,7 @@ import { apiErrorResponse } from '@/lib/api/error-response'
 import { z } from 'zod';
 import { defineRoute } from '@/lib/api/route';
 import { NextResponse } from 'next/server'
-import { createMatch, unmatchStatementLine } from '@openbooks/engine/src/banking/banking.ts'
+import { createMatch, unmatchStatementLine } from '@openbooks/engine/banking/banking'
 import { isUuid } from '../../../../../../lib/list-params'
 import { notFound } from "@/lib/api/responses";
 const POSTBodySchema1 = z.object({ statementLineIds: z.array(z.string().uuid()).min(1), journalLineIds: z.array(z.string().uuid()).min(1) });

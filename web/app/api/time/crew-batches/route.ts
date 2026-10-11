@@ -5,9 +5,9 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { guardFeaturePermission } from '../../../../lib/feature-gates'
 import { can } from '../../../../lib/authz'
-import { createBatch } from '@openbooks/engine/src/hrm/field-time/crew.ts'
-import { listCrewBatches } from '@openbooks/engine/src/hrm/field-time/reads.ts'
-import { FieldTimeError } from '@openbooks/engine/src/hrm/field-time/errors.ts'
+import { createBatch } from '@openbooks/engine/hrm/field-time/crew'
+import { listCrewBatches } from '@openbooks/engine/hrm/field-time/reads'
+import { FieldTimeError } from '@openbooks/engine/hrm/field-time/errors'
 
 export const runtime = 'nodejs'
 

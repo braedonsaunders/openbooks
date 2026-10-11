@@ -2,9 +2,9 @@ import { importRowError } from './row-error'
 import { readExportWindow, transferId, transferWhere, transferOrder, transferLimit, finishExportPage } from './export-page'
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { cmp } from '@openbooks/engine/src/money/money.ts'
-import { parseEntitlementCarryInAmount } from '@openbooks/engine/src/payroll/entitlements-openings-save.ts'
+import { db } from '@openbooks/engine/platform/db'
+import { cmp } from '@openbooks/engine/money/money'
+import { parseEntitlementCarryInAmount } from '@openbooks/engine/payroll/entitlements-openings-save'
 import {
   assertTaxYear,
   declaredProgramBaseFields,
@@ -18,7 +18,7 @@ import {
   saveOpeningBalances,
   type DeclaredProgramBaseField,
   type OpeningComponentField,
-} from '@openbooks/engine/src/payroll/opening-balances.ts'
+} from '@openbooks/engine/payroll/opening-balances'
 import {
   assertMovementDate,
   entitlementOpeningLocks,
@@ -26,7 +26,7 @@ import {
   resolvePlanLimit,
   saveEntitlementOpenings,
   type EntitlementPlan,
-} from '@openbooks/engine/src/payroll/entitlements.ts'
+} from '@openbooks/engine/payroll/entitlements/operations'
 import type { CellValue, ImportMode, ResourceDescriptor, ResourceField, WriteOutcome } from './types'
 import type { DataResource, WriteCtx } from './resources'
 import {

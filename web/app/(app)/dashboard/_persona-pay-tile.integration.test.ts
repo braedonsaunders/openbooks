@@ -23,9 +23,9 @@ registerHooks({
   },
 })
 
-const { db, env, withBypass } = await import('@openbooks/engine/src/platform/db.ts')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
-const { withSimClock: pinClock } = await import('@openbooks/engine/src/platform/clock.ts')
+const { db, env, withBypass } = await import('@openbooks/engine/platform/db')
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
+const { withSimClock: pinClock } = await import('@openbooks/engine/testing/platform/clock')
 const { loadPersonaMetrics } = await import('./_persona.ts')
 type Authz = import('@/lib/authz.ts').Authz
 

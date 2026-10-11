@@ -1,3 +1,4 @@
+import { resolveEngineSpecifier } from '../../../../testing/engine-resolve-hooks.ts'
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
@@ -36,16 +37,9 @@ const hooks = registerHooks({
     ) {
       return { url: "mock:authz", shortCircuit: true };
     }
-    if (specifier.startsWith("@openbooks/engine/src/")) {
-      const webMarker = context.parentURL?.lastIndexOf("/web/") ?? -1;
-      if (webMarker === -1) return nextResolve(specifier, context);
-      return nextResolve(
-        new URL(
-          `${context.parentURL!.slice(0, webMarker + 1)}engine/${specifier.slice("@openbooks/engine/".length)}`,
-        ).href,
-        context,
-      );
-    }
+
+    const engineUrl = resolveEngineSpecifier(specifier);
+    if (engineUrl) return nextResolve(engineUrl, context);
     return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
@@ -62,9 +56,9 @@ const { GET: listDuplicates } = (await import(duplicatesUrl)) as typeof import("
 const { GET: previewMerge, POST: commitMerge } =
   (await import(mergeUrl)) as typeof import("../merge/route.ts");
 
-const { db } = await import("../../../../../engine/src/platform/db.ts");
+const { db } = await import("@openbooks/engine/platform/db");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } =
-  await import("../../../../../engine/src/testing/fixtures.ts");
+  await import("@openbooks/engine/testing/fixtures");
 
 
 function authorize(orgId: string, actorId: string): void {

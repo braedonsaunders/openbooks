@@ -4,10 +4,10 @@ import { parseJsonBody } from "@/lib/api/json"
 import { NextResponse } from "next/server";
 import { getTranslations } from "next-intl/server";
 import { sql } from "drizzle-orm";
-import { db, withOrgTransaction } from "@openbooks/engine/src/platform/db.ts";
-import { isIsoCalendarDate } from "@openbooks/engine/src/platform/business-date.ts";
-import { ensureCrmDefaults } from "@openbooks/engine/src/crm/crm.ts";
-import { normalizeMoney } from "@openbooks/engine/src/money/money.ts";
+import { db, withOrgTransaction } from "@openbooks/engine/platform/db";
+import { isIsoCalendarDate } from "@openbooks/engine/platform/business-date/module";
+import { ensureCrmDefaults } from "@openbooks/engine/crm/crm";
+import { normalizeMoney } from "@openbooks/engine/money/money";
 import "../../../../lib/feature-gates";
 import { guardUnrestrictedScope } from "../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../lib/features";

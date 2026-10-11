@@ -2,13 +2,13 @@ import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from "@/lib/api/error-response";
 import { NextResponse } from "next/server";
-import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
 import {
   EmploymentReadError,
   getEmploymentRecord,
-} from "@openbooks/engine/src/hrm/employment-read.ts";
-import { HrmAuthorizationError } from "@openbooks/engine/src/hrm/authorization.ts";
-import { TemporalError } from "@openbooks/engine/src/hrm/temporal.ts";
+} from "@openbooks/engine/hrm/employment-read";
+import { HrmAuthorizationError } from "@openbooks/engine/hrm/authorization";
+import { TemporalError } from "@openbooks/engine/hrm/temporal";
 import { guardFeaturePermission } from "../../../../../lib/feature-gates";
 import { isUuid } from "../../../../../lib/list-params";
 import { hrmAuthorizationResponse } from "../../../../../lib/api/record-not-found";

@@ -1,6 +1,6 @@
 import 'server-only'
 
-import { getFlowAdapter } from '@openbooks/engine/src/flows/registry.ts'
+import { getFlowAdapter } from '@openbooks/engine/flows/registry'
 import { moduleDrawerHref } from './txn-links'
 
 /**

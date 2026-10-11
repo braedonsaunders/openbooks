@@ -2,12 +2,12 @@ import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from "@/lib/api/error-response";
 import { NextResponse } from "next/server";
-import { remeasureAsset } from "@openbooks/engine/src/assets/asset-lifecycle.ts";
+import { remeasureAsset } from "@openbooks/engine/assets/asset-lifecycle";
 import {
   businessToday,
   isIsoCalendarDate,
-} from "@openbooks/engine/src/platform/business-date.ts";
-import { normalizeMoney } from "@openbooks/engine/src/money/money.ts";
+} from "@openbooks/engine/platform/business-date/module";
+import { normalizeMoney } from "@openbooks/engine/money/money";
 import { isUuid } from "../../../../../lib/list-params";
 import {
   canonicalDecimal,

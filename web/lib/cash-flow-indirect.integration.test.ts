@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
-import { env } from "@openbooks/engine/src/platform/db.ts";
+import { env } from "@openbooks/engine/platform/db";
 
 test("indirect cash flow ties to bank balances and net income", { skip: !env.OPENBOOKS_DB_URL }, () => {
   // Web report modules intentionally import `server-only`, so the contract
@@ -91,10 +91,10 @@ const consolidatedRows = [
          * while both still tie.
          */
         const root = pathToFileURL(process.cwd() + '/').href
-        const { db, withBypassContext, withOrgContext } = (await import(root + 'engine/src/platform/db.ts')) as typeof import('@openbooks/engine/src/platform/db.ts')
-        const { toUnits } = (await import(root + 'engine/src/money/money.ts')) as typeof import('@openbooks/engine/src/money/money.ts')
+        const { db, withBypassContext, withOrgContext } = (await import('@openbooks/engine/platform/db')) as typeof import('@openbooks/engine/platform/db')
+        const { toUnits } = (await import('@openbooks/engine/money/money')) as typeof import('@openbooks/engine/money/money')
         const { sql } = await import(root + 'node_modules/drizzle-orm/index.js')
-        const { createScratchOrg, dropScratchOrg, seedFlowActors } = (await import(root + 'engine/src/testing/fixtures.ts')) as typeof import('@openbooks/engine/src/testing/fixtures.ts')
+        const { createScratchOrg, dropScratchOrg, seedFlowActors } = (await import('@openbooks/engine/testing/fixtures')) as typeof import('@openbooks/engine/testing/fixtures')
         const { cashFlow, cashFlowIndirect } = (await import(root + 'web/lib/reports.ts')) as typeof import('./reports')
 
         test('direct cash flow presents cash disposal gains as investing proceeds', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
@@ -168,11 +168,11 @@ const consolidatedRows = [
          * and the two cash-flow statements must classify it identically.
          */
         const root = pathToFileURL(process.cwd() + '/').href
-        const { db, withBypassContext, withOrgContext } = (await import(root + 'engine/src/platform/db.ts')) as typeof import('@openbooks/engine/src/platform/db.ts')
-        const { toUnits } = (await import(root + 'engine/src/money/money.ts')) as typeof import('@openbooks/engine/src/money/money.ts')
+        const { db, withBypassContext, withOrgContext } = (await import('@openbooks/engine/platform/db')) as typeof import('@openbooks/engine/platform/db')
+        const { toUnits } = (await import('@openbooks/engine/money/money')) as typeof import('@openbooks/engine/money/money')
         const { sql } = await import(root + 'node_modules/drizzle-orm/index.js')
-        const { createScratchOrg, dropScratchOrg, seedFlowActors } = (await import(root + 'engine/src/testing/fixtures.ts')) as typeof import('@openbooks/engine/src/testing/fixtures.ts')
-        const { runRevaluation } = (await import(root + 'engine/src/close/fx-revaluation.ts')) as typeof import('@openbooks/engine/src/close/fx-revaluation.ts')
+        const { createScratchOrg, dropScratchOrg, seedFlowActors } = (await import('@openbooks/engine/testing/fixtures')) as typeof import('@openbooks/engine/testing/fixtures')
+        const { runRevaluation } = (await import('@openbooks/engine/close/fx-revaluation')) as typeof import('@openbooks/engine/close/fx-revaluation')
         const { cashFlow, cashFlowIndirect } = (await import(root + 'web/lib/reports.ts')) as typeof import('./reports')
 
         test('direct cash flow routes unrealized FX revaluation of cash to the FX-effect line', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
@@ -245,11 +245,11 @@ const consolidatedRows = [
          * classification, not just the reconciliation gap.
          */
         const root = pathToFileURL(process.cwd() + '/').href
-        const { db, withBypassContext, withOrgContext } = (await import(root + 'engine/src/platform/db.ts')) as typeof import('@openbooks/engine/src/platform/db.ts')
-        const { toUnits } = (await import(root + 'engine/src/money/money.ts')) as typeof import('@openbooks/engine/src/money/money.ts')
+        const { db, withBypassContext, withOrgContext } = (await import('@openbooks/engine/platform/db')) as typeof import('@openbooks/engine/platform/db')
+        const { toUnits } = (await import('@openbooks/engine/money/money')) as typeof import('@openbooks/engine/money/money')
         const { sql } = await import(root + 'node_modules/drizzle-orm/index.js')
-        const { createScratchOrg, dropScratchOrg, seedFlowActors } = (await import(root + 'engine/src/testing/fixtures.ts')) as typeof import('@openbooks/engine/src/testing/fixtures.ts')
-        const { runRevaluation } = (await import(root + 'engine/src/close/fx-revaluation.ts')) as typeof import('@openbooks/engine/src/close/fx-revaluation.ts')
+        const { createScratchOrg, dropScratchOrg, seedFlowActors } = (await import('@openbooks/engine/testing/fixtures')) as typeof import('@openbooks/engine/testing/fixtures')
+        const { runRevaluation } = (await import('@openbooks/engine/close/fx-revaluation')) as typeof import('@openbooks/engine/close/fx-revaluation')
         const { cashFlowIndirect } = (await import(root + 'web/lib/reports.ts')) as typeof import('./reports')
 
         test('indirect cash flow adds back unrealized FX revaluation and reports foreign-cash remeasurement as the FX effect', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
@@ -333,10 +333,10 @@ const consolidatedRows = [
          *       entries doubled the sections and broke the tie-out.
          */
         const root = pathToFileURL(process.cwd() + '/').href
-        const { db, withBypassContext, withOrgContext } = (await import(root + 'engine/src/platform/db.ts')) as typeof import('@openbooks/engine/src/platform/db.ts')
-        const { toUnits } = (await import(root + 'engine/src/money/money.ts')) as typeof import('@openbooks/engine/src/money/money.ts')
+        const { db, withBypassContext, withOrgContext } = (await import('@openbooks/engine/platform/db')) as typeof import('@openbooks/engine/platform/db')
+        const { toUnits } = (await import('@openbooks/engine/money/money')) as typeof import('@openbooks/engine/money/money')
         const { sql } = await import(root + 'node_modules/drizzle-orm/index.js')
-        const { createScratchOrg, dropScratchOrg } = (await import(root + 'engine/src/testing/fixtures.ts')) as typeof import('@openbooks/engine/src/testing/fixtures.ts')
+        const { createScratchOrg, dropScratchOrg } = (await import('@openbooks/engine/testing/fixtures')) as typeof import('@openbooks/engine/testing/fixtures')
         const { cashFlow, cashFlowIndirect, generalLedger } = (await import(root + 'web/lib/reports.ts')) as typeof import('./reports')
 
         test('cash flow statements answer for one book and fail closed on an empty subsidiary scope', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
@@ -419,9 +419,9 @@ const cashLedgerRows = [
   { label: "cash ledger", register: async () => {
         const { randomUUID }=await import("node:crypto");
         const { sql } = await import("drizzle-orm");
-        const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
-        const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
-        const { postDocument } = await import("@openbooks/engine/src/ledger/posting-document.ts");
+        const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
+        const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
+        const { postDocument } = await import("@openbooks/engine/ledger/posting-document");
         const { bankBalances, openItems } = await import("./cash/core");
         for (const path of ["partial month", "completed month", "receivables", "payables"] as const) {
           for (const mode of ["all", "restricted", "empty"] as const) {
@@ -521,8 +521,8 @@ const cashLedgerRows = [
   { label: "cash payment scope", register: async () => {
         const { randomUUID }=await import("node:crypto");
         const {sql} = await import('drizzle-orm');
-        const {db,withBypassContext,withOrgContext} = await import('@openbooks/engine/src/platform/db.ts');
-        const {createScratchOrg,createScratchUser,dropScratchOrg} = await import('@openbooks/engine/src/testing/fixtures.ts');
+        const {db,withBypassContext,withOrgContext} = await import('@openbooks/engine/platform/db');
+        const {createScratchOrg,createScratchUser,dropScratchOrg} = await import('@openbooks/engine/testing/fixtures');
         const {paymentStats} = await import('./cash/core');
         for (const side of ['ar','ap'] as const) {
           for (const mode of ['all','restricted','empty'] as const) {

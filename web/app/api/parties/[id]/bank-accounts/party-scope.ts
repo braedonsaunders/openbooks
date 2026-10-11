@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db, type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
-import { lockScopeRow, ScopeNotFoundError } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
+import { db, type SqlExecutor } from '@openbooks/engine/platform/db'
+import { lockScopeRow, ScopeNotFoundError } from '@openbooks/engine/organization/scope'
 import { can, getAuthz, guardSubsidiaryScope, type Authz } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
 

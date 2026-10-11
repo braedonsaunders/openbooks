@@ -8,8 +8,8 @@ const allocationCases = [
         const { pathToFileURL } = await import('node:url');
         const test = (await import('node:test')).default;
         const { sql } = await import('drizzle-orm');
-        const { db } = await import('@openbooks/engine/src/platform/db.ts');
-        const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts');
+        const { db } = await import('@openbooks/engine/platform/db');
+        const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures');
         // Same seam as web/lib/setup-feature-fence.integration.test.ts: shim the RSC
         // `server-only` marker (this file runs from the root, one file per process).
         const root = pathToFileURL(process.cwd() + '/').href
@@ -69,8 +69,8 @@ const allocationCases = [
         const assert: typeof import('node:assert/strict') = (await import('node:assert/strict')).default;
         const test = (await import('node:test')).default;
         const { sql } = await import('drizzle-orm');
-        const { db, pool, withBypass, withOrgContext } = await import('../../engine/src/platform/db.ts');
-        const { createScratchOrg, dropScratchOrg } = await import('../../engine/src/testing/fixtures.ts');
+        const { db, pool, withBypass, withOrgContext } = await import('@openbooks/engine/platform/db');
+        const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures');
         const { REPORT_ENTITY_MAP } = await import('../../packages/reports/src/entities.ts');
         const { runCustomQuery } = await import('../../packages/reports/src/run.ts');
         const { BUILT_IN_REPORT_DEFINITION_MAP } = await import('../../packages/reports/src/built-ins.ts');

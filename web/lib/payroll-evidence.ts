@@ -2,17 +2,17 @@ import 'server-only'
 import { sql } from 'drizzle-orm'
 import { PDFDocument } from 'pdf-lib'
 import { getTranslations } from 'next-intl/server'
-import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
-import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
-import { ensureReportDefinitions } from '@openbooks/engine/src/reports/ensure-report-definitions.ts'
-import { PayrollError } from "@openbooks/engine/src/payroll/error.ts";
-import { previewPayRunGl } from "@openbooks/engine/src/payroll/run-commit.ts";
+import { businessToday } from '@openbooks/engine/platform/business-date/module'
+import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
+import { ensureReportDefinitions } from '@openbooks/engine/reports/ensure-report-definitions'
+import { PayrollError } from "@openbooks/engine/payroll/error";
+import { previewPayRunGl } from "@openbooks/engine/payroll/run-commit";
 import {
   lockAndCheckPayrollRunPopulation,
   payrollRunPopulationScopeFilter,
   payrollSubsidiaryInScope,
   type PayrollSubsidiaryScope,
-} from '@openbooks/engine/src/payroll/scope.ts'
+} from '@openbooks/engine/payroll/scope'
 import { resolveDefinitionToExportData } from './report-run'
 import { exportDataToPdf, orgBranding, resolveLayout, type ExportData, type Translator } from './report-pdf'
 import { parseReportQuery } from './report-filters'

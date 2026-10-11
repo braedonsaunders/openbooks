@@ -3,9 +3,9 @@ import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 import { sql } from 'drizzle-orm';
 import { NextResponse } from 'next/server';
-import { db, withBypassContext, withOrgContext } from '@openbooks/engine/src/platform/db.ts';
-import { createScratchOrg, createScratchUser, dropScratchOrg } from '@openbooks/engine/src/testing/fixtures.ts';
-import { getConnection } from '@openbooks/engine/src/sync/connection.ts';
+import { db, withBypassContext, withOrgContext } from '@openbooks/engine/platform/db';
+import { createScratchOrg, createScratchUser, dropScratchOrg } from '@openbooks/engine/testing/fixtures';
+import { getConnection } from '@openbooks/engine/sync/connection';
 import { stubModules } from '../../../../../../testing/stub-modules';
 
 const state = { orgId: '', userId: '', permission: '', denied: false, restricted: false };

@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { draftFeeDrawdown, draftHoursDrawdown } from "@openbooks/engine/src/resourcing/retainers.ts";
+import { draftFeeDrawdown, draftHoursDrawdown } from "@openbooks/engine/resourcing/retainers";
 import { created } from "@/lib/api/responses";
 import { defineRoute } from "@/lib/api/route";
 

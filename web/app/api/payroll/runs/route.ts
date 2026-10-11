@@ -2,16 +2,16 @@ import { uuidId } from "@/lib/api/json-schema"
 import { z } from 'zod'
 import { defineRoute } from '@/lib/api/route'
 import { apiErrorResponse } from '@/lib/api/error-response'
-import { isIsoCalendarDate } from "@openbooks/engine/src/platform/business-date.ts";
-import { payrollRunPopulationScopeFilter } from "@openbooks/engine/src/payroll/scope.ts";
+import { isIsoCalendarDate } from "@openbooks/engine/platform/business-date/module";
+import { payrollRunPopulationScopeFilter } from "@openbooks/engine/payroll/scope";
 import { parseJsonBody } from "@/lib/api/json"
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { createPayRun } from "@openbooks/engine/src/payroll/run-lifecycle.ts";
-import { PayrollError } from "@openbooks/engine/src/payroll/error.ts";
-import { ScopeNotFoundError } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
-import { type PayRunType } from "@openbooks/engine/src/payroll/run-contracts.ts";
+import { db } from '@openbooks/engine/platform/db'
+import { createPayRun } from "@openbooks/engine/payroll/run-lifecycle";
+import { PayrollError } from "@openbooks/engine/payroll/error";
+import { ScopeNotFoundError } from "@openbooks/engine/organization/scope";
+import { type PayRunType } from "@openbooks/engine/payroll/run-contracts";
 import '../../../../lib/feature-gates';
 import { guardSubsidiaryScope, subsidiaryScopeAllows } from '../../../../lib/authz'
 import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'

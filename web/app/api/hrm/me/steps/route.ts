@@ -1,6 +1,6 @@
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { getMySteps } from "@openbooks/engine/src/hrm/self-service/self-read.ts";
+import { getMySteps } from "@openbooks/engine/hrm/self-service/self-read";
 import { meErrorResponse } from "../_lib";
 /**
  * The caller's own open checklist steps. Completion rides the existing

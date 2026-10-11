@@ -4,8 +4,8 @@ import test from 'node:test'
 import { sql } from 'drizzle-orm'
 import type { ListViewConfig } from '@openbooks/customization'
 
-const { db, env, withBypass } = await import('@openbooks/engine/src/platform/db.ts')
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { db, env, withBypass } = await import('@openbooks/engine/platform/db')
+const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
 const { entityListSource } = await import('./list/entity-sources.ts')
 
 test('timesheet week rows and employee options honor the caller subsidiary scope', { skip: !env.OPENBOOKS_DB_URL }, async () => {

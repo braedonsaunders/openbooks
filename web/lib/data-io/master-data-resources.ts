@@ -12,8 +12,8 @@ import partiesZh from '../../messages/zh/parties.json'
 
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { db, type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
-import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
+import { db, type SqlExecutor } from '@openbooks/engine/platform/db'
+import { normalizeMoney } from '@openbooks/engine/money/money'
 import { canonicalDecimal } from '../exact-decimal'
 import { ensurePartyRoleRow } from '../party-roles'
 import { assetBankHygieneWarning } from '../accounts-hygiene'
@@ -37,7 +37,7 @@ import {
   type ResourceRefTarget,
   type WriteOutcome,
 } from './types'
-import { isUuid } from '@openbooks/engine/src/platform/uuid.ts'
+import { isUuid } from '@openbooks/engine/platform/identifiers'
 // --- Master-data resources ----------------------------------------------------
 
 interface MasterCol {

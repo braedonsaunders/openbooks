@@ -6,8 +6,8 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { stubModules } from '../../../../../testing/stub-modules'
 import { db, withBypassContext } from '@openbooks/engine/platform/database'
-import { createScratchOrg, createScratchUser, dropScratchOrg } from '@openbooks/engine/src/testing/fixtures.ts'
-import { setFeatures } from '@openbooks/engine/src/testing/hrm-harness.ts'
+import { createScratchOrg, createScratchUser, dropScratchOrg } from '@openbooks/engine/testing/fixtures'
+import { setFeatures } from '@openbooks/engine/testing/hrm-harness'
 
 const stateKey = Symbol.for('openbooks.benefit-plan-configuration-route')
 const state = {

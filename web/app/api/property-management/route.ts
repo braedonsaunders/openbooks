@@ -4,11 +4,11 @@ import { apiErrorResponse } from '@/lib/api/error-response'
 
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
-import { normalizeMoney } from "@openbooks/engine/src/money/money.ts";
+import { db } from "@openbooks/engine/platform/db";
+import { normalizeMoney } from "@openbooks/engine/money/money";
 import { canonicalDecimal } from "../../../lib/exact-decimal";
 import { moneyRefusal } from "../../../lib/payroll-decimal-refusal";
-import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
 import {
   PropertyManagementError,
   activatePropertyLease,
@@ -38,8 +38,8 @@ import {
   scheduleLeaseCharges,
   terminatePropertyLease,
   updateCamPool,
-} from "@openbooks/engine/src/property/management.ts";
-import { ScopeNotFoundError } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
+} from "@openbooks/engine/property/management";
+import { ScopeNotFoundError } from "@openbooks/engine/organization/scope";
 import { can, guardPermission } from "../../../lib/authz";
 import type { Authz } from "../../../lib/authz";
 import {
@@ -50,7 +50,7 @@ import {
 import { isFeatureEnabled } from "../../../lib/features";
 import { guardPropertyManagementFeature } from "../../../lib/property-management-gate";
 import { notFound } from "@/lib/api/responses";
-import { isUuid } from "@openbooks/engine/src/platform/uuid.ts";
+import { isUuid } from "@openbooks/engine/platform/identifiers";
 
 const moneyText = (field: string) => z.string().superRefine((value, ctx) => {
   if (canonicalDecimal(value, 4) === null) {

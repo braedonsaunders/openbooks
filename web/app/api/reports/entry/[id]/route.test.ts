@@ -92,7 +92,7 @@ stubModules({
         return NextResponse.json({ error: 'missing permission: ' + permission }, { status: 403 })
       }
     `,
-    "@openbooks/engine/src/platform/db.ts": `
+    "@openbooks/engine/platform/db": `
       export * as schema from '${import.meta.resolve('@openbooks/schema')}'
       export function currentRequestOrgResolver() { return undefined }
       export function registerRequestOrgResolver() {}
@@ -216,7 +216,7 @@ stubModules({
 // Engine custom-field, segment and feature-state readers import the transport relatively.
 const ENGINE_READERS = /\/engine\/src\/(records\/custom-fields|organization\/(segments|feature-state))\.ts$/;
 registerHooks({ resolve: (specifier, context, next) => next(specifier === "../platform/db.ts" &&
-  ENGINE_READERS.test(context.parentURL ?? "") ? "@openbooks/engine/src/platform/db.ts" : specifier, context) });
+  ENGINE_READERS.test(context.parentURL ?? "") ? "@openbooks/engine/platform/db" : specifier, context) });
 const routeUrl = "./route.ts?reports-entry-subsidiary-scope-test";
 const { GET } = (await import(routeUrl)) as typeof import("./route.ts");
 

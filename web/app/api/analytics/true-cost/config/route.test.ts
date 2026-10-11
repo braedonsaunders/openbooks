@@ -102,7 +102,7 @@ const mockUrls = new Map<string, string>([
   ['@/lib/feature-gates', 'mock:gates'],
   ['../../../../../lib/analytics/true-cost-data', 'mock:data'],
   ['../../../../../lib/analytics/true-cost-engine', 'mock:engine'],
-  ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
+  ['@openbooks/engine/platform/db', 'mock:db'],
 ])
 let realAuthzUrl = ''
 let dbRealUrl = ''
@@ -113,7 +113,7 @@ registerHooks({
       realAuthzUrl = nextResolve(specifier, context).url
       return { url: 'mock:authz', shortCircuit: true }
     }
-    if (specifier === '@openbooks/engine/src/platform/db.ts') {
+    if (specifier === '@openbooks/engine/platform/db') {
       dbRealUrl = nextResolve(specifier, context).url
       return { url: 'mock:db', shortCircuit: true }
     }

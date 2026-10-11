@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { completeWorkOrderOperation } from "@openbooks/engine/src/manufacturing/materials.ts";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { completeWorkOrderOperation } from "@openbooks/engine/manufacturing/materials";
+import { db } from "@openbooks/engine/platform/db";
 import { can } from "@/lib/authz";
 import { defineRoute } from "@/lib/api/route";
 import { manufacturingTransaction } from "../../../../../_transaction";

@@ -3,9 +3,9 @@ import { z } from 'zod'
 import { parseJsonBody } from "@/lib/api/json"
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
-import { sealSecret } from '@openbooks/engine/src/platform/secrets.ts'
-import { FORM_TYPES, type FormType } from '@openbooks/engine/src/compliance/information-returns.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
+import { sealSecret } from '@openbooks/engine/platform/secrets'
+import { FORM_TYPES, type FormType } from '@openbooks/engine/compliance/information-returns'
 import { guardSubsidiaryScope } from '@/lib/authz';
 import { guardInformationReturnsFeature } from '@/lib/compliance'
 import { isFeatureEnabled } from '@/lib/features'

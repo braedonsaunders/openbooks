@@ -3,13 +3,13 @@ import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, pool, withOrgContext, withOrgTransaction } from "@openbooks/engine/src/platform/db.ts";
-import { PERMISSION_CATALOGUE } from "@openbooks/engine/src/organization/permissions.ts";
+import { db, pool, withOrgContext, withOrgTransaction } from "@openbooks/engine/platform/db";
+import { PERMISSION_CATALOGUE } from "@openbooks/engine/organization/permissions";
 import {
   createScratchOrg,
   createScratchUser,
   dropScratchOrg,
-} from "@openbooks/engine/src/testing/fixtures.ts";
+} from "@openbooks/engine/testing/fixtures";
 
 // Boundary suite for /api/admin/roles against the real schema.
 //
@@ -46,7 +46,7 @@ const mockAuthz = `
 // file's session mock ahead of that forwarder for the factory's late
 // "@/lib/authz" gate import.
 const { installTestExtension, disableTestExtension } = await import(
-  "@openbooks/engine/src/testing/extension-packages.ts"
+  "@openbooks/engine/testing/extension-packages"
 );
 registerHooks({
   resolve(specifier, context, nextResolve) {

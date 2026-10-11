@@ -1,9 +1,9 @@
 import { NextResponse } from 'next/server'
 import { defineRoute } from "@/lib/api/route";
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { generatePaymentFileArtifact, recordPaymentFileDownload } from '@openbooks/engine/src/payments/operations.ts'
-import { assertRunPayeesInScope } from '@openbooks/engine/src/payments/run-readiness.ts'
+import { db } from '@openbooks/engine/platform/db'
+import { generatePaymentFileArtifact, recordPaymentFileDownload } from '@openbooks/engine/payments/operations'
+import { assertRunPayeesInScope } from '@openbooks/engine/payments/run-readiness'
 import { refuseMaskedStorageKind } from '../../../../../../lib/file-storage'
 import { isUuid } from '../../../../../../lib/list-params'
 import { guardPaymentRunPermission, paymentErrorResponse } from '../../../lib'

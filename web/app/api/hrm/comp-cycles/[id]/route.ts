@@ -11,7 +11,7 @@ import {
   pushCycle,
   setCycleBudgets,
   submitCycleForApproval,
-} from "@openbooks/engine/src/hrm/compensation/cycles.ts";
+} from "@openbooks/engine/hrm/compensation/cycles";
 
 import { isUuid } from "../../../../../lib/list-params";
 import { compensationErrorResponse } from "../../compensation/_lib";

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import test from "node:test";
-import { permissionSetCovers } from "@openbooks/engine/src/organization/permissions.ts";
+import { permissionSetCovers } from "@openbooks/engine/organization/permissions";
 
 interface CashPositionCall {
   orgId: string;
@@ -74,7 +74,7 @@ const mockSources = new Map<string, string>([
 let GET: typeof import("./route.ts")["GET"];
 if (process.env.VITEST) {
   const { vi } = await import(vitestModuleName);
-  const { permissionSetCovers } = await import("@openbooks/engine/src/organization/permissions.ts");
+  const { permissionSetCovers } = await import("@openbooks/engine/organization/permissions");
   vi["mock"]("../../../../lib/authz", () => ({
     getAuthz: async () => ({ user: { orgId: "org-1", id: "user-1" }, permissions: new Set(["*"]), allowedSubsidiaryIds: routeState.allowedSubsidiaryIds }),
     can: (authz: { permissions: Set<string> }, perm: string) => permissionSetCovers(authz.permissions, perm),

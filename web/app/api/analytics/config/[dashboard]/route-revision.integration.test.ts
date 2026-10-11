@@ -68,9 +68,9 @@ const hooks = registerHooks({
 const routeUrl = "./route.ts?analytics-config-revision-integration";
 const { GET, PUT } = (await import(routeUrl)) as typeof import("./route.ts");
 
-const { db } = await import("@openbooks/engine/src/platform/db.ts");
+const { db } = await import("@openbooks/engine/platform/db");
 const { createScratchOrg, createScratchUser } = await import(
-  "@openbooks/engine/src/testing/fixtures.ts"
+  "@openbooks/engine/testing/fixtures"
 );
 
 const DASHBOARD = "sentinel";

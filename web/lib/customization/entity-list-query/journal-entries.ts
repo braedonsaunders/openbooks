@@ -3,7 +3,7 @@ import { sql, type SQL } from "drizzle-orm";
 import type { ListViewConfig, FilterClause } from "@openbooks/customization";
 import type { EntityAdhoc } from "./adhoc";
 import { dateOrFalse, pushCustomFieldFilter } from "../list-query";
-import { subsidiaryVisibleFilter } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
+import { subsidiaryVisibleFilter } from '@openbooks/engine/organization/scope'
 
 /* ------------------------------------------------------------------ */
 /* Journal entries                                                     */

@@ -1,7 +1,7 @@
 import "server-only";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
-import { computeTaxReturn, filterTaxReturnFormsByFeatures, TaxReturnError } from "@openbooks/engine/src/tax-returns/return.ts";
+import { db } from "@openbooks/engine/platform/db";
+import { computeTaxReturn, filterTaxReturnFormsByFeatures, TaxReturnError } from "@openbooks/engine/tax-returns/return";
 import { normalizeMoneyValue } from "../cash/core";
 import type { ApplicationContext } from "./context";
 import { assertApplicationPermission, assertSubsidiaryAccess } from "./context";

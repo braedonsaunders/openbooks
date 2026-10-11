@@ -21,7 +21,7 @@ const state: { orgId: string | null; userId: string | null } = { orgId: null, us
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state
 
 const mockAuthz = `
-  import { permissionSetCovers } from '@openbooks/engine/src/organization/permissions.ts'
+  import { permissionSetCovers } from '@openbooks/engine/organization/permissions'
   const state = globalThis[Symbol.for('openbooks.hub-catalog-test')]
   export async function getAuthz() {
     if (!state.orgId || !state.userId) return null
@@ -61,8 +61,8 @@ registerHooks({
 
 const { loadReportsHub } = await import('./view.ts')
 const { sql } = await import('drizzle-orm')
-const { db, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { db, withBypass, withOrgContext } = await import('@openbooks/engine/platform/db')
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
 
 
 async function freshOrg(): Promise<string> {

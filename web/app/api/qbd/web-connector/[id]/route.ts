@@ -9,7 +9,7 @@ import {
   nextWebConnectorRequest,
   recordConnectionError,
   webConnectorLastError,
-} from "@openbooks/engine/src/qbd/bridge.ts";
+} from "@openbooks/engine/qbd/bridge";
 import {
   assertSoapEnvelopeComplexity,
   firstNode,
@@ -18,7 +18,7 @@ import {
   parseXml,
   QBD_PREAUTH_MAX_BYTES,
   xmlEscape,
-} from "@openbooks/engine/src/qbd/qbxml.ts";
+} from "@openbooks/engine/qbd/qbxml";
 import { QBD_MAX_BODY_BYTES } from "./body-limit";
 
 export const runtime = "nodejs";

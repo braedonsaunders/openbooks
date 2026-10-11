@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import test, { after } from 'node:test'
-import { PayrollError } from '@openbooks/engine/src/payroll/error.ts'
+import { PayrollError } from '@openbooks/engine/payroll/error'
 import { stubModules } from '../testing/stub-modules.ts'
 
 /**
@@ -37,7 +37,7 @@ function sqlText(query: unknown): string {
 }
 ;(globalThis as typeof globalThis & Record<string, unknown>).openbooksBankFileSqlText = sqlText
 
-const dbUrl = import.meta.resolve('@openbooks/engine/src/platform/db.ts')
+const dbUrl = import.meta.resolve('@openbooks/engine/platform/db')
 
 const mockSources = new Map<string, string>([
   [
@@ -103,9 +103,9 @@ const mockUrls = new Map<string, string>([
   ['@/lib/feature-gates', mockUrl('feature-gates')],
   ['../../../../../../lib/authz', mockUrl('authz')],
   ['@/lib/authz', mockUrl('authz')],
-  ['@openbooks/engine/src/platform/db.ts', mockUrl('db')],
-  ['@openbooks/engine/src/payroll/bank-file.ts', mockUrl('bank-file')],
-  ['@openbooks/engine/src/payroll/bank-file-artifact.ts', mockUrl('bank-file-artifact')],
+  ['@openbooks/engine/platform/db', mockUrl('db')],
+  ['@openbooks/engine/payroll/bank-file', mockUrl('bank-file')],
+  ['@openbooks/engine/payroll/bank-file-artifact', mockUrl('bank-file-artifact')],
 ])
 
 stubModules({ intl: true, navigation: false, authz: false, features: false });

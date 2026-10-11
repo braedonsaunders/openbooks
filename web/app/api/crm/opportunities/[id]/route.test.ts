@@ -118,8 +118,8 @@ stubModules({
   authz: false,
   features: false,
   extra: {
-    "@openbooks/engine/src/platform/db.ts": `
-    export * from ${JSON.stringify(import.meta.resolve('@openbooks/engine/src/platform/db.ts'))}
+    "@openbooks/engine/platform/db": `
+    export * from ${JSON.stringify(import.meta.resolve('@openbooks/engine/platform/db'))}
     const state = globalThis[Symbol.for('openbooks.opportunity-contact-route-test')]
     const sqlText = globalThis.openbooksSqlTextOpportunity
     const respondExecute = (query) => {
@@ -234,10 +234,10 @@ stubModules({
     export async function withBypass(work) { return work() }
     export function inDbTransaction(_work) { throw new Error('unexpected inDbTransaction') }
   `,
-    "@openbooks/engine/src/crm/crm.ts": `
+    "@openbooks/engine/crm/crm": `
     export async function promoteCrmAccount() { return { customerRoleActive: true, lifecycleApplied: true, transitioned: true } }
   `,
-    "@openbooks/engine/src/crm/crm-math.ts": `
+    "@openbooks/engine/crm/crm-math": `
     export { validateOpportunityStageTransition } from ${JSON.stringify(
       new URL('../../../../../../engine/src/crm/crm-math.ts', import.meta.url).href,
     )}

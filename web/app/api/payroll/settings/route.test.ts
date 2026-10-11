@@ -1,3 +1,4 @@
+import { resolveEngineSpecifier } from '../../../../testing/engine-resolve-hooks.ts'
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
@@ -61,16 +62,7 @@ registerHooks({
     ) {
       return { url: "mock:payroll-outputs", shortCircuit: true };
     }
-    if (specifier.startsWith("@openbooks/engine/src/")) {
-      const webMarker = context.parentURL?.lastIndexOf("/web/") ?? -1;
-      if (webMarker === -1) return nextResolve(specifier, context);
-      return nextResolve(
-        new URL(
-          `${context.parentURL!.slice(0, webMarker + 1)}engine/${specifier.slice("@openbooks/engine/".length)}`,
-        ).href,
-        context,
-      );
-    }
+
     if (specifier.startsWith("@openbooks/schema/")) {
       const webMarker = context.parentURL?.lastIndexOf("/web/") ?? -1;
       if (webMarker === -1) return nextResolve(specifier, context);
@@ -81,6 +73,8 @@ registerHooks({
         context,
       );
     }
+    const engineUrl = resolveEngineSpecifier(specifier);
+    if (engineUrl) return nextResolve(engineUrl, context);
     return nextResolve(specifier, context);
   },
   load(url, context, nextLoad) {
@@ -102,11 +96,11 @@ const routeUrl = "./route.ts?payroll-settings-atomicity-test";
 const { GET, PUT, POST } = (await import(routeUrl)) as typeof import("./route.ts");
 
 const { db, withBypass, withBypassContext, withOrgContext } =
-  await import("../../../../../engine/src/platform/db.ts");
+  await import("@openbooks/engine/platform/db");
 const { createScratchOrg, createScratchUser, dropScratchOrg } =
-  await import("../../../../../engine/src/testing/fixtures.ts");
+  await import("@openbooks/engine/testing/fixtures");
 const { PAYROLL_COUNTRY_PACKS, remittanceScheduleForFrequencyKey } =
-  await import("../../../../../engine/src/payroll/packs.ts");
+  await import("@openbooks/engine/payroll/packs");
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
@@ -1099,7 +1093,7 @@ test(
     // same registry declaration as the packs tab, so the two surfaces cannot
     // disagree about what is installable or what it is called.
     const { installablePayrollPacks, PAYROLL_COUNTRY_PACKS } = await import(
-      "../../../../../engine/src/payroll/packs.ts"
+      "@openbooks/engine/payroll/packs"
     );
     const fixture = await scratchPayrollOrg();
     await withPayrollActor(fixture, async () => {

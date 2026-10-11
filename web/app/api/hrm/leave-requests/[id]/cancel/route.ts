@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { cancelLeaveRequest } from "@openbooks/engine/src/hrm/leave.ts";
+import { cancelLeaveRequest } from "@openbooks/engine/hrm/leave";
 
 import { isUuid } from "../../../../../../lib/list-params";
 import { leaveErrorResponse } from "../../_lib";

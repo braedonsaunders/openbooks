@@ -3,8 +3,8 @@ import { defineRoute } from '@/lib/api/route'
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { exactMoney, parseJsonBody } from "@/lib/api/json"
 import { NextResponse } from 'next/server'
-import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
-import { PayrollError } from "@openbooks/engine/src/payroll/error.ts";
+import { businessToday } from '@openbooks/engine/platform/business-date/module'
+import { PayrollError } from "@openbooks/engine/payroll/error";
 import {
   assertTaxYear,
   declaredEmployerLevyFields,
@@ -12,7 +12,7 @@ import {
   employerLevyOpeningsForYear,
   saveEmployerLevyOpening,
   type EmployerLevyOpeningWrite,
-} from '@openbooks/engine/src/payroll/opening-balances.ts'
+} from '@openbooks/engine/payroll/opening-balances'
 import '../../../../../lib/feature-gates';
 import { guardUnrestrictedScope } from '../../../../../lib/authz'
 

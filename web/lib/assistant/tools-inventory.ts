@@ -1,9 +1,9 @@
 import "server-only";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
-import { resolveScan, type ScanField } from "@openbooks/engine/src/inventory/item-identifiers.ts";
-import { listCustomerItemRefs } from "@openbooks/engine/src/sales/customer-item-refs.ts";
+import { db } from "@openbooks/engine/platform/db";
+import { resolveScan, type ScanField } from "@openbooks/engine/inventory/item-identifiers";
+import { listCustomerItemRefs } from "@openbooks/engine/sales/customer-item-refs";
 import { isFeatureEnabled } from "../features";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
 import { loadItem } from "../../app/api/items/_lib";

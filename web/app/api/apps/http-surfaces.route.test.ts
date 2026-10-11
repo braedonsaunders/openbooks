@@ -1,3 +1,4 @@
+import { resolveEngineSpecifier } from '../../../testing/engine-resolve-hooks.ts'
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
@@ -21,14 +22,11 @@ const hooks = registerHooks({
     if (specifier === './auth' && context.parentURL?.endsWith('/web/lib/authz.ts')) {
       return { shortCircuit: true, url: 'mock:apps-session' }
     }
-    if (specifier.startsWith('@openbooks/engine/src/')) {
-      return nextResolve(
-        pathToFileURL(`${repoRoot}/engine/${specifier.slice('@openbooks/engine/'.length)}`).href,
-        context,
-      )
-    }
+
     // @openbooks/schema resolves through the workspace symlink in
     // node_modules; mapping it here would bypass its package exports.
+    const engineUrl = resolveEngineSpecifier(specifier);
+    if (engineUrl) return nextResolve(engineUrl, context);
     return nextResolve(specifier, context)
   },
   load(url, context, nextLoad) {

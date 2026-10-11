@@ -12,7 +12,7 @@ import type { ApiField, ResolvedApiType } from "./registry-data.ts";
 // tenant-opaque 404 — the metadata-driven record path must fail closed the
 // same way, on create and on update, for header and repeating-row fields.
 const { createRecord, updateRecord } = await import("./writers.ts");
-const { documentRevisionCounterSql } = await import("@openbooks/engine/src/records/revision.ts");
+const { documentRevisionCounterSql } = await import("@openbooks/engine/records/revision");
 
 /** Current optimistic-concurrency token for a custom record (opaque wire form). */
 async function revisionOf(id: string): Promise<string> {
@@ -23,9 +23,9 @@ async function revisionOf(id: string): Promise<string> {
   );
   return rows.rows[0]!.revision;
 }
-const { db, withBypass, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
+const { db, withBypass, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  "@openbooks/engine/src/testing/fixtures.ts"
+  "@openbooks/engine/testing/fixtures"
 );
 
 const DB = !!process.env.OPENBOOKS_DB_URL;

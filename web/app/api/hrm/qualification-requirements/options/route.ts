@@ -1,7 +1,7 @@
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { db } from "@openbooks/engine/src/platform/db.ts";
-import { listRequirementSubjectOptions } from "@openbooks/engine/src/hrm/qualifications/requirements.ts";
+import { db } from "@openbooks/engine/platform/db";
+import { listRequirementSubjectOptions } from "@openbooks/engine/hrm/qualifications/requirements";
 import { qualificationErrorResponse } from "../../qualifications/_lib";
 const SUBJECT_KINDS = [
   "project",

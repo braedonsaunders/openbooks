@@ -2,7 +2,7 @@
  * Canonical account-type universes — re-exported from the engine so posting
  * paths, consolidation and statements share one definition.
  * Importing from here keeps existing import sites working; the source of
- * truth is `@openbooks/engine/src/records/account-types.ts`.
+ * truth is `@openbooks/engine/records/account-types`.
  */
 export {
   ACCOUNT_CLASS_TYPES,
@@ -13,4 +13,4 @@ export {
   PNL_TYPES,
   accountClassTypes,
   type AccountClassKey,
-} from "@openbooks/engine/src/records/account-types.ts";
+} from "@openbooks/engine/records/account-types";

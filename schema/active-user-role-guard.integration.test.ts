@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, pool } from "../engine/src/platform/db.ts";
-import { createScratchOrg, createScratchUser, dropScratchOrg } from "../engine/src/testing/fixtures.ts";
+import { db, pool } from "@openbooks/engine/platform/db";
+import { createScratchOrg, createScratchUser, dropScratchOrg } from "@openbooks/engine/testing/fixtures";
 
 const skip = !process.env.OPENBOOKS_DB_URL;
 

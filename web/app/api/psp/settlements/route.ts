@@ -3,7 +3,7 @@ import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from "@/lib/api/error-response";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { db } from "@openbooks/engine/platform/db";
 import {
   PspSettlementError,
   PspSettlementConflictError,
@@ -19,8 +19,8 @@ import {
   savePspProviderConfig,
   summarizeSettlement,
   type ParsedSettlement,
-} from "@openbooks/engine/src/payments/psp-settlement.ts";
-import { businessToday, isIsoCalendarDate } from "@openbooks/engine/src/platform/business-date.ts";
+} from "@openbooks/engine/payments/psp-settlement";
+import { businessToday, isIsoCalendarDate } from "@openbooks/engine/platform/business-date/module";
 import {
   accruePayoutsInTransit,
   batchDepositTieout,
@@ -44,7 +44,7 @@ import {
   ScopeNotFoundError,
   subsidiaryVisibleFilter,
   UnrestrictedScopeError,
-} from "@openbooks/engine/src/organization/subsidiary-scope.ts";
+} from "@openbooks/engine/organization/scope";
 import {
   isFeatureEnabled,
   subsidiaryFeatureEnabled,

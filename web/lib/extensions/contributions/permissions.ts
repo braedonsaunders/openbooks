@@ -1,4 +1,4 @@
-import { permissionContributionSchema } from '@openbooks/engine/src/extensions/contribution-schemas.ts'
+import { permissionContributionSchema } from '@openbooks/engine/extensions/contribution-schemas'
 /** Declaration availability comes from installed active versions; grants stay in app_roles. */
 export { permissionContributionSchema }
 

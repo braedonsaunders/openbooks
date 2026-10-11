@@ -85,8 +85,8 @@ const mockSources = new Map<string, string>([
 
 const _hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === '@openbooks/engine/src/platform/db.ts') return { url: 'mock:db', shortCircuit: true }
-    if (specifier === '@openbooks/engine/src/tax-returns/depreciation-packs.ts') return { url: 'mock:packs', shortCircuit: true }
+    if (specifier === '@openbooks/engine/platform/db') return { url: 'mock:db', shortCircuit: true }
+    if (specifier === '@openbooks/engine/tax-returns/depreciation-packs') return { url: 'mock:packs', shortCircuit: true }
     if (specifier.endsWith('/lib/feature-gates')) return { url: 'mock:feature-gates', shortCircuit: true }
     if (specifier.endsWith('/lib/authz')) return { url: 'mock:authz', shortCircuit: true }
     return nextResolve(specifier, context)

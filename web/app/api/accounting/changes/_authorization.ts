@@ -1,10 +1,10 @@
 import { sql } from "drizzle-orm";
 import { NextResponse } from "next/server";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { db } from "@openbooks/engine/platform/db";
 import {
   assertAnyPermission,
   ScopeNotFoundError,
-} from "@openbooks/engine/src/organization/subsidiary-scope.ts";
+} from "@openbooks/engine/organization/scope";
 import { getAuthz, can } from "@/lib/authz";
 import { isFeatureEnabled } from "@/lib/features";
 import { isUuid } from "@/lib/list-params";

@@ -22,7 +22,7 @@ stubModules({
   features: { source: featureGateSource },
   extra: {
     "@openbooks/engine/platform/database": `const state = globalThis[Symbol.for("openbooks.utilization-entries-precision-test")]
-     export * from ${JSON.stringify(import.meta.resolve("@openbooks/engine/src/platform/db.ts"))}
+     export * from ${JSON.stringify(import.meta.resolve("@openbooks/engine/platform/db"))}
      export const db = { execute: async (query) => {
        // The route resolves the presentation currency through the org row;
        // entry fixture rows carry no currency, so they translate 1:1.

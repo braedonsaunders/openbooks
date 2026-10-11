@@ -19,7 +19,7 @@ import {
   fromUnits as moneyFromUnits,
   roundDiv as moneyRoundDiv,
   toUnits as moneyToUnits,
-} from '@openbooks/engine/src/money/money.ts'
+} from '@openbooks/engine/money/money'
 
 export type ExactDecimal = string
 export type StatementValue = ExactDecimal | null | undefined

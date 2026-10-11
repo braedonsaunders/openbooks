@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { updateJobFamily } from "@openbooks/engine/src/hrm/compensation/architecture.ts";
+import { updateJobFamily } from "@openbooks/engine/hrm/compensation/architecture";
 
 import { isUuid } from "../../../../../lib/list-params";
 import { compensationErrorResponse } from "../../compensation/_lib";

@@ -9,17 +9,17 @@ import {
   listHireablePeopleOptions,
   listLocationOptions,
   listPeopleOptions,
-} from "@openbooks/engine/src/hrm/employment-read.ts";
-import { HrmPositionError } from "@openbooks/engine/src/hrm/positions.ts";
-import { listPositionOptions } from "@openbooks/engine/src/hrm/positions-read.ts";
+} from "@openbooks/engine/hrm/employment-read";
+import { HrmPositionError } from "@openbooks/engine/hrm/positions";
+import { listPositionOptions } from "@openbooks/engine/hrm/positions-read";
 import {
   listLeaveFilingEmploymentOptions,
   listLeaveTypeOptions,
   listOwnLeaveEmploymentOptions,
-} from "@openbooks/engine/src/hrm/leave-read.ts";
-import { HrmAuthorizationError } from "@openbooks/engine/src/hrm/authorization.ts";
+} from "@openbooks/engine/hrm/leave-read";
+import { HrmAuthorizationError } from "@openbooks/engine/hrm/authorization";
 import { hrmAuthorizationResponse } from "../../../../lib/api/record-not-found";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { db } from "@openbooks/engine/platform/db";
 import { guardFeaturePermission } from "../../../../lib/feature-gates";
 import { isUuid } from "../../../../lib/list-params";
 /**

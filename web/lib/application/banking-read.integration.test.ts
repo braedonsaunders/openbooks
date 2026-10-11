@@ -2,10 +2,10 @@ import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { afterEach, beforeEach, test } from 'node:test'
 import { sql } from 'drizzle-orm'
-import { db, withBypassContext, withOrgContext } from '@openbooks/engine/src/platform/db.ts'
-import { createScratchOrg, dropScratchOrg, seedFlowActors } from '@openbooks/engine/src/testing/fixtures.ts'
+import { db, withBypassContext, withOrgContext } from '@openbooks/engine/platform/db'
+import { createScratchOrg, dropScratchOrg, seedFlowActors } from '@openbooks/engine/testing/fixtures'
 import type { ApplicationContext } from './context'
-import { startReconciliation } from '@openbooks/engine/src/banking/banking.ts'
+import { startReconciliation } from '@openbooks/engine/banking/banking'
 const {
   getApplicationReconciliation,
   listApplicationBankFeeds,

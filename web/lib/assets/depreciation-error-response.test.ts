@@ -4,8 +4,8 @@ import {
   ClosedBatchError,
   DepreciationRefusalError,
   StalePreviewError,
-} from "@openbooks/engine/src/assets/depreciation.ts";
-import { DepreciationFormulaError } from "@openbooks/engine/src/assets/depreciation-formula.ts";
+} from "@openbooks/engine/assets/depreciation";
+import { DepreciationFormulaError } from "@openbooks/engine/assets/depreciation-formula";
 import { depreciationFailure } from "./depreciation-error-response.ts";
 
 /**

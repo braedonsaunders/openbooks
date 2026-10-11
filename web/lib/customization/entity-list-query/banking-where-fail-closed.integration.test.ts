@@ -7,8 +7,8 @@ import { sql } from "drizzle-orm";
 // filter (or a saved view holding one) dies as a raw uuid/date throw and
 // the whole page 500s. The builders must fail those closed to an empty row
 // set. SQL builders and storage are real; only server-only is stubbed.
-const { db } = await import("@openbooks/engine/src/platform/db.ts");
-const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
+const { db } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
 const { bankReconciliationWhere, bankStatementWhere } = await import("./banking.ts");
 const { defaultListView } = await import("@openbooks/customization");
 

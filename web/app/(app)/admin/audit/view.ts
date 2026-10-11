@@ -2,7 +2,7 @@ import 'server-only'
 
 import { notFound, redirect } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
-import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
+import { isIsoCalendarDate } from '@openbooks/engine/platform/business-date/module'
 import { grid, page, pageHeader, pagination, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { isUuid, mergeHref, parseListParams, pickString } from '../../../../lib/list-params'
 import { requirePermission } from '../../../../lib/authz'

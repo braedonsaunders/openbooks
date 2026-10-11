@@ -93,7 +93,7 @@ stubModules({
   authz: false,
   features: false,
   extra: {
-    "@openbooks/engine/src/platform/db.ts": `
+    "@openbooks/engine/platform/db": `
       const state = globalThis[Symbol.for('openbooks.payments-route-test')]
       const sqlText = globalThis.openbooksPaymentsSqlText
       // The shared claim helper reads through sql.identifier, whose chunk
@@ -182,15 +182,15 @@ stubModules({
        return null
      }
      export function subsidiariesInScope() { return true }`,
-    "@openbooks/engine/src/payments/payment-queries.ts": `const state = globalThis[Symbol.for('openbooks.payments-route-test')]
+    "@openbooks/engine/payments/payment-queries": `const state = globalThis[Symbol.for('openbooks.payments-route-test')]
      export async function openItemsForParty() { return state.openItems }
      export async function loadPaymentDocument(id, kind, orgId) {
        if (!state.inserted || id !== state.requestKey) return null
        return { doc: { id, kind, org_id: orgId, document_number: 'PAY-000003' }, bankAccountId: null, allocations: [], applied: [] }
      }`,
-    "@openbooks/engine/src/payments/payment-documents.ts": `const state = globalThis[Symbol.for('openbooks.payments-route-test')]
+    "@openbooks/engine/payments/payment-documents": `const state = globalThis[Symbol.for('openbooks.payments-route-test')]
      export async function updateDraftPayment(_id, patch) { state.savedPatch = patch; return null }`,
-    "@openbooks/engine/src/platform/business-date.ts": `export async function businessToday() { return globalThis[Symbol.for('openbooks.payments-route-test')].clockDate }`,
+    "@openbooks/engine/platform/business-date/module": `export async function businessToday() { return globalThis[Symbol.for('openbooks.payments-route-test')].clockDate }`,
   },
 });
 

@@ -29,9 +29,9 @@ registerHooks({
     return next(specifier, context)
   },
 })
-import { db, withBypassContext, withOrgContext } from '@openbooks/engine/src/platform/db.ts'
+import { db, withBypassContext, withOrgContext } from '@openbooks/engine/platform/db'
 import { sql } from 'drizzle-orm'
-import { createScratchOrg, dropScratchOrg, createScratchUser } from '@openbooks/engine/src/testing/fixtures.ts'
+import { createScratchOrg, dropScratchOrg, createScratchUser } from '@openbooks/engine/testing/fixtures'
 const { PATCH } = await import('./route.ts')
 
 async function fixture(withAddress: boolean) {

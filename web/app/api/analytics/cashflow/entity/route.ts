@@ -2,9 +2,9 @@ import { defineRoute } from '@/lib/api/route'
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
-import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
-import { db } from "@openbooks/engine/src/platform/db.ts";
-import { add, mulDecimal, normalizeMoney, sum } from "@openbooks/engine/src/money/money.ts";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
+import { db } from "@openbooks/engine/platform/db";
+import { add, mulDecimal, normalizeMoney, sum } from "@openbooks/engine/money/money";
 import { guardSubsidiaryScope } from "../../../../../lib/authz";
 import { statementBookExpr } from "../../../../../lib/gl-summary";
 import { flowRates, presentationCurrency } from "../../../../../lib/fx-presentation";

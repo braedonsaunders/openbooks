@@ -14,10 +14,10 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context);
 } });
 const { sql } = await import('drizzle-orm');
-const { db, env, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts');
-const { documentRevisionSql, isDocumentRevisionToken } = await import('@openbooks/engine/src/records/revision.ts');
-const { createScratchOrg, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts');
-const { waitForLockWaiter } = await import('@openbooks/engine/src/testing/lock-wait.ts');
+const { db, env, withOrgContext } = await import('@openbooks/engine/platform/db');
+const { documentRevisionSql, isDocumentRevisionToken } = await import('@openbooks/engine/records/revision');
+const { createScratchOrg, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures');
+const { waitForLockWaiter } = await import('@openbooks/engine/testing/lock-wait');
 const { POST, PATCH } = await import('../app/api/admin/custom-fields/route');
 
 const scenarios = ['create evidence', 'update evidence', 'missing revision', 'truncated revision', 'malformed revision', 'stale revision', 'successive saves', 'concurrent editors', 'waiting writer', 'create audit failure', 'update audit failure', 'foreign definition', 'permission denied', 'invalid id'] as const;

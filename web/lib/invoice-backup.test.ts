@@ -1,7 +1,8 @@
+import { resolveEngineSpecifier } from '../testing/engine-resolve-hooks.ts'
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
-import { toUnits } from '../../engine/src/money/money.ts'
+import { toUnits } from '@openbooks/engine/money/money'
 import { createMoneyFormatter } from './money-format.ts'
 import type { CustomerLabourRow } from './invoice-backup.ts'
 
@@ -9,7 +10,7 @@ import type { CustomerLabourRow } from './invoice-backup.ts'
 // allocator can be exercised directly without starting a Next.js server.
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier.startsWith('@openbooks/engine/src/') || specifier.startsWith('@openbooks/schema/src/')) {
+    if (specifier.startsWith('@openbooks/schema/src/')) {
       const [packageName, ...packagePath] = specifier.slice('@openbooks/'.length).split('/')
       if (packageName !== 'engine' && packageName !== 'schema') {
         // Workspace packages declare their own subpath exports (networking's
@@ -21,6 +22,8 @@ const hooks = registerHooks({
       const localPath = packagePath.length ? packagePath.join('/') : 'src/index.ts'
       return { shortCircuit: true, url: new URL(`${packageRoot}/${localPath}`, import.meta.url).href }
     }
+    const engineUrl = resolveEngineSpecifier(specifier);
+    if (engineUrl) return nextResolve(engineUrl, context);
     return nextResolve(specifier, context)
   },
 })

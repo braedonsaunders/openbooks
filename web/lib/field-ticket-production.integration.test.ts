@@ -2,11 +2,11 @@ import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import test from 'node:test'
 
-const { db, withBypassContext, withOrgTransaction } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypassContext, withOrgTransaction } = await import('@openbooks/engine/platform/db')
 const { sql } = await import('drizzle-orm')
-const { createScratchOrg, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
-const { requestDocumentVoid } = await import('@openbooks/engine/src/ledger/document-void.ts')
-const { ProjectProgressError, recordFieldTicketProgressInTransaction } = await import('@openbooks/engine/src/projects/progress.ts')
+const { createScratchOrg, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
+const { requestDocumentVoid } = await import('@openbooks/engine/ledger/document-void')
+const { ProjectProgressError, recordFieldTicketProgressInTransaction } = await import('@openbooks/engine/projects/progress')
 const { createFieldTicket, loadFieldTicket, releaseFieldTicketApproval, saveCrewGrid, submitFieldTicket, FieldTicketError } = await import('./field-tickets')
 const { addTicketQuantity, removeTicketQuantity } = await import('./field-ticket-production')
 

@@ -29,13 +29,9 @@ registerHooks({
     return next(s, c)
   },
 })
-const { db, withBypassContext, withOrgContext } = await import(
-  root + 'engine/src/platform/db.ts'
-)
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
 const { sql } = await import(root + 'node_modules/drizzle-orm/index.js')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
-  root + 'engine/src/testing/fixtures.ts'
-)
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
 const { GET: cardGet } = await import(
   root + 'web/app/api/insights/cards/[id]/route.ts'
 )

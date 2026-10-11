@@ -29,8 +29,8 @@ const { resolveDynamicSetupOptions } = (await import('./dynamic-options.ts')) as
 const { SETUP_ENTITY_BY_KEY } = (await import('./registry.ts')) as {
   SETUP_ENTITY_BY_KEY: Map<string, unknown>
 }
-const packRegistry: typeof import('@openbooks/engine/src/payroll/packs.ts') =
-  await import('@openbooks/engine/src/payroll/packs.ts')
+const packRegistry: typeof import('@openbooks/engine/payroll/packs') =
+  await import('@openbooks/engine/payroll/packs')
 
 const MESSAGES = join(import.meta.dirname, '..', '..', 'messages', 'en', 'admin.json')
 

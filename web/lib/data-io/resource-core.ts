@@ -8,7 +8,7 @@
 
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/db'
 import { featureEnabled, resolvedFeatureState } from '../features'
 import { loadNumberSequenceKindOptions } from '../setup/number-sequence-kinds'
 import { SETUP_ENTITY_BY_KEY, toSnake } from '../setup/registry'
@@ -21,7 +21,7 @@ import {
   type ResourceRefTarget,
   type WriteOutcome,
 } from './types'
-import { isUuid } from '@openbooks/engine/src/platform/uuid.ts'
+import { isUuid } from '@openbooks/engine/platform/identifiers'
 
 /**
  * Shared export cap, error, and gate live in the dependency-free

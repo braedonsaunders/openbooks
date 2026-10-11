@@ -27,7 +27,7 @@ registerHooks({
         shortCircuit: true,
         url: "mock:control-loss-reversal-authority",
       };
-    if (specifier === "@openbooks/engine/src/consolidation/loss-of-control.ts")
+    if (specifier === "@openbooks/engine/consolidation/loss-of-control")
       return { shortCircuit: true, url: "mock:control-loss-reversal-command" };
     if (specifier === "@/lib/api/json")
       return next(

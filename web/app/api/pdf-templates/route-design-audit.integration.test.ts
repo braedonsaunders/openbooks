@@ -54,9 +54,9 @@ const idUrl = "./[id]/route.ts?pdf-template-design-audit-id";
 const { POST } = (await import(postUrl)) as typeof import("./route.ts");
 const { PATCH, DELETE } = (await import(idUrl)) as typeof import("./[id]/route.ts");
 
-const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
-  "@openbooks/engine/src/testing/fixtures.ts"
+  "@openbooks/engine/testing/fixtures"
 );
 
 async function seed(): Promise<{ orgId: string; actorId: string }> {

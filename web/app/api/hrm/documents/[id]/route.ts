@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { getDocumentDetail } from "@openbooks/engine/src/hrm/documents/documents.ts";
+import { getDocumentDetail } from "@openbooks/engine/hrm/documents/documents";
 import { hrmDocumentsErrorResponse } from "../_lib";
 export const GET = defineRoute({
   permission: "hrm.documents.read",

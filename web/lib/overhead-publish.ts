@@ -1,10 +1,10 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { db, inDbTransaction } from '@openbooks/engine/src/platform/db.ts'
-import { overheadPublishBlockers } from '@openbooks/engine/src/projects/overhead-rates.ts'
-import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
-import { lockScopeRows } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
-import { syncOverheadSystemRule } from '@openbooks/engine/src/allocations/overhead-sync.ts'
+import { db, inDbTransaction } from '@openbooks/engine/platform/db'
+import { overheadPublishBlockers } from '@openbooks/engine/projects/overhead-rates'
+import { businessToday } from '@openbooks/engine/platform/business-date/module'
+import { lockScopeRows } from '@openbooks/engine/organization/scope'
+import { syncOverheadSystemRule } from '@openbooks/engine/allocations/overhead-sync'
 import { trueCostData } from './analytics/true-cost-data'
 
 /**

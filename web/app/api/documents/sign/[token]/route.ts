@@ -5,7 +5,7 @@ import {
   declineTokenDocument,
   readTokenDocument,
   signTokenDocument,
-} from "@openbooks/engine/src/hrm/documents/documents.ts";
+} from "@openbooks/engine/hrm/documents/documents";
 import { hrmDocumentsErrorResponse } from "../../../hrm/documents/_lib";
 import { signActionBody } from "../../../hrm/documents/bodies";
 

@@ -1,5 +1,5 @@
 /** Client-safe exact decimal helpers for the editable budget worksheet. */
-import { apportion } from '@openbooks/engine/src/money/money.ts'
+import { apportion } from '@openbooks/engine/money/money'
 
 const SCALE = 10_000n
 

@@ -7,9 +7,9 @@ const fixture = installCompensationReadFixture();
 
 const { loadCompensationHome, loadEquity } = await import("../../../../lib/hrm/compensation.ts");
 const { CompensationError } = await import(
-  "@openbooks/engine/src/hrm/compensation/errors.ts"
+  "@openbooks/engine/hrm/compensation/errors"
 );
-const { HrmAuthorizationError } = await import("@openbooks/engine/src/hrm/authorization.ts");
+const { HrmAuthorizationError } = await import("@openbooks/engine/hrm/authorization");
 
 Object.assign(globalThis, { React });
 const identity = { orgId: "019f655b-2900-7000-8000-000000000001", id: "019f655b-2900-7000-8000-000000000002" };

@@ -7,7 +7,7 @@ import { useTranslations } from 'next-intl'
 import { Card, CardContent, cn } from '@openbooks/ui'
 import type { PnlLine } from '@openbooks/schema'
 import { PagedTable } from '../../../../components/paged-table'
-import { add, cmp, neg, roundDiv, toUnits } from '@openbooks/engine/src/money/money.ts'
+import { add, cmp, neg, roundDiv, toUnits } from '@openbooks/engine/money/money'
 
 interface CategoryRow { category: string; amount: string }
 interface AccountRow { accountId: string; number: string | null; name: string; amount: string }

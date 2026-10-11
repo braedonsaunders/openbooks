@@ -1,6 +1,6 @@
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from 'next/server'
-import { worklistGates } from '@openbooks/engine/src/flows/index.ts'
+import { worklistGates } from '@openbooks/engine/flows/module'
 import { requireFlowsSession } from '../_lib'
 
 export const runtime = 'nodejs'

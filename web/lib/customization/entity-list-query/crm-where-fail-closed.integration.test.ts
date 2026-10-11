@@ -10,8 +10,8 @@ import { sql } from "drizzle-orm";
 // half moved onto the unified customer list when /crm/leads and
 // /crm/prospects were retired, so it is `customerWhere` that is exercised
 // here now. SQL builders and storage are real; only server-only is stubbed.
-const { db } = await import("@openbooks/engine/src/platform/db.ts");
-const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
+const { db } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
 const { activityWhere } = await import("./crm.ts");
 const { customerBaseJoins, customerWhere } = await import("./customers.ts");
 const { defaultListView } = await import("@openbooks/customization");

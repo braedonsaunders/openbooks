@@ -5,17 +5,17 @@ import { workCompletedOn, workPeriodOf } from '@openbooks/engine/records/work-pe
 export { projectContractCapacityUsed } from '@openbooks/engine/projects/billing-pricing'
 
 import { sql } from 'drizzle-orm'
-import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
 import { appBaseUrl, runRecordFlows, PREBILL_SUBJECT_KIND } from '@openbooks/engine/flows'
-import { businessToday, isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
-import { add, allocateLargestRemainder, cmp, mul, mulPercent, normalizeMoney, sum } from '@openbooks/engine/src/money/money.ts'
-import { documentRevisionCounterSql, isDocumentRevisionToken } from '@openbooks/engine/src/records/revision.ts'
+import { businessToday, isIsoCalendarDate } from '@openbooks/engine/platform/business-date/module'
+import { add, allocateLargestRemainder, cmp, mul, mulPercent, normalizeMoney, sum } from '@openbooks/engine/money/money'
+import { documentRevisionCounterSql, isDocumentRevisionToken } from '@openbooks/engine/records/revision'
 import { canonicalDecimal } from './exact-decimal'
-import { computeLineTaxes } from '@openbooks/engine/src/tax/tax.ts'
+import { computeLineTaxes } from '@openbooks/engine/tax/tax'
 import {
   loadTaxComponentConfig,
   persistLineTaxComponents,
-} from '@openbooks/engine/src/tax/persist.ts'
+} from '@openbooks/engine/tax/persist'
 import { nextDocumentNumber } from "./bills.ts";
 import { acquireFeatureGateLock, isFeatureEnabled } from './features'
 import {
@@ -35,12 +35,12 @@ import {
 } from '@openbooks/engine/delivery/email-config'
 import { createMoneyFormatter } from './money-format'
 
-import { lockAndCheckOrgFeature } from '@openbooks/engine/src/organization/org-feature-lock.ts'
+import { lockAndCheckOrgFeature } from '@openbooks/engine/organization/org-feature-lock'
 import {
   lockProjectForScope,
   ScopeNotFoundError,
   withScopeSnapshot,
-} from '@openbooks/engine/src/organization/subsidiary-scope.ts'
+} from '@openbooks/engine/organization/scope'
 import { subsidiaryVisibleFilter } from './subsidiaries'
 import type { FinancialProfile, InvoicingProfile } from '@openbooks/schema'
 import {

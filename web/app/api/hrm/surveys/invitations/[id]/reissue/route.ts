@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { reissueInvitationToken } from "@openbooks/engine/src/hrm/surveys/responses.ts";
+import { reissueInvitationToken } from "@openbooks/engine/hrm/surveys/responses";
 import { hrmDocumentsErrorResponse } from "../../../../documents/_lib";
 /**
  * POST /api/hrm/surveys/invitations/[id]/reissue — re-mint one open

@@ -3,11 +3,11 @@ import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, withBypassContext } from "@openbooks/engine/src/platform/db.ts";
-import { createScratchOrg, dropScratchOrg, seedFlowActors } from "@openbooks/engine/src/testing/fixtures.ts";
-import { receiveInventory } from "@openbooks/engine/src/inventory/movements.ts";
-import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
-import { withSimClock } from "@openbooks/engine/src/platform/clock.ts";
+import { db, withBypassContext } from "@openbooks/engine/platform/db";
+import { createScratchOrg, dropScratchOrg, seedFlowActors } from "@openbooks/engine/testing/fixtures";
+import { receiveInventory } from "@openbooks/engine/inventory/movements";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
+import { withSimClock } from "@openbooks/engine/testing/platform/clock";
 
 type InventorySessionUser = {
   id: string;
@@ -142,9 +142,9 @@ const inventoryFeatureCases = [
         const assert: typeof import("node:assert/strict") = (await import("node:assert/strict")).default;
         const test = (await import("node:test")).default;
         const { sql } = await import("drizzle-orm");
-        const { withBypassContext, db, pool } = await import("@openbooks/engine/src/platform/db.ts");
-        const { documentRevisionSql } = await import("@openbooks/engine/src/records/revision.ts");
-        const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
+        const { withBypassContext, db, pool } = await import("@openbooks/engine/platform/db");
+        const { documentRevisionSql } = await import("@openbooks/engine/records/revision");
+        const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
         const { PUT } = await import("../app/api/items/[id]/costing/route");
 
         for (const field of ["cogsAccountId", "adjustmentAccountId", "varianceAccountId", "receivedNotBilledAccountId"] as const) {
@@ -246,12 +246,12 @@ const inventoryMovementCases = [
         const { randomUUID } = await import('node:crypto');
         const test = (await import('node:test')).default;
         const { sql } = await import('drizzle-orm');
-        const { db, withBypassContext, withOrg } = await import('@openbooks/engine/src/platform/db.ts');
-        const { receiveInventory } = await import('@openbooks/engine/src/inventory/movements.ts');
-        const { activePickReservations } = await import('@openbooks/engine/src/inventory/pick-reservations.ts');
-        const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts');
-        const { createWarehouseOperator,confirmFixturePick,packFixtureShipment } = await import('@openbooks/engine/src/testing/warehouse-execution.ts');
-        const { FulfillmentRefusal, createPickList, createShipment, releasePickList, setShipmentCarrier } = await import('@openbooks/engine/src/sales/fulfillment.ts');
+        const { db, withBypassContext, withOrg } = await import('@openbooks/engine/platform/db');
+        const { receiveInventory } = await import('@openbooks/engine/inventory/movements');
+        const { activePickReservations } = await import('@openbooks/engine/testing/inventory/pick-reservations');
+        const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures');
+        const { createWarehouseOperator,confirmFixturePick,packFixtureShipment } = await import('@openbooks/engine/testing/warehouse-execution');
+        const { FulfillmentRefusal, createPickList, createShipment, releasePickList, setShipmentCarrier } = await import('@openbooks/engine/sales/fulfillment/module');
         const { completeShipment, saveFulfillmentCustom } = await import('./shipments');
         const DB = Boolean(process.env.OPENBOOKS_DB_URL)
 
@@ -378,8 +378,8 @@ const inventoryMovementCases = [
         const { randomUUID } = await import("node:crypto");
         const test = (await import("node:test")).default;
         const { sql } = await import("drizzle-orm");
-        const { db, withBypassContext } = await import("@openbooks/engine/src/platform/db.ts");
-        const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
+        const { db, withBypassContext } = await import("@openbooks/engine/platform/db");
+        const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
         const { activeStockLocations, profiledItemIds, resolveLineStockLocation } = await import("./stock-locations.ts");
 
         const DB = !!process.env.OPENBOOKS_DB_URL;

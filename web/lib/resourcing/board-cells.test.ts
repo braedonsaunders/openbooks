@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type { PersonWeekForecast } from "@openbooks/engine/src/resourcing/forecast.ts";
+import type { PersonWeekForecast } from "@openbooks/engine/resourcing/forecast";
 import { boardCell, nextCell, NO_CAPACITY_REMEDY } from "./board-cells.ts";
 
 function forecast(overrides: Partial<PersonWeekForecast> = {}): PersonWeekForecast {

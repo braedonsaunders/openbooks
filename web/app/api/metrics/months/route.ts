@@ -1,4 +1,4 @@
-import { listSaasMetricsMonths } from "@openbooks/engine/src/billing/metrics/metrics-ledger.ts";
+import { listSaasMetricsMonths } from "@openbooks/engine/billing/metrics/metrics-ledger";
 import { defineRoute } from "@/lib/api/route";
 
 export const GET = defineRoute({

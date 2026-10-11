@@ -3,9 +3,9 @@ import test from 'node:test';
 import type { SessionUser } from '../auth';
 
 const { sql } = await import('drizzle-orm');
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts');
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import('@openbooks/engine/src/testing/fixtures.ts');
-const { ensureCloseDefaults } = await import("@openbooks/engine/src/close/defaults.ts");
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db');
+const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import('@openbooks/engine/testing/fixtures');
+const { ensureCloseDefaults } = await import("@openbooks/engine/testing/close/defaults");
 const { executeAssistantTool } = await import('./registry');
 
 function userFor(orgId: string, userId: string): SessionUser {

@@ -7,8 +7,8 @@ const { getResource } = await import('./resources.ts')
 const { toCsv } = await import('./serialize.ts')
 const { parseImportFile } = await import('./parse.ts')
 const { sql } = await import('drizzle-orm')
-const { db, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { db, withBypassContext } = await import('@openbooks/engine/platform/db')
+const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import('@openbooks/engine/testing/fixtures')
 const DB = !!process.env.OPENBOOKS_DB_URL
 const sections: FormSection[] = [
   { id: 'main', title: 'Main', fields: [

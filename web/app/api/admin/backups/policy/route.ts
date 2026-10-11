@@ -3,8 +3,8 @@ import { defineRoute } from "@/lib/api/route";
 
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
-import { db, withOrgTransaction } from "@openbooks/engine/src/platform/db.ts";
-import { auditBackupEvent, computeNextRunAt, type BackupPolicyShape } from "@openbooks/engine/src/backup/backup.ts";
+import { db, withOrgTransaction } from "@openbooks/engine/platform/db";
+import { auditBackupEvent, computeNextRunAt, type BackupPolicyShape } from "@openbooks/engine/backup/backup";
 
 
 const requestBodySchema = z.discriminatedUnion("frequency", [

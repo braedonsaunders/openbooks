@@ -1,10 +1,10 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { documentRevisionSql } from '@openbooks/engine/src/records/revision.ts'
-import { db, type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
-import { resolveAssetAccounts } from '@openbooks/engine/src/assets/depreciation.ts'
-import { fromUnits, toUnits } from '@openbooks/engine/src/money/money.ts'
-import { lockScopeRow, ScopeNotFoundError } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
+import { documentRevisionSql } from '@openbooks/engine/records/revision'
+import { db, type SqlExecutor } from '@openbooks/engine/platform/db'
+import { resolveAssetAccounts } from '@openbooks/engine/assets/depreciation'
+import { fromUnits, toUnits } from '@openbooks/engine/money/money'
+import { lockScopeRow, ScopeNotFoundError } from '@openbooks/engine/organization/scope'
 
 /**
  * Asset payload for the flyout: the asset row, its category, the resolved

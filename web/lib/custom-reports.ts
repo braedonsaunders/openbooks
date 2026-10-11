@@ -3,7 +3,7 @@ import { reportEntityCatalog, validateCatalogReportQuery } from './custom-record
 import { requireReportAuthz, snapshotReportAuthorization, withReportAuthz } from './report-execution-context'
 import { canRunReportEntity } from './report-authz'
 import { sql } from 'drizzle-orm'
-import { db, pool } from '@openbooks/engine/src/platform/db.ts'
+import { db, pool } from '@openbooks/engine/platform/db'
 import {
   REPORT_ENTITY_MAP,
   customQueryReferencesBook,
@@ -37,8 +37,8 @@ import { resolvePeriod } from './periods'
 import { fiscalStartMonth } from './fiscal'
 import { isFeatureEnabled } from './features'
 import { reportEntityFeatureKey } from './report-authz'
-import { ensureReportDefinitions } from '@openbooks/engine/src/reports/ensure-report-definitions.ts'
-import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
+import { ensureReportDefinitions } from '@openbooks/engine/reports/ensure-report-definitions'
+import { businessToday } from '@openbooks/engine/platform/business-date/module'
 import { can } from './authz'
 import { applyPayrollConfidentialityToReportResult } from './report-payroll-collapse'
 

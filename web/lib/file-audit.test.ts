@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { PgDialect } from 'drizzle-orm/pg-core'
-import type { SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
+import type { SqlExecutor } from '@openbooks/engine/platform/db'
 
 const { recordFileEvent } = await import('./file-audit.ts')
 

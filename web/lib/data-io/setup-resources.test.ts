@@ -8,8 +8,8 @@ const { setupResource } = (await import('./setup-resources.ts')) as typeof impor
 const { SETUP_ENTITY_BY_KEY, SETUP_PROJECTS_OR_MANUFACTURING_REMEDY } = await import('../setup/registry.ts')
 const { resolvedFeatureState } = await import('../features.ts')
 
-const { db, withOrgTransaction } = await import('@openbooks/engine/src/platform/db.ts')
-const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { db, withOrgTransaction } = await import('@openbooks/engine/platform/db')
+const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import('@openbooks/engine/testing/fixtures')
 
 test(
   'setup imports roll back a row when audit fails and record actual snapshots on success',

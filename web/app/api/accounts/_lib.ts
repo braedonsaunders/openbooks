@@ -1,7 +1,7 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { subsidiaryVisibleFilter } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
+import { db } from '@openbooks/engine/platform/db'
+import { subsidiaryVisibleFilter } from '@openbooks/engine/organization/scope'
 
 export interface AccountPayload {
   account: Record<string, unknown>

@@ -20,7 +20,7 @@ stubModules({
   },
   extra: {
     'server-only': `export {}`,
-    '@openbooks/engine/src/platform/db.ts':
+    '@openbooks/engine/platform/db':
       `export const db = { execute: async (q) => {` +
       `const s = JSON.stringify(q); globalThis.__recoverySql.push(s);` +
       `if (s.includes('needs_authentication')) return { rows: [] };` +

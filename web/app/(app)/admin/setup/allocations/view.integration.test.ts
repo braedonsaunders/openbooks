@@ -69,9 +69,9 @@ const hooks = registerHooks({
 const { loadAllocations } = (await import('./view.ts')) as typeof import('./view.ts')
 hooks.deregister()
 
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
 const { createScratchOrg, dropScratchOrg } = await import(
-  '@openbooks/engine/src/testing/fixtures.ts'
+  '@openbooks/engine/testing/fixtures'
 )
 
 // F1T-FIX-ALLOC: seeds run under the explicit bypass. The unscoped

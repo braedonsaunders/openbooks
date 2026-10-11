@@ -4,8 +4,8 @@ import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 import { stubModules } from '../../../testing/stub-modules'
 import { resolveAppModule } from '../../../lib/test-module-hooks'
-import type { FundReadRecord } from '@openbooks/engine/src/nonprofit/funds.ts'
-import type { FundReleaseReadRecord } from '@openbooks/engine/src/nonprofit/releases.ts'
+import type { FundReadRecord } from '@openbooks/engine/nonprofit/funds'
+import type { FundReleaseReadRecord } from '@openbooks/engine/nonprofit/releases'
 
 const root = pathToFileURL(process.cwd() + '/').href
 const orgId = '00000000-0000-4000-8000-000000000001'
@@ -22,9 +22,9 @@ registerHooks({
     const wrap = (path: string, source: string) => ({ shortCircuit: true, url: 'data:text/javascript,' + encodeURIComponent(`export * from ${JSON.stringify(root + path)};${source}`) })
     if (s === '../../../../lib/authz') return wrap('web/lib/authz.ts', `export async function requirePermission(){return {user:{orgId:${JSON.stringify(orgId)}},permissions:new Set(['funds.read']),allowedSubsidiaryIds:null}}`)
     if (s.endsWith('/features') || s === './features') return wrap('web/lib/features.ts', `export async function isFeatureEnabled(){return true} export async function orgFeatureState(){return {features:{nonprofit:true,fundAccounting:true}}}`)
-    if (s === '@openbooks/engine/src/nonprofit/funds.ts' && c.parentURL?.endsWith('/funds/view.ts')) return wrap('engine/src/nonprofit/funds.ts', `export async function getFund(request){const s=globalThis.__fundReaderBoundary;s.reads.push(request);return s.fund}`)
-    if (s === '@openbooks/engine/src/nonprofit/releases.ts' && c.parentURL?.endsWith('/releases/view.ts')) return wrap('engine/src/nonprofit/releases.ts', `export async function getFundRelease(request){const s=globalThis.__fundReaderBoundary;s.reads.push(request);return s.release}`)
-    if (s === '@openbooks/engine/src/platform/db.ts' && c.parentURL?.endsWith('/funds/view.ts')) return { shortCircuit: true, url: 'data:text/javascript,' + encodeURIComponent(`export const db={async execute(){const s=globalThis.__fundReaderBoundary;if(!s.fund || s.reads.length!==1)throw Error('collection read before canonical fund');s.collections++;return {rows:[]}}}`) }
+    if (s === '@openbooks/engine/nonprofit/funds' && c.parentURL?.endsWith('/funds/view.ts')) return wrap('engine/src/nonprofit/funds.ts', `export async function getFund(request){const s=globalThis.__fundReaderBoundary;s.reads.push(request);return s.fund}`)
+    if (s === '@openbooks/engine/nonprofit/releases' && c.parentURL?.endsWith('/releases/view.ts')) return wrap('engine/src/nonprofit/releases.ts', `export async function getFundRelease(request){const s=globalThis.__fundReaderBoundary;s.reads.push(request);return s.release}`)
+    if (s === '@openbooks/engine/platform/db' && c.parentURL?.endsWith('/funds/view.ts')) return { shortCircuit: true, url: 'data:text/javascript,' + encodeURIComponent(`export const db={async execute(){const s=globalThis.__fundReaderBoundary;if(!s.fund || s.reads.length!==1)throw Error('collection read before canonical fund');s.collections++;return {rows:[]}}}`) }
     return resolveAppModule(s, c, next, root) ?? next(s, c)
   },
 })

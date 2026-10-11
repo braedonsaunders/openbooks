@@ -1,8 +1,8 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { db, withOrgTransaction } from "@openbooks/engine/src/platform/db.ts";
-import { revokeQualification } from "@openbooks/engine/src/hrm/qualifications/qualifications.ts";
+import { db, withOrgTransaction } from "@openbooks/engine/platform/db";
+import { revokeQualification } from "@openbooks/engine/hrm/qualifications/qualifications";
 import { qualificationErrorResponse } from "../../_lib";
 import { revokeQualificationBody } from "../../bodies";
 /** Revoke with a reason: the row freezes, only a new record replaces it. */

@@ -1,4 +1,4 @@
-import { documentRevisionCounterSql } from "@openbooks/engine/src/records/revision.ts";
+import { documentRevisionCounterSql } from "@openbooks/engine/records/revision";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
@@ -49,9 +49,9 @@ const hooks = registerHooks({
 const { makePATCH } = await import("./handlers.ts");
 hooks.deregister();
 
-const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { createScratchOrg, dropScratchOrg, seedApprovalFlow, seedFlowActors } = await import(
-  "@openbooks/engine/src/testing/fixtures.ts"
+  "@openbooks/engine/testing/fixtures"
 );
 
 const PATCH = makePATCH({ kind: "quote", readPerm: "ar.read", createPerm: "ar.create" });

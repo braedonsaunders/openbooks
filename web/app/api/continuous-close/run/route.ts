@@ -5,8 +5,8 @@ import { z } from "zod";
 import {
   isContinuousCloseAgentKey,
   runContinuousCloseAgent,
-} from "@openbooks/engine/src/continuous-close/continuous-close.ts";
-import { UnrestrictedScopeError } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
+} from "@openbooks/engine/continuous-close/continuous-close";
+import { UnrestrictedScopeError } from "@openbooks/engine/organization/scope";
 const runBody = z.object({ agentKey: z.string().refine(isContinuousCloseAgentKey) });
 
 export const POST = defineRoute({

@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import {
   listTemplates,
   saveTemplate,
-} from "@openbooks/engine/src/hrm/documents/templates.ts";
+} from "@openbooks/engine/hrm/documents/templates";
 import { hrmDocumentsErrorResponse } from "../documents/_lib";
 import { saveTemplateBody } from "./bodies";
 export const GET = defineRoute({

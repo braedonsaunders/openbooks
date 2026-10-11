@@ -5,7 +5,7 @@ import { defineRoute } from '@/lib/api/route'
 import { z } from 'zod'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
 import {
   cancelStockCount,
   createStockCount,
@@ -16,12 +16,12 @@ import {
   setStockCountDate,
   startStockCount,
   submitStockCountForReview,
-} from '@openbooks/engine/src/inventory/stock-counts.ts'
-import { getStockCountDetail, listStockCounts } from '@openbooks/engine/src/inventory/stock-count-queries.ts'
-import { executeIdempotentInventoryAction } from '@openbooks/engine/src/inventory/action-idempotency.ts'
-import { InventoryNotFoundError } from '@openbooks/engine/src/inventory/contracts.ts'
+} from '@openbooks/engine/inventory/stock-counts'
+import { getStockCountDetail, listStockCounts } from '@openbooks/engine/inventory/stock-count-queries'
+import { executeIdempotentInventoryAction } from '@openbooks/engine/inventory/action-idempotency'
+import { InventoryNotFoundError } from '@openbooks/engine/inventory/contracts/module'
 import { inventoryErrorStatus } from '@/lib/api/inventory-errors'
-import { SubsidiaryError, defaultPostingSubsidiaryId, loadSubsidiaryContext } from '@openbooks/engine/src/organization/subsidiaries.ts'
+import { SubsidiaryError, defaultPostingSubsidiaryId, loadSubsidiaryContext } from '@openbooks/engine/organization/subsidiaries'
 import { isUuid } from '../../../../lib/list-params'
 import { notFound } from "@/lib/api/responses";
 

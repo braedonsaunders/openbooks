@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { scorecardSummary } from "@openbooks/engine/src/hrm/recruiting/scorecards.ts";
+import { scorecardSummary } from "@openbooks/engine/hrm/recruiting/scorecards";
 
 import { recruitingErrorResponse } from "../../../../_lib";
 

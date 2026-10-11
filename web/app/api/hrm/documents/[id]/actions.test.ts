@@ -89,7 +89,7 @@ const mockSources = new Map<string, string>([
 registerHooks({
   resolve(specifier, _context, nextResolve) {
     if (specifier === "../../../../../../lib/authz" || specifier === "./authz" || specifier === "./features") return { url: "mock:authz", shortCircuit: true };
-    if (specifier === "@openbooks/engine/src/hrm/documents/documents.ts") return { url: "mock:service", shortCircuit: true };
+    if (specifier === "@openbooks/engine/hrm/documents/documents") return { url: "mock:service", shortCircuit: true };
     if (specifier === "../../../../../../lib/hrm/document-delivery") return { url: "mock:delivery", shortCircuit: true };
     if (specifier === "../../route") return { url: "mock:collection", shortCircuit: true };
     return nextResolve(specifier);

@@ -66,12 +66,12 @@ const { SETUP_ENTITY_BY_KEY, SETUP_PROJECTS_OR_MANUFACTURING_REMEDY, resolveSetu
 const { createSetupRecord, deleteSetupRecord, preflightSetupWrite, updateSetupRecord } = await import(
   "../../../../../lib/setup/write.ts"
 );
-const { db } = await import("@openbooks/engine/src/platform/db.ts");
+const { db } = await import("@openbooks/engine/platform/db");
 const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import(
-  "@openbooks/engine/src/testing/fixtures.ts"
+  "@openbooks/engine/testing/fixtures"
 );
-const { computeLineTaxes } = await import("@openbooks/engine/src/tax/tax.ts");
-const { loadTaxComponentConfig } = await import("@openbooks/engine/src/tax/persist.ts");
+const { computeLineTaxes } = await import("@openbooks/engine/tax/tax");
+const { loadTaxComponentConfig } = await import("@openbooks/engine/tax/persist");
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 

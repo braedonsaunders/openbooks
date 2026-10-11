@@ -30,9 +30,9 @@ const hooks = registerHooks({ resolve(specifier, context, next) {
 test.after(() => hooks.deregister())
 
 const { sql } = await import('drizzle-orm')
-const { db, withBypass } = await import('@openbooks/engine/src/platform/db.ts')
-const { assertDedicatedFixtureDatabase } = await import('@openbooks/engine/src/testing/fixtures.ts')
-const { JULY, withTrueCostOrg } = await import('@openbooks/engine/src/testing/true-cost-fixtures.ts')
+const { db, withBypass } = await import('@openbooks/engine/platform/db')
+const { assertDedicatedFixtureDatabase } = await import('@openbooks/engine/testing/fixtures')
+const { JULY, withTrueCostOrg } = await import('@openbooks/engine/testing/true-cost-fixtures')
 const { overheadRateAppliesToDriver, OVERHEAD_ZERO_APPLIED_MARKER } = await import('@openbooks/engine/allocations/overhead-application')
 const { compareDecimal } = await import('@openbooks/engine/money/decimal')
 const { trueCostData } = await import('./true-cost-data')

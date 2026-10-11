@@ -83,11 +83,9 @@ test("schedule autosave and delete answer a malformed id with 404", async () => 
 });
 
 test("hour/active PATCH keeps a restricted authorization_snapshot when the editor is org-unrestricted", async () => {
-  const { db, withBypassContext } = await import(root + "engine/src/platform/db.ts");
+  const { db, withBypassContext } = await import("@openbooks/engine/platform/db");
   const { sql } = await import(root + "node_modules/drizzle-orm/index.js");
-  const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
-    root + "engine/src/testing/fixtures.ts"
-  );
+  const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
   const fixture = await withBypassContext(() => createScratchOrg());
   const oid = fixture.orgId;
   try {

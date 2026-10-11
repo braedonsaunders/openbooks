@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import {
   createTalentPool,
   listTalentPools,
-} from "@openbooks/engine/src/hrm/recruiting/pools.ts";
+} from "@openbooks/engine/hrm/recruiting/pools";
 
 import { recruitingErrorResponse } from "../_lib";
 import { createTalentPoolBody } from "./bodies";

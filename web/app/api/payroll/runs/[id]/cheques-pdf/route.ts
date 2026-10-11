@@ -2,11 +2,11 @@ import { defineRoute } from '@/lib/api/route'
 import { z } from 'zod'
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
-import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
-import { PayrollError } from "@openbooks/engine/src/payroll/error.ts";
+import { businessToday } from '@openbooks/engine/platform/business-date/module'
+import { PayrollError } from "@openbooks/engine/payroll/error";
 import '../../../../../../lib/feature-gates';
 import { guardSubsidiaryScope } from '../../../../../../lib/authz'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/db'
 import { sql } from 'drizzle-orm'
 import { isUuid } from '../../../../../../lib/list-params'
 import { rendererUnavailableResponse } from '../../../../../../lib/api/pdf-renderer'

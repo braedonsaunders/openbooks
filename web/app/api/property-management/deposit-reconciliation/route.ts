@@ -1,7 +1,7 @@
 import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from "next/server";
-import { securityDepositReconciliation } from "@openbooks/engine/src/property/management.ts";
+import { securityDepositReconciliation } from "@openbooks/engine/property/management";
 import { guardPermission } from "../../../../lib/authz";
 import { guardPropertyManagementFeature } from "../../../../lib/property-management-gate";
 

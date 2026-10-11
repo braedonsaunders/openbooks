@@ -9,8 +9,8 @@ const { getSetupRecord, listSetupEntities } = await import("./setup-read");
 const { SETUP_ENTITY_BY_KEY, resolveSetupEntityGate } = await import("../setup/registry");
 const { resolvedFeatureState } = await import("../features");
 const { sql } = await import("drizzle-orm");
-const { db } = await import("@openbooks/engine/src/platform/db.ts");
-const { createScratchOrg, dropScratchOrgReporting } = await import("@openbooks/engine/src/testing/fixtures.ts");
+const { db } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, dropScratchOrgReporting } = await import("@openbooks/engine/testing/fixtures");
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 

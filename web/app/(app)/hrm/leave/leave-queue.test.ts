@@ -74,14 +74,14 @@ registerHooks({
         url: "data:text/javascript,export async function hrmGroupTabs() { return []; }",
       };
     }
-    if (owned && specifier === "@openbooks/engine/src/platform/business-date.ts") {
+    if (owned && specifier === "@openbooks/engine/platform/business-date/module") {
       return {
         shortCircuit: true,
         format: "module",
         url: "data:text/javascript,export async function businessToday() { return '2026-09-22'; } export function utcDateFromParts() { throw new Error('unstubbed'); }",
       };
     }
-    if (owned && specifier === "@openbooks/engine/src/hrm/leave-read.ts") {
+    if (owned && specifier === "@openbooks/engine/hrm/leave-read") {
       return {
         shortCircuit: true,
         format: "module",
@@ -100,7 +100,7 @@ registerHooks({
           ),
       };
     }
-    if (owned && specifier === "@openbooks/engine/src/hrm/attendance.ts") {
+    if (owned && specifier === "@openbooks/engine/hrm/attendance") {
       return {
         shortCircuit: true,
         format: "module",
@@ -127,7 +127,7 @@ registerHooks({
     // not-available fallback, which these tests never assert on.
     if (
       (owned || parent.endsWith("/web/lib/hrm/change-requests.ts") || parent.endsWith("/web/lib/scoped-options.ts")) &&
-      specifier === "@openbooks/engine/src/platform/db.ts"
+      specifier === "@openbooks/engine/platform/db"
     ) {
       return {
         shortCircuit: true,
@@ -141,9 +141,9 @@ registerHooks({
 
 const { loadLeaveQueue } = await import("../../../../lib/hrm/leave.ts");
 const { HrmAuthorizationError } = await import(
-  "@openbooks/engine/src/hrm/authorization.ts"
+  "@openbooks/engine/hrm/authorization"
 );
-const { LeaveError } = await import("@openbooks/engine/src/hrm/leave-errors.ts");
+const { LeaveError } = await import("@openbooks/engine/hrm/leave-errors");
 
 const gap = globalThis as Record<string, unknown>;
 

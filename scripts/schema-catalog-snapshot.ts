@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { db, pool } from "../engine/src/platform/db.ts";
+import { db, pool } from "@openbooks/engine/platform/db";
 
 async function rows(query: ReturnType<typeof sql>): Promise<unknown[]> {
   return (await db.execute(query)).rows;

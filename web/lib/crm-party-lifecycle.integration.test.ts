@@ -12,12 +12,12 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier,context);
 }});
 const { sql } = await import('drizzle-orm');
-const { db, pool, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
+const { db, pool, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
 const { PATCH, GET } = await import("../app/api/parties/[id]/route");
 
 const { randomUUID } = await import('node:crypto');
-const { ensureCrmDefaults } = await import('@openbooks/engine/src/crm/crm.ts');
+const { ensureCrmDefaults } = await import('@openbooks/engine/crm/crm');
 const { POST: draft } = await import('../app/api/crm/opportunities/draft/route');
 const { PATCH: edit } = await import('../app/api/crm/opportunities/[id]/route');
 const { NextRequest } = await import('next/server');

@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { rediscoverForRequisition } from "@openbooks/engine/src/hrm/recruiting/pools.ts";
+import { rediscoverForRequisition } from "@openbooks/engine/hrm/recruiting/pools";
 
 import { recruitingErrorResponse } from "../../../_lib";
 import { rediscoverBody } from "../../bodies";

@@ -5,10 +5,10 @@ import { readExportWindow, transferId, transferWhere, transferOrder, transferLim
 
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
-import { canonicalDecimal } from '@openbooks/engine/src/money/exact-decimal.ts'
-import { decimalNullRefusal } from '@openbooks/engine/src/money/decimal-refusal.ts'
+import { db } from '@openbooks/engine/platform/db'
+import { normalizeMoney } from '@openbooks/engine/money/money'
+import { canonicalDecimal } from '@openbooks/engine/money/decimal'
+import { decimalNullRefusal } from '@openbooks/engine/money/decimal-refusal'
 import { canonicalPositiveLeaseCharge } from './property-money'
 import {
   activatePropertyLease,
@@ -21,7 +21,7 @@ import {
   updateManagedProperty,
   updatePropertyLease,
   updatePropertyUnit,
-} from '@openbooks/engine/src/property/management.ts'
+} from '@openbooks/engine/property/management'
 import { coerceBoolean } from '../setup/coerce'
 import { INVENTORY_ITEM_KINDS } from './master-data-resources'
 import {
@@ -35,7 +35,7 @@ import {
   type ResourceField,
   type WriteOutcome,
 } from './types'
-import { isUuid } from '@openbooks/engine/src/platform/uuid.ts'
+import { isUuid } from '@openbooks/engine/platform/identifiers'
 // --- Property-management migration resources --------------------------------
 
 export const PROPERTY_DESCRIPTORS: ResourceDescriptor[] = [

@@ -1,4 +1,4 @@
-import { SEEDED_ACCOUNT_STATUS_NAMES, SEEDED_OPPORTUNITY_STATUS_NAMES } from '../../engine/src/crm/crm-default-statuses.ts'
+import { SEEDED_ACCOUNT_STATUS_NAMES, SEEDED_OPPORTUNITY_STATUS_NAMES } from '@openbooks/engine/crm/crm-default-statuses'
 
 export { SEEDED_ACCOUNT_STATUS_NAMES, SEEDED_OPPORTUNITY_STATUS_NAMES }
 

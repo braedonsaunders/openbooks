@@ -1,8 +1,8 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 
-const { withSimClock } = await import('@openbooks/engine/src/platform/clock.ts')
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { withSimClock } = await import('@openbooks/engine/testing/platform/clock')
+const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
 const { expensesDashboard } = await import('./expenses-dashboard.ts')
 const { seedExpensesDashboardBookScope } = await import('../testing/report-fixtures.ts')
 

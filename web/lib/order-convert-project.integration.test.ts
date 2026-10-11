@@ -3,11 +3,11 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { BUILTIN_PROJECT_TYPES } from "@openbooks/schema";
-import { resolveProjectFinancials } from "@openbooks/engine/src/projects/financials.ts";
-import { db, withBypassContext } from "@openbooks/engine/src/platform/db.ts";
-import { createScratchOrg, createScratchUser, dropScratchOrg } from "@openbooks/engine/src/testing/fixtures.ts";
+import { resolveProjectFinancials } from "@openbooks/engine/projects/financials";
+import { db, withBypassContext } from "@openbooks/engine/platform/db";
+import { createScratchOrg, createScratchUser, dropScratchOrg } from "@openbooks/engine/testing/fixtures";
 import { convertOrder } from "./order-cycle.ts";
-import { postDocument } from "@openbooks/engine/src/ledger/posting-document.ts";
+import { postDocument } from "@openbooks/engine/ledger/posting-document";
 
 const fixedPrice = BUILTIN_PROJECT_TYPES.find((t) => t.key === "fixed_price")!.financialProfile;
 

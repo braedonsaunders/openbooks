@@ -4,7 +4,7 @@ import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as Sha
 import { useMoney } from '@/components/money-provider'
 import { useState } from 'react'
 import { useTranslations } from 'next-intl'
-import { cmp as compareMoney, div as divideMoney } from '@openbooks/engine/src/money/money.ts'
+import { cmp as compareMoney, div as divideMoney } from '@openbooks/engine/money/money'
 import {
   Wallet,
   TriangleAlert,

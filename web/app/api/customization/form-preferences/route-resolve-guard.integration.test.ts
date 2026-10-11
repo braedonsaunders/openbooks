@@ -46,10 +46,10 @@ const hooks = registerHooks({
 const form_pref_resolve_guardUrl = './route.ts?form-pref-resolve-guard'
 const { PUT } = (await import(form_pref_resolve_guardUrl)) as typeof import('./route.ts');
 
-const { db, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
+const { db, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { sql } = await import("drizzle-orm");
 const { createScratchOrg, dropScratchOrg } = await import(
-  "@openbooks/engine/src/testing/fixtures.ts"
+  "@openbooks/engine/testing/fixtures"
 );
 
 

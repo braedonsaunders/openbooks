@@ -7,8 +7,8 @@ import { sql } from "drizzle-orm";
 // clauses: five bills sharing one date/status/total must page out exactly
 // once each, in a repeatable order, and four vendors sharing one name must
 // do the same. Only the session seam is stubbed; SQL and storage are real.
-const { db } = await import("@openbooks/engine/src/platform/db.ts");
-const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
+const { db } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
 const { listOrderClause } = await import("./sources.ts");
 const { entityListSource, entityOrderClause } = await import("./entity-sources.ts");
 

@@ -1,7 +1,7 @@
 'use client'
 
 import { useMoney } from '@/components/money-provider'
-import { cmp as compareMoney } from '@openbooks/engine/src/money/money.ts'
+import { cmp as compareMoney } from '@openbooks/engine/money/money'
 import Link from 'next/link'
 import { useLocale, useTranslations } from 'next-intl'
 import { Drawer } from '@openbooks/ui'

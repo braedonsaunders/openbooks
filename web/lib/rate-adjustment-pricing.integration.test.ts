@@ -74,10 +74,10 @@ test(
     // the subtests below — so the hook stays registered until this test ends.
     t.after(() => hooks.deregister());
 
-    const { db, withOrgTransaction } = await import("@openbooks/engine/src/platform/db.ts");
+    const { db, withOrgTransaction } = await import("@openbooks/engine/platform/db");
     const { sql } = await import("drizzle-orm");
     const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import(
-      "@openbooks/engine/src/testing/fixtures.ts"
+      "@openbooks/engine/testing/fixtures"
     );
     const pg = (await import("pg")).default;
 

@@ -3,15 +3,15 @@ import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { z } from 'zod'
-import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
-import { postDocument } from "@openbooks/engine/src/ledger/posting-document.ts";
-import { PostingError } from "@openbooks/engine/src/journal/posting-contracts.ts";
-import { runPostDocumentEffects } from "@openbooks/engine/src/ledger/posting-dispatch.ts";
-import { submitAndReleaseIfUngated } from '@openbooks/engine/src/flows/index.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
+import { postDocument } from "@openbooks/engine/ledger/posting-document";
+import { PostingError } from "@openbooks/engine/journal/contracts";
+import { runPostDocumentEffects } from "@openbooks/engine/ledger/posting-dispatch";
+import { submitAndReleaseIfUngated } from '@openbooks/engine/flows/module'
 import {
   ControlAccountsIncompleteError,
   loadRequiredControlAccounts,
-} from '@openbooks/engine/src/records/control-accounts.ts'
+} from '@openbooks/engine/records/control-accounts'
 import { guardPermission, guardSubsidiaryScope } from '../../../../lib/authz'
 import { uuidId } from '../../../../lib/api/json'
 import { budgetaryControlAdvisories, partylessControlLines } from '../../../../lib/journal-warnings'

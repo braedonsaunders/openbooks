@@ -41,8 +41,8 @@ function renderReadOnly(element: React.ReactElement): string {
 }
 // Side effect: publishes the built-in packs' certificate sources, the same
 // way any production importer of the pack registry does.
-await import('@openbooks/engine/src/payroll/packs.ts')
-const { packCertificates } = await import('@openbooks/engine/src/payroll/certificates.ts')
+await import('@openbooks/engine/payroll/packs')
+const { packCertificates } = await import('@openbooks/engine/payroll/certificates')
 
 // The declared NL certificates render every field kind the packs use, with
 // the stored answers prefilled — the entry surface the pay-run proof fills

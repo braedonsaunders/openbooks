@@ -23,10 +23,10 @@ registerHooks({
     return next(specifier, context)
   },
 })
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
 const { sql } = await import('drizzle-orm')
-const { createScratchOrg, createScratchUser, dropScratchOrg, seedApprovalFlow, seedFlowActors } = await import('@openbooks/engine/src/testing/fixtures.ts')
-const { submitForApproval } = await import('@openbooks/engine/src/flows/index.ts')
+const { createScratchOrg, createScratchUser, dropScratchOrg, seedApprovalFlow, seedFlowActors } = await import('@openbooks/engine/testing/fixtures')
+const { submitForApproval } = await import('@openbooks/engine/flows/module')
 const { POST } = await import('./route')
 
 const request = (body: unknown) => new Request('http://po-withdraw.local/api/documents/actions', { method: 'POST', body: JSON.stringify(body) })

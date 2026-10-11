@@ -13,10 +13,10 @@ export async function registerNodeInstrumentation() {
   // Install local profiling and configured OTLP exporters in one provider,
   // before application boot. With neither configured this remains a no-op.
   await startTelemetry(process.env, localSpanProcessors)
-  const { assertSafeRuntimeDatabaseRole } = await import('@openbooks/engine/src/platform/db.ts')
+  const { assertSafeRuntimeDatabaseRole } = await import('@openbooks/engine/platform/db')
   await assertSafeRuntimeDatabaseRole()
-  const { resolveWebSchedulerMode } = await import('@openbooks/engine/src/scheduling/mode.ts')
-  const { registerContinuousCloseEnricher } = await import('@openbooks/engine/src/continuous-close/continuous-close.ts')
+  const { resolveWebSchedulerMode } = await import('@openbooks/engine/scheduling/mode')
+  const { registerContinuousCloseEnricher } = await import('@openbooks/engine/continuous-close/continuous-close')
   // Manual close runs still receive enrichment when the web scheduler is off.
   // Load the assistant's readers when enrichment is invoked, rather than during
   // process startup for unrelated requests such as sign-in and entity lists.
@@ -30,16 +30,16 @@ export async function registerNodeInstrumentation() {
   // under `next dev` — see engine/src/scheduling/mode.ts.
   const decision = resolveWebSchedulerMode(process.env)
   if (decision.enabled) {
-    const { ensureScheduler } = await import('@openbooks/engine/src/scheduling/scheduler.ts')
+    const { ensureScheduler } = await import('@openbooks/engine/scheduling/scheduler')
     ensureScheduler()
     // HR-16 automation scan on the same 60-second topology (own advisory
     // claim key, same mode decision) — web-composed because no engine
     // module may depend on the automations module.
-    const { ensureAutomationTick } = await import('@openbooks/engine/src/automations/tick.ts')
+    const { ensureAutomationTick } = await import('@openbooks/engine/automations/tick')
     ensureAutomationTick()
   }
   console.log(decision.logLine)
-  const { ensureSftpServer } = await import('@openbooks/engine/src/sftp/manager.ts')
+  const { ensureSftpServer } = await import('@openbooks/engine/sftp/manager')
   await ensureSftpServer()
 
   // Flow emails with `attachPdf` render through the web-only record-PDF
@@ -49,7 +49,7 @@ export async function registerNodeInstrumentation() {
   // sending without the attachment.
   const {
     registerFlowPdfRenderer,
-  } = await import('@openbooks/engine/src/flows/index.ts')
+  } = await import('@openbooks/engine/flows/module')
 
   // Web-owned approval releases (field tickets, timesheet weeks, crew time
   // batches): the engine owns routing and gate decisions; these web hooks
@@ -59,7 +59,7 @@ export async function registerNodeInstrumentation() {
 
   // Engine seams (script journal writer, ...): the web process posts and
   // runs scripts, so install the composition root beside the web handlers.
-  const { installEngineSeams } = await import('@openbooks/engine/src/composition/install.ts')
+  const { installEngineSeams } = await import('@openbooks/engine/composition/install')
   installEngineSeams()
 
   registerFlowPdfRenderer(async ({ orgId, subjectKind, subjectId }) => {
@@ -71,7 +71,7 @@ export async function registerNodeInstrumentation() {
         import('./lib/pdf-templates/store'),
         import('./lib/pdf-templates/values'),
         import('./lib/pdf-templates/render'),
-        import('@openbooks/engine/src/platform/business-date.ts'),
+        import('@openbooks/engine/platform/business-date/module'),
       ])
     const [tpl, record] = await Promise.all([
       resolvePdfTemplate(orgId, subjectKind, null),

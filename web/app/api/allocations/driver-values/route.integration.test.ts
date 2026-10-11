@@ -60,9 +60,9 @@ const itemUrl = "./[id]/route.ts?alloc-values";
 const collectionRoute = (await import(collectionUrl)) as typeof import("./route.ts");
 const itemRoute = (await import(itemUrl)) as typeof import("./[id]/route.ts");
 
-const { db } = await import("../../../../../engine/src/platform/db.ts");
+const { db } = await import("@openbooks/engine/platform/db");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  "../../../../../engine/src/testing/fixtures.ts"
+  "@openbooks/engine/testing/fixtures"
 );
 
 

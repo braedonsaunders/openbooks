@@ -39,8 +39,8 @@ const routeUrl = './route.ts?with-variants-route-integration'
 const { POST } = (await import(routeUrl)) as typeof import('./route.ts')
 after(() => hooks.deregister())
 
-const { db, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
-const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { db, withBypassContext } = await import('@openbooks/engine/platform/db')
+const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } = await import('@openbooks/engine/testing/fixtures')
 
 async function fixture() {
   return withBypassContext(async () => {

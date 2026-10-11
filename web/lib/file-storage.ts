@@ -14,10 +14,10 @@ export {
   emailAttachmentsKeyPrefix,
   fileCabinetKeyPrefix,
   fileCabinetObjectKey,
-} from '@openbooks/engine/src/platform/file-storage.ts'
+} from '@openbooks/engine/platform/file-storage'
 export {
   enqueueStorageCleanup,
   enqueueStorageCleanupStandalone,
   type StorageCleanupIntent,
   type StorageCleanupOwnerKind,
-} from '@openbooks/engine/src/platform/storage-cleanup.ts'
+} from '@openbooks/engine/platform/storage-cleanup'

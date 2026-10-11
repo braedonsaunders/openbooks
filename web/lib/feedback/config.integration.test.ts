@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 const { sql } = await import("drizzle-orm");
-const { db, withBypass } = await import("@openbooks/engine/src/platform/db.ts");
-const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
-const { requireDataKey } = await import("@openbooks/engine/src/platform/secrets.ts");
+const { db, withBypass } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
+const { requireDataKey } = await import("@openbooks/engine/platform/secrets");
 const {
   clearFeedbackToken,
   getFeedbackRuntime,

@@ -55,7 +55,7 @@ stubModules({
         }
       }
     `,
-    "@openbooks/engine/src/platform/db.ts": `
+    "@openbooks/engine/platform/db": `
       const state = globalThis[Symbol.for('openbooks.project-time-detail-route-test')]
       const sqlText = globalThis.openbooksProjectTimeSqlText
       export const db = {

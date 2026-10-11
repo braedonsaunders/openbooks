@@ -2,33 +2,33 @@ import 'server-only'
 
 import { getTranslations } from 'next-intl/server'
 import { benefitContributionLabels } from './benefit-contribution-labels'
-import { actorHasTeam, findTeamEmploymentIdsForParty } from '@openbooks/engine/src/hrm/self-service/team-read.ts'
+import { actorHasTeam, findTeamEmploymentIdsForParty } from '@openbooks/engine/hrm/self-service/team-read'
 import { getMyProfile,
   getMyRequests,
   getMySteps,
   type MyRequest,
   type MyStep,
-} from '@openbooks/engine/src/hrm/self-service/self-read.ts'
+} from '@openbooks/engine/hrm/self-service/self-read'
 import {
   getMyBenefitsWorkspace,
   getMyReviewWorkspace,
   loadManagerOwedReviews,
   selfWorkspaceCapabilities,
-} from '@openbooks/engine/src/hrm/self-service/my-work.ts'
-import { getTeamView, type TeamView } from '@openbooks/engine/src/hrm/self-service/team-read.ts'
+} from '@openbooks/engine/hrm/self-service/my-work'
+import { getTeamView, type TeamView } from '@openbooks/engine/hrm/self-service/team-read'
 import { listOwnBankAccounts } from '@openbooks/engine/hrm/self-service/bank-changes'
-import { HrmAuthorizationError } from '@openbooks/engine/src/hrm/authorization.ts'
+import { HrmAuthorizationError } from '@openbooks/engine/hrm/authorization'
 import { employmentChangeFlowsEnabled } from '@openbooks/engine/hrm/change-requests'
-import { SelfServiceError } from '@openbooks/engine/src/hrm/self-service/actor.ts'
+import { SelfServiceError } from '@openbooks/engine/hrm/self-service/actor'
 import { can, type Authz } from '../authz'
 import type { DirectoryItem } from '../../components/module-home/ui'
 import type { ModuleHomeTab } from '../../components/module-home/ui'
 import { loadMyLeave, type MyLeaveBalance } from './leave'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { listQualifications } from '@openbooks/engine/src/hrm/qualifications/qualifications.ts';
-import { HrmQualificationError } from "@openbooks/engine/src/hrm/qualifications/errors.ts";
+import { db } from '@openbooks/engine/platform/db'
+import { listQualifications } from '@openbooks/engine/hrm/qualifications/qualifications';
+import { HrmQualificationError } from "@openbooks/engine/hrm/qualifications/errors";
 import { isFeatureEnabled } from "../features";
-import type { ExplainPayTrace } from '@openbooks/engine/src/hrm/ai/explain-pay.ts'
+import type { ExplainPayTrace } from '@openbooks/engine/hrm/ai/explain-pay'
 
 /**
  * Me workspace loaders — the person's own view of their employment and the
@@ -164,8 +164,8 @@ async function meHasDocuments(authz: Authz): Promise<boolean> {
   try {
     const { isFeatureEnabled } = await import('../features')
     if (!(await isFeatureEnabled(authz.user.orgId, 'hrmDocuments'))) return false
-    const { listOwnDocuments } = await import('@openbooks/engine/src/hrm/documents/documents.ts')
-    const { listOwnExports } = await import('@openbooks/engine/src/hrm/documents/dsar.ts')
+    const { listOwnDocuments } = await import('@openbooks/engine/hrm/documents/documents')
+    const { listOwnExports } = await import('@openbooks/engine/hrm/documents/dsar')
     const [docs, exports] = await Promise.all([
       listOwnDocuments({ orgId: authz.user.orgId, actorId: authz.user.id }).catch(() => null),
       listOwnExports({ orgId: authz.user.orgId, actorId: authz.user.id }).catch(() => null),
@@ -182,7 +182,7 @@ async function meHasSurveys(authz: Authz): Promise<boolean> {
   try {
     const { isFeatureEnabled } = await import('../features')
     if (!(await isFeatureEnabled(authz.user.orgId, 'hrmSurveys'))) return false
-    const { listOwnInvitations } = await import('@openbooks/engine/src/hrm/surveys/responses.ts')
+    const { listOwnInvitations } = await import('@openbooks/engine/hrm/surveys/responses')
     const invitations = await listOwnInvitations({ orgId: authz.user.orgId, actorId: authz.user.id }).catch(
       () => [],
     )

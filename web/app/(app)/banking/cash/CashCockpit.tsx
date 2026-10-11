@@ -22,7 +22,7 @@ import {
   SlidersHorizontal,
 } from 'lucide-react'
 import { Button, cn } from '@openbooks/ui'
-import { cmp as compareMoney } from '@openbooks/engine/src/money/money.ts'
+import { cmp as compareMoney } from '@openbooks/engine/money/money'
 import type { PageLayoutPrefs } from '@openbooks/schema'
 import type { CashPosition } from '../../../../lib/cash/cash-position'
 import { CASH_HORIZON_PRESETS } from '../../../../lib/cash/horizon'

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { stubModules } from '../../../../../testing/stub-modules'
 import test from 'node:test'
-import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
+import { isIsoCalendarDate } from '@openbooks/engine/platform/business-date/module'
 
 interface RemeasurementCall {
   orgId: string
@@ -41,7 +41,7 @@ stubModules({
         return { user: { orgId: 'org-1', id: 'user-1' } }
       }
     `,
-    "@openbooks/engine/src/platform/business-date.ts": `
+    "@openbooks/engine/platform/business-date/module": `
       const state = globalThis[Symbol.for('openbooks.asset-remeasurement-route-test')]
       export async function businessToday(orgId) {
         state.businessTodayCalls.push(orgId)
@@ -49,7 +49,7 @@ stubModules({
       }
       export const isIsoCalendarDate = state.isIsoCalendarDate
     `,
-    "@openbooks/engine/src/assets/asset-lifecycle.ts": `
+    "@openbooks/engine/assets/asset-lifecycle": `
       const state = globalThis[Symbol.for('openbooks.asset-remeasurement-route-test')]
       export async function remeasureAsset(orgId, assetId, options) {
         state.remeasureCalls.push({ orgId, assetId, options })

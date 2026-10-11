@@ -140,13 +140,13 @@ const mockSources = new Map<string, string>([
 ])
 
 const mockUrls = new Map<string, string>([
-  ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
+  ['@openbooks/engine/platform/db', 'mock:db'],
   ['@/lib/authz', 'mock:authz'],
   ['@/lib/feature-gates', 'mock:features'],
   ['../../../../lib/authz', 'mock:authz'],
   ['../../../../lib/features', 'mock:features'],
   ['../../../../lib/field-ticket-signing', 'mock:signing'],
-  ['@openbooks/engine/src/organization/org-feature-lock.ts', 'mock:org-feature-lock'],
+  ['@openbooks/engine/organization/org-feature-lock', 'mock:org-feature-lock'],
 ])
 
 registerHooks({

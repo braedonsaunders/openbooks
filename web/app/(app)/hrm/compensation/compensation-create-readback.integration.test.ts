@@ -71,12 +71,12 @@ registerHooks({
 });
 
 const { sql } = await import("drizzle-orm");
-const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
-  "@openbooks/engine/src/testing/fixtures.ts"
+  "@openbooks/engine/testing/fixtures"
 );
-const { createCycle, listCycles } = await import("@openbooks/engine/src/hrm/compensation/cycles.ts");
-const { createPlan, listPlans } = await import("@openbooks/engine/src/hrm/compensation/headcount-plans.ts");
+const { createCycle, listCycles } = await import("@openbooks/engine/hrm/compensation/cycles");
+const { createPlan, listPlans } = await import("@openbooks/engine/hrm/compensation/headcount-plans");
 const { loadCompensationHome } = await import("../../../../lib/hrm/compensation");
 
 test("the dialogs' create payloads persist and appear in the home registers", async () => {

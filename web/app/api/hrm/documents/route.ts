@@ -7,9 +7,9 @@ import {
   listDocuments,
   resolveMergeFields,
   uploadDocument,
-} from "@openbooks/engine/src/hrm/documents/documents.ts";
-import { db } from "@openbooks/engine/src/platform/db.ts";
-import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
+} from "@openbooks/engine/hrm/documents/documents";
+import { db } from "@openbooks/engine/platform/db";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
 import { applicationContextFromSession } from "../../../../lib/application/context";
 import { executeIdempotent } from "../../../../lib/application/idempotency";
 import { hrmDocumentsErrorResponse } from "./_lib";

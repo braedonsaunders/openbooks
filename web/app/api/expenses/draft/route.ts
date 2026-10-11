@@ -1,9 +1,9 @@
 import { defineRoute } from '@/lib/api/route';
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db, schema } from '@openbooks/engine/src/platform/db.ts'
-import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
-import { resolveDraftSubsidiary } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
+import { db, schema } from '@openbooks/engine/platform/db'
+import { businessToday } from '@openbooks/engine/platform/business-date/module'
+import { resolveDraftSubsidiary } from '@openbooks/engine/organization/scope'
 import { nextDocumentNumber } from "../../../../lib/bills.ts";
 
 export const runtime = 'nodejs'

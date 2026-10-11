@@ -1,4 +1,4 @@
-import type { TaxReturnResult, TaxReturnBox } from '@openbooks/engine/src/tax-returns/return.ts'
+import type { TaxReturnResult, TaxReturnBox } from '@openbooks/engine/tax-returns/return'
 import { formatDecimal } from './money-format'
 
 /**

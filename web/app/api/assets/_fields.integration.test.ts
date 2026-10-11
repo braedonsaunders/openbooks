@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
-import { createScratchOrg, dropScratchOrg } from "@openbooks/engine/src/testing/fixtures.ts";
+import { db } from "@openbooks/engine/platform/db";
+import { createScratchOrg, dropScratchOrg } from "@openbooks/engine/testing/fixtures";
 
 const { FieldRefusal, assetAccountScopeSql, parseAccountOverride } = await import("./_fields.ts");
 

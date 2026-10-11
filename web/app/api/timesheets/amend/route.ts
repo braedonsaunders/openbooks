@@ -5,7 +5,7 @@ import { isoDate, uuidId } from "@/lib/api/json";
 import { apiErrorResponse } from "@/lib/api/error-response";
 import { NextResponse } from "next/server";
 import { isUuid } from "../../../../lib/list-params";
-import { ScopeNotFoundError } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
+import { ScopeNotFoundError } from "@openbooks/engine/organization/scope";
 import {
   amendLockedWeek,
   amendTimeEntry,

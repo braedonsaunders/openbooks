@@ -13,14 +13,14 @@ registerHooks({
 })
 
 const { sql } = await import('drizzle-orm')
-const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/platform/db')
+const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
 const { healthData } = await import('./health-data')
 // health-data pulls in web/lib/auth, whose request-org module registers its
 // Next request-store RLS resolver at import time — after the runner's trusted
 // test bypass. Outside a request that resolver denies everything, so scratch
 // reads come back empty. Re-assert the bypass here, after every import.
-const { installTrustedTestDatabaseBypass } = await import('@openbooks/engine/src/testing/database-bypass.ts')
+const { installTrustedTestDatabaseBypass } = await import('@openbooks/engine/testing/database-bypass')
 installTrustedTestDatabaseBypass()
 
 const D = '2026-07-14'

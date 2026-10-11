@@ -3,7 +3,7 @@ import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { z } from 'zod'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/db'
 import { guardPermission } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
 import { pgTextArrayLiteral } from '../../../../lib/pg-array'

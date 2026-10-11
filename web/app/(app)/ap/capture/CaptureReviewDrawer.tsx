@@ -8,7 +8,7 @@ import { AlertTriangle, Check, FileText, Loader2, Plus, RefreshCw, Trash2, X } f
 import { toast } from 'sonner'
 import { Badge, Button, Input, SearchSelect, Select, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Textarea, UrlDrawer } from '@openbooks/ui'
 import { Field } from '@/components/field'
-import type { CaptureIssue, NormalizedCapture } from '@openbooks/engine/src/payables/ap-capture.ts'
+import type { CaptureIssue, NormalizedCapture } from '@openbooks/engine/payables/ap-capture'
 import { ReadOnlyValue } from '../../../../components/read-only-value'
 import { readApiErrorMessage } from '../../../../lib/api-error'
 import { confirmDialog } from '../../../../lib/confirm'

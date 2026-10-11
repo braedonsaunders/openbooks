@@ -121,7 +121,7 @@ const hooks = registerHooks({
     // engine helpers (business clocks, type defaults) would run their reads
     // on a real connection.
     if (
-      specifier === '@openbooks/engine/src/platform/db.ts' ||
+      specifier === '@openbooks/engine/platform/db' ||
       specifier.endsWith('/platform/db.ts') ||
       (specifier === './db.ts' && context.parentURL?.includes('/engine/src/platform/'))
     ) {

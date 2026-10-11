@@ -3,10 +3,10 @@ import 'server-only'
 
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { withScopeSnapshot } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
-import { documentRevisionCounterSql } from '@openbooks/engine/src/records/revision.ts'
-import { getDocumentCaptureSettings } from '@openbooks/engine/src/payables/ap-capture-config.ts'
+import { db } from '@openbooks/engine/platform/db'
+import { withScopeSnapshot } from '@openbooks/engine/organization/scope'
+import { documentRevisionCounterSql } from '@openbooks/engine/records/revision'
+import { getDocumentCaptureSettings } from '@openbooks/engine/payables/ap-capture-config'
 import {
   grid,
   page,

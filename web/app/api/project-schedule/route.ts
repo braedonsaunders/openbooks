@@ -4,7 +4,7 @@ import { projectScheduleBody } from '@/lib/project-schedule-input'
 import { parseJsonBody } from "@/lib/api/json"
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/db'
 import { guardPermission } from '../../../lib/authz'
 import { isUuid } from '../../../lib/list-params'
 import { guardProjectSchedulingFeature } from '../../../lib/projects-gate'

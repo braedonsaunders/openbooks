@@ -11,10 +11,10 @@ import { randomUUID } from 'node:crypto'
  * Actual column, and its actuals equal the P&L's for the same range.
  */
 const root = pathToFileURL(process.cwd() + '/').href
-const { db, withBypassContext, withOrgContext } = (await import(root + 'engine/src/platform/db.ts')) as typeof import('@openbooks/engine/src/platform/db.ts')
-const { toUnits } = (await import(root + 'engine/src/money/money.ts')) as typeof import('@openbooks/engine/src/money/money.ts')
+const { db, withBypassContext, withOrgContext } = (await import('@openbooks/engine/platform/db')) as typeof import('@openbooks/engine/platform/db')
+const { toUnits } = (await import('@openbooks/engine/money/money')) as typeof import('@openbooks/engine/money/money')
 const { sql } = await import(root + 'node_modules/drizzle-orm/index.js')
-const { createScratchOrg, dropScratchOrg } = (await import(root + 'engine/src/testing/fixtures.ts')) as typeof import('@openbooks/engine/src/testing/fixtures.ts')
+const { createScratchOrg, dropScratchOrg } = (await import('@openbooks/engine/testing/fixtures')) as typeof import('@openbooks/engine/testing/fixtures')
 const { budgetVsActualView } = (await import(root + 'web/lib/budget-report.ts')) as typeof import('./budget-report')
 const { profitAndLossView } = (await import(root + 'web/lib/statement-matrix.ts')) as typeof import('./statement-matrix')
 
@@ -91,8 +91,8 @@ const consolidatedRows = [
   { label: "budget list subsidiary scope", register: async () => {
         const { sql }=await import("drizzle-orm");
         type ListViewConfig = import("@openbooks/customization").ListViewConfig;
-        const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
-        const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+        const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/platform/db')
+        const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
         const { entityListSource } = await import('./list/entity-sources.ts')
 
         test('budget scenario rows and totals honor the caller subsidiary scope', { skip: !env.OPENBOOKS_DB_URL }, async () => {
@@ -220,8 +220,8 @@ const budgetCalendarCases = [
         })
 
         const { sql } = await import('drizzle-orm')
-        const { db } = await import('@openbooks/engine/src/platform/db.ts')
-        const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+        const { db } = await import('@openbooks/engine/platform/db')
+        const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
         const { loadBudgetWorkspace } = await import('./budgets.ts')
         const { saveBudgetCells, BudgetMutationError } = await import('./budget-mutations.ts')
 
@@ -406,12 +406,12 @@ const budgetCalendarCases = [
           import.meta.url,
         ).href;
         const { db, withBypassContext: withBypass } = await import(
-          "@openbooks/engine/src/platform/db.ts"
+          "@openbooks/engine/platform/db"
         );
         const { createScratchOrg, dropScratchOrg } = await import(
-          "@openbooks/engine/src/testing/fixtures.ts"
+          "@openbooks/engine/testing/fixtures"
         );
-        const { businessToday } = await import("@openbooks/engine/src/platform/business-date.ts");
+        const { businessToday } = await import("@openbooks/engine/platform/business-date/module");
         const { GET } = await import("../app/api/budgets/[id]/export/route.ts");
 
         test("the budget xlsx stamps the workbook from the org business day", async () => {
@@ -471,9 +471,9 @@ const budgetCalendarCases = [
         })
 
         const { sql } = await import('drizzle-orm')
-        const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
-        const { toUnits } = await import('@openbooks/engine/src/money/money.ts')
-        const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+        const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/platform/db')
+        const { toUnits } = await import('@openbooks/engine/money/money')
+        const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
         const { budgetVsActualView } = await import('./budget-report')
 
         const D = '2026-07-14'
@@ -629,8 +629,8 @@ const budgetCalendarCases = [
         })
 
         const { sql } = await import('drizzle-orm')
-        const { db } = await import('@openbooks/engine/src/platform/db.ts')
-        const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+        const { db } = await import('@openbooks/engine/platform/db')
+        const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
         const { loadBudgetWorkspace } = await import('./budgets.ts')
         const { saveBudgetCells } = await import('./budget-mutations.ts')
 
@@ -716,8 +716,8 @@ const budgetCalendarCases = [
         } })
 
         const { sql } = await import('drizzle-orm')
-        const { db, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
-        const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+        const { db, withBypassContext } = await import('@openbooks/engine/platform/db')
+        const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
         const { listBudgetSourceOptions } = await import('./budgets')
 
         test('budget source options omit scenarios whose lines belong only to hidden subsidiaries', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
@@ -773,8 +773,8 @@ const budgetCalendarCases = [
         })
 
         const { sql } = await import('drizzle-orm')
-        const { db } = await import('@openbooks/engine/src/platform/db.ts')
-        const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+        const { db } = await import('@openbooks/engine/platform/db')
+        const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
         const { BudgetPrerequisiteError, loadBudgetWorkspace, loadUnsavedBudgetWorkspace } = await import('./budgets.ts')
 
         const DB = !!process.env.OPENBOOKS_DB_URL

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import { engineSourceSpecifier } from '../testing/engine-resolve-hooks.ts'
+import { canonicalEngineSpecifier } from '../testing/engine-resolve-hooks.ts'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
 
@@ -90,34 +90,34 @@ const mockSources = new Map<string, string>([
 ])
 
 const mockUrls = new Map<string, string>([
-  ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
-  ['@openbooks/engine/src/payments/payment-accounts.ts', 'mock:payments'],
-  ['@openbooks/engine/src/payments/payment-contracts.ts', 'mock:payments'],
-  ['@openbooks/engine/src/payments/payment-documents.ts', 'mock:payments'],
-  ['@openbooks/engine/src/payments-core/payment-errors.ts', 'mock:payments'],
-  ['@openbooks/engine/src/payments/payment-posting.ts', 'mock:payments'],
-  ['@openbooks/engine/src/payments/payment-queries.ts', 'mock:payments'],
-  ['@openbooks/engine/src/payments/payment-return.ts', 'mock:payments'],
-  ['@openbooks/engine/src/payments-core/rail-cpa005.ts', 'mock:payments'],
-  ['@openbooks/engine/src/payments-core/rail-nacha.ts', 'mock:payments'],
-  ['@openbooks/engine/src/payments-core/rail-sepa.ts', 'mock:payments'],
-  ['@openbooks/engine/src/payments-core/rail-cemtex.ts', 'mock:payments'],
-  ['@openbooks/engine/src/payments-core/rail-settings.ts', 'mock:payments'],
-  ['@openbooks/engine/src/payments/run-cancellation.ts', 'mock:payments'],
-  ['@openbooks/engine/src/payments/run-creation.ts', 'mock:payments'],
-  ['@openbooks/engine/src/payments/run-files.ts', 'mock:payments'],
-  ['@openbooks/engine/src/payments/run-posting.ts', 'mock:payments'],
-  ['@openbooks/engine/src/payments/run-readiness.ts', 'mock:payments'],
-  ['@openbooks/engine/src/payments/settlement-policy.ts', 'mock:payments'],
-  ['@openbooks/engine/src/flows/run.ts', 'mock:flows'],
-  ['@openbooks/engine/src/flows/bank-accounts-adapter.ts', 'mock:bank-adapter'],
-  ['@openbooks/engine/src/platform/business-date.ts', 'mock:business-date'],
+  ['@openbooks/engine/platform/db', 'mock:db'],
+  ['@openbooks/engine/payments/payment-accounts', 'mock:payments'],
+  ['@openbooks/engine/payments/payment-contracts', 'mock:payments'],
+  ['@openbooks/engine/payments/payment-documents', 'mock:payments'],
+  ['@openbooks/engine/payments-core/payment-errors', 'mock:payments'],
+  ['@openbooks/engine/payments/payment-posting', 'mock:payments'],
+  ['@openbooks/engine/payments/payment-queries', 'mock:payments'],
+  ['@openbooks/engine/testing/payments/payment-return', 'mock:payments'],
+  ['@openbooks/engine/testing/payments-core/rail-cpa005', 'mock:payments'],
+  ['@openbooks/engine/testing/payments-core/rail-nacha', 'mock:payments'],
+  ['@openbooks/engine/testing/payments-core/rail-sepa', 'mock:payments'],
+  ['@openbooks/engine/testing/payments-core/rail-cemtex', 'mock:payments'],
+  ['@openbooks/engine/payments-core/rail-settings', 'mock:payments'],
+  ['@openbooks/engine/payments/run-cancellation', 'mock:payments'],
+  ['@openbooks/engine/payments/run-creation', 'mock:payments'],
+  ['@openbooks/engine/testing/payments/run-files', 'mock:payments'],
+  ['@openbooks/engine/payments/run-posting', 'mock:payments'],
+  ['@openbooks/engine/payments/run-readiness', 'mock:payments'],
+  ['@openbooks/engine/payments/settlement-policy', 'mock:payments'],
+  ['@openbooks/engine/flows/run', 'mock:flows'],
+  ['@openbooks/engine/flows/bank-accounts-adapter', 'mock:bank-adapter'],
+  ['@openbooks/engine/platform/business-date/module', 'mock:business-date'],
 ])
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier.endsWith('/lib/authz')) return { url: 'mock:authz', shortCircuit: true }
-    const mocked = mockUrls.get(specifier) ?? mockUrls.get(engineSourceSpecifier(specifier) ?? '')
+    const mocked = mockUrls.get(specifier) ?? mockUrls.get(canonicalEngineSpecifier(specifier) ?? '')
     if (mocked) return { url: mocked, shortCircuit: true }
     return nextResolve(specifier, context)
   },

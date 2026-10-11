@@ -1,14 +1,14 @@
 import { extensionContributionTargetErrors } from './contribution-targets'
 import 'server-only'
 import { sql, type SQL } from 'drizzle-orm'
-import { db, type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
+import { db, type SqlExecutor } from '@openbooks/engine/platform/db'
 import {
   runAppEndpoint,
   type AppHostAdapters,
   type AppRequest,
   type AppRecordsAdapter,
   type AppStorageAdapter,
-} from '@openbooks/engine/src/apps/runtime.ts'
+} from '@openbooks/engine/apps/runtime'
 import {
   executeAppInvocation,
   lockInstalledAppForInvocation,
@@ -19,16 +19,16 @@ import {
   AppInvocationDisabledError,
   type AppInvocationAuditRow,
   type AppInvocationAttempt,
-} from '@openbooks/engine/src/apps/invocations.ts'
-import { createScriptJournal, type ScriptJournalInput } from '@openbooks/engine/src/ledger/journal-writes.ts'
+} from '@openbooks/engine/apps/invocations'
+import { createScriptJournal, type ScriptJournalInput } from '@openbooks/engine/ledger/journal-writes'
 import { requestHash } from '@/lib/application/idempotency-core'
 import { parseManifest, validateBundle, validateAppToolsForInstall, contentTypeFor, type AppManifest } from './manifest'
 import { appliedDraftStillCurrent, PACKAGE_PATH_REFUSAL, validPackagePath } from './package-files'
 import { APP_CAPABILITIES } from './manifest'
-import { projectExtensionPage } from '@openbooks/engine/src/extensions/pages.ts'
-import { projectSupplementalContributions, withdrawSupplementalContributions } from '@openbooks/engine/src/extensions/projections.ts'
+import { projectExtensionPage } from '@openbooks/engine/extensions/pages'
+import { projectSupplementalContributions, withdrawSupplementalContributions } from '@openbooks/engine/extensions/projections'
 import { EXTENSION_CONTRIBUTION_PERMISSIONS } from './contributions'
-import { actorHasPermission } from '@openbooks/engine/src/organization/actor-permissions.ts'
+import { actorHasPermission } from '@openbooks/engine/organization/actor-permissions'
 import { parseNativeExtension } from './native-ui'
 import { parseObjectSpecs, type ParsedObjects } from './objects'
 import { createAppPlatformAdapter, AppPlatformError } from './platform'
@@ -40,8 +40,8 @@ import { validateCustomFieldDefinition, type ExistingFieldDef } from '../custom-
 import { normalizeCustomFieldConfig } from '../custom-field-config'
 import { isCustomFieldTargetEnabled } from '../customization/gates'
 import { acquireFeatureGateLock, featureGateLockKey, isFeatureEnabled } from '../features'
-import { lockAndCheckOrgFeature } from '@openbooks/engine/src/organization/org-feature-lock.ts'
-import { documentRevisionSql } from '@openbooks/engine/src/records/revision.ts'
+import { lockAndCheckOrgFeature } from '@openbooks/engine/organization/org-feature-lock'
+import { documentRevisionSql } from '@openbooks/engine/records/revision'
 import { inTypeAudience, hasSubsidiaryField, loadRecordTypeByKey, recordVisibleInSubsidiaryFenceSql, type RecordTypeRow } from '@/lib/records'
 import { lintRecordFields } from '../record-schema'
 

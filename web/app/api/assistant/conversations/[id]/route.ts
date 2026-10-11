@@ -12,7 +12,7 @@ import { abortActiveRun } from "../../../../../lib/assistant/owned-runs";
 import { createDbOwnedRunStore } from "../../../../../lib/assistant/owned-runs-db";
 import { markTitleRenamed } from "../../../../../lib/assistant/conversation-title";
 import { notFound } from "@/lib/api/responses";
-import { isUuid } from "@openbooks/engine/src/platform/uuid.ts";
+import { isUuid } from "@openbooks/engine/platform/identifiers";
 import { conversationScope } from "../../../../../lib/assistant/conversation-scopes";
 
 /** The conversation's scope from `?scope=`; the general assistant when absent. */

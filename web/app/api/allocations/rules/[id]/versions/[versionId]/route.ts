@@ -3,7 +3,7 @@ import { defineRoute } from "@/lib/api/route";
 import { z } from "zod";
 import { parseJsonBody } from '@/lib/api/json';
 import { NextResponse } from 'next/server'
-import { getRuleVersion, updateDraftVersion } from '../../../../../../../../engine/src/allocations/index.ts'
+import { getRuleVersion, updateDraftVersion } from '@openbooks/engine/allocations/runtime'
 import { allocationWriteErrorResponse, requireRevision, requireRuleId } from '../../../../_lib.ts'
 import { notFound } from "@/lib/api/responses";
 

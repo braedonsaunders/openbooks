@@ -1,6 +1,6 @@
 /** Split from PartyDrawer.tsx; moved without behavior changes. */
 import { type InvoicingPref } from '../../../components/invoicing-preference-fields'
-import { formatMoney } from '@openbooks/engine/src/money/money.ts'
+import { formatMoney } from '@openbooks/engine/money/money'
 
 export type Opt = {
   id: string

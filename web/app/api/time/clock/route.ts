@@ -6,9 +6,9 @@ import { NextResponse } from 'next/server'
 import { z } from 'zod';
 import { fieldClockOwnerKey } from "../../../../lib/field-clock-owner";
 import { isUuid } from '../../../../lib/list-params'
-import { myClockDay, resolveOwnParty } from '@openbooks/engine/src/hrm/field-time/reads.ts'
-import { recordClockEvent, replayClockEvents, type RecordClockInput } from '@openbooks/engine/src/hrm/field-time/clock.ts'
-import { FieldTimeError } from '@openbooks/engine/src/hrm/field-time/errors.ts'
+import { myClockDay, resolveOwnParty } from '@openbooks/engine/hrm/field-time/reads'
+import { recordClockEvent, replayClockEvents, type RecordClockInput } from '@openbooks/engine/hrm/field-time/clock'
+import { FieldTimeError } from '@openbooks/engine/hrm/field-time/errors'
 
 export const runtime = 'nodejs'
 

@@ -2,7 +2,7 @@ import 'server-only'
 
 import { getLocale, getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/db'
 import { registeredListTable } from '../../../../lib/list/prepared-spec'
 import {
   badge,
@@ -21,7 +21,7 @@ import {
   widgetBlock,
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
-import { addCalendarDays, addMonthsStart, businessToday, startOfMonth, isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
+import { addCalendarDays, addMonthsStart, businessToday, startOfMonth, isIsoCalendarDate } from '@openbooks/engine/platform/business-date/module'
 import { can, requirePermission } from '../../../../lib/authz'
 import { customerGroupTabs } from '../../../../components/module-home/group-tabs'
 import { calculateForecast, countUndatedForecastExcluded, type ForecastRow } from '../../../../lib/crm'

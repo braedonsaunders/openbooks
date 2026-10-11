@@ -76,7 +76,7 @@ const mockSources = new Map<string, string>([
   [
     'mock:db',
     `
-      export * from '${import.meta.resolve('@openbooks/engine/src/platform/db.ts')}'
+      export * from '${import.meta.resolve('@openbooks/engine/platform/db')}'
       const state = globalThis[Symbol.for('openbooks.custom-fields-route-test')]
       const sqlText = globalThis.openbooksCustomFieldsSqlText
       export const db = {
@@ -100,8 +100,8 @@ const mockUrls = new Map<string, string>([
   ['../../../../lib/authz', 'mock:authz'],
   ['@/lib/authz', 'mock:authz'],
   ['../../../../lib/customization/gates', 'mock:feature-gates'],
-  ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
-  ['@openbooks/engine/src/flows/documents-adapter.ts', 'mock:documents-adapter'],
+  ['@openbooks/engine/platform/db', 'mock:db'],
+  ['@openbooks/engine/flows/documents-adapter', 'mock:documents-adapter'],
 ])
 
 const hooks = registerHooks({

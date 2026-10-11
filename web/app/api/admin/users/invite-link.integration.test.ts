@@ -3,8 +3,8 @@ import { registerHooks } from "node:module";
 import { pathToFileURL } from "node:url";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, withBypassContext, withOrgContext } from "@openbooks/engine/src/platform/db.ts";
-import { createScratchOrg, createScratchUser, dropScratchOrg } from "@openbooks/engine/src/testing/fixtures.ts";
+import { db, withBypassContext, withOrgContext } from "@openbooks/engine/platform/db";
+import { createScratchOrg, createScratchUser, dropScratchOrg } from "@openbooks/engine/testing/fixtures";
 
 // When email delivery is not configured the
 // invite must still hand the admin a copyable set-password link (one-time,
@@ -65,7 +65,7 @@ registerHooks({
         }
       `);
     }
-    if (parent.includes("auth-reset.ts") && specifier === "@openbooks/engine/src/delivery/email-config.ts") {
+    if (parent.includes("auth-reset.ts") && specifier === "@openbooks/engine/delivery/email-config/module") {
       return virtual(`
         const state = globalThis[Symbol.for('openbooks.admin-invite-link-integration')];
         export async function resolveOrgEmailTransport() { return state.transport ? { provider: 'isolated' } : null; }

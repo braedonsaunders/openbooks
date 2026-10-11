@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import {
   createAutomation,
   listAutomations,
-} from "@openbooks/engine/src/automations/services.ts";
+} from "@openbooks/engine/automations/services";
 import { createAutomationBody } from "./bodies";
 import { automationErrorResponse } from "./_lib";
 

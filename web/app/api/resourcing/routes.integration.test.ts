@@ -29,9 +29,9 @@ registerHooks({
   },
 });
 
-const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { sql } = await import("drizzle-orm");
-const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import("@openbooks/engine/src/testing/fixtures.ts");
+const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import("@openbooks/engine/testing/fixtures");
 const { POST: postAssignment } = await import("./assignments/route.ts");
 const { GET: getBoard } = await import("./board/route.ts");
 const { POST: postRequest } = await import("./requests/route.ts");

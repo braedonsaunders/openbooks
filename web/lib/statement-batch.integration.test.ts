@@ -2,14 +2,14 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { randomUUID } from 'node:crypto'
 import { sql } from 'drizzle-orm'
-import { db, withOrg } from '@openbooks/engine/src/platform/db.ts'
-import { postDocument } from '@openbooks/engine/src/ledger/posting-document.ts'
+import { db, withOrg } from '@openbooks/engine/platform/db'
+import { postDocument } from '@openbooks/engine/ledger/posting-document'
 import {
   createScratchOrg,
   createScratchUser,
   dropScratchOrg,
   type ScratchOrg,
-} from '@openbooks/engine/src/testing/fixtures.ts'
+} from '@openbooks/engine/testing/fixtures'
 import {
   assembleBatchList,
   loadStatementBatchParties,

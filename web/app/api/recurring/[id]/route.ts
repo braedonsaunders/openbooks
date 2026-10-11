@@ -3,7 +3,7 @@ import { isoDate, uuidId, parseJsonBody } from "@/lib/api/json";
 import { z } from "zod";
 import { NextResponse } from "next/server";
 import { sql, type SQL } from "drizzle-orm";
-import { db, type SqlExecutor } from "@openbooks/engine/src/platform/db.ts";
+import { db, type SqlExecutor } from "@openbooks/engine/platform/db";
 import {
   assertTemplateTokensKnown,
   CATCH_UP_CHOICE_THRESHOLD,
@@ -16,7 +16,7 @@ import {
   toDateArrayLiteral,
   type Cadence,
   type CatchUpMode,
-} from "@openbooks/engine/src/billing/recurring.ts";
+} from "@openbooks/engine/billing/recurring";
 import { businessToday } from "@openbooks/engine/platform/business-date/module";
 import { can, type Authz } from "../../../../lib/authz";
 import { defineRoute } from "../../../../lib/api/route";

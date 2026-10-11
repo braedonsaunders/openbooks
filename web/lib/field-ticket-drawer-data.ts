@@ -1,8 +1,8 @@
 import 'server-only'
 
 import { sql } from 'drizzle-orm'
-import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { businessToday } from '@openbooks/engine/platform/business-date/module'
+import { db } from '@openbooks/engine/platform/db'
 import type { FieldTicketDrawerProps, TicketPayload } from '../app/(app)/field-tickets/FieldTicketDrawer'
 import type { FieldTicketCreateDrawerProps } from '../app/(app)/field-tickets/FieldTicketCreateDrawer'
 import { can, type Authz } from './authz'

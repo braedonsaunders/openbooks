@@ -16,7 +16,7 @@ Object.assign(globalThis, { __utilizationHistoryRead: async (query: Parameters<P
   ] }
 } })
 registerHooks({ resolve(specifier, context, next) {
-  if (specifier === '@openbooks/engine/platform/database' || specifier === '@openbooks/engine/src/platform/db.ts') return { shortCircuit: true, url: 'data:text/javascript,export function ambientTenantOrgId(){return null} export async function withBypassContext(read){return read()} export const db={execute(query){return globalThis.__utilizationHistoryRead(query)}}' }
+  if (specifier === '@openbooks/engine/platform/database' || specifier === '@openbooks/engine/platform/db') return { shortCircuit: true, url: 'data:text/javascript,export function ambientTenantOrgId(){return null} export async function withBypassContext(read){return read()} export const db={execute(query){return globalThis.__utilizationHistoryRead(query)}}' }
   return next(specifier, context)
 } })
 const { fetchHistoryHours, planHistoryWindows } = await import('./utilization-history')

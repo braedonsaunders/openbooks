@@ -49,6 +49,8 @@ const mockSources = new Map<string, string>([
   [
     "mock:service",
     `
+      export { REQUISITION_DESCRIPTION_MAX_LENGTH } from ${JSON.stringify(import.meta.resolve('@openbooks/engine/hrm/recruiting/requisitions'))};
+
       const state = globalThis[Symbol.for('openbooks.hrm-recruiting-requisitions-route-test')]
       export async function reviseRequisition(args) { state.calls.push({ fn: 'revise', args }); if (state.serviceThrow) throw state.serviceThrow; return { id: 'requisition-1', requisitionNumber: 'REQ-00001' } }
       export async function createRequisition(args) {
@@ -109,8 +111,8 @@ const mockUrls = new Map<string, string>([
   ["../../../../../lib/features", "mock:authz"],
   ["../../../../../../lib/authz", "mock:authz"],
   ["../../../../../../lib/features", "mock:authz"],
-  ["@openbooks/engine/src/hrm/recruiting/requisitions.ts", "mock:service"],
-  ["@openbooks/engine/src/hrm/recruiting/recruiting-read.ts", "mock:service"],
+  ["@openbooks/engine/hrm/recruiting/requisitions", "mock:service"],
+  ["@openbooks/engine/hrm/recruiting/recruiting-read", "mock:service"],
   ["../_lib", "mock:lib"],
   ["../../_lib", "mock:lib"],
   ["@/lib/authz", "mock:authz"],

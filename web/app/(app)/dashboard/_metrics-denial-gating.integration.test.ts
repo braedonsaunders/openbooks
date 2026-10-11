@@ -1,3 +1,4 @@
+import { resolveEngineSpecifier } from '../../../testing/engine-resolve-hooks.ts'
 import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import test from "node:test";
@@ -14,23 +15,20 @@ registerHooks({
     // second db pool without the test bypass). Pin them to this checkout —
     // the same modules a real install resolves — process-wide, so the
     // loader under test and its transitive engine imports agree.
-    if (specifier.startsWith("@openbooks/engine/src/")) {
-      return nextResolve(
-        new URL(`../../../../engine/${specifier.slice("@openbooks/engine/".length)}`, import.meta.url).href,
-        context,
-      );
-    }
+
+    const engineUrl = resolveEngineSpecifier(specifier);
+    if (engineUrl) return nextResolve(engineUrl, context);
     return nextResolve(specifier, context);
   },
 });
 
-const { toUnits } = await import("@openbooks/engine/src/money/money.ts");
-const { withBypass, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
+const { toUnits } = await import("@openbooks/engine/money/money");
+const { withBypass, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
 const { loadDashboardMetrics } = await import("./_metrics.ts");
 type DashboardMoneyReaders = import("./_metrics.ts").DashboardMoneyReaders;
 const { canSeeWidget } = await import("./_widget-access.ts");
-const { businessToday } = await import("@openbooks/engine/src/platform/business-date.ts");
+const { businessToday } = await import("@openbooks/engine/platform/business-date/module");
 type Authz = import("@/lib/authz.ts").Authz;
 type OpenItem = import("@/lib/cash/core.ts").OpenItem;
 

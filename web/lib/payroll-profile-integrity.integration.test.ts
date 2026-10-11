@@ -14,9 +14,9 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context);
 } });
 const { sql } = await import("drizzle-orm");
-const { db, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
-const { sealSecret } = await import("@openbooks/engine/src/platform/secrets.ts");
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
+const { db, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { sealSecret } = await import("@openbooks/engine/platform/secrets");
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
 const { POST } = await import("../app/api/payroll/profiles/route");
 
 const cases: Array<[string, Record<string, unknown>]> = [

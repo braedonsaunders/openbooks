@@ -1,7 +1,7 @@
 import "server-only";
 import { analyticsQuery } from "./query";
 import { sql } from "drizzle-orm";
-import { add, mulDecimal, roundDiv, toUnits } from "@openbooks/engine/src/money/money.ts";
+import { add, mulDecimal, roundDiv, toUnits } from "@openbooks/engine/money/money";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
 import { statementBookExpr } from "../gl-summary";
 import { flowRates } from "../fx-presentation";

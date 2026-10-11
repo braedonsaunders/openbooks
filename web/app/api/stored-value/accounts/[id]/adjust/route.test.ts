@@ -16,8 +16,8 @@ registerHooks({ resolve(specifier, context, nextResolve) {
   // keeping the route factory, JSON schema and native JSON response real.
   if (context.parentURL?.endsWith('/adjust/route.ts')) {
     let source: string | undefined
-    if (specifier === '@openbooks/engine/src/platform/db.ts') source = 'export async function withOrgTransaction(_orgId, work) { return work() }'
-    if (specifier === '@openbooks/engine/src/stored-value/accounts.ts') source = `
+    if (specifier === '@openbooks/engine/platform/db') source = 'export async function withOrgTransaction(_orgId, work) { return work() }'
+    if (specifier === '@openbooks/engine/stored-value/accounts') source = `
       export async function adjustStoredValue(input) {
         const state = globalThis.__storedAdjustment
         state.calls.push(input)

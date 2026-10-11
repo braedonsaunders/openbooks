@@ -4,7 +4,7 @@ import { dirname, join } from 'node:path'
 import test from 'node:test'
 import { fileURLToPath } from 'node:url'
 import { displayRoleName, SEEDED_ROLE_NAMES } from './role-display.ts'
-import { BUILT_IN_ROLES } from '../../engine/src/organization/permissions.ts'
+import { BUILT_IN_ROLES } from '@openbooks/engine/organization/permissions'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const messagesDir = join(here, '..', 'messages')

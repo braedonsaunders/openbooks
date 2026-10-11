@@ -222,8 +222,8 @@ stubModules({ navigation: false, intl: false, authz: false, features: false, ext
 const scopeHooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === 'drizzle-orm') return { url: 'mock:drizzle', shortCircuit: true }
-    if (specifier === '@openbooks/engine/src/platform/db.ts') return { url: 'mock:db', shortCircuit: true }
-    if (specifier === '@openbooks/engine/src/organization/org-feature-lock.ts') return { url: 'mock:org-feature-lock', shortCircuit: true }
+    if (specifier === '@openbooks/engine/platform/db') return { url: 'mock:db', shortCircuit: true }
+    if (specifier === '@openbooks/engine/organization/org-feature-lock') return { url: 'mock:org-feature-lock', shortCircuit: true }
     return nextResolve(specifier, context)
   },
   load(url, context, nextLoad) {
@@ -246,8 +246,8 @@ registerHooks({
     // '@/lib/api/json' is not mocked: never double the validation boundary.
     if (specifier === 'next/server') return { url: 'mock:project-route-next-server', shortCircuit: true }
     if (specifier === 'drizzle-orm') return { url: 'mock:drizzle', shortCircuit: true }
-    if (specifier === '@openbooks/engine/src/platform/db.ts') return { url: 'mock:db', shortCircuit: true }
-    if (specifier === '@openbooks/engine/src/organization/org-feature-lock.ts') return { url: 'mock:org-feature-lock', shortCircuit: true }
+    if (specifier === '@openbooks/engine/platform/db') return { url: 'mock:db', shortCircuit: true }
+    if (specifier === '@openbooks/engine/organization/org-feature-lock') return { url: 'mock:org-feature-lock', shortCircuit: true }
     return nextResolve(specifier, context)
   },
   load(url, context, nextLoad) {

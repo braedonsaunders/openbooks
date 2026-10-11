@@ -2,9 +2,9 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 
 const { sql } = await import('drizzle-orm')
-const { db, withBypass } = await import('@openbooks/engine/src/platform/db.ts')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
-const { payrollSetupState } = await import('@openbooks/engine/src/payroll/readiness.ts')
+const { db, withBypass } = await import('@openbooks/engine/platform/db')
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
+const { payrollSetupState } = await import('@openbooks/engine/payroll/readiness')
 const { createSetupRecord, updateSetupRecord } = await import('./write.ts')
 
 const DB = !!process.env.OPENBOOKS_DB_URL

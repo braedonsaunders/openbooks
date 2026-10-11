@@ -7,8 +7,8 @@ import test from "node:test";
 // quote/SO id converts through the purchase-orders route, and without the
 // subsidiary check an out-of-scope PO converts under a restricted key.
 const { sql } = await import("drizzle-orm");
-const { db, withBypassContext } = await import("@openbooks/engine/src/platform/db.ts");
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
+const { db, withBypassContext } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
 const { convertApplicationOrder } = await import("./orders");
 const { ApplicationError } = await import("./errors");
 type ApplicationContext = import("./context").ApplicationContext;

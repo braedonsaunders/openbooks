@@ -34,8 +34,8 @@ const hooks = registerHooks({
 const routeUrl = './route.ts?item-rates-precision-route-integration'
 const { POST } = (await import(routeUrl)) as typeof import('./route')
 
-const { withBypassContext, withOrgContext, db } = await import('@openbooks/engine/src/platform/db.ts')
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { withBypassContext, withOrgContext, db } = await import('@openbooks/engine/platform/db')
+const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
 test.after(() => hooks.deregister())
 
 

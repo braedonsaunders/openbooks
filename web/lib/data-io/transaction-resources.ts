@@ -5,13 +5,13 @@ import { importRowError } from './row-error'
 
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { db, schema } from '@openbooks/engine/src/platform/db.ts'
-import { acquireOrgFeatureGateLock, lockAndCheckOrgFeature } from '@openbooks/engine/src/organization/org-feature-lock.ts'
-import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
-import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
-import { postDocument } from "@openbooks/engine/src/ledger/posting-document.ts";
-import { loadEntryRuleByKey } from '@openbooks/engine/src/allocations/entry.ts'
-import { controlDeps } from "../../../engine/src/ledger/document-service.ts";
+import { db, schema } from '@openbooks/engine/platform/db'
+import { acquireOrgFeatureGateLock, lockAndCheckOrgFeature } from '@openbooks/engine/organization/org-feature-lock'
+import { normalizeMoney } from '@openbooks/engine/money/money'
+import { isIsoCalendarDate } from '@openbooks/engine/platform/business-date/module'
+import { postDocument } from "@openbooks/engine/ledger/posting-document";
+import { loadEntryRuleByKey } from '@openbooks/engine/allocations/entry'
+import { controlDeps } from "@openbooks/engine/ledger/document-service";
 import { nextDocumentNumber } from "../bills.ts";
 import { createPermission, postPermission, readPermission, type DocKindConfig } from '../document-kinds'
 import { canonicalDecimal } from '../exact-decimal'

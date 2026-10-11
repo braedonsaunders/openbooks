@@ -1,5 +1,5 @@
-import { canonicalDecimal, divideDecimal, isPositiveDecimal } from '@openbooks/engine/src/money/exact-decimal.ts'
-import { mulDecimal, neg, sum } from '@openbooks/engine/src/money/money.ts'
+import { canonicalDecimal, divideDecimal, isPositiveDecimal } from '@openbooks/engine/money/decimal'
+import { mulDecimal, neg, sum } from '@openbooks/engine/money/money'
 
 /** Return ROI as a one-decimal percentage string, using only exact decimals. */
 export function equipmentRoiPercent(

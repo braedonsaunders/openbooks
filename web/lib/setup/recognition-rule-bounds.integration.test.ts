@@ -14,12 +14,12 @@ import test from "node:test";
 // The writer imports the server-only marker; shim it like the other
 // route-level tests do (same seam as subsidiary-scope.test.ts).
 const { sql } = await import("drizzle-orm");
-const { db } = await import("@openbooks/engine/src/platform/db.ts");
+const { db } = await import("@openbooks/engine/platform/db");
 const {
   createScratchOrg,
   dropScratchOrgReporting,
   seedFlowActors,
-} = await import("@openbooks/engine/src/testing/fixtures.ts");
+} = await import("@openbooks/engine/testing/fixtures");
 const { createSetupRecord, updateSetupRecord } = await import("./write.ts");
 
 const DB = !!process.env.OPENBOOKS_DB_URL;

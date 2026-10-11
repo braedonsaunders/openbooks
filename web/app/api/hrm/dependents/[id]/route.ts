@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import {
   deactivateDependent,
   updateDependent,
-} from "@openbooks/engine/src/hrm/benefits/dependents.ts";
+} from "@openbooks/engine/hrm/benefits/dependents";
 import { isUuid } from "../../../../../lib/list-params";
 import { benefitsErrorResponse } from "../../benefits/_lib";
 import { updateDependentBody } from "../bodies";

@@ -13,7 +13,7 @@ const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:t
 registerHooks({
   resolve(specifier, context, next) {
     if (specifier === '../../../../lib/authz' || specifier === '@/lib/authz') return virtual(`
-      import { permissionSetCovers } from '@openbooks/engine/src/organization/permissions.ts';
+      import { permissionSetCovers } from '@openbooks/engine/organization/permissions';
       export async function getAuthz() {
         const s = globalThis.__documentInvoiceProjectState;
         return { user: { orgId: s.orgId, id: s.actorId, isSuperAdmin: false }, permissions: new Set(['ar.read', 'ar.create', 'ar.post']), allowedSubsidiaryIds: null };
@@ -28,10 +28,10 @@ registerHooks({
     return next(specifier, context)
   },
 })
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
 const { sql } = await import('drizzle-orm')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
-const { documentRevisionCounterSql } = await import("../../../../../engine/src/records/revision.ts");
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
+const { documentRevisionCounterSql } = await import("@openbooks/engine/records/revision");
 const { PATCH } = await import('./route.ts')
 
 async function revision(orgId: string, id: string): Promise<string> {

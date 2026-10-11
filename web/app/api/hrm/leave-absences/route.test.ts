@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import nodeTest from "node:test";
 import { NextResponse } from "next/server";
-import { LeaveError } from "@openbooks/engine/src/hrm/leave-errors.ts";
+import { LeaveError } from "@openbooks/engine/hrm/leave-errors";
 
 /**
  * Absence-record boundary. mock:authz and the service double isolate the
@@ -69,7 +69,7 @@ const mockSources = new Map<string, string>([
 const mockUrls = new Map<string, string>([
   ["../../../../lib/authz", "mock:authz"],
   ["@/lib/feature-gates", "mock:authz"],
-  ["@openbooks/engine/src/hrm/attendance.ts", "mock:service"],
+  ["@openbooks/engine/hrm/attendance", "mock:service"],
 ]);
 
 const hooks = registerHooks({

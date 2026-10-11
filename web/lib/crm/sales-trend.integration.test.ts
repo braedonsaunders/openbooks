@@ -7,11 +7,11 @@ import {
   pool,
   withBypassContext,
   withOrgContext,
-} from "@openbooks/engine/src/platform/db.ts";
+} from "@openbooks/engine/platform/db";
 import {
   createScratchOrg,
   dropScratchOrg,
-} from "@openbooks/engine/src/testing/fixtures.ts";
+} from "@openbooks/engine/testing/fixtures";
 import { REPORT_ENTITY_MAP, runCustomQuery } from "@openbooks/reports";
 import { salesTrendQuery, salesTrendFromReport } from "./sales-trend";
 

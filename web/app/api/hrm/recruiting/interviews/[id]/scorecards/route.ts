@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import {
   readScorecardsForInterview,
   submitScorecard,
-} from "@openbooks/engine/src/hrm/recruiting/scorecards.ts";
+} from "@openbooks/engine/hrm/recruiting/scorecards";
 
 import { recruitingErrorResponse } from "../../../_lib";
 import { submitScorecardBody } from "./bodies";

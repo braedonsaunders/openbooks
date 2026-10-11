@@ -29,13 +29,13 @@ registerHooks({
     return next(specifier, context)
   },
 })
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
 const { sql } = await import('drizzle-orm')
-const { isDocumentRevisionToken } = await import('@openbooks/engine/src/records/revision.ts')
-const { encryptAccountNumber } = await import("@openbooks/engine/src/payments-core/rail-settings.ts");
+const { isDocumentRevisionToken } = await import('@openbooks/engine/records/revision')
+const { encryptAccountNumber } = await import("@openbooks/engine/payments-core/rail-settings");
 const { createScratchOrg, createScratchUser, dropScratchOrg, seedFlowActors, seedApprovalFlow } =
-  await import('@openbooks/engine/src/testing/fixtures.ts')
-const { decideGate } = await import('@openbooks/engine/src/flows/gates.ts')
+  await import('@openbooks/engine/testing/fixtures')
+const { decideGate } = await import('@openbooks/engine/testing/flows/gates')
 const { POST: submit } = await import('./route')
 const { GET: getParty } = await import('../../route')
 const { PATCH: patchAccount } = await import('../route')

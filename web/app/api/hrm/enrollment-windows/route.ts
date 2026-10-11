@@ -1,8 +1,8 @@
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { createEnrollmentWindow } from "@openbooks/engine/src/hrm/benefits/windows.ts";
-import { listEnrollmentWindows } from "@openbooks/engine/src/hrm/benefits/benefits-read.ts";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { createEnrollmentWindow } from "@openbooks/engine/hrm/benefits/windows";
+import { listEnrollmentWindows } from "@openbooks/engine/hrm/benefits/benefits-read";
+import { db } from "@openbooks/engine/platform/db";
 import { benefitsErrorResponse } from "../benefits/_lib";
 import { createWindowBody } from "./bodies";
 /**

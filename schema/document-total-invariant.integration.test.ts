@@ -28,9 +28,9 @@ function pgMessage(error: unknown): string {
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
-type EngineDb = typeof import("../engine/src/platform/db.ts");
-type EnginePosting = typeof import("../engine/src/ledger/posting-document.ts");
-type EngineFixtures = typeof import("../engine/src/testing/fixtures.ts");
+type EngineDb = typeof import("@openbooks/engine/platform/db");
+type EnginePosting = typeof import("@openbooks/engine/ledger/posting-document");
+type EngineFixtures = typeof import("@openbooks/engine/testing/fixtures");
 type Tx = Parameters<Parameters<EngineDb["db"]["transaction"]>[0]>[0];
 
 type Harness = {
@@ -45,9 +45,9 @@ let harness: Harness | null = null;
 async function ctx(): Promise<Harness> {
   if (!harness) {
     const [{ db }, { postDocument }, { createScratchOrg }] = await Promise.all([
-      import("../engine/src/platform/db.ts"),
-      import("../engine/src/ledger/posting-document.ts"),
-      import("../engine/src/testing/fixtures.ts"),
+      import("@openbooks/engine/platform/db"),
+      import("@openbooks/engine/ledger/posting-document"),
+      import("@openbooks/engine/testing/fixtures"),
     ]);
     const org = await createScratchOrg();
     harness = { db, postDocument, org, retainageAccountId: randomUUID() };
@@ -185,7 +185,7 @@ test("the correct net header commits, posts through the kernel, and ties to the 
 if (DB) {
   test.after(async () => {
     if (!harness) return;
-    const { dropScratchOrg } = await import("../engine/src/testing/fixtures.ts");
+    const { dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
     await dropScratchOrg(harness.org.orgId);
     harness = null;
   });

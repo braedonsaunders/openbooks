@@ -1,13 +1,13 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/db'
 import {
   DEFAULT_PERIOD_PRESET,
   isPeriodPreset,
   resolvePreset,
   type DateRange,
 } from '@openbooks/reports'
-import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
+import { businessToday } from '@openbooks/engine/platform/business-date/module'
 import { defaultFiscalCalendarPeriods, fiscalStartMonth } from './fiscal'
 import { resolveOrgId } from './org-scope'
 

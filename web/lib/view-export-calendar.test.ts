@@ -18,7 +18,7 @@ const viewState: { pdfStamps: unknown[] } = { pdfStamps: [] }
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[viewKey] = viewState
 
 const reportPdfUrl = new URL('./report-pdf.ts', import.meta.url).href
-const businessDateUrl = import.meta.resolve('@openbooks/engine/src/platform/business-date.ts')
+const businessDateUrl = import.meta.resolve('@openbooks/engine/platform/business-date/module')
 
 const mockSources = new Map<string, string>([
   [
@@ -80,7 +80,7 @@ stubModules({ intl: true, navigation: false, authz: false, features: false });
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === '@openbooks/engine/src/platform/business-date.ts') {
+    if (specifier === '@openbooks/engine/platform/business-date/module') {
       return {
         shortCircuit: true,
         url: `data:text/javascript,export * from '${businessDateUrl}'; export async function businessToday() { return '${STAMP}' }`,

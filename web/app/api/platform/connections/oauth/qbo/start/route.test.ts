@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import test from "node:test";
-import { sealJson, unsealJson } from "@openbooks/engine/src/platform/secrets.ts";
+import { sealJson, unsealJson } from "@openbooks/engine/platform/secrets";
 
 process.env.OPENBOOKS_DATA_KEY ??=
   "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f";
@@ -44,8 +44,8 @@ const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     const mocks: Record<string, string> = {
       "@/lib/authz": "mock:authz",
-      "@openbooks/engine/src/sync/connection.ts": "mock:connection",
-      "@openbooks/engine/src/flows/email-tokens.ts": "mock:email-tokens",
+      "@openbooks/engine/sync/connection": "mock:connection",
+      "@openbooks/engine/flows/email-tokens": "mock:email-tokens",
     };
     const url = mocks[specifier];
     return url ? { url, shortCircuit: true } : nextResolve(specifier, context);

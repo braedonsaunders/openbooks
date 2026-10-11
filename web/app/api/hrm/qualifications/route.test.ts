@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import nodeTest from "node:test";
 import { NextResponse } from "next/server";
-import { HrmQualificationError } from "@openbooks/engine/src/hrm/qualifications/errors.ts";
+import { HrmQualificationError } from "@openbooks/engine/hrm/qualifications/errors";
 import { pathToFileURL } from "node:url";
 
 
@@ -185,11 +185,11 @@ const mockUrls = new Map<string, string>([
   ["../../../../lib/features", "mock:features"],
   ["../../../../../lib/features", "mock:features"],
   ["../../../../../../lib/features", "mock:features"],
-  ["@openbooks/engine/src/hrm/qualifications/qualifications.ts", "mock:ledger"],
-  ["@openbooks/engine/src/hrm/qualifications/gating.ts", "mock:gating"],
-  ["@openbooks/engine/src/hrm/qualifications/requirements.ts", "mock:requirements"],
-  ["@openbooks/engine/src/hrm/qualifications/types.ts", "mock:types"],
-  ["@openbooks/engine/src/platform/db.ts", "mock:db"],
+  ["@openbooks/engine/hrm/qualifications/qualifications", "mock:ledger"],
+  ["@openbooks/engine/hrm/qualifications/gating", "mock:gating"],
+  ["@openbooks/engine/hrm/qualifications/requirements", "mock:requirements"],
+  ["@openbooks/engine/hrm/qualifications/types", "mock:types"],
+  ["@openbooks/engine/platform/db", "mock:db"],
 ]);
 
 registerHooks({

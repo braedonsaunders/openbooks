@@ -3,12 +3,12 @@ import { parseJsonBody, isoDate } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
-import { db } from "@openbooks/engine/src/platform/db.ts";
-import { previewDepreciation } from "@openbooks/engine/src/assets/depreciation.ts";
+import { db } from "@openbooks/engine/platform/db";
+import { previewDepreciation } from "@openbooks/engine/assets/depreciation";
 import {
   businessToday,
   isIsoCalendarDate,
-} from "@openbooks/engine/src/platform/business-date.ts";
+} from "@openbooks/engine/platform/business-date/module";
 import { isUuid } from "../../../../lib/list-params";
 
 export const runtime = "nodejs";

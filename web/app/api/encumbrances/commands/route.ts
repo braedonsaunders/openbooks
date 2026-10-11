@@ -9,7 +9,7 @@ import {
   createEncumbrance,
   encumbranceSubsidiaryId,
   voidEncumbrance,
-} from '@openbooks/engine/src/nonprofit/encumbrances.ts'
+} from '@openbooks/engine/nonprofit/encumbrances'
 
 export const runtime = 'nodejs'
 

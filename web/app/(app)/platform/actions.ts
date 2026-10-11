@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { sql } from "drizzle-orm";
-import { db, withBypass } from "@openbooks/engine/src/platform/db.ts";
+import { db, withBypass } from "@openbooks/engine/platform/db";
 import { isUuid } from "../../../lib/list-params";
 import { lockSuperAdminActor, requireSuperAdmin } from "../../../lib/super-admin";
 import { enterOrg } from "../../../lib/sandbox-session";

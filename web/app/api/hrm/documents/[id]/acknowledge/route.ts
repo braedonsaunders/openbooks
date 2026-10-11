@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { acknowledgeDocument } from "@openbooks/engine/src/hrm/documents/documents.ts";
+import { acknowledgeDocument } from "@openbooks/engine/hrm/documents/documents";
 import { guardPermission } from "../../../../../../lib/authz";
 import { hrmDocumentsErrorResponse } from "../../_lib";
 /**

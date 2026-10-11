@@ -3,15 +3,15 @@ import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
-import { toUnits } from "@openbooks/engine/src/money/money.ts";
-import { postDocument } from "@openbooks/engine/src/ledger/posting-document.ts";
-import { openItemsForParty } from "@openbooks/engine/src/payments/payment-queries.ts";
+import { db } from "@openbooks/engine/platform/db";
+import { toUnits } from "@openbooks/engine/money/money";
+import { postDocument } from "@openbooks/engine/ledger/posting-document";
+import { openItemsForParty } from "@openbooks/engine/payments/payment-queries";
 import {
   createScratchOrg,
   createScratchUser,
   dropScratchOrg,
-} from "@openbooks/engine/src/testing/fixtures.ts";
+} from "@openbooks/engine/testing/fixtures";
 
 const state = { user: { orgId: "", id: "" } };
 Object.assign(globalThis, { __payPartialAuth: state });

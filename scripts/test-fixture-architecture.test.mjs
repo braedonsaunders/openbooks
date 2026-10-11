@@ -208,7 +208,7 @@ test("the lifecycle receipt survives an owner that exits immediately after writi
 const behavior = process.env.OPENBOOKS_TEST_FIXTURE_BEHAVIOR === "1";
 
 test("pool refuses shared databases even when the isolation flag is spoofed", { skip: !behavior }, async () => {
-  const { ScratchOrgPool, hasEphemeralDatabaseMarker } = await import("../engine/src/testing/fixtures.ts");
+  const { ScratchOrgPool, hasEphemeralDatabaseMarker } = await import("@openbooks/engine/testing/fixtures");
   const store = { bootstrap: async () => ({ orgId: "unused" }), reset: async () => {}, teardown: async () => {} };
   assert.throws(
     () => new ScratchOrgPool({ size: 2, isolatedDatabase: false, store }),
@@ -220,7 +220,7 @@ test("pool refuses shared databases even when the isolation flag is spoofed", { 
 });
 
 test("leases reset committed state, preserve tenant isolation, and bound lifecycle work", { skip: !behavior }, async () => {
-  const { ScratchOrgPool } = await import("../engine/src/testing/fixtures.ts");
+  const { ScratchOrgPool } = await import("@openbooks/engine/testing/fixtures");
   let next = 0;
   const records = new Map();
   const baselineRows = new Map([["baseline-account", "original"], ["baseline-setting", "production"]]);
@@ -271,7 +271,7 @@ test("leases reset committed state, preserve tenant isolation, and bound lifecyc
 });
 
 test("leaked rows taint a slot and fail closed", { skip: !behavior }, async () => {
-  const { ScratchOrgPool } = await import("../engine/src/testing/fixtures.ts");
+  const { ScratchOrgPool } = await import("@openbooks/engine/testing/fixtures");
   const store = {
     bootstrap: async () => ({ orgId: "leaky", rows: new Set(["uncommitted-leak"]) }),
     reset: async (org) => {
@@ -349,8 +349,8 @@ test("legacy lease is returned by the lifecycle hook", () => {});
 test("real pooled leases restore committed baseline rows and stay cross-tenant isolated", {
   skip: !behavior || !process.env.OPENBOOKS_DB_URL || !process.env.OPENBOOKS_TEST_DB_MARKER,
 }, async () => {
-  const { createScratchOrg, dropScratchOrg } = await import("../engine/src/testing/fixtures.ts");
-  const { db, withBypassContext } = await import("../engine/src/platform/db.ts");
+  const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
+  const { db, withBypassContext } = await import("@openbooks/engine/platform/db");
   const { sql } = await import("drizzle-orm");
   const { randomUUID } = await import("node:crypto");
   const first = await createScratchOrg();
@@ -408,8 +408,8 @@ test("narrowed resets mark exactly the dirtied tables and restore a pristine slo
     dropScratchOrg,
     listOrgIdTables,
     probeScratchOrgTouchedTables,
-  } = await import("../engine/src/testing/fixtures.ts");
-  const { db, withBypassContext } = await import("../engine/src/platform/db.ts");
+  } = await import("@openbooks/engine/testing/fixtures");
+  const { db, withBypassContext } = await import("@openbooks/engine/platform/db");
   const { sql } = await import("drizzle-orm");
   const { randomUUID } = await import("node:crypto");
 

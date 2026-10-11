@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import {
   getExitRecord,
   updateExitRecord,
-} from "@openbooks/engine/src/hrm/performance/exits.ts";
+} from "@openbooks/engine/hrm/performance/exits";
 
 import { isUuid } from "../../../../../lib/list-params";
 import { performanceErrorResponse } from "../../review-cycles/_lib";

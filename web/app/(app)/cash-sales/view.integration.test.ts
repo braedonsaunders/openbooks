@@ -25,11 +25,11 @@ registerHooks({
     return next(specifier, context)
   },
 })
-const { db, withBypassContext, withOrg, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypassContext, withOrg, withOrgContext } = await import('@openbooks/engine/platform/db')
 const { sql } = await import('drizzle-orm')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
-const { postDocument } = await import('@openbooks/engine/src/ledger/posting-document.ts')
-const { receiveInventory } = await import('@openbooks/engine/src/inventory/movements.ts')
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
+const { postDocument } = await import('@openbooks/engine/ledger/posting-document')
+const { receiveInventory } = await import('@openbooks/engine/inventory/movements')
 const { loadCashSales } = await import('./view')
 
 const sessionFor = (orgId: string, actor: string): SessionUser => ({

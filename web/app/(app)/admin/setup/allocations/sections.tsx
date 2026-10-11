@@ -2,7 +2,7 @@ import 'server-only'
 
 import { PageHeader } from '@openbooks/ui'
 import { ModuleHomeTabs } from '@/components/module-home/tabs'
-import { listRuleHeads } from '../../../../../../engine/src/allocations/index.ts'
+import { listRuleHeads } from '@openbooks/engine/allocations/runtime'
 import { getAuthz } from '../../../../../lib/authz'
 import { requirePermission } from '../../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../../lib/feature-gates'

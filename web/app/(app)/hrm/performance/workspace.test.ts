@@ -4,14 +4,14 @@ import { stubModules } from '../../../../testing/stub-modules'
 
 // Replace service reads, never validation or navigation composition.
 stubModules({ intl: true, extra: {
-  '@openbooks/engine/src/hrm/performance/performance-read.ts': `export async function listCycleProgress() { return [] }`,
-  '@openbooks/engine/src/hrm/performance/talent.ts': `
+  '@openbooks/engine/hrm/performance/performance-read': `export async function listCycleProgress() { return [] }`,
+  '@openbooks/engine/hrm/performance/talent': `
     export async function listTalentDirectory() { return { employments: [], positions: [] } }
     export async function listTalentReviews() { throw new Error('No cycle must not query assessments') }
     export async function nineBoxForCycle() { throw new Error('No cycle must not query a matrix') }
     export async function listSuccessionPlans() { return [{ id: 'plan', positionCode: 'CEO', positionTitle: 'Chief executive', incumbentName: null, candidates: [], status: 'draft' }] }
   `,
-  '@openbooks/engine/src/hrm/performance/calibration.ts': `
+  '@openbooks/engine/hrm/performance/calibration': `
     export async function listCalibrationSessions() { return [{ id: 'session', name: 'Annual calibration', status: 'draft' }] }
     export async function getCalibrationSession() { throw new Error('A list must not implicitly open a session') }
     export async function calibrationDistribution() { throw new Error('A list must not query distributions') }

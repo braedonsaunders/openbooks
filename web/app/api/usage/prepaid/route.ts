@@ -1,5 +1,5 @@
-import { createPrepaidGrant, listPrepaidGrants } from "@openbooks/engine/src/billing/usage/prepaid.ts";
-import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
+import { createPrepaidGrant, listPrepaidGrants } from "@openbooks/engine/billing/usage/prepaid";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
 import { defineRoute } from "@/lib/api/route";
 import { idempotentUsageCreate } from "../_idempotent";
 import { z } from "zod";

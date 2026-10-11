@@ -3,7 +3,7 @@ import 'server-only'
 
 import { getLocale, getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
-import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
 import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { requireProjectsFeature } from '../../../lib/projects-gate'
 import { isFeatureEnabled } from '../../../lib/features'

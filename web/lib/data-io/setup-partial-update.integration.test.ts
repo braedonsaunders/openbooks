@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { sql } from 'drizzle-orm';
 import { db } from '@openbooks/engine/platform/database';
-import { createScratchOrg, dropScratchOrg, seedFlowActors } from '@openbooks/engine/src/testing/fixtures.ts';
+import { createScratchOrg, dropScratchOrg, seedFlowActors } from '@openbooks/engine/testing/fixtures';
 import { setupResource } from './setup-resources';
 import { SETUP_ENTITY_BY_KEY } from '../setup/registry';
 

@@ -5,7 +5,7 @@ import {
   InventoryIdempotencyConflictError,
   InventoryNotFoundError,
   InventoryOwnershipError,
-} from "@openbooks/engine/src/inventory/contracts.ts";
+} from "@openbooks/engine/inventory/contracts/module";
 import { inventoryErrorStatus } from "./inventory-errors.ts";
 
 test("inventory refusals map to their HTTP status", () => {

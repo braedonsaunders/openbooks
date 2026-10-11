@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import { registerHooks } from 'node:module'
 import { randomUUID } from 'node:crypto'
-import { env } from '@openbooks/engine/src/platform/db.ts'
+import { env } from '@openbooks/engine/platform/db'
 
 /**
  * An invoice with no org-authored PDF template still prints: the record-PDF
@@ -59,8 +59,8 @@ registerHooks({ resolve(specifier, context, next) {
 }})
 
 const { sql } = await import('drizzle-orm')
-const { db, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { db, withOrgContext } = await import('@openbooks/engine/platform/db')
+const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
 const { GET } = await import('./route')
 
 const needsDb = { skip: !env.OPENBOOKS_DB_URL }

@@ -2,11 +2,11 @@ import { z } from 'zod'
 import { defineRoute } from '@/lib/api/route'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/db'
 import {
   comparisonFindings,
   parallelComparisons,
-} from '@openbooks/engine/src/payroll/parallel-run-store.ts'
+} from '@openbooks/engine/payroll/parallel-run-store'
 import '../../../../../../lib/feature-gates';
 import { isUuid } from '../../../../../../lib/list-params'
 import { subsidiaryVisibleFilter } from '../../../../../../lib/subsidiaries'

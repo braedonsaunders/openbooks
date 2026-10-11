@@ -3,9 +3,9 @@ import { defineRoute } from "@/lib/api/route";
 
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
-import { documentRevisionCounterSql, isDocumentRevisionToken } from '@openbooks/engine/src/records/revision.ts'
-import { runTriggerScripts } from '@openbooks/engine/src/scripting/scripting.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
+import { documentRevisionCounterSql, isDocumentRevisionToken } from '@openbooks/engine/records/revision'
+import { runTriggerScripts } from '@openbooks/engine/scripting/scripting'
 import type { FieldValueMap, FormSection } from '@openbooks/forms-core'
 import { guardPermission } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'

@@ -1,4 +1,4 @@
-import { sum, toCents } from '@openbooks/engine/src/money/money.ts'
+import { sum, toCents } from '@openbooks/engine/money/money'
 import { marginPercentText } from '../financial-decimal'
 
 export { marginPercentText }

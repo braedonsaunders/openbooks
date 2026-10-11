@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { subsidiaryScopeAllows } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
+import { subsidiaryScopeAllows } from '@openbooks/engine/organization/scope'
 
 test('timesheet subsidiary checks allow only the selected entity for restricted callers', () => {
   const scope = new Set(['subsidiary-a'])

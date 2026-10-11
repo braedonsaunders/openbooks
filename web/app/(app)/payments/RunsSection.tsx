@@ -6,9 +6,9 @@ import { getMoneyFormatter } from '@/lib/money-server'
 import Link from 'next/link'
 import { getLocale, getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
-import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { paymentRunReadiness } from "@openbooks/engine/src/payments/run-readiness.ts";
+import { businessToday } from '@openbooks/engine/platform/business-date/module'
+import { db } from '@openbooks/engine/platform/db'
+import { paymentRunReadiness } from "@openbooks/engine/payments/run-readiness";
 import { paymentRunSubjectKind } from '@openbooks/engine/flows'
 import { Alert, AlertDescription, AlertTitle, Badge, UrlDrawer } from '@openbooks/ui'
 import { SearchInput } from '../../../components/search-input'

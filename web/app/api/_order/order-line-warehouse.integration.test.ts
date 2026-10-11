@@ -45,10 +45,10 @@ const hooks = registerHooks({
 });
 
 const { sql } = await import("drizzle-orm");
-const { withBypassContext, db, withOrg } = await import("@openbooks/engine/src/platform/db.ts");
-const { installTrustedTestDatabaseBypass } = await import("@openbooks/engine/src/testing/database-bypass.ts");
-const { documentRevisionCounterSql } = await import("@openbooks/engine/src/records/revision.ts");
-const { receiveInventory } = await import("@openbooks/engine/src/inventory/movements.ts");
+const { withBypassContext, db, withOrg } = await import("@openbooks/engine/platform/db");
+const { installTrustedTestDatabaseBypass } = await import("@openbooks/engine/testing/database-bypass");
+const { documentRevisionCounterSql } = await import("@openbooks/engine/records/revision");
+const { receiveInventory } = await import("@openbooks/engine/inventory/movements");
 const {
   assignOrderLineWarehouse,
   createOrderDraft,
@@ -58,7 +58,7 @@ const {
   ORDER_LINE_WAREHOUSE_REQUIRED,
 } = await import("../../../lib/order-cycle.ts");
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
-  "@openbooks/engine/src/testing/fixtures.ts"
+  "@openbooks/engine/testing/fixtures"
 );
 
 installTrustedTestDatabaseBypass();

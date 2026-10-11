@@ -1,6 +1,6 @@
 import { notFound } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
-import { readBookingLink } from '@openbooks/engine/src/hrm/recruiting/scheduling.ts'
+import { readBookingLink } from '@openbooks/engine/hrm/recruiting/scheduling'
 import { isFeatureEnabled } from '../../../lib/features'
 import { resolvePublicOrgFeatures } from '../../../lib/recruiting-public'
 import { BookSlotForm } from './BookSlotForm'

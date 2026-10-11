@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { db } from "@openbooks/engine/src/platform/db.ts";
-import { endWorkCenterRate, getWorkCenter } from "@openbooks/engine/src/manufacturing/work-centers.ts";
+import { db } from "@openbooks/engine/platform/db";
+import { endWorkCenterRate, getWorkCenter } from "@openbooks/engine/manufacturing/work-centers";
 import { guardSubsidiaryScope } from "@/lib/authz";
 import { defineRoute } from "@/lib/api/route";
 import { notFound } from "@/lib/api/responses";

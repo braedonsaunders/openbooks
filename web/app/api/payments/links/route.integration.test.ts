@@ -35,11 +35,11 @@ const hooks = registerHooks({
 const routeUrl = "./route.ts?payment-links-boundary-test";
 const { GET, POST } = (await import(routeUrl)) as typeof import("./route.ts");
 
-const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
-const { sealJson } = await import("@openbooks/engine/src/platform/secrets.ts");
-const { postDocument } = await import("@openbooks/engine/src/ledger/posting-document.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { sealJson } = await import("@openbooks/engine/platform/secrets");
+const { postDocument } = await import("@openbooks/engine/ledger/posting-document");
 const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import(
-  "@openbooks/engine/src/testing/fixtures.ts",
+  "@openbooks/engine/testing/fixtures",
 );
 
 function request(body: unknown): Request {

@@ -4,22 +4,22 @@ import { defineRoute } from "@/lib/api/route";
 import { z } from "zod";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
-import { db, withOrgTransaction } from "@openbooks/engine/src/platform/db.ts";
-import { InventoryNotFoundError } from "@openbooks/engine/src/inventory/contracts.ts";
-import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
+import { db, withOrgTransaction } from "@openbooks/engine/platform/db";
+import { InventoryNotFoundError } from "@openbooks/engine/inventory/contracts/module";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
 import { inventoryErrorStatus } from "@/lib/api/inventory-errors";
-import { createTransferOrder, receiveTransferOrder, shipTransferOrder } from "@openbooks/engine/src/inventory/transfer-orders.ts";
-import { ensureLot, ensureSerial, queryLotRecall } from "@openbooks/engine/src/inventory/tracking.ts";
-import { executeIdempotentInventoryAction } from "@openbooks/engine/src/inventory/action-idempotency.ts";
-import { postLandedCostVoucher, reverseLandedCostVoucher } from "@openbooks/engine/src/inventory/landed-cost.ts";
-import { SubsidiaryError, defaultPostingSubsidiaryId, loadSubsidiaryContext } from "@openbooks/engine/src/organization/subsidiaries.ts";
+import { createTransferOrder, receiveTransferOrder, shipTransferOrder } from "@openbooks/engine/inventory/transfer-orders";
+import { ensureLot, ensureSerial, queryLotRecall } from "@openbooks/engine/inventory/tracking";
+import { executeIdempotentInventoryAction } from "@openbooks/engine/inventory/action-idempotency";
+import { postLandedCostVoucher, reverseLandedCostVoucher } from "@openbooks/engine/inventory/landed-cost";
+import { SubsidiaryError, defaultPostingSubsidiaryId, loadSubsidiaryContext } from "@openbooks/engine/organization/subsidiaries";
 import { guardPermission } from "../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../lib/features";
 import { isUuid } from "../../../../lib/list-params";
 import {
   INVENTORY_ADVANCED_ACTION_PERMISSIONS,
   type CataloguePermission,
-} from "@openbooks/engine/src/organization/permissions.ts";
+} from "@openbooks/engine/organization/permissions";
 import { notFound } from "@/lib/api/responses";
 
 export const runtime = "nodejs";

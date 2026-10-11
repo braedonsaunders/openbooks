@@ -1,8 +1,8 @@
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { createDependent } from "@openbooks/engine/src/hrm/benefits/dependents.ts";
-import { listDependents } from "@openbooks/engine/src/hrm/benefits/benefits-read.ts";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { createDependent } from "@openbooks/engine/hrm/benefits/dependents";
+import { listDependents } from "@openbooks/engine/hrm/benefits/benefits-read";
+import { db } from "@openbooks/engine/platform/db";
 import { isUuid } from "../../../../lib/list-params";
 import { benefitsErrorResponse } from "../benefits/_lib";
 import { createDependentBody } from "./bodies";

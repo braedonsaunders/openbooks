@@ -1,6 +1,6 @@
 import 'server-only'
 import { sql, type SQL } from 'drizzle-orm'
-import { civilDateFromParts, endOfMonth } from '@openbooks/engine/src/platform/business-date.ts'
+import { civilDateFromParts, endOfMonth } from '@openbooks/engine/platform/business-date/module'
 
 /**
  * Read-side of the gl_month_activity summary (maintained by the

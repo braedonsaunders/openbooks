@@ -1,6 +1,6 @@
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { CONTINUOUS_CLOSE_AGENT_KEYS } from "@openbooks/engine/src/agents/continuous-close-config.ts";
+import { CONTINUOUS_CLOSE_AGENT_KEYS } from "@openbooks/engine/agents/continuous-close-config";
 import { isUuid, pickString } from "../../../../lib/list-params";
 import { loadAgentInbox } from "../../../../lib/agents/inbox";
 

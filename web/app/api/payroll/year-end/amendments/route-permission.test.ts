@@ -53,23 +53,23 @@ stubModules({
       export async function guardPayrollFilingRowIds() { return null }
       export async function guardPayrollFilingData() { return null }
     `,
-    "@openbooks/engine/src/platform/db.ts": `
-      export * from ${JSON.stringify(import.meta.resolve('@openbooks/engine/src/platform/db.ts'))}
+    "@openbooks/engine/platform/db": `
+      export * from ${JSON.stringify(import.meta.resolve('@openbooks/engine/platform/db'))}
       export const db = { execute: async () => ({ rows: [] }) }
     `,
     "drizzle-orm": `
       export function sql() { return {} }
     `,
-    "@openbooks/engine/src/payroll/packs.ts": `
+    "@openbooks/engine/payroll/packs": `
       export class PayrollPackError extends Error {}
     `,
-    "@openbooks/engine/src/payroll/error.ts": `
+    "@openbooks/engine/payroll/error": `
       export class PayrollError extends Error {}
     `,
-    "@openbooks/engine/src/payroll/yearend.ts": `
+    "@openbooks/engine/payroll/yearend": `
       export async function orgYearEndFilings() { return [] }
     `,
-    "@openbooks/engine/src/payroll/yearend-amendments.ts": `
+    "@openbooks/engine/payroll/yearend-amendments": `
       const state = globalThis[Symbol.for('openbooks.payroll-amendments-permission-test')]
       export async function filingLifecycle() { return { submissions: [], rows: [] } }
       export async function recordFilingIssue(input) {

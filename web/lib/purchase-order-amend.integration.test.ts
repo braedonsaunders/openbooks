@@ -1,16 +1,16 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { db } from "@openbooks/engine/platform/db";
 import {
   createScratchOrg,
   dropScratchOrg,
   seedApprovalFlow,
   seedDraftDocument,
   seedFlowActors,
-} from "@openbooks/engine/src/testing/fixtures.ts";
-import { submitAndReleaseIfUngated, submitForApproval } from "@openbooks/engine/src/flows/index.ts";
-import { decideGate } from "@openbooks/engine/src/flows/gates.ts";
+} from "@openbooks/engine/testing/fixtures";
+import { submitAndReleaseIfUngated, submitForApproval } from "@openbooks/engine/flows/module";
+import { decideGate } from "@openbooks/engine/testing/flows/gates";
 import {
   amendPurchaseOrder,
   PurchaseOrderAmendError,

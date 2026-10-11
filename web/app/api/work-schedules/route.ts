@@ -3,16 +3,16 @@ import { defineRoute } from '@/lib/api/route'
 import { parseJsonBody } from "@/lib/api/json"
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { loadWorkSchedules } from '@openbooks/engine/src/payroll/work-schedules.ts'
-import { UNRESTRICTED_SCOPE_REQUIRED } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
+import { db } from '@openbooks/engine/platform/db'
+import { loadWorkSchedules } from '@openbooks/engine/payroll/work-schedules/operations'
+import { UNRESTRICTED_SCOPE_REQUIRED } from '@openbooks/engine/organization/scope'
 import { guardSubsidiaryScope, type Authz } from '../../../lib/authz'
 import '../../../lib/feature-gates';
 import { isUuid } from '../../../lib/list-params'
 import { subsidiaryVisibleFilter } from '../../../lib/subsidiaries'
 import { parseCycleDays } from '../../../lib/work-schedule-days'
 import { canonicalDecimal } from '../../../lib/exact-decimal'
-import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
+import { isIsoCalendarDate } from '@openbooks/engine/platform/business-date/module'
 import { notFound } from "@/lib/api/responses";
 
 const MAX_CYCLE_DAYS = 366

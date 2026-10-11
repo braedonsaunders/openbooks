@@ -4,7 +4,7 @@ import test from 'node:test'
 import { sql } from 'drizzle-orm'
 import { db, withBypassContext, withOrgContext } from '@openbooks/engine/platform/database'
 import { postDocument } from '@openbooks/engine/documents'
-import { createScratchOrg, dropScratchOrg, assertDedicatedFixtureDatabase } from '@openbooks/engine/src/testing/fixtures.ts'
+import { createScratchOrg, dropScratchOrg, assertDedicatedFixtureDatabase } from '@openbooks/engine/testing/fixtures'
 import { openItems } from '../cash/open-items'
 import { buildWeekGrid, compareMoney, overdueItemCount, subtractMoney, summariseSide, ZERO_MONEY } from '../cash/core'
 
@@ -29,7 +29,7 @@ test('the AR home overdue count and amount come from the same open-item row set'
   await assertDedicatedFixtureDatabase()
   const org = await createScratchOrg()
   try {
-    const { createScratchUser } = await import('@openbooks/engine/src/testing/fixtures.ts')
+    const { createScratchUser } = await import('@openbooks/engine/testing/fixtures')
     const actor = await createScratchUser(org.orgId, 'AR Controller', 'admin')
     const secondSub = randomUUID()
     await withBypassContext(async () => {

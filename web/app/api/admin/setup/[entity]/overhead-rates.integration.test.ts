@@ -58,9 +58,9 @@ const { SETUP_ENTITY_BY_KEY, SETUP_PROJECTS_OR_MANUFACTURING_REMEDY, resolveSetu
 const { createSetupRecord, preflightSetupWrite, updateSetupRecord } = await import(
   "../../../../../lib/setup/write.ts"
 );
-const { db } = await import("@openbooks/engine/src/platform/db.ts");
+const { db } = await import("@openbooks/engine/platform/db");
 const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import(
-  "@openbooks/engine/src/testing/fixtures.ts"
+  "@openbooks/engine/testing/fixtures"
 );
 
 const DB = !!process.env.OPENBOOKS_DB_URL;

@@ -7,9 +7,9 @@ registerHooks({ resolve(specifier, context, next) {
   if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export{}' }
   return next(specifier, context)
 } })
-const { db, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
-const { getConnection } = await import('@openbooks/engine/src/sync/connection.ts')
+const { db, withOrgContext } = await import('@openbooks/engine/platform/db')
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
+const { getConnection } = await import('@openbooks/engine/sync/connection')
 const { sql } = await import('drizzle-orm')
 const { updateConnection } = await import('./connection-update')
 

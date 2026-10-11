@@ -33,9 +33,9 @@ registerHooks({
   },
 })
 
-const { db, withBypassContext, withOrgTransaction } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypassContext, withOrgTransaction } = await import('@openbooks/engine/platform/db')
 const { sql } = await import('drizzle-orm')
-const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import('@openbooks/engine/testing/fixtures')
 const { resolveReport } = await import('./report-run')
 const { withReportAuthz } = await import('./report-execution-context')
 const { parseReportQuery, buildDrillTarget, REPORT_PARAM_KEYS } = await import('./report-filters')

@@ -45,8 +45,8 @@ function sqlText(query: unknown): string {
 }
 ;(globalThis as typeof globalThis & Record<string, unknown>).openbooksAdjustSqlText = sqlText
 
-const dbUrl = import.meta.resolve('@openbooks/engine/src/platform/db.ts')
-const runAdjustmentsUrl = import.meta.resolve('@openbooks/engine/src/payroll/run-adjustments.ts')
+const dbUrl = import.meta.resolve('@openbooks/engine/platform/db')
+const runAdjustmentsUrl = import.meta.resolve('@openbooks/engine/payroll/run-adjustments')
 
 const mockSources = new Map<string, string>([
   [
@@ -106,8 +106,8 @@ const mockUrls = new Map<string, string>([
   ['@/lib/feature-gates', mockUrl('feature-gates')],
   ['../../../../../lib/authz', mockUrl('authz')],
   ['@/lib/authz', mockUrl('authz')],
-  ['@openbooks/engine/src/platform/db.ts', mockUrl('db')],
-  ['@openbooks/engine/src/payroll/run-adjustments.ts', mockUrl('run-adjustments')],
+  ['@openbooks/engine/platform/db', mockUrl('db')],
+  ['@openbooks/engine/payroll/run-adjustments', mockUrl('run-adjustments')],
 ])
 
 const hooks = registerHooks({

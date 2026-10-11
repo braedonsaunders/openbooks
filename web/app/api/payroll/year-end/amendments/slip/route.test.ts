@@ -21,16 +21,16 @@ stubModules({
     "../../../subsidiary-scope": `
       export async function guardPayrollFilingRowIds() { return null }
     `,
-    "@openbooks/engine/src/payroll/yearend-amendments.ts": `
+    "@openbooks/engine/payroll/yearend-amendments": `
       export async function filingCorrectionSlip() { return { formCode: 'T4C' } }
     `,
-    "@openbooks/engine/src/payroll/packs.ts": `
+    "@openbooks/engine/payroll/packs": `
       export class PayrollPackError extends Error {}
     `,
-    "@openbooks/engine/src/payroll/error.ts": `
+    "@openbooks/engine/payroll/error": `
       export class PayrollError extends Error {}
     `,
-    "@openbooks/engine/src/platform/business-date.ts": `
+    "@openbooks/engine/platform/business-date/module": `
       export async function businessToday() { return '2026-09-19' }
     `,
     "../../../../../../lib/export": `

@@ -3,9 +3,9 @@ import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
-import { createScratchOrg, dropScratchOrg, seedFlowActors } from "@openbooks/engine/src/testing/fixtures.ts";
-import { withSimClock } from "@openbooks/engine/src/platform/clock.ts";
+import { db } from "@openbooks/engine/platform/db";
+import { createScratchOrg, dropScratchOrg, seedFlowActors } from "@openbooks/engine/testing/fixtures";
+import { withSimClock } from "@openbooks/engine/testing/platform/clock";
 
 const state = { user: { orgId: "", id: "" } };
 Object.assign(globalThis, { __inventoryRetryAudit: state });

@@ -2,7 +2,7 @@ import type { Authz } from "@/lib/authz";
 import { defineRoute } from "@/lib/api/route";
 import { z } from "zod";
 import { NextResponse } from 'next/server'
-import { publishVersion } from '../../../../../../../../../engine/src/allocations/index.ts'
+import { publishVersion } from '@openbooks/engine/allocations/runtime'
 import { allocationWriteErrorResponse, requireRuleId } from '../../../../../_lib.ts'
 import { notFound } from "@/lib/api/responses";
 

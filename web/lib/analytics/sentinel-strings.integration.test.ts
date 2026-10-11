@@ -8,8 +8,8 @@ import type { Authz } from '../authz.ts'
 import type { SessionUser } from '../auth.ts'
 
 const { sql } = await import('drizzle-orm')
-const { db, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { db, withBypass, withOrgContext } = await import('@openbooks/engine/platform/db')
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
 const { sentinelStrings } = await import('./sentinel-strings.ts')
 const { sentinelData } = await import('./sentinel-data.ts')
 const { analyticsConfig } = await import('./config.ts')

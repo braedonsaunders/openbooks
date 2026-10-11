@@ -1,10 +1,10 @@
 import "server-only";
 import { z } from "zod";
-import { db } from "@openbooks/engine/src/platform/db.ts";
-import { listPutawayRules } from "@openbooks/engine/src/inventory/putaway.ts";
-import { getWarehouse, listWarehouseLocations, listWarehouses } from "@openbooks/engine/src/inventory/warehouses.ts";
-import { AvailabilityRefusal, getAvailableToPromise } from "@openbooks/engine/src/inventory/availability.ts";
-import { replenishmentProposals } from "@openbooks/engine/src/inventory/replenishment.ts";
+import { db } from "@openbooks/engine/platform/db";
+import { listPutawayRules } from "@openbooks/engine/inventory/putaway";
+import { getWarehouse, listWarehouseLocations, listWarehouses } from "@openbooks/engine/inventory/warehouses";
+import { AvailabilityRefusal, getAvailableToPromise } from "@openbooks/engine/inventory/availability";
+import { replenishmentProposals } from "@openbooks/engine/inventory/replenishment";
 import { isFeatureEnabled } from "../features";
 import { availabilityEntityScope, availabilityRefusalText } from "../availability-report";
 import type { AssistantToolDef, ToolResult } from "./types";

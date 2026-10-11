@@ -1,7 +1,7 @@
 import { defineRoute } from "@/lib/api/route";
 
 import { NextResponse } from "next/server";
-import { attachCandidate } from "@openbooks/engine/src/hrm/recruiting/applications.ts";
+import { attachCandidate } from "@openbooks/engine/hrm/recruiting/applications";
 
 import { recruitingErrorResponse } from "../_lib";
 import { attachCandidateBody } from "./bodies";

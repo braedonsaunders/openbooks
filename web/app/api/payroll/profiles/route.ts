@@ -4,9 +4,9 @@ import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { z } from 'zod'
-import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
-import { sealSecret, SecretIntegrityError, unsealSecret } from '@openbooks/engine/src/platform/secrets.ts'
-import { listFilingAccounts } from '@openbooks/engine/src/payroll/filing.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
+import { sealSecret, SecretIntegrityError, unsealSecret } from '@openbooks/engine/platform/secrets'
+import { listFilingAccounts } from '@openbooks/engine/payroll/filing'
 import { assignEmployeeWorkerCompGroup, installedPayrollCountries, payrollProfileEmployment } from '@openbooks/engine/payroll/setup'
 import {
   employmentJurisdictionsOf,
@@ -16,7 +16,7 @@ import {
   PAYROLL_COUNTRY_PACKS,
   payrollPack,
   validatePackEmployeeIdentifier,
-} from '@openbooks/engine/src/payroll/packs.ts'
+} from '@openbooks/engine/payroll/packs'
 import {
   packCertificates,
   profileColumnChoices,
@@ -24,9 +24,9 @@ import {
   profileColumnField,
   regionWithholdingCertificate,
   type PayrollCertificate,
-} from '@openbooks/engine/src/payroll/certificates.ts'
-import type { PayrollProfileExemptionFlag } from '@openbooks/engine/src/payroll/packs.ts'
-import type { PayrollEmployeeFact } from '@openbooks/engine/src/payroll/employee-facts.ts'
+} from '@openbooks/engine/payroll/certificates'
+import type { PayrollProfileExemptionFlag } from '@openbooks/engine/payroll/packs'
+import type { PayrollEmployeeFact } from '@openbooks/engine/payroll/employee-facts'
 import '../../../../lib/feature-gates';
 import { guardSubsidiaryScope } from '../../../../lib/authz'
 import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'

@@ -5,7 +5,7 @@ import { NextResponse } from "next/server";
 import {
   installTaxDepreciationPack,
   taxDepreciationPacks,
-} from "@openbooks/engine/src/tax-returns/depreciation-packs.ts";
+} from "@openbooks/engine/tax-returns/depreciation-packs";
 import { guardUnrestrictedScope } from "../../../../lib/authz";
 const postBodySchema0 = z.strictObject({
   code: z.string().trim().min(1, "code is required").max(100),

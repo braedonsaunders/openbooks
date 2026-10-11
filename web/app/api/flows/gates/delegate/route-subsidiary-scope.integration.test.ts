@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, withBypassContext, withOrgTransaction } from "@openbooks/engine/src/platform/db.ts";
-import { ScopeNotFoundError } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
-import { createScratchOrg, dropScratchOrg } from "@openbooks/engine/src/testing/fixtures.ts";
+import { db, withBypassContext, withOrgTransaction } from "@openbooks/engine/platform/db";
+import { ScopeNotFoundError } from "@openbooks/engine/organization/scope";
+import { createScratchOrg, dropScratchOrg } from "@openbooks/engine/testing/fixtures";
 import { filterFlowRunSubjectsToScope, loadFlowSubjectSubsidiary, loadGateHeader, lockFlowSubjectScope } from "../../_lib.ts";
 
 test("allocation flow scope includes every subsidiary touched by the run", async () => {

@@ -4,8 +4,8 @@ import test from 'node:test';
 import type { SessionUser } from '../auth';
 
 const { sql } = await import('drizzle-orm');
-const { withBypassContext, db, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts');
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts');
+const { withBypassContext, db, withOrgContext } = await import('@openbooks/engine/platform/db');
+const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures');
 const { FEATURES } = await import('../features');
 const { buildToolRegistry, executeAssistantTool } = await import('./registry');
 const { ASSISTANT_TOOLS } = await import('./registry');

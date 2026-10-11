@@ -29,20 +29,20 @@ import {
   releaseMigrationClient,
   sanitizeMigrationContent,
 } from "../../../scripts/bootstrap-migration-client.ts";
-import { createStockCount } from "../../../engine/src/inventory/stock-counts.ts";
-import { receiveInventory } from "../../../engine/src/inventory/movements.ts";
+import { createStockCount } from "@openbooks/engine/inventory/stock-counts";
+import { receiveInventory } from "@openbooks/engine/inventory/movements";
 import {
   assertTableCatalogMatches,
   snapshotTableCatalog,
   withCatalogRollback,
   type CatalogQuery,
   type TableCatalogSnapshot,
-} from "../../../engine/src/testing/migration-catalog.ts";
+} from "@openbooks/engine/testing/migration-catalog";
 import {
   createScratchOrg,
   dropScratchOrg,
   type ScratchOrg,
-} from "../../../engine/src/testing/fixtures.ts";
+} from "@openbooks/engine/testing/fixtures";
 
 const MIGRATION_FILENAME = "generated/0299_stock_count_line_counted_nonnegative.sql";
 

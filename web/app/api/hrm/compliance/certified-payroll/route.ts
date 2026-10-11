@@ -1,7 +1,7 @@
 import { defineRoute } from "@/lib/api/route";
 import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { db } from "@openbooks/engine/platform/db";
 import {
   amendRun,
   downloadRun,
@@ -9,7 +9,7 @@ import {
   listFormats,
   listRuns,
   submitRun,
-} from "@openbooks/engine/src/hrm/construction/certified.ts";
+} from "@openbooks/engine/hrm/construction/certified";
 import { constructionErrorResponse } from "../_lib";
 import { certifiedActionBody, generateCertifiedBody } from "../bodies";
 /** Certified payroll runs: list, generate, submit, amend, download. */

@@ -1,8 +1,8 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { correctEmploymentChange } from "@openbooks/engine/src/automations/event-verbs.ts";
-import { HrmAuthorizationError } from "@openbooks/engine/src/hrm/authorization.ts";
+import { correctEmploymentChange } from "@openbooks/engine/automations/event-verbs";
+import { HrmAuthorizationError } from "@openbooks/engine/hrm/authorization";
 import { hrmAuthorizationResponse } from "../../../../../../lib/api/record-not-found";
 import { isUuid } from "../../../../../../lib/list-params";
 import { automationErrorResponse } from "../../../../automations/_lib";

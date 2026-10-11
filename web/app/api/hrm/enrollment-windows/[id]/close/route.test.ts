@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import nodeTest from "node:test";
 import { NextResponse } from "next/server";
-import { BenefitsError } from "@openbooks/engine/src/hrm/benefits/errors.ts";
+import { BenefitsError } from "@openbooks/engine/hrm/benefits/errors";
 
 /**
  * Window close boundary: the reason is required by the REAL parser, and a
@@ -71,7 +71,7 @@ const mockSources = new Map<string, string>([
 const mockUrls = new Map<string, string>([
   ["../../../../../../lib/authz", "mock:authz"],
   ["../../../../../../lib/features", "mock:features"],
-  ["@openbooks/engine/src/hrm/benefits/windows.ts", "mock:service"],
+  ["@openbooks/engine/hrm/benefits/windows", "mock:service"],
 ]);
 
   registerHooks({

@@ -5,7 +5,7 @@ import { useMoney } from '@/components/money-provider'
 import { useMemo, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useFormatter, useTranslations } from "next-intl";
-import { cmp as compareMoney, sum as sumMoney } from '@openbooks/engine/src/money/money.ts'
+import { cmp as compareMoney, sum as sumMoney } from '@openbooks/engine/money/money'
 import { ArrowRight, TriangleAlert, CalendarClock } from "lucide-react";
 import { Badge, Button, cn } from "@openbooks/ui";
 

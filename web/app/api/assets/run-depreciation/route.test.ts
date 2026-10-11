@@ -361,7 +361,7 @@ const mockUrls = new Map<string, string>([
 ]);
 
 function mockedUrl(specifier: string): string | null {
-  if (specifier === "@openbooks/engine/src/platform/db.ts") return "mock:db";
+  if (specifier === "@openbooks/engine/platform/db") return "mock:db";
   if (/(^|\/)platform\/db\.ts$/.test(specifier)) return "mock:db";
   return mockUrls.get(specifier) ?? null;
 }
@@ -381,8 +381,8 @@ const _hooks = registerHooks({
 });
 
 const engineModule = (await import(
-  "@openbooks/engine/src/assets/depreciation.ts"
-)) as typeof import("@openbooks/engine/src/assets/depreciation.ts");
+  "@openbooks/engine/assets/depreciation"
+)) as typeof import("@openbooks/engine/assets/depreciation");
 const { previewDepreciationFingerprint, runDepreciation, StalePreviewError } = engineModule;
 
 const routeUrl = "./route.ts?depreciation-confirm-test";

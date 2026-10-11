@@ -1,7 +1,7 @@
 import { defineRoute } from "@/lib/api/route";
 import { notFound } from "@/lib/api/responses";
 import { NextResponse } from "next/server";
-import { explainPayslip } from "@openbooks/engine/src/hrm/ai/explain-pay.ts";
+import { explainPayslip } from "@openbooks/engine/hrm/ai/explain-pay";
 import {
   aiRailsErrorResponse,
   requireAnyPerm,

@@ -2,18 +2,18 @@ import { applyProductionTimeCorrections } from '@openbooks/engine/manufacturing/
 import { lockSharedTimeAuthority, type TimeCommandPermission, type TimeWorkFamily } from '@openbooks/engine/projects/time-work-target'
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
-import { lockScopeRow } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
-import { laborCostingSettings, setPrevailingWageEntryWage, snapshotLaborCostRates } from '@openbooks/engine/src/projects/labor-costing.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
+import { lockScopeRow } from '@openbooks/engine/organization/scope'
+import { laborCostingSettings, setPrevailingWageEntryWage, snapshotLaborCostRates } from '@openbooks/engine/projects/labor-costing/operations'
 // HR-13: register the prevailing-wage resolver for the snapshot hook —
 // the projects module never imports hrm, so the web approval path wires
 // the HRM implementation here. With the feature off it returns null and
 // every entry keeps the standard wage path.
-import { prevailingWageForTimeEntry } from '@openbooks/engine/src/hrm/construction/labor-hook.ts'
+import { prevailingWageForTimeEntry } from '@openbooks/engine/hrm/construction/labor-hook'
 
 setPrevailingWageEntryWage(prevailingWageForTimeEntry)
-import { applyOverheadForTime } from '@openbooks/engine/src/allocations/overhead-post.ts'
-import { postProjectLaborCost } from '@openbooks/engine/src/projects/recognition.ts'
+import { applyOverheadForTime } from '@openbooks/engine/allocations/overhead-post'
+import { postProjectLaborCost } from '@openbooks/engine/projects/recognition'
 import { setTimesheetWeekStatus, weekWindow } from '../app/api/timesheets/_lib'
 import { snapshotTimeBillRates } from './item-rates'
 import { isFeatureEnabled } from './features'

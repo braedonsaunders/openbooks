@@ -1,12 +1,12 @@
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { DecisionFailedError, GateError, getFlowAdapter } from '@openbooks/engine/src/flows/index.ts'
+import { db } from '@openbooks/engine/platform/db'
+import { DecisionFailedError, GateError, getFlowAdapter } from '@openbooks/engine/flows/module'
 import {
   FlowSubjectScopeUnresolvedError,
   lockSubjectScope,
   resolveSubjectSubsidiaries,
-} from '@openbooks/engine/src/flows/subject-scope.ts'
+} from '@openbooks/engine/flows/subject-scope'
 import { getAuthz, type Authz } from '../../../lib/authz'
 import { isFeatureEnabled } from '../../../lib/features'
 import { canReadFlowSubject } from '../../../lib/flow-subject-authz'

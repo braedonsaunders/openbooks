@@ -9,8 +9,8 @@ import {
   shareReview,
   submitReview,
   saveReviewDraft,
-} from "@openbooks/engine/src/hrm/performance/reviews.ts";
-import { getReviewDetail } from "@openbooks/engine/src/hrm/performance/performance-read.ts";
+} from "@openbooks/engine/hrm/performance/reviews";
+import { getReviewDetail } from "@openbooks/engine/hrm/performance/performance-read";
 
 import { isFeatureEnabled } from "../../../../../lib/features";
 import { isUuid } from "../../../../../lib/list-params";

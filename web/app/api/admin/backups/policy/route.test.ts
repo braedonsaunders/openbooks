@@ -27,6 +27,9 @@ const stateKey = Symbol.for("openbooks.backup-policy-route-test");
 const mockSources = new Map<string, string>([
   ["mock:authz", `export async function guardPermission(){return {user:{id:'${USER_ID}',orgId:'${ORG_ID}'}}}`],
   ["mock:db", `
+      export function inExecutorTransaction() { throw new Error('unexpected inExecutorTransaction in route boundary test') }
+      export function withTransactionSavepoint() { throw new Error('unexpected withTransactionSavepoint in route boundary test') }
+
     const state = globalThis[Symbol.for('openbooks.backup-policy-route-test')]
     const sqlText = globalThis.backupPolicySqlText
     export const env = {}
@@ -57,8 +60,8 @@ const backupUrl = new URL("../../../../../../engine/src/backup/backup.ts", impor
 registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === "@/lib/api/json") return nextResolve(jsonUrl, context);
-    if (specifier === "@openbooks/engine/src/backup/backup.ts") return nextResolve(backupUrl, context);
-    if (specifier === "@openbooks/engine/src/platform/db.ts" || specifier.endsWith("/platform/db.ts")) {
+    if (specifier === "@openbooks/engine/backup/backup") return nextResolve(backupUrl, context);
+    if (specifier === "@openbooks/engine/platform/db" || specifier.endsWith("/platform/db.ts")) {
       return { url: "mock:db", shortCircuit: true };
     }
     if (specifier === "../../../../../lib/authz" || specifier === "@/lib/authz") return { url: "mock:authz", shortCircuit: true };

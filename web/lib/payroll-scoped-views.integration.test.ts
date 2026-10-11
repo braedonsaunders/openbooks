@@ -3,14 +3,14 @@ import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, withBypassContext, withOrgContext } from "@openbooks/engine/src/platform/db.ts";
-import { saveOpeningBalances } from "@openbooks/engine/src/payroll/opening-balances.ts";
-import { commitPayRun } from "@openbooks/engine/src/payroll/run-commit.ts";
-import { dropScratchOrgReporting } from "@openbooks/engine/src/testing/fixtures.ts";
+import { db, withBypassContext, withOrgContext } from "@openbooks/engine/platform/db";
+import { saveOpeningBalances } from "@openbooks/engine/payroll/opening-balances";
+import { commitPayRun } from "@openbooks/engine/payroll/run-commit";
+import { dropScratchOrgReporting } from "@openbooks/engine/testing/fixtures";
 import {
   calculatedRun,
   seedAdoption,
-} from "@openbooks/engine/src/payroll/filing-test-fixtures.ts";
+} from "@openbooks/engine/testing/payroll/filing-test-fixtures";
 import type { Authz } from "./authz";
 
 /**
@@ -198,7 +198,7 @@ const payrollReportingCases = [
         const assert: typeof import('node:assert/strict') = (await import('node:assert/strict')).default;
         const test = (await import('node:test')).default;
         const { randomUUID } = await import('node:crypto');
-        const { cmp, sum } = await import('@openbooks/engine/src/money/money.ts');
+        const { cmp, sum } = await import('@openbooks/engine/money/money');
         /**
          * PAYCONF-c/d/e (collapse semantics): payroll legs arrive pre-collapsed per
          * (entry, account) in the entity FROM — before any caller filter, breakout,
@@ -211,9 +211,9 @@ const payrollReportingCases = [
          * Two employees share one pay-run journal/account with distinct net pays.
          */
         const root = pathToFileURL(process.cwd() + '/').href
-        const { db, pool, withBypassContext } = (await import(root + 'engine/src/platform/db.ts')) as typeof import('@openbooks/engine/src/platform/db.ts')
+        const { db, pool, withBypassContext } = (await import('@openbooks/engine/platform/db')) as typeof import('@openbooks/engine/platform/db')
         const { sql } = await import(root + 'node_modules/drizzle-orm/index.js')
-        const { createScratchOrg, dropScratchOrg } = (await import(root + 'engine/src/testing/fixtures.ts')) as typeof import('@openbooks/engine/src/testing/fixtures.ts')
+        const { createScratchOrg, dropScratchOrg } = (await import('@openbooks/engine/testing/fixtures')) as typeof import('@openbooks/engine/testing/fixtures')
         // runCustomQuery directly: the web executeReport wrapper needs a Next request
         // scope (cookies) for locale/feature prep, which tests lack.
         const { runCustomQuery } = (await import(root + 'packages/reports/src/run.ts')) as typeof import('@openbooks/reports')
@@ -404,8 +404,8 @@ const payrollReportingCases = [
         const test = (await import('node:test')).default;
         type Authz = import('./authz.ts').Authz;
         const { sql } = await import('drizzle-orm')
-        const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
-        const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+        const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/platform/db')
+        const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
         const { journalReport, generalLedger } = await import('./reports/ledger-reports.ts')
         const { transactionDetail } = await import('./reports/transaction-detail.ts')
         const { accountRegister, partyRegister, partnerStatement } = await import('./reports/registers.ts')
@@ -709,10 +709,10 @@ const payrollReportingCases = [
         const test = (await import('node:test')).default;
         const { randomUUID } = await import('node:crypto');
         const { sql } = await import('drizzle-orm');
-        const { db, pool } = await import('@openbooks/engine/src/platform/db.ts')
-        const { withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
-        const { createScratchOrg, dropScratchOrg, seedWorkerEmployment } = await import('@openbooks/engine/src/testing/fixtures.ts')
-        const { PAYROLL_COUNTRY_PACKS, eiColumnSystemKeys, employeeSocialInsuranceSystemKeys, packStatutoryComponents } = await import('@openbooks/engine/src/payroll/packs.ts')
+        const { db, pool } = await import('@openbooks/engine/platform/db')
+        const { withBypass, withOrgContext } = await import('@openbooks/engine/platform/db')
+        const { createScratchOrg, dropScratchOrg, seedWorkerEmployment } = await import('@openbooks/engine/testing/fixtures')
+        const { PAYROLL_COUNTRY_PACKS, eiColumnSystemKeys, employeeSocialInsuranceSystemKeys, packStatutoryComponents } = await import('@openbooks/engine/payroll/packs')
         const { REPORT_ENTITY_MAP } = await import('@openbooks/reports')
         const { compileCustomQuery } = await import('@openbooks/reports')
         const { reportEntityCatalog } = await import('./custom-record-report-catalog')
@@ -1163,9 +1163,9 @@ const payrollReportingCases = [
          * unchanged.
          */
         const root = pathToFileURL(process.cwd() + '/').href
-        const { db, withBypassContext } = (await import(root + 'engine/src/platform/db.ts')) as typeof import('@openbooks/engine/src/platform/db.ts')
+        const { db, withBypassContext } = (await import('@openbooks/engine/platform/db')) as typeof import('@openbooks/engine/platform/db')
         const { sql } = await import(root + 'node_modules/drizzle-orm/index.js')
-        const { createScratchOrg, dropScratchOrg } = (await import(root + 'engine/src/testing/fixtures.ts')) as typeof import('@openbooks/engine/src/testing/fixtures.ts')
+        const { createScratchOrg, dropScratchOrg } = (await import('@openbooks/engine/testing/fixtures')) as typeof import('@openbooks/engine/testing/fixtures')
         const { generalLedger, journalReport } = (await import(root + 'web/lib/reports/ledger-reports.ts')) as typeof import('@/lib/reports/ledger-reports.ts')
         const { PAYROLL_RESTRICTED_PARTY_LABEL } = (await import(root + 'web/lib/payroll-confidentiality.ts')) as typeof import('@/lib/payroll-confidentiality.ts')
 
@@ -1260,8 +1260,8 @@ const payrollReportingCases = [
         const { randomUUID } = await import('node:crypto');
         const test = (await import('node:test')).default;
         const { sql } = await import('drizzle-orm')
-        const { db, env, withBypass, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
-        const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+        const { db, env, withBypass, withBypassContext } = await import('@openbooks/engine/platform/db')
+        const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
         const { balanceSheetView } = await import('./statement-matrix.ts')
         const { balanceSheet, trialBalance } = await import('./reports/statements.ts')
         const { generalLedger } = await import('./reports/ledger-reports.ts')

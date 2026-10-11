@@ -3,15 +3,15 @@ import 'server-only'
 import { randomUUID } from 'node:crypto'
 import { createHash } from 'node:crypto'
 import { sql } from 'drizzle-orm'
-import { adjustInventory } from '@openbooks/engine/src/inventory/movements.ts'
-import { db, withOrgContext, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
-import { submitAndReleaseIfUngated } from '@openbooks/engine/src/flows/submit.ts'
-import { controlDeps } from '@openbooks/engine/src/ledger/document-service.ts'
-import { postDocument } from '@openbooks/engine/src/ledger/posting-document.ts'
+import { adjustInventory } from '@openbooks/engine/inventory/movements'
+import { db, withOrgContext, withOrgTransaction } from '@openbooks/engine/platform/db'
+import { submitAndReleaseIfUngated } from '@openbooks/engine/flows/submit'
+import { controlDeps } from '@openbooks/engine/ledger/document-service'
+import { postDocument } from '@openbooks/engine/ledger/posting-document'
 import { postedDocumentControlAccount } from '@openbooks/engine/ledger/posting-control-account'
-import { runPostDocumentEffects } from '@openbooks/engine/src/ledger/posting-dispatch.ts'
-import { runRecordFlows } from '@openbooks/engine/src/flows/index.ts'
-import { canonicalDecimal, compareDecimal } from '@openbooks/engine/src/money/exact-decimal.ts'
+import { runPostDocumentEffects } from '@openbooks/engine/ledger/posting-dispatch'
+import { runRecordFlows } from '@openbooks/engine/flows/module'
+import { canonicalDecimal, compareDecimal } from '@openbooks/engine/money/decimal'
 import { quantumScale, roundDiv, toUnits } from '@openbooks/engine/money'
 import {
   recordRestockingFeeWaiver,
@@ -24,9 +24,9 @@ import {
   currencyPrecisionRemedy,
   resolveCurrencyQuantum,
 } from '@openbooks/engine/sales/currency-precision'
-import { returnableSources } from '@openbooks/engine/src/inventory/returnable-sources.ts'
+import { returnableSources } from '@openbooks/engine/inventory/returnable-sources'
 import { postedReturnEvidenceScope, SALES_FULFILLMENT_DOCUMENT_KIND } from '@openbooks/engine/inventory'
-import { subsidiaryScopeAllows } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
+import { subsidiaryScopeAllows } from '@openbooks/engine/organization/scope'
 import {
   authorizeReturn,
   completeReturnInspection,
@@ -39,9 +39,9 @@ import {
   ReturnRefusal,
   type InspectionLine,
   type ReturnAuthorization,
-} from '@openbooks/engine/src/sales/returns.ts'
+} from '@openbooks/engine/sales/returns'
 import { createDocument } from './documents.ts'
-import type { DocumentEditInput, DocumentLineInput } from '@openbooks/engine/src/ledger/document-input.ts'
+import type { DocumentEditInput, DocumentLineInput } from '@openbooks/engine/ledger/document-input'
 import {
   deriveEmailDeliveryKey,
   returnDecisionEmail,
@@ -54,7 +54,7 @@ import {
   markEmailSent,
   markEmailUncertain,
   resolveOrgEmailTransport,
-} from '@openbooks/engine/src/delivery/email-config.ts'
+} from '@openbooks/engine/delivery/email-config/module'
 
 export type ReturnSourceSelection = {
   lineNumber: number

@@ -3,9 +3,9 @@ import 'server-only'
 import { registeredListTable } from '../../../../lib/list/prepared-spec'
 import { sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
-import { documentRevisionSql } from '@openbooks/engine/src/records/revision.ts'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { lintFlowGraphForSubject, listFlowSubjectProfiles } from '@openbooks/engine/src/flows/index.ts'
+import { documentRevisionSql } from '@openbooks/engine/records/revision'
+import { db } from '@openbooks/engine/platform/db'
+import { lintFlowGraphForSubject, listFlowSubjectProfiles } from '@openbooks/engine/flows/module'
 import {
   flowReadiness,
   nodeDisplayName,

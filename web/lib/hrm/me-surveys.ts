@@ -1,8 +1,8 @@
 import 'server-only'
 
 import { getTranslations } from 'next-intl/server'
-import { HrmSurveysError } from '@openbooks/engine/src/hrm/documents/errors.ts'
-import { listOwnInvitations } from '@openbooks/engine/src/hrm/surveys/responses.ts'
+import { HrmSurveysError } from '@openbooks/engine/hrm/documents/errors'
+import { listOwnInvitations } from '@openbooks/engine/hrm/surveys/responses'
 import { loadOrRefuse, type PageRefusal } from '../load-or-refuse'
 import { meTabs } from './self-service'
 import { getAuthz, type Authz } from '../authz'

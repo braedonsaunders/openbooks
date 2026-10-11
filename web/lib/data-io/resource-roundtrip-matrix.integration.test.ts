@@ -15,9 +15,9 @@ const { listResources, getResource } = (await import('./resources.ts')) as typeo
 )
 const { guessMapping } = (await import('./parse.ts')) as typeof import('./parse.ts')
 
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
 const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import(
-  '@openbooks/engine/src/testing/fixtures.ts'
+  '@openbooks/engine/testing/fixtures'
 )
 const { resolveAuthzByUserId } = await import('../authz-core.ts')
 const { withAuthzContext } = await import('../authz-context.ts')

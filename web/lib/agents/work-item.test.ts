@@ -35,7 +35,7 @@ const hooks = registerHooks({
     if (specifier === "drizzle-orm") {
       return { url: "mock:work-item-drizzle", shortCircuit: true };
     }
-    if (specifier === "@openbooks/engine/src/platform/db.ts") {
+    if (specifier === "@openbooks/engine/platform/db") {
       return { url: "mock:work-item-db", shortCircuit: true };
     }
     // The scope check loads through the real lib/authz; only the session
@@ -47,7 +47,7 @@ const hooks = registerHooks({
         shortCircuit: true,
       };
     }
-    if (specifier === "@openbooks/engine/src/navigation/nav-registry.ts") {
+    if (specifier === "@openbooks/engine/navigation/nav-registry") {
       // The worktree's root node_modules is a symlink to the main
       // checkout's modules, so the workspace alias would resolve the
       // registry to the main checkout (stale). Pin it to this checkout's

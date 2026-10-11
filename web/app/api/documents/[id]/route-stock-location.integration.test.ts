@@ -37,10 +37,10 @@ registerHooks({
     return resolved
   },
 })
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
 const { sql } = await import('drizzle-orm')
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
-const { documentRevisionCounterSql } = await import("../../../../../engine/src/records/revision.ts");
+const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
+const { documentRevisionCounterSql } = await import("@openbooks/engine/records/revision");
 const { PATCH } = await import('./route.ts')
 
 async function makeDraftInvoice(org: { orgId: string; customerId: string; subsidiaryId: string; date: string }): Promise<string> {

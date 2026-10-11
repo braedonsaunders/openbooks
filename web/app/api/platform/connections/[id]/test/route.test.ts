@@ -50,7 +50,7 @@ stubModules({
   authz: false,
   features: false,
   extra: {
-    "@openbooks/engine/src/platform/db.ts": `
+    "@openbooks/engine/platform/db": `
       const state = globalThis[Symbol.for("openbooks.connection-test-route-test")]
       const sqlText = globalThis.connectionTestSqlText
       export const db = {
@@ -80,7 +80,7 @@ stubModules({
         },
       }
     `,
-    "@openbooks/engine/src/sync/connection.ts": `
+    "@openbooks/engine/sync/connection": `
       const state = globalThis[Symbol.for("openbooks.connection-test-route-test")]
       export function buildSource() {
         return {

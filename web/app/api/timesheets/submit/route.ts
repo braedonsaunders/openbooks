@@ -7,10 +7,10 @@ import { isoDate, uuidId } from "@/lib/api/json";
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
-import { db, withOrgTransaction } from "@openbooks/engine/src/platform/db.ts";
+import { db, withOrgTransaction } from "@openbooks/engine/platform/db";
 import { isUuid } from "../../../../lib/list-params";
-import { runRecordFlows } from "@openbooks/engine/src/flows/run.ts";
-import { TIMESHEET_WEEK_SUBJECT_KIND } from "@openbooks/engine/src/flows/timesheet-weeks-adapter.ts";
+import { runRecordFlows } from "@openbooks/engine/flows/run";
+import { TIMESHEET_WEEK_SUBJECT_KIND } from "@openbooks/engine/flows/timesheet-weeks-adapter";
 import {
   assertWeekSubmittable,
   ensureTimesheetWeek,

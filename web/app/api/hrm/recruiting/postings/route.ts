@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import {
   listPostings,
   publishPosting,
-} from "@openbooks/engine/src/hrm/recruiting/postings.ts";
+} from "@openbooks/engine/hrm/recruiting/postings";
 
 import { recruitingErrorResponse } from "../_lib";
 import { publishPostingBody } from "./bodies";

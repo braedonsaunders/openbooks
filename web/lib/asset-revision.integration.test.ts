@@ -4,10 +4,10 @@ import test from 'node:test';
 import pg from 'pg';
 import { registerHooks } from 'node:module';
 import { sql } from 'drizzle-orm';
-import { documentRevisionSql } from '@openbooks/engine/src/records/revision.ts';
-import { db, env } from '@openbooks/engine/src/platform/db.ts';
-import { createScratchOrg, dropScratchOrg, seedFlowActors, type ScratchOrg } from '@openbooks/engine/src/testing/fixtures.ts';
-import { waitForLockWaiter } from '@openbooks/engine/src/testing/lock-wait.ts';
+import { documentRevisionSql } from '@openbooks/engine/records/revision';
+import { db, env } from '@openbooks/engine/platform/db';
+import { createScratchOrg, dropScratchOrg, seedFlowActors, type ScratchOrg } from '@openbooks/engine/testing/fixtures';
+import { waitForLockWaiter } from '@openbooks/engine/testing/lock-wait';
 
 async function seedAsset(org: ScratchOrg) {
   const actorId = (await seedFlowActors(org.orgId)).adminId;
@@ -94,13 +94,13 @@ const assetDisplayCases = [
         const assert: typeof import('node:assert/strict') = (await import('node:assert/strict')).default;
         const { randomUUID } = await import('node:crypto');
         const test = (await import('node:test')).default;
-        const { buildSchedule, runDepreciation } = await import('@openbooks/engine/src/assets/depreciation.ts');
-        const { toUnits } = await import('@openbooks/engine/src/money/money.ts');
+        const { buildSchedule, runDepreciation } = await import('@openbooks/engine/assets/depreciation');
+        const { toUnits } = await import('@openbooks/engine/money/money');
         const { sql } = await import('drizzle-orm');
-        const { db } = await import('@openbooks/engine/src/platform/db.ts');
-        const { disposeAsset, remeasureAsset, reverseAssetLifecycleEvent } = await import('@openbooks/engine/src/assets/asset-lifecycle.ts');
-        const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import('@openbooks/engine/src/testing/fixtures.ts');
-        type ScratchOrg = import('@openbooks/engine/src/testing/fixtures.ts').ScratchOrg;
+        const { db } = await import('@openbooks/engine/platform/db');
+        const { disposeAsset, remeasureAsset, reverseAssetLifecycleEvent } = await import('@openbooks/engine/assets/asset-lifecycle');
+        const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import('@openbooks/engine/testing/fixtures');
+        type ScratchOrg = import('@openbooks/engine/testing/fixtures').ScratchOrg;
         async function seedAsset(org: ScratchOrg) {
           const actorId = (await seedFlowActors(org.orgId)).adminId;
           const assetId = randomUUID(), categoryId = randomUUID();

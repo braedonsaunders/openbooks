@@ -10,7 +10,7 @@ import { registerHooks } from 'node:module'
 
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === '@openbooks/engine/src/platform/db.ts') {
+    if (specifier === '@openbooks/engine/platform/db') {
       return {
         shortCircuit: true,
         format: 'module',

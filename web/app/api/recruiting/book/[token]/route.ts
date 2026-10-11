@@ -1,6 +1,6 @@
 import { defineRoute } from '@/lib/api/route';
 import { NextResponse } from "next/server";
-import { bookSlot, readBookingLink } from "@openbooks/engine/src/hrm/recruiting/scheduling.ts";
+import { bookSlot, readBookingLink } from "@openbooks/engine/hrm/recruiting/scheduling";
 import { recruitingErrorResponse } from "../../../hrm/recruiting/_lib";
 import { bookSlotBody } from "./bodies";
 

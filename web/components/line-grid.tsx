@@ -21,7 +21,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from 'react'
 import { ArrowDown, ArrowUp, Copy, Lock, LockOpen, MoreHorizontal, Plus, RotateCcw, Split, Trash2 } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { Badge, Button, ContextMenu, FieldLabel, SearchSelect, Select, cn, useContextMenu, type ContextMenuEntry, type SearchSelectScanResult } from '@openbooks/ui'
-import { cmp, normalizeMoney } from '@openbooks/engine/src/money/money.ts'
+import { cmp, normalizeMoney } from '@openbooks/engine/money/money'
 import {
   displayLineDecimal,
   invalidLineDecimal,

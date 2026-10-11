@@ -11,7 +11,7 @@ import type {
   PropertyUnitRow,
   ScheduleCountRow,
   SecurityDepositRow,
-} from "@openbooks/engine/src/property/management.ts";
+} from "@openbooks/engine/property/management";
 
 export type PropertyWorkspace = {
   properties: ManagedPropertyRow[];

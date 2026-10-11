@@ -25,7 +25,7 @@ const subsidiaryModule = 'export const subsidiaryVisibleFilter = globalThis.inve
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === '@openbooks/engine/src/platform/db.ts') {
+    if (specifier === '@openbooks/engine/platform/db') {
       return {
         shortCircuit: true,
         format: 'module',

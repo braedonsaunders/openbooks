@@ -21,7 +21,7 @@ const mockCrm = `
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "@openbooks/engine/src/crm/crm.ts") {
+    if (specifier === "@openbooks/engine/crm/crm") {
       return { url: "mock:quote-crm-refusal-crm", shortCircuit: true };
     }
     return nextResolve(specifier, context);
@@ -35,10 +35,10 @@ const hooks = registerHooks({
 });
 
 const { db, withBypassContext, withOrgContext } = await import(
-  "@openbooks/engine/src/platform/db.ts"
+  "@openbooks/engine/platform/db"
 );
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
-  "@openbooks/engine/src/testing/fixtures.ts"
+  "@openbooks/engine/testing/fixtures"
 );
 const { createOrder } = await import("./create.ts");
 hooks.deregister();

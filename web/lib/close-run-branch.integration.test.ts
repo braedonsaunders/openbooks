@@ -43,11 +43,11 @@ registerHooks({
 })
 
 const { sql } = await import('drizzle-orm')
-const { db, withOrgContext, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withOrgContext, withBypassContext } = await import('@openbooks/engine/platform/db')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
-  '@openbooks/engine/src/testing/fixtures.ts'
+  '@openbooks/engine/testing/fixtures'
 )
-const { startCloseRun } = await import("@openbooks/engine/src/close/run-start.ts");
+const { startCloseRun } = await import("@openbooks/engine/close/run-start");
 const { loadClose, closeSpec } = await import('../app/(app)/close/view')
 
 test('the run branch loads the wizard and renders under its own shell', {

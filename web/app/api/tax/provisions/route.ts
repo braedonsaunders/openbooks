@@ -5,7 +5,7 @@ import { apiErrorResponse } from '@/lib/api/error-response'
 import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { db } from "@openbooks/engine/platform/db";
 import {
   IncomeTaxProvisionError,
   computeProvisionRun,
@@ -14,8 +14,8 @@ import {
   type DifferenceInput,
   type EntityProvisionInputs,
   type PermanentDifference,
-} from "@openbooks/engine/src/tax-returns/income-tax-provision.ts";
-import { normalizeMoney } from "@openbooks/engine/src/money/money.ts";
+} from "@openbooks/engine/tax-returns/income-tax-provision";
+import { normalizeMoney } from "@openbooks/engine/money/money";
 import { guardUnrestrictedScope } from "../../../../lib/authz";
 import { canonicalDecimal } from "../../../../lib/exact-decimal";
 import { moneyRefusal } from "../../../../lib/payroll-decimal-refusal";

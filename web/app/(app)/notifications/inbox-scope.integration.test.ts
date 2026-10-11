@@ -51,9 +51,9 @@ registerHooks({
 });
 
 const { sql } = await import("drizzle-orm");
-const { db, withBypass, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
+const { db, withBypass, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
-  "@openbooks/engine/src/testing/fixtures.ts"
+  "@openbooks/engine/testing/fixtures"
 );
 const { GET, PATCH } = await import("../../api/notifications/route.ts");
 type Authz = import("@/lib/authz.ts").Authz;

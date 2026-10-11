@@ -3,20 +3,20 @@ import { defineRoute } from "@/lib/api/route";
 
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db, schema } from '@openbooks/engine/src/platform/db.ts'
-import { ScopeNotFoundError } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
+import { db, schema } from '@openbooks/engine/platform/db'
+import { ScopeNotFoundError } from '@openbooks/engine/organization/scope'
 import {
   createPaymentBankProfile,
   type PaymentBankProfileInput,
-} from '@openbooks/engine/src/payments/operations.ts'
-import { computeNextRunAt } from '@openbooks/engine/src/scripting/scripting.ts'
+} from '@openbooks/engine/payments/operations'
+import { computeNextRunAt } from '@openbooks/engine/scripting/scripting'
 import { guardPermission } from '../../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../../lib/features'
 import { isUuid } from '../../../../../lib/list-params'
 import { normalizeCountryCode } from '../../../../../lib/countries'
-import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
-import { canonicalDecimal } from '@openbooks/engine/src/money/exact-decimal.ts'
-import { moneyRefusal } from '@openbooks/engine/src/money/decimal-refusal.ts'
+import { isIsoCalendarDate } from '@openbooks/engine/platform/business-date/module'
+import { canonicalDecimal } from '@openbooks/engine/money/decimal'
+import { moneyRefusal } from '@openbooks/engine/money/decimal-refusal'
 import { subsidiaryVisibleFilter } from '../../../../../lib/subsidiaries'
 import { auditConfigChange } from '../_lib'
 import { notFound } from "@/lib/api/responses";

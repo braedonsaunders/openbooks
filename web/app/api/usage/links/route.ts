@@ -1,4 +1,4 @@
-import { createSubscriptionUsageLink, listSubscriptionUsageLinks } from "@openbooks/engine/src/billing/usage/rating-plans.ts";
+import { createSubscriptionUsageLink, listSubscriptionUsageLinks } from "@openbooks/engine/billing/usage/rating-plans";
 import { defineRoute } from "@/lib/api/route";
 import { idempotentUsageCreate } from "../_idempotent";
 import { z } from "zod";

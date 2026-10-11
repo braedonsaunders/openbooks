@@ -1,15 +1,15 @@
 import "server-only";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { db } from "@openbooks/engine/platform/db";
 import { normalizeMoney, wholeDigits } from "@openbooks/engine/money";
 import { resolveInvoicingPreference } from "./invoicing-preference.ts";
 import { loadProjectType } from "./project-type";
 import { canonicalDecimal } from "./exact-decimal";
-import { isIsoCalendarDate } from "@openbooks/engine/src/platform/business-date.ts";
+import { isIsoCalendarDate } from "@openbooks/engine/platform/business-date/module";
 import { acquireFeatureGateLock, isFeatureEnabled } from "./features";
-import { lockAndCheckOrgFeature } from "@openbooks/engine/src/organization/org-feature-lock.ts";
+import { lockAndCheckOrgFeature } from "@openbooks/engine/organization/org-feature-lock";
 import { subsidiaryVisibleFilter } from "./subsidiaries";
-import { isUuid } from "@openbooks/engine/src/platform/uuid.ts";
+import { isUuid } from "@openbooks/engine/platform/identifiers";
 
 /** CRUD for project billing requests + milestone schedules. */
 

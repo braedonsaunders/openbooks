@@ -10,9 +10,9 @@ import { executeIdempotent } from "@/lib/application/idempotency";
 import { isUuid } from "@/lib/list-params";
 import { SETUP_ENTITY_BY_KEY } from "@/lib/setup/registry";
 import type { SetupCommandName } from "@/lib/setup/types";
-import { setFramework } from "@openbooks/engine/src/nonprofit/frameworks.ts";
-import { setFundPair } from "@openbooks/engine/src/nonprofit/funds.ts";
-import { setFunctionalMapping } from "@openbooks/engine/src/nonprofit/functional.ts";
+import { setFramework } from "@openbooks/engine/nonprofit/frameworks";
+import { setFundPair } from "@openbooks/engine/nonprofit/funds";
+import { setFunctionalMapping } from "@openbooks/engine/nonprofit/functional";
 import {
   CHANNEL_ACCOUNT_ROLES,
   recordChannelAdSpend,

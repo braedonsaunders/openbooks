@@ -54,10 +54,10 @@ const hooks = registerHooks({
 const routeUrl = "./route.ts?list-view-post-bool-integration";
 const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
 
-const { db } = await import("@openbooks/engine/src/platform/db.ts");
+const { db } = await import("@openbooks/engine/platform/db");
 const { defaultListView } = await import("@openbooks/customization");
 const { createScratchOrg, createScratchUser } = await import(
-  "@openbooks/engine/src/testing/fixtures.ts"
+  "@openbooks/engine/testing/fixtures"
 );
 
 async function seed(): Promise<{ orgId: string; actorId: string }> {

@@ -1,13 +1,13 @@
 import "server-only";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { db } from "@openbooks/engine/platform/db";
 import { functionalReportReader } from "./currency-basis";
 import { statementBookExpr } from "../gl-summary";
 import { resolveOrgId } from "../org-scope";
 import { decimalCmp, decimalSum, type ExactDecimal } from "../statement-format";
 import { decimalRatio, decimalSubtract } from "./decimals";
 import { type DimFilter, dimWhere } from "./filters";
-import { subsidiaryVisibleFilter } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
+import { subsidiaryVisibleFilter } from "@openbooks/engine/organization/scope";
 
 // ---------------------------------------------------------------------------
 // Project profitability — per-project revenue, cost and margin (job costing)

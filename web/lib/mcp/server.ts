@@ -25,7 +25,7 @@ import { ASSISTANT_TOOLS, applicationToolVisible, executeAssistantTool } from ".
 import { listAppToolViews, runListedAppTool, toAssistantToolDef } from "../apps/tools";
 import { can } from "../authz";
 import { resolvedFeatureState } from "../features";
-import type { FeatureState } from "@openbooks/engine/src/organization/feature-registry.ts";
+import type { FeatureState } from "@openbooks/engine/organization/feature-registry";
 import { canRunTool } from "../assistant/gate";
 import { AssistantToolFailure, mapMcpError, mcpErrorStatus } from "./errors";
 import { MCP_SKILLS } from "./skills";

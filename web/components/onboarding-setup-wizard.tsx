@@ -1,5 +1,5 @@
 import { canonicalTimeZone, countryTimeZoneDirectory, listCanonicalTimeZones } from '@openbooks/engine/platform/time-zone'
-import { installablePayrollPackSummaries } from '@openbooks/engine/src/payroll/packs.ts'
+import { installablePayrollPackSummaries } from '@openbooks/engine/payroll/packs'
 import { COUNTRY_CODES } from '@/lib/countries'
 import { canSwitchIndustry } from '@/lib/industries'
 import { INDUSTRIES } from '@/lib/industries'

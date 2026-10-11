@@ -4,7 +4,7 @@ import { registeredListTable } from '../../../lib/list/prepared-spec'
 import { getFormatter, getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { allowedSources, getSource } from '@openbooks/analytics'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/db'
 import {
   pagination,
   badge,

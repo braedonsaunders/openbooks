@@ -9,29 +9,29 @@ import { isUuid } from '../list-params'
 import { saveExtensionSettingRow } from './extension-settings'
 import { createHomeAnnouncementRow, deleteHomeAnnouncementRow, saveHomeAnnouncementRow } from './home-announcements'
 import { sql } from 'drizzle-orm'
-import { CurrencyError, updateFxRate } from '@openbooks/engine/src/fx/currencies.ts'
-import { assertStockLocationDeletionAllowed, WarehouseRefusal } from '@openbooks/engine/src/inventory/warehouses.ts'
-import { db, withOrgTransaction, type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
+import { CurrencyError, updateFxRate } from '@openbooks/engine/fx/currencies'
+import { assertStockLocationDeletionAllowed, WarehouseRefusal } from '@openbooks/engine/inventory/warehouses'
+import { db, withOrgTransaction, type SqlExecutor } from '@openbooks/engine/platform/db'
 import { lockLedgerSetupFence } from '@openbooks/engine/organization/ledger-setup'
-import { toUnits } from '@openbooks/engine/src/money/money.ts'
+import { toUnits } from '@openbooks/engine/money/money'
 import { canonicalDecimal, compareDecimal } from '@openbooks/engine/money/decimal'
 import { decimalNullRefusal } from '../payroll-decimal-refusal'
-import { compileFormula } from '@openbooks/engine/src/assets/depreciation-formula.ts'
-import { declaredPayrollFilings, filingAccountProblem } from '@openbooks/engine/src/payroll/filing-registry.ts'
+import { compileFormula } from '@openbooks/engine/assets/depreciation-formula'
+import { declaredPayrollFilings, filingAccountProblem } from '@openbooks/engine/payroll/filing-registry'
 import { collidingSequenceKind } from '@openbooks/engine/records/numbering'
-import { payPeriodsPerYearProblem, semiMonthlyAnchorProblem } from "@openbooks/engine/src/payroll/run-calendar.ts";
-import { payScheduleSubsidiaryProblem, rescopePayScheduleRuns } from "@openbooks/engine/src/payroll/run-lifecycle.ts";
-import { payComponentTreatmentProblem } from '@openbooks/engine/src/payroll/treatment-bases.ts'
+import { payPeriodsPerYearProblem, semiMonthlyAnchorProblem } from "@openbooks/engine/payroll/run-calendar";
+import { payScheduleSubsidiaryProblem, rescopePayScheduleRuns } from "@openbooks/engine/payroll/run-lifecycle";
+import { payComponentTreatmentProblem } from '@openbooks/engine/payroll/treatment-bases'
 import { nonCashOffsetProblem } from '@openbooks/engine/payroll/setup'
-import { PAYROLL_COUNTRY_PACKS, defaultLevyExclusionsForNewComponent } from '@openbooks/engine/src/payroll/packs.ts'
-import { recognitionRulePolicyProblem } from '@openbooks/engine/src/revenue/recognition-limits.ts'
-import { parseRatingScale, PerformanceMathError } from '@openbooks/engine/src/hrm/performance/performance-math.ts'
+import { PAYROLL_COUNTRY_PACKS, defaultLevyExclusionsForNewComponent } from '@openbooks/engine/payroll/packs'
+import { recognitionRulePolicyProblem } from '@openbooks/engine/revenue/recognition-limits'
+import { parseRatingScale, PerformanceMathError } from '@openbooks/engine/hrm/performance/performance-math'
 // HR-18 begin: recruiting-depth Setup validation runs through the engine
 // owners of each shape (one implementation, two callers).
-import { CANONICAL_RATING_KEYS } from '@openbooks/engine/src/hrm/recruiting/kits.ts'
-import { RecruitingError } from '@openbooks/engine/src/hrm/recruiting/errors.ts'
-import { parseClauses } from '@openbooks/engine/src/hrm/recruiting/offers-signing.ts'
-import { validateAvailabilityWindows } from '@openbooks/engine/src/hrm/recruiting/scheduling.ts'
+import { CANONICAL_RATING_KEYS } from '@openbooks/engine/hrm/recruiting/kits'
+import { RecruitingError } from '@openbooks/engine/hrm/recruiting/errors'
+import { parseClauses } from '@openbooks/engine/hrm/recruiting/offers-signing'
+import { validateAvailabilityWindows } from '@openbooks/engine/hrm/recruiting/scheduling'
 import { requireCompensation } from '@openbooks/engine/hrm/recruiting/requisitions'
 import { jobDescriptionDeleteRefusal } from '@openbooks/engine/hrm/recruiting/job-descriptions'
 // HR-18 end
@@ -55,8 +55,8 @@ import { normalizeHrmProcessTemplateInput } from './hrm-process-template'
 import { normalizeHrmPipelineStageInput } from './hrm-pipeline'
 import { HrmReviewTemplateScaleError, normalizeHrmReviewTemplateInput } from './hrm-review-template'
 import { normalizeHrmCompensationInput } from './hrm-compensation'
-import { validateCategoryKey } from '@openbooks/engine/src/hrm/documents/categories.ts'
-import { validateTemplateInput } from '@openbooks/engine/src/hrm/documents/templates.ts'
+import { validateCategoryKey } from '@openbooks/engine/hrm/documents/categories'
+import { validateTemplateInput } from '@openbooks/engine/hrm/documents/templates'
 import { benefitPlanShapeProblem, normalizeHrmBenefitPlanInput } from './hrm-benefits'
 import { benefitProgramShapeProblem } from './benefit-programs'
 import { leavePolicyRuleProblem, normalizeHrmLeavePolicyInput } from './hrm-leave-policy'
@@ -64,7 +64,7 @@ import { findSameSpecificityConflict, pinnedIds, targetingSpecificity } from '@o
 import { mergeTemplateSlots, normalizeHrmDocumentTemplateInput } from './hrm-document-template'
 import { applyRuleSlotColumns } from './hrm-rule-slots'
 import { normalizeTaxReturnFormInput } from './tax-return-form'
-import { taxRegistrationFormProblem } from '@openbooks/engine/src/tax/seed-tax-forms.ts'
+import { taxRegistrationFormProblem } from '@openbooks/engine/tax/seed-tax-forms'
 import { saveSetupBook } from './books'
 import {
   createUsageMeter,
@@ -72,9 +72,9 @@ import {
   reactivateUsageMeter,
   updateUsageMeter,
   type UsageAggregation,
-} from '@openbooks/engine/src/billing/usage/records.ts'
-import { createUsageRatingPlan, retireUsageRatingPlan } from '@openbooks/engine/src/billing/usage/rating-plans.ts'
-import { UsageBillingError } from '@openbooks/engine/src/billing/usage/errors.ts'
+} from '@openbooks/engine/billing/usage/records'
+import { createUsageRatingPlan, retireUsageRatingPlan } from '@openbooks/engine/billing/usage/rating-plans'
+import { UsageBillingError } from '@openbooks/engine/billing/usage/errors'
 import { EntitlementError, createSaasFeature, updateSaasFeature, type SaasFeatureType } from '@openbooks/engine/billing'
 import { setupEntityWithValidationHook } from './entities/customer-item-refs'
 

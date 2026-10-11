@@ -3,12 +3,12 @@ import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from "@/lib/api/error-response";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
-import { reverseAssetLifecycleEvent } from "@openbooks/engine/src/assets/asset-lifecycle.ts";
+import { db } from "@openbooks/engine/platform/db";
+import { reverseAssetLifecycleEvent } from "@openbooks/engine/assets/asset-lifecycle";
 import {
   businessToday,
   isIsoCalendarDate,
-} from "@openbooks/engine/src/platform/business-date.ts";
+} from "@openbooks/engine/platform/business-date/module";
 import { isUuid } from "../../../../../lib/list-params";
 import { isoDate } from "../../../../../lib/api/json";
 import { notFound } from "@/lib/api/responses";

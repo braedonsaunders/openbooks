@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useLocale, useTranslations } from 'next-intl'
 import { Button, Drawer, cn } from '@openbooks/ui'
-import { abs as absoluteMoney, cmp as compareMoney, div as divideMoney, mulDecimal, sum as sumMoney } from '@openbooks/engine/src/money/money.ts'
+import { abs as absoluteMoney, cmp as compareMoney, div as divideMoney, mulDecimal, sum as sumMoney } from '@openbooks/engine/money/money'
 import {
   History,
   Gauge as GaugeIcon,

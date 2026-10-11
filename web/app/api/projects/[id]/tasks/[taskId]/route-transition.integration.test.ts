@@ -14,8 +14,8 @@ registerHooks({ resolve(specifier, context, next) {
 }})
 
 const { sql } = await import('drizzle-orm')
-const { db, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { db, withOrgContext } = await import('@openbooks/engine/platform/db')
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
 const { createWorkBreakdownTask, loadWorkBreakdownTasks } = await import('../../../../../../lib/project-work-breakdown')
 const { PATCH } = await import('./route')
 

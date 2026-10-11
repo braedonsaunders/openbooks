@@ -1,6 +1,6 @@
 import "server-only";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { db } from "@openbooks/engine/platform/db";
 import { budgetScenarioOptions } from "../budget-report";
 import { loadBudgetScenario } from "../budgets";
 import { isFeatureEnabled } from "../features";

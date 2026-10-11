@@ -43,8 +43,8 @@ const routeUrl = './route.ts?item-price-history'
 const { POST, PATCH, DELETE } = (await import(routeUrl)) as typeof import('./route.ts')
 const { resolveItemPrice } = await import('../../../../../lib/item-pricing.ts')
 
-const { db, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
-const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { db, withBypassContext } = await import('@openbooks/engine/platform/db')
+const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } = await import('@openbooks/engine/testing/fixtures')
 
 interface Fixture { orgId: string; actorId: string; itemId: string; priceLevelId: string }
 

@@ -39,9 +39,9 @@ registerHooks({
   },
 })
 
-const { db, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withOrgContext } = await import('@openbooks/engine/platform/db')
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
-  '@openbooks/engine/src/testing/fixtures.ts'
+  '@openbooks/engine/testing/fixtures'
 )
 const { loadCrewPage, crewSpec } = await import('./view')
 const { POST } = await import('../../../api/time/crew-batches/route')

@@ -1,22 +1,22 @@
 import "server-only";
 import { and, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import { employeeRoles, parties, projects, resAssignments } from "@openbooks/schema";
-import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
+import { db } from "@openbooks/engine/platform/db";
 import {
   buildResourcingForecast,
   type BenchPerson,
   type ForecastWindow,
   type ResourcingForecast,
   type RolloffPerson,
-} from "@openbooks/engine/src/resourcing/forecast.ts";
-import { readAvailability } from "@openbooks/engine/src/resourcing/availability-read.ts";
-import { assertSundayWindow } from "@openbooks/engine/src/resourcing/weeks.ts";
-import { ResourcingRefusal } from "@openbooks/engine/src/resourcing/errors.ts";
+} from "@openbooks/engine/resourcing/forecast";
+import { readAvailability } from "@openbooks/engine/resourcing/availability-read";
+import { assertSundayWindow } from "@openbooks/engine/resourcing/weeks";
+import { ResourcingRefusal } from "@openbooks/engine/resourcing/errors";
 import {
   projectDerivedStatus,
   type StoredQualificationStatus,
-} from "@openbooks/engine/src/hrm/qualifications/shared.ts";
+} from "@openbooks/engine/hrm/qualifications/shared";
 import { isFeatureEnabled } from "../features";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
 

@@ -6,9 +6,9 @@ import test from 'node:test'
 // per-session request key that becomes the ticket id. Replays of that key
 // (a retried or doubled Save) must resolve to the one ticket and one number
 // the first attempt created; a replay naming a different project refuses.
-const { db, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypassContext } = await import('@openbooks/engine/platform/db')
 const { sql } = await import('drizzle-orm')
-const { createScratchOrg, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { createScratchOrg, seedFlowActors, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
 const { createFieldTicket, FieldTicketCreateConflictError } = await import('./field-tickets')
 
 const enabled = { skip: !process.env.OPENBOOKS_DB_URL }

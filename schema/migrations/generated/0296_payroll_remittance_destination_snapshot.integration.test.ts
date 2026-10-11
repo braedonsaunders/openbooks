@@ -15,23 +15,23 @@ import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import test, { afterEach, beforeEach } from "node:test";
 import { sql } from "drizzle-orm";
-import { db, withBypass } from "../../../engine/src/platform/db.ts";
+import { db, withBypass } from "@openbooks/engine/platform/db";
 import {
   assertTableCatalogMatches,
   snapshotTableCatalog,
   type CatalogQuery,
   type TableCatalogSnapshot,
-} from "../../../engine/src/testing/migration-catalog.ts";
+} from "@openbooks/engine/testing/migration-catalog";
 import {
   PAYROLL_COUNTRY_PACKS,
   statutoryRemittanceDeclaration,
-} from "../../../engine/src/payroll/packs.ts";
+} from "@openbooks/engine/payroll/packs";
 import {
   createScratchOrg,
   createScratchUser,
   dropScratchOrg,
   seedWorkerEmployment,
-} from "../../../engine/src/testing/fixtures.ts";
+} from "@openbooks/engine/testing/fixtures";
 import {
   connectMigrationClient,
   executeMigrationBody,

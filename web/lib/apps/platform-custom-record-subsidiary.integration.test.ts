@@ -4,9 +4,9 @@ import test from 'node:test'
 import { sql } from 'drizzle-orm'
 
 const { createAppPlatformAdapter } = await import('./platform.ts')
-const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/platform/db')
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  '@openbooks/engine/src/testing/fixtures.ts',
+  '@openbooks/engine/testing/fixtures',
 )
 
 test(
@@ -182,7 +182,7 @@ test(
         assert.equal(listed.records[0]?.id, visibleId)
         assert.equal(await platform.get(typeKey, hiddenId), null)
 
-        const { documentRevisionCounterSql } = await import('@openbooks/engine/src/records/revision.ts')
+        const { documentRevisionCounterSql } = await import('@openbooks/engine/records/revision')
         const revision = (await db.execute<{ revision: string }>(sql`
           select ${documentRevisionCounterSql(sql`revision_seq`)} as revision
             from custom_records where id = ${hiddenId}

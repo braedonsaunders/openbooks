@@ -5,9 +5,9 @@ import { registerHooks } from 'node:module';
 import test from 'node:test';
 import pg from 'pg';
 import { sql } from 'drizzle-orm';
-import { db, env } from '@openbooks/engine/src/platform/db.ts';
-import { createScratchOrg, dropScratchOrg, type ScratchOrg } from '@openbooks/engine/src/testing/fixtures.ts';
-import { waitForLockWaiter } from '@openbooks/engine/src/testing/lock-wait.ts';
+import { db, env } from '@openbooks/engine/platform/db';
+import { createScratchOrg, dropScratchOrg, type ScratchOrg } from '@openbooks/engine/testing/fixtures';
+import { waitForLockWaiter } from '@openbooks/engine/testing/lock-wait';
 
 const state: { gate: { user: { orgId: string; id: string } } | null } = { gate: null };
 Object.assign(globalThis, { __setupEvidence: state });

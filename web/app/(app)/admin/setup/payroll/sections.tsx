@@ -3,19 +3,19 @@ import 'server-only'
 import { NavigationPicker } from '@/components/module-home/navigation-picker'
 import { ModuleHomeTabs } from '../../../../../components/module-home/ui'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { payrollSettings, statutoryHolidayPayEnabled } from "@openbooks/engine/src/payroll/run-setup.ts";
-import { type PayrollSubsidiaryScope } from "@openbooks/engine/src/payroll/scope.ts";
-import { payrollPaymentMethodSettings } from '@openbooks/engine/src/payroll/payment-method.ts'
-import { payrollSetupState } from '@openbooks/engine/src/payroll/readiness.ts'
-import { payrollBankProfiles } from '@openbooks/engine/src/payroll/bank-file.ts'
+import { db } from '@openbooks/engine/platform/db'
+import { payrollSettings, statutoryHolidayPayEnabled } from "@openbooks/engine/payroll/run-setup";
+import { type PayrollSubsidiaryScope } from "@openbooks/engine/payroll/scope";
+import { payrollPaymentMethodSettings } from '@openbooks/engine/payroll/payment-method'
+import { payrollSetupState } from '@openbooks/engine/payroll/readiness'
+import { payrollBankProfiles } from '@openbooks/engine/payroll/bank-file'
 import {
   installablePayrollPacks,
   packRemittanceVendorSettingsKeys,
   packSlotState,
   PAYROLL_COUNTRY_PACKS,
-} from '@openbooks/engine/src/payroll/packs.ts'
-import { payrollTaxYearCoverage } from '@openbooks/engine/src/payroll/packs.ts'
+} from '@openbooks/engine/payroll/packs'
+import { payrollTaxYearCoverage } from '@openbooks/engine/payroll/packs'
 import { pdfEncryptionAvailable } from '@openbooks/pdf'
 import { stubPasswordPolicy } from '../../../../../lib/payroll-outputs'
 import { can, getAuthz } from '../../../../../lib/authz'

@@ -10,7 +10,7 @@ import {
   recordGrantDrawdown,
   voidGrant,
   voidGrantDrawdown,
-} from '@openbooks/engine/src/nonprofit/grants.ts'
+} from '@openbooks/engine/nonprofit/grants'
 
 export const runtime = 'nodejs'
 

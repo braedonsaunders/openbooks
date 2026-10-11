@@ -3,7 +3,7 @@ import { defineRoute } from '@/lib/api/route';
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from "next/server";
 import { sql, type SQL } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { db } from "@openbooks/engine/platform/db";
 import {
   SubscriptionError,
   billSubscriptionNow,
@@ -19,13 +19,13 @@ import {
   resolveNextBillOnUpdate,
   runSubscriptionCatchUp,
   type Interval,
-} from "@openbooks/engine/src/billing/subscription-billing.ts";
+} from "@openbooks/engine/billing/subscription-billing";
 import { CATCH_UP_CHOICE_THRESHOLD } from "@openbooks/engine/billing/recurring";
-import { ScopeNotFoundError } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
-import { add, mulDecimal } from "@openbooks/engine/src/money/money.ts";
+import { ScopeNotFoundError } from "@openbooks/engine/organization/scope";
+import { add, mulDecimal } from "@openbooks/engine/money/money";
 import { guardSubsidiaryScope, guardUnrestrictedScope, type Authz } from "../../../lib/authz";
 import { isFeatureEnabled } from "../../../lib/features";
-import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
 import { notFound } from "@/lib/api/responses";
 const intervalSchema = z.enum(['weekly', 'monthly', 'quarterly', 'annually']);
 const intervalCountSchema = z.union([z.number().int(), z.string().regex(/^\d+$/)]).optional();

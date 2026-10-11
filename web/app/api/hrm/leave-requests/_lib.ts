@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
-import { HrmAuthorizationError } from "@openbooks/engine/src/hrm/authorization.ts";
+import { HrmAuthorizationError } from "@openbooks/engine/hrm/authorization";
 import { hrmAuthorizationResponse } from "../../../../lib/api/record-not-found";
-import { LeaveError } from "@openbooks/engine/src/hrm/leave-errors.ts";
+import { LeaveError } from "@openbooks/engine/hrm/leave-errors";
 
 /**
  * Shared error mapping for /api/hrm/leave-* — mirrors the change-request

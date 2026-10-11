@@ -13,14 +13,14 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context)
 }})
 const { sql } = await import('drizzle-orm')
-const { db, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
-const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import('@openbooks/engine/src/testing/fixtures.ts')
-const { waitForLockWaiter } = await import('@openbooks/engine/src/testing/lock-wait.ts')
+const { db, withOrgContext } = await import('@openbooks/engine/platform/db')
+const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import('@openbooks/engine/testing/fixtures')
+const { waitForLockWaiter } = await import('@openbooks/engine/testing/lock-wait')
 const { PUT } = await import('./route')
 const { POST: submitWeek } = await import('./submit/route')
 const { POST: approveWeek } = await import('./approve/route')
 const { loadWeek } = await import('./_lib')
-const { isIsoCalendarDate } = await import('@openbooks/engine/src/platform/business-date.ts')
+const { isIsoCalendarDate } = await import('@openbooks/engine/platform/business-date/module')
 
 async function fixture(requireApproval: boolean) {
   const org = await createScratchOrg()

@@ -4,12 +4,12 @@ import {
   RunQueryError,
   getRun,
   type RunDetail,
-} from "../../engine/src/allocations/run-queries.ts";
+} from "@openbooks/engine/allocations/run-queries";
 import {
   allocationRuleVisible,
   allocationScopeVisible,
-} from "../../engine/src/organization/allocation-scope.ts";
-import type { RuleInEffect } from "../../engine/src/allocations/types.ts";
+} from "@openbooks/engine/organization/allocation-scope";
+import type { RuleInEffect } from "@openbooks/engine/allocations/types";
 import { notFound } from "@/lib/api/responses";
 
 /**

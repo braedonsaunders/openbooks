@@ -2,7 +2,7 @@ import 'server-only'
 
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/db'
 import {
   page,
   pageHeader,
@@ -12,13 +12,13 @@ import {
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
 import { mergeHref, pickString, isUuid } from '../../../lib/list-params'
-import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
+import { businessToday } from '@openbooks/engine/platform/business-date/module'
 import { requirePermission, can } from '../../../lib/authz'
 import { purchaseOrderConversionPermission } from '../../../lib/permissions'
 import { CONVERSION_TARGETS } from '../../../lib/order-kinds'
 import { requireFeatureEnabled } from '../../../lib/feature-gates'
 import { isFeatureEnabled } from '../../../lib/features'
-import { dropShipOrderStatus } from '@openbooks/engine/src/sales/drop-ship.ts'
+import { dropShipOrderStatus } from '@openbooks/engine/sales/drop-ship'
 import { loadOrder } from '../../api/_order/lib'
 import type { OrderDrawer } from '../_order/OrderDrawer'
 import { resolveFormLayout } from '../../../lib/customization/resolve'

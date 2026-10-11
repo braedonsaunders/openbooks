@@ -2,7 +2,7 @@ import 'server-only'
 
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/db'
 import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { isUuid, pickString } from '../../../../lib/list-params'
 import { can, requirePermission } from '../../../../lib/authz'
@@ -10,7 +10,7 @@ import { isFeatureEnabled } from '../../../../lib/features'
 import { BANK_KINDS, DOC_KINDS, createPermission, isDocumentCreateKind, postPermission } from "../../../../lib/document-kinds.ts";
 import { canReadDocumentKind } from '../../../../lib/flow-subject-authz'
 import { accountOptions, bankAccountOptions, cardLiabilityAccountOptions, cardOptions, createDocumentSeed, dimensionOptions, partyOptions, taxCodeOptions, taxGroupOptions } from "../../../../lib/documents.ts";
-import { loadDocument } from "../../../../../engine/src/ledger/document-service.ts";
+import { loadDocument } from "@openbooks/engine/ledger/document-service";
 import { loadFieldDefs } from '../../../../lib/custom-fields'
 import { isMultiSubsidiary, subsidiaryOptions } from '../../../../lib/subsidiaries'
 import { resolveFormLayout } from '../../../../lib/customization/resolve'

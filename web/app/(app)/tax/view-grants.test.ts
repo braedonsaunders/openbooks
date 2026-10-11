@@ -113,11 +113,11 @@ const mockSources = new Map<string, string>([
 ])
 
 const mockUrls = new Map<string, string>([
-  ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
-  ['@openbooks/engine/src/tax-returns/return.ts', 'mock:tax-return'],
-  ['@openbooks/engine/src/tax-returns/filing.ts', 'mock:tax-filing'],
-  ['@openbooks/engine/src/tax/nexus-ledger.ts', 'mock:tax-nexus-ledger'],
-  ['@openbooks/engine/src/platform/business-date.ts', 'mock:business-date'],
+  ['@openbooks/engine/platform/db', 'mock:db'],
+  ['@openbooks/engine/tax-returns/return', 'mock:tax-return'],
+  ['@openbooks/engine/tax-returns/filing', 'mock:tax-filing'],
+  ['@openbooks/engine/tax/nexus-ledger', 'mock:tax-nexus-ledger'],
+  ['@openbooks/engine/platform/business-date/module', 'mock:business-date'],
   ['@braedonsaunders/appkit-viewspec', 'mock:viewspec'],
 ])
 

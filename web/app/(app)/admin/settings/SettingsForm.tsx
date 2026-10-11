@@ -25,7 +25,7 @@ import {
 import { LOCALES, isLocale, type Locale } from '../../../../i18n/config'
 import { readApiErrorMessage } from '../../../../lib/api-error'
 import { SaasMetricsNormalization } from './SaasMetricsNormalization'
-import type { ControlAccountRole } from '@openbooks/engine/src/records/control-accounts.ts'
+import type { ControlAccountRole } from '@openbooks/engine/records/control-accounts'
 import { countryOptions } from '../../../../lib/countries'
 import { accountTypeMessageKey, controlAccountPickerOptions } from './control-account-options'
 import {

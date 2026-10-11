@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, withBypass } from "@openbooks/engine/src/platform/db.ts";
-import { createScratchOrg, dropScratchOrg, seedFlowActors } from "@openbooks/engine/src/testing/fixtures.ts";
-import { seedEmployment } from "@openbooks/engine/src/testing/hrm-harness.ts";
+import { db, withBypass } from "@openbooks/engine/platform/db";
+import { createScratchOrg, dropScratchOrg, seedFlowActors } from "@openbooks/engine/testing/fixtures";
+import { seedEmployment } from "@openbooks/engine/testing/hrm-harness";
 import { createSetupRecord, updateSetupRecord } from "./write.ts";
 
 /**

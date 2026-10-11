@@ -25,9 +25,9 @@ registerHooks({
     return next(specifier, context);
   },
 });
-const { withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
-const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
-const { createLeaseAgreement } = await import("@openbooks/engine/src/revenue/leases.ts");
+const { withOrgContext } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
+const { createLeaseAgreement } = await import("@openbooks/engine/revenue/leases");
 const { POST } = await import("./route.ts");
 
 function post(id: string, body: unknown): Promise<{ status: number; json: Record<string, unknown> }> {

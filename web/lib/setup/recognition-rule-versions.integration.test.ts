@@ -17,26 +17,26 @@ import test from "node:test";
 // The writer imports the server-only marker; shim it like the other
 // route-level tests do (same seam as subsidiary-scope.test.ts).
 const { sql } = await import("drizzle-orm");
-const { db } = await import("@openbooks/engine/src/platform/db.ts");
+const { db } = await import("@openbooks/engine/platform/db");
 const {
   createScratchOrg,
   dropScratchOrgReporting,
   seedFlowActors,
   seedApprovalFlow,
-} = await import("@openbooks/engine/src/testing/fixtures.ts");
+} = await import("@openbooks/engine/testing/fixtures");
 const {
   buildRecognitionSchedule,
   runRevenueRecognition,
-} = await import("@openbooks/engine/src/revenue/recognition.ts");
+} = await import("@openbooks/engine/revenue/recognition");
 const {
   proposeRevenueModification,
   applyRevenueModification,
-} = await import("@openbooks/engine/src/revenue/contract-modifications.ts");
+} = await import("@openbooks/engine/revenue/contract-modifications");
 const { submitFinancialChange } = await import(
-  "@openbooks/engine/src/flows/financial-changes-adapter.ts"
+  "@openbooks/engine/flows/financial-changes-adapter"
 );
-const { decideGate } = await import("@openbooks/engine/src/flows/gates.ts");
-const { toUnits } = await import("@openbooks/engine/src/money/money.ts");
+const { decideGate } = await import("@openbooks/engine/testing/flows/gates");
+const { toUnits } = await import("@openbooks/engine/money/money");
 const { createSetupRecord, updateSetupRecord } = await import("./write.ts");
 
 const DB = !!process.env.OPENBOOKS_DB_URL;

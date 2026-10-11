@@ -3,14 +3,14 @@ import { defineRoute } from '@/lib/api/route';
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { deleteDocument, DeleteError } from '@openbooks/engine/src/ledger/document-delete.ts'
-import { ScopeNotFoundError } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
-import { captureTransactionAuditSnapshot, recordTransactionAudit } from '@openbooks/engine/src/records/transaction-audit.ts'
+import { db } from '@openbooks/engine/platform/db'
+import { deleteDocument, DeleteError } from '@openbooks/engine/ledger/document-delete'
+import { ScopeNotFoundError } from '@openbooks/engine/organization/scope'
+import { captureTransactionAuditSnapshot, recordTransactionAudit } from '@openbooks/engine/records/transaction-audit'
 import { guardSubsidiaryScope } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'
-import { DocumentEditError, requireDocumentEditRevision, runDocumentVersionedTransaction } from "../../../../../engine/src/records/document-edit-policy.ts";
-import { documentRevisionCounterSql } from "../../../../../engine/src/records/revision.ts";
+import { DocumentEditError, requireDocumentEditRevision, runDocumentVersionedTransaction } from "@openbooks/engine/records/document-edit-policy";
+import { documentRevisionCounterSql } from "@openbooks/engine/records/revision";
 import { type ExpenseEditBody, persistExpenseEdit, prepareExpenseEdit } from '../../../../lib/expense-edit'
 import { loadExpenseReport } from '../../../../lib/expenses'
 import { notFound } from "@/lib/api/responses";

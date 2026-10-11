@@ -75,11 +75,11 @@ const mockSources = new Map<string, string>([
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === '@openbooks/engine/src/platform/db.ts') return { url: 'mock:db', shortCircuit: true }
-    if (specifier === '@openbooks/engine/src/tax/pack-provisioning.ts') {
+    if (specifier === '@openbooks/engine/platform/db') return { url: 'mock:db', shortCircuit: true }
+    if (specifier === '@openbooks/engine/tax/pack-provisioning') {
       return { url: 'mock:provisioning', shortCircuit: true }
     }
-    if (specifier === '@openbooks/engine/src/tax/seed-tax-forms.ts') {
+    if (specifier === '@openbooks/engine/tax/seed-tax-forms') {
       return { url: 'mock:seed-forms', shortCircuit: true }
     }
     if (specifier === '@/lib/authz' || specifier.endsWith('/lib/authz')) return { url: 'mock:authz', shortCircuit: true }

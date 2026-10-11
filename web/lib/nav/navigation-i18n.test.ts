@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs'
 import test from 'node:test'
 import { createTranslator } from 'next-intl'
 import { NAV_MODULES, NAV_GROUPS } from './registry'
-import { LOCAL_NAVIGATION } from '@openbooks/engine/src/navigation/local-navigation.ts'
+import { LOCAL_NAVIGATION } from '@openbooks/engine/testing/navigation/local-navigation'
 
 const locales = ['en', 'fr', 'es', 'de', 'pt-BR', 'zh', 'ja']
 const read = (locale: string, namespace: string) => JSON.parse(readFileSync(new URL(`../../messages/${locale}/${namespace === 'continuousClose' ? 'continuous-close' : namespace}.json`, import.meta.url), 'utf8')) as Record<string, Record<string, string>>

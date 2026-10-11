@@ -47,7 +47,7 @@ import {
   type UnbilledClient,
   type EffectiveInvoicingClient,
 } from './tabs/BillingSection'
-import { SUBDIVISIONS } from '@openbooks/engine/src/compliance/lien-jurisdictions.ts'
+import { SUBDIVISIONS } from '@openbooks/engine/compliance/lien-jurisdictions'
 import { fetchAction } from '@braedonsaunders/appkit-errors'
 import { ActionAlert } from '@braedonsaunders/appkit-errors/react'
 import { useMoney } from '@/components/money-provider'

@@ -5,8 +5,8 @@ import { apiErrorResponse } from '@/lib/api/error-response'
 import { parseJsonBody } from "@/lib/api/json"
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { PayrollError } from "@openbooks/engine/src/payroll/error.ts";
+import { db } from '@openbooks/engine/platform/db'
+import { PayrollError } from "@openbooks/engine/payroll/error";
 import {
   comparablePayRuns,
   comparableSlots,
@@ -15,7 +15,7 @@ import {
   priorRegisters,
   runParallelComparison,
   suggestedPayRunForRegister,
-} from '@openbooks/engine/src/payroll/parallel-run-store.ts'
+} from '@openbooks/engine/payroll/parallel-run-store'
 import '../../../../lib/feature-gates';
 import { isUuid } from '../../../../lib/list-params'
 import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'

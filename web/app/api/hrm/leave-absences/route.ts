@@ -1,6 +1,6 @@
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { recordAbsence } from "@openbooks/engine/src/hrm/attendance.ts";
+import { recordAbsence } from "@openbooks/engine/hrm/attendance";
 import { leaveErrorResponse } from "../leave-requests/_lib";
 import { recordAbsenceBody } from "../leave-requests/bodies";
 /**

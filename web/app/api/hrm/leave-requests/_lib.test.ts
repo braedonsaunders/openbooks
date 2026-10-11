@@ -8,9 +8,9 @@ process.env.OPENBOOKS_DB_URL = "";
 process.env.OPENBOOKS_MIGRATION_DB_URL = "";
 
 const { leaveErrorResponse } = await import("./_lib.ts");
-const { HrmAuthorizationError } = await import("@openbooks/engine/src/hrm/authorization.ts");
-const { LeaveError } = await import("@openbooks/engine/src/hrm/leave-errors.ts");
-import type { LeaveErrorCode } from "@openbooks/engine/src/hrm/leave-errors.ts";
+const { HrmAuthorizationError } = await import("@openbooks/engine/hrm/authorization");
+const { LeaveError } = await import("@openbooks/engine/hrm/leave-errors");
+import type { LeaveErrorCode } from "@openbooks/engine/hrm/leave-errors";
 
 test("every refusal code maps to its status with the message intact", () => {
   const cases: Array<[LeaveErrorCode, number]> = [

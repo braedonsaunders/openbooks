@@ -2,18 +2,18 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
-import { toUnits } from "@openbooks/engine/src/money/money.ts";
+import { db } from "@openbooks/engine/platform/db";
+import { toUnits } from "@openbooks/engine/money/money";
 import {
   createScratchOrg,
   createScratchUser,
   dropScratchOrg,
-} from "@openbooks/engine/src/testing/fixtures.ts";
-import { postDocument } from "@openbooks/engine/src/ledger/posting-document.ts";
+} from "@openbooks/engine/testing/fixtures";
+import { postDocument } from "@openbooks/engine/ledger/posting-document";
 import {
   correctReceiptQuantity,
-} from "@openbooks/engine/src/inventory/receipt-void-dependents.ts";
-import { getOnHand } from "@openbooks/engine/src/inventory/position.ts";
+} from "@openbooks/engine/inventory/receipt-void-dependents";
+import { getOnHand } from "@openbooks/engine/testing/inventory/position";
 import {
   createOrderDraft,
   fulfillSalesOrder,
@@ -276,7 +276,7 @@ test("correcting into billed cover refuses", { skip: !DB }, async () => {
               'Widget', '100', 'ea', '2', '200', '0', ${seed.location}, '{}'::jsonb)
     `);
     await db.execute(sql`update documents set status = 'approved' where id = ${billId} and org_id = ${seed.orgId}`);
-    const { matchVendorBillLines } = await import("@openbooks/engine/src/payables/vendor-bill-matching.ts");
+    const { matchVendorBillLines } = await import("@openbooks/engine/payables/vendor-bill-matching");
     await matchVendorBillLines({
       orgId: seed.orgId,
       billId,

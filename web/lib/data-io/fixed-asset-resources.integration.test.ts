@@ -7,10 +7,10 @@ const { fixedAssetsResource, FIXED_ASSETS_DESCRIPTOR } = (await import(
   './fixed-asset-resources.ts'
 )) as typeof import('./fixed-asset-resources.ts')
 
-const { db, withOrgTransaction } = await import('@openbooks/engine/src/platform/db.ts')
-const { runDepreciation } = await import('@openbooks/engine/src/assets/depreciation.ts')
+const { db, withOrgTransaction } = await import('@openbooks/engine/platform/db')
+const { runDepreciation } = await import('@openbooks/engine/assets/depreciation')
 const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import(
-  '@openbooks/engine/src/testing/fixtures.ts'
+  '@openbooks/engine/testing/fixtures'
 )
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL)

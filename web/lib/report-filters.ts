@@ -16,7 +16,7 @@ import type {
 } from './statement-matrix'
 import type { ReportDrillTarget } from './report-drill'
 import type { AgingCurrencyBasis } from './reports/aging'
-import { isUuid } from '@openbooks/engine/src/platform/uuid.ts'
+import { isUuid } from '@openbooks/engine/platform/identifiers'
 
 export type ReportScale = 'actual' | 'thousands' | 'millions'
 export type ProjectReportScope = 'active' | 'all'

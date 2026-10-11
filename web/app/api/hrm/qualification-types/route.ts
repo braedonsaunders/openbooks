@@ -1,10 +1,10 @@
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { db } from "@openbooks/engine/platform/db";
 import {
   createQualificationType,
   listQualificationTypes,
-} from "@openbooks/engine/src/hrm/qualifications/types.ts";
+} from "@openbooks/engine/hrm/qualifications/types";
 import { qualificationErrorResponse } from "../qualifications/_lib";
 import { createQualificationTypeBody } from "../qualifications/bodies";
 /** Qualification types: the org-declared taxonomy (Setup mirrors this). */

@@ -53,7 +53,7 @@ registerHooks({
     if (specifier === "../../../../lib/features") {
       return { url: "mock:features", shortCircuit: true };
     }
-    if (specifier === "@openbooks/engine/src/hrm/documents/documents.ts") {
+    if (specifier === "@openbooks/engine/hrm/documents/documents") {
       return { url: "mock:hrm-documents", shortCircuit: true };
     }
     return nextResolve(specifier, context);

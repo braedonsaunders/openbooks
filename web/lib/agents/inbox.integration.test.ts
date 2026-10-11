@@ -16,11 +16,11 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context);
 } });
 const { sql } = await import('drizzle-orm');
-const { db, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts');
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts');
+const { db, withOrgContext } = await import('@openbooks/engine/platform/db');
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures');
 const { getAuthz } = await import('../authz');
 const { loadAgentInbox } = await import('./inbox');
-const { CONTINUOUS_CLOSE_AGENT_KEYS } = await import('@openbooks/engine/src/agents/continuous-close-config.ts');
+const { CONTINUOUS_CLOSE_AGENT_KEYS } = await import('@openbooks/engine/agents/continuous-close-config');
 const { AGENT_READ_PERMS } = await import('../continuous-close');
 
 async function seedFinding(orgId: string, row: {

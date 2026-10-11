@@ -65,9 +65,9 @@ const setupResourceUrl = "./data-io/setup-resources.ts?segment-hierarchy-contrac
 const { setupResource } = (await import(setupResourceUrl)) as typeof import("./data-io/setup-resources.ts");
 const { SETUP_ENTITY_BY_KEY } = await import("./setup/registry.ts");
 
-const { db } = await import("@openbooks/engine/src/platform/db.ts");
+const { db } = await import("@openbooks/engine/platform/db");
 const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import(
-  "@openbooks/engine/src/testing/fixtures.ts"
+  "@openbooks/engine/testing/fixtures"
 );
 
 

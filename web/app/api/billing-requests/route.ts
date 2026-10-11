@@ -3,7 +3,7 @@ import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
 
 import { NextResponse } from "next/server";
-import { normalizeMoney } from "@openbooks/engine/src/money/money.ts";
+import { normalizeMoney } from "@openbooks/engine/money/money";
 import { guardPermission } from "../../../lib/authz";
 import { isUuid } from "../../../lib/list-params";
 import {

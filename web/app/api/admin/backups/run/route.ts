@@ -1,8 +1,8 @@
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
-import { db, withOrgTransaction } from "@openbooks/engine/src/platform/db.ts";
-import { s3Enabled } from "@openbooks/engine/src/platform/file-storage.ts";
+import { db, withOrgTransaction } from "@openbooks/engine/platform/db";
+import { s3Enabled } from "@openbooks/engine/platform/file-storage";
 import { enqueueBackupRun } from "@openbooks/jobs";
 import { guardPermission } from "../../../../../lib/authz";
 

@@ -3,7 +3,7 @@ import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { db } from "@openbooks/engine/platform/db";
 import { parseFormSchema } from "@openbooks/forms-core";
 import { auditSetupChange } from "../../../../../../lib/setup/audit";
 import { getTemplateByKey } from "../../../_lib";

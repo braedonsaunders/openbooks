@@ -1,4 +1,4 @@
-import { replaceUsageRatingBands } from "@openbooks/engine/src/billing/usage/rating-plans.ts";
+import { replaceUsageRatingBands } from "@openbooks/engine/billing/usage/rating-plans";
 import { defineRoute } from "@/lib/api/route";
 import { z } from "zod";
 

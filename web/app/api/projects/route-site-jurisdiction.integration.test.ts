@@ -49,8 +49,8 @@ const hooks = registerHooks({
 const { POST } = await import("./route.ts");
 const { PATCH } = await import("./[id]/route.ts");
 
-const { db } = await import("@openbooks/engine/src/platform/db.ts");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
+const { db } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
 
 
 async function fixture() {

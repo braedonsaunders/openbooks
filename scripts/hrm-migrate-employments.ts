@@ -43,30 +43,30 @@
 import { readFileSync, realpathSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { sql } from "drizzle-orm";
-import { db, pool } from "../engine/src/platform/db.ts";
-import { isUuid } from "../engine/src/platform/uuid.ts";
-import { decideProductionApply } from "../engine/src/hrm/migration-cli-gate.ts";
+import { db, pool } from "@openbooks/engine/platform/db";
+import { isUuid } from "@openbooks/engine/platform/identifiers";
+import { decideProductionApply } from "@openbooks/engine/hrm/migration-cli-gate";
 import {
   collectLegacyEmployments,
   EmploymentCollectionError,
   type OperatorEmploymentMapping,
-} from "../engine/src/hrm/migration-collect.ts";
+} from "@openbooks/engine/hrm/migration-collect";
 import {
   MappingApprovalError,
   requestMigrationMappingApproval,
-} from "../engine/src/hrm/migration-approval.ts";
+} from "@openbooks/engine/hrm/migration-approval";
 import {
   EmploymentMigrationError,
   EmploymentMigrationRefusalError,
   executeEmploymentMigration,
   migrationExitCode,
   type EmploymentMigrationReport,
-} from "../engine/src/hrm/migration-execute.ts";
+} from "@openbooks/engine/hrm/migration-execute";
 import {
   hashOperatorMappingSet,
   type MappingSetEntry,
   type SourcePersonRow,
-} from "../engine/src/hrm/migration-preflight.ts";
+} from "@openbooks/engine/hrm/migration-preflight";
 
 function usage(): string {
   return [

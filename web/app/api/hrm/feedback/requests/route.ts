@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import {
   fulfillRequest,
   listOpenRequestsForParty,
-} from "@openbooks/engine/src/hrm/performance/feedback.ts";
+} from "@openbooks/engine/hrm/performance/feedback";
 
 import { isFeatureEnabled } from "../../../../../lib/features";
 import { performanceErrorResponse } from "../../review-cycles/_lib";

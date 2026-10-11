@@ -55,9 +55,9 @@ const hooks = registerHooks({
 const routeUrl = "./route.ts?rates-currency-serialization-test";
 const { POST } = (await import(routeUrl)) as typeof import("./route.ts");
 
-const { withBypassContext, withOrgContext, db, pool } = await import("@openbooks/engine/src/platform/db.ts");
+const { withBypassContext, withOrgContext, db, pool } = await import("@openbooks/engine/platform/db");
 const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } = await import(
-  "@openbooks/engine/src/testing/fixtures.ts"
+  "@openbooks/engine/testing/fixtures"
 );
 type PoolClient = import("pg").PoolClient;
 

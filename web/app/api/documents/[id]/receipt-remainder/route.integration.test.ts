@@ -22,11 +22,11 @@ registerHooks({
     return next(specifier, context)
   },
 })
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
 const { sql } = await import('drizzle-orm')
-const { toUnits } = await import('@openbooks/engine/src/money/money.ts')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
-const { postDocument } = await import('@openbooks/engine/src/ledger/posting-document.ts')
+const { toUnits } = await import('@openbooks/engine/money/money')
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
+const { postDocument } = await import('@openbooks/engine/ledger/posting-document')
 const { createOrderDraft, fulfillSalesOrder, receivePurchaseOrder } = await import('@/lib/order-cycle.ts')
 const { POST: voidDocument } = await import('../void/route.ts')
 const { POST: correctRemainder } = await import('./route.ts')
@@ -161,7 +161,7 @@ test('a closed-period reversal date refuses typed so the void dialog stays open'
       select ${randomUUID()}, ${org.orgId}, fiscal_calendar_id,
              2026, 8, '2026-08', '2026-08-01', '2026-08-31', false, '{}'::jsonb
         from accounting_periods where id = ${org.periodId}`))
-    const { setPeriodLockState } = await import('@openbooks/engine/src/periods/period-locks.ts')
+    const { setPeriodLockState } = await import('@openbooks/engine/periods/period-locks')
     await withOrgContext(org.orgId, () => setPeriodLockState({
       orgId: org.orgId, periodId: org.periodId, bookId: org.bookId,
       module: 'ap', state: 'closed', actorId: actor, reason: 'closed-period void control',

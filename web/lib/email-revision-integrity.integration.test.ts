@@ -12,9 +12,9 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier,context);
 }});
 const { sql } = await import('drizzle-orm');
-const { db, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
-const { readOrgEmailConfigView, saveOrgEmailConfig, OrgEmailConfigConflictError } = await import("@openbooks/engine/src/delivery/email-config.ts");
+const { db, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
+const { readOrgEmailConfigView, saveOrgEmailConfig, OrgEmailConfigConflictError } = await import("@openbooks/engine/delivery/email-config/module");
 const { PUT } = await import("../app/api/admin/email/route");
 for (const operation of ['engine', 'http']) {
   test(`email ${operation} refuses a one-microsecond stale form`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
@@ -40,7 +40,7 @@ for (const operation of ['engine', 'http']) {
 test('email saves in one transaction advance the revision and reject a replay', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const org = await createScratchOrg();
   try {
-    const { withOrg } = await import("@openbooks/engine/src/platform/db.ts");
+    const { withOrg } = await import("@openbooks/engine/platform/db");
     await withOrg(org.orgId, async () => {
       const actor = {kind:'system' as const,reason:'Revision regression'};
       const first = await saveOrgEmailConfig(org.orgId,{enabled:false,fromName:'First'},actor);

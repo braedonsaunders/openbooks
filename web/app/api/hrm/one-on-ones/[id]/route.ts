@@ -7,7 +7,7 @@ import {
   getOneOnOne,
   holdOneOnOne,
   skipOneOnOne,
-} from "@openbooks/engine/src/hrm/performance/one-on-ones.ts";
+} from "@openbooks/engine/hrm/performance/one-on-ones";
 
 import { isFeatureEnabled } from "../../../../../lib/features";
 import { performanceErrorResponse } from "../../review-cycles/_lib";

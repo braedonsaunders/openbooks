@@ -27,8 +27,11 @@
  */
 import { execFileSync } from "node:child_process";
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
-import { dirname, join, posix, resolve } from "node:path";
+import { dirname, isAbsolute, join, posix, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
+import { isBuiltin } from "node:module";
+import { importsOf } from "./engine-imports.mjs";
+export { importsOf } from "./engine-imports.mjs";
 
 export const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const ENGINE = "engine/src";
@@ -88,11 +91,16 @@ export function moduleOf(file) {
 }
 
 const RESOLVE_EXTS = ["", ".ts", ".tsx", ".mts", ".mjs", ".js", "/index.ts"];
-function resolveTarget(fromFile, spec, root) {
+function resolveTarget(fromFile, spec, root, exports = {}) {
   let candidate;
   if (spec.startsWith("@openbooks/engine/src/")) candidate = `${ENGINE}/${spec.slice("@openbooks/engine/src/".length)}`;
+  else if (spec.startsWith("@openbooks/engine/")) {
+    const target = exports[`./${spec.slice("@openbooks/engine/".length)}`];
+    if (typeof target === "string") candidate = posix.normalize(posix.join("engine", target));
+  }
   else if (spec.startsWith(".")) candidate = posix.normalize(posix.join(posix.dirname(fromFile), spec));
   else return null;
+  if (!candidate) return null;
   candidate = candidate.replace(/[?#].*$/, "");
   for (const ext of RESOLVE_EXTS) {
     const p = candidate + ext;
@@ -100,11 +108,6 @@ function resolveTarget(fromFile, spec, root) {
   }
   return null;
 }
-
-// Static imports/re-exports and dynamic `import("…")` with a literal specifier.
-// `import type` counts: a type dependency is still a dependency the module
-// cannot compile without.
-const IMPORT_RE = /(?:^|[^.\w$])(?:import|export)\s*(?:type\s+)?(?:[\w$*{}\s,]*?\s*from\s*)?\(?\s*(['"])([^'"\n]+)\1|(?:^|[^.\w$])import\s*\(\s*(['"])([^'"\n]+)\3\s*\)/gm;
 
 // Comments are not dependencies. Block comments are blanked (newlines kept so
 // line numbers survive) and whole-line `//` comments are blanked; a `//` inside
@@ -115,20 +118,12 @@ export function stripComments(source) {
     .replace(/^[ \t]*\/\/.*$/gm, "");
 }
 
-export function importsOf(file, source) {
-  const out = [];
-  const code = stripComments(source);
-  const lineAt = (index) => code.slice(0, index).split("\n").length;
-  for (const m of code.matchAll(IMPORT_RE)) {
-    const spec = m[2] ?? m[4];
-    if (!spec) continue;
-    out.push({ spec, line: lineAt(m.index + m[0].indexOf(spec)) });
-  }
-  return out;
-}
-
 export function analyze(root = ROOT) {
   const manifest = loadManifest(root);
+  const packageFile = join(root, "engine/package.json");
+  const enginePackage = existsSync(packageFile) ? JSON.parse(readFileSync(packageFile, "utf8")) : null;
+  const exports = enginePackage?.exports ?? {};
+  const dependencies = new Set(Object.keys({ ...enginePackage?.dependencies, ...enginePackage?.devDependencies }));
   const declared = new Set(Object.keys(manifest.modules));
   const problems = [];
   const usedEdges = new Map(); // "a->b" -> first file:line
@@ -149,11 +144,31 @@ export function analyze(root = ROOT) {
     const isTest = TEST.test(file);
     const source = readFileSync(join(root, file), "utf8");
     for (const { spec, line } of importsOf(file, source)) {
-      if (spec.startsWith("@/")) {
+      if (!isTest && spec.startsWith("@openbooks/engine/testing/")) {
+        problems.push(`${file}:${line}: engine production code must not import test-support contracts ("${spec}").`);
+        continue;
+      }
+      let filesystemTarget;
+      if (spec.startsWith("file:")) {
+        try { filesystemTarget = relative(root, fileURLToPath(spec)); } catch { /* The compiler diagnoses invalid file URLs. */ }
+      } else if (isAbsolute(spec)) filesystemTarget = relative(root, spec);
+      else if (spec.startsWith(".")) filesystemTarget = posix.normalize(posix.join(posix.dirname(file), spec));
+      if (spec.startsWith("@/") || spec === "web" || spec.startsWith("web/") || filesystemTarget?.startsWith("web/")
+        || spec === "next" || spec.startsWith("next/") || spec === "next-intl" || spec.startsWith("next-intl/")) {
         if (!isTest) problems.push(`${file}:${line}: engine code must not import the web app ("${spec}"). Move the shared piece into the engine or a package; only engine TESTS may reach into web.`);
         continue;
       }
-      const target = resolveTarget(file, spec, root);
+      if (!isTest && enginePackage && !spec.startsWith(".") && !isAbsolute(spec) && !spec.startsWith("file:") && !isBuiltin(spec)) {
+        if (spec.startsWith("@openbooks/engine/")) {
+          if (!Object.hasOwn(exports, `./${spec.slice("@openbooks/engine/".length)}`)) {
+            problems.push(`${file}:${line}: unknown engine package contract "${spec}".`);
+          }
+        } else {
+          const dependency = spec.split('/').slice(0, spec.startsWith('@') ? 2 : 1).join('/');
+          if (!dependencies.has(dependency)) problems.push(`${file}:${line}: dependency "${dependency}" must be declared by engine/package.json; the engine cannot rely on a web workspace dependency.`);
+        }
+      }
+      const target = resolveTarget(file, spec, root, exports);
       if (!target || !target.startsWith(`${ENGINE}/`)) continue;
       const targetMod = moduleOf(target);
       if (targetMod === null || targetMod === mod) continue;
@@ -256,12 +271,13 @@ function analyzeUsageOnly() {
   const files = engineFiles();
   const dirs = [...new Set(files.map(moduleOf).filter(Boolean))];
   const usedEdges = new Set();
+  const exports = JSON.parse(readFileSync(join(ROOT, "engine/package.json"), "utf8")).exports;
   for (const file of files) {
     const mod = moduleOf(file);
     if (!mod || !SOURCE.test(file) || TEST.test(file)) continue;
     const source = readFileSync(join(ROOT, file), "utf8");
     for (const { spec } of importsOf(file, source)) {
-      const target = resolveTarget(file, spec, ROOT);
+      const target = resolveTarget(file, spec, ROOT, exports);
       if (!target || !target.startsWith(`${ENGINE}/`)) continue;
       const t = moduleOf(target);
       if (t && t !== mod) usedEdges.add(`${mod}->${t}`);

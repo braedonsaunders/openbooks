@@ -1,7 +1,7 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { getSurveyResults } from "@openbooks/engine/src/hrm/surveys/responses.ts";
+import { getSurveyResults } from "@openbooks/engine/hrm/surveys/responses";
 import { hrmDocumentsErrorResponse } from "../../../documents/_lib";
 /** Aggregate results only — the reader grants no path back to a respondent. */
 export const GET = defineRoute({

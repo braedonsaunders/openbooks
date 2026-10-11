@@ -96,9 +96,9 @@ const mockSources = new Map<string, string>([
 const mockUrls = new Map<string, string>([
   ["../../../../../lib/authz", "mock:authz"],
   ["../../../../../lib/features", "mock:features"],
-  ["@openbooks/engine/src/hrm/self-service/self-read.ts", "mock:self-read"],
-  ["@openbooks/engine/src/hrm/self-service/team-read.ts", "mock:team-read"],
-  ["@openbooks/engine/src/hrm/self-service/profile-changes.ts", "mock:profile-changes"],
+  ["@openbooks/engine/hrm/self-service/self-read", "mock:self-read"],
+  ["@openbooks/engine/hrm/self-service/team-read", "mock:team-read"],
+  ["@openbooks/engine/hrm/self-service/profile-changes", "mock:profile-changes"],
 ]);
 
   registerHooks({
@@ -208,7 +208,7 @@ test("filing validates the body before the service runs, then 201s", async () =>
 test("a no-link refusal reaches the caller as a 403 with the remedy intact", async () => {
   reset();
   const { SelfServiceError } = await import(
-    "@openbooks/engine/src/hrm/self-service/actor.ts"
+    "@openbooks/engine/hrm/self-service/actor"
   );
   routeState.serviceThrow = new SelfServiceError(
     "NO_LINK",
@@ -222,7 +222,7 @@ test("a no-link refusal reaches the caller as a 403 with the remedy intact", asy
 test("a report-less team refusal reaches the caller as a 403", async () => {
   reset();
   const { SelfServiceError } = await import(
-    "@openbooks/engine/src/hrm/self-service/actor.ts"
+    "@openbooks/engine/hrm/self-service/actor"
   );
   routeState.serviceThrow = new SelfServiceError("NO_TEAM", "no direct reports as of 2026-09-20 — team visibility follows the current line");
   const response = await teamRoute!.GET(readRequest());
@@ -233,7 +233,7 @@ test("a report-less team refusal reaches the caller as a 403", async () => {
 test("malformed proposals map to 400 and unknown rows to 404", async () => {
   reset();
   const { SelfServiceError } = await import(
-    "@openbooks/engine/src/hrm/self-service/actor.ts"
+    "@openbooks/engine/hrm/self-service/actor"
   );
   routeState.serviceThrow = new SelfServiceError("REFUSED", "profile change refused: phone must not be blank");
   assert.equal((await stepsRoute!.GET(readRequest())).status, 400);
@@ -243,7 +243,7 @@ test("malformed proposals map to 400 and unknown rows to 404", async () => {
 
 test("a nested change-request refusal keeps the shared mapping", async () => {
   reset();
-  const { HrmChangeRequestError } = await import("@openbooks/engine/src/hrm/change-requests.ts");
+  const { HrmChangeRequestError } = await import("@openbooks/engine/hrm/change-requests/operations");
   routeState.serviceThrow = new HrmChangeRequestError("INVALID_PAYLOAD", "change payload invalid: foo");
   const response = await fileRoute!.POST(
     postFile({ employmentId: EMPLOYMENT_ID, changes: { kind: "profile_change", phone: "x" }, reason: "moved" }),

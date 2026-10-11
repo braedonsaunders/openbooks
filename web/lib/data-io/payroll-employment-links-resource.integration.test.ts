@@ -3,11 +3,11 @@ import { randomUUID } from 'node:crypto'
 import test from 'node:test'
 import { sql } from 'drizzle-orm'
 import { db, withBypassContext } from '@openbooks/engine/platform/database'
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from '@openbooks/engine/src/testing/fixtures.ts'
+import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from '@openbooks/engine/testing/fixtures'
 import { payrollProfileEmployment } from '@openbooks/engine/payroll/setup'
 import { payrollEmploymentLinksResource } from './payroll-employment-links-resource'
-import { createPayRun } from '@openbooks/engine/src/payroll/run-lifecycle.ts'
-import { payRunReadiness } from '@openbooks/engine/src/payroll/readiness.ts'
+import { createPayRun } from '@openbooks/engine/payroll/run-lifecycle'
+import { payRunReadiness } from '@openbooks/engine/payroll/readiness'
 
 async function fixture() {
   const { orgId, subsidiaryId } = await createScratchOrg()

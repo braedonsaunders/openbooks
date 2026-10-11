@@ -6,16 +6,16 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { stubModules } from '../../../../testing/stub-modules'
 import { db, withBypassContext } from '@openbooks/engine/platform/database'
-import { createScratchOrg, createScratchUser, dropScratchOrg } from '@openbooks/engine/src/testing/fixtures.ts'
-import { setFeatures } from '@openbooks/engine/src/testing/hrm-harness.ts'
-import { seedPayrollComponents } from '@openbooks/engine/src/payroll/run-setup.ts'
-import { seedOntarioEhtFixture } from '@openbooks/engine/src/payroll/filing-test-fixtures.ts'
-import { calculatePayRun } from '@openbooks/engine/src/payroll/run-calculation.ts'
-import { createPayRun } from '@openbooks/engine/src/payroll/run-lifecycle.ts'
+import { createScratchOrg, createScratchUser, dropScratchOrg } from '@openbooks/engine/testing/fixtures'
+import { setFeatures } from '@openbooks/engine/testing/hrm-harness'
+import { seedPayrollComponents } from '@openbooks/engine/payroll/run-setup'
+import { seedOntarioEhtFixture } from '@openbooks/engine/testing/payroll/filing-test-fixtures'
+import { calculatePayRun } from '@openbooks/engine/payroll/run-calculation'
+import { createPayRun } from '@openbooks/engine/payroll/run-lifecycle'
 import {
   seedPayrollSchedule, seedPayrollEmployeeRole, seedPayrollPerson, seedPayrollTime,
   seedPayrollProfile, seedPayrollWage, seedWorkerEmployment,
-} from '@openbooks/engine/src/testing/fixtures.ts'
+} from '@openbooks/engine/testing/fixtures'
 
 /**
  * POST employee-components — the assignment write path the Payroll tab drives:

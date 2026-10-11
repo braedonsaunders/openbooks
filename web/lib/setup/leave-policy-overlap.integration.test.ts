@@ -10,8 +10,8 @@ import test from "node:test";
  */
 
 const { sql } = await import("drizzle-orm");
-const { db, withBypass } = await import("@openbooks/engine/src/platform/db.ts");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
+const { db, withBypass } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
 const { createSetupRecord, updateSetupRecord } = await import("./write.ts");
 
 const DB = !!process.env.OPENBOOKS_DB_URL;

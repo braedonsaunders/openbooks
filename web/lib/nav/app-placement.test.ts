@@ -41,7 +41,7 @@ stubModules({ intl: true, navigation: {}, authz: false, features: false, extra: 
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === '@openbooks/engine/src/extensions/projections.ts' || specifier === '@openbooks/engine/extensions/navigation') {
+    if (specifier === '@openbooks/engine/extensions/projections' || specifier === '@openbooks/engine/extensions/navigation') {
       return {
         shortCircuit: true,
         url: 'data:text/javascript,export async function listActiveExtensionContributions() { return [] }',

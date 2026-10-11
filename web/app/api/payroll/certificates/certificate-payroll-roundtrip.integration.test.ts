@@ -19,12 +19,12 @@ registerHooks({
     return next(specifier, context)
   },
 })
-const { db, pool, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, pool, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
 const { sql } = await import('drizzle-orm')
-const { setPackSlotAccount } = await import('@openbooks/engine/src/payroll/packs.ts')
-const { upsertPayrollEmployerFact } = await import('@openbooks/engine/src/payroll/employer-fact-store.ts')
-const { calculatePayRun } = await import("@openbooks/engine/src/payroll/run-calculation.ts"), { commitPayRun } = await import("@openbooks/engine/src/payroll/run-commit.ts"), { createPayRun } = await import("@openbooks/engine/src/payroll/run-lifecycle.ts"), { seedPayrollComponents } = await import("@openbooks/engine/src/payroll/run-setup.ts");
-const { createScratchOrg, createScratchUser, dropScratchOrg, seedWorkerEmployment } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { setPackSlotAccount } = await import('@openbooks/engine/payroll/packs')
+const { upsertPayrollEmployerFact } = await import('@openbooks/engine/payroll/employer-fact-store')
+const { calculatePayRun } = await import("@openbooks/engine/payroll/run-calculation"), { commitPayRun } = await import("@openbooks/engine/payroll/run-commit"), { createPayRun } = await import("@openbooks/engine/payroll/run-lifecycle"), { seedPayrollComponents } = await import("@openbooks/engine/payroll/run-setup");
+const { createScratchOrg, createScratchUser, dropScratchOrg, seedWorkerEmployment } = await import('@openbooks/engine/testing/fixtures')
 const { POST } = await import('./route')
 
 /**

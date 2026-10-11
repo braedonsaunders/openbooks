@@ -37,15 +37,15 @@ registerHooks({
     return next(specifier, context)
   },
 })
-const { db, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withOrgContext } = await import('@openbooks/engine/platform/db')
 const { sql } = await import('drizzle-orm')
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import('@openbooks/engine/testing/fixtures')
 const { opportunityWhere, OPPORTUNITY_BASE_JOINS } = await import(
   '../../../../../lib/customization/entity-list-query/opportunities.ts'
 )
 const { PATCH } = await import('./route.ts')
 const { defaultListView } = await import('@openbooks/customization')
-const { installTrustedTestDatabaseBypass } = await import(root + 'engine/src/testing/database-bypass.ts')
+const { installTrustedTestDatabaseBypass } = await import('@openbooks/engine/testing/database-bypass')
 // The route chain pulls in web/lib/request-org, which claims the
 // process-global request-org resolver slot at import time and displaces the
 // trusted test bypass installed by the --import preload. Re-install last so

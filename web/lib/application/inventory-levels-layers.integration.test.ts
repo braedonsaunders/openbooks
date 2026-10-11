@@ -7,13 +7,13 @@ import test from "node:test";
 // adjustments rewrite layers plus GL and write no movement rows, so a
 // movement sum overstates value after either.
 const { sql } = await import("drizzle-orm");
-const { withBypassContext, db } = await import("@openbooks/engine/src/platform/db.ts");
+const { withBypassContext, db } = await import("@openbooks/engine/platform/db");
 const { createScratchOrg, dropScratchOrg } = await import(
-  "@openbooks/engine/src/testing/fixtures.ts"
+  "@openbooks/engine/testing/fixtures"
 );
-const { receiveInventory } = await import("@openbooks/engine/src/inventory/movements.ts");
-const { writeDownInventoryToNrv } = await import("@openbooks/engine/src/inventory/nrv.ts");
-const { postLandedCostVoucher } = await import("@openbooks/engine/src/inventory/landed-cost.ts");
+const { receiveInventory } = await import("@openbooks/engine/inventory/movements");
+const { writeDownInventoryToNrv } = await import("@openbooks/engine/testing/inventory/nrv");
+const { postLandedCostVoucher } = await import("@openbooks/engine/inventory/landed-cost");
 const { listApplicationInventoryLevels } = await import("./inventory-read.ts");
 const { ApplicationError } = await import("./errors.ts");
 type ApplicationContext = import("./context.ts").ApplicationContext;

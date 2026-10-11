@@ -1,5 +1,5 @@
 import { canonicalDecimal } from './exact-decimal'
-import { isUuid } from '@openbooks/engine/src/platform/uuid.ts'
+import { isUuid } from '@openbooks/engine/platform/identifiers'
 
 /**
  * Pricing provenance for a priced document line (0336). When a line's price

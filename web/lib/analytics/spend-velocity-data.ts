@@ -2,7 +2,7 @@ import "server-only";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
 import { statementBookExpr } from "../gl-summary";
 import { flowRates } from "../fx-presentation";
-import { add, cmp, div, mulDecimal, neg } from "@openbooks/engine/src/money/money.ts";
+import { add, cmp, div, mulDecimal, neg } from "@openbooks/engine/money/money";
 import { sql } from "drizzle-orm";
 import type { FiscalPeriod } from "@openbooks/reports";
 import { analyticsQuery } from "./query";

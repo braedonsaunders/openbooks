@@ -1,7 +1,7 @@
 import { isPeriodPreset } from '@openbooks/reports'
 import { accountClassTypes } from './account-types'
 import type { ReportDrillTarget } from './report-drill'
-import { isUuid } from '@openbooks/engine/src/platform/uuid.ts'
+import { isUuid } from '@openbooks/engine/platform/identifiers'
 
 /** Every CoA balance drills the GL ledger, so callers may read the ledger
  *  fields (mode/from/to, accountIds/accountTypes) without narrowing first. */

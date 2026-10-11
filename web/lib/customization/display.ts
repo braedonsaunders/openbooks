@@ -1,4 +1,4 @@
-import { DEFAULT_VIEW_NAME } from '../../../engine/src/provisioning/default-view-name.ts'
+import { DEFAULT_VIEW_NAME } from '@openbooks/engine/provisioning/default-view-name'
 
 /**
  * Display names for resolved customization rows.

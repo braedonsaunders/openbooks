@@ -59,8 +59,8 @@ const patchRouteUrl = "./[id]/route.ts?reconcilable-currency-patch";
 const { POST } = (await import(postRouteUrl)) as typeof import("./route.ts");
 const { PATCH, GET } = (await import(patchRouteUrl)) as typeof import("./[id]/route.ts");
 
-const { withBypassContext, db } = await import("@openbooks/engine/src/platform/db.ts");
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
+const { withBypassContext, db } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
 
 
 function postRequest(key: string, body: unknown): Request {

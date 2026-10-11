@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import {
   evaluateRetentionRule,
   listRetentionRuns,
-} from "@openbooks/engine/src/hrm/recruiting/retention.ts";
+} from "@openbooks/engine/hrm/recruiting/retention";
 
 import { recruitingErrorResponse } from "../../../_lib";
 

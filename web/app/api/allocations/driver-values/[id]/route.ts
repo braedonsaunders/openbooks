@@ -8,7 +8,7 @@ import {
   DriverAdminError,
   deleteDriverValue,
   updateDriverValue,
-} from "../../../../../../engine/src/allocations/driver-admin.ts";
+} from "@openbooks/engine/allocations/driver-admin";
 import { notFound } from "@/lib/api/responses";
 
 

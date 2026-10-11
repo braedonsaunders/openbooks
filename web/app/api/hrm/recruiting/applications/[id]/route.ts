@@ -7,7 +7,7 @@ import {
   moveApplicationStage,
   rejectApplication,
   withdrawApplication,
-} from "@openbooks/engine/src/hrm/recruiting/applications.ts";
+} from "@openbooks/engine/hrm/recruiting/applications";
 
 import { isUuid } from "../../../../../../lib/list-params";
 import { recruitingErrorResponse } from "../../_lib";

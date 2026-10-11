@@ -1,11 +1,11 @@
 import { defineRoute } from "@/lib/api/route";
 import { notFound } from "@/lib/api/responses";
 import { NextResponse } from "next/server";
-import { fileLeaveRequest } from "@openbooks/engine/src/hrm/leave.ts";
+import { fileLeaveRequest } from "@openbooks/engine/hrm/leave";
 import {
   listLeaveRequests,
   myLeaveRequests,
-} from "@openbooks/engine/src/hrm/leave-read.ts";
+} from "@openbooks/engine/hrm/leave-read";
 import { guardPermission } from "../../../../lib/authz";
 import { isFeatureEnabled } from "../../../../lib/features";
 import { isUuid } from "../../../../lib/list-params";

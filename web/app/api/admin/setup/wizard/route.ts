@@ -4,14 +4,14 @@ import { apiErrorResponse } from '@/lib/api/error-response'
 
 import { NextResponse } from 'next/server'
 import { sql, type SQL } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/db'
 import { guardPermission, guardUnrestrictedScope } from '../../../../../lib/authz'
 import { FEATURE_BY_KEY, acquireFeatureGateLock, featureDisableBlocked, featureRequirements } from '../../../../../lib/features'
 import { INDUSTRY_BY_KEY, canSwitchIndustry } from '../../../../../lib/industries'
 import { NEUTRAL_INDUSTRY_KEY } from '../../../../../lib/industry-keys'
 import { normalizeCountryCode } from '../../../../../lib/countries'
-import { canonicalTimeZone } from '@openbooks/engine/src/platform/time-zone.ts'
-import { lockLedgerSetupFence } from '@openbooks/engine/src/organization/ledger-setup-fence.ts'
+import { canonicalTimeZone } from '@openbooks/engine/platform/time-zone'
+import { lockLedgerSetupFence } from '@openbooks/engine/organization/ledger-setup'
 import {
   periodDerivationSql,
   periodDerivationStagingSql,

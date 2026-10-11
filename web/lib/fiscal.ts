@@ -1,7 +1,7 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { addCalendarDays, businessToday } from '@openbooks/engine/src/platform/business-date.ts'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { addCalendarDays, businessToday } from '@openbooks/engine/platform/business-date/module'
+import { db } from '@openbooks/engine/platform/db'
 import { fiscalContextFor, fiscalYearOf, fiscalYearStartOn, type FiscalContext, type FiscalPeriod } from '@openbooks/reports'
 import { resolveOrgId } from './org-scope'
 

@@ -4,9 +4,9 @@ import { registeredListTable } from '../../../../lib/list/prepared-spec'
 import { notFound, redirect } from 'next/navigation'
 import { sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/db'
 import { CUSTOM_FIELD_TARGETS } from '@openbooks/customization'
-import { documentRevisionSql } from '@openbooks/engine/src/records/revision.ts'
+import { documentRevisionSql } from '@openbooks/engine/records/revision'
 import {
   pagination,
   badge,

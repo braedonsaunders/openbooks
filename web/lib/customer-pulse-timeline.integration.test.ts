@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto'
 import test from 'node:test'
 import { sql } from 'drizzle-orm'
 import { db, withBypassContext, withOrgContext } from '@openbooks/engine/platform/database'
-import { assertDedicatedFixtureDatabase, createScratchOrg, createScratchUser, dropScratchOrg } from '@openbooks/engine/src/testing/fixtures.ts'
+import { assertDedicatedFixtureDatabase, createScratchOrg, createScratchUser, dropScratchOrg } from '@openbooks/engine/testing/fixtures'
 import { loadCustomerPulseTimeline } from './customer-pulse-timeline'
 
 const ALL = { ar: true, crm: true, projects: false }

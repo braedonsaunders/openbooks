@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { checkWorkOrderCreateReplay, createWorkOrder, type WorkOrderInput } from "@openbooks/engine/src/manufacturing/work-orders.ts";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { checkWorkOrderCreateReplay, createWorkOrder, type WorkOrderInput } from "@openbooks/engine/manufacturing/work-orders";
+import { db } from "@openbooks/engine/platform/db";
 import { guardSubsidiaryScope } from "@/lib/authz";
 import { defineRoute } from "@/lib/api/route";
 import { created } from "@/lib/api/responses";

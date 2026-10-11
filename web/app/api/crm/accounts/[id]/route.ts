@@ -6,16 +6,16 @@ import { crmSharedScope } from '../../../../../lib/crm-scope'
 import { parseJsonBody } from "@/lib/api/json"
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { CrmLifecycleRefusalError, promoteCrmAccount, transitionCrmAccountStage } from '@openbooks/engine/src/crm/crm.ts'
-import { normalizeMoney } from '@openbooks/engine/src/money/money.ts'
+import { db } from '@openbooks/engine/platform/db'
+import { CrmLifecycleRefusalError, promoteCrmAccount, transitionCrmAccountStage } from '@openbooks/engine/crm/crm'
+import { normalizeMoney } from '@openbooks/engine/money/money'
 import '../../../../../lib/feature-gates';
 import { isUuid } from '../../../../../lib/list-params'
 import { loadCrmAccount } from '../../../../../lib/crm'
 import { findUnownedCustomReferences, loadFieldDefs, unknownCustomFieldKey, validateCustomValues } from '../../../../../lib/custom-fields'
 import { isIsoTimestamp } from '../../../../../lib/crm-dates'
 import { canonicalDecimal, compareDecimal } from '../../../../../lib/exact-decimal'
-import { documentRevisionSql, isDocumentRevisionToken } from '@openbooks/engine/src/records/revision.ts'
+import { documentRevisionSql, isDocumentRevisionToken } from '@openbooks/engine/records/revision'
 import { moneyRefusal } from '../../../../../lib/payroll-decimal-refusal'
 import { notFound } from "@/lib/api/responses";
 

@@ -19,19 +19,19 @@ import {
   widgetBlock,
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
-import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
-import { isCivilDate } from '@openbooks/engine/src/hrm/temporal.ts'
+import { businessToday } from '@openbooks/engine/platform/business-date/module'
+import { isCivilDate } from '@openbooks/engine/hrm/temporal'
 import {
   formatFte,
   HrmPositionError,
   parseFte,
-} from '@openbooks/engine/src/hrm/positions.ts'
+} from '@openbooks/engine/hrm/positions'
 import {
   getPositionAsOf,
   getVacancyAsOf,
-} from '@openbooks/engine/src/hrm/positions-read.ts'
+} from '@openbooks/engine/hrm/positions-read'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/db'
 import { hrmGroupTabs } from '../../../../components/module-home/group-tabs'
 import { can, requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
@@ -40,7 +40,7 @@ import {
   subsidiaryUiOptions,
 } from '../../../../lib/subsidiaries'
 import { listScopedDepartmentOptions } from '../../../../lib/scoped-options'
-import type { PositionRowDTO } from '@openbooks/engine/src/hrm/positions-read.ts'
+import type { PositionRowDTO } from '@openbooks/engine/hrm/positions-read'
 import type { PositionCreateProps } from './PositionCreateForm'
 import type { PositionManageProps } from './PositionManageForm'
 

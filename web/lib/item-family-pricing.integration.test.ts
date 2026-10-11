@@ -3,9 +3,9 @@ import { randomUUID } from 'node:crypto'
 import test from 'node:test'
 import { sql } from 'drizzle-orm'
 
-const { db, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import('@openbooks/engine/src/testing/fixtures.ts')
-const { createItemFamily, generateFamilyVariants } = await import('@openbooks/engine/src/inventory/item-families.ts')
+const { db, withBypassContext } = await import('@openbooks/engine/platform/db')
+const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import('@openbooks/engine/testing/fixtures')
+const { createItemFamily, generateFamilyVariants } = await import('@openbooks/engine/testing/inventory/item-families')
 const { resolveItemPrice } = await import('./item-pricing.ts')
 
 const enabled = { skip: !process.env.OPENBOOKS_DB_URL }

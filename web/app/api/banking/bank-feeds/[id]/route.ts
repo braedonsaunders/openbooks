@@ -2,14 +2,14 @@ import { z } from 'zod';
 import { defineRoute } from '@/lib/api/route';
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
-import { db, type SqlExecutor } from "@openbooks/engine/src/platform/db.ts";
-import { lockScopeRow, ScopeNotFoundError } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
+import { db, type SqlExecutor } from "@openbooks/engine/platform/db";
+import { lockScopeRow, ScopeNotFoundError } from "@openbooks/engine/organization/scope";
 import {
   resolveFeedSyncOverlapDays,
   sealCredentials,
   syncBankFeedNow,
   testBankFeedConnection,
-} from "@openbooks/engine/src/banking/bank-feed-providers.ts";
+} from "@openbooks/engine/banking/bank-feed-providers";
 import { isUuid } from "../../../../../lib/list-params";
 import type { Authz } from "../../../../../lib/authz";
 import { notFound } from "@/lib/api/responses";

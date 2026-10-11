@@ -1,10 +1,10 @@
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { db } from "@openbooks/engine/platform/db";
 import {
   createClassification,
   listClassifications,
-} from "@openbooks/engine/src/hrm/construction/classifications.ts";
+} from "@openbooks/engine/hrm/construction/classifications";
 import { constructionErrorResponse } from "../_lib";
 import { createClassificationBody } from "../bodies";
 /** Work classifications: the org's trade taxonomy (Setup registry mirrors this). */

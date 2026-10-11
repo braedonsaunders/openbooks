@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { sql } from 'drizzle-orm'
 import { PgDialect } from 'drizzle-orm/pg-core'
 import test from 'node:test'
-import { subsidiaryScopeAllows, subsidiaryVisibleFilter } from '../../engine/src/organization/subsidiary-scope.ts'
+import { subsidiaryScopeAllows, subsidiaryVisibleFilter } from '@openbooks/engine/organization/scope'
 
 const { guardSubsidiaryScope, subsidiariesInScope } = await import('./authz.ts')
 

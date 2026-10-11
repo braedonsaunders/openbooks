@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { NAV_MODULES } from '@openbooks/engine/src/navigation/nav-registry.ts'
+import { NAV_MODULES } from '@openbooks/engine/navigation/nav-registry'
 import { ICON_KEYS } from './sidebar-nav'
 
 test('every menu entry names an icon the sidebar can draw', () => {

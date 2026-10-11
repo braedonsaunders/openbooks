@@ -58,15 +58,15 @@ registerScopedHooks({
 });
 
 const { sql } = await import("drizzle-orm");
-const { db, withBypass, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
+const { db, withBypass, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
-  "@openbooks/engine/src/testing/fixtures.ts"
+  "@openbooks/engine/testing/fixtures"
 );
 const { loadApprovals } = await import("./view.ts");
 const { inboxContext, inboxCounts } = await import("../../../lib/inbox-context");
-const { writeNotification } = await import("@openbooks/engine/src/inbox/adapters/notification.ts");
+const { writeNotification } = await import("@openbooks/engine/inbox/adapters/notification");
 type Authz = import("@/lib/authz.ts").Authz;
-type ScratchOrg = import("@openbooks/engine/src/testing/fixtures.ts").ScratchOrg;
+type ScratchOrg = import("@openbooks/engine/testing/fixtures").ScratchOrg;
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -265,7 +265,7 @@ test("badge is zero when only decided history remains", { skip: !DB }, async () 
     await withOrgContext(org.orgId, async () => {
       const authz = state.authz as Authz;
       const ctx = await inboxContext(authz);
-      const { actOnInboxItem } = await import("@openbooks/engine/src/inbox/index.ts");
+      const { actOnInboxItem } = await import("@openbooks/engine/inbox/runtime");
       for (const week of seeded) {
         await actOnInboxItem(ctx, `timesheet_approval:${week.weekId}`, "approve");
       }

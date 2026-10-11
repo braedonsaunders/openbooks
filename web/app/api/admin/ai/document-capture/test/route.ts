@@ -2,8 +2,8 @@ import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 
 import { NextResponse } from 'next/server'
-import { getDocumentCaptureTestConfig } from '@openbooks/engine/src/payables/ap-capture-config.ts'
-import { testAzureDocumentProvider } from '@openbooks/engine/src/payables/ap-capture.ts'
+import { getDocumentCaptureTestConfig } from '@openbooks/engine/payables/ap-capture-config'
+import { testAzureDocumentProvider } from '@openbooks/engine/payables/ap-capture'
 
 
 const requestBodySchema = z.object({

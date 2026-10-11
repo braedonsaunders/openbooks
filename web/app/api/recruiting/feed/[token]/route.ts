@@ -1,6 +1,6 @@
 import { defineRoute } from '@/lib/api/route';
 import { NextResponse } from "next/server";
-import { listFeedPostings, resolveFeedOrg } from "@openbooks/engine/src/hrm/recruiting/postings.ts";
+import { listFeedPostings, resolveFeedOrg } from "@openbooks/engine/hrm/recruiting/postings";
 import { recruitingErrorResponse } from "../../../hrm/recruiting/_lib";
 
 export const runtime = "nodejs";

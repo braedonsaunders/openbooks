@@ -89,21 +89,21 @@ registerHooks({
         url: "data:text/javascript,export async function hrmGroupTabs() { return []; }",
       };
     }
-    if (owned && specifier === "@openbooks/engine/src/hrm/change-requests.ts") {
+    if (owned && specifier === "@openbooks/engine/hrm/change-requests/operations") {
       return {
         shortCircuit: true,
         format: "module",
         url: "data:text/javascript,export async function listChangeRequests() { return []; } export class HrmChangeRequestError extends Error {}",
       };
     }
-    if (owned && specifier === "@openbooks/engine/src/hrm/authorization.ts") {
+    if (owned && specifier === "@openbooks/engine/hrm/authorization") {
       return {
         shortCircuit: true,
         format: "module",
         url: "data:text/javascript,export class HrmAuthorizationError extends Error {}",
       };
     }
-    if (owned && specifier === "@openbooks/engine/src/platform/db.ts") {
+    if (owned && specifier === "@openbooks/engine/platform/db") {
       return {
         shortCircuit: true,
         format: "module",

@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import {
   createRetentionRule,
   listRetentionRules,
-} from "@openbooks/engine/src/hrm/recruiting/retention.ts";
+} from "@openbooks/engine/hrm/recruiting/retention";
 
 import { recruitingErrorResponse } from "../_lib";
 import { createRetentionRuleBody } from "./bodies";

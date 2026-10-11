@@ -4,7 +4,7 @@ import { z } from "zod";
 import {
   fulfilPayInformationRequest,
   refusePayInformationRequest,
-} from "@openbooks/engine/src/hrm/compensation/pay-transparency.ts";
+} from "@openbooks/engine/hrm/compensation/pay-transparency";
 
 import { isUuid } from "../../../../../lib/list-params";
 import { compensationErrorResponse } from "../../compensation/_lib";

@@ -12,7 +12,7 @@ import { PgDialect } from "drizzle-orm/pg-core";
 // real and rendered with the Postgres dialect.
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "@openbooks/engine/src/platform/db.ts") {
+    if (specifier === "@openbooks/engine/platform/db") {
       return {
         shortCircuit: true,
         format: "module",

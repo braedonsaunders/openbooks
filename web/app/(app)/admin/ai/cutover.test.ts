@@ -37,7 +37,7 @@ registerHooks({
     if (specifier === '@openbooks/ui') {
       return { shortCircuit: true, url: worktreeUi }
     }
-    if (specifier === '@openbooks/engine/src/platform/db.ts' || specifier.endsWith('/platform/db.ts')) {
+    if (specifier === '@openbooks/engine/platform/db' || specifier.endsWith('/platform/db.ts')) {
       return { shortCircuit: true, format: 'module', url: 'mock:ai-cutover-db' }
     }
     if (specifier === '@/lib/authz' || specifier.endsWith('lib/authz') || specifier.endsWith('/authz')) {

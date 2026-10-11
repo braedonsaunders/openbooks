@@ -4,7 +4,7 @@ import { NextResponse } from "next/server";
 import {
   sendOfferLink,
   voidOfferSignature,
-} from "@openbooks/engine/src/hrm/recruiting/offers-signing.ts";
+} from "@openbooks/engine/hrm/recruiting/offers-signing";
 
 import { recruitingErrorResponse } from "../../../_lib";
 import { offerSigningBody } from "./bodies";

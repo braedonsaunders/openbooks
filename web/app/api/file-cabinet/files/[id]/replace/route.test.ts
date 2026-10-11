@@ -61,9 +61,9 @@ const routeUrl = './route.ts?file-cabinet-replace'
 const { POST } = (await import(routeUrl)) as typeof import('./route.ts')
 const { createFile } = await import('../../../../../../lib/file-cabinet')
 
-const { db } = await import('@openbooks/engine/src/platform/db.ts')
+const { db } = await import('@openbooks/engine/platform/db')
 const { createScratchOrg, dropScratchOrg } = await import(
-  '@openbooks/engine/src/testing/fixtures.ts'
+  '@openbooks/engine/testing/fixtures'
 )
 
 function gate(orgId: string, userId: string, permissions: string[]) {

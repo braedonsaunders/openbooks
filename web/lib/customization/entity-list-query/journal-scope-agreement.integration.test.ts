@@ -6,8 +6,8 @@ import { sql } from "drizzle-orm";
 // fixture includes standalone journals, source-linked migration postings,
 // reversed journal records, and ordinary subledger postings. Query builders
 // and storage are real; only server-only is stubbed.
-const { db, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
-const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
+const { db, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
 const { JOURNAL_ENTRY_TABLE, journalEntryWhere, journalScopeWhere } = await import("./journal-entries.ts");
 const { defaultListView } = await import("@openbooks/customization");
 const { readResolvedEntityListPageForView } = await import("../../list/entity-reader.ts");
@@ -63,7 +63,7 @@ async function listTotal(orgId: string): Promise<number> {
 }
 
 test("guide, header, and list count one journal scope", { skip: !DB }, async () => {
-  const { withBypass } = await import("@openbooks/engine/src/platform/db.ts");
+  const { withBypass } = await import("@openbooks/engine/platform/db");
   const org = await withBypass(() => createScratchOrg());
   try {
     await withOrgContext(org.orgId, async () => {

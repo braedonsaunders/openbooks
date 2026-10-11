@@ -2,7 +2,7 @@ import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 
 import { NextResponse } from 'next/server'
-import { delegateGate } from '@openbooks/engine/src/flows/index.ts'
+import { delegateGate } from '@openbooks/engine/flows/module'
 import { guardSubsidiaryScope } from '../../../../../lib/authz'
 import { isUuid } from '../../../../../lib/list-params'
 import { gateErrorResponse, loadGateHeader } from '../../_lib'

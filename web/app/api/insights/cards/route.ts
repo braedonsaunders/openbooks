@@ -4,7 +4,7 @@ import { z } from "zod";
 import { INSIGHT_VIZ_TYPES, validateInsightQuery } from "@openbooks/analytics";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { db } from "@openbooks/engine/platform/db";
 import { isUuid } from "../../../../lib/list-params";
 import {
   claimIdempotentCreate,

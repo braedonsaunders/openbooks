@@ -1,7 +1,7 @@
 import "server-only";
 import { z } from "zod";
 import { getLocale, getTranslations } from "next-intl/server";
-import { withOrg } from "@openbooks/engine/src/platform/db.ts";
+import { withOrg } from "@openbooks/engine/platform/db";
 import { burdenRateFor } from "@openbooks/engine/hrm/compensation";
 import type { AssistantToolDef, ToolResult } from "./types";
 import { dateInput, numberValue, capList, decimalText, rangeInputFields, resolveToolRange, type RangeArgs } from "./tools-shared";

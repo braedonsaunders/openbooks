@@ -1,7 +1,7 @@
 import 'server-only'
 import { sql, type SQL } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { add, cmp, neg, normalizeMoney } from '@openbooks/engine/src/money/money.ts'
+import { db } from '@openbooks/engine/platform/db'
+import { add, cmp, neg, normalizeMoney } from '@openbooks/engine/money/money'
 import { marginPercentText } from './financial-decimal'
 import { subsidiaryVisibleFilter } from './subsidiaries'
 

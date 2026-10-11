@@ -248,7 +248,7 @@ function mockedUrl(specifier: string): string | null {
   // web routes use the canonical package specifier; both resolve to the
   // same module, so match it by suffix or the mock silently misses and the
   // REAL database receives the query.
-  if (specifier === "@openbooks/engine/src/platform/db.ts") return "mock:db";
+  if (specifier === "@openbooks/engine/platform/db") return "mock:db";
   if (/(^|\/)platform\/db\.ts$/.test(specifier)) return "mock:db";
   return mockUrls.get(specifier) ?? null;
 }

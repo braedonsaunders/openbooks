@@ -16,7 +16,7 @@ import { Badge, Button, Drawer, FieldHelp, Input, Label } from '@openbooks/ui'
 import { apiJson, ApiResponseError } from '../../../../lib/api-error'
 import { PagedTable } from '../../../../components/paged-table'
 import { MoneyInput, moneyFieldError } from '../../../../components/money-input'
-import { isZeroDecimal } from '@openbooks/engine/src/money/exact-decimal.ts'
+import { isZeroDecimal } from '@openbooks/engine/money/decimal'
 
 interface DeclaredLevy {
   country: string

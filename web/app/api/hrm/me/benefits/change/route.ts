@@ -1,6 +1,6 @@
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { changeMyBenefit } from "@openbooks/engine/src/hrm/self-service/my-work.ts";
+import { changeMyBenefit } from "@openbooks/engine/hrm/self-service/my-work";
 import { meErrorResponse } from "../../_lib";
 import { changeBenefitBody } from "../../bodies";
 /**

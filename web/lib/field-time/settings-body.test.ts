@@ -9,8 +9,8 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { fieldTimeSettingsBody, normalizeFieldTimeSettingsBody } from './settings-body.ts'
-import { validateFieldTimeSettings } from '@openbooks/engine/src/hrm/field-time/settings.ts'
-import { FieldTimeError } from '@openbooks/engine/src/hrm/field-time/errors.ts'
+import { validateFieldTimeSettings } from '@openbooks/engine/hrm/field-time/settings'
+import { FieldTimeError } from '@openbooks/engine/hrm/field-time/errors'
 
 const fullRules = {
   roundingIncrement: 15,

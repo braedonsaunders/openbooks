@@ -1,7 +1,7 @@
 import { z } from "zod";
-import { loadRetainerForUpdate, updateRetainerDraft } from "@openbooks/engine/src/resourcing/retainers.ts";
-import { ResourcingRefusal } from "@openbooks/engine/src/resourcing/errors.ts";
-import { withOrgTransaction } from "@openbooks/engine/src/platform/db.ts";
+import { loadRetainerForUpdate, updateRetainerDraft } from "@openbooks/engine/resourcing/retainers";
+import { ResourcingRefusal } from "@openbooks/engine/resourcing/errors";
+import { withOrgTransaction } from "@openbooks/engine/platform/db";
 import { defineRoute } from "@/lib/api/route";
 import { unprocessable } from "@/lib/api/responses";
 import { findUnownedCustomReferences, loadFieldDefs, unknownCustomFieldKey, validateCustomValues } from "@/lib/custom-fields";

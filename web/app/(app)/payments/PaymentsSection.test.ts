@@ -78,9 +78,9 @@ const mockUrls = new Map<string, string>([
   ["next/navigation", "mock:next-navigation"],
   ["next/headers", "mock:next-headers"],
   ["next-intl/server", "mock:next-intl-server"],
-  ["@openbooks/engine/src/platform/db.ts", "mock:engine-db"],
-  ["@openbooks/engine/src/payments/payment-queries.ts", "mock:payment-queries"],
-  ["@openbooks/engine/src/platform/business-date.ts", "mock:business-date"],
+  ["@openbooks/engine/platform/db", "mock:engine-db"],
+  ["@openbooks/engine/payments/payment-queries", "mock:payment-queries"],
+  ["@openbooks/engine/platform/business-date/module", "mock:business-date"],
   ["./PaymentDrawer", "mock:payment-drawer"],
 ]);
 

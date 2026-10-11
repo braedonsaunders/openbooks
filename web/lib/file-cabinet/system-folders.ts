@@ -1,6 +1,6 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/db'
 export { ensureAttachmentsRoot, ensureRecordFolder } from '@openbooks/engine/platform/record-folders'
 
 /** System intake folder for AP capture source packets. */

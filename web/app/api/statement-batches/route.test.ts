@@ -16,15 +16,15 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context)
 }})
 const { sql } = await import('drizzle-orm')
-const { db, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
-const { postDocument } = await import('@openbooks/engine/src/ledger/posting-document.ts')
+const { db, withOrgContext } = await import('@openbooks/engine/platform/db')
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
+const { postDocument } = await import('@openbooks/engine/ledger/posting-document')
 const { randomUUID } = await import('node:crypto')
 const preview = await import('./preview/route')
 const batches = await import('./route')
 const detail = await import('./[id]/route')
 const retry = await import('./[id]/retry/route')
-const { registerRequestOrgResolver } = await import('@openbooks/engine/src/platform/db.ts')
+const { registerRequestOrgResolver } = await import('@openbooks/engine/platform/db')
 registerRequestOrgResolver(() => ({ orgId: null, bypass: true }))
 
 async function setup(permissions: string[] = ['*']) {
@@ -107,7 +107,7 @@ test('batch create refuses without the send grant and without transport', async 
 test('batch create records the run, detail shows items, retry requeues failures', async () => {
   const { org, actor } = await setup()
   try {
-    const { saveOrgEmailConfig } = await import('@openbooks/engine/src/delivery/email-config.ts')
+    const { saveOrgEmailConfig } = await import('@openbooks/engine/delivery/email-config/module')
     await withOrgContext(org.orgId, () =>
       saveOrgEmailConfig(
         org.orgId,

@@ -4,13 +4,13 @@ import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from 'next/server'
 import { and, eq } from 'drizzle-orm'
 import { evaluateLogicRule, planAutomation, type EvalContext } from '@openbooks/forms-core'
-import { db, schema, withOrgContext } from '@openbooks/engine/src/platform/db.ts'
+import { db, schema, withOrgContext } from '@openbooks/engine/platform/db'
 import {
   dispatchFailureReason,
   getFlowAdapter,
   parseFlowGraph,
   runRecordFlows,
-} from '@openbooks/engine/src/flows/index.ts'
+} from '@openbooks/engine/flows/module'
 import { can, guardSubsidiaryScope, type Authz } from '../../../../lib/authz'
 import { canReadFlowSubject, manualButtonPermission } from '../../../../lib/flow-subject-authz'
 import { loadFlowSubjectSubsidiary, requireFlowsRecordReader } from '../_lib'

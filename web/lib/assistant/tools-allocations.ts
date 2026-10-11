@@ -1,7 +1,7 @@
 import "server-only";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { db } from "@openbooks/engine/platform/db";
 import { can, guardUnrestrictedScope, type Authz } from "../authz";
 import { entryDetail } from "../data";
 import { isFeatureEnabled } from "../features";
@@ -23,34 +23,34 @@ import {
   getRuleDetail,
   getRuleVersion,
   listRuleHeads,
-} from "../../../engine/src/allocations/rules.ts";
+} from "@openbooks/engine/allocations/rules";
 import {
   DriverAdminError,
   getDimensionValueLabels,
   getDriver,
   listDrivers,
   vectorShares,
-} from "../../../engine/src/allocations/driver-admin.ts";
+} from "@openbooks/engine/allocations/driver-admin";
 import {
   DriverNotAvailableError,
   previewDriverVector,
-} from "../../../engine/src/allocations/drivers.ts";
+} from "@openbooks/engine/allocations/drivers";
 import {
   postDriverResolver,
   runDriverReport,
-} from "../../../engine/src/allocations/report-runner.ts";
-import { previewAllocationRun } from "../../../engine/src/allocations/period-run.ts";
+} from "@openbooks/engine/allocations/report-runner";
+import { previewAllocationRun } from "@openbooks/engine/allocations/period-run";
 import {
   allocationScopeVisible,
   previewPinError,
-} from "../../../engine/src/organization/allocation-scope.ts";
+} from "@openbooks/engine/organization/allocation-scope";
 import {
   RunQueryError,
   getRun,
   listRuns,
   queryLineage,
   validateLineageAnchor,
-} from "../../../engine/src/allocations/run-queries.ts";
+} from "@openbooks/engine/allocations/run-queries";
 
 /**
  * Allocation-kernel read tools for the agentic assistant (A13). Every tool

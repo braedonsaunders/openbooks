@@ -5,7 +5,7 @@ import { NextResponse } from "next/server";
 import {
   cancelInterview,
   completeInterview,
-} from "@openbooks/engine/src/hrm/recruiting/interviews.ts";
+} from "@openbooks/engine/hrm/recruiting/interviews";
 
 import { isUuid } from "../../../../../../lib/list-params";
 import { recruitingErrorResponse } from "../../_lib";

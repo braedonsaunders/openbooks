@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { canonicalDecimal, compareDecimal } from "@openbooks/engine/src/money/exact-decimal.ts";
+import { canonicalDecimal, compareDecimal } from "@openbooks/engine/money/decimal";
 
 function percentage(field: string) {
   return z.string({ error: `${field} must be sent as a decimal string` }).transform((raw, ctx) => {

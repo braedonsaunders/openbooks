@@ -88,7 +88,7 @@ registerHooks({
     ) {
       return { url: "mock:authz", shortCircuit: true };
     }
-    if (specifier === "@openbooks/engine/src/sftp/import-job.ts") {
+    if (specifier === "@openbooks/engine/sftp/import-job") {
       return { url: "mock:import-job", shortCircuit: true };
     }
     return nextResolve(specifier, context);
@@ -108,16 +108,16 @@ const itemUrl = "./route.ts?sftp-schedule-toggle-delete-test";
 const { PATCH, DELETE } = (await import(itemUrl)) as typeof import("./route.ts");
 
 const { db, pool, withBypass, withOrgContext } =
-  await import("@openbooks/engine/src/platform/db.ts");
+  await import("@openbooks/engine/platform/db");
 // The REAL notice identity (this specifier is not mocked): the route must
 // resolve exactly the rows the scheduler writes — a copy here would make
 // the test self-consistent and hollow.
 const {
   SFTP_UNBOUND_SCHEDULE_NOTICE_KIND,
   sftpUnboundScheduleNoticeHref,
-} = await import("@openbooks/engine/src/sftp/schedule-notice.ts");
+} = await import("@openbooks/engine/sftp/schedule-notice");
 const { createScratchOrg, createScratchUser, dropScratchOrg } =
-  await import("@openbooks/engine/src/testing/fixtures.ts");
+  await import("@openbooks/engine/testing/fixtures");
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 

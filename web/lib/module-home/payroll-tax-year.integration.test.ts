@@ -3,10 +3,10 @@ import { randomUUID } from 'node:crypto'
 import test from 'node:test'
 import { sql } from 'drizzle-orm'
 
-const { db, env, withBypass } = await import('@openbooks/engine/src/platform/db.ts')
-const { toUnits } = await import('@openbooks/engine/src/money/money.ts')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
-const { withSimClock: pinClock } = await import('@openbooks/engine/src/platform/clock.ts')
+const { db, env, withBypass } = await import('@openbooks/engine/platform/db')
+const { toUnits } = await import('@openbooks/engine/money/money')
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
+const { withSimClock: pinClock } = await import('@openbooks/engine/testing/platform/clock')
 const { payrollHome } = await import('./payroll.ts')
 
 const DB = !!env.OPENBOOKS_DB_URL

@@ -89,8 +89,8 @@ const mockSources = new Map<string, string>([
 const mockUrls = new Map<string, string>([
   ["../../../../lib/authz", "mock:authz"],
   ["../../../../lib/features", "mock:features"],
-  ["@openbooks/engine/src/inbox/index.ts", "mock:inbox"],
-  ["@openbooks/engine/src/platform/business-date.ts", "mock:business-date"],
+  ["@openbooks/engine/inbox/runtime", "mock:inbox"],
+  ["@openbooks/engine/platform/business-date/module", "mock:business-date"],
 ]);
 
 const hooks = registerHooks({

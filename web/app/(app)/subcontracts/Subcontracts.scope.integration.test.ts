@@ -29,8 +29,8 @@ stubModules({
 })
 
 const { loadSubcontracts } = await import('./view.ts') as typeof import('./view.ts')
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
+const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
 
 function insertParty(orgId: string, id: string, name: string, subsidiaryId: string | null) {
   return db.execute(sql`

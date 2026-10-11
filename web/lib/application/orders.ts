@@ -1,6 +1,6 @@
 import "server-only";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { db } from "@openbooks/engine/platform/db";
 import {
   ConversionError,
   CONVERSION_TARGETS,
@@ -14,7 +14,7 @@ import {
 import { isFeatureEnabled } from "../features";
 import { purchaseOrderConversionPermission } from "../permissions";
 import { isUuid } from "../list-params";
-import { isDocumentRevisionToken } from "@openbooks/engine/src/records/revision.ts";
+import { isDocumentRevisionToken } from "@openbooks/engine/records/revision";
 import { add, compareDecimal, mulPercent, neg } from "@openbooks/engine/money";
 import {
   issueSalesOrder,

@@ -1,7 +1,7 @@
 import { lockManufacturingCenterAuthority } from "@openbooks/engine/manufacturing/authority";
 import { z } from "zod";
-import { db } from "@openbooks/engine/src/platform/db.ts";
-import { createWorkCenter, getWorkCenter, type WorkCenterInput } from "@openbooks/engine/src/manufacturing/work-centers.ts";
+import { db } from "@openbooks/engine/platform/db";
+import { createWorkCenter, getWorkCenter, type WorkCenterInput } from "@openbooks/engine/manufacturing/work-centers";
 import { guardSubsidiaryScope } from "@/lib/authz";
 import { defineRoute } from "@/lib/api/route";
 import { created } from "@/lib/api/responses";

@@ -5,9 +5,9 @@ import { exactMoney, nullableUuidId, uuidId } from '@/lib/api/json'
 import { isoDate } from '@/lib/api/json'
 import { isUuid } from '@/lib/list-params'
 import { canonicalDecimal } from '@/lib/exact-decimal'
-import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
+import { isIsoCalendarDate } from '@openbooks/engine/platform/business-date/module'
 import { resolveItemPrice } from '@/lib/item-pricing'
-import { cmp } from '@openbooks/engine/src/money/money.ts'
+import { cmp } from '@openbooks/engine/money/money'
 import { notFound } from "@/lib/api/responses";
 
 

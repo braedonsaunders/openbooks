@@ -2,8 +2,8 @@ import { z } from 'zod';
 import { defineRoute } from '@/lib/api/route';
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
-import { ControlAccountsIncompleteError } from '@openbooks/engine/src/records/control-accounts.ts'
-import { PostingError } from "@openbooks/engine/src/journal/posting-contracts.ts";
+import { ControlAccountsIncompleteError } from '@openbooks/engine/records/control-accounts'
+import { PostingError } from "@openbooks/engine/journal/contracts";
 import { isUuid } from '../../../../../../lib/list-params'
 import { addJournalMatchFromLine, JournalPostingDeniedError } from '../../../../../../lib/banking-rules'
 import { notFound } from "@/lib/api/responses";

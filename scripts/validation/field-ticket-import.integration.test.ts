@@ -1,11 +1,11 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "../../engine/src/platform/db.ts";
+import { db } from "@openbooks/engine/platform/db";
 import {
   createScratchOrg,
   dropScratchOrg,
-} from "../../engine/src/testing/fixtures.ts";
+} from "@openbooks/engine/testing/fixtures";
 import {
   importFieldTickets,
   type ImportTicket,

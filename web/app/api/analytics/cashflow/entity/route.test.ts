@@ -108,15 +108,15 @@ const mockSources = new Map<string, string>([
     // nothing to isolate, so a hand copy could only drift. businessToday
     // stays pinned — the explicit export shadows the re-exported one.
     "mock:business-date",
-    `export * from "@openbooks/engine/src/platform/business-date.ts"
+    `export * from "@openbooks/engine/platform/business-date/module"
       export async function businessToday() { return '2026-08-28' }`,
   ],
   ["mock:features", `export async function subsidiaryFeatureEnabled() { return true }`],
 ]);
 
 const mockUrls = new Map<string, string>([
-  ["@openbooks/engine/src/platform/db.ts", "mock:db"],
-  ["@openbooks/engine/src/platform/business-date.ts", "mock:business-date"],
+  ["@openbooks/engine/platform/db", "mock:db"],
+  ["@openbooks/engine/platform/business-date/module", "mock:business-date"],
   ["../../../../../lib/authz", "mock:authz"],
   ["@/lib/authz", "mock:authz"],
   ["./features", "mock:features"],

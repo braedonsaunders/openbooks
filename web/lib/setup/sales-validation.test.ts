@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import type { SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
+import type { SqlExecutor } from '@openbooks/engine/platform/db'
 import { SETUP_ENTITY_BY_KEY } from './registry.ts'
 import { validatePromotionWrite } from './sales-validation.ts'
 

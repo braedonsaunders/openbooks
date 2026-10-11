@@ -2,7 +2,7 @@ import { getAuthz, type Authz } from '@/lib/authz'
 import { isUuid } from '../../../lib/list-params'
 import { insightVisibilitySql } from '@/lib/insight-access'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/db'
 import {
   INSIGHT_VIZ_TYPES,
   validateInsightQuery,

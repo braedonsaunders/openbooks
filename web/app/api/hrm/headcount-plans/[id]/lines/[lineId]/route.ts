@@ -1,7 +1,7 @@
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { z } from "zod";
-import { approvePlanLine } from "@openbooks/engine/src/hrm/compensation/headcount-plans.ts";
+import { approvePlanLine } from "@openbooks/engine/hrm/compensation/headcount-plans";
 import { isUuid } from "../../../../../../../lib/list-params";
 import { compensationErrorResponse } from "../../../../compensation/_lib";
 /**

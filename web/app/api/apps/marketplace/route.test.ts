@@ -117,7 +117,7 @@ const mockSources = new Map<string, string>([
 const mockUrls = new Map<string, string>([
   ['next/server', 'mock:next'],
   ['drizzle-orm', 'mock:sql'],
-  ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
+  ['@openbooks/engine/platform/db', 'mock:db'],
   ['@/lib/feature-gates', 'mock:gates'],
   ['@/lib/apps/store', 'mock:store'],
   ['@/lib/application/context', 'mock:context'],

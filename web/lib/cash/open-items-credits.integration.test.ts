@@ -2,11 +2,11 @@ import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import test from 'node:test'
 const { sql } = await import('drizzle-orm')
-const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
-const { assertDedicatedFixtureDatabase, createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
-const { datedAppliedAmountSql } = await import('@openbooks/engine/src/records/balance-due.ts')
-const { cmp } = await import('@openbooks/engine/src/money/money.ts')
-const { postDocument } = await import("@openbooks/engine/src/ledger/posting-document.ts");
+const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/platform/db')
+const { assertDedicatedFixtureDatabase, createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
+const { datedAppliedAmountSql } = await import('@openbooks/engine/records/balance-due')
+const { cmp } = await import('@openbooks/engine/money/money')
+const { postDocument } = await import("@openbooks/engine/ledger/posting-document");
 const { openItems } = await import('./open-items')
 
 async function postBill(

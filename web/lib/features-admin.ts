@@ -1,8 +1,8 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
-import { lockLedgerSetupFence } from '@openbooks/engine/src/organization/ledger-setup-fence.ts'
-import { provisionFeatureDefaults } from '@openbooks/engine/src/provisioning/organization-provisioning.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
+import { lockLedgerSetupFence } from '@openbooks/engine/organization/ledger-setup'
+import { provisionFeatureDefaults } from '@openbooks/engine/provisioning/organization-provisioning'
 import {
   FEATURES,
   FEATURE_BY_KEY,
@@ -109,7 +109,7 @@ export async function applyFeatureChanges(
     // stores the disable, so a scheduler pass can never execute a script for a
     // feature the org has already turned off.
     if (clean.scripts !== undefined) {
-      const { refreshScheduledNextRuns } = await import('@openbooks/engine/src/scripting/scripting.ts')
+      const { refreshScheduledNextRuns } = await import('@openbooks/engine/scripting/scripting')
       await refreshScheduledNextRuns(orgId)
     }
     // Install each enabled feature's editable baseline under the same
@@ -122,7 +122,7 @@ export async function applyFeatureChanges(
       // (idempotent — tenant edits win, a missing default is seeded). An
       // org enabled before HR-6 still gets its funnel lazily on open.
       if (key === 'hrm' && enabled) {
-        const { ensureDefaultPipelineTemplate } = await import('@openbooks/engine/src/hrm/recruiting/pipeline.ts')
+        const { ensureDefaultPipelineTemplate } = await import('@openbooks/engine/hrm/recruiting/pipeline')
         await ensureDefaultPipelineTemplate(db, orgId, actorId)
       }
     }

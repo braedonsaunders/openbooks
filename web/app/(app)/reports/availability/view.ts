@@ -13,15 +13,15 @@ import {
   textBlock,
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { isZero } from '@openbooks/engine/src/money/money.ts'
+import { db } from '@openbooks/engine/platform/db'
+import { isZero } from '@openbooks/engine/money/money'
 import {
   AvailabilityRefusal,
   listAvailableToPromise,
   releasableBackorders,
   type AvailableToPromise,
   type ReleasableBackorder,
-} from '@openbooks/engine/src/inventory/availability.ts'
+} from '@openbooks/engine/inventory/availability'
 import { requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { isFeatureEnabled } from '../../../../lib/features'

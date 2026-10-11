@@ -6,10 +6,10 @@ import test from "node:test";
 // writer: persisted, deduplicated with the winner named, both spellings
 // accepted, and a half pair refused before anything writes.
 const { withBypassContext, withOrgContext } = await import(
-  "@openbooks/engine/src/platform/db.ts"
+  "@openbooks/engine/platform/db"
 );
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  "@openbooks/engine/src/testing/fixtures.ts"
+  "@openbooks/engine/testing/fixtures"
 );
 const { createRecord, updateRecord } = await import("./writers.ts");
 import type { ResolvedApiType } from "./registry-data.ts";

@@ -1,7 +1,7 @@
 import { defineRoute } from "@/lib/api/route";
 
 import { NextResponse } from "next/server";
-import { scheduleInterview } from "@openbooks/engine/src/hrm/recruiting/interviews.ts";
+import { scheduleInterview } from "@openbooks/engine/hrm/recruiting/interviews";
 
 import { recruitingErrorResponse } from "../_lib";
 import { scheduleInterviewBody } from "./bodies";

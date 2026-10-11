@@ -5,8 +5,8 @@ import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { parseJsonBody } from '@/lib/api/json'
 import { sql } from 'drizzle-orm'
-import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
-import { PayrollError } from '@openbooks/engine/src/payroll/error.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
+import { PayrollError } from '@openbooks/engine/payroll/error'
 import {
   demandingHolidays,
   recordEntitledDaysAttestation,
@@ -14,18 +14,18 @@ import {
   mergeHolidayEligibility,
   recordHolidayAssertion,
   type DemandingHoliday,
-} from '@openbooks/engine/src/payroll/holiday-attestations.ts'
-import { evidencedEntitledPayDays } from '@openbooks/engine/src/payroll/holidays.ts'
+} from '@openbooks/engine/payroll/holiday-attestations'
+import { evidencedEntitledPayDays } from '@openbooks/engine/payroll/holidays'
 import {
   holidayOccupationClassesOf,
   jurisdictionKey,
   occupationCapValues,
-} from '@openbooks/engine/src/payroll/packs.ts'
+} from '@openbooks/engine/payroll/packs'
 import '../../../../../../lib/feature-gates';
 import { guardSubsidiaryScope } from '../../../../../../lib/authz'
 import { isUuid } from '../../../../../../lib/list-params'
 import { notFound } from "@/lib/api/responses";
-import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
+import { isIsoCalendarDate } from '@openbooks/engine/platform/business-date/module'
 
 const assertionTarget = {
   employeePartyId: uuidId,

@@ -6,8 +6,8 @@ import test from 'node:test'
 import { createTranslator } from 'next-intl'
 
 const { sql } = await import('drizzle-orm')
-const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/platform/db')
+const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
 const { healthStrings, localizedRatioDefs } = await import('./health-strings.ts')
 type RatioDefText = import('./health-strings.ts').RatioDefText
 const { healthData } = await import('./health-data.ts')

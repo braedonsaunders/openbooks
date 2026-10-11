@@ -2,17 +2,17 @@ import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { sql } from 'drizzle-orm'
-import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
-import { encryptAccountNumber } from "@openbooks/engine/src/payments-core/rail-settings.ts";
+import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
+import { encryptAccountNumber } from "@openbooks/engine/payments-core/rail-settings";
 import { businessToday } from "@openbooks/engine/platform/business-date/module";
-import { runRecordFlows } from '@openbooks/engine/src/flows/run.ts'
-import { BANK_ACCOUNT_SUBJECT_KIND } from '@openbooks/engine/src/flows/bank-accounts-adapter.ts'
+import { runRecordFlows } from '@openbooks/engine/flows/run'
+import { BANK_ACCOUNT_SUBJECT_KIND } from '@openbooks/engine/flows/bank-accounts-adapter'
 import { defineRoute } from '../../../../../lib/api/route'
 import { authorizePartyBankWrite, denyLockedOutsidePartyScope, denyOutsidePartyScope } from './party-scope'
 import { isFeatureEnabled } from '../../../../../lib/features'
 import { isUuid } from '../../../../../lib/list-params'
 import { normalizeCountryCode } from '../../../../../lib/countries'
-import { documentRevisionSql } from "../../../../../../engine/src/records/revision.ts";
+import { documentRevisionSql } from "@openbooks/engine/records/revision";
 import { isDocumentRevisionToken } from '../../../../../lib/api/registry-data'
 import { notFound } from "@/lib/api/responses";
 

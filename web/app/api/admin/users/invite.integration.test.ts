@@ -3,8 +3,8 @@ import { registerHooks } from "node:module";
 import { pathToFileURL } from "node:url";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, withBypassContext, withOrgContext } from "@openbooks/engine/src/platform/db.ts";
-import { createScratchOrg, createScratchUser, dropScratchOrg } from "@openbooks/engine/src/testing/fixtures.ts";
+import { db, withBypassContext, withOrgContext } from "@openbooks/engine/platform/db";
+import { createScratchOrg, createScratchUser, dropScratchOrg } from "@openbooks/engine/testing/fixtures";
 
 // Invite-user vertical slice: POST action=invite → user row with an
 // unusable credential + role assignment + audit evidence → set-password link
@@ -69,7 +69,7 @@ registerHooks({
         }
       `);
     }
-    if (parent.includes("auth-reset.ts") && specifier === "@openbooks/engine/src/delivery/email-config.ts") {
+    if (parent.includes("auth-reset.ts") && specifier === "@openbooks/engine/delivery/email-config/module") {
       return virtual(`
         const state = globalThis[Symbol.for('openbooks.admin-invite-integration')];
         export async function resolveOrgEmailTransport() { return { provider: 'isolated' }; }

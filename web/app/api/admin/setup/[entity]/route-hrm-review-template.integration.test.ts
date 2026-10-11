@@ -47,11 +47,11 @@ registerHooks({
 
 const routeUrl = "./route.ts?hrm-review-template-labels-route-test";
 const { PATCH, POST } = (await import(routeUrl)) as typeof import("./route.ts");
-const { db, withBypassContext } = await import("@openbooks/engine/src/platform/db.ts");
+const { db, withBypassContext } = await import("@openbooks/engine/platform/db");
 const { createScratchOrg, createScratchUser } = await import(
-  "@openbooks/engine/src/testing/fixtures.ts"
+  "@openbooks/engine/testing/fixtures"
 );
-const { listReviewTemplates } = await import("@openbooks/engine/src/hrm/performance/review-cycles.ts");
+const { listReviewTemplates } = await import("@openbooks/engine/hrm/performance/review-cycles");
 
 async function grant(orgId: string, userId: string, permissions: string[]): Promise<void> {
   await withBypassContext(async () => {

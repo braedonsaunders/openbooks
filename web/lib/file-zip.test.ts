@@ -44,7 +44,7 @@ const mockSources = new Map<string, string>([
 
 const hooks = registerHooks({
   resolve(specifier, _context, nextResolve) {
-    if (specifier === '@openbooks/engine/src/platform/db.ts') {
+    if (specifier === '@openbooks/engine/platform/db') {
       return { shortCircuit: true, format: 'module', url: 'mock:db' }
     }
     if (specifier === './file-cabinet') {

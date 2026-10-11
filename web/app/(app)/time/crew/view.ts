@@ -3,7 +3,7 @@ import 'server-only'
 import { redirect  } from 'next/navigation'
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/db'
 import { registeredListTable } from '../../../../lib/list/prepared-spec'
 import {
   badge,
@@ -23,10 +23,10 @@ import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { isUuid } from '../../../../lib/list-params'
 import { loadOrRefuse, type PageRefusal } from '../../../../lib/load-or-refuse'
-import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
-import { FieldTimeError } from '@openbooks/engine/src/hrm/field-time/errors.ts'
-import { listCrewBatches, getBatchDetail } from '@openbooks/engine/src/hrm/field-time/reads.ts'
-import { loadFieldTimeSettings } from '@openbooks/engine/src/hrm/field-time/settings.ts'
+import { businessToday } from '@openbooks/engine/platform/business-date/module'
+import { FieldTimeError } from '@openbooks/engine/hrm/field-time/errors'
+import { listCrewBatches, getBatchDetail } from '@openbooks/engine/hrm/field-time/reads'
+import { loadFieldTimeSettings } from '@openbooks/engine/hrm/field-time/settings'
 import { scheduledWork } from '@openbooks/engine/schedule-boards/prefill'
 
 /**

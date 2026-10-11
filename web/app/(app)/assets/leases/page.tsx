@@ -1,6 +1,6 @@
 import { getTranslations } from "next-intl/server";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { db } from "@openbooks/engine/platform/db";
 import { Button, PageHeader } from "@openbooks/ui";
 import Link from "next/link";
 import { ListPageLayout } from "@/components/page-layout";

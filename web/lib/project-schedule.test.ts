@@ -137,8 +137,8 @@ stubModules({ navigation: false, intl: false, authz: false, features: false, ext
 const hooks = registerHooks({
   resolve(specifier, _context, nextResolve) {
     if (specifier === 'drizzle-orm') return { url: 'mock:drizzle', shortCircuit: true }
-    if (specifier === '@openbooks/engine/src/platform/db.ts') return { url: 'mock:db', shortCircuit: true }
-    if (specifier === '@openbooks/engine/src/organization/org-feature-lock.ts') return { url: 'mock:org-feature-lock', shortCircuit: true }
+    if (specifier === '@openbooks/engine/platform/db') return { url: 'mock:db', shortCircuit: true }
+    if (specifier === '@openbooks/engine/organization/org-feature-lock') return { url: 'mock:org-feature-lock', shortCircuit: true }
     if (specifier === '@braedonsaunders/appkit-scheduling') return { url: 'mock:scheduling', shortCircuit: true }
     return nextResolve(specifier, _context)
   },

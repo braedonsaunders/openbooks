@@ -67,15 +67,15 @@ const mockSources = new Map<string, string>([
   // nothing to isolate, so a hand copy could only drift. businessToday stays
   // pinned — the explicit export shadows the re-exported one. The old
   // identity addCalendarDays stub is gone: it dated the 7-day window as today.
-  ['mock:business-date', `export * from "@openbooks/engine/src/platform/business-date.ts"; export async function businessToday() { return '2026-08-28' }`],
+  ['mock:business-date', `export * from "@openbooks/engine/platform/business-date/module"; export async function businessToday() { return '2026-08-28' }`],
   // `can` exists only to link modules the cockpit reaches that read gates;
   // no test here decides gates.
   ['mock:authz', `export async function getAuthz() { throw new Error('explicit scope should not resolve request authz') } export function can() { return false }`],
 ])
 
 const mockUrls = new Map<string, string>([
-  ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
-  ['@openbooks/engine/src/platform/business-date.ts', 'mock:business-date'],
+  ['@openbooks/engine/platform/db', 'mock:db'],
+  ['@openbooks/engine/platform/business-date/module', 'mock:business-date'],
   ['../authz', 'mock:authz'],
 ])
 

@@ -7,7 +7,7 @@ import { toast } from 'sonner'
 import { Button, Card, CardContent, Input, Label, Select } from '@openbooks/ui'
 import { ModuleHomeTabs, type ModuleHomeTab } from '../../../../../components/module-home/ui'
 import { readApiErrorMessage } from '../../../../../lib/api-error'
-import type { ManufacturingPolicies } from '@openbooks/engine/src/manufacturing/policies.ts'
+import type { ManufacturingPolicies } from '@openbooks/engine/manufacturing/policies'
 
 export function ManufacturingSetupTabs({ tabs }: { tabs: ModuleHomeTab[] }) {
   return <ModuleHomeTabs tabs={tabs} />

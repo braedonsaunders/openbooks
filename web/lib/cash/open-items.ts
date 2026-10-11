@@ -6,9 +6,9 @@ import { mulDecimal } from '@openbooks/engine/money'
 // Relative (not the bare workspace specifier): worktree node_modules resolves
 // bare @openbooks/* to the main checkout, so a new engine module would not
 // resolve until merge; a relative import binds this checkout everywhere.
-import { AP_OPEN_ITEM_KINDS, AR_OPEN_ITEM_KINDS } from '../../../engine/src/records/open-item-kinds.ts'
-import { datedAppliedAmountSql } from '../../../engine/src/records/balance-due.ts'
-import { asOfPostedEntryLateral } from '../../../engine/src/records/open-item-scopes.ts'
+import { AP_OPEN_ITEM_KINDS, AR_OPEN_ITEM_KINDS } from '@openbooks/engine/records/open-item-kinds'
+import { datedAppliedAmountSql } from '@openbooks/engine/records/balance-due'
+import { asOfPostedEntryLateral } from '@openbooks/engine/records/open-item-scopes'
 import { lineFunctional, presentationCurrency, presentationRates } from '../fx-presentation'
 import { apOpenAccountScope, arOpenAccountScope } from '../ledger-scope'
 import { normalizeMoneyValue, parseISO, type OpenItem, type Side } from './core'

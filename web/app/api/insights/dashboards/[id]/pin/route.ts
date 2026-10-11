@@ -2,7 +2,7 @@ import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { db } from "@openbooks/engine/platform/db";
 import { insightDashboardPins } from "@openbooks/schema/src/insights.ts";
 import { isUuid } from "../../../../../../lib/list-params";
 import { loadDashboard } from "../../../_lib";

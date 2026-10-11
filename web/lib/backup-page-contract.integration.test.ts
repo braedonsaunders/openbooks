@@ -49,10 +49,10 @@ registerHooks({
 
 const gateKey = Symbol.for("openbooks.backups-gate");
 const { db, withBypassContext: withBypass } = await import(
-  "@openbooks/engine/src/platform/db.ts"
+  "@openbooks/engine/platform/db"
 );
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  "@openbooks/engine/src/testing/fixtures.ts"
+  "@openbooks/engine/testing/fixtures"
 );
 const { loadAdminBackups } = await import("../app/(app)/admin/backups/view.ts");
 
@@ -106,7 +106,7 @@ const backupRunCases = [
             if (specifier === "@openbooks/jobs") {
               return { shortCircuit: true, url: "mock:backup-run-queue" };
             }
-            if (specifier === "@openbooks/engine/src/platform/file-storage.ts") {
+            if (specifier === "@openbooks/engine/platform/file-storage") {
               return { shortCircuit: true, url: "mock:backup-run-storage" };
             }
             return nextResolve(specifier, context);
@@ -143,10 +143,10 @@ const backupRunCases = [
 
         const gateKey = Symbol.for("openbooks.backup-run-gate");
         const { db, withBypassContext: withBypass } = await import(
-          "@openbooks/engine/src/platform/db.ts"
+          "@openbooks/engine/platform/db"
         );
         const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-          "@openbooks/engine/src/testing/fixtures.ts"
+          "@openbooks/engine/testing/fixtures"
         );
         const { POST } = await import("../app/api/admin/backups/run/route.ts");
 

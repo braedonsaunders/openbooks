@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 import { sql } from 'drizzle-orm';
-import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts';
-import { createScratchOrg, dropScratchOrg, seedFlowActors } from '@openbooks/engine/src/testing/fixtures.ts';
+import { db, withOrgTransaction } from '@openbooks/engine/platform/db';
+import { createScratchOrg, dropScratchOrg, seedFlowActors } from '@openbooks/engine/testing/fixtures';
 const {setupResource}=await import('./setup-resources');
 const {SETUP_ENTITY_BY_KEY}=await import('../setup/registry');
 

@@ -4,23 +4,23 @@ import { defineRoute } from "@/lib/api/route";
 import { z } from 'zod'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { toUnits } from '@openbooks/engine/src/money/money.ts'
-import { adjustInventory, issueInventory, receiveInventory } from "@openbooks/engine/src/inventory/movements.ts";
-import { buildAssembly, reverseAssemblyBuild } from "@openbooks/engine/src/inventory/assembly.ts";
+import { db } from '@openbooks/engine/platform/db'
+import { toUnits } from '@openbooks/engine/money/money'
+import { adjustInventory, issueInventory, receiveInventory } from "@openbooks/engine/inventory/movements";
+import { buildAssembly, reverseAssemblyBuild } from "@openbooks/engine/inventory/assembly";
 import { disassembleAssembly, reverseAssemblyDisassembly } from '@openbooks/engine/inventory';
-import { executeIdempotentInventoryAction } from "@openbooks/engine/src/inventory/action-idempotency.ts";
-import { postLandedCostVoucher } from "@openbooks/engine/src/inventory/landed-cost.ts";
-import { reverseInventoryMovement } from "@openbooks/engine/src/inventory/reversal.ts";
-import { reverseMaterialIssue } from "@openbooks/engine/src/manufacturing/completion.ts";
-import { transferInventory } from "@openbooks/engine/src/inventory/transfers.ts";
+import { executeIdempotentInventoryAction } from "@openbooks/engine/inventory/action-idempotency";
+import { postLandedCostVoucher } from "@openbooks/engine/inventory/landed-cost";
+import { reverseInventoryMovement } from "@openbooks/engine/inventory/reversal";
+import { reverseMaterialIssue } from "@openbooks/engine/manufacturing/completion";
+import { transferInventory } from "@openbooks/engine/inventory/transfers";
 import { inventoryErrorStatus } from "@/lib/api/inventory-errors";
 import { can, guardPermission } from '../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../lib/features'
 import { isUuid } from '../../../../lib/list-params'
-import { INVENTORY_ACTION_PERMISSIONS, type CataloguePermission } from '@openbooks/engine/src/organization/permissions.ts'
-import { SubsidiaryError, defaultPostingSubsidiaryId, loadSubsidiaryContext } from '@openbooks/engine/src/organization/subsidiaries.ts'
-import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
+import { INVENTORY_ACTION_PERMISSIONS, type CataloguePermission } from '@openbooks/engine/organization/permissions'
+import { SubsidiaryError, defaultPostingSubsidiaryId, loadSubsidiaryContext } from '@openbooks/engine/organization/subsidiaries'
+import { businessToday } from '@openbooks/engine/platform/business-date/module'
 import { notFound } from "@/lib/api/responses";
 
 export const runtime = 'nodejs'

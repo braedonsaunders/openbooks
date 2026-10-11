@@ -9,32 +9,32 @@
  */
 import { pathToFileURL } from "node:url";
 import { sql } from "drizzle-orm";
-import { FEATURE_BY_KEY } from "../engine/src/organization/feature-registry.ts";
-import { registerWorkerDuty } from "../engine/src/scheduling/duties.ts";
-import { installEngineSeams } from "../engine/src/composition/install.ts";
-import { AUTOMATION_TICK_LOCK_KEY, runAutomationTickClaimed } from "../engine/src/automations/tick.ts";
-import { runQualificationAlertScan } from "../engine/src/hrm/qualifications/alerts.ts";
-import { SYSTEM_ACTOR_ID } from "../engine/src/banking/banking.ts";
-import { activeRetentionRuleIdsForDuty, evaluateRetentionRule } from "../engine/src/hrm/recruiting/retention.ts";
-import { db, pool, withBypassContext, withOrgContext, withOrgTransaction } from "../engine/src/platform/db.ts";
-import { businessToday } from "../engine/src/platform/business-date.ts";
-import { runRetentionTick } from "../engine/src/hrm/documents/retention.ts";
-import { drainExportQueue } from "../engine/src/hrm/documents/dsar.ts";
+import { FEATURE_BY_KEY } from "@openbooks/engine/organization/feature-registry";
+import { registerWorkerDuty } from "@openbooks/engine/scheduling/duties";
+import { installEngineSeams } from "@openbooks/engine/composition/install";
+import { AUTOMATION_TICK_LOCK_KEY, runAutomationTickClaimed } from "@openbooks/engine/automations/tick";
+import { runQualificationAlertScan } from "@openbooks/engine/hrm/qualifications/alerts";
+import { SYSTEM_ACTOR_ID } from "@openbooks/engine/banking/banking";
+import { activeRetentionRuleIdsForDuty, evaluateRetentionRule } from "@openbooks/engine/hrm/recruiting/retention";
+import { db, pool, withBypassContext, withOrgContext, withOrgTransaction } from "@openbooks/engine/platform/db";
+import { businessToday } from "@openbooks/engine/platform/business-date/module";
+import { runRetentionTick } from "@openbooks/engine/hrm/documents/retention";
+import { drainExportQueue } from "@openbooks/engine/hrm/documents/dsar";
 import {
   dueReminderSigners,
   recordDocumentReminded,
-} from "../engine/src/hrm/documents/documents.ts";
+} from "@openbooks/engine/hrm/documents/documents";
 import {
   insertEmailLog,
   markEmailFailed,
   markEmailSent,
   markEmailUncertain,
   resolveOrgEmailTransport,
-} from "../engine/src/delivery/email-config.ts";
-import { writeNotification } from "../engine/src/inbox/adapters/notification.ts";
-import { recoverStaleApCaptureClaims } from "../engine/src/payables/ap-capture-service.ts";
-import { recoverUnenqueuedApCaptures } from "../engine/src/payables/ap-capture-dispatch.ts";
-import { drainStorageCleanupOutbox } from "../engine/src/platform/storage-cleanup.ts";
+} from "@openbooks/engine/delivery/email-config/module";
+import { writeNotification } from "@openbooks/engine/inbox/adapters/notification";
+import { recoverStaleApCaptureClaims } from "@openbooks/engine/payables/ap-capture-service";
+import { recoverUnenqueuedApCaptures } from "@openbooks/engine/payables/ap-capture-dispatch";
+import { drainStorageCleanupOutbox } from "@openbooks/engine/platform/storage-cleanup";
 import {
   deriveEmailDeliveryKey,
   hrmSignatureRequestEmail,
@@ -377,9 +377,9 @@ if (isMain) {
   void loadDataTransferWorker().then(async ({ startDataTransferWorker }) => {
     // Resolve deferred transfer dependencies before any worker can publish
     // a heartbeat, so a startup refusal cannot appear ready briefly.
-    await import("../engine/src/worker/index.ts");
+    await import("@openbooks/engine/worker/runtime");
     const stopTransfers = startDataTransferWorker();
-    const { registerProcessWorker } = await import('../engine/src/worker/shutdown.ts');
+    const { registerProcessWorker } = await import('@openbooks/engine/worker/shutdown');
     registerProcessWorker({ close: stopTransfers });
   }).catch((error: unknown) => {
     console.error("[worker] startup failed:", error);

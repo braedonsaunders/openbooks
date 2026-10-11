@@ -4,8 +4,8 @@ import test from 'node:test'
 import { sql } from 'drizzle-orm'
 import type { FormSection } from '@openbooks/forms-core'
 
-const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/platform/db')
+const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import('@openbooks/engine/testing/fixtures')
 const { recordResource } = await import('./record-resources.ts')
 const sections: FormSection[] = [{ id: 'main', title: 'Details', fields: [
   { id: 'title', label: 'Title', type: 'text', required: true },

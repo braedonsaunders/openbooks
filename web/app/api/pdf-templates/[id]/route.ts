@@ -5,7 +5,7 @@ import { apiErrorResponse } from '@/lib/api/error-response'
 import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { db } from "@openbooks/engine/platform/db";
 import { assertPrintablePage, compileTemplateHtml, PDF_MARGIN_MM_MAX, PDF_MARGIN_MM_MIN, sanitizeTokenizedFragment } from "@openbooks/pdf";
 import { describeDbError, pgErrorCode } from "../../../../lib/setup/coerce";
 import { isDocKindEnabled } from "../../../../lib/documents.ts";

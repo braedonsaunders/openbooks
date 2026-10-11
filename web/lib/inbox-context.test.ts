@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { registerHooks } from "node:module";
 import type { Authz } from "./authz";
-import { __testResetInboxAdapters, type InboxAdapter } from "../../engine/src/inbox/registry.ts";
-import type { InboxItem, InboxKind, InboxListContext } from "../../engine/src/inbox/types.ts";
+import { __testResetInboxAdapters, type InboxAdapter } from "@openbooks/engine/testing/inbox/registry";
+import type { InboxItem, InboxKind, InboxListContext } from "@openbooks/engine/testing/inbox/types";
 
 // Exercise the real count registry and permission check. Only the approval
 // database reader and individual task sources are replaced.
@@ -14,7 +14,7 @@ const state = { approvalTotal: 0, approvalReads: 0, actorId: "user-1", orgId: "o
 const hooks = registerHooks({
   resolve(specifier, context, next) {
     if (context.parentURL?.endsWith("/inbox-context.ts")) {
-      if (specifier === "@openbooks/engine/src/inbox/index.ts") return { url: registryUrl, shortCircuit: true };
+      if (specifier === "@openbooks/engine/inbox/runtime") return { url: registryUrl, shortCircuit: true };
       if (specifier === "./application/approvals") return { url: "mock:inbox-count-approvals", shortCircuit: true };
     }
     return next(specifier, context);

@@ -23,7 +23,7 @@ import {
 } from '../../../../components/paged-table'
 import { useBusinessToday } from '../../../../components/business-date-provider'
 import { useMoney } from '../../../../components/money-provider'
-import { compareDecimal } from '@openbooks/engine/src/money/exact-decimal.ts'
+import { compareDecimal } from '@openbooks/engine/money/decimal'
 import { readApiErrorMessage } from '../../../../lib/api-error'
 
 /* ------------------------------------------------------------------ */

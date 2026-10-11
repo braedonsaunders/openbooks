@@ -1,6 +1,6 @@
 import type { FiscalContext } from "@openbooks/reports";
-import { FEATURES, featureEnabled, type FeatureState } from "@openbooks/engine/src/organization/feature-registry.ts";
-import { AI_CAPABILITIES, capabilityFeatureOn } from "@openbooks/engine/src/hrm/ai/registry.ts";
+import { FEATURES, featureEnabled, type FeatureState } from "@openbooks/engine/organization/feature-registry";
+import { AI_CAPABILITIES, capabilityFeatureOn } from "@openbooks/engine/hrm/ai/registry";
 
 const MONTH_NAMES = [
   "January", "February", "March", "April", "May", "June",

@@ -5,10 +5,10 @@ import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from "next/server";
 import { guardPermission, guardUnrestrictedScope } from "../../../../lib/authz";
 import { isAiProvider, type AiProvider } from "../../../../lib/assistant/client";
-import { CONTINUOUS_CLOSE_AGENT_KEYS } from "@openbooks/engine/src/continuous-close/continuous-close.ts";
-import { CONTINUOUS_CLOSE_DETECTOR_SPECS } from "@openbooks/engine/src/agents/continuous-close-config.ts";
-import { canonicalDecimal } from "@openbooks/engine/src/money/exact-decimal.ts";
-import { moneyRefusal } from "@openbooks/engine/src/money/decimal-refusal.ts";
+import { CONTINUOUS_CLOSE_AGENT_KEYS } from "@openbooks/engine/continuous-close/continuous-close";
+import { CONTINUOUS_CLOSE_DETECTOR_SPECS } from "@openbooks/engine/agents/continuous-close-config";
+import { canonicalDecimal } from "@openbooks/engine/money/decimal";
+import { moneyRefusal } from "@openbooks/engine/money/decimal-refusal";
 import {
   clearOrgAiKey,
   CONTINUOUS_CLOSE_DISABLED_REMEDY,

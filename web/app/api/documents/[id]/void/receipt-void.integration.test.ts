@@ -2,21 +2,21 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
-import { toUnits } from "@openbooks/engine/src/money/money.ts";
+import { db } from "@openbooks/engine/platform/db";
+import { toUnits } from "@openbooks/engine/money/money";
 import {
   createScratchOrg,
   createScratchUser,
   dropScratchOrg,
-} from "@openbooks/engine/src/testing/fixtures.ts";
+} from "@openbooks/engine/testing/fixtures";
 import {
   DocumentVoidError,
   requestDocumentVoid,
   suggestVoidReversalDate,
-} from "@openbooks/engine/src/ledger/document-void.ts";
-import { setPeriodLockState } from "@openbooks/engine/src/periods/period-locks.ts";
-import { getOnHand } from "@openbooks/engine/src/inventory/position.ts";
-import { issueInventory } from "@openbooks/engine/src/inventory/movements.ts";
+} from "@openbooks/engine/ledger/document-void";
+import { setPeriodLockState } from "@openbooks/engine/periods/period-locks";
+import { getOnHand } from "@openbooks/engine/testing/inventory/position";
+import { issueInventory } from "@openbooks/engine/inventory/movements";
 import { receivePurchaseOrder } from "../../../../../lib/order-cycle.ts";
 import { convertOrder } from "../../../../../lib/order-cycle.ts";
 

@@ -12,7 +12,7 @@ import {
   deleteDriver,
   getDriver,
   updateDriver,
-} from "../../../../../../engine/src/allocations/driver-admin.ts";
+} from "@openbooks/engine/allocations/driver-admin";
 import { notFound } from "@/lib/api/responses";
 
 

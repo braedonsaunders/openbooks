@@ -20,7 +20,7 @@ import {
 import { requirePermission } from '../../../lib/authz'
 import { requireFeatureEnabled } from '../../../lib/feature-gates'
 import { loadOrRefuse } from '../../../lib/load-or-refuse'
-import { SelfServiceError } from '@openbooks/engine/src/hrm/self-service/actor.ts'
+import { SelfServiceError } from '@openbooks/engine/hrm/self-service/actor'
 import type { MePaySection } from '../../../lib/hrm/ai-rails'
 import { loadMeOverview, type MeOverviewData } from '../../../lib/hrm/self-service'
 

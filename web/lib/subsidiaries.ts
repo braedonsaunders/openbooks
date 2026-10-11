@@ -1,7 +1,7 @@
 import "server-only";
 import { sql } from "drizzle-orm";
-import { ambientTenantOrgId, db, withBypassContext } from "@openbooks/engine/src/platform/db.ts";
-import { actorAllowedSubsidiaryIds } from "@openbooks/engine/src/organization/actor-subsidiaries.ts";
+import { ambientTenantOrgId, db, withBypassContext } from "@openbooks/engine/platform/db";
+import { actorAllowedSubsidiaryIds } from "@openbooks/engine/organization/actor-subsidiaries";
 import { subsidiaryFeatureEnabled } from "./features";
 
 /**
@@ -117,7 +117,7 @@ export function subtreeIds(all: Pick<SubsidiaryOption, "id" | "parentId">[], sub
  * The list/report WHERE predicate lives in the canonical engine scope module
  * (shapes 1 and 3); re-exported here so existing importers keep working.
  */
-export { subsidiaryVisibleFilter, UNRESTRICTED_SCOPE_REQUIRED } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
+export { subsidiaryVisibleFilter, UNRESTRICTED_SCOPE_REQUIRED } from "@openbooks/engine/organization/scope";
 
 /**
  * The subsidiaries this user may SEE, from the union of their roles'

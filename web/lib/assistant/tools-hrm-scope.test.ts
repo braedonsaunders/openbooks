@@ -6,13 +6,13 @@ import test from "node:test";
 // resolve through tsx with TSX_TSCONFIG_PATH=web/tsconfig.json (as the
 // suite runner sets it).
 const { HRM_TOOLS, hrmRefusal } = await import("./tools-hrm.ts");
-const { EmploymentReadError } = await import("@openbooks/engine/src/hrm/employment-read.ts");
-const { HrmAuthorizationError } = await import("@openbooks/engine/src/hrm/authorization.ts");
-const { AmbiguousRevisionError, NoRevisionError } = await import("@openbooks/engine/src/hrm/temporal.ts");
-const { HrmPerformanceError } = await import("@openbooks/engine/src/hrm/performance/errors.ts");
-const { HrmQualificationError } = await import("@openbooks/engine/src/hrm/qualifications/errors.ts");
-const { HrmDocumentsError } = await import("@openbooks/engine/src/hrm/documents/errors.ts");
-const { CompensationError } = await import("@openbooks/engine/src/hrm/compensation/errors.ts");
+const { EmploymentReadError } = await import("@openbooks/engine/hrm/employment-read");
+const { HrmAuthorizationError } = await import("@openbooks/engine/hrm/authorization");
+const { AmbiguousRevisionError, NoRevisionError } = await import("@openbooks/engine/hrm/temporal");
+const { HrmPerformanceError } = await import("@openbooks/engine/hrm/performance/errors");
+const { HrmQualificationError } = await import("@openbooks/engine/hrm/qualifications/errors");
+const { HrmDocumentsError } = await import("@openbooks/engine/hrm/documents/errors");
+const { CompensationError } = await import("@openbooks/engine/hrm/compensation/errors");
 
 const UUID = "11111111-1111-4111-8111-111111111111";
 

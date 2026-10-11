@@ -4,11 +4,11 @@ import { z } from 'zod'
 import {
   cancelRevenueRecognitionForInvoice,
   RevenueRecognitionCancellationError,
-} from '@openbooks/engine/src/ledger/revenue-recognition-cancellation.ts'
-import { ScopeNotFoundError } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
-import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
-import { DocumentVoidError } from '@openbooks/engine/src/ledger/document-void.ts'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+} from '@openbooks/engine/ledger/revenue-recognition-cancellation'
+import { ScopeNotFoundError } from '@openbooks/engine/organization/scope'
+import { businessToday } from '@openbooks/engine/platform/business-date/module'
+import { DocumentVoidError } from '@openbooks/engine/ledger/document-void'
+import { db } from '@openbooks/engine/platform/db'
 import { sql } from 'drizzle-orm'
 import { guardSubsidiaryScope } from '../../../../lib/authz'
 import { defineRoute } from '../../../../lib/api/route'

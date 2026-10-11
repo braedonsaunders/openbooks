@@ -1,6 +1,6 @@
 import { NextResponse } from 'next/server'
-import { BankingError } from '@openbooks/engine/src/banking/banking.ts'
-import { ScopeNotFoundError } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
+import { BankingError } from '@openbooks/engine/banking/banking'
+import { ScopeNotFoundError } from '@openbooks/engine/organization/scope'
 
 /** Map engine BankingError → 422 with its user-safe message; anything else → 500. */
 export function bankingErrorResponse(e: unknown): NextResponse {

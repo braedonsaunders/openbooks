@@ -1,7 +1,7 @@
 import "server-only";
 import { cache } from "react";
 import { sql } from "drizzle-orm";
-import { db, withOrgContext } from "@openbooks/engine/src/platform/db.ts";
+import { db, withOrgContext } from "@openbooks/engine/platform/db";
 import { effectiveNavMode, isNavMode, type NavMode } from "./nav-mode";
 
 /**

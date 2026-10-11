@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { CONTROL_ACCOUNT_ROLES, CONTROL_ACCOUNT_TYPE_POLICY } from '@openbooks/engine/src/records/control-accounts.ts'
+import { CONTROL_ACCOUNT_ROLES, CONTROL_ACCOUNT_TYPE_POLICY } from '@openbooks/engine/records/control-accounts'
 
 declare global {
   var __settingsRouter: { push(url: string): void; refresh(): void } | undefined

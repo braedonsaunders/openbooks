@@ -3,8 +3,8 @@ import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { subsidiaryVisibleFilter } from "../../../../lib/subsidiaries";
-import { db } from "../../../../../engine/src/platform/db.ts";
-import { NATIVE_MEASURES } from "../../../../../engine/src/allocations/driver-admin.ts";
+import { db } from "@openbooks/engine/platform/db";
+import { NATIVE_MEASURES } from "@openbooks/engine/allocations/driver-admin";
 
 export const runtime = "nodejs";
 

@@ -4,7 +4,7 @@ import { getMoneyFormatter } from '@/lib/money-server'
 import { notFound, redirect } from 'next/navigation'
 import { getLocale, getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/db'
 import { registeredListTable } from '../../../lib/list/prepared-spec'
 import {
   badge,
@@ -30,7 +30,7 @@ import { readableContinuousCloseAgents } from '../../../lib/continuous-close'
 import {
   CONTINUOUS_CLOSE_AGENT_KEYS,
   type ContinuousCloseAgentKey,
-} from '@openbooks/engine/src/agents/continuous-close-config.ts'
+} from '@openbooks/engine/agents/continuous-close-config'
 import { loadWorkItemDetail } from '../../../lib/agents/work-item'
 import { findingProposalCommand, type FindingProposalCommand } from '../../../lib/agents/proposals'
 import { findingSummaryLine } from '../../../lib/agents/summary'

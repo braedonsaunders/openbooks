@@ -3,8 +3,8 @@ import test from 'node:test'
 import { registerHooks } from 'node:module'
 import { bootJsdomEnvironment } from '../../../testing/jsdom-env'
 import { stubModules } from '../../../testing/stub-modules'
-import { connectorSettings } from '@openbooks/engine/src/sync/connection-settings.ts'
-import { entityMappingMetadata } from '@openbooks/engine/src/sync/entity-mapping-contract.ts'
+import { connectorSettings } from '@openbooks/engine/sync/connection-settings'
+import { entityMappingMetadata } from '@openbooks/engine/sync/entity-mapping-contract'
 
 await bootJsdomEnvironment({ url: 'http://localhost/sync', event: 'jsdom' })
 const uiSource = new URL('../../../../packages/ui/src/index.ts', import.meta.url).href

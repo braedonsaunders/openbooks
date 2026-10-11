@@ -14,9 +14,9 @@ import type { ApiField, ResolvedApiType } from "./registry-data.ts";
 // ownership-checked (tenant-opaque 404) before storage, mirroring the
 // document header/line-ref fences.
 const { createRecord, updateRecord } = await import("./writers.ts");
-const { db, withBypass, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
+const { db, withBypass, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  "@openbooks/engine/src/testing/fixtures.ts"
+  "@openbooks/engine/testing/fixtures"
 );
 
 const DB = !!process.env.OPENBOOKS_DB_URL;

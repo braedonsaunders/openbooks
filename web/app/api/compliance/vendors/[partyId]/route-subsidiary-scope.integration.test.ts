@@ -17,9 +17,9 @@ stubModules({ navigation: true });
 
 const routeUrl = "./route.ts?compliance-vendor-scope-test";
 const { PATCH } = (await import(routeUrl)) as typeof import("./route.ts");
-const { db, withBypass, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
+const { db, withBypass, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
-  "@openbooks/engine/src/testing/fixtures.ts",
+  "@openbooks/engine/testing/fixtures",
 );
 const { resolveAuthzByUserId } = await import("@/lib/authz-core");
 const { withAuthzContext } = await import("@/lib/authz-context");

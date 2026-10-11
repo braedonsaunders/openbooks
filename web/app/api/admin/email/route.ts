@@ -4,8 +4,8 @@ import { apiErrorResponse } from '@/lib/api/error-response'
 
 import { NextResponse } from 'next/server'
 import { guardPermission } from '../../../../lib/authz'
-import { OrgEmailConfigConflictError, readOrgEmailConfigView, saveOrgEmailConfig } from '@openbooks/engine/src/delivery/email-config.ts'
-import { isDocumentRevisionToken } from '@openbooks/engine/src/records/revision.ts'
+import { OrgEmailConfigConflictError, readOrgEmailConfigView, saveOrgEmailConfig } from '@openbooks/engine/delivery/email-config/module'
+import { isDocumentRevisionToken } from '@openbooks/engine/records/revision'
 import { isEmailProvider } from '@openbooks/emails'
 
 const requestBodySchema = z.object({

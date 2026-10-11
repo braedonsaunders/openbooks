@@ -5,9 +5,9 @@ import test from "node:test";
 // v1 order conversion requires the caller's revision token: an omitted
 // expectedUpdatedAt used to skip the revision fence entirely, so a stale
 // view could create the downstream document.
-const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
 const { sql } = await import("drizzle-orm");
-const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
+const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
 const { convertApplicationOrder } = await import("./orders");
 const { ApplicationError } = await import("./errors");
 const { applicationContextFromSession } = await import("./context");

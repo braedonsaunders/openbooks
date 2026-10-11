@@ -16,9 +16,9 @@ test('feature questions share render facts while later renders and live executor
       import {PassThrough} from 'node:stream';
       import React from 'react';
       import {PgDialect} from 'drizzle-orm/pg-core';
-      const {db}=await import('@openbooks/engine/src/platform/db.ts');
+      const {db}=await import('@openbooks/engine/platform/db');
       const {isFeatureEnabled,orgFeatureState,resolvedFeatureState}=await import('./lib/features.ts');
-      const {isFeatureEnabled:engineFeatureEnabled}=await import('@openbooks/engine/src/organization/feature-state.ts');
+      const {isFeatureEnabled:engineFeatureEnabled}=await import('@openbooks/engine/organization/feature-state');
       const dialect=new PgDialect();
       const facts=new Map([
         ['company-a',{state:{projects:true,preBilling:true},subsidiaries:2,currency:true}],

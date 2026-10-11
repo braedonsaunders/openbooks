@@ -14,9 +14,9 @@ registerHooks({
       return next(specifier, { ...context, parentURL: import.meta.url });
     if (specifier === "@/lib/feature-gates")
       return { shortCircuit: true, url: "mock:control-loss-route-auth" };
-    if (specifier === "@openbooks/engine/src/consolidation/loss-of-control.ts")
+    if (specifier === "@openbooks/engine/consolidation/loss-of-control")
       return { shortCircuit: true, url: "mock:control-loss-route-domain" };
-    if (specifier === "@openbooks/engine/src/platform/db.ts")
+    if (specifier === "@openbooks/engine/platform/db")
       return {
         shortCircuit: true,
         url: "data:text/javascript,export const db={execute:async()=>({rows:[]})};export async function withBypassContext(work){return work()};export async function withOrgTransaction(_orgId,work){return work()}",

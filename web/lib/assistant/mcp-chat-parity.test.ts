@@ -8,7 +8,7 @@ import type { Authz } from "../authz.ts";
 // web/lib/application/tool-catalog.test.ts). The `@/lib` alias resolves via
 // TSX_TSCONFIG_PATH=web/tsconfig.json, which scripts/test-suite.mjs sets.
 const { buildToolRegistry, executeAssistantTool } = await import("./registry.ts");
-const { FEATURES } = await import("../../../engine/src/organization/feature-registry.ts");
+const { FEATURES } = await import("@openbooks/engine/organization/feature-registry");
 
 type SessionUser = import("../auth.ts").SessionUser;
 type FeatureState = Record<string, boolean>;

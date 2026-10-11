@@ -1,8 +1,8 @@
 import 'server-only'
 
 import { z } from 'zod'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { getReturnAuthorization, listReturnAuthorizations } from '@openbooks/engine/src/sales/returns.ts'
+import { db } from '@openbooks/engine/platform/db'
+import { getReturnAuthorization, listReturnAuthorizations } from '@openbooks/engine/sales/returns'
 import type { Authz } from '../authz'
 import { isFeatureEnabled } from '../features'
 import type { AssistantToolDef, ToolResult } from './types'

@@ -1,8 +1,8 @@
 import { defineRoute } from "@/lib/api/route";
 import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
-import { createGoal } from "@openbooks/engine/src/hrm/performance/goals.ts";
-import { listGoals } from "@openbooks/engine/src/hrm/performance/performance-read.ts";
+import { createGoal } from "@openbooks/engine/hrm/performance/goals";
+import { listGoals } from "@openbooks/engine/hrm/performance/performance-read";
 import { isUuid } from "../../../../lib/list-params";
 import { performanceErrorResponse } from "../review-cycles/_lib";
 import { createGoalBody } from "./bodies";

@@ -3,7 +3,7 @@ import {
   InventoryIdempotencyConflictError,
   InventoryNotFoundError,
   InventoryOwnershipError,
-} from "@openbooks/engine/src/inventory/contracts.ts";
+} from "@openbooks/engine/inventory/contracts/module";
 
 /**
  * The single inventory error-to-HTTP-status mapping shared by every

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { defineRoute } from '@/lib/api/route'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/db'
 import { isFeatureEnabled } from '@/lib/features'
 
 /**

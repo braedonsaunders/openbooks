@@ -1,7 +1,7 @@
 import "server-only";
 import { sql, type SQL } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
-import { lockLedgerSetupFence } from "@openbooks/engine/src/organization/ledger-setup-fence.ts";
+import { db } from "@openbooks/engine/platform/db";
+import { lockLedgerSetupFence } from "@openbooks/engine/organization/ledger-setup";
 import {
   assertValidControlAccountMappings,
   CONTROL_ACCOUNT_ROLE_LABELS,
@@ -9,8 +9,8 @@ import {
   ControlAccountsIncompleteError,
   type ControlAccountRecord,
   type OrgControlAccounts,
-} from "@openbooks/engine/src/records/control-accounts.ts";
-import { canonicalTimeZone } from "@openbooks/engine/src/platform/time-zone.ts";
+} from "@openbooks/engine/records/control-accounts";
+import { canonicalTimeZone } from "@openbooks/engine/platform/time-zone";
 import {
   isLegalForm,
   isTaxClassification,

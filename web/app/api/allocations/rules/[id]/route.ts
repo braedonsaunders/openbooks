@@ -3,7 +3,7 @@ import { defineRoute } from "@/lib/api/route";
 import { z } from "zod";
 import { parseJsonBody } from '@/lib/api/json';
 import { NextResponse } from 'next/server'
-import { getRuleDetail, updateRule } from '../../../../../../engine/src/allocations/index.ts'
+import { getRuleDetail, updateRule } from '@openbooks/engine/allocations/runtime'
 import { allocationWriteErrorResponse, requireRevision, requireRuleId } from '../../_lib.ts'
 
 export const runtime = 'nodejs'

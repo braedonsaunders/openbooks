@@ -4,9 +4,9 @@ import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from 'next/server'
 
 import { saveSetupAgentPolicy } from '../../../../../../lib/setup/agents'
-import { CONTINUOUS_CLOSE_DETECTOR_SPECS } from '@openbooks/engine/src/agents/continuous-close-config.ts'
-import { canonicalDecimal } from '@openbooks/engine/src/money/exact-decimal.ts'
-import { moneyRefusal } from '@openbooks/engine/src/money/decimal-refusal.ts'
+import { CONTINUOUS_CLOSE_DETECTOR_SPECS } from '@openbooks/engine/agents/continuous-close-config'
+import { canonicalDecimal } from '@openbooks/engine/money/decimal'
+import { moneyRefusal } from '@openbooks/engine/money/decimal-refusal'
 
 const detectorKeys = [...new Set(CONTINUOUS_CLOSE_DETECTOR_SPECS.map((spec) => spec.detectorKey))] as [string, ...string[]];
 const materialityThresholdSchema = z.string().superRefine((value, ctx) => {

@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -79,7 +79,14 @@ export function webRootFor(fromFile, root = ROOT) {
 
 export function resolveReal(spec, fromFile, root = ROOT) {
   if (!spec || spec === "server-only" || spec.startsWith("node:") || spec.startsWith("data:") || spec.startsWith("mock:")) return null;
-  for (const [alias, target] of [["@openbooks/engine/src/", "engine/src/"], ["@openbooks/schema/src/", "schema/src/"]]) {
+  if (spec.startsWith("@openbooks/engine/")) {
+    const packageFile = join(root, "engine/package.json");
+    if (!existsSync(packageFile)) return null;
+    const exports = JSON.parse(readFileSync(packageFile, "utf8")).exports ?? {};
+    const target = exports[`./${spec.slice("@openbooks/engine/".length)}`];
+    return typeof target === "string" ? existingTs(join(root, "engine", target)) : null;
+  }
+  for (const [alias, target] of [["@openbooks/schema/src/", "schema/src/"]]) {
     if (spec.startsWith(alias)) return existingTs(join(root, target + spec.slice(alias.length)));
   }
   if (spec.startsWith("@/")) {
@@ -428,7 +435,7 @@ const PROTECTED_EXPORT_NAMES = new Set([
 
 /**
  * A mock body is exempt when it is ONLY re-exports of the real protected
- * module (`export * from '@openbooks/engine/src/money/money.ts'`): it then
+ * module (`export * from '@openbooks/engine/money/money'`): it then
  * serves the genuine implementation and cannot drift, which is the
  * compliant way to keep one mock serving protected names plus its own
  * module-local stubs. Any local declaration forfeits the exemption, because

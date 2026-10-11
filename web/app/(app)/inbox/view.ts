@@ -4,13 +4,13 @@ import { registeredListTable } from '../../../lib/list/prepared-spec'
 import { getMoneyFormatter } from '@/lib/money-server'
 import { inArray, sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
-import { db, schema } from '@openbooks/engine/src/platform/db.ts'
-import { type WorklistGate } from '@openbooks/engine/src/flows/index.ts'
+import { db, schema } from '@openbooks/engine/platform/db'
+import { type WorklistGate } from '@openbooks/engine/flows/module'
 import {
   dueBusinessDay,
   type InboxItem,
   type InboxSourceNotice,
-} from '@openbooks/engine/src/inbox/index.ts'
+} from '@openbooks/engine/inbox/runtime'
 import {
   approvalWorklistAwaitingForAuthz,
   approvalWorklistPageForAuthz,

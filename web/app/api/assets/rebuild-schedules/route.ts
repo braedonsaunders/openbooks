@@ -3,8 +3,8 @@ import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { z } from "zod";
-import { db } from "@openbooks/engine/src/platform/db.ts";
-import { buildSchedule } from "@openbooks/engine/src/assets/depreciation.ts";
+import { db } from "@openbooks/engine/platform/db";
+import { buildSchedule } from "@openbooks/engine/assets/depreciation";
 import { isUuid } from "../../../../lib/list-params";
 
 export const runtime = "nodejs";

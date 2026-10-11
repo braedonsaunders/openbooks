@@ -2,12 +2,12 @@ import { paymentRunScopeSql } from '@/lib/payment-run-access'
 import 'server-only'
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
-import { PaymentError } from "@openbooks/engine/src/payments-core/payment-errors.ts";
-import { type PaymentKind } from "@openbooks/engine/src/payments/payment-contracts.ts";
-import { PostingError } from "@openbooks/engine/src/journal/posting-contracts.ts";
+import { PaymentError } from "@openbooks/engine/payments-core/payment-errors";
+import { type PaymentKind } from "@openbooks/engine/payments/payment-contracts";
+import { PostingError } from "@openbooks/engine/journal/contracts";
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { assertAnyPermission, ScopeNotFoundError } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
+import { db } from '@openbooks/engine/platform/db'
+import { assertAnyPermission, ScopeNotFoundError } from '@openbooks/engine/organization/scope'
 import { can, getAuthz, guardSubsidiaryScope, type Authz } from '@/lib/authz'
 import { isMaskedFileContentError } from '@/lib/file-storage'
 import { isUuid } from '../../../lib/list-params'

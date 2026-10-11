@@ -2,9 +2,9 @@ import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
-const { db, env, withBypassContext, withOrgTransaction } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, env, withBypassContext, withOrgTransaction } = await import('@openbooks/engine/platform/db')
 const { sql } = await import('drizzle-orm')
-const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import('@openbooks/engine/testing/fixtures')
 const { resolveItemRate, snapshotTimeBillRates } = await import('./item-rates')
 const { resolveRateAdjustments } = await import('./rate-adjustments')
 
@@ -122,9 +122,9 @@ const consolidatedRows = [
         const assert: typeof import("node:assert/strict") = (await import("node:assert/strict")).default;
         const { randomUUID } = await import("node:crypto");
         const test = (await import("node:test")).default;
-        const { db, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
+        const { db, withBypassContext } = await import('@openbooks/engine/platform/db')
         const { sql } = await import('drizzle-orm')
-        const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+        const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
         const { resolveItemRate } = await import('./item-rates')
 
         const DB = !!process.env.OPENBOOKS_DB_URL
@@ -216,9 +216,9 @@ const consolidatedRows = [
         const assert: typeof import("node:assert/strict") = (await import("node:assert/strict")).default;
         const { randomUUID } = await import("node:crypto");
         const test = (await import("node:test")).default;
-        const { db, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
+        const { db, withBypassContext } = await import('@openbooks/engine/platform/db')
         const { sql } = await import('drizzle-orm')
-        const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+        const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
         const { resolveItemRate } = await import('./item-rates')
 
         const enabled = { skip: !process.env.OPENBOOKS_DB_URL }
@@ -295,9 +295,9 @@ const consolidatedRows = [
         const assert: typeof import("node:assert/strict") = (await import("node:assert/strict")).default;
         const { randomUUID } = await import("node:crypto");
         const test = (await import("node:test")).default;
-        const { db } = await import('@openbooks/engine/src/platform/db.ts')
+        const { db } = await import('@openbooks/engine/platform/db')
         const { sql } = await import('drizzle-orm')
-        const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+        const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
         const { resolveItemRate } = await import('./item-rates.ts')
         const { resolveRateAdjustments, findLapsedRateCard } = await import('./rate-adjustments.ts')
 
@@ -384,9 +384,9 @@ const consolidatedRows = [
         const assert: typeof import("node:assert/strict") = (await import("node:assert/strict")).default;
         const { randomUUID } = await import("node:crypto");
         const test = (await import("node:test")).default;
-        const { db, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
+        const { db, withBypassContext } = await import('@openbooks/engine/platform/db')
         const { sql } = await import('drizzle-orm')
-        const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+        const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
         const { resolveItemRate } = await import('./item-rates')
 
         const enabled = { skip: !process.env.OPENBOOKS_DB_URL }
@@ -496,7 +496,7 @@ const rateBookDefaultCases = [{ label: 'item rate book default controls', regist
   const readRow = async (id: string) => (await withBypassContext(() => db.execute(sql`select * from item_rate_books where id=${id}`))).rows[0];
   const responseEvidence = async (id: string) => (await withBypassContext(() => db.execute<{ changes: Record<string, unknown> }>(sql`select changes from audit_log where row_id=${id} and action='delete' order by at desc limit 1`))).rows[0]!;
   const json = (value: unknown) => JSON.parse(JSON.stringify(value));
-  const { waitForLockWaiter } = await import('@openbooks/engine/src/testing/lock-wait.ts');
+  const { waitForLockWaiter } = await import('@openbooks/engine/testing/lock-wait');
   const pg = (await import('pg')).default;
   test('rate book deletion cannot remove a concurrently promoted default', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
     const org = await withBypassContext(() => createScratchOrg());
@@ -569,9 +569,9 @@ for (const row of rateBookDefaultCases) await row.register();
 
 const itemPricingAsOfRows = [
   { label: "item pricing asof", register: async () => {
-        const { db, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
+        const { db, withBypassContext } = await import('@openbooks/engine/platform/db')
         const { sql } = await import('drizzle-orm')
-        const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+        const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
         const { resolveItemPrice } = await import('./item-pricing')
 
         const enabled = { skip: !process.env.OPENBOOKS_DB_URL }

@@ -45,8 +45,8 @@ const { POST } = (await import(routeUrl)) as typeof import('./route')
 const bookRouteUrl = '../../../item-rate-books/route.ts?item-rates-pin-book-integration'
 const { POST: BOOKS_POST } = (await import(bookRouteUrl)) as typeof import('../../../item-rate-books/route')
 
-const { withBypassContext, db } = await import('@openbooks/engine/src/platform/db.ts')
-const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { withBypassContext, db } = await import('@openbooks/engine/platform/db')
+const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
 const { resolveItemRate } = await import('../../../../../lib/item-rates.ts')
 test.after(() => hooks.deregister())
 

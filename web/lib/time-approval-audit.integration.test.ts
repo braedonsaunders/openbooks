@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import test from "node:test";
-import { env } from "@openbooks/engine/src/platform/db.ts";
+import { env } from "@openbooks/engine/platform/db";
 
 // Same child-process harness as time-approval-guards.integration.test.ts:
 // web/lib modules import `server-only`, so the approval service runs in a
@@ -284,10 +284,10 @@ test(
 const consolidatedRows = [
   { label: "time amendment", register: async () => {
         const { randomUUID } = await import("node:crypto");
-        const { db, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
+        const { db, withBypassContext } = await import('@openbooks/engine/platform/db')
         const { sql } = await import('drizzle-orm')
-        const { createScratchOrg, seedFlowActors, seedActiveEmployment, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
-        const { ScopeNotFoundError } = await import('@openbooks/engine/src/organization/subsidiary-scope.ts')
+        const { createScratchOrg, seedFlowActors, seedActiveEmployment, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
+        const { ScopeNotFoundError } = await import('@openbooks/engine/organization/scope')
         const { pinTimekeeperEntry, weekStart } = await import('../app/api/timesheets/_lib.ts')
         const { amendLockedWeek, amendTimeEntry } = await import('./time-amendment')
         const { approveSubmittedTimeEntries } = await import('./time-approval')

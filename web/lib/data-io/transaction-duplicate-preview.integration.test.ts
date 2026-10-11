@@ -10,9 +10,9 @@ const { transactionResource } = (await import('./transaction-resources.ts')) as 
   './transaction-resources.ts'
 )
 
-const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db')
 const { createScratchOrg, dropScratchOrgReporting } = await import(
-  '@openbooks/engine/src/testing/fixtures.ts'
+  '@openbooks/engine/testing/fixtures'
 )
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL)

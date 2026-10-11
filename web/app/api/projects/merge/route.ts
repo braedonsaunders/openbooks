@@ -3,12 +3,12 @@ import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { db } from "@openbooks/engine/platform/db";
 import {
   mergeProjects,
   previewProjectMerge,
   ProjectMergeError,
-} from "@openbooks/engine/src/projects/merge.ts";
+} from "@openbooks/engine/projects/merge";
 import { guardPermission, guardSubsidiaryScope } from "../../../../lib/authz";
 import { isUuid } from "../../../../lib/list-params";
 import { notFound } from "@/lib/api/responses";

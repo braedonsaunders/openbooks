@@ -4,10 +4,10 @@ import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 
 const root = pathToFileURL(process.cwd() + '/').href
-const { db, withBypassContext, withOrgContext } = (await import(root + 'engine/src/platform/db.ts')) as typeof import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypassContext, withOrgContext } = (await import('@openbooks/engine/platform/db')) as typeof import('@openbooks/engine/platform/db')
 const { sql } = await import(root + 'node_modules/drizzle-orm/index.js')
-const { createScratchOrg, dropScratchOrg } = (await import(root + 'engine/src/testing/fixtures.ts')) as typeof import('@openbooks/engine/src/testing/fixtures.ts')
-const { recomputeSaasMetrics } = await import(root + 'engine/src/billing/metrics/metrics-ledger.ts')
+const { createScratchOrg, dropScratchOrg } = (await import('@openbooks/engine/testing/fixtures')) as typeof import('@openbooks/engine/testing/fixtures')
+const { recomputeSaasMetrics } = await import('@openbooks/engine/billing/metrics/metrics-ledger')
 const { BUILT_IN_REPORT_DEFINITIONS, BUILT_IN_REPORT_DEFINITION_MAP } = (await import(root + 'packages/reports/src/built-ins.ts')) as typeof import('@openbooks/reports')
 
 type Org = Awaited<ReturnType<typeof createScratchOrg>>

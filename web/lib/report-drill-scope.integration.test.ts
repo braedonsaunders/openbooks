@@ -16,8 +16,8 @@ registerHooks({
 });
 
 const { sql } = await import('drizzle-orm')
-const { db, env, withBypass, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { db, env, withBypass, withBypassContext } = await import('@openbooks/engine/platform/db')
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
 const { loadReportDrillData } = await import('./report-drill-data')
 const { transactionDetail } = await import('./reports/transaction-detail')
 const { encodeReportDrillTarget, parseReportDrillTarget } = await import('./report-drill')
@@ -197,8 +197,8 @@ const consolidatedRows = [
           return next(specifier, context);
         } });
         const { sql } = await import('drizzle-orm');
-        const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts');
-        const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts');
+        const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db');
+        const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures');
         const { loadReportDrillData } = await import('./report-drill-data.ts');
         type Authz = import('./authz.ts').Authz;
 
@@ -280,8 +280,8 @@ const consolidatedRows = [
           return next(specifier, context);
         } });
         const { sql } = await import('drizzle-orm');
-        const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts');
-        const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts');
+        const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db');
+        const { createScratchOrg, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures');
         const { loadReportDrillData } = await import('./report-drill-data.ts');
         const { budgetVsActualView } = await import('./budget-report.ts');
         type Authz = import('./authz.ts').Authz;
@@ -392,8 +392,8 @@ const consolidatedRows = [
         const { registerHooks } = await import("node:module");
         const test = (await import("node:test")).default;
         const { sql } = await import("drizzle-orm");
-        const { db, withBypass, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
-        const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/src/testing/fixtures.ts");
+        const { db, withBypass, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
+        const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
         const { stubModules } = await import("../testing/stub-modules.ts");
         // Database partition: order drill scopes route through live SQL predicates
         // (open/backlog, converted/linked, voided) that only PostgreSQL can answer.

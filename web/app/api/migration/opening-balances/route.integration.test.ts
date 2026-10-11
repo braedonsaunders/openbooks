@@ -49,8 +49,8 @@ registerHooks({
 const { POST: previewPOST } = (await import("./preview/route.ts?migration-opening-preview")) as typeof import("./preview/route.ts");
 const { POST: draftPOST } = (await import("./draft/route.ts?migration-opening-draft")) as typeof import("./draft/route.ts");
 
-const { withBypassContext, withOrgTransaction, db, env } = await import("@openbooks/engine/src/platform/db.ts");
-const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
+const { withBypassContext, withOrgTransaction, db, env } = await import("@openbooks/engine/platform/db");
+const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
 const { resolveAuthzByUserId } = await import("@/lib/authz");
 const { createTransfer, loadTransfer } = await import("@/lib/data-io/transfer-store");
 const { commandTransfer, uploadTransferPart } = await import("@/lib/data-io/transfer-commands");

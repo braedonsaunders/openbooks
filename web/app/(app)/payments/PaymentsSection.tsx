@@ -1,6 +1,6 @@
 import { can, type Authz } from '@/lib/authz'
 import { getTranslations } from 'next-intl/server'
-import { PAYMENT_KIND_SIDE, type PaymentKind } from "@openbooks/engine/src/payments/payment-contracts.ts";
+import { PAYMENT_KIND_SIDE, type PaymentKind } from "@openbooks/engine/payments/payment-contracts";
 import { RecordListView } from '../../../components/record-list-view'
 import { isUuid, mergeHref } from '../../../lib/list-params'
 import { NewPaymentButton } from './NewPaymentButton'

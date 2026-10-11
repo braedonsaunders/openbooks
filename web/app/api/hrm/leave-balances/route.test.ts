@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { engineSourceSpecifier } from "../../../../testing/engine-resolve-hooks.ts";
+import { canonicalEngineSpecifier } from "../../../../testing/engine-resolve-hooks.ts";
 import { registerHooks } from "node:module";
 import nodeTest from "node:test";
 import { NextResponse } from "next/server";
@@ -71,13 +71,13 @@ const mockUrls = new Map<string, string>([
   ["@/lib/authz", "mock:authz"],
   ["@/lib/features", "mock:features"],
   ["@/lib/feature-gates", "mock:authz"],
-  ["@openbooks/engine/src/hrm/leave-read.ts", "mock:leave-read"],
-  ["@openbooks/engine/src/platform/db.ts", "mock:db"],
+  ["@openbooks/engine/hrm/leave-read", "mock:leave-read"],
+  ["@openbooks/engine/platform/db", "mock:db"],
 ]);
 
 const hooks = registerHooks({
   resolve(specifier, _context, nextResolve) {
-    const mocked = mockUrls.get(specifier) ?? mockUrls.get(engineSourceSpecifier(specifier) ?? '');
+    const mocked = mockUrls.get(specifier) ?? mockUrls.get(canonicalEngineSpecifier(specifier) ?? '');
     if (mocked) return { url: mocked, shortCircuit: true };
     return nextResolve(specifier);
   },

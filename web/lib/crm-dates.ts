@@ -1,4 +1,4 @@
-import { isIsoCalendarDate } from '@openbooks/engine/src/platform/iso-date.ts'
+import { isIsoCalendarDate } from '@openbooks/engine/platform/iso-date'
 // iso-date, not business-date: ActivityDrawer is a client component and
 // business-date imports the database pool.
 

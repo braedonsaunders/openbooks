@@ -1,6 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
-import type { ContinuousCloseAgentKey } from "@openbooks/engine/src/agents/continuous-close-config.ts";
+import type { ContinuousCloseAgentKey } from "@openbooks/engine/agents/continuous-close-config";
 import {
   packMissionBrief,
   packNarrativeTitle,

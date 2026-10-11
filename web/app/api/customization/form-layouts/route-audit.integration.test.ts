@@ -54,10 +54,10 @@ const { POST } = (await import(collectionUrl)) as typeof import("./route.ts");
 const memberUrl = "./[id]/route.ts?form-layout-audit-test";
 const member = (await import(memberUrl)) as typeof import("./[id]/route.ts");
 
-const { db } = await import("@openbooks/engine/src/platform/db.ts");
+const { db } = await import("@openbooks/engine/platform/db");
 const { defaultFormLayout } = await import("@openbooks/customization");
 const { createScratchOrg, createScratchUser } = await import(
-  "@openbooks/engine/src/testing/fixtures.ts"
+  "@openbooks/engine/testing/fixtures"
 );
 
 async function seed(): Promise<{ orgId: string }> {

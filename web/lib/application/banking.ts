@@ -1,6 +1,6 @@
 import "server-only";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { db } from "@openbooks/engine/platform/db";
 import {
   BankingError,
   createMatch,
@@ -8,11 +8,11 @@ import {
   reconciliationTotals,
   startReconciliation,
   unmatchStatementLine,
-} from "@openbooks/engine/src/banking/banking.ts";
-import { ControlAccountsIncompleteError } from "@openbooks/engine/src/records/control-accounts.ts";
-import { ScopeNotFoundError } from "@openbooks/engine/src/organization/subsidiary-scope.ts";
-import { normalizeMoney } from "@openbooks/engine/src/money/money.ts";
-import { PostingError } from "@openbooks/engine/src/journal/posting-contracts.ts";
+} from "@openbooks/engine/banking/banking";
+import { ControlAccountsIncompleteError } from "@openbooks/engine/records/control-accounts";
+import { ScopeNotFoundError } from "@openbooks/engine/organization/scope";
+import { normalizeMoney } from "@openbooks/engine/money/money";
+import { PostingError } from "@openbooks/engine/journal/contracts";
 import { addJournalMatchFromLine, JournalPostingDeniedError } from "../banking-rules";
 import { normalizeMoneyValue } from "../cash/core";
 import { canonicalDecimal } from "../exact-decimal";

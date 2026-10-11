@@ -19,8 +19,8 @@ import { requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { pickString } from '../../../../lib/list-params'
 import { dateTime } from '../../../../lib/format'
-import { listAutomations } from '@openbooks/engine/src/automations/services.ts'
-import { loadApprovalSettings } from '@openbooks/engine/src/automations/approvals.ts'
+import { listAutomations } from '@openbooks/engine/automations/services'
+import { loadApprovalSettings } from '@openbooks/engine/automations/approvals'
 
 /**
  * The automations list, split into a loader and a spec.

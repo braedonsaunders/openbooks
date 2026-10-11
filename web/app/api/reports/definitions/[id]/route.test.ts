@@ -120,7 +120,7 @@ const selfUrl = new URL(import.meta.url).href;
 const mockUrl = (name: string) => `${selfUrl}?report-definition-mock=${name}`;
 const mockUrls = new Map<string, string>([
   ["@/lib/custom-record-report-catalog", mockUrl("catalog")],
-  ["@openbooks/engine/src/platform/db.ts", mockUrl("db")],
+  ["@openbooks/engine/platform/db", mockUrl("db")],
   ["../../../../../lib/authz", mockUrl("authz")],
   ["@/lib/authz", mockUrl("authz")],
   ["@/lib/feature-gates", mockUrl("authz")],

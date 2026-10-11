@@ -175,8 +175,8 @@ const state = { orgId: '', userId: '' }
  */
 const featureGateLockKey = (orgId: string): string => `openbooks:feature-gate:${orgId}`
 
-const { db, env } = await import('@openbooks/engine/src/platform/db.ts')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { db, env } = await import('@openbooks/engine/platform/db')
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
 const { isFeatureEnabled } = await import('./features.ts')
 // The factory gate double above answers at request time; hand it the real
 // responder and the real feature check before any route is imported.

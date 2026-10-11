@@ -6,7 +6,7 @@ import {
   closeCalibrationSession,
   getCalibrationSession,
   openCalibrationSession,
-} from "@openbooks/engine/src/hrm/performance/calibration.ts";
+} from "@openbooks/engine/hrm/performance/calibration";
 import { performanceErrorResponse } from "../../review-cycles/_lib";
 import { patchCalibrationSessionBody } from "../bodies";
 /**

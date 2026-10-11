@@ -46,10 +46,10 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context);
 } });
 const { sql } = await import("drizzle-orm");
-const { db, pool, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
-const { seedAdoption, calculatedRun } = await import("@openbooks/engine/src/payroll/filing-test-fixtures.ts");
-const { dropScratchOrgReporting } = await import("@openbooks/engine/src/testing/fixtures.ts");
-const { mutatePayRunAdjustment } = await import("@openbooks/engine/src/payroll/run-adjustments.ts");
+const { db, pool, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { seedAdoption, calculatedRun } = await import("@openbooks/engine/testing/payroll/filing-test-fixtures");
+const { dropScratchOrgReporting } = await import("@openbooks/engine/testing/fixtures");
+const { mutatePayRunAdjustment } = await import("@openbooks/engine/payroll/run-adjustments");
 const { GET, POST } = await import("../app/api/payroll/runs/[id]/route");
 
 for (const action of ["add-adjustment", "delete-adjustment", "exclude-employee", "include-employee", "bulk-adjustment", "set-scope", "preview-gl", "calculate", "dry-run", "commit", "read", "read-adjustments"] as const) {
@@ -172,12 +172,12 @@ const consolidatedRows = [
         } });
         const { sql } = await import("drizzle-orm");
         const { randomUUID } = await import("node:crypto");
-        const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
-        const { seedAdoption } = await import("@openbooks/engine/src/payroll/filing-test-fixtures.ts");
-        const { createPayRun } = await import("@openbooks/engine/src/payroll/run-lifecycle.ts");
-        const { demandingHolidays, recordHolidayAssertion } = await import("@openbooks/engine/src/payroll/holiday-attestations.ts");
-        const { payRunStaleness } = await import("@openbooks/engine/src/payroll/readiness.ts");
-        const { dropScratchOrgReporting, seedWorkerEmployment, seedPayrollProfile } = await import("@openbooks/engine/src/testing/fixtures.ts");
+        const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
+        const { seedAdoption } = await import("@openbooks/engine/testing/payroll/filing-test-fixtures");
+        const { createPayRun } = await import("@openbooks/engine/payroll/run-lifecycle");
+        const { demandingHolidays, recordHolidayAssertion } = await import("@openbooks/engine/payroll/holiday-attestations");
+        const { payRunStaleness } = await import("@openbooks/engine/payroll/readiness");
+        const { dropScratchOrgReporting, seedWorkerEmployment, seedPayrollProfile } = await import("@openbooks/engine/testing/fixtures");
         const { POST } = await import("../app/api/payroll/runs/[id]/route");
         const assertionsRoute = await import("../app/api/payroll/runs/[id]/holiday-assertions/route");
         const profilesRoute = await import("../app/api/payroll/profiles/route");
@@ -654,9 +654,9 @@ const consolidatedRows = [
           return next(specifier, context);
         } });
         const { sql } = await import("drizzle-orm");
-        const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
-        const { createPayRun } = await import("@openbooks/engine/src/payroll/run-lifecycle.ts"), { seedPayrollComponents } = await import("@openbooks/engine/src/payroll/run-setup.ts");
-        const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
+        const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
+        const { createPayRun } = await import("@openbooks/engine/payroll/run-lifecycle"), { seedPayrollComponents } = await import("@openbooks/engine/payroll/run-setup");
+        const { createScratchOrg, dropScratchOrgReporting, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
         const { POST } = await import("../app/api/payroll/runs/[id]/route");
 
         /**
@@ -948,10 +948,10 @@ const payrollRunRouteCases = [
           return resolved;
         } });
         const { sql } = await import("drizzle-orm");
-        const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
-        const { seedAdoption, calculatedRun } = await import("@openbooks/engine/src/payroll/filing-test-fixtures.ts");
-        const { commitPayRun } = await import("@openbooks/engine/src/payroll/run-commit.ts");
-        const { dropScratchOrgReporting } = await import("@openbooks/engine/src/testing/fixtures.ts");
+        const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
+        const { seedAdoption, calculatedRun } = await import("@openbooks/engine/testing/payroll/filing-test-fixtures");
+        const { commitPayRun } = await import("@openbooks/engine/payroll/run-commit");
+        const { dropScratchOrgReporting } = await import("@openbooks/engine/testing/fixtures");
         const { GET, POST } = await import("../app/api/payroll/runs/[id]/bank-file/route");
 
         /**
@@ -1065,9 +1065,9 @@ const payrollRunRouteCases = [
           return next(specifier, context);
         } });
         const { sql } = await import("drizzle-orm");
-        const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
-        const { seedAdoption } = await import("@openbooks/engine/src/payroll/filing-test-fixtures.ts");
-        const { dropScratchOrgReporting } = await import("@openbooks/engine/src/testing/fixtures.ts");
+        const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
+        const { seedAdoption } = await import("@openbooks/engine/testing/payroll/filing-test-fixtures");
+        const { dropScratchOrgReporting } = await import("@openbooks/engine/testing/fixtures");
         const { listApplicationPayrollEmployees } = await import("./application/payroll-read.ts");
         const { ApplicationError } = await import("./application/errors.ts");
         type ApplicationContext = import("./application/context.ts").ApplicationContext;
@@ -1198,9 +1198,9 @@ const payrollRunRouteCases = [
           }
           return next(specifier, context);
         } });
-        const { seedAdoption } = await import("@openbooks/engine/src/payroll/filing-test-fixtures.ts");
-        const { dropScratchOrgReporting } = await import("@openbooks/engine/src/testing/fixtures.ts");
-        const { withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
+        const { seedAdoption } = await import("@openbooks/engine/testing/payroll/filing-test-fixtures");
+        const { dropScratchOrgReporting } = await import("@openbooks/engine/testing/fixtures");
+        const { withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
         const { POST } = await import("../app/api/payroll/retro/route");
 
         /**
@@ -1322,9 +1322,9 @@ const payrollPopulationCases = [{ label: "payroll run population scope", registe
           return next(specifier, context);
         } });
         const { sql } = await import("drizzle-orm");
-        const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
-        const { seedAdoption, calculatedRun } = await import("@openbooks/engine/src/payroll/filing-test-fixtures.ts");
-        const { dropScratchOrgReporting } = await import("@openbooks/engine/src/testing/fixtures.ts");
+        const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
+        const { seedAdoption, calculatedRun } = await import("@openbooks/engine/testing/payroll/filing-test-fixtures");
+        const { dropScratchOrgReporting } = await import("@openbooks/engine/testing/fixtures");
         const { GET } = await import("../app/api/payroll/runs/route");
         const { PAYROLL_TOOLS } = await import("./assistant/tools-payroll");
         const { payRunWhere } = await import("./customization/list-query");

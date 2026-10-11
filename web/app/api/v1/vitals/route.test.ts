@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { importWithMocks } from "@openbooks/engine/src/testing/module-mocks.ts";
+import { importWithMocks } from "@openbooks/engine/testing/module-mocks";
 
 const { GET } = await importWithMocks<typeof import("./route.ts")>(
   "./route.ts",

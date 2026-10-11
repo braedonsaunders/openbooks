@@ -1,4 +1,4 @@
-import { voidAndRebillRateRun } from "@openbooks/engine/src/billing/usage/rate-run.ts";
+import { voidAndRebillRateRun } from "@openbooks/engine/billing/usage/rate-run";
 import { defineRoute } from "@/lib/api/route";
 import { z } from "zod";
 

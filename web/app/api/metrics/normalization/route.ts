@@ -1,4 +1,4 @@
-import { listNormalizationMonthStates } from "@openbooks/engine/src/billing/metrics/metrics-normalization-service.ts";
+import { listNormalizationMonthStates } from "@openbooks/engine/billing/metrics/metrics-normalization-service";
 import { defineRoute } from "@/lib/api/route";
 
 export const GET = defineRoute({

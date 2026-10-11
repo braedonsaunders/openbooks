@@ -1,5 +1,5 @@
-import { normalizeDecimal } from '@openbooks/engine/src/money/money.ts'
-import { cmp, toUnits } from '@openbooks/engine/src/money/money.ts'
+import { normalizeDecimal } from '@openbooks/engine/money/money'
+import { cmp, toUnits } from '@openbooks/engine/money/money'
 import { canonicalDecimal, compareDecimal } from '../../../lib/exact-decimal'
 import type { PriceBasis } from '../../../lib/price-basis'
 import { resolveItemPrice } from '../../../lib/item-pricing'

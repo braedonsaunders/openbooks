@@ -559,7 +559,7 @@ const mockSources = new Map<string, string>([
     export async function segmentRegistry() { return [] }
     export function validateExtraDims(value) { return { ok: true, cleaned: value ?? {} } }
   `],
-  ['mock:crm', `export async function promoteCrmAccount() { return { customerRoleActive: true, lifecycleApplied: true, transitioned: true } }`],
+  ['mock:crm', `export { CrmLifecycleRefusalError } from ${JSON.stringify(import.meta.resolve('@openbooks/engine/crm/crm'))}; export async function promoteCrmAccount() { return { customerRoleActive: true, lifecycleApplied: true, transitioned: true } }`],
   ['mock:features', `
     export async function isFeatureEnabled() { return true }
     export async function subsidiaryFeatureEnabled() { return true }
@@ -602,8 +602,8 @@ const mockSources = new Map<string, string>([
 const resolutionMocks = new Map<string, string>([
   ['next/server', 'mock:next-server'],
   ['drizzle-orm', 'mock:drizzle'],
-  ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
-  ['@openbooks/engine/src/ledger/document-delete.ts', 'mock:document-delete'],
+  ['@openbooks/engine/platform/db', 'mock:db'],
+  ['@openbooks/engine/ledger/document-delete', 'mock:document-delete'],
   ['../../../lib/feature-gates', 'mock:feature-gates'],
   ['../../../lib/authz', 'mock:authz'],
   ['../../../lib/order-cycle', 'mock:order-cycle'],
@@ -611,11 +611,11 @@ const resolutionMocks = new Map<string, string>([
   ['../../../lib/bills.ts', 'mock:bills'],
   ['../../../lib/stock-locations', 'mock:stock-locations'],
   ['../../../lib/segments', 'mock:segments'],
-  ['@openbooks/engine/src/crm/crm.ts', 'mock:crm'],
+  ['@openbooks/engine/crm/crm', 'mock:crm'],
   ['../../../lib/features', 'mock:features'],
-  ['@openbooks/engine/src/flows/index.ts', 'mock:flows'],
-  ['@openbooks/engine/src/sales/sales-orders.ts', 'mock:sales-orders'],
-  ['@openbooks/engine/src/ledger/document-void.ts', 'mock:document-void'],
+  ['@openbooks/engine/flows/module', 'mock:flows'],
+  ['@openbooks/engine/sales/sales-orders', 'mock:sales-orders'],
+  ['@openbooks/engine/ledger/document-void', 'mock:document-void'],
   ['@openbooks/engine/billing/quote-to-cash', 'mock:quote-to-cash'],
 ])
 
@@ -1041,6 +1041,16 @@ class IssuePoolHarness {
     ) {
       return { ...this.result([]), rowCount: 0 }
     }
+    // The isolated read role has no privileges to execute SQL text functions.
+    if (normalized.includes('from pg_catalog.pg_proc p') && normalized.includes('has_function_privilege')) {
+      assert.equal(this.readRoleSelections, this.governedPoolCheckouts)
+      return { ...this.result([]), rowCount: 0 }
+    }
+    if (normalized.startsWith('select current_user::pg_catalog.text') && normalized.endsWith('as intact')) {
+      assert.deepEqual(params, [ORG_ID])
+      assert.equal(this.readRoleSelections, this.governedPoolCheckouts)
+      return { ...this.result([{ intact: true }], ['intact']), rowCount: 1 }
+    }
     if (normalized === 'rollback') {
       this.governedRollbacks += 1
       return { ...this.result([]), rowCount: 0 }
@@ -1244,14 +1254,14 @@ const poolMockSources = new Map<string, string>([
 const poolHooks = registerHooks({
   resolve(specifier, context, nextResolve) {
     if (specifier === 'drizzle-orm') return { url: 'pool:drizzle', shortCircuit: true }
-    if (specifier === '@openbooks/engine/src/platform/db.ts') return { url: 'pool:db', shortCircuit: true }
-    if (specifier === '@openbooks/engine/src/flows/index.ts') {
+    if (specifier === '@openbooks/engine/platform/db') return { url: 'pool:db', shortCircuit: true }
+    if (specifier === '@openbooks/engine/flows/module') {
       return { url: poolSubmitUrl, shortCircuit: true }
     }
-    if (specifier === '@openbooks/engine/src/ledger/document-delete.ts') {
+    if (specifier === '@openbooks/engine/ledger/document-delete') {
       return { url: 'pool:document-delete', shortCircuit: true }
     }
-    if (specifier === '@openbooks/engine/src/ledger/document-void.ts') {
+    if (specifier === '@openbooks/engine/ledger/document-void') {
       return { url: 'pool:document-void', shortCircuit: true }
     }
     if (specifier === './lib' && context.parentURL === poolHandlerUrl) {

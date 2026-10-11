@@ -7,9 +7,9 @@ import {
   widgetBlock,
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { AvailabilityRefusal } from '@openbooks/engine/src/inventory/availability.ts'
-import { replenishmentProposals, type ReplenishmentLine } from '@openbooks/engine/src/inventory/replenishment.ts'
+import { db } from '@openbooks/engine/platform/db'
+import { AvailabilityRefusal } from '@openbooks/engine/inventory/availability'
+import { replenishmentProposals, type ReplenishmentLine } from '@openbooks/engine/inventory/replenishment'
 import { can, requirePermission } from '../../../../lib/authz'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { isFeatureEnabled, subsidiaryFeatureEnabled } from '../../../../lib/features'

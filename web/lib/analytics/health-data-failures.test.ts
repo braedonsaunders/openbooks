@@ -9,7 +9,7 @@ const dialect = new PgDialect();
 Object.assign(globalThis, { __healthQuery: (query: Parameters<PgDialect["sqlToQuery"]>[0]) => dialect.sqlToQuery(query).sql });
 const mocks: Record<string, string> = {
   "server-only": "export {}",
-  "@openbooks/engine/src/platform/db.ts": `export function ambientTenantOrgId(){return null} export function registerRequestOrgResolver(){} export async function withBypassContext(work){return work()} export const db={async execute(query){
+  "@openbooks/engine/platform/db": `export function ambientTenantOrgId(){return null} export function registerRequestOrgResolver(){} export async function withBypassContext(work){return work()} export const db={async execute(query){
     const s=globalThis.__healthFailures;const text=globalThis.__healthQuery(query);s.queries.push(text);
     if(s.fail && text.includes(s.fail))throw new Error('injected ledger read failure');
     return {rows:[]};}}`,
@@ -22,7 +22,7 @@ const mocks: Record<string, string> = {
     revenueGrowth:null,breakevenRevenue:null,operatingLeverage:null,rule40:null}}}`,
 };
 registerHooks({ resolve(specifier, context, next) {
-  if (specifier === "@openbooks/engine/platform/database" && context.parentURL?.endsWith("/analytics/query.ts")) return { shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(mocks["@openbooks/engine/src/platform/db.ts"]!) };
+  if (specifier === "@openbooks/engine/platform/database" && context.parentURL?.endsWith("/analytics/query.ts")) return { shortCircuit: true, url: "data:text/javascript," + encodeURIComponent(mocks["@openbooks/engine/platform/db"]!) };
   // Relative doubles stand in for web/lib siblings only; a package's own `./config` stays real.
   if (specifier in mocks && (!specifier.startsWith(".") || context.parentURL?.includes("/web/lib/"))) return { shortCircuit: true, url: 'data:text/javascript,' + encodeURIComponent(mocks[specifier]!) };
   return next(specifier, context);

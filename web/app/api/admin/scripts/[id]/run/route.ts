@@ -3,14 +3,14 @@ import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/db'
 import {
   computeScheduledScriptNextRunAt,
   InvalidScheduledScriptCronError,
   INVALID_SCHEDULED_SCRIPT_CRON_CODE,
   runBulkScript,
   runScheduledScript,
-} from '@openbooks/engine/src/scripting/scripting.ts'
+} from '@openbooks/engine/scripting/scripting'
 import {
   bulkRunClientKey,
   bulkRunIdempotencyScope,
@@ -18,7 +18,7 @@ import {
   claimBulkRunKey,
   completeBulkRunKey,
   releaseAbandonedBulkRunKey,
-} from '@openbooks/engine/src/scripting/bulk-run-claim.ts'
+} from '@openbooks/engine/scripting/bulk-run-claim'
 
 import { unexpectedServerError } from '../../../../../../lib/api/unexpected'
 import { isUuid } from '../../../../../../lib/list-params'

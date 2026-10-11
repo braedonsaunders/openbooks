@@ -17,9 +17,9 @@ const { buildToolRegistryAsync, executeAssistantTool } = await import('../assist
 const { createOpenBooksMcpServer } = await import('../mcp/server')
 const { Client: McpClient } = await import('@modelcontextprotocol/sdk/client/index.js')
 const { InMemoryTransport } = await import('@modelcontextprotocol/sdk/inMemory.js')
-const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, env, withBypass, withOrgContext } = await import('@openbooks/engine/platform/db')
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  '@openbooks/engine/src/testing/fixtures.ts'
+  '@openbooks/engine/testing/fixtures'
 )
 import type { Authz } from '../authz'
 

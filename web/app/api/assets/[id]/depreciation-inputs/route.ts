@@ -3,13 +3,13 @@ import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from "@/lib/api/error-response";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { db } from "@openbooks/engine/platform/db";
 import {
   buildAllSchedules,
   recordDepreciationInput,
-} from "@openbooks/engine/src/assets/depreciation.ts";
-import { isIsoCalendarDate } from "@openbooks/engine/src/platform/business-date.ts";
-import { normalizeMoney } from "@openbooks/engine/src/money/money.ts";
+} from "@openbooks/engine/assets/depreciation";
+import { isIsoCalendarDate } from "@openbooks/engine/platform/business-date/module";
+import { normalizeMoney } from "@openbooks/engine/money/money";
 import { isUuid } from "../../../../../lib/list-params";
 import { canonicalDecimal } from "../../../../../lib/exact-decimal";
 import { moneyRefusal } from "../../../../../lib/payroll-decimal-refusal";

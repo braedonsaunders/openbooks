@@ -11,7 +11,7 @@ import {
   resolveFeatureOn,
   type FeatureTreeRow,
 } from './feature-tree'
-import { FEATURE_CATEGORIES as CATEGORIES, FEATURE_GROUPS, FEATURES } from '../../../../../../engine/src/organization/feature-registry'
+import { FEATURE_CATEGORIES as CATEGORIES, FEATURE_GROUPS, FEATURES } from '@openbooks/engine/organization/feature-registry'
 import { INDUSTRIES } from '../../../../../lib/industries'
 
 const ROWS: FeatureTreeRow[] = [

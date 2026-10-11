@@ -4,7 +4,7 @@ import { crmSubjectVisible, lockCrmLinkSubject } from '../../../../../lib/crm-sc
 import { parseJsonBody } from "@/lib/api/json"
 import { NextResponse } from 'next/server';
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/db'
 import '../../../../../lib/feature-gates';
 import '../../../../../lib/list-params';
 import { notFound } from "@/lib/api/responses";

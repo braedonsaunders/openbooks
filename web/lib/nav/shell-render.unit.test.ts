@@ -22,8 +22,8 @@ test('menus share source reads within a render and recheck organization and role
         if(specifier==='next-intl/server') return {shortCircuit:true,url:'data:text/javascript,'+encodeURIComponent('export async function getTranslations(){return key=>key;}')};
         return next(specifier,context);
       }});
-      const {db} = await import('@openbooks/engine/src/platform/db.ts');
-      const {FEATURES} = await import('@openbooks/engine/src/organization/feature-registry.ts');
+      const {db} = await import('@openbooks/engine/platform/db');
+      const {FEATURES} = await import('@openbooks/engine/organization/feature-registry');
       const {defaultNavConfig} = await import('./lib/nav/registry.ts');
       const {resolveNav} = await import('./lib/nav/resolve.ts');
       const {resolveLocalNavigation} = await import('./lib/nav/local.ts');

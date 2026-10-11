@@ -1,6 +1,6 @@
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { getMyBenefitsWorkspace } from "@openbooks/engine/src/hrm/self-service/my-work.ts";
+import { getMyBenefitsWorkspace } from "@openbooks/engine/hrm/self-service/my-work";
 import { meErrorResponse } from "../_lib";
 /**
  * The caller's own benefits: elections with the stored payroll amounts,

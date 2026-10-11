@@ -5,17 +5,17 @@ import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { z } from 'zod'
-import { db, withOrgTransaction } from '@openbooks/engine/src/platform/db.ts'
-import { businessToday, isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
-import { normalizeDecimal } from '@openbooks/engine/src/money/money.ts'
+import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
+import { businessToday, isIsoCalendarDate } from '@openbooks/engine/platform/business-date/module'
+import { normalizeDecimal } from '@openbooks/engine/money/money'
 import {
   PAYROLL_COUNTRY_PACKS,
-} from '@openbooks/engine/src/payroll/packs.ts'
+} from '@openbooks/engine/payroll/packs'
 import {
   certificateAnswersProblem,
   packCertificates,
   payrollCertificate,
-} from '@openbooks/engine/src/payroll/certificates.ts'
+} from '@openbooks/engine/payroll/certificates'
 import '../../../../lib/feature-gates';
 import { guardSubsidiaryScope } from '../../../../lib/authz'
 import { isUuid } from '../../../../lib/list-params'

@@ -18,7 +18,7 @@ registerHooks({
       return next(specifier, { ...context, parentURL: import.meta.url });
     if (specifier === "@/lib/feature-gates" || specifier === "@/lib/authz")
       return { shortCircuit: true, url: "mock:revenue-change-auth" };
-    if (specifier === "@openbooks/engine/src/revenue/contract-modifications.ts")
+    if (specifier === "@openbooks/engine/revenue/contract-modifications")
       return { shortCircuit: true, url: "mock:revenue-change-command" };
     if (specifier === "@/lib/api/json")
       return next(

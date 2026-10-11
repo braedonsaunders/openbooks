@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
-import { isIsoCalendarDate } from '@openbooks/engine/src/platform/business-date.ts'
+import { isIsoCalendarDate } from '@openbooks/engine/platform/business-date/module'
 
 // A contradictory { writeOff: true, proceeds: 500 } must reach the engine
 // untouched so its write-off-takes-no-proceeds refusal fires. The route used
@@ -42,7 +42,7 @@ const _hooks = registerHooks({
     if ((specifier === '@/lib/feature-gates' || specifier === '../../../../../lib/feature-gates')) {
       return { url: 'mock:feature-gates', shortCircuit: true }
     }
-    if (specifier === '@openbooks/engine/src/platform/business-date.ts') {
+    if (specifier === '@openbooks/engine/platform/business-date/module') {
       return { url: 'mock:business-date', shortCircuit: true }
     }
     return nextResolve(specifier, context)

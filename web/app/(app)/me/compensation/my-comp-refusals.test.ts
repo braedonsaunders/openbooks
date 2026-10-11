@@ -52,7 +52,7 @@ registerIoHooks({
     // a real database. The real module is re-exported untouched and only
     // `db` is overridden; planned pages are consumed in order and anything
     // unexpected reads empty.
-    if (specifier === "@openbooks/engine/src/platform/db.ts") {
+    if (specifier === "@openbooks/engine/platform/db") {
       // The workspace engine lives at <repo>/engine; every test file runs
       // from the repo root, so the file URL is stable without resolution.
       const target = new URL("file://" + process.cwd() + "/engine/src/platform/db.ts").href;
@@ -93,7 +93,7 @@ registerIoHooks({
 });
 
 const { loadMyCompensation, myCompRefusal } = await import("../../../../lib/hrm/compensation");
-const { HrmAuthorizationError } = await import("@openbooks/engine/src/hrm/authorization.ts");
+const { HrmAuthorizationError } = await import("@openbooks/engine/hrm/authorization");
 
 const NOT_LINKED = hrmCatalog.myComp?.notLinked as string;
 const NO_EMPLOYMENT = hrmCatalog.myComp?.noEmployment as string;

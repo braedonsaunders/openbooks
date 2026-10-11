@@ -7,9 +7,9 @@ import test from 'node:test'
  * engine and the Setup page both read the same key, so this is the single
  * source of truth — not a parallel gate.
  */
-const { db, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
+const { db, withBypassContext } = await import('@openbooks/engine/platform/db')
 const { sql } = await import('drizzle-orm')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
 const { readCompanySettings, updateCompanySettings } = await import('./company-settings')
 
 async function orgSettings(orgId: string) {
@@ -120,11 +120,11 @@ const consolidatedRows = [
          * (US/Eastern) store canonical and keep working; unknown zones refuse by
          * name instead of accruing UTC days.
          */
-        const { db, withBypassContext } = await import('@openbooks/engine/src/platform/db.ts')
+        const { db, withBypassContext } = await import('@openbooks/engine/platform/db')
         const { sql } = await import('drizzle-orm')
-        const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
-        const { withSimClock } = await import('@openbooks/engine/src/platform/clock.ts')
-        const { businessTimeZone, businessToday } = await import('@openbooks/engine/src/platform/business-date.ts')
+        const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
+        const { withSimClock } = await import('@openbooks/engine/testing/platform/clock')
+        const { businessTimeZone, businessToday } = await import('@openbooks/engine/platform/business-date/module')
         const { readCompanySettings, updateCompanySettings } = await import('./company-settings')
 
         async function orgSettings(orgId: string) {
@@ -266,16 +266,16 @@ const featureDefaultsCases = [
         // helper (engine/src/organization/feature-defaults.ts); an explicit stored boolean always
         // wins in both directions.
         const { db, withBypassContext, withOrgTransaction } = await import(
-          "@openbooks/engine/src/platform/db.ts"
+          "@openbooks/engine/platform/db"
         );
         const { createScratchOrg, dropScratchOrg } = await import(
-          "@openbooks/engine/src/testing/fixtures.ts"
+          "@openbooks/engine/testing/fixtures"
         );
         const { lockAndCheckOrgFeature } = await import(
-          "@openbooks/engine/src/organization/org-feature-lock.ts"
+          "@openbooks/engine/organization/org-feature-lock"
         );
         const { dataDependentFeatureDefault } = await import(
-          "@openbooks/engine/src/organization/feature-defaults.ts"
+          "@openbooks/engine/testing/organization/feature-defaults"
         );
         const { featureDisableStatuses, isFeatureEnabled, resolvedFeatureState } = await import("./features.ts");
         const { seedFeatureDisableBookScope } = await import("../testing/report-fixtures.ts");

@@ -21,8 +21,8 @@ import {
   TableRow,
   Textarea,
 } from '@openbooks/ui'
-import { filedBoxAmounts } from '@openbooks/engine/src/compliance/information-returns-boxes.ts'
-import type { FormBox } from '@openbooks/engine/src/compliance/information-returns.ts'
+import { filedBoxAmounts } from '@openbooks/engine/compliance/information-returns-boxes'
+import type { FormBox } from '@openbooks/engine/compliance/information-returns'
 import { promptDialog } from '../../../../../lib/prompt'
 import { readApiErrorMessage } from '../../../../../lib/api-error'
 import type { FilingDetail, RecipientRow } from '../../../../../lib/compliance'

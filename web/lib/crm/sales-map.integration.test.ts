@@ -10,7 +10,7 @@ import {
   createScratchOrg,
   createScratchUser,
   dropScratchOrg,
-} from "@openbooks/engine/src/testing/fixtures.ts";
+} from "@openbooks/engine/testing/fixtures";
 import { loadSalesMapCustomers } from "./sales-map";
 
 test(

@@ -1,7 +1,7 @@
 import { NextResponse } from 'next/server'
 import { z } from 'zod'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/db'
 import { can, guardSubsidiaryScope } from '../../../../../lib/authz'
 import { defineRoute } from '../../../../../lib/api/route'
 import { isFeatureEnabled } from '../../../../../lib/features'

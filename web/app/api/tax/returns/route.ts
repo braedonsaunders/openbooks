@@ -4,9 +4,9 @@ import { defineRoute } from "@/lib/api/route";
 import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { filterTaxReturnFormsByFeatures } from '@openbooks/engine/src/tax-returns/return.ts'
-import { installTaxReturnPacks, TAX_RETURN_PACKS } from '@openbooks/engine/src/tax/seed-tax-forms.ts'
+import { db } from '@openbooks/engine/platform/db'
+import { filterTaxReturnFormsByFeatures } from '@openbooks/engine/tax-returns/return'
+import { installTaxReturnPacks, TAX_RETURN_PACKS } from '@openbooks/engine/tax/seed-tax-forms'
 import { guardUnrestrictedScope } from '../../../../lib/authz'
 import { planTaxReturnLibraryChange } from '../../../../lib/setup/tax-return-library'
 

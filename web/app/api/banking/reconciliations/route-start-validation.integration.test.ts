@@ -2,8 +2,8 @@ import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
-import { createScratchOrg, dropScratchOrg, seedFlowActors } from '@openbooks/engine/src/testing/fixtures.ts'
+import { db } from '@openbooks/engine/platform/db'
+import { createScratchOrg, dropScratchOrg, seedFlowActors } from '@openbooks/engine/testing/fixtures'
 import type { Authz } from '../../../../lib/authz'
 
 // Reconciliation start must validate what it stores. POST requires all three

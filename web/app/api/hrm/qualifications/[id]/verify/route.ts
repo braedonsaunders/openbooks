@@ -1,8 +1,8 @@
 import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
-import { db, withOrgTransaction } from "@openbooks/engine/src/platform/db.ts";
-import { verifyQualification } from "@openbooks/engine/src/hrm/qualifications/qualifications.ts";
+import { db, withOrgTransaction } from "@openbooks/engine/platform/db";
+import { verifyQualification } from "@openbooks/engine/hrm/qualifications/qualifications";
 import { qualificationErrorResponse } from "../../_lib";
 import { verifyQualificationBody } from "../../bodies";
 /** Verification stays HR's: pending_verification becomes valid. */

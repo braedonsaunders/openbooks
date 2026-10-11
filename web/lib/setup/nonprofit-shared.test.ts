@@ -3,7 +3,7 @@ import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import test from "node:test";
 import { PgDialect } from "drizzle-orm/pg-core";
-import { BUILT_IN_ROLES, PERMISSION_CATALOGUE, PERMISSION_GROUPS, permissionLabelKey, permissionSetCovers } from "@openbooks/engine/src/organization/permissions.ts";
+import { BUILT_IN_ROLES, PERMISSION_CATALOGUE, PERMISSION_GROUPS, permissionLabelKey, permissionSetCovers } from "@openbooks/engine/organization/permissions";
 import { getRecordType, type FilterClause } from "@openbooks/customization";
 import { entityListSource } from "../list/entity-sources.ts";
 // Shared fund registry properties — catalogue, labels, storage, sources.

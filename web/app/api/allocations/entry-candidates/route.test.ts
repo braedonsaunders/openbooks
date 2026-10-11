@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { stubModules } from "../../../../testing/stub-modules";
 import test from "node:test";
 import { NextResponse } from "next/server";
-import { allocationRuleVisible } from "@openbooks/engine/src/organization/allocation-scope.ts";
+import { allocationRuleVisible } from "@openbooks/engine/organization/allocation-scope";
 
 // The route's scope wrapper (web/lib/allocations-scope.ts) cannot load here
 // rule onto the REAL engine predicate: the refusal decision under test is
@@ -129,7 +129,7 @@ stubModules({
        if (orgId !== '${ORG_ID}') return false
        return state.features[key] === true
      }`,
-    "@openbooks/engine/src/allocations/match.ts": `export async function listEntryRulesInEffect(request) {
+    "@openbooks/engine/allocations/match": `export async function listEntryRulesInEffect(request) {
        const state = globalThis[Symbol.for('openbooks.entry-candidates-route-test')]
        state.lastListRequest = { ...request }
        return state.rules.map((canned) => ({
@@ -199,7 +199,7 @@ stubModules({
        state.selectCalls.push({ keys: candidates.map((c) => c.rule.key), line: { ...line } })
        return candidates[0] ?? null
      }`,
-    "@openbooks/engine/src/platform/business-date.ts": `export async function businessToday(orgId) {
+    "@openbooks/engine/platform/business-date/module": `export async function businessToday(orgId) {
        const state = globalThis[Symbol.for('openbooks.entry-candidates-route-test')]
        state.lastBusinessTodayOrg = orgId
        return '2026-07-15'

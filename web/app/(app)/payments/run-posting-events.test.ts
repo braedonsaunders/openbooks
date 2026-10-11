@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import test from 'node:test'
-import { PAYMENT_RUN_POSTING_EVENT_TYPES } from '../../../../engine/src/payments/run-posting-events.ts'
+import { PAYMENT_RUN_POSTING_EVENT_TYPES } from '@openbooks/engine/testing/payments/run-posting-events'
 import { LOCALE_CODES as LOCALES } from "../../../i18n/config"
 
 // a failed pay-run posting rendered raw keys

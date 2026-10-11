@@ -57,7 +57,7 @@ registerHooks({
     // app's alias the way PartyDrawer.test.tsx does: `@/lib/...` → web/lib.
     const parent = context.parentURL ?? ''
     if (specifier === '@/lib/authz') return { shortCircuit: true, format: 'module', url: 'mock:authz-patch' }
-    if (specifier === '@openbooks/engine/src/platform/db.ts' && parent.includes('customization/list-views')) {
+    if (specifier === '@openbooks/engine/platform/db' && parent.includes('customization/list-views')) {
       // Late delegation: the route binds `db` at import time, before the
       // test installs its doubles, so the stub forwards on every call.
       return { shortCircuit: true, format: 'module', url: 'data:text/javascript,export const db = { execute: (...a) => globalThis[Symbol.for("openbooks.list-view-mark-strip-patch-test")].db.execute(...a), transaction: (...a) => globalThis[Symbol.for("openbooks.list-view-mark-strip-patch-test")].db.transaction(...a) }' }

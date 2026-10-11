@@ -1,14 +1,14 @@
 import { defineRoute } from "@/lib/api/route";
 import { parseJsonBody } from "@/lib/api/json";
 import { NextResponse } from "next/server";
-import { db } from "@openbooks/engine/src/platform/db.ts";
+import { db } from "@openbooks/engine/platform/db";
 import {
   classify,
   createCompClass,
   createCompRule,
   dailySplit,
   listCompClasses,
-} from "@openbooks/engine/src/hrm/construction/comp-classes.ts";
+} from "@openbooks/engine/hrm/construction/comp-classes";
 import { constructionErrorResponse } from "../_lib";
 import { createCompClassBody, createCompRuleBody, splitBody } from "../bodies";
 /** Comp classes, their priority match rules, and the daily split report. */

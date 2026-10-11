@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import {
   listActionReasons,
   upsertActionReason,
-} from "@openbooks/engine/src/automations/action-reasons.ts";
+} from "@openbooks/engine/automations/action-reasons";
 import { actionReasonRouteBody } from "../../automations/bodies";
 import { automationErrorResponse } from "../../automations/_lib";
 /**

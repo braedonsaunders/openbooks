@@ -106,7 +106,7 @@ stubModules({
     "@/lib/feature-gates": `export async function guardFeaturePermission() {
       return { user: { orgId: '${ORG_ID}', id: '${USER_ID}' }, allowedSubsidiaryIds: null }
     }`,
-    "@openbooks/engine/src/platform/db.ts": `
+    "@openbooks/engine/platform/db": `
       const state = globalThis[Symbol.for('openbooks.report-schedule-route-test')]
       const sqlText = globalThis.openbooksSqlTextReportSchedule
       const isWrite = (text) =>

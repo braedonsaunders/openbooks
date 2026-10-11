@@ -57,9 +57,9 @@ const { MASTER_BY_KEY, masterResource } = (await import(
   `../../../../lib/data-io/master-data-resources.ts?account-warnings-${Date.now()}`
 )) as typeof import('../../../../lib/data-io/master-data-resources.ts')
 
-const { withBypassContext, db } = await import('@openbooks/engine/src/platform/db.ts')
+const { withBypassContext, db } = await import('@openbooks/engine/platform/db')
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import(
-  '@openbooks/engine/src/testing/fixtures.ts'
+  '@openbooks/engine/testing/fixtures'
 )
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL)

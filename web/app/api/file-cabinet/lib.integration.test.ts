@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { spawnSync } from 'node:child_process'
 import { test } from 'node:test'
-import { env } from '@openbooks/engine/src/platform/db.ts'
+import { env } from '@openbooks/engine/platform/db'
 import { ATTACHABLE_TARGET_TABLES, isAttachableTargetTable } from './target-tables.ts'
 
 test('allowlist covers exactly the tables the app attaches files to', () => {

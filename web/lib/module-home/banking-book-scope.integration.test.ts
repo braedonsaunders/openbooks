@@ -3,9 +3,9 @@ import { randomUUID } from 'node:crypto'
 import test from 'node:test'
 import { sql } from 'drizzle-orm'
 
-const { db, env, withBypass } = await import('@openbooks/engine/src/platform/db.ts')
-const { businessToday } = await import('@openbooks/engine/src/platform/business-date.ts')
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts')
+const { db, env, withBypass } = await import('@openbooks/engine/platform/db')
+const { businessToday } = await import('@openbooks/engine/platform/business-date/module')
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
 const { bankingHome } = await import('./banking.ts')
 
 /**

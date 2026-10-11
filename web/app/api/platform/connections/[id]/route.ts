@@ -3,8 +3,8 @@ import { defineRoute } from '@/lib/api/route'
 import { z } from 'zod'
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
-import { db } from "@openbooks/engine/src/platform/db.ts";
-import { getConnection } from "@openbooks/engine/src/sync/connection.ts";
+import { db } from "@openbooks/engine/platform/db";
+import { getConnection } from "@openbooks/engine/sync/connection";
 import { connectionAuditChanges } from "@openbooks/schema/src/connections.ts";
 import { guardPermission, guardUnrestrictedScope } from "../../../../../lib/authz";
 import { storageIdentityError } from "../_storage-identity";

@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 import {
   actOnInboxItem,
   InboxError,
-} from "@openbooks/engine/src/inbox/index.ts";
+} from "@openbooks/engine/inbox/runtime";
 import { TimeApprovalRefusal } from "@/lib/time-approval-refusal";
 import "../../../../lib/authz";
 import { inboxContext } from "../../../../lib/inbox-context";

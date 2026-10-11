@@ -53,7 +53,7 @@ stubModules({
   authz: false,
   features: false,
   extra: {
-    "@openbooks/engine/src/platform/db.ts": `
+    "@openbooks/engine/platform/db": `
       const state = globalThis[Symbol.for('openbooks.folder-restore-route-test')]
       const sqlText = globalThis.openbooksSqlTextFolderRestore
       const clone = (value) => ({ ...value })

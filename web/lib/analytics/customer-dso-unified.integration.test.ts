@@ -10,8 +10,8 @@ import test from 'node:test';
 // fast small payers) the two surfaces quoted different DSOs for the same org
 // on the same day. The header now reads the single engine definition.
 const { sql } = await import('drizzle-orm');
-const { db, withBypass, withOrgContext } = await import('@openbooks/engine/src/platform/db.ts');
-const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/src/testing/fixtures.ts');
+const { db, withBypass, withOrgContext } = await import('@openbooks/engine/platform/db');
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures');
 const { customerData } = await import('./customer-data.ts');
 const { paymentStats } = await import('../cash/core.ts');
 

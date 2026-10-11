@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { NextResponse } from "next/server";
-import { BenefitsError } from "@openbooks/engine/src/hrm/benefits/errors.ts";
-import { HrmAuthorizationError } from "@openbooks/engine/src/hrm/authorization.ts";
+import { BenefitsError } from "@openbooks/engine/hrm/benefits/errors";
+import { HrmAuthorizationError } from "@openbooks/engine/hrm/authorization";
 import { stubModules } from "../../../../../testing/stub-modules";
 
 const orgId = "00000000-0000-4000-8000-000000000001";

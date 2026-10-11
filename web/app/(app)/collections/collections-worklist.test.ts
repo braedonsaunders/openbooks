@@ -24,7 +24,7 @@ registerHooks({
         `),
       }
     }
-    if (specifier === '@openbooks/engine/src/platform/db.ts') {
+    if (specifier === '@openbooks/engine/platform/db') {
       return {
         shortCircuit: true,
         url: 'data:text/javascript,' + encodeURIComponent('export const db={execute:async()=>({rows:[]})}'),

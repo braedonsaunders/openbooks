@@ -208,10 +208,10 @@ const flowReleaseCases = [{ label: 'flow approval release handlers', register: a
       if (specifier === 'server-only') return { shortCircuit: true, url: 'data:text/javascript,export%20{}' }
       return next(specifier, context)
     }})
-    const { hasFlowApprovalReleaseHandler, handlerReleasedSubjectKinds } = await import('@openbooks/engine/src/flows/index.ts')
+    const { hasFlowApprovalReleaseHandler, handlerReleasedSubjectKinds } = await import('@openbooks/engine/flows/module')
     const flowReleaseModule: string = './flow-approval-releases?flow-release-test'
     const { registerFlowApprovalReleaseHandlers } = await import(flowReleaseModule) as typeof import('./flow-approval-releases')
-    const { installEngineSeams } = await import('@openbooks/engine/src/composition/install.ts')
+    const { installEngineSeams } = await import('@openbooks/engine/composition/install')
     releaseHooks.deregister()
     installEngineSeams()
     await registerFlowApprovalReleaseHandlers()

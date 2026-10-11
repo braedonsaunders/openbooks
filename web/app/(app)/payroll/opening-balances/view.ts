@@ -1,7 +1,7 @@
 import 'server-only'
 
 import { getTranslations } from 'next-intl/server'
-import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
+import { businessToday } from '@openbooks/engine/platform/business-date/module'
 import {
   OPENING_BALANCE_FIELDS,
   declaredAccountOpeningBaseFields,
@@ -9,12 +9,12 @@ import {
   declaredProgramBaseFields,
   employerLevyOpeningsForYear,
   type OpeningBalanceYear,
-} from '@openbooks/engine/src/payroll/opening-balances.ts'
-import { US_STATES } from '@openbooks/engine/src/payroll/us/rates.ts'
-import { listFilingAccounts } from '@openbooks/engine/src/payroll/filing.ts'
-import type { EntitlementOpeningsResult } from '@openbooks/engine/src/payroll/entitlements-openings.ts'
-import { itSurtaxSaldoCarryIns } from '@openbooks/engine/src/payroll/it/saldo-carryins.ts'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+} from '@openbooks/engine/payroll/opening-balances'
+import { US_STATES } from '@openbooks/engine/payroll/us/rates'
+import { listFilingAccounts } from '@openbooks/engine/payroll/filing'
+import type { EntitlementOpeningsResult } from '@openbooks/engine/payroll/entitlements-openings'
+import { itSurtaxSaldoCarryIns } from '@openbooks/engine/payroll/it/saldo-carryins'
+import { db } from '@openbooks/engine/platform/db'
 import {
   page,
   pageHeader,

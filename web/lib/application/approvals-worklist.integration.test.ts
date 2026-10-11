@@ -7,12 +7,12 @@ import test from "node:test";
 // get_vitals must count that same set. Previously listApprovalWorklist only
 // saw Flows gates, so an approver saw [] while documents sat pending.
 const { sql } = await import("drizzle-orm");
-const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/src/platform/db.ts");
-const { assertDedicatedFixtureDatabase, createScratchOrg, dropScratchOrg, seedApprovalFlow, seedDraftDocument, seedFlowActors } = await import("@openbooks/engine/src/testing/fixtures.ts");
-const { submitForApproval } = await import("@openbooks/engine/src/flows/submit.ts");
-const { OUTBOUND_PAYMENT_RUN_SUBJECT_KIND } = await import("@openbooks/engine/src/flows/payment-runs-adapter.ts");
-const { submitPaymentRun } = await import("@openbooks/engine/src/payments/operations.ts");
-const { installEngineSeams } = await import("@openbooks/engine/src/composition/install.ts");
+const { db, withBypassContext, withOrgContext } = await import("@openbooks/engine/platform/db");
+const { assertDedicatedFixtureDatabase, createScratchOrg, dropScratchOrg, seedApprovalFlow, seedDraftDocument, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
+const { submitForApproval } = await import("@openbooks/engine/flows/submit");
+const { OUTBOUND_PAYMENT_RUN_SUBJECT_KIND } = await import("@openbooks/engine/testing/flows/payment-runs-adapter");
+const { submitPaymentRun } = await import("@openbooks/engine/payments/operations");
+const { installEngineSeams } = await import("@openbooks/engine/composition/install");
 const { approvalWorklistCountForAuthz, approvalWorklistPageForAuthz, decideApproval, listApprovalWorklist } = await import("./approvals.ts");
 const { ApplicationError } = await import("./errors.ts");
 const { orgVitals } = await import("./vitals.ts");

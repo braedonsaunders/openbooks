@@ -14,7 +14,7 @@ Object.assign(globalThis, {
   },
 })
 stubModules({ extra: {
-  '@openbooks/engine/src/platform/db.ts':
+  '@openbooks/engine/platform/db':
     'export const db = { execute: (query) => globalThis.__conversationListExecute(query) }',
 } })
 const { listConversations } = await import('./ai-conversations')

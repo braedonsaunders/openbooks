@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { DOCUMENT_FLOW_KINDS, listFlowSubjectProfiles } from '@openbooks/engine/src/flows/index.ts'
-import { PAY_RUN_SUBJECT_KIND } from '@openbooks/engine/src/flows/pay-runs-adapter.ts'
+import { DOCUMENT_FLOW_KINDS, listFlowSubjectProfiles } from '@openbooks/engine/flows/module'
+import { PAY_RUN_SUBJECT_KIND } from '@openbooks/engine/testing/flows/pay-runs-adapter'
 import { FLOW_SUBJECT_GROUPS, flowSubjectGroup } from './groups.ts'
 
 // QA-057: the New Flow record-type picker groups every subject kind under a

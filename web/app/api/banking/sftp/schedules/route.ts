@@ -4,15 +4,15 @@ import { defineRoute } from '@/lib/api/route';
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/src/platform/db.ts'
+import { db } from '@openbooks/engine/platform/db'
 import { isUuid } from '../../../../../lib/list-params'
 import { pgErrorCode } from '../../../../../lib/setup/coerce'
 import { guardSubsidiaryScope } from '../../../../../lib/authz'
 import { subsidiaryVisibleFilter } from '../../../../../lib/subsidiaries'
-import { normalizeExternalAccountId } from '@openbooks/engine/src/banking/banking.ts'
+import { normalizeExternalAccountId } from '@openbooks/engine/banking/banking'
 import { auditSetupChange } from '../../../../../lib/setup/audit'
 import { randomUUID } from 'node:crypto'
-import { findSftpWatchFolderOverlap, normalizeSftpWatchFolder, sftpWatchFolderOverlapRefusal } from '@openbooks/engine/src/sftp/watch-folders.ts'
+import { findSftpWatchFolderOverlap, normalizeSftpWatchFolder, sftpWatchFolderOverlapRefusal } from '@openbooks/engine/sftp/watch-folders'
 const POSTBodySchema1 = z.object({
   // The handler applies the same named refusal before either UUID reaches SQL.
   sftpServerId: z.string(), accountId: z.string(), format: z.enum(['auto', 'ofx', 'csv', 'camt053', 'bai2', 'mt940']).optional(),

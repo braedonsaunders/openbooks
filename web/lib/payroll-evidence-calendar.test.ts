@@ -124,10 +124,10 @@ const mockSources = new Map<string, string>([
 
 const mockUrls = new Map<string, string>([
   ['next-intl/server', 'mock:intl'],
-  ['@openbooks/engine/src/platform/business-date.ts', 'mock:business-date'],
-  ['@openbooks/engine/src/reports/ensure-report-definitions.ts', 'mock:ensure-definitions'],
-  ['@openbooks/engine/src/payroll/run-commit.ts', 'mock:run-commit'],
-  ['@openbooks/engine/src/platform/db.ts', 'mock:db'],
+  ['@openbooks/engine/platform/business-date/module', 'mock:business-date'],
+  ['@openbooks/engine/reports/ensure-report-definitions', 'mock:ensure-definitions'],
+  ['@openbooks/engine/payroll/run-commit', 'mock:run-commit'],
+  ['@openbooks/engine/platform/db', 'mock:db'],
   ['./report-run', 'mock:report-run'],
   ['./report-pdf', 'mock:report-pdf'],
   ['./periods', 'mock:periods'],

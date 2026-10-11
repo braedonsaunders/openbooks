@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { upsertAssignment } from "@openbooks/engine/src/resourcing/assignments.ts";
+import { upsertAssignment } from "@openbooks/engine/resourcing/assignments";
 import { defineRoute } from "@/lib/api/route";
 import { findUnownedCustomReferences, loadFieldDefs, unknownCustomFieldKey, validateCustomValues } from "@/lib/custom-fields";
 
