@@ -796,6 +796,13 @@ export function OrderDrawer({
   // refusal in one place and closes only on an ok response — never silently
   // on a denial.
   const [voidTarget, setVoidTarget] = useState<{ id: string; number: string } | null>(null)
+  // Amendment: an approved order with received or billed lines cannot return
+  // to draft, so quantity/price changes go through the amend endpoint with a
+  // reason instead of the draft PATCH. The reason is prompted up front
+  // (void/return-to-draft convention); the panel edits only qty/price while
+  // the header and grid stay read-only.
+  const [amendReason, setAmendReason] = useState<string | null>(null)
+  const [amendRows, setAmendRows] = useState<{ id: string; description: string; quantity: string; unitPrice: string }[] | null>(null)
   // Unsaved-draft retention state lives below, next to the dirty tracker.
   const [dropShipRoutes, setDropShipRoutes] = useState<DropShipRoute[]>(dropShipLines)
   const [dropShipVendorId, setDropShipVendorId] = useState('')
@@ -1505,6 +1512,57 @@ export function OrderDrawer({
     )
   }
 
+  async function openAmend() {
+    // The amendment carries its reason into the audit entry; prompt it
+    // before opening the panel so Cancel never leaves a half-reasoned edit.
+    const reason = await promptDialog({
+      title: t('amend'),
+      label: tCommon('amendment.reason'),
+      placeholder: tCommon('amendment.returnToDraftPlaceholder'),
+      confirmLabel: tCommon('actions.confirm'),
+    })
+    if (reason === null) return
+    if (reason.trim().length < 5 || reason.trim().length > 500) {
+      refuse(tCommon('amendment.returnToDraftPlaceholder'), t('actionFailed'))
+      return
+    }
+    setAmendReason(reason)
+    setAmendRows(
+      rows
+        .filter((row) => row.persistedLineId !== '')
+        .map((row) => ({
+          id: row.persistedLineId,
+          description: row.description || items.find((item) => item.id === row.itemId)?.name || '',
+          quantity: row.quantity,
+          unitPrice: row.unitPrice,
+        })),
+    )
+  }
+
+  async function saveAmend() {
+    if (amendReason === null || amendRows === null) return
+    await execute(
+      () => fetchAppAction(`${apiBase}/${doc.id}/amend`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          reason: amendReason,
+          expectedUpdatedAt: revisionRef.current,
+          lines: amendRows.map((row) => ({ lineId: row.id, quantity: row.quantity, unitPrice: row.unitPrice })),
+        }),
+      }, { fallback: t('amendFailed') }),
+      {
+        fallbackMessage: t('amendFailed'),
+        successMessage: t('amendSaved'),
+        onOk: () => {
+          setAmendReason(null)
+          setAmendRows(null)
+          router.refresh()
+        },
+      },
+    )
+  }
+
   async function setDropShipRoute(salesOrderLineId: string, routed: boolean) {
     await execute(
       () => fetchAppAction(`/api/sales-orders/${doc.id}/drop-ship`, {
@@ -2095,6 +2153,11 @@ export function OrderDrawer({
                 {tCommon('actions.returnToDraft')}
               </Button>
             ) : null}
+            {canManage && isApproved && kind === 'purchase_order' ? (
+              <Button variant="outline" disabled={busy} onClick={() => void openAmend()}>
+                {t('amend')}
+              </Button>
+            ) : null}
             {canManage && doc.status === 'draft' ? (
               <Button variant="ghost" disabled={busy} onClick={remove} className="text-red-600 hover:bg-red-50 hover:text-red-700 dark:text-red-400 dark:hover:bg-red-950/40">
                 {tCommon('actions.delete')}
@@ -2265,6 +2328,49 @@ export function OrderDrawer({
           </section>
         ) : null}
         {priceLookupFailures.size > 0 ? <ul className="space-y-1 text-sm text-red-700 dark:text-red-300">{[...priceLookupFailures].map(([key, message]) => <li key={key} role="alert">{rows.find((row) => row.clientKey === key)?.description || t('columns.item')}: {message}</li>)}</ul> : null}
+        {amendReason !== null && amendRows !== null ? (
+          <section aria-label={t('amendTitle')} className="space-y-2 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
+            <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{t('amendTitle')}</p>
+            <p className="text-sm text-slate-500 dark:text-slate-400">{t('amendHint')}</p>
+            <div className="space-y-2">
+              {amendRows.map((row) => (
+                <div key={row.id} className="flex flex-wrap items-end gap-2">
+                  <p className="min-w-40 flex-1 text-sm text-slate-700 dark:text-slate-300">{row.description || t('columns.item')}</p>
+                  <div>
+                    <Label>{t('columns.qty')}</Label>
+                    <Input
+                      aria-label={`${t('columns.qty')} — ${row.description || t('columns.item')}`}
+                      inputMode="decimal"
+                      className="w-28 text-right tabular-nums"
+                      value={row.quantity}
+                      disabled={busy}
+                      onChange={(event) => setAmendRows((current) => current?.map((candidate) => candidate.id === row.id ? { ...candidate, quantity: event.target.value } : candidate) ?? null)}
+                    />
+                  </div>
+                  <div>
+                    <Label>{t('columns.unitPrice')}</Label>
+                    <Input
+                      aria-label={`${t('columns.unitPrice')} — ${row.description || t('columns.item')}`}
+                      inputMode="decimal"
+                      className="w-28 text-right tabular-nums"
+                      value={row.unitPrice}
+                      disabled={busy}
+                      onChange={(event) => setAmendRows((current) => current?.map((candidate) => candidate.id === row.id ? { ...candidate, unitPrice: event.target.value } : candidate) ?? null)}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button size="sm" disabled={busy} onClick={() => void saveAmend()}>
+                {busy ? tCommon('actions.saving') : t('amendSave')}
+              </Button>
+              <Button variant="ghost" size="sm" disabled={busy} onClick={() => { setAmendReason(null); setAmendRows(null) }}>
+                {tCommon('actions.cancel')}
+              </Button>
+            </div>
+          </section>
+        ) : null}
         {layout ? <HeaderFields layout={layout} editable={editable} renderField={renderHeaderField} /> : <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className={`${field} lg:col-span-2`}>
             <Label>

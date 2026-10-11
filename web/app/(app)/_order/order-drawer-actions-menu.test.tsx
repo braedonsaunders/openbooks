@@ -76,7 +76,23 @@ function actionsTrigger(): HTMLButtonElement | undefined {
   ) as HTMLButtonElement | undefined;
 }
 
-async function mount(props: { canManage: boolean; allowedConvertKinds?: readonly string[] }) {
+const LINE = {
+  id: randomUUID(),
+  item_id: null,
+  account_id: "acct-6100",
+  description: "Bulk grain",
+  quantity: "3040",
+  unit: "lb",
+  unit_price: "10",
+  tax_code_id: null,
+  tax_group_id: null,
+  department_id: null,
+  project_id: null,
+  stock_location_id: null,
+  extra_dims: {},
+};
+
+async function mount(props: { canManage: boolean; allowedConvertKinds?: readonly string[]; lines?: typeof LINE[] }) {
   const prior = globalThis.fetch;
   globalThis.fetch = (async () => Response.json({
     approvalState: { status: "approved", pendingWith: [], myActions: null },
@@ -93,7 +109,7 @@ async function mount(props: { canManage: boolean; allowedConvertKinds?: readonly
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
         <MoneyProvider currency="USD">
           <OrderDrawer
-            order={{ doc: DOC, lines: [], links: [] } as never}
+            order={{ doc: DOC, lines: props.lines ?? [], links: [] } as never}
             initialMode={"view" as never}
             kind="purchase_order"
             parties={[]}
@@ -151,4 +167,29 @@ test("an approved PO with the manage grant keeps the Actions menu", async (t) =>
   const view = await mount({ canManage: true });
   t.after(view.cleanup);
   assert.ok(actionsTrigger(), "the Actions menu trigger renders for a manager");
+});
+
+test("an approved PO with the manage grant offers Amend with qty/price rows", async (t) => {
+  const view = await mount({ canManage: true, lines: [LINE] });
+  t.after(view.cleanup);
+  const trigger = actionsTrigger();
+  assert.ok(trigger, "the Actions menu trigger renders for a manager");
+  await act(async () => {
+    trigger.click();
+    await tick(50);
+  });
+  const amend = [...document.querySelectorAll("button")].find(
+    (button) => (button.textContent ?? "").trim() === "Amend",
+  ) as HTMLButtonElement | undefined;
+  assert.ok(amend, "the Amend entry renders for an approved purchase order");
+  await act(async () => {
+    amend.click();
+    await tick(50);
+  });
+  await tick(60);
+  const panel = document.querySelector('section[aria-label="Amend approved quantities and prices"]');
+  assert.ok(panel, "the amendment panel opens after the reason prompt");
+  const inputs = [...panel.querySelectorAll("input")].map((input) => (input as HTMLInputElement).value);
+  assert.ok(inputs.includes("3040"), "the line quantity is editable in the panel");
+  assert.ok(inputs.includes("10"), "the line unit price is editable in the panel");
 });
