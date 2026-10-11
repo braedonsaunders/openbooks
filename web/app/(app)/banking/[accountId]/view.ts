@@ -139,6 +139,10 @@ export interface StatementListRow {
   deleteBlockedReason: string | null
   deleteConfirmMessage: string
   deleteLineCount: number
+  /** Unmatch-all affordance beside a match-blocked delete: releases the
+   * import's groups so its delete can proceed. Zero hides the action. */
+  unmatchAllMatchedCount: number
+  unmatchAllConfirmMessage: string
 }
 
 export interface ReconciliationListRow {
@@ -366,10 +370,39 @@ export async function loadBankingAccount(
         `),
         db.execute<CountRow>(sql`select count(*) as n from bank_statement_lines l where ${lineWhere}`),
       ]))
+      // Balances stay editable until the first match — the engine refuses
+      // matched and signed-off-history statements, and the drawer names the
+      // reason instead of offering edits that cannot succeed.
+      const [matchedLines, coverage] = (await Promise.all([
+        db.execute<CountRow>(sql`
+          select count(*) as n
+            from reconciliation_matches m
+            join bank_statement_lines l on l.id = m.statement_line_id and l.org_id = m.org_id
+           where l.statement_id = ${openStatementId} and l.org_id = ${orgId}
+        `),
+        db.execute<{ first_posted: string | null; signed_through: string | null }>(sql`
+          select (select min(l.posted_on)::text from bank_statement_lines l
+                   where l.statement_id = ${openStatementId} and l.org_id = ${orgId}) as first_posted,
+                 (select max(r.through_date)::text from reconciliations r
+                   where r.org_id = ${orgId} and r.account_id = ${accountId} and r.status = 'signed_off') as signed_through
+        `),
+      ]))
+      const matchedLineCount = Number(matchedLines.rows[0]?.n ?? 0)
+      const signedThrough = coverage.rows[0]?.signed_through ?? null
+      const firstPosted = coverage.rows[0]?.first_posted ?? null
+      const canEditBalances =
+        matchedLineCount === 0 && !(signedThrough && firstPosted && firstPosted <= signedThrough)
       drawer = {
         basePath,
         currentParams: sp,
         statement: { ...s.rows[0], source: statementSourceLabel(s.rows[0].source) },
+        canEditBalances,
+        balancesBlockedReason:
+          matchedLineCount > 0
+            ? t('drawer.balancesBlockedMatched', { count: matchedLineCount })
+            : signedThrough && firstPosted && firstPosted <= signedThrough
+              ? t('drawer.balancesBlockedSignedOff', { date: signedThrough })
+              : null,
         lines: lines.rows,
         lineTotal: Number(lineCount.rows[0]?.n ?? 0),
         page: lineParams.page,
@@ -491,6 +524,8 @@ export async function loadBankingAccount(
               : null,
         deleteConfirmMessage: t('account.deleteImportConfirm', { count: lineCount }),
         deleteLineCount: lineCount,
+        unmatchAllMatchedCount: matched,
+        unmatchAllConfirmMessage: t('account.unmatchAllConfirm', { count: matched }),
       }
     }),
     stmtTotal,
@@ -654,6 +689,8 @@ export function bankingAccountSpec(data: BankingAccountData): PageSpec {
                     blockedReason: item('deleteBlockedReason'),
                     confirmMessage: item('deleteConfirmMessage'),
                     showDelete: item('showDelete'),
+                    matchedCount: item('unmatchAllMatchedCount'),
+                    unmatchAllConfirmMessage: item('unmatchAllConfirmMessage'),
                   }),
                 ),
               ],

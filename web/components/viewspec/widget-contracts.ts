@@ -547,7 +547,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'single-book-label': { props: ['label', 'name'] },
   'spend-velocity-view': { props: ['canConfigure', 'data'] },
   'start-reconciliation': { props: ['accountId', 'glBalance', 'openReconciliationId'] },
-  'statement-delete-cell': { props: ['blockedReason', 'confirmMessage', 'lineCount', 'showDelete', 'statementId'] },
+  'statement-delete-cell': { props: ['blockedReason', 'confirmMessage', 'lineCount', 'matchedCount', 'showDelete', 'statementId', 'unmatchAllConfirmMessage'] },
   'statement-drawer': { props: ['drawer'] },
   'statement-matrix': { props: ['currency', 'drill', 'scale', 'view'] },
   'statement-rows': { props: ['rows'] },

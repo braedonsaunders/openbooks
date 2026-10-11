@@ -431,7 +431,10 @@
     "deleteBlockedMatched": "Has {count} matched lines — unmatch them in the reconcile workspace first",
     "deleteBlockedExcluded": "Has {count} excluded lines — restore them first",
     "deleteImportConfirm": "Delete this import and its {count} lines? The same file can be re-imported afterwards.",
-    "importDeleted": "Import deleted ({count} lines removed)"
+    "importDeleted": "Import deleted ({count} lines removed)",
+    "unmatchAll": "Unmatch all",
+    "unmatchAllConfirm": "Unmatch {count} matched lines? Their journals return to the outstanding pool. Signed-off sessions still refuse.",
+    "unmatchedToast": "Unmatched {count} lines"
   },
   "import": {
     "button": "Import statement",
@@ -483,7 +486,10 @@
     "balanceRoleClosing": "closing balance",
     "useAsOpening": "Use as opening",
     "useAsClosing": "Use as closing",
-    "skippedBalanceRow": "Line {line}: “{dateCell}” looks like a {role} of {amount} — use it as a balance instead of importing it."
+    "skippedBalanceRow": "Line {line}: “{dateCell}” looks like a {role} of {amount} — use it as a balance instead of importing it.",
+    "mappingMissing": "Column mapping still needs {columns} — pick them above or run Detect columns again.",
+    "previewEmpty": "Preview found no transaction lines — check the Amount column and the Date format, then run Preview again.",
+    "previewRequired": "Run Preview before Import."
   },
   "start": {
     "resume": "Resume reconciliation",
@@ -541,7 +547,13 @@
     "formSetPreferredDone": "Preferred form saved",
     "formPreferredCleared": "Preferred form cleared",
     "formPreferredFailed": "Could not save the preferred form",
-    "partylessControlWarning": "Posted with no customer or vendor on {accounts}. These amounts sit outside the receivable and payable subledgers, so open invoices and bills stay unpaid. Record customer receipts with Receive payment and supplier payments with Pay bills, or name the customer or vendor on the line. Setup → Company & Accounting → Control accounts can refuse these postings."
+    "partylessControlWarning": "Posted with no customer or vendor on {accounts}. These amounts sit outside the receivable and payable subledgers, so open invoices and bills stay unpaid. Record customer receipts with Receive payment and supplier payments with Pay bills, or name the customer or vendor on the line. Setup → Company & Accounting → Control accounts can refuse these postings.",
+    "editBalancesTitle": "Statement balances",
+    "editBalancesHelp": "Set the statement balances here before the first match — a CSV carries none from the bank.",
+    "saveBalances": "Save balances",
+    "balancesSaved": "Statement balances saved",
+    "balancesBlockedMatched": "Balances are locked — this import has {count} matched lines. Unmatch them first to edit.",
+    "balancesBlockedSignedOff": "Balances are locked — lines reach into the signed-off reconciliation through {date}."
   },
   "reconcile": {
     "title": "Reconcile through {date}",

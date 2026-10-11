@@ -424,7 +424,10 @@
     "deleteBlockedMatched": "Tiene {count} líneas conciliadas — descóncilielas primero en el espacio de conciliación",
     "deleteBlockedExcluded": "Tiene {count} líneas excluidas — restáurelas primero",
     "deleteImportConfirm": "¿Eliminar esta importación y sus {count} líneas? El mismo archivo podrá importarse de nuevo después.",
-    "importDeleted": "Importación eliminada ({count} líneas eliminadas)"
+    "importDeleted": "Importación eliminada ({count} líneas eliminadas)",
+    "unmatchAll": "Desasignar todo",
+    "unmatchAllConfirm": "¿Desasignar {count} líneas asignadas? Sus asientos vuelven a la cartera pendiente. Las sesiones cerradas lo seguirán rechazando.",
+    "unmatchedToast": "{count} líneas desasignadas"
   },
   "import": {
     "button": "Importar extracto",
@@ -476,7 +479,10 @@
     "balanceRoleClosing": "saldo final",
     "useAsOpening": "Usar como inicial",
     "useAsClosing": "Usar como final",
-    "skippedBalanceRow": "Fila {line}: «{dateCell}» parece un {role} de {amount}: úsela como saldo en lugar de importarla."
+    "skippedBalanceRow": "Fila {line}: «{dateCell}» parece un {role} de {amount}: úsela como saldo en lugar de importarla.",
+    "mappingMissing": "Al mapa de columnas aún le faltan {columns}: elígelas arriba o vuelve a detectar columnas.",
+    "previewEmpty": "La vista previa no encontró líneas de movimientos: revisa la columna de importe y el formato de fecha, y vuelve a ejecutarla.",
+    "previewRequired": "Ejecuta la vista previa antes de importar."
   },
   "start": {
     "resume": "Reanudar conciliación",
@@ -534,7 +540,13 @@
     "cardAccountHelp": "Sin tarjetas registradas — selecciona la cuenta de tarjeta conciliable para contabilizar.",
     "noCardAccounts": "Aún no hay cuentas de tarjeta conciliables.",
     "noCardAccountsCta": "Añade una en el plan de cuentas",
-    "partylessControlWarning": "Contabilizado sin cliente ni proveedor en {accounts}. Estos importes quedan fuera de los submayores de cuentas por cobrar y por pagar, por lo que las facturas abiertas siguen pendientes. Registre los cobros de clientes con Recibir pago y los pagos a proveedores con Pagar facturas, o indique el cliente o proveedor en la línea. Configuración → Empresa y contabilidad → Cuentas de control puede rechazar estos asientos."
+    "partylessControlWarning": "Contabilizado sin cliente ni proveedor en {accounts}. Estos importes quedan fuera de los submayores de cuentas por cobrar y por pagar, por lo que las facturas abiertas siguen pendientes. Registre los cobros de clientes con Recibir pago y los pagos a proveedores con Pagar facturas, o indique el cliente o proveedor en la línea. Configuración → Empresa y contabilidad → Cuentas de control puede rechazar estos asientos.",
+    "editBalancesTitle": "Saldos del extracto",
+    "editBalancesHelp": "Indica aquí los saldos del extracto antes de la primera asignación: un CSV no trae ninguno del banco.",
+    "saveBalances": "Guardar saldos",
+    "balancesSaved": "Saldos del extracto guardados",
+    "balancesBlockedMatched": "Saldos bloqueados: esta importación tiene {count} líneas asignadas. Desasígnalas primero para editar.",
+    "balancesBlockedSignedOff": "Saldos bloqueados: hay líneas dentro de la conciliación cerrada hasta {date}."
   },
   "reconcile": {
     "title": "Conciliar hasta {date}",

@@ -424,7 +424,10 @@
     "deleteBlockedMatched": "有{count}行已对账 — 请先在对账工作区取消对账",
     "deleteBlockedExcluded": "有{count}行已排除 — 请先恢复",
     "deleteImportConfirm": "删除此次导入及其{count}行吗？之后可以重新导入同一文件。",
-    "importDeleted": "导入已删除（移除了{count}行）"
+    "importDeleted": "导入已删除（移除了{count}行）",
+    "unmatchAll": "全部取消核对",
+    "unmatchAllConfirm": "要取消核对 {count} 个已核对行吗？其分录将回到未清池。已结账的会话仍会拒绝。",
+    "unmatchedToast": "已取消核对 {count} 行"
   },
   "import": {
     "button": "导入对账单",
@@ -476,7 +479,10 @@
     "balanceRoleClosing": "期末余额",
     "useAsOpening": "用作期初余额",
     "useAsClosing": "用作期末余额",
-    "skippedBalanceRow": "第{line}行（{dateCell}）看起来像金额为{amount}的{role}，请将其用作余额，不要导入。"
+    "skippedBalanceRow": "第{line}行（{dateCell}）看起来像金额为{amount}的{role}，请将其用作余额，不要导入。",
+    "mappingMissing": "列映射还缺少 {columns} — 请在上方选择，或重新运行检测列。",
+    "previewEmpty": "预览未找到交易行 — 请检查金额列和日期格式，然后重新运行预览。",
+    "previewRequired": "请先运行预览，再导入。"
   },
   "start": {
     "resume": "继续对账",
@@ -534,7 +540,13 @@
     "cardAccountHelp": "未登记卡 — 请选择用于过账的可对账卡账户。",
     "noCardAccounts": "暂无可对账的卡账户。",
     "noCardAccountsCta": "在会计科目表中添加",
-    "partylessControlWarning": "已过账到 {accounts}，但未指定客户或供应商。这些金额不在应收和应付明细账中，未结发票和账单仍显示未付。请使用“收款”登记客户收款、使用“支付账单”登记供应商付款，或在该行指定客户或供应商。可在“设置 → 公司与会计 → 控制科目”中设置拒绝此类过账。"
+    "partylessControlWarning": "已过账到 {accounts}，但未指定客户或供应商。这些金额不在应收和应付明细账中，未结发票和账单仍显示未付。请使用“收款”登记客户收款、使用“支付账单”登记供应商付款，或在该行指定客户或供应商。可在“设置 → 公司与会计 → 控制科目”中设置拒绝此类过账。",
+    "editBalancesTitle": "对账单余额",
+    "editBalancesHelp": "请在首次核对前在此设置对账单余额 — CSV 不含银行提供的余额。",
+    "saveBalances": "保存余额",
+    "balancesSaved": "对账单余额已保存",
+    "balancesBlockedMatched": "余额已锁定 — 此导入有 {count} 个已核对行。请先取消核对再编辑。",
+    "balancesBlockedSignedOff": "余额已锁定 — 行落入截至 {date} 的已结账对账期内。"
   },
   "reconcile": {
     "title": "对账截至 {date}",

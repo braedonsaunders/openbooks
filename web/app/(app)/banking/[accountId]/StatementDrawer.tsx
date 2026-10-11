@@ -5,6 +5,7 @@ import { SearchInput } from '../../../../components/search-input'
 import { Pagination } from '../../../../components/pagination'
 import { SortTh } from '../../../../components/sortable-th'
 import { mergeHref } from '../../../../lib/list-params'
+import { StatementBalanceForm } from './StatementBalanceForm'
 const MATCH_VARIANT: Record<string, 'success' | 'secondary' | 'outline'> = {
   matched: 'success',
   unmatched: 'secondary',
@@ -25,6 +26,8 @@ export async function StatementDrawer({
   basePath,
   currentParams,
   statement,
+  canEditBalances,
+  balancesBlockedReason,
   lines,
   lineTotal,
   page,
@@ -42,6 +45,8 @@ export async function StatementDrawer({
     closing_balance: string | null
     imported_at: string
   }
+  canEditBalances: boolean
+  balancesBlockedReason: string | null
   lines: {
     id: string
     line_number: number
@@ -97,6 +102,13 @@ export async function StatementDrawer({
       })}
     >
       <div className="space-y-3">
+        <StatementBalanceForm
+          statementId={statement.id}
+          opening={statement.opening_balance}
+          closing={statement.closing_balance}
+          canEdit={canEditBalances}
+          blockedReason={balancesBlockedReason}
+        />
         <SearchInput placeholder={t('drawer.searchLines')} paramKey="slQ" pageParamKey="slPage" />
         <Table>
           <TableHeader>

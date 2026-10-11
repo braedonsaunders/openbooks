@@ -424,7 +424,10 @@
     "deleteBlockedMatched": "Enthält {count} abgeglichene Zeilen — gleichen Sie diese zuerst im Abgleichsarbeitsbereich ab",
     "deleteBlockedExcluded": "Enthält {count} ausgeschlossene Zeilen — stellen Sie diese zuerst wieder her",
     "deleteImportConfirm": "Diesen Import und seine {count} Zeilen löschen? Dieselbe Datei kann danach erneut importiert werden.",
-    "importDeleted": "Import gelöscht ({count} Zeilen entfernt)"
+    "importDeleted": "Import gelöscht ({count} Zeilen entfernt)",
+    "unmatchAll": "Alle lösen",
+    "unmatchAllConfirm": "{count} zugeordnete Zeilen lösen? Ihre Buchungen kehren in den offenen Bestand zurück. Abgeschlossene Sitzungen verweigern dies weiterhin.",
+    "unmatchedToast": "{count} Zeilen gelöst"
   },
   "import": {
     "button": "Auszug importieren",
@@ -476,7 +479,10 @@
     "balanceRoleClosing": "Schlusssaldo",
     "useAsOpening": "Als Anfangssaldo übernehmen",
     "useAsClosing": "Als Schlusssaldo übernehmen",
-    "skippedBalanceRow": "Zeile {line}: „{dateCell}“ sieht wie ein {role} von {amount} aus — übernehmen Sie sie als Saldo, statt sie zu importieren."
+    "skippedBalanceRow": "Zeile {line}: „{dateCell}“ sieht wie ein {role} von {amount} aus — übernehmen Sie sie als Saldo, statt sie zu importieren.",
+    "mappingMissing": "Der Spaltenzuordnung fehlen noch {columns} — oben auswählen oder Spalten erneut erkennen.",
+    "previewEmpty": "Die Vorschau enthält keine Buchungszeilen — Betragsspalte und Datumsformat prüfen, dann Vorschau erneut ausführen.",
+    "previewRequired": "Vor dem Importieren zuerst die Vorschau ausführen."
   },
   "start": {
     "resume": "Abstimmung fortsetzen",
@@ -534,7 +540,13 @@
     "cardAccountHelp": "Keine Karten hinterlegt — wählen Sie das abstimmbare Kartenkonto, gegen das gebucht wird.",
     "noCardAccounts": "Noch keine abstimmbaren Kartenkonten.",
     "noCardAccountsCta": "Im Kontenplan hinzufügen",
-    "partylessControlWarning": "Ohne Kunden oder Lieferanten auf {accounts} gebucht. Diese Beträge stehen außerhalb der Debitoren- und Kreditoren-Nebenbücher, offene Rechnungen bleiben daher unbezahlt. Erfassen Sie Kundeneingänge mit „Zahlung erfassen“ und Lieferantenzahlungen mit „Rechnungen bezahlen“ oder geben Sie den Kunden bzw. Lieferanten auf der Zeile an. Unter Einrichtung → Unternehmen & Buchhaltung → Kontrollkonten lassen sich solche Buchungen ablehnen."
+    "partylessControlWarning": "Ohne Kunden oder Lieferanten auf {accounts} gebucht. Diese Beträge stehen außerhalb der Debitoren- und Kreditoren-Nebenbücher, offene Rechnungen bleiben daher unbezahlt. Erfassen Sie Kundeneingänge mit „Zahlung erfassen“ und Lieferantenzahlungen mit „Rechnungen bezahlen“ oder geben Sie den Kunden bzw. Lieferanten auf der Zeile an. Unter Einrichtung → Unternehmen & Buchhaltung → Kontrollkonten lassen sich solche Buchungen ablehnen.",
+    "editBalancesTitle": "Kontoauszugssalden",
+    "editBalancesHelp": "Salden hier vor der ersten Zuordnung setzen — eine CSV-Datei enthält keine von der Bank.",
+    "saveBalances": "Salden speichern",
+    "balancesSaved": "Kontoauszugssalden gespeichert",
+    "balancesBlockedMatched": "Salden sind gesperrt — dieser Import enthält {count} zugeordnete Zeilen. Zum Bearbeiten zuerst lösen.",
+    "balancesBlockedSignedOff": "Salden sind gesperrt — Zeilen reichen in die abgeschlossene Abstimmung bis {date}."
   },
   "reconcile": {
     "title": "Abstimmen bis {date}",

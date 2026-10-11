@@ -424,7 +424,10 @@
     "deleteBlockedMatched": "{count}件の消込済み明細があります — 照合作業画面で先に消込を解除してください",
     "deleteBlockedExcluded": "{count}件の除外済み明細があります — 先に復元してください",
     "deleteImportConfirm": "このインポートとその{count}件の明細を削除しますか？同じファイルは後から再インポートできます。",
-    "importDeleted": "インポートを削除しました（{count}件の明細を削除）"
+    "importDeleted": "インポートを削除しました（{count}件の明細を削除）",
+    "unmatchAll": "すべて突合解除",
+    "unmatchAllConfirm": "突合済みの {count} 行を解除しますか？仕訳は未処理に戻ります。締め済みセッションは引き続き拒否されます。",
+    "unmatchedToast": "{count} 行を解除しました"
   },
   "import": {
     "button": "明細をインポート",
@@ -476,7 +479,10 @@
     "balanceRoleClosing": "期末残高",
     "useAsOpening": "期首残高として使う",
     "useAsClosing": "期末残高として使う",
-    "skippedBalanceRow": "行 {line}（{dateCell}）は{amount}の{role}のようです。インポートせず残高として使ってください。"
+    "skippedBalanceRow": "行 {line}（{dateCell}）は{amount}の{role}のようです。インポートせず残高として使ってください。",
+    "mappingMissing": "列マッピングには {columns} が不足しています — 上で選択するか、列の検出を再実行してください。",
+    "previewEmpty": "プレビューに取引行がありません — 金額列と日付形式を確認して、プレビューを再実行してください。",
+    "previewRequired": "インポートの前にプレビューを実行してください。"
   },
   "start": {
     "resume": "消込を再開",
@@ -534,7 +540,13 @@
     "cardAccountHelp": "登録済みのカードがありません — 記帳先の消込対象カード勘定を選択してください。",
     "noCardAccounts": "消込対象のカード勘定はまだありません。",
     "noCardAccountsCta": "勘定科目表で追加する",
-    "partylessControlWarning": "{accounts} に得意先・仕入先なしで転記されました。これらの金額は売掛金・買掛金の補助簿の対象外となるため、未決済の請求書は未払のままです。得意先からの入金は「入金を受け取る」、仕入先への支払は「請求書を支払う」で記録するか、明細行に得意先または仕入先を指定してください。「セットアップ → 会社と会計 → 統制勘定」でこうした転記を拒否できます。"
+    "partylessControlWarning": "{accounts} に得意先・仕入先なしで転記されました。これらの金額は売掛金・買掛金の補助簿の対象外となるため、未決済の請求書は未払のままです。得意先からの入金は「入金を受け取る」、仕入先への支払は「請求書を支払う」で記録するか、明細行に得意先または仕入先を指定してください。「セットアップ → 会社と会計 → 統制勘定」でこうした転記を拒否できます。",
+    "editBalancesTitle": "明細残高",
+    "editBalancesHelp": "最初の突合の前に明細残高をここで設定してください — CSV には銀行からの残高が含まれません。",
+    "saveBalances": "残高を保存",
+    "balancesSaved": "明細残高を保存しました",
+    "balancesBlockedMatched": "残高はロックされています — このインポートには突合済みの {count} 行があります。編集するには先に解除してください。",
+    "balancesBlockedSignedOff": "残高はロックされています — {date} までの締め済み照合に行が含まれています。"
   },
   "reconcile": {
     "title": "{date} までの消込",

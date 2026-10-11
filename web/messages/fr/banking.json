@@ -424,7 +424,10 @@
     "deleteBlockedMatched": "Contient {count} lignes rapprochées — annulez d'abord leur rapprochement dans l'espace de rapprochement",
     "deleteBlockedExcluded": "Contient {count} lignes exclues — restaurez-les d'abord",
     "deleteImportConfirm": "Supprimer cet import et ses {count} lignes ? Le même fichier pourra être réimporté ensuite.",
-    "importDeleted": "Import supprimé ({count} lignes supprimées)"
+    "importDeleted": "Import supprimé ({count} lignes supprimées)",
+    "unmatchAll": "Tout désaffecter",
+    "unmatchAllConfirm": "Désaffecter {count} lignes affectées ? Leurs écritures retournent à l'encours. Les sessions clôturées le refuseront toujours.",
+    "unmatchedToast": "{count} lignes désaffectées"
   },
   "import": {
     "button": "Importer un relevé",
@@ -476,7 +479,10 @@
     "balanceRoleClosing": "solde de clôture",
     "useAsOpening": "Utiliser comme solde d’ouverture",
     "useAsClosing": "Utiliser comme solde de clôture",
-    "skippedBalanceRow": "Ligne {line} : « {dateCell} » ressemble à un {role} de {amount} — utilisez-la comme solde au lieu de l’importer."
+    "skippedBalanceRow": "Ligne {line} : « {dateCell} » ressemble à un {role} de {amount} — utilisez-la comme solde au lieu de l’importer.",
+    "mappingMissing": "Le mappage des colonnes attend encore {columns} — choisissez-les ci-dessus ou relancez Détecter les colonnes.",
+    "previewEmpty": "L'aperçu ne contient aucune ligne d'opération — vérifiez la colonne du montant et le format de date, puis relancez l'aperçu.",
+    "previewRequired": "Lancez l'aperçu avant d'importer."
   },
   "start": {
     "resume": "Reprendre le rapprochement",
@@ -534,7 +540,13 @@
     "cardAccountHelp": "Aucune carte enregistrée — sélectionnez le compte de carte à rapprocher pour comptabiliser.",
     "noCardAccounts": "Aucun compte de carte à rapprocher pour l'instant.",
     "noCardAccountsCta": "Ajoutez-en un dans le plan comptable",
-    "partylessControlWarning": "Comptabilisé sans client ni fournisseur sur {accounts}. Ces montants restent hors des auxiliaires clients et fournisseurs : les factures ouvertes restent impayées. Enregistrez les encaissements clients avec Recevoir un paiement et les paiements fournisseurs avec Payer des factures, ou indiquez le client ou le fournisseur sur la ligne. Configuration → Société et comptabilité → Comptes de contrôle permet de refuser ces écritures."
+    "partylessControlWarning": "Comptabilisé sans client ni fournisseur sur {accounts}. Ces montants restent hors des auxiliaires clients et fournisseurs : les factures ouvertes restent impayées. Enregistrez les encaissements clients avec Recevoir un paiement et les paiements fournisseurs avec Payer des factures, ou indiquez le client ou le fournisseur sur la ligne. Configuration → Société et comptabilité → Comptes de contrôle permet de refuser ces écritures.",
+    "editBalancesTitle": "Soldes du relevé",
+    "editBalancesHelp": "Saisissez ici les soldes du relevé avant la première affectation — un CSV n'en apporte aucun de la banque.",
+    "saveBalances": "Enregistrer les soldes",
+    "balancesSaved": "Soldes du relevé enregistrés",
+    "balancesBlockedMatched": "Soldes verrouillés — cet import compte {count} lignes affectées. Désaffectez-les d'abord pour modifier.",
+    "balancesBlockedSignedOff": "Soldes verrouillés — des lignes relèvent de la conciliation clôturée au {date}."
   },
   "reconcile": {
     "title": "Rapprochement jusqu’au {date}",

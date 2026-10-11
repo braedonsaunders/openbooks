@@ -375,6 +375,8 @@ export const BANKING_WIDGETS = {
       blockedReason={(props.blockedReason as string | null) ?? null}
       confirmMessage={str(props, 'confirmMessage') ?? ''}
       showDelete={props.showDelete === true}
+      matchedCount={typeof props.matchedCount === 'number' ? props.matchedCount : 0}
+      unmatchAllConfirmMessage={str(props, 'unmatchAllConfirmMessage') ?? ''}
     />
   ),
   'recon-action-cell': (props) => (

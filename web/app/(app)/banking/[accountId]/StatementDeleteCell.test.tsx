@@ -8,7 +8,9 @@ import { act, click, mountDashboard, scriptFetch } from '../../dashboard/_dashbo
 
 // Await-imports (not static imports): module hooks register while the
 // harness above evaluates, so only imports that resolve after that point see
-// the jsdom shims.
+// the jsdom shims. The harness mocks '@/lib/confirm' with an auto-answer
+// (no ConfirmRoot UI ships under the mock), so confirmation is driven
+// through globalThis.__confirmAnswer: false proves the gate, true proceeds.
 const { StatementDeleteCell } = await import('./StatementDeleteCell')
 
 // The dashboard harness models confirmation headlessly: confirmDialog
@@ -133,5 +135,86 @@ test('a refused delete toasts the named remedy', async () => {
   } finally {
     await unmount()
     restoreFetch()
+  }
+})
+
+function unmatchButton(): HTMLButtonElement | null {
+  return document.querySelector('button[aria-label="Unmatch all"]')
+}
+
+// A match-blocked import keeps its disabled delete with the reason, and
+// offers Unmatch all beside it so the release — and then the delete — can
+// proceed without leaving the history.
+test('a match-blocked import offers unmatch-all beside the disabled delete', async () => {
+  const calls: { url: string; method?: string }[] = []
+  let refreshed = 0
+  const restoreFetch = scriptFetch((url, init) => {
+    if (url.includes(`/api/banking/statements/${STATEMENT_ID}/unmatch-all`)) {
+      calls.push({ url, method: init?.method })
+      return Response.json({ ok: true, unmatchedGroups: 1, unmatchedLines: 2 })
+    }
+    return null
+  })
+  const { unmount } = await mountDashboard(
+    <StatementDeleteCell
+        statementId={STATEMENT_ID}
+        lineCount={2}
+        blockedReason="Has 2 matched lines — unmatch them first"
+        confirmMessage="Delete?"
+        showDelete
+        matchedCount={2}
+        unmatchAllConfirmMessage="Unmatch 2 matched lines?"
+      />
+    messages,
+  )
+  try {
+    const router = (globalThis as unknown as { __dashRouter: { refresh(): void } }).__dashRouter
+    router.refresh = () => { refreshed += 1 }
+    const blocked = deleteButton()
+    assert.ok(blocked, 'the blocked import still shows its delete control')
+    assert.equal(blocked.disabled, true, 'the blocked delete cannot run')
+    const release = unmatchButton()
+    assert.ok(release, 'the match-blocked import offers unmatch-all')
+    assert.equal(release.disabled, false, 'unmatch-all runs while delete stays disabled')
+    confirmAnswer(false)
+    await click(release)
+    await act(async () => {})
+    assert.equal(calls.length, 0, 'declining the confirm must send nothing')
+    confirmAnswer(true)
+    await click(release)
+    await act(async () => {})
+    assert.ok(
+      calls.some((c) => c.method === 'POST'),
+      `the confirm must POST unmatch-all, got ${JSON.stringify(calls)}`,
+    )
+    assert.ok(
+      toasts().some((t) => t.kind === 'success' && t.message.includes('Unmatched 2 lines')),
+      `unmatch-all must toast its result, got ${JSON.stringify(toasts())}`,
+    )
+    assert.equal(refreshed, 1, 'the history refreshes after unmatch-all')
+  } finally {
+    await unmount()
+    restoreFetch()
+  }
+})
+
+test('a non-match block shows no unmatch-all', async () => {
+  const { unmount } = await mountDashboard(
+    <StatementDeleteCell
+        statementId={STATEMENT_ID}
+        lineCount={1}
+        blockedReason="Has 1 excluded line — restore it first"
+        confirmMessage="Delete?"
+        showDelete
+        matchedCount={0}
+        unmatchAllConfirmMessage="Unmatch 0 matched lines?"
+      />
+    messages,
+  )
+  try {
+    assert.ok(deleteButton(), 'the blocked import still shows its delete control')
+    assert.equal(unmatchButton(), null, 'unmatch-all hides when no match blocks the delete')
+  } finally {
+    await unmount()
   }
 })
