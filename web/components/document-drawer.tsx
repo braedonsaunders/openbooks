@@ -2013,9 +2013,13 @@ export function DocumentDrawer({
       : t('drawer.controlAccountUnset')
   // A vendor credit always offers the choice: even with no returnable
   // receipt in the list the operator can still record the line as an
-  // allowance (no goods returned). Sales credits keep the picker list-gated.
+  // allowance (no goods returned). An allowance moves no stock, so the row
+  // needs no warehouse before choosing — a warehouseless stocked row still
+  // counts here, or a draft saved before its location was stamped could
+  // never reach the choice the save requires. Sales credits keep the picker
+  // list-gated.
   const hasStockedReturnRows = rows.some(
-    (row) => stockedItemIds.has(String(row.itemId ?? '')) && String(row.stockLocationId ?? '') !== '',
+    (row) => stockedItemIds.has(String(row.itemId ?? '')),
   )
   const showReturnPicker =
     returnSide !== null && (returnSources.length > 0 || (returnSide === 'purchase' && hasStockedReturnRows))
@@ -2049,10 +2053,13 @@ export function DocumentDrawer({
           label: sourceLabel(source),
         })),
       ],
-      // Only a stocked row in a named warehouse can carry a return: the save
-      // refuses one without both, so do not offer the choice before then.
+      // A vendor allowance moves no stock, so a stocked row chooses even
+      // before its warehouse is known (the save stamps a single-warehouse
+      // default, and refuses a receipt choice on a warehouseless row by
+      // line name). Other credit kinds keep the standing warehouse gate.
       isCellEditable: (row) =>
-        stockedItemIds.has(String(row.itemId ?? '')) && String(row.stockLocationId ?? '') !== '',
+        stockedItemIds.has(String(row.itemId ?? '')) &&
+        (returnSide === 'purchase' || String(row.stockLocationId ?? '') !== ''),
       optionsFor: (row) => [
         blankOption,
         ...allowanceOption,

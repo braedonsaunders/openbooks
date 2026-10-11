@@ -184,7 +184,9 @@ export async function loadApBills(
           db
             .execute(
               sql`
-            select id, code, name from items
+            select id, code, name,
+                   exists (select 1 from item_inventory_profiles p where p.org_id = items.org_id and p.item_id = items.id) as has_inventory_profile
+             from items
              where org_id = ${authz.user.orgId} and is_active
                and (
                  ${inventoryEnabled ? sql`true` : sql`kind not in ('inventory', 'assembly', 'kit')`}
