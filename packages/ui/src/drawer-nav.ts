@@ -28,6 +28,40 @@ export function shouldCommitDrawerCloseNavigation(args: {
 }
 
 /**
+ * A pending record-switch guard: resolves true when the drawer switch may
+ * proceed (the open drawer confirms its dirty draft first).
+ */
+export type DrawerRouteGuard = () => boolean | Promise<boolean>
+
+const guardStack: DrawerRouteGuard[] = []
+
+/**
+ * Register a guard consulted before a same-list drawer switch retargets the
+ * URL underneath an open drawer. Only the topmost drawer decides; when no
+ * drawer is open there is nothing to confirm and passage is free. Returns
+ * the unregister function for the effect cleanup.
+ */
+export function pushDrawerRouteGuard(guard: DrawerRouteGuard): () => void {
+  guardStack.push(guard)
+  return () => {
+    const index = guardStack.indexOf(guard)
+    if (index >= 0) guardStack.splice(index, 1)
+  }
+}
+
+/** Whether any open drawer currently guards record switches. */
+export function hasDrawerRouteGuard(): boolean {
+  return guardStack.length > 0
+}
+
+/** Ask the topmost open drawer whether a record switch may proceed. */
+export async function queryDrawerRouteGuard(): Promise<boolean> {
+  const top = guardStack[guardStack.length - 1]
+  if (!top) return true
+  return await top()
+}
+
+/**
  * Mirror `open` into local `show`, and remount when the open target identity
  * changes even if `open` stayed true (second drill while the first is still
  * flagged open in the URL).

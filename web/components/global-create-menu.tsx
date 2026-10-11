@@ -22,7 +22,7 @@ import {
   UsersRound,
   WalletCards,
 } from 'lucide-react'
-import { Popover, cn } from '@openbooks/ui'
+import { Popover, cn, useMenuTrigger } from '@openbooks/ui'
 import { toast } from 'sonner'
 import { documentCreateHref } from '../lib/document-kinds'
 
@@ -122,6 +122,10 @@ export function GlobalCreateMenu({ permissions }: { permissions: GlobalCreatePer
   const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState<CreateKey | null>(null)
   const available = useMemo(() => ACTIONS.filter((action) => action.enabled(permissions)), [permissions])
+  // The trigger answers the pointer release as well as the click, so a
+  // press whose release never becomes a click still opens the menu.
+  // Keyboard activation (no pointer events) opens through onClick.
+  const triggerActivation = useMenuTrigger(() => setOpen(true))
 
   if (available.length === 0) return null
 
@@ -168,7 +172,7 @@ export function GlobalCreateMenu({ permissions }: { permissions: GlobalCreatePer
       trigger={
         <button
           type="button"
-          onClick={() => setOpen((value) => !value)}
+          {...triggerActivation}
           disabled={busy !== null}
           aria-label={t('ariaLabel')}
           aria-expanded={open}

@@ -4,7 +4,7 @@ import { createContext, useCallback, useContext, useLayoutEffect, useState, type
 import { useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { ChevronDown } from 'lucide-react'
-import { Button, Popover, UrlDrawer } from '@openbooks/ui'
+import { Button, Popover, UrlDrawer, useMenuTrigger } from '@openbooks/ui'
 import { AttachmentPanel } from './attachment-panel'
 import { AuditTrailPanel } from './audit-trail-panel'
 import { DrawerTabStrip } from './drawer-tab-strip'
@@ -163,7 +163,13 @@ function TransactionDrawerFrame({
       keepRecordTabsMounted === true || Array.isArray(keepRecordTabsMounted) && keepRecordTabsMounted.includes(key)
     )
   )
+  // The button renders whenever callers pass an actions slot; whether the
+  // slot holds a visible entry is each record's own contract (an approved
+  // bill's empty popover is fixed per record, not here). The trigger itself
+  // answers the pointer release as well as the click, so a press whose
+  // release never becomes a click still opens the menu.
   const hasActions = actions != null || actionsMenuHeader != null
+  const actionsTrigger = useMenuTrigger(() => setActionsOpen(true))
   const requestedReturn = searchParams.get('drawerReturn')
   const nestedReturn = requestedReturn?.startsWith('/') && !requestedReturn.startsWith('//')
     ? requestedReturn
@@ -204,7 +210,7 @@ function TransactionDrawerFrame({
                   variant="outline"
                   size="sm"
                   className="h-8 gap-1.5 px-2.5 text-xs"
-                  onClick={() => setActionsOpen((open) => !open)}
+                  {...actionsTrigger}
                   aria-expanded={actionsOpen}
                 >
                   {t('labels.actions')}

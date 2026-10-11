@@ -53,6 +53,19 @@ async function click(target: Element) {
   })
 }
 
+// A real pointer press without the compatibility click: the trigger must
+// still open the menu, so a press whose release never becomes a click is
+// not silently lost. Keyboard activation (click only) keeps working.
+async function pointerPress(target: Element) {
+  const opts = { bubbles: true, cancelable: true, button: 0 }
+  await act(async () => {
+    target.dispatchEvent(new window.MouseEvent('pointerdown', opts))
+    target.dispatchEvent(new window.MouseEvent('pointerup', opts))
+    await tick()
+    await tick()
+  })
+}
+
 test('master-data choices navigate to their unsaved editor without creating drafts', async (t: TestContext) => {
   const router = (globalThis as Record<string, unknown>).__createMenuRouter as { pushes: string[] }
   router.pushes.length = 0
@@ -92,6 +105,32 @@ test('master-data choices navigate to their unsaved editor without creating draf
     assert.equal(router.pushes.at(-1), href, `${label} opens the unsaved editor`)
   }
   assert.equal(fetches, 0, 'master-data navigation must not allocate a draft record')
+})
+
+test('the trigger opens on pointer release alone and stays open on repeat presses', async (t: TestContext) => {
+  const host = document.createElement('div')
+  document.body.appendChild(host)
+  const root = createRoot(host)
+  t.after(async () => {
+    await act(async () => root.unmount())
+    host.remove()
+  })
+  await act(async () => {
+    root.render(
+      React.createElement(
+        IntlProvider,
+        { locale: 'en', messages, timeZone: 'UTC' },
+        React.createElement(GlobalCreateMenu, { permissions }),
+      ),
+    )
+  })
+  const trigger = document.querySelector(`button[aria-label="${menuMessages.ariaLabel}"]`)
+  assert.ok(trigger, 'the global create control is available')
+  await pointerPress(trigger)
+  assert.equal(trigger.getAttribute('aria-expanded'), 'true', 'pointer release without a click must open the menu')
+  assert.ok(document.querySelector('[data-ui-overlay]'), 'the menu panel renders after a pointer-only press')
+  await click(trigger)
+  assert.equal(trigger.getAttribute('aria-expanded'), 'true', 'a repeat press keeps the open menu open')
 })
 
 test('ledger document choices open the unsaved-create drawer and allocate nothing', async (t: TestContext) => {

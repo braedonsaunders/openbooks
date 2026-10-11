@@ -32,6 +32,32 @@ export function usePopoverRetention(): PopoverRetention | null {
 }
 
 /**
+ * Activation for a menu trigger that must answer the pointer, not only the
+ * compatibility click. A press whose release never becomes a `click` (moved
+ * slightly, assistive pointer, suppressed compat events) still opens the
+ * menu on `pointerup`; keyboard activation has no pointer events, so its
+ * click opens as before. Both handlers open idempotently — never toggle —
+ * so the follow-on click after a pointer release is a harmless no-op rather
+ * than an immediate re-close. Closing stays on outside press, Escape, and
+ * item selection, the same contract hover-opened menus already use.
+ */
+export function useMenuTrigger(open: () => void): {
+  onPointerUp: (event: React.PointerEvent<HTMLElement>) => void
+  onClick: () => void
+} {
+  return React.useMemo(() => ({
+    onPointerUp(event) {
+      if (event.pointerType === 'mouse' && event.button !== 0) return
+      if (event.isPrimary === false) return
+      open()
+    },
+    onClick() {
+      open()
+    },
+  }), [open])
+}
+
+/**
  * Portal-based popover that escapes any overflow-hidden ancestor.
  *
  * Use this for header/sidebar dropdowns (tenant switcher, notifications,
@@ -165,6 +191,11 @@ export function Popover({
                   transition={{ duration: 0.14, ease: [0.16, 1, 0.3, 1] }}
                   className={cn(
                     'fixed z-[60] min-w-[12rem] origin-top rounded-md border border-slate-200 bg-white shadow-xl dark:border-slate-800 dark:bg-slate-900',
+                    // A closing menu stops taking the pointer at once, so the
+                    // next press lands on its real target instead of being
+                    // eaten by a fading panel. Same precedent as the drawer
+                    // layer, which goes pointer-events-none while exiting.
+                    exiting && 'pointer-events-none',
                     className,
                   )}
                   style={{

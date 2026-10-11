@@ -5,7 +5,7 @@ import { createPortal } from 'react-dom'
 import { AnimatePresence, motion, useReducedMotion } from 'framer-motion'
 import { useTranslations } from 'next-intl'
 import { useHydrated } from './use-hydrated'
-import { nextDrawerShow, shouldCommitDrawerCloseNavigation } from './drawer-nav'
+import { nextDrawerShow, pushDrawerRouteGuard, shouldCommitDrawerCloseNavigation } from './drawer-nav'
 import { OverlayExit } from './overlay-exit'
 import { usePopoverRetention } from './popover'
 import { DrawerSubtabSlotContext, DrawerViewSwitchContext, drawerViewSwitchType, ViewTransition } from './view-transition'
@@ -66,6 +66,35 @@ const FOLD_CLIP = `polygon(${FOLD}px 0, 100% 0, 100% 100%, 0 100%, 0 ${FOLD}px)`
 /** A menu, picker or popover that is open (not playing its exit). */
 function hasOpenOverlay(): boolean {
   return document.querySelector('[data-ui-overlay]:not([data-overlay-exiting])') !== null
+}
+
+/**
+ * The interactive control directly beneath a backdrop point, if any. The
+ * backdrop hides for one hit-test so `elementFromPoint` sees through it;
+ * controls inside another drawer or a floating overlay own their own
+ * presses and are never forwarded to.
+ */
+function backdropForwardTarget(backdrop: HTMLElement, x: number, y: number): Element | null {
+  if (typeof document.elementFromPoint !== 'function') return null
+  const { visibility } = backdrop.style
+  backdrop.style.visibility = 'hidden'
+  let beneath: Element | null = null
+  try {
+    beneath = document.elementFromPoint(x, y)
+  } finally {
+    backdrop.style.visibility = visibility
+  }
+  const target = beneath?.closest?.('a[href],button:not([disabled])') ?? null
+  if (!target || target.closest('[data-drawer-depth],[data-ui-overlay]')) return null
+  return target
+}
+
+/** Re-dispatch the backdrop click onto the control beneath it. */
+function forwardBackdropClick(backdrop: HTMLElement, x: number, y: number): boolean {
+  const target = backdropForwardTarget(backdrop, x, y)
+  if (!target) return false
+  target.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true, clientX: x, clientY: y }))
+  return true
 }
 
 let openDrawerCount = 0
@@ -316,13 +345,23 @@ export function Drawer({
             exit={{ opacity: 0 }}
             transition={{ duration: 0.15 }}
             className="absolute inset-0 bg-slate-900/40 backdrop-blur-[2px]"
-            onMouseDown={() => {
+            onMouseDown={(event) => {
               backdropPressClosesOverlayRef.current = hasOpenOverlay()
+              // Keep focus where it is when this press will reach a control
+              // behind the drawer; the click below forwards to it.
+              if (!backdropPressClosesOverlayRef.current && backdropForwardTarget(event.currentTarget, event.clientX, event.clientY)) {
+                event.preventDefault()
+              }
             }}
-            onClick={() => {
+            onClick={(event) => {
               const overlayTookPress = backdropPressClosesOverlayRef.current
               backdropPressClosesOverlayRef.current = false
               if (overlayTookPress || hasOpenOverlay()) return
+              // A row, link or button behind the drawer owns this click: the
+              // drawer never silently eats it. Forwarding reaches the list's
+              // own navigation (which confirms a dirty draft first); only an
+              // empty backdrop press dismisses the drawer.
+              if (forwardBackdropClick(event.currentTarget, event.clientX, event.clientY)) return
               onClose()
             }}
             aria-hidden="true"
@@ -653,6 +692,16 @@ export function UrlDrawer({
   if (nextShow.show !== show) setShow(nextShow.show)
   if (nextShow.prevOpen !== prevOpen) setPrevOpen(nextShow.prevOpen)
   if (nextShow.prevOpenKey !== prevOpenKey) setPrevOpenKey(nextShow.prevOpenKey)
+  // While shown, a guarded drawer confirms record switches: list links ask
+  // the topmost guard before retargeting the URL underneath the drawer, so
+  // clicking another row switches records through the same dirty-draft
+  // confirm as closing. Untracked drawers register nothing and switch free.
+  // beforeClose rides the deps, so the registered guard is always the
+  // latest render's closure.
+  React.useEffect(() => {
+    if (!show || !beforeClose) return
+    return pushDrawerRouteGuard(() => beforeClose())
+  }, [show, beforeClose])
   async function close() {
     if (beforeClose && !(await beforeClose())) return
     if (typeof window !== 'undefined') {

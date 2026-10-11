@@ -410,6 +410,11 @@ function OverflowGroupRow({ group, activeHref }: { group: SidebarNavGroup; activ
     [],
   )
 
+  // A group header with no accessible children renders nothing: a header
+  // that opens an empty flyout (or nothing at all) is a dead control.
+  // After the hooks so the call order never shifts between renders.
+  if (group.items.length === 0) return null
+
   function openMenu() {
     if (closeTimer.current) {
       window.clearTimeout(closeTimer.current)
@@ -465,9 +470,12 @@ function OverflowGroupRow({ group, activeHref }: { group: SidebarNavGroup; activ
           aria-expanded={open}
           onKeyDown={openByKeyboard}
           onClick={(event) => {
+            // Headers open, never toggle: hover already opens the flyout,
+            // so toggling reads as a dead header that closes what hover
+            // opened. Escape, mouse-leave and outside press still close.
             event.stopPropagation()
             setFocusEdge('first')
-            setOpen((current) => !current)
+            openMenu()
           }}
           className={rowCls}
         >
