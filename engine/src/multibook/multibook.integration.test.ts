@@ -5,7 +5,7 @@ import { sql } from "drizzle-orm";
 import { db, withBypass, withOrgContext, withOrgTransaction } from "../platform/db.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
 import { markEntryReversed, postEntry } from "../journal/post-entry.ts";
-import { bookReplicationGaps, replicateEntryToBooks } from "../journal/book-replication.ts";
+import { bookReplicationGaps, bookReplicationReadiness, replicateEntryToBooks } from "../journal/book-replication.ts";
 import { submitAndReleaseIfUngated } from "../flows/submit.ts";
 import { postDocument } from "../ledger/posting-document.ts";
 import { setPeriodLockState } from "../periods/period-locks.ts";
@@ -286,6 +286,36 @@ test("a deactivated book shows its gap until a catch-up fills it", enabled, () =
   assert.equal((await replicaOf(f, missed)).links, 1);
   const gaps = await withOrgContext(f.org.orgId, () => bookReplicationGaps(db, { orgId: f.org.orgId, bookId: f.book, through: "2026-12-31" }));
   assert.equal(gaps.missing, 0);
+}));
+
+test("close readiness reports an entry a full book is missing until a catch-up replicates it", enabled, () => fixture(async (f) => {
+  await activate(f);
+  // A primary entry written outside the posting API never reached the book.
+  const entryId = randomUUID();
+  await withOrgContext(f.org.orgId, async () => {
+    await db.execute(sql`
+      insert into journal_entries
+        (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, status, origin, created_by, updated_by)
+      values (${entryId}, ${f.org.orgId}, ${f.org.bookId}, ${f.org.subsidiaryId}, ${`MB-RAW-${entryId.slice(0, 8)}`}, ${f.org.date},
+              ${f.org.periodId}, 'draft', 'manual', ${f.actor}, ${f.actor})`);
+    await db.execute(sql`
+      insert into journal_lines (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate)
+      values (${f.org.orgId}, ${entryId}, 1, ${f.org.accounts.bank}, ${f.org.subsidiaryId}, 9, ${f.baseCurrency}, 9, 1),
+             (${f.org.orgId}, ${entryId}, 2, ${f.org.accounts.revenue}, ${f.org.subsidiaryId}, -9, ${f.baseCurrency}, -9, 1)`);
+    await db.execute(sql`update journal_entries set status = 'posted', posted_at = now(), posted_by = ${f.actor} where id = ${entryId}`);
+  });
+  const before = await withOrgContext(f.org.orgId, () =>
+    bookReplicationReadiness(db, { orgId: f.org.orgId, bookId: f.org.bookId, through: "2026-12-31" }));
+  assert.equal(before.missing, 1, "the primary book's close sees the full book's gap");
+  assert.deepEqual(before.books.map((book) => book.bookId), [f.book]);
+  const run = await changeBookReplication({
+    orgId: f.org.orgId, actorId: f.actor, allowedSubsidiaryIds: null,
+    input: { bookId: f.book, kind: "catch_up" }, reason: "Fill the gap found at close",
+  });
+  assert.equal(run.replicatedCount, 1);
+  const after = await withOrgContext(f.org.orgId, () =>
+    bookReplicationReadiness(db, { orgId: f.org.orgId, bookId: f.book, through: "2026-12-31" }));
+  assert.equal(after.missing, 0);
 }));
 
 test("a book-specific journal posts to its book only and is never replicated", enabled, () => fixture(async (f) => {
