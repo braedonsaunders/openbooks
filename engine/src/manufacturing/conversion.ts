@@ -42,6 +42,8 @@ type OperationCostRow = {
   overhead_snapshot: { basis?: string; cards?: Array<{ id: string; rate: string; kind: string; category: string | null; effectiveFrom: string; effectiveTo: string | null }> } | null;
   center_code: string; center_kind: CenterKind; absorbs_overhead: boolean;
   labor_minutes_per_unit: string | null; labor_time_source: "operation" | "approved_time";
+  /** Set when an empty released snapshot was resolved at the order's governing date. */
+  overhead_resolved_on?: string;
 };
 
 export type ConversionOrder = {
@@ -68,6 +70,26 @@ function usesMachine(kind: CenterKind): boolean { return kind === "machine" || k
 function usesLabor(kind: CenterKind): boolean { return kind === "labor" || kind === "cell"; }
 
 async function loadOperationCost(tx: SqlExecutor, orgId: string, workOrderId: string, operationId?: string): Promise<OperationCostRow[]> {
+  const rows = await loadStoredOperationCost(tx, orgId, workOrderId, operationId);
+  // An operation released before any standard overhead rate existed carries
+  // an empty snapshot; it takes the rate effective at its order's governing
+  // date (resolved as release would have) so it can still complete.
+  const filled: OperationCostRow[] = [];
+  for (const row of rows) {
+    if (row.absorbs_overhead && (row.overhead_snapshot?.cards?.length ?? 0) === 0) {
+      const { resolveEmptyOperationOverhead } = await import("./work-orders.ts");
+      const resolved = await resolveEmptyOperationOverhead(tx, orgId, workOrderId, row.id);
+      if (resolved) {
+        filled.push({ ...row, overhead_snapshot: resolved.snapshot as OperationCostRow["overhead_snapshot"], overhead_resolved_on: resolved.governingDate });
+        continue;
+      }
+    }
+    filled.push(row);
+  }
+  return filled;
+}
+
+async function loadStoredOperationCost(tx: SqlExecutor, orgId: string, workOrderId: string, operationId?: string): Promise<OperationCostRow[]> {
   return (await tx.execute<OperationCostRow>(sql`
     select operation.id, operation.sequence, operation.status, operation.work_center_id,
            operation.planned_setup_minutes::text as planned_setup_minutes,
@@ -124,10 +146,17 @@ function operationMinutes(
 }
 
 /** Completion, costing and setup resolve the same effective machine policy. */
-export async function resolveMachineRate(tx:SqlExecutor,orgId:string,centerId:string,onDate:string,label:string):Promise<{id:string;rate:string}> {
+/**
+ * The machine rate covering a date, or null when the work center has never
+ * been given a machine rate — machine time on such a center is not costed.
+ * Once any rate exists, the center costs machine time and exactly one rate
+ * must cover the date.
+ */
+export async function resolveMachineRate(tx:SqlExecutor,orgId:string,centerId:string,onDate:string,label:string):Promise<{id:string;rate:string}|null> {
   const rows=(await tx.execute<{id:string;rate:string}>(sql`select id,machine_rate_per_hour::text as rate from mfg_work_center_rates where org_id=${orgId} and work_center_id=${centerId} and effective_from<=${onDate}::date and (effective_to is null or effective_to>${onDate}::date) order by effective_from,id for share`)).rows;
-  if(rows.length!==1) refuse(`Work center ${label} requires one effective machine rate covering ${onDate}.`,"machine_rate_missing",`Review the effective machine rates on work center ${label} before recording conversion cost.`);
-  return rows[0]!;
+  if(rows.length===1) return rows[0]!;
+  if(rows.length===0 && !(await tx.execute(sql`select 1 from mfg_work_center_rates where org_id=${orgId} and work_center_id=${centerId} limit 1`)).rows.length) return null;
+  refuse(`Work center ${label} requires one effective machine rate covering ${onDate}.`,"machine_rate_missing",`Review the effective machine rates on work center ${label} so one covers ${onDate}, or record the operation on a date an existing rate covers.`);
 }
 async function machineRate(tx:SqlExecutor,orgId:string,operation:OperationCostRow,onDate:string) {
   return resolveMachineRate(tx,orgId,operation.work_center_id,onDate,operation.center_code);
@@ -139,7 +168,7 @@ function overheadCards(operation: OperationCostRow, orderNumber: string): Standa
   if (!snapshot || cards.length === 0) {
     refuse(`Work center ${operation.center_code} absorbs overhead, but operation ${operation.sequence} of work order ${orderNumber} was released with no standard overhead rate.`,
       "standard_overhead_rate_missing",
-      `Add a standard overhead rate for the work center's department under Company Settings → Overhead and release a replacement work order, or turn off overhead absorption on work center ${operation.center_code} before completing the operation.`);
+      `Add a standard overhead rate for the work center's department under Company Settings → Overhead effective on the work order's planned start (or its release date), then complete the operation again; it takes that rate. Otherwise turn off overhead absorption on work center ${operation.center_code}.`);
   }
   return cards.map((card) => ({
     id: card.id, orgId: "", departmentId: null, category: card.category, method: "standard" as const,
@@ -258,6 +287,7 @@ export async function absorbOperationConversion(
         laborRate: operation.standard_labor_final_rate, laborAmount: labor,
         machineRateId: machine?.id ?? null, machineRate: machine?.rate ?? null, machineAmount: machineCost,
         overheadBasis: operation.absorbs_overhead ? operation.overhead_snapshot?.basis ?? null : null, overheadAmount: overhead,
+        ...(operation.overhead_resolved_on ? { overheadResolvedOn: operation.overhead_resolved_on, overheadCardIds: (operation.overhead_snapshot?.cards ?? []).map((card) => card.id) } : {}),
       },
     },
   });
@@ -301,7 +331,8 @@ export async function conversionRelief(
       const { laborMinutes, machineMinutes } = operationMinutes(operation, quantity, setup, run);
       standardLabor = add(standardLabor, laborAmount(operation, order.number, laborMinutes));
       if (usesMachine(operation.center_kind) && !isZero(machineMinutes)) {
-        standardOverhead = add(standardOverhead, priceMinutes((await machineRate(tx, orgId, operation, date)).rate, machineMinutes));
+        const rate = await machineRate(tx, orgId, operation, date);
+        if (rate) standardOverhead = add(standardOverhead, priceMinutes(rate.rate, machineMinutes));
       }
       standardOverhead = add(standardOverhead, overheadAmount(operation, order.number, quantity, laborMinutes, machineMinutes));
     }

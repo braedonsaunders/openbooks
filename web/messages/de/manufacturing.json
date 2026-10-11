@@ -63,6 +63,8 @@
     "quantityScrapped": "Ausschussmenge",
     "unit": "Einheit",
     "plannedStart": "Geplanter Beginn",
+    "startedOn": "Begonnen am",
+    "completedOn": "Abgeschlossen am",
     "plannedEnd": "Geplantes Ende",
     "holdReason": "Sperrgrund",
     "cancelReason": "Stornogrund",

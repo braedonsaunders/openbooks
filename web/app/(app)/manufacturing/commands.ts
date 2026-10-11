@@ -346,7 +346,7 @@ export function childCommands(
     const base =
       "/api/manufacturing/work-orders/" + r.id + "/operations/" + row.id;
     if (row.status === "pending")
-      return [{ key: "startOperation", path: base + "/start", fields: [] }];
+      return [{ key: "startOperation", path: base + "/start", fields: [date("startedOn", r.plannedStart ?? null)] }];
     if (row.status === "paused")
       return [{ key: "resumeOperation", path: base + "/resume", fields: [] }];
     if (row.status === "running")
@@ -370,6 +370,7 @@ export function childCommands(
             decimal("actualSetupMinutes", row.actualSetupMinutes, false),
             decimal("actualRunMinutes", row.actualRunMinutes, false),
             ...(row.laborTimeSource === "approved_time" ? [] : [decimal("actualLaborMinutes", row.actualLaborMinutes, false)]),
+            date("completedOn", r.plannedStart ?? null),
           ],
         },
       ];

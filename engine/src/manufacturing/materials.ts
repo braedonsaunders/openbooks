@@ -10,7 +10,7 @@ import { assertInspectionIdentifierScope } from "../inventory/inspections.ts";
 import { sql } from "drizzle-orm";
 import { add, cmp, fromUnits, isZero, neg, toUnits } from "../money/money.ts";
 import type { SqlExecutor } from "../platform/db.ts";
-import { businessToday } from "../platform/business-date.ts";
+import { businessToday, isIsoCalendarDate } from "../platform/business-date.ts";
 import { loadSubsidiaryContext } from "../organization/subsidiaries.ts";
 import { assertItemsActive } from "../inventory/item-active.ts";
 import { assertMovementOwner, assertNoForeignOnHand, assertStockLocationAdmitsSubsidiary, resolveProfile } from "../inventory/profile-policy.ts";
@@ -37,6 +37,8 @@ export interface MaterialIssueLine {
 export interface OperationCompletion extends OperationTimeInput {
   doneQty: string;
   measuredQty?: string | null;
+  /** The day the operation actually finished, for back-dated production; today when omitted. */
+  completedOn?: string | null;
 }
 
 type WorkOrder = {
@@ -56,6 +58,7 @@ type Material = {
 type Operation = {
   id: string; sequence: number; status: string; quantity_planned: string;
   quantity_done: string; quantity_scrapped_here: string; measured_qty: string | null; quality_gate: string; backflush_at: string;
+  started_at: string | null;
 };
 
 type IssueIntent = {
@@ -118,7 +121,8 @@ async function loadOperation(tx: SqlExecutor, orgId: string, workOrderId: string
            operation.quantity_scrapped_here::text as quantity_scrapped_here,
            operation.measured_qty::text as measured_qty,
            operation.quality_gate,
-           operation.backflush_at
+           operation.backflush_at,
+           operation.started_at::date::text as started_at
       from mfg_wo_operations operation
      where operation.org_id=${orgId} and operation.work_order_id=${workOrderId} and operation.id=${operationId}
      ${lock ? sql`for update of operation` : sql``}`)).rows[0];
@@ -353,6 +357,7 @@ async function postMaterialIssue(
   plannedIntents: PlannedIssue[],
   deltas: Map<string, { issued: string; backflush: string }>,
   evidence: Record<string, unknown> = {},
+  onDate?: string,
 ): Promise<{ entryId: string | null; movementIds: string[] }> {
   if (!plannedIntents.length) return { entryId: null, movementIds: [] };
   const merged = new Map<string, PlannedIssue>();
@@ -369,7 +374,7 @@ async function postMaterialIssue(
   if (!order.subsidiary_id || !order.issue_location_id || !order.bom_revision || order.routing_version === null) {
     refuse(`Work order ${order.number} is missing its released posting evidence.`, "work_order_snapshot_missing", "Release a new work order from a valid BOM and routing version.", 409);
   }
-  const date = await businessToday(orgId);
+  const date = onDate ?? await businessToday(orgId);
   const periodId = await periodForDate(orgId, date, tx);
   if (!periodId) refuse(`No accounting period is open for material issue on ${date}.`, "posting_period_missing", "Open the accounting period or choose an allowed posting date.");
   const bookId = await primaryBookId(orgId, tx);
@@ -567,6 +572,7 @@ export async function backflushOperation(
   workOrderId: string,
   operationId: string,
   trigger: "start" | "finish",
+  options: { onDate?: string } = {},
 ): Promise<{ entryId: string | null; movementIds: string[]; fired: boolean }> {
   await assertManufacturingFeature(tx, orgId, "manufacturing");
   const order = await loadOrder(tx, orgId, workOrderId, true);
@@ -602,8 +608,25 @@ export async function backflushOperation(
   const planned = await planIssues(tx, orgId, actorId,order, intents);
   const result = await postMaterialIssue(tx, orgId, actorId, order, planned, deltas, {
     operation_id: operationId, operation_sequence: String(operation.sequence), backflush_trigger: trigger,
-  });
+  }, options.onDate);
   return { ...result, fired: true };
+}
+
+/**
+ * Validate an operation event date a user supplied for back-dated
+ * production: a real calendar date, not after the organization's business
+ * day, and not before the event it follows. Null keeps "now".
+ */
+export async function operationEventDate(
+  tx: SqlExecutor, orgId: string, value: string | null | undefined, notBefore: Date | string | null, label: string,
+): Promise<string | null> {
+  if (value == null || value === "") return null;
+  if (!isIsoCalendarDate(value)) refuse(`${label} date ${value} is not a calendar date.`, "invalid_operation_date", "Enter the date as YYYY-MM-DD.");
+  const today = await businessToday(orgId);
+  if (value > today) refuse(`${label} cannot be dated after today (${today}).`, "operation_date_in_future", "Record the day production actually happened.");
+  const floor = notBefore === null ? null : (notBefore instanceof Date ? notBefore.toISOString() : String(notBefore)).slice(0, 10);
+  if (floor !== null && value < floor) refuse(`${label} cannot be dated before ${floor}, when it started.`, "operation_date_before_start", `Use ${floor} or a later date.`);
+  return value;
 }
 
 export async function completeWorkOrderOperation(
@@ -650,14 +673,18 @@ export async function completeWorkOrderOperation(
   if (toUnits(add(doneQty, operation.quantity_scrapped_here)) > maximumUnits) {
     refuse(`Operation ${operation.sequence} completed quantity ${doneQty} exceeds its planned quantity ${operation.quantity_planned} plus the ${policies.completionTolerancePct}% completion tolerance.`, "completion_tolerance_exceeded", "Revise the order quantity.");
   }
+  // A back-dated completion books its conversion cost, backflush and
+  // completion stamp on the day production actually finished; never later
+  // than today and never before the operation started.
+  const completedOn = await operationEventDate(tx, orgId, input.completedOn, operation.started_at, `Operation ${operation.sequence}`);
   // Conversion cost is absorbed in the same transaction as the transition,
   // so an operation is never done without its labor and overhead in WIP.
-  const conversion = await absorbOperationConversion(tx, orgId, actorId, order, operationId, doneQty, input);
+  const conversion = await absorbOperationConversion(tx, orgId, actorId, order, operationId, doneQty, input, { onDate: completedOn ?? undefined });
   const updated = await tx.execute<{ id: string; sequence: number; status: string; quantity_done: string; measured_qty: string | null }>(sql`
     update mfg_wo_operations set status='done', quantity_done=${doneQty}, measured_qty=${measuredQty},
       actual_setup_minutes=${conversion.setupMinutes}, actual_run_minutes=${conversion.runMinutes},
       actual_labor_minutes=${conversion.laborMinutes},
-      completed_at=now(), updated_by=${actorId}, updated_at=now()
+      completed_at=${completedOn ? sql`${completedOn}::date::timestamptz` : sql`now()`}, updated_by=${actorId}, updated_at=now()
      where org_id=${orgId} and work_order_id=${workOrderId} and id=${operationId} and status='running'
      returning id, sequence, status, quantity_done::text, measured_qty::text`);
   const after = rowOrNotFound(updated.rows);
@@ -666,7 +693,7 @@ export async function completeWorkOrderOperation(
     before: operation, after: { ...after, actualSetupMinutes: conversion.setupMinutes, actualRunMinutes: conversion.runMinutes,
       actualLaborMinutes: conversion.laborMinutes, conversionEntryId: conversion.entryId,
       reason: `Operation completed with ${doneQty} units.` } });
-  await backflushOperation(tx, orgId, actorId, workOrderId, operationId, "finish");
+  await backflushOperation(tx, orgId, actorId, workOrderId, operationId, "finish", { onDate: completedOn ?? undefined });
   await finishInspectionRework(tx,orgId,actorId,operationId);
   return after;
 }

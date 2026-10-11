@@ -40,7 +40,7 @@ import { ManufacturingError, ManufacturingNotFoundError } from "./errors.ts";
 import { auditChange, compareDecimal, decimalValue, isoDate } from "./master-support.ts";
 import { getManufacturingPolicies } from "./policies.ts";
 import { setupEditorHref } from "./setup-editors.ts";
-import { backflushOperation } from "./materials.ts";
+import { backflushOperation, operationEventDate } from "./materials.ts";
 import { manufacturingControlAccount, postManufacturingEntry } from "./journal.ts";
 import { checkPinnedOperatingProfileCommand, resolveOperatingProfileForCreate } from "../organization/operating-profiles.ts";
 
@@ -1177,6 +1177,36 @@ export interface ReleaseReadinessFinding {
  * confirms the remaining invariants, so "ready" means the release would
  * succeed now. A current diagnostic only: release re-checks authoritatively.
  */
+/**
+ * The standard overhead an operation released before any overhead rate
+ * existed should carry: resolved from the routing version the order was
+ * released on, at the order's governing date (planned start, else release
+ * date), exactly as release would have resolved it. Released snapshots stay
+ * frozen in storage; completion uses this in place of an empty snapshot and
+ * records it as evidence. Null when the operation needs none or no rate
+ * covers that date yet.
+ */
+export async function resolveEmptyOperationOverhead(
+  tx: SqlExecutor, orgId: string, workOrderId: string, operationId: string,
+): Promise<{ snapshot: unknown; governingDate: string } | null> {
+  const order = await loadOrder(tx, orgId, workOrderId);
+  const operation = (await tx.execute<{ sequence: number; work_center_id: string }>(sql`
+    select sequence, work_center_id from mfg_wo_operations
+     where org_id = ${orgId} and work_order_id = ${workOrderId} and id = ${operationId}`)).rows[0];
+  if (!operation || order.routingVersion === null || !order.subsidiaryId) return null;
+  const governingDate = order.plannedStart ?? (order.releasedAt ? new Date(order.releasedAt).toISOString().slice(0, 10) : await releaseBusinessDate(tx, orgId));
+  const routing = (await tx.execute<ActiveRouting>(sql`
+    select id, version, effective_from::text, effective_to::text,
+           default_issue_location_id, default_receipt_location_id, overhead_basis as "overheadBasis"
+      from mfg_routings
+     where org_id = ${orgId} and produced_item_id = ${order.producedItemId} and version = ${order.routingVersion}`)).rows[0];
+  if (!routing) return null;
+  const [snapshot] = await resolveOperationReleaseSnapshots(
+    tx, orgId, order, [operation], routing, governingDate, await releaseFunctionalCurrency(tx, orgId, order));
+  if (!snapshot || snapshot.overhead.cards.length === 0) return null;
+  return { snapshot: snapshot.overhead, governingDate };
+}
+
 export async function readWorkOrderReleaseReadiness(
   tx: SqlExecutor,
   orgId: string,
@@ -1502,7 +1532,7 @@ async function lockOperation(tx: SqlExecutor, orgId: string, workOrderId: string
   return { order, operation };
 }
 
-export async function startWorkOrderOperation(tx: SqlExecutor, orgId: string, actorId: string, workOrderId: string, operationId: string) {
+export async function startWorkOrderOperation(tx: SqlExecutor, orgId: string, actorId: string, workOrderId: string, operationId: string, options: { startedOn?: string | null } = {}) {
   await assertManufacturingFeature(tx, orgId, "manufacturing");
   await lockManufacturingOrderExecutionAuthority(tx,orgId,actorId,workOrderId);
   const { order, operation: before } = await lockOperation(tx, orgId, workOrderId, operationId);
@@ -1511,15 +1541,17 @@ export async function startWorkOrderOperation(tx: SqlExecutor, orgId: string, ac
   else if (order.status !== "in_progress") refuse(`Start work order ${order.number} before starting an operation.`, "work_order_not_started", "Start the released work order first.", 409);
   if (before.status === "running") return before;
   if (before.status !== "pending") refuse(`Operation ${before.sequence} cannot start from ${before.status}.`, "invalid_operation_transition", "Start a pending operation or resume a paused one.", 409);
+  // A back-dated start stamps and backflushes on the day production began.
+  const startedOn = await operationEventDate(tx, orgId, options.startedOn, null, `Operation ${before.sequence}`);
   const updated = await tx.execute(sql`
-    update mfg_wo_operations set status='running', operator_user_id=${actorId}, started_at=now(),
+    update mfg_wo_operations set status='running', operator_user_id=${actorId}, started_at=${startedOn ? sql`${startedOn}::date::timestamptz` : sql`now()`},
       pause_reason=null, updated_by=${actorId}, updated_at=now()
      where org_id=${orgId} and work_order_id=${workOrderId} and id=${operationId} and status='pending'
      returning id, work_order_id, sequence, status, operator_user_id, pause_reason, started_at`);
   const after = rowOrNotFound(updated.rows);
   await auditChange(tx, { orgId, actorId, table: "mfg_wo_operations", rowId: operationId, action: "update", before, after: { ...after, reason: "Operation started." } });
   await createOperationInspection(tx,orgId,actorId,workOrderId,operationId);
-  await backflushOperation(tx, orgId, actorId, workOrderId, operationId, "start");
+  await backflushOperation(tx, orgId, actorId, workOrderId, operationId, "start", { onDate: startedOn ?? undefined });
   return after;
 }
 

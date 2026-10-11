@@ -63,6 +63,8 @@
     "quantityScrapped": "廃棄数量",
     "unit": "単位",
     "plannedStart": "開始予定",
+    "startedOn": "開始日",
+    "completedOn": "完了日",
     "plannedEnd": "終了予定",
     "holdReason": "保留理由",
     "cancelReason": "取消理由",

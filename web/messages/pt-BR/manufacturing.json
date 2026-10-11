@@ -63,6 +63,8 @@
     "quantityScrapped": "Quantidade de refugo",
     "unit": "Unidade",
     "plannedStart": "Início previsto",
+    "startedOn": "Iniciada em",
+    "completedOn": "Concluída em",
     "plannedEnd": "Fim previsto",
     "holdReason": "Motivo do bloqueio",
     "cancelReason": "Motivo do cancelamento",

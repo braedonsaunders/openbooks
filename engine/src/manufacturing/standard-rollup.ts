@@ -83,7 +83,7 @@ export async function previewStandardRollup(tx: SqlExecutor, orgId: string, acto
     let machine = "0.0000", machineRateId: string | null = null;
     if (cmp(machineMinutes, "0") > 0) {
       const rate=await resolveMachineRate(tx,orgId,operation.work_center_id,input.onDate,operation.name);
-      machine = minutesCost(rate.rate, machineMinutes); machineRateId = rate.id;
+      if (rate) { machine = minutesCost(rate.rate, machineMinutes); machineRateId = rate.id; }
     }
     if (operation.absorbs && !snapshot.overhead.cards.length) fail(`No standard overhead rate covers ${operation.name}.`, "rollup_overhead_required", "Configure standard overhead for the work center's department and routing basis.");
     const overhead = operation.absorbs ? sum(snapshot.overhead.cards.map(card => route.overheadBasis === "units" ? mul(card.rate, batchQuantity) : minutesCost(card.rate, route.overheadBasis === "machine_hours" ? machineMinutes : laborMinutes))) : "0.0000";

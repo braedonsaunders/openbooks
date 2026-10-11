@@ -186,11 +186,11 @@ async function account(f: Fixture, role: string, type: string): Promise<string> 
  * standard overhead card on labor hours. Ten units at 6 run minutes each and
  * two components at 3.00 per unit.
  */
-async function conversionOrder(f: Fixture, produced: string, laborTimeSource: "operation" | "approved_time" = "operation") {
+async function conversionOrder(f: Fixture, produced: string, laborTimeSource: "operation" | "approved_time" = "operation", overheadFrom = "2026-01-01") {
   await withBypassContext(async () => {
     await db.execute(sql`update labor_cost_rates set rate='30' where org_id=${f.org.orgId} and department_id=${f.departmentId} returning id`);
     await db.execute(sql`insert into overhead_rates (org_id,department_id,method,rate_kind,rate_percent,effective_from)
-      values (${f.org.orgId},${f.departmentId},'standard','per_hour','5','2026-01-01') returning id`);
+      values (${f.org.orgId},${f.departmentId},'standard','per_hour','5',${overheadFrom}) returning id`);
     if (produced !== f.org.items.assembly) await db.execute(sql`insert into bom_components (org_id,assembly_item_id,component_item_id,quantity_per,sort_order,is_byproduct)
       values (${f.org.orgId},${produced},${f.org.items.component},'2',0,false) returning id`);
     else await db.execute(sql`update bom_components set quantity_per='2',operation_seq=null,is_byproduct=false
@@ -546,11 +546,53 @@ const cases: Case[] = [
     assert.equal(amounts[wo.overheadVariance], "3.4000");
     assert.equal(amounts[f.org.accounts.adjustment], undefined, "the conversion in the standard is not a production variance");
   } },
-  { name: "operation completion refuses by name when its work center has no machine rate", run: async (f) => {
+  { name: "operation completion refuses by name when the work center's machine rates leave the date uncovered", run: async (f) => {
     const wo = await conversionOrder(f, f.org.items.assembly);
-    await withBypassContext(() => db.execute(sql`delete from mfg_work_center_rates where org_id=${f.org.orgId} returning id`));
+    await withBypassContext(() => db.execute(sql`update mfg_work_center_rates set effective_from='2099-01-01' where org_id=${f.org.orgId} returning id`));
     await refuse(run((tx) => completeWorkOrderOperation(tx, f.org.orgId, f.actorId, wo.id, wo.operation, { doneQty: "10" })),
       "machine_rate_missing", "requires one effective machine rate covering", "Review the effective machine rates on work center");
+  } },
+  { name: "a work center never given a machine rate does not cost machine time", run: async (f) => {
+    const wo = await conversionOrder(f, f.org.items.assembly);
+    await withBypassContext(() => db.execute(sql`delete from mfg_work_center_rates where org_id=${f.org.orgId} returning id`));
+    await run((tx) => completeWorkOrderOperation(tx, f.org.orgId, f.actorId, wo.id, wo.operation, { doneQty: "10" }));
+    const conversion = await withBypassContext(async () => (await db.execute<{ machine: string | null; machineAmount: string }>(sql`
+      select custom->'conversion'->>'machineRateId' as machine, custom->'conversion'->>'machineAmount' as "machineAmount"
+        from journal_entries where org_id=${f.org.orgId} and custom->>'operation_id'=${wo.operation} and custom ? 'conversion_labor_amount'`)).rows[0]!);
+    assert.deepEqual(conversion, { machine: null, machineAmount: "0.0000" }, "labor and overhead post; machine time carries no cost");
+  } },
+  { name: "a back-dated completion posts its conversion and stamp on the day production finished", run: async (f) => {
+    const wo = await conversionOrder(f, f.org.items.assembly);
+    const tomorrow = addCalendarDays(f.postingDate, 1);
+    await refuse(run((tx) => completeWorkOrderOperation(tx, f.org.orgId, f.actorId, wo.id, wo.operation, { doneQty: "10", completedOn: tomorrow })),
+      "operation_date_in_future", "cannot be dated after today", "Record the day production actually happened");
+    const started = await withBypassContext(async () => (await db.execute<{ day: string }>(sql`select started_at::date::text as day from mfg_wo_operations where org_id=${f.org.orgId} and id=${wo.operation}`)).rows[0]!.day);
+    await refuse(run((tx) => completeWorkOrderOperation(tx, f.org.orgId, f.actorId, wo.id, wo.operation, { doneQty: "10", completedOn: addCalendarDays(started, -1) })),
+      "operation_date_before_start", "cannot be dated before", "or a later date");
+    const finished = started;
+    await run((tx) => completeWorkOrderOperation(tx, f.org.orgId, f.actorId, wo.id, wo.operation, { doneQty: "10", completedOn: finished }));
+    const stamped = await withBypassContext(async () => (await db.execute<{ completed: string; posted: string }>(sql`
+      select o.completed_at::date::text as completed, e.posting_date::text as posted
+        from mfg_wo_operations o
+        join journal_entries e on e.org_id=o.org_id and e.custom->>'operation_id'=o.id::text and e.custom ? 'conversion_labor_amount'
+       where o.org_id=${f.org.orgId} and o.id=${wo.operation}`)).rows[0]!);
+    assert.deepEqual(stamped, { completed: finished, posted: finished });
+  } },
+  { name: "an operation released before any overhead rate takes the rate effective at its order's date", run: async (f) => {
+    // Released while no overhead rate covered the order: the frozen snapshot is empty.
+    const wo = await conversionOrder(f, f.org.items.assembly, "operation", "2099-01-01");
+    const released = await withBypassContext(async () => (await db.execute<{ cards: number }>(sql`
+      select coalesce(jsonb_array_length(overhead_snapshot->'cards'), 0)::int as cards from mfg_wo_operations where org_id=${f.org.orgId} and id=${wo.operation}`)).rows[0]!.cards);
+    assert.equal(released, 0);
+    await withBypassContext(() => db.execute(sql`update overhead_rates set effective_from='2026-01-01' where org_id=${f.org.orgId} and department_id=${f.departmentId} returning id`));
+    await run((tx) => completeWorkOrderOperation(tx, f.org.orgId, f.actorId, wo.id, wo.operation, { doneQty: "10" }));
+    const evidence = await withBypassContext(async () => (await db.execute<{ resolvedOn: string | null; overhead: string; stored: number }>(sql`
+      select e.custom->'conversion'->>'overheadResolvedOn' as "resolvedOn", e.custom->'conversion'->>'overheadAmount' as overhead,
+             (select coalesce(jsonb_array_length(o.overhead_snapshot->'cards'), 0)::int from mfg_wo_operations o where o.org_id=e.org_id and o.id=${wo.operation}) as stored
+        from journal_entries e where e.org_id=${f.org.orgId} and e.custom->>'operation_id'=${wo.operation} and e.custom ? 'conversion_labor_amount'`)).rows[0]!);
+    assert.equal(evidence.resolvedOn, f.org.date, "the rate resolves at the order's planned start");
+    assert.equal(evidence.overhead, "5.0000", "ten units at six minutes on a 5/h card");
+    assert.equal(evidence.stored, 0, "the released snapshot itself stays frozen");
   } },
   { name: "completion uses the organization's business date", run: async (f) => {
     const wo = await prepare(f); await stock(f, f.org.items.component, "4", "3");

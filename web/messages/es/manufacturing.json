@@ -63,6 +63,8 @@
     "quantityScrapped": "Cantidad desechada",
     "unit": "Unidad",
     "plannedStart": "Inicio previsto",
+    "startedOn": "Iniciada el",
+    "completedOn": "Completada el",
     "plannedEnd": "Fin previsto",
     "holdReason": "Motivo del bloqueo",
     "cancelReason": "Motivo de cancelación",

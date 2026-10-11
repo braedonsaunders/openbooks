@@ -63,6 +63,8 @@
     "quantityScrapped": "Scrapped quantity",
     "unit": "Unit",
     "plannedStart": "Planned start",
+    "startedOn": "Started on",
+    "completedOn": "Completed on",
     "plannedEnd": "Planned finish",
     "holdReason": "Hold reason",
     "cancelReason": "Cancellation reason",

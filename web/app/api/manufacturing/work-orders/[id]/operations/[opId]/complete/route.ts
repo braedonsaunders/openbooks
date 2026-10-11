@@ -11,6 +11,7 @@ const Body = z.object({
   doneQty: z.string(), measuredQty: z.string().nullable().optional(),
   actualSetupMinutes: z.string().nullable().optional(), actualRunMinutes: z.string().nullable().optional(),
   actualLaborMinutes: z.string().nullable().optional(),
+  completedOn: z.string().nullable().optional(),
 }).strict();
 
 export const POST = defineRoute({

@@ -63,6 +63,8 @@
     "quantityScrapped": "报废数量",
     "unit": "单位",
     "plannedStart": "计划开始",
+    "startedOn": "开始日期",
+    "completedOn": "完成日期",
     "plannedEnd": "计划完成",
     "holdReason": "暂停原因",
     "cancelReason": "取消原因",

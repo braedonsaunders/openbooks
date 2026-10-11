@@ -63,6 +63,8 @@
     "quantityScrapped": "Quantité rebutée",
     "unit": "Unité",
     "plannedStart": "Début prévu",
+    "startedOn": "Commencée le",
+    "completedOn": "Terminée le",
     "plannedEnd": "Fin prévue",
     "holdReason": "Motif de blocage",
     "cancelReason": "Motif d’annulation",
