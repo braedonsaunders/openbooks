@@ -353,18 +353,6 @@ export function ProfileEditor(props: {
     : classOptions
   const classLabel = (classKey: string, fallback: string): string =>
     textOf(`employmentClassOptions.${classKey}`, fallback)
-  // Workers-compensation coverage: the org's active rate classes plus the
-  // pack's exemption declaration. Shown where the org prices WCB, where the
-  // pack declares the exclusion, or where an answer is already stored —
-  // never for packs with no workers-comp premium.
-  const workerCompGroups = props.workerCompGroups ?? []
-  const wcbRelevant = workerCompGroups.length > 0
-    || (pack?.exemptionFlags ?? []).some((flag) => flag.column === 'wcb_exempt')
-    || wcbExempt || workerCompGroupId !== ''
-  const wcbCoverageReadout = wcbExempt
-    ? (wcbExemptReason.trim() || textOf('fields.wcbExempt', 'WCB exempt'))
-    : (workerCompGroups.find((group) => group.id === workerCompGroupId)?.name
-      ?? (workerCompGroupId !== '' ? workerCompGroupId : textOf('fields.wcbUndecided', 'Coverage not decided')))
 
   // Everything below renders from the selected pack's declaration — the
   // subdivision list and label, the withholding certificates, the exemption
@@ -518,6 +506,18 @@ export function ProfileEditor(props: {
     column ? textOf(`fields.${columnLocaleBase(column)}`, fallback) : fallback
   const choiceLabel = (column: string, value: string, fallback: string): string =>
     textOf(`${columnLocaleBase(column)}.${value}`, fallback)
+  // Workers-compensation coverage: the org's active rate classes plus the
+  // pack's exemption declaration. Shown where the org prices WCB, where the
+  // pack declares the exclusion, or where an answer is already stored —
+  // never for packs with no workers-comp premium.
+  const workerCompGroups = props.workerCompGroups ?? []
+  const wcbRelevant = workerCompGroups.length > 0
+    || (pack?.exemptionFlags ?? []).some((flag) => flag.column === 'wcb_exempt')
+    || wcbExempt || workerCompGroupId !== ''
+  const wcbCoverageReadout = wcbExempt
+    ? (wcbExemptReason.trim() || textOf('fields.wcbExempt', 'WCB exempt'))
+    : (workerCompGroups.find((group) => group.id === workerCompGroupId)?.name
+      ?? (workerCompGroupId !== '' ? workerCompGroupId : textOf('fields.wcbUndecided', 'Coverage not decided')))
 
   // Declared above `save`: both the save path and the render path below
   // read it, and a const arrow used before its declaration trips the

@@ -81,7 +81,7 @@ function render(
   countries: string[] = ['XX'],
   storedCertificates: StoredCertificateRow[] = [],
   derivedColumns: Record<string, string> = {},
-  editor: { readOnly?: boolean; section?: 'general' | 'tax' } = {},
+  editor: { readOnly?: boolean; section?: 'general' | 'tax'; workerCompGroups?: { id: string; code: string; name: string }[] } = {},
 ): string {
   const profileCountry = (overrides.country as string | undefined) ?? countries[0]!
   return renderToStaticMarkup(
@@ -143,6 +143,7 @@ function render(
         schedules={[{ id: 'sched', name: 'Monthly', frequency: 'monthly' }]}
         filingAccounts={[]}
         labourJurisdictions={{}}
+        workerCompGroups={editor.workerCompGroups}
         countries={countries}
         packProfiles={packProfiles}
         storedCertificates={storedCertificates}
@@ -445,6 +446,21 @@ test('read mode renders values with no form controls and no save', () => {
   // and an em dash render.
   assert.match(html, /Fixture payroll number/)
   assert.doesNotMatch(html, /id="pp-sin"/)
+})
+
+test('an employee with undecided workers-comp coverage renders in both modes', () => {
+  // Coverage reads its rate classes, the pack's exemption declaration and
+  // the locale; an undecided employee (no class, not exempt) is exactly the
+  // one readiness sends here, so the tab must render for it.
+  const groups = [{ id: 'wcb-office', code: '90200', name: 'Office and clerical' }]
+  for (const readOnly of [true, false]) {
+    for (const workerCompGroups of [[], groups]) {
+      const html = render({ wcb_exempt: false, wcb_exempt_reason: null, worker_comp_group_id: null }, { XX: xxPack }, ['XX'], [], {}, { readOnly, workerCompGroups })
+      assert.match(html, /Monthly/)
+    }
+  }
+  const undecided = render({ wcb_exempt: false, wcb_exempt_reason: null, worker_comp_group_id: null }, { XX: xxPack }, ['XX'], [], {}, { workerCompGroups: groups })
+  assert.match(undecided, /Office and clerical/, 'the rate classes are offered to resolve it')
 })
 
 test('edit mode renders the inputs and the save button', () => {
