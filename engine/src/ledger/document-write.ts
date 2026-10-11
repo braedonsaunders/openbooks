@@ -1617,13 +1617,22 @@ export async function applyDocumentEdit(
           })
           .filter((part) => part.tip !== '0.0000' || part.fee !== '0.0000')
         const bag: Record<string, unknown> = { ...suppliedBag, parts }
-        // Totals derive from the parts unless the caller stated them — then
-        // the parse cross-foots them.
-        if (bag.tipsTotal === undefined) {
+        // Fresh tenders are the single source: the header totals derive from
+        // the same payload in the same statement, so the header can never
+        // disagree with the tender fields (a save recomputes it, which also
+        // recovers drafts wedged by an earlier divergence). An
+        // over/short-only edit resubmits no tenders; then stated totals
+        // still cross-foot against the stored parts.
+        if (tenderInputs !== undefined) {
           bag.tipsTotal = fromUnits(parts.reduce((sum, part) => sum + toUnits(part.tip), 0n))
-        }
-        if (bag.feeTotal === undefined) {
           bag.feeTotal = fromUnits(parts.reduce((sum, part) => sum + toUnits(part.fee), 0n))
+        } else {
+          if (bag.tipsTotal === undefined) {
+            bag.tipsTotal = fromUnits(parts.reduce((sum, part) => sum + toUnits(part.tip), 0n))
+          }
+          if (bag.feeTotal === undefined) {
+            bag.feeTotal = fromUnits(parts.reduce((sum, part) => sum + toUnits(part.fee), 0n))
+          }
         }
         if (bag.overShort === undefined) {
           bag.overShort =
@@ -1640,7 +1649,7 @@ export async function applyDocumentEdit(
         if (parsed) headerCustom.closeout = serializeCashCloseout(parsed)
         else delete headerCustom.closeout
       } catch (error) {
-        if (error instanceof CashCloseoutError) throw new DocumentEditError(422, error.message)
+        if (error instanceof CashCloseoutError) throw new DocumentEditError(422, error.message, undefined, error.remedy)
         throw error
       }
     }
@@ -2594,7 +2603,7 @@ export async function applyDocumentEdit(
             { actorId: userId, allowedSubsidiaryIds: ctx.allowedSubsidiaryIds },
           )
         } catch (error) {
-          if (error instanceof TenderRefusal) throw new DocumentEditError(error.status, error.message)
+          if (error instanceof TenderRefusal) throw new DocumentEditError(error.status, error.message, undefined, error.remedy)
           throw error
         }
       }

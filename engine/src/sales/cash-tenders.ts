@@ -74,12 +74,28 @@ export function assertTendersMatchTotal(
 }
 
 /**
- * Close-out tender cross-foot for a cash sale: the till collects the
- * document total plus card tips, keeps back the processor fees withheld at
- * settlement, and counts over or short against the expected cash — so
- * tenders must equal total + tips − fees ± over/short (over positive,
- * short negative), stated explicitly so a mis-tendered close-out reads as
- * arithmetic, never as a plug.
+ * The one close-out tender derivation: the till collects the document total
+ * plus card tips, keeps back the processor fees withheld at settlement, and
+ * counts over or short against the expected cash (over positive, short
+ * negative). The posting kernel cross-foots through it below and the cash
+ * drawer balances its tender editor through it, so the two can never
+ * disagree about what a close-out must tender. Plain exact-decimal strings
+ * in, canonical decimal text out; a malformed leg throws instead of
+ * plugging.
+ */
+export function expectedTenderedForCloseout(
+  documentTotal: string,
+  tipsTotal: string,
+  feeTotal: string,
+  overShort: string,
+): string {
+  return sum([documentTotal, tipsTotal, neg(feeTotal), overShort]);
+}
+
+/**
+ * Close-out tender cross-foot for a cash sale: tenders must equal the
+ * shared derivation above, stated explicitly so a mis-tendered close-out
+ * reads as arithmetic, never as a plug.
  */
 export function assertCloseoutTendersMatchTotal(
   tenders: readonly CashPostingTender[],
@@ -88,12 +104,12 @@ export function assertCloseoutTendersMatchTotal(
   documentNumber: string,
 ): void {
   const tendered = sumMoney(tenders.map((t) => t.amount));
-  const expected = sum([
+  const expected = expectedTenderedForCloseout(
     abs(incomeAndTaxTotal),
     closeout.tipsTotal,
-    neg(closeout.feeTotal),
+    closeout.feeTotal,
     closeout.overShort,
-  ]);
+  );
   if (cmp(tendered, expected) !== 0) {
     const parts = [`document total ${abs(incomeAndTaxTotal)}`];
     if (cmp(closeout.tipsTotal, "0") !== 0) parts.push(`tips ${closeout.tipsTotal}`);
