@@ -414,6 +414,18 @@ export interface TargetedPolicyWindow {
 }
 
 /**
+ * The pinned set of a targeting dimension, or null for wildcard. Empty
+ * and absent lists both read as wildcard — writes refuse empty lists, so
+ * this only ever normalizes legacy rows — matching the storage guard,
+ * which exempts empty arrays from the wildcard-only exclusion the same
+ * way it exempts absent keys.
+ */
+export function pinnedIds(ids: readonly string[] | null | undefined): readonly string[] | null {
+  if (!Array.isArray(ids) || ids.length === 0) return null;
+  return ids;
+}
+
+/**
  * Specificity score of a pin pattern: employment pin 8, classification
  * pin 4, subsidiary pin 2, department pin 1 — the same weights selectPolicy
  * resolves by. Binary weights make equal scores mean identical pin
@@ -424,8 +436,8 @@ export function targetingSpecificity(window: Omit<TargetedPolicyWindow, "id" | "
   let score = 0;
   if (window.employerSubsidiaryId !== null) score += 2;
   if (window.departmentId !== null) score += 1;
-  if (window.employmentIds != null) score += 8;
-  if (window.classificationIds != null) score += 4;
+  if (pinnedIds(window.employmentIds) !== null) score += 8;
+  if (pinnedIds(window.classificationIds) !== null) score += 4;
   return score;
 }
 
@@ -433,9 +445,11 @@ function targetSetsIntersect(
   a: readonly string[] | null | undefined,
   b: readonly string[] | null | undefined,
 ): boolean {
-  if (a == null && b == null) return true;
-  if (a == null || b == null) return false;
-  return a.some((id) => b.includes(id));
+  const left = pinnedIds(a);
+  const right = pinnedIds(b);
+  if (left === null && right === null) return true;
+  if (left === null || right === null) return false;
+  return left.some((id) => right.includes(id));
 }
 
 /**
@@ -654,20 +668,23 @@ export function selectPolicy<T extends PolicyCandidate>(
     if (policy.effectiveTo != null && policy.effectiveTo < onDate) continue;
     const subMatch = policy.employerSubsidiaryId === null || policy.employerSubsidiaryId === scope.employerSubsidiaryId;
     const depMatch = policy.departmentId === null || policy.departmentId === scope.departmentId;
+    // Empty lists read as wildcard (pinnedIds), exactly like absent keys.
+    const empPins = pinnedIds(policy.employmentIds);
+    const clsPins = pinnedIds(policy.classificationIds);
     const empMatch =
-      policy.employmentIds == null ||
-      (scope.employmentId != null && policy.employmentIds.includes(scope.employmentId));
+      empPins === null ||
+      (scope.employmentId != null && empPins.includes(scope.employmentId));
     const clsMatch =
-      policy.classificationIds == null ||
+      clsPins === null ||
       (scope.classificationIds != null &&
-        policy.classificationIds.some((pinned) => scope.classificationIds!.includes(pinned)));
+        clsPins.some((pinned) => scope.classificationIds!.includes(pinned)));
     if (!subMatch || !depMatch || !empMatch || !clsMatch) continue;
     // A null pin is a wildcard, never a match: specificity counts only pins.
     let score = 0;
     if (policy.employerSubsidiaryId !== null) score += 2;
     if (policy.departmentId !== null) score += 1;
-    if (policy.employmentIds != null) score += 8;
-    if (policy.classificationIds != null) score += 4;
+    if (empPins !== null) score += 8;
+    if (clsPins !== null) score += 4;
     scored.push({ policy, score });
   }
   // Total order: specificity, then latest start, then id. The old comparator

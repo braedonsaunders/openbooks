@@ -21,6 +21,7 @@ import {
   accrualEarnedAcrossSegments,
   addHours,
   carryoverApplied,
+  pinnedIds,
   requireRuleTiers,
   selectReigns,
   subHours,
@@ -159,9 +160,10 @@ export function policyToCandidate(row: PolicyRow): PolicyCandidate {
     id: row.id,
     employerSubsidiaryId: (row.applies_to?.employer_subsidiary_id as string | null) ?? null,
     departmentId: (row.applies_to?.department_id as string | null) ?? null,
-    // Legacy rows predate targeting keys: absent reads as wildcard (null).
-    employmentIds: (row.applies_to?.employment_ids as string[] | null | undefined) ?? null,
-    classificationIds: (row.applies_to?.classification_ids as string[] | null | undefined) ?? null,
+    // Legacy rows predate targeting keys: absent reads as wildcard (null),
+    // and empty lists read the same way (pinnedIds).
+    employmentIds: pinnedIds(row.applies_to?.employment_ids as string[] | null | undefined),
+    classificationIds: pinnedIds(row.applies_to?.classification_ids as string[] | null | undefined),
     effectiveFrom: String(row.effective_from).slice(0, 10),
     effectiveTo: row.effective_to ? String(row.effective_to).slice(0, 10) : null,
   };

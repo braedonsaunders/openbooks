@@ -4,6 +4,7 @@ import {
   accrualEarned,
   completedServiceYears,
   findSameSpecificityConflict,
+  pinnedIds,
   selectPolicy,
   selectReigns,
   targetingSpecificity,
@@ -164,6 +165,47 @@ test("same-specificity conflicts refuse intersecting sets and pass disjoint ones
   // A non-overlapping window never conflicts.
   const later = { ...clash, id: "policy-d", effectiveFrom: "2027-01-01", effectiveTo: null };
   assert.equal(findSameSpecificityConflict(window, [later]), null);
+});
+
+test("empty target lists read as wildcard in matching, scoring, and conflicts", () => {
+  assert.equal(pinnedIds([]), null);
+  assert.equal(pinnedIds(null), null);
+  assert.deepEqual(pinnedIds(["e1"]), ["e1"]);
+  const scope = {
+    employerSubsidiaryId: null,
+    departmentId: null,
+    employmentId: "e1",
+    classificationIds: [] as string[],
+  };
+  // An empty employment list matches like a wildcard (score 0)...
+  const empty = candidate({ id: "empty", employmentIds: [] });
+  assert.equal(selectPolicy([empty], scope, "2026-06-01")?.id, "empty");
+  assert.equal(
+    targetingSpecificity({
+      employerSubsidiaryId: null,
+      departmentId: null,
+      employmentIds: [],
+      classificationIds: null,
+    }),
+    0,
+  );
+  // ...so it conflicts with the general policy, never with a pinned one.
+  const window = {
+    employerSubsidiaryId: null,
+    departmentId: null,
+    employmentIds: [] as readonly string[],
+    classificationIds: null,
+    effectiveFrom: "2026-01-01",
+    effectiveTo: "2026-12-31" as string | null,
+  };
+  assert.equal(
+    findSameSpecificityConflict(window, [{ id: "general", ...window, employmentIds: null }])?.id,
+    "general",
+  );
+  assert.equal(
+    findSameSpecificityConflict(window, [{ id: "pinned", ...window, employmentIds: ["e1"] }]),
+    null,
+  );
 });
 
 test("reigns follow per-day classifications: a mid-period change splits the reign", () => {

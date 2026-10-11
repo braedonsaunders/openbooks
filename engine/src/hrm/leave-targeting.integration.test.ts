@@ -115,6 +115,30 @@ test("a classification held for only part of the period governs only that part",
   });
 });
 
+test("a pinned policy overlaps the general policy and resolves to the pinned worker", { skip: !DB }, async () => {
+  await withHarness(() => setupHarness(TARGETING_SPEC), async (h) => {
+    const partyA = await linkPerson(h.org.orgId, h.managerId, "Pinned A");
+    const partyB = await linkPerson(h.org.orgId, h.managerId, "General B");
+    const a = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { workerPartyId: partyA, from: "2020-01-01" });
+    const b = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { workerPartyId: partyB, from: "2020-01-01" });
+    const type = await seedType(h.org.orgId, h.managerId);
+    // Same type, scope, and dates: the general policy and the pinned
+    // policy coexist (the storage guard only excludes wildcard pairs)
+    // and specificity resolves to the pinned worker.
+    await seedPolicy(h.org.orgId, h.managerId, type.id, { effectiveFrom: "2026-01-01" });
+    await seedPolicy(h.org.orgId, h.managerId, type.id, {
+      appliesTo: { employer_subsidiary_id: null, department_id: null, employment_ids: [a.employmentId] },
+      accrualRule: { kind: "per_year", hours: "200" },
+      effectiveFrom: "2026-01-01",
+    });
+    assert.equal(await policyCount(h.org.orgId, type.id), 2, "general and pinned windows coexist");
+    const pinned = await timeBalanceAsOf(db, h.org.orgId, a.employmentId, type.id, "2026-06-01");
+    assert.equal(pinned.balance, "200");
+    const general = await timeBalanceAsOf(db, h.org.orgId, b.employmentId, type.id, "2026-06-01");
+    assert.equal(general.balance, "120");
+  });
+});
+
 test("a targeted successor replaces the org-wide rule for its workers only", { skip: !DB }, async () => {
   await withHarness(() => setupHarness(TARGETING_SPEC), async (h) => {
     const partyA = await linkPerson(h.org.orgId, h.managerId, "Successor A");

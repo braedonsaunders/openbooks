@@ -87,6 +87,59 @@ test("a targeted tiered create persists the fold and audits the reason", { skip:
   }
 });
 
+test("two overlapping wildcard windows are still refused by storage itself", { skip: !DB }, async () => {
+  const org = await seedOrg();
+  try {
+    const first = await withBypass(() => createSetupRecord(org.actor, "leave-policies", policyBody({
+      leaveTypeId: org.typeId, effectiveFrom: "2026-01-01",
+    })));
+    assert.equal(first.status, 200, `first policy refused: ${JSON.stringify(first.body)}`);
+    // Raw SQL bypasses the advisory-lock preflight: the wildcard-only
+    // exclusion must still arbitrate the race at the storage floor.
+    const raced = await withBypass(() => db.execute(sql`
+      insert into hrm_leave_policies (org_id, leave_type_id, applies_to, accrual_rule, carryover_rule, effective_from)
+      values (${org.orgId}, ${org.typeId},
+        '{"employer_subsidiary_id": null, "department_id": null}'::jsonb,
+        '{"kind": "per_year", "hours": "120"}'::jsonb,
+        '{"kind": "none"}'::jsonb,
+        '2026-06-01')
+      returning id`).catch((error: unknown) => error));
+    // The driver surfaces the PG fields on cause: the code proves an
+    // exclusion fired, the constraint name proves it is this guard.
+    const cause = ((raced as { cause?: Record<string, unknown> }).cause ?? {}) as Record<string, unknown>;
+    assert.equal(String(cause.code ?? ""), "23P01", `expected the exclusion to fire, got ${String(cause.code ?? "")}`);
+    assert.equal(cause.constraint, "hrm_leave_policies_no_same_scope_overlap");
+    const count = (await withBypass(() => db.execute<{ n: number }>(sql`
+      select count(*)::int as n from hrm_leave_policies where org_id = ${org.orgId} and leave_type_id = ${org.typeId}`))).rows[0]?.n ?? -1;
+    assert.equal(count, 1, "the storage refusal stores no second window");
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId));
+  }
+});
+
+test("a pinned policy overlaps the general policy through the drawer", { skip: !DB }, async () => {
+  const org = await seedOrg();
+  try {
+    const { employmentId } = await withBypass(() => seedEmployment(org.orgId, org.subsidiaryId, { from: "2020-01-01" }));
+    const general = await withBypass(() => createSetupRecord(org.actor, "leave-policies", policyBody({
+      leaveTypeId: org.typeId, effectiveFrom: "2026-01-01",
+    })));
+    assert.equal(general.status, 200, `general policy refused: ${JSON.stringify(general.body)}`);
+    // Same type, scope, and dates as the general policy: a different
+    // specificity class overlaps freely instead of conflicting.
+    const pinned = await withBypass(() => createSetupRecord(org.actor, "leave-policies", policyBody({
+      leaveTypeId: org.typeId,
+      effectiveFrom: "2026-01-01",
+      appliesEmploymentIds: [employmentId],
+      accrualHours: "200",
+      reason: "senior cover",
+    })));
+    assert.equal(pinned.status, 200, `pinned policy refused: ${JSON.stringify(pinned.body)}`);
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId));
+  }
+});
+
 test("a policy change without a reason is refused and stores nothing", { skip: !DB }, async () => {
   const org = await seedOrg();
   try {

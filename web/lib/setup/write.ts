@@ -60,7 +60,7 @@ import { validateTemplateInput } from '@openbooks/engine/src/hrm/documents/templ
 import { benefitPlanShapeProblem, normalizeHrmBenefitPlanInput } from './hrm-benefits'
 import { benefitProgramShapeProblem } from './benefit-programs'
 import { leavePolicyRuleProblem, normalizeHrmLeavePolicyInput } from './hrm-leave-policy'
-import { findSameSpecificityConflict } from '@openbooks/engine/src/hrm/leave-math.ts'
+import { findSameSpecificityConflict, pinnedIds, targetingSpecificity } from '@openbooks/engine/src/hrm/leave-math.ts'
 import { mergeTemplateSlots, normalizeHrmDocumentTemplateInput } from './hrm-document-template'
 import { applyRuleSlotColumns } from './hrm-rule-slots'
 import { normalizeTaxReturnFormInput } from './tax-return-form'
@@ -2157,11 +2157,12 @@ function overlapConflict(entityKey: string): { status: 409; body: { error: strin
  * (org, leave type) advisory lock, then a resulting active window that
  * overlaps an active same-type policy of the same specificity class with
  * intersecting employee/classification sets is refused naming the
- * conflicting policy (409 overlap, the drawer code). Same (type,
- * subsidiary, department) windows keep the storage exclusion as the race
- * backstop. Runs inside the write transaction on create and on every
- * update/end path (window, target, or active-flag edits, reactivations),
- * so concurrent writers observe each other's committed rows.
+ * conflicting policy (409 overlap, the drawer code). Different classes
+ * overlap freely and resolve by specificity; the wildcard-only storage
+ * exclusion backstops the concurrent-writer race for untargeted windows.
+ * Runs inside the write transaction on create and on every update/end
+ * path (window, target, or active-flag edits, reactivations), so
+ * concurrent writers observe each other's committed rows.
  */
 async function guardLeavePolicyWindow(
   tx: SetupTransaction,
@@ -2187,23 +2188,24 @@ async function guardLeavePolicyWindow(
   `)).rows
   const applies = window.appliesTo ?? {}
   const pins = (stored: unknown) => (typeof stored === 'object' && stored !== null ? stored as Record<string, unknown> : {})
+  const candidate = {
+    employerSubsidiaryId: (applies.employer_subsidiary_id as string | null) ?? null,
+    departmentId: (applies.department_id as string | null) ?? null,
+    employmentIds: pinnedIds(applies.employment_ids as string[] | null | undefined),
+    classificationIds: pinnedIds(applies.classification_ids as string[] | null | undefined),
+    effectiveFrom: window.effectiveFrom,
+    effectiveTo: window.effectiveTo,
+  }
   const conflict = findSameSpecificityConflict(
-    {
-      employerSubsidiaryId: (applies.employer_subsidiary_id as string | null) ?? null,
-      departmentId: (applies.department_id as string | null) ?? null,
-      employmentIds: (applies.employment_ids as string[] | null | undefined) ?? null,
-      classificationIds: (applies.classification_ids as string[] | null | undefined) ?? null,
-      effectiveFrom: window.effectiveFrom,
-      effectiveTo: window.effectiveTo,
-    },
+    candidate,
     rows.map((row) => {
       const stored = pins(row.applies_to)
       return {
         id: String(row.id),
         employerSubsidiaryId: (stored.employer_subsidiary_id as string | null) ?? null,
         departmentId: (stored.department_id as string | null) ?? null,
-        employmentIds: (stored.employment_ids as string[] | null | undefined) ?? null,
-        classificationIds: (stored.classification_ids as string[] | null | undefined) ?? null,
+        employmentIds: pinnedIds(stored.employment_ids as string[] | null | undefined),
+        classificationIds: pinnedIds(stored.classification_ids as string[] | null | undefined),
         effectiveFrom: String(row.effective_from).slice(0, 10),
         effectiveTo: row.effective_to ? String(row.effective_to).slice(0, 10) : null,
       }
@@ -2211,8 +2213,13 @@ async function guardLeavePolicyWindow(
   )
   if (conflict) {
     const span = `${conflict.effectiveFrom} to ${conflict.effectiveTo ?? 'open'}`
+    // The all-wildcard class keeps the historic scope wording; targeted
+    // classes name the dimension they collide on.
+    const covers = targetingSpecificity(candidate) === 0
+      ? `Policy ${conflict.id} already covers this leave type and scope over ${span}`
+      : `Policy ${conflict.id} already covers these employees and classifications over ${span} at the same specificity`
     throw new SetupWriteRefusal(
-      `Policy ${conflict.id} already covers these employees and classifications over ${span} at the same specificity — close its window or deactivate it before saving.`,
+      `${covers} — close its window or deactivate it before saving.`,
       409,
       'overlap',
     )
