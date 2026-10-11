@@ -127,7 +127,7 @@ export async function measureTransactionSettlement(input: {
       from document_lines l join documents d on d.org_id=l.org_id and d.id=l.document_id
       left join field_tickets ft on ft.org_id=d.org_id and ft.document_id=(case when d.kind='field_ticket' then d.id else l.field_ticket_id end)
       left join projects p on p.org_id=d.org_id and p.id=coalesce(l.project_id,d.project_id)
-     where l.org_id=${orgId} and l.id=any(${`{${selected.map(r=>r.id).join(",")}}`}::uuid[])`)).rows.map(r=>[r.id,r])));
+     where l.org_id=${orgId} and l.id=any(${`{${selected.map(r=>r.id).join(",")}}`}::uuid[])`)).rows.map(r=>[r.id,r]));
   const memberByParty=new Map((await db.execute<{employment_id:string;party:string}>(sql`select id::text as employment_id,worker_party_id::text as party from worker_employments where org_id=${orgId} and id=any(${`{${[...covered].join(",")}}`}::uuid[])`)).rows.map(r=>[r.party,r.employment_id]));
   const roleColumn={field_ticket_foreman:"ticket_foreman",field_ticket_superintendent:"ticket_superintendent",project_foreman:"project_foreman",project_manager:"project_manager"} as const;
   const forfeit=policy.unassignedShare==="forfeit";
