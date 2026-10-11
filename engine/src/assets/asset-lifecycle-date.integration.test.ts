@@ -57,6 +57,9 @@ for(const operation of ['dispose','remeasure'] as const){
      if(timing==='earlier'){
       await assert.rejects(perform(),/before|precede/);
       assert.deepEqual((await snapshot()).rows,before,'refusal is atomic');
+     }else if(operation==='dispose'&&(source==='valuation'||source==='reversed valuation')){
+      await assert.rejects(perform(),/unposted depreciation.*Partial disposal \/ transfer/);
+      assert.deepEqual((await snapshot()).rows,before,'a mid-period disposal refusal preserves the complete history');
      }else{
       const result=await perform();
       assert.equal((await db.execute<{date:string}>(sql`select posting_date::text as date from journal_entries where id=${result.entryId}`)).rows[0]!.date,date);

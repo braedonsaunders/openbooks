@@ -63,7 +63,7 @@ test(
         }),
         (error: unknown) =>
           error instanceof AssetLifecycleError &&
-          /unposted depreciation|stub period|2026-08/i.test(error.message),
+          /unposted depreciation.*Partial disposal \/ transfer of 100%/i.test(error.message),
         "disposal with the stub period unposted is refused",
       );
 

@@ -12,6 +12,7 @@ import {
 } from "../testing/fixtures.ts";
 import { loadDocumentEditCurrent } from "../ledger/document-service.ts";
 import { applyDocumentEdit, createDocument } from "../ledger/document-write.ts";
+import { postDocument } from "../ledger/posting-document.ts";
 import { DocumentEditError } from "../records/document-edit-policy.ts";
 import { decideGate } from "./gates.ts";
 import {
@@ -30,6 +31,19 @@ import {
  */
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
+
+async function nativeBill(org: Awaited<ReturnType<typeof createScratchOrg>>, actorId: string): Promise<string> {
+  const body = {
+    partyId: org.vendorId,
+    documentDate: org.date,
+    lines: [{ accountId: org.accounts.cogs, amount: "100" }],
+  };
+  const created = await createDocument({
+    orgId: org.orgId, userId: actorId, kind: "vendor_bill", key: randomUUID(),
+    body, subsidiaryId: org.subsidiaryId, requestBody: body,
+  });
+  return created.id;
+}
 
 async function docStatus(orgId: string, id: string): Promise<string> {
   const rows = (await db.execute<{ status: string }>(sql`
@@ -187,7 +201,7 @@ test("non-approved documents refuse with a named remedy", { skip: !DB }, async (
   try {
     const actors = await seedFlowActors(org.orgId);
     await pinApprovalNotRequired(org.orgId);
-    const billId = await seedDraftDocument(org.orgId, { kind: "vendor_bill", createdBy: actors.submitterId });
+    const billId = await nativeBill(org, actors.submitterId);
 
     await assert.rejects(
       returnDocumentToDraft({ documentId: billId, orgId: org.orgId, actorId: actors.submitterId, reason: "mistake in the batch" }),
@@ -195,18 +209,19 @@ test("non-approved documents refuse with a named remedy", { skip: !DB }, async (
     );
 
     await submitAndReleaseIfUngated("vendor_bill", billId, actors.submitterId);
-    await db.execute(sql`update documents set status = 'posted' where id = ${billId} and org_id = ${org.orgId}`);
+    await postDocument(billId, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } });
     await assert.rejects(
       returnDocumentToDraft({ documentId: billId, orgId: org.orgId, actorId: actors.submitterId, reason: "mistake in the batch" }),
       (error: unknown) => error instanceof ReturnToDraftError && /void it or post a correction/.test(error.message),
     );
 
-    await db.execute(sql`update documents set status = 'voided' where id = ${billId} and org_id = ${org.orgId}`);
+    const voidedId = await seedDraftDocument(org.orgId, { kind: "vendor_bill", createdBy: actors.submitterId });
+    await db.execute(sql`update documents set status = 'voided' where id = ${voidedId} and org_id = ${org.orgId}`);
     await assert.rejects(
-      returnDocumentToDraft({ documentId: billId, orgId: org.orgId, actorId: actors.submitterId, reason: "mistake in the batch" }),
+      returnDocumentToDraft({ documentId: voidedId, orgId: org.orgId, actorId: actors.submitterId, reason: "mistake in the batch" }),
       (error: unknown) => error instanceof ReturnToDraftError && /terminal/.test(error.message),
     );
-    assert.equal(await docStatus(org.orgId, billId), "voided");
+    assert.equal(await docStatus(org.orgId, voidedId), "voided");
   } finally {
     await dropScratchOrg(org.orgId);
   }
@@ -235,15 +250,10 @@ test("a concurrent post and return converge to exactly one outcome", { skip: !DB
   try {
     const actors = await seedFlowActors(org.orgId);
     await pinApprovalNotRequired(org.orgId);
-    const billId = await seedDraftDocument(org.orgId, { kind: "vendor_bill", createdBy: actors.submitterId });
+    const billId = await nativeBill(org, actors.submitterId);
     await submitAndReleaseIfUngated("vendor_bill", billId, actors.submitterId);
 
-    // The post side mirrors the posting precondition (approved-only flip);
-    // the row lock serializes the two writers, so exactly one can win.
-    const posting = db.execute<{ id: string }>(sql`
-      update documents set status = 'posted', updated_at = now()
-       where id = ${billId} and org_id = ${org.orgId} and status = 'approved'
-      returning id`);
+    const posting = postDocument(billId, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } });
     const returning = returnDocumentToDraft({
       documentId: billId,
       orgId: org.orgId,
@@ -252,16 +262,19 @@ test("a concurrent post and return converge to exactly one outcome", { skip: !DB
     });
     const [posted, returnedOutcome] = await Promise.allSettled([posting, returning]);
 
-    const postWon = posted.status === "fulfilled" && posted.value.rows.length === 1;
+    const postWon = posted.status === "fulfilled";
     const returnWon = returnedOutcome.status === "fulfilled";
     assert.ok(postWon !== returnWon, "exactly one of the post and the return commits");
     if (postWon) {
       assert.match(String((returnedOutcome as PromiseRejectedResult).reason?.message ?? returnedOutcome), /already posted/);
       assert.equal(await docStatus(org.orgId, billId), "posted");
     } else {
-      assert.equal((posted as PromiseFulfilledResult<{ rows: unknown[] }>).value.rows.length, 0);
+      assert.equal(posted.status, "rejected", "posting refuses a returned draft");
       assert.equal(await docStatus(org.orgId, billId), "draft");
     }
+    const entries = (await db.execute<{ id: string }>(sql`
+      select id from journal_entries where org_id=${org.orgId} and source_document_id=${billId}`)).rows;
+    assert.equal(entries.length, postWon ? 1 : 0, "only the winning posting can leave accounting history");
   } finally {
     await dropScratchOrg(org.orgId);
   }

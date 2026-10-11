@@ -4,6 +4,7 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { disposeAsset, remeasureAsset, reverseAssetLifecycleEvent } from "./asset-lifecycle.ts";
 import { db } from "../platform/db.ts";
+import { isZero } from "../money/money.ts";
 import { buildSchedule, recordDepreciationInput, runDepreciation } from "./depreciation.ts";
 import { createScratchOrg, dropScratchOrg, seedFlowActors } from "../testing/fixtures.ts";
 
@@ -190,6 +191,12 @@ test("reversing a disposal restores the continued carrying status", { skip: !DB 
       asOf: "2025-12-31",
     });
     await buildSchedule(assetId, org.orgId, actorId, org.bookId);
+    const pending = (await db.execute<{ amount: string }>(sql`
+      select l.planned_amount::text as amount from depreciation_schedule_lines l
+      join depreciation_schedules s on s.id=l.schedule_id and s.org_id=l.org_id
+      where s.org_id=${org.orgId} and s.asset_id=${assetId} and l.posted_amount is null`)).rows;
+    assert.ok(pending.length > 0, "zero-charge projections remain as schedule evidence");
+    assert.ok(pending.every((line) => isZero(line.amount)), "the opening figure consumes every planned charge");
     const disposal = await disposeAsset(org.orgId, assetId, {
       proceeds: "5000.0000",
       proceedsAccountId: org.accounts.invAsset,

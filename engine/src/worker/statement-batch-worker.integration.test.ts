@@ -68,7 +68,7 @@ test("a customer with no configured transport is refused before any render", asy
     assert.equal(renders, 0);
     const items = await withOrg(org.orgId, () => listStatementBatchItems(org.orgId, created.runId));
     assert.equal(items[0]!.status, "failed");
-    assert.match(items[0]!.error ?? "", /not configured/);
+    assert.match(items[0]!.error ?? "", /Email delivery is not enabled.*Admin → Email/);
   } finally {
     await dropScratchOrg(org.orgId);
   }

@@ -584,9 +584,14 @@ export async function disposeAsset(
         join depreciation_schedules s on s.id = l.schedule_id and s.org_id = l.org_id
         join accounting_periods p on p.id = l.period_id and p.org_id = l.org_id
        where l.org_id = ${orgId} and s.asset_id = ${assetId} and s.book_id = ${bookId}
-         and l.posted_amount is null and p.starts_on < ${opts.date}
+         and l.posted_amount is null and l.planned_amount <> 0 and p.starts_on < ${opts.date}
        order by p.starts_on desc limit 1`);
     if (stub.rows[0]) {
+      if (stub.rows[0].ends_on > opts.date) {
+        throw new AssetLifecycleError(
+          `asset ${asset.asset_number} has unposted depreciation in period ${stub.rows[0].period_name} covering the disposal date — record an approved Partial disposal / transfer of 100% to recognize elapsed depreciation on the disposal date (zero proceeds for a write-off)`,
+        );
+      }
       throw new AssetLifecycleError(
         `asset ${asset.asset_number} has unposted depreciation through period ${stub.rows[0].period_name} covering the disposal date — run depreciation through ${stub.rows[0].ends_on} before disposing so the gain or loss ties to the schedule`,
       );
