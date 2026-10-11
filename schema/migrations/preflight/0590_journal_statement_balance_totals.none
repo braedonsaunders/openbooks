@@ -1,0 +1,1 @@
+Shares one journal-line aggregation between entry and subsidiary balance checks; no retained rows are read for readiness or changed.
