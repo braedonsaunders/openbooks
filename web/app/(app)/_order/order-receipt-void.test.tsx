@@ -140,10 +140,6 @@ function mockVoidEndpoints(
 
 test('voiding a linked goods receipt posts with its revision and toasts its number', async (t) => {
   window.sessionStorage.clear()
-  ;(globalThis as unknown as { __promptAnswers: unknown[] }).__promptAnswers = [
-    'phantom full-quantity receipt from the blind convert',
-    '2026-08-01',
-  ]
   let posts: Record<string, unknown>[] = []
   const restoreFetch = mockVoidEndpoints(t, (body) => {
     posts.push(body)
@@ -154,6 +150,10 @@ test('voiding a linked goods receipt posts with its revision and toasts its numb
   t.after(unmount)
   await tick()
   await tick()
+  ;(globalThis as unknown as { __promptAnswers: unknown[] }).__promptAnswers = [
+    'phantom full-quantity receipt from the blind convert',
+    '2026-08-01',
+  ]
   await openRelatedTab()
   const voids = buttonsNamed('Void')
   assert.equal(voids.length, 1, 'the approved receipt link offers Void')
@@ -177,10 +177,6 @@ test('voiding a linked goods receipt posts with its revision and toasts its numb
 
 test('a refused receipt void pins the refusal and keeps the link', async (t) => {
   window.sessionStorage.clear()
-  ;(globalThis as unknown as { __promptAnswers: unknown[] }).__promptAnswers = [
-    'phantom full-quantity receipt from the blind convert',
-    '2026-08-01',
-  ]
   const restoreFetch = mockVoidEndpoints(t, () =>
     Response.json(
       { error: 'inventory from this movement has downstream consumption; reverse those issues/transfers first' },
@@ -192,6 +188,10 @@ test('a refused receipt void pins the refusal and keeps the link', async (t) => 
   t.after(unmount)
   await tick()
   await tick()
+  ;(globalThis as unknown as { __promptAnswers: unknown[] }).__promptAnswers = [
+    'phantom full-quantity receipt from the blind convert',
+    '2026-08-01',
+  ]
   await openRelatedTab()
   const voids = buttonsNamed('Void')
   assert.equal(voids.length, 1, 'the approved receipt link offers Void')

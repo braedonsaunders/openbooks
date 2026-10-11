@@ -1,6 +1,6 @@
 'use client'
 
-import { promptDialog } from './prompt'
+import { promptDialog } from '@/lib/prompt'
 
 export type VoidReversalPeriodCopy = {
   title: string
