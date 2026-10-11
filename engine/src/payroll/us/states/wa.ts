@@ -19,9 +19,25 @@
  *     employer size, never defaulted on or off.
  *     https://esd.wa.gov/about-us/news-release/2025/paid-family-medical-leave-premium-rate-increases-113-2026
  *
+ *   PFML 2025 (Employment Security Department news release 10/23/24): total
+ *     premium 0.92% of gross wages to the Social Security wage base
+ *     ($176,100 for 2025, per the Social Security Administration's maximum
+ *     taxable earnings table). Employees carry 71.52% of the total;
+ *     employers with 50 or more employees carry 28.48% — a different split
+ *     from 2024 and 2026, taken from the announcement, never carried over.
+ *     https://esd.wa.gov/about-us/news-release/2024/paid-family-medical-leave-premiums-increase-2025
+ *
+ *   PFML 2024 (Employment Security Department news release, fall 2023):
+ *     total premium 0.74% of gross wages to the Social Security wage base
+ *     ($168,600 for 2024). Employees carry 71.43%; employers with 50 or more
+ *     employees carry 28.57%.
+ *     https://esd.wa.gov/about-us/news-release/2023/paid-family-medical-leave-premiums-decrease-2024
+ *
  *   WA Cares Fund (RCW 50B.04; WA Cares Fund employer guidance):
  *     0.58% of gross wages, employee-paid, with no wage-base cap. Premium
- *     collection began July 1, 2023.
+ *     collection began July 1, 2023. The rate is statutory, unchanged across
+ *     2024–2026, so every transcribed year carries the same figure.
+ *     https://wacaresfund.wa.gov/employers
  *
  * All arithmetic is exact bigint. No floats.
  */
@@ -54,6 +70,45 @@ export interface WaYearRates {
 }
 
 /**
+ * The PFML/Cares edition for 2024 pay dates. Converting businesses back-fill
+ * prior years, so every transcribed year stays published with its own
+ * announcement figures — never derived from a neighboring year.
+ */
+export const WA_RATES_2024: WaYearRates = {
+  year: 2024,
+  status: "published",
+  // ESD news release, fall 2023: "The premium rate will be 0.74%."
+  // "Employers will pay 28.57% of the total premium and employees will pay
+  // 71.43%."
+  pfmlTotalRate: "0.0074",
+  pfmlEmployeeShare: "0.7143",
+  pfmlEmployerShare: "0.2857",
+  // The family-leave wage base is the federal OASDI base, $168,600 for 2024
+  // (Social Security Administration, Maximum Taxable Earnings table).
+  pfmlWageBase: "168600",
+  // RCW 50B.04.080: 0.58% of wages, employee-paid, no cap.
+  caresRate: "0.0058",
+};
+
+/**
+ * The PFML/Cares edition for 2025 pay dates.
+ */
+export const WA_RATES_2025: WaYearRates = {
+  year: 2025,
+  status: "published",
+  // ESD news release 10/23/24: "The premium rate will be 0.92%. The rate
+  // for 2024 is 0.74%." — "Employers will pay 28.48% of the total premium
+  // and employees will pay 71.52%."
+  pfmlTotalRate: "0.0092",
+  pfmlEmployeeShare: "0.7152",
+  pfmlEmployerShare: "0.2848",
+  // The family-leave wage base is the federal OASDI base, $176,100 for 2025.
+  pfmlWageBase: "176100",
+  // RCW 50B.04.080: 0.58% of wages, employee-paid, no cap.
+  caresRate: "0.0058",
+};
+
+/**
  * The current PFML/Cares edition for 2026 pay dates.
  */
 export const WA_RATES_2026: WaYearRates = {
@@ -72,8 +127,20 @@ export const WA_RATES_2026: WaYearRates = {
 };
 
 const WA_EDITIONS_BY_YEAR: Record<number, WaYearRates> = {
+  [WA_RATES_2024.year]: WA_RATES_2024,
+  [WA_RATES_2025.year]: WA_RATES_2025,
   [WA_RATES_2026.year]: WA_RATES_2026,
 };
+
+/**
+ * Whether the pack's transcribed table covers a pay-date year. The money
+ * path and the rate-slot waiver both read this, so the pack winning over an
+ * operator-entered back-fill is one predicate, never two copies of the
+ * edition list that can disagree about which years are shipped.
+ */
+export function waPackCoversYear(year: number): boolean {
+  return WA_EDITIONS_BY_YEAR[year]?.status === "published";
+}
 
 /** The transcribed rates for a pay date's year, or a refusal naming the transcription. */
 export function waRatesForPayDate(payDate: string): WaYearRates {

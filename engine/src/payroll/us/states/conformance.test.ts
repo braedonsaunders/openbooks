@@ -55,7 +55,7 @@ import {
 import { AR_RATES_2026, arAnnualGrossTax, arMidrangeLookup, arRoundToDollar } from "./ar.ts";
 import { AZ_CERTIFICATE, AZ_WITHHOLDING, azRateForPrintedPercent } from "./az.ts";
 import { coFamliWithholding } from "./co.ts";
-import { waCaresWithholding, waPfmlWithholding, waRatesForPayDate } from "./wa.ts";
+import { waCaresWithholding, waPackCoversYear, waPfmlWithholding, waRatesForPayDate } from "./wa.ts";
 import {
   ctInitialTax, ctPaidLeaveWithholding, ctPersonalCredit, ctPersonalExemption, ctPhaseOutAddBack,
   ctTaxRecapture,
@@ -4534,8 +4534,46 @@ test("WA Cares withholds 0.58% of gross wages with no cap", () => {
   assert.equal(waCaresWithholding("2026-03-06", "1000000.00"), money("5800.00"));
 });
 
-test("WA levies refuse pay dates outside the transcribed year", () => {
+test("WA 2025 prices the 0.92% total 71.52/28.48 with the legs summing to the total", () => {
+  // ESD news release 10/23/24: 2025 total premium 0.92% of gross wages;
+  // employers (50+) pay 28.48% and employees 71.52% — a different split from
+  // 2024 and 2026, taken from the announcement, never carried over. $10,000
+  // prices $92.00 total: the employee leg is 71.52% of the rounded total
+  // ($65.80) and the employer leg is the remainder ($26.20).
+  const pfml = waPfmlWithholding("2025-10-16", "10000.00", "0", "fifty_or_more");
+  assert.equal(pfml.total, money("92.00"));
+  assert.equal(pfml.employee, money("65.80"));
+  assert.equal(pfml.employer, money("26.20"));
+  // A smaller employer still withholds the employee share but owes no
+  // employer share; WA Cares is the statutory 0.58%, uncapped, every year.
+  const small = waPfmlWithholding("2025-10-16", "10000.00", "0", "fewer_than_fifty");
+  assert.equal(small.employee, money("65.80"));
+  assert.equal(small.employer, money("0.00"));
+  assert.equal(waCaresWithholding("2025-10-16", "10000.00"), money("58.00"));
+});
+
+test("WA 2024 back-fill prices the 0.74% total 71.43/28.57 to the 2024 base", () => {
+  // ESD news release, fall 2023: 2024 total premium 0.74%; employers (50+)
+  // pay 28.57% and employees 71.43%. $10,000 prices $74.00 total ($52.86 /
+  // $21.14). The 2024 Social Security base is $168,600: $200,000 of wages
+  // with $168,000 already priced leaves $600 of room ($4.44 total).
+  const pfml = waPfmlWithholding("2024-06-15", "10000.00", "0", "fifty_or_more");
+  assert.equal(pfml.total, money("74.00"));
+  assert.equal(pfml.employee, money("52.86"));
+  assert.equal(pfml.employer, money("21.14"));
+  const capped = waPfmlWithholding("2024-06-15", "200000.00", "168000.00", "fifty_or_more");
+  assert.equal(capped.total, money("4.44"));
+  assert.equal(capped.employee, money("3.17"));
+  assert.equal(capped.employer, money("1.27"));
+  assert.equal(waCaresWithholding("2024-06-15", "10000.00"), money("58.00"));
+});
+
+test("WA levies refuse pay dates outside the transcribed years", () => {
+  assert.equal(waRatesForPayDate("2024-01-01").year, 2024);
+  assert.equal(waRatesForPayDate("2025-01-01").year, 2025);
   assert.equal(waRatesForPayDate("2026-01-01").year, 2026);
-  assert.throws(() => waPfmlWithholding("2025-12-31", "10000.00", "0", "fifty_or_more"), /no transcribed rates for 2025/);
+  assert.ok(waPackCoversYear(2024) && waPackCoversYear(2025) && waPackCoversYear(2026));
+  assert.ok(!waPackCoversYear(2023) && !waPackCoversYear(2027));
+  assert.throws(() => waPfmlWithholding("2023-12-31", "10000.00", "0", "fifty_or_more"), /no transcribed rates for 2023/);
   assert.throws(() => waCaresWithholding("2027-01-15", "10000.00"), /no transcribed rates for 2027/);
 });

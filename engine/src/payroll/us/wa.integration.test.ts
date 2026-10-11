@@ -34,14 +34,25 @@ const PAY_DATE = "2026-07-21";
 const PERIOD_START = "2026-07-05";
 const PERIOD_END = "2026-07-18";
 
+/**
+ * The 2025 run the pack refused before the year shipped: pay date
+ * 2025-10-16, on a biweekly period ending three days earlier, exactly like
+ * the 2026 fixture's shape.
+ */
+const DATES_2025 = { payDate: "2025-10-16", periodStart: "2025-09-30", periodEnd: "2025-10-13" };
+
 interface Fixture {
   orgId: string;
   actorId: string;
   subsidiaryId: string;
   scheduleId: string;
+  payDate: string;
+  periodStart: string;
+  periodEnd: string;
 }
 
-async function waPayrollOrg(): Promise<Fixture> {
+async function waPayrollOrg(year = 2026): Promise<Fixture> {
+  const dates = year === 2025 ? DATES_2025 : { payDate: PAY_DATE, periodStart: PERIOD_START, periodEnd: PERIOD_END };
   const org = await createScratchOrg();
   const actorId = (await seedFlowActors(org.orgId)).adminId;
   const account = async (number: string, name: string, type: string) => {
@@ -75,13 +86,22 @@ async function waPayrollOrg(): Promise<Fixture> {
   }
   for (const state of ["WA", "CA", "OH"]) {
     const filingAccountId = await seedUsSuiAccount(org.orgId, actorId, state);
+    if (year === 2025) {
+      // The shared SUI seeder records the financing method from 2026-01-01,
+      // which a 2025 pay date cannot read: the 2025 run gets its own row.
+      await upsertPayrollEmployerFact({
+        orgId: org.orgId, actorId, filingAccountId, country: "US",
+        factKey: "sui_financing_method", effectiveFrom: "2025-01-01", value: "contributory",
+        changeReason: "state account determination",
+      });
+    }
     await upsertStatutoryRate({
       orgId: org.orgId, actorId, rates: US_PACK_RATES, rateKey: "us_sui",
-      region: state, filingAccountId, taxYear: 2026, values: { rate: "0.03", wageBase: "7000" },
+      region: state, filingAccountId, taxYear: year, values: { rate: "0.03", wageBase: "7000" },
     });
     await upsertStatutoryRate({
       orgId: org.orgId, actorId, rates: US_PACK_RATES, rateKey: "us_futa",
-      region: state, filingAccountId: null, taxYear: 2026, values: { rate: "0.006" },
+      region: state, filingAccountId: null, taxYear: year, values: { rate: "0.006" },
     });
   }
   const subsidiaryId = randomUUID();
@@ -95,13 +115,14 @@ async function waPayrollOrg(): Promise<Fixture> {
     insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
                                pay_date_offset_days, subsidiary_id, is_active,
                                created_by, updated_by)
-    values (${scheduleId}, ${org.orgId}, 'Biweekly US', 'biweekly', 26, ${PERIOD_END}, 3,
+    values (${scheduleId}, ${org.orgId}, 'Biweekly US', 'biweekly', 26, ${dates.periodEnd}, 3,
             ${subsidiaryId}, true, ${actorId}, ${actorId})`);
-  return { orgId: org.orgId, actorId, subsidiaryId, scheduleId };
+  return { orgId: org.orgId, actorId, subsidiaryId, scheduleId, ...dates };
 }
 
 async function waEmployee(
   fx: Fixture, name: string, state: string, residence?: string,
+  annualSalary = "52000", year = 2026,
 ): Promise<string> {
   const id = randomUUID();
   await db.execute(sql`
@@ -112,7 +133,7 @@ async function waEmployee(
   await db.execute(sql`
     insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis, annual_hours,
                                   effective_from, is_active, created_by, updated_by)
-    values (${fx.orgId}, ${id}, 'USD', '52000', 'year', 2080, '2026-01-01', true,
+    values (${fx.orgId}, ${id}, 'USD', ${annualSalary}, 'year', 2080, ${`${year}-01-01`}, true,
             ${fx.actorId}, ${fx.actorId})`);
   const employmentId = await seedWorkerEmployment(fx.orgId, id, fx.subsidiaryId);
   const suiAccountId = await seedUsSuiAccount(fx.orgId, fx.actorId, state);
@@ -129,7 +150,7 @@ async function waEmployee(
                                            region, sub_region, answers, effective_from,
                                            created_by, updated_by)
     values (${fx.orgId}, ${id}, 'US', 'us_w4_tax_residency', null, null,
-            '{"alien_status": "us_person_or_resident_alien"}'::jsonb, '2026-01-01',
+            '{"alien_status": "us_person_or_resident_alien"}'::jsonb, ${`${year}-01-01`},
             ${fx.actorId}, ${fx.actorId})`);
   return id;
 }
@@ -139,6 +160,38 @@ async function slotDetails(orgId: string, documentId: string): Promise<string[]>
   return readiness.items
     .filter((item) => item.code === "setup.slot")
     .map((item) => item.detail ?? "");
+}
+
+/**
+ * One priced Washington run for a recorded employer size: maps the PFML and
+ * Cares slots, calculates on the fixture's dates, and returns the stub
+ * lines. Refusals fail the test — a priced run prices cleanly.
+ */
+async function priceWashingtonRun(
+  fx: Fixture, employerSize: "fifty_or_more" | "fewer_than_fifty", year: number,
+): Promise<{ system_key: string | null; amount: string }[]> {
+  await upsertPayrollEmployerFact({
+    orgId: fx.orgId, actorId: fx.actorId, subsidiaryId: fx.subsidiaryId, country: "US",
+    factKey: "wa_pfml_employer_size", effectiveFrom: `${year}-01-01`,
+    value: employerSize, changeReason: "recorded employer size",
+  });
+  const payable = (await db.execute<{ id: string }>(sql`
+    select id from accounts where org_id = ${fx.orgId} and number = '2330'`)).rows[0]!.id;
+  await setPackSlotAccount(fx.orgId, fx.actorId, "US", "wa_pfml", payable);
+  await setPackSlotAccount(fx.orgId, fx.actorId, "US", "wa_cares", payable);
+  const run = await createPayRun({
+    orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
+    periodStart: fx.periodStart, periodEnd: fx.periodEnd, payDate: fx.payDate,
+  });
+  const result = await calculatePayRun({ orgId: fx.orgId, documentId: run.documentId, actorId: fx.actorId });
+  assert.deepEqual(result.errors, []);
+  assert.equal(result.employees, 1);
+  return (await db.execute<{ system_key: string | null; amount: string }>(sql`
+    select c.system_key, l.amount::text as amount
+      from pay_stub_lines l
+      join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
+      left join pay_components c on c.id = l.component_id and c.org_id = l.org_id
+     where s.org_id = ${fx.orgId} and s.pay_run_document_id = ${run.documentId}`)).rows;
 }
 
 describe("washington-obligation-derived-mappings", { skip: !DB }, () => {
@@ -250,6 +303,59 @@ describe("washington-obligation-derived-mappings", { skip: !DB }, () => {
       assert.equal(amount("wa_pfml_employer"), "6.4600");
       assert.equal(amount("wa_cares_employee"), "11.6000");
       assert.equal(amount("state_income_tax"), undefined);
+    } finally {
+      await dropScratchOrgReporting(fx.orgId);
+    }
+  });
+
+  test("a 2025 Washington run prices PFML 71.52/28.48 and Cares exactly", async () => {
+    // The 2025-10-16 run this pack used to refuse: $2,000 of wages prices
+    // $18.40 of PFML (0.92%), split $13.16 employee / $5.24 employer, and
+    // $11.60 of WA Cares (0.58%) — decimal-exact on the stub, no SIT line.
+    const fx = await waPayrollOrg(2025);
+    try {
+      await waEmployee(fx, "Wally WA", "WA", undefined, "52000", 2025);
+      const lines = await priceWashingtonRun(fx, "fifty_or_more", 2025);
+      const amount = (key: string) => lines.find((line) => line.system_key === key)?.amount;
+      assert.equal(amount("wa_pfml_employee"), "13.1600");
+      assert.equal(amount("wa_pfml_employer"), "5.2400");
+      assert.equal(amount("wa_cares_employee"), "11.6000");
+      assert.equal(amount("state_income_tax"), undefined);
+    } finally {
+      await dropScratchOrgReporting(fx.orgId);
+    }
+  });
+
+  test("a 2025 Washington run caps PFML at the Social Security base while Cares stays uncapped", async () => {
+    // $200,000 of wages against the $176,100 base: PFML prices the room
+    // ($1,620.12 total, $1,158.71 employee / $461.41 employer) while WA
+    // Cares prices the whole cheque ($1,160.00) — the cap binds one levy
+    // and not the other.
+    const fx = await waPayrollOrg(2025);
+    try {
+      await waEmployee(fx, "Hetty High", "WA", undefined, "5200000", 2025);
+      const lines = await priceWashingtonRun(fx, "fifty_or_more", 2025);
+      const amount = (key: string) => lines.find((line) => line.system_key === key)?.amount;
+      assert.equal(amount("wa_pfml_employee"), "1158.7100");
+      assert.equal(amount("wa_pfml_employer"), "461.4100");
+      assert.equal(amount("wa_cares_employee"), "1160.0000");
+    } finally {
+      await dropScratchOrgReporting(fx.orgId);
+    }
+  });
+
+  test("a 2025 Washington run for a small employer withholds PFML with no employer share", async () => {
+    // Fewer than 50 employees: the $13.16 employee share is still withheld
+    // and remitted, but the employer owes no share of the premium — so no
+    // employer line posts at all (zero statutory lines never post).
+    const fx = await waPayrollOrg(2025);
+    try {
+      await waEmployee(fx, "Wally WA", "WA", undefined, "52000", 2025);
+      const lines = await priceWashingtonRun(fx, "fewer_than_fifty", 2025);
+      const amount = (key: string) => lines.find((line) => line.system_key === key)?.amount;
+      assert.equal(amount("wa_pfml_employee"), "13.1600");
+      assert.equal(amount("wa_pfml_employer"), undefined);
+      assert.equal(amount("wa_cares_employee"), "11.6000");
     } finally {
       await dropScratchOrgReporting(fx.orgId);
     }
