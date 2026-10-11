@@ -191,6 +191,7 @@ export async function renewInsurancePolicy(
   return withOrgTransaction(orgId, async () => {
     const tx: SqlExecutor = db;
     const source = await lockPolicy(tx, orgId, args.policyId, args.allowedSubsidiaryIds);
+    await assertAssetAccess(tx, { orgId, actorId: args.actorId, permission: "assets.maintain", feature: "assetInsurance", subsidiaryIds: [source.subsidiary_id] });
     const existing = (await tx.execute(sql`
       select 1 from asset_insurance_policies where org_id = ${orgId} and renews_policy_id = ${args.policyId} and status = 'active' limit 1`)).rows[0];
     if (existing) refuse("policy_already_renewed", `policy ${source.policy_number} already has an active renewal`, { status: 409 });

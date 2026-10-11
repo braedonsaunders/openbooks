@@ -72,7 +72,7 @@ async function postCost(org: Org, cipAccount: string, amount: string): Promise<{
     currency: "CAD",
     lines: [
       { accountId: cipAccount, amount, memo: "Contractor progress billing" },
-      { accountId: org.accounts.ap, amount: `-${amount}` },
+      { accountId: org.accounts.bank, amount: `-${amount}` },
     ],
   }));
   return { entryId: posted.entryId, lineId: posted.lines[0]!.id };
@@ -191,7 +191,7 @@ test(
       const wrongAccount = await withOrgContext(org.orgId, () => postEntry(db, {
         orgId: org.orgId, bookId: org.bookId, subsidiaryId: org.subsidiaryId, entryNumber: `X-${randomUUID()}`,
         postingDate: org.date, periodId: org.periodId, origin: "manual", currency: "CAD",
-        lines: [{ accountId: repairs, amount: "10" }, { accountId: org.accounts.ap, amount: "-10" }],
+        lines: [{ accountId: repairs, amount: "10" }, { accountId: org.accounts.bank, amount: "-10" }],
       }));
       await refusedWith("source_wrong_account", () => linkCipCosts(org.orgId, {
         cipAssetId: record.id, journalLineIds: [wrongAccount.lines[0]!.id], actorId: actors.adminId,

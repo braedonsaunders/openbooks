@@ -76,7 +76,7 @@ async function postPurchase(org: Org, clearing: string, amounts: string[]): Prom
     currency: "CAD",
     lines: [
       ...amounts.map((amount, index) => ({ accountId: clearing, amount, memo: `Purchase line ${index + 1}` })),
-      { accountId: org.accounts.ap, amount: `-${total}` },
+      { accountId: org.accounts.bank, amount: `-${total}` },
     ],
   }));
   return { entryId: posted.entryId, lineIds: posted.lines.slice(0, amounts.length).map((line) => line.id) };
