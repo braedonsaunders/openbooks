@@ -461,7 +461,10 @@
       "saveNotConfirmed": "Le serveur n’a pas confirmé l’enregistrement de toutes les modifications d’autorisations. Rouvrez le rôle pour voir ses autorisations actuelles, puis appliquez de nouveau vos modifications.",
       "includes": "Comprend aussi : {permissions}",
       "includedBy": "Déjà inclus par : {permissions}",
-      "ownScope": "{permission} (ses propres enregistrements uniquement)"
+      "ownScope": "{permission} (ses propres enregistrements uniquement)",
+      "selfServiceTitle": "Libre-service employé",
+      "selfServiceDescription": "Voir son propre dossier d'emploi, demander des modifications de profil et de coordonnées bancaires, et demander des congés. Activé par défaut pour chaque rôle.",
+      "selfServiceOffWarning": "Désactivé : les personnes disposant uniquement de ce rôle ne peuvent ni demander de congés, ni mettre à jour leur profil, ni soumettre leurs coordonnées bancaires."
     },
     "builtInDescriptions": {
       "admin": "Accès complet à tout, y compris les utilisateurs, les rôles, la navigation et les paramètres de l’entreprise.",

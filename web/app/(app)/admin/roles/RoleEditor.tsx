@@ -8,9 +8,12 @@ import { Badge, Button, Drawer, Input, Label, SearchSelect, Select, Textarea } f
 import { confirmDialog } from '@/lib/confirm'
 import { readApiErrorMessage } from '@/lib/api-error'
 import {
+  EMPLOYEE_SELF_SERVICE_BASELINE,
   PERMISSION_GROUPS,
   PERMISSION_IMPLICATIONS,
   permissionLabelKey,
+  roleHasSelfServiceBaseline,
+  withSelfServiceBaseline,
   type CataloguePermission,
 } from '@/lib/permissions'
 import type { SubsidiaryRestriction } from '@openbooks/schema'
@@ -113,7 +116,25 @@ function RoleDrawer({
   const [key, setKey] = useState(role?.key ?? '')
   const [keyTouched, setKeyTouched] = useState(isEdit)
   const [description, setDescription] = useState(role?.description ?? '')
-  const [selected, setSelected] = useState<Set<string>>(new Set(role?.permissions ?? []))
+  // New roles start with the employee self-service baseline on; edits open
+  // with the stored set untouched.
+  const [selected, setSelected] = useState<Set<string>>(
+    () => new Set(role ? role.permissions : withSelfServiceBaseline([])),
+  )
+  // The toggle reflects effective coverage, not just the three ticked
+  // boxes: a role holding `*` covers the baseline however its boxes read,
+  // so unchecking the toggle there cannot switch it off.
+  const baselineOn = roleHasSelfServiceBaseline([...selected])
+  function toggleBaseline() {
+    setSelected((prev) => {
+      if (roleHasSelfServiceBaseline([...prev])) {
+        const next = new Set(prev)
+        for (const key of EMPLOYEE_SELF_SERVICE_BASELINE) next.delete(key)
+        return next
+      }
+      return new Set(withSelfServiceBaseline([...prev]))
+    })
+  }
   const restriction = role?.subsidiaryRestriction ?? { mode: 'all' as const }
   const [subMode, setSubMode] = useState<SubsidiaryRestriction['mode'] | 'invalid'>(restriction.mode)
   const [subtreeId, setSubtreeId] = useState(
@@ -229,7 +250,7 @@ function RoleDrawer({
     setBusy(true)
     const payload = isEdit
       ? role.isBuiltIn
-        ? { id: role.id, permissions: [...selected], subsidiaryRestriction, expectedUpdatedAt: role.updatedAt }
+        ? { id: role.id, permissions: [...selected], subsidiaryRestriction, expectedUpdatedAt: role.updatedAt, selfServiceBaseline: baselineOn }
         : {
             id: role.id,
             name: name.trim(),
@@ -237,6 +258,7 @@ function RoleDrawer({
             permissions: [...selected],
             subsidiaryRestriction,
             expectedUpdatedAt: role.updatedAt,
+            selfServiceBaseline: baselineOn,
           }
       : {
           name: name.trim(),
@@ -244,6 +266,7 @@ function RoleDrawer({
           description: description.trim(),
           permissions: [...selected],
           subsidiaryRestriction,
+          selfServiceBaseline: baselineOn,
         }
     const res = await fetch('/api/admin/roles', {
       method: isEdit ? 'PATCH' : 'POST',
@@ -262,13 +285,17 @@ function RoleDrawer({
       // Success is what the server stored, not what was sent: a response
       // that does not carry exactly the submitted permissions keeps the
       // drawer open with the refusal instead of closing as if it saved.
+      // With the baseline toggled on the server unions any missing keys
+      // (e.g. a role covered only through `hrm.*`), so confirmation reads
+      // against the intended set, not the raw ticked boxes.
+      const intended = baselineOn ? withSelfServiceBaseline([...selected]) : [...selected]
       const data = (await res.json().catch(() => null)) as { role?: { permissions?: unknown; updatedAt?: unknown } } | null
       const storedPermissions: unknown = data?.role?.permissions
       const storedVersion: unknown = data?.role?.updatedAt
       const persisted = Array.isArray(storedPermissions)
         ? storedPermissions.filter((key): key is string => typeof key === 'string')
         : null
-      if (!persisted || typeof storedVersion !== 'string' || !samePermissionSet(persisted, [...selected])) {
+      if (!persisted || typeof storedVersion !== 'string' || !samePermissionSet(persisted, intended)) {
         toast.error(t('drawer.saveNotConfirmed'))
         return
       }
@@ -401,6 +428,33 @@ function RoleDrawer({
             placeholder={t('drawer.descriptionPlaceholder')}
           />
         </div>
+
+        {!locked ? (
+          <fieldset className="rounded-lg border border-slate-200 dark:border-slate-800">
+            <legend className="sr-only">{t('drawer.selfServiceTitle')}</legend>
+            <label className="flex cursor-pointer items-start gap-2.5 px-3 py-2">
+              <input
+                type="checkbox"
+                checked={baselineOn}
+                onChange={toggleBaseline}
+                className="mt-0.5 h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500 dark:border-slate-600 dark:bg-slate-800"
+              />
+              <span className="min-w-0">
+                <span className="block text-sm font-medium text-slate-900 dark:text-slate-100">
+                  {t('drawer.selfServiceTitle')}
+                </span>
+                <span className="block text-[11px] text-slate-500 dark:text-slate-400">
+                  {t('drawer.selfServiceDescription')}
+                </span>
+              </span>
+            </label>
+            {!baselineOn ? (
+              <p role="status" className="px-3 pb-2 pl-9 text-[11px] text-amber-700 dark:text-amber-300">
+                {t('drawer.selfServiceOffWarning')}
+              </p>
+            ) : null}
+          </fieldset>
+        ) : null}
 
         <div className="space-y-4">
           <div className="flex items-center justify-between">

@@ -461,7 +461,10 @@
       "saveNotConfirmed": "Der Server hat nicht bestätigt, dass alle Berechtigungsänderungen gespeichert wurden. Öffnen Sie die Rolle erneut, um ihre aktuellen Berechtigungen zu sehen, und wenden Sie Ihre Änderungen dann erneut an.",
       "includes": "Umfasst außerdem: {permissions}",
       "includedBy": "Bereits enthalten über: {permissions}",
-      "ownScope": "{permission} (nur eigene Datensätze)"
+      "ownScope": "{permission} (nur eigene Datensätze)",
+      "selfServiceTitle": "Self-Service für Mitarbeitende",
+      "selfServiceDescription": "Eigene Beschäftigungsübersicht ansehen, Profil- und Bankänderungen einreichen und Urlaub beantragen. Für jede Rolle standardmäßig aktiviert.",
+      "selfServiceOffWarning": "Deaktiviert: Personen mit nur dieser Rolle können weder Urlaub beantragen noch ihr Profil aktualisieren oder Bankdaten einreichen."
     },
     "builtInDescriptions": {
       "admin": "Vollzugriff auf alles, einschließlich Benutzern, Rollen, Navigation und Unternehmenseinstellungen.",

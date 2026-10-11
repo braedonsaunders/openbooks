@@ -614,7 +614,10 @@
       "saveNotConfirmed": "El servidor no confirmó que se guardaran todos los cambios de permisos. Vuelva a abrir el rol para ver sus permisos actuales y aplique de nuevo sus cambios.",
       "includes": "También incluye: {permissions}",
       "includedBy": "Ya incluido por: {permissions}",
-      "ownScope": "{permission} (solo registros propios)"
+      "ownScope": "{permission} (solo registros propios)",
+      "selfServiceTitle": "Autoservicio del empleado",
+      "selfServiceDescription": "Ver su propio resumen de empleo, solicitar cambios de perfil y datos bancarios, y solicitar licencias. Activado por defecto en cada rol.",
+      "selfServiceOffWarning": "Desactivado: las personas con solo este rol no pueden solicitar licencias, actualizar su perfil ni enviar datos bancarios."
     },
     "builtInDescriptions": {
       "admin": "Acceso total a todo, incluidos usuarios, roles, navegación y configuración de la empresa.",

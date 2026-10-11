@@ -461,7 +461,10 @@
       "saveNotConfirmed": "すべての権限変更が保存されたことをサーバーが確認できませんでした。ロールを開き直して現在の権限を確認し、変更をもう一度適用してください。",
       "includes": "次も含みます: {permissions}",
       "includedBy": "次の権限に含まれています: {permissions}",
-      "ownScope": "{permission}（自分のレコードのみ）"
+      "ownScope": "{permission}（自分のレコードのみ）",
+      "selfServiceTitle": "従業員セルフサービス",
+      "selfServiceDescription": "自身の雇用概要の表示、プロフィール・口座情報の変更申請、休暇申請ができます。すべてのロールで既定で有効です。",
+      "selfServiceOffWarning": "オフの場合、このロールのみを持つ人は休暇申請、プロフィール更新、口座情報の送信ができません。"
     },
     "builtInDescriptions": {
       "admin": "ユーザー、ロール、ナビゲーション、会社設定を含むすべてにフルアクセスできます。",

@@ -160,7 +160,9 @@ test("ID2: a role may only be created, or grow, inside the actor's own permissio
     // …but adding one the actor lacks is refused.
     const grown = await call("PATCH", { id, permissions: ["gl.read", "admin.users.manage"] });
     assert.equal(grown.status, 403);
-    assert.deepEqual(await rolePermissions(id), ["gl.read", "ap.read", "ap.approve"]);
+    // New roles carry the employee self-service baseline by default (in
+    // catalogue order), so the untouched role keeps it beside the grant.
+    assert.deepEqual(await rolePermissions(id), ["gl.read", "ap.read", "ap.approve", "hrm.leave.request", "hrm.self.read", "hrm.self.request"]);
   } finally {
     routeState.authz = null;
     await dropScratchOrg(f.orgId);
@@ -481,9 +483,78 @@ test("module permission declarations are tenant-scoped, explicitly grantable ins
     routeState.authz!.permissions = new Set(["*"]);
     await withOrgContext(f.orgId, () => disableTestExtension({ orgId: f.orgId, actorId: f.actorId, key: "role-addon" }));
     assert.deepEqual((await (await scopedGet()).json()).permissions, []);
-    assert.deepEqual(await scopedRolePermissions(id), ["role_addon.read"]);
+    // Creation unions the employee self-service baseline (catalogue order,
+    // extension keys last), so the stored set is the grant plus the trio.
+    assert.deepEqual(await scopedRolePermissions(id), ["hrm.leave.request", "hrm.self.read", "hrm.self.request", "role_addon.read"]);
     assert.equal((await scopedCall("POST", { name: "Inactive permission", permissions: ["role_addon.read"] })).status, 400);
     assert.equal((await scopedCall("PATCH", { id, permissions: ["role_addon.read", "gl.read"] })).status, 200);
     assert.equal((await scopedCall("PATCH", { id, permissions: ["gl.read"] })).status, 200);
   } finally { routeState.authz = null; await dropScratchOrg(f.orgId); await dropScratchOrg(other.orgId); }
+});
+
+test("new roles carry the self-service baseline by default; an explicit opt-out stores exactly the sent set", async () => {
+  const f = await seed(["*"]);
+  try {
+    const created = await call("POST", { name: "Hourly", permissions: ["gl.read"] });
+    assert.equal(created.status, 200);
+    const { id } = (await created.json()) as { id: string };
+    assert.deepEqual(await rolePermissions(id), ["gl.read", "hrm.leave.request", "hrm.self.read", "hrm.self.request"]);
+
+    const omitted = await call("POST", { name: "Bare" });
+    assert.equal(omitted.status, 200);
+    const bare = (await omitted.json()) as { id: string };
+    assert.deepEqual(await rolePermissions(bare.id), ["hrm.leave.request", "hrm.self.read", "hrm.self.request"]);
+
+    const optedOut = await call("POST", { name: "Kiosk", permissions: ["gl.read"], selfServiceBaseline: false });
+    assert.equal(optedOut.status, 200);
+    const kiosk = (await optedOut.json()) as { id: string };
+    assert.deepEqual(await rolePermissions(kiosk.id), ["gl.read"], "an explicit opt-out stores exactly the sent permissions");
+  } finally {
+    routeState.authz = null;
+    await dropScratchOrg(f.orgId);
+  }
+});
+
+test("the baseline default never escalates: an administrator lacking it still creates roles, but nothing else", async () => {
+  const f = await seed(["admin.roles.manage", "gl.read"]);
+  try {
+    // The baseline rides along exempt from the ceiling; the grant itself is judged.
+    const created = await call("POST", { name: "Crew", permissions: ["gl.read"] });
+    assert.equal(created.status, 200);
+    const { id } = (await created.json()) as { id: string };
+    assert.deepEqual(await rolePermissions(id), ["gl.read", "hrm.leave.request", "hrm.self.read", "hrm.self.request"]);
+    const refused = await call("POST", { name: "Overreach", permissions: ["gl.post"] });
+    assert.equal(refused.status, 403);
+    assert.deepEqual(((await refused.json()) as { missing: string[] }).missing, ["gl.post"]);
+  } finally {
+    routeState.authz = null;
+    await dropScratchOrg(f.orgId);
+  }
+});
+
+test("PATCH with selfServiceBaseline true backfills the trio; edits without the flag keep legacy behavior", async () => {
+  const f = await seed(["*"]);
+  try {
+    const bare = await createRole(f.orgId, "legacy_crew", ["gl.read"]);
+    const untouched = await call("PATCH", { id: bare, permissions: ["gl.read", "ap.read"] });
+    assert.equal(untouched.status, 200);
+    assert.deepEqual(await rolePermissions(bare), ["gl.read", "ap.read"], "no flag means no backfill");
+
+    const opened = (await db.execute<{ token: string }>(sql`select updated_at::text as token from app_roles where id = ${bare}`)).rows[0]!.token;
+    const backfilled = await call("PATCH", { id: bare, selfServiceBaseline: true, expectedUpdatedAt: opened });
+    assert.equal(backfilled.status, 200);
+    const stored = (await backfilled.json()) as { role: { permissions: string[] } };
+    assert.deepEqual(
+      [...stored.role.permissions].sort(),
+      ["gl.read", "ap.read", "hrm.leave.request", "hrm.self.read", "hrm.self.request"].sort(),
+      "the response is the union the server stored",
+    );
+    assert.deepEqual(
+      [...(await rolePermissions(bare))].sort(),
+      ["gl.read", "ap.read", "hrm.leave.request", "hrm.self.read", "hrm.self.request"].sort(),
+    );
+  } finally {
+    routeState.authz = null;
+    await dropScratchOrg(f.orgId);
+  }
 });

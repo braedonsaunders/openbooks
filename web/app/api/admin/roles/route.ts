@@ -5,7 +5,7 @@ import { NextResponse } from "next/server";
 import { sql, type SQL } from "drizzle-orm";
 import { db, withOrgTransaction, withTransactionSavepoint } from "@openbooks/engine/src/platform/db.ts";
 import { seedDashboardDefaultsForOrg } from "@openbooks/engine/src/provisioning/dashboard-defaults.ts";
-import { permissionsOutsideCeiling } from "@openbooks/engine/src/organization/permissions.ts";
+import { EMPLOYEE_SELF_SERVICE_BASELINE, permissionsOutsideCeiling, withSelfServiceBaseline } from "@openbooks/engine/src/organization/permissions.ts";
 import {
   grantedRestrictionWithinCoverage,
   grantedScopeSetWithinCoverage,
@@ -25,6 +25,11 @@ const roleWriteFields = {
   name: z.string().trim().min(1).max(200).optional(),
   permissions: z.array(z.string()).max(500).optional(),
   subsidiaryRestriction: z.json().optional(),
+  // Employee self-service toggle (Admin → Roles). True (the default on
+  // create) unions the baseline into the stored set; false stores exactly
+  // the sent permissions. PATCH honors an explicit true only, so edits
+  // from clients that do not send the flag keep legacy behavior.
+  selfServiceBaseline: z.boolean().optional(),
 };
 const createRoleBodySchema = z.object({ ...roleWriteFields, name: z.string().trim().min(1).max(200) });
 const updateRoleBodySchema = z.object({
@@ -46,6 +51,12 @@ export const runtime = "nodejs";
  *
  * Built-in roles: only `permissions` may change, and the `admin` role is
  * fully locked (always the full catalogue) so an org can't lock itself out.
+ *
+ * New custom roles carry the employee self-service baseline
+ * (hrm.self.read, hrm.self.request, hrm.leave.request) unless the caller
+ * explicitly opts out with `selfServiceBaseline: false`; PATCH adds it on
+ * explicit opt-in. Baseline keys are exempt from the privilege ceiling —
+ * each is structurally scoped to the holder's own employment.
  *
  * Privilege ceiling: admin.roles.manage is an ordinary permission. An
  * administrator may only create a role from, or ADD permissions to a role
@@ -92,10 +103,15 @@ async function normalizePermissions(input: unknown, orgId: string, preserved: re
 /**
  * 403 naming every permission in `granted` that the actor does not hold, or
  * null when the grant sits inside the actor's ceiling (super admins exempt).
+ * The employee self-service baseline is exempt: each key is structurally
+ * scoped to the holder's own employment, so it is safe on every login
+ * (every built-in role carries it) and never an escalation — an
+ * administrator who lacks it can still hand it to a role.
  */
 function ceilingViolation(authz: Authz, granted: readonly string[]): NextResponse | null {
   if (authz.user.isSuperAdmin) return null;
-  const missing = permissionsOutsideCeiling(authz.permissions, granted);
+  const baseline = EMPLOYEE_SELF_SERVICE_BASELINE as readonly string[];
+  const missing = permissionsOutsideCeiling(authz.permissions, granted.filter((key) => !baseline.includes(key)));
   if (missing.length === 0) return null;
   return NextResponse.json(
     { error: `cannot grant permissions you do not hold: ${missing.join(", ")}`, missing },
@@ -252,7 +268,13 @@ export const POST = defineRoute({
         { status: 400 },
       );
     }
-    const permissions = await normalizePermissions(body.permissions ?? [], actor.orgId);
+    // New roles carry the employee self-service baseline unless the caller
+    // explicitly opts out — a custom hourly role must not ship with broken
+    // self-service.
+    const permissions = await normalizePermissions(
+      body.selfServiceBaseline === false ? (body.permissions ?? []) : withSelfServiceBaseline(body.permissions ?? []),
+      actor.orgId,
+    );
     if (!permissions) {
       return NextResponse.json({ error: "permissions must be known catalogue keys" }, { status: 400 });
     }
@@ -360,8 +382,14 @@ export const PATCH = defineRoute({
       // is judged against these: widening a role whose permissions exceed the
       // actor's ceiling broadens every one of those grants.
       let effectivePermissions = rolePermissionList(role.permissions);
-      if (body.permissions !== undefined) {
-        const permissions = await normalizePermissions(body.permissions, actor.orgId, rolePermissionList(role.permissions));
+      // An explicit opt-in adds the baseline to the edited (or stored) set
+      // and flows through the same added-permission ceiling judgment below.
+      const requestedPermissions =
+        body.selfServiceBaseline === true
+          ? withSelfServiceBaseline(body.permissions ?? rolePermissionList(role.permissions))
+          : body.permissions;
+      if (requestedPermissions !== undefined) {
+        const permissions = await normalizePermissions(requestedPermissions, actor.orgId, rolePermissionList(role.permissions));
         if (!permissions) {
           return NextResponse.json(
             { error: "permissions must be known catalogue keys" },

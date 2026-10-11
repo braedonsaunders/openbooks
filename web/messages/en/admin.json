@@ -461,7 +461,10 @@
       "saveNotConfirmed": "The server did not confirm that every permission change was saved. Reopen the role to see its current permissions, then apply your changes again.",
       "includes": "Also includes: {permissions}",
       "includedBy": "Already included by: {permissions}",
-      "ownScope": "{permission} (own records only)"
+      "ownScope": "{permission} (own records only)",
+      "selfServiceTitle": "Employee self-service",
+      "selfServiceDescription": "View your own employment summary, file profile and bank-detail changes, and request leave. On by default for every role.",
+      "selfServiceOffWarning": "Off: people holding only this role cannot request leave, update their profile, or submit bank details."
     },
     "builtInDescriptions": {
       "admin": "Full access to everything, including users, roles, navigation and company settings.",
