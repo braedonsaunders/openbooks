@@ -6,6 +6,7 @@ import { sql } from "drizzle-orm"
 import { randomUUID } from "node:crypto"
 import { db, inDbTransaction, withOrgTransaction, withTransactionSavepoint } from "../platform/db.ts"
 import { fromUnits, sum, toUnits } from "../money/money.ts"
+import { excludePeriodEndJournals } from "../records/period-end-origins.ts"
 import { calendarDaysBetween } from "../platform/civil-date.ts"
 import { lockScopeRows, ScopeNotFoundError } from "../organization/subsidiary-scope.ts"
 import { assertRealDate, isBalanceSummaryRow, normalizeAmount } from "./statement-parsers/shared"
@@ -77,6 +78,7 @@ export async function autoMatch(reconciliationId: string, ctx: BankingContext): 
          and je.posting_date <= ${recon.through_date}
          and (${carryStart}::date is null or je.posting_date >= ${carryStart}::date)
          and jl.reconciled_at is null
+         and ${excludePeriodEndJournals(sql`je.origin`)}
          and not exists (select 1 from reconciliation_matches m where m.journal_line_id = jl.id and m.org_id = jl.org_id)
          ${subsidiaryScopeSql(ctx.allowedSubsidiaryIds, sql`jl.subsidiary_id`)}
        order by je.posting_date, jl.line_number
@@ -285,6 +287,7 @@ async function createMatchInTransaction(
        and jl.account_id = ${recon.account_id}
        and jl.currency = ${recon.currency}
        and jl.reconciled_at is null
+       and ${excludePeriodEndJournals(sql`je.origin`)}
        and je.posting_date <= ${recon.through_date}
        and not exists (
          select 1 from reconciliation_matches m where m.journal_line_id = jl.id and m.org_id = jl.org_id
@@ -453,6 +456,7 @@ export async function createGlClearingGroup(
          and jl.account_id = ${recon.account_id}
          and jl.currency = ${recon.currency}
          and jl.reconciled_at is null
+         and ${excludePeriodEndJournals(sql`je.origin`)}
          and je.posting_date <= ${recon.through_date}
          and not exists (
            select 1 from reconciliation_matches m where m.journal_line_id = jl.id and m.org_id = jl.org_id

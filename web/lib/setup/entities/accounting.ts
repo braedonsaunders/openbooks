@@ -3,6 +3,18 @@ import type { SetupEntity } from '../types'
 import { CONSOLIDATION_METHODS, NCI_MEASUREMENTS } from '../options'
 import { INTERCOMPANY_REPRESENTING_PARTIES_ENTITY, INTERCOMPANY_TRANSFER_PRICING_ENTITY } from '../intercompany'
 
+/** How income-statement balances reach retained earnings at year end. */
+const PERIOD_END_CLOSING_METHODS = [
+  { value: 'retained_earnings', labelKey: 'options.periodEndClosingMethod.retained_earnings' },
+  { value: 'income_summary', labelKey: 'options.periodEndClosingMethod.income_summary' },
+]
+
+/** The period of the fiscal year the closing journals post into. */
+const PERIOD_END_POSTING_PERIODS = [
+  { value: 'last_period', labelKey: 'options.periodEndPostingPeriod.last_period' },
+  { value: 'adjustment_period', labelKey: 'options.periodEndPostingPeriod.adjustment_period' },
+]
+
 export const ACCOUNTING_ENTITIES: SetupEntity[] = [
   // --- Accounting --------------------------------------------------------
   {
@@ -148,6 +160,55 @@ export const ACCOUNTING_ENTITIES: SetupEntity[] = [
       { key: 'goodwillAccountId', kind: 'ref', ref: 'accounts' },
       { key: 'fairValueAdjustmentAccountId', kind: 'ref', ref: 'accounts' },
       { key: 'isActive', kind: 'boolean' },
+    ],
+  },
+  {
+    // Explicit year-end closing journals (Company Settings → Features →
+    // Period-end journals). Effective-dated and append-only: a change is a new
+    // version from its date, never an edit, so a closed year keeps the policy
+    // it was closed under; storage refuses a version reaching back into a year
+    // already closed by journal.
+    key: 'period-end-journal-policies',
+    table: 'period_end_journal_policies',
+    singularTitleKey: 'entities.period-end-journal-policies.singular',
+    actorCols: true,
+    groupKey: 'accounting',
+    iconKey: 'book-open',
+    featureKey: 'periodEndJournals',
+    orgScoped: true,
+    orderBy: 'effective_from desc',
+    hasActive: false,
+    allowUpdate: false,
+    allowDelete: false,
+    docSlug: 'year-end-closing',
+    columns: [
+      { key: 'effectiveFrom', kind: 'date' },
+      { key: 'closingMethod', kind: 'badge', options: PERIOD_END_CLOSING_METHODS },
+      { key: 'retainedEarningsAccountId', kind: 'ref', ref: 'accounts' },
+      { key: 'postingPeriod', kind: 'badge', options: PERIOD_END_POSTING_PERIODS },
+      { key: 'balanceSheetJournals', kind: 'boolean' },
+    ],
+    fields: [
+      { key: 'effectiveFrom', kind: 'date', required: true, lockedOnEdit: true, helpTextKey: 'fieldHelp.periodEndEffectiveFrom' },
+      { key: 'closingMethod', kind: 'select', required: true, options: PERIOD_END_CLOSING_METHODS, defaultValue: 'retained_earnings', helpTextKey: 'fieldHelp.periodEndClosingMethod' },
+      { key: 'retainedEarningsAccountId', kind: 'ref', ref: 'accounts', required: true, refAccountTypes: ['equity'] },
+      {
+        key: 'incomeSummaryAccountId',
+        kind: 'ref',
+        ref: 'accounts',
+        required: true,
+        refAccountTypes: ['equity'],
+        showWhen: { field: 'closingMethod', in: ['income_summary'] },
+        clearWhenHidden: true,
+      },
+      { key: 'postingPeriod', kind: 'select', required: true, options: PERIOD_END_POSTING_PERIODS, defaultValue: 'last_period', helpTextKey: 'fieldHelp.periodEndPostingPeriod' },
+      { key: 'balanceSheetJournals', kind: 'boolean', helpTextKey: 'fieldHelp.periodEndBalanceSheetJournals' },
+      { key: 'preserveDepartments', kind: 'boolean', sectionKey: 'sections.periodEndDimensions' },
+      { key: 'preserveClasses', kind: 'boolean', sectionKey: 'sections.periodEndDimensions' },
+      { key: 'preserveLocations', kind: 'boolean', sectionKey: 'sections.periodEndDimensions' },
+      { key: 'preserveProjects', kind: 'boolean', sectionKey: 'sections.periodEndDimensions' },
+      { key: 'preserveSegments', kind: 'boolean', sectionKey: 'sections.periodEndDimensions', helpTextKey: 'fieldHelp.periodEndPreserveSegments' },
+      { key: 'reason', kind: 'textarea', required: true },
     ],
   },
 ]

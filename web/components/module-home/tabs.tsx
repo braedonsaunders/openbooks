@@ -182,7 +182,9 @@ export function ModuleHomeTabs({ tabs, placement = 'header', ariaLabel, navigati
     <div
       ref={trackRef}
       data-subtabs-track
-      style={tabs.length < 8 && preferredWidth ? { width: preferredWidth } : undefined}
+      // Size by the visible strip: supporting destinations fold into More, so
+      // a short primary row hugs its controls beside the page's primary action.
+      style={primary.length < 8 && preferredWidth ? { width: preferredWidth } : undefined}
       className={cn(
         "relative flex min-w-0 max-w-full items-center overflow-hidden",
         placement === "local" ? "w-full justify-start" : "justify-end",
@@ -190,7 +192,7 @@ export function ModuleHomeTabs({ tabs, placement = 'header', ariaLabel, navigati
         // half the desktop viewport and let the component's existing,
         // measured More menu own the overflow. Small view switches keep
         // their natural width; narrow screens still get the full row.
-        tabs.length >= 8 && placement === "header" ? "w-full md:w-[min(50vw,48rem)] md:flex-none" : null,
+        primary.length >= 8 && placement === "header" ? "w-full md:w-[min(50vw,48rem)] md:flex-none" : null,
       )}
     >
       {/* Off-screen copy at full width: the only honest source for "how wide

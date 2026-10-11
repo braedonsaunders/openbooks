@@ -3175,7 +3175,8 @@
       "gift": "Gift",
       "grant": "Grant",
       "release": "Restriction release",
-      "manufacturing": "Manufacturing"
+      "manufacturing": "Manufacturing",
+      "opening": "Opening"
     },
     "columns": {
       "detail": "Party / memo"

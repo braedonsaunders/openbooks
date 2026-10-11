@@ -124,6 +124,11 @@ export const FEATURES: FeatureDef[] = [
   // and governed close-package publication. It depends on Flows because the
   // independent approval must be real at the service boundary, not a UI flag.
   { key: 'advancedClose', defaultEnabled: false, category: 'finance', group: 'close', parentKey: 'flows' },
+  // Explicit year-end closing and opening journals for jurisdictions that
+  // require them. Off by default: statements compute retained earnings either
+  // way. The generation step lives in the period close workspace, so the
+  // close surface is its parent.
+  { key: 'periodEndJournals', defaultEnabled: false, category: 'finance', group: 'close', parentKey: 'continuousClose' },
 
   // Sales — pipeline, order entry and point-of-sale selling.
   // The account list is NOT here: leads, prospects and customers share one

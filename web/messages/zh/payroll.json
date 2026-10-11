@@ -1213,7 +1213,60 @@
     "dueOn": "{dueDate} 到期 · {authority}",
     "apNote": "代缴账单是普通的供应商账单:",
     "apLink": "打开应付账单",
-    "translated": "已按衍生合并汇率折算为{currency}"
+    "translated": "已按衍生合并汇率折算为{currency}",
+    "columns": {
+      "destination": "缴款对象",
+      "due": "到期",
+      "components": "项目",
+      "employees": "员工",
+      "gross": "工资总额",
+      "actions": "操作"
+    }
+  },
+  "workLocations": {
+    "title": "薪资工作地点",
+    "description": "为没有已批准的带日期工时记录的雇佣记录工作地点证明。已确认的薪资期间已锁定。",
+    "record": "记录分配",
+    "update": "更新分配",
+    "editorDescription": "若已批准的工时记录覆盖该期间，请使用工时记录。对于未计时的工作，请输入人事分配及其来源和原因。",
+    "loadFailed": "无法加载薪资工作地点。",
+    "saveFailed": "无法保存薪资工作地点。",
+    "recorded": "已记录薪资工作地点。",
+    "updated": "已更新薪资工作地点。",
+    "empty": "选择员工和期间以查看已保存的分配。",
+    "emptyScope": "该员工在此期间没有记录的分配。",
+    "shareValue": "比例 {share}",
+    "daysValue": "{days, plural, other {# 天}}",
+    "columns": {
+      "region": "地区",
+      "measure": "期间数据",
+      "source": "证明类型",
+      "document": "证明文件",
+      "reason": "原因"
+    },
+    "sources": {
+      "hr_records": "人事记录",
+      "certificate": "证明书",
+      "adequate_records": "充分记录"
+    },
+    "filters": {
+      "employment": "员工",
+      "clearPeriod": "清除期间"
+    },
+    "fields": {
+      "employment": "员工和法定雇主",
+      "chooseEmployment": "选择雇佣",
+      "periodStart": "期间开始",
+      "periodEnd": "期间结束",
+      "region": "地区",
+      "regionPlaceholder": "州或司法管辖区代码",
+      "subregion": "次级地区（可选）",
+      "measure": "分配依据",
+      "serviceDays": "服务天数",
+      "wageShare": "工资比例（0–1）",
+      "wageShareOption": "工资比例",
+      "evidenceDocument": "证明文件 ID（可选）"
+    }
   },
   "yearEnd": {
     "title": "年终",

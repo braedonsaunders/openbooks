@@ -3753,6 +3753,11 @@
       "intercompany-transfer-pricing": {
         "title": "Intercompany Transfer Pricing",
         "description": "Effective-dated pricing for goods one entity fulfills for another: a price level or cost plus a markup."
+      },
+      "period-end-journal-policies": {
+        "title": "Period-End Journals",
+        "singular": "period-end journal policy",
+        "description": "How the year-end close posts its journals: the retained earnings account, an optional income summary account, balance-sheet closing and opening journals, the posting period and the dimensions the closing lines keep. Each version governs fiscal years ending on or after its effective date."
       }
     },
     "fields": {
@@ -4391,7 +4396,17 @@
       "buyerSubsidiaryId": "Buying subsidiary",
       "markupPercent": "Markup %",
       "revenueAccountId": "Intercompany revenue account",
-      "costAccountId": "Intercompany cost account"
+      "costAccountId": "Intercompany cost account",
+      "closingMethod": "Closing method",
+      "retainedEarningsAccountId": "Retained earnings account",
+      "incomeSummaryAccountId": "Income summary account",
+      "balanceSheetJournals": "Balance-sheet closing and opening journals",
+      "postingPeriod": "Posting period",
+      "preserveDepartments": "Keep departments",
+      "preserveClasses": "Keep classes",
+      "preserveLocations": "Keep locations",
+      "preserveProjects": "Keep projects",
+      "preserveSegments": "Keep custom segments"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Days between the newest usable rate and the period end beyond which revaluation and consolidation refuse the rate. Closing rates count from the date of the period-end spot rate; average rates from the newest quote averaged. Default when no policy is set: 31 days.",
@@ -4579,7 +4594,12 @@
       "transferPricingMarkup": "Added to the fulfilling entity's cost. 10 means cost plus 10%.",
       "transferPricingRevenue": "The fulfilling entity's intercompany revenue. Must be marked Eliminate on consolidation.",
       "transferPricingCost": "The selling entity's cost at the transfer price. Must be marked Eliminate on consolidation.",
-      "intercompanyControlAccount": "Intercompany invoices and bills to or from the representing parties post their open items to these accounts. Each must be marked Eliminate on consolidation."
+      "intercompanyControlAccount": "Intercompany invoices and bills to or from the representing parties post their open items to these accounts. Each must be marked Eliminate on consolidation.",
+      "periodEndEffectiveFrom": "Fiscal years ending on or after this date close under this version. It cannot reach back into a year already closed by period-end journals.",
+      "periodEndClosingMethod": "Directly: income and expense close into retained earnings. Through an income summary account: they close into that account, which then closes into retained earnings.",
+      "periodEndPostingPeriod": "The last regular period of the fiscal year, or the year's adjustment period when the fiscal calendar has one.",
+      "periodEndBalanceSheetJournals": "Also zero every balance-sheet account on the year-end date and re-establish the same balances on the first day of the next fiscal year.",
+      "periodEndPreserveSegments": "Balancing segments are always kept, so each segment value stays balanced on its own."
     },
     "options": {
       "withholdingCondominiumPayer": "Condominium payer",
@@ -5393,6 +5413,14 @@
       "transferPricingMethod": {
         "price_level": "Price level",
         "cost_plus": "Cost plus markup"
+      },
+      "periodEndClosingMethod": {
+        "retained_earnings": "Directly into retained earnings",
+        "income_summary": "Through an income summary account"
+      },
+      "periodEndPostingPeriod": {
+        "last_period": "Last period of the year",
+        "adjustment_period": "Adjustment period"
       }
     },
     "payroll": {
@@ -6361,7 +6389,8 @@
       "scheduleBoardBookingHelp": "Whole-day bookings use these working hours in the board's time zone.",
       "scheduleBoardAutomation": "Automation",
       "scheduleBoardAutomationHelp": "What happens after a booking is published on this board.",
-      "intercompanyControlAccounts": "Intercompany receivable and payable accounts"
+      "intercompanyControlAccounts": "Intercompany receivable and payable accounts",
+      "periodEndDimensions": "Dimensions kept on closing lines"
     },
     "constructionRateEditor": {
       "tab": "Scope & rates"
@@ -8105,6 +8134,10 @@
     "crossSubsidiaryFulfillment": {
       "title": "Cross-subsidiary fulfillment",
       "description": "Fulfill one entity's sales orders from another entity's warehouse, with an intercompany cross-charge at the transfer price."
+    },
+    "periodEndJournals": {
+      "title": "Period-end journals",
+      "description": "Post explicit year-end closing journals for jurisdictions that require them: income and expense into retained earnings, optionally through an income summary account, with optional balance-sheet closing and next-year opening journals. Statements compute retained earnings either way."
     }
   },
   "backupsManager": {

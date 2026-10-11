@@ -5,6 +5,7 @@ import { cachedAnalyticsRead } from "./preview-cache";
 import { getMoneyFormatter } from '../money-server'
 import { sql } from "drizzle-orm";
 import { profitAndLoss, balanceSheet, type StatementRow } from "../reports";
+import { excludePeriodEndJournals } from "@openbooks/engine/records/period-end-origins";
 import { statementBookExpr } from "../gl-summary";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
 import { resolveOrgId } from "../org-scope";
@@ -263,6 +264,7 @@ async function accountActivity(orgId: string, from: string, to: string, allowed:
        and l.account_id = any(${`{${accountIds.join(",")}}`}::uuid[])
        and e.status in ('posted', 'reversed')
        and e.book_id = ${statementBookExpr(orgId)}
+       and ${excludePeriodEndJournals(sql`e.origin`)}
        and e.posting_date >= ${from} and e.posting_date <= ${to}
        ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowed)}
      group by sub.base_currency
@@ -284,6 +286,7 @@ async function creditBalance(orgId: string, asOf: string, allowed: ReadonlySet<s
        and l.account_id = any(${`{${accountIds.join(",")}}`}::uuid[])
        and e.status in ('posted', 'reversed')
        and e.book_id = ${statementBookExpr(orgId)}
+       and ${excludePeriodEndJournals(sql`e.origin`)}
        and e.posting_date <= ${asOf}
        ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowed)}
      group by sub.base_currency
@@ -322,6 +325,7 @@ async function depreciationAmortization(orgId: string, from: string, to: string,
        and a.type in ('expense', 'expense_other', 'expense_deferred')
        and e.status in ('posted', 'reversed')
        and e.book_id = ${statementBookExpr(orgId)}
+       and ${excludePeriodEndJournals(sql`e.origin`)}
        ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowed)}
        and (e.origin = 'depreciation' or exists (
          select 1 from da_accounts d where d.account_id = a.id

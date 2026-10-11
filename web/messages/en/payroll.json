@@ -1213,7 +1213,60 @@
     "dueOn": "Due {dueDate} · {authority}",
     "apNote": "Remittance bills are ordinary vendor bills:",
     "apLink": "open AP bills",
-    "translated": "Translated to {currency} at the derived consolidated rate"
+    "translated": "Translated to {currency} at the derived consolidated rate",
+    "columns": {
+      "destination": "Destination",
+      "due": "Due",
+      "components": "Components",
+      "employees": "Employees",
+      "gross": "Gross payroll",
+      "actions": "Actions"
+    }
+  },
+  "workLocations": {
+    "title": "Payroll work locations",
+    "description": "Record work-location evidence for employments without approved dated time entries. Committed payroll periods are locked.",
+    "record": "Record allocation",
+    "update": "Update allocation",
+    "editorDescription": "Use approved time entries where they cover the period. Enter an HR allocation for untimed work, with its source and reason.",
+    "loadFailed": "Could not load payroll work locations.",
+    "saveFailed": "Could not save the payroll work location.",
+    "recorded": "Payroll work location recorded.",
+    "updated": "Payroll work location updated.",
+    "empty": "Choose an employee and period to review saved allocations.",
+    "emptyScope": "No allocations are recorded for this employee and period.",
+    "shareValue": "{share} share",
+    "daysValue": "{days, plural, one {# day} other {# days}}",
+    "columns": {
+      "region": "Region",
+      "measure": "Period input",
+      "source": "Evidence type",
+      "document": "Evidence document",
+      "reason": "Reason"
+    },
+    "sources": {
+      "hr_records": "HR records",
+      "certificate": "Certificate",
+      "adequate_records": "Adequate records"
+    },
+    "filters": {
+      "employment": "Employee",
+      "clearPeriod": "Clear period"
+    },
+    "fields": {
+      "employment": "Employee and legal employer",
+      "chooseEmployment": "Choose employment",
+      "periodStart": "Period start",
+      "periodEnd": "Period end",
+      "region": "Region",
+      "regionPlaceholder": "State or jurisdiction code",
+      "subregion": "Subregion (optional)",
+      "measure": "Allocation measure",
+      "serviceDays": "Service days",
+      "wageShare": "Wage share (0–1)",
+      "wageShareOption": "Wage share",
+      "evidenceDocument": "Evidence document ID (optional)"
+    }
   },
   "yearEnd": {
     "title": "Year-end",

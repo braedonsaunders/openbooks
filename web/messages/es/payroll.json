@@ -1213,7 +1213,60 @@
     "dueOn": "Vence el {dueDate} · {authority}",
     "apNote": "Las facturas de remesa son facturas de proveedor ordinarias:",
     "apLink": "abrir facturas de proveedor",
-    "translated": "Convertido a {currency} al tipo consolidado derivado"
+    "translated": "Convertido a {currency} al tipo consolidado derivado",
+    "columns": {
+      "destination": "Destino",
+      "due": "Vencimiento",
+      "components": "Componentes",
+      "employees": "Empleados",
+      "gross": "Nómina bruta",
+      "actions": "Acciones"
+    }
+  },
+  "workLocations": {
+    "title": "Lugares de trabajo de nómina",
+    "description": "Registre la evidencia del lugar de trabajo para empleos sin registros de tiempo fechados y aprobados. Los periodos de nómina confirmados están bloqueados.",
+    "record": "Registrar asignación",
+    "update": "Actualizar asignación",
+    "editorDescription": "Use los registros de tiempo aprobados cuando cubran el periodo. Introduzca una asignación de RR. HH. para el trabajo sin registro de tiempo, con su origen y motivo.",
+    "loadFailed": "No se pudieron cargar los lugares de trabajo de nómina.",
+    "saveFailed": "No se pudo guardar el lugar de trabajo de nómina.",
+    "recorded": "Lugar de trabajo de nómina registrado.",
+    "updated": "Lugar de trabajo de nómina actualizado.",
+    "empty": "Elija un empleado y un periodo para revisar las asignaciones guardadas.",
+    "emptyScope": "No hay asignaciones registradas para este empleado y periodo.",
+    "shareValue": "Proporción {share}",
+    "daysValue": "{days, plural, one {# día} other {# días}}",
+    "columns": {
+      "region": "Región",
+      "measure": "Dato del periodo",
+      "source": "Tipo de evidencia",
+      "document": "Documento de evidencia",
+      "reason": "Motivo"
+    },
+    "sources": {
+      "hr_records": "Registros de RR. HH.",
+      "certificate": "Certificado",
+      "adequate_records": "Registros adecuados"
+    },
+    "filters": {
+      "employment": "Empleado",
+      "clearPeriod": "Borrar periodo"
+    },
+    "fields": {
+      "employment": "Empleado y empleador legal",
+      "chooseEmployment": "Elegir empleo",
+      "periodStart": "Inicio del periodo",
+      "periodEnd": "Fin del periodo",
+      "region": "Región",
+      "regionPlaceholder": "Código de estado o jurisdicción",
+      "subregion": "Subregión (opcional)",
+      "measure": "Medida de asignación",
+      "serviceDays": "Días de servicio",
+      "wageShare": "Proporción salarial (0–1)",
+      "wageShareOption": "Proporción salarial",
+      "evidenceDocument": "ID del documento de evidencia (opcional)"
+    }
   },
   "yearEnd": {
     "title": "Cierre anual",

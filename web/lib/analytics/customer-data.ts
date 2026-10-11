@@ -5,6 +5,7 @@ import { customerLedgerMonths } from "./customer-ledger-months";
 import { subsidiaryVisibleFilter } from "../subsidiaries";
 import { fiscalStartMonth } from "../fiscal";
 import { fiscalYearOf } from "@openbooks/reports";
+import { excludePeriodEndJournals } from "@openbooks/engine/records/period-end-origins";
 import { statementBookExpr } from "../gl-summary";
 import { REVENUE_TYPES } from "../reports/statements";
 import { getMoneyFormatter } from '../money-server'
@@ -575,6 +576,7 @@ export async function customerProfitability(
        where posting_date >= ${from} and posting_date <= ${to}
          ${orgId ? sql`and org_id = ${orgId}` : sql``}
          and status in ('posted', 'reversed') and book_id = ${statementBookExpr(orgId)}
+         and ${excludePeriodEndJournals(sql`origin`)}
     )
     select pr.customer_id as customer_id,
       coalesce(cp.display_name, 'Unknown') as customer_name,
@@ -1269,6 +1271,7 @@ async function readCustomerData(
            and posting_date >= ${pFrom} and posting_date <= ${to}
            and status in ('posted', 'reversed')
            and book_id = ${statementBookExpr(orgId)}
+           and ${excludePeriodEndJournals(sql`origin`)}
       )
       -- One row per (party, functional, posting day): each bucket below
       -- filters on that day, so translating the row at its own date prices
@@ -1332,6 +1335,7 @@ async function readCustomerData(
          where org_id = ${orgId}
            and status in ('posted', 'reversed')
            and book_id = ${statementBookExpr(orgId)}
+           and ${excludePeriodEndJournals(sql`origin`)}
       )
       select coalesce(l.party_id, rc.customer_id) as id,
         sub.base_currency as func,

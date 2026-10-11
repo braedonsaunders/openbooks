@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 import { db, withOrgContext, type SqlExecutor } from "../platform/db.ts";
 import { isIsoCalendarDate } from "../platform/business-date.ts";
+import { excludePeriodEndJournals } from "../records/period-end-origins.ts";
 import { addMoney, cmpMoney, negMoney, subMoney, sumMoney, ZERO_MONEY, type Money } from "../money/brands.ts";
 import { NonprofitError, fundFeatureOff } from "./errors.ts";
 import {
@@ -350,6 +351,7 @@ async function loadPositionData(scope: PositionScopeInput, runner: SqlExecutor):
      where jl.org_id = ${scope.orgId}
        and je.book_id = ${bookId}
        and je.status in ('posted', 'reversed')
+       and ${excludePeriodEndJournals(sql`je.origin`)}
        and je.posting_date <= ${scope.asOf}::date
        and (${scope.fundId ?? null}::uuid is null or jl.extra_dims->>'fund' = ${scope.fundId ?? null})
      order by je.posting_date, jl.entry_id, jl.line_number, jl.id

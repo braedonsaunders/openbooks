@@ -228,6 +228,7 @@ export async function loadGeneralLedger(
         mode: 'balance',
         dims,
         bookId: selectedBook.id,
+        includePeriodEndJournals: true,
       },
       closing: m(a.closing),
       closingTone: decimalCmp(a.closing, '0') < 0 ? 'negative' : 'default',
@@ -239,6 +240,7 @@ export async function loadGeneralLedger(
         mode: 'balance',
         dims,
         bookId: selectedBook.id,
+        includePeriodEndJournals: true,
       },
       lines: a.lines.map((l, i) => ({
         key: `${l.entryId}-${i}`,

@@ -456,6 +456,7 @@ async function writeEntry(
         subsidiaryIds,
         modules: input.closeModules ?? [],
         allowImportedLocks: input.allowImportedLocks,
+        reversesEntryId: input.reversesEntryId ?? null,
       });
     } catch (error) {
       if (error instanceof CloseError)
@@ -474,6 +475,7 @@ async function writeEntry(
         subsidiaryIds,
         modules: input.closeModules ?? [],
         allowImportedLocks: input.allowImportedLocks,
+        reversesEntryId: input.reversesEntryId ?? null,
       });
     } catch (error) {
       if (!(error instanceof CloseError)) throw error;

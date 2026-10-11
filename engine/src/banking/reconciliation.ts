@@ -5,6 +5,7 @@ import { normalizeAmount } from "./statement-parsers/shared"
 import { sql } from "drizzle-orm"
 import { db, schema, type SqlExecutor, withOrgTransaction } from "../platform/db.ts"
 import { fromUnits, isZero, toUnits } from "../money/money.ts"
+import { excludePeriodEndJournals } from "../records/period-end-origins.ts"
 import { ScopeNotFoundError, subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts"
 import { resolveCoveringPeriod } from "../periods/period-resolution.ts"
 
@@ -169,6 +170,7 @@ async function readPreCoverageHistory(
        and jl.currency = ${recon.currency}
        and je.posting_date <= ${recon.through_date}
        and je.posting_date < ${coverageStart}
+       and ${excludePeriodEndJournals(sql`je.origin`)}
        and (jl.reconciled_at is null or m.journal_line_id is not null)
        and not exists (
          select 1 from reconciliation_matches other

@@ -34,6 +34,7 @@ import {
   proposeFinancialChange,
 } from "../platform/financial-changes.ts";
 import { EQUITY_TYPES } from "../records/account-types.ts";
+import { excludePeriodEndJournals } from "../records/period-end-origins.ts";
 import {
   runOwnershipConsolidationIn,
   withOwnershipSourceTransaction,
@@ -544,7 +545,7 @@ async function scope(
       line_count: string;
       latest: string | null;
     }>(
-      sql`select l.subsidiary_id,l.account_id,sum(l.amount)::text as amount,count(*)::text as line_count,max(e.created_at)::text as latest from journal_entries e join journal_lines l on l.org_id=e.org_id and l.entry_id=e.id where e.org_id=${orgId} and e.book_id=${book[0]!.id} and e.status in('posted','reversed') and e.posting_date<=${input.effectiveOn} and l.subsidiary_id=any(${uuidArray(requiredSubsidiaryIds)}::uuid[]) group by l.subsidiary_id,l.account_id order by l.subsidiary_id,l.account_id`,
+      sql`select l.subsidiary_id,l.account_id,sum(l.amount)::text as amount,count(*)::text as line_count,max(e.created_at)::text as latest from journal_entries e join journal_lines l on l.org_id=e.org_id and l.entry_id=e.id where e.org_id=${orgId} and e.book_id=${book[0]!.id} and e.status in('posted','reversed') and ${excludePeriodEndJournals(sql`e.origin`)} and e.posting_date<=${input.effectiveOn} and l.subsidiary_id=any(${uuidArray(requiredSubsidiaryIds)}::uuid[]) group by l.subsidiary_id,l.account_id order by l.subsidiary_id,l.account_id`,
     )
   ).rows;
   const rates = (
@@ -605,7 +606,7 @@ async function measure(
       name: string;
       amount: string;
     }>(
-      sql`select l.subsidiary_id,l.account_id,a.type,a.name,sum(l.amount)::text as amount from journal_entries e join journal_lines l on l.org_id=e.org_id and l.entry_id=e.id join accounts a on a.org_id=l.org_id and a.id=l.account_id where e.org_id=${orgId} and e.book_id=${s.bookId} and e.status in('posted','reversed') and e.posting_date<=${input.effectiveOn} and l.subsidiary_id=any(${uuidArray(s.family)}::uuid[]) and a.type not in('income','income_other','cogs','expense','expense_other','expense_deferred','equity') group by l.subsidiary_id,l.account_id,a.type,a.name order by l.subsidiary_id,l.account_id`,
+      sql`select l.subsidiary_id,l.account_id,a.type,a.name,sum(l.amount)::text as amount from journal_entries e join journal_lines l on l.org_id=e.org_id and l.entry_id=e.id join accounts a on a.org_id=l.org_id and a.id=l.account_id where e.org_id=${orgId} and e.book_id=${s.bookId} and e.status in('posted','reversed') and ${excludePeriodEndJournals(sql`e.origin`)} and e.posting_date<=${input.effectiveOn} and l.subsidiary_id=any(${uuidArray(s.family)}::uuid[]) and a.type not in('income','income_other','cogs','expense','expense_other','expense_deferred','equity') group by l.subsidiary_id,l.account_id,a.type,a.name order by l.subsidiary_id,l.account_id`,
     )
   ).rows;
   const netAssetBalances: LossOfControlBalance[] = balances.map((l) => ({
@@ -744,7 +745,7 @@ async function measure(
     let attributable = "0";
     const familyBooks = (
       await tx.execute<{ subsidiary_id: string; amount: string }>(
-        sql`select l.subsidiary_id,sum(l.amount)::text as amount from journal_entries e join journal_lines l on l.org_id=e.org_id and l.entry_id=e.id where e.org_id=${orgId} and e.book_id=${s.bookId} and e.status in('posted','reversed') and e.posting_date<=${input.effectiveOn} and l.subsidiary_id=any(${uuidArray(s.family)}::uuid[]) and l.account_id=${o.accountId} group by l.subsidiary_id`,
+        sql`select l.subsidiary_id,sum(l.amount)::text as amount from journal_entries e join journal_lines l on l.org_id=e.org_id and l.entry_id=e.id where e.org_id=${orgId} and e.book_id=${s.bookId} and e.status in('posted','reversed') and ${excludePeriodEndJournals(sql`e.origin`)} and e.posting_date<=${input.effectiveOn} and l.subsidiary_id=any(${uuidArray(s.family)}::uuid[]) and l.account_id=${o.accountId} group by l.subsidiary_id`,
       )
     ).rows;
     for (const row of familyBooks)

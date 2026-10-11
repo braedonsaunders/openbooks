@@ -4,6 +4,7 @@ import { db } from '@openbooks/engine/platform/db'
 import { addCalendarDays, addMonthsClamped, calendarDaysBetween } from '@openbooks/engine/platform/business-date/module'
 import { declaredPeriodColumns, declaredPeriodsCover, declaredQuarterColumns, fiscalMonthsBetween, fiscalQuartersBetween } from '@openbooks/reports'
 import { resolveOrgId } from './org-scope'
+import { excludePeriodEndJournals } from '@openbooks/engine/records/period-end-origins'
 import { glActivityBuckets, glSummaryEligibleDims, bucketSubsidiaryFilter, statementBookExpr, type ActivityBoundary } from './gl-summary'
 import { MissingRatesError } from './consolidation'
 import { ASSET_TYPES, EQUITY_TYPES, LIABILITY_TYPES, PNL_TYPES } from './account-types'
@@ -995,6 +996,7 @@ export async function statementMatrix(opts: {
       with e as materialized (
         select id, posting_date from journal_entries e
          where e.org_id = ${orgId} and e.status in ('posted', 'reversed') and ${baseDate} ${baseBook}
+           and ${excludePeriodEndJournals(sql`e.origin`)}
       )${cashCtes}
       select a.id, a.parent_id, a.number, a.name, a.type, a.is_summary, ${filterCols}
         from accounts a

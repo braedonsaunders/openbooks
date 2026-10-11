@@ -3678,6 +3678,11 @@
       "intercompany-transfer-pricing": {
         "title": "Precios de transferencia intercompañía",
         "description": "Precios con fecha de vigencia para los bienes que una entidad despacha a otra: un nivel de precios o el costo más un margen."
+      },
+      "period-end-journal-policies": {
+        "title": "Asientos de cierre del ejercicio",
+        "singular": "política de asientos de cierre",
+        "description": "Cómo registra el cierre anual sus asientos: la cuenta de resultados acumulados, una cuenta de resumen de resultados opcional, los asientos de cierre de balance y de apertura, el periodo de registro y las dimensiones que conservan las líneas de cierre. Cada versión rige los ejercicios que terminan en su fecha de vigencia o después."
       }
     },
     "fields": {
@@ -4316,7 +4321,17 @@
       "buyerSubsidiaryId": "Subsidiaria compradora",
       "markupPercent": "Margen %",
       "revenueAccountId": "Cuenta de ingresos intercompañía",
-      "costAccountId": "Cuenta de costos intercompañía"
+      "costAccountId": "Cuenta de costos intercompañía",
+      "closingMethod": "Método de cierre",
+      "retainedEarningsAccountId": "Cuenta de resultados acumulados",
+      "incomeSummaryAccountId": "Cuenta de resumen de resultados",
+      "balanceSheetJournals": "Asientos de cierre de balance y de apertura",
+      "postingPeriod": "Periodo de registro",
+      "preserveDepartments": "Conservar departamentos",
+      "preserveClasses": "Conservar clases",
+      "preserveLocations": "Conservar ubicaciones",
+      "preserveProjects": "Conservar proyectos",
+      "preserveSegments": "Conservar segmentos personalizados"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Días entre el tipo utilizable más reciente y el cierre del período a partir de los cuales la revaluación y la consolidación rechazan el tipo. Los tipos de cierre se cuentan desde la fecha del tipo al contado de cierre; los promedio, desde la cotización más reciente promediada. Valor predeterminado sin política: 31 días.",
@@ -4504,7 +4519,12 @@
       "transferPricingMarkup": "Se suma al costo de la entidad que despacha. 10 significa costo más 10 %.",
       "transferPricingRevenue": "Los ingresos intercompañía de la entidad que despacha. Debe estar marcada como Eliminar en la consolidación.",
       "transferPricingCost": "El costo de la entidad vendedora al precio de transferencia. Debe estar marcada como Eliminar en la consolidación.",
-      "intercompanyControlAccount": "Las facturas intercompañía hacia o desde los terceros representantes contabilizan sus partidas abiertas en estas cuentas. Cada una debe estar marcada como Eliminar en la consolidación."
+      "intercompanyControlAccount": "Las facturas intercompañía hacia o desde los terceros representantes contabilizan sus partidas abiertas en estas cuentas. Cada una debe estar marcada como Eliminar en la consolidación.",
+      "periodEndEffectiveFrom": "Los ejercicios que terminan en esta fecha o después se cierran con esta versión. No puede aplicarse a un ejercicio ya cerrado con asientos de cierre.",
+      "periodEndClosingMethod": "Directamente: los ingresos y gastos se cierran contra resultados acumulados. A través de una cuenta de resumen de resultados: se cierran contra esa cuenta, que después se cierra contra resultados acumulados.",
+      "periodEndPostingPeriod": "El último periodo ordinario del ejercicio, o el periodo de ajuste del ejercicio cuando el calendario fiscal lo tiene.",
+      "periodEndBalanceSheetJournals": "Además, saldar todas las cuentas de balance en la fecha de cierre y restablecer los mismos saldos el primer día del ejercicio siguiente.",
+      "periodEndPreserveSegments": "Los segmentos de cuadre se conservan siempre, para que cada valor de segmento quede cuadrado por sí mismo."
     },
     "options": {
       "withholdingCondominiumPayer": "Pagador: comunidad de propietarios",
@@ -5318,6 +5338,14 @@
       "transferPricingMethod": {
         "price_level": "Nivel de precios",
         "cost_plus": "Costo más margen"
+      },
+      "periodEndClosingMethod": {
+        "retained_earnings": "Directamente a resultados acumulados",
+        "income_summary": "A través de una cuenta de resumen de resultados"
+      },
+      "periodEndPostingPeriod": {
+        "last_period": "Último periodo del ejercicio",
+        "adjustment_period": "Periodo de ajuste"
       }
     },
     "laborCosting": {
@@ -6433,7 +6461,8 @@
       "scheduleBoardBookingHelp": "Las asignaciones de jornada completa usan este horario laboral en la zona horaria del tablero.",
       "scheduleBoardAutomation": "Automatización",
       "scheduleBoardAutomationHelp": "Lo que ocurre después de publicar una asignación en este tablero.",
-      "intercompanyControlAccounts": "Cuentas por cobrar y por pagar intercompañía"
+      "intercompanyControlAccounts": "Cuentas por cobrar y por pagar intercompañía",
+      "periodEndDimensions": "Dimensiones conservadas en las líneas de cierre"
     },
     "segmentValues": {
       "builtinLink": "Abrir {name}",
@@ -8105,6 +8134,10 @@
     "crossSubsidiaryFulfillment": {
       "title": "Cumplimiento entre subsidiarias",
       "description": "Cumpla los pedidos de venta de una entidad desde el almacén de otra, con un cargo intercompañía al precio de transferencia."
+    },
+    "periodEndJournals": {
+      "title": "Asientos de cierre del ejercicio",
+      "description": "Registre asientos explícitos de cierre del ejercicio en las jurisdicciones que los exigen: ingresos y gastos a resultados acumulados, opcionalmente a través de una cuenta de resumen de resultados, con asientos opcionales de cierre de balance y de apertura del ejercicio siguiente. Los estados financieros calculan los resultados acumulados en cualquier caso."
     }
   },
   "backupsManager": {

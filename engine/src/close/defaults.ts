@@ -137,6 +137,21 @@ const DEFAULT_STEPS = [
     evidence: true,
   },
   {
+    // Year-end only: materializes on the last regular period's and the
+    // adjustment period's runs, and is complete on whichever of the two the
+    // period-end journal policy does not post into.
+    key: "period-end-journals",
+    title: "close.defaultSteps.period-end-journals.title",
+    description: "close.defaultSteps.period-end-journals.description",
+    workstream: "gl",
+    taskType: "journal",
+    completionMode: "computed",
+    gateType: "hard",
+    offset: 3,
+    evidence: true,
+    applicability: { periodTypes: ["year", "adjustment"] },
+  },
+  {
     key: "variance-review",
     title: "close.defaultSteps.variance-review.title",
     description: "close.defaultSteps.variance-review.description",
@@ -225,6 +240,15 @@ const DEFAULT_DEPENDENCIES: Array<[string, string]> = [
   ["variance-review", "recognition-posted"],
   ["variance-review", "unbilled-revenue-accrued"],
   ["variance-review", "consolidation"],
+  ["period-end-journals", "drafts-cleared"],
+  ["period-end-journals", "fx-revalued"],
+  ["period-end-journals", "depreciation-posted"],
+  ["period-end-journals", "recognition-posted"],
+  ["period-end-journals", "unbilled-revenue-accrued"],
+  ["period-end-journals", "intercompany-balanced"],
+  ["period-end-journals", "consolidation"],
+  ["variance-review", "period-end-journals"],
+  ["financial-review", "period-end-journals"],
   ["controller-approval", "variance-review"],
   ["lock-subledgers", "controller-approval"],
   ["lock-subledgers", "financial-review"],
@@ -294,13 +318,20 @@ export async function ensureCloseDefaults(
         insert into close_blueprint_steps
           (org_id, blueprint_id, key, title, description, workstream, task_type,
            completion_mode, gate_type, due_offset_business_days, evidence_required,
-           sort_order, created_by, updated_by)
+           sort_order, applicability, created_by, updated_by)
         values (${orgId}, ${blueprintId}, ${step.key}, ${step.title}, ${step.description},
                 ${step.workstream}, ${step.taskType}, ${step.completionMode}, ${step.gateType},
-                ${step.offset}, ${step.evidence}, ${(index + 1) * 10}, ${actorId ?? null}, ${actorId ?? null})
+                ${step.offset}, ${step.evidence}, ${(index + 1) * 10},
+                ${JSON.stringify("applicability" in step ? step.applicability : {})}::jsonb,
+                ${actorId ?? null}, ${actorId ?? null})
         on conflict (blueprint_id, key) do update set
           title = excluded.title, description = excluded.description,
-          sort_order = excluded.sort_order, updated_at = now()
+          sort_order = excluded.sort_order,
+          -- Declared year-end applicability is the system step's contract;
+          -- steps that declare none keep their stored applicability.
+          applicability = case when excluded.applicability = '{}'::jsonb
+                               then close_blueprint_steps.applicability else excluded.applicability end,
+          updated_at = now()
         where close_blueprint_steps.org_id = ${orgId}
         returning id`));
         stepIds.set(step.key, inserted.rows[0]!.id);

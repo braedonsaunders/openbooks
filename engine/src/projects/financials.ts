@@ -2,6 +2,7 @@ import { sql, type SQL } from 'drizzle-orm'
 import { db, orgContext, withOrgTransaction } from '../platform/db.ts'
 import { BUILTIN_PROJECT_TYPES, type FinancialProfile, type CostSource, type OverheadSource } from '@openbooks/schema'
 import { resolveAccountGroups } from '../records/account-groups.ts'
+import { excludePeriodEndJournals } from '../records/period-end-origins.ts'
 import { flowTranslation, translateFlowAmount } from '../fx/translation.ts'
 import { add, cmp, fromUnits, isZero, mul, mulDecimal, mulPercent, neg, normalizeMoney, roundDiv, signedDocumentAmount, sum, toUnits } from '../money/money.ts'
 import { directSubcontractOpenCommitment } from './subcontract-commitments.ts'
@@ -284,6 +285,7 @@ async function resolveProjectFinancialsInSnapshot(
         left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id
        where l.org_id = ${orgId} and l.project_id = ${projectId} and e.status in ('posted', 'reversed')
          and ${primaryBookSql(orgId)}
+         and ${excludePeriodEndJournals(sql`e.origin`)}
        group by 1`))
   // committedCost — unbilled portion (by line amount) of open (approved)
   // orders. Uses amount × unbilled-fraction rather than qty×unit_price, since
@@ -408,6 +410,7 @@ async function resolveProjectFinancialsInSnapshot(
              left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id
            where l.org_id = ${orgId} and l.project_id = ${projectId} and e.status in ('posted', 'reversed') and e.origin = 'labor_burden'
              and ${primaryBookSql(orgId)}
+             and ${excludePeriodEndJournals(sql`e.origin`)}
            group by 1`)
       : profile.laborCost.source === 'time_rate'
         ? db.execute(sql`select coalesce(te.cost_rate_currency, crs.base_currency, o.base_currency) as func,
@@ -437,6 +440,7 @@ async function resolveProjectFinancialsInSnapshot(
              left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id
             where l.org_id = ${orgId} and l.project_id = ${projectId} and e.status in ('posted', 'reversed')
               and ${primaryBookSql(orgId)}
+              and ${excludePeriodEndJournals(sql`e.origin`)}
             group by 1`)
           : profile.laborCost.source === 'in_actual_cost' || profile.laborCost.source === 'none'
             ? db.execute(sql`select 0 as labor`)
@@ -469,6 +473,7 @@ async function resolveProjectFinancialsInSnapshot(
            left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id
           where l.org_id = ${orgId} and l.project_id = ${projectId} and e.status in ('posted', 'reversed')
             and ${primaryBookSql(orgId)}
+            and ${excludePeriodEndJournals(sql`e.origin`)}
           group by 1`))
   // project approved labor hours (base for per-hour / rate-engine overhead).
   const hoursRes = await (db.execute(sql`select coalesce(sum(te.hours), 0) as total,
@@ -486,6 +491,7 @@ async function resolveProjectFinancialsInSnapshot(
         left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id
        where l.org_id = ${orgId} and l.project_id = ${projectId} and e.status in ('posted', 'reversed')
          and ${primaryBookSql(orgId)}
+         and ${excludePeriodEndJournals(sql`e.origin`)}
          and ${costPredicate(profile.actualCost, costIds)}
        group by a.id, a.number, a.name, a.type, sub.base_currency having coalesce(sum(l.amount),0) <> 0 order by amount desc`))
   // documents on the project (transactions tab). Row amounts arrive in
@@ -985,6 +991,7 @@ export async function resolveProjectActualCosts(
        where l.org_id = ${orgId} and l.project_id = any(${`{${ids.join(',')}}`}::uuid[])
          and e.status in ('posted', 'reversed')
          and ${primaryBookSql(orgId)}
+         and ${excludePeriodEndJournals(sql`e.origin`)}
        group by 1, 2, 3, 4`),
     db.execute<{ project_id: string; amount: string }>(sql`
       select project_id, coalesce(sum(amount), 0) as amount

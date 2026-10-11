@@ -222,6 +222,10 @@
     "intercompany-unreconciled": {
       "title": "法人間残高が一致しません",
       "message": "{count, plural, one {# 組の法人間残高が一致していません。締め前に法人間残高照合を確認してください。} other {# 組の法人間残高が一致していません。締め前に法人間残高照合を確認してください。}}"
+    },
+    "period-end-journals-pending": {
+      "title": "期末決算仕訳が最新ではありません",
+      "message": "{count, plural, other {#件の法人またはポリシー条件で、期末決算仕訳の作成または修正が必要です。}}"
     }
   },
   "severity": {
@@ -434,6 +438,10 @@
     "commerce-complete": {
       "title": "コマースの完全性を証明する",
       "description": "すべての店舗売上は元帳にあります。注文は店舗と一致し、精算は転記済み、クリアリングはゼロ、負債の繰越は一致しています。"
+    },
+    "period-end-journals": {
+      "title": "期末決算仕訳を計上",
+      "description": "明示的な締め仕訳で会計年度の収益・費用勘定を利益剰余金へ締め、ポリシーが求める場合は翌年度を開始します。"
     }
   },
   "setup": {
@@ -961,5 +969,78 @@
     "posted": "未請求収益の見越計上を転記しました。",
     "postFailed": "見越計上を転記できませんでした。",
     "postPermission": "見越計上の転記には仕訳の転記権限が必要です。"
+  },
+  "periodEndJournals": {
+    "loading": "期末決算仕訳を計算しています…",
+    "loadFailed": "期末決算仕訳を計算できませんでした。",
+    "retry": "再試行",
+    "scope": "{year}会計年度（{from}～{to}）・{book}",
+    "closingPeriod": "締め仕訳の計上期間：{period}",
+    "openingPeriod": "開始仕訳の計上期間：{period}",
+    "policyRetainedEarnings": "収益と費用を{retained}へ締めます",
+    "policyIncomeSummary": "収益と費用を{summary}経由で{retained}へ締めます",
+    "policyBalanceSheet": "貸借対照表の締め仕訳と開始仕訳あり",
+    "policyEffective": "ポリシー発効日：{date}",
+    "blocked": "作成前に解決してください",
+    "openPolicy": "期末決算仕訳ポリシーを開く",
+    "empty": "この会計年度に締める取引がある法人はありません。",
+    "status": {
+      "not_generated": "未作成",
+      "current": "最新",
+      "stale": "再作成が必要",
+      "nothing_to_close": "締める対象なし",
+      "blocked": "準備未完了"
+    },
+    "fiscalYearEarnings": "当年度利益",
+    "priorUnclosedEarnings": "未締めの過年度利益",
+    "review": "仕訳を確認",
+    "journals": "{count, plural, other {#件の仕訳}}",
+    "kinds": {
+      "income_statement": "損益計算書の締め",
+      "income_summary": "損益集計勘定の締め",
+      "balance_sheet": "貸借対照表の締め",
+      "opening": "開始残高"
+    },
+    "columns": {
+      "account": "勘定",
+      "dimensions": "ディメンション",
+      "debit": "借方",
+      "credit": "貸方",
+      "entity": "法人",
+      "generation": "世代",
+      "status": "ステータス",
+      "generated": "作成",
+      "reversed": "取消",
+      "journals": "仕訳"
+    },
+    "dimensions": {
+      "department": "部門",
+      "class": "クラス",
+      "location": "拠点",
+      "project": "プロジェクト",
+      "segment": "セグメント"
+    },
+    "generate": "期末決算仕訳を作成",
+    "reverse": "期末決算仕訳を取り消す",
+    "generateReasonTitle": "期末決算仕訳を作成する",
+    "reverseReasonTitle": "期末決算仕訳を取り消す",
+    "reasonHint": "理由を記入してください。理由は仕訳とともに監査証跡に保存されます（10～500文字）。",
+    "reasonLabel": "理由",
+    "generated": "{count, plural, other {#件の法人の期末決算仕訳を計上しました。}}",
+    "unchanged": "期末決算仕訳はすでに最新です。計上は行われませんでした。",
+    "partiallyRefused": "{count, plural, other {#件の法人の準備が完了していません。}}",
+    "reversed": "{count, plural, other {#件の法人の期末決算仕訳を取り消しました。}}",
+    "generateFailed": "期末決算仕訳を作成できませんでした。",
+    "reverseFailed": "期末決算仕訳を取り消せませんでした。",
+    "runPermission": "期末決算仕訳の作成には締め実行の権限が必要です。",
+    "history": "履歴",
+    "generations": "{count, plural, other {#世代}}",
+    "historyEmpty": "この会計年度の期末決算仕訳はまだ作成されていません。",
+    "setStatus": {
+      "posted": "計上済み",
+      "reversed": "取消済み"
+    },
+    "by": "{name}（{at}）",
+    "system": "システム"
   }
 }

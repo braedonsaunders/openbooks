@@ -3753,6 +3753,11 @@
       "intercompany-transfer-pricing": {
         "title": "Preços de transferência entre empresas",
         "description": "Preços com vigência definida para mercadorias entregues por uma entidade para outra: tabela de preços ou custo acrescido de margem."
+      },
+      "period-end-journal-policies": {
+        "title": "Lançamentos de encerramento do exercício",
+        "singular": "política de lançamentos de encerramento",
+        "description": "Como o encerramento anual registra seus lançamentos: a conta de lucros acumulados, uma conta de apuração do resultado opcional, os lançamentos de encerramento do balanço e de abertura, o período de registro e as dimensões mantidas nas linhas de encerramento. Cada versão rege os exercícios que terminam na data de vigência ou depois."
       }
     },
     "fields": {
@@ -4391,7 +4396,17 @@
       "buyerSubsidiaryId": "Subsidiária compradora",
       "markupPercent": "% de markup",
       "revenueAccountId": "Conta de receita entre empresas",
-      "costAccountId": "Conta de custo entre empresas"
+      "costAccountId": "Conta de custo entre empresas",
+      "closingMethod": "Método de encerramento",
+      "retainedEarningsAccountId": "Conta de lucros acumulados",
+      "incomeSummaryAccountId": "Conta de apuração do resultado",
+      "balanceSheetJournals": "Lançamentos de encerramento do balanço e de abertura",
+      "postingPeriod": "Período de registro",
+      "preserveDepartments": "Manter departamentos",
+      "preserveClasses": "Manter classes",
+      "preserveLocations": "Manter locais",
+      "preserveProjects": "Manter projetos",
+      "preserveSegments": "Manter segmentos personalizados"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Dias entre a taxa utilizável mais recente e o fim do período a partir dos quais a reavaliação e a consolidação recusam a taxa. Taxas de fechamento contam a partir da data da taxa à vista de fim de período; taxas médias, a partir da cotação mais recente incluída na média. Padrão sem política: 31 dias.",
@@ -4579,7 +4594,12 @@
       "transferPricingMarkup": "Acrescido ao custo da entidade que entrega. 10 significa custo mais 10%.",
       "transferPricingRevenue": "Receita entre empresas da entidade que entrega. Deve ser marcada para eliminação na consolidação.",
       "transferPricingCost": "Custo da entidade vendedora ao preço de transferência. Deve ser marcado para eliminação na consolidação.",
-      "intercompanyControlAccount": "Faturas e contas das partes representantes registram seus títulos em aberto nestas contas. Cada uma deve ser marcada para eliminação na consolidação."
+      "intercompanyControlAccount": "Faturas e contas das partes representantes registram seus títulos em aberto nestas contas. Cada uma deve ser marcada para eliminação na consolidação.",
+      "periodEndEffectiveFrom": "Os exercícios que terminam nesta data ou depois são encerrados por esta versão. Ela não pode retroagir a um exercício já encerrado por lançamentos de encerramento.",
+      "periodEndClosingMethod": "Diretamente: receitas e despesas são encerradas contra lucros acumulados. Por meio de uma conta de apuração do resultado: são encerradas contra essa conta, que depois é encerrada contra lucros acumulados.",
+      "periodEndPostingPeriod": "O último período regular do exercício, ou o período de ajuste do exercício quando o calendário fiscal tiver um.",
+      "periodEndBalanceSheetJournals": "Também zerar todas as contas do balanço na data de encerramento e restabelecer os mesmos saldos no primeiro dia do exercício seguinte.",
+      "periodEndPreserveSegments": "Os segmentos de balanceamento são sempre mantidos, para que cada valor de segmento continue equilibrado por si só."
     },
     "options": {
       "withholdingCondominiumPayer": "Pagador: condomínio",
@@ -5393,6 +5413,14 @@
       "transferPricingMethod": {
         "price_level": "Nível de preço",
         "cost_plus": "Custo acrescido de margem"
+      },
+      "periodEndClosingMethod": {
+        "retained_earnings": "Diretamente para lucros acumulados",
+        "income_summary": "Por meio de uma conta de apuração do resultado"
+      },
+      "periodEndPostingPeriod": {
+        "last_period": "Último período do exercício",
+        "adjustment_period": "Período de ajuste"
       }
     },
     "payroll": {
@@ -6361,7 +6389,8 @@
       "scheduleBoardBookingHelp": "As alocações de dia inteiro usam este expediente no fuso horário do quadro.",
       "scheduleBoardAutomation": "Automação",
       "scheduleBoardAutomationHelp": "O que acontece depois que uma alocação é publicada neste quadro.",
-      "intercompanyControlAccounts": "Contas a receber e a pagar entre empresas"
+      "intercompanyControlAccounts": "Contas a receber e a pagar entre empresas",
+      "periodEndDimensions": "Dimensões mantidas nas linhas de encerramento"
     },
     "constructionRateEditor": {
       "tab": "Escopo e tarifas"
@@ -8105,6 +8134,10 @@
     "crossSubsidiaryFulfillment": {
       "title": "Atendimento entre subsidiárias",
       "description": "Atenda pedidos de uma entidade pelo depósito de outra com cobrança entre empresas pelo preço de transferência."
+    },
+    "periodEndJournals": {
+      "title": "Lançamentos de encerramento do exercício",
+      "description": "Registre lançamentos explícitos de encerramento do exercício nas jurisdições que os exigem: receitas e despesas para lucros acumulados, opcionalmente por meio de uma conta de apuração do resultado, com lançamentos opcionais de encerramento do balanço e de abertura do exercício seguinte. As demonstrações calculam os lucros acumulados em qualquer caso."
     }
   },
   "backupsManager": {

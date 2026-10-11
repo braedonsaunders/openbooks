@@ -222,6 +222,10 @@
     "intercompany-unreconciled": {
       "title": "Intercompany balances do not agree",
       "message": "{count, plural, one {# intercompany pair has balances that do not agree between its entities. Review the intercompany reconciliation before closing.} other {# intercompany pairs have balances that do not agree between their entities. Review the intercompany reconciliation before closing.}}"
+    },
+    "period-end-journals-pending": {
+      "title": "Period-end journals are not current",
+      "message": "{count, plural, one {# legal entity or policy condition needs its period-end journals generated or corrected.} other {# legal entities or policy conditions need their period-end journals generated or corrected.}}"
     }
   },
   "severity": {
@@ -434,6 +438,10 @@
     "commerce-complete": {
       "title": "Prove commerce complete",
       "description": "Every storefront sale is in the ledger: orders match the storefront, payouts are posted, clearing is zero, and liability roll-forwards tie."
+    },
+    "period-end-journals": {
+      "title": "Post period-end journals",
+      "description": "Close the fiscal year's income and expense accounts into retained earnings with explicit closing journals, and open the next year when the policy requires it."
     }
   },
   "setup": {
@@ -961,5 +969,78 @@
     "posted": "Unbilled revenue accrual posted.",
     "postFailed": "Could not post the accrual.",
     "postPermission": "Posting the accrual requires permission to post journal entries."
+  },
+  "periodEndJournals": {
+    "loading": "Calculating the period-end journals…",
+    "loadFailed": "Could not calculate the period-end journals.",
+    "retry": "Retry",
+    "scope": "Fiscal year {year} ({from} to {to}) · {book}",
+    "closingPeriod": "closing journals post in {period}",
+    "openingPeriod": "opening journals post in {period}",
+    "policyRetainedEarnings": "Income and expense close into {retained}",
+    "policyIncomeSummary": "Income and expense close through {summary} into {retained}",
+    "policyBalanceSheet": "with balance-sheet closing and opening journals",
+    "policyEffective": "policy effective {date}",
+    "blocked": "Resolve before generating",
+    "openPolicy": "Open the period-end journal policy",
+    "empty": "No legal entity has activity to close in this fiscal year.",
+    "status": {
+      "not_generated": "Not generated",
+      "current": "Current",
+      "stale": "Needs regenerating",
+      "nothing_to_close": "Nothing to close",
+      "blocked": "Not ready"
+    },
+    "fiscalYearEarnings": "Fiscal-year earnings",
+    "priorUnclosedEarnings": "Earlier earnings not yet closed",
+    "review": "Review journals",
+    "journals": "{count, plural, one {# journal} other {# journals}}",
+    "kinds": {
+      "income_statement": "Income statement closing",
+      "income_summary": "Income summary closing",
+      "balance_sheet": "Balance sheet closing",
+      "opening": "Opening balances"
+    },
+    "columns": {
+      "account": "Account",
+      "dimensions": "Dimensions",
+      "debit": "Debit",
+      "credit": "Credit",
+      "entity": "Legal entity",
+      "generation": "Generation",
+      "status": "Status",
+      "generated": "Generated",
+      "reversed": "Reversed",
+      "journals": "Journals"
+    },
+    "dimensions": {
+      "department": "Department",
+      "class": "Class",
+      "location": "Location",
+      "project": "Project",
+      "segment": "Segment"
+    },
+    "generate": "Generate period-end journals",
+    "reverse": "Reverse period-end journals",
+    "generateReasonTitle": "Generate the period-end journals",
+    "reverseReasonTitle": "Reverse the period-end journals",
+    "reasonHint": "Explain why. The reason is kept with the journals in the audit trail (10–500 characters).",
+    "reasonLabel": "Reason",
+    "generated": "{count, plural, one {Period-end journals posted for # legal entity.} other {Period-end journals posted for # legal entities.}}",
+    "unchanged": "The period-end journals are already current; nothing was posted.",
+    "partiallyRefused": "{count, plural, one {# legal entity is not ready.} other {# legal entities are not ready.}}",
+    "reversed": "{count, plural, one {Period-end journals reversed for # legal entity.} other {Period-end journals reversed for # legal entities.}}",
+    "generateFailed": "Could not generate the period-end journals.",
+    "reverseFailed": "Could not reverse the period-end journals.",
+    "runPermission": "Generating period-end journals requires the Close run permission.",
+    "history": "History",
+    "generations": "{count, plural, one {# generation} other {# generations}}",
+    "historyEmpty": "No period-end journals have been generated for this fiscal year.",
+    "setStatus": {
+      "posted": "Posted",
+      "reversed": "Reversed"
+    },
+    "by": "{name} on {at}",
+    "system": "System"
   }
 }

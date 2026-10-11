@@ -10,11 +10,8 @@ import {
   AlertTriangle,
   ArrowUpRight,
   CircleCheck,
-  Download,
   Scale,
-  Plus,
   Trash2,
-  Upload,
 } from 'lucide-react'
 import {
   Badge,
@@ -28,6 +25,7 @@ import {
   cn,
 } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../../../lib/api-error'
+import { useHeaderAction } from '../_ui/use-header-action'
 import { useAppAction } from '../../../../lib/use-app-action'
 import { MoneyInput, moneyFieldError } from '../../../../components/money-input'
 import { RecordTabs } from '../../../../components/module-home/record-tabs'
@@ -241,7 +239,9 @@ export function ParallelRunView({
       : fallback
 
   const [view, setView] = useState<'comparisons' | 'registers'>('comparisons')
-  const [compareOpen, setCompareOpen] = useState(false)
+  // Header actions open these drawers: New comparison (?new=1) and
+  // Tolerances (?tolerances=1).
+  const [compareOpen, setCompareOpen] = useHeaderAction('new')
   const [compareFailure, setCompareFailure] = useState<string | null>(null)
   const [registerId, setRegisterId] = useState('')
   const [payRunDocumentId, setPayRunDocumentId] = useState('')
@@ -253,8 +253,14 @@ export function ParallelRunView({
   const findingsRequest = useRef(0)
   const [employeeFilter, setEmployeeFilter] = useState<string | null>(null)
   const [showMatches, setShowMatches] = useState(false)
-  const [toleranceOpen, setToleranceOpen] = useState(false)
+  const [toleranceOpen, setToleranceOpen] = useHeaderAction('tolerances')
   const [liveTolerances, setLiveTolerances] = useState(tolerances)
+  // A new comparison starts without the previous attempt's refusal.
+  const [compareWasOpen, setCompareWasOpen] = useState(compareOpen)
+  if (compareOpen !== compareWasOpen) {
+    setCompareWasOpen(compareOpen)
+    if (compareOpen) setCompareFailure(null)
+  }
 
   const register = registers.find((row) => row.id === registerId) ?? null
 
@@ -704,64 +710,27 @@ export function ParallelRunView({
   ]
 
   return (
-    <div className="space-y-5">
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 pb-3 dark:border-slate-800">
-        <RecordTabs
-          label={text('workspace.views', 'Parallel run views')}
-          active={view}
-          onChange={setView}
-          tabs={[
-            {
-              key: 'comparisons',
-              label: text('comparisonsTitle', 'Comparisons'),
-              count: comparisons.length,
-            },
-            {
-              key: 'registers',
-              label: text('registersTitle', 'Imported registers'),
-              count: registers.length,
-            },
-          ]}
-        />
-        <div className="flex flex-wrap gap-2">
-          <Button variant="outline" size="sm" asChild>
-            <Link href={'/data/import' as never}>
-              <Upload size={14} aria-hidden />
-              {text('importRegister', 'Import a register')}
-            </Link>
-          </Button>
-          <Button variant="outline" size="sm" asChild>
-            <Link href={'/data/export' as never}>
-              <Download size={14} aria-hidden />
-              {text('export', 'Export')}
-            </Link>
-          </Button>
-          {canManage && (
-            <>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setToleranceOpen(true)}
-              >
-                {text('tolerances', 'Tolerances')} ({liveTolerances.length})
-              </Button>
-              <Button
-                size="sm"
-                disabled={registers.length === 0 || runs.length === 0}
-                onClick={() => {
-                  setCompareFailure(null)
-                  setCompareOpen(true)
-                }}
-              >
-                <Plus size={14} aria-hidden />
-                {text('workspace.newComparison', 'New comparison')}
-              </Button>
-            </>
-          )}
-        </div>
-      </div>
+    <div className="space-y-4">
+      <RecordTabs
+        label={text('workspace.views', 'Parallel run views')}
+        active={view}
+        onChange={setView}
+        tabs={[
+          {
+            key: 'comparisons',
+            label: text('comparisonsTitle', 'Comparisons'),
+            count: comparisons.length,
+          },
+          {
+            key: 'registers',
+            label: text('registersTitle', 'Imported registers'),
+            count: registers.length,
+          },
+        ]}
+      />
       <Drawer
-        open={compareOpen}
+        // Comparing is payroll.manage work; a bare address cannot open it.
+        open={compareOpen && canManage}
         onClose={() => {
           if (!running) setCompareOpen(false)
         }}
@@ -944,24 +913,21 @@ export function ParallelRunView({
       </Drawer>
 
       {/* Comparisons */}
-      <section hidden={view !== 'comparisons'} className="space-y-2">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-200">
-            {text('comparisonsTitle', 'Comparisons')}
-          </h2>
-          <Button variant="ghost" size="sm" asChild>
-            <Link href={'/reports' as never}>
-              {text('openReport', 'Open the reconciliation report')}
-              <ArrowUpRight size={14} aria-hidden />
-            </Link>
-          </Button>
-        </div>
+      <section hidden={view !== 'comparisons'}>
         <PagedTable
           source="payroll_parallel_comparisons"
           rows={comparisons}
           columns={comparisonColumns}
           rowKey={(row) => row.id}
           searchable
+          toolbarAfter={
+            <Button variant="ghost" asChild className="ml-auto">
+              <Link href={'/reports' as never}>
+                {text('openReport', 'Open the reconciliation report')}
+                <ArrowUpRight size={14} aria-hidden />
+              </Link>
+            </Button>
+          }
           pageSize={25}
           rowLabel={(row) => `${row.registerName} · ${row.payRunNumber}`}
           onRowClick={(row) => void openDrawer(row)}
@@ -991,10 +957,7 @@ export function ParallelRunView({
       </section>
 
       {/* Registers */}
-      <section hidden={view !== 'registers'} className="space-y-2">
-        <h2 className="text-sm font-semibold text-slate-700 dark:text-slate-200">
-          {text('registersTitle', 'Imported registers')}
-        </h2>
+      <section hidden={view !== 'registers'}>
         <PagedTable
           source="payroll_parallel_registers"
           rowLabel={(row) => row.name}
@@ -1250,11 +1213,15 @@ export function ParallelRunView({
       </Drawer>
 
       <ToleranceDrawer
-        open={toleranceOpen}
+        open={toleranceOpen && canManage}
         onClose={() => setToleranceOpen(false)}
         slots={slots}
         tolerances={liveTolerances}
-        onChange={setLiveTolerances}
+        onChange={(next) => {
+          setLiveTolerances(next)
+          // The header's Tolerances action states the count in force.
+          router.refresh()
+        }}
         text={text}
         money={money}
       />

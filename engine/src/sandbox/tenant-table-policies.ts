@@ -822,6 +822,11 @@ export const TENANT_TABLE_POLICIES = {
   "intercompany_netting_runs": "skip:no-copy",
   "intercompany_netting_lines": "skip:no-copy",
   "intercompany_fund_transfers": "skip:no-copy",
+  // Period-end journal policy, generations and their journal links travel
+  // with the journal entries they describe.
+  "period_end_journal_policies": "clone:catalog-uuid-rebase",
+  "period_end_journal_sets": "clone:catalog-uuid-rebase",
+  "period_end_journal_entries": "clone:catalog-uuid-rebase",
 } as const satisfies Record<string, "clone:catalog-uuid-rebase" | "clone:parent-filter" | "skip:no-copy">;
 
 export type TenantTablePolicy = (typeof TENANT_TABLE_POLICIES)[keyof typeof TENANT_TABLE_POLICIES];

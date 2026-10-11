@@ -172,6 +172,8 @@ export async function assertPeriodModulesOpen(
     modules: CloseModule[];
     /** Historical source replay may cross source-owned locks, never user locks. */
     allowImportedLocks?: boolean;
+    /** The entry a posting reverses: a period-end generation does not seal the reversal of its own journals. */
+    reversesEntryId?: string | null;
   },
 ): Promise<void> {
   const modules = [...new Set<CloseModule>([...args.modules, "gl"])];
@@ -201,6 +203,48 @@ export async function assertPeriodModulesOpen(
         );
     }
   }
+  await assertPeriodNotSealed(executor, args);
+}
+
+/**
+ * The year-end seal. While a fiscal year's period-end journals stand, the
+ * book and legal entity are closed through that year end: posting into any
+ * period ending on or before it would leave the income accounts open again
+ * behind the closing entries. The rule is the database's
+ * period_end_journal_seal(), the same function the journal_entries storage
+ * guard applies, so the kernel refuses by name exactly what storage refuses.
+ * The remedy is a controlled reopen of the closing period, whose approval
+ * reverses the period-end journals; the refusal carries that period as its
+ * reopen scope.
+ */
+async function assertPeriodNotSealed(
+  executor: SqlExecutor,
+  args: { orgId: string; periodId: string; bookId: string; subsidiaryIds: string[]; reversesEntryId?: string | null },
+): Promise<void> {
+  const subsidiaryIds = [...new Set(args.subsidiaryIds)];
+  const seal = (await executor.execute<{
+    fiscal_year: number;
+    closing_period_id: string;
+    closing_period_name: string;
+    subsidiary_id: string;
+  }>(sql`
+    select s.fiscal_year, s.closing_period_id, p.name as closing_period_name, s.subsidiary_id
+      from period_end_journal_seal(
+             ${args.orgId}, ${args.bookId}, ${args.periodId},
+             ${subsidiaryIds.length ? `{${subsidiaryIds.join(",")}}` : null}::uuid[],
+             ${args.reversesEntryId ?? null}::uuid) s
+      join accounting_periods p on p.org_id = ${args.orgId} and p.id = s.closing_period_id`)).rows[0];
+  if (!seal) return;
+  throw new PeriodClosedError(
+    `GL is closed for this period and accounting book by the period-end journals of fiscal year ${seal.fiscal_year} — request a controlled reopen of ${seal.closing_period_name}, whose approval reverses them, to post here`,
+    {
+      kind: "period-closed",
+      periodId: seal.closing_period_id,
+      bookId: args.bookId,
+      subsidiaryId: seal.subsidiary_id,
+      module: "gl",
+    },
+  );
 }
 
 /**

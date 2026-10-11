@@ -1,6 +1,7 @@
 import 'server-only'
 import { sql, type SQL } from 'drizzle-orm'
 import { db } from '@openbooks/engine/platform/db'
+import { excludePeriodEndJournals } from '@openbooks/engine/records/period-end-origins'
 import { add, cmp, neg, normalizeMoney } from '@openbooks/engine/money/money'
 import { marginPercentText } from './financial-decimal'
 import { subsidiaryVisibleFilter } from './subsidiaries'
@@ -155,6 +156,7 @@ export async function rankProjects(
          and l.project_id in (select id from scoped)
          and e.status in ('posted', 'reversed')
          and e.book_id = (select id from book)
+         and ${excludePeriodEndJournals(sql`e.origin`)}
          ${lineScope}
        group by l.project_id
     ),

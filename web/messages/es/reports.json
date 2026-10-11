@@ -3155,7 +3155,8 @@
       "gift": "Donación",
       "grant": "Subvención",
       "release": "Liberación de restricciones",
-      "manufacturing": "Fabricación"
+      "manufacturing": "Fabricación",
+      "opening": "Apertura"
     },
     "columns": {
       "detail": "Tercero / nota"

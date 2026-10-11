@@ -2,6 +2,7 @@ import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/platform/db";
 import { functionalReportReader } from "./currency-basis";
+import { excludePeriodEndJournals } from "@openbooks/engine/records/period-end-origins";
 import { statementBookExpr } from "../gl-summary";
 import { resolveOrgId } from "../org-scope";
 import { decimalCmp, decimalSum, type ExactDecimal } from "../statement-format";
@@ -147,6 +148,7 @@ export async function projectProfitability(
         from journal_lines l
         join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
           and e.book_id = ${statementBookExpr(orgId, opts.bookId)}
+          and ${excludePeriodEndJournals(sql`e.origin`)}
         join accounts a on a.id = l.account_id and a.org_id = l.org_id
        where l.project_id is not null
          and l.org_id = ${orgId}
@@ -175,6 +177,7 @@ export async function projectProfitability(
         from journal_lines l
         join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
           and e.book_id = ${statementBookExpr(orgId, opts.bookId)}
+          and ${excludePeriodEndJournals(sql`e.origin`)}
         join accounts a on a.id = l.account_id and a.org_id = l.org_id
        where l.project_id is null
          and l.org_id = ${orgId}

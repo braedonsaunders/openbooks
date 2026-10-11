@@ -1539,6 +1539,27 @@ export const TENANT_RETIREMENT_GUARDS = [
     "sha256": "c552a5ad592446e94ee32005ada5b971fcd0a75ea46359b40a1ebc7b1f68e946",
     "newSha256": "aca581caf6ef846a3319eff6c0ec99850823d8f5678fc7e1f6a25f09837d6d08",
     "patch": true
+  },
+  {
+    "name": "period_end_journal_policy_guard",
+    "source": "0684_period_end_journals.sql",
+    "sha256": "c2277350b9bc1efdeccfa8961a7316610f7abea719421bb6981446a58b20b929",
+    "newSha256": "c2277350b9bc1efdeccfa8961a7316610f7abea719421bb6981446a58b20b929",
+    "patch": false
+  },
+  {
+    "name": "period_end_journal_set_guard",
+    "source": "0684_period_end_journals.sql",
+    "sha256": "2b3d68814dad441e2301e8b9eaee04ac9b05d9c4149c11ebf4baa7f6403a3681",
+    "newSha256": "2b3d68814dad441e2301e8b9eaee04ac9b05d9c4149c11ebf4baa7f6403a3681",
+    "patch": false
+  },
+  {
+    "name": "period_end_journal_entry_guard",
+    "source": "0684_period_end_journals.sql",
+    "sha256": "07f9d2d53dd8951b3ada47c1f9847194b1ee03322602a00affa119884fe7eeec",
+    "newSha256": "07f9d2d53dd8951b3ada47c1f9847194b1ee03322602a00affa119884fe7eeec",
+    "patch": false
   }
 ] as const;
 
@@ -2557,6 +2578,24 @@ export const TENANT_RETIREMENT_GUARD_ATTRIBUTES = [
   },
   {
     "name": "payroll_prior_earnings_guard",
+    "config": [
+      "search_path=public,pg_catalog"
+    ]
+  },
+  {
+    "name": "period_end_journal_policy_guard",
+    "config": [
+      "search_path=public,pg_catalog"
+    ]
+  },
+  {
+    "name": "period_end_journal_set_guard",
+    "config": [
+      "search_path=public,pg_catalog"
+    ]
+  },
+  {
+    "name": "period_end_journal_entry_guard",
     "config": [
       "search_path=public,pg_catalog"
     ]
@@ -4093,6 +4132,21 @@ export const TENANT_RETIREMENT_TRIGGER_CONTRACTS = [
     "table": "payroll_prior_earnings",
     "trigger": "payroll_prior_earnings_guard",
     "function": "payroll_prior_earnings_guard"
+  },
+  {
+    "table": "period_end_journal_policies",
+    "trigger": "period_end_journal_policy_guard",
+    "function": "period_end_journal_policy_guard"
+  },
+  {
+    "table": "period_end_journal_sets",
+    "trigger": "period_end_journal_set_guard",
+    "function": "period_end_journal_set_guard"
+  },
+  {
+    "table": "period_end_journal_entries",
+    "trigger": "period_end_journal_entry_guard",
+    "function": "period_end_journal_entry_guard"
   }
 ] as const;
 

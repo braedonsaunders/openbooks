@@ -82,7 +82,7 @@ test('hidden and renamed destinations share one snapshot while local order stays
   assert.equal(groups.flatMap((group) => group.items).find((item) => item.href === '/payroll/runs')!.label, 'Process wages')
 })
 
-test('Payroll shows its daily workflow in order and Year-end only in local More', async () => {
+test('Payroll shows its daily workflow in order and periodic work only in local More', async () => {
   reset()
   const groups = await resolveNav('company-one', () => true, [], (key) => translator(`nav.${key}` as never), (key) => translator.has(`nav.${key}` as never))
   const payroll = groups.flatMap(group => group.items).filter(item => item.subgroup === translator('nav.groups.payroll-work'))
@@ -90,7 +90,8 @@ test('Payroll shows its daily workflow in order and Year-end only in local More'
   assert.deepEqual(payroll.map(item => item.label), ['Overview', 'Pay runs', 'Remittances'])
   const local = await resolveLocalNavigation({user: {orgId: 'company-one'}, permissions: new Set(['*'])} as Parameters<typeof resolveLocalNavigation>[0])
   const tabs = local.groups.find(group => group.some(tab => tab.href === '/payroll'))!
-  assert.equal(tabs.find(tab => tab.href === '/payroll/year-end')?.secondary, true)
+  assert.deepEqual(tabs.filter(tab => !tab.secondary).map(tab => tab.href), ['/payroll', '/payroll/runs', '/payroll/remittances', '/payroll/anomalies', '/payroll/separations'])
+  assert.deepEqual(tabs.filter(tab => tab.secondary).map(tab => tab.href), ['/payroll/year-end', '/payroll/opening-balances', '/payroll/retro', '/payroll/parallel-run', '/payroll/work-locations'])
   assert.equal(tabs[0]!.label, 'Overview')
 })
 
@@ -246,7 +247,8 @@ test('saved People shortcuts disappear from the menu while native module access 
   for (const [, href] of destinations) assert.ok(!hrefs.includes(href), href)
   assert.ok(hrefs.includes('/payroll/remittances'))
   const local = await resolveLocalNavigation({ user: { orgId: 'company-one' }, permissions: new Set(['*']) } as Parameters<typeof resolveLocalNavigation>[0])
-  for (const [, href] of destinations) assert.equal(local.groups.flat().find(tab => tab.href === href)?.secondary, true, href)
+  // People supporting queues stay in More; payroll checks and separations are primary payroll work.
+  for (const [, href] of destinations) assert.equal(local.groups.flat().find(tab => tab.href === href)?.secondary, href.startsWith('/payroll/') ? undefined : true, href)
   const limited = await resolveLocalNavigation({ user: { orgId: 'company-one' }, permissions: new Set(['parties.read']) } as Parameters<typeof resolveLocalNavigation>[0])
   for (const [, href] of destinations) assert.ok(!limited.groups.flat().some(tab => tab.href === href), href)
 })

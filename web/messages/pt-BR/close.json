@@ -222,6 +222,10 @@
     "intercompany-unreconciled": {
       "title": "Os saldos entre empresas divergem",
       "message": "{count, plural, one {# par de empresas tem saldos divergentes entre suas entidades. Revise a conciliação entre empresas antes de fechar.} other {# pares de empresas têm saldos divergentes entre suas entidades. Revise a conciliação entre empresas antes de fechar.}}"
+    },
+    "period-end-journals-pending": {
+      "title": "Os lançamentos de encerramento não estão atualizados",
+      "message": "{count, plural, one {# entidade legal ou condição da política precisa gerar ou corrigir seus lançamentos de encerramento.} other {# entidades legais ou condições da política precisam gerar ou corrigir seus lançamentos de encerramento.}}"
     }
   },
   "severity": {
@@ -434,6 +438,10 @@
     "commerce-complete": {
       "title": "Provar a integridade do commerce",
       "description": "Cada venda da loja está no razão: os pedidos conferem com a loja, os pagamentos estão lançados, a compensação zera e os passivos conferem."
+    },
+    "period-end-journals": {
+      "title": "Registrar os lançamentos de encerramento do exercício",
+      "description": "Encerrar as contas de receitas e despesas do exercício contra lucros acumulados com lançamentos de encerramento explícitos e abrir o exercício seguinte quando a política exigir."
     }
   },
   "setup": {
@@ -961,5 +969,78 @@
     "posted": "Provisão de receita não faturada lançada.",
     "postFailed": "Não foi possível lançar a provisão.",
     "postPermission": "Lançar a provisão requer permissão para lançar lançamentos contábeis."
+  },
+  "periodEndJournals": {
+    "loading": "Calculando os lançamentos de encerramento…",
+    "loadFailed": "Não foi possível calcular os lançamentos de encerramento.",
+    "retry": "Tentar novamente",
+    "scope": "Exercício {year} ({from} a {to}) · {book}",
+    "closingPeriod": "lançamentos de encerramento registrados em {period}",
+    "openingPeriod": "lançamentos de abertura registrados em {period}",
+    "policyRetainedEarnings": "Receitas e despesas encerradas contra {retained}",
+    "policyIncomeSummary": "Receitas e despesas encerradas por meio de {summary} contra {retained}",
+    "policyBalanceSheet": "com lançamentos de encerramento do balanço e de abertura",
+    "policyEffective": "política vigente desde {date}",
+    "blocked": "Resolva antes de gerar",
+    "openPolicy": "Abrir a política de lançamentos de encerramento",
+    "empty": "Nenhuma entidade legal tem movimentação a encerrar neste exercício.",
+    "status": {
+      "not_generated": "Não gerados",
+      "current": "Atualizados",
+      "stale": "Precisam ser gerados novamente",
+      "nothing_to_close": "Nada a encerrar",
+      "blocked": "Não preparada"
+    },
+    "fiscalYearEarnings": "Resultado do exercício",
+    "priorUnclosedEarnings": "Resultados anteriores ainda não encerrados",
+    "review": "Revisar lançamentos",
+    "journals": "{count, plural, one {# lançamento} other {# lançamentos}}",
+    "kinds": {
+      "income_statement": "Encerramento da demonstração do resultado",
+      "income_summary": "Encerramento da apuração do resultado",
+      "balance_sheet": "Encerramento do balanço",
+      "opening": "Saldos de abertura"
+    },
+    "columns": {
+      "account": "Conta",
+      "dimensions": "Dimensões",
+      "debit": "Débito",
+      "credit": "Crédito",
+      "entity": "Entidade legal",
+      "generation": "Geração",
+      "status": "Situação",
+      "generated": "Gerado",
+      "reversed": "Estornado",
+      "journals": "Lançamentos"
+    },
+    "dimensions": {
+      "department": "Departamento",
+      "class": "Classe",
+      "location": "Local",
+      "project": "Projeto",
+      "segment": "Segmento"
+    },
+    "generate": "Gerar lançamentos de encerramento",
+    "reverse": "Estornar lançamentos de encerramento",
+    "generateReasonTitle": "Gerar os lançamentos de encerramento",
+    "reverseReasonTitle": "Estornar os lançamentos de encerramento",
+    "reasonHint": "Explique o motivo. Ele fica registrado com os lançamentos na trilha de auditoria (10 a 500 caracteres).",
+    "reasonLabel": "Motivo",
+    "generated": "{count, plural, one {Lançamentos de encerramento registrados para # entidade legal.} other {Lançamentos de encerramento registrados para # entidades legais.}}",
+    "unchanged": "Os lançamentos de encerramento já estão atualizados; nada foi registrado.",
+    "partiallyRefused": "{count, plural, one {# entidade legal não está preparada.} other {# entidades legais não estão preparadas.}}",
+    "reversed": "{count, plural, one {Lançamentos de encerramento estornados para # entidade legal.} other {Lançamentos de encerramento estornados para # entidades legais.}}",
+    "generateFailed": "Não foi possível gerar os lançamentos de encerramento.",
+    "reverseFailed": "Não foi possível estornar os lançamentos de encerramento.",
+    "runPermission": "Gerar lançamentos de encerramento exige a permissão para executar o fechamento.",
+    "history": "Histórico",
+    "generations": "{count, plural, one {# geração} other {# gerações}}",
+    "historyEmpty": "Nenhum lançamento de encerramento foi gerado para este exercício.",
+    "setStatus": {
+      "posted": "Registrado",
+      "reversed": "Estornado"
+    },
+    "by": "{name} em {at}",
+    "system": "Sistema"
   }
 }

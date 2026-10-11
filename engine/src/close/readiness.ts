@@ -10,6 +10,8 @@ import { sourceEvidencePolicyActive } from "../banking/banking.ts";
 import { defaultPostingSubsidiaryId, loadSubsidiaryContext } from "../organization/subsidiaries.ts";
 import { unbilledAccrualReadiness } from "../projects/unbilled-accrual.ts";
 import { unreconciledIntercompanyCount } from "../intercompany/reconciliation.ts";
+import { periodEndJournalCloseCheck, type PeriodEndCloseCheck } from "./period-end-journals.ts";
+import { excludePeriodEndJournals } from "../records/period-end-origins.ts";
 const nonPostingKindList = () => sql.join(NON_POSTING_DOCUMENT_KINDS.map((k) => sql`${k}`), sql`, `);
 
 type ReadinessCheck = {
@@ -286,6 +288,7 @@ export async function readinessChecks(
                select 1 from journal_lines jl join journal_entries je on je.id=jl.entry_id and je.org_id=jl.org_id
                 where jl.org_id=${orgId} and jl.account_id=a.id and je.period_id=${ctx.period_id}
                   and je.book_id=${ctx.book_id} and je.status in ('posted','reversed') and ${inScope(sql`jl.subsidiary_id`)}
+                  and ${excludePeriodEndJournals(sql`je.origin`)}
              )
              or exists (
                select 1 from journal_lines jl
@@ -293,6 +296,7 @@ export async function readinessChecks(
                join accounting_periods jp on jp.id=je.period_id and jp.org_id=je.org_id
                 where jl.org_id=${orgId} and jl.account_id=a.id and je.book_id=${ctx.book_id}
                   and je.status in ('posted','reversed') and jp.ends_on <= ${ctx.ends_on}
+                  and ${excludePeriodEndJournals(sql`je.origin`)}
                   and ${inScope(sql`jl.subsidiary_id`)}
                 group by jl.subsidiary_id having sum(jl.amount) <> 0
              )
@@ -320,7 +324,7 @@ export async function readinessChecks(
             from journal_lines jl
             join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
            where jl.org_id = ${orgId} and je.book_id = ${ctx.book_id}
-             and je.status in ('posted', 'reversed')
+             and je.status in ('posted', 'reversed') and ${excludePeriodEndJournals(sql`je.origin`)}
              and jl.posting_date <= ${ctx.ends_on} and ${inScope(sql`jl.subsidiary_id`)}
         ) jl on jl.account_id = o.id
         left join source_reconciliation_state s on s.org_id = ${orgId} and s.account_id = o.id
@@ -419,6 +423,7 @@ export async function readinessChecks(
              and consolidated.from_currency = s.base_currency
              and consolidated.to_currency = ${ctx.elimination_currency}
            where e.org_id = ${orgId} and e.book_id = ${ctx.book_id} and e.status in ('posted', 'reversed')
+             and ${excludePeriodEndJournals(sql`e.origin`)}
              and (e.period_id = ${ctx.period_id}
                   or (a.type not in ('income','income_other','cogs','expense','expense_other','expense_deferred')
                       and p.ends_on < ${ctx.ends_on}::date))
@@ -485,6 +490,19 @@ export async function readinessChecks(
     unbilledAccrual = await unbilledAccrualReadiness(orgId, ctx.period_id, scoped ? subsidiaryIds : undefined);
   }
 
+  // The year-end step is current when every legal entity's period-end
+  // journals match what the generator would post now. Only runs that carry
+  // the task pay for the measurement.
+  let periodEnd: PeriodEndCloseCheck = { count: 0 };
+  const periodEndTask = (
+    await db.execute<{ id: string }>(sql`
+      select id from close_run_tasks
+       where run_id = ${runId} and org_id = ${orgId} and key = 'period-end-journals' limit 1`)
+  ).rows[0];
+  if (periodEndTask) {
+    periodEnd = await periodEndJournalCloseCheck(orgId, { periodId: ctx.period_id, bookId: ctx.book_id, subsidiaryIds });
+  }
+
   const threshold = variancePolicy.rows[0] ?? {
     amount: "10000.0000",
     percent: 20,
@@ -494,6 +512,7 @@ export async function readinessChecks(
       select l.account_id, l.subsidiary_id, sum(l.amount) as amount
         from journal_lines l join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
        where e.org_id = ${orgId} and e.period_id = ${ctx.period_id} and e.book_id = ${ctx.book_id} and e.status in ('posted', 'reversed')
+         and ${excludePeriodEndJournals(sql`e.origin`)}
          and ${inScope(sql`l.subsidiary_id`)}
        group by l.account_id, l.subsidiary_id
     ), prior_period as (
@@ -505,7 +524,7 @@ export async function readinessChecks(
       select l.account_id, l.subsidiary_id, sum(l.amount) as amount
         from journal_lines l join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
        where e.org_id = ${orgId} and e.period_id = (select id from prior_period)
-         and e.book_id = ${ctx.book_id} and e.status in ('posted', 'reversed')
+         and e.book_id = ${ctx.book_id} and e.status in ('posted', 'reversed') and ${excludePeriodEndJournals(sql`e.origin`)}
          and ${inScope(sql`l.subsidiary_id`)}
        group by l.account_id, l.subsidiary_id
     ), entity_activity as (
@@ -596,6 +615,16 @@ export async function readinessChecks(
       message: "close.diagnostics.unbilled-revenue-unaccrued.message",
       count: unbilledAccrual.applies ? unbilledAccrual.pendingKeys : 0,
       details: unbilledAccrual.problem ? { problem: unbilledAccrual.problem } : undefined,
+    },
+    {
+      code: "period-end-journals-pending",
+      taskKey: "period-end-journals",
+      category: "year_end",
+      severity: "error",
+      title: "close.diagnostics.period-end-journals-pending.title",
+      message: "close.diagnostics.period-end-journals-pending.message",
+      count: periodEnd.count,
+      details: periodEnd.details,
     },
     {
       code: "fx-missing",

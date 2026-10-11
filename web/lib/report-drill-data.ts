@@ -5,6 +5,7 @@ import { sql } from 'drizzle-orm'
 import { getTranslations } from 'next-intl/server'
 import { db } from '@openbooks/engine/platform/db'
 import { orderedNetOfCancelledSql } from '@openbooks/engine/records/order-line-remainders'
+import { excludePeriodEndJournals } from '@openbooks/engine/records/period-end-origins'
 import { defaultColumnsFor, validateCustomQuery, type ReportCustomQuery, type ReportRuleGroup } from '@openbooks/reports'
 import { can, type Authz } from './authz'
 import { canRunReportEntity } from './report-authz'
@@ -165,6 +166,7 @@ async function ledgerData(target: Extract<ReportDrillTarget, { kind: 'ledger' }>
       cashOnly: target.cashOnly,
       newestFirst: target.newestFirst,
       hideVoidPairs: target.hideVoidPairs,
+      includePeriodEndJournals: target.includePeriodEndJournals,
       limit: REPORT_DRILL_PAGE_SIZE,
       offset: (page - 1) * REPORT_DRILL_PAGE_SIZE,
       orgId: authz.user.orgId,
@@ -529,6 +531,7 @@ async function budgetData(target: Extract<ReportDrillTarget, { kind: 'budget' }>
           left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id
          where l.org_id = ${authz.user.orgId} and e.book_id = ${row.book_id}
            and e.posting_date >= ${from} and e.posting_date <= ${to}
+           and ${excludePeriodEndJournals(sql`e.origin`)}
            ${actualAccount} ${actualDims} ${actualSubsidiaryFilter}
         union all
         select 'budget'::text as source, bl.id::text as key, ap.starts_on as sort_date,

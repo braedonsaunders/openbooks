@@ -4,6 +4,7 @@ import { db } from "@openbooks/engine/platform/db";
 import { PAYROLL_RESTRICTED_PARTY_LABEL, collapseRestrictedPayrollLines } from "../payroll-confidentiality";
 import { resolveOrgId } from "../org-scope";
 import { decimalNeg, type ExactDecimal } from "../statement-format";
+import { excludePeriodEndJournals } from "@openbooks/engine/records/period-end-origins";
 import { statementBookExpr } from "../gl-summary";
 import { CREDIT_NORMAL } from "./statements";
 import { type DimFilter, dimWhere } from "./filters";
@@ -99,6 +100,11 @@ export async function transactionDetail(opts: {
   /** Newest posting date first — CoA / register browsing. Statement cell
    *  drills leave this off so page 1 still starts at the window's first line. */
   newestFirst?: boolean
+  /** Keep period-end closing and opening journals. Ledger, register and
+   *  chart-of-accounts drills set this because they present the statutory
+   *  record; statement drills leave it off so their lines tie to statement
+   *  values, which exclude those journals. */
+  includePeriodEndJournals?: boolean
   /** Drop complete in-window void pairs (voided original plus its reversal).
    *  Both legs net to zero, so the net is unchanged and the drill reads
    *  clean. Off by default: the drill shows every posted line with its void
@@ -128,6 +134,9 @@ export async function transactionDetail(opts: {
     opts.cashOnly
       ? sql` and e.id in (select l2.entry_id from journal_lines l2 join accounts a2 on a2.id = l2.account_id and a2.org_id = l2.org_id where l2.org_id = ${orgId} and a2.type = 'asset_bank')`
       : sql``
+  const periodEndFilter = opts.includePeriodEndJournals
+    ? sql``
+    : sql` and ${excludePeriodEndJournals(sql`e.origin`)}`
   const partyFilter = opts.partyIds?.length
     ? sql` and l.party_id in ${opts.partyIds}`
     : opts.unassignedParty
@@ -262,7 +271,7 @@ export async function transactionDetail(opts: {
        and pl.account_id = l.account_id
        and ${partnerValue} = -(${v})
   )`
-  const where = sql`l.org_id = ${orgId} and e.org_id = ${orgId} and a.org_id = ${orgId} and ${bookFilter} and ${acctFilter} and ${dateFilter} and ${dimWhere(opts.dims)}${cashFilter}${partyFilter}${projectCustomerFilter}${projectSearchFilter}${activeProjectFilter}${cashBasis ? sql` and ${cashValue} <> 0` : sql``}${opts.hideVoidPairs ? sql` and not (${voidPair})` : sql``}`
+  const where = sql`l.org_id = ${orgId} and e.org_id = ${orgId} and a.org_id = ${orgId} and ${bookFilter} and ${acctFilter} and ${dateFilter} and ${dimWhere(opts.dims)}${cashFilter}${periodEndFilter}${partyFilter}${projectCustomerFilter}${projectSearchFilter}${activeProjectFilter}${cashBasis ? sql` and ${cashValue} <> 0` : sql``}${opts.hideVoidPairs ? sql` and not (${voidPair})` : sql``}`
 
   // Totals over the FULL set (independent of the display limit), so `net` ties
   // out to the clicked cell even when the line list is truncated. `net` is

@@ -73,7 +73,8 @@
         "money",
         "organization",
         "periods",
-        "platform"
+        "platform",
+        "records"
       ]
     },
     "billing": {
@@ -827,6 +828,7 @@
         "organization",
         "periods",
         "platform",
+        "records",
         "tax"
       ]
     },

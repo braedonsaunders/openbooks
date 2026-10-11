@@ -403,7 +403,8 @@ async function loadSettlementContext(
 
 /**
  * Employer-wide eligibility: every employment of the program's employer in
- * active service during the period is a member for the whole period, with
+ * active service during the period (and, for payroll delivery, on payroll)
+ * is a member for the whole period, with
  * equal weight. Named memberships still carry roles and weights and take
  * precedence for their employments; an excluded membership touching the
  * period removes its employment.
@@ -421,6 +422,11 @@ async function employerWideMembers(
   const rows = (await db.execute<{ id: string }>(sql`
     select w.id::text as id from worker_employments w
      where w.org_id = ${orgId} and w.employer_subsidiary_id = ${program.legalEntityId}
+       -- A payroll-delivered program covers only employees payroll pays.
+       and (${program.deliveryMethod !== "payroll"} or exists (
+             select 1 from employee_payroll_profiles prof
+              where prof.org_id = w.org_id and prof.employee_party_id = w.worker_party_id and prof.is_active
+                and (prof.employment_id is null or prof.employment_id = w.id)))
        and exists (select 1 from worker_employment_versions v
                     where v.org_id = w.org_id and v.employment_id = w.id
                       and v.status = 'active' and v.recorded_until is null

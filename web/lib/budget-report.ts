@@ -5,6 +5,7 @@ import { add, mulDecimal } from '@openbooks/engine/money/money'
 import { flowRates } from './fx-presentation'
 import type { BudgetDimensions } from './budgets'
 import { scenarioOutOfScopeSubsidiaryNames } from './budget-scope'
+import { excludePeriodEndJournals } from '@openbooks/engine/records/period-end-origins'
 import {
   combineTotals,
   recomputeVariance,
@@ -188,6 +189,7 @@ export async function budgetVsActualView(
       left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id
      where e.org_id = ${orgId} and a.org_id = ${orgId}
        and a.type in ${PNL_TYPES} and e.book_id = ${scenario.book_id}
+       and ${excludePeriodEndJournals(sql`e.origin`)}
        ${subsidiaryIds ? sql`and l.subsidiary_id in (${subsidiaryList})` : sql``}
        and e.posting_date >= ${window.from} and e.posting_date <= ${window.to}
        ${dims.departmentId ? sql`and l.department_id = ${dims.departmentId}` : sql``}

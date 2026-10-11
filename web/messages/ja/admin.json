@@ -3806,6 +3806,11 @@
       "intercompany-transfer-pricing": {
         "title": "法人間移転価格",
         "description": "別法人向け出荷に適用する有効期間付き価格設定：価格レベルまたは原価に利益率を加算。"
+      },
+      "period-end-journal-policies": {
+        "title": "期末決算仕訳",
+        "singular": "期末決算仕訳ポリシー",
+        "description": "年度末の締めが仕訳を計上する方法：利益剰余金勘定、任意の損益集計勘定、貸借対照表の締め仕訳と開始仕訳、計上期間、締め仕訳の明細が保持するディメンション。各バージョンは発効日以降に終了する会計年度に適用されます。"
       }
     },
     "fields": {
@@ -4444,7 +4449,17 @@
       "buyerSubsidiaryId": "買手法人",
       "markupPercent": "マークアップ率（%）",
       "revenueAccountId": "法人間収益勘定",
-      "costAccountId": "法人間原価勘定"
+      "costAccountId": "法人間原価勘定",
+      "closingMethod": "締め方法",
+      "retainedEarningsAccountId": "利益剰余金勘定",
+      "incomeSummaryAccountId": "損益集計勘定",
+      "balanceSheetJournals": "貸借対照表の締め仕訳と開始仕訳",
+      "postingPeriod": "計上期間",
+      "preserveDepartments": "部門を保持",
+      "preserveClasses": "クラスを保持",
+      "preserveLocations": "拠点を保持",
+      "preserveProjects": "プロジェクトを保持",
+      "preserveSegments": "カスタムセグメントを保持"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "使用可能な最新レートから期末までの日数がこれを超えると、再評価と連結はそのレートを拒否します。期末レートは期末スポットレートの日付から、平均レートは平均に含まれる最新の相場の日付から数えます。ポリシー未設定時の既定値: 31日。",
@@ -4632,7 +4647,12 @@
       "transferPricingMarkup": "出荷法人の原価に加算します。10 は原価に 10% を加算することを意味します。",
       "transferPricingRevenue": "出荷法人の法人間収益。連結時消去を指定する必要があります。",
       "transferPricingCost": "移転価格による販売法人の原価。連結時消去を指定する必要があります。",
-      "intercompanyControlAccount": "代表取引先の法人間請求書の未決済項目はこれらの勘定に計上されます。各勘定で連結時消去を指定してください。"
+      "intercompanyControlAccount": "代表取引先の法人間請求書の未決済項目はこれらの勘定に計上されます。各勘定で連結時消去を指定してください。",
+      "periodEndEffectiveFrom": "この日以降に終了する会計年度はこのバージョンで締められます。期末決算仕訳で締め済みの年度に遡って適用することはできません。",
+      "periodEndClosingMethod": "直接：収益と費用を利益剰余金へ振り替えます。損益集計勘定経由：収益と費用をその勘定へ振り替え、その後利益剰余金へ振り替えます。",
+      "periodEndPostingPeriod": "会計年度の最終通常期間、または会計カレンダーに調整期間がある場合はその年度の調整期間。",
+      "periodEndBalanceSheetJournals": "さらに、年度末日にすべての貸借対照表勘定をゼロにし、翌会計年度の初日に同じ残高を再計上します。",
+      "periodEndPreserveSegments": "バランシングセグメントは常に保持され、各セグメント値が単独で貸借一致します。"
     },
     "options": {
       "withholdingCondominiumPayer": "集合住宅管理組合の支払者",
@@ -5446,6 +5466,14 @@
       "transferPricingMethod": {
         "price_level": "価格レベル",
         "cost_plus": "原価に利益率を加算"
+      },
+      "periodEndClosingMethod": {
+        "retained_earnings": "利益剰余金へ直接",
+        "income_summary": "損益集計勘定を経由"
+      },
+      "periodEndPostingPeriod": {
+        "last_period": "年度の最終期間",
+        "adjustment_period": "調整期間"
       }
     },
     "invoicing": {
@@ -6433,7 +6461,8 @@
       "scheduleBoardBookingHelp": "終日の割り当てには、ボードのタイムゾーンでこの勤務時間が使われます。",
       "scheduleBoardAutomation": "自動化",
       "scheduleBoardAutomationHelp": "このボードで割り当てが公開された後の処理。",
-      "intercompanyControlAccounts": "法人間債権・債務勘定"
+      "intercompanyControlAccounts": "法人間債権・債務勘定",
+      "periodEndDimensions": "締め仕訳の明細に保持するディメンション"
     },
     "segmentValues": {
       "builtinLink": "{name}を開く",
@@ -8105,6 +8134,10 @@
     "crossSubsidiaryFulfillment": {
       "title": "法人をまたぐ出荷",
       "description": "別法人の倉庫から販売注文を出荷し、移転価格で法人間請求を計上します。"
+    },
+    "periodEndJournals": {
+      "title": "期末決算仕訳",
+      "description": "決算仕訳を義務付ける法域向けに、明示的な年度末の締め仕訳を計上します。収益と費用を利益剰余金へ振り替え（任意で損益集計勘定を経由）、任意で貸借対照表の締め仕訳と翌期の開始仕訳も計上します。財務諸表はいずれの場合も利益剰余金を計算します。"
     }
   },
   "extensions": {

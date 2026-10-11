@@ -16,6 +16,7 @@ import {
   COMPUTED_RETAINED_EARNINGS_PRIOR_NAME,
 } from "../computed-earnings";
 import { fiscalYearStartOnDate } from "../fiscal";
+import { excludePeriodEndJournals } from "@openbooks/engine/records/period-end-origins";
 
 /**
  * Financial statement queries. Sign convention: journal amounts are
@@ -60,6 +61,7 @@ async function accountBalances(where: ReturnType<typeof sql>, dims?: DimFilter, 
     with e as materialized (
       select e.id from journal_entries e
        where e.org_id = ${resolvedOrgId} and e.status in ('posted', 'reversed') and ${where}
+         and ${excludePeriodEndJournals(sql`e.origin`)}
          and e.book_id = ${statementBookExpr(resolvedOrgId, bookId)}
     )
     select ${reportDb.censusColumn}, a.id, a.parent_id, a.number, a.name, a.type, a.is_summary,
@@ -228,8 +230,10 @@ export async function balanceSheet(
   const totalLiabilities = sum(liabilities);
   const statedEquity = sum(equity);
 
-  // No closing entries exist (by design). Prior-year P&L and FYTD P&L are
-  // report placeholders so the sheet reads as if the year had been closed.
+  // Retained earnings are computed on the statement basis: prior-year P&L
+  // and FYTD P&L are report lines, and period-end closing and opening
+  // journals are excluded, so the sheet is identical whether or not a year
+  // has been closed by journal.
   const lifetimePnl = decimalSum(rows.filter((r) => PNL_TYPES.includes(r.type)).map((r) => r.raw));
   const currentPnl = decimalSum(currentRows.filter((r) => PNL_TYPES.includes(r.type)).map((r) => r.raw));
   const currentYearEarnings = decimalNeg(currentPnl);
@@ -322,6 +326,7 @@ export async function trialBalance(asOf: string, dims?: DimFilter, orgId?: strin
     with e as materialized (
       select id, posting_date from journal_entries
        where org_id = ${resolvedOrgId} and status in ('posted', 'reversed')
+         and ${excludePeriodEndJournals(sql`origin`)}
          and posting_date <= ${asOf}
          and book_id = ${statementBookExpr(resolvedOrgId, bookId)}
     )
@@ -344,6 +349,7 @@ export async function trialBalance(asOf: string, dims?: DimFilter, orgId?: strin
     with e as materialized (
       select id from journal_entries
        where org_id = ${resolvedOrgId} and status in ('posted', 'reversed')
+         and ${excludePeriodEndJournals(sql`origin`)}
          and posting_date < ${fyStart}
          and book_id = ${statementBookExpr(resolvedOrgId, bookId)}
     )
@@ -387,6 +393,7 @@ export async function partnerBalances(kind: "receivable" | "payable", orgId?: st
     with e as materialized (
       select id, origin, source_document_id from journal_entries
        where org_id = ${resolvedOrgId} and status in ('posted', 'reversed')
+         and ${excludePeriodEndJournals(sql`origin`)}
          and posting_date <= ${resolvedAsOf}
          and book_id = ${statementBookExpr(resolvedOrgId, bookId)}
     )

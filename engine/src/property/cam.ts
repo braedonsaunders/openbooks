@@ -7,6 +7,7 @@ import { canonicalJson } from "../platform/canonical-json.ts";
 import { createSubscriptionInvoice } from "../billing/subscription-billing.ts";
 import { subsidiaryVisibleFilter } from "../organization/subsidiary-scope.ts";
 import { arePeriodModulesOpen } from "../periods/period-policy.ts";
+import { excludePeriodEndJournals } from "../records/period-end-origins.ts";
 import { add, cmp, fromUnits, mulPercent, mulRatio, neg, sum, toUnits } from "../money/money.ts";
 import { assertEnabled, assertLockedSubsidiaryInScope, audit, CAM_VACANCY_TREATMENTS, exactMoney, lockPropertyInScope, PropertyManagementError, validDate, type CamAllocationDbRow, type CamLeaseRow, type CamPoolDbRow, type CamVacancyTreatment } from "./management-foundation.ts";
 import { overlapDayCount } from "./management-foundation.ts";
@@ -262,6 +263,7 @@ export async function finalizeCamPool(orgId: string, actorId: string, allowedSub
       from journal_lines jl join journal_entries je on je.id=jl.entry_id and je.org_id=jl.org_id
       where jl.org_id=${orgId} and je.book_id=${bookId} and jl.subsidiary_id=${pool.subsidiary_id}
         and je.status in ('posted','reversed') and je.posting_date between ${pool.period_starts_on} and ${pool.period_ends_on} and jl.location_id=${pool.location_id}
+        and ${excludePeriodEndJournals(sql`je.origin`)}
         and jl.account_id::text in(select jsonb_array_elements_text(${JSON.stringify(pool.expense_account_ids)}::jsonb))`);
     const actual = await sourceTotals();
     const actualAmount = exactMoney(actual.rows[0]?.amount ?? "0", "CAM actual amount");

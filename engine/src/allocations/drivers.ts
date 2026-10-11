@@ -2,6 +2,7 @@ import { sql, type SQL } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { daysInCivilMonth } from "../platform/business-date.ts";
 import { resolveAccountGroups } from "../records/account-groups.ts";
+import { excludePeriodEndJournals, statementMonthActivity } from "../records/period-end-origins.ts";
 import { add, normalizeDecimal } from "../money/money.ts";
 import {
   DRIVER_SOURCE_KINDS,
@@ -395,7 +396,7 @@ async function resolveGlAggregate(
   const month = `${window.from.slice(0, 7)}-01`;
   const rows = (await db.execute<VectorRow>(sql`
     select g.subsidiary_id::text as dim, coalesce(sum(g.debit_total - g.credit_total), 0) as total
-    from gl_month_activity g
+    from ${statementMonthActivity(orgId)} g
     where g.org_id = ${orgId}
       and g.book_id = ${bookId}
       ${balance ? sql`and g.month <= ${month}` : sql`and g.month = ${month}`}
@@ -425,6 +426,7 @@ async function resolveGlLines(
     where l.org_id = ${orgId}
       and e.status in ('posted', 'reversed')
       and e.book_id = ${bookId}
+      and ${excludePeriodEndJournals(sql`e.origin`)}
       ${balance ? sql`` : sql`and e.posting_date >= ${window.from}`}
       and e.posting_date <= ${window.to}
       ${scopeAccountIds ? sql`and l.account_id in (${sql.join(scopeAccountIds.map((id) => sql`${id}`), sql`, `)})` : sql``}
@@ -557,6 +559,7 @@ async function resolveNativeGl(
     where l.org_id = ${orgId}
       and e.status in ('posted', 'reversed')
       and e.book_id = ${bookId}
+      and ${excludePeriodEndJournals(sql`e.origin`)}
       and e.posting_date >= ${window.from} and e.posting_date <= ${window.to}
       and a.is_summary = false
       ${accountFilter}

@@ -3,6 +3,7 @@ import 'server-only'
 import { getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/platform/db'
+import { excludePeriodEndJournals } from '@openbooks/engine/records/period-end-origins'
 import { reconciliationBookId, reconciliationTotals } from '@openbooks/engine/banking/banking'
 import { page, pageHeader, ref, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission, subsidiaryScopeAllows } from '../../../../lib/authz'
@@ -153,6 +154,7 @@ export async function loadMatch(
     const glWhere = sql`jl.account_id = ${account.id} and jl.org_id = ${orgId}
       and je.book_id = ${bookId} and jl.currency = ${session.currency}
       and je.status in ('posted', 'reversed') and je.posting_date <= ${session.through_date}
+      and ${excludePeriodEndJournals(sql`je.origin`)}
       ${carryStart ? sql`and je.posting_date >= ${carryStart}` : sql``}
       and jl.reconciled_at is null
       and not exists (select 1 from reconciliation_matches m where m.journal_line_id = jl.id and m.org_id = jl.org_id)

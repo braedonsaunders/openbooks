@@ -20,7 +20,7 @@ export type AccountBalanceDrillWindow = {
   period?: string
 }
 
-function ledgerWindow(ctx: AccountBalanceDrillWindow): Pick<LedgerDrillTarget, 'mode' | 'from' | 'to' | 'period' | 'newestFirst'> | null {
+function ledgerWindow(ctx: AccountBalanceDrillWindow): Pick<LedgerDrillTarget, 'mode' | 'from' | 'to' | 'period' | 'newestFirst' | 'includePeriodEndJournals'> | null {
   if (!ISO_DATE.test(ctx.from) || !ISO_DATE.test(ctx.to)) return null
   return {
     mode: 'flow',
@@ -28,6 +28,7 @@ function ledgerWindow(ctx: AccountBalanceDrillWindow): Pick<LedgerDrillTarget, '
     to: ctx.to,
     period: ctx.period && isPeriodPreset(ctx.period) ? ctx.period : 'this_period',
     newestFirst: true,
+    includePeriodEndJournals: true,
   }
 }
 

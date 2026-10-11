@@ -1,6 +1,7 @@
 import "server-only";
 import { sql } from "drizzle-orm";
 import { functionalReportReader } from "./currency-basis";
+import { excludePeriodEndJournals } from "@openbooks/engine/records/period-end-origins";
 import { bucketSubsidiaryFilter, glActivityBuckets, glSummaryEligibleDims, statementBookExpr } from "../gl-summary";
 import { resolveOrgId } from "../org-scope";
 import { decimalAdd, decimalIsMaterial, decimalNeg, decimalSum, type ExactDecimal } from "../statement-format";
@@ -142,6 +143,7 @@ export async function cashFlowIndirect(
        where e.org_id = ${resolvedOrgId} and e.status in ('posted', 'reversed')
          and e.posting_date >= ${from} and e.posting_date <= ${to}
          and e.book_id = ${statementBookExpr(resolvedOrgId, bookId)}
+         and ${excludePeriodEndJournals(sql`e.origin`)}
        group by l.entry_id
       having not bool_or(l.account_id in (
                select id from accounts where org_id = ${resolvedOrgId} and type = 'asset_bank'))
@@ -171,6 +173,7 @@ export async function cashFlowIndirect(
            where l.org_id = ${resolvedOrgId} and e.status in ('posted', 'reversed')
              and e.posting_date >= ${from} and e.posting_date <= ${to}
              and e.book_id = ${statementBookExpr(resolvedOrgId, bookId)}
+             and ${excludePeriodEndJournals(sql`e.origin`)}
              and a.type in ${PNL_TYPES} and ${dim}`,
   ));
   const netIncome = ni.rows[0]?.ni ?? ZERO;
@@ -244,6 +247,7 @@ export async function cashFlowIndirect(
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
      where l.org_id = ${resolvedOrgId} and e.status in ('posted', 'reversed') and e.posting_date <= ${to}
        and e.book_id = ${statementBookExpr(resolvedOrgId, bookId)}
+       and ${excludePeriodEndJournals(sql`e.origin`)}
        and a.type in ${[...CF_WC_ASSET_TYPES, ...CF_WC_LIABILITY_TYPES]} and ${dim}
      group by l.account_id, a.number, a.name, a.type
   `));
@@ -282,6 +286,7 @@ export async function cashFlowIndirect(
          and l.account_id in (
            select id from accounts where org_id = ${resolvedOrgId} and type = 'asset_bank')
          and e.origin <> 'translation'
+         and ${excludePeriodEndJournals(sql`e.origin`)}
     )
     select ${reportDb.censusColumn}, l.account_id, a.number, a.name, a.type, e.origin, -sum(l.amount) as cash_effect
       from journal_lines l
@@ -366,6 +371,7 @@ export async function cashFlowIndirect(
             from journal_lines l
             join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
               and e.book_id = ${statementBookExpr(resolvedOrgId, bookId)}
+              and ${excludePeriodEndJournals(sql`e.origin`)}
             join accounts a on a.id = l.account_id and a.org_id = l.org_id
            where l.org_id = ${resolvedOrgId} and a.type = 'asset_bank' and ${dimWhere(dims)}`,
   ));

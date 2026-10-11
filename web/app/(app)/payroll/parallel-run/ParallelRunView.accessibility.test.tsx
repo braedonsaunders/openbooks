@@ -3,11 +3,13 @@ import test from 'node:test'
 import { bootJsdomEnvironment } from '../../../../testing/jsdom-env'
 import { stubModules } from '../../../../testing/stub-modules'
 
-await bootJsdomEnvironment({ url: 'http://localhost:4800/payroll/parallel-run', matchMediaMatches: false })
+// The header's Tolerances action requests the drawer through the address.
+await bootJsdomEnvironment({ url: 'http://localhost:4800/payroll/parallel-run?tolerances=1', matchMediaMatches: false })
 
 stubModules({
   navigation: {
-    source: 'export function useRouter(){return {push(){},refresh(){},replace(){}}}',
+    source: 'export function useRouter(){return {push(){},refresh(){},replace(){}}}' +
+      'export function useSearchParams(){return new URLSearchParams(window.location.search)}',
   },
   intl: false,
   authz: false,
@@ -25,7 +27,7 @@ const messages = (await import('../../../../messages/en')).default
 const { MoneyProvider } = await import('../../../../components/money-provider')
 const { ParallelRunView } = await import('./ParallelRunView')
 
-test('tolerance removal has a translated accessible name', async (t) => {
+test('the tolerance drawer opens from its header request and names its remove control', async (t) => {
   const host = document.createElement('div')
   document.body.appendChild(host)
   const root = createRoot(host)
@@ -49,8 +51,6 @@ test('tolerance removal has a translated accessible name', async (t) => {
       </NextIntlClientProvider>,
     )
   })
-  const openButton = [...document.querySelectorAll('button')].find((button) => button.textContent?.includes('Tolerances (1)'))
-  assert.ok(openButton, 'tolerance drawer can be opened')
-  await act(async () => openButton.click())
+  assert.ok(document.querySelector('[role="dialog"]'), 'the header request opens the tolerance drawer')
   assert.ok(document.querySelector('button[aria-label="Delete"]'), 'remove tolerance control has a translated name')
 })

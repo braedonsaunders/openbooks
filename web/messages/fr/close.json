@@ -222,6 +222,10 @@
     "intercompany-unreconciled": {
       "title": "Les soldes intercompagnies ne concordent pas",
       "message": "{count, plural, one {# paire intercompagnies présente des soldes discordants entre ses entités. Examinez le rapprochement intercompagnies avant de clôturer.} other {# paires intercompagnies présentent des soldes discordants entre leurs entités. Examinez le rapprochement intercompagnies avant de clôturer.}}"
+    },
+    "period-end-journals-pending": {
+      "title": "Les écritures de clôture ne sont pas à jour",
+      "message": "{count, plural, one {# entité juridique ou condition de politique doit générer ou corriger ses écritures de clôture.} other {# entités juridiques ou conditions de politique doivent générer ou corriger leurs écritures de clôture.}}"
     }
   },
   "severity": {
@@ -434,6 +438,10 @@
     "commerce-complete": {
       "title": "Prouver l’exhaustivité du commerce",
       "description": "Chaque vente de la boutique est au grand livre : les commandes correspondent à la boutique, les versements sont comptabilisés, les comptes d’attente sont à zéro et les passifs concordent."
+    },
+    "period-end-journals": {
+      "title": "Passer les écritures de clôture de l'exercice",
+      "description": "Solder les comptes de produits et de charges de l'exercice vers le report à nouveau par des écritures de clôture explicites, et rouvrir l'exercice suivant lorsque la politique l'exige."
     }
   },
   "setup": {
@@ -961,5 +969,78 @@
     "posted": "Régularisation des produits non facturés comptabilisée.",
     "postFailed": "Impossible de comptabiliser la régularisation.",
     "postPermission": "La comptabilisation de la régularisation nécessite l’autorisation de comptabiliser des écritures."
+  },
+  "periodEndJournals": {
+    "loading": "Calcul des écritures de clôture…",
+    "loadFailed": "Impossible de calculer les écritures de clôture.",
+    "retry": "Réessayer",
+    "scope": "Exercice {year} (du {from} au {to}) · {book}",
+    "closingPeriod": "écritures de clôture passées en {period}",
+    "openingPeriod": "écritures de réouverture passées en {period}",
+    "policyRetainedEarnings": "Produits et charges soldés vers {retained}",
+    "policyIncomeSummary": "Produits et charges soldés via {summary} vers {retained}",
+    "policyBalanceSheet": "avec écritures de clôture du bilan et de réouverture",
+    "policyEffective": "politique en vigueur depuis le {date}",
+    "blocked": "À résoudre avant la génération",
+    "openPolicy": "Ouvrir la politique d'écritures de clôture",
+    "empty": "Aucune entité juridique n'a de mouvement à clôturer sur cet exercice.",
+    "status": {
+      "not_generated": "Non générées",
+      "current": "À jour",
+      "stale": "À régénérer",
+      "nothing_to_close": "Rien à clôturer",
+      "blocked": "Pas prête"
+    },
+    "fiscalYearEarnings": "Résultat de l'exercice",
+    "priorUnclosedEarnings": "Résultats antérieurs non encore clôturés",
+    "review": "Examiner les écritures",
+    "journals": "{count, plural, one {# écriture} other {# écritures}}",
+    "kinds": {
+      "income_statement": "Clôture du compte de résultat",
+      "income_summary": "Clôture du résultat récapitulatif",
+      "balance_sheet": "Clôture du bilan",
+      "opening": "Soldes de réouverture"
+    },
+    "columns": {
+      "account": "Compte",
+      "dimensions": "Axes analytiques",
+      "debit": "Débit",
+      "credit": "Crédit",
+      "entity": "Entité juridique",
+      "generation": "Génération",
+      "status": "Statut",
+      "generated": "Générée",
+      "reversed": "Contrepassée",
+      "journals": "Écritures"
+    },
+    "dimensions": {
+      "department": "Département",
+      "class": "Classe",
+      "location": "Emplacement",
+      "project": "Projet",
+      "segment": "Segment analytique"
+    },
+    "generate": "Générer les écritures de clôture",
+    "reverse": "Contrepasser les écritures de clôture",
+    "generateReasonTitle": "Générer les écritures de clôture",
+    "reverseReasonTitle": "Contrepasser les écritures de clôture",
+    "reasonHint": "Expliquez pourquoi. Le motif est conservé avec les écritures dans la piste d'audit (10 à 500 caractères).",
+    "reasonLabel": "Motif",
+    "generated": "{count, plural, one {Écritures de clôture passées pour # entité juridique.} other {Écritures de clôture passées pour # entités juridiques.}}",
+    "unchanged": "Les écritures de clôture sont déjà à jour ; rien n'a été passé.",
+    "partiallyRefused": "{count, plural, one {# entité juridique n'est pas prête.} other {# entités juridiques ne sont pas prêtes.}}",
+    "reversed": "{count, plural, one {Écritures de clôture contrepassées pour # entité juridique.} other {Écritures de clôture contrepassées pour # entités juridiques.}}",
+    "generateFailed": "Impossible de générer les écritures de clôture.",
+    "reverseFailed": "Impossible de contrepasser les écritures de clôture.",
+    "runPermission": "Générer les écritures de clôture nécessite l'autorisation d'exécuter la clôture.",
+    "history": "Historique",
+    "generations": "{count, plural, one {# génération} other {# générations}}",
+    "historyEmpty": "Aucune écriture de clôture n'a encore été générée pour cet exercice.",
+    "setStatus": {
+      "posted": "Comptabilisée",
+      "reversed": "Contrepassée"
+    },
+    "by": "{name} le {at}",
+    "system": "Système"
   }
 }

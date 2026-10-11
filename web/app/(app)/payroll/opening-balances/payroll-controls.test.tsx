@@ -5,7 +5,7 @@ import { stubModules } from '../../../../testing/stub-modules'
 
 await bootJsdomEnvironment({ matchMediaMatches: false })
 stubModules({
-  navigation: { source: 'export function useRouter(){return {push(){},refresh(){}}}' },
+  navigation: { source: 'export function useRouter(){return {push(){},refresh(){}}}export function useSearchParams(){return new URLSearchParams(window.location.search)}' },
   intl: false,
   authz: false,
   features: false,
@@ -146,8 +146,10 @@ test('retro review separates payable periods from named refusals and never creat
     return Response.json({ taxYear: 2026, periods: [period, { ...period, candidate: { ...period.candidate, employeeName: 'Grace', employeePartyId: 'employee-2' }, outcome: 'unavailable', difference: null, blockedReason: 'Wage history unavailable; restore the wage history before recalculating.' }], employees: [], payableTotal: '10', overpaidTotal: '0', unavailable: 1 })
   }
   t.after(() => { globalThis.fetch = prior })
+  // The header's New review action requests the scope drawer through the address.
+  window.history.replaceState(null, '', '/payroll/retro?new=1')
+  t.after(() => window.history.replaceState(null, '', '/'))
   await mount(t, <RetroWorkspace schedules={[{ id: 'schedule-1', name: 'Semi-monthly' }]} canRun />)
-  await click(button('New review'))
   await click(button('Find retroactive pay'))
   assert.deepEqual(requests, ['propose'])
   assert.ok(document.querySelector('tr[aria-label="Ada · PAY-001"]'))
