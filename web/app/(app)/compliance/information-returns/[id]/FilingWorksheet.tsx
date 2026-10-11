@@ -27,6 +27,7 @@ import { promptDialog } from '../../../../../lib/prompt'
 import { readApiErrorMessage } from '../../../../../lib/api-error'
 import type { FilingDetail, RecipientRow } from '../../../../../lib/compliance'
 import { formatBoxAmount } from '../../../../../lib/information-return-format'
+import { FilingExceptionList, type FilingExceptionRow } from './FilingExceptionList'
 
 const FILING_CHANNELS = ['iris', 'fire', 'provider', 'paper', 'other'] as const
 
@@ -71,6 +72,7 @@ export function FilingWorksheet({
   const router = useRouter()
   const [error, setError] = useState<string | null>(null)
   const [notice, setNotice] = useState<string | null>(null)
+  const [exceptions, setExceptions] = useState<FilingExceptionRow[]>([])
   const [pending, startTransition] = useTransition()
   const [editing, setEditing] = useState<RecipientRow | null>(null)
   const [draft, setDraft] = useState<{ adjustments: Record<string, string>; reason: string; excluded: boolean; exclusionReason: string }>({
@@ -107,7 +109,7 @@ export function FilingWorksheet({
 
   async function compute() {
     const result = (await post({ action: 'compute' })) as
-      | { recipients: number; tracedCash: string; exceptions: { kind: string; partyName: string; detail: string }[] }
+      | { recipients: number; tracedCash: string; exceptions: FilingExceptionRow[] }
       | null
     if (result) {
       setNotice(
@@ -116,6 +118,7 @@ export function FilingWorksheet({
           exceptions: result.exceptions.length,
         }),
       )
+      setExceptions(result.exceptions)
     }
   }
 
@@ -178,6 +181,7 @@ export function FilingWorksheet({
           <AlertDescription>{notice}</AlertDescription>
         </Alert>
       ) : null}
+      <FilingExceptionList exceptions={exceptions} />
 
       <div className="flex flex-wrap items-center gap-2">
         <Badge variant={filingTone(filing.status)}>

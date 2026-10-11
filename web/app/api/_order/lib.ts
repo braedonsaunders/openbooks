@@ -2,11 +2,13 @@ import 'server-only'
 import { documentRevisionCounterSql } from '@openbooks/engine/records/revision'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/platform/db'
+import { businessTimeZone } from '@openbooks/engine/platform/business-date'
 import { add, mul, normalizeMoney, sum } from '@openbooks/engine/money/money'
 import { computeLineTaxes } from '@openbooks/engine/tax/tax'
 import { taxProfileMap, type TaxProfiles } from "../../../lib/bills.ts";
 import { canonicalDecimal } from '../../../lib/exact-decimal'
 import { subsidiaryVisibleFilter } from '../../../lib/subsidiaries'
+import { enteredAfterOrderDays } from '../../../lib/order-entry-lag'
 import type { OrderKind } from '../../../lib/order-cycle'
 
 /** Exact numeric(19,4) money string, or 'invalid'. */
@@ -68,9 +70,26 @@ export function computeOrderTotals(lines: OrderLineInput[], profiles: TaxProfile
 export { taxProfileMap as orderTaxProfileMap }
 
 /**
+ * Days a purchase order was entered after its order date, or null when it was
+ * entered within the notice threshold. The entry day is the business day of
+ * `created_at` in the organization's own zone, so the notice agrees with every
+ * other business-date reader.
+ */
+async function purchaseOrderEntryLag(id: string, orgId: string, orderDate: string): Promise<number | null> {
+  const timeZone = await businessTimeZone(orgId)
+  const entered = (await db.execute<{ entered_on: string }>(sql`
+    select to_char(d.created_at at time zone ${timeZone}, 'YYYY-MM-DD') as entered_on
+      from documents d
+     where d.id = ${id} and d.org_id = ${orgId}
+  `)).rows[0]
+  return entered ? enteredAfterOrderDays(orderDate, entered.entered_on) : null
+}
+
+/**
  * Full order payload for the drawer: header (with party name resolved), lines
- * (with item/account/tax display names resolved for read-only rendering), and
- * the document_links graph (origin + converted-into edges).
+ * (with item/account/tax display names resolved for read-only rendering), the
+ * document_links graph (origin + converted-into edges), and for a purchase
+ * order the days it was entered after its order date (null when not notable).
  */
 export async function loadOrder(
   id: string,
@@ -88,6 +107,11 @@ export async function loadOrder(
        ${orderScope}
   `))
   if (!doc.rows[0]) return null
+
+  const orderDate = doc.rows[0].document_date
+  const enteredAfterOrder = kind === 'purchase_order' && typeof orderDate === 'string'
+    ? await purchaseOrderEntryLag(id, orgId, orderDate)
+    : null
 
   const lines = (await db.execute<Record<string, unknown>>(sql`
     select l.id, l.line_number, l.item_id, l.account_id, l.description, l.quantity, l.unit,
@@ -122,5 +146,5 @@ export async function loadOrder(
     order by 1
   `))
 
-  return { doc: doc.rows[0], lines: lines.rows, links: links.rows }
+  return { doc: doc.rows[0], lines: lines.rows, links: links.rows, enteredAfterOrderDays: enteredAfterOrder }
 }

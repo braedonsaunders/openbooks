@@ -1494,6 +1494,65 @@ async function lockFilingRow(
 }
 
 /**
+ * What is wrong with one exception and the remedy that clears it.
+ *
+ * Compute returns this for every exception so the worksheet can name the fix,
+ * and finalize refuses with the blocking subset of the same text (see
+ * `filingExceptionRefusal`). One function owns the wording, so the two
+ * surfaces can never name different remedies for the same vendor.
+ */
+export interface FilingExceptionGuidance {
+  message: string;
+  remedy: string;
+}
+
+export function filingExceptionGuidance(exception: ComputationException): FilingExceptionGuidance {
+  const name = exception.partyName;
+  switch (exception.kind) {
+    case "missing_tin":
+      return {
+        message: `vendor "${name}" has no taxpayer identification number on file`,
+        remedy: "collect a W-9 (or exclude the recipient with a reason) before finalizing",
+      };
+    case "missing_form_assignment":
+      return {
+        message: `vendor "${name}" is flagged as reportable but has no information return assigned`,
+        remedy: "assign one on the vendor record (or clear the reportable flag), then recompute before finalizing",
+      };
+    case "backup_withholding_not_withheld":
+      return {
+        message: `vendor "${name}" is flagged for backup withholding but no tax was withheld`,
+        remedy: "record the withholding, clear the flag on the vendor record, or exclude the recipient with a reason before finalizing",
+      };
+    case "corporation_flagged":
+      return {
+        message: `vendor "${name}": ${exception.detail}`,
+        remedy: "if it is not reportable, clear the reportable flag on the vendor record or exclude the recipient with a reason",
+      };
+    case "unflagged_over_threshold":
+      return {
+        message: `vendor "${name}": ${exception.detail}`,
+        remedy: "flag it reportable and assign its form on the vendor record if it should be filed, then recompute",
+      };
+    case "unmapped_account":
+      return {
+        message: `vendor "${name}": ${exception.detail}`,
+        remedy: "map the account under Setup → Information return boxes, or accept the vendor's default box",
+      };
+    default: {
+      const exhaustive: never = exception.kind;
+      throw new InformationReturnError(`unknown information return exception kind "${exhaustive}"`);
+    }
+  }
+}
+
+/** The finalize refusal for one blocking exception: what is wrong, then the remedy. */
+export function filingExceptionRefusal(exception: ComputationException): string {
+  const { message, remedy } = filingExceptionGuidance(exception);
+  return `${message} — ${remedy}`;
+}
+
+/**
  * Refuse finalization while any blocking exception is unresolved.
  *
  * The fresh recompute lists every exception; a recipient a person deliberately
@@ -1533,25 +1592,7 @@ export async function assertNoBlockingFilingExceptions(args: {
     ) {
       continue;
     }
-    const name = exception.partyName;
-    if (exception.kind === "missing_tin") {
-      throw new InformationReturnError(
-        `vendor "${name}" has no taxpayer identification number on file — collect a W-9 (or exclude the recipient with a reason) before finalizing`,
-      );
-    }
-    if (exception.kind === "missing_form_assignment") {
-      throw new InformationReturnError(
-        `vendor "${name}" is flagged as reportable but has no information return assigned — assign one on the vendor record (or clear the reportable flag), then recompute before finalizing`,
-      );
-    }
-    if (exception.kind === "backup_withholding_not_withheld") {
-      throw new InformationReturnError(
-        `vendor "${name}" is flagged for backup withholding but no tax was withheld — record the withholding, clear the flag on the vendor record, or exclude the recipient with a reason before finalizing`,
-      );
-    }
-    throw new InformationReturnError(
-      `vendor "${name}" has an unresolved ${exception.kind} exception — resolve it or exclude the recipient with a reason before finalizing`,
-    );
+    throw new InformationReturnError(filingExceptionRefusal(exception));
   }
 }
 

@@ -25,6 +25,7 @@ import { returnableBillLines } from '@openbooks/engine/inventory/vendor-credit-p
 import { isUuid, pickString } from '../../../../lib/list-params'
 import { resolveFormLayout } from '../../../../lib/customization/resolve'
 import { documentSettlementHref } from '../../../../lib/settlement-href'
+import { creditApplicationsDrawer, type CreditApplicationsDrawer } from '../../../../lib/credit-applications-drawer'
 
 /**
  * Vendor bills + credits — the AP document list, split into a loader and a spec.
@@ -47,7 +48,7 @@ import { documentSettlementHref } from '../../../../lib/settlement-href'
 export interface ApBillsDrawer {
   remountKey: string
   /** Posted vendor credits carry the cash-free credit-application panel. */
-  creditApplications?: { documentId: string; side: 'ap' | 'ar'; partyId: string | null; canApply: boolean } | null
+  creditApplications?: CreditApplicationsDrawer | null
   basePath: string
   payload: unknown
   /** Unsaved create: the drawer edits a blank payload; Save POSTs the collection. */
@@ -360,15 +361,7 @@ export async function loadApBills(
           // permission, mirroring the customer-credit side.
           creditApplications:
             openDoc && drawerKind === 'vendor_credit'
-              && String((openDoc.doc as Record<string, unknown>).status) === 'posted'
-              ? {
-                  documentId: String((openDoc.doc as Record<string, unknown>).id),
-                  side: 'ap' as const,
-                  partyId: (openDoc.doc as Record<string, unknown>).party_id
-                    ? String((openDoc.doc as Record<string, unknown>).party_id)
-                    : null,
-                  canApply: can(authz, 'ap.pay'),
-                }
+              ? creditApplicationsDrawer(openDoc.doc as Record<string, unknown>, { ar: false, ap: can(authz, 'ap.pay') })
               : null,
         }
       : null

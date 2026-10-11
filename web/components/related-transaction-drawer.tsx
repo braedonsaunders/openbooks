@@ -26,6 +26,7 @@ import { canRecallExpenseReport, loadExpenseReport } from '../lib/expenses'
 import { loadJournalDoc } from '../lib/journals'
 import { customSegmentOptions } from '../lib/segments'
 import { isMultiSubsidiary, subsidiaryOptions } from '../lib/subsidiaries'
+import { creditApplicationsDrawer } from '../lib/credit-applications-drawer'
 
 const PAYMENT_KINDS = new Set(['vendor_payment', 'customer_payment'])
 const ORDER_KINDS = new Set(['quote', 'sales_order', 'purchase_order'])
@@ -429,6 +430,12 @@ export async function loadRelatedTransactionDrawerData({
       // universal drawer; governed header amendments preserve that evidence.
       canCreate: kind === 'project_charge' ? can(authz, 'projects.manage') : can(authz, createPermission(kind)),
       canPost: kind === 'project_charge' ? false : can(authz, postPermission(kind)),
+      // A posted credit memo settles its open items from every drawer that
+      // opens it (party, report and global flyouts), not only the list pages.
+      creditApplications: creditApplicationsDrawer(loaded.doc, {
+        ar: can(authz, 'ar.pay'),
+        ap: can(authz, 'ap.pay'),
+      }),
       allocationsEntryEnabled,
       layout: resolvedForm.layout,
       availableLayouts: resolvedForm.available,

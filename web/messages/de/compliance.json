@@ -320,6 +320,10 @@
     "frozenNotice": "Diese Meldung ist eingefroren. Beträge und Ausschlüsse entsprechen dem Übermittelten; Korrekturen erfolgen in einer neuen Meldung.",
     "noRecipients": "Noch nichts berechnet. Berechnen Sie die Meldung, um die Zahlungen des Jahres nachzuverfolgen.",
     "computedNoRecipients": "Berechnet — kein Empfänger hat die Meldeschwelle erreicht.",
+    "exceptions": {
+      "title": "Zu prüfende Ausnahmen",
+      "remedy": "Abhilfe"
+    },
     "adjust": "Anpassen",
     "adjustDescription": "Anpassungen sind vorzeichenbehaftete Abweichungen vom Hauptbuchwert, sodass die Nachverfolgung nie überschrieben wird.",
     "adjustReason": "Grund der Anpassung",

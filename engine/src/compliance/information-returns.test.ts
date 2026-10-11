@@ -13,6 +13,8 @@ import {
   INFORMATION_RETURN_FORMS,
   InformationReturnError,
   recipientExceptions,
+  filingExceptionGuidance,
+  filingExceptionRefusal,
   informationReturnExceptionSeverity,
   resolveInformationReturnCurrency,
   statutoryFilingThreshold,
@@ -734,4 +736,54 @@ test("every exception kind carries a finalization severity", () => {
   for (const [kind, expected] of cases) {
     assert.equal(informationReturnExceptionSeverity(kind), expected, `${kind} severity`);
   }
+});
+
+// --- exception guidance ---------------------------------------------------
+
+const exception = (kind: ExceptionKind, detail = "detail text") => ({
+  kind,
+  partyId: "p1",
+  partyName: "Ace Framing",
+  detail,
+  amount: "5000",
+});
+
+test("every exception kind has a message and a remedy the operator can act on", () => {
+  const kinds: ExceptionKind[] = [
+    "missing_tin",
+    "missing_form_assignment",
+    "corporation_flagged",
+    "unflagged_over_threshold",
+    "backup_withholding_not_withheld",
+    "unmapped_account",
+  ];
+  for (const kind of kinds) {
+    const guidance = filingExceptionGuidance(exception(kind));
+    assert.match(guidance.message, /Ace Framing/, `${kind} names the vendor`);
+    assert.ok(guidance.remedy.length > 0, `${kind} has a remedy`);
+  }
+});
+
+test("the finalize refusal keeps the wording blocking exceptions have always carried", () => {
+  // These strings are the contract operators and the worksheet read; the
+  // compute response and the finalize refusal both come from one function.
+  assert.equal(
+    filingExceptionRefusal(exception("missing_tin")),
+    'vendor "Ace Framing" has no taxpayer identification number on file — collect a W-9 (or exclude the recipient with a reason) before finalizing',
+  );
+  assert.equal(
+    filingExceptionRefusal(exception("missing_form_assignment")),
+    'vendor "Ace Framing" is flagged as reportable but has no information return assigned — assign one on the vendor record (or clear the reportable flag), then recompute before finalizing',
+  );
+  assert.equal(
+    filingExceptionRefusal(exception("backup_withholding_not_withheld")),
+    'vendor "Ace Framing" is flagged for backup withholding but no tax was withheld — record the withholding, clear the flag on the vendor record, or exclude the recipient with a reason before finalizing',
+  );
+});
+
+test("informational exceptions carry their own specifics into the message", () => {
+  assert.equal(
+    filingExceptionGuidance(exception("unmapped_account", 'spend on "Office" has no box rule and fell to the default box')).message,
+    'vendor "Ace Framing": spend on "Office" has no box rule and fell to the default box',
+  );
 });

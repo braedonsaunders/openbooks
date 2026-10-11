@@ -320,6 +320,10 @@
     "frozenNotice": "此申报已冻结。金额与排除项反映已报送内容；更正请新建申报。",
     "noRecipients": "尚未计算。请计算申报以追溯全年付款。",
     "computedNoRecipients": "已计算 — 没有收款人达到申报门槛。",
+    "exceptions": {
+      "title": "待复核的例外",
+      "remedy": "处理方法"
+    },
     "adjust": "调整",
     "adjustDescription": "调整是对总账金额的有符号差额，追溯链条永不被覆盖。",
     "adjustReason": "调整原因",

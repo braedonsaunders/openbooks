@@ -12,7 +12,7 @@ import { bootJsdomEnvironment } from '../testing/jsdom-env.ts'
 await bootJsdomEnvironment({ url: "http://localhost:4800/ar/invoices", matchMediaMatches: false });
 
 const React = await import("react");
-void React;
+Object.assign(globalThis, { React });
 const { createRoot } = await import("react-dom/client");
 const { act } = await import("react");
 const { NextIntlClientProvider } = await import("next-intl");

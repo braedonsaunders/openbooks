@@ -34,6 +34,7 @@ import { AssignWarehousePanel } from './AssignWarehousePanel'
 import { GoodsReceiptForm } from './GoodsReceiptForm'
 import { VoidReceiptDialog } from './VoidReceiptDialog'
 import { ApprovalHistory } from '../../../components/approval-history'
+import { EnteredAfterOrderDateNotice } from './EnteredAfterOrderDateNotice'
 import { DropShipAssessmentButton } from './DropShipAssessmentButton'
 import { OrderBackorders } from './OrderBackorders'
 import { QuoteCashSection } from './QuoteCashSection'
@@ -143,6 +144,8 @@ export interface OrderPayload {
   doc: Record<string, unknown>
   lines: Record<string, unknown>[]
   links: LinkRow[]
+  /** Purchase orders only: days entered after the order date, when notable. */
+  enteredAfterOrderDays?: number | null
 }
 
 type DropShipRoute = {
@@ -2268,7 +2271,12 @@ export function OrderDrawer({
         {
           key: 'approvals',
           label: tCommon('approvalFlow.historyTitle'),
-          content: <ApprovalHistory subjectKind={kind} subjectId={String(doc.id)} showEmptyState />,
+          content: (
+            <div className="space-y-4">
+              {kind === 'purchase_order' ? <EnteredAfterOrderDateNotice days={order.enteredAfterOrderDays} /> : null}
+              <ApprovalHistory subjectKind={kind} subjectId={String(doc.id)} showEmptyState />
+            </div>
+          ),
         },
         ...(kind === 'quote' && quoteToCashEnabled ? [{
           key: 'subscription',
@@ -2345,6 +2353,9 @@ export function OrderDrawer({
     >
       <div className="space-y-6 p-1">
         <ActionAlert error={refusal} fallbackMessage={t('actionFailed')} />
+        {kind === 'purchase_order' && mode === 'view' ? (
+          <EnteredAfterOrderDateNotice days={order.enteredAfterOrderDays} />
+        ) : null}
         {refusal?.code === 'ORDER_LINE_WAREHOUSE_REQUIRED' && canManage && isApproved && (kind === 'purchase_order' || kind === 'sales_order') ? (
           <AssignWarehousePanel
             lines={rows

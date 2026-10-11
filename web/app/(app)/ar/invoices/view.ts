@@ -22,6 +22,7 @@ import type { TaxProviderChipRow } from '../../../../components/tax-provider-chi
 import { TAX_FILING_WRITE_PERMISSION } from '../../../../lib/tax-filing-permission'
 import { DISPLAY_DOCUMENT_NUMBER_EXPR } from '../../../../lib/customization/list-query'
 import { documentSettlementHref } from '../../../../lib/settlement-href'
+import { creditApplicationsDrawer, type CreditApplicationsDrawer } from '../../../../lib/credit-applications-drawer'
 
 /**
  * Customer invoices + credits, split into a loader and a spec.
@@ -79,7 +80,7 @@ export interface ArInvoicesDrawer {
   supplyEvidence: { documentId: string; status: string; canManage: boolean } | null
   allocationsEntryEnabled: boolean
   appliedPayments: { payments: AppliedPayment[]; currency: string } | null
-  creditApplications: { documentId: string; side: 'ap' | 'ar'; partyId: string | null; canApply: boolean } | null
+  creditApplications: CreditApplicationsDrawer | null
   returnAuthorizationHref: string | null
   /** Receive payment for this posted invoice (party + invoice preselected). */
   settlementHref: string | null
@@ -305,13 +306,8 @@ export async function loadArInvoices(
           // Only a posted credit memo can settle anything. The panel reads its
           // own state; the loader supplies identity and the permission.
           creditApplications:
-            openDoc && drawerKind === 'customer_credit' && String(openDoc.doc.status) === 'posted'
-              ? {
-                  documentId: String(openDoc.doc.id),
-                  side: 'ar' as const,
-                  partyId: openDoc.doc.party_id ? String(openDoc.doc.party_id) : null,
-                  canApply: can(authz, 'ar.pay'),
-                }
+            openDoc && drawerKind === 'customer_credit'
+              ? creditApplicationsDrawer(openDoc.doc as Record<string, unknown>, { ar: can(authz, 'ar.pay'), ap: false })
               : null,
           returnAuthorizationHref:
             drawerKind === 'customer_invoice' && featureEnabled(featureState, 'returnAuthorizations') && can(authz, 'orders.fulfill')

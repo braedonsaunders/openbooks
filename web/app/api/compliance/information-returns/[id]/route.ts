@@ -6,6 +6,7 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/platform/db'
 import {
+  filingExceptionGuidance,
   finalizeFiling,
   InformationReturnError,
   markFilingFiled,
@@ -79,7 +80,12 @@ export const POST = defineRoute({
         return NextResponse.json({
           recipients: computation.recipients.length,
           tracedCash: computation.tracedCash,
-          exceptions: computation.exceptions,
+          // Each exception names what is wrong and its remedy, through the
+          // same wording finalize refuses with.
+          exceptions: computation.exceptions.map((exception) => ({
+            ...exception,
+            ...filingExceptionGuidance(exception),
+          })),
         })
       }
       if (action === 'finalize') {

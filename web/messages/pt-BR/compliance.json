@@ -320,6 +320,10 @@
     "frozenNotice": "Esta declaração está congelada. Valores e exclusões refletem o que foi transmitido; correções vão em uma nova declaração.",
     "noRecipients": "Nada calculado ainda. Calcule a declaração para rastrear os pagamentos do ano.",
     "computedNoRecipients": "Calculado — nenhum beneficiário atingiu o limite de declaração.",
+    "exceptions": {
+      "title": "Exceções a revisar",
+      "remedy": "Correção"
+    },
     "adjust": "Ajustar",
     "adjustDescription": "Ajustes são deltas assinados contra o valor do razão, para que o rastreio nunca seja sobrescrito.",
     "adjustReason": "Motivo do ajuste",
