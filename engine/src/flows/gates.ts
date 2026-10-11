@@ -4,6 +4,7 @@ import { planFromGate, type GateData } from "@openbooks/forms-core";
 import { db, pool, schema, withOrg, withBypassContext, withOrgContext, withTransactionSavepoint } from "../platform/db.ts";
 import type { FlowExecCtx, FlowSubjectAdapter, FlowSubjectContext } from "./types.ts";
 import { getFlowAdapter, listFlowSubjectProfiles } from "./registry.ts";
+import { DOCUMENT_FLOW_KINDS } from "./subject-profiles.ts";
 import { resolveSubjectSubsidiaries } from "./subject-scope.ts";
 import { CLOSE_RUN_SUBJECT_KIND, closeRunsFlowAdapter } from "./close-runs-adapter.ts";
 import { executeFlowPlan } from "./execute.ts";
@@ -1114,6 +1115,37 @@ function worklistGateOverdueSql(overdue: boolean | undefined): SQL {
   return overdue ? sql`and g.escalate_at is not null and g.escalate_at < now()` : sql``
 }
 
+/**
+ * Liveness shared by the gate leg's rows and its kind counts: a pending gate
+ * is actionable only while its run still awaits a decision and its subject
+ * still exists undecided. Decided, voided, or deleted subjects leave pending
+ * rows behind (failed or superseded runs, removed records); listing them
+ * would offer decisions the native path must refuse, and counting them
+ * inflates the badge past the rows. One predicate feeds worklistGates and
+ * worklistGateKindCounts, so the two cannot disagree.
+ *
+ * Document decisions release while the record awaits approval, so a pending
+ * gate stays listed while its document does — the exclusion below drops only
+ * subjects that cannot be decided at all (a run that already closed, an
+ * accounting event that already left pending, a document row that no longer
+ * exists), never a later gate in a multi-level chain.
+ */
+function worklistLiveGateSql(): SQL {
+  const docKinds = JSON.stringify([...DOCUMENT_FLOW_KINDS]);
+  return sql`and exists (
+    select 1 from flow_runs r
+     where r.org_id = g.org_id and r.id = g.run_id and r.status in ('waiting', 'running')
+  )
+  and (g.subject_kind <> 'financial_change' or exists (
+    select 1 from financial_changes fc
+     where fc.org_id = g.org_id and fc.id = g.subject_id and fc.status = 'pending'
+  ))
+  and (g.subject_kind not in (select jsonb_array_elements_text(${docKinds}::jsonb)) or exists (
+    select 1 from documents d
+     where d.org_id = g.org_id and d.id = g.subject_id
+  ))`;
+}
+
 function worklistDirectWhere(
   orgId: string,
   userId: string,
@@ -1124,6 +1156,7 @@ function worklistDirectWhere(
   overdue: boolean | undefined,
 ): SQL {
   return sql`g.org_id = ${orgId} and g.status = 'pending'
+    ${worklistLiveGateSql()}
     and (g.assignee_user_id = ${userId}
          or (g.assignee_role is not null and g.assignee_role in
               (select jsonb_array_elements_text(${JSON.stringify(roleList)}::jsonb))))
@@ -1180,6 +1213,7 @@ export async function worklistGates(
     const d = (await db.execute<Record<string, unknown>>(sql`
       ${WORKLIST_SELECT}
        where g.org_id = ${orgId} and g.status = 'pending'
+         ${worklistLiveGateSql()}
          and g.assignee_user_id in
               (select jsonb_array_elements_text(${JSON.stringify(principals.map((p) => p.id))}::jsonb)::uuid)
          ${worklistGateScopeSql(allowedSubsidiaryIds)}
@@ -1243,6 +1277,7 @@ export async function worklistGateKindCounts(
       select coalesce(d.kind, g.subject_kind) as kind, count(*) as n
         ${baseJoins}
        where g.org_id = ${orgId} and g.status = 'pending'
+         ${worklistLiveGateSql()}
          and g.assignee_user_id in
               (select jsonb_array_elements_text(${JSON.stringify(principals.map((p) => p.id))}::jsonb)::uuid)
          and not (g.assignee_user_id = ${userId}
@@ -1256,6 +1291,87 @@ export async function worklistGateKindCounts(
     `)).rows);
   }
   return counts;
+}
+
+/**
+ * Pending gates the shared worklist predicate holds back, with the reason
+ * each one is unactionable. `run_closed` and `subject_missing`/`subject_decided`
+ * rows are exactly what worklistLiveGateSql excludes from both the rows and
+ * the counts; `awaiting_void` rows stay listed (a void-requested document may
+ * still carry its void decision through the same gate) and are reported for
+ * review, never for automatic cleanup.
+ *
+ * This is a read-only reconciliation readout. Clearing a held-back gate is a
+ * governed act — cancel it through the Flows run with its audit reason, or
+ * re-drive the run — never a direct delete: the gate row is decision
+ * evidence even when its subject is gone.
+ */
+export interface OrphanedPendingGate {
+  id: string;
+  runId: string;
+  flowId: string;
+  subjectKind: string;
+  subjectId: string;
+  assigneeUserId: string | null;
+  assigneeRole: string | null;
+  createdAt: Date;
+  reason: "run_closed" | "subject_decided" | "subject_missing" | "awaiting_void";
+  runStatus: string | null;
+}
+
+export async function listOrphanedPendingGates(orgId: string): Promise<OrphanedPendingGate[]> {
+  const docKinds = JSON.stringify([...DOCUMENT_FLOW_KINDS]);
+  const rows = (await db.execute<{
+    id: string; runId: string; flowId: string; subjectKind: string; subjectId: string;
+    assigneeUserId: string | null; assigneeRole: string | null; createdAt: Date;
+    runStatus: string | null; fcStatus: string | null; fcExists: boolean;
+    docExists: boolean; voidRequested: boolean;
+  }>(sql`
+    select g.id::text as id, g.run_id::text as "runId", g.flow_id::text as "flowId",
+           g.subject_kind as "subjectKind", g.subject_id::text as "subjectId",
+           g.assignee_user_id::text as "assigneeUserId", g.assignee_role as "assigneeRole",
+           g.created_at as "createdAt", r.status as "runStatus",
+           fc.status as "fcStatus", (fc.id is not null) as "fcExists",
+           (d.id is not null) as "docExists", (d.void_requested_at is not null) as "voidRequested"
+      from flow_gates g
+      left join flow_runs r on r.org_id = g.org_id and r.id = g.run_id
+      left join financial_changes fc on fc.org_id = g.org_id and fc.id = g.subject_id
+        and g.subject_kind = 'financial_change'
+      left join documents d on d.org_id = g.org_id and d.id = g.subject_id
+        and g.subject_kind in (select jsonb_array_elements_text(${docKinds}::jsonb))
+     where g.org_id = ${orgId} and g.status = 'pending'
+     order by g.created_at, g.id
+  `)).rows;
+  const docKindSet = new Set<string>(DOCUMENT_FLOW_KINDS);
+  const out: OrphanedPendingGate[] = [];
+  for (const row of rows) {
+    const base = {
+      id: row.id,
+      runId: row.runId,
+      flowId: row.flowId,
+      subjectKind: row.subjectKind,
+      subjectId: row.subjectId,
+      assigneeUserId: row.assigneeUserId,
+      assigneeRole: row.assigneeRole,
+      createdAt: row.createdAt,
+      runStatus: row.runStatus,
+    };
+    if (row.runStatus !== "waiting" && row.runStatus !== "running") {
+      out.push({ ...base, reason: "run_closed" });
+      continue;
+    }
+    if (row.subjectKind === "financial_change") {
+      if (row.fcStatus !== "pending") {
+        out.push({ ...base, reason: row.fcExists ? "subject_decided" : "subject_missing" });
+      }
+      continue;
+    }
+    if (docKindSet.has(row.subjectKind)) {
+      if (!row.docExists) out.push({ ...base, reason: "subject_missing" });
+      else if (row.voidRequested) out.push({ ...base, reason: "awaiting_void" });
+    }
+  }
+  return out;
 }
 
 // --- Delegation ----------------------------------------------------------------
