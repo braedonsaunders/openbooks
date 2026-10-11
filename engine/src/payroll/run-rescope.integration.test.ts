@@ -285,7 +285,15 @@ test(
       assert.equal(stubsBefore.n, 1);
 
       const discarded = await discardPayRun({ orgId: f.orgId, documentId: run.documentId, actorId: f.actorId });
-      assert.match(discarded.documentNumber, /^PAY-/);
+      const sequence = (await db.execute<{ prefix: string }>(sql`
+        select prefix from number_sequences
+         where org_id = ${f.orgId} and document_kind = 'pay_run' and subsidiary_id is null
+      `)).rows[0];
+      assert.ok(sequence?.prefix, "the native pay_run number sequence carries a prefix");
+      assert.ok(
+        discarded.documentNumber.startsWith(sequence.prefix),
+        `discarded run number ${discarded.documentNumber} carries the native sequence prefix ${sequence.prefix}`,
+      );
       const remaining = (await db.execute<{ documents: number; runs: number; stubs: number; adjustments: number }>(sql`
         select (select count(*)::int from documents where org_id = ${f.orgId} and id = ${run.documentId}) as documents,
                (select count(*)::int from pay_runs where org_id = ${f.orgId} and document_id = ${run.documentId}) as runs,
