@@ -19,6 +19,33 @@ import {
   type CataloguePermission,
 } from "./permissions.ts";
 
+/**
+ * Fixed-asset duties: capitalize accepts proposals and capitalizes
+ * construction in progress (both post reclasses); maintain keeps the
+ * maintenance and insurance registers. Both follow assets.manage: the
+ * controller and accountant hold them, read-only duties never do.
+ */
+test("fixed-asset capitalization and maintenance permissions are catalogued and granted by duty", () => {
+  const keys: CataloguePermission[] = ["assets.capitalize", "assets.maintain"];
+  for (const perm of keys) {
+    assert.ok((PERMISSION_CATALOGUE as readonly string[]).includes(perm), `${perm} must be seeded so someone can hold it`);
+    assert.equal(permissionLabelKey(perm), `permissions.${perm.replace(/\./g, "_")}`);
+  }
+  const group = PERMISSION_GROUPS.find((entry) => entry.key === "assets");
+  assert.ok(group);
+  assert.deepEqual(group.permissions.map((entry) => entry.key), ["assets.read", "assets.manage", ...keys]);
+  const holds = (role: string, perm: string) =>
+    permissionSetCovers(new Set(BUILT_IN_ROLES[role]!.permissions), perm);
+  for (const perm of keys) {
+    for (const role of ["admin", "controller", "accountant"]) {
+      assert.equal(holds(role, perm), true, `${role} must hold ${perm}`);
+    }
+    for (const role of ["viewer", "approver"]) {
+      assert.equal(holds(role, perm), false, `${role} must not hold ${perm}`);
+    }
+  }
+});
+
 test("stored value permissions are catalogued, grouped, and split by duty", () => {
   const keys: CataloguePermission[] = ["stored_value.read", "stored_value.manage", "stored_value.adjust"];
   for (const perm of keys) {

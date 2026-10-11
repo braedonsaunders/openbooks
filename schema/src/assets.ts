@@ -47,11 +47,14 @@ export const fixedAssets = pgTable(
     /** Legal entity whose books own the asset and its depreciation. */
     subsidiaryId: uuid("subsidiary_id").notNull(),
     transferredFromAssetId: uuid("transferred_from_asset_id"),
+    /** Compound assets: a component's parent, one level deep, same legal entity (migration 0688). */
+    parentAssetId: uuid("parent_asset_id"),
     categoryId: uuid("category_id").notNull(),
     assetNumber: text("asset_number").notNull(),
     name: text("name").notNull(),
     description: text("description"),
-    status: text("status", { enum: ["draft", "in_service", "fully_depreciated", "disposed", "written_off"] })
+    /** construction = construction in progress (never depreciates); capitalized = a closed CIP record. */
+    status: text("status", { enum: ["draft", "in_service", "fully_depreciated", "disposed", "written_off", "construction", "capitalized"] })
       .notNull()
       .default("draft"),
     acquiredOn: date("acquired_on"),
@@ -92,6 +95,7 @@ export const fixedAssets = pgTable(
       t.assetNumber,
     ),
     index("assets_org_status").on(t.orgId, t.status),
+    index("fixed_assets_parent").on(t.orgId, t.parentAssetId).where(sql`${t.parentAssetId} is not null`),
   ],
 );
 

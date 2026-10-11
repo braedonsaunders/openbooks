@@ -71,6 +71,17 @@ export const FEATURES: FeatureDef[] = [
   // live feeds). Off by default — manual OFX/CSV import always works without it.
   { key: 'bankFeeds', defaultEnabled: false, category: 'finance', group: 'cash' },
   { key: 'fixedAssets', defaultEnabled: true, category: 'finance', group: 'assets', navModules: ['assets', 'leases', 'tax-depreciation'] },
+  // Fixed-asset depth, each opt-in under Fixed Assets: compound assets with
+  // separately depreciated components; asset proposals generated from
+  // posted purchases under the capitalization rules; construction in
+  // progress with its subledger and governed capitalization; maintenance
+  // schedules and work records; insurance policies and renewals. Turning
+  // one off hides its screens and refuses its writes; recorded data stays.
+  { key: 'assetComponents', defaultEnabled: false, category: 'finance', group: 'assets', parentKey: 'fixedAssets' },
+  { key: 'assetProposals', defaultEnabled: false, category: 'finance', group: 'assets', navModules: ['asset-proposals'], parentKey: 'fixedAssets' },
+  { key: 'constructionInProgress', defaultEnabled: false, category: 'finance', group: 'assets', navModules: ['asset-construction'], parentKey: 'fixedAssets' },
+  { key: 'assetMaintenance', defaultEnabled: false, category: 'finance', group: 'assets', navModules: ['asset-maintenance'], parentKey: 'fixedAssets' },
+  { key: 'assetInsurance', defaultEnabled: false, category: 'finance', group: 'assets', navModules: ['asset-insurance'], parentKey: 'fixedAssets' },
   { key: 'budgets', defaultEnabled: true, category: 'finance', group: 'planning', navModules: ['budgets'] },
   // Internal billing: one part of the business bills another — department
   // to department, project to project, or subsidiary to subsidiary. Each
