@@ -68,6 +68,7 @@ const ACTION_LABELS = {
   withdraw: 'Withdraw',
   reason: 'Reason',
   failed: 'Could not change the offer',
+  addBankAccount: 'Add bank account',
 }
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 20))
@@ -329,4 +330,45 @@ test('the accept action pins the refusal instead of swallowing it', async (t) =>
   const alert = document.querySelector('[role="alert"]')
   assert.ok(alert, 'the refusal pins as an accessible alert')
   assert.ok((alert?.textContent ?? '').includes(refusal), 'the refusal message renders intact')
+})
+
+test('accepting the offer offers bank capture for the new hire', async (t) => {
+  const partyId = 'e2b8c9d0-1111-4111-8111-111111111111'
+  const prior = globalThis.fetch
+  globalThis.fetch = (async () => Response.json({ hire: { employmentId: 'emp-1', workerPartyId: partyId } }, { status: 200 })) as typeof fetch
+  t.after(() => {
+    globalThis.fetch = prior
+  })
+
+  const host = document.createElement('div')
+  document.body.appendChild(host)
+  const root = createRoot(host)
+  await act(async () => {
+    root.render(provider(<OfferActionsIsland offerId="offer-1" labels={ACTION_LABELS} />))
+    await tick()
+  })
+  await tick()
+  t.after(async () => {
+    await act(async () => {
+      root.unmount()
+    })
+    host.remove()
+  })
+
+  const accept = [...host.querySelectorAll('button')].find((b) => b.textContent?.trim() === 'Accept and hire')
+  assert.ok(accept, 'the island offers Accept')
+  await act(async () => {
+    ;(accept as HTMLElement).click()
+    await tick()
+  })
+  await tick()
+
+  const link = host.querySelector('a')
+  assert.ok(link, 'the hire completion offers bank capture')
+  assert.equal(link?.textContent, 'Add bank account')
+  assert.equal(
+    link?.getAttribute('href'),
+    `/entities/employees?party=${partyId}&partyTab=employment`,
+    'the offer lands on the hire Employment tab',
+  )
 })

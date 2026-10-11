@@ -1058,7 +1058,8 @@
       "decline": "辞退",
       "withdraw": "撤回",
       "reason": "理由",
-      "failed": "オファー操作に失敗しました。"
+      "failed": "オファー操作に失敗しました。",
+      "addBankAccount": "銀行口座を追加"
     },
     "basis": {
       "hourly": "時給",

@@ -73,6 +73,10 @@ const mockSources = new Map<string, string>([
       export async function guardPermission() {
         return { user: { id: 'user-1', orgId: '${ORG_ID}' }, permissions: new Set(['*']), allowedSubsidiaryIds: null }
       }
+      export async function getAuthz() {
+        return { user: { id: 'user-1', orgId: '${ORG_ID}' }, permissions: new Set(['*']), allowedSubsidiaryIds: null }
+      }
+      export function can(gate, perm) { return gate.permissions.has('*') || gate.permissions.has(perm) }
       export function guardSubsidiaryScope() { return null }
     `,
   ],

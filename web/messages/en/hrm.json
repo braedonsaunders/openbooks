@@ -1058,7 +1058,8 @@
       "decline": "Decline",
       "withdraw": "Withdraw",
       "reason": "Reason",
-      "failed": "The offer action failed."
+      "failed": "The offer action failed.",
+      "addBankAccount": "Add bank account"
     },
     "basis": {
       "hourly": "Hourly",

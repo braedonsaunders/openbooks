@@ -846,12 +846,16 @@ export function OfferActionsIsland({
   labels,
 }: {
   offerId: string
-  labels: { send: string; accept: string; decline: string; withdraw: string; reason: string; failed: string }
+  labels: { send: string; accept: string; decline: string; withdraw: string; reason: string; failed: string; addBankAccount: string }
 }) {
   const refresh = useRefresh()
   const [reason, setReason] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Accept mints the employment: offer direct-deposit capture for the new
+  // hire next — the employee record's Employment tab carries the bank
+  // section for HR/payroll operators.
+  const [hiredPartyId, setHiredPartyId] = useState<string | null>(null)
 
   async function act(body: unknown): Promise<void> {
     setBusy(true)
@@ -863,6 +867,12 @@ export function OfferActionsIsland({
         setBusy(false)
         return
       }
+      if ((body as { action?: unknown } | null)?.action === 'accept') {
+        const data = (await res.json().catch(() => ({}))) as { hire?: { workerPartyId?: unknown } }
+        if (typeof data.hire?.workerPartyId === 'string' && data.hire.workerPartyId) {
+          setHiredPartyId(data.hire.workerPartyId)
+        }
+      }
       setBusy(false)
       refresh()
     } catch {
@@ -873,6 +883,16 @@ export function OfferActionsIsland({
 
   return (
     <div className="space-y-2">
+      {hiredPartyId ? (
+        <p className="text-sm">
+          <a
+            href={`/entities/employees?party=${encodeURIComponent(hiredPartyId)}&partyTab=employment`}
+            className="font-medium text-teal-700 hover:underline dark:text-teal-300"
+          >
+            {labels.addBankAccount}
+          </a>
+        </p>
+      ) : null}
       <div className="flex flex-wrap items-center gap-2">
         <Button size="sm" disabled={busy} onClick={() => void act({ action: 'send' })}>
           {labels.send}

@@ -64,6 +64,7 @@ export function PartyDrawer({
   fieldDefs,
   subsidiaries,
   canManage,
+  canManageEmployeeBanks = false,
   canHire = false,
   canReadActivities = false,
   canManageActivities = false,
@@ -110,6 +111,13 @@ export function PartyDrawer({
   fieldDefs: CustomFieldDefClient[]
   subsidiaries: SubsidiaryOpt[]
   canManage: boolean
+  /**
+   * Direct-deposit capture: the master-data grant or the HR/payroll manage
+   * grant unlocks Add on the employee Bank accounts sections (the
+   * bank-accounts route enforces the same rule per party). Without it the
+   * sections read — "No bank accounts on file" with no control.
+   */
+  canManageEmployeeBanks?: boolean
   /**
    * hrm.employment.manage — chains the unsaved-create save into the Hire
    * step so one drawer records the person and their first employment.
@@ -2117,7 +2125,21 @@ export function PartyDrawer({
 
         {tab === 'employment' && showEmploymentTab && hrm ? (
           hrm.employmentIds.length === 1 ? (
-            <EmploymentTab employmentId={hrm.employmentIds[0] as string} canManageHrm={hrm.canManageHrm} canReadExits={hrm.canReadExits} canRecordExit={hrm.canRecordExit} canVerb={hrm.canVerb ?? false} departmentOptions={departments.map((option) => ({ value: option.id, label: option.label ?? option.name ?? option.id }))} />
+            <div className="space-y-6 p-1">
+              <EmploymentTab employmentId={hrm.employmentIds[0] as string} canManageHrm={hrm.canManageHrm} canReadExits={hrm.canReadExits} canRecordExit={hrm.canRecordExit} canVerb={hrm.canVerb ?? false} departmentOptions={departments.map((option) => ({ value: option.id, label: option.label ?? option.name ?? option.id }))} />
+              {/* Direct deposit at hire: the native party bank path with its
+                  approval controls, offered where the hiring operator works.
+                  HR/payroll manage captures; pure readers see no section. */}
+              {canManageEmployeeBanks ? (
+                <BankAccountsPanel
+                  partyId={String(p.id)}
+                  initialAccounts={payload.bankAccounts}
+                  canManage={canManage || canManageEmployeeBanks}
+                  multiCurrency={multiCurrency}
+                  readOnly={!editable && !canManageEmployeeBanks}
+                />
+              ) : null}
+            </div>
           ) : hrm.employmentIds.length === 0 ? (
             <div className="space-y-2 p-1">
               <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">
@@ -2325,9 +2347,9 @@ export function PartyDrawer({
             <BankAccountsPanel
               partyId={String(p.id)}
               initialAccounts={payload.bankAccounts}
-              canManage={canManage}
+              canManage={canManage || canManageEmployeeBanks}
               multiCurrency={multiCurrency}
-              readOnly={!editable}
+              readOnly={!editable && !canManageEmployeeBanks}
             />
           </div>
         </div>
@@ -2351,10 +2373,14 @@ export function PartyDrawer({
             router.refresh()
           }}
           onSaved={() => {
+            // The hire is recorded; land on the Employment tab, whose bank
+            // section offers direct-deposit capture for the new employment.
+            // Viewers without the tab fall back to overview (same predicate
+            // gates the button and the deep link), so nobody strands.
             const createdId = hiredAfterCreate.partyId
             setHiredAfterCreate(null)
             const separator = returnHref.includes('?') ? '&' : '?'
-            router.replace(`${returnHref}${separator}party=${createdId}` as never)
+            router.replace(`${returnHref}${separator}party=${createdId}&partyTab=employment` as never)
             router.refresh()
           }}
         />

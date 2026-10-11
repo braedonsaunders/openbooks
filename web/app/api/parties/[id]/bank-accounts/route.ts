@@ -8,7 +8,7 @@ import { businessToday } from "@openbooks/engine/src/platform/business-date.ts";
 import { runRecordFlows } from '@openbooks/engine/src/flows/run.ts'
 import { BANK_ACCOUNT_SUBJECT_KIND } from '@openbooks/engine/src/flows/bank-accounts-adapter.ts'
 import { defineRoute } from '../../../../../lib/api/route'
-import { denyLockedOutsidePartyScope, denyOutsidePartyScope } from './party-scope'
+import { authorizePartyBankWrite, denyLockedOutsidePartyScope, denyOutsidePartyScope } from './party-scope'
 import { isFeatureEnabled } from '../../../../../lib/features'
 import { isUuid } from '../../../../../lib/list-params'
 import { normalizeCountryCode } from '../../../../../lib/countries'
@@ -92,7 +92,7 @@ function canonicalRevision(value: unknown): string | null {
 }
 
 export const POST = defineRoute({
-  permission: 'parties.manage',
+  authorize: authorizePartyBankWrite,
   feature: { none: 'Party bank details are governed by party permissions and approval flows.' },
   params: z.object({ id: z.string() }),
   handler: async ({ request: req, authz: gate, params }) => {
@@ -189,7 +189,7 @@ export const POST = defineRoute({
 })
 
 export const PATCH = defineRoute({
-  permission: 'parties.manage',
+  authorize: authorizePartyBankWrite,
   feature: { none: 'Party bank details are governed by party permissions and approval flows.' },
   params: z.object({ id: z.string() }),
   handler: async ({ request: req, authz: gate, params }) => {
@@ -382,7 +382,7 @@ export const PATCH = defineRoute({
 
 /** Retire approved or rejected bank details without destroying fraud evidence. */
 export const DELETE = defineRoute({
-  permission: 'parties.manage',
+  authorize: authorizePartyBankWrite,
   feature: { none: 'Party bank details are governed by party permissions and approval flows.' },
   params: z.object({ id: z.string() }),
   handler: async ({ request: req, authz: gate, params }) => {

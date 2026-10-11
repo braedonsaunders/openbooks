@@ -83,6 +83,7 @@ async function seedOffer(): Promise<{ orgId: string; cleanup: () => Promise<void
       employer: catalog.recruiting.drawer.employer,
       send: actions.send, accept: actions.accept, decline: actions.decline,
       withdraw: actions.withdraw, reason: actions.reason, failed: actions.failed,
+      addBankAccount: actions.addBankAccount,
     },
   };
   const cand = await getCandidateDetail({ orgId, actorId: adminId, candidateId: created.candidate.id });

@@ -246,6 +246,16 @@ export async function loadEntityRole(
               }
             : openParty) as unknown as PartyDrawerProps['payload'],
           canManage,
+          // Direct-deposit capture at hire: the employee Bank accounts
+          // sections (payroll tab and Employment tab) manage through the
+          // native party bank path when the viewer holds the master-data
+          // grant or the HR/payroll manage grant. The bank-accounts route
+          // re-checks the same rule per party, so this flag only reveals
+          // the Add control the server will honor.
+          canManageEmployeeBanks:
+            canManage ||
+            (hrmEnabled && can(authz, 'hrm.employment.manage')) ||
+            (payrollEnabled && can(authz, 'payroll.manage')),
           // First-employment Hire chaining for the unsaved-create flow:
           // employee drawers only, behind the employment manage grant (the
           // hire route re-checks it). Readers keep the read-only record.

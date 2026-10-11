@@ -1058,7 +1058,8 @@
       "decline": "Recusar",
       "withdraw": "Retirar",
       "reason": "Motivo",
-      "failed": "A ação da oferta falhou."
+      "failed": "A ação da oferta falhou.",
+      "addBankAccount": "Adicionar conta bancária"
     },
     "basis": {
       "hourly": "Por hora",

@@ -52,7 +52,11 @@ const mockSources = new Map<string, string>([
         const state = globalThis[Symbol.for('openbooks.bank-accounts-route-test')]
         return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: state.allowedSubsidiaryIds }
       }
-      export async function getAuthz() { return { user: { orgId: 'org-1', id: 'user-1' } } }
+      export async function getAuthz() {
+        const state = globalThis[Symbol.for('openbooks.bank-accounts-route-test')]
+        return { user: { orgId: 'org-1', id: 'user-1' }, allowedSubsidiaryIds: state.allowedSubsidiaryIds }
+      }
+      export function can() { return true }
       export function guardRootSubsidiaryScope() { return null }
       export function guardUnrestrictedScope() { return null }
       export function guardSubsidiaryScope(gate, subsidiaryId, options = {}) {

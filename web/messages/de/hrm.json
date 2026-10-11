@@ -1058,7 +1058,8 @@
       "decline": "Ablehnen",
       "withdraw": "Zurückziehen",
       "reason": "Grund",
-      "failed": "Die Angebotsaktion ist fehlgeschlagen."
+      "failed": "Die Angebotsaktion ist fehlgeschlagen.",
+      "addBankAccount": "Bankverbindung hinzufügen"
     },
     "basis": {
       "hourly": "Stündlich",

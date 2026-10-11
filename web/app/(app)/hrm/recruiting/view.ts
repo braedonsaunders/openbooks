@@ -813,6 +813,7 @@ export async function loadRecruitingPage(
           withdraw: t('recruiting.offerActions.withdraw'),
           reason: t('recruiting.offerActions.reason'),
           failed: t('recruiting.offerActions.failed'),
+          addBankAccount: t('recruiting.offerActions.addBankAccount'),
         },
       }
     } catch (error) {

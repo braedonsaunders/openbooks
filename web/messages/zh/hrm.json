@@ -1058,7 +1058,8 @@
       "decline": "拒绝",
       "withdraw": "撤回",
       "reason": "原因",
-      "failed": "录用通知操作失败。"
+      "failed": "录用通知操作失败。",
+      "addBankAccount": "添加银行账户"
     },
     "basis": {
       "hourly": "按小时",

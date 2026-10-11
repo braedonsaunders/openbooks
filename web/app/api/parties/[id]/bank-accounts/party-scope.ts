@@ -2,7 +2,32 @@ import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
 import { db, type SqlExecutor } from '@openbooks/engine/src/platform/db.ts'
 import { lockScopeRow, ScopeNotFoundError } from '@openbooks/engine/src/organization/subsidiary-scope.ts'
-import { guardSubsidiaryScope, type Authz } from '../../../../../lib/authz'
+import { can, getAuthz, guardSubsidiaryScope, type Authz } from '../../../../../lib/authz'
+import { isUuid } from '../../../../../lib/list-params'
+
+/**
+ * Bank details stay under parties.manage — except an EMPLOYEE's own
+ * direct-deposit record, which the hiring and payroll operators must capture
+ * at hire without holding the master-data grant: hrm.employment.manage or
+ * payroll.manage suffices when the party carries an active employee role.
+ * This widens WHO may start the flow, never what it enforces — approval,
+ * revision tokens, audit and the subsidiary-scope checks in each handler
+ * still govern every write.
+ */
+export const authorizePartyBankWrite = async ({ params }: { request: Request; params: unknown }) => {
+  const authz = await getAuthz()
+  if (!authz) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
+  if (can(authz, 'parties.manage')) return authz
+  const partyId = (params as { id?: string } | undefined)?.id ?? ''
+  if (
+    isUuid(partyId) &&
+    (can(authz, 'hrm.employment.manage') || can(authz, 'payroll.manage')) &&
+    (await db.execute(sql`select 1 from employee_roles where org_id = ${authz.user.orgId} and party_id = ${partyId} and is_active`)).rows.length > 0
+  ) {
+    return authz
+  }
+  return NextResponse.json({ error: 'missing permission: parties.manage' }, { status: 403 })
+}
 
 /** Party record boundary shared by every bank-account verb here (null-subsidiary parties are org-wide). */
 export async function denyOutsidePartyScope(gate: Authz, partyId: string): Promise<NextResponse | null> {

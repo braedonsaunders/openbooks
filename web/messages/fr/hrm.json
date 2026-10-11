@@ -1058,7 +1058,8 @@
       "decline": "Refuser",
       "withdraw": "Retirer",
       "reason": "Motif",
-      "failed": "L'action sur l'offre a échoué."
+      "failed": "L'action sur l'offre a échoué.",
+      "addBankAccount": "Ajouter un compte bancaire"
     },
     "basis": {
       "hourly": "Horaire",

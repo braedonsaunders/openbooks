@@ -9,7 +9,7 @@ import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { BANK_ACCOUNT_SUBJECT_KIND } from '@openbooks/engine/src/flows/bank-accounts-adapter.ts'
 import { defineRoute } from '../../../../../../lib/api/route'
 import { isUuid } from '../../../../../../lib/list-params'
-import { denyLockedOutsidePartyScope, denyOutsidePartyScope } from '../party-scope'
+import { authorizePartyBankWrite, denyLockedOutsidePartyScope, denyOutsidePartyScope } from '../party-scope'
 import { notFound } from "@/lib/api/responses";
 
 /**
@@ -39,7 +39,10 @@ export const runtime = 'nodejs'
  * instead of refusing with nowhere to go.
  */
 export const POST = defineRoute({
-  permission: 'parties.manage',
+  // Same WHO as the bank writes: master data everywhere, HR/payroll for an
+  // employee's own direct-deposit record. Submission only (re-)drives the
+  // approval flow; deciding stays in the approvals centre.
+  authorize: authorizePartyBankWrite,
   feature: { none: 'Party bank detail submission is governed by party permissions and approval flows.' },
   params: z.object({ id: z.string() }),
   handler: async ({ request: req, authz: gate, params }) => {

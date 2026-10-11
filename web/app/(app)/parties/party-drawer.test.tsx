@@ -61,6 +61,7 @@ const { act } = await import("react");
 const { NextIntlClientProvider } = await import("next-intl");
 const messages = (await import("../../../messages/en")).default;
 const { MoneyProvider } = await import("../../../components/money-provider");
+const { BusinessDateProvider } = await import("../../../components/business-date-provider");
 const { PartyDrawer } = await import("./PartyDrawer");
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
@@ -229,4 +230,82 @@ test("a refused save still pins, toasts, and stays in edit mode", async (t) => {
   );
   assert.ok(buttonsNamed("Save").length > 0, "a refused save must stay in edit mode with values intact");
   assert.equal(save.disabled, false, "busy must release after the refusal");
+});
+
+// Direct-deposit capture at hire: the Employment tab's bank section offers
+// Add bank account to HR/payroll operators through the native party bank
+// path — without the master-data grant and without drawer edit mode —
+// while pure readers still see no control.
+const EMPLOYEE_PAYLOAD = {
+  ...PAYLOAD,
+  party: { ...PAYLOAD.party, kind: "person", display_name: "Hired Hannah" },
+  vendor: null,
+  employee: { is_active: true },
+};
+
+async function renderEmployeeDrawer(canManageEmployeeBanks: boolean) {
+  globalThis.__partyToasts = [];
+  globalThis.__partyRouter = { push() {}, refresh() {} };
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  await act(async () => {
+    root.render(
+      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+        <MoneyProvider currency="USD">
+          <BusinessDateProvider today="2026-10-01">
+          <PartyDrawer
+            payload={EMPLOYEE_PAYLOAD as never}
+            paymentTerms={[]}
+            departments={[]}
+            trades={[]}
+            fieldDefs={[]}
+            subsidiaries={[]}
+            canManage={false}
+            canManageEmployeeBanks={canManageEmployeeBanks}
+            recordType="employee"
+            role="employee"
+            initialTab="employment"
+            hrm={{
+              employmentIds: ["33333333-3333-4333-8333-333333333333"],
+              canManageHrm: true,
+              canReadExits: false,
+              canRecordExit: false,
+            }}
+          />
+          </BusinessDateProvider>
+        </MoneyProvider>
+      </NextIntlClientProvider>,
+    );
+    await tick();
+  });
+  await tick();
+  await tick();
+  return {
+    unmount: async () => {
+      await act(async () => {
+        root.unmount();
+      });
+      host.remove();
+    },
+  };
+}
+
+test("the Employment tab offers Add bank account to HR/payroll operators without edit mode", async (t) => {
+  const restoreFetch = scriptFetch(() => null);
+  t.after(restoreFetch);
+  const { unmount } = await renderEmployeeDrawer(true);
+  t.after(unmount);
+  assert.ok(
+    buttonsNamed("Add bank account")[0],
+    "HR/payroll operators must get the native Add control where they hire",
+  );
+});
+
+test("readers get no bank capture control on the Employment tab", async (t) => {
+  const restoreFetch = scriptFetch(() => null);
+  t.after(restoreFetch);
+  const { unmount } = await renderEmployeeDrawer(false);
+  t.after(unmount);
+  assert.equal(buttonsNamed("Add bank account").length, 0, "no grant must mean no control");
 });

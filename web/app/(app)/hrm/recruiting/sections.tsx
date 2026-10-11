@@ -219,7 +219,7 @@ export interface OfferDrawerData {
   closeHref: string
   /** HR-21 "Draft from evidence" link for the letter clauses (offer_letter_clauses kind). */
   draft: { href: string; label: string } | null
-  labels: { employer: string; send: string; accept: string; decline: string; withdraw: string; reason: string; failed: string }
+  labels: { employer: string; send: string; accept: string; decline: string; withdraw: string; reason: string; failed: string; addBankAccount: string }
 }
 
 /** The requisition flyout body: facts, pipeline chips, applications, islands. */
