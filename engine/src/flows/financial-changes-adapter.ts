@@ -42,6 +42,20 @@ async function assertAccountingSubjectFeatures(orgId: string, subjectId: string,
 }
 
 export const FINANCIAL_CHANGE_SUBJECT_KIND = "financial_change";
+
+/** A submit refused by the approval-flow policy itself: named with a 4xx
+ * status so route boundaries answer the operator's message, never a 500. */
+export class FinancialChangeSubmitError extends Error {
+  readonly status = 422;
+  readonly code: string;
+  readonly remedy?: string;
+  constructor(message: string, code: string, remedy?: string) {
+    super(message);
+    this.name = "FinancialChangeSubmitError";
+    this.code = code;
+    if (remedy !== undefined) this.remedy = remedy;
+  }
+}
 export const financialChangeSubjectProfile: FlowSubjectProfile = {
   subjectKind: FINANCIAL_CHANGE_SUBJECT_KIND,
   label: "Accounting event",
@@ -292,10 +306,17 @@ export async function submitFinancialChange(
         { orgId, userId: actorId },
       );
       if (result.failed || result.gatesCreated === 0) {
-        throw new Error(
-          result.failed
-            ? "accounting event approval routing failed; review the configured flow and its recipients, then resubmit"
-            : "configure an enabled Accounting event approval flow in Flows, then submit this proposal",
+        if (result.failed) {
+          throw new FinancialChangeSubmitError(
+            "accounting event approval routing failed; review the configured flow and its recipients, then resubmit",
+            "financial_change_flow_failed",
+            "Review the configured flow and its recipients, then resubmit.",
+          );
+        }
+        throw new FinancialChangeSubmitError(
+          "configure an enabled Accounting event approval flow in Flows, then submit this proposal",
+          "financial_change_flow_required",
+          "Configure an enabled Accounting event approval flow in Flows, then submit this proposal.",
         );
       }
       const updated = await tx.execute(sql`

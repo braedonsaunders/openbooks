@@ -9,7 +9,8 @@ import { canonicalJson } from "../platform/canonical-json.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { lockActorCommandAuthority } from "../organization/actor-command-authority.ts";
 import { ScopeNotFoundError } from "../organization/subsidiary-scope.ts";
-import { assertFinancialChangeApproved, completeFinancialChange, existingFinancialChange, loadFinancialChange, proposeFinancialChange, MANUFACTURING_BOM_APPROVAL_OPERATION } from "../platform/financial-changes.ts";
+import { assertFinancialChangeApproved, completeFinancialChange, existingFinancialChange, financialChangeFlowConfigured, loadFinancialChange, proposeFinancialChange, MANUFACTURING_BOM_APPROVAL_OPERATION } from "../platform/financial-changes.ts";
+import type { FinancialChange } from "../platform/financial-changes.ts";
 
 export class BomPolicyError extends Error {
   constructor(message: string, readonly status = 422, readonly code = "bom_policy_refused", readonly details?: Record<string, unknown>) { super(message); }
@@ -94,8 +95,12 @@ async function validateReferences(tx: SqlExecutor, orgId: string, assemblyItemId
   if (valid.rows.length !== ids.length) throw new BomPolicyError("Every assembly and component must be an active inventory item with a costing profile in this organization.");
 }
 
-/** Earlier effectivity remains readable after a successor takes effect. */
-function preserveHistory(before: StoredLine[], next: BomPolicyLine[], today: string) {
+/** Earlier effectivity remains readable after a successor takes effect. A
+ * back-dated revision is admitted only as a first revision for an
+ * assembly with no production posted on or after its start; anything
+ * posted keeps the back-date refused, naming it, and any other
+ * back-dated revision keeps the standing refusal. */
+async function preserveHistory(tx: SqlExecutor, orgId: string, assemblyItemId: string, before: StoredLine[], next: BomPolicyLine[], today: string) {
   const semantic = (line: BomPolicyLine) => ({ componentItemId: line.componentItemId, quantityPer: canonicalDecimal(line.quantityPer,4), operationSeq: line.operationSeq, scrapPct: canonicalDecimal(line.scrapPct ?? "0",4), isByproduct: line.isByproduct,quantityBasis:line.quantityBasis??'per_unit',formulaOutputQuantity:canonicalDecimal(line.formulaOutputQuantity??'1',4), effectiveFrom: line.effectiveFrom });
   const matched = new Set<number>();
   for (const old of before) {
@@ -105,7 +110,32 @@ function preserveHistory(before: StoredLine[], next: BomPolicyLine[], today: str
     if (index < 0) throw new BomPolicyError("Retain earlier component quantities and effectivity. End the current line today or later and add its successor with a new effective start.",409,"bom_history_immutable");
     matched.add(index);
   }
-  if (next.some((line,index) => !matched.has(index) && (line.effectiveFrom === null || line.effectiveFrom < today))) throw new BomPolicyError("New manufacturing component lines require an effective start of today or later; earlier recipe history cannot be introduced by a revision.",409,"bom_backdated_revision");
+  const backdated = next.map((line, index) => ({ line, index }))
+    .filter(({ line, index }) => !matched.has(index) && (line.effectiveFrom === null || line.effectiveFrom < today));
+  if (backdated.length > 0) {
+    const starts = backdated.map(({ line }) => line.effectiveFrom).filter((from): from is string => from !== null).sort();
+    await assertBackdateWindowClear(tx,orgId,assemblyItemId,starts[0] ?? "0001-01-01");
+    if (before.length > 0) throw new BomPolicyError("New manufacturing component lines require an effective start of today or later; earlier recipe history cannot be introduced by a revision.",409,"bom_backdated_revision");
+  }
+}
+
+/** Production evidence for a back-dated recipe: released or completed
+ * work orders and posted finished builds on or after the requested
+ * start each refuse the back-date, naming what posted. */
+async function assertBackdateWindowClear(tx: SqlExecutor, orgId: string, assemblyItemId: string, earliestFrom: string): Promise<void> {
+  const order = (await tx.execute<{ number: string; posted: string }>(sql`
+    select number, greatest(released_at::date, coalesce(completed_at::date, released_at::date))::text as posted
+      from mfg_work_orders
+     where org_id=${orgId} and produced_item_id=${assemblyItemId} and released_at is not null
+       and (released_at::date >= ${earliestFrom}::date or completed_at::date >= ${earliestFrom}::date)
+     order by released_at, number limit 1`)).rows[0];
+  if (order) throw new BomPolicyError(`A back-dated first recipe is refused: work order ${order.number} already posts production for this assembly (posted ${order.posted}). Propose the revision with an effective start of today or later.`,409,"bom_backdated_revision");
+  const build = (await tx.execute<{ moved: string }>(sql`
+    select moved_at::date::text as moved from inventory_movements
+     where org_id=${orgId} and item_id=${assemblyItemId} and kind='assembly_build' and status='posted'
+       and moved_at::date >= ${earliestFrom}::date
+     order by moved_at limit 1`)).rows[0];
+  if (build) throw new BomPolicyError(`A back-dated first recipe is refused: finished production of this assembly already posted on ${build.moved}. Propose the revision with an effective start of today or later.`,409,"bom_backdated_revision");
 }
 
 async function replace(tx: SqlExecutor, orgId: string, actorId: string, input: BomPolicyInput, before: Awaited<ReturnType<typeof snapshot>>, lines: BomPolicyLine[], approvalChangeId?: string) {
@@ -143,13 +173,14 @@ export async function saveBomPolicy(tx: SqlExecutor, orgId: string, actorId: str
     if (!input.subsidiaryId || !isUuid(input.subsidiaryId) || !input.requestKey || input.requestKey.length>120 || input.reason.trim().length<8 || input.reason.trim().length>1000) throw new BomPolicyError("Choose a booking entity, provide a request key and enter an approval reason between 8 and 1,000 characters.");
     if (!(await tx.execute(sql`select id from subsidiaries where org_id=${orgId} and id=${input.subsidiaryId} and is_active and not is_elimination for share`)).rows.length) throw new ScopeNotFoundError();
     const retained = (await tx.execute<{effective_on:string}>(sql`select effective_on::text from financial_changes where org_id=${orgId} and idempotency_key=${input.requestKey}`)).rows[0];
+    const directEvidence = !(await financialChangeFlowConfigured(tx,orgId));
     const proposal = {orgId,actorId,subsidiaryId:input.subsidiaryId,domain:"manufacturing" as const,subjectId:input.assemblyItemId,operation:MANUFACTURING_BOM_APPROVAL_OPERATION,
-      effectiveOn:retained?.effective_on ?? await businessTodayInTx(tx,orgId),reason:input.reason,idempotencyKey:input.requestKey,payload:{assemblyItemId:input.assemblyItemId,expectedVersion:input.expectedVersion,components:lines,requiredSubsidiaryIds:[input.subsidiaryId]}};
+      effectiveOn:retained?.effective_on ?? await businessTodayInTx(tx,orgId),reason:input.reason,idempotencyKey:input.requestKey,payload:{assemblyItemId:input.assemblyItemId,expectedVersion:input.expectedVersion,components:lines,requiredSubsidiaryIds:[input.subsidiaryId],...(directEvidence ? {decision:{mode:"automatic",policy:{flowConfigured:false}}} : {})}};
     // Replays remain available after application, with current authority still required.
     const prior = await existingFinancialChange(tx,proposal);
     if (prior) return {changeId:prior,approvalRequired:true as const};
     if (before.version!==input.expectedVersion) throw new BomPolicyError("This recipe changed after you opened it; reopen it and use its current revision.",409,"bom_revision_changed");
-    preserveHistory(before.lines,lines,proposal.effectiveOn);
+    await preserveHistory(tx,orgId,input.assemblyItemId,before.lines,lines,proposal.effectiveOn);
     await validateReferences(tx,orgId,input.assemblyItemId,lines);
     return {changeId:await proposeFinancialChange(tx,{...proposal,beforeState:before}),approvalRequired:true as const};
   }
@@ -169,15 +200,55 @@ export async function applyBomRevision(orgId: string, actorId: string, changeId:
       if (!change.result) throw new BomPolicyError("The applied revision has no retained result; contact an administrator.",409);
       return change.result;
     }
-    const input = {assemblyItemId:change.subject_id,expectedVersion:change.payload.expectedVersion as string|null,reason:change.reason,components:change.payload.components as BomPolicyLine[]};
-    const lines = normalize(input);
     const before = await snapshot(db,orgId,change.subject_id);
     assertFinancialChangeApproved(change,{domain:"manufacturing",subjectId:change.subject_id,beforeState:before});
-    if (before.kind==="kit") throw new BomPolicyError("Virtual kit recipes use the inventory editor, not manufacturing revision approval.");
-    preserveHistory(before.lines,lines,await businessTodayInTx(db,orgId));
-    await validateReferences(db,orgId,change.subject_id,lines);
-    const result = await replace(db,orgId,actorId,input,before,lines,changeId);
-    await completeFinancialChange(db,orgId,changeId,actorId,result);
-    return result;
+    return applyApprovedBomRevision(db,orgId,actorId,change,before);
+  });
+}
+
+async function applyApprovedBomRevision(tx: SqlExecutor, orgId: string, actorId: string, change: FinancialChange, before: Awaited<ReturnType<typeof snapshot>>) {
+  const input = {assemblyItemId:change.subject_id,expectedVersion:change.payload.expectedVersion as string|null,reason:change.reason,components:change.payload.components as BomPolicyLine[]};
+  const lines = normalize(input);
+  if (before.kind==="kit") throw new BomPolicyError("Virtual kit recipes use the inventory editor, not manufacturing revision approval.");
+  await preserveHistory(tx,orgId,change.subject_id,before.lines,lines,await businessTodayInTx(tx,orgId));
+  await validateReferences(tx,orgId,change.subject_id,lines);
+  const result = await replace(tx,orgId,actorId,input,before,lines,change.id);
+  await completeFinancialChange(tx,orgId,change.id,actorId,result);
+  return result;
+}
+
+/** Submit a BOM revision through native Flows. Approval is an optional
+ * Flow: with no enabled Accounting-event flow governing the change, the
+ * proposer's own submit applies the revision directly through the
+ * governed admission — the proposal carries the automatic no-flow
+ * decision evidence, the same canonical writer every approval uses
+ * replaces the lines per their effectivity, audited with the actor
+ * recorded. A configured Flow still governs through its gates. */
+export async function submitBomRevision(orgId: string, actorId: string, changeId: string): Promise<void> {
+  return withOrgTransaction(orgId,async()=>{
+    const tx = db;
+    await tx.execute(sql`lock table bom_components in row exclusive mode`);
+    if (!await lockAndCheckOrgFeature(tx,orgId,"manufacturing")) throw new ScopeNotFoundError();
+    await authority(tx,orgId,actorId,true);
+    const change = await loadFinancialChange(tx,orgId,changeId);
+    if (change.domain!=="manufacturing" || change.operation!==MANUFACTURING_BOM_APPROVAL_OPERATION) throw new ScopeNotFoundError();
+    if (change.submitted_by !== actorId) throw new BomPolicyError("Only the proposer can submit this recipe revision.");
+    if (change.status !== "draft") return;
+    if (await financialChangeFlowConfigured(tx,orgId)) {
+      const { submitFinancialChange } = await import("../flows/financial-changes-adapter.ts");
+      return submitFinancialChange(orgId,changeId,actorId);
+    }
+    const decision = change.payload.decision as { mode?: unknown; policy?: { flowConfigured?: unknown } } | undefined;
+    if (decision?.mode !== "automatic" || decision?.policy?.flowConfigured !== false) throw new BomPolicyError("This proposal predates direct approval; propose the revision again to record its approval evidence.",422,"bom_direct_evidence_missing");
+    const pending = await tx.execute(sql`update financial_changes set status='pending',updated_by=${actorId},updated_at=now() where org_id=${orgId} and id=${changeId} and status='draft' returning id`);
+    if (pending.rows.length !== 1) throw new BomPolicyError("The recipe revision was not submitted; reload it and try again.",409);
+    const approved = await tx.execute(sql`update financial_changes set status='approved',approved_by=${actorId},approved_at=now(),updated_by=${actorId},updated_at=now() where org_id=${orgId} and id=${changeId} and status='pending' returning id`);
+    if (approved.rows.length !== 1) throw new BomPolicyError("The recipe approval was not recorded; reload it and try again.",409);
+    if (await financialChangeFlowConfigured(tx,orgId)) throw new BomPolicyError("An enabled approval flow now governs recipe revisions; propose the revision for approval through the configured flow.",409,"bom_flow_governed");
+    const direct = await loadFinancialChange(tx,orgId,changeId);
+    if (direct.status !== "approved" || direct.approved_by !== direct.submitted_by || direct.approved_by !== actorId) throw new BomPolicyError("This recipe revision has no permitted approval decision; submit it for approval.",409);
+    const before = await snapshot(tx,orgId,change.subject_id);
+    if (canonicalJson(change.before_state) !== canonicalJson(before)) throw new BomPolicyError("This recipe changed after you opened it; reopen it and use its current revision.",409,"bom_revision_changed");
+    await applyApprovedBomRevision(tx,orgId,actorId,direct,before);
   });
 }

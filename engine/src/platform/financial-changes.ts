@@ -137,6 +137,12 @@ export async function existingFinancialChange(
   }
   return existing.id;
 }
+/** Approval is an optional tenant Flow: true when an enabled Accounting-event
+ * Flow can govern a financial change, so a revision may need its gates. */
+export async function financialChangeFlowConfigured(tx: SqlExecutor, orgId: string): Promise<boolean> {
+  const enabled = (await tx.execute<{ n: number }>(sql`select count(*)::int as n from flows where org_id=${orgId} and subject_kind='financial_change' and enabled`)).rows[0]?.n ?? 0;
+  return enabled > 0;
+}
 export async function proposeFinancialChange(
   tx: SqlExecutor,
   args: FinancialChangeProposal,

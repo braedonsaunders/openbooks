@@ -1,14 +1,15 @@
 import { sql } from "drizzle-orm";
 import type { SqlExecutor } from "../platform/db.ts";
 import { assertManufacturingFeature } from "./gate.ts";
-import { ManufacturingError, ManufacturingNotFoundError } from "./errors.ts";
+import { ManufacturingError, ManufacturingIdempotencyConflictError, ManufacturingNotFoundError } from "./errors.ts";
 import { auditChange, compareDecimal, decimalValue, isoDate, refused, storageCode } from "./master-support.ts";
 import { isUuid } from "../platform/uuid.ts";
 import { assertManufacturingItemExists } from "./item-policies.ts";
 import { lockManufacturingManageAuthority, lockManufacturingRoutingAuthority, lockManufacturingCenterAuthority, assertManufacturingStockLocationScope } from "./authority.ts";
 import { canonicalJson } from "../platform/canonical-json.ts";
 import { db, withOrgTransaction } from "../platform/db.ts";
-import { loadFinancialChange, proposeFinancialChange, assertFinancialChangeApproved, completeFinancialChange, MANUFACTURING_ROUTING_APPROVAL_OPERATION } from "../platform/financial-changes.ts";
+import { loadFinancialChange, proposeFinancialChange, assertFinancialChangeApproved, completeFinancialChange, financialChangeFlowConfigured, FinancialChangeConflictError, MANUFACTURING_ROUTING_APPROVAL_OPERATION } from "../platform/financial-changes.ts";
+import type { FinancialChange } from "../platform/financial-changes.ts";
 
 export interface RoutingInput {
   producedItemId: string; code: string; name: string; effectiveFrom: string; effectiveTo?: string | null;
@@ -291,6 +292,12 @@ export async function activateRouting(tx: SqlExecutor, orgId: string, actorId: s
   if (canonicalJson(change.before_state)!==canonicalJson(evidence)) refused("The routing or effective revisions changed after proposal.","routing_approval_stale","approvalChangeId","Review the routing and propose a new activation against current revisions.");
   assertFinancialChangeApproved(change,{domain:"manufacturing",subjectId:id,beforeState:evidence});
   if (canonicalJson(change.payload.supersedes)!==canonicalJson(evidence.supersedes)) refused("The approved effective-date changes differ from current evidence.","routing_approval_stale","approvalChangeId","Propose and approve the current revision again.");
+  return applyApprovedRoutingActivation(tx,orgId,actorId,id,approvalChangeId,evidence);
+}
+
+type RoutingActivationEvidence = Awaited<ReturnType<typeof routingActivationEvidence>>;
+
+async function applyApprovedRoutingActivation(tx: SqlExecutor, orgId: string, actorId: string, id: string, approvalChangeId: string, evidence: RoutingActivationEvidence) {
   const identity = await routing(tx, orgId, id);
   if (!identity) throw new ManufacturingNotFoundError();
   await tx.execute(sql`select id from items where org_id=${orgId} and id=${identity.producedItemId} for update`);
@@ -335,6 +342,60 @@ export async function activateRouting(tx: SqlExecutor, orgId: string, actorId: s
   await auditChange(tx, { orgId, actorId, table: "mfg_routings", rowId: id, action: "update", before, after });
   await completeFinancialChange(tx,orgId,approvalChangeId,actorId,after);
   return after;
+}
+
+/** Approval is an optional tenant Flow: true when no enabled Accounting-event
+ * Flow can govern a routing revision, so the revision may apply directly. */
+export async function routingDirectApplyAllowed(tx: SqlExecutor, orgId: string): Promise<boolean> {
+  return !(await financialChangeFlowConfigured(tx, orgId));
+}
+
+function assertDirectApproval(change: FinancialChange, actorId: string): void {
+  const decision = change.payload.decision as { mode?: unknown; policy?: { flowConfigured?: unknown } } | undefined;
+  if (change.status !== "approved" || change.approved_by !== change.submitted_by || change.approved_by !== actorId
+    || decision?.mode !== "automatic" || decision?.policy?.flowConfigured !== false) {
+    refused("This routing revision has no permitted approval decision.", "routing_approval_required", "approvalChangeId", "Submit its Accounting event for approval before applying it.");
+  }
+}
+
+/** Activate a draft routing without a Flow decision. With no enabled Flow
+ * governing routing revisions, a holder of the unrestricted manufacturing
+ * authority applies the revision directly: the engine records a draft to
+ * pending to approved financial change carrying the automatic no-flow
+ * decision evidence the storage guard requires, then runs the same canonical
+ * activation writer every approval uses — audited, superseding the
+ * previously active revision per the existing effectivity rules. A
+ * configured Flow still governs through "Propose revision approval". */
+export async function activateRoutingDirect(tx: SqlExecutor, orgId: string, actorId: string, id: string, input: { subsidiaryId: string; reason: string; idempotencyKey: string }) {
+  await routingApprovalAuthority(tx,orgId,actorId);
+  if (!isUuid(id) || !isUuid(input.subsidiaryId)) throw new ManufacturingNotFoundError();
+  if (input.reason.trim().length < 8 || input.reason.trim().length > 1000 || !input.idempotencyKey.trim() || input.idempotencyKey.length > 120) refused("Provide a reason of 8–1,000 characters and a stable request key.", "routing_proposal_invalid", "reason", "Explain the revision and retry with a stable request key.");
+  if (!(await routingDirectApplyAllowed(tx, orgId))) refused("An enabled approval flow governs routing revisions.", "routing_flow_governed", "approvalChangeId", "Propose revision approval and obtain approval through the configured flow.");
+  const entity = (await tx.execute(sql`select id from subsidiaries where org_id=${orgId} and id=${input.subsidiaryId} and is_active and not is_elimination for share`)).rows[0];
+  if (!entity) throw new ManufacturingNotFoundError();
+  await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${`financial-change:${orgId}:${input.idempotencyKey}`}))`);
+  const evidence = await routingActivationEvidence(tx,orgId,id);
+  if (!evidence.candidate.operations.length) refused("A routing requires operations before approval.", "routing_operations_required", "operations", "Add an operation with an active work center.");
+  let changeId: string;
+  try {
+    changeId = await proposeFinancialChange(tx, { orgId, actorId, subsidiaryId: input.subsidiaryId, domain: "manufacturing", subjectId: id, operation: MANUFACTURING_ROUTING_APPROVAL_OPERATION, effectiveOn: String(evidence.candidate.effectiveFrom), reason: input.reason, idempotencyKey: input.idempotencyKey, payload: { routingId: id, requiredSubsidiaryIds: [input.subsidiaryId], supersedes: evidence.supersedes, decision: { mode: "automatic", policy: { flowConfigured: false } } }, beforeState: evidence });
+  } catch (error) {
+    if (error instanceof FinancialChangeConflictError) throw new ManufacturingIdempotencyConflictError();
+    throw error;
+  }
+  let change = await loadFinancialChange(tx,orgId,changeId);
+  if (change.status === "applied") { if (!change.result) throw new ManufacturingNotFoundError(); return change.result; }
+  if (change.status !== "draft") throw new ManufacturingIdempotencyConflictError();
+  const pending = await tx.execute(sql`update financial_changes set status='pending',updated_by=${actorId},updated_at=now() where org_id=${orgId} and id=${changeId} and status='draft' returning id`);
+  if (pending.rows.length !== 1) throw new ManufacturingIdempotencyConflictError();
+  const approved = await tx.execute(sql`update financial_changes set status='approved',approved_by=${actorId},approved_at=now(),updated_by=${actorId},updated_at=now() where org_id=${orgId} and id=${changeId} and status='pending' returning id`);
+  if (approved.rows.length !== 1) throw new ManufacturingError("The routing approval was not recorded.", { code: "write_failed", remedy: "Reload the routing and try again." });
+  if (!(await routingDirectApplyAllowed(tx, orgId))) refused("An enabled approval flow governs routing revisions.", "routing_flow_governed", "approvalChangeId", "Propose revision approval and obtain approval through the configured flow.");
+  change = await loadFinancialChange(tx,orgId,changeId);
+  assertDirectApproval(change, actorId);
+  const current = await routingActivationEvidence(tx,orgId,id);
+  if (canonicalJson(change.before_state) !== canonicalJson(current)) refused("The routing or effective revisions changed after proposal.", "routing_approval_stale", "approvalChangeId", "Review the routing and propose a new activation against current revisions.");
+  return applyApprovedRoutingActivation(tx,orgId,actorId,id,changeId,current);
 }
 
 async function routingApprovalAuthority(tx: SqlExecutor,orgId:string,actorId:string) {
