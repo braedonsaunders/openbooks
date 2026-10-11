@@ -101,6 +101,9 @@ test("re-publication versions the package and retains the original", { skip: !DB
       values (${randomUUID()}, ${org.orgId}, ${entryId}, 1, ${expense}, ${org.subsidiaryId}, null, false, '250.0000', 'CAD', '250.0000', 1, ${org.date}),
              (${randomUUID()}, ${org.orgId}, ${entryId}, 2, ${org.accounts.bank}, ${org.subsidiaryId}, null, false, '-250.0000', 'CAD', '-250.0000', 1, ${org.date})`);
     await db.execute(sql`update journal_entries set status = 'posted', posted_at = now() where id = ${entryId}`);
+    // Ending a window is permission-gated, so the approver holds the
+    // reopen permission here.
+    await db.execute(sql`update app_roles set permissions = '["close.reopen"]'::jsonb where org_id = ${org.orgId} and key = 'approver'`);
     await recloseApprovedReopen({
       orgId: org.orgId,
       requestId,

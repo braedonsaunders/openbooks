@@ -91,6 +91,9 @@ test("re-publishing after a controlled reopen enqueues a deliverable package", {
       approve: true,
       hours: 2,
     });
+    // Ending a window is permission-gated, so the approver holds the
+    // reopen permission here.
+    await db.execute(sql`update app_roles set permissions = '["close.reopen"]'::jsonb where org_id = ${org.orgId} and key = 'approver'`);
     await recloseApprovedReopen({
       orgId: org.orgId,
       requestId,

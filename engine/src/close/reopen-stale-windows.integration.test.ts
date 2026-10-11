@@ -5,6 +5,7 @@ import { db } from "../platform/db.ts";
 import { CloseError } from "../periods/period-policy.ts";
 import { setPeriodLockState } from "../periods/period-locks.ts";
 import {
+  consumeReopenRequestsForClosedModules,
   decidePeriodReopen,
   recloseApprovedReopen,
   requestPeriodReopen,
@@ -164,6 +165,55 @@ test(
       assert.equal(await requestStatus(org.orgId, next), "approved");
     } finally {
       await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "reconciliation and the engine consume path end the same stale windows",
+  { skip: !DB },
+  async () => {
+    async function buildStalePlusLive() {
+      const org = await createScratchOrg();
+      const actors = await seedFlowActors(org.orgId);
+      const target = { orgId: org.orgId, periodId: org.periodId, bookId: org.bookId };
+      await setPeriodLockState({ ...target, module: "ap", state: "closed", actorId: actors.adminId, reason: "Close for review" });
+      const stale = await requestPeriodReopen({ ...target, modules: ["ap"], actorId: actors.adminId, reason: "Stale correction window" });
+      await decidePeriodReopen({ orgId: org.orgId, requestId: stale, actorId: actors.approver1Id, approve: true, hours: 2 });
+      await setPeriodLockState({ ...target, subsidiaryId: org.subsidiaryId, module: "gl", state: "closed", actorId: actors.adminId, reason: "Close for review" });
+      const live = await requestPeriodReopen({ ...target, subsidiaryId: org.subsidiaryId, modules: ["gl"], actorId: actors.adminId, reason: "Live correction window" });
+      await decidePeriodReopen({ orgId: org.orgId, requestId: live, actorId: actors.approver1Id, approve: true, hours: 2 });
+      await setPeriodLockState({ ...target, module: "ap", state: "closed", actorId: actors.adminId, reason: "Correction work completed" });
+      return { org, actors, stale, live };
+    }
+    const first = await buildStalePlusLive();
+    const second = await buildStalePlusLive();
+    try {
+      // The engine path first: it ends exactly the stale window and audits
+      // through the close event stream.
+      const { consumed } = await consumeReopenRequestsForClosedModules({
+        orgId: second.org.orgId,
+        periodId: second.org.periodId,
+        bookId: second.org.bookId,
+        actorId: second.actors.adminId,
+        reason: "Correction work completed",
+      });
+      assert.deepEqual(consumed, [second.stale]);
+      assert.equal(await requestStatus(second.org.orgId, second.stale), "reclosed");
+      assert.equal(await requestStatus(second.org.orgId, second.live), "approved");
+
+      // The reconciliation then agrees on the identical fixtures: the
+      // other stale window ends with its audit row, both live windows
+      // stay approved, and nothing new happens on the consumed side.
+      await db.execute(sql.raw(RECONCILE_STALE_REOPEN_WINDOWS));
+      assert.equal(await requestStatus(first.org.orgId, first.stale), "reclosed");
+      assert.equal(await endAuditCount(first.org.orgId, first.stale), 1);
+      assert.equal(await requestStatus(first.org.orgId, first.live), "approved");
+      assert.equal(await requestStatus(second.org.orgId, second.live), "approved");
+      assert.equal(await endAuditCount(second.org.orgId, second.live), 0);
+    } finally {
+      await dropScratchOrg(first.org.orgId);
+      await dropScratchOrg(second.org.orgId);
     }
   },
 );

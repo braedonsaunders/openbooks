@@ -86,7 +86,9 @@ test('an org-wide reopen window covers subsidiary-scoped locks and re-closes the
       subsidiaryIds:[org.subsidiaryId],modules:['gl'],
     });
     // Ending the window must re-close the subsidiary row it relaxed: an
-    // open child shadows the re-closed scope and keeps posting.
+    // open child shadows the re-closed scope and keeps posting. Ending is
+    // permission-gated, so the approver holds the reopen permission here.
+    await db.execute(sql`update app_roles set permissions = '["close.reopen"]'::jsonb where org_id = ${org.orgId} and key = 'approver'`);
     await recloseApprovedReopen({orgId:org.orgId,requestId,actorId:actors.approver1Id,reason:'Correction work completed'});
     await assert.rejects(
       assertPeriodModulesOpen(db, {
