@@ -2,6 +2,11 @@ import 'server-only'
 
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
+import {
+  financialChangeEventLabel,
+  loadFinancialChangeSubjectLabel,
+  type FinancialChangeDomain,
+} from '@openbooks/engine/src/platform/financial-changes.ts'
 import { pgTextArrayLiteral } from './pg-array'
 import { isUuid } from '@openbooks/engine/src/platform/uuid.ts'
 
@@ -22,6 +27,13 @@ export interface ApprovalSubjectDetail {
   /** What the approver decides (change kind, effective date, and
    *  compensation terms where the payload carries them). */
   summary: string | null
+  /** Kind-column label override (the accounting event for financial
+   *  changes, which otherwise renders as the bare subject kind). */
+  kindLabel?: string | null
+  /** Proposed money the change carries, as a decimal string. */
+  amount?: string | null
+  /** Currency of `amount` (org base applies when absent). */
+  currency?: string | null
 }
 
 export interface ApprovalSubjectText {
@@ -113,8 +125,77 @@ async function resolveHrmChangeRequests(
   return out
 }
 
+/**
+ * Top-level payload keys that carry proposed money, in priority order. The
+ * proposal is the record of what the approver releases, so only the frozen
+ * payload counts — never a regenerated measurement beside it.
+ */
+const FINANCIAL_CHANGE_AMOUNT_KEYS = [
+  'amount',
+  'estimate',
+  'totalAmount',
+  'newTotal',
+  'settlement',
+  'payment',
+] as const
+
+function financialChangeAmount(payload: Record<string, unknown>): string | null {
+  for (const key of FINANCIAL_CHANGE_AMOUNT_KEYS) {
+    const value = payload[key]
+    if (typeof value === 'string' && value.trim() !== '') return value.trim()
+    if (typeof value === 'number' && Number.isFinite(value)) return String(value)
+  }
+  return null
+}
+
+function financialChangeCurrency(payload: Record<string, unknown>): string | null {
+  const currency = payload.currency
+  return typeof currency === 'string' && currency.trim() !== '' ? currency.trim() : null
+}
+
+async function resolveFinancialChanges(
+  orgId: string,
+  subjectIds: string[],
+): Promise<Map<string, ApprovalSubjectDetail>> {
+  const out = new Map<string, ApprovalSubjectDetail>()
+  const ids = [...new Set(subjectIds)].filter((id) => isUuid(id))
+  if (ids.length === 0) return out
+  const rows = (await db.execute<{
+    id: string
+    domain: string
+    operation: string
+    subjectId: string
+    payload: Record<string, unknown>
+  }>(sql`
+    select id::text as id, domain, operation, subject_id::text as "subjectId", payload
+      from financial_changes
+     where org_id = ${orgId} and id = any(${pgTextArrayLiteral(ids)}::uuid[])
+  `)).rows
+  for (const row of rows) {
+    const payload = (row.payload ?? {}) as Record<string, unknown>
+    const subjectLabel = await loadFinancialChangeSubjectLabel(
+      db,
+      orgId,
+      row.domain as FinancialChangeDomain,
+      row.subjectId,
+      row.operation,
+    )
+    out.set(String(row.id), {
+      // The payroll subject is the person the entitlement is for; every
+      // other domain decides a record, not a party.
+      partyName: row.domain === 'payroll' ? subjectLabel : null,
+      summary: subjectLabel ?? financialChangeEventLabel(row.operation),
+      kindLabel: financialChangeEventLabel(row.operation),
+      amount: financialChangeAmount(payload),
+      currency: financialChangeCurrency(payload),
+    })
+  }
+  return out
+}
+
 const SUBJECT_RESOLVERS: Record<string, SubjectResolver> = {
   hrm_employment_change_request: resolveHrmChangeRequests,
+  financial_change: (orgId, subjectIds) => resolveFinancialChanges(orgId, subjectIds),
 }
 
 /**

@@ -364,6 +364,7 @@ export async function loadApprovals(
     // change requests): resolved in one batch below through the
     // per-kind registry — never inline special cases here.
     const subject = subjectDetails.get(`${g.subjectKind}:${g.subjectId}`)
+    const subjectAmount = subject?.amount ? subject.amount : null
     return {
       key: `gate:${g.id}`,
       gateId: g.id,
@@ -375,10 +376,17 @@ export async function loadApprovals(
         g.subjectLabel ??
         g.subjectId.slice(0, 8),
       kind,
-      kindLabel: kindLabel(kind),
+      // Financial-change gates name their accounting event (never the bare
+      // subject kind) and carry the subject title, party, and proposed
+      // amount the resolver read off the frozen change.
+      kindLabel: subject?.kindLabel ?? kindLabel(kind),
       href: g.href ?? approvalRecordHref(kind, g.subjectId),
       party: g.document?.partyName ?? subject?.partyName ?? null,
-      amount: g.document ? formatMoney(g.document.total) : null,
+      amount: g.document
+        ? formatMoney(g.document.total)
+        : subjectAmount
+          ? formatSubjectAmount({ amount: subjectAmount, currency: subject?.currency })
+          : null,
       approvalTitle: g.title,
       engineName: flowNames.get(g.flowId) ?? '',
       requestedAt: iso(g.createdAt),
@@ -450,6 +458,24 @@ export async function loadApprovals(
     ),
     th,
   )
+  // Amounts a subject carries format in their own currency (the shared
+  // formatter stays the org-base fallback) — one cached formatter per
+  // currency on the page, never one per row.
+  const subjectFormatters = new Map<string, (value: string) => string>()
+  await Promise.all(
+    [
+      ...new Set(
+        [...subjectDetails.values()].flatMap((detail) =>
+          detail.currency ? [detail.currency] : [],
+        ),
+      ),
+    ].map(async (currency) => {
+      subjectFormatters.set(currency, (await getMoneyFormatter(orgId, currency)).money)
+    }),
+  )
+  const formatSubjectAmount = (detail: { amount: string; currency?: string | null }): string =>
+    (detail.currency ? subjectFormatters.get(detail.currency) : undefined)?.(detail.amount) ??
+    formatMoney(detail.amount)
 
   const unionToRow = (
     item: ApprovalWorklistItem,
