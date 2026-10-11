@@ -1,0 +1,131 @@
+import { defineRoute } from "@/lib/api/route";
+import { apiErrorResponse } from '@/lib/api/error-response'
+import { parseJsonBody } from "@/lib/api/json";
+import { NextResponse } from 'next/server'
+import { z } from 'zod'
+import { enqueueStatementBatchJobs } from '@openbooks/jobs'
+import { resolveOrgEmailTransport } from '@openbooks/engine/src/delivery/email-config.ts'
+import {
+  createStatementBatchRun,
+  listStatementBatchRuns,
+} from '@openbooks/engine/src/receivables/statement-batches.ts'
+import { ReportCurrencyBasisError } from '../../../lib/reports/currency-basis'
+import { buildStatementBatchPreview } from '../../../lib/statement-batch'
+import { can, type Authz } from '../../../lib/authz'
+
+export const runtime = 'nodejs'
+
+/**
+ * Batched customer statements: preview the recipients (GET) or create a
+ * run and enqueue one job per customer (POST). Creating needs the
+ * statement send grant plus the read pair its preview renders through;
+ * the run is scoped to the creator's subsidiaries, and an org without
+ * outbound email configured is refused up front with the setup remedy —
+ * no run is recorded and nothing is enqueued.
+ */
+
+const batchBody = z.object({
+  from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  toDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+  overdueOnly: z.boolean().optional(),
+  subsidiaryId: z.string().uuid().optional(),
+  currency: z.string().regex(/^[A-Za-z]{3}$/).optional(),
+}).strict()
+
+function sendGrants(gate: Authz): NextResponse | null {
+  if (!can(gate, 'ar.create')) return NextResponse.json({ error: 'missing permission: ar.create' }, { status: 403 })
+  if (!can(gate, 'ar.read')) return NextResponse.json({ error: 'missing permission: ar.read' }, { status: 403 })
+  if (!can(gate, 'reports.read')) {
+    return NextResponse.json({ error: 'missing permission: reports.read' }, { status: 403 })
+  }
+  return null
+}
+
+/** GET — audited run history, newest first. */
+export const GET = defineRoute({
+  public: 'session',
+  handler: async ({ request: req, authz: gate }) => {
+  if (!can(gate, 'ar.read')) return NextResponse.json({ error: 'missing permission: ar.read' }, { status: 403 })
+  const params = new URL(req.url).searchParams
+  const limit = Math.min(Math.max(Number(params.get('limit') || 25), 1), 100)
+  const runs = await listStatementBatchRuns(gate.user.orgId, { limit })
+  return NextResponse.json({ runs })
+  },
+})
+
+/** POST — create a run from the current preview and enqueue one job per customer. */
+export const POST = defineRoute({
+  public: 'session',
+  handler: async ({ request: req, authz: gate }) => {
+  const refused = sendGrants(gate)
+  if (refused) return refused
+  const parsedBody = await parseJsonBody(req, batchBody)
+  if (!parsedBody.ok) return parsedBody.response
+  const body = parsedBody.data as {
+    from?: string; toDate?: string; overdueOnly?: boolean; subsidiaryId?: string; currency?: string
+  }
+  const transport = await resolveOrgEmailTransport(gate.user.orgId)
+  if (!transport) {
+    return NextResponse.json({ error: 'email delivery is not configured — set it up in Admin → Email' }, { status: 422 })
+  }
+  let preview
+  try {
+    preview = await buildStatementBatchPreview(
+      gate.user.orgId,
+      gate.allowedSubsidiaryIds,
+      can(gate, 'payroll.read'),
+      {
+        from: body.from ?? null,
+        to: body.toDate ?? null,
+        overdueOnly: body.overdueOnly,
+        subsidiaryId: body.subsidiaryId ?? null,
+        currency: body.currency ?? null,
+      },
+    )
+  } catch (e) {
+    if (e instanceof ReportCurrencyBasisError) {
+      return NextResponse.json({ error: e.message }, { status: 422 })
+    }
+    if (e instanceof Error && /YYYY-MM-DD|starts after it ends/.test(e.message)) {
+      return NextResponse.json({ error: e.message }, { status: 400 })
+    }
+    return apiErrorResponse(e)
+  }
+  if (preview.recipients.length === 0) {
+    return NextResponse.json({ error: 'statement batch has no recipients — adjust the period or filters' }, { status: 422 })
+  }
+  try {
+    const run = await createStatementBatchRun({
+      orgId: gate.user.orgId,
+      senderId: gate.user.id,
+      periodFrom: preview.from,
+      periodTo: preview.to,
+      filters: {
+        ...(body.overdueOnly ? { overdueOnly: true } : {}),
+        ...(body.subsidiaryId ? { subsidiaryId: body.subsidiaryId } : {}),
+        ...(body.currency ? { currency: body.currency.toUpperCase() } : {}),
+      },
+      recipients: preview.recipients.map((recipient) => ({
+        partyId: recipient.partyId,
+        balance: recipient.balance,
+        overdue: recipient.overdue,
+        currency: recipient.currency,
+        toEmail: recipient.toEmail,
+      })),
+      excluded: preview.excluded.map((exclusion) => ({
+        partyId: exclusion.partyId,
+        balance: exclusion.balance,
+        overdue: exclusion.overdue,
+      })),
+      allowedSubsidiaryIds: gate.allowedSubsidiaryIds === null ? null : [...gate.allowedSubsidiaryIds].sort(),
+      enqueue: (jobs) => enqueueStatementBatchJobs(jobs),
+    })
+    return NextResponse.json({ ok: true, runId: run.runId, queued: run.queued, skipped: run.skipped })
+  } catch (e) {
+    if (e instanceof Error && /no recipients|was not recorded|listed one customer twice/.test(e.message)) {
+      return NextResponse.json({ error: e.message }, { status: 422 })
+    }
+    return apiErrorResponse(e)
+  }
+  },
+})

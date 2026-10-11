@@ -101,6 +101,31 @@ async function loadReportPrincipal(orgId: string, snapshot: ReportAuthorization)
     homeUserId: row.id, homeOrgId: row.org_id, isSuperAdmin: row.is_super_admin }
 }
 
+/** Durable principal behind a statement-batch render: the batch creator, re-resolved at execution. */
+export type StatementBatchAuthorization = Pick<ReportAuthorization, 'version' | 'userId' | 'allowedSubsidiaryIds'>
+
+/**
+ * Authorize a batched-statement render minted by a batch run. Same shape as
+ * a scheduled render — a durable principal re-resolved at execution, never
+ * a saved permission set — but under send authority: the creator must still
+ * hold the statement send grants (ar.create with its ar.read/reports.read
+ * render pair), or the render fails with the remedy (create a new batch
+ * run) instead of delivering.
+ */
+export async function statementBatchReportAuthz(
+  orgId: string,
+  snapshot: StatementBatchAuthorization,
+): Promise<Authz> {
+  const user = await loadReportPrincipal(orgId, snapshot as ReportAuthorization)
+  const current = await resolveUserAuthz(user)
+  for (const permission of ['ar.create', 'ar.read', 'reports.read'] as const) {
+    if (!can(current, permission)) {
+      throw new Error(`Statement batch sender no longer holds ${permission} — create a new batch run`)
+    }
+  }
+  return narrowToSnapshotScope(current, snapshot as ReportAuthorization)
+}
+
 /** Narrow a re-resolved principal to the run's pinned subsidiary scope. */
 function narrowToSnapshotScope(current: Authz, snapshot: ReportAuthorization): Authz {
   return { ...current, allowedSubsidiaryIds: snapshot.allowedSubsidiaryIds === null

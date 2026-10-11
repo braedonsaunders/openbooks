@@ -92,11 +92,20 @@ export async function renderStatementBatchPdf(
   }
   const pdf = Buffer.from(await res.arrayBuffer());
   if (pdf.length === 0) throw new Error("statement render returned an empty document — nothing was sent");
+  const header = (name: string, fallback: string): string => {
+    const raw = res.headers.get(name)?.trim();
+    if (!raw) return fallback;
+    try {
+      return decodeURIComponent(raw);
+    } catch {
+      return fallback;
+    }
+  };
   return {
     pdf,
-    attachmentName: res.headers.get("x-statement-filename")?.trim() || `statement-${partyId}.pdf`,
-    orgName: res.headers.get("x-statement-org")?.trim() || "OpenBooks",
-    reference: res.headers.get("x-statement-reference")?.trim() || "",
+    attachmentName: header("x-statement-filename", `statement-${partyId}.pdf`),
+    orgName: header("x-statement-org", "OpenBooks"),
+    reference: header("x-statement-reference", ""),
   };
 }
 

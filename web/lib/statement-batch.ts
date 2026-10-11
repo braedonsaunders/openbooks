@@ -1,10 +1,14 @@
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/src/platform/db.ts'
+import { businessToday } from '@openbooks/engine/src/platform/business-date.ts'
 import { isValidEmailAddress } from '@openbooks/emails'
 import { functionalReportReader } from './reports/currency-basis'
 import { dimWhere } from './reports/filters'
 import { statementBookExpr } from './gl-summary'
 import { decimalCmp } from './statement-format'
+import { reportBookSelection } from './report-books'
+import { resolveSubsidiaryScope } from './consolidation'
+import { partnerBalances } from './reports/statements'
 
 /**
  * Batched customer statements ("send statements to customers with a
@@ -224,4 +228,76 @@ export function assembleBatchList(args: {
     })
   }
   return { recipients, excluded }
+}
+
+const DATE_RE = /^\d{4}-\d{2}-\d{2}$/
+
+export interface StatementBatchPreviewQuery {
+  from?: string | null
+  to?: string | null
+  overdueOnly?: boolean
+  subsidiaryId?: string | null
+  currency?: string | null
+}
+
+export interface StatementBatchPreview {
+  from: string | null
+  to: string
+  recipients: BatchRecipient[]
+  excluded: BatchExclusion[]
+}
+
+/**
+ * Preview (and run-creation) recipient list: the picker's balance source
+ * for the requested period end, narrowed to the caller's subsidiary scope
+ * and the requested filters. A multi-currency viewed set throws the same
+ * named refusal as the picker — choose a single-currency subsidiary view.
+ */
+export async function buildStatementBatchPreview(
+  orgId: string,
+  allowedSubsidiaryIds: Set<string> | null,
+  canSeePayroll: boolean,
+  query: StatementBatchPreviewQuery,
+): Promise<StatementBatchPreview> {
+  const today = await businessToday(orgId)
+  const to = query.to?.trim() || today
+  const from = query.from?.trim() || null
+  if (!DATE_RE.test(to) || (from !== null && !DATE_RE.test(from))) {
+    throw new Error('statement batch period dates must be YYYY-MM-DD')
+  }
+  if (from !== null && from > to) {
+    throw new Error('statement batch period starts after it ends — swap the From and To dates')
+  }
+  const { selectedBook } = await reportBookSelection(orgId)
+  // Explicit scope from the caller's gate — never the ambient session — so
+  // this runs identically in pages, API routes, and the worker's wake.
+  const subView = await resolveSubsidiaryScope(query.subsidiaryId ?? undefined, to, allowedSubsidiaryIds)
+  const viewedIds = subView.subsidiary?.ids
+  const subsidiaryIds = allowedSubsidiaryIds === null
+    ? viewedIds
+    : viewedIds === undefined
+      ? [...allowedSubsidiaryIds]
+      : viewedIds.filter((id) => allowedSubsidiaryIds.has(id))
+  const balances = await partnerBalances('receivable', orgId, to, selectedBook.id, {
+    subsidiaryIds,
+  }, canSeePayroll)
+  const ids = balances.map((row) => row.id).filter((id): id is string => id !== null)
+  const [parties, overdueByParty] = await Promise.all([
+    loadStatementBatchParties(orgId, ids),
+    partyOverdueMap(orgId, to, { bookId: selectedBook.id, subsidiaryIds }),
+  ])
+  const { recipients, excluded } = assembleBatchList({
+    balances,
+    parties,
+    overdueByParty,
+    filters: {
+      to,
+      from,
+      overdueOnly: query.overdueOnly,
+      subsidiaryId: query.subsidiaryId,
+      currency: query.currency,
+    },
+    allowedSubsidiaryIds,
+  })
+  return { from, to, recipients, excluded }
 }
