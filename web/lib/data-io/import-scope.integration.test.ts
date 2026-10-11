@@ -68,11 +68,12 @@ const carryIn = (mode: "preview" | "commit", employee: string) => ({
   mode,
   ...(mode === "commit" ? { idempotencyKey: randomUUID() } : {}),
   resource: "payroll-opening-balances",
-  rows: [{ employee, taxYear: "2025", pensionableYtd: "5000.00", cppYtd: "100.00" }],
+  rows: [{ employee, taxYear: "2025", pensionableYtd: "5000.00", insurableYtd: "5000.00", cppYtd: "100.00" }],
   mapping: {
     employee: "employee",
     taxYear: "taxYear",
     pensionableYtd: "pensionableYtd",
+    insurableYtd: "insurableYtd",
     cppYtd: "cppYtd",
   },
 });

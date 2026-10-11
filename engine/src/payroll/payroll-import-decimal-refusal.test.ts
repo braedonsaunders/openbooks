@@ -26,7 +26,7 @@ const RRSP: OpeningComponentField = {
 /* Opening statutory normalizer -------------------------------------- */
 
 test("payroll-1: plain opening YTD is accepted", () => {
-  const amounts = normalizeOpeningBalance({ pensionableYtd: "1234.56" });
+  const amounts = normalizeOpeningBalance({ pensionableYtd: "1234.56", insurableYtd: "0" });
   assert.equal(amounts.pensionableYtd, "1234.5600");
 });
 

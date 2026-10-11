@@ -427,7 +427,12 @@ function ReconcileWorkspaceForId({
       confirmLabel: t('withdrawSignOff'),
     })
     if (!reason) return
-    const data = await call('POST', `/api/banking/reconciliations/${reconciliation.id}/withdraw-sign-off`, { reason })
+    // A refusal (a later session to discard first, Banking closed) stays on
+    // screen beside the sign-off, not only in a transient toast.
+    const data = await call('POST', `/api/banking/reconciliations/${reconciliation.id}/withdraw-sign-off`, { reason }, (message) => {
+      setSignOffError(message)
+      toast.error(message)
+    })
     if (!data) return
     toast.success(t('withdrawnToast'))
     router.refresh()
