@@ -8,6 +8,12 @@ export interface NonprofitRefusalInput {
   code: string;
   remedy: string;
   field?: string;
+  /**
+   * Machine-readable evidence (never internals): a closed-period refusal
+   * preserved through the domain wrap, so the API boundary can offer the
+   * controlled reopen route instead of a bare message.
+   */
+  details?: unknown;
 }
 
 /** A typed refusal that route boundaries can safely return as a 4xx response. */
@@ -17,6 +23,7 @@ export class NonprofitError extends PostingError {
   readonly code: string;
   readonly remedy: string;
   readonly field?: string;
+  readonly details?: unknown;
 
   constructor(input: NonprofitRefusalInput) {
     super(input.message);
@@ -24,6 +31,7 @@ export class NonprofitError extends PostingError {
     this.code = input.code;
     this.remedy = input.remedy;
     if (input.field !== undefined) this.field = input.field;
+    this.details = input.details;
   }
 }
 

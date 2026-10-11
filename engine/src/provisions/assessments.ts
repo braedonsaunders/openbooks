@@ -9,7 +9,7 @@ import { isIsoCalendarDate } from '../platform/business-date.ts'
 import { orgReportingFramework, type ReportingFramework } from '../platform/reporting-framework.ts'
 import { existingFinancialChange, proposeFinancialChange, loadFinancialChange, assertFinancialChangeApproved, completeFinancialChange } from '../platform/financial-changes.ts'
 import { resolveCoveringPeriod } from '../periods/period-resolution.ts'
-import { assertPeriodModulesOpen, CloseError } from '../periods/period-policy.ts'
+import { assertPeriodModulesOpen, CloseError, periodClosedDetailsOf } from '../periods/period-policy.ts'
 import { postEntry } from '../journal/post-entry.ts'
 import { add, neg, isZero, normalizeMoney } from '../money/money.ts'
 import { measureProvision, ProvisionError, type ProvisionAssessment } from './measurement.ts'
@@ -205,7 +205,7 @@ export async function applyProvisionAssessment(orgId: string, changeId: string, 
       await assertPeriodModulesOpen(tx, { orgId, periodId: beforeState.periodId, bookId: identity.bookId,
         subsidiaryIds: [identity.subsidiaryId], modules: [] })
     } catch (error) {
-      if (error instanceof CloseError) throw new ProvisionError(`${error.message} — use an open assessment date or the controlled reopen workflow in Accounting → Close`)
+      if (error instanceof CloseError) throw new ProvisionError(`${error.message} — use an open assessment date or the controlled reopen workflow in Accounting → Close`, { details: periodClosedDetailsOf(error) })
       throw error
     }
     const construction = beforeState.construction ? measureConstructionLoss(beforeState.reportingFramework,beforeState.construction,change.payload.construction as ConstructionForecast,change.payload.assessment as ProvisionAssessment) : null

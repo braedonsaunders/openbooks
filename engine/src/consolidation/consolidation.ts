@@ -1,5 +1,5 @@
 import { consolidateAssetTransfers } from "./asset-transfers.ts";import { sql } from "drizzle-orm";
-import { periodLockBlocksPosting } from "../periods/period-policy.ts";
+import { periodLockBlocksPosting, type PeriodClosedDetails } from "../periods/period-policy.ts";
 import { CurrencyError, updateFxRate } from "../fx/currencies.ts";
 import { averageSpotRateWithinAgeLimit, closingSpotRateWithinAgeLimit } from "../fx/rate-age-policy.ts";
 import { db, orgContext, withOrgContext, withOrgTransaction } from "../platform/db.ts";
@@ -80,6 +80,14 @@ export type ConsolidationCode =
 
 export class ConsolidationError extends Error {
   readonly code: ConsolidationCode;
+  /** What the caller does next. Named only by refusals with a route out. */
+  readonly remedy?: string;
+  /**
+   * Machine-readable evidence (never internals): a closed-period refusal
+   * names the locked scope so the API boundary can offer the controlled
+   * reopen route. Absent for every other consolidation refusal.
+   */
+  readonly details?: unknown;
   /**
    * `cause` is not decoration. Re-wrapping a caught database failure with only
    * its MESSAGE discards the pg error underneath -- including SQLSTATE 40001,
@@ -87,10 +95,12 @@ export class ConsolidationError extends Error {
    * "this data is invalid". Callers that classify a failure must be able to
    * reach the original, so every construction from a caught error passes it.
    */
-  constructor(message: string, code: ConsolidationCode = 'invalid', options?: { cause?: unknown }) {
+  constructor(message: string, code: ConsolidationCode = 'invalid', options?: { cause?: unknown; remedy?: string; details?: unknown }) {
     super(message, options);
     this.name = 'ConsolidationError';
     this.code = code;
+    this.remedy = options?.remedy;
+    this.details = options?.details;
   }
 }
 
@@ -863,14 +873,26 @@ async function assertConsolidatedRatesOpen(
     select id from accounting_books where org_id = ${orgId} and is_primary and is_active limit 1`));
   const bookId = book.rows[0]?.id;
   if (!bookId) throw new ConsolidationError("no active primary accounting book is configured", 'not-configured');
-  const locks = (await exec.execute<{ state: string; reopenExpiresAt: Date | string | null; reason: string | null }>(sql`
-    select state, reopen_expires_at as "reopenExpiresAt", reason
+  const locks = (await exec.execute<{ state: string; reopenExpiresAt: Date | string | null; reason: string | null; subsidiaryId: string | null }>(sql`
+    select state, reopen_expires_at as "reopenExpiresAt", reason, subsidiary_id as "subsidiaryId"
       from period_locks
      where org_id = ${orgId} and period_id = ${periodId} and book_id = ${bookId} and module = 'gl'`));
-  if (locks.rows.some((lock) => periodLockBlocksPosting(lock, false))) {
+  const blocking = locks.rows.find((lock) => periodLockBlocksPosting(lock, false));
+  if (blocking) {
+    const details: PeriodClosedDetails = {
+      kind: "period-closed",
+      periodId,
+      bookId,
+      subsidiaryId: blocking.subsidiaryId,
+      module: "gl",
+    };
     throw new ConsolidationError(
       "GL is closed for this period — consolidated exchange rates are close evidence and cannot be re-derived until the period is reopened",
-    'period-closed');
+      'period-closed',
+      {
+        remedy: "Request a controlled reopen of the period, then derive the rates again.",
+        details,
+      });
   }
 }
 

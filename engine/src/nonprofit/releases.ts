@@ -709,6 +709,9 @@ function postingRefusal(error: unknown, releaseNumber: string): NonprofitPosting
     status: 409,
     code: "fund_release_posting_refused",
     remedy: "Resolve the named ledger refusal, then submit the release again.",
+    // A closed-period refusal keeps its locked scope through this wrap, so
+    // the response can link the controlled reopen request prefilled for it.
+    details: error.details,
   });
 }
 

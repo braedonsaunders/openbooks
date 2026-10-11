@@ -7,7 +7,7 @@ import { decideGate } from "../flows/gates.ts";
 import { db, withBypass, withBypassContext, withOrgContext, withOrgTransaction } from "../platform/db.ts";
 import { postEntry } from "../journal/post-entry.ts";
 import { createFund, setFundPair } from "./funds.ts";
-import { NonprofitError } from "./errors.ts";
+import { NonprofitError, NonprofitPostingError } from "./errors.ts";
 import { setFramework } from "./frameworks.ts";
 import { provisionFundAccounting } from "./provision.ts";
 import { createFundRelease, getFundRelease, listFundReleases, submitFundRelease, voidFundRelease } from "./releases.ts";
@@ -204,6 +204,59 @@ test("fund releases route approval, post and reverse, and refuse unsafe class or
       (error) => error instanceof NonprofitError && error.code === "feature_off" &&
         error.message.includes("fundAccounting") && error.remedy.includes("Company Settings → Features"),
     );
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId));
+  }
+});
+
+test("a closed-period fund release refusal keeps the typed reopen scope", { skip: !DB }, async () => {
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    const actor = await withBypass(() => createScratchUser(org.orgId, "Release Drafter", "accountant"));
+    installEngineSeams();
+    await withOrgContext(org.orgId, () => db.execute(sql`
+      update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{features}',
+        coalesce(settings->'features', '{}'::jsonb) || '{"nonprofit":true,"fundAccounting":true}'::jsonb, true)
+      where id = ${org.orgId}`));
+    const setup = await provisionFundAccounting({
+      orgId: org.orgId,
+      defaultFund: { code: "UNRESTRICTED", name: "Unrestricted Fund" },
+      classifications: { UNRESTRICTED: { kind: "operating", restrictionClass: "without_donor_restrictions" } },
+      actorId: actor,
+    });
+    const restricted = await createFund({ orgId: org.orgId, code: "SCHOLARSHIP", name: "Scholarship Fund",
+      kind: "restricted", restrictionClass: "with_donor_restrictions", actorId: actor });
+    await setFramework({ orgId: org.orgId, framework: "us_asc958", actorId: actor, reason: "Adopt US nonprofit reporting" });
+    await setFundPair({ orgId: org.orgId, fromFundId: setup.defaultFundId, toFundId: restricted.id,
+      dueFromAccountId: org.accounts.ar, dueToAccountId: org.accounts.ap, actorId: actor, reason: "Settle interfund balances" });
+    await withOrgTransaction(org.orgId, () => postEntry(db, {
+      orgId: org.orgId, bookId: org.bookId, subsidiaryId: org.subsidiaryId,
+      entryNumber: `RELEASE-OPEN-${randomUUID()}`, postingDate: org.date, periodId: org.periodId,
+      currency: "CAD", actorId: actor, origin: "journal", memo: "Restricted support",
+      lines: [
+        { accountId: org.accounts.bank, amount: "1000.0000", extraDims: { fund: restricted.id } },
+        { accountId: org.accounts.revenue, amount: "-1000.0000", extraDims: { fund: restricted.id } },
+      ],
+    }));
+    const release = await createFundRelease({ orgId: org.orgId, fromFundId: restricted.id, toFundId: setup.defaultFundId,
+      releaseAccountId: org.accounts.revenue, releaseDate: org.date, amount: "50.0000",
+      purpose: "Award expenses met", satisfactionRef: "Scholarship award terms", actorId: actor });
+    await withBypassContext(() => db.execute(sql`insert into period_locks
+      (org_id,period_id,book_id,subsidiary_id,module,state,locked_at,reason)
+      values (${org.orgId},${org.periodId},${org.bookId},null,'gl','closed',now(),'Completed period close')`));
+    const failure = await withOrgContext(org.orgId, () =>
+      submitFundRelease({ orgId: org.orgId, releaseId: release.id, actorId: actor })).then(
+      () => null,
+      (error: unknown) => error,
+    );
+    assert.ok(failure instanceof NonprofitPostingError);
+    assert.equal(failure.code, "fund_release_posting_refused");
+    const details = failure.details as Record<string, unknown>;
+    assert.equal(details?.["kind"], "period-closed");
+    assert.equal(details?.["periodId"], org.periodId);
+    assert.equal(details?.["bookId"], org.bookId);
+    assert.equal(details?.["module"], "gl");
+    assert.equal(typeof details?.["subsidiaryId"], "string");
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId));
   }

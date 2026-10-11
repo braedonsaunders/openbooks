@@ -8,11 +8,17 @@ import { lockAndCheckOrgFeature } from '../organization/org-feature-lock.ts'
 import { ScopeNotFoundError } from '../organization/subsidiary-scope.ts'
 import { loadSubsidiaryContext,validateSubsidiaryRestrictions,restrictionAdmits } from '../organization/subsidiaries.ts'
 import { resolveCoveringPeriod } from '../periods/period-resolution.ts'
-import { assertPeriodModulesOpen,CloseError } from '../periods/period-policy.ts'
+import { assertPeriodModulesOpen,CloseError,periodClosedDetailsOf } from '../periods/period-policy.ts'
 import { postEntry,markEntryReversed } from '../journal/post-entry.ts'
 import { cmp,isZero,mulRate,neg,sum } from '../money/money.ts'
 
-export class NetInvestmentError extends Error { readonly status=422; readonly name='NetInvestmentError' }
+export class NetInvestmentError extends Error {
+  readonly status=422; readonly name='NetInvestmentError'
+  /** A closed-period refusal preserved through the domain wrap, so the API
+   * boundary can offer the controlled reopen route. Absent otherwise. */
+  readonly details?: unknown
+  constructor(message: string, options?: { details?: unknown }) { super(message); this.details = options?.details }
+}
 export interface NetInvestmentAssessment {
   pairId:string
   bookId:string
@@ -155,7 +161,7 @@ export async function applyNetInvestmentAssessment(orgId:string,id:string,actorI
     try {assertFinancialChangeApproved(change,{domain:'consolidation',subjectId:change.subject_id,beforeState})}
     catch(error){throw new NetInvestmentError(error instanceof Error ? error.message : 'Independent approval is required')}
     try {await assertPeriodModulesOpen(db,{orgId,periodId:beforeState.periodId,bookId:input.bookId,subsidiaryIds:required,modules:['gl']})}
-    catch(error){if(error instanceof CloseError)throw new NetInvestmentError(`${error.message} — use an open assessment period or the controlled reopen workflow in Accounting → Close`);throw error}
+    catch(error){if(error instanceof CloseError)throw new NetInvestmentError(`${error.message} — use an open assessment period or the controlled reopen workflow in Accounting → Close`,{details:periodClosedDetailsOf(error)});throw error}
     const delta=sum(beforeState.sources.map(source=>source.translated))
     const entry=isZero(delta) ? null : await postEntry(db,{orgId,bookId:input.bookId,subsidiaryId:input.eliminationSubsidiaryId,
       entryNumber:`NETINV-${change.id}`,postingDate:change.effective_on,periodId:beforeState.periodId,origin:'net_investment_oci',actorId,
@@ -229,7 +235,7 @@ export async function applyNetInvestmentReversal(orgId:string,id:string,actorId:
     const period=await resolveCoveringPeriod(db,orgId,change.effective_on)
     if(!period)throw new NetInvestmentError('Create an accounting period for the correction date in the original book')
     try{await assertPeriodModulesOpen(db,{orgId,periodId:period.id,bookId:beforeState.record.book_id,subsidiaryIds:required,modules:['gl']})}
-    catch(error){if(error instanceof CloseError)throw new NetInvestmentError(`${error.message} — use the controlled reopen workflow in Accounting → Close or an open correction date`);throw error}
+    catch(error){if(error instanceof CloseError)throw new NetInvestmentError(`${error.message} — use the controlled reopen workflow in Accounting → Close or an open correction date`,{details:periodClosedDetailsOf(error)});throw error}
     const entry=beforeState.record.journal_entry_id ? await postEntry(db,{orgId,bookId:beforeState.record.book_id,subsidiaryId:beforeState.subsidiaryId,
       entryNumber:`NETINV-REV-${change.id}`,postingDate:change.effective_on,periodId:period.id,origin:'net_investment_oci',actorId,
       reversesEntryId:beforeState.record.journal_entry_id,idempotencyKey:`net-investment-reversal:${change.id}`,

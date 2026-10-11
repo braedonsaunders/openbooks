@@ -99,6 +99,23 @@ test("consolidation journal phases refuse a closed GL with ConsolidationError", 
       values (${org.orgId}, ${org.periodId}, ${org.bookId}, null, 'gl', 'closed', now(), 'controller sign-off')
     `);
 
+    // Rate derivation names the locked scope and the route out, so the API
+    // boundary can link the controlled reopen request prefilled for it.
+    const derivation = await deriveConsolidatedRates(org.orgId, org.periodId, actorId).then(
+      () => null,
+      (error: unknown) => error,
+    );
+    assert.ok(derivation instanceof ConsolidationError);
+    assert.equal(derivation.code, "period-closed");
+    assert.equal(typeof derivation.remedy, "string");
+    assert.deepEqual(derivation.details, {
+      kind: "period-closed",
+      periodId: org.periodId,
+      bookId: org.bookId,
+      subsidiaryId: null,
+      module: "gl",
+    });
+
     await assert.rejects(
       runOwnershipConsolidation(org.orgId, org.periodId, actorId),
       ConsolidationError,

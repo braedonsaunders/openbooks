@@ -5,6 +5,17 @@ import type { ReportingFramework } from '../platform/reporting-framework.ts'
 export class ProvisionError extends Error {
   readonly status = 422
   readonly name = 'ProvisionError'
+  /**
+   * Machine-readable evidence (never internals): a closed-period refusal
+   * preserved through the domain wrap, so the API boundary can offer the
+   * controlled reopen route instead of a bare message. Absent for every
+   * other provision refusal.
+   */
+  readonly details?: unknown
+  constructor(message: string, options?: { details?: unknown }) {
+    super(message)
+    this.details = options?.details
+  }
 }
 
 export type ProvisionEstimate =
