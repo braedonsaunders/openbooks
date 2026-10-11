@@ -42,6 +42,8 @@ import { applySubsidiaries } from "./posting-subsidiaries.ts";
 import { resolveInternalBillingPostingContext } from "./internal-billing-posting.ts";
 import { documentControlChoice, resolveDocumentControlAccount } from "./posting-control-account.ts";
 import { assertPartylessControlPolicy } from "./partyless-control-policy.ts";
+import { DocumentDefaultsError, resolveTermsDueDate } from "./document-defaults.ts";
+import { docKindConfig } from "../records/document-kinds.ts";
 
 import { postingEffectSubsidiaryId } from "./posting-dispatch.ts";
 import type { PostDocumentOptions } from "../journal/posting-contracts.ts";
@@ -486,6 +488,29 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
     throw new PostingError((error as Error).message);
   }
 
+  // A kind that declares dueDateFromTerms (invoices and bills) posts with a due
+  // date: the one the document states, else the one its party's payment terms
+  // (then the organization default) imply on the document date — the resolver
+  // the drawer previews. With no terms at all the document is due on receipt,
+  // its document date. The date is stamped with the posting, so the open item
+  // and the document header agree and aging never sees an undated item.
+  // Historical replay keeps the stored header untouched.
+  let dueDateFromTerms: { dueDate: string } | null = null;
+  if (!deps.migration && docKindConfig(effectiveDoc.kind)?.dueDateFromTerms && effectiveDoc.dueDate == null) {
+    try {
+      dueDateFromTerms = await resolveTermsDueDate(db, effectiveDoc.orgId, {
+        kind: effectiveDoc.kind,
+        partyId: effectiveDoc.partyId,
+        documentDate: effectiveDoc.documentDate,
+      });
+    } catch (error) {
+      if (error instanceof DocumentDefaultsError) throw new PostingError(error.message);
+      throw error;
+    }
+    dueDateFromTerms ??= { dueDate: effectiveDoc.documentDate };
+    effectiveDoc = { ...effectiveDoc, dueDate: dueDateFromTerms.dueDate };
+  }
+
   // The ledger boundary shares capture's ISO 4217 gate: no path posts a
   // non-ISO currency, whatever wrote the header (capture, API, sync, a
   // before_post script or flow — all merged into effectiveDoc above). Shape
@@ -743,5 +768,5 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
     : await resolveShipToSnapshot(effectiveDoc, postingLines);
 
   const postingDate = effectivePostingDate(effectiveDoc);
-  return { documentId, deps, doc, postingLines, effectiveDoc, kernelLines, postContrib, primaryContrib, unionLines, subApplied, scriptLines, postingDate, shipToSnapshot, controlAccountStamp };
+  return { documentId, deps, doc, postingLines, effectiveDoc, kernelLines, postContrib, primaryContrib, unionLines, subApplied, scriptLines, postingDate, shipToSnapshot, controlAccountStamp, dueDateFromTerms };
 }

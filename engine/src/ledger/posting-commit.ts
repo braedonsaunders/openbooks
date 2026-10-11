@@ -36,7 +36,7 @@ import type { prepareDocumentPosting } from "./posting-prepare.ts";
 
 /** Owns the accounting transaction; every journal, stock effect, audit and outbox write uses its executor. */
 export async function commitDocumentPosting(prepared: Awaited<ReturnType<typeof prepareDocumentPosting>>, options: PostDocumentOptions): Promise<string> {
-  const { documentId, deps, doc, postingLines, effectiveDoc, kernelLines, postContrib, primaryContrib, unionLines, subApplied, scriptLines, postingDate, shipToSnapshot, controlAccountStamp } = prepared;
+  const { documentId, deps, doc, postingLines, effectiveDoc, kernelLines, postContrib, primaryContrib, unionLines, subApplied, scriptLines, postingDate, shipToSnapshot, controlAccountStamp, dueDateFromTerms } = prepared;
   return await inDbTransaction(async (tx) => {
     const consolidationRefusal = await consolidationSourceRefusal(tx, doc.orgId, documentId);
     if (consolidationRefusal) throw new PostingError(consolidationRefusal);
@@ -306,6 +306,9 @@ export async function commitDocumentPosting(prepared: Awaited<ReturnType<typeof 
         postedEntryId: entry.id,
         postingDate,
         postingPeriodId: period.id,
+        // The due date the party's terms imply, stamped with the status flip
+        // so the open item and the document header agree from the posting on.
+        ...(dueDateFromTerms ? { dueDate: dueDateFromTerms.dueDate } : {}),
         ...(subApplied.originBaseCurrency !== effectiveDoc.currency
           ? { fxRate: subApplied.originFxRate }
           : {}),
