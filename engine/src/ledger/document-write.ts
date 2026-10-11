@@ -27,7 +27,7 @@ import { assertReturnSourceSelectable, type ReturnSide } from '../inventory/retu
 import { InventoryError } from '../inventory/contracts.ts'
 import { cmp, fitsLedgerRange, ledgerSideTotals, normalizeDecimal, normalizeMoney, wholeDigits } from '../money/money.ts'
 import { runRecordFlows } from '../flows/index.ts'
-import { captureTransactionAuditSnapshot, recordTransactionAudit } from '../records/transaction-audit.ts'
+import { captureTransactionAuditSnapshot, recordTransactionAudit, transactionSnapshotsMatch } from '../records/transaction-audit.ts'
 import { promoteCrmAccount } from '../crm/crm.ts'
 import { resolveDraftSubsidiary, subsidiaryScopeAllows, subsidiaryVisibleFilter } from '../organization/subsidiary-scope.ts'
 import { actorAllowedSubsidiaryIds } from '../organization/actor-subsidiaries.ts'
@@ -2646,16 +2646,22 @@ export async function applyDocumentEdit(
       if (auditBefore) {
         const auditAfter = await captureTransactionAuditSnapshot(tx, id, ctx.orgId)
         if (!auditAfter) throw new Error(`document ${id} disappeared during amendment`)
-        await recordTransactionAudit(tx, {
-          orgId,
-          documentId: id,
-          action: 'update',
-          actorId: userId,
-          source: ctx.source,
-          reason: body.amendmentReason?.trim(),
-          before: auditBefore,
-          after: auditAfter,
-        })
+        // A save that changes nothing writes no audit row: the UPDATE above
+        // always bumps the write stamps, so the comparison ignores them (and
+        // the re-minted line identity of an identical line rewrite) and only
+        // material content decides.
+        if (!transactionSnapshotsMatch(auditBefore, auditAfter)) {
+          await recordTransactionAudit(tx, {
+            orgId,
+            documentId: id,
+            action: 'update',
+            actorId: userId,
+            source: ctx.source,
+            reason: body.amendmentReason?.trim(),
+            before: auditBefore,
+            after: auditAfter,
+          })
+        }
       }
     },
   })

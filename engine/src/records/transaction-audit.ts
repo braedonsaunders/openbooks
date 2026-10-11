@@ -98,6 +98,63 @@ export async function captureTransactionAuditSnapshot(
   return result.rows[0]?.snapshot ?? null;
 }
 
+/**
+ * Write stamps every document UPDATE bumps, even when the save changes
+ * nothing material: the display timestamp, the actor, and the optimistic-
+ * concurrency counter. They are evidence of a write, not of a change, so
+ * the no-change comparison ignores them.
+ */
+const VOLATILE_SNAPSHOT_KEYS: ReadonlySet<string> = new Set([
+  "updated_at",
+  "updated_by",
+  "revision_seq",
+]);
+
+/**
+ * Surrogate identity the line writer re-mints on every wholesale line
+ * replace: a save that rewrites identical lines carries new row ids but no
+ * new content. Line content (line number and every content column) fully
+ * describes the material state, so the comparison ignores the minted ids
+ * and the component linkage that follows them.
+ */
+const LINE_IDENTITY_KEYS: ReadonlySet<string> = new Set(["id", "document_line_id"]);
+
+function comparableSnapshotRow(
+  row: Record<string, unknown>,
+  stripped: ReadonlySet<string> = VOLATILE_SNAPSHOT_KEYS,
+): Record<string, unknown> {
+  const clean: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(row)) {
+    if (stripped.has(key)) continue;
+    clean[key] = value;
+  }
+  return clean;
+}
+
+function comparableSnapshot(snapshot: TransactionAuditSnapshot): unknown {
+  const lineStripped = new Set([...VOLATILE_SNAPSHOT_KEYS, ...LINE_IDENTITY_KEYS]);
+  return {
+    document: comparableSnapshotRow(snapshot.document),
+    lines: snapshot.lines.map((line) => comparableSnapshotRow(line, lineStripped)),
+    taxComponents: snapshot.taxComponents.map((component) => comparableSnapshotRow(component, lineStripped)),
+    applications: snapshot.applications,
+    glImpact: snapshot.glImpact,
+  };
+}
+
+/**
+ * Whether a save changed anything the audit trail evidences. Snapshots come
+ * from the same transaction, so any remaining difference is this save's own
+ * write — a rewrite of identical lines still counts as no change. Callers
+ * skip the audit insert on true, so a no-op save leaves no 'Updated' row.
+ */
+export function transactionSnapshotsMatch(
+  before: TransactionAuditSnapshot,
+  after: TransactionAuditSnapshot,
+): boolean {
+  return JSON.stringify(comparableSnapshot(before)) === JSON.stringify(comparableSnapshot(after));
+}
+
 export function buildTransactionAuditChanges(input: {
   mode: TransactionAuditChanges["mode"];
   source: string;

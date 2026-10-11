@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   buildTransactionAuditChanges,
+  transactionSnapshotsMatch,
   type TransactionAuditSnapshot,
 } from "./transaction-audit.ts";
 
@@ -86,4 +87,60 @@ test("transaction deletion evidence is a tombstone with a reason", () => {
       after: null,
     },
   );
+});
+
+// A save that changes nothing writes no audit row: the UPDATE always bumps
+// the write stamps (and the line writer re-mints row ids on a rewrite), so
+// the comparison ignores stamps and surrogate line identity and only
+// material content decides.
+function snapshot(overrides: Partial<TransactionAuditSnapshot> = {}): TransactionAuditSnapshot {
+  return {
+    document: {
+      id: "doc-1", org_id: "org-1", kind: "customer_invoice", status: "posted",
+      document_number: "INV-1", memo: null, total: "100.0000",
+      created_at: "2026-07-15T00:00:00+00:00", created_by: "u1",
+      updated_at: "2026-07-15T00:00:00+00:00", updated_by: "u1", revision_seq: "4",
+    },
+    lines: [
+      { id: "line-1", document_id: "doc-1", line_number: 1, account_id: "a1", amount: "100.0000", description: null },
+    ],
+    taxComponents: [],
+    applications: [],
+    glImpact: null,
+    ...overrides,
+  };
+}
+
+test("stamp-only differences match", () => {
+  const before = snapshot();
+  const after = snapshot({
+    document: { ...before.document, updated_at: "2026-07-16T00:00:00+00:00", updated_by: "u2", revision_seq: "5" },
+  });
+  assert.equal(transactionSnapshotsMatch(before, after), true);
+});
+
+test("a material header change does not match", () => {
+  const before = snapshot();
+  const after = snapshot({ document: { ...before.document, memo: "hello", updated_at: "2026-07-16T00:00:00+00:00", revision_seq: "5" } });
+  assert.equal(transactionSnapshotsMatch(before, after), false);
+});
+
+test("an identical line rewrite with re-minted ids matches", () => {
+  const before = snapshot();
+  const after = snapshot({
+    lines: [{ id: "line-2", document_id: "doc-1", line_number: 1, account_id: "a1", amount: "100.0000", description: null }],
+  });
+  assert.equal(transactionSnapshotsMatch(before, after), true);
+});
+
+test("a line content change does not match", () => {
+  const before = snapshot();
+  const after = snapshot({
+    lines: [{ id: "line-1", document_id: "doc-1", line_number: 1, account_id: "a1", amount: "200.0000", description: null }],
+  });
+  assert.equal(transactionSnapshotsMatch(before, after), false);
+});
+
+test("a removed line does not match", () => {
+  assert.equal(transactionSnapshotsMatch(snapshot(), snapshot({ lines: [] })), false);
 });
