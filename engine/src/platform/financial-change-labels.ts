@@ -23,6 +23,7 @@ export const FINANCIAL_CHANGE_OPERATION_LABELS: Record<string, string> = {
   work_order_loss_disposition: "Production loss disposition",
   standard_cost_rollup: "Manufacturing standard-cost roll-up",
   scrap_snapshot_restatement: "Scrap snapshot restatement",
+  account_merge: "Account merge",
 };
 
 export const FINANCIAL_CHANGE_DOMAIN_LABELS: Record<string, string> = {
@@ -34,6 +35,7 @@ export const FINANCIAL_CHANGE_DOMAIN_LABELS: Record<string, string> = {
   revenue: "Revenue contract",
   consolidation: "Consolidation",
   manufacturing: "Manufacturing",
+  ledger: "General ledger",
 };
 
 export const FINANCIAL_CHANGE_STATUS_LABELS: Record<string, string> = {

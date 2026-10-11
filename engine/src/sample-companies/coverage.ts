@@ -78,6 +78,9 @@ export const DEMO_FEATURE_EVIDENCE: Record<string, DemoFeatureEvidence> = {
   automationSimulator: workspace("automations"), apps: configuration("apps", "app_versions", "app_files"), scripts: configuration("user_scripts"),
   apiAccess: configuration("api_keys"), mcpAccess: configuration("api_keys"), queryConsole: workspace("journal_entries"),
   homeAnnouncements: workspace(), aiGovernanceLedger: configuration("ai_capabilities"),
+  accountMerges: { ...workspace("accounts"), limitation: "No accounts are merged in the demonstration; preview a merge from an account to see its consequences before executing one." },
+  accountingContexts: { ...workspace("accounts"), limitation: "No statutory context is installed; create a context and its localized account numbers before running reports under it." },
+  segmentDependencies: { ...workspace("segment_definitions"), limitation: "No dependency rules are installed; segment values remain freely combinable until a rule is created." },
 };
 
 export function demoFeatureEvidence(industryKey: string): Record<string, DemoFeatureEvidence> {

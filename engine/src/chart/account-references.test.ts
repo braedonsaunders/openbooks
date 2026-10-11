@@ -1,0 +1,76 @@
+import assert from "node:assert/strict";
+import { readdirSync, readFileSync } from "node:fs";
+import test from "node:test";
+import {
+  ACCOUNT_JSON_REFERENCES,
+  ACCOUNT_REFERENCE_OWNED,
+  ACCOUNT_REFERENCE_RULES,
+  classifyAccountReference,
+} from "./account-references.ts";
+
+// source-pin-contract: merge reference classification — every foreign key into accounts that a published migration declares must be classified as configuration or history; subjects derived from the migrations, never hand-listed.
+const MIGRATIONS = new URL("../../../schema/migrations/generated/", import.meta.url);
+
+/**
+ * Every published foreign key into accounts, read from the migrations
+ * themselves: `ALTER TABLE ... ADD CONSTRAINT ... FOREIGN KEY (org_id, col)
+ * REFERENCES public.accounts` and inline table constraints alike.
+ */
+function publishedAccountForeignKeys(): Set<string> {
+  const found = new Set<string>();
+  for (const file of readdirSync(MIGRATIONS).filter((name) => name.endsWith(".sql")).sort()) {
+    const source = readFileSync(new URL(file, MIGRATIONS), "utf8");
+    for (const statement of source.matchAll(/ALTER TABLE (?:ONLY )?(?:public\.)?([a-z_0-9]+)\s+ADD CONSTRAINT [a-z_0-9]+\s+FOREIGN KEY \(([^)]*)\)\s+REFERENCES (?:public\.)?accounts\s*\(/gi)) {
+      for (const column of statement[2]!.split(",").map((part) => part.trim())) {
+        if (column !== "org_id") found.add(`${statement[1]}.${column}`);
+      }
+    }
+    for (const table of source.matchAll(/CREATE TABLE (?:IF NOT EXISTS )?(?:public\.)?([a-z_0-9]+)\s*\(([\s\S]*?)\n\);/gi)) {
+      for (const fk of table[2]!.matchAll(/FOREIGN KEY\s*\(([^)]*)\)\s*REFERENCES (?:public\.)?accounts\s*\(/gi)) {
+        for (const column of fk[1]!.split(",").map((part) => part.trim())) {
+          if (column !== "org_id") found.add(`${table[1]}.${column}`);
+        }
+      }
+    }
+  }
+  return found;
+}
+
+test("every published foreign key into accounts is classified for a merge", () => {
+  const published = publishedAccountForeignKeys();
+  assert.ok(published.size > 50, `expected the account foreign keys to be found, saw ${published.size}`);
+  const unclassified = [...published].filter((key) => {
+    const [table, column] = key.split(".") as [string, string];
+    return classifyAccountReference({ table, column }) === null;
+  });
+  assert.deepEqual(unclassified, [], "classify each new reference as configuration (redirect) or history in ACCOUNT_REFERENCE_RULES");
+});
+
+test("rules and merge-owned columns never overlap, and keys name one column", () => {
+  for (const key of Object.keys(ACCOUNT_REFERENCE_RULES)) {
+    assert.match(key, /^[a-z_0-9]+\.[a-z_0-9]+$/);
+    assert.equal(ACCOUNT_REFERENCE_OWNED.has(key), false, `${key} is both owned and ruled`);
+  }
+  assert.equal(classifyAccountReference({ table: "journal_lines", column: "account_id" }), "owned");
+  assert.equal(classifyAccountReference({ table: "brand_new_table", column: "account_id" }), null);
+});
+
+test("posted facts are history and in-flight documents block rather than move", () => {
+  assert.equal(ACCOUNT_REFERENCE_RULES["pay_stub_lines.expense_account_id"]?.disposition, "history");
+  assert.equal(ACCOUNT_REFERENCE_RULES["bank_statements.account_id"]?.disposition, "history");
+  const lines = ACCOUNT_REFERENCE_RULES["document_lines.account_id"]!;
+  assert.equal(lines.disposition, "redirect");
+  assert.ok(lines.redirectWhere, "only draft document lines move");
+  assert.ok(lines.blockWhere, "documents awaiting approval block the merge");
+  assert.equal(ACCOUNT_REFERENCE_RULES["tax_codes.collected_account_id"]?.disposition, "redirect");
+  assert.equal(ACCOUNT_REFERENCE_RULES["tax_codes.collected_account_id"]?.redirectWhere, undefined);
+});
+
+test("JSON references are uniquely keyed and organization-scoped", () => {
+  const keys = ACCOUNT_JSON_REFERENCES.map((ref) => ref.key);
+  assert.equal(new Set(keys).size, keys.length);
+  const controls = ACCOUNT_JSON_REFERENCES.find((ref) => ref.key === "orgs.settings.controlAccounts");
+  assert.equal(controls?.orgColumn, "id");
+  assert.equal(controls?.path, "controlAccounts");
+  assert.ok(ACCOUNT_JSON_REFERENCES.filter((ref) => ref.table !== "orgs").every((ref) => ref.orgColumn === "org_id"));
+});

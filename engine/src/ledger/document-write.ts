@@ -50,6 +50,7 @@ import { featureEnabled } from '../organization/feature-registry.ts'
 import { isFeatureEnabled, orgFeatureState, checkProjectsWriteEnabled } from '../organization/feature-state.ts'
 import { findUnownedCustomReferences, loadFieldDefs, validateCustomValues } from '../records/custom-fields.ts'
 import { extraDimsSubsidiaryError, segmentRegistry, validateExtraDims } from '../organization/segments.ts'
+import { assertDocumentSegmentDependencies } from '../organization/segment-dependencies.ts'
 import { resolveExternalRefPair } from '../records/external-ref.ts'
 import { documentWorkDatesRefusal } from '../records/work-period.ts'
 import { businessToday, isIsoCalendarDate } from '../platform/business-date.ts'
@@ -2692,6 +2693,10 @@ export async function applyDocumentEdit(
           throw new Error('customer role was not established while saving the document')
         }
       }
+
+      // Segment value dependencies, checked on the saved lines with header
+      // defaults inherited, exactly as posting will read them.
+      await assertDocumentSegmentDependencies(tx, orgId, id)
 
       if (auditBefore) {
         const auditAfter = await captureTransactionAuditSnapshot(tx, id, ctx.orgId)

@@ -70,6 +70,10 @@ export interface BalancingContext {
   sourceDocumentId: string | null;
   /** Policy providers skip regeneration; balancing providers still add legs. */
   regeneration: boolean;
+  /** Direct postings name their journal origin; the document path leaves it unset. */
+  origin?: string | null;
+  /** Set when the posting reverses an existing entry, restoring its prior state. */
+  reversesEntryId?: string | null;
 }
 
 export type BalancingLegProvider = (
