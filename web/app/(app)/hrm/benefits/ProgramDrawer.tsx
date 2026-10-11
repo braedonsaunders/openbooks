@@ -482,7 +482,7 @@ export function ProgramDrawer({
       title={<span className="flex items-center gap-2">{program.name}<Badge variant={program.statusVariant}>{program.statusLabel}</Badge></span>}
       description={program.code} beforeClose={closeGuard.beforeClose}
       primaryAction={headerActions} actions={menuActions}
-      showAttachments={false} detailsLabel={t('programWorkspace.rules')} activeTab={tab} onActiveTabChange={setTab} mountAllRecordTabs
+      showAttachments={false} detailsLabel={t('programWorkspace.rules')} activeTab={tab} onActiveTabChange={setTab} mountAllRecordTabs auditRefreshKey={drawer}
       detailTabs={[
         { key: 'participants', label: t('programWorkspace.participants'), content: participants },
         { key: 'activity', label: t(program.family === 'incentive' ? 'programWorkspace.calculations' : 'programWorkspace.activity'), content: activity },

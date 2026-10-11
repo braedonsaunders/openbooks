@@ -47,7 +47,7 @@ function changeCount(changes: Record<string, unknown>): number {
   return auditEventDiffs(changes).length
 }
 
-export function AuditTrailPanel({ table, recordId }: { table: AuditRecordTable; recordId: string }) {
+export function AuditTrailPanel({ table, recordId, refreshKey }: { table: AuditRecordTable; recordId: string; refreshKey?: string | number | object }) {
   const t = useTranslations('common.auditTrail')
   const ta = useTranslations('admin.audit')
   const [q, setQ] = useState('')
@@ -90,7 +90,7 @@ export function AuditTrailPanel({ table, recordId }: { table: AuditRecordTable; 
       window.clearTimeout(timer)
       controller.abort()
     }
-  }, [action, page, q, recordId, reloadKey, table])
+  }, [action, page, q, recordId, reloadKey, table, refreshKey])
 
   const pages = Math.max(1, Math.ceil((data?.total ?? 0) / (data?.perPage ?? 15)))
   const actionLabel = (value: string) => KNOWN_ACTIONS.has(value)

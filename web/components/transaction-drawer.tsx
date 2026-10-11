@@ -47,10 +47,12 @@ export interface TransactionDrawerProps {
   /** Retain all or named record panels after their first visit; unvisited panels stay lazy. */
   keepRecordTabsMounted?: boolean | readonly string[]
   /**
-   * Mount every record panel when the drawer opens. For records whose panels
-   * render data the server already loaded, so switching tabs is immediate.
+   * Mount all available panels when the drawer opens, including evidence.
+   * Retain their data and local state while the operator switches tabs.
    */
   mountAllRecordTabs?: boolean
+  /** Changing this value reloads audit history after a record save. */
+  auditRefreshKey?: string | number | object
   /** Optional controlled tab state for record bodies that render tab-specific content themselves. */
   activeTab?: string
   onActiveTabChange?: (key: string) => void
@@ -117,6 +119,7 @@ function TransactionDrawerFrame({
   keepChildrenMounted = false,
   keepRecordTabsMounted = false,
   mountAllRecordTabs = false,
+  auditRefreshKey,
   activeTab: controlledActiveTab,
   onActiveTabChange,
   footer,
@@ -265,10 +268,23 @@ function TransactionDrawerFrame({
           {detailTabs.map((tab) => shouldMountRecordTab(tab.key) ? (
             <div key={tab.key} hidden={activeTab !== tab.key}>{tab.content}</div>
           ) : null)}
-          {activeTab === 'attachments' ? (
+          {mountAllRecordTabs ? (
+            <>
+              {showEvidenceTabs && showAttachments ? (
+                <div key={`attachments:${recordId}`} hidden={activeTab !== 'attachments'}>
+                  <AttachmentPanel targetTable={targetTable} targetId={recordId} canEdit={canEditAttachments} canRemove={canRemoveAttachments} />
+                </div>
+              ) : null}
+              {showEvidenceTabs ? (
+                <div key={`audit:${recordId}`} hidden={activeTab !== 'audit'}>
+                  <AuditTrailPanel table={targetTable} recordId={recordId} refreshKey={auditRefreshKey} />
+                </div>
+              ) : null}
+            </>
+          ) : activeTab === 'attachments' ? (
             <AttachmentPanel targetTable={targetTable} targetId={recordId} canEdit={canEditAttachments} canRemove={canRemoveAttachments} />
           ) : activeTab === 'audit' ? (
-            <AuditTrailPanel table={targetTable} recordId={recordId} />
+            <AuditTrailPanel table={targetTable} recordId={recordId} refreshKey={auditRefreshKey} />
           ) : null}
         </>
       ) : activeTab === 'attachments' || activeTab === 'audit' ? (
@@ -277,7 +293,7 @@ function TransactionDrawerFrame({
           {activeTab === 'attachments' ? (
             <AttachmentPanel targetTable={targetTable} targetId={recordId} canEdit={canEditAttachments} canRemove={canRemoveAttachments} />
           ) : (
-            <AuditTrailPanel table={targetTable} recordId={recordId} />
+            <AuditTrailPanel table={targetTable} recordId={recordId} refreshKey={auditRefreshKey} />
           )}
         </>
       ) : activeTab === 'details' ? (
