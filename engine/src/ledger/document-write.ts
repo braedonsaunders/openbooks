@@ -1,3 +1,4 @@
+import { commercialDocumentKindConfig, type CommercialDocumentKind } from '../records/commercial-document-kind.ts';
 import { amortizationLineRefusal } from "../amortization/source-fields.ts";
 import { WithholdingMaterialsCostError } from "../allocations/withholding-cost.ts";
 import { assertWithholdingDepositEdit } from "../contractor-withholding/deposits.ts";
@@ -166,9 +167,10 @@ export async function createDocumentDraft(
     subsidiaryId?: string | null;
     runFlows?: boolean;
     source?: 'ui' | 'api' | 'mcp' | 'assistant' | 'posted_correction';
+    commercialKind?: CommercialDocumentKind;
   },
 ) {
-  const cfg = docKindConfig(kind)
+  const cfg = options.commercialKind===kind ? commercialDocumentKindConfig(options.commercialKind) : docKindConfig(kind)
   if (!cfg) throw new Error(`unknown document kind "${kind}"`)
   const currency = await orgBaseCurrency(orgId)
   // Unrestricted callers keep the legacy default (the org root) when they
@@ -323,6 +325,8 @@ export async function precomputeDocumentTotalsForCreate(
 }
 
 export interface DocumentEditContext {
+  /** Internal, declaration-owned quote/order initialization; transport bodies cannot set it. */
+  commercialKind?: CommercialDocumentKind;
   orgId: string
   userId: string
   allowedSubsidiaryIds?: ReadonlySet<string> | null
@@ -1139,7 +1143,7 @@ export async function applyDocumentEdit(
    */
   scope?: { tx: DocumentTransaction },
 ): Promise<DocumentUpdateFlowEvent | undefined> {
-  const cfg = docKindConfig(current.kind)
+  const cfg = ctx.commercialKind===current.kind ? commercialDocumentKindConfig(ctx.commercialKind) : docKindConfig(current.kind)
   if (!cfg) throw new DocumentEditError(422, `kind "${current.kind}" is not editable`)
   if (current.status !== 'draft') {
     throw new DocumentEditError(

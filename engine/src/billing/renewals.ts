@@ -1,11 +1,10 @@
-import { randomUUID } from 'node:crypto';
 import { sql } from 'drizzle-orm';
 import { db, withOrg, withBypassContext } from '../platform/db.ts';
 import { businessToday, civilDayIndex, isIsoCalendarDate } from '../platform/business-date.ts';
 import { lockAndCheckOrgFeature } from '../organization/org-feature-lock.ts';
 import { lockActorCommandAuthority } from '../organization/actor-command-authority.ts';
 import { ScopeNotFoundError } from '../organization/subsidiary-scope.ts';
-import { createDocument } from '../ledger/document-write.ts';
+import { createCommercialDocument } from '../ledger/commercial-document.ts';
 import { add, cmp, mul, mulPercent, prorateDays } from '../money/money.ts';
 import { AdvancedSubscriptionError, advanceLifecycleDate, type Interval } from './advanced-subscriptions.ts';
 import { runRecordFlows } from '../flows/index.ts';
@@ -88,7 +87,7 @@ export async function generateRenewalDocument(orgId: string, actorId: string, su
     const request = { partyId: subject.customer_id, documentDate: asOf, currency: subject.currency,
       memo: `Renewal ${subject.term_ends_on} through ${endsOn}`, referenceNumber: `Renewal ${subscriptionId}`,
       custom: { subscriptionRenewal: { subscriptionId, policyId: policy.id, termStartsOn: subject.term_ends_on, termEndsOn: endsOn, upliftPercent: policy.uplift_percent } }, lines };
-    const created = await createDocument({ orgId, userId: actorId, kind: policy.document_kind, key: randomUUID(), body: request, requestBody: request, subsidiaryId: subject.subsidiary_id });
+    const created = await createCommercialDocument({orgId,actorId,kind:policy.document_kind,body:request,subsidiaryId:subject.subsidiary_id});
     const recorded = (await db.execute(sql`
       insert into subscription_renewal_occurrences(org_id,policy_id,subscription_id,term_ends_on,occurrence,document_id,snapshot,actor_id)
       values(${orgId},${policy.id},${subscriptionId},${subject.term_ends_on},'document',${created.id},${JSON.stringify({ subject, policy, request, components })}::jsonb,${actorId}) returning id
