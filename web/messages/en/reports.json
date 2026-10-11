@@ -3173,7 +3173,8 @@
       "gift": "Gift",
       "grant": "Grant",
       "release": "Restriction release",
-      "manufacturing": "Manufacturing"
+      "manufacturing": "Manufacturing",
+      "account_merge": "Account merge"
     },
     "columns": {
       "detail": "Party / memo"
@@ -3332,5 +3333,12 @@
       "currentPrice": "Current price",
       "invoicedToDate": "Invoiced to date"
     }
+  },
+  "accountingContext": {
+    "label": "Accounting context",
+    "default": "Subsidiary default",
+    "base": "Base chart",
+    "legend": "Accounting context: {context}; {marker} marks an account shown under its base chart number and name",
+    "blockedTitle": "This accounting context cannot label the accounts"
   }
 }

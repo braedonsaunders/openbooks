@@ -25,7 +25,8 @@
     "fxSettlement": "外汇结算",
     "translation": "折算",
     "migration": "迁移",
-    "manufacturing": "生产制造"
+    "manufacturing": "生产制造",
+    "accountMerge": "科目合并"
   },
   "detail": {
     "notFound": "未找到分录",

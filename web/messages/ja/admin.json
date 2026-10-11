@@ -3793,6 +3793,22 @@
         "title": "職務記述書",
         "singularTitle": "職務記述書",
         "description": "新しい採用申請の起点となる再利用可能な求人内容：職名、雇用形態、給与レンジ、説明。"
+      },
+      "accounting-contexts": {
+        "title": "会計コンテキスト",
+        "description": "現地の法定勘定科目表などの名前付きコンテキスト。レポートはそのローカライズされた勘定番号と名称で実行できます。"
+      },
+      "accounting-context-defaults": {
+        "title": "既定",
+        "description": "レポートで別のコンテキストを指定しない限り、このコンテキストで報告する子会社（または国のすべての子会社）。"
+      },
+      "account-localizations": {
+        "title": "ローカライズ勘定",
+        "description": "勘定ごとの発効日付きのローカライズ番号と名称（必要に応じて子会社単位）。ローカライズ番号は範囲と期間ごとに1つの勘定にのみ属します。"
+      },
+      "segment-value-dependencies": {
+        "title": "依存関係",
+        "description": "制御セグメントの指定値とのみ使用できるこのセグメントの値。各行で1つの制御値を許可し、行のない値は制限されません。"
       }
     },
     "fields": {
@@ -4420,7 +4436,13 @@
       "compensationMin": "給与下限",
       "compensationMax": "給与上限",
       "compensationCurrency": "給与通貨",
-      "compensationBasis": "給与基準"
+      "compensationBasis": "給与基準",
+      "contextId": "会計コンテキスト",
+      "localizedNumber": "ローカライズ番号",
+      "localizedName": "ローカライズ名称",
+      "valueId": "値",
+      "controllingSegmentId": "制御セグメント",
+      "allowedValueId": "許可する組み合わせ"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "使用可能な最新レートから期末までの日数がこれを超えると、再評価と連結はそのレートを拒否します。期末レートは期末スポットレートの日付から、平均レートは平均に含まれる最新の相場の日付から数えます。ポリシー未設定時の既定値: 31日。",
@@ -4599,7 +4621,10 @@
       "hrmJobDescriptionTitle": "求人で応募者に表示される職名。",
       "hrmJobDescriptionKind": "例：正社員、パートタイム、季節雇用、契約。",
       "hrmJobDescriptionPay": "任意。下限・上限・通貨・基準をすべて入力するか、4つとも空欄にします。",
-      "hrmJobDescriptionBody": "求人本文。新しい採用申請にコピーされるため、ここでの編集は既存の求人に影響しません。"
+      "hrmJobDescriptionBody": "求人本文。新しい採用申請にコピーされるため、ここでの編集は既存の求人に影響しません。",
+      "contextDefaultScope": "子会社を選択するか、空欄のまま国を選択してその国のすべての子会社を対象にします。",
+      "localizationSubsidiary": "空欄にするとすべての子会社に適用されます。子会社固有のローカライズは、その子会社のレポートで優先されます。",
+      "allowedValue": "1 行に 1 つの許可値です。この値と併用できる制御セグメントの値ごとに行を追加します。"
     },
     "options": {
       "withholdingCondominiumPayer": "集合住宅管理組合の支払者",
@@ -7332,6 +7357,19 @@
       "4": "木曜日",
       "5": "金曜日",
       "6": "土曜日"
+    },
+    "segmentDependencies": {
+      "navTitle": "依存関係の例外",
+      "title": "セグメント依存関係の例外",
+      "description": "{count, plural, =0 {依存関係ルールに違反する未転記伝票はありません。} other {# 件の未転記伝票明細が、伝票日付に有効なルールに違反しています。}}",
+      "empty": "依存関係ルールに違反する未転記伝票はありません。",
+      "columns": {
+        "document": "伝票",
+        "date": "日付",
+        "status": "ステータス",
+        "line": "行",
+        "problem": "問題"
+      }
     }
   },
   "flows": {
@@ -8055,6 +8093,18 @@
     "manufacturingSubcontract": {
       "title": "外注製造",
       "description": "部品を仕入先に送り、加工サービスを記録し、生産数量を製造オーダーに戻します。"
+    },
+    "accountMerges": {
+      "title": "勘定の統合",
+      "description": "重複した勘定を存続勘定に統合します。すべての拒否理由と影響をプレビューし、残高を振替仕訳で、設定も一緒に移し、転記済みの履歴はそのまま保持します。"
+    },
+    "accountingContexts": {
+      "title": "会計コンテキスト",
+      "description": "法定の現地勘定科目表など、ローカライズした勘定番号と名称でレポートを表示します。コンテキストごと、必要に応じて子会社や国ごとに設定できます。"
+    },
+    "segmentDependencies": {
+      "title": "セグメントの依存関係",
+      "description": "あるセグメント値を別のセグメントの指定値とのみ組み合わせられるようにします（例：特定の部門でのみ使えるクラス）。伝票の保存時と転記時に適用されます。"
     }
   },
   "extensions": {

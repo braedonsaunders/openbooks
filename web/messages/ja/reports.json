@@ -3173,7 +3173,8 @@
       "gift": "寄付",
       "grant": "助成金",
       "release": "使途制限の解除",
-      "manufacturing": "製造"
+      "manufacturing": "製造",
+      "account_merge": "勘定の統合"
     },
     "columns": {
       "detail": "取引先／摘要"
@@ -3332,5 +3333,12 @@
       "currentPrice": "現行価格",
       "invoicedToDate": "請求済額"
     }
+  },
+  "accountingContext": {
+    "label": "会計コンテキスト",
+    "default": "子会社の既定",
+    "base": "基本勘定科目表",
+    "legend": "会計コンテキスト：{context}。{marker} は基本勘定科目表の番号と名称で表示された勘定を示します",
+    "blockedTitle": "この会計コンテキストでは勘定を表示できません"
   }
 }

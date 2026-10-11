@@ -22,6 +22,7 @@ import { reportScheduleAnchor, scheduleParamsFrom } from '../../../../lib/report
 import { getAuthz } from '@/lib/authz'
 import { dimensionOptionsScope } from '../../../../lib/reports/filters'
 import { statementReportSpec } from '@/lib/reports/statement-report-spec'
+import { AccountingContextError, accountingContextFilter, accountingContextLegend, reportAccountingContext, type ReportAccountingContext } from '../../../../lib/reports/accounting-context'
 
 /**
  * The balance sheet, split into a loader and a spec — the same statement
@@ -56,6 +57,8 @@ export interface BalanceSheetData {
   /** Set when underived consolidated rates block the statement:
    * the page renders a typed banner with a derive link instead of numbers. */
   ratesBlocked: RatesBlockedNotice | null
+  /** Set when the requested accounting context cannot label the accounts. */
+  contextBlocked: { title: string; description: string } | null
   /** False exactly when ratesBlocked is set; the paper hides with it. */
   ratesReady: boolean
   /** Null exactly when ratesBlocked is set; never rendered then. */
@@ -103,9 +106,18 @@ export async function loadBalanceSheet(
   let subView: Awaited<ReturnType<typeof reportSubsidiaryView>> | undefined
   let view: Awaited<ReturnType<typeof balanceSheetView>> | null = null
   let ratesBlocked: RatesBlockedNotice | null = null
+  let accountingContext: ReportAccountingContext | null = null
+  let contextBlocked: { title: string; description: string } | null = null
+  try {
+    accountingContext = await reportAccountingContext(await resolveOrgId(), sp.ctx, { asOf: period.to, subsidiaryId: q.subsidiaryId ?? null })
+  } catch (e) {
+    if (!(e instanceof AccountingContextError)) throw e
+    contextBlocked = { title: t('accountingContext.blockedTitle'), description: `${e.message} ${e.remedy}` }
+  }
   try {
     subView = await reportSubsidiaryView(q.subsidiaryId, period.to)
-    view = await balanceSheetView({ from: period.from, to: period.to }, period.label, labels, {
+    if (!contextBlocked) view = await balanceSheetView({ from: period.from, to: period.to }, period.label, labels, {
+      accountLabels: accountingContext?.labels ?? null,
       breakout: q.breakout,
       compare: q.compare,
       basis: q.basis,
@@ -160,15 +172,20 @@ export async function loadBalanceSheet(
     backLabel: t('hub.title'),
     dimensions: opts,
     subsidiaries: subView?.picker ?? [],
-    primaryFilter:
-      books.length > 1
-        ? {
-            paramKey: 'book',
-            label: tb('list.bookFilter'),
-            value: selectedBook.id,
-            options: books.map((book) => ({ value: book.id, label: book.name })),
-          }
-        : undefined,
+    primaryFilter: (() => {
+      const filters = [
+        books.length > 1
+          ? {
+              paramKey: 'book',
+              label: tb('list.bookFilter'),
+              value: selectedBook.id,
+              options: books.map((book) => ({ value: book.id, label: book.name })),
+            }
+          : null,
+        accountingContext ? accountingContextFilter(accountingContext, t) : null,
+      ].filter((filter) => filter !== null)
+      return filters.length > 0 ? filters : undefined
+    })(),
     scheduleDefId,
     scheduleParams: scheduleParamsFrom(sp),
     exportParams: sp,
@@ -178,11 +195,12 @@ export async function loadBalanceSheet(
       ? t('balanceSheet.balanced')
       : t('balanceSheet.offBy', { amount: money(difference) }),
     company: org?.name ?? '',
-    periodPhrase: `${selectedBook.name} · ${t('balanceSheet.asOf', { date: period.to })}`,
+    periodPhrase: [selectedBook.name, t('balanceSheet.asOf', { date: period.to }), accountingContext ? accountingContextLegend(accountingContext, t) : null].filter(Boolean).join(' · '),
     note: scaleFactor(q.scale).note || '',
     wide: view ? view.columns.length > 4 : false,
     ratesBlocked,
-    ratesReady: ratesBlocked === null,
+    ratesReady: ratesBlocked === null && contextBlocked === null,
+    contextBlocked,
     view,
     truncated: view?.truncated ?? false,
     truncatedLabel: t('filterBar.truncated'),
@@ -263,6 +281,15 @@ export function balanceSheetSpec(data: BalanceSheetData): PageSpec {
         }),
         when: f('ratesBlocked'),
       },
+      ...(data.contextBlocked
+        ? [{
+            ...widgetBlock('empty-state', {
+              title: data.contextBlocked.title,
+              description: data.contextBlocked.description,
+            }),
+            when: f('contextBlocked'),
+          }]
+        : []),
     ],
     paper: {
         company: f('company'),

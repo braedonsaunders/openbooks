@@ -38,6 +38,7 @@ export async function setupRailFlags(authz: Authz, features: FeatureState): Prom
     shippingEnabled: featureEnabled(features, 'shippingHub'),
     payrollEnabled: featureEnabled(features, 'payroll'),
     hrmEnabled: featureEnabled(features, 'hrm'),
+    segmentDependenciesEnabled: featureEnabled(features, 'segmentDependencies'),
     appSettings,
   }
 }

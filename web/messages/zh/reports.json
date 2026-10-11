@@ -3173,7 +3173,8 @@
       "gift": "捐赠",
       "grant": "资助",
       "release": "解除用途限制",
-      "manufacturing": "生产制造"
+      "manufacturing": "生产制造",
+      "account_merge": "科目合并"
     },
     "columns": {
       "detail": "往来方 / 备注"
@@ -3332,5 +3333,12 @@
       "currentPrice": "当前价格",
       "invoicedToDate": "截至目前已开票"
     }
+  },
+  "accountingContext": {
+    "label": "会计上下文",
+    "default": "子公司默认",
+    "base": "基础科目表",
+    "legend": "会计上下文：{context}；{marker} 表示按基础科目表编号和名称显示的科目",
+    "blockedTitle": "此会计上下文无法标注科目"
   }
 }

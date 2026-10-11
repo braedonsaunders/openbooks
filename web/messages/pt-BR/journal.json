@@ -25,7 +25,8 @@
     "fxSettlement": "Liquidação cambial",
     "migration": "Migração",
     "translation": "Conversão",
-    "manufacturing": "Manufatura"
+    "manufacturing": "Manufatura",
+    "accountMerge": "Mesclagem de contas"
   },
   "detail": {
     "notFound": "Lançamento não encontrado",

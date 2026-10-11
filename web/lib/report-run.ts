@@ -74,6 +74,7 @@ import { weekStartOf } from '@openbooks/engine/resourcing/weeks'
 import { reportRunLabels } from './report-labels'
 import { runResourcingReport, type ResourcingReportKey } from './resourcing/report-facts'
 import { getTranslations } from 'next-intl/server'
+import { AccountingContextError, localizeAccountRows, reportAccountingContext, type AccountLabels } from './reports/accounting-context'
 
 /**
  * The single catalog of built-in report "kinds" and the one place that turns
@@ -205,6 +206,20 @@ export type ResolvedReport =
 const PAY_RUN_DOCUMENT_KIND = 'pay_run'
 function ledgerContentPermissions(lines: ReadonlyArray<{ docKind: string | null }>): string[] {
   return lines.some((line) => line.docKind === PAY_RUN_DOCUMENT_KIND) ? ['payroll.read'] : []
+}
+
+/**
+ * Accounting-context labels for an export or scheduled run: the same `ctx`
+ * parameter and resolution as the screen. An unknown or ambiguous context
+ * refuses with its remedy rather than exporting base labels silently.
+ */
+async function exportAccountLabels(orgId: string, p: URLSearchParams, asOf: string, subsidiaryId: string | undefined): Promise<AccountLabels | null> {
+  try {
+    return (await reportAccountingContext(orgId, p.get('ctx'), { asOf, subsidiaryId: subsidiaryId ?? null })).labels
+  } catch (error) {
+    if (error instanceof AccountingContextError) throw new ReportResolutionError(`${error.message} ${error.remedy}`)
+    throw error
+  }
 }
 
 export type ResolveReportCtx = {
@@ -348,7 +363,8 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
     let title = ''
     let periodPhrase = ''
     const selectedBook = kind === 'budget' ? undefined : (await reportBookSelection(orgId, p.get('book'))).selectedBook
-    const matrixOpts = { orgId, bookId: selectedBook?.id, breakout: q.breakout, compare: q.compare, basis: q.basis, dims: q.dims, subsidiary: subView.subsidiary, showZero: q.showZero }
+    const accountLabels = kind === 'budget' ? null : await exportAccountLabels(orgId, p, period.to, q.subsidiaryId)
+    const matrixOpts = { orgId, bookId: selectedBook?.id, breakout: q.breakout, compare: q.compare, basis: q.basis, dims: q.dims, subsidiary: subView.subsidiary, showZero: q.showZero, accountLabels }
     if (kind === 'pnl') {
       title = t('pnl.title')
       periodPhrase = t('pnl.dateRange', { from: period.from, to: period.to })
@@ -429,7 +445,8 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
   const canSeePayroll = can(authz, 'payroll.read')
   switch (kind) {
     case 'general-ledger': {
-      const ledger = await generalLedger(period.from, period.to, { accountId: isReportUuidParam(p.get('account')) ? p.get('account')! : undefined, dims, orgId, bookId: detailBookId, canSeePayroll })
+      const raw = await generalLedger(period.from, period.to, { accountId: isReportUuidParam(p.get('account')) ? p.get('account')! : undefined, dims, orgId, bookId: detailBookId, canSeePayroll })
+      const ledger = { ...raw, accounts: localizeAccountRows(raw.accounts, await exportAccountLabels(orgId, p, period.to, q.subsidiaryId)) }
       return {
         render: 'data',
         data: generalLedgerExportData(ledger, t('generalLedger.title'), t),
@@ -483,7 +500,7 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
   const to = p.get('to') ?? period.to
   switch (kind) {
     case 'trial-balance':
-      return { render: 'data', data: trialBalanceExportData(await trialBalance(asOf, dims, orgId, detailBookId), asOf, t) }
+      return { render: 'data', data: trialBalanceExportData(localizeAccountRows(await trialBalance(asOf, dims, orgId, detailBookId), await exportAccountLabels(orgId, p, asOf, q.subsidiaryId)), asOf, t) }
     case 'partners': {
       // `kind` is the one partners param end to end (seeded Receivables /
       // Payables declarations, schedule snapshots, the page toggle and

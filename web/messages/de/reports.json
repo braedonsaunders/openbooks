@@ -3173,7 +3173,8 @@
       "gift": "Spende",
       "grant": "Zuschuss",
       "release": "Freigabe aus Zweckbindungen",
-      "manufacturing": "Fertigung"
+      "manufacturing": "Fertigung",
+      "account_merge": "Kontenzusammenführung"
     },
     "columns": {
       "detail": "Geschäftspartner / Notiz"
@@ -3332,5 +3333,12 @@
       "currentPrice": "Aktueller Preis",
       "invoicedToDate": "Bisher fakturiert"
     }
+  },
+  "accountingContext": {
+    "label": "Rechnungslegungskontext",
+    "default": "Standard der Tochtergesellschaft",
+    "base": "Basis-Kontenplan",
+    "legend": "Rechnungslegungskontext: {context}; {marker} kennzeichnet ein Konto mit Nummer und Name aus dem Basis-Kontenplan",
+    "blockedTitle": "Dieser Rechnungslegungskontext kann die Konten nicht beschriften"
   }
 }

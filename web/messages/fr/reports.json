@@ -3153,7 +3153,8 @@
       "gift": "Don",
       "grant": "Subvention",
       "release": "Levée des restrictions",
-      "manufacturing": "Fabrication"
+      "manufacturing": "Fabrication",
+      "account_merge": "Fusion de comptes"
     },
     "columns": {
       "detail": "Tiers / mémo"
@@ -3332,5 +3333,12 @@
       "currentPrice": "Prix actuel",
       "invoicedToDate": "Facturé à ce jour"
     }
+  },
+  "accountingContext": {
+    "label": "Contexte comptable",
+    "default": "Par défaut de la filiale",
+    "base": "Plan comptable de base",
+    "legend": "Contexte comptable : {context} ; {marker} signale un compte affiché avec le numéro et le nom du plan de base",
+    "blockedTitle": "Ce contexte comptable ne peut pas libeller les comptes"
   }
 }

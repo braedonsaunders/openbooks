@@ -25,7 +25,8 @@
     "fxSettlement": "Règlement de change",
     "translation": "Conversion",
     "migration": "Migration",
-    "manufacturing": "Fabrication"
+    "manufacturing": "Fabrication",
+    "accountMerge": "Fusion de comptes"
   },
   "detail": {
     "notFound": "Écriture introuvable",

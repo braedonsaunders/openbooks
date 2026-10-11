@@ -9,10 +9,23 @@ import { CustomFieldInputs, type CustomFieldDefClient } from '../../../component
 import type { CustomFieldViewer } from '@openbooks/customization'
 import type { AccountPayload } from '../../api/accounts/_lib'
 import { ReadOnlyValue } from '../../../components/read-only-value'
-import { refusalMessageFromBody } from '../../../lib/api-error'
+import { ApiResponseError, apiJson, refusalMessageFromBody } from '../../../lib/api-error'
 import { useDirtyClose } from '../../../lib/use-dirty-close'
+import { AccountMergePanel } from './AccountMergePanel'
 
 type Option = { value: string; label: string; type?: string }
+
+/** Account merge affordances the server resolves for this drawer. */
+export interface AccountDrawerMerge {
+  /** Feature on, chart authority, posting authority and unrestricted scope. */
+  canMerge: boolean
+  /** Active, postable, unmerged accounts of the same type. */
+  targets: { value: string; label: string }[]
+  today: string
+  /** An open merge proposal of this account under an Accounting event flow. */
+  proposal: { changeId: string; status: 'draft' | 'pending' | 'approved'; targetLabel: string; effectiveDate: string } | null
+  mergedInto: { label: string; date: string; reason: string | null; href: string } | null
+}
 
 const TYPE_VALUES = [
   'asset_bank',
@@ -135,6 +148,7 @@ export function AccountDrawer({
   multiCurrency = false,
   multiSubsidiary = false,
   baseCurrency = '',
+  merge = null,
 }: {
   payload: AccountPayload
   parents: Option[]
@@ -154,6 +168,8 @@ export function AccountDrawer({
   /** Company Settings → Features. Elimination is Multi-subsidiary
    *  consolidation configuration; hide and omit it when that switch is off. */
   multiSubsidiary?: boolean
+  /** Account merges: present while the feature is on; `mergedInto` describes a merged account. */
+  merge?: AccountDrawerMerge | null
 }) {
   const t = useTranslations('accounts')
   const tc = useTranslations('common')
@@ -164,7 +180,9 @@ export function AccountDrawer({
 
   const initial = useMemo(() => toForm(account, createMode), [account, createMode])
   const [form, setForm] = useState(initial)
-  const [mode, setMode] = useState<'view' | 'edit'>(createMode ? 'edit' : 'view')
+  const [mode, setMode] = useState<'view' | 'edit' | 'merge'>(createMode ? 'edit' : 'view')
+  const mergedInto = merge?.mergedInto ?? null
+  const canStartMerge = Boolean(merge?.canMerge && !mergedInto && !createMode && !account.is_summary)
   // A blocked save that only fires a transient toast reads as "nothing
   // happened" once it dismisses: the
   // failure also persists as a form-level alert, cleared on the next edit.
@@ -330,6 +348,21 @@ export function AccountDrawer({
     void closeGuard.close()
   }
 
+  async function applyApprovedMerge(changeId: string) {
+    setBusy(true)
+    try {
+      await apiJson(`/api/accounts/merges/${changeId}/apply`, { method: 'POST' }, t('merge.failed'))
+      toast.success(t('merge.applied'))
+      router.refresh()
+    } catch (failure) {
+      const message = failure instanceof ApiResponseError ? failure.message : t('merge.failed')
+      setFieldError(message)
+      toast.error(message)
+    } finally {
+      setBusy(false)
+    }
+  }
+
   function toggleDimension(dimension: string, checked: boolean) {
     set('requiredDimensions', checked
       ? [...new Set([...form.requiredDimensions, dimension])]
@@ -350,13 +383,15 @@ export function AccountDrawer({
         <span className="flex items-center gap-2.5">
           <span>{createMode ? t('drawer.newTitle') : `${form.number} ${form.name}`.trim()}</span>
           {!createMode ? (
-            <Badge variant={form.isActive ? 'success' : 'outline'}>
-              {form.isActive ? tc('status.active') : tc('status.inactive')}
-            </Badge>
+            mergedInto ? <Badge variant="secondary">{t('merge.badge')}</Badge> : (
+              <Badge variant={form.isActive ? 'success' : 'outline'}>
+                {form.isActive ? tc('status.active') : tc('status.inactive')}
+              </Badge>
+            )
           ) : null}
         </span>
       }
-      description={createMode ? t('drawer.newDescription') : mode === 'edit' ? tc('feedback.editingHint') : undefined}
+      description={createMode ? t('drawer.newDescription') : mode === 'edit' ? tc('feedback.editingHint') : mode === 'merge' ? t('merge.title') : undefined}
       headerActions={
         mode === 'edit' ? (
           <>
@@ -365,12 +400,44 @@ export function AccountDrawer({
               {busy ? tc('actions.saving') : createMode ? t('drawer.create') : tc('actions.save')}
             </Button>
           </>
-        ) : canManage ? (
-          <Button variant="outline" onClick={() => setMode('edit')}>{tc('actions.edit')}</Button>
+        ) : mode === 'merge' ? undefined : canManage && !mergedInto ? (
+          <>
+            {canStartMerge ? <Button variant="outline" onClick={() => setMode('merge')}>{t('merge.action')}</Button> : null}
+            <Button variant="outline" onClick={() => setMode('edit')}>{tc('actions.edit')}</Button>
+          </>
         ) : undefined
       }
     >
+      {mode === 'merge' && merge ? (
+        <AccountMergePanel
+          accountId={account.id}
+          accountLabel={`${form.number} ${form.name}`.trim()}
+          targets={merge.targets}
+          today={merge.today}
+          onDone={() => setMode('view')}
+        />
+      ) : (
       <div className="space-y-7 p-1">
+        {merge?.proposal && !mergedInto ? (
+          <div role="status" className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-sky-200 bg-sky-50 p-3 text-sm text-sky-900 dark:border-sky-900 dark:bg-sky-950/40 dark:text-sky-200">
+            <span>{t(merge.proposal.status === 'approved' ? 'merge.proposalApproved' : 'merge.proposalPending', { target: merge.proposal.targetLabel, date: merge.proposal.effectiveDate })}</span>
+            {merge.proposal.status === 'approved' && merge.canMerge ? (
+              <Button size="sm" disabled={busy} onClick={() => void applyApprovedMerge(merge.proposal!.changeId)}>{t('merge.applyApproved')}</Button>
+            ) : null}
+          </div>
+        ) : null}
+        {mergedInto ? (
+          <div role="status" className="rounded-md border border-slate-200 bg-slate-50 p-3 text-sm dark:border-slate-800 dark:bg-slate-900/60">
+            <p>
+              {t.rich('merge.mergedBanner', {
+                target: mergedInto.label,
+                date: mergedInto.date,
+                link: (chunks: ReactNode) => <a className="underline" href={mergedInto.href}>{chunks}</a>,
+              })}
+            </p>
+            {mergedInto.reason ? <p className="mt-1 text-slate-600 dark:text-slate-300">{t('merge.mergedReason', { reason: mergedInto.reason })}</p> : null}
+          </div>
+        ) : null}
         {fieldError ? (
           <p role="alert" className="rounded-md border border-red-200 bg-red-50 p-2.5 text-sm text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300">
             {fieldError}
@@ -522,6 +589,7 @@ export function AccountDrawer({
 
         <CustomFieldInputs defs={fieldDefs} values={form.custom} onChange={(v) => set('custom', v)} readOnly={!editable} viewer={customFieldViewer} />
       </div>
+      )}
     </UrlDrawer>
   )
 }

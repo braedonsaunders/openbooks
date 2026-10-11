@@ -27,6 +27,7 @@ import { dimensionOptionsScope } from '../../../../lib/reports/filters'
 import type { ReportDrillTarget } from '../../../../lib/report-drill'
 import type { PaperCell } from '../PaperView'
 import { mergeHref } from '../../../../lib/list-params'
+import { AccountingContextError, accountingContextFilter, accountingContextLegend, localizeAccountRows, reportAccountingContext, type ReportAccountingContext } from '../../../../lib/reports/accounting-context'
 import { filterBar, page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
 
 /**
@@ -39,7 +40,9 @@ import { filterBar, page, pageHeader, ref, widget, widgetBlock, type PageSpec } 
  */
 
 export interface TrialBalanceData {
-  primaryFilter: { paramKey: string; label: string; value: string; options: { value: string; label: string }[] } | null
+  primaryFilter: { paramKey: string; label: string; value: string; options: { value: string; label: string }[] }[] | null
+  /** Set when the requested accounting context cannot label the accounts (unknown or ambiguous). */
+  contextBlocked: { title: string; description: string } | null
   title: string
   backHref: string
   backLabel: string
@@ -102,6 +105,7 @@ export async function loadTrialBalance(
       }),
       baseCurrencyReady: false,
       primaryFilter: null,
+      contextBlocked: null,
       scheduleDefId,
       scheduleParams: scheduleParamsFrom(sp),
       exportParams: sp,
@@ -149,11 +153,24 @@ export async function loadTrialBalance(
   ])
   const fyStart = fiscalYearStartOn(date, startMonth)
   const priorEnd = priorFiscalYearEndOn(date, startMonth)
-  const displayRows = rows.map((r) => (
+  // Accounting context: localized numbers and names, ordered by them.
+  let accountingContext: ReportAccountingContext | null = null
+  let contextBlocked: TrialBalanceData['contextBlocked'] = null
+  try {
+    accountingContext = await reportAccountingContext(await resolveOrgId(), sp.ctx, { asOf: date, subsidiaryId: q.subsidiaryId ?? null })
+  } catch (e) {
+    if (!(e instanceof AccountingContextError)) throw e
+    contextBlocked = { title: t('accountingContext.blockedTitle'), description: `${e.message} ${e.remedy}` }
+  }
+  const displayRows = localizeAccountRows(rows, accountingContext?.labels).map((r) => (
     r.id === COMPUTED_RETAINED_EARNINGS_PRIOR_ID
       ? { ...r, name: t('statement.retainedEarningsPrior') }
       : r
   ))
+  const contextLegend = accountingContext ? accountingContextLegend(accountingContext, t) : null
+  const contextFilter = accountingContext ? accountingContextFilter(accountingContext, t) : null
+  const bookFilter = books.length > 1 ? { paramKey: 'book', label: tb('list.bookFilter'), value: selectedBook.id, options: books.map((book) => ({ value: book.id, label: book.name })) } : null
+  const primaryFilters = [bookFilter, contextFilter].filter((filter) => filter !== null)
   const totalDebits = decimalSum(displayRows.map((r) => r.debits))
   const totalCredits = decimalSum(displayRows.map((r) => r.credits))
 
@@ -202,10 +219,11 @@ export async function loadTrialBalance(
     subsidiaries: subView?.picker ?? [],
     ratesBlocked,
     currencyBasisBlocked,
-    ratesReady: ratesBlocked === null && currencyBasisBlocked === null,
+    ratesReady: ratesBlocked === null && currencyBasisBlocked === null && contextBlocked === null,
     baseCurrencyNotice: null,
     baseCurrencyReady: true,
-    primaryFilter: books.length > 1 ? { paramKey: 'book', label: tb('list.bookFilter'), value: selectedBook.id, options: books.map((book) => ({ value: book.id, label: book.name })) } : null,
+    primaryFilter: primaryFilters.length > 0 ? primaryFilters : null,
+    contextBlocked,
     scheduleDefId,
     scheduleParams: scheduleParamsFrom(sp),
     exportParams: sp,
@@ -217,7 +235,7 @@ export async function loadTrialBalance(
     emptyLabel: t('generalLedger.empty'),
     paper: {
       title: t('trialBalance.title'),
-      periodPhrase: `${selectedBook.name} · ${t('trialBalance.description', { date, count: rows.length })}`,
+      periodPhrase: [selectedBook.name, t('trialBalance.description', { date, count: rows.length }), contextLegend].filter(Boolean).join(' · '),
       groups: [
         {
           columns: [
@@ -310,6 +328,19 @@ export function trialBalanceSpec(data: TrialBalanceData): PageSpec {
                 description: data.currencyBasisBlocked?.description,
               }),
               when: f('currencyBasisBlocked'),
+            },
+          ]
+        : []),
+      // An unknown or ambiguous accounting context renders its refusal; the
+      // remedy is the context picker above or the context's setup.
+      ...(data.contextBlocked
+        ? [
+            {
+              ...widgetBlock('empty-state', {
+                title: data.contextBlocked?.title ?? '',
+                description: data.contextBlocked?.description,
+              }),
+              when: f('contextBlocked'),
             },
           ]
         : []),

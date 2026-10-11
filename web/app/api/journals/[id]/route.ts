@@ -23,6 +23,7 @@ import {
   visibleCustomFieldDefs,
 } from '../../../../lib/custom-fields'
 import { extraDimsSubsidiaryError, segmentRegistry, validateExtraDims } from '../../../../lib/segments'
+import { assertDocumentSegmentDependencies } from '@openbooks/engine/organization/segment-dependencies'
 import { exactMoney, isoDate, nullableUuidId } from '../../../../lib/api/json'
 import { notFound } from "@/lib/api/responses";
 
@@ -455,6 +456,9 @@ export const PATCH = defineRoute({
               updated_by = ${user.id}
             where id = ${id} and org_id = ${user.orgId}
           `)
+
+          // Segment value dependencies on the saved lines, as posting will read them.
+          await assertDocumentSegmentDependencies(tx, user.orgId, id)
 
           const auditAfter = await captureTransactionAuditSnapshot(tx, id, user.orgId)
           if (!auditAfter) throw new Error(`journal ${id} disappeared during update`)

@@ -3665,6 +3665,22 @@
         "title": "Descripciones de puesto",
         "singularTitle": "Descripción de puesto",
         "description": "Contenido de publicación reutilizable para nuevas solicitudes: título, tipo de empleo, rango salarial y descripción."
+      },
+      "accounting-contexts": {
+        "title": "Contextos contables",
+        "description": "Contextos con nombre, como un plan de cuentas estatutario local, bajo cuyos números y nombres de cuenta localizados pueden ejecutarse los informes."
+      },
+      "accounting-context-defaults": {
+        "title": "Valores predeterminados",
+        "description": "Filiales, o todas las filiales de un país, que informan bajo este contexto salvo que un informe indique otro."
+      },
+      "account-localizations": {
+        "title": "Cuentas localizadas",
+        "description": "Número y nombre localizados por cuenta, con fecha de vigencia y opcionalmente para una filial. Un número localizado pertenece a una sola cuenta por ámbito y periodo."
+      },
+      "segment-value-dependencies": {
+        "title": "Dependencias",
+        "description": "Valores de este segmento permitidos solo con valores indicados de un segmento de control. Cada fila permite un valor de control; un valor sin filas no tiene restricciones."
       }
     },
     "fields": {
@@ -4292,7 +4308,13 @@
       "compensationMin": "Salario mínimo",
       "compensationMax": "Salario máximo",
       "compensationCurrency": "Moneda del salario",
-      "compensationBasis": "Base salarial"
+      "compensationBasis": "Base salarial",
+      "contextId": "Contexto contable",
+      "localizedNumber": "Número localizado",
+      "localizedName": "Nombre localizado",
+      "valueId": "Valor",
+      "controllingSegmentId": "Segmento de control",
+      "allowedValueId": "Permitido con"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Días entre el tipo utilizable más reciente y el cierre del período a partir de los cuales la revaluación y la consolidación rechazan el tipo. Los tipos de cierre se cuentan desde la fecha del tipo al contado de cierre; los promedio, desde la cotización más reciente promediada. Valor predeterminado sin política: 31 días.",
@@ -4471,7 +4493,10 @@
       "hrmJobDescriptionTitle": "El título del puesto que ven los candidatos en la publicación.",
       "hrmJobDescriptionKind": "Por ejemplo jornada completa, media jornada, temporal o por contrato.",
       "hrmJobDescriptionPay": "Opcional. Indique mínimo, máximo, moneda y base juntos, o deje los cuatro vacíos.",
-      "hrmJobDescriptionBody": "El texto de la publicación. Las nuevas solicitudes lo copian, así que editarlo aquí no cambia una vacante existente."
+      "hrmJobDescriptionBody": "El texto de la publicación. Las nuevas solicitudes lo copian, así que editarlo aquí no cambia una vacante existente.",
+      "contextDefaultScope": "Elija una filial, o déjelo vacío y elija un país para abarcar todas sus filiales.",
+      "localizationSubsidiary": "Déjelo vacío para aplicarlo a todas las filiales; una localización específica de una filial prevalece en sus informes.",
+      "allowedValue": "Un valor permitido por fila. Añada una fila por cada valor del segmento de control con el que puede usarse este valor."
     },
     "options": {
       "withholdingCondominiumPayer": "Pagador: comunidad de propietarios",
@@ -7332,6 +7357,19 @@
       "4": "Jueves",
       "5": "Viernes",
       "6": "Sábado"
+    },
+    "segmentDependencies": {
+      "navTitle": "Excepciones de dependencias",
+      "title": "Excepciones de dependencias de segmentos",
+      "description": "{count, plural, =0 {Ningún documento abierto incumple una regla de dependencia.} one {# línea de documento abierto incumple una regla vigente en su fecha.} other {# líneas de documentos abiertos incumplen una regla vigente en su fecha.}}",
+      "empty": "Ningún documento abierto incumple una regla de dependencia.",
+      "columns": {
+        "document": "Documento",
+        "date": "Fecha",
+        "status": "Estado",
+        "line": "Línea",
+        "problem": "Problema"
+      }
     }
   },
   "flows": {
@@ -8055,6 +8093,18 @@
     "manufacturingSubcontract": {
       "title": "Fabricación externa",
       "description": "Envíe componentes a un proveedor, registre servicios y devuelva la producción a la orden."
+    },
+    "accountMerges": {
+      "title": "Fusión de cuentas",
+      "description": "Fusione una cuenta duplicada con la cuenta que permanece: previsualice cada rechazo y consecuencia, traslade el saldo con un asiento de reclasificación y la configuración con él, y conserve intacto el historial contabilizado."
+    },
+    "accountingContexts": {
+      "title": "Contextos contables",
+      "description": "Presente los informes con números y nombres de cuenta localizados, como un plan de cuentas estatutario local, por contexto y, opcionalmente, por filial o país."
+    },
+    "segmentDependencies": {
+      "title": "Dependencias de segmentos",
+      "description": "Permita un valor de segmento solo con valores indicados de otro segmento, como una clase solo con ciertos departamentos; se aplica al guardar y contabilizar documentos."
     }
   },
   "backupsManager": {

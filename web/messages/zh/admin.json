@@ -3740,6 +3740,22 @@
         "title": "职位描述",
         "singularTitle": "职位描述",
         "description": "新招聘申请可复用的发布内容：职位名称、雇用类型、薪酬范围和说明。"
+      },
+      "accounting-contexts": {
+        "title": "会计上下文",
+        "description": "命名的上下文（例如当地法定科目表），报表可按其本地化科目编号和名称运行。"
+      },
+      "accounting-context-defaults": {
+        "title": "默认设置",
+        "description": "除非报表指定其他上下文，否则按此上下文报告的子公司（或某国家的所有子公司）。"
+      },
+      "account-localizations": {
+        "title": "本地化科目",
+        "description": "按科目设置带生效日期的本地化编号和名称，可选限定某子公司。每个范围和期间内，一个本地化编号只能属于一个科目。"
+      },
+      "segment-value-dependencies": {
+        "title": "依赖关系",
+        "description": "此段的值仅允许与控制段的指定值组合。每行允许一个控制值；没有任何行的值不受限制。"
       }
     },
     "fields": {
@@ -4367,7 +4383,13 @@
       "compensationMin": "薪酬下限",
       "compensationMax": "薪酬上限",
       "compensationCurrency": "薪酬币种",
-      "compensationBasis": "薪酬基准"
+      "compensationBasis": "薪酬基准",
+      "contextId": "会计上下文",
+      "localizedNumber": "本地化编号",
+      "localizedName": "本地化名称",
+      "valueId": "值",
+      "controllingSegmentId": "控制段",
+      "allowedValueId": "允许搭配"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "最新可用汇率距期末的天数超过此值时，重估和合并将拒绝该汇率。期末汇率从期末即期汇率的日期起算；平均汇率从计入平均的最新报价日期起算。未设置政策时的默认值：31 天。",
@@ -4546,7 +4568,10 @@
       "hrmJobDescriptionTitle": "求职者在职位发布中看到的职位名称。",
       "hrmJobDescriptionKind": "例如：全职、兼职、季节性或合同制。",
       "hrmJobDescriptionPay": "可选。请同时填写下限、上限、币种和基准，或四项全部留空。",
-      "hrmJobDescriptionBody": "职位发布文本。新招聘申请会复制该文本，因此在此编辑不会更改已有职位。"
+      "hrmJobDescriptionBody": "职位发布文本。新招聘申请会复制该文本，因此在此编辑不会更改已有职位。",
+      "contextDefaultScope": "选择一个子公司，或留空并选择国家以涵盖该国所有子公司。",
+      "localizationSubsidiary": "留空则适用于所有子公司；特定子公司的本地化在该子公司的报表中优先。",
+      "allowedValue": "每行一个允许值。为此值可搭配使用的每个控制段值各添加一行。"
     },
     "options": {
       "withholdingCondominiumPayer": "公寓业主共同体付款人",
@@ -7332,6 +7357,19 @@
       "4": "星期四",
       "5": "星期五",
       "6": "星期六"
+    },
+    "segmentDependencies": {
+      "navTitle": "依赖关系例外",
+      "title": "段依赖关系例外",
+      "description": "{count, plural, =0 {没有未过账单据违反依赖规则。} other {# 条未过账单据行违反其日期有效的依赖规则。}}",
+      "empty": "没有未过账单据违反依赖规则。",
+      "columns": {
+        "document": "单据",
+        "date": "日期",
+        "status": "状态",
+        "line": "行",
+        "problem": "问题"
+      }
     }
   },
   "flows": {
@@ -8055,6 +8093,18 @@
     "manufacturingSubcontract": {
       "title": "外协制造",
       "description": "向供应商发送组件，记录加工服务，并将生产数量返回生产订单。"
+    },
+    "accountMerges": {
+      "title": "科目合并",
+      "description": "将重复科目合并到保留科目：预览所有拒绝原因和影响，通过重分类凭证转移余额并一同转移配置，同时保持已过账历史不变。"
+    },
+    "accountingContexts": {
+      "title": "会计上下文",
+      "description": "按上下文（可选按子公司或国家）以本地化的科目编号和名称展示报表，例如当地法定科目表。"
+    },
+    "segmentDependencies": {
+      "title": "段依赖关系",
+      "description": "仅允许某段值与另一段的指定值组合使用，例如某类别仅限特定部门；在保存和过账单据时强制执行。"
     }
   },
   "backupsManager": {

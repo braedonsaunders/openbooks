@@ -3153,7 +3153,8 @@
       "gift": "Donación",
       "grant": "Subvención",
       "release": "Liberación de restricciones",
-      "manufacturing": "Fabricación"
+      "manufacturing": "Fabricación",
+      "account_merge": "Fusión de cuentas"
     },
     "columns": {
       "detail": "Tercero / nota"
@@ -3332,5 +3333,12 @@
       "currentPrice": "Precio actual",
       "invoicedToDate": "Facturado a la fecha"
     }
+  },
+  "accountingContext": {
+    "label": "Contexto contable",
+    "default": "Predeterminado de la filial",
+    "base": "Plan de cuentas base",
+    "legend": "Contexto contable: {context}; {marker} indica una cuenta mostrada con el número y nombre del plan base",
+    "blockedTitle": "Este contexto contable no puede rotular las cuentas"
   }
 }

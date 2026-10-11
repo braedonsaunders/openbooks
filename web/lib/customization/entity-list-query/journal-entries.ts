@@ -66,6 +66,8 @@ export const JOURNAL_GL_NATIVE_ORIGINS = [
   // source document: without this they post to the GL yet stay
   // invisible in the list and its counts even with Origin=All.
   "migration",
+  // Account merge reclasses move a merged account's balance to its survivor.
+  "account_merge",
 ];
 
 /**

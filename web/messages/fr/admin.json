@@ -3665,6 +3665,22 @@
         "title": "Descriptions de poste",
         "singularTitle": "Description de poste",
         "description": "Contenu d'annonce réutilisable pour les nouvelles demandes : intitulé, type d'emploi, fourchette de rémunération et description."
+      },
+      "accounting-contexts": {
+        "title": "Contextes comptables",
+        "description": "Contextes nommés, comme un plan comptable statutaire local, sous lesquels les rapports peuvent afficher des numéros et libellés de comptes localisés."
+      },
+      "accounting-context-defaults": {
+        "title": "Valeurs par défaut",
+        "description": "Filiales, ou toutes les filiales d’un pays, qui utilisent ce contexte sauf si un rapport en désigne un autre."
+      },
+      "account-localizations": {
+        "title": "Comptes localisés",
+        "description": "Numéro et libellé localisés par compte, avec date d’effet et éventuellement pour une filiale. Un numéro localisé appartient à un seul compte par périmètre et période."
+      },
+      "segment-value-dependencies": {
+        "title": "Dépendances",
+        "description": "Valeurs de ce segment autorisées uniquement avec certaines valeurs d’un segment de contrôle. Chaque ligne autorise une valeur de contrôle ; une valeur sans ligne reste libre."
       }
     },
     "fields": {
@@ -4292,7 +4308,13 @@
       "compensationMin": "Rémunération minimale",
       "compensationMax": "Rémunération maximale",
       "compensationCurrency": "Devise de rémunération",
-      "compensationBasis": "Base de rémunération"
+      "compensationBasis": "Base de rémunération",
+      "contextId": "Contexte comptable",
+      "localizedNumber": "Numéro localisé",
+      "localizedName": "Libellé localisé",
+      "valueId": "Valeur",
+      "controllingSegmentId": "Segment de contrôle",
+      "allowedValueId": "Autorisé avec"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Nombre de jours entre le taux utilisable le plus récent et la fin de période au-delà duquel la réévaluation et la consolidation refusent le taux. Les taux de clôture se comptent depuis la date du taux comptant de fin de période ; les taux moyens depuis la cotation la plus récente incluse dans la moyenne. Valeur par défaut sans politique : 31 jours.",
@@ -4471,7 +4493,10 @@
       "hrmJobDescriptionTitle": "L'intitulé de poste affiché aux candidats dans l'annonce.",
       "hrmJobDescriptionKind": "Par exemple temps plein, temps partiel, saisonnier ou contractuel.",
       "hrmJobDescriptionPay": "Facultatif. Saisissez ensemble le minimum, le maximum, la devise et la base, ou laissez les quatre vides.",
-      "hrmJobDescriptionBody": "Le texte de l'annonce. Les nouvelles demandes le copient : le modifier ici ne change jamais un poste existant."
+      "hrmJobDescriptionBody": "Le texte de l'annonce. Les nouvelles demandes le copient : le modifier ici ne change jamais un poste existant.",
+      "contextDefaultScope": "Choisissez une filiale, ou laissez vide et choisissez un pays pour couvrir toutes ses filiales.",
+      "localizationSubsidiary": "Laissez vide pour toutes les filiales ; une localisation propre à une filiale prévaut dans ses rapports.",
+      "allowedValue": "Une valeur autorisée par ligne. Ajoutez une ligne pour chaque valeur du segment de contrôle avec laquelle cette valeur peut être utilisée."
     },
     "options": {
       "withholdingCondominiumPayer": "Payeur : copropriété",
@@ -7332,6 +7357,19 @@
       "4": "Jeudi",
       "5": "Vendredi",
       "6": "Samedi"
+    },
+    "segmentDependencies": {
+      "navTitle": "Exceptions de dépendances",
+      "title": "Exceptions aux dépendances de segments",
+      "description": "{count, plural, =0 {Aucun document ouvert n’enfreint une règle de dépendance.} one {# ligne de document ouvert enfreint une règle en vigueur à sa date.} other {# lignes de documents ouverts enfreignent une règle en vigueur à leur date.}}",
+      "empty": "Aucun document ouvert n’enfreint une règle de dépendance.",
+      "columns": {
+        "document": "Pièce",
+        "date": "Date de pièce",
+        "status": "Statut",
+        "line": "Ligne",
+        "problem": "Problème"
+      }
     }
   },
   "flows": {
@@ -8055,6 +8093,18 @@
     "manufacturingSubcontract": {
       "title": "Fabrication externe",
       "description": "Envoyez des composants à un fournisseur, enregistrez les services et retournez la production sur l’ordre."
+    },
+    "accountMerges": {
+      "title": "Fusion de comptes",
+      "description": "Fusionnez un compte en double avec un compte conservé : prévisualisez chaque refus et conséquence, transférez le solde par une écriture de reclassement avec sa configuration, et conservez l’historique comptabilisé intact."
+    },
+    "accountingContexts": {
+      "title": "Contextes comptables",
+      "description": "Présentez les rapports avec des numéros et libellés de comptes localisés, comme un plan comptable statutaire local, par contexte et éventuellement par filiale ou pays."
+    },
+    "segmentDependencies": {
+      "title": "Dépendances de segments",
+      "description": "N’autorisez une valeur de segment qu’avec certaines valeurs d’un autre segment, par exemple une classe uniquement avec certains départements ; appliqué à l’enregistrement et à la comptabilisation des documents."
     }
   },
   "backupsManager": {

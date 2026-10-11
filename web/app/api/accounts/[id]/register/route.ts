@@ -32,6 +32,7 @@ import {
 import { decimalCmp, decimalSum } from "../../../../../lib/statement-format";
 import { businessToday } from "@openbooks/engine/platform/business-date/module";
 import { notFound } from "@/lib/api/responses";
+import { AccountingContextError, labelAccountRow, reportAccountingContext } from "../../../../../lib/reports/accounting-context";
 
 export const runtime = "nodejs";
 
@@ -51,6 +52,21 @@ function isIsoDate(value: string): boolean {
   return (
     !Number.isNaN(date.getTime()) && date.toISOString().slice(0, 10) === value
   );
+}
+
+/**
+ * The register header under the requested accounting context (`ctx`), as of
+ * the register's end date. An unknown or ambiguous context refuses.
+ */
+async function contextualAccount<T extends { id: string; number: string | null; name: string }>(
+  orgId: string,
+  account: T,
+  ctx: string | null,
+  asOf: string,
+): Promise<T> {
+  if (!ctx) return account;
+  const context = await reportAccountingContext(orgId, ctx, { asOf });
+  return labelAccountRow(account, context.labels);
 }
 
 export const GET = defineRoute({
@@ -117,6 +133,12 @@ export const GET = defineRoute({
       );
       if (!result.account)
         return notFound("record");
+      try {
+        result.account = await contextualAccount(gate.user.orgId, result.account, query.get("ctx"), to || (await businessToday(gate.user.orgId)));
+      } catch (error) {
+        if (error instanceof AccountingContextError) return apiErrorResponse(error);
+        throw error;
+      }
       if (result.total > MAX_EXPORT_LINES) {
         return NextResponse.json(
           {
@@ -230,6 +252,12 @@ export const GET = defineRoute({
     );
     if (!result.account)
       return notFound("record");
+    try {
+      result.account = await contextualAccount(gate.user.orgId, result.account, query.get("ctx"), to || (await businessToday(gate.user.orgId)));
+    } catch (error) {
+      if (error instanceof AccountingContextError) return apiErrorResponse(error);
+      throw error;
+    }
     return NextResponse.json({ ...result, page, perPage: PER_PAGE });
   },
 });

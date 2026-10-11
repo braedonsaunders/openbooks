@@ -27,6 +27,7 @@ import { ACCOUNTING_ENTITIES } from './entities/accounting'
 import { INTERNAL_BILLING_RULES_ENTITY } from './entities/internal-billing'
 import { TAX_ENTITIES } from './entities/taxes'
 import { DIMENSION_ENTITIES } from './entities/dimensions'
+import { CHART_ENTITIES } from './entities/chart'
 import { BILLING_ENTITIES } from './entities/billing'
 import { SALES_SETUP_ENTITIES } from './entities/sales'
 import { STORED_VALUE_ENTITIES } from './entities/stored-value'
@@ -88,6 +89,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
   ...COMMERCE_ENTITIES,
   PAYROLL_COMPENSATION_PACKAGES_ENTITY, PAYROLL_COMPENSATION_VERSIONS_ENTITY, PAYROLL_COMPENSATION_ASSIGNMENTS_ENTITY,
   TRAINING_COURSES_ENTITY, TRAINING_SESSIONS_ENTITY, TRAINING_PARTICIPANTS_ENTITY,
+  ...CHART_ENTITIES,
 ]
 
 export const SETUP_ENTITY_BY_KEY = new Map(SETUP_ENTITIES.map((e) => [e.key, e]))

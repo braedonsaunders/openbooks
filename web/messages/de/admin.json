@@ -3793,6 +3793,22 @@
         "title": "Stellenbeschreibungen",
         "singularTitle": "Stellenbeschreibung",
         "description": "Wiederverwendbare Ausschreibungsinhalte für neue Stellenanforderungen: Titel, Beschäftigungsart, Gehaltsspanne und Beschreibung."
+      },
+      "accounting-contexts": {
+        "title": "Rechnungslegungskontexte",
+        "description": "Benannte Kontexte, etwa ein landesrechtlicher Kontenplan, unter deren lokalisierten Kontonummern und -namen Berichte laufen können."
+      },
+      "accounting-context-defaults": {
+        "title": "Standards",
+        "description": "Tochtergesellschaften oder alle Tochtergesellschaften eines Landes, die unter diesem Kontext berichten, sofern ein Bericht keinen anderen nennt."
+      },
+      "account-localizations": {
+        "title": "Lokalisierte Konten",
+        "description": "Lokalisierte Nummer und Bezeichnung je Konto mit Gültigkeitsdatum, optional für eine Tochtergesellschaft. Eine lokalisierte Nummer gehört je Bereich und Zeitraum zu genau einem Konto."
+      },
+      "segment-value-dependencies": {
+        "title": "Abhängigkeiten",
+        "description": "Werte dieses Segments, die nur mit bestimmten Werten eines steuernden Segments zulässig sind. Jede Zeile erlaubt einen steuernden Wert; ein Wert ohne Zeilen bleibt uneingeschränkt."
       }
     },
     "fields": {
@@ -4420,7 +4436,13 @@
       "compensationMin": "Gehalt Minimum",
       "compensationMax": "Gehalt Maximum",
       "compensationCurrency": "Gehaltswährung",
-      "compensationBasis": "Gehaltsbasis"
+      "compensationBasis": "Gehaltsbasis",
+      "contextId": "Rechnungslegungskontext",
+      "localizedNumber": "Lokalisierte Nummer",
+      "localizedName": "Lokalisierte Bezeichnung",
+      "valueId": "Wert",
+      "controllingSegmentId": "Steuerndes Segment",
+      "allowedValueId": "Zulässig mit"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Tage zwischen dem neuesten verwendbaren Kurs und dem Periodenende, ab denen Bewertung und Konsolidierung den Kurs ablehnen. Stichtagskurse zählen ab dem Datum des Kassakurses zum Periodenende, Durchschnittskurse ab der neuesten einbezogenen Notierung. Standard ohne Richtlinie: 31 Tage.",
@@ -4599,7 +4621,10 @@
       "hrmJobDescriptionTitle": "Der Stellentitel, den Bewerbende in der Ausschreibung sehen.",
       "hrmJobDescriptionKind": "Zum Beispiel Vollzeit, Teilzeit, saisonal oder befristet.",
       "hrmJobDescriptionPay": "Optional. Minimum, Maximum, Währung und Basis gemeinsam angeben oder alle vier leer lassen.",
-      "hrmJobDescriptionBody": "Der Ausschreibungstext. Neue Stellenanforderungen übernehmen eine Kopie; Änderungen hier wirken nicht auf bestehende Stellen."
+      "hrmJobDescriptionBody": "Der Ausschreibungstext. Neue Stellenanforderungen übernehmen eine Kopie; Änderungen hier wirken nicht auf bestehende Stellen.",
+      "contextDefaultScope": "Wählen Sie eine Tochtergesellschaft oder lassen Sie das Feld leer und wählen Sie ein Land für alle dortigen Tochtergesellschaften.",
+      "localizationSubsidiary": "Leer lassen, um für alle Tochtergesellschaften zu gelten; eine tochterspezifische Lokalisierung hat in deren Berichten Vorrang.",
+      "allowedValue": "Ein zulässiger Wert je Zeile. Fügen Sie für jeden Wert des steuernden Segments, mit dem dieser Wert verwendet werden darf, eine Zeile hinzu."
     },
     "options": {
       "withholdingCondominiumPayer": "Wohnungseigentümergemeinschaft als Zahler",
@@ -7332,6 +7357,19 @@
       "4": "Donnerstag",
       "5": "Freitag",
       "6": "Samstag"
+    },
+    "segmentDependencies": {
+      "navTitle": "Abhängigkeitsverstöße",
+      "title": "Verstöße gegen Segmentabhängigkeiten",
+      "description": "{count, plural, =0 {Kein offener Beleg verstößt gegen eine Abhängigkeitsregel.} one {# offene Belegzeile verstößt gegen eine zum Belegdatum gültige Regel.} other {# offene Belegzeilen verstoßen gegen eine zum Belegdatum gültige Regel.}}",
+      "empty": "Kein offener Beleg verstößt gegen eine Abhängigkeitsregel.",
+      "columns": {
+        "document": "Beleg",
+        "date": "Datum",
+        "status": "Zustand",
+        "line": "Zeile",
+        "problem": "Abweichung"
+      }
     }
   },
   "flows": {
@@ -8055,6 +8093,18 @@
     "manufacturingSubcontract": {
       "title": "Externe Fertigung",
       "description": "Komponenten an Lieferanten senden, Bearbeitungsleistungen erfassen und Produktion auf den Fertigungsauftrag zurücknehmen."
+    },
+    "accountMerges": {
+      "title": "Kontenzusammenführung",
+      "description": "Ein doppeltes Konto in ein verbleibendes Konto zusammenführen: alle Ablehnungen und Auswirkungen vorab prüfen, den Saldo per Umbuchung und die Einstellungen mit übertragen und die gebuchte Historie unverändert lassen."
+    },
+    "accountingContexts": {
+      "title": "Rechnungslegungskontexte",
+      "description": "Berichte mit lokalisierten Kontonummern und -namen darstellen, etwa nach einem landesrechtlichen Kontenplan, je Kontext und optional je Tochtergesellschaft oder Land."
+    },
+    "segmentDependencies": {
+      "title": "Segmentabhängigkeiten",
+      "description": "Einen Segmentwert nur zusammen mit bestimmten Werten eines anderen Segments zulassen, etwa eine Klasse nur mit bestimmten Abteilungen; geprüft beim Speichern und Buchen von Belegen."
     }
   },
   "extensions": {

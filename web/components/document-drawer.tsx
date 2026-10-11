@@ -3,6 +3,8 @@
 import { apportionWithholdingMaterialsCost, collapseWithholdingLineMetadata } from '@openbooks/engine/allocations/withholding-cost'
 
 import { CLEAR_SEGMENT, INHERIT_SEGMENT, segmentCellValue, segmentAssignmentsFromCells } from '../lib/segment-assignments'
+import { collectDependencyRules, dependentOptions, lineExtraDims } from '../lib/segment-dependency-options'
+import type { DimensionAssignment, SegmentDependencyRule } from '@openbooks/engine/organization/segment-dependency-rules'
 
 import { quoteGoodsPlaceOfSupply } from '@openbooks/engine/tax/contracts'
 
@@ -104,17 +106,22 @@ interface SubsidiaryOpt {
   depth: number
 }
 interface SegmentOpt {
+  id?: string
   key: string
   name: string
   showOnHeader: boolean
   showOnLines: boolean
   values: { id: string; code: string | null; name: string }[]
+  /** Dependency rules restricting this segment's values (segment value dependencies). */
+  dependencies?: SegmentDependencyRule[]
 }
 interface BuiltinSegmentOpt {
+  id?: string
   key: string
   storageColumn: string | null
   showOnHeader: boolean
   showOnLines: boolean
+  dependencies?: SegmentDependencyRule[]
 }
 
 // Stable identities for the omitted-`segments`/`builtinSegments` defaults. A
@@ -2893,6 +2900,35 @@ export function DocumentDrawer({
 
   // -- grid columns (line-based kinds; transfer uses its own fields) --------
   const columns = useMemo<LineGridColumn<LineRow>[]>(() => {
+    // Segment value dependencies: each line picker offers the values the
+    // line's other values allow on the document date.
+    const dependencyRules = collectDependencyRules([...segments, ...builtinSegments])
+    const builtinSegmentId = (storage: string) => builtinSegments.find((segment) => segment.storageColumn === storage)?.id
+    const segmentKeys = segments.map((segment) => segment.key)
+    const lineDimensions = (row: LineRow): DimensionAssignment => {
+      const cells = row as unknown as Record<string, unknown>
+      return {
+        subsidiaryId: (typeof cells.subsidiaryId === 'string' && cells.subsidiaryId) || subsidiaryId || null,
+        departmentId: (typeof cells.departmentId === 'string' && cells.departmentId) || departmentId || null,
+        projectId: (typeof cells.projectId === 'string' && cells.projectId) || projectIdHeader || null,
+        locationId: locationId || null,
+        classId: classId || null,
+        extraDims: lineExtraDims(extraDims, cells, segmentKeys),
+      }
+    }
+    const dependent = <T extends { value: string }>(options: T[], storageOrId: { storage?: string; id?: string }, cell: string) =>
+      dependencyRules.length === 0
+        ? undefined
+        : (row: LineRow) => dependentOptions(
+          options,
+          dependencyRules,
+          storageOrId.id ?? (storageOrId.storage ? builtinSegmentId(storageOrId.storage) : undefined),
+          lineDimensions(row),
+          documentDate,
+          String((row as unknown as Record<string, unknown>)[cell] ?? ''),
+        )
+    const departmentOptions = [{ value: '', label: '—' }, ...departments.map((d) => ({ value: d.id, label: d.name ?? '' }))]
+    const projectOptions = projects.map((p) => ({ value: p.id, label: p.name ?? '' }))
     const cols: LineGridColumn<LineRow>[] = [
       {
         key: 'accountId',
@@ -2909,14 +2945,16 @@ export function DocumentDrawer({
         label: tCommon('labels.department'),
         width: '140px',
         type: 'select',
-        options: [{ value: '', label: '—' }, ...departments.map((d) => ({ value: d.id, label: d.name ?? '' }))],
+        options: departmentOptions,
+        optionsFor: dependent(departmentOptions, { storage: 'department_id' }, 'departmentId'),
       },
       {
         key: 'projectId',
         label: tCommon('labels.project'),
         width: 'minmax(150px,1.2fr)',
         type: 'search-select',
-        options: projects.map((p) => ({ value: p.id, label: p.name ?? '' })),
+        options: projectOptions,
+        optionsFor: dependent(projectOptions, { storage: 'project_id' }, 'projectId'),
         placeholder: '—',
       },
     ]
@@ -2933,15 +2971,17 @@ export function DocumentDrawer({
       })
     }
     for (const segment of segments.filter((item) => item.showOnLines)) {
+      const segmentOptions = [{ value: INHERIT_SEGMENT, label: tCommon('labels.inheritHeader') }, { value: CLEAR_SEGMENT, label: tCommon('labels.noDimensionValue') }, ...segment.values.map((value) => ({
+        value: value.id,
+        label: `${value.code ? `${value.code} · ` : ''}${value.name}`,
+      }))]
       cols.push({
         key: `seg_${segment.key}`,
         label: segment.name,
         width: '150px',
         type: 'search-select',
-        options: [{ value: INHERIT_SEGMENT, label: tCommon('labels.inheritHeader') }, { value: CLEAR_SEGMENT, label: tCommon('labels.noDimensionValue') }, ...segment.values.map((value) => ({
-          value: value.id,
-          label: `${value.code ? `${value.code} · ` : ''}${value.name}`,
-        }))],
+        options: segmentOptions,
+        optionsFor: dependent(segmentOptions, { id: segment.id }, `seg_${segment.key}`),
         placeholder: '—',
       })
     }
@@ -2980,7 +3020,7 @@ export function DocumentDrawer({
       return !storage || lineVisibility.get(storage) !== false
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [accounts, departments, projects, taxProfiles, lineDefs, segments, builtinSegments, config, t, tCommon, tWithholdingLine, warehouseColumn, returnSourceColumn, promotionColumn, marketplaceColumn, showWithholdingLines])
+  }, [accounts, departments, projects, taxProfiles, lineDefs, segments, builtinSegments, config, t, tCommon, tWithholdingLine, warehouseColumn, returnSourceColumn, promotionColumn, marketplaceColumn, showWithholdingLines, subsidiaryId, departmentId, projectIdHeader, locationId, classId, extraDims, documentDate])
 
   const field = 'space-y-1.5'
   const accountName = (id: unknown): string => {
