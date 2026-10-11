@@ -19,7 +19,7 @@ const creds: NetSuiteCreds = {
   tokenSecret: "secret",
 };
 
-const compatibleHealth = (version = "1.5.0") => ({
+const compatibleHealth = (version = "1.5.1") => ({
   ok: true, schemaVersion: 1, bridgeVersion: version, accountId: "TEST", environment: "SANDBOX",
   role: { id: "3", name: "Administrator" }, serverTime: "2026-10-10 12:00:00", features: {}, remainingUsage: 5000,
 });
@@ -487,6 +487,49 @@ test('vendor bill PDFs and expense-line receipts share one deduplicated transact
   });
 });
 
+test("expense reports deleted at the source inventory as fileless while other load failures still refuse", () => {
+  const bridgeWith = (failure: { name: string; message: string }) => {
+    let restlet: { post: (input: Record<string, unknown>) => unknown } | undefined;
+    const record = { Type: { EXPENSE_REPORT: "expenseReport" }, load: ({ id }: { id: string }) => {
+      if (id === "21") throw Object.assign(new Error(failure.message), { name: failure.name });
+      return { getLineCount: () => 1, getSublistValue: () => "300" };
+    } };
+    const search = { Type: { TRANSACTION: "transaction", VENDOR_BILL: "vendorBill", EXPENSE_REPORT: "expenseReport" }, Sort: { ASC: "ASC" }, Summary: { GROUP: "GROUP" }, createColumn: (column: unknown) => column,
+      create: () => ({ runPaged: () => ({ count: 0, pageRanges: [], fetch: () => ({ data: [] }) }) }),
+    };
+    runInNewContext(readSuiteScript("integrations/netsuite-bridge/src/FileCabinet/SuiteScripts/OpenBooks/openbooks_bridge_restlet.js"), {
+      define: (_dependencies: string[], factory: (...modules: unknown[]) => typeof restlet) => { restlet = factory({}, {}, {}, record, {}, search, {}); },
+    });
+    return restlet!.post({ action: "attachmentInventory", records: [{ recordType: "expenseReport", internalId: "20" }, { recordType: "expenseReport", internalId: "21" }] });
+  };
+  assert.deepEqual(JSON.parse(JSON.stringify(bridgeWith({ name: "RCRD_DSNT_EXIST", message: "That record does not exist." }))), {
+    ok: true, schemaVersion: 1, records: { "20": ["300"], "21": [] },
+  });
+  assert.deepEqual(JSON.parse(JSON.stringify(bridgeWith({ name: "INSUFFICIENT_PERMISSION", message: "Denied" }))), {
+    ok: false, schemaVersion: 1, error: "Denied", name: "INSUFFICIENT_PERMISSION",
+  });
+});
+
+test("attachment change detection lists transactions whose files changed on or after a calendar day", () => {
+  let restlet: { post: (input: Record<string, unknown>) => unknown } | undefined;
+  let filters: unknown;
+  const format = { Type: { DATE: "date" }, format: ({ value }: { value: Date }) => `${value.getMonth() + 1}/${value.getDate()}/${value.getFullYear()}` };
+  const search = { Type: { TRANSACTION: "transaction" }, Sort: { ASC: "ASC" }, Summary: { GROUP: "GROUP" }, createColumn: (column: unknown) => column,
+    create: (options: { filters: unknown }) => {
+      filters = options.filters;
+      return { runPaged: () => ({ count: 2, pageRanges: [{ index: 0 }], fetch: () => ({ data: ["7", "9"].map((id) => ({ getValue: () => id })) }) }) };
+    },
+  };
+  runInNewContext(readSuiteScript("integrations/netsuite-bridge/src/FileCabinet/SuiteScripts/OpenBooks/openbooks_bridge_restlet.js"), {
+    define: (_dependencies: string[], factory: (...modules: unknown[]) => typeof restlet) => { restlet = factory({}, format, {}, {}, {}, search, {}); },
+  });
+  assert.deepEqual(JSON.parse(JSON.stringify(restlet!.post({ action: "attachmentChanges", since: "2026-10-09" }))), {
+    ok: true, schemaVersion: 1, since: "2026-10-09", transactions: ["7", "9"],
+  });
+  assert.deepEqual(JSON.parse(JSON.stringify(filters)), [["file.modified", "onorafter", "10/9/2026"]]);
+  assert.equal((restlet!.post({ action: "attachmentChanges", since: "yesterday" }) as { ok: boolean }).ok, false);
+});
+
 test("an outdated installed bridge refuses before any export starts, naming its version and the upgrade", async () => {
   const actions: string[] = [];
   const client = new NetSuiteBridgeClient(creds, {}, async <T>(params: Record<string, unknown>) => {
@@ -495,7 +538,7 @@ test("an outdated installed bridge refuses before any export starts, naming its 
   });
   await assert.rejects(
     () => client.bulkQuery([{ id: "a", sql: "SELECT 1 AS id FROM DUAL" }]),
-    /version 1\.3\.0; this release requires 1\.5\.0 or later\. Deploy the SuiteCloud project in integrations\/netsuite-bridge/,
+    /version 1\.3\.0; this release requires 1\.5\.1 or later\. Deploy the SuiteCloud project in integrations\/netsuite-bridge/,
   );
   assert.deepEqual(actions, ["health"]);
 });

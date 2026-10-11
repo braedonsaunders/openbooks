@@ -5,7 +5,7 @@
  */
 define(['N/file', 'N/format', 'N/query', 'N/record', 'N/runtime', 'N/search', 'N/task'],
   (file, format, query, record, runtime, search, task) => {
-    const BRIDGE_VERSION = '1.5.0';
+    const BRIDGE_VERSION = '1.5.1';
     const SCHEMA_VERSION = 1;
     const MARKER_PATH = 'SuiteScripts/OpenBooks/Jobs/bridge-marker.json';
     const EXPORT_SCRIPT_ID = 'customscript_openbooks_export_mr';
@@ -213,7 +213,15 @@ define(['N/file', 'N/format', 'N/query', 'N/record', 'N/runtime', 'N/search', 'N
       // Expense receipts can be attached to individual expense lines instead
       // of the transaction's Files subtab. Include both relationships.
       requested.filter((item) => item.recordType === 'expenseReport').forEach((item) => {
-        const loaded = record.load({ type: record.Type.EXPENSE_REPORT, id: item.internalId, isDynamic: false });
+        let loaded;
+        try {
+          loaded = record.load({ type: record.Type.EXPENSE_REPORT, id: item.internalId, isDynamic: false });
+        } catch (error) {
+          // A report deleted at the source has no files; its deletion is the
+          // mirror's concern, not the inventory's.
+          if (error && error.name === 'RCRD_DSNT_EXIST') return;
+          throw error;
+        }
         const count = loaded.getLineCount({ sublistId: 'expense' });
         for (let line = 0; line < count; line += 1) {
           add(item.internalId, loaded.getSublistValue({
