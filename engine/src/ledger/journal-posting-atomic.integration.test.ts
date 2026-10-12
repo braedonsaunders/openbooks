@@ -38,7 +38,7 @@ test("script journal submission keeps its provenance while ordinary submissions 
       const graph = (await db.execute<{ graph: { nodes: unknown[]; edges: unknown[] } }>(sql`
         select graph from flows where org_id = ${org.orgId} and id = ${seeded.flowId}`)).rows[0]!.graph;
       graph.nodes.push({ id: "source", position: { x: 110, y: 0 }, data: {
-        kind: "condition", rule: { op: "eq", field: "event_source", value: "api", valueType: "string" },
+        kind: "condition", rule: { op: "eq", field: "event_source", value: "api" },
       } });
       graph.edges = [
         { id: "source-trigger", source: "trigger", target: "source", sourceHandle: "next" },
@@ -479,6 +479,7 @@ test(
       // rounding at 0.3333333333 yields 33.3333 + 33.3333 − 66.6667 = −0.0001.
       const documentId = randomUUID();
       await withOrgContext(org.orgId, async () => {
+        await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features,multiCurrency}','true'::jsonb) where id=${org.orgId}`);
         await db.execute(sql`
           insert into documents
             (id, org_id, kind, status, document_number, subsidiary_id,
@@ -576,6 +577,7 @@ test(
       );
       const documentId = randomUUID();
       await withOrgContext(org.orgId, async () => {
+        await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features,multiCurrency}','true'::jsonb) where id=${org.orgId}`);
         await db.execute(sql`
           insert into documents
             (id, org_id, kind, status, document_number, subsidiary_id,

@@ -3,7 +3,7 @@ import test from 'node:test';
 import {randomUUID} from 'node:crypto';
 import {sql} from 'drizzle-orm';
 import {db,withOrg,withBypassContext} from '../platform/db.ts';
-import {createScratchOrg,dropScratchOrg,seedFlowActors,type ScratchOrg} from '../testing/fixtures.ts';
+import {createScratchOrg,dropScratchOrg,seedFlowActors,grantScratchPermissions,type ScratchOrg} from '../testing/fixtures.ts';
 import {createDocument} from '../ledger/document-write.ts';
 import {postDocument} from '../ledger/posting-document.ts';
 import {controlRecognition} from './recognition-controls.ts';
@@ -13,6 +13,17 @@ import {approveRebateAgreement,generateRebateClaim,approveRebateClaim,settleReba
 import {createRebateSettlement} from '../composition/rebate-settlement.ts';
 
 const enabled=Boolean(process.env.OPENBOOKS_DB_URL);
+async function commercialActors(org:ScratchOrg) {
+ return withBypassContext(async()=>{
+  const actors=await seedFlowActors(org.orgId);
+  await grantScratchPermissions(org.orgId,actors.adminId,['ar.create','ar.post','ap.create','ap.post']);
+  await grantScratchPermissions(org.orgId,actors.submitterId,['ar.post','ap.post']);
+  await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"multiCurrency":true,"revenueRecognition":true}'::jsonb) where id=${org.orgId}`);
+  await db.execute(sql`insert into customer_roles(org_id,party_id,ar_account_id,is_active,created_by) values(${org.orgId},${org.customerId},${org.accounts.ar},true,${actors.adminId})`);
+  await db.execute(sql`insert into vendor_roles(org_id,party_id,ap_account_id,is_active,created_by) values(${org.orgId},${org.vendorId},${org.accounts.ap},true,${actors.adminId})`);
+  return actors;
+ });
+}
 async function invoice(org:ScratchOrg,actorId:string,amount:string,itemId?:string) {
  const document=await withOrg(org.orgId,()=>createDocument({orgId:org.orgId,userId:actorId,key:randomUUID(),kind:'customer_invoice',subsidiaryId:org.subsidiaryId,requestBody:{amount,...(itemId?{itemId}:{})},body:{partyId:org.customerId,documentDate:org.date,currency:'CAD',lines:[{accountId:org.accounts.revenue,itemId,quantity:'1',unitPrice:amount,amount,description:'Commercial service'}]}}));
  await withBypassContext(()=>db.execute(sql`update documents set status='approved' where org_id=${org.orgId} and id=${document.id}`));
@@ -31,7 +42,7 @@ async function earned(orgId:string,agreementId:string) {return (await withOrg(or
 test('hold/release requires live authority and revision, skips journals, and resumes the unchanged plan',{skip:!enabled},async()=>{
  const org=await createScratchOrg();
  try {
-  const actors=await withBypassContext(()=>seedFlowActors(org.orgId));
+  const actors=await commercialActors(org);
   const documentId=await invoice(org,actors.adminId,'1200',org.items.service);
   const obligation=(await withOrg(org.orgId,()=>db.execute<{id:string}>(sql`select o.id from performance_obligations o join document_lines l on l.org_id=o.org_id and l.id=o.document_line_id where o.org_id=${org.orgId} and l.document_id=${documentId}`))).rows[0]!;
   const end=(await withOrg(org.orgId,()=>db.execute<{ends_on:string}>(sql`select ends_on::text from accounting_periods where org_id=${org.orgId} and id=${org.periodId}`))).rows[0]!.ends_on;
@@ -50,7 +61,7 @@ test('hold/release requires live authority and revision, skips journals, and res
 test('retrospective tiers append balanced catch-up facts and claims enforce independent approval, replay and reversal',{skip:!enabled},async()=>{
  const org=await createScratchOrg();
  try {
-  const actors=await withBypassContext(()=>seedFlowActors(org.orgId));
+  const actors=await commercialActors(org);
   const agreementId=await seedAgreement(org,actors.submitterId,'VOLUME');
   await assert.rejects(()=>approveRebateAgreement(org.orgId,actors.submitterId,agreementId,'Independent approval required'),/independent/);
   await approveRebateAgreement(org.orgId,actors.adminId,agreementId,'Reviewed commercial liability');
@@ -76,7 +87,7 @@ test('retrospective tiers append balanced catch-up facts and claims enforce inde
 test('native credit settlement links the approved claim to the posted credit once',{skip:!enabled},async()=>{
  const org=await createScratchOrg();
  try {
-  const actors=await withBypassContext(()=>seedFlowActors(org.orgId));
+  const actors=await commercialActors(org);
   const agreementId=await seedAgreement(org,actors.submitterId,'CREDIT',[{threshold:'0',rate:'10'}]);await approveRebateAgreement(org.orgId,actors.adminId,agreementId,'Approved credit settlement terms');await invoice(org,actors.adminId,'100');
   const claim=await generateRebateClaim(org.orgId,actors.submitterId,agreementId,org.customerId,org.date,'Reconciled earned credit claim');await approveRebateClaim(org.orgId,actors.adminId,claim.id,'Approved settlement to customer');
   const document=await createRebateSettlement(org.orgId,actors.adminId,claim.id,org.date);
@@ -90,7 +101,7 @@ test('native credit settlement links the approved claim to the posted credit onc
 test('software residuals defer every bundle element until documented delivery and preserve exact VSOE evidence',{skip:!enabled},async()=>{
  const org=await createScratchOrg();
  try {
-  const actors=await withBypassContext(()=>seedFlowActors(org.orgId)),software=randomUUID(),observable=randomUUID(),fairValueId=randomUUID();
+  const actors=await commercialActors(org),software=randomUUID(),observable=randomUUID(),fairValueId=randomUUID();
   await withBypassContext(async()=>{
    for(const [id,code,allocation] of [[software,'SOFTWARE','software'],[observable,'SUPPORT','normal']]) await db.execute(sql`insert into items(id,org_id,code,name,kind,revenue_allocation,recognition_rule_id,income_account_id,deferred_account_id) values(${id},${org.orgId},${code},${code},'service',${allocation},${org.recognitionRuleId},${org.accounts.revenue},${org.accounts.deferred})`);
    await db.execute(sql`insert into fair_value_prices(id,org_id,item_id,currency,unit_price,calculation_method,formula_percent,list_price,effective_from,effective_to,created_by,updated_by) values(${fairValueId},${org.orgId},${observable},'CAD','0','percent_of_list','40','200',${org.date},${org.date},${actors.adminId},${actors.adminId})`);
@@ -113,7 +124,7 @@ test('software residuals defer every bundle element until documented delivery an
 test('supplier-funded downstream margin rebates use posted stock cost and create the vendor receivable',{skip:!enabled},async()=>{
  const org=await createScratchOrg();
  try {
-  const actors=await withBypassContext(()=>seedFlowActors(org.orgId)),agreementId=randomUUID(),receivable=randomUUID();
+  const actors=await commercialActors(org),agreementId=randomUUID(),receivable=randomUUID();
   await withBypassContext(async()=>{
    await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features,rebateManagement}','true'::jsonb,true) where id=${org.orgId}`);
    await db.execute(sql`insert into accounts(id,org_id,number,name,type,is_active,is_summary) values(${receivable},${org.orgId},'1380','Supplier rebate receivable','asset_current_other',true,false)`);

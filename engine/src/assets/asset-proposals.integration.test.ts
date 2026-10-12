@@ -227,7 +227,7 @@ test(
         await postEntry(db, {
           orgId: org.orgId, bookId: org.bookId, subsidiaryId: org.subsidiaryId,
           entryNumber: `PUR-REV-${randomUUID()}`, postingDate: org.date, periodId: org.periodId,
-          origin: "manual", reversesEntryId: purchase.entryId, actorId: actors.adminId,
+          origin: "manual", currency: "CAD", reversesEntryId: purchase.entryId, actorId: actors.adminId,
           lines: original.map((line) => ({ accountId: line.account_id, amount: neg(line.amount), lineNumber: line.line_number })),
         });
         await markEntryReversed(db, { orgId: org.orgId, entryId: purchase.entryId, actorId: actors.adminId });

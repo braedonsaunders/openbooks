@@ -19,13 +19,13 @@ for (const documentKind of ['quote','sales_order'] as const) test(`${documentKin
   const termEnd=advanceLifecycleDate(org.date,'monthly',1);
   await withBypassContext(async()=>{
    await grantScratchPermissions(org.orgId,actors.adminId,['ar.read','ar.create','ar.post',...(documentKind==='quote'?['estimates.create','estimates.issue']:[])]);
-   await db.execute(sql`update orgs set settings=jsonb_set(jsonb_set(settings,'{features,subscriptionBilling}','true'::jsonb,true),'{features,advancedSubscriptions}','true'::jsonb,true) where id=${org.orgId}`);
+   await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"subscriptionBilling":true,"advancedSubscriptions":true,"multiCurrency":true,"orders":true}'::jsonb) where id=${org.orgId}`);
    await db.execute(sql`insert into subscription_plans(id,org_id,name,amount,currency_code,interval,income_account_id,created_by,updated_by) values(${planId},${org.orgId},'Renewable support','100','CAD','monthly',${org.accounts.revenue},${actors.adminId},${actors.adminId})`);
    await db.execute(sql`insert into subscriptions(id,org_id,customer_id,plan_id,start_on,next_bill_on,created_by,updated_by) values(${subscriptionId},${org.orgId},${org.customerId},${planId},${org.date},${org.date},${actors.adminId},${actors.adminId})`);
   });
-  const version=await withOrg(org.orgId,()=>createPlanVersion(org.orgId,actors.adminId,{planId,effectiveFrom:org.date,components:[{componentKey:'support',name:'Support',quantity:'1',unitPrice:'100',incomeAccountId:org.accounts.revenue}]}));
-  await withOrg(org.orgId,()=>publishPlanVersion(org.orgId,actors.adminId,version));
-  await withOrg(org.orgId,()=>activateLifecycle(org.orgId,actors.adminId,{subscriptionId,planVersionId:version,termStartsOn:org.date,termEndsOn:termEnd,renewalPolicy:'auto',renewalTermMonths:12}));
+  const version=await withOrg(org.orgId,()=>createPlanVersion(org.orgId,actors.adminId,{planId,effectiveFrom:org.date,components:[{componentKey:'support',name:'Support',quantity:'1',unitPrice:'100',incomeAccountId:org.accounts.revenue}]},null));
+  await withOrg(org.orgId,()=>publishPlanVersion(org.orgId,actors.adminId,version,null));
+  await withOrg(org.orgId,()=>activateLifecycle(org.orgId,actors.adminId,{subscriptionId,planVersionId:version,termStartsOn:org.date,termEndsOn:termEnd,renewalPolicy:'auto',renewalTermMonths:12},null));
   await withBypassContext(()=>db.execute(sql`insert into subscription_renewal_policies(id,org_id,subscription_id,subsidiary_id,effective_from,effective_to,owner_id,reminder_days,generation_lead_days,document_kind,uplift_percent,term_months,reason,created_by,updated_by)
     values(${policyId},${org.orgId},${subscriptionId},${org.subsidiaryId},${org.date},${termEnd},${actors.adminId},'[{"days":40}]'::jsonb,3660,${documentKind},'10',12,'Reviewed renewal pricing and notice terms',${actors.adminId},${actors.adminId})`));
   if(documentKind==='quote') {

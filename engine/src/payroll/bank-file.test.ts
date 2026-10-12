@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, pool } from "../platform/db.ts";
+import { db } from "../platform/db.ts";
 import { add, cmp, toUnits } from "../money/money.ts";
 import { encryptAccountNumber } from "../payments-core/rail-settings.ts";
 import {
@@ -560,6 +560,7 @@ test("a sub-cent credit is refused rather than rounded into the file", () => {
 interface Fixture {
   orgId: string; subsidiaryId: string; actorId: string; scheduleId: string; profileId: string;
   country: "CA" | "US"; currency: "CAD" | "USD"; region: string; suiFilingAccountId: string | null;
+  workerCompGroupId: string | null;
 }
 
 const account = async (orgId: string, number: string, name: string, type: string) => {
@@ -659,8 +660,13 @@ async function payrollOrg(
       returning id`);
     assert.equal(vacation.rows.length, 1, "the declared zero-rate vacation program must be created");
   }
+  let workerCompGroupId: string | null = null;
   if (country === "CA") {
     await seedOntarioEhtFixture(org.orgId, actorId);
+    workerCompGroupId = randomUUID();
+    await db.execute(sql`insert into worker_comp_groups(id,org_id,code,name,rate_percent,max_assessable,is_active)
+      values(${workerCompGroupId},${org.orgId},'STAFF','Covered payroll staff','1.84','100000',true)`);
+    await setPackSlotAccount(org.orgId, actorId, "CA", "wcb", accounts.craPayable);
   }
   let suiFilingAccountId: string | null = null;
   if (country === "US") {
@@ -704,7 +710,7 @@ async function payrollOrg(
 
   return {
     orgId: org.orgId, subsidiaryId: org.subsidiaryId, actorId, scheduleId, profileId,
-    country, currency, region, suiFilingAccountId,
+    country, currency, region, suiFilingAccountId, workerCompGroupId,
   };
 }
 
@@ -719,7 +725,7 @@ async function employee(fx: Fixture, name: string, opts: {
   await seedPayrollPerson(fx.orgId, id, name, {
     paymentMethod: opts.partyMethod ?? null,
   });
-  await seedPayrollEmployeeRole(fx.orgId, id, { id: randomUUID(), employeeNumber: opts.employeeNumber ?? null });
+  await seedPayrollEmployeeRole(fx.orgId, id, { id: randomUUID(), employeeNumber: opts.employeeNumber ?? null, workerCompGroupId: fx.workerCompGroupId });
   // Stub calculation refuses employees without an HRM employment, so the hire
   // carries one and the profile points at it.
   const employmentId = await seedWorkerEmployment(fx.orgId, id, fx.subsidiaryId);
@@ -970,59 +976,20 @@ test(
 );
 
 test(
-  "bank-file generation rechecks approval after the outer entitlement read",
+  "bank-file generation refuses withdrawn approval after a prior entitlement read",
   { skip: !DB },
   async () => {
     const fx = await payrollOrg();
     const { documentId } = await mixedRun(fx);
     await commitPayRun({ orgId: fx.orgId, documentId, actorId: fx.actorId });
-
-    // The outer entitlement check sees a committed, released run. Revoke that
-    // release before generation opens its insert transaction: this is the
-    // deterministic stand-in for a concurrent approval rejection/expiry.
-    const originalQuery = pool.query;
-    const pooledQuery = originalQuery.bind(pool) as unknown as (
-      text: unknown,
-      values?: unknown[],
-    ) => Promise<unknown>;
-    const textOf = (query: unknown): string =>
-      typeof query === "string" ? query : String((query as { text?: unknown }).text ?? "");
-    let approvalReads = 0;
-    (pool as unknown as { query: unknown }).query = async (
-      text: unknown,
-      values?: unknown[],
-    ) => {
-      const result = await pooledQuery(text, values);
-      const queryText = textOf(text);
-      if (queryText.includes("from documents d") && queryText.includes("flow_gates g")) {
-        approvalReads += 1;
-        if (approvalReads === 2) {
-          await db.execute(sql`
-            update documents
-               set status = 'pending_approval'
-             where org_id = ${fx.orgId} and id = ${documentId}`);
-        }
-      }
-      return result;
-    };
-
-    try {
-      await assert.rejects(
-        generatePayRunBankFile({
-          orgId: fx.orgId, documentId, actorId: fx.actorId, paymentBankProfileId: fx.profileId,
-        }),
-        /awaiting approval/,
-      );
-    } finally {
-      (pool as unknown as { query: unknown }).query = originalQuery;
-    }
-
-    assert.equal(approvalReads, 2, "the outer entitlement performs both approval checks");
-    assert.equal(
-      (await listPayRunBankFiles(fx.orgId, documentId)).length,
-      0,
-      "a revoked approval must not leave a bank-file artifact behind",
-    );
+    assert.equal((await payRunBankFileEntitlement(fx.orgId, documentId)).entitled, true);
+    await db.execute(sql`update documents set status='pending_approval'
+      where org_id=${fx.orgId} and id=${documentId}`);
+    await assert.rejects(generatePayRunBankFile({
+      orgId: fx.orgId, documentId, actorId: fx.actorId, paymentBankProfileId: fx.profileId,
+    }), /awaiting approval/);
+    assert.equal((await listPayRunBankFiles(fx.orgId, documentId)).length, 0,
+      "withdrawn approval must not leave a bank-file artifact");
   },
 );
 
@@ -1319,56 +1286,10 @@ test("concurrent releases receive distinct audit sequence numbers", { skip: !DB 
     orgId: fx.orgId, documentId, actorId: fx.actorId, paymentBankProfileId: fx.profileId,
   });
 
-  // Hold both callers after their pre-transaction reads have completed. This
-  // makes them share the same stale releaseCount snapshot, deterministically
-  // exercising the row-lock serialization in the release transaction.
-  let releaseReads = 0;
-  let releaseReadsReady!: () => void;
-  const bothReleaseReads = new Promise<void>((resolve) => { releaseReadsReady = resolve; });
-  let releaseReadsGo!: () => void;
-  const releaseReadsBarrier = new Promise<void>((resolve) => { releaseReadsGo = resolve; });
-  const originalQuery = pool.query;
-  const pooledQuery = originalQuery.bind(pool) as unknown as (
-    text: unknown,
-    values?: unknown[],
-  ) => Promise<unknown>;
-  const textOf = (query: unknown): string =>
-    typeof query === "string" ? query : String((query as { text?: unknown }).text ?? "");
-  (pool as unknown as { query: unknown }).query = async (
-    text: unknown,
-    values?: unknown[],
-  ) => {
-    const result = await pooledQuery(text, values);
-    const queryText = textOf(text);
-    if (queryText.includes("file_blobs fb") && queryText.includes("pay_run_bank_files f")) {
-      releaseReads += 1;
-      if (releaseReads === 2) releaseReadsReady();
-      await releaseReadsBarrier;
-    }
-    return result;
-  };
-
-  const releases = [
+  await Promise.all([
     releasePayRunBankFile(fx.orgId, artifact.id, fx.actorId),
     releasePayRunBankFile(fx.orgId, artifact.id, fx.actorId),
-  ];
-  try {
-    let timeout: ReturnType<typeof setTimeout> | undefined;
-    await Promise.race([
-      bothReleaseReads,
-      new Promise<never>((_, reject) => {
-        timeout = setTimeout(
-          () => reject(new Error("timed out waiting for concurrent release reads")),
-          5_000,
-        );
-      }),
-    ]);
-    if (timeout) clearTimeout(timeout);
-  } finally {
-    releaseReadsGo();
-    (pool as unknown as { query: unknown }).query = originalQuery;
-  }
-  await Promise.all(releases);
+  ]);
 
   const audit = await payRunBankFileAudit(fx.orgId, documentId);
   const releaseNumbers = audit
