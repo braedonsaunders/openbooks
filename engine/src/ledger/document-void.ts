@@ -53,7 +53,8 @@ export type DocumentVoidCode =
   | "reversal-period-closed"
   | "retainer-drawdowns-posted"
   | "billed-on-invoice"
-  | "receipt-stock-consumed";
+  | "receipt-stock-consumed"
+  | "bill-stock-consumed";
 
 export class DocumentVoidError extends Error {
   constructor(

@@ -979,7 +979,7 @@ export type EmployeeSelfServiceBaseline = (typeof EMPLOYEE_SELF_SERVICE_BASELINE
  * holds everything is never reported as missing self-service.
  */
 export function roleHasSelfServiceBaseline(permissions: ReadonlySet<string> | readonly string[]): boolean {
-  const set = Array.isArray(permissions) ? new Set(permissions) : permissions;
+  const set = new Set(permissions);
   return EMPLOYEE_SELF_SERVICE_BASELINE.every((key) => permissionSetCovers(set, key));
 }
 

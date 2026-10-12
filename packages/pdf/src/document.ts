@@ -150,7 +150,8 @@ export async function renderPdfDocument(input: PdfDocumentInput): Promise<Buffer
     await completion;
     return Buffer.concat(chunks);
   } catch (cause) {
-    doc.destroy();
+    if ('destroy' in doc && typeof doc.destroy === 'function') doc.destroy();
+    else doc.end();
     sink.destroy();
     await completion.catch(() => {});
     throw cause;
@@ -279,11 +280,9 @@ function drawSummary(
     }
     let x = page.contentLeft
     for (const item of rowItems) {
-      if (theme.design !== 'modern') {
-        doc.rect(x, y, cardW, cardH).fill('#fafafa')
-        doc.rect(x, y, accentW, cardH).fill(theme.primary)
-        doc.rect(x, y, cardW, cardH).lineWidth(0.5).strokeColor('#e5e7eb').stroke()
-      }
+      doc.rect(x, y, cardW, cardH).fill('#fafafa')
+      doc.rect(x, y, accentW, cardH).fill(theme.primary)
+      doc.rect(x, y, cardW, cardH).lineWidth(0.5).strokeColor('#e5e7eb').stroke()
       doc.font(theme.font).fontSize(s.summaryLabel).fillColor(theme.muted)
       const labelW = cardW - padX * 2 - accentW
       // Measure the (possibly wrapped) label so the value never overlaps a

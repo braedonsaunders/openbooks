@@ -3,7 +3,7 @@ import { sql } from 'drizzle-orm'
 import { configuredSchedulePdfLayout, schedulePdfLayoutSchema, type SchedulePdfLayout } from '@openbooks/forms-core'
 import { db, withOrgTransaction } from '../platform/db.ts'
 import { canonicalJson } from '../platform/canonical-json.ts'
-import { getBoard, boardAuthority, type ScheduleActor } from './boards.ts'
+import { getBoard, boardAuthority, scheduleReportWeekendDays, type ScheduleActor } from './boards.ts'
 import { loadBoardWindow } from './window.ts'
 import { scheduleReportLines } from './distribution.ts'
 import { renderSchedulePdf, type ScheduleReportPreview } from './distribution-report.ts'
@@ -34,7 +34,7 @@ async function readReport(actor: ScheduleActor, input: {boardId: string; from: s
   const evidence = {
     boardId: board.id, boardName: board.name, organizationName,
     from: window.from, through: window.through, timeZone: board.timeZone,
-    weekendDays: board.weekendDays, layout: parsed.data, lines,
+    weekendDays: scheduleReportWeekendDays(board), layout: parsed.data, lines,
     entries: window.entries.filter(entry => entry.boardId === board.id).map(entry => ({id: entry.id, revision: entry.revision, status: entry.status})).sort((a,b) => a.id.localeCompare(b.id)),
     sourceIds: (window.sourceRecords ?? []).map(record => record.id).sort(),
   }

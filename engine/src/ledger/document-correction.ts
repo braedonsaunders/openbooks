@@ -612,7 +612,7 @@ export async function createPostedCorrection(
   }))
   }
 
-interface ReclassPostedLeg {
+type ReclassPostedLeg = {
   bookId: string;
   accountId: string;
   subsidiaryId: string | null;
@@ -842,7 +842,8 @@ export async function correctPostedDocument(
 ): Promise<CorrectPostedDocumentResult> {
   const expectedRevision = requireDocumentEditRevision(input.expectedUpdatedAt);
   const plan = await planPostedCorrection(sourceId, input, context.orgId);
-  if (plan.outcome === "void-and-reissue") {
+  const outcome = plan.outcome;
+  if (outcome === "void-and-reissue") {
     await refuseClosedOriginalPeriod(db, context.orgId, plan);
     return withOrgTransaction(context.orgId, async () => {
       const replacement = await createPostedCorrection(sourceId, input, context, writer);
@@ -882,7 +883,7 @@ export async function correctPostedDocument(
     mutate: async (tx, locked) => {
       await authorizePostedCorrection(tx, sourceId, locked, context);
       let reclassEntryIds: string[] = [];
-      if (plan.outcome === "reclass") {
+      if (outcome === "reclass") {
         await refuseClosedOriginalPeriod(tx, context.orgId, plan);
         ({ reclassEntryIds } = await applyDimensionReclass(tx, plan, context));
       }
@@ -909,11 +910,11 @@ export async function correctPostedDocument(
         }
       }
       await writeInPlaceCorrectionAudit(tx, context.orgId, sourceId, context.userId,
-        plan.outcome === "reclass" ? "posted_dimension_reclass" : "posted_metadata_correction",
+        outcome === "reclass" ? "posted_dimension_reclass" : "posted_metadata_correction",
         plan.reason, before, after,
         reclassEntryIds.length > 0 ? { reclassEntryIds } : {});
       return {
-        kind: plan.outcome,
+        kind: outcome,
         replacement: { id: sourceId, documentNumber: locked.documentNumber, kind: locked.kind },
         voidResult: null,
         reclassEntryIds,
