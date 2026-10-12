@@ -3,6 +3,7 @@ import { createHash, randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../../platform/db.ts";
+import { submitAndReleaseIfUngated } from "../../flows/submit.ts";
 import { installEngineSeams } from "../../composition/install.ts";
 import { seedPayrollBenefitProgram } from "../../testing/benefit-fixtures.ts";
 import { seedBenefitIncentivePosting } from "../../testing/benefit-incentive-posting.ts";
@@ -15,9 +16,9 @@ import { previewIncentiveSettlement, settleIncentivePeriod, type IncentivePrevie
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 const SPEC = {
-  features: ["hrm", "payroll", "projects"],
+  features: ["hrm", "payroll", "projects", "orders"],
   users: [{ key: "actorId", name: "Margin Operator", handle: "margin_operator",
-    permissions: ["hrm.benefits.read", "hrm.benefits.manage", "gl.read"], link: true }],
+    permissions: ["hrm.benefits.read", "hrm.benefits.manage", "gl.read", "purchase_orders.read", "purchase_orders.create"], link: true }],
 } as const;
 type Harness = Awaited<ReturnType<typeof setupHarness<typeof SPEC>>>;
 
@@ -33,12 +34,21 @@ async function purchaseCommitment(h: Harness, projectId: string, date: string, a
   const documentId = randomUUID();
   await db.execute(sql`
     insert into documents
-      (id,org_id,subsidiary_id,party_id,kind,document_number,document_date,currency,status,subtotal,tax_total,total)
+      (id,org_id,subsidiary_id,party_id,kind,document_number,document_date,currency,status,subtotal,tax_total,total,created_by,updated_by)
     values (${documentId},${h.org.orgId},${h.org.subsidiaryId},${h.org.vendorId},'purchase_order',
-      ${documentId},${date}::date,'USD','approved',${amount},0,${amount})`);
+      ${documentId},${date}::date,'USD','draft',${amount},0,${amount},${h.actorId},${h.actorId})`);
   await db.execute(sql`
     insert into document_lines (org_id,document_id,line_number,item_id,project_id,quantity,unit_price,amount)
     values (${h.org.orgId},${documentId},1,${h.org.items.service},${projectId},1,${amount},${amount})`);
+  const release = await submitAndReleaseIfUngated("purchase_order",documentId,h.actorId);
+  assert.equal(release.autoApproved,true);
+  assert.equal(release.gated,false);
+  assert.equal(release.flowError,null);
+  assert.equal(release.approvalRequired,false);
+  const stored = (await db.execute<{ status:string }>(sql`select status from documents
+    where org_id=${h.org.orgId} and id=${documentId}`)).rows;
+  assert.equal(stored.length,1);
+  assert.equal(stored[0]!.status,"approved","commitments enter the measure only after native release");
 }
 
 function projectSnapshot(preview: IncentivePreview): ProjectMarginSnapshot {
