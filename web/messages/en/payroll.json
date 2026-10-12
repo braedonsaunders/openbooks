@@ -1354,6 +1354,24 @@
       "help": "Everyone this filing covers, with the figures it will carry. Produce the file only once the rows are right — an issued filing is evidence, and correcting it means an amendment rather than an edit.",
       "issue": "Record as filed",
       "viewAll": "View all"
+    },
+    "separationFacts": {
+      "title": "Separation facts",
+      "help": "Confirm these dates from the original separation documents before preparing the Record of Employment.",
+      "interruption": "Interruption of earnings",
+      "lastInsurable": "Last day of insurable earnings",
+      "continuance": "Paid-leave or salary-continuance end (if applicable)",
+      "status": "Facts status",
+      "draft": "Draft",
+      "confirmed": "Confirmed",
+      "source": "Original source reference",
+      "reason": "Change reason",
+      "save": "Save facts",
+      "saving": "Saving…",
+      "retry": "Retry",
+      "loadFailed": "The separation facts could not be loaded",
+      "saveFailed": "The separation facts could not be saved",
+      "issued": "These facts belong to an issued ROE. Preserve them and use the Service Canada correction workflow."
     }
   },
   "separations": {

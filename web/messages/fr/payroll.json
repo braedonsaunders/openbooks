@@ -1354,6 +1354,24 @@
       "help": "Tous ceux que cette déclaration couvre, avec les chiffres qu’elle portera. Ne produisez le fichier qu’une fois les lignes exactes — une déclaration émise fait foi, et la corriger exige une modification plutôt qu’une retouche.",
       "issue": "Consigner comme produit",
       "viewAll": "Tout voir"
+    },
+    "separationFacts": {
+      "title": "Faits relatifs à la cessation d’emploi",
+      "help": "Confirmez ces dates à partir des documents originaux avant de préparer le relevé d’emploi.",
+      "interruption": "Arrêt de rémunération",
+      "lastInsurable": "Dernier jour de rémunération assurable",
+      "continuance": "Fin du congé payé ou du maintien du salaire (s’il y a lieu)",
+      "status": "Statut des faits",
+      "draft": "Brouillon",
+      "confirmed": "Confirmé",
+      "source": "Référence de la source originale",
+      "reason": "Motif du changement",
+      "save": "Enregistrer les faits",
+      "saving": "Enregistrement…",
+      "retry": "Réessayer",
+      "loadFailed": "Impossible de charger les faits relatifs à la cessation d’emploi",
+      "saveFailed": "Impossible d’enregistrer les faits relatifs à la cessation d’emploi",
+      "issued": "Ces faits appartiennent à un relevé d’emploi délivré. Conservez-les et utilisez la procédure de correction de Service Canada."
     }
   },
   "separations": {

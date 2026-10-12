@@ -1354,6 +1354,24 @@
       "help": "Todos que esta declaração cobre, com os valores que vai levar. Gere o arquivo só quando as linhas estiverem certas — declaração emitida é prova, e corrigi-la exige retificação em vez de edição.",
       "issue": "Registrar como entregue",
       "viewAll": "Ver tudo"
+    },
+    "separationFacts": {
+      "title": "Dados de desligamento",
+      "help": "Confirme estas datas nos documentos originais antes de preparar o Registro de emprego.",
+      "interruption": "Interrupção de rendimentos",
+      "lastInsurable": "Último dia de rendimentos seguráveis",
+      "continuance": "Fim da licença remunerada ou da continuidade salarial (se aplicável)",
+      "status": "Status dos dados",
+      "draft": "Rascunho",
+      "confirmed": "Confirmado",
+      "source": "Referência da fonte original",
+      "reason": "Motivo da alteração",
+      "save": "Salvar dados",
+      "saving": "Salvando…",
+      "retry": "Tentar novamente",
+      "loadFailed": "Não foi possível carregar os dados de desligamento",
+      "saveFailed": "Não foi possível salvar os dados de desligamento",
+      "issued": "Estes dados pertencem a um ROE emitido. Preserve-os e use o procedimento de correção do Service Canada."
     }
   },
   "separations": {

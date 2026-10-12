@@ -21,6 +21,7 @@ import {
 } from '@openbooks/ui'
 import type { YearEndFilingSection } from '@openbooks/engine/payroll/yearend'
 import type { PayrollFilingSlipData } from '@openbooks/engine/payroll/filing-registry'
+import { RoeSeparationFactsForm } from './roe-separation-facts'
 import { PagedTable, type PagedColumn } from '../../../../components/paged-table'
 import { useMoney } from '../../../../components/money-provider'
 import { readApiErrorMessage } from '../../../../lib/api-error'
@@ -620,6 +621,7 @@ export function SlipDrawer({
     + (format === 'pdf' ? '&format=pdf' : '')
 
   const [state, setState] = useState<SlipState>({ status: 'loading' })
+  const [factsRevision, setFactsRevision] = useState(0)
   // Reset the slip while reloading, during render (same committed values, no
   // extra render). Keyed on the fetch inputs below.
   const [prevSlipInputs, setPrevSlipInputs] = useState(() => ({
@@ -646,7 +648,7 @@ export function SlipDrawer({
       alive = false
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [section.country, section.key, year, rowId])
+  }, [section.country, section.key, year, rowId, factsRevision])
 
   // The facsimile body is the shared pure renderer — identical markup to the
   // PDF the footer button downloads.
@@ -683,6 +685,9 @@ export function SlipDrawer({
       }
     >
       <div className="space-y-5">
+        {section.country === 'CA' && section.key === 'roe' && <RoeSeparationFactsForm
+          key={rowId} employeePartyId={rowId} canEdit={canFile}
+          onSaved={() => { setState({ status: 'loading' }); setFactsRevision(value => value + 1) }} />}
         {state.status === 'loading' && (
           <div className="space-y-3">
             <Skeleton className="h-6 w-2/3" />

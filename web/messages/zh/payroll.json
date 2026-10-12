@@ -1354,6 +1354,24 @@
       "help": "该申报覆盖的全部人员及所载数字。行无误后再生成文件——已签发的申报是证据,更正意味着修订而非编辑。",
       "issue": "登记为已申报",
       "viewAll": "查看全部"
+    },
+    "separationFacts": {
+      "title": "离职事实",
+      "help": "准备就业记录前，请根据原始离职文件确认这些日期。",
+      "interruption": "收入中断日期",
+      "lastInsurable": "最后一个可保收入日",
+      "continuance": "带薪休假或工资延续的结束日期（如适用）",
+      "status": "事实状态",
+      "draft": "草稿",
+      "confirmed": "已确认",
+      "source": "原始来源参考",
+      "reason": "变更原因",
+      "save": "保存事实",
+      "saving": "正在保存…",
+      "retry": "重试",
+      "loadFailed": "无法加载离职事实",
+      "saveFailed": "无法保存离职事实",
+      "issued": "这些事实属于已签发的就业记录。请保留原记录，并使用加拿大服务局的更正流程。"
     }
   },
   "separations": {

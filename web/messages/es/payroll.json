@@ -1354,6 +1354,24 @@
       "help": "Todos los que cubre esta declaración, con las cifras que llevará. Produzca el archivo solo cuando las filas estén bien — una declaración emitida es evidencia, y corregirla exige una modificación en vez de una edición.",
       "issue": "Registrar como presentado",
       "viewAll": "Ver todo"
+    },
+    "separationFacts": {
+      "title": "Datos de separación",
+      "help": "Confirme estas fechas con los documentos originales antes de preparar el Registro de empleo.",
+      "interruption": "Interrupción de ingresos",
+      "lastInsurable": "Último día de ingresos asegurables",
+      "continuance": "Fin de licencia remunerada o continuidad salarial (si corresponde)",
+      "status": "Estado de los datos",
+      "draft": "Borrador",
+      "confirmed": "Confirmado",
+      "source": "Referencia de la fuente original",
+      "reason": "Motivo del cambio",
+      "save": "Guardar datos",
+      "saving": "Guardando…",
+      "retry": "Reintentar",
+      "loadFailed": "No se pudieron cargar los datos de separación",
+      "saveFailed": "No se pudieron guardar los datos de separación",
+      "issued": "Estos datos pertenecen a un ROE emitido. Consérvelos y utilice el procedimiento de corrección de Service Canada."
     }
   },
   "separations": {

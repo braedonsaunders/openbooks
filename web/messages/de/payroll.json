@@ -1354,6 +1354,24 @@
       "help": "Alle, die diese Meldung abdeckt, mit den Zahlen, die sie tragen wird. Erzeugen Sie die Datei erst, wenn die Zeilen stimmen — eine ausgestellte Meldung ist ein Beleg, und sie zu berichtigen bedeutet eine Änderung statt einer Bearbeitung.",
       "issue": "Als gemeldet erfassen",
       "viewAll": "Alle ansehen"
+    },
+    "separationFacts": {
+      "title": "Angaben zum Beschäftigungsende",
+      "help": "Bestätigen Sie diese Daten anhand der Originalunterlagen, bevor Sie den Record of Employment vorbereiten.",
+      "interruption": "Unterbrechung des Verdienstes",
+      "lastInsurable": "Letzter Tag mit versicherungspflichtigem Verdienst",
+      "continuance": "Ende des bezahlten Urlaubs oder der Gehaltsfortzahlung (falls zutreffend)",
+      "status": "Status der Angaben",
+      "draft": "Entwurf",
+      "confirmed": "Bestätigt",
+      "source": "Referenz der Originalquelle",
+      "reason": "Änderungsgrund",
+      "save": "Angaben speichern",
+      "saving": "Wird gespeichert…",
+      "retry": "Erneut versuchen",
+      "loadFailed": "Die Angaben konnten nicht geladen werden",
+      "saveFailed": "Die Angaben konnten nicht gespeichert werden",
+      "issued": "Diese Angaben gehören zu einem ausgestellten ROE. Bewahren Sie sie auf und nutzen Sie das Korrekturverfahren von Service Canada."
     }
   },
   "separations": {
