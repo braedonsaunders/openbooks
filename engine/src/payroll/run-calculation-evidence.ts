@@ -1,3 +1,5 @@
+import { resolveCaBonusIncomeReference, type CaBonusIncomeReferenceScope, type CaBonusIncomeReferenceSource } from './canada/bonus-income-reference.ts';
+import { PayrollError } from './error.ts';
 import { historicalEmploymentRosterSource, type HistoricalEmploymentRosterSource } from "./employment-roster.ts";
 import { employeeEmployerAssignmentHistory, type EmployerAssignmentSource } from './employer-assignment-history.ts';
 import { compensationPackageRunSource, type CompensationPackageAssignmentSource } from './compensation-package-source.ts';
@@ -72,6 +74,7 @@ export interface PayRunCalculationSourceSnapshot {
   assignmentRunPolicies?: { id: string; employeePartyId: string; employmentId: string | null; componentId: string; policy: string; from: string; to: string | null }[];
   historicalEmploymentRoster?: HistoricalEmploymentRosterSource[];
   holidayObligations?: HolidayObligationSource[];
+  bonusIncomeReferences?: CaBonusIncomeReferenceSource[];
   claimEntryIds: string[];
 }
 
@@ -115,7 +118,8 @@ export function parsePayRunCalculationSource(
       || (Object.hasOwn(snapshot, 'assignmentRunPolicies') && !Array.isArray(snapshot.assignmentRunPolicies))
       || (Object.hasOwn(snapshot, 'historicalEmploymentRoster') && !Array.isArray(snapshot.historicalEmploymentRoster))
       || (Object.hasOwn(snapshot, 'employerAssignments') && !Array.isArray(snapshot.employerAssignments))
-      || (Object.hasOwn(snapshot, 'holidayObligations') && !Array.isArray(snapshot.holidayObligations))) return null;
+      || (Object.hasOwn(snapshot, 'holidayObligations') && !Array.isArray(snapshot.holidayObligations))
+      || (Object.hasOwn(snapshot, 'bonusIncomeReferences') && !Array.isArray(snapshot.bonusIncomeReferences))) return null;
   // Snapshots stored before item routing existed carry no itemAccounts; they
   // read as "no mapped items", so the first post-upgrade commit compares
   // honestly and refuses with the items reason instead of a bare selection.
@@ -143,6 +147,7 @@ export async function payRunCalculationSource(
   executor: Pick<typeof db, "execute"> = db,
   lockSources = false,
   allowedSubsidiaryIds?: PayrollSubsidiaryScope,
+  calculatedBonusReferences?: readonly CaBonusIncomeReferenceSource[],
 ): Promise<PayRunCalculationSourceSnapshot | null> {
   const rowLock = lockSources ? sql`for update` : sql``;
   const entryRowLock = lockSources ? sql`for update of te` : sql``;
@@ -361,6 +366,39 @@ export async function payRunCalculationSource(
   const employerAssignments = await employeeEmployerAssignmentHistory(executor, { orgId, payDate: row.pay_date, employeePartyIds: row.employee_party_ids ?? [] });
   const compensationPackages = await compensationPackageRunSource(executor, orgId, documentId, allowedSubsidiaryIds, lockSources);
   const holidayObligations = await holidayObligationRunSource(executor, orgId, documentId, allowedSubsidiaryIds);
+  // Calculate supplies the exact identities used by its successful statutory
+  // passes. Commit/readiness re-resolve them through the same authoritative
+  // service so a different selected history row changes the protected digest.
+  const bonusSubjects = (await executor.execute<CaBonusIncomeReferenceScope & { income: string }>(sql`
+    select s.org_id as "orgId",r.document_id as "documentId",
+      s.employee_party_id as "employeePartyId",s.employment_id as "employmentId",
+      d.subsidiary_id as "subsidiaryId",s.filing_account_id as "filingAccountId",
+      d.currency,r.pay_schedule_id as "payScheduleId",s.tax_year as "taxYear",
+      r.pay_date::text as "payDate",r.period_end::text as "periodEnd",
+      s.factors->>'CA_BONUS_I_REFERENCE' as income
+    from pay_stubs s join pay_runs r on r.org_id=s.org_id and r.document_id=s.pay_run_document_id
+      join documents d on d.org_id=r.org_id and d.id=r.document_id
+    where s.org_id=${orgId} and r.document_id=${documentId} and s.country='CA'
+      and s.factors ? 'CA_BONUS_I_REFERENCE'
+      and s.employee_party_id in (select jsonb_array_elements_text(${JSON.stringify(row.employee_party_ids ?? [])}::jsonb)::uuid)
+    order by s.employee_party_id
+  `)).rows;
+  const bonusIncomeReferences: CaBonusIncomeReferenceSource[] = [];
+  if (calculatedBonusReferences && calculatedBonusReferences.length !== bonusSubjects.length) {
+    throw new PayrollError('Canadian bonus calculation source identities do not cover the calculated employee population — recalculate the pay run');
+  }
+  for (const subject of bonusSubjects) {
+    const { income, ...scope } = subject;
+    const source = calculatedBonusReferences
+      ? calculatedBonusReferences.find(source => source.employeePartyId === subject.employeePartyId)
+      : await resolveCaBonusIncomeReference(executor, scope);
+    if (!source || (calculatedBonusReferences &&
+      (Object.entries(scope).some(([key,value]) => source[key as keyof CaBonusIncomeReferenceScope] !== value)
+        || source.income !== income))) {
+      throw new PayrollError('Canadian bonus calculation source identity differs from the income actually used — recalculate the pay run');
+    }
+    bonusIncomeReferences.push(source);
+  }
   return {
     version: 1,
     timeEntries: row.time_entries ?? [],
@@ -374,6 +412,7 @@ export async function payRunCalculationSource(
     ...(assignmentRunPolicies.length ? { assignmentRunPolicies } : {}),
     ...(historicalEmploymentRoster.length ? { historicalEmploymentRoster } : {}),
     ...(holidayObligations.length ? { holidayObligations } : {}),
+    ...(bonusIncomeReferences.length ? { bonusIncomeReferences } : {}),
     claimEntryIds: row.claim_entry_ids ?? [],
   };
 }
@@ -386,7 +425,8 @@ export function payRunCalculationSourceChanges(
     time: canonicalJson(stored.timeEntries) !== canonicalJson(current.timeEntries)
       || canonicalJson(stored.claimEntryIds) !== canonicalJson(current.claimEntryIds),
     timeTypes: canonicalJson(stored.timeTypes) !== canonicalJson(current.timeTypes),
-    wages: canonicalJson(stored.payRates) !== canonicalJson(current.payRates),
+    wages: canonicalJson(stored.payRates) !== canonicalJson(current.payRates)
+      || canonicalJson(stored.bonusIncomeReferences ?? []) !== canonicalJson(current.bonusIncomeReferences ?? []),
     compensationPackages: canonicalJson(stored.compensationPackages ?? []) !== canonicalJson(current.compensationPackages ?? []),
     components: canonicalJson(stored.assignmentRunPolicies ?? []) !== canonicalJson(current.assignmentRunPolicies ?? []),
     holidayObligations: canonicalJson(stored.holidayObligations ?? []) !== canonicalJson(current.holidayObligations ?? []),

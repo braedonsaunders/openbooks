@@ -1,3 +1,4 @@
+import { resolveCaBonusIncomeReference, type CaBonusIncomeReferenceSource } from './bonus-income-reference.ts';
 import { sql } from "drizzle-orm";
 import type { db } from "../../platform/db.ts";
 import { add, cmp, div, fromUnits, mulDecimal, mulPercent, neg, sum, toUnits } from "../../money/money.ts";
@@ -430,7 +431,7 @@ export async function computeCaStatutory(
   // CRA's regular bonus method uses the most recent periodic I when a
   // separately paid bonus has no periodic remuneration of its own. The
   // reference affects only bonus tax, never current earnings or premiums.
-  let bonusIncomeReference: { stub_id: string; document_id: string; income: string; pay_date: string } | null = null;
+  let bonusIncomeReference: CaBonusIncomeReferenceSource | null = null;
   let referencedBonusTax: ReturnType<typeof calculateT4127> | null = null;
   if (!cumulative?.averaging && !foldBonus && region !== "QC"
       && !bool(empFact("CA", emp, "tax_exempt"))
@@ -438,28 +439,14 @@ export async function computeCaStatutory(
     if (!ctx.employmentId || !ctx.subsidiaryId || !run.doc_currency || !run.pay_schedule_id || !ctx.filingAccountId) {
       throw new PayrollError("A separately paid Canadian bonus requires its native employment, employer, currency, schedule and filing account before resolving regular income");
     }
-    const references = (await tx.execute<{
-      stub_id: string; document_id: string; income: string; pay_date: string;
-    }>(sql`
-      select s.id as stub_id, r.document_id, s.factors->>'I' as income,
-             s.pay_date::text as pay_date
-        from pay_stubs s
-        join pay_runs r on r.org_id=s.org_id and r.document_id=s.pay_run_document_id
-        join documents d on d.org_id=r.org_id and d.id=r.document_id
-       where s.org_id=${orgId} and s.employee_party_id=${employeePartyId}
-         and s.employment_id=${ctx.employmentId} and s.filing_account_id=${ctx.filingAccountId}
-         and s.country='CA' and s.tax_year=${taxYear}
-         and d.subsidiary_id=${ctx.subsidiaryId} and d.currency=${run.doc_currency}
-         and r.pay_schedule_id=${run.pay_schedule_id} and r.run_status='committed'
-         and d.status<>'voided' and r.document_id<>${documentId}
-         and s.pay_date<=${run.pay_date}::date and r.period_end<=${run.period_end}::date
-         and (s.factors->>'I')::numeric>0
-       order by s.pay_date desc, r.period_end desc, r.updated_at desc, r.document_id desc, s.id desc
-       limit 1
-    `)).rows;
-    const reference = references[0];
-    if (!reference) throw new PayrollError("A separately paid Canadian bonus has no committed regular income for this employment, employer, currency, schedule and filing account — calculate and commit its regular pay before the bonus");
+    const reference = await resolveCaBonusIncomeReference(tx, {
+      orgId,documentId,employeePartyId,employmentId:ctx.employmentId,
+      subsidiaryId:ctx.subsidiaryId,filingAccountId:ctx.filingAccountId,
+      currency:run.doc_currency,payScheduleId:run.pay_schedule_id,taxYear,
+      payDate:run.pay_date!,periodEnd:run.period_end!,
+    });
     bonusIncomeReference = reference;
+    ctx.recordBonusIncomeReference?.(reference);
     referencedBonusTax = calculateT4127({
       ...t4127Input, averaging: undefined, income: reference.income, nonPeriodic,
       pensionable, insurable, qpipInsurable,
@@ -543,9 +530,6 @@ export async function computeCaStatutory(
       T: currentTax.factors.T ?? currentTax.periodicTax,
       TB: referencedBonusTax.bonusTax,
       CA_BONUS_I_REFERENCE: bonusIncomeReference.income,
-      CA_BONUS_REFERENCE_STUB: bonusIncomeReference.stub_id,
-      CA_BONUS_REFERENCE_RUN: bonusIncomeReference.document_id,
-      CA_BONUS_REFERENCE_PAY_DATE: bonusIncomeReference.pay_date,
     } : {}),
     B: nonPeriodic, I: income, PI: pensionable, IE: insurable,
     F:deduction("pension_f"),F2:deduction("alimony"),U1:deduction("union_dues"),F3:deduction("pension_f_bonus"),

@@ -1,3 +1,4 @@
+import type { CaBonusIncomeReferenceSource } from './canada/bonus-income-reference.ts';
 import type { db } from "../platform/db.ts";
 import type { Money } from "../money/brands.ts";
 import type { ResolvedCertificate, StoredCertificate } from "./certificates.ts";
@@ -235,6 +236,8 @@ export interface PayrollStatutoryComputeContext {
   pushStatutory: PushStatutoryFn;
   storedCertificates: readonly StoredCertificate[];
   certificateFor: (key: string) => ResolvedCertificate | null;
+  /** Typed source identity retained separately from numeric statutory factors. */
+  recordBonusIncomeReference?: (source: CaBonusIncomeReferenceSource) => void;
   /**
    * Report a named, non-blocking advisory for the run's per-employee warning
    * channel (a reciprocity form to collect, not a refusal). Optional so packs

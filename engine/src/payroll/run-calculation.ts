@@ -1,3 +1,4 @@
+import type { CaBonusIncomeReferenceSource } from './canada/bonus-income-reference.ts';
 import { payrollEmploymentOverlapsPeriod, payrollEpisodeDate, lockPayrollEmploymentRoster } from "./employment-roster.ts";
 import { clearCalculatedHolidayAllocations, holidayObligationsAvailable as holidayObligationsAvailableProbe } from "./holiday-obligation-source.ts";
 import { requireCompensationPackageConfiguration, clearCompensationPackageCalculations } from './compensation-package-payroll.ts';
@@ -578,6 +579,7 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
       rateResolutions.set(key, pending);
       return pending;
     };
+    const bonusIncomeReferences: CaBonusIncomeReferenceSource[] = [];
     let grossTotal = "0"; let netTotal = "0"; let employerTotal = "0"; let count = 0;
     const P = Number(run.periods_per_year ?? 0) || undefined;
 
@@ -641,6 +643,7 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
           allowedSubsidiaryIds: input.allowedSubsidiaryIds,
           periodPriors: periodPriorsByEmployee.get(emp.party_id!),
           supplementalTaxMethod,
+          onBonusIncomeReference: source => { bonusIncomeReferences.push(source); },
         }));
         grossTotal = add(grossTotal, result.gross);
         netTotal = add(netTotal, result.net);
@@ -723,6 +726,7 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
       tx,
       true,
       input.allowedSubsidiaryIds,
+      bonusIncomeReferences,
     );
     if (!calculationSource) throw new PayrollError("pay run not found");
     const calculationSourceDigest = payRunCalculationSourceDigest(calculationSource);

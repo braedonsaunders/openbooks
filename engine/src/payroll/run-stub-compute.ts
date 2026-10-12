@@ -1,3 +1,4 @@
+import type { CaBonusIncomeReferenceSource } from './canada/bonus-income-reference.ts';
 import type { PayRunType } from './run-contracts.ts';
 import { historicalWithholdingProfile } from './historical-withholding.ts';
 import { prepareCompensationPackages, appendCompensationPackageStage, persistCompensationPackageCalculations } from './compensation-package-payroll.ts';
@@ -88,6 +89,7 @@ export async function calculateStub(
     periodPriors?: PayPeriodPriors;
     /** The org's supplemental income-tax method, resolved once per run. */
     supplementalTaxMethod?: SupplementalTaxMethod;
+    onBonusIncomeReference?: (source: CaBonusIncomeReferenceSource) => void;
   },
 ): Promise<StubComputation> {
   const { orgId, actorId, documentId, run, emp: storedEmp, jurisdiction } = ctx;
@@ -587,7 +589,9 @@ export async function calculateStub(
     })
     : undefined;
 
+  const bonusIncomeReferences: CaBonusIncomeReferenceSource[] = [];
   const runStatutoryPass = async (): Promise<void> => {
+    bonusIncomeReferences.length = 0;
     clearIncomeAssessedLines();
     factors = await pack.computeStatutory({
       tx, orgId, documentId, employeePartyId,
@@ -599,6 +603,7 @@ export async function calculateStub(
       employeeName: emp.display_name ?? employeePartyId,
       taxYear, country, region: province, run, emp,
       filingAccountId: jurisdiction.filingAccountId,
+      recordBonusIncomeReference: source => { bonusIncomeReferences.push(source); },
       periodsPerYear: P, employerEmployeeCount: ctx.employerEmployeeCount,
       workAllocations,
       income, nonPeriodic, pensionable, insurable, pensionableNonPeriodic,insurableNonPeriodic,programNonPeriodicBases,
@@ -765,6 +770,7 @@ export async function calculateStub(
   });
 
   await persistCompensationPackageCalculations(tx, compensationPackages);
+  for (const source of bonusIncomeReferences) ctx.onBonusIncomeReference?.(source);
 
   return {
     employeePartyId, province, gross, net, employerCost,
