@@ -1337,7 +1337,7 @@ export async function runDueSubscriptions(asOf?: string): Promise<SubscriptionRu
     // tick retries. Only one tick can win the compare-and-swap: a concurrent
     // tick blocks on this row lock and, when the winner commits, re-evaluates
     // the WHERE against the advanced value and claims zero rows.
-    let sub: { invoiceId: string; documentNumber: string; posted: boolean } | null = null;
+    let sub: Awaited<ReturnType<typeof billOne>> | null = null;
     try {
       sub = await withOrg(row.orgId, async () => {
         const claimed = (await db.execute<{ id: string }>(sql`

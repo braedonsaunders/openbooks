@@ -9,25 +9,25 @@ import { activePostingPrimaryBookId } from '../platform/accounting-books.ts';
 import { isIsoCalendarDate } from '../platform/business-date.ts';
 import { resolveCoveringPeriod } from '../periods/period-resolution.ts';
 import { reversalJournalLines } from '../records/reversal-journal-lines.ts';
-import { postEntry, markEntryReversed } from '../journal/post-entry.ts';
+import { postEntry, markEntryReversed, type PostEntryLineInput } from '../journal/post-entry.ts';
 import { add, cmp, divRate, mulRate, neg, sum } from '../money/money.ts';
 import { earnedRebates, selectRebateDeals, validateRebateTerms, RebateError, type RebateTerms, type RebateCandidate } from './rebate-math.ts';
 export { RebateError } from './rebate-math.ts';
 
-export interface RebateAgreement {
+export type RebateAgreement = {
   id: string; code: string; name: string; status: string; subsidiary_id: string; side: 'customer' | 'vendor';
   activity: 'sale' | 'purchase' | 'downstream_sale'; party_id: string | null; class_id: string | null; item_id: string | null;
   currency: string; effective_from: string; effective_to: string; method: RebateTerms['method']; tier_basis: RebateTerms['tierBasis'];
   tiers: RebateTerms['tiers']; target_unit_cost: string | null; margin_percent: string | null; stacking: 'stack' | 'best';
   tax_treatment:'outside_scope'|'taxable'; settlement_tax_code_id:string|null; selection_group: string; accrual_account_id: string; offset_account_id: string; fx_account_id: string; created_by: string;
-}
-interface EligibleLine {
+};
+type EligibleLine = {
   id: string; amount: string; quantity: string; cost: string | null; marginRevenue: string | null; fx_rate: string; party_id: string; document_date: string; class_id: string | null;
-}
-export interface RebateClaim {
+};
+export type RebateClaim = {
   id: string; agreement_id: string; party_id: string; amount: string; base_amount: string; status: string; cutoff_on: string;
   created_by: string; approved_by: string | null; settlement_document_id: string | null; settlement_entry_id?: string | null; settlement_basis?: unknown;
-}
+};
 async function enabled(tx: SqlExecutor, orgId: string) {
   if (!await lockAndCheckOrgFeature(tx,orgId,'rebateManagement')) throw new RebateError('Enable Rebate management in Company Settings → Features');
 }
@@ -322,7 +322,8 @@ export async function reverseRebatePayment(orgId:string,actorId:string,id:string
     if (!original||!period) throw new RebateError('The original settlement or reversal accounting period is unavailable');
     const lines=await db.select().from(schema.journalLines).where(and(eq(schema.journalLines.orgId,orgId),eq(schema.journalLines.entryId,claim.settlement_entry_id)));
     const entry=await postEntry(db,{orgId,bookId:original.book_id,subsidiaryId:a.subsidiary_id,postingDate:date,periodId:period.id,entryNumber:`REBATE-REV-${claim.settlement_entry_id}`,idempotencyKey:`rebate-payment-reversal:${claim.settlement_entry_id}`,origin:'rebate_settlement',closeModules:[a.side==='customer'?'ar':'ap'],actorId,reversesEntryId:claim.settlement_entry_id,memo:reason,
-      amountBasis:'book',accountBasis:'book',lines:reversalJournalLines(lines,{orgId,entryId:claim.settlement_entry_id}).map(line=>({...line,accountId:line.accountId,amount:String(line.amount)}))});
+      amountBasis:'book',accountBasis:'book',lines:reversalJournalLines(lines,{orgId,entryId:claim.settlement_entry_id}).map(line=>({...line,accountId:line.accountId,amount:String(line.amount),
+        extraDims:line.extraDims as PostEntryLineInput['extraDims'],custom:line.custom as PostEntryLineInput['custom']}))});
     await markEntryReversed(db,{orgId,entryId:claim.settlement_entry_id,actorId});
     await releaseVoidedRebateSettlement(orgId,actorId,claim,entry.entryId,date,reason);
     return {entryId:entry.entryId};

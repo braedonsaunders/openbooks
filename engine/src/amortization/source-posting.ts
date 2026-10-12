@@ -31,7 +31,7 @@ import { assertDeferralAccount, assertDestinationAccount, loadTemplateVersion, r
 export { AMORTIZABLE_LINE_KINDS as AMORTIZABLE_DOCUMENT_KINDS } from "./source-fields.ts";
 import { AMORTIZABLE_LINE_KINDS as AMORTIZABLE_DOCUMENT_KINDS, amortizationLineRefusal } from "./source-fields.ts";
 
-export interface AmortizationSourceLine {
+export type AmortizationSourceLine = {
   id: string;
   lineNumber: number;
   accountId: string | null;
@@ -40,7 +40,7 @@ export interface AmortizationSourceLine {
   amortizationStartOn: string | null;
   amortizationEndOn: string | null;
   settlementType?: string | null;
-}
+};
 
 export interface AmortizationRouting {
   documentLineId: string;

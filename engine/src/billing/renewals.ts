@@ -33,14 +33,14 @@ export function renewalTermAmount(unitPrice:string,start:string,end:string,inter
   }
   return total;
 }
-interface RenewalSubject {
+type RenewalSubject = {
   id: string; customer_id: string; subsidiary_id: string; term_ends_on: string | null; status: string;
   renewal_policy: string; plan_version_id: string; plan_id: string; billing_timing: 'advance' | 'arrears'; currency: string; interval:Interval; interval_count:number; term_starts_on:string;
-}
-interface Policy {
+};
+type Policy = {
   id: string; owner_id: string; reminder_days: {days:number}[]; generation_lead_days: number; document_kind: 'quote' | 'sales_order';
   uplift_percent: string; term_months: number; reason: string;
-}
+};
 
 /** One native document per subscription expiry, serialized with subscription
  * billing/amendments. Drafts retain native commercial approval and tax.

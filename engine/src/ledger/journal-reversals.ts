@@ -6,7 +6,7 @@ import { lockLedgerSetupFence } from "../organization/ledger-setup-fence.ts";
 import { lockActorCommandAuthority } from "../organization/actor-command-authority.ts";
 import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
 import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
-import { postEntry } from "../journal/post-entry.ts";
+import { postEntry, type PostEntryLineInput } from "../journal/post-entry.ts";
 import { reversalJournalLines } from "../records/reversal-journal-lines.ts";
 import { nextFreeEntryNumber } from "../records/entry-number.ts";
 import { JournalInstructionError } from "./journal-instruction-error.ts";
@@ -81,7 +81,8 @@ export async function runScheduledJournalReversals(input: { orgId: string; actor
             memo:`Approved automatic reversal of ${live.entry_number}`,allowInactiveAccounts:true,amountBasis:'book',accountBasis:'book',
             idempotencyKey:live.id===instruction.source_entry_id ? `journal-reversal:${candidate.id}` : `journal-reversal:${candidate.id}:${live.id}`,
             auditChanges:{instructionId:candidate.id,approvedReversalOn:instruction.reverse_on,actorKind:input.actorId ? 'user' : 'system'},
-            lines:mirrored.map(line=>({...line,currency:line.currency!,txnAmount:line.txnAmount!,amount:line.amount!,subsidiaryId:line.subsidiaryId!,isOpenItem:false})),
+            lines:mirrored.map(line=>({...line,currency:line.currency!,txnAmount:line.txnAmount!,amount:line.amount!,subsidiaryId:line.subsidiaryId!,isOpenItem:false,
+              extraDims:line.extraDims as PostEntryLineInput['extraDims'],custom:line.custom as PostEntryLineInput['custom']})),
           });
           if(live.id===instruction.source_entry_id)primaryReversalId=reversal.entryId;
         }
