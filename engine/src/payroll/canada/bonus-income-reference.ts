@@ -2,7 +2,7 @@ import { sql } from 'drizzle-orm';
 import type { db } from '../../platform/db.ts';
 import { PayrollError } from '../error.ts';
 
-export interface CaBonusIncomeReferenceScope {
+export type CaBonusIncomeReferenceScope = {
   orgId: string;
   documentId: string;
   employeePartyId: string;
@@ -14,9 +14,9 @@ export interface CaBonusIncomeReferenceScope {
   taxYear: number;
   payDate: string;
   periodEnd: string;
-}
+};
 
-export interface CaBonusIncomeReferenceSource extends CaBonusIncomeReferenceScope {
+export type CaBonusIncomeReferenceSource = CaBonusIncomeReferenceScope & {
   referenceStubId: string;
   referenceRunId: string;
   referencePayDate: string;
@@ -30,7 +30,7 @@ export interface CaBonusIncomeReferenceSource extends CaBonusIncomeReferenceScop
     effectiveFrom: string | null;
     answers: Record<string, string>;
   };
-}
+};
 
 /** Committed periodic income for CRA's separately paid Option 1 bonus method. */
 export async function resolveCaBonusIncomeReference(
