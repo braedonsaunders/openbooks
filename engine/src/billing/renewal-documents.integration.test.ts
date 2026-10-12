@@ -4,7 +4,7 @@ import {randomUUID} from 'node:crypto';
 import {withSimClock} from '../platform/clock.ts';
 import {sql} from 'drizzle-orm';
 import {db,withOrg,withBypassContext} from '../platform/db.ts';
-import {createScratchOrg,dropScratchOrg,seedFlowActors} from '../testing/fixtures.ts';
+import {createScratchOrg,dropScratchOrg,seedFlowActors,grantScratchPermissions} from '../testing/fixtures.ts';
 import {createPlanVersion,publishPlanVersion,activateLifecycle,advanceLifecycleDate,prepareAdvancedSubscriptionBilling} from './advanced-subscriptions.ts';
 import {activateQuote} from './quote-to-cash.ts';
 import {billSubscriptionNow} from './subscription-billing.ts';
@@ -18,6 +18,7 @@ for (const documentKind of ['quote','sales_order'] as const) test(`${documentKin
   const actors=await withBypassContext(()=>seedFlowActors(org.orgId)),planId=randomUUID(),subscriptionId=randomUUID(),policyId=randomUUID();
   const termEnd=advanceLifecycleDate(org.date,'monthly',1);
   await withBypassContext(async()=>{
+   await grantScratchPermissions(org.orgId,actors.adminId,['ar.read','ar.create','ar.post',...(documentKind==='quote'?['estimates.create','estimates.issue']:[])]);
    await db.execute(sql`update orgs set settings=jsonb_set(jsonb_set(settings,'{features,subscriptionBilling}','true'::jsonb,true),'{features,advancedSubscriptions}','true'::jsonb,true) where id=${org.orgId}`);
    await db.execute(sql`insert into subscription_plans(id,org_id,name,amount,currency_code,interval,income_account_id,created_by,updated_by) values(${planId},${org.orgId},'Renewable support','100','CAD','monthly',${org.accounts.revenue},${actors.adminId},${actors.adminId})`);
    await db.execute(sql`insert into subscriptions(id,org_id,customer_id,plan_id,start_on,next_bill_on,created_by,updated_by) values(${subscriptionId},${org.orgId},${org.customerId},${planId},${org.date},${org.date},${actors.adminId},${actors.adminId})`);
