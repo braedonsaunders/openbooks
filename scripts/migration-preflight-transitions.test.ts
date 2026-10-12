@@ -48,3 +48,31 @@ test("source, overload, publisher and prerequisite drift retain their refusal", 
     recorded: new Map([...evidence.recorded, [future, hash(unexpected)]]) }), false);
   assert.equal(preflightNeedsRecordedGuardTransition({ ...evidence, findings: [{ ...evidence.findings[0]!, subject: "public.other_guard" }] }), false);
 });
+
+test("currency-binding consumer defers only its pinned pending publisher and revalidation query", () => {
+  const binding = "generated/0702_journal_instruction_currency_binding.sql";
+  const files = new Map([...published, [binding, read(binding)]]);
+  const bindingEvidence: PreflightTransitionEvidence = {
+    ...evidence, migration: binding, published: files,
+    consumerSql: read("preflight/0702_journal_instruction_currency_binding.sql"),
+    findings: [{ ...evidence.findings[0]!, migration: binding,
+      code: "0702.instruction_guard_definition", subject: "public.journal_instruction_line_guard()" }],
+  };
+  assert.equal(preflightNeedsRecordedGuardTransition(bindingEvidence), true);
+  for (const changed of [
+    { recorded: new Map() },
+    { recorded: new Map([[current, "0".repeat(64)]]) },
+    { recorded: new Map([...evidence.recorded, [next, hash(files.get(next)!)]]) },
+    { pendingBeforeConsumer: new Set<string>() },
+    { currentBody: null },
+    { currentBody: currentBody + "\n" },
+    { consumerSql: bindingEvidence.consumerSql + "\n" },
+    { consumerSql: evidence.consumerSql },
+    { findings: evidence.findings },
+    { findings: [...bindingEvidence.findings, { ...bindingEvidence.findings[0]!, code: "0702.other_drift" }] },
+  ]) assert.equal(preflightNeedsRecordedGuardTransition({ ...bindingEvidence, ...changed }), false);
+  for (const filename of [current, next, binding]) {
+    const changed = new Map(files); changed.set(filename, changed.get(filename)! + "\n");
+    assert.equal(preflightNeedsRecordedGuardTransition({ ...bindingEvidence, published: changed }), false);
+  }
+});

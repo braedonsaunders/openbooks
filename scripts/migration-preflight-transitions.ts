@@ -3,14 +3,23 @@ import type { PreflightFinding } from "./migration-preflight.ts";
 
 const CURRENT = "generated/0692_journal_instruction_modes.sql";
 const NEXT = "generated/0699_financial_history_native_clone_guards.sql";
-const CONSUMER = "generated/0700_typed_currency_adjustment_fx_residual_guards.sql";
 const SIGNATURE = "public.journal_instruction_line_guard()";
 const IDENTITIES = new Map([
   [CURRENT, "e31bcb469f0082873620ec3cdca678a6f55ab043843da9f8147b6dc1aa7e7000"],
   [NEXT, "eb192fe9113093021a6b6998c18fb08f671e9a1a22182e4265bd2132fad67e5a"],
-  [CONSUMER, "3c1e27ef03f885cc6b07f8223e38a286d71947cb10f5f9de6e1173aefe33d0c1"],
 ]);
-const PREFLIGHT = "ce56c23c0e95667dc07abf491f07777ea500a6603377bbc5d133b41628991135";
+const CONSUMERS = new Map([
+  ["generated/0700_typed_currency_adjustment_fx_residual_guards.sql", {
+    source: "3c1e27ef03f885cc6b07f8223e38a286d71947cb10f5f9de6e1173aefe33d0c1",
+    preflight: "ce56c23c0e95667dc07abf491f07777ea500a6603377bbc5d133b41628991135",
+    code: "0700.instruction_guard_definition", subject: "public.journal_instruction_line_guard",
+  }],
+  ["generated/0702_journal_instruction_currency_binding.sql", {
+    source: "3b7ebba6fe31c5a9e8e8925a0fd894b35db029648737b2b5d28dc306d1274334",
+    preflight: "99d4da6ba4bf4765d0d5c4d41eb4f8bb4916f5ed89a532c6f11efa7252dcc77f",
+    code: "0702.instruction_guard_definition", subject: SIGNATURE,
+  }],
+]);
 const digest = (content: string) => createHash("sha256").update(content).digest("hex");
 
 /** Extract only the declaration of the no-argument instruction guard. */
@@ -30,20 +39,22 @@ export type PreflightTransitionEvidence = {
 };
 
 /** A future exact publisher may legitimately replace an exact recorded guard.
- * This admits one known transition for deferred revalidation, never an unknown
+ * This admits explicitly pinned consumers for deferred revalidation, never an unknown
  * body, an unrecorded schema object or a general function-name exemption. */
 export function preflightNeedsRecordedGuardTransition(evidence: PreflightTransitionEvidence): boolean {
   const { migration, consumerSql, findings, published, recorded, pendingBeforeConsumer, currentBody } = evidence;
-  if (migration !== CONSUMER || digest(consumerSql) !== PREFLIGHT || !pendingBeforeConsumer.has(NEXT)
+  const consumer = CONSUMERS.get(migration);
+  if (!consumer || digest(consumerSql) !== consumer.preflight || !pendingBeforeConsumer.has(NEXT)
     || recorded.has(NEXT) || recorded.get(CURRENT) !== IDENTITIES.get(CURRENT)) return false;
   if (findings.length !== 1 || findings[0]!.severity !== "refuse"
-    || findings[0]!.code !== "0700.instruction_guard_definition"
-    || findings[0]!.subject !== "public.journal_instruction_line_guard"
+    || findings[0]!.code !== consumer.code
+    || findings[0]!.subject !== consumer.subject
     || findings[0]!.migration !== migration) return false;
   for (const [filename, expected] of IDENTITIES) {
     const content = published.get(filename);
     if (content === undefined || digest(content) !== expected) return false;
   }
+  if (digest(published.get(migration) ?? "") !== consumer.source) return false;
   const original = instructionGuardBody(published.get(CURRENT)!);
   const future = instructionGuardBody(published.get(NEXT)!);
   if (original === null || future === null || original !== currentBody) return false;
@@ -56,7 +67,7 @@ export function preflightNeedsRecordedGuardTransition(evidence: PreflightTransit
     latest = filename;
   }
   if (latest !== CURRENT) return false;
-  const finalClause = consumerSql.slice(consumerSql.lastIndexOf("SELECT '0700.instruction_guard_definition'"));
+  const finalClause = consumerSql.slice(consumerSql.lastIndexOf(`SELECT '${consumer.code}'`));
   const expected = /\$expected\$([\s\S]*?)\$expected\$/.exec(finalClause)?.[1];
   return expected === future && finalClause.includes(`'${SIGNATURE}'::regprocedure`);
 }
