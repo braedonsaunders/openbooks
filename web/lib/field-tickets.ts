@@ -1,7 +1,8 @@
 import 'server-only'
 import { sql } from 'drizzle-orm'
-import { db, withOrg } from '@openbooks/engine/platform/db'
+import { db, withOrg, type SqlExecutor } from '@openbooks/engine/platform/db'
 import { utcDateFromParts } from '@openbooks/engine/platform/business-date/module'
+import { lockActorCommandAuthority } from '@openbooks/engine/organization/actor-command-authority'
 import { lockAndCheckOrgFeature } from '@openbooks/engine/organization/org-feature-lock'
 import { submitForApproval } from '@openbooks/engine/flows/module'
 import {
@@ -13,7 +14,7 @@ import { recordFieldTicketProgressInTransaction } from '@openbooks/engine/projec
 import { businessToday, isIsoCalendarDate } from '@openbooks/engine/platform/business-date/module'
 import { nextDocumentNumber } from "./bills.ts";
 import { documentRevisionCounterSql } from "@openbooks/engine/records/revision";
-import { runDocumentVersionedTransaction } from "@openbooks/engine/records/document-edit-policy";
+import { assertDocumentEditRevision, requireDocumentEditRevision, runDocumentVersionedTransaction } from "@openbooks/engine/records/document-edit-policy";
 import { canonicalDecimal } from './exact-decimal'
 import { unpricedLaborHours as fieldTicketUnpricedHours } from './field-ticket-totals'
 import { acquireFeatureGateLock, checkProjectsWriteEnabled, isFeatureEnabled } from './features'
@@ -93,7 +94,7 @@ async function assertFieldTicketsEnabled(orgId: string): Promise<void> {
   }
 }
 
-async function assertFieldTicketsEnabledTx(tx: TicketTransaction, orgId: string): Promise<void> {
+async function assertFieldTicketsEnabledTx(tx: SqlExecutor, orgId: string): Promise<void> {
   await acquireFeatureGateLock(orgId, tx)
   if (!(await lockAndCheckOrgFeature(tx, orgId, 'fieldTickets'))) {
     throw new FieldTicketNotFoundError('Ticket not found')
@@ -1199,15 +1200,37 @@ export async function discardEmptyTicketDraft(
   })
 }
 
+/** Pin live lifecycle authority and the exact ticket version inside the caller's transaction. */
+export async function lockTicketLifecycleRevision(
+  orgId: string,
+  userId: string,
+  ticketId: string,
+  expectedRevision: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
+): Promise<HeaderRow> {
+  requireDocumentEditRevision(expectedRevision)
+  await assertFieldTicketsEnabledTx(db, orgId)
+  const liveScope = await lockActorCommandAuthority(db, orgId, userId, null, 'time.manage')
+  const doc = await loadHeader(orgId, ticketId, true)
+  if (!subsidiaryScopeAllows(liveScope, doc.subsidiaryId) ||
+      !subsidiaryScopeAllows(allowedSubsidiaryIds, doc.subsidiaryId)) {
+    throw new FieldTicketNotFoundError('Ticket not found')
+  }
+  assertDocumentEditRevision(expectedRevision, doc.revision)
+  return doc
+}
+
 /**
  * Submit through Flows. An enabled tenant-authored on_submit flow may create
  * gates; when none does, the ticket approves immediately. There is no default
  * approver, hardcoded threshold, or parallel approval path.
  */
-export async function submitFieldTicket(orgId: string, userId: string, ticketId: string): Promise<void> {
-  await assertFieldTicketsEnabled(orgId)
+export async function submitFieldTicket(
+  orgId: string, userId: string, ticketId: string, expectedRevision: string,
+  allowedSubsidiaryIds: ReadonlySet<string> | null = null,
+): Promise<void> {
   const outcome = await withOrg(orgId, async () => {
-    const doc = await loadHeader(orgId, ticketId)
+    const doc = await lockTicketLifecycleRevision(orgId, userId, ticketId, expectedRevision, allowedSubsidiaryIds)
     if (doc.status !== 'draft') throw new FieldTicketError('Only draft tickets can be submitted')
     const counts = (await db.execute<{ hours: number; lines: number }>(sql`
       select (select count(*) from time_entries where org_id = ${orgId} and field_ticket_id = ${ticketId}) as hours,
@@ -1233,11 +1256,13 @@ export async function submitFieldTicket(orgId: string, userId: string, ticketId:
       throw new FieldTicketError('Some production lines name tasks of another project — remove them and report production against this ticket’s project')
     }
 
-    await db.execute(sql`
+    const submitted = await db.execute<{ document_id: string }>(sql`
       update field_tickets
          set submitted_by = ${userId}, submitted_at = now(),
              rejection_reason = null, updated_at = now(), updated_by = ${userId}
-       where document_id = ${ticketId} and org_id = ${orgId}`)
+       where document_id = ${ticketId} and org_id = ${orgId}
+       returning document_id`)
+    if (submitted.rows.length !== 1) throw new FieldTicketNotFoundError('Ticket not found')
 
     const routed = await submitForApproval('field_ticket', ticketId, userId)
     if (routed.flowError) {

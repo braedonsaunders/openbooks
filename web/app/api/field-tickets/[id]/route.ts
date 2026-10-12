@@ -64,8 +64,8 @@ const ticketActionBody = z.discriminatedUnion('action', [
     quantity: z.string().min(1).max(40), unit: z.string().min(1).max(32), note: z.string().max(500).nullable().optional(),
   }).strict(),
   z.object({ action: z.literal('remove-quantity'), expectedRevision: z.string().min(1), quantityId: z.string().uuid() }).strict(),
-  z.object({ action: z.literal('submit') }).strict(),
-  z.object({ action: z.literal('send-signature'), to: z.string().min(1), message: z.string().nullable().optional() }).strict(),
+  z.object({ action: z.literal('submit'), expectedRevision: z.string().min(1) }).strict(),
+  z.object({ action: z.literal('send-signature'), expectedRevision: z.string().min(1), to: z.string().min(1), message: z.string().nullable().optional() }).strict(),
 ])
 const ticketDiscardBody = z.object({ expectedRevision: z.string().min(1) }).strict()
 
@@ -213,10 +213,7 @@ export const POST = defineRoute({
   // including add/remove-line (not only the header/grid forms). Resolve the
   // record scope first so forbidden tickets always remain indistinguishable
   // 404s, even when the request body is malformed or stale.
-  const preflightRevision = body.action === 'save-grid' || body.action === 'patch' || body.action === 'add-line' || body.action === 'remove-line'
-    || body.action === 'add-quantity' || body.action === 'remove-quantity'
-    ? await requireRevision(body.expectedRevision)
-    : null
+  const preflightRevision = await requireRevision(body.expectedRevision)
   if (preflightRevision instanceof NextResponse) return preflightRevision
   // Production reporting is a Progress tracking capability: answered as
   // missing while that feature is off, exactly like a disabled route.
@@ -286,13 +283,14 @@ export const POST = defineRoute({
     } else if (body.action === 'remove-quantity') {
       await removeTicketQuantity(orgId, userId, id, body.quantityId, preflightRevision as string, gate.allowedSubsidiaryIds ?? null)
     } else if (body.action === 'submit') {
-      await submitFieldTicket(orgId, userId, id)
+      await submitFieldTicket(orgId, userId, id, preflightRevision, gate.allowedSubsidiaryIds ?? null)
     } else if (body.action === 'send-signature') {
       const base = process.env.OPENBOOKS_APP_URL || new URL(req.url).origin
       await sendTicketForSignature({
         orgId,
         userId,
         ticketId: id,
+        expectedRevision: preflightRevision,
         to: body.to,
         message: body.message ? body.message.slice(0, 1000) : null,
         appBaseUrl: base,

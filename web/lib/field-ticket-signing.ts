@@ -2,7 +2,7 @@ import 'server-only'
 import { randomUUID } from 'node:crypto'
 import { sql } from 'drizzle-orm'
 import { businessToday } from '@openbooks/engine/platform/business-date/module'
-import { db } from '@openbooks/engine/platform/db'
+import { db, withOrg } from '@openbooks/engine/platform/db'
 import { deriveEmailDeliveryKey, sendVia, emailDeliveryBlockedMessage } from '@openbooks/emails'
 import {
   insertEmailLog,
@@ -12,7 +12,7 @@ import {
   resolveOrgEmailTransportDetailed,
 } from '@openbooks/engine/delivery/email-config/module'
 import { mintSigningToken, signingTokenDigest } from './field-ticket-token'
-import { FieldTicketError } from './field-tickets'
+import { FieldTicketError, lockTicketLifecycleRevision } from './field-tickets'
 import { resolvePdfTemplate } from './pdf-templates/store'
 import { mergeAndPrintPdf } from './pdf-templates/render'
 import { loadPdfRecordValues } from './pdf-templates/values'
@@ -27,6 +27,7 @@ export async function sendTicketForSignature(args: {
   orgId: string
   userId: string
   ticketId: string
+  expectedRevision: string
   to: string
   message?: string | null
   appBaseUrl: string
@@ -36,12 +37,12 @@ export async function sendTicketForSignature(args: {
    */
   allowedSubsidiaryIds: ReadonlySet<string> | null
 }): Promise<{ to: string }> {
-  const doc = (await db.execute<{ id: string; status: string; document_number: string }>(sql`
-    select id, status, document_number from documents
-     where id = ${args.ticketId} and org_id = ${args.orgId} and kind = 'field_ticket'`))
-  const row = doc.rows[0]
-  if (!row) throw new FieldTicketError('Ticket not found')
-  if (row.status !== 'approved') throw new FieldTicketError('Approve the ticket before sending it for signature')
+  const lockApproved = async () => {
+    const row = await lockTicketLifecycleRevision(args.orgId, args.userId, args.ticketId, args.expectedRevision, args.allowedSubsidiaryIds)
+    if (row.status !== 'approved') throw new FieldTicketError('Approve the ticket before sending it for signature')
+    return row
+  }
+  const row = await withOrg(args.orgId, lockApproved)
   const to = args.to.trim()
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) throw new FieldTicketError('A valid recipient email is required')
 
@@ -80,23 +81,30 @@ export async function sendTicketForSignature(args: {
   const attachmentName = `Field-Ticket-${row.document_number}-${stamp}.pdf`
   const pdf = await mergeAndPrintPdf(tpl, record.values)
 
-  const logId = await insertEmailLog({
-    orgId: args.orgId,
-    recipients: [to],
-    subject,
-    status: 'queued',
-    categoryKey: 'document',
-    meta: { recordType: 'field_ticket', recordId: args.ticketId, purpose: 'signature_request' },
-    actor: { kind: 'user', userId: args.userId },
+  const logId = await withOrg(args.orgId, async () => {
+    // The rendered attachment and retained signing request must describe the same reviewed version.
+    await lockApproved()
+    const logId = await insertEmailLog({
+      orgId: args.orgId,
+      recipients: [to],
+      subject,
+      status: 'queued',
+      categoryKey: 'document',
+      meta: { recordType: 'field_ticket', recordId: args.ticketId, purpose: 'signature_request', documentRevision: args.expectedRevision },
+      actor: { kind: 'user', userId: args.userId },
+    })
+    const request = await db.execute<{ id: string }>(sql`
+      insert into field_ticket_signature_requests
+        (id, org_id, field_ticket_id, recipient, message, sent_at, expires_at,
+         token_digest, email_log_id, created_by)
+      values (${requestId}, ${args.orgId}, ${args.ticketId}, ${to},
+              ${args.message ?? null}, null, ${expiresAt.toISOString()},
+              ${signingTokenDigest(token)}, ${logId}, ${args.userId})
+      returning id
+    `)
+    if (request.rows.length !== 1) throw new FieldTicketError('The signature request was not saved; reload the ticket and retry')
+    return logId
   })
-  await db.execute(sql`
-    insert into field_ticket_signature_requests
-      (id, org_id, field_ticket_id, recipient, message, sent_at, expires_at,
-       token_digest, email_log_id, created_by)
-    values (${requestId}, ${args.orgId}, ${args.ticketId}, ${to},
-            ${args.message ?? null}, null, ${expiresAt.toISOString()},
-            ${signingTokenDigest(token)}, ${logId}, ${args.userId})
-  `)
   let providerMessageId: string
   try {
     const outcome = await sendVia(transport, {

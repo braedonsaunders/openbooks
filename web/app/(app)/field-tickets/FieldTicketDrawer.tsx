@@ -300,7 +300,7 @@ export type FieldTicketMutationInput = {
 /**
  * One revision-fenced field-ticket mutation — the exact routine the drawer's
  * header/grid saves execute. The loaded exact token rides as expectedRevision
- * (the route fences PATCH and save-grid behind it and ignores it elsewhere),
+ * (the route requires it for editing, submission and signature delivery),
  * a success hands back the refreshed token from the response, and a stale
  * token surfaces as an explicit conflict for the caller's reload flow.
  */

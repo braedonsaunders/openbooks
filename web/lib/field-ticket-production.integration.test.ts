@@ -66,7 +66,7 @@ test('approved field-ticket production becomes progress exactly once and voiding
       ticket = await loadFieldTicket(org.orgId, created.id)
       assert.deepEqual(ticket.production.map((row) => [row.quantity, row.unit, row.note]), [['12.50000000', 'm', 'North run']])
 
-      await submitFieldTicket(org.orgId, actor, created.id)
+      await submitFieldTicket(org.orgId, actor, created.id, ticket.revision)
       ticket = await loadFieldTicket(org.orgId, created.id)
       assert.equal(ticket.status, 'approved')
       assert.deepEqual(await progressRows(org.orgId, created.id), [
@@ -130,7 +130,8 @@ test('a ticket reporting production cannot be submitted while Progress tracking 
       await addTicketQuantity(org.orgId, actor, created.id, { projectTaskId: taskId, quantity: '3', unit: 'm' }, ticket.revision)
 
       await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features,projectProgress}', 'false'::jsonb) where id = ${org.orgId}`)
-      await assert.rejects(submitFieldTicket(org.orgId, actor, created.id), (error: unknown) =>
+      ticket = await loadFieldTicket(org.orgId, created.id)
+      await assert.rejects(submitFieldTicket(org.orgId, actor, created.id, ticket.revision), (error: unknown) =>
         error instanceof FieldTicketError && /Progress tracking is off/.test(error.message))
       assert.equal((await loadFieldTicket(org.orgId, created.id)).status, 'draft')
       assert.equal((await progressRows(org.orgId, created.id)).length, 0)
