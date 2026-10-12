@@ -550,7 +550,9 @@ export async function computeCaStatutory(
     CA_PE:add(pensionable,neg(ctx.pensionableNonPeriodic??"0")),CA_IE:add(insurable,neg(ctx.insurableNonPeriodic??"0")),
     CA_QPIP_PE:add(qpipInsurable,neg(ctx.programNonPeriodicBases?.qpip??"0")),
     CA_BPE:ctx.pensionableNonPeriodic??"0",CA_BIE:ctx.insurableNonPeriodic??"0",CA_BQPIP:ctx.programNonPeriodicBases?.qpip??"0",
-    CA_T_BASE: (hasPriors || foldBonus)
+    CA_T_BASE: referencedBonusTax
+      ? nonNegative(add(currentTax.periodicTax, neg(t4127Input.additionalTaxPerPeriod ?? "0")))
+      : (hasPriors || foldBonus)
       ? nonNegative(add(federalTax, neg(t4127Input.additionalTaxPerPeriod ?? "0")))
       : add(statutory.periodicTax,neg(t4127Input.additionalTaxPerPeriod??"0")),
     ...(cmp(wcbAssessable, "0") > 0 ? { WCB: wcbAmount, WCB_EARN: wcbAssessable } : {}),
