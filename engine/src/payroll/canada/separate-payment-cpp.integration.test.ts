@@ -56,7 +56,7 @@ test("native separate bonus keeps full CPP with a tax income reference and later
         };
         const prior = await create('2026-01-01','2026-01-07','2026-01-09','regular','1000','0');
         await commitPayRun(prior);
-        const bonus = await create('2026-01-08','2026-01-14','2026-01-13','bonus','0','1000');
+        const bonus = await create('2026-01-08','2026-01-14','2026-01-15','bonus','0','1000');
         const paid = await stub(fx,bonus.documentId);
         assert.equal(paid.gross,'1000.0000');
         assert.equal(paid.factors.I,'0.0000');
