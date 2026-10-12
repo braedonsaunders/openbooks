@@ -4692,7 +4692,9 @@
       "amortizationDestinationAccount": "Vide : chaque ligne s’étale sur son propre compte de charge.",
       "contextDefaultScope": "Choisissez une filiale, ou laissez vide et choisissez un pays pour couvrir toutes ses filiales.",
       "localizationSubsidiary": "Laissez vide pour toutes les filiales ; une localisation propre à une filiale prévaut dans ses rapports.",
-      "allowedValue": "Une valeur autorisée par ligne. Ajoutez une ligne pour chaque valeur du segment de contrôle avec laquelle cette valeur peut être utilisée."
+      "allowedValue": "Une valeur autorisée par ligne. Ajoutez une ligne pour chaque valeur du segment de contrôle avec laquelle cette valeur peut être utilisée.",
+      "taxRateEffectiveFrom": "Première date de transaction couverte par ce taux, cette date incluse.",
+      "taxRateEffectiveTo": "Dernière date de transaction couverte par ce taux, cette date incluse. Laissez vide pour ne pas définir de date de fin. Si le taux suivant commence le 1er juillet, terminez ce taux le 30 juin."
     },
     "options": {
       "withholdingCondominiumPayer": "Payeur : copropriété",

@@ -4854,7 +4854,9 @@
       "amortizationDestinationAccount": "Leer lässt jede Position auf ihr eigenes Aufwandskonto auflösen.",
       "contextDefaultScope": "Wählen Sie eine Tochtergesellschaft oder lassen Sie das Feld leer und wählen Sie ein Land für alle dortigen Tochtergesellschaften.",
       "localizationSubsidiary": "Leer lassen, um für alle Tochtergesellschaften zu gelten; eine tochterspezifische Lokalisierung hat in deren Berichten Vorrang.",
-      "allowedValue": "Ein zulässiger Wert je Zeile. Fügen Sie für jeden Wert des steuernden Segments, mit dem dieser Wert verwendet werden darf, eine Zeile hinzu."
+      "allowedValue": "Ein zulässiger Wert je Zeile. Fügen Sie für jeden Wert des steuernden Segments, mit dem dieser Wert verwendet werden darf, eine Zeile hinzu.",
+      "taxRateEffectiveFrom": "Erstes von diesem Steuersatz abgedecktes Transaktionsdatum, einschließlich dieses Tages.",
+      "taxRateEffectiveTo": "Letztes von diesem Steuersatz abgedecktes Transaktionsdatum, einschließlich dieses Tages. Ohne Enddatum leer lassen. Beginnt der nächste Satz am 1. Juli, endet dieser Satz am 30. Juni."
     },
     "options": {
       "withholdingCondominiumPayer": "Wohnungseigentümergemeinschaft als Zahler",

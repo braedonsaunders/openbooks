@@ -7,7 +7,7 @@ export const taxConfiguration: DocArticle = {
   order: 2,
   summary:
     'Define how tax is selected and posted: calculation type, recoverability, inclusive pricing, effective-dated rates, and sequenced tax groups.',
-  updated: '2026-10-09',
+  updated: '2026-10-12',
   keywords: [
     'tax code',
     'tax rate',
@@ -57,6 +57,13 @@ Rates are **effective-dated** so a new statutory rate never rewrites transaction
 from an earlier period — the applicable rate is the one in effect on the
 transaction date. The open tax code is fixed on every rate created or edited from
 this subtab, so a rate can only ever belong to the code you opened.
+
+Both **Effective from** and **Effective to** include the selected date. Leave
+Effective to blank when the rate has no end date. For a new rate starting July 1,
+end the previous rate on June 30. Retain the earlier rate and its date range;
+create a dated successor instead of replacing the historical percentage. Review
+existing unposted transactions under the new rate before submitting them for
+approval. Posted tax component snapshots remain unchanged.
 
 ## Tax groups
 

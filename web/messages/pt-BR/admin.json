@@ -4767,7 +4767,9 @@
       "amortizationDestinationAccount": "Em branco, cada linha é apropriada na sua própria conta de despesa.",
       "contextDefaultScope": "Escolha uma subsidiária, ou deixe em branco e escolha um país para abranger todas as suas subsidiárias.",
       "localizationSubsidiary": "Deixe em branco para aplicar a todas as subsidiárias; uma localização específica de subsidiária prevalece nos relatórios dela.",
-      "allowedValue": "Um valor permitido por linha. Adicione uma linha para cada valor do segmento de controle com o qual este valor pode ser usado."
+      "allowedValue": "Um valor permitido por linha. Adicione uma linha para cada valor do segmento de controle com o qual este valor pode ser usado.",
+      "taxRateEffectiveFrom": "Primeira data de transação abrangida por esta alíquota, incluindo essa data.",
+      "taxRateEffectiveTo": "Última data de transação abrangida por esta alíquota, incluindo essa data. Deixe em branco para não definir uma data final. Se a próxima alíquota começar em 1º de julho, encerre esta em 30 de junho."
     },
     "options": {
       "withholdingCondominiumPayer": "Pagador: condomínio",

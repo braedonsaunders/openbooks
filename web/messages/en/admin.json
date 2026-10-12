@@ -4767,7 +4767,9 @@
       "amortizationDestinationAccount": "Blank amortizes each line into its own expense account.",
       "contextDefaultScope": "Choose a subsidiary, or leave it empty and choose a country to cover every subsidiary there.",
       "localizationSubsidiary": "Leave empty to apply to every subsidiary; a subsidiary-specific localization takes precedence in that subsidiary's reports.",
-      "allowedValue": "One allowed value per row. Add a row for each value of the controlling segment this value may be used with."
+      "allowedValue": "One allowed value per row. Add a row for each value of the controlling segment this value may be used with.",
+      "taxRateEffectiveFrom": "First transaction date covered by this rate, including that date.",
+      "taxRateEffectiveTo": "Last transaction date covered by this rate, including that date. Leave blank for no end date. If the next rate starts July 1, end this rate June 30."
     },
     "options": {
       "withholdingCondominiumPayer": "Condominium payer",

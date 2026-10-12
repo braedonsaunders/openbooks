@@ -159,8 +159,8 @@ export const TAX_ENTITIES: SetupEntity[] = [
     fields: [
       { key: 'taxCodeId', kind: 'ref', ref: 'tax-codes', required: true },
       { key: 'ratePercent', kind: 'percent', required: true },
-      { key: 'effectiveFrom', kind: 'date', required: true },
-      { key: 'effectiveTo', kind: 'date' },
+      { key: 'effectiveFrom', kind: 'date', required: true, helpTextKey: 'fieldHelp.taxRateEffectiveFrom' },
+      { key: 'effectiveTo', kind: 'date', helpTextKey: 'fieldHelp.taxRateEffectiveTo' },
     ],
   },
   {

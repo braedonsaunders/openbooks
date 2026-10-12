@@ -4692,7 +4692,9 @@
       "amortizationDestinationAccount": "En blanco, cada línea se amortiza en su propia cuenta de gasto.",
       "contextDefaultScope": "Elija una filial, o déjelo vacío y elija un país para abarcar todas sus filiales.",
       "localizationSubsidiary": "Déjelo vacío para aplicarlo a todas las filiales; una localización específica de una filial prevalece en sus informes.",
-      "allowedValue": "Un valor permitido por fila. Añada una fila por cada valor del segmento de control con el que puede usarse este valor."
+      "allowedValue": "Un valor permitido por fila. Añada una fila por cada valor del segmento de control con el que puede usarse este valor.",
+      "taxRateEffectiveFrom": "Primera fecha de transacción cubierta por esta tasa, incluida esa fecha.",
+      "taxRateEffectiveTo": "Última fecha de transacción cubierta por esta tasa, incluida esa fecha. Déjelo en blanco si no hay fecha de fin. Si la siguiente tasa comienza el 1 de julio, finalice esta tasa el 30 de junio."
     },
     "options": {
       "withholdingCondominiumPayer": "Pagador: comunidad de propietarios",

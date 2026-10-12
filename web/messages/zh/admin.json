@@ -4767,7 +4767,9 @@
       "amortizationDestinationAccount": "留空时，每行摊销至其自身的费用科目。",
       "contextDefaultScope": "选择一个子公司，或留空并选择国家以涵盖该国所有子公司。",
       "localizationSubsidiary": "留空则适用于所有子公司；特定子公司的本地化在该子公司的报表中优先。",
-      "allowedValue": "每行一个允许值。为此值可搭配使用的每个控制段值各添加一行。"
+      "allowedValue": "每行一个允许值。为此值可搭配使用的每个控制段值各添加一行。",
+      "taxRateEffectiveFrom": "此税率适用的第一个交易日期，包含当天。",
+      "taxRateEffectiveTo": "此税率适用的最后一个交易日期，包含当天。不设结束日期时请留空。如果下一税率从7月1日开始，此税率应于6月30日结束。"
     },
     "options": {
       "withholdingCondominiumPayer": "公寓业主共同体付款人",
