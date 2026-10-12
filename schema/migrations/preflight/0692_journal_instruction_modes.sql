@@ -49,32 +49,8 @@ SELECT '0692.guard_definition' AS code,'refuse' AS severity,'public.journal_line
  'The native ledger guard differs from its published definition.' AS detail,
  'Preserve the function and obtain owner-approved reconciliation before retrying the native upgrade.' AS remedy
  WHERE (SELECT prosrc FROM pg_proc WHERE oid='public.journal_lines_check_fx_residual_entries(uuid[])'::regprocedure) IS DISTINCT FROM $expected$
-declare
-  v_bad_org uuid;
-  v_bad_entry uuid;
-  v_bad_subsidiary uuid;
-  v_bad_deviation numeric(19, 4);
-  v_bad_lines integer;
-  v_bad_bound numeric;
 begin
-  -- One re-sum per touched (org, entry, subsidiary) group, not per line.
-  -- Drafts are skipped: they post through je_check_posted_balance below.
-  select l.org_id, l.entry_id, l.subsidiary_id,
-         sum(abs(l.amount - round(l.txn_amount * l.fx_rate, 4))),
-         count(*), count(*) * 0.00005
-    into v_bad_org, v_bad_entry, v_bad_subsidiary, v_bad_deviation, v_bad_lines, v_bad_bound
-    from unnest(p_entry_ids) t(entry_id)
-    join journal_lines l on l.entry_id = t.entry_id
-    join journal_entries e on e.id = t.entry_id
-   where e.status is distinct from 'draft'
-   group by l.org_id, l.entry_id, l.subsidiary_id
-  having sum(abs(l.amount - round(l.txn_amount * l.fx_rate, 4))) > count(*) * 0.00005
-   limit 1;
-  if found then
-    raise exception 'journal entry % in organization % exceeds the per-entry FX rounding bound for subsidiary % (stored deviation % over % lines, bound %): correct through the ledger API by posting a reversal and reposting instead of editing history',
-      v_bad_entry, v_bad_org, v_bad_subsidiary, v_bad_deviation, v_bad_lines, v_bad_bound
-      using errcode = '23514';
-  end if;
+  perform public.journal_lines_check_fx_residual_entries(p_entry_ids, false);
 end $expected$
 UNION ALL
 SELECT '0692.fx_constraint_definition' AS code,'refuse' AS severity,'journal_lines.jl_fx_consistent' AS subject,
