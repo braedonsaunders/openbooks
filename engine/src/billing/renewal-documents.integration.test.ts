@@ -29,9 +29,11 @@ for (const documentKind of ['quote','sales_order'] as const) test(`${documentKin
   await withBypassContext(()=>db.execute(sql`insert into subscription_renewal_policies(id,org_id,subscription_id,subsidiary_id,effective_from,effective_to,owner_id,reminder_days,generation_lead_days,document_kind,uplift_percent,term_months,reason,created_by,updated_by)
     values(${policyId},${org.orgId},${subscriptionId},${org.subsidiaryId},${org.date},${termEnd},${actors.adminId},'[{"days":40}]'::jsonb,3660,${documentKind},'10',12,'Reviewed renewal pricing and notice terms',${actors.adminId},${actors.adminId})`));
   if(documentKind==='quote') {
-   await withBypassContext(()=>db.execute(sql`insert into user_permission_overrides(org_id,user_id,permission,effect) values(${org.orgId},${actors.adminId},'estimates.create','deny')`));
+   const denied=await withBypassContext(()=>db.execute(sql`update user_permission_overrides set effect='deny' where org_id=${org.orgId} and user_id=${actors.adminId} and permission='estimates.create'`));
+   assert.equal(denied.rowCount,1);
    await assert.rejects(()=>generateRenewalDocument(org.orgId,actors.adminId,subscriptionId,org.date));
-   await withBypassContext(()=>db.execute(sql`delete from user_permission_overrides where org_id=${org.orgId} and user_id=${actors.adminId} and permission='estimates.create'`));
+   const restored=await withBypassContext(()=>db.execute(sql`update user_permission_overrides set effect='grant' where org_id=${org.orgId} and user_id=${actors.adminId} and permission='estimates.create'`));
+   assert.equal(restored.rowCount,1);
   }
   await withSimClock(`${org.date}T12:00:00Z`,()=>runRenewalScan());
   await withSimClock(`${org.date}T12:00:00Z`,()=>runRenewalScan());
