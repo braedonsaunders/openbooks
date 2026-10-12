@@ -19,7 +19,7 @@ import { postReturnReceipt, returnFinancialStage } from "./psp-return-stages.ts"
 import { postDocument } from "../ledger/posting-document.ts";
 import { postPaymentWithApplications } from "./payment-posting.ts";
 import { approveDisputeReview, rejectDisputeReview, processProviderDisputeEvent } from "./psp-refund-automation.ts";
-import { settleHarness, settle, invoiceOpen, disputeRows, type Harness } from "./refund-test-support.integration.ts";
+import { settleHarness, settle, invoiceOpen, disputeRows, type Harness } from "./refund-test-fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 

@@ -15,7 +15,7 @@ import { openItemsForParty } from "./payment-queries.ts";
 import { sameCurrencyAllocation } from "./settlement-policy.ts";
 import { receiptFundingAccountOptions, saveProcessorReceiptPolicy } from "./processor-receipts.ts";
 import { importSettlementBatch, postSettlementBatch } from "./psp-settlement.ts";
-import { settleHarness, invoiceOpen } from "./refund-test-support.integration.ts";
+import { settleHarness, invoiceOpen } from "./refund-test-fixtures.ts";
 import { saveAcceptanceConfig } from "./acceptance.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;

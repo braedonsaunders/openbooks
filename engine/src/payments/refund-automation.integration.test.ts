@@ -9,7 +9,7 @@ import {
 } from "./psp-refund-automation.ts";
 import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
 
-import { settleHarness, settle, invoiceOpen, disputeRows } from "./refund-test-support.integration.ts";
+import { settleHarness, settle, invoiceOpen, disputeRows } from "./refund-test-fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
