@@ -156,7 +156,7 @@ test('same-command concurrency is once-only, an aborted transaction rolls back, 
     await withBypassContext(()=>db.execute(sql`update time_entries set status='rejected' where org_id=${f.org.orgId} and id=${f.entry}`))
     const before=await f.snapshots(), body=await f.request()
     await assert.rejects(f.inOrg(()=>withOrgTransaction(f.org.orgId,async()=>{
-      await correctUnapprovedTimeType(db,{...body,orgId:f.org.orgId,actorId:f.actor,requestedScope:null})
+      await correctUnapprovedTimeType({...body,orgId:f.org.orgId,actorId:f.actor,requestedScope:null})
       throw new Error('Abort the enclosing transaction')
     })),/Abort the enclosing transaction/)
     assert.deepEqual(await f.snapshots(),before)

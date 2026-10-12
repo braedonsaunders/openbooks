@@ -21,7 +21,7 @@ export const POST = defineRoute({
   handler: async ({ request, authz, body }) => {
     try {
       return await withOrgTransaction(authz.user.orgId, async () => {
-        const result = await correctUnapprovedTimeType(db, { ...body,
+        const result = await correctUnapprovedTimeType({ ...body,
           orgId: authz.user.orgId, actorId: authz.user.id, requestedScope: authz.allowedSubsidiaryIds,
           workFamily: timeWorkFamily(request),
         })

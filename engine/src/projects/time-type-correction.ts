@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm'
-import type { SqlExecutor } from '../platform/db.ts'
+import { db, withOrgTransaction, type SqlExecutor } from '../platform/db.ts'
 import { isUuid } from '../platform/uuid.ts'
 import { isIsoCalendarDate } from '../platform/business-date.ts'
 import { canonicalJson } from '../platform/canonical-json.ts'
@@ -13,12 +13,17 @@ export type TimeTypeCorrection = {
 }
 const revision = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/
 
-/** Run inside the caller's tenant transaction. Only the current classification
- * changes; source ticket evidence, hours, lifecycle and financial snapshots do
- * not. Approval resolves rates from the corrected classification separately. */
-export async function correctUnapprovedTimeType(tx: SqlExecutor, input: TimeTypeCorrection & {
+type CorrectionInput = TimeTypeCorrection & {
   orgId: string; actorId: string; requestedScope: ReadonlySet<string> | null; workFamily?: TimeWorkFamily
-}): Promise<{ changed: boolean; replayed: boolean }> {
+}
+/** Every caller shares one atomic tenant write and audit. Only the current
+ * classification changes; source evidence, hours, lifecycle and financial
+ * snapshots do not. Approval resolves rates separately. */
+export async function correctUnapprovedTimeType(input: CorrectionInput): Promise<{ changed: boolean; replayed: boolean }> {
+  return withOrgTransaction(input.orgId, () => correctTimeTypeInTransaction(db, input))
+}
+
+async function correctTimeTypeInTransaction(tx: SqlExecutor, input: CorrectionInput): Promise<{ changed: boolean; replayed: boolean }> {
   const refuse = (message: string, code = 'time_type_correction_refused', remedy =
     'Reload the week and review the individual unapproved entry before correcting its time type.') =>
     new TimeWorkTargetError(message, 409, code, remedy)
