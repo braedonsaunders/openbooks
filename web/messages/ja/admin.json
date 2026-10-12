@@ -1373,6 +1373,7 @@
     "parties_manage": "取引先を管理",
     "banking_read": "銀行取引を表示",
     "banking_reconcile": "銀行口座を消込",
+    "banking_review_sign_off": "署名済み銀行照合をレビュー",
     "expenses_read": "経費精算を表示",
     "expenses_create": "経費精算を入力",
     "admin_custom_fields_manage": "カスタムフィールドを管理",

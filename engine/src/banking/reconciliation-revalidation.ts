@@ -3,6 +3,7 @@ import { db, withOrgTransaction, type SqlExecutor } from '../platform/db.ts'
 import { canonicalJson } from '../platform/canonical-json.ts'
 import { isUuid } from '../platform/uuid.ts'
 import { fromUnits, toUnits } from '../money/money.ts'
+import { actorHasPermission } from '../organization/actor-permissions.ts'
 import { lockActorCommandAuthority } from '../organization/actor-command-authority.ts'
 import { acquireOrgFeatureGateLock, lockAndCheckOrgFeature } from '../organization/org-feature-lock.ts'
 import { ScopeNotFoundError, subsidiaryScopeAllows } from '../organization/subsidiary-scope.ts'
@@ -41,7 +42,11 @@ async function reviewInTransaction(tx: SqlExecutor, id: string, ctx: BankingCont
      where r.org_id=${ctx.orgId} and r.id=${id}
   `)).rows[0]
   requireSessionRowInScope(head,ctx.allowedSubsidiaryIds)
-  const actualScope = await lockActorCommandAuthority(tx,ctx.orgId,ctx.userId,head.subsidiary_id,'banking.reconcile')
+  // Existing reconciliation authority still covers review; the narrower
+  // duty can certify evidence without conferring other bank mutations.
+  const permission = await actorHasPermission(tx,ctx.orgId,ctx.userId,'banking.review_sign_off')
+    ? 'banking.review_sign_off' : 'banking.reconcile'
+  const actualScope = await lockActorCommandAuthority(tx,ctx.orgId,ctx.userId,head.subsidiary_id,permission)
   requireSessionRowInScope(head,actualScope)
   const bookId = await reconciliationBookId(tx,ctx.orgId)
   await lockReconciliationAccount(tx,ctx.orgId,head.account_id)
@@ -58,7 +63,7 @@ async function reviewInTransaction(tx: SqlExecutor, id: string, ctx: BankingCont
     throw new BankingError('Review requires an existing statement-backed sign-off. Source-only or unsigned sessions use their ordinary reconciliation workflow.')
   }
   if (ctx.userId===row.signed_off_by) {
-    throw new BankingError('Another authorized bank reconciler must independently review this sign-off.')
+    throw new BankingError('Another authorized reviewer must independently review this sign-off.')
   }
   const affected = (await tx.execute<{subsidiaryId:string|null}>(sql`
     select distinct jl.subsidiary_id as "subsidiaryId" from journal_lines jl

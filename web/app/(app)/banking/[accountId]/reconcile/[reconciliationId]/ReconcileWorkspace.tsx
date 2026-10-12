@@ -178,6 +178,7 @@ type ReconcileWorkspaceProps = {
   reconciliation: { id: string; status: string; throughDate: string; statementBalance: string; currency: string }
   difference: string
   canReconcile: boolean
+  canReviewSignOff?: boolean
   stmtRows: StmtRow[]
   stmtTotal: number
   stmtOutstandingTotal: string
@@ -206,6 +207,7 @@ function ReconcileWorkspaceForId({
   reconciliation,
   difference,
   canReconcile,
+  canReviewSignOff = canReconcile,
   stmtRows,
   stmtTotal,
   stmtOutstandingTotal,
@@ -684,7 +686,7 @@ function ReconcileWorkspaceForId({
             </div>
           ) : null}
           {stale.reviewed && stale.reviewedHref ? <p className="mt-2"><Link href={stale.reviewedHref} className="underline">{stale.reviewedText}</Link></p> : <p className="mt-2">{tStale('remedy')}</p>}
-          {canReconcile && signedOff && !stale.reviewed && stale.reversed.length===0 ? (
+          {canReviewSignOff && signedOff && !stale.reviewed && stale.reversed.length===0 ? (
             <NeutralHistoryReview key={reconciliation.id} reconciliationId={reconciliation.id} disabled={busy} />
           ) : null}
         </Alert>

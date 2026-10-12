@@ -406,6 +406,7 @@ export const PERMISSION_CATALOGUE = [
   // Banking
   "banking.read",
   "banking.reconcile",
+  "banking.review_sign_off",
   // Expense reports
   "expenses.create",
   "expenses.read",
@@ -885,6 +886,7 @@ export const PERMISSION_GROUPS: {
     permissions: [
       { key: "banking.read", labelKey: permissionLabelKey("banking.read") },
       { key: "banking.reconcile", labelKey: permissionLabelKey("banking.reconcile") },
+      { key: "banking.review_sign_off", labelKey: permissionLabelKey("banking.review_sign_off") },
     ],
   },
   {

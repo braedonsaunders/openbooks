@@ -152,6 +152,7 @@ export const BANKING_WIDGETS = {
       reconciliation={props.reconciliation as ComponentProps<typeof ReconcileWorkspace>['reconciliation']}
       difference={str(props, 'difference') ?? '0'}
       canReconcile={props.canReconcile === true}
+      canReviewSignOff={props.canReviewSignOff === true}
       stmtRows={(props.stmtRows as ComponentProps<typeof ReconcileWorkspace>['stmtRows']) ?? []}
       stmtTotal={num(props, 'stmtTotal') ?? 0}
       stmtOutstandingTotal={str(props, 'stmtOutstandingTotal') ?? '0'}

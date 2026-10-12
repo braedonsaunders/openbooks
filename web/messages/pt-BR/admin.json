@@ -1387,6 +1387,7 @@
     "parties_manage": "Gerenciar partes",
     "banking_read": "Ver banco",
     "banking_reconcile": "Conciliar contas bancárias",
+    "banking_review_sign_off": "Revisar conciliações bancárias assinadas",
     "expenses_read": "Ver relatórios de despesas",
     "expenses_create": "Registrar relatórios de despesas",
     "admin_custom_fields_manage": "Gerenciar campos personalizados",

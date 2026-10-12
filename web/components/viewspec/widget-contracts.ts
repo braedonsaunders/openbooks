@@ -488,7 +488,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'reconcile-stats': { props: ['clearedBalanceLabel', 'clearedBalanceValue', 'difference', 'differenceCurrency', 'differenceLabel', 'matchedLabel', 'matchedValue', 'statementBalanceLabel', 'statementBalanceValue'] },
   'reconcile-status-badge': { props: ['label', 'variant'] },
   'reconcile-supporting-statements': { props: ['accountPath', 'sourceEvidence', 'statements', 'throughDate', 'windowStart'] },
-  'reconcile-workspace': { props: ['accountPath', 'basePath', 'canReconcile', 'currentParams', 'difference', 'glClearings', 'glOutstandingTotal', 'glParams', 'glRows', 'glTotal', 'mParams', 'matchedRows', 'matchedTotal', 'opening', 'priorEffects', 'reconciliation', 'stale', 'stmtOutstandingTotal', 'stmtParams', 'stmtRows', 'stmtTotal'] },
+  'reconcile-workspace': { props: ['accountPath', 'basePath', 'canReconcile', 'canReviewSignOff', 'currentParams', 'difference', 'glClearings', 'glOutstandingTotal', 'glParams', 'glRows', 'glTotal', 'mParams', 'matchedRows', 'matchedTotal', 'opening', 'priorEffects', 'reconciliation', 'stale', 'stmtOutstandingTotal', 'stmtParams', 'stmtRows', 'stmtTotal'] },
   'gl-audit-number-command': { props: ['bookId','periods','entities'] },
   'reconciliation-note': { props: ['label', 'reconciled', 'status'] },
   'record-count-cell': { props: ['count', 'href', 'linked'] },

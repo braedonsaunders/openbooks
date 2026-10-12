@@ -1373,6 +1373,7 @@
     "parties_manage": "Administrar terceros",
     "banking_read": "Ver bancos",
     "banking_reconcile": "Conciliar cuentas bancarias",
+    "banking_review_sign_off": "Revisar conciliaciones bancarias firmadas",
     "expenses_read": "Ver informes de gastos",
     "expenses_create": "Registrar informes de gastos",
     "admin_custom_fields_manage": "Administrar campos personalizados",

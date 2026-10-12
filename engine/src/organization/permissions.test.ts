@@ -556,3 +556,19 @@ test("declared implications decide which grants open each time command", () => {
   }
 });
 
+
+
+test("independent bank sign-off review is an assignable duty that confers no reconciliation or posting authority", () => {
+  const review: CataloguePermission = "banking.review_sign_off";
+  assert.ok(PERMISSION_CATALOGUE.includes(review));
+  assert.ok(PERMISSION_GROUPS.find(group => group.key === "banking")?.permissions.some(permission => permission.key === review));
+  const permissions = new Set(["banking.read", review]);
+  assert.equal(permissionSetCovers(permissions, review), true);
+  for (const forbidden of ["banking.reconcile", "gl.post", "ap.pay", "ar.pay", "close.reopen"]) {
+    assert.equal(permissionSetCovers(permissions, forbidden), false);
+  }
+  for (const role of ["accountant", "viewer", "approver"]) {
+    assert.equal(permissionSetCovers(new Set(BUILT_IN_ROLES[role]!.permissions), review), false,
+      "read-only and unrelated duties do not acquire review authority automatically");
+  }
+});

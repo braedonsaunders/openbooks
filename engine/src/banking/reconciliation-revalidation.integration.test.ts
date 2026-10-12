@@ -3,6 +3,7 @@ import test from 'node:test'
 import { randomUUID } from 'node:crypto'
 import { sql } from 'drizzle-orm'
 import { db, withBypassContext, withOrgContext, withOrgTransaction } from '../platform/db.ts'
+import { actorHasPermission } from '../organization/actor-permissions.ts'
 import { fromUnits, toUnits } from '../money/money.ts'
 import { postEntry } from '../journal/post-entry.ts'
 import { createScratchOrg, createScratchUser, dropScratchOrgReporting } from '../testing/fixtures.ts'
@@ -17,7 +18,8 @@ async function fixture() {
   const signer = await withBypassContext(()=>createScratchUser(org.orgId,'Original reconciler','bank-sign-off'))
   const reviewer = await withBypassContext(()=>createScratchUser(org.orgId,'Independent reconciler','bank-review'))
   await withBypassContext(async()=>{
-    assert.equal((await db.execute(sql`update app_roles set permissions='["banking.reconcile","gl.post"]'::jsonb
+    assert.equal((await db.execute(sql`update app_roles set permissions=case when key='bank-review'
+      then '["banking.read","banking.review_sign_off"]'::jsonb else '["banking.reconcile","gl.post"]'::jsonb end
       where org_id=${org.orgId} and key in ('bank-sign-off','bank-review') returning id`)).rows.length,2)
     assert.equal((await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',
       coalesce(settings->'features','{}'::jsonb)||'{"banking":true}'::jsonb)
@@ -116,7 +118,7 @@ test('review requires current evidence, independent live authority, requested sc
     await withBypassContext(()=>db.execute(sql`update app_roles set permissions='[]'::jsonb
       where org_id=${f.org.orgId} and key='bank-review'`))
     await assert.rejects(f.inOrg(()=>revalidateReconciliationSignOff(id,{expectedDigest:preview.proof.digest,reason},f.ctx())))
-    await withBypassContext(()=>db.execute(sql`update app_roles set permissions='["banking.reconcile"]'::jsonb
+    await withBypassContext(()=>db.execute(sql`update app_roles set permissions='["banking.review_sign_off"]'::jsonb
       where org_id=${f.org.orgId} and key='bank-review'`))
     await assert.rejects(f.inOrg(()=>withOrgTransaction(f.org.orgId,async()=>{
       await revalidateReconciliationSignOff(id,{expectedDigest:preview.proof.digest,reason},f.ctx())
@@ -255,4 +257,35 @@ test('a later sign-off cannot inherit an earlier review when an older transactio
     await pending.catch(()=>{})
     await f.close()
   }
+})
+
+
+test('narrow sign-off review authority preserves reconciliation authority and refuses live role-scope or duty loss',enabled,async()=>{
+  const f=await fixture()
+  try {
+    const id=await f.signed(f.org.date,'250.00','250.00');await f.post('5.00');await f.post('-5.00')
+    const before=await f.snapshot()
+    assert.equal(await f.inOrg(()=>actorHasPermission(db,f.org.orgId,f.reviewer,'banking.review_sign_off')),true)
+    assert.equal(await f.inOrg(()=>actorHasPermission(db,f.org.orgId,f.reviewer,'banking.reconcile')),false)
+    const preview=await f.inOrg(()=>previewSignOffRevalidation(id,f.ctx()))
+    await withBypassContext(()=>db.execute(sql`update app_roles set subsidiary_restriction='{"mode":"list","subsidiaryIds":[]}'::jsonb
+      where org_id=${f.org.orgId} and key='bank-review'`))
+    await assert.rejects(f.inOrg(()=>revalidateReconciliationSignOff(id,{expectedDigest:preview.proof.digest,reason},f.ctx())))
+    await withBypassContext(()=>db.execute(sql`update app_roles set subsidiary_restriction='{"mode":"all"}'::jsonb,
+      permissions='["banking.read"]'::jsonb where org_id=${f.org.orgId} and key='bank-review'`))
+    await assert.rejects(f.inOrg(()=>previewSignOffRevalidation(id,f.ctx())))
+    assert.equal(await f.auditCount(),0)
+    assert.deepEqual(await f.snapshot(),before)
+    await withBypassContext(()=>db.execute(sql`update app_roles set permissions='["banking.reconcile"]'::jsonb
+      where org_id=${f.org.orgId} and key='bank-review'`))
+    assert.equal((await f.inOrg(()=>previewSignOffRevalidation(id,f.ctx()))).proof.digest,preview.proof.digest,
+      'existing full reconciliation authority can still review the same evidence')
+    await withBypassContext(()=>db.execute(sql`update app_roles set permissions='["banking.review_sign_off"]'::jsonb
+      where org_id=${f.org.orgId} and key='bank-review'`))
+    const reviewed=await f.inOrg(()=>revalidateReconciliationSignOff(id,{expectedDigest:preview.proof.digest,reason},f.ctx()))
+    assert.equal(reviewed.replayed,false)
+    assert.equal(reviewed.certificate.reviewedBy,f.reviewer)
+    assert.deepEqual(await f.snapshot(),before)
+    assert.equal(await f.auditCount(),1)
+  }finally{await f.close()}
 })

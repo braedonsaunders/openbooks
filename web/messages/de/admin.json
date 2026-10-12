@@ -1373,6 +1373,7 @@
     "parties_manage": "Geschäftspartner verwalten",
     "banking_read": "Banking anzeigen",
     "banking_reconcile": "Bankkonten abstimmen",
+    "banking_review_sign_off": "Unterzeichnete Bankabstimmungen prüfen",
     "expenses_read": "Spesenabrechnungen anzeigen",
     "expenses_create": "Spesenabrechnungen erfassen",
     "admin_custom_fields_manage": "Benutzerdefinierte Felder verwalten",

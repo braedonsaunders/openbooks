@@ -1381,6 +1381,7 @@
     "parties_manage": "Manage parties",
     "banking_read": "View banking",
     "banking_reconcile": "Reconcile bank accounts",
+    "banking_review_sign_off": "Review retained bank sign-offs",
     "expenses_read": "View expense reports",
     "expenses_create": "Enter expense reports",
     "admin_custom_fields_manage": "Manage custom fields",

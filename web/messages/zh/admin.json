@@ -1387,6 +1387,7 @@
     "parties_manage": "管理往来方",
     "banking_read": "查看银行业务",
     "banking_reconcile": "对账银行账户",
+    "banking_review_sign_off": "复核已签署的银行对账",
     "expenses_read": "查看费用报告",
     "expenses_create": "录入费用报告",
     "admin_custom_fields_manage": "管理自定义字段",

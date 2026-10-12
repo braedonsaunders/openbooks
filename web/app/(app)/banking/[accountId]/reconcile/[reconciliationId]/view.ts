@@ -191,6 +191,7 @@ export interface ReconciliationData {
   accountPath: string
   currentParams: Record<string, string | string[] | undefined>
   canReconcile: boolean
+  canReviewSignOff: boolean
   reconciliation: {
     id: string
     status: string
@@ -235,6 +236,7 @@ export async function loadReconciliation(
 ): Promise<ReconciliationData> {
   const authz = await requirePermission('banking.read')
   const canReconcile = can(authz, 'banking.reconcile')
+  const canReviewSignOff = canReconcile || can(authz, 'banking.review_sign_off')
   const t = await getTranslations('banking')
   const locale = await getLocale()
   if (!isUuid(accountId) || !isUuid(reconciliationId)) notFound()
@@ -549,6 +551,7 @@ export async function loadReconciliation(
     accountPath: `/banking/${accountId}`,
     currentParams: sp,
     canReconcile,
+    canReviewSignOff,
     reconciliation: {
       id: recon.id,
       status: recon.status,
@@ -639,6 +642,7 @@ function reconcileBody(data: ReconciliationData): PageSpec['body'] {
       reconciliation: data.reconciliation,
       difference: data.difference,
       canReconcile: data.canReconcile,
+      canReviewSignOff: data.canReviewSignOff,
       stmtRows: data.stmtRows,
       stmtTotal: data.stmtTotal,
       stmtOutstandingTotal: data.stmtOutstandingTotal,

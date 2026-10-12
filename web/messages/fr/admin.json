@@ -1373,6 +1373,7 @@
     "parties_manage": "Gérer les tiers",
     "banking_read": "Consulter les opérations bancaires",
     "banking_reconcile": "Rapprocher les comptes bancaires",
+    "banking_review_sign_off": "Réviser les rapprochements bancaires signés",
     "expenses_read": "Consulter les notes de frais",
     "expenses_create": "Saisir des notes de frais",
     "admin_custom_fields_manage": "Gérer les champs personnalisés",

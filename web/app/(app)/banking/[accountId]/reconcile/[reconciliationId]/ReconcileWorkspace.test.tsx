@@ -69,6 +69,8 @@ async function mountWorkspace(
   fetchImpl: typeof fetch,
   override: {
     status?: string;
+    canReconcile?: boolean;
+    canReviewSignOff?: boolean;
     stmtRows?: {
       id: string
       posted_on: string
@@ -130,7 +132,8 @@ async function mountWorkspace(
             currentParams={{}}
             reconciliation={{ id: 'rec-1', status: override.status ?? 'in_progress', throughDate: '2026-09-10', statementBalance: '17070.01', currency: 'CAD' }}
             difference="0.00"
-            canReconcile
+            canReconcile={override.canReconcile ?? true}
+            canReviewSignOff={override.canReviewSignOff}
             stmtRows={override.stmtRows ?? []}
             stmtTotal={override.stmtTotal ?? 0}
             stmtOutstandingTotal={override.stmtOutstandingTotal ?? '0'}
@@ -793,4 +796,25 @@ test('the review discloses a nonzero late movement and its complete zero-net unc
   assert.ok(prompt.message.includes('8,000'),'the actual nonzero late movement is disclosed')
   assert.ok(prompt.message.includes('retained counterparts'),'the complete reviewed set includes the older evidence')
   assert.deepEqual(calls,['GET'],'cancelling review records no financial or audit command')
+})
+
+
+test('an independent review-only workspace offers review while ordinary reconciliation actions remain unavailable',async(t)=>{
+  await mountWorkspace(t,(async()=>Response.json({})) as typeof fetch,{
+    status:'signed_off',canReconcile:false,canReviewSignOff:true,
+    stale:{badge:'Stale',effect:'0',late:[],reversed:[]},
+  })
+  const labels=[...document.querySelectorAll('button')].map(button=>button.textContent??'')
+  assert.ok(labels.some(label=>label.includes('Review neutral account history')))
+  for(const forbidden of ['Withdraw sign-off','Adjust','Sign off']) {
+    assert.equal(labels.some(label=>label.includes(forbidden)),false,`review-only authority does not offer ${forbidden}`)
+  }
+})
+
+test('a banking reader cannot open neutral-history review without a review duty',async(t)=>{
+  await mountWorkspace(t,(async()=>Response.json({})) as typeof fetch,{
+    status:'signed_off',canReconcile:false,canReviewSignOff:false,
+    stale:{badge:'Stale',effect:'0',late:[],reversed:[]},
+  })
+  assert.equal([...document.querySelectorAll('button')].some(button=>button.textContent?.includes('Review neutral account history')),false)
 })
