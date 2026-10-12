@@ -438,10 +438,10 @@ export async function computeCaStatutory(
       throw new PayrollError("A separately paid Canadian bonus requires its native employment, employer, currency, schedule and filing account before resolving regular income");
     }
     const references = (await tx.execute<{
-      stub_id: string; document_id: string; income: string; pay_date: string; averaging: string | null;
+      stub_id: string; document_id: string; income: string; pay_date: string;
     }>(sql`
       select s.id as stub_id, r.document_id, s.factors->>'I' as income,
-             s.pay_date::text as pay_date, s.factors->>'S1_DEN' as averaging
+             s.pay_date::text as pay_date
         from pay_stubs s
         join pay_runs r on r.org_id=s.org_id and r.document_id=s.pay_run_document_id
         join documents d on d.org_id=r.org_id and d.id=r.document_id
@@ -458,7 +458,6 @@ export async function computeCaStatutory(
     `)).rows;
     const reference = references[0];
     if (!reference) throw new PayrollError("A separately paid Canadian bonus has no committed regular income for this employment, employer, currency, schedule and filing account — calculate and commit its regular pay before the bonus");
-    if (reference.averaging !== null) throw new PayrollError("The latest regular income uses cumulative averaging — review the effective Canadian withholding method before calculating a separate Option 1 bonus");
     bonusIncomeReference = reference;
     referencedBonusTax = calculateT4127({
       ...t4127Input, averaging: undefined, income: reference.income, nonPeriodic,
