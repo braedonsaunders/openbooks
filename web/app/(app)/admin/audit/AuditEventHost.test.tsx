@@ -26,7 +26,7 @@ const { NextIntlClientProvider } = await import('next-intl')
 const messages = (await import('../../../../messages/en')).default
 const { AuditEventHost } = await import('./AuditEventHost')
 const { AuditRows } = await import('./AuditRows')
-const { JsonValue } = await import('./AuditEventDrawer')
+const { JsonValue, AuditEventDrawer } = await import('./AuditEventDrawer')
 const id = '019f0000-0000-4000-8000-000000000011'
 const otherId = '019f0000-0000-4000-8000-000000000012'
 const event = { id, rowId: id, action: 'update', at: '2026-09-01T12:00:00Z', actorName: 'Audit operator', recordType: 'parties', requestId: null, changes: { amount: ['1.00', '2.00'] } }
@@ -110,4 +110,23 @@ test('snapshot collections render nested evidence only when expanded', async () 
     await act(async () => root.unmount())
     node.remove()
   }
+})
+
+
+test('explicit snapshot events retain a two-record context collection instead of hiding it as a legacy field pair', async (t) => {
+  const node=document.createElement('div');document.body.appendChild(node)
+  const root=createRoot(node)
+  t.after(async()=>{await act(async()=>root.unmount());node.remove()})
+  await act(async()=>root.render(<NextIntlClientProvider locale="en" timeZone="UTC" messages={messages}>
+    <AuditEventDrawer event={{...event,recordType:'timesheet_weeks',changes:{
+      event:'additional_time_submitted',before:{status:'approved'},after:{status:'submitted'},
+      entries:[{id:'first-selected-entry',hours:'1.5000'},{id:'second-selected-entry',hours:'2.5000'}],
+    }}} onClose={()=>{}} />
+  </NextIntlClientProvider>))
+  assert.ok(document.body.textContent?.includes('Entries'),'the retained two-entry collection has a visible context section')
+  const collections=[...document.querySelectorAll('details')]
+  assert.ok(collections.length>0)
+  await act(async()=>{for(const details of collections){details.open=true;details.dispatchEvent(new window.Event('toggle'))}await tick()})
+  assert.ok(document.body.textContent?.includes('first-selected-entry'))
+  assert.ok(document.body.textContent?.includes('second-selected-entry'))
 })

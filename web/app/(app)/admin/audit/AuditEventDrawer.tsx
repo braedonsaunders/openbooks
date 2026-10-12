@@ -233,7 +233,7 @@ export function AuditEventDrawer(props: AuditEventDrawerProps) {
     !CONTEXT_KEYS.has(key)
     && key !== 'before'
     && key !== 'after'
-    && !(Array.isArray(value) && value.length === 2)
+    && !(!hasBefore && !hasAfter && Array.isArray(value) && value.length === 2)
   )))
 
   const title = event ? (
