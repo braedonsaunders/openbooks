@@ -15,7 +15,7 @@ test("separate CPP bonus prices its full pensionable amount without a period exe
   assert.equal(result.cppEmployer,"113.6500");
   assert.equal(result.cpp2,"0.0000");
   assert.equal(result.factors.CPP_EXEMPTION,"0.0000");
-  assert.equal(result.factors.PI,"1910.0000");
+  assert.equal(result.factors.C,"113.6500");
 });
 
 test("regular plus bonus in one payment retains the regular period exemption", () => {
@@ -28,7 +28,7 @@ test("tax-only regular-income reference cannot grant a CPP exemption to a separa
   const result = calculateT4127({ ...payment,income:"1532.01",separateNonPeriodicPayment:true });
   assert.equal(result.cpp,"113.6500");
   assert.equal(result.factors.CPP_EXEMPTION,"0.0000");
-  assert.equal(result.factors.PI,"1910.0000");
+  assert.equal(result.factors.C,"113.6500");
 });
 
 test("separate CPP payment keeps annual CPP and CPP2 remaining-room limits", () => {
@@ -58,6 +58,7 @@ test("non-taxable separate pensionable remuneration uses its contribution base",
 test("CPP separate-payment treatment leaves QPP exemption and contribution behavior unchanged", () => {
   const baseline = calculateT4127({ ...payment,province:"QC" });
   const explicit = calculateT4127({ ...payment,province:"QC",separateNonPeriodicPayment:true });
-  assert.equal(explicit.cpp,"117.9300");
+  // Published 2026 QPP total rate 0.0630; the unchanged weekly exemption is 67.30.
+  assert.equal(explicit.cpp,"116.0900");
   assert.deepEqual(explicit,baseline);
 });
