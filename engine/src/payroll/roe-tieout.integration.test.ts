@@ -73,9 +73,9 @@ test(
       const eventId = randomUUID();
       await db.execute(sql`
         with event as (insert into payroll_roe_separation_events
-          (id, org_id, employee_party_id, interruption_on, last_insurable_earnings_on,
-           salary_continuance_end_on, status, change_reason)
-          values (${eventId}, ${fx.orgId}, ${fx.employeeId}, '2026-08-10', '2026-08-01', '2026-08-05', 'confirmed', 'fixture') returning id),
+          (id, org_id, employee_party_id,employment_id,subsidiary_id,first_day_worked,source_reference,
+           interruption_on, last_insurable_earnings_on, salary_continuance_end_on, status, change_reason)
+          values (${eventId}, ${fx.orgId}, ${fx.employeeId},${fx.employmentId},${fx.subsidiaryId},'2026-07-06','Original separation declaration','2026-08-10', '2026-08-01', '2026-08-05', 'confirmed', 'fixture') returning id),
         components as (select distinct component.id, component.code from pay_stub_lines line
           join pay_stubs stub on stub.org_id = line.org_id and stub.id = line.stub_id
           join pay_components component on component.org_id = line.org_id and component.id = line.component_id

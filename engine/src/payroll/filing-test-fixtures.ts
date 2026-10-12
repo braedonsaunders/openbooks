@@ -46,10 +46,15 @@ export async function seedRoeIssuanceFixture(orgId: string, employeeId: string):
   await db.execute(sql`
     insert into addresses (org_id, party_id, line1, city, region, postal_code, country)
     values (${orgId}, ${employeeId}, '10 Main Street', 'Toronto', 'ON', 'M5V 2T6', 'CA')`);
-  await db.execute(sql`
+  const event = await db.execute(sql`
     insert into payroll_roe_separation_events
-      (org_id, employee_party_id, interruption_on, last_insurable_earnings_on, status, change_reason)
-    values (${orgId}, ${employeeId}, '2026-08-10', '2026-08-01', 'confirmed', 'ROE fixture separation')`);
+      (org_id, employee_party_id,employment_id,subsidiary_id,first_day_worked,source_reference,
+       interruption_on, last_insurable_earnings_on, status, change_reason)
+    select ${orgId}::uuid, ${employeeId}::uuid,prof.employment_id,p.subsidiary_id,'2000-01-01',
+      'Original fixture employment-spell declaration','2026-08-10','2026-08-01','confirmed','ROE fixture separation'
+    from employee_payroll_profiles prof join parties p on p.org_id=prof.org_id and p.id=prof.employee_party_id
+    where prof.org_id=${orgId} and prof.employee_party_id=${employeeId} returning id`);
+  assert.equal(event.rows.length, 1, "the ROE fixture resolves one native employee employment and employer");
   await db.execute(sql`
     insert into payroll_roe_component_classifications
       (org_id, pay_component_id, effective_from, block, change_reason)

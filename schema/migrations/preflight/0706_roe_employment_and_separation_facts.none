@@ -1,0 +1,1 @@
+New declared employment, employer, first-worked and source fields remain null on retained rows. No historical dates or financial records are backfilled. Legacy incomplete declarations remain retained and require explicit source qualification before ROE generation.

@@ -1371,7 +1371,9 @@
       "retry": "Retry",
       "loadFailed": "The separation facts could not be loaded",
       "saveFailed": "The separation facts could not be saved",
-      "issued": "These facts belong to an issued ROE. Preserve them and use the Service Canada correction workflow."
+      "issued": "These facts belong to an issued ROE. Preserve them and use the Service Canada correction workflow.",
+      "firstWorked": "First day worked in this employment spell",
+      "employer": "Legal employer: {name}"
     }
   },
   "separations": {

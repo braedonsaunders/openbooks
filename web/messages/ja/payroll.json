@@ -1371,7 +1371,9 @@
       "retry": "再試行",
       "loadFailed": "離職に関する事実を読み込めませんでした",
       "saveFailed": "離職に関する事実を保存できませんでした",
-      "issued": "これらの事実は発行済みの雇用記録に属します。記録を保持し、Service Canadaの訂正手続きを使用してください。"
+      "issued": "これらの事実は発行済みの雇用記録に属します。記録を保持し、Service Canadaの訂正手続きを使用してください。",
+      "firstWorked": "この雇用期間の最初の勤務日",
+      "employer": "法的な雇用主：{name}"
     }
   },
   "separations": {

@@ -1371,7 +1371,9 @@
       "retry": "Erneut versuchen",
       "loadFailed": "Die Angaben konnten nicht geladen werden",
       "saveFailed": "Die Angaben konnten nicht gespeichert werden",
-      "issued": "Diese Angaben gehören zu einem ausgestellten ROE. Bewahren Sie sie auf und nutzen Sie das Korrekturverfahren von Service Canada."
+      "issued": "Diese Angaben gehören zu einem ausgestellten ROE. Bewahren Sie sie auf und nutzen Sie das Korrekturverfahren von Service Canada.",
+      "firstWorked": "Erster Arbeitstag in diesem Beschäftigungszeitraum",
+      "employer": "Rechtlicher Arbeitgeber: {name}"
     }
   },
   "separations": {

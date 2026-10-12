@@ -912,10 +912,11 @@ export async function roeRecord(orgId: string, employeePartyId: string): Promise
       display_name: string; employee_number: string | null; job_title: string | null;
       hired_on: string | null; terminated_on: string | null; sin_last3: string | null;
       frequency: string | null; country: string | null; filing_account_id: string | null;
+      employment_id: string | null; subsidiary_id: string | null;
     }>(sql`
     select p.display_name, er.employee_number, er.job_title,
            er.hired_on::text as hired_on, er.terminated_on::text as terminated_on,
-           prof.sin_last3, sched.frequency, prof.country as country,
+           prof.sin_last3, sched.frequency, prof.country as country, prof.employment_id, p.subsidiary_id,
            ${effectiveFilingAccountSql("prof")} as filing_account_id
       from parties p
       left join employee_roles er on er.party_id = p.id and er.org_id = p.org_id
@@ -991,14 +992,15 @@ export async function roeRecord(orgId: string, employeePartyId: string): Promise
 
   const event = (await db.execute<{
     id: string; interruption_on: string; last_insurable_earnings_on: string;
+    employment_id: string | null; subsidiary_id: string | null; first_day_worked: string | null; source_reference: string | null;
     salary_continuance_end_on: string | null;
   }>(sql`
-    select id, interruption_on::text as interruption_on,
-           last_insurable_earnings_on::text as last_insurable_earnings_on,
+    select id, employment_id,subsidiary_id,first_day_worked::text as first_day_worked,source_reference,
+           interruption_on::text as interruption_on, last_insurable_earnings_on::text as last_insurable_earnings_on,
            salary_continuance_end_on::text as salary_continuance_end_on
       from payroll_roe_separation_events
      where org_id = ${orgId} and employee_party_id = ${employeePartyId}
-       and status = 'confirmed'
+       and status in ('confirmed','issued')
      order by interruption_on desc, id desc
      limit 1
   `)).rows[0];
@@ -1007,6 +1009,12 @@ export async function roeRecord(orgId: string, employeePartyId: string): Promise
       `${row.display_name} has no confirmed Record of Employment separation facts — `
       + "record the interruption date, last insurable earnings date, and any salary-continuance or paid-leave end before issuing the ROE",
     );
+  }
+  if (!event.first_day_worked || !event.employment_id || !event.subsidiary_id || !event.source_reference?.trim()) {
+    throw new PayrollError(`${row.display_name} has incomplete ROE employment-spell facts — record the original first day worked, native employment, legal employer and source in the ROE drawer before preparing the filing`);
+  }
+  if (event.employment_id !== row.employment_id || event.subsidiary_id !== row.subsidiary_id) {
+    throw new PayrollError(`${row.display_name}'s confirmed separation belongs to a different native employment or legal employer — review the employment attribution before preparing this ROE`);
   }
   // Earnings dated after the separation's last insurable date are a lie or a
   // stale declaration: the stub belongs to a later spell or the separation
@@ -1143,7 +1151,7 @@ export async function roeRecord(orgId: string, employeePartyId: string): Promise
     filingAccount: filingAccountRef(row.filing_account_id, accounts),
     payPeriodType: periodType,
     sinLast3: row.sin_last3,
-    firstDayWorked: row.hired_on,
+    firstDayWorked: event.first_day_worked,
     // Block 11 is an explicit event fact, including the end of salary
     // continuance or paid leave when that extends beyond termination.
     lastDayPaid: event.salary_continuance_end_on ?? event.last_insurable_earnings_on,

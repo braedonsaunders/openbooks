@@ -15,6 +15,7 @@ import type {
   PayrollPackFilings,
   PayrollYearEndFiling,
 } from "../filing-registry.ts";
+import { lockRoeIssueFacts, recordRoeFactsIssued } from "../roe-separation-facts.ts";
 import { rl1Filing } from "./quebec/rl1-filing.ts";
 import { isUuid } from "../../platform/uuid.ts";
 
@@ -495,6 +496,8 @@ function buildCaPackFilings(): PayrollPackFilings {
     },
     {
       key: "roe",
+      lockIssueSources: lockRoeIssueFacts,
+      recordIssueSources: recordRoeFactsIssued,
       label: "Records of Employment",
       // A SEPARATION document: due within days of an interruption of
       // earnings, per employee event — never a year-end return. The cadence

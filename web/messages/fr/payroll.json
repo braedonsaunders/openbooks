@@ -1371,7 +1371,9 @@
       "retry": "Réessayer",
       "loadFailed": "Impossible de charger les faits relatifs à la cessation d’emploi",
       "saveFailed": "Impossible d’enregistrer les faits relatifs à la cessation d’emploi",
-      "issued": "Ces faits appartiennent à un relevé d’emploi délivré. Conservez-les et utilisez la procédure de correction de Service Canada."
+      "issued": "Ces faits appartiennent à un relevé d’emploi délivré. Conservez-les et utilisez la procédure de correction de Service Canada.",
+      "firstWorked": "Premier jour travaillé de cette période d’emploi",
+      "employer": "Employeur légal : {name}"
     }
   },
   "separations": {

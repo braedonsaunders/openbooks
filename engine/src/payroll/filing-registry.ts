@@ -443,6 +443,10 @@ export interface PayrollYearEndFiling {
   /** Why no file exists, when it does not — named, never implied. */
   downloadRefusal?: string;
   issue?: PayrollFilingIssue;
+  /** Native source locks held while an explicit issued artifact is snapshotted. */
+  lockIssueSources?: (orgId: string, actorId: string, rowIds: readonly string[]) => Promise<void>;
+  /** Source lifecycle recorded in the same transaction as the issued artifact. */
+  recordIssueSources?: (orgId: string, actorId: string, rowIds: readonly string[], submissionId: string) => Promise<void>;
   /**
    * How this filing is CORRECTED once issued. Required — every employer
    * eventually files a wrong slip, and a pack that says nothing would

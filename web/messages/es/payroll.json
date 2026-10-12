@@ -1371,7 +1371,9 @@
       "retry": "Reintentar",
       "loadFailed": "No se pudieron cargar los datos de separación",
       "saveFailed": "No se pudieron guardar los datos de separación",
-      "issued": "Estos datos pertenecen a un ROE emitido. Consérvelos y utilice el procedimiento de corrección de Service Canada."
+      "issued": "Estos datos pertenecen a un ROE emitido. Consérvelos y utilice el procedimiento de corrección de Service Canada.",
+      "firstWorked": "Primer día trabajado en este período de empleo",
+      "employer": "Empleador legal: {name}"
     }
   },
   "separations": {

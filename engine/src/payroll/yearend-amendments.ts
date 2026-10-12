@@ -845,6 +845,8 @@ async function issueOriginal(
   if (input.authorizeRowIds) {
     await input.authorizeRowIds(rows.map((row) => String(row[data.rowKey] ?? "")));
   }
+  const sourceRowIds = rows.map(row => String(row[data.rowKey] ?? ""));
+  await filing.lockIssueSources?.(orgId, input.actorId, sourceRowIds);
   let file: PayrollFilingFile | null = null;
   let fileRefusal: string | null = null;
   if (filing.download) {
@@ -873,6 +875,7 @@ async function issueOriginal(
     if (error instanceof ConcurrentFilingIssue) throw alreadyIssued(1, "original");
     throw error;
   });
+  await filing.recordIssueSources?.(orgId, input.actorId, sourceRowIds, submission.id);
   return { submission, file, fileRefusal, corrections: [] };
 }
 

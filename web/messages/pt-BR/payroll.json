@@ -1371,7 +1371,9 @@
       "retry": "Tentar novamente",
       "loadFailed": "Não foi possível carregar os dados de desligamento",
       "saveFailed": "Não foi possível salvar os dados de desligamento",
-      "issued": "Estes dados pertencem a um ROE emitido. Preserve-os e use o procedimento de correção do Service Canada."
+      "issued": "Estes dados pertencem a um ROE emitido. Preserve-os e use o procedimento de correção do Service Canada.",
+      "firstWorked": "Primeiro dia trabalhado neste período de emprego",
+      "employer": "Empregador legal: {name}"
     }
   },
   "separations": {
