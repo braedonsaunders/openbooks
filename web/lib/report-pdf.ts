@@ -10,6 +10,7 @@ import {
   type PdfDocumentInput,
   type PdfPageSetup,
   type PdfTableGroup,
+  type PdfTableCell,
   type StatementPdfStyle,
 } from '@openbooks/pdf'
 import { COMPUTED_RETAINED_EARNINGS_PRIOR_ID } from './computed-earnings'
@@ -113,6 +114,17 @@ function pdfCell(v: string | number | null | undefined, locale: string, isMoney 
   return String(v)
 }
 
+function formattedPdfCell(cell: PdfTableCell, locale: string, isMoney: boolean): PdfTableCell {
+  if (cell !== null && typeof cell === 'object') {
+    return {
+      ...cell,
+      text: pdfCell(cell.text, locale, isMoney),
+      ...(cell.segments ? { segments: cell.segments.map(segment => ({ ...segment, text: pdfCell(segment.text, locale, isMoney) })) } : {}),
+    }
+  }
+  return pdfCell(cell, locale, isMoney)
+}
+
 function pdfSummary(s: ReportSummaryItem, locale: string): { label: string; value: string } {
   return {
     label: s.label,
@@ -170,7 +182,7 @@ export function exportDataToRunResult(data: ExportData): ReportRunResult {
     title: g.title,
     subtitle: g.subtitle,
     columns: g.columns,
-    rows: g.rows.map((row) => [...row]),
+    rows: g.rows.map((row) => row.map(cell => cell !== null && typeof cell === 'object' ? cell.text : cell)),
     ...(g.money ? { money: g.money } : {}),
     isEmpty: g.isEmpty,
   }))
@@ -197,7 +209,7 @@ export function exportDataToPdfInput(
     title: g.title,
     subtitle: g.subtitle,
     columns: g.columns,
-    rows: g.rows.map((row) => row.map((cell, i) => pdfCell(cell, locale, g.money?.[i] === true))),
+    rows: g.rows.map((row) => row.map((cell, i) => formattedPdfCell(cell, locale, g.money?.[i] === true))),
     align: g.align,
     isEmpty: g.isEmpty,
   }))

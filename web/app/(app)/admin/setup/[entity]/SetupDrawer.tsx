@@ -1236,7 +1236,8 @@ export function FieldControl({
   }
 
   if (field.kind === 'multiref') {
-    if (field.refScopeField) refOptions=refOptions.filter(option=>option.scopeValue==null || option.scopeValue===String((Object.hasOwn(formValues,field.refScopeField) ? formValues : recordValues)[field.refScopeField] ?? ''))
+    const refScopeField = field.refScopeField
+    if (refScopeField) refOptions=refOptions.filter(option=>option.scopeValue==null || option.scopeValue===String((Object.hasOwn(formValues,refScopeField) ? formValues : recordValues)[refScopeField] ?? ''))
     const selected: string[] = Array.isArray(value) ? value : []
     if (field.searchableReferences)
       return (

@@ -224,7 +224,7 @@ export async function pinTimesheetLineRefs(
   return { projectId, itemId, timeTypeId, departmentId }
 }
 
-export interface WeekLeaveCover {
+export type WeekLeaveCover = {
   requestId: string
   leaveType: string
   from: string
@@ -306,6 +306,7 @@ export async function loadWeek(
   const dayIndex = new Map(days.map((d, i) => [d, i]))
 
   const res = (await db.execute<{
+      id: string
       worked_on: string
       hours: string
       time_type_id: string | null

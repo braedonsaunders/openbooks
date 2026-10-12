@@ -100,14 +100,14 @@ export interface NecPreparationData {
   reportReady: boolean
 }
 
-interface CardPaymentRow {
+type CardPaymentRow = {
   paymentId: string
   documentNumber: string
   paymentDate: string
   partyId: string
   vendorName: string
   cardPaid: string
-}
+};
 
 /**
  * Posted vendor payments settled through a corporate card in the calendar

@@ -318,7 +318,7 @@ export async function buildStatementBatchPreview(
     },
     allowedSubsidiaryIds,
   })
-  return { from, to, recipients, excluded, subsidiaries: subView.picker, currency: subView.currency }
+  return { from, to, recipients, excluded, subsidiaries: subView.options, currency: subView.currency }
 }
 
 /** A statement batch run's period and the sender's authorization snapshot, for rendering one statement. */

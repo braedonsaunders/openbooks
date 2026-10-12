@@ -132,7 +132,7 @@ export const REPORTING_WIDGETS = {
     />
   ),
   'statement-batch-run-drawer': (props) => (
-    <StatementBatchRunDrawer runId={str(props, 'runId')} />
+    <StatementBatchRunDrawer runId={str(props, 'runId') ?? null} />
   ),
   'reconciliation-note': (props) => (
     <ReconciliationNote

@@ -86,14 +86,12 @@ export function meProfileSpec(data: MeProfileData): PageSpec {
             // A null href hides the action: the panel offers Update direct
             // deposit only when the employee may file it, and names the
             // refusal reason otherwise.
-            header: [
-              widget('link-button', {
+            blocks: [
+              widgetBlock('link-button', {
                 href: f('bankEditHref'),
                 label: f('bankEditButton'),
                 iconKey: 'plus',
               }),
-            ],
-            blocks: [
               widgetBlock('hrm-facts', { facts: data.bankFacts, empty: data.bankRefusal ?? data.noBank }),
               ...(data.bankRefusal && data.bankFacts.length > 0 ? [textBlock(f('bankRefusal'))] : []),
             ],

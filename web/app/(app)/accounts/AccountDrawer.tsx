@@ -380,7 +380,7 @@ export function AccountDrawer({
       setMode('view')
       router.refresh()
     } catch {
-      const message = errorMessage('save_failed')
+      const message = errorMessage({ error: 'save_failed' })
       setFieldError(message)
       toast.error(message)
     } finally {

@@ -1,5 +1,6 @@
 import { getTranslations } from 'next-intl/server'
 import Link from 'next/link'
+import { notFound } from 'next/navigation'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/platform/database'
 import { businessToday } from '@openbooks/engine/platform/business-date/module'
@@ -29,8 +30,10 @@ export default async function CashDailySummary() {
   await requireFeatureEnabled(authz.user.orgId, 'cashSales')
   const t = await getTranslations('ar')
   const scope = authz.allowedSubsidiaryIds
+  const config = DOC_KINDS.cash_sale
+  if (!config) notFound()
   const [accounts, taxCodes, tenderAccounts, subsidiaries, servers, currency, today] = await Promise.all([
-    accountOptions(DOC_KINDS.cash_sale, authz.user.orgId, authz.allowedSubsidiaryIds),
+    accountOptions(config, authz.user.orgId, authz.allowedSubsidiaryIds),
     taxCodeOptions(authz.user.orgId),
     db.execute<{ id: string; number: string | null; name: string | null }>(sql`
       select id, number, name from accounts

@@ -105,7 +105,7 @@ export function TimelineView({ controller, window: board, groupBy, search, zoom,
     return { start, duration }
   }
 
-  function onBarPointerDown(event: PointerEvent<HTMLDivElement>, entry: BoardEntry, kind: 'move' | 'start' | 'end') {
+  function onBarPointerDown(event: PointerEvent<HTMLElement>, entry: BoardEntry, kind: 'move' | 'start' | 'end') {
     if (!board.canManage || entry.boardId !== board.board.id || event.button !== 0) return
     event.stopPropagation()
     event.currentTarget.setPointerCapture(event.pointerId)

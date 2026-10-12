@@ -483,7 +483,7 @@ export function CashTendersSection({
           <FieldLabel fieldName={t('tenders.overShort')}>{t('tenders.overShort')}</FieldLabel>
           <div className="grid grid-cols-[130px_1fr] items-end gap-2">
             <div>
-              {editable ? (
+              {editable && onCloseoutChange ? (
                 <Input
                   inputMode="decimal"
                   value={closeout.overShort}
@@ -496,7 +496,7 @@ export function CashTendersSection({
             </div>
             <div>
               <FieldLabel fieldName={t('tenders.server')}>{t('tenders.server')}</FieldLabel>
-              {editable ? (
+              {editable && onCloseoutChange ? (
                 serverOptions && serverOptions.length > 0 ? (
                   <SearchSelect
                     options={serverOptions}
@@ -518,8 +518,8 @@ export function CashTendersSection({
               )}
             </div>
           </div>
-          {editable ? <p className="text-xs text-slate-500 dark:text-slate-400">{t('tenders.overShortHint')}</p> : null}
-          {editable && tillSuggestion && !isZeroDecimal(tillSuggestion.difference) ? (
+          {editable && onCloseoutChange ? <p className="text-xs text-slate-500 dark:text-slate-400">{t('tenders.overShortHint')}</p> : null}
+          {editable && onCloseoutChange && tillSuggestion && !isZeroDecimal(tillSuggestion.difference) ? (
             <div className="flex flex-wrap items-center gap-2 rounded-md border border-amber-200 bg-amber-50/70 px-2 py-1.5 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/20 dark:text-amber-200">
               <span>
                 {t(tillSuggestion.after ? 'tenders.tillDifference' : 'tenders.tillDifferenceFirst', {
@@ -528,7 +528,7 @@ export function CashTendersSection({
                   difference: money(tillSuggestion.difference, { currency }),
                 })}
               </span>
-              {editable ? (
+              {editable && onCloseoutChange ? (
                 <Button
                   type="button"
                   variant="outline"
@@ -550,7 +550,7 @@ export function CashTendersSection({
               ) : null}
             </div>
           ) : null}
-          {editable ? <p className="text-xs text-slate-500 dark:text-slate-400">{t('tenders.closeoutHint')}</p> : null}
+          {editable && onCloseoutChange ? <p className="text-xs text-slate-500 dark:text-slate-400">{t('tenders.closeoutHint')}</p> : null}
         </div>
       ) : null}
     </div>

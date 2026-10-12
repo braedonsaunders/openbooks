@@ -71,7 +71,6 @@ const TYPE_KEYS: Record<string, string> = {
   income_other: 'incomeOther',
   cogs: 'cogs',
   expense: 'expense',
-  statistical: 'statistical',
   expense_other: 'expenseOther',
   expense_deferred: 'expenseDeferred',
   statistical: 'statistical',

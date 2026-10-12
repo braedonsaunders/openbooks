@@ -155,7 +155,6 @@ export async function loadProjects(
         orgId,
         userId: authz.user.id,
         recordType: 'project',
-        defaultPresentation,
         userRoles: authz.user.roles.map(({ key }) => key),
         headerDefs: projectFieldDefs,
         lineDefs: [],

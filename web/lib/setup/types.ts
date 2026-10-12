@@ -119,7 +119,7 @@ export type SetupDynamicOptionsSource =
 
 export interface SetupField {
   /** Optional configuration is hidden and refused while its authoritative feature is disabled. */
-  featureKey?: 'einvoicing' | 'consignment'
+  featureKey?: 'einvoicing' | 'consignment' | 'manufacturingSubcontract'
   /** Required financial owner scope remains visible in a single-entity organization. */
   legalEntity?: boolean
   /** A sibling IANA zone opts a zonedDateTime into the native local-time picker. */

@@ -217,6 +217,8 @@ export interface BankingAccountData {
     basePath: string
     currentParams: Record<string, string | string[] | undefined>
     statement: DrawerProps['statement']
+    canEditBalances: DrawerProps['canEditBalances']
+    balancesBlockedReason: DrawerProps['balancesBlockedReason']
     lines: DrawerProps['lines']
     lineTotal: number
     page: number

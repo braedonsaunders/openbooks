@@ -6,7 +6,7 @@ import { generalLedgerExportData, isExactDecimalText, pdfMoney } from './report-
 // `report-pdf` is server-only in production. This suite runs it directly so
 // the shared CSV/XLSX boundary is covered without weakening that production
 // guard.
-const { exportDataToCsv, exportDataToRunResult, exportDataToXlsx, projectProfitabilityExportData, journalExportData, registerExportData, partnerStatementExportData } = await import('./report-pdf.ts')
+const { exportDataToPdfInput, exportDataToCsv, exportDataToRunResult, exportDataToXlsx, projectProfitabilityExportData, journalExportData, registerExportData, partnerStatementExportData } = await import('./report-pdf.ts')
 const { decimalRatio } = await import('./reports/decimals.ts')
 
 const t = (key: string) => key
@@ -329,4 +329,20 @@ test('isExactDecimalText separates ledger decimals from prose and dates', () => 
   assert.equal(isExactDecimalText('2026-01-31'), false)
   assert.equal(isExactDecimalText('12.5%'), false)
   assert.equal(isExactDecimalText('JE-100'), false)
+})
+
+
+test('styled observations retain exact values in tabular exports and their identity in PDF', () => {
+  const exact = '9007199254740993.0100'
+  const data = { title: 'Observations', dateRangeLabel: '', summary: [], groups: [{
+    kind: 'results' as const, title: '', columns: ['Amount', 'Observation'], money: [true, false], rows: [[
+      { text: exact, textColor: '#123456', bold: true },
+      { text: 'Delivered; Held', segments: [{ text: 'Delivered', textColor: '#008800' }, { text: '; Held', textColor: '#880000' }] },
+    ]],
+  }] }
+  assert.deepEqual(exportDataToRunResult(data).groups[0]?.rows, [[exact, 'Delivered; Held']])
+  assert.ok(exportDataToCsv(data, {}).includes(exact))
+  const pdf = exportDataToPdfInput(data, { orgName: 'Example' }, { paperSize: 'letter', orientation: 'portrait', marginMm: 12, density: 'standard' }, { locale: 'en' })
+  assert.deepEqual(pdf.groups[0]?.rows[0]?.[0], { text: pdfMoney(exact, 'en'), textColor: '#123456', bold: true })
+  assert.deepEqual(pdf.groups[0]?.rows[0]?.[1], data.groups[0]?.rows[0]?.[1])
 })

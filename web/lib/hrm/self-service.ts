@@ -617,6 +617,7 @@ export interface MeProfileData {
     submitLabel: string
     cancelLabel: string
     submitFailed: string
+    noEmployment: string
   } | null
   bankTitle: string
   bankFacts: MeFact[]

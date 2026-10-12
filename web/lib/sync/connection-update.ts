@@ -81,7 +81,7 @@ export async function updateConnection(
     if (!existing) return { refusal: refused(404, { error: "not_found" }) };
 
     const manifest = sourceType(existing.source);
-    const updates: Partial<typeof connections.$inferInsert> = {};
+    const updates: Omit<Partial<typeof connections.$inferInsert>, "config"> & { config?: Record<string, unknown> } = {};
     let credentialsChanged = false;
 
     if (typeof body.displayName === "string" && body.displayName.trim()) {

@@ -23,7 +23,7 @@ import type { SchedulingWorkspaceProps } from '../../../components/scheduling/Sc
  * view and the first window; the workspace navigates dates client-side.
  */
 
-export type SchedulingPageData = SchedulingWorkspaceProps & { title: string; description: string }
+export type SchedulingPageData = SchedulingWorkspaceProps & { title: string; description: string; hostPath: string }
 
 const f = ref<SchedulingPageData>()
 

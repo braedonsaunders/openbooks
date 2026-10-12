@@ -58,11 +58,6 @@ export interface AnomalyChecksData {
   emptyTitle: string;
   emptyDescription: string;
   allLabel: string;
-  emptyLabel: string;
-  declarationSavedLabel: string;
-  reviewRecordedLabel: string;
-  registryRefreshedLabel: string;
-  codeMaximumLabel: string;
   severityLabel: string;
   kindLabel: string;
   statusLabel: string;

@@ -556,7 +556,10 @@ export async function loadBenefitsPortfolio(
               : measured.metric === 'transactions' ? [
                   { label: t('portfolio.simulate.measured'), value: found.valuation === 'per_unit' ? measured.value : amountLabel(measured.value, measured.currency) },
                   { label: t('portfolio.simulate.entries'), value: String(measured.entryCount) },
-                ] : [
+                ] : measured.metric === 'project_margin' ? measured.projects.map(project => ({
+                  label: `${t('portfolio.metrics.project_margin')} — ${projects.rows.find(option => option.id === project.projectId)?.name ?? project.projectId}`,
+                  value: amountLabel(project.margin, preview.computation.currency),
+                })) : [
                   { label: t('portfolio.simulate.revenue'), value: amountLabel(measured.revenueTotal, measured.currency) },
                   { label: t('portfolio.simulate.expenses'), value: amountLabel(measured.expenseTotal, measured.currency) },
                   { label: t('portfolio.simulate.measured'), value: amountLabel(measured.value, measured.currency) },

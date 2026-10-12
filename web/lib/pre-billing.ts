@@ -223,7 +223,7 @@ interface PrebillHeaderRow extends Record<string, unknown> {
 }
 
 /** One convertible prebill_lines row plus its hold flag. */
-interface PrebillLineRow extends Record<string, unknown> {
+type PrebillSourceLineRow = {
   id: string
   org_id: string
   prebill_id: string
@@ -255,7 +255,7 @@ interface PrebillLineRow extends Record<string, unknown> {
   is_billable: boolean | null
   billed_by_line_id: string | null
   actively_held: boolean
-}
+};
 
 type ProjectPolicyContext = {
   projectId: string
@@ -1383,7 +1383,7 @@ export async function convertPrebill(orgId: string, actorId: string, id: string,
       }
     }
 
-    const lines = (await tx.execute<PrebillLineRow>(sql`
+    const lines = (await tx.execute<PrebillSourceLineRow>(sql`
       select line.*,
              exists (
                select 1 from prebill_holds hold

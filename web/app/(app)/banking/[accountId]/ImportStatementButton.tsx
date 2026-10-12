@@ -298,6 +298,8 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
     possibleDuplicateLines?: PreviewLine[]
     skipped?: SkippedRow[]
     balanceCandidates?: BalanceCandidate[]
+    suggestedOpening?: SuggestedOpening | null
+    openingMismatch?: OpeningMismatch | null
     statementDate?: string
     closingBalance?: string
     currency?: string
@@ -491,7 +493,7 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
       // Chain the opening from the prior signed-off closing when the
       // operator left it empty — still editable, and a mismatch they typed
       // stays flagged below instead of silently replacing their figure.
-      const suggested = (data.suggestedOpening ?? null) as SuggestedOpening | null
+      const suggested = data.suggestedOpening ?? null
       if (suggested) setOpeningBalance((current) => current || editableMoneyDecimal(suggested.balance))
     } catch (e) {
       if (requestRevision === sourceRevision.current) {
@@ -655,7 +657,7 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
               role="alert"
               className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-800 dark:border-amber-800/60 dark:bg-amber-950/40 dark:text-amber-300"
             >
-              {t('currencyMismatchWarning', { statement: statementCurrency, account: selectedAccount.currency })}
+              {t('currencyMismatchWarning', { statement: statementCurrency, account: selectedAccount.currency ?? '—' })}
             </p>
           ) : null}
           <div className="grid gap-4 sm:grid-cols-2">

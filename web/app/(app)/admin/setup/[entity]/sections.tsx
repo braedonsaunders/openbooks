@@ -582,7 +582,7 @@ export async function SetupPayrollStatutoryHolidaysSlot({
   const reading = await statutoryHolidayCalendarsOf({
     orgId,
     year,
-    subsidiaryIds: authz.allowedSubsidiaryIds,
+    subsidiaryIds: authz.allowedSubsidiaryIds === null ? null : [...authz.allowedSubsidiaryIds],
   })
   const yearHref = (target: number) => mergeHref('/admin/setup/business-calendars', sp, {
     view: 'payroll-holidays',
