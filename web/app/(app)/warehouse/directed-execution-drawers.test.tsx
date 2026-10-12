@@ -21,7 +21,11 @@ Object.assign(globalThis, { React })
 const { act } = React
 const { createRoot } = await import('react-dom/client')
 const { NextIntlClientProvider } = await import('next-intl')
-const messages = (await import('../../../messages/en')).default
+const messages = {
+  common: (await import('../../../messages/en/common.json', { with: { type: 'json' } })).default,
+  ui: (await import('../../../messages/en/ui.json', { with: { type: 'json' } })).default,
+  warehouse: (await import('../../../messages/en/warehouse.json', { with: { type: 'json' } })).default,
+}
 const { BusinessDateProvider } = await import('../../../components/business-date-provider')
 const { ReceiptQueue } = await import('./ReceiptQueue')
 const { PutawayQueue } = await import('./PutawayQueue')
@@ -37,13 +41,13 @@ async function mount(t: TestContext, node: ReactNode) {
   const host = document.createElement('div')
   document.body.append(host)
   const root = createRoot(host)
+  t.after(async () => { await act(async () => root.unmount()); host.remove() })
   await act(async () => {
     root.render(<NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
       <BusinessDateProvider today="2026-10-15">{node}</BusinessDateProvider>
     </NextIntlClientProvider>)
     await tick()
   })
-  t.after(async () => { await act(async () => root.unmount()); host.remove() })
 }
 function button(label: string) {
   const found = [...document.querySelectorAll('button')].find(node => node.textContent?.trim() === label)
@@ -58,6 +62,13 @@ async function escape() {
     document.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
     await tick()
   })
+}
+async function waitForDismissal() {
+  for (let attempt = 0; attempt < 80; attempt++) {
+    if (document.querySelector('[role="dialog"]') === null) return
+    await act(async () => { await tick() })
+  }
+  assert.fail('the native execution dialog must finish its exit after authorized dismissal')
 }
 type RequestBody = {
   action: string; commandKey?: string; taskId?: string; lineId?: string;
@@ -97,7 +108,7 @@ for (const kind of ['receipt', 'putaway'] as const) {
     assert.ok(shell.querySelector('[aria-busy="true"]'))
     assert.equal(document.body.style.overflow, 'hidden')
     await escape()
-    assert.equal(document.querySelector('[role="dialog"]'), shell, 'a pending native command cannot be dismissed')
+    assert.ok(document.querySelector('[role="dialog"]') === shell, 'a pending native command cannot be dismissed')
     assert.equal(requests.length, 1)
     assert.equal(requests[0]!.action, kind === 'receipt' ? 'receive' : 'putaway')
     assert.ok(requests[0]!.commandKey)
@@ -108,19 +119,19 @@ for (const kind of ['receipt', 'putaway'] as const) {
     } else assert.equal(requests[0]!.lineId, 'receipt-line-1')
 
     await act(async () => { first.reject(new Error('Warehouse response was lost')); await tick() })
-    assert.equal(document.querySelector('[role="dialog"]'), shell)
+    assert.ok(document.querySelector('[role="dialog"]') === shell, 'request phases must retain the same dialog element')
     assert.match(shell.textContent ?? '', /Warehouse response was lost/)
     await press(button(messages.common.actions.retry))
     assert.deepEqual(requests[1], requests[0], 'transport retry keeps the original command and financial subject')
-    assert.equal(document.querySelector('[role="dialog"]'), shell)
+    assert.ok(document.querySelector('[role="dialog"]') === shell, 'request phases must retain the same dialog element')
     await act(async () => { retry.resolve(Response.json({ task: { ...task, stage: kind } })); await tick() })
-    assert.equal(document.querySelector('[role="dialog"]'), shell)
+    assert.ok(document.querySelector('[role="dialog"]') === shell, 'request phases must retain the same dialog element')
     assert.match(shell.textContent ?? '', /LOT-17/)
     await escape()
-    await act(async () => { await tick(350) })
-    assert.equal(document.querySelector('[role="dialog"]'), null, 'an idle command uses the native local dismissal callback')
+    await waitForDismissal()
+    assert.ok(document.querySelector('[role="dialog"]') === null, 'an idle command uses the native local dismissal callback')
     assert.equal(document.body.style.overflow, overflow)
-    assert.equal(document.activeElement, trigger)
+    assert.ok(document.activeElement === trigger, 'idle dismissal restores focus to the selected row action')
     await press(trigger)
     shell = document.querySelector('[role="dialog"]')
     assert.ok(shell)
@@ -128,15 +139,15 @@ for (const kind of ['receipt', 'putaway'] as const) {
     await press(button('Confirm'))
     assert.deepEqual(requests[3], { action: 'confirm', taskId: task.id })
     await escape()
-    assert.equal(document.querySelector('[role="dialog"]'), shell, 'confirmation retains the same busy-close gate')
+    assert.ok(document.querySelector('[role="dialog"]') === shell, 'confirmation retains the same busy-close gate')
     await act(async () => { confirmation.resolve(Response.json({ status: 'done' })); await tick() })
-    await act(async () => { await tick(350) })
-    assert.equal(document.querySelector('[role="dialog"]'), null)
+    await waitForDismissal()
+    assert.ok(document.querySelector('[role="dialog"]') === null, 'no execution dialog may remain after completion or without authority')
     assert.equal(refreshes, 1)
     assert.deepEqual(navigations, [], 'local execution does not navigate to a fabricated URL destination')
     assert.equal(window.location.pathname, '/warehouse')
     assert.equal(document.body.style.overflow, overflow)
-    assert.equal(document.activeElement, trigger, 'native dismissal restores focus to the selected row action')
+    assert.ok(document.activeElement === trigger, 'native dismissal restores focus to the selected row action')
   })
 }
 
@@ -149,7 +160,7 @@ test('receipt and putaway readers without the posting grant cannot open an execu
     <ReceiptQueue rows={[{ lineId: 'line-1', number: 'GR-17', itemLabel: 'Widget', binCode: 'RECEIVE', quantity: '3', confirmed: false }]} canPost={false} />
     <PutawayQueue rows={[{ warehouseId: 'warehouse-1', warehouseCode: 'MAIN', stagingLocationId: 'stage-1', stagingCode: 'RECEIVE', itemId: 'item-1', itemLabel: 'Widget', subsidiaryId: 'sub-1', quantity: '3', lotId: null, serialId: null, lotNumber: null, serialNumber: null }]} canPost={false} />
   </>)
-  assert.equal(document.querySelector('[role="dialog"]'), null)
+  assert.ok(document.querySelector('[role="dialog"]') === null, 'no execution dialog may remain after completion or without authority')
   assert.equal([...document.querySelectorAll('button')].filter(node => ['Confirm receipt', messages.warehouse.putaway.action].includes(node.textContent?.trim() ?? '')).length, 0)
   assert.equal(calls, 0)
 })

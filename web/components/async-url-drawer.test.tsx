@@ -10,10 +10,20 @@ Object.assign(globalThis, { React })
 const { act } = React
 const { createRoot } = await import('react-dom/client')
 const { NextIntlClientProvider } = await import('next-intl')
-const messages = (await import('../messages/en')).default
+const messages = {
+  common: (await import('../messages/en/common.json', { with: { type: 'json' } })).default,
+  ui: (await import('../messages/en/ui.json', { with: { type: 'json' } })).default,
+}
 const { DrawerNavigateContext } = await import('@openbooks/ui')
 const { AsyncUrlDrawer } = await import('./async-url-drawer')
 const tick = (ms = 30) => new Promise(resolve => setTimeout(resolve, ms))
+async function waitForDismissal() {
+  for (let attempt = 0; attempt < 80; attempt++) {
+    if (document.querySelector('[role="dialog"]') === null) return
+    await act(async () => { await tick() })
+  }
+  assert.fail('the native URL dialog must finish its exit after authorized dismissal')
+}
 
 test('URL request phases retain one native shell, retry callback, close guard and scoped close destination', async t => {
   const host = document.createElement('div')
@@ -51,7 +61,7 @@ test('URL request phases retain one native shell, retry callback, close guard an
   assert.ok(shell.querySelector('[aria-busy="true"]'))
   assert.equal(document.body.style.overflow, 'hidden')
   await render('refused')
-  assert.equal(document.querySelector('[role="dialog"]'), shell)
+  assert.ok(document.querySelector('[role="dialog"]') === shell, 'URL request phases must retain the same dialog element')
   assert.match(shell.textContent ?? '', /selected stock layers could not be read/)
   const retry = [...shell.querySelectorAll('button')].find(node => node.textContent === messages.common.actions.retry)
   assert.ok(retry)
@@ -60,22 +70,22 @@ test('URL request phases retain one native shell, retry callback, close guard an
   await render('pending')
   await render('ready')
   assert.equal(document.querySelectorAll('[role="dialog"]').length, 1)
-  assert.equal(document.querySelector('[role="dialog"]'), shell)
+  assert.ok(document.querySelector('[role="dialog"]') === shell, 'URL request phases must retain the same dialog element')
   assert.equal(shell.getAttribute('aria-labelledby'), titleId)
   assert.match(shell.textContent ?? '', /Inspect retained layer/)
   await act(async () => {
     document.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
     await tick()
   })
-  assert.equal(document.querySelector('[role="dialog"]'), shell, 'the existing URL-host close guard still owns dismissal')
+  assert.ok(document.querySelector('[role="dialog"]') === shell, 'the existing URL-host close guard still owns dismissal')
   assert.deepEqual(navigations, [])
   allowClose = true
   await act(async () => {
     document.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
     await tick()
   })
-  await act(async () => { await tick(350) })
-  assert.equal(document.querySelector('[role="dialog"]'), null)
+  await waitForDismissal()
+  assert.ok(document.querySelector('[role="dialog"]') === null, 'the authorized URL close must dismiss its dialog')
   assert.deepEqual(navigations, [closeHref])
   assert.equal(document.body.style.overflow, overflow)
 })
