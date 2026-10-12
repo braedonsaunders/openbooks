@@ -1,40 +1,10 @@
 /** Setup-registry intercompany entities: representing parties and transfer pricing. */
-import type { SetupEntity, SetupEntityValidationHook } from './types'
+import type { SetupEntity } from './types'
 
 export const TRANSFER_PRICING_METHODS = [
   { value: 'price_level', labelKey: 'options.transferPricingMethod.price_level' },
   { value: 'cost_plus', labelKey: 'options.transferPricingMethod.cost_plus' },
 ]
-
-/**
- * The representation is validated against its subject before the storage
- * guard: the parties hold the matching active role, neither already trades
- * with the entity it represents, and each represents only this entity. The
- * hook loads the engine lazily because this module rides the client
- * registry bundle; it only ever runs inside the server write path.
- */
-const validateRepresentingPartiesWrite: SetupEntityValidationHook = async ({ orgId, body, rowId, executor }) => {
-  const { sql } = await import('drizzle-orm')
-  const { representingPartiesRefusal } = await import('@openbooks/engine/intercompany')
-  const current = rowId
-    ? (await executor.execute<Record<string, unknown>>(sql`
-        select subsidiary_id, customer_party_id, vendor_party_id, is_active
-          from intercompany_representing_parties where org_id = ${orgId} and id = ${rowId}`)).rows[0] ?? null
-    : null
-  return representingPartiesRefusal(executor, orgId, body, current, rowId ?? null)
-}
-
-const validateTransferPricingWrite: SetupEntityValidationHook = async ({ orgId, body, rowId, executor }) => {
-  const { sql } = await import('drizzle-orm')
-  const { transferPricingPolicySetupRefusal } = await import('@openbooks/engine/intercompany')
-  const current = rowId
-    ? (await executor.execute<Record<string, unknown>>(sql`
-        select seller_subsidiary_id, buyer_subsidiary_id, method, price_level_id, markup_percent::text as markup_percent,
-               revenue_account_id, cost_account_id, effective_from::text as effective_from, effective_to::text as effective_to
-          from intercompany_transfer_pricing_policies where org_id = ${orgId} and id = ${rowId}`)).rows[0] ?? null
-    : null
-  return transferPricingPolicySetupRefusal(executor, orgId, body, current)
-}
 
 /**
  * The customer and vendor that represent a subsidiary to its sister
@@ -56,7 +26,6 @@ export const INTERCOMPANY_REPRESENTING_PARTIES_ENTITY: SetupEntity = {
   hasActive: true,
   allowDelete: false,
   docSlug: 'intercompany',
-  validateWrite: validateRepresentingPartiesWrite,
   columns: [
     { key: 'subsidiaryId', kind: 'ref', ref: 'subsidiaries' },
     { key: 'customerPartyId', kind: 'ref', ref: 'customers' },
@@ -90,7 +59,6 @@ export const INTERCOMPANY_TRANSFER_PRICING_ENTITY: SetupEntity = {
   orderBy: 'seller_subsidiary_id, effective_from desc',
   hasActive: true,
   docSlug: 'intercompany',
-  validateWrite: validateTransferPricingWrite,
   columns: [
     { key: 'code', kind: 'code' },
     { key: 'name', kind: 'text' },

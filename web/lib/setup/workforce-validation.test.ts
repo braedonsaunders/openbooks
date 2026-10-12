@@ -1,10 +1,13 @@
 import assert from 'node:assert/strict'
+import { validateRepresentingPartiesWrite, validateTransferPricingWrite } from './intercompany-validation.ts'
 import test from 'node:test'
 import { setupEntityWithValidationHook } from './entities/customer-item-refs.ts'
 import { SETUP_ENTITY_BY_KEY } from './registry.ts'
 import { validateContributionWrite, validateServiceCredit, validateServiceTier, validateVacationTerm } from './workforce-validation.ts'
 
 const expectedHooks = [
+  ['intercompany-representing-parties', validateRepresentingPartiesWrite],
+  ['intercompany-transfer-pricing', validateTransferPricingWrite],
   ['payroll-service-credits', validateServiceCredit],
   ['payroll-vacation-terms', validateVacationTerm],
   ['entitlement-service-tiers', validateServiceTier],

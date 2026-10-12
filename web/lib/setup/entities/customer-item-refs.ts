@@ -1,4 +1,5 @@
 import 'server-only'
+import { validateRepresentingPartiesWrite, validateTransferPricingWrite } from '../intercompany-validation'
 import { validateWithholdingEnrollmentWrite } from '../contractor-withholding-validation'
 import { validateScheduleBoardWrite, validateScheduleCodeWrite } from '../scheduling-validation'
 import { sql } from 'drizzle-orm'
@@ -71,6 +72,8 @@ const validateAmortizationTemplateWrite: SetupEntityValidationHook = async ({ or
 }
 
 const SETUP_ENTITY_VALIDATION_HOOKS: Record<string, SetupEntityValidationHook> = {
+  'intercompany-representing-parties': validateRepresentingPartiesWrite,
+  'intercompany-transfer-pricing': validateTransferPricingWrite,
   'expense-amortization-templates': validateAmortizationTemplateWrite,
   'einvoice-settings': validateEInvoiceSetupWrite,
   'einvoice-recipients': validateEInvoiceSetupWrite,
