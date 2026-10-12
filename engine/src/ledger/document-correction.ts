@@ -278,7 +278,7 @@ function changedCorrectionFields(
 
 interface PostedCorrectionPlan {
   sourceId: string;
-  outcome: PostedCorrectionOutcome;
+  outcome: Exclude<PostedCorrectionOutcome, "refused-closed-period">;
   /** Changed fields grouped by class; empty when nothing material changed. */
   changedFields: string[];
   metadataFields: string[];

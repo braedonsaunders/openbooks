@@ -25,7 +25,13 @@ export async function lockSubcontractCustodyAuthority(
   let scope:ReadonlySet<string>|null=null;
   for (const permission of ["items.post","manufacturing.manage"]) {
     const granted=await lockActorCommandAuthority(tx,orgId,actorId,subsidiaryId,permission);
-    if(granted!==null) scope=scope===null?granted:new Set([...scope].filter(id=>granted.has(id)));
+    if (granted !== null) {
+      if (scope === null) scope = granted;
+      else {
+        const currentScope: ReadonlySet<string> = scope;
+        scope = new Set([...currentScope].filter(id => granted.has(id)));
+      }
+    }
   }
   if(!(await tx.execute(sql`select stock.id from stock_locations stock
     join locations location on location.org_id=stock.org_id and location.id=stock.location_id
