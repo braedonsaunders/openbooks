@@ -16,19 +16,21 @@ export type ReconciliationReviewProof = {
   reversedMatches: number
 }
 
+type EvidenceHashRow = {id:string;value:string;detail?:string}
+
 /** Hash keyed rows incrementally. A review never sorts or concatenates a
  * complete financial workpaper in PostgreSQL or buffers it in the service. */
 async function hashRows(
   tx: SqlExecutor,
   page: (after: string | null) => SQL,
   deadline: number,
-  inspect?: (row: { id: string; value: string; detail?: string }) => void,
+  inspect?: (row: EvidenceHashRow) => void,
 ): Promise<{ digest: string; count: number }> {
   const hash = createHash('sha256')
   let after: string | null = null, count = 0
   while (true) {
     if (Date.now()>deadline) throw new BankingError('The evidence review exceeded its interactive time budget. Retry the same review when database capacity is available; nothing was changed.')
-    const rows = (await tx.execute<{ id: string; value: string; detail?: string }>(page(after))).rows
+    const rows: EvidenceHashRow[] = (await tx.execute<EvidenceHashRow>(page(after))).rows
     if (rows.length === 0) break
     for (const row of rows) {
       hash.update(row.id).update('\0').update(row.value).update('\n')
