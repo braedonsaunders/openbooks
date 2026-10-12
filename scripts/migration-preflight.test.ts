@@ -72,12 +72,27 @@ test("the preflight statement timeout defaults to five minutes and stays bounded
   }
 });
 
-test("only undefined-table and undefined-column defer a preflight", () => {
+test("only missing schema objects are candidates for preflight deferral", () => {
   assert.equal(isDeferredPreflightError({ code: "42P01" }), true);
   assert.equal(isDeferredPreflightError({ code: "42703" }), true);
+  assert.equal(isDeferredPreflightError({ code: "42883" }), true);
   for (const code of ["42501", "57014", "55P03", undefined]) {
     assert.equal(isDeferredPreflightError({ code }), false, String(code));
   }
+});
+
+test("a missing guard defers only for its exact no-argument pending creator", () => {
+  const missing = new Error('function "public.native_history_guard()" does not exist');
+  assert.equal(earlierPendingCreatesObject(missing, ["CREATE OR REPLACE FUNCTION public.native_history_guard() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NEW; END $$;"]), true);
+  assert.equal(earlierPendingCreatesObject(missing, ["CREATE FUNCTION native_history_guard () RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NEW; END $$;"]), true);
+  for (const sql of [
+    "CREATE FUNCTION private.native_history_guard() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NEW; END $$;",
+    "CREATE FUNCTION native_history_guard(uuid) RETURNS uuid LANGUAGE sql AS $$ SELECT $1 $$;",
+    "CREATE FUNCTION another_guard() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NEW; END $$;",
+    "-- CREATE FUNCTION native_history_guard()\nSELECT 1;",
+  ]) assert.equal(earlierPendingCreatesObject(missing, [sql]), false, sql);
+  assert.equal(earlierPendingCreatesObject(missing, []), false);
+  assert.equal(earlierPendingCreatesObject(new Error('function "public.native_history_guard(uuid)" does not exist'), ["CREATE FUNCTION native_history_guard() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NEW; END $$;"]), false);
 });
 
 test("a preflight is deferred only when an earlier pending migration creates the object", () => {

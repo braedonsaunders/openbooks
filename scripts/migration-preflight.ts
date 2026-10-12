@@ -30,7 +30,7 @@ const PREFLIGHT_STATEMENT_TIMEOUT_MIN_MS = 1_000;
 const PREFLIGHT_STATEMENT_TIMEOUT_MAX_MS = 3_600_000;
 
 /** SQLSTATEs that mark a preflight as deferred rather than failed. */
-export const PREFLIGHT_DEFERRED_SQLSTATES = Object.freeze(["42P01", "42703"]);
+export const PREFLIGHT_DEFERRED_SQLSTATES = Object.freeze(["42P01", "42703", "42883"]);
 
 export type PreflightSeverity = "refuse" | "notice";
 
@@ -128,7 +128,7 @@ export function preflightStatementTimeoutMs(
   return parsed;
 }
 
-/** True when the error is a missing relation/column (deferral candidate). */
+/** Missing schema objects are candidates; their pending creator must still be proved. */
 export function isDeferredPreflightError(error: unknown): boolean {
   return PREFLIGHT_DEFERRED_SQLSTATES.includes(
     (error as { code?: unknown } | null)?.code as string,
@@ -231,6 +231,16 @@ export function earlierPendingCreatesObject(
   preflightSql?: string,
 ): boolean {
   const raw = error instanceof Error ? error.message : String(error);
+  // Guard preflights use regprocedure to inspect exact no-argument functions.
+  // Their absence is expected only when an earlier pending migration creates
+  // that same function. Other missing functions and overloads remain refusals.
+  const missingGuard = /function "((?:[A-Za-z_][\w$]*\.)?[A-Za-z_][\w$]*)\(\)" does not exist/.exec(raw);
+  if (missingGuard) {
+    const name = missingGuard[1]!;
+    const functionName = name.startsWith('public.') ? `(?:public\\s*\\.\\s*)?${escapeRegExp(name.slice(7))}` : name.includes('.') ? escapeRegExp(name) : `(?:public\\s*\\.\\s*)?${escapeRegExp(name)}`;
+    const creator = new RegExp(`create\\s+(?:or\\s+replace\\s+)?function\\s+(?<![\\w.])${functionName}\\s*\\(\\s*\\)`, 'i');
+    return earlierContents.some(content => creator.test(stripSqlComments(content)));
+  }
   const missingTable = /relation "([^"]+)" does not exist/.exec(raw)?.[1];
   const missingColumn = /column "([^"]+)" of relation "([^"]+)" does not exist/.exec(raw);
   const table = missingColumn?.[2] ?? missingTable;
