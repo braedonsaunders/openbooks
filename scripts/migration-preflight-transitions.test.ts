@@ -81,7 +81,9 @@ test("measurement consumer defers only the complete pinned instruction publisher
   const binding = "generated/0702_journal_instruction_currency_binding.sql";
   const measurement = "generated/0703_journal_measurement_and_instruction_guards.sql";
   const files = new Map([...published, [binding, read(binding)], [measurement, read(measurement)]]);
-  const body = (filename: string) => files.get(filename)!.split("AS $$")[1]!.split("$$;")[0]!;
+  const body = (filename: string) => files.get(filename)!
+    .split("FUNCTION public.journal_instruction_line_guard()")[1]!
+    .split("AS $$")[1]!.split("$$;")[0]!;
   const measurementEvidence: PreflightTransitionEvidence = {
     ...evidence, migration: measurement, published: files,
     consumerSql: read("preflight/0703_journal_measurement_and_instruction_guards.sql"),
