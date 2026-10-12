@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../../platform/db.ts";
@@ -8,8 +8,10 @@ import { seedPayrollBenefitProgram } from "../../testing/benefit-fixtures.ts";
 import { seedBenefitIncentivePosting } from "../../testing/benefit-incentive-posting.ts";
 import { seedComponent, seedEmployment, seedProject, setupHarness, withHarness } from "../../testing/hrm-harness.ts";
 import type { ProjectMarginSnapshot } from "./project-margin-settlement.ts";
+import { recordSettledAward } from "./awards.ts";
+import { errorChainMatches } from "../../testing/error-chain.ts";
 import { addProgramMembership } from "./programs.ts";
-import { previewIncentiveSettlement, type IncentivePreview } from "./settlement.ts";
+import { previewIncentiveSettlement, settleIncentivePeriod, type IncentivePreview } from "./settlement.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 const SPEC = {
@@ -45,8 +47,7 @@ function projectSnapshot(preview: IncentivePreview): ProjectMarginSnapshot {
   return preview.measured as ProjectMarginSnapshot;
 }
 
-test("project-margin preview retains its cutoff when later revenue, costs and commitments arrive", { skip: !DB }, () =>
-  withHarness(setup, async h => {
+async function seedMargin(h: Harness, asOf = "2026-07-20") {
     const component = await seedComponent(h.org.orgId, { kind: "earning", code: "MARGIN" });
     const worker = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { displayName: "Project Manager" });
     const projectId = await seedProject(h.org.orgId, "Margin source project");
@@ -72,7 +73,13 @@ test("project-margin preview retains its cutoff when later revenue, costs and co
     await posting("2026-07-10",h.org.accounts.cogs,"2000","-2000");
     await purchaseCommitment(h,projectId,"2026-07-12","1000");
     const query = { orgId:h.org.orgId,actorId:h.actorId,programId:program.id,
-      periodFrom:"2026-07-01",periodTo:"2026-07-31",asOf:"2026-07-20" };
+      periodFrom:"2026-07-01",periodTo:"2026-07-31",asOf };
+    return { query, posting, program, projectId, worker };
+}
+
+test("project-margin preview retains its cutoff when later revenue, costs and commitments arrive", { skip: !DB }, () =>
+  withHarness(setup, async h => {
+    const { query, posting, program, projectId } = await seedMargin(h);
     const baseline = await previewIncentiveSettlement(query);
     assert.equal(baseline.computation.totalAwarded,"350.0000");
     const original = projectSnapshot(baseline);
@@ -101,3 +108,54 @@ test("project-margin preview retains its cutoff when later revenue, costs and co
       from hrm_benefit_awards where org_id=${h.org.orgId} and program_id=${program.id}`)).rows[0];
     assert.equal(awards?.count,0,"both native previews leave award history untouched");
   }));
+
+for (const legacy of [false, true]) {
+  test(`project-margin ${legacy ? "legacy" : "cutoff"} settlement retries preserve awards and refuse changed sources`,
+    { skip: !DB }, () => withHarness(setup, async h => {
+      const { query, posting, program, worker } = await seedMargin(h, "2026-07-31");
+      const preview = await previewIncentiveSettlement(query);
+      let awardId: string;
+      if (legacy) {
+        const margin = projectSnapshot(preview);
+        const body = { metric:"project_margin",scope:"company",projects:margin.projects,
+          ...(margin.carryForward ? { carryForward:margin.carryForward } : {}) };
+        const digest = createHash("sha256").update(JSON.stringify(body)).digest("hex");
+        const measurement = { ...preview.sourceSnapshot, projectMargin:{ ...body,digest },digest };
+        // Seed the original representation through native issuance, without editing history.
+        const award = await recordSettledAward({ orgId:h.org.orgId,actorId:h.actorId,
+          programId:program.id,employmentId:worker.employmentId,
+          periodFrom:query.periodFrom,periodTo:query.periodTo,value:"350.0000",currency:"USD",
+          sourceKey:`${preview.sourceKeyPrefix}:${worker.employmentId}`,
+          evidence:{ kind:"incentive-settlement",programRevision:preview.programRevision,
+            computation:{ value:"350.0000",capped:false } },settlementMeasurement:measurement });
+        awardId = award.id;
+      } else {
+        const first = await settleIncentivePeriod(query);
+        assert.equal(first.awards.length,1);
+        awardId = first.awards[0]!.id;
+      }
+      const readHistory = async () => (await db.execute<{ history:unknown }>(sql`
+        select jsonb_agg(to_jsonb(a) order by a.id) as history from hrm_benefit_awards a
+        where a.org_id=${h.org.orgId} and a.program_id=${program.id}`)).rows[0]!.history;
+      const before = await readHistory();
+      const retried = await settleIncentivePeriod(query);
+      assert.deepEqual(retried.awards.map(a => a.id),[awardId]);
+      assert.deepEqual(await readHistory(),before,"same-span retry makes no new award or history write");
+      const snapshot = retried.awards[0]!.sourceSnapshot as {
+        measurement:{ settlement:{ projectMargin:ProjectMarginSnapshot;digest:string } } };
+      const retained = snapshot.measurement.settlement;
+      assert.equal(Object.hasOwn(retained.projectMargin,"asOf"),!legacy);
+      assert.equal(retained.digest,retained.projectMargin.digest);
+      if (!legacy) assert.equal(retained.projectMargin.asOf,query.asOf);
+
+      // A later dated source is outside this cutoff and cannot change the retry.
+      await posting("2026-08-05",h.org.accounts.cogs,"500","-500");
+      assert.deepEqual((await settleIncentivePeriod(query)).awards.map(a => a.id),[awardId]);
+      assert.deepEqual(await readHistory(),before);
+      // An additional financial source inside the cutoff must still refuse.
+      await posting("2026-07-15",h.org.accounts.cogs,"100","-100");
+      await assert.rejects(() => settleIncentivePeriod(query),
+        error => errorChainMatches(error,/already settled .* different facts/));
+      assert.deepEqual(await readHistory(),before,"changed facts cannot rewrite retained awards");
+    }));
+}

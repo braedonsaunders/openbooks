@@ -818,7 +818,7 @@ export async function settleIncentivePeriod(query: SettleIncentivePeriodQuery): 
         return (snap?.measurement?.settlement ?? null) as Record<string, unknown> | null;
       });
       const current = buildSourceSnapshot(ctx, query, result, computation, result.excluded);
-      const sameFacts = sameKeys && persisted.every((snap) => snap !== null && snapshotsMatch(snap, current)) &&
+      const sameFacts = sameKeys && persisted.every((snap) => snap !== null && settlementSnapshotsMatch(snap, current)) &&
         exact.every((a) => {
           const recipient = computation.recipients.find((r) => `${prefix}:${r.employmentId}` === String(a.sourceKey));
           return recipient !== undefined && recipient.value === String(a.value);
@@ -969,6 +969,46 @@ export function snapshotsMatch(
   current: Record<string, unknown>,
 ): boolean {
   return canonicalSnapshotJson(persisted) === canonicalSnapshotJson(current);
+}
+
+/**
+ * Earlier project-margin evidence predates the explicit cutoff field. Admit
+ * that shape only when its original digest and every retained fact match the
+ * exact legacy representation of the current calculation.
+ */
+function settlementSnapshotsMatch(
+  persisted: Record<string, unknown>,
+  current: Record<string, unknown>,
+): boolean {
+  if (snapshotsMatch(persisted, current)) return true;
+  const oldMargin = persisted.projectMargin;
+  const newMargin = current.projectMargin;
+  if (persisted.metric !== "project_margin" || current.metric !== "project_margin" ||
+      oldMargin === null || typeof oldMargin !== "object" || Array.isArray(oldMargin) ||
+      newMargin === null || typeof newMargin !== "object" || Array.isArray(newMargin)) return false;
+  const old = oldMargin as Record<string, unknown>;
+  const fresh = newMargin as Record<string, unknown>;
+  if (Object.hasOwn(old, "asOf") || typeof fresh.asOf !== "string" ||
+      !/^\d{4}-\d{2}-\d{2}$/.test(fresh.asOf) ||
+      fresh.metric !== "project_margin" || fresh.scope !== "company" ||
+      !Array.isArray(fresh.projects)) return false;
+  const legacyBody = {
+    metric: "project_margin", scope: "company", projects: fresh.projects,
+    ...(Object.hasOwn(fresh, "carryForward") ? { carryForward: fresh.carryForward } : {}),
+  };
+  const currentBody = {
+    metric: "project_margin", scope: "company", asOf: fresh.asOf, projects: fresh.projects,
+    ...(Object.hasOwn(fresh, "carryForward") ? { carryForward: fresh.carryForward } : {}),
+  };
+  const digest = (body: unknown) => createHash("sha256").update(JSON.stringify(body)).digest("hex");
+  const currentDigest = digest(currentBody);
+  if (fresh.digest !== currentDigest || current.digest !== currentDigest ||
+      !snapshotsMatch(fresh, { ...currentBody, digest: currentDigest })) return false;
+  const legacyDigest = digest(legacyBody);
+  return old.digest === legacyDigest && persisted.digest === legacyDigest &&
+    snapshotsMatch(persisted, {
+      ...current, projectMargin: { ...legacyBody, digest: legacyDigest }, digest: legacyDigest,
+    });
 }
 
 function buildEvidence(
