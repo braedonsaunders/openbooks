@@ -4,7 +4,9 @@ import { randomUUID } from 'node:crypto'
 import { sql } from 'drizzle-orm'
 import { db, withBypassContext, withOrgContext } from '@openbooks/engine/platform/db'
 import { createScratchOrg, createScratchUser, dropScratchOrgReporting } from '@openbooks/engine/testing/fixtures'
-import { readEntityListPage } from './entity-reader'
+import { readResolvedEntityListPageForView } from './entity-reader'
+import { defaultListView } from '@openbooks/customization'
+import { resolveAuthzByUserId, can } from '../authz-core'
 
 const enabled = { skip: !process.env.OPENBOOKS_DB_URL }
 test('saved week lifecycle wins over mixed entry status while totals and empty headers remain visible', enabled, async () => {
@@ -51,12 +53,18 @@ test('saved week lifecycle wins over mixed entry status while totals and empty h
     })
     const before = await withOrgContext(org.orgId, () => db.execute(sql`
       select id,status,hours from time_entries where org_id=${org.orgId} order by id`))
-    const read = (over: Partial<Parameters<typeof readEntityListPage>[0]> = {}) => readEntityListPage({
-      recordType:'timesheet_week',orgId:org.orgId,actorId:actor,allowedSubsidiaryIds:null,
-      sort:'week',dir:'asc',...over,
-    })
+    const view = defaultListView('timesheet_week')
+    const read = (over: { actorId?: string; filters?: typeof view.filters } = {}) =>
+      withOrgContext(org.orgId, async () => {
+        const authz = await resolveAuthzByUserId(org.orgId,over.actorId ?? actor)
+        assert.ok(authz && can(authz,'time.read'),'the native timesheet host resolves its actual read authority')
+        return readResolvedEntityListPageForView({
+          recordType:'timesheet_week',orgId:org.orgId,allowedSubsidiaryIds:authz.allowedSubsidiaryIds,
+          view:{...view,filters:over.filters ?? view.filters},sort:'week',dir:'asc',page:1,perPage:25,
+        },{inventory:true,crm:false,hrm:false})
+      })
     const result = await read()
-    assert.ok(result.ok)
+    assert.ok(result.ok, JSON.stringify(result))
     if (!result.ok) return
     assert.equal(result.filteredTotal, 3)
     const week = result.rows.find(row=>String(row.week_start)==='2026-04-05')
@@ -69,7 +77,7 @@ test('saved week lifecycle wins over mixed entry status while totals and empty h
     const approved = await read({ filters:[{key:'status',operator:'eq',value:'approved'}] })
     assert.ok(approved.ok)
     if (approved.ok) assert.equal(approved.filteredTotal,2)
-    const none = await read({ actorId:emptyActor,allowedSubsidiaryIds:new Set<string>() })
+    const none = await read({ actorId:emptyActor })
     assert.ok(none.ok)
     if (none.ok) assert.equal(none.rows.length,0)
     assert.deepEqual((await withOrgContext(org.orgId,()=>db.execute(sql`

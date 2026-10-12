@@ -73,11 +73,11 @@ export function ReopenDecision({ requestId, ownRequest }: { requestId: string; o
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ action: 'reopen-conflicts', requestId }),
       })
-      if (!live) return { ok: true, data: null }
+      if (!live) return { ok: true, status: 204, data: null }
       if (!result.ok) return result
       const data = decisionPreview(result.data)
       return data
-        ? { ok: true, data }
+        ? { ...result, data }
         : { ok: false, error: new ActionError({ kind: 'refused', serverMessage: t('previewFailed') }) }
     }, {
       fallbackMessage: t('previewFailed'),
