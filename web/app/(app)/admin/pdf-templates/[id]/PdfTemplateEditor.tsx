@@ -319,10 +319,10 @@ export default function PdfTemplateEditor({
           {t('editor.margins')}
           <Input
             type="number"
-            min={0}
-            max={50}
+            min={template.recordType === 'payroll_cheque' ? 0 : 5}
+            max={30}
             value={marginMm}
-            onChange={(e) => setMarginMm(Math.min(50, Math.max(0, Number(e.target.value) || 0)))}
+            onChange={(e) => setMarginMm(Math.min(30, Math.max(template.recordType === 'payroll_cheque' ? 0 : 5, Number(e.target.value) || 0)))}
             className="h-9 w-16"
           />
           mm
