@@ -4563,7 +4563,8 @@
       "generationLeadDays": "Dias antes do vencimento para gerar o documento",
       "upliftPercent": "Percentual de reajuste na renovação",
       "termMonths": "Prazo de renovação em meses",
-      "settlementTaxCodeId": "Código tributário da liquidação"
+      "settlementTaxCodeId": "Código tributário da liquidação",
+      "recordType": "Tipo de registro"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Dias entre a taxa utilizável mais recente e o fim do período a partir dos quais a reavaliação e a consolidação recusam a taxa. Taxas de fechamento contam a partir da data da taxa à vista de fim de período; taxas médias, a partir da cotação mais recente incluída na média. Padrão sem política: 31 dias.",

@@ -28,6 +28,8 @@ test('approved field-ticket production becomes progress exactly once and voiding
         features: { projects: true, fieldTickets: true, projectProgress: true },
       })}::jsonb where id = ${org.orgId}`)
       const actor = (await seedFlowActors(org.orgId)).adminId
+      await db.execute(sql`insert into user_permission_overrides (org_id,user_id,permission,effect)
+        values (${org.orgId},${actor},'time.manage','grant')`)
       const projectId = randomUUID(), taskId = randomUUID(), unbudgeted = randomUUID(), employeeId = randomUUID(), timeTypeId = randomUUID()
       await db.execute(sql`insert into projects (id, org_id, subsidiary_id, code, name, customer_id, status, is_active, custom)
         values (${projectId}, ${org.orgId}, ${org.subsidiaryId}, 'FT-PROD', 'Production job', ${org.customerId}, 'active', true, '{}'::jsonb)`)
@@ -111,6 +113,8 @@ test('a ticket reporting production cannot be submitted while Progress tracking 
         features: { projects: true, fieldTickets: true, projectProgress: true },
       })}::jsonb where id = ${org.orgId}`)
       const actor = (await seedFlowActors(org.orgId)).adminId
+      await db.execute(sql`insert into user_permission_overrides (org_id,user_id,permission,effect)
+        values (${org.orgId},${actor},'time.manage','grant')`)
       const projectId = randomUUID(), taskId = randomUUID(), employeeId = randomUUID(), timeTypeId = randomUUID()
       await db.execute(sql`insert into projects (id, org_id, subsidiary_id, code, name, customer_id, status, is_active, custom)
         values (${projectId}, ${org.orgId}, ${org.subsidiaryId}, 'FT-OFF', 'Gate job', ${org.customerId}, 'active', true, '{}'::jsonb)`)

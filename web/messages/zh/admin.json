@@ -4563,7 +4563,8 @@
       "generationLeadDays": "到期前多少天生成单据",
       "upliftPercent": "续订涨价百分比",
       "termMonths": "续订期限（月）",
-      "settlementTaxCodeId": "结算税码"
+      "settlementTaxCodeId": "结算税码",
+      "recordType": "记录类型"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "最新可用汇率距期末的天数超过此值时，重估和合并将拒绝该汇率。期末汇率从期末即期汇率的日期起算；平均汇率从计入平均的最新报价日期起算。未设置政策时的默认值：31 天。",

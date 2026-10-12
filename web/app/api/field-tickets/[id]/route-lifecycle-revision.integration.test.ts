@@ -36,6 +36,7 @@ async function setup() {
   try {
     const actor = await withBypassContext(() => seedFlowActors(org.orgId))
     const id = await withBypassContext(async () => {
+      await db.execute(sql`insert into user_permission_overrides (org_id,user_id,permission,effect) values (${org.orgId},${actor.adminId},'time.manage','grant')`)
       await db.execute(sql`update orgs set settings=settings||${JSON.stringify({features:{projects:true,fieldTickets:true}})}::jsonb where id=${org.orgId}`)
       const project = randomUUID(), employee = randomUUID(), timeType = randomUUID()
       await db.execute(sql`insert into projects (id,org_id,subsidiary_id,code,name,customer_id,status,is_active,custom)
@@ -84,11 +85,10 @@ test('field-ticket lifecycle commands recheck live authority and signature revis
   const {org,actor,id}=await setup()
   try {
     const draft=await read(org.orgId,id)
-    await withBypassContext(()=>db.execute(sql`insert into user_permission_overrides (org_id,user_id,permission,effect)
-      values (${org.orgId},${actor},'time.manage','deny')`))
+    await withBypassContext(()=>db.execute(sql`update user_permission_overrides set effect='deny' where org_id=${org.orgId} and user_id=${actor} and permission='time.manage'`))
     assert.equal((await post(org.orgId,id,{action:'submit',expectedRevision:draft.revision})).status,404)
     assert.equal((await read(org.orgId,id)).status,'draft')
-    await withBypassContext(()=>db.execute(sql`delete from user_permission_overrides where org_id=${org.orgId} and user_id=${actor} and permission='time.manage'`))
+    await withBypassContext(()=>db.execute(sql`update user_permission_overrides set effect='grant' where org_id=${org.orgId} and user_id=${actor} and permission='time.manage'`))
     assert.equal((await post(org.orgId,id,{action:'submit',expectedRevision:draft.revision})).status,200)
     const approved=await read(org.orgId,id)
     const request={action:'send-signature',to:'customer@example.test'}

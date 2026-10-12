@@ -4650,7 +4650,8 @@
       "generationLeadDays": "Dokumenterstellung: Tage vor Ablauf",
       "upliftPercent": "Preiserhöhung bei Verlängerung in Prozent",
       "termMonths": "Verlängerungsdauer in Monaten",
-      "settlementTaxCodeId": "Steuerschlüssel für die Abrechnung"
+      "settlementTaxCodeId": "Steuerschlüssel für die Abrechnung",
+      "recordType": "Datensatztyp"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Tage zwischen dem neuesten verwendbaren Kurs und dem Periodenende, ab denen Bewertung und Konsolidierung den Kurs ablehnen. Stichtagskurse zählen ab dem Datum des Kassakurses zum Periodenende, Durchschnittskurse ab der neuesten einbezogenen Notierung. Standard ohne Richtlinie: 31 Tage.",

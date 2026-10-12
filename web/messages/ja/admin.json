@@ -4650,7 +4650,8 @@
       "generationLeadDays": "期限の何日前に書類を作成するか",
       "upliftPercent": "更新時の値上げ率",
       "termMonths": "更新期間（月）",
-      "settlementTaxCodeId": "決済の税コード"
+      "settlementTaxCodeId": "決済の税コード",
+      "recordType": "レコードの種類"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "使用可能な最新レートから期末までの日数がこれを超えると、再評価と連結はそのレートを拒否します。期末レートは期末スポットレートの日付から、平均レートは平均に含まれる最新の相場の日付から数えます。ポリシー未設定時の既定値: 31日。",

@@ -4563,7 +4563,8 @@
       "defaultJournalFormId": "Default journal form",
       "priority": "Priority",
       "resetRule": "Reset rule",
-      "segmentKey": "Segment key"
+      "segmentKey": "Segment key",
+      "recordType": "Record type"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Days between the newest usable rate and the period end beyond which revaluation and consolidation refuse the rate. Closing rates count from the date of the period-end spot rate; average rates from the newest quote averaged. Default when no policy is set: 31 days.",
