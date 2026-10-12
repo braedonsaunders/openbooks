@@ -11,10 +11,12 @@ import { requireDataKey } from "@openbooks/engine/platform/secrets"
 import { sql } from "drizzle-orm"
 import { db, env, pool } from "@openbooks/engine/platform/db"
 import { connectMigrationClient, describeBootstrapMigrationFailure, executeMigrationAttempt, executeMigrationBody, isLockNotAvailable, migrationLockConfig, migrationRetryDelayMs, migrationRunsWithoutTransaction, releaseMigrationClient, sanitizeMigrationContent } from "../bootstrap-migration-client.ts"
-import { PREFLIGHT_MIN_ORDINAL, earlierPendingCreatesObject, evaluatePreflight, formatFinding, ordinalOf as preflightOrdinalOf, preflightDecisionFor, preflightDirFor, preflightStatementTimeoutMs, readNoneReason, readPreflightSql, type PreflightFinding } from "../migration-preflight.ts"
+import { PREFLIGHT_MIN_ORDINAL, assertReadOnlyPreflight, earlierPendingCreatesObject, evaluatePreflight, formatFinding, ordinalOf as preflightOrdinalOf, preflightDecisionFor, preflightDirFor, preflightStatementTimeoutMs, readNoneReason, readPreflightSql, validateFindingRows, type PreflightFinding } from "../migration-preflight.ts"
 import { assertBaselineHistory, historicalMigrationPlan, migrationIdentityIsApplied, releaseMigrationPlan } from "../migration-baseline-plan.mjs"
 import { publishedMigrationSessionPrelude } from "../migration-session-headers.mjs"
 import { ensureRetirementAuthorityOwnership } from "./retirement-ownership.ts"
+import { migrationExecutionCompatibility } from "../migration-execution-compatibility.ts"
+import { preflightNeedsRecordedGuardTransition, RECORDED_INSTRUCTION_GUARD_SIGNATURE } from "../migration-preflight-transitions.ts"
 
 /**
  * A fresh installation hands business objects to the dedicated schema owner
@@ -36,6 +38,7 @@ async function executeTrackedMigration(
   content: string,
   digest: string,
   recordedDigest?: string,
+  deferredPreflight?: DeferredPreflight,
 ): Promise<void> {
   // Long DDL rides the timeout-free maintenance pool: the request pool's 120s
   // client query_timeout aborts the whole-schema baseline on a slow host.
@@ -58,7 +61,8 @@ async function executeTrackedMigration(
   const lock = migrationLockConfig(env);
   // The ledger digest still identifies the original immutable file. Supply
   // only its reviewed session settings before applying the bounded lock policy.
-  const body = sanitizeMigrationContent(publishedMigrationSessionPrelude(filename, content) + content);
+  const executable = migrationExecutionCompatibility(filename, content);
+  const body = sanitizeMigrationContent(publishedMigrationSessionPrelude(filename, content) + executable.content);
   const transactional = !migrationRunsWithoutTransaction(content);
   let attempt = 0;
   for (;;) {
@@ -77,6 +81,17 @@ async function executeTrackedMigration(
         lock,
         digest,
         recordedDigest,
+        executionCorrection: executable.correction && { ...executable.correction, executedSha256: sha256(body) },
+        beforeBody: deferredPreflight ? async migrationClient => {
+          assertReadOnlyPreflight(deferredPreflight.filename, deferredPreflight.sql);
+          await migrationClient.query(`set local statement_timeout = ${preflightStatementTimeoutMs(env)}`);
+          const result = await migrationClient.query<Record<string, unknown>>(deferredPreflight.sql);
+          const findings = validateFindingRows(deferredPreflight.filename, deferredPreflight.ordinal, result.rows);
+          printPreflightFindings(findings);
+          const codes = findings.filter(finding => finding.severity === "refuse").map(finding => finding.code);
+          if (codes.length) throw new Error(`[bootstrap] migration preflight ${filename} refuses this upgrade (${[...new Set(codes)].join(", ")}); this migration and its ledger record were not applied`);
+          await migrationClient.query("set local statement_timeout = 0");
+        } : undefined,
         schemaOwnerRole: await provisionedSchemaOwnerRole(client),
         executeBody:
           filename === ORDER_QUANTITY_PROGRESS_MIGRATION_FILENAME
@@ -108,6 +123,7 @@ async function applyTracked(
   label: string,
   filename: string,
   content: string,
+  deferredPreflight?: DeferredPreflight,
 ): Promise<boolean> {
   const digest = sha256(content);
   const seen = (await db.execute<{ sha256: string }>(sql`
@@ -134,7 +150,7 @@ async function applyTracked(
       );
       console.log(`[bootstrap]   ${transition.reason}`);
       if (transition.strategy === "reapply") {
-        await executeTrackedMigration(filename, content, digest, recorded);
+        await executeTrackedMigration(filename, content, digest, recorded, deferredPreflight);
         return true;
       }
       await db.execute(sql`
@@ -147,7 +163,7 @@ async function applyTracked(
     return false;
   }
   console.log(`[bootstrap] applying ${label}: ${filename}`);
-  await executeTrackedMigration(filename, content, digest);
+  await executeTrackedMigration(filename, content, digest, undefined, deferredPreflight);
   return true;
 }
 
@@ -312,6 +328,24 @@ async function evaluatePendingMigrations(
             + `pending migration creates, so it runs at apply time (${evaluation.reason})`,
         );
         continue;
+      }
+      if (evaluation.status === "ready" && evaluation.findings.some(finding => finding.code === "0700.instruction_guard_definition")) {
+        const recorded = await client.query<{ filename: string; sha256: string }>("select filename,sha256 from public._applied_migrations order by filename");
+        const published = new Map<string, string>();
+        for (const filename of generatedMigrationFiles().map(file => `generated/${file}`)) {
+          published.set(filename, readFileSync(join(migrationsDir, filename), "utf8"));
+        }
+        const current = await client.query<{ body: string }>("select prosrc as body from pg_proc where oid=to_regprocedure($1)", [RECORDED_INSTRUCTION_GUARD_SIGNATURE]);
+        if (preflightNeedsRecordedGuardTransition({
+          migration: item.filename, consumerSql: sqlText, findings: evaluation.findings, published,
+          recorded: new Map(recorded.rows.map(row => [row.filename, row.sha256])),
+          pendingBeforeConsumer: new Set(pending.slice(0, index).map(prerequisite => prerequisite.filename)),
+          currentBody: current.rows[0]?.body ?? null,
+        })) {
+          report.deferred.push({ file: item.file, filename: item.filename, ordinal: item.ordinal, sql: sqlText });
+          console.log(`[bootstrap] migration preflight ${item.filename} is deferred until its exact pending guard publisher is recorded; its strict query runs again at apply time`);
+          continue;
+        }
       }
       report.evaluated.push(item.filename);
       report.findings.push(...evaluation.findings);
@@ -568,8 +602,9 @@ export async function migrate(historicalMigrations = false): Promise<void> {
   for (const filename of plan.filenames) {
     const content = readFileSync(join(migrationsDir, filename), "utf8");
     const deferredPreflight = deferred.find((candidate) => candidate.filename === filename);
-    if (deferredPreflight) await runDeferredPreflight(deferredPreflight, appliedThisRun);
-    if (await applyTracked("migration", filename, content)) appliedThisRun.push(filename);
+    const transactional = !migrationRunsWithoutTransaction(content);
+    if (deferredPreflight && !transactional) await runDeferredPreflight(deferredPreflight, appliedThisRun);
+    if (await applyTracked("migration", filename, content, transactional ? deferredPreflight : undefined)) appliedThisRun.push(filename);
     if (filename === "generated/0626_tenant_retirement.sql" || filename === "generated/0619_operating_profiles_production_extensions.sql") {
       await ensureRetirementAuthorityOwnership();
     }

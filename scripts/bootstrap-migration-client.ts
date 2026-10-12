@@ -19,6 +19,8 @@
  * bootstrap.ts runs main() on import; tests import this module directly.
  */
 import pg from "pg";
+import { createHash } from "node:crypto";
+import type { MigrationExecutionCorrection } from "./migration-execution-compatibility.ts";
 import { connectBypassLongClient, longPool } from "@openbooks/engine/platform/db";
 
 export async function connectMigrationClient(options?: { bypass?: boolean }): Promise<pg.PoolClient> {
@@ -470,6 +472,9 @@ export type MigrationAttempt = {
   lock: MigrationLockConfig;
   digest: string;
   recordedDigest?: string;
+  executionCorrection?: MigrationExecutionCorrection;
+  /** Deferred validation shares the applying transaction and its schema role. */
+  beforeBody?: (client: pg.PoolClient) => Promise<void>;
   /** Business schema owner to apply as when this privileged session is not it. */
   schemaOwnerRole?: string;
   executeBody: (
@@ -521,7 +526,14 @@ export async function executeMigrationAttempt(
   client: pg.PoolClient,
   attempt: MigrationAttempt,
 ): Promise<void> {
-  const { filename, body, transactional, lock, digest, recordedDigest, schemaOwnerRole, executeBody } = attempt;
+  const { filename, body, transactional, lock, digest, recordedDigest, schemaOwnerRole, executeBody, executionCorrection, beforeBody } = attempt;
+  if (executionCorrection && (!transactional || executionCorrection.publishedSha256 !== digest)) {
+    throw new Error("migration execution correction requires its exact published identity and an atomic transaction");
+  }
+  if (executionCorrection && createHash("sha256").update(body).digest("hex") !== executionCorrection.executedSha256) {
+    throw new Error("migration executable differs from its correction identity");
+  }
+  if (beforeBody && !transactional) throw new Error("atomic migration preflight requires a transactional migration");
   const ownerRole = schemaOwnerRole ? pg.escapeIdentifier(schemaOwnerRole) : null;
   if (transactional) {
     await client.query("begin");
@@ -532,6 +544,7 @@ export async function executeMigrationAttempt(
     if (ownerRole) await client.query(`SET ROLE ${ownerRole}`);
   }
   try {
+    if (beforeBody) await beforeBody(client);
     await executeBody(client, body, { transactional, filename });
     // pg_dump-style baselines intentionally clear search_path while creating
     // fully qualified objects. Restore the application default before this
@@ -553,6 +566,26 @@ export async function executeMigrationAttempt(
         "insert into public._applied_migrations (filename, sha256) values ($1, $2)",
         [filename, digest],
       );
+    }
+    if (executionCorrection) {
+      await client.query(`create table if not exists public._migration_execution_corrections (
+        filename text primary key references public._applied_migrations(filename),
+        correction_id text not null,
+        published_sha256 text not null check (published_sha256 ~ '^[a-f0-9]{64}$'),
+        executed_sha256 text not null check (executed_sha256 ~ '^[a-f0-9]{64}$'),
+        applied_at timestamptz not null default now()
+      )`);
+      const recorded = await client.query(`insert into public._migration_execution_corrections
+        (filename,correction_id,published_sha256,executed_sha256) values ($1,$2,$3,$4)
+        on conflict (filename) do nothing returning filename`,
+      [filename, executionCorrection.id, executionCorrection.publishedSha256, executionCorrection.executedSha256]);
+      if (recorded.rowCount !== 1) {
+        // An approved replay may retain exactly the same execution evidence.
+        const prior = await client.query(`select filename from public._migration_execution_corrections
+          where filename=$1 and correction_id=$2 and published_sha256=$3 and executed_sha256=$4`,
+        [filename, executionCorrection.id, executionCorrection.publishedSha256, executionCorrection.executedSha256]);
+        if (prior.rowCount !== 1) throw new Error("migration execution correction conflicts with recorded evidence");
+      }
     }
     if (transactional) {
       await client.query("commit");

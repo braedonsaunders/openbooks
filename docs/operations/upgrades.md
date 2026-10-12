@@ -178,6 +178,20 @@ APIs present in every supported source release.
 
 ## Migration preflights
 
+Published SQL retains its original filename and digest. A reviewed native
+execution compatibility policy may adapt one exact published syntax form;
+it refuses changed source and records its policy identifier, published digest,
+and actual executable digest in `_migration_execution_corrections`, atomically
+with the original `_applied_migrations` row. It does not admit schema drift or
+alter financial validation. Preserve both metadata tables in installation
+backups and upgrade evidence.
+
+A guard preflight may defer an exact recorded function version to its exact
+earlier pending publisher. Such transitions require the matching recorded
+digest, current body, future published body and consumer query; other drift
+still refuses. Deferred transactional checks run again on the applying
+connection inside the migration transaction before its body or ledger write.
+
 Every install can ask, read-only and before upgrading, "will these pending
 migrations work on MY data, and what do I need to do?"
 
