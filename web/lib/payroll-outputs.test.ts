@@ -307,7 +307,7 @@ function reset(stubs: StubRow[], policy: { enabled: boolean; expression: string 
 }
 
 const protectedPayrollRecordTypes = Object.values(PDF_RECORD_TYPE_BY_KEY)
-  .filter((meta) => meta.readPermission === 'payroll.read')
+  .filter((meta) => meta.readPermission.startsWith('payroll.'))
   .map((meta) => meta.key)
   .sort()
 
