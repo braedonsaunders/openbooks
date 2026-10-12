@@ -1156,7 +1156,17 @@
     "pullSummary": "Le planificateur récupère chaque prestataire activé lors de son passage.",
     "pullHint": "Récupérer automatiquement les nouveaux versements",
     "pullSaved": "Récupération planifiée mise à jour",
-    "pullFailed": "Mise à jour impossible de la récupération planifiée"
+    "pullFailed": "Mise à jour impossible de la récupération planifiée",
+    "reviewAndPost": "Vérifier et comptabiliser",
+    "postingConfiguration": "Comptes et périmètre comptable",
+    "postingConfigurationCurrent": "Le brouillon utilise les comptes enregistrés et la configuration actuelle de l’entité et du livre. Ils sont vérifiés à nouveau lors de la comptabilisation.",
+    "postingConfigurationRecorded": "L’entité et le livre proviennent de l’écriture comptabilisée ; les comptes sont ceux enregistrés dans le lot.",
+    "postingBook": "Livre comptable",
+    "postingCurrency": "Devise du règlement",
+    "postingDisputeAccount": "Compte de litige",
+    "postingFxAccount": "Compte de change",
+    "postingNotConfigured": "Non configuré",
+    "postingBankAccount": "Compte bancaire du versement"
   },
   "pspReviews": {
     "title": "Examens des remboursements et litiges",

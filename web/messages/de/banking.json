@@ -1156,7 +1156,17 @@
     "pullSummary": "Der Planer ruft jeden aktivierten Provider in seinem Auszahlungslauf ab.",
     "pullHint": "Neue Auszahlungen automatisch abrufen",
     "pullSaved": "Automatischer Abruf aktualisiert",
-    "pullFailed": "Automatischer Abruf konnte nicht aktualisiert werden"
+    "pullFailed": "Automatischer Abruf konnte nicht aktualisiert werden",
+    "reviewAndPost": "Prüfen und buchen",
+    "postingConfiguration": "Buchungskonten und Geltungsbereich",
+    "postingConfigurationCurrent": "Der Entwurf verwendet gespeicherte Konten und die aktuelle Konfiguration von Gesellschaft und Buch. Bei der Buchung werden sie erneut geprüft.",
+    "postingConfigurationRecorded": "Gesellschaft und Buch stammen aus dem gebuchten Journal; die Konten sind im Stapel gespeichert.",
+    "postingBook": "Buchungsbuch",
+    "postingCurrency": "Abrechnungswährung",
+    "postingDisputeAccount": "Streitfallkonto",
+    "postingFxAccount": "Wechselkurskonto",
+    "postingNotConfigured": "Nicht konfiguriert",
+    "postingBankAccount": "Auszahlungsbankkonto"
   },
   "pspReviews": {
     "title": "Rückerstattungs- und Disputprüfungen",

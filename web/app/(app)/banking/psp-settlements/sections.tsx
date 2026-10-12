@@ -26,6 +26,7 @@ import { Switch } from '@/components/switch'
 import { useMoney } from '../../../../components/money-provider'
 import { useBusinessToday } from '../../../../components/business-date-provider'
 import { promptDialog } from '@/lib/prompt'
+import { useAppAction } from '@/lib/use-app-action'
 
 const SETTLEMENT_PROVIDERS = [
   'stripe',
@@ -186,6 +187,21 @@ interface SettlementDetail {
     fxAmount: string
     netAmount: string
     settlementDate: string
+    bankAccountId: string | null
+    bankAccountLabel: string
+    feeAccountId: string | null
+    feeAccountLabel: string
+    clearingAccountId: string | null
+    clearingAccountLabel: string
+    disputeAccountId: string | null
+    disputeAccountLabel: string
+    fxAccountId: string | null
+    fxAccountLabel: string
+    postingEntityId: string | null
+    postingEntityName: string | null
+    postingBookId: string | null
+    postingBookName: string | null
+    postingBasis: 'current' | 'recorded'
   }
   lines: SettlementDetailLine[]
 }
@@ -207,7 +223,15 @@ function isSettlementDetail(value: unknown): value is SettlementDetail {
     typeof batch.id !== 'string' ||
     typeof batch.externalRef !== 'string' ||
     typeof batch.currency !== 'string' ||
-    !amounts.every((key) => typeof batch[key] === 'string')
+    typeof batch.settlementDate !== 'string' ||
+    !SETTLEMENT_STATUSES.includes(batch.status as SettlementStatus) ||
+    !amounts.every((key) => typeof batch[key] === 'string') ||
+    !['bankAccountId', 'feeAccountId', 'clearingAccountId', 'disputeAccountId', 'fxAccountId',
+      'postingEntityId', 'postingEntityName', 'postingBookId', 'postingBookName']
+      .every((key) => batch[key] === null || typeof batch[key] === 'string') ||
+    !['bankAccountLabel', 'feeAccountLabel', 'clearingAccountLabel', 'disputeAccountLabel', 'fxAccountLabel']
+      .every((key) => typeof batch[key] === 'string') ||
+    !['current', 'recorded'].includes(String(batch.postingBasis))
   ) {
     return false
   }
@@ -380,6 +404,7 @@ export function PspSettlementsWorkspace({
   const reversalDateId = useId()
   const reversalReasonId = useId()
   const t = useTranslations('banking.pspSettlements')
+  const { runExclusive } = useAppAction()
   // Client-fetched rows (native path, and spec-path reloads after a mutation)
   // format through the same hooks the native page has always used.
   const common = useTranslations('common')
@@ -419,6 +444,7 @@ export function PspSettlementsWorkspace({
   const [detail, setDetail] = useState<SettlementDetail | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [detailFailed, setDetailFailed] = useState(false)
+  const [postingBatchId, setPostingBatchId] = useState<string | null>(null)
   // Line-evidence panel: the matchable line under edit. Mutations reload the
   // open detail; totals-changing ones reload the batch list too.
   const [evidenceLineNumber, setEvidenceLineNumber] = useState<number | null>(null)
@@ -474,6 +500,9 @@ export function PspSettlementsWorkspace({
   // The open and retry handlers reset the detail state; the effect only
   // resolves the fetch, so no synchronous set-state lives in the effect.
   const openSettlementDetail = (batchId: string) => {
+    if (postingBatchId !== null) return
+    setErr(null)
+    setMsg(null)
     setDetail(null)
     setDetailFailed(false)
     setDetailLoading(true)
@@ -652,17 +681,23 @@ export function PspSettlementsWorkspace({
     void load()
   }
 
-  const post = async (batchId: string) => {
+  const post = runExclusive(async (batchId: string) => {
     setErr(null)
     setMsg(null)
-    const d = await requestSettlement<{ entryId?: string }>({ action: 'post', batchId })
-    if (!d.ok || typeof d.data.entryId !== 'string') {
-      setErr(!d.ok && d.error ? d.error : t('postFailed'))
-      return
+    if (postingBatchId !== null) return
+    setPostingBatchId(batchId)
+    try {
+      const d = await requestSettlement<{ entryId?: string }>({ action: 'post', batchId })
+      if (!d.ok || typeof d.data.entryId !== 'string') {
+        setErr(!d.ok && d.error ? d.error : t('postFailed'))
+        return
+      }
+      setMsg(t('postedToast', { id: d.data.entryId }))
+      await reloadDetail(true)
+    } finally {
+      setPostingBatchId(null)
     }
-    setMsg(t('postedToast', { id: d.data.entryId }))
-    void load()
-  }
+  })
 
   const reverse = async (batchId: string) => {
     setErr(null)
@@ -715,7 +750,8 @@ export function PspSettlementsWorkspace({
   const reloadDetail = async (reloadList: boolean) => {
     if (selectedBatchId) {
       const loaded = await fetchSettlementDetail(selectedBatchId)
-      if (loaded !== null) setDetail(loaded)
+      setDetail(loaded)
+      setDetailFailed(loaded === null)
     }
     if (reloadList) void load()
   }
@@ -1085,8 +1121,8 @@ export function PspSettlementsWorkspace({
                 cell: (b) => (
                   <>
                     {b.rawStatus === 'draft' && canReconcile && (
-                      <Button size="sm" variant="ghost" onClick={() => void post(b.id)}>
-                        {strings.postLabel}
+                      <Button size="sm" variant="ghost" onClick={() => openSettlementDetail(b.id)}>
+                        {t('reviewAndPost')}
                       </Button>
                     )}
                     {b.rawStatus === 'draft' && canReconcile && (
@@ -1114,8 +1150,13 @@ export function PspSettlementsWorkspace({
 
       <Drawer
         open={selectedBatchId !== null}
-        onClose={() => setSelectedBatchId(null)}
+        onClose={() => { if (postingBatchId === null) setSelectedBatchId(null) }}
         size="lg"
+        headerActions={detail && !detailLoading && !detailFailed && detail.batch.status === 'draft' && canReconcile ? (
+          <Button disabled={postingBatchId !== null} onClick={() => void post(detail.batch.id)}>
+            {postingBatchId === detail.batch.id ? strings.loadingLabel : strings.postLabel}
+          </Button>
+        ) : undefined}
         title={detail ? t('detailTitle', { ref: detail.batch.externalRef }) : strings.recentBatches}
       >
         {detailLoading ? (
@@ -1149,6 +1190,8 @@ export function PspSettlementsWorkspace({
           </div>
         ) : (
           <div className="space-y-4">
+            {err ? <p role="alert" className="text-sm text-red-600">{err}</p> : null}
+            {msg ? <p aria-live="polite" className="text-sm text-teal-700 dark:text-teal-300">{msg}</p> : null}
             <SettlementDetailBody
               detail={detail}
               money={money}
@@ -1575,6 +1618,7 @@ function SettlementDetailBody({
   onEvidence: (line: SettlementDetailLine) => void
 }) {
   const { batch, lines } = detail
+  const locale = useLocale()
   const currency = batch.currency
   const totals: [string, string][] = [
     [t('detailGross'), money(batch.grossAmount, { currency })],
@@ -1587,6 +1631,28 @@ function SettlementDetailBody({
   ]
   return (
     <div className="space-y-5">
+      <div className="space-y-2">
+        <h4 className="text-sm font-semibold">{t('postingConfiguration')}</h4>
+        <p className="text-xs text-muted-foreground">{t(batch.postingBasis === 'current' ? 'postingConfigurationCurrent' : 'postingConfigurationRecorded')}</p>
+        <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+          {([
+            [t('subsidiaryLabel'), batch.postingEntityName],
+            [t('postingBook'), batch.postingBookName],
+            [t('settlementDate'), dateLabel(new Date(`${batch.settlementDate}T12:00:00Z`), locale)],
+            [t('postingCurrency'), batch.currency],
+            [t('postingBankAccount'), batch.bankAccountLabel],
+            [t('feeAccountId'), batch.feeAccountLabel],
+            [t('clearingAccountId'), batch.clearingAccountLabel],
+            ...(batch.disputeAccountId ? [[t('postingDisputeAccount'), batch.disputeAccountLabel]] : []),
+            ...(batch.fxAccountId ? [[t('postingFxAccount'), batch.fxAccountLabel]] : []),
+          ] as [string, string | null][]).map(([label, value]) => (
+            <div key={label}>
+              <dt className="text-xs text-muted-foreground">{label}</dt>
+              <dd>{value || t('postingNotConfigured')}</dd>
+            </div>
+          ))}
+        </dl>
+      </div>
       <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm sm:grid-cols-4">
         {totals.map(([label, value], index) => (
           <div key={label} className={index === totals.length - 1 ? 'font-semibold' : undefined}>

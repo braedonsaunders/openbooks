@@ -1156,7 +1156,17 @@
     "pullSummary": "スケジューラーが有効な各プロバイダーをペイアウトスキャンで取得します。",
     "pullHint": "新しいペイアウトを自動取得する",
     "pullSaved": "定期取得を更新しました",
-    "pullFailed": "定期取得を更新できませんでした"
+    "pullFailed": "定期取得を更新できませんでした",
+    "reviewAndPost": "確認して転記",
+    "postingConfiguration": "転記口座と範囲",
+    "postingConfigurationCurrent": "下書きは保存済み口座と現在の法人・帳簿設定を使用します。転記時に再検証されます。",
+    "postingConfigurationRecorded": "法人と帳簿は転記済み仕訳に基づき、口座はバッチに保存された設定です。",
+    "postingBook": "転記帳簿",
+    "postingCurrency": "決済通貨",
+    "postingDisputeAccount": "異議申立口座",
+    "postingFxAccount": "為替口座",
+    "postingNotConfigured": "未設定",
+    "postingBankAccount": "入金先銀行口座"
   },
   "pspReviews": {
     "title": "返金と異議申立ての確認",

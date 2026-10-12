@@ -1163,7 +1163,17 @@
     "pullSummary": "The scheduler pulls each enabled provider on its payout scan.",
     "pullHint": "Pull new payouts automatically",
     "pullSaved": "Scheduled pull updated",
-    "pullFailed": "Could not update scheduled pull"
+    "pullFailed": "Could not update scheduled pull",
+    "reviewAndPost": "Review & post",
+    "postingConfiguration": "Posting accounts and scope",
+    "postingConfigurationCurrent": "Draft uses the saved accounts and current entity/book configuration. Posting validates them again.",
+    "postingConfigurationRecorded": "Entity and book are taken from the posted journal; accounts are the saved batch mappings.",
+    "postingBook": "Posting book",
+    "postingCurrency": "Settlement currency",
+    "postingDisputeAccount": "Dispute account",
+    "postingFxAccount": "FX account",
+    "postingNotConfigured": "Not configured",
+    "postingBankAccount": "Payout bank account"
   },
   "pspReviews": {
     "title": "Refund and dispute reviews",

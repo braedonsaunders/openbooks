@@ -156,6 +156,12 @@ const mockSources = new Map<string, string>([
     `
       const state = globalThis[Symbol.for('openbooks.psp-settlement-route-test')]
 
+      export async function primaryBookId() { return 'book-1'; }
+      export async function loadSubsidiaryContext() {
+        const state = globalThis[Symbol.for('openbooks.psp-settlement-route-test')];
+        const rows = state.subsidiaryRows.map(row => ({...row, name: row.name ?? row.id}));
+        return { byId: new Map(rows.map(row => [row.id, row])), rootId: rows[0]?.id ?? 'root-1', multi: state.multiSubsidiary };
+      }
       export class PspSettlementError extends Error {}
       export class PspSettlementConflictError extends PspSettlementError {
         constructor(message, persistedBatch) { super(message); this.persistedBatch = persistedBatch }
@@ -348,6 +354,7 @@ const mockUrls = new Map<string, string>([
   ["@openbooks/engine/payments/settlement", "mock:psp-settlement"],
   ["@openbooks/engine/commerce", "mock:commerce"],
   ["@openbooks/engine/organization/scope", "mock:psp-settlement"],
+  ["@openbooks/engine/organization/subsidiaries", "mock:psp-settlement"],
   ["@openbooks/engine/platform/business-date/module", "mock:business-date"],
   ["../../../../lib/authz", "mock:authz"],
   ["@/lib/authz", "mock:authz"],

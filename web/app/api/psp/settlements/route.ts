@@ -16,11 +16,13 @@ import {
   parseSquarePayout,
   parseStripeBalanceTransactions,
   postSettlementBatch,
+  primaryBookId,
   reverseSettlementBatch,
   savePspProviderConfig,
   summarizeSettlement,
   type ParsedSettlement,
 } from "@openbooks/engine/payments/psp-settlement";
+import { loadSubsidiaryContext } from "@openbooks/engine/organization/subsidiaries";
 import { businessToday, isIsoCalendarDate } from "@openbooks/engine/platform/business-date/module";
 import {
   accruePayoutsInTransit,
@@ -474,13 +476,53 @@ export const GET = defineRoute({
                b.adjustment_amount as "adjustmentAmount", b.fx_amount as "fxAmount",
                b.net_amount as "netAmount", b.settlement_date::text as "settlementDate",
                b.journal_entry_id as "journalEntryId", b.reversal_entry_id as "reversalEntryId",
-               b.reversal_reason as "reversalReason", b.memo, b.line_count as "lineCount"
+               b.reversal_reason as "reversalReason", b.memo, b.line_count as "lineCount",
+               b.subsidiary_id as "subsidiaryId", j.subsidiary_id as "recordedSubsidiaryId",
+               j.book_id as "recordedBookId",
+               b.bank_account_id as "bankAccountId", concat_ws(' · ', bank.number, bank.name) as "bankAccountLabel",
+               b.fee_account_id as "feeAccountId", concat_ws(' · ', fee.number, fee.name) as "feeAccountLabel",
+               b.clearing_account_id as "clearingAccountId", concat_ws(' · ', clearing.number, clearing.name) as "clearingAccountLabel",
+               b.dispute_account_id as "disputeAccountId", concat_ws(' · ', dispute.number, dispute.name) as "disputeAccountLabel",
+               b.fx_account_id as "fxAccountId", concat_ws(' · ', fx.number, fx.name) as "fxAccountLabel"
           from psp_settlement_batches b
+          left join journal_entries j on j.org_id = b.org_id and j.id = b.journal_entry_id
+          left join accounts bank on bank.org_id = b.org_id and bank.id = b.bank_account_id
+          left join accounts fee on fee.org_id = b.org_id and fee.id = b.fee_account_id
+          left join accounts clearing on clearing.org_id = b.org_id and clearing.id = b.clearing_account_id
+          left join accounts dispute on dispute.org_id = b.org_id and dispute.id = b.dispute_account_id
+          left join accounts fx on fx.org_id = b.org_id and fx.id = b.fx_account_id
          where b.org_id = ${orgId} and b.id = ${batchId}${scopedBatch}
          limit 1
       `);
       const row = batch.rows[0] as Record<string, unknown> | undefined;
       if (!row) return notFound("record");
+      // Drafts use the same entity and primary-book resolution as posting;
+      // posted history keeps the actual journal identity even if Setup changes.
+      const context = await loadSubsidiaryContext(db, orgId);
+      const postingEntityId = row.status === "draft"
+        ? row.subsidiaryId ?? (context.multi ? null : context.rootId)
+        : row.recordedSubsidiaryId;
+      let postingBookId = row.recordedBookId ?? null;
+      if (row.status === "draft") {
+        try {
+          postingBookId = await primaryBookId(orgId);
+        } catch (error) {
+          if (!(error instanceof PspSettlementError)) throw error;
+        }
+      }
+      const book = postingBookId
+        ? (await db.execute<{ name: string }>(sql`
+            select name from accounting_books where org_id = ${orgId} and id = ${postingBookId}
+          `)).rows[0]
+        : undefined;
+      const review = {
+        postingEntityId: postingEntityId ?? null,
+        postingEntityName: typeof postingEntityId === "string"
+          ? context.byId.get(postingEntityId)?.name ?? null : null,
+        postingBookId,
+        postingBookName: book?.name ?? null,
+        postingBasis: row.status === "draft" ? "current" : "recorded",
+      };
       const lines = await db.execute(sql`
         select l.id, l.line_number as "lineNumber", l.kind, l.external_ref as "externalRef",
                l.description, l.amount, l.currency, l.document_id as "documentId",
@@ -504,7 +546,7 @@ export const GET = defineRoute({
          where org_id = ${orgId} and batch_id = ${batchId}
          order by accrual_date
       `);
-      return NextResponse.json({ batch: row, lines: lines.rows, tieout, accruals: accruals.rows });
+      return NextResponse.json({ batch: { ...row, ...review }, lines: lines.rows, tieout, accruals: accruals.rows });
     }
     const subsidiaryFilter = gate.allowedSubsidiaryIds
       ? gate.allowedSubsidiaryIds.size > 0

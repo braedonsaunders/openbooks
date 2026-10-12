@@ -1156,7 +1156,17 @@
     "pullSummary": "O agendador coleta cada provedor ativado na sua varredura de repasses.",
     "pullHint": "Coletar novos repasses automaticamente",
     "pullSaved": "Coleta programada atualizada",
-    "pullFailed": "Não foi possível atualizar a coleta programada"
+    "pullFailed": "Não foi possível atualizar a coleta programada",
+    "reviewAndPost": "Revisar e contabilizar",
+    "postingConfiguration": "Contas e escopo contábil",
+    "postingConfigurationCurrent": "O rascunho usa as contas salvas e a configuração atual de entidade e livro. Elas são validadas novamente na contabilização.",
+    "postingConfigurationRecorded": "A entidade e o livro vêm do lançamento contabilizado; as contas são as salvas no lote.",
+    "postingBook": "Livro contábil",
+    "postingCurrency": "Moeda da liquidação",
+    "postingDisputeAccount": "Conta de disputa",
+    "postingFxAccount": "Conta de câmbio",
+    "postingNotConfigured": "Não configurado",
+    "postingBankAccount": "Conta bancária do repasse"
   },
   "pspReviews": {
     "title": "Revisões de reembolsos e disputas",

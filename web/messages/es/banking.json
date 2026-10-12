@@ -1156,7 +1156,17 @@
     "pullSummary": "El programador descarga cada proveedor activado en su pasada de pagos.",
     "pullHint": "Descargar automáticamente los nuevos pagos",
     "pullSaved": "Descarga programada actualizada",
-    "pullFailed": "No se pudo actualizar la descarga programada"
+    "pullFailed": "No se pudo actualizar la descarga programada",
+    "reviewAndPost": "Revisar y contabilizar",
+    "postingConfiguration": "Cuentas y alcance contable",
+    "postingConfigurationCurrent": "El borrador usa las cuentas guardadas y la configuración actual de entidad y libro. Se validan de nuevo al contabilizar.",
+    "postingConfigurationRecorded": "La entidad y el libro proceden del asiento contabilizado; las cuentas son las guardadas en el lote.",
+    "postingBook": "Libro contable",
+    "postingCurrency": "Moneda de liquidación",
+    "postingDisputeAccount": "Cuenta de disputa",
+    "postingFxAccount": "Cuenta de cambio",
+    "postingNotConfigured": "Sin configurar",
+    "postingBankAccount": "Cuenta bancaria del desembolso"
   },
   "pspReviews": {
     "title": "Revisiones de reembolsos y disputas",

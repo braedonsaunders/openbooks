@@ -1156,7 +1156,17 @@
     "pullSummary": "调度器在付款扫描中拉取每个已启用的支付机构。",
     "pullHint": "自动拉取新的付款",
     "pullSaved": "定时拉取已更新",
-    "pullFailed": "无法更新定时拉取"
+    "pullFailed": "无法更新定时拉取",
+    "reviewAndPost": "审核并过账",
+    "postingConfiguration": "过账账户和范围",
+    "postingConfigurationCurrent": "草稿使用已保存的账户和当前法人及账簿配置。过账时会再次验证。",
+    "postingConfigurationRecorded": "法人和账簿来自已过账凭证；账户来自批次保存的映射。",
+    "postingBook": "过账账簿",
+    "postingCurrency": "结算币种",
+    "postingDisputeAccount": "争议账户",
+    "postingFxAccount": "汇兑账户",
+    "postingNotConfigured": "未配置",
+    "postingBankAccount": "付款入账银行账户"
   },
   "pspReviews": {
     "title": "退款与争议复核",
