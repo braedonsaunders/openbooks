@@ -46,14 +46,14 @@ export function AdditionalTimeReview({ entries, pickers, busy, refusal, onBack, 
         }),
       }}
       columns={[
-        { key: 'date', header: t('date'), cell: entry => viewerDate(entry.workedOn, locale), search: entry => entry.workedOn },
+        { key: 'date', header: t('date'), cell: entry => viewerDate(entry.workedOn, locale, 'UTC'), search: entry => entry.workedOn },
         { key: 'project', header: t('project'), cell: entry => projectName(entry.projectId), search: entry => projectName(entry.projectId) },
         { key: 'source', header: t('source'), cell: entry => <div className="flex flex-wrap items-center gap-2">
           <span>{entry.fieldTicketNumber ?? t('directTime')}</span>
           {entry.fieldTicketStatus ? <Badge variant="secondary">{statusLabel(entry.fieldTicketStatus)}</Badge> : null}
         </div>, search: entry => [entry.fieldTicketNumber ?? t('directTime'), entry.fieldTicketStatus ? statusLabel(entry.fieldTicketStatus) : ''].join(' ') },
         { key: 'item', header: t('item'), cell: entry => itemName(entry.itemId), search: entry => itemName(entry.itemId) },
-        { key: 'hours', header: t('hours'), align: 'right', cell: entry => decimalLabel(entry.hours) },
+        { key: 'hours', header: t('hours'), align: 'right', cell: entry => decimalLabel(Number(entry.hours), locale, 0, 4) },
         { key: 'status', header: t('timeStatus'), cell: entry => <Badge variant="outline">{statusLabel(entry.status)}</Badge> },
       ]} />
     <label className="block space-y-1 text-sm">
