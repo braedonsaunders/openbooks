@@ -53,12 +53,12 @@ export async function pinInternalPerson(
   return { id: row.id, subsidiaryId: row.subsidiary_id };
 }
 
-export interface InternalPersonOption {
+export type InternalPersonOption = {
   id: string;
   display_name: string;
   subsidiary_id: string | null;
   kind: string;
-}
+};
 
 /**
  * Picker options for project roles and any other surface that names an

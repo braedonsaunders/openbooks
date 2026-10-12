@@ -7,7 +7,7 @@ import type { SourceBoundHolidayPayment } from "./holiday-payment-source.ts";
 import { effectivePayRateSql } from "./rate.ts";
 import { resolvePayRate, resolvePayrollFxSource } from "./run-calculation-support.ts";
 
-export interface HolidayObligationSource {
+export type HolidayObligationSource = {
   id: string;
   employeePartyId: string;
   employmentId: string;
@@ -18,7 +18,7 @@ export interface HolidayObligationSource {
   foreignClaim: { id: string; documentId: string; status: string } | null;
   component: Record<string, unknown> | null;
   wage?: { resolved: NonNullable<Awaited<ReturnType<typeof resolvePayRate>>>; source: Record<string, unknown>; fx: Awaited<ReturnType<typeof resolvePayrollFxSource>> };
-}
+};
 
 /** Older databases cannot contain this newly introduced class of obligation.
  * A partial deployment is refused, never interpreted as no unpaid holiday. */

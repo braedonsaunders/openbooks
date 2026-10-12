@@ -29,7 +29,7 @@ import { TIMESHEET_WEEK_SUBJECT_KIND } from "./timesheet-weeks-adapter.ts";
  * One gateless submitted week, in database-row shape — the same columns the
  * inbox adapter has always listed, so both readers map one row type.
  */
-export interface DirectTimesheetWeek {
+export type DirectTimesheetWeek = {
   id: string;
   employee_party_id: string;
   person_name: string | null;
@@ -38,7 +38,7 @@ export interface DirectTimesheetWeek {
   created_at: string;
   entries: number;
   hours: string;
-}
+};
 
 export interface DirectTimesheetWindow {
   prefix?: number;

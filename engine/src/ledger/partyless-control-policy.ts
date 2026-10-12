@@ -35,12 +35,12 @@ export async function partylessControlPolicy(
   return parsePartylessControlPolicy(row?.policy);
 }
 
-export interface PartylessControlAccount {
+export type PartylessControlAccount = {
   id: string;
   number: string | null;
   name: string;
   type: "asset_receivable" | "liability_payable";
-}
+};
 
 /**
  * Receivable/payable accounts whose party-less lines leave the sub-ledger:

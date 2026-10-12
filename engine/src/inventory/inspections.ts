@@ -22,7 +22,10 @@ async function authority(tx:SqlExecutor,orgId:string,actorId:string,subsidiaryId
   let scope:ReadonlySet<string>|null=null;
   for (const permission of permissions) {
     const allowed=await lockActorCommandAuthority(tx,orgId,actorId,subsidiaryId,permission);
-    if (allowed!==null) scope=scope===null ? allowed : new Set([...scope].filter(id=>allowed.has(id)));
+    if (allowed!==null) {
+      const currentScope:ReadonlySet<string> = scope ?? allowed;
+      scope=new Set([...currentScope].filter(id=>allowed.has(id)));
+    }
   }
   return scope;
 }
@@ -85,7 +88,7 @@ export async function createReceiptInspection(tx:SqlExecutor,orgId:string,actorI
   await audit(tx,orgId,actorId,'inventory_inspections',saved.rows[0]!.id,null,{...movement,planSnapshot:plan,status:'pending'});
 }
 
-export interface InspectionRead { id:string; planSnapshot:InspectionPlanSnapshot; itemId:string; subsidiaryId:string; stockLocationId:string|null; receiptMovementId:string|null; workOrderId:string|null; operationId:string|null; lotId:string|null; serialId:string|null; quantity:string; status:"pending"|"pass"|"fail"; disposition:"use_as_is"|"scrap"|"rework"|null; measurements:Record<string,string>; reason:string|null; dispositionResult:Record<string,unknown>|null; reworkWorkOrderId:string|null;reworkCompletedAt:Date|string|null;reworkResolved:boolean;reworkLoss:boolean; sourceActive:boolean }
+export type InspectionRead = { id:string; planSnapshot:InspectionPlanSnapshot; itemId:string; subsidiaryId:string; stockLocationId:string|null; receiptMovementId:string|null; workOrderId:string|null; operationId:string|null; lotId:string|null; serialId:string|null; quantity:string; status:"pending"|"pass"|"fail"; disposition:"use_as_is"|"scrap"|"rework"|null; measurements:Record<string,string>; reason:string|null; dispositionResult:Record<string,unknown>|null; reworkWorkOrderId:string|null;reworkCompletedAt:Date|string|null;reworkResolved:boolean;reworkLoss:boolean; sourceActive:boolean };
 export async function loadInspection(tx:SqlExecutor,orgId:string,id:string,lock=false):Promise<InspectionRead> {
   if (!isUuid(id)) throw new InventoryNotFoundError("Inspection not found.");
   const row=(await tx.execute<InspectionRead>(sql`select id,plan_snapshot as "planSnapshot",item_id as "itemId",subsidiary_id as "subsidiaryId",stock_location_id as "stockLocationId",receipt_movement_id as "receiptMovementId",work_order_id as "workOrderId",operation_id as "operationId",lot_id as "lotId",serial_id as "serialId",quantity::text,status,disposition,measurements,reason,disposition_result as "dispositionResult",rework_work_order_id as "reworkWorkOrderId",rework_completed_at as "reworkCompletedAt",${inspectionReworkAccepted(sql`inspection`)} as "reworkResolved",exists(select 1 from mfg_work_orders repair where repair.org_id=inspection.org_id and repair.id=inspection.rework_work_order_id and repair.loss_change_id is not null) as "reworkLoss",${inspectionSourceActive(sql`inspection`)} as "sourceActive" from inventory_inspections inspection where org_id=${orgId} and id=${id} ${lock?sql`for update`:sql``}`)).rows[0];

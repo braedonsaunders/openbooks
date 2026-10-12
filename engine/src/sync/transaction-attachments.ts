@@ -5,7 +5,7 @@ import { isUuid } from '../platform/uuid.ts';
 import { AttachmentImportError, type ImportSummary } from './attachment-contract.ts';
 import { detectContentType, persistTransactionFile, verifyTransactionFiles, type SourceFileTarget } from './transaction-file-storage.ts';
 
-export interface AttachmentTransaction { id: string; sourceRef: string; kind: string }
+export type AttachmentTransaction = { id: string; sourceRef: string; kind: string };
 export interface TransactionAttachment {
   id: string;
   name: string;

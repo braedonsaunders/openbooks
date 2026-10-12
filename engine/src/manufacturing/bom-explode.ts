@@ -7,7 +7,7 @@ import { ManufacturingError } from "./errors.ts";
 
 const MAX_DEPTH = 32;
 
-type BomRow = BomQuantityPolicy & {
+type BomRow = { [Field in keyof BomQuantityPolicy]: BomQuantityPolicy[Field] } & {
   componentItemId: string;
   componentCode: string;
   quantityPer: string;

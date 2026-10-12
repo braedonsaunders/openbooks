@@ -10,6 +10,8 @@ import { bindHolidayPaymentSource, readHolidayPaymentSourceReference, type Retai
 import { payrollSubsidiaryInScope } from "./scope.ts";
 import { takeEmployeeConfigurationFence } from "./fences.ts";
 
+type RetainedHolidayPaymentSourceRow = { [Field in keyof RetainedHolidayPaymentSource]: RetainedHolidayPaymentSource[Field] };
+
 /** Prepare frozen evidence inside the owning command transaction. The
  * File Cabinet grant callback must use its native ACL resolver in the same
  * organization context. This read grants neither approval nor settlement. */
@@ -46,7 +48,7 @@ export async function loadHolidayPaymentEvidence(
   }
   // file_versions has no org_id: the tenant boundary is the joined parent.
   // Older retained versions remain admissible after a replacement upload.
-  const retained = (await tx.execute<RetainedHolidayPaymentSource>(sql`
+  const retained = (await tx.execute<RetainedHolidayPaymentSourceRow>(sql`
     select f.org_id as "orgId", f.id as "fileId", v.id as "versionId",
            v.version_number as "versionNumber", v.content_hash as "contentHash",
            f.is_inactive as "fileInactive", folder.is_inactive as "folderInactive"

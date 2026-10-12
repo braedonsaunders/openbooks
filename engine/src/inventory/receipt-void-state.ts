@@ -46,7 +46,7 @@ export interface ReceiptVoidRelief {
   remainderQuantity: string;
 }
 
-export interface LiveReceiptMovement {
+export type LiveReceiptMovement = {
   id: string;
   item_id: string;
   item_code: string | null;
@@ -57,7 +57,7 @@ export interface LiveReceiptMovement {
   document_line_id: string;
   stock_location_id: string;
   subsidiary_id: string;
-}
+};
 
 /** Live receipt movements behind a goods receipt: posted, never reversed. */
 export async function liveReceiptMovements(
@@ -116,7 +116,7 @@ export async function layerCover(
   return { cover, layered };
 }
 
-export interface ConsumptionRow {
+export type ConsumptionRow = {
   cost_layer_id: string;
   issue_movement_id: string;
   consumed_quantity: string;
@@ -129,7 +129,7 @@ export interface ConsumptionRow {
   doc_kind: string | null;
   doc_status: string | null;
   doc_void_requested: string | null;
-}
+};
 
 /** Live consumptions of the receipt's layers: issues no reversal has undone. */
 export async function liveConsumptions(

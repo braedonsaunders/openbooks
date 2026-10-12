@@ -51,12 +51,12 @@ export interface MatchedBillLine {
   quantity: string;
 }
 
-export interface PurchaseReceiptReference {
+export type PurchaseReceiptReference = {
   id: string;
   documentNumber: string;
   documentDate: string;
   status: string;
-}
+};
 
 export interface BillMatchCandidate {
   purchaseOrderId: string;

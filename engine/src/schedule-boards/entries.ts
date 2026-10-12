@@ -76,12 +76,12 @@ function noticeFor(entry: BoardEntry, change: ScheduleNotice["change"]): Schedul
   return { workerPartyId: entry.workerPartyId, onDate: entry.startsOn, change, label, hours: hoursLabel(entry) || null };
 }
 
-interface StoredEntry {
+type StoredEntry = {
   id: string; revision: number; boardId: string; workerPartyId: string | null; subjectId: string; subjectKind: "person" | "equipment" | "location"; status: "draft" | "published" | "cancelled";
   targetKind: TargetRef["kind"] | null; targetId: string | null; projectTaskId: string | null; departmentId: string | null;
   detail: string | null; notes: string | null; spanMode: "day" | "timed"; timeZone: string; startsOn: string; endsOn: string;
   startsAt: string; endsAt: string; breakMinutes: number; seriesId: string | null; supersedesId: string | null;
-}
+};
 
 const STORED_COLUMNS = sql`id, revision, board_id as "boardId", worker_party_id as "workerPartyId", coalesce(worker_party_id,equipment_unit_id,resource_location_id) as "subjectId",
   case when worker_party_id is not null then 'person' when equipment_unit_id is not null then 'equipment' else 'location' end as "subjectKind", status,
@@ -117,7 +117,7 @@ async function readEntry(orgId: string, id: string): Promise<BoardEntry> {
   return shapeEntry(row);
 }
 
-interface Person { partyId: string; name: string; subsidiaryId: string | null }
+type Person = { partyId: string; name: string; subsidiaryId: string | null };
 
 async function bookablePerson(orgId: string, allowed: ReadonlySet<string> | null, partyId: string): Promise<Person> {
   const row = (await db.execute<Person>(sql`select p.id as "partyId", p.display_name as name, p.subsidiary_id as "subsidiaryId"

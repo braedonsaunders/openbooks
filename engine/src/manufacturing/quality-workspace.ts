@@ -10,7 +10,7 @@ import { ManufacturingError, ManufacturingNotFoundError } from "./errors.ts";
 import { businessToday } from "../platform/business-date.ts";
 import { isUuid } from "../platform/uuid.ts";
 
-export interface InspectionQueueRow { id:string;name:string;itemName:string;status:string;disposition:string|null;quantity:string;lotNumber:string|null;serialNumber:string|null;workOrderId:string|null;operationId:string|null;receiptMovementId:string|null;createdAt:Date|string;totalCount:string;sourceActive:boolean }
+export type InspectionQueueRow = { id:string;name:string;itemName:string;status:string;disposition:string|null;quantity:string;lotNumber:string|null;serialNumber:string|null;workOrderId:string|null;operationId:string|null;receiptMovementId:string|null;createdAt:Date|string;totalCount:string;sourceActive:boolean };
 function visible(scope:ReadonlySet<string>|null) {
   return sql`${subsidiaryVisibleFilter(sql`inspection.subsidiary_id`,scope)}
     and not exists(select 1 from inventory_movements owner where owner.org_id=inspection.org_id

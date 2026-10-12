@@ -16,7 +16,7 @@ import { readBoardSourceHistory, type BoardSourceRecord } from "./source-history
 import { ScheduleError, scheduleDatabaseRefusal } from "./errors.ts";
 import { datesBetween, localClock, requireDate } from "./spans.ts";
 
-export interface BoardRow {
+export type BoardRow = {
   readonly subjectId: string;
   readonly subjectKind: "person" | "equipment" | "location";
   readonly name: string;
@@ -27,9 +27,9 @@ export interface BoardRow {
   readonly tradeName: string | null;
   /** In the board's scope; false for people booked here from elsewhere. */
   readonly inScope: boolean;
-}
+};
 
-export interface BoardTarget {
+export type BoardTarget = {
   readonly kind: "customer" | "project" | "location" | "code";
   readonly id: string;
   readonly code: string | null;
@@ -40,7 +40,7 @@ export interface BoardTarget {
   readonly color: string | null;
   /** Unavailable codes occupy a day without counting as work. */
   readonly counts: boolean;
-}
+};
 
 export interface BoardEntry {
   readonly id: string;
@@ -73,13 +73,13 @@ export interface BoardEntry {
   readonly updatedByName: string | null;
 }
 
-export interface BoardAbsence {
+export type BoardAbsence = {
   readonly workerPartyId: string;
   readonly onDate: string;
   readonly hours: string;
   readonly leaveTypeCode: string;
   readonly leaveTypeName: string;
-}
+};
 
 export interface BoardDay {
   readonly date: string;
@@ -88,13 +88,13 @@ export interface BoardDay {
   readonly isHoliday: boolean;
 }
 
-export interface BoardCode {
+export type BoardCode = {
   readonly id: string;
   readonly code: string;
   readonly label: string;
   readonly category: "work" | "unavailable";
   readonly color: string;
-}
+};
 
 export interface BoardWindow {
   readonly board: ScheduleBoard;

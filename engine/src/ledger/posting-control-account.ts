@@ -272,11 +272,11 @@ export async function controlAccountLookupScope(
   return { party, document };
 }
 
-export interface ControlAccountOption {
+export type ControlAccountOption = {
   id: string;
   number: string | null;
   name: string;
-}
+};
 
 export interface ControlAccountChoices {
   side: ControlSide;

@@ -17,12 +17,12 @@ export class BomPolicyError extends Error {
 }
 
 export { isAssemblyCapableKind } from "./public-contracts.ts";
-export interface BomPolicyLine extends BomQuantityPolicy {
+export type BomPolicyLine = { [Field in keyof BomQuantityPolicy]: BomQuantityPolicy[Field] } & {
   componentItemId: string; quantityPer: string; sortOrder: number;
   effectiveFrom: string | null; effectiveTo: string | null;
   operationSeq: number | null; scrapPct: string | null; isByproduct: boolean;
   outputCostWeight?:string|null;
-}
+};
 export interface BomPolicyInput {
   assemblyItemId: string; expectedVersion: string | null; reason: string;
   components: Array<Omit<BomPolicyLine, "sortOrder">>;

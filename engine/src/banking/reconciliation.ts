@@ -577,7 +577,7 @@ async function reconciliationTotalsUsing(
   };
 }
 
-export interface SignOffBlocker {
+export type SignOffBlocker = {
   id: string;
   postedOn: string;
   amount: string;
@@ -587,7 +587,7 @@ export interface SignOffBlocker {
   /** The duplicated line's date and amount, so the blocker names what it duplicates. */
   possibleDuplicateOfPostedOn: string | null;
   possibleDuplicateOfAmount: string | null;
-}
+};
 
 /**
  * The unmatched statement lines through the cutoff that refuse sign-off,
@@ -1203,7 +1203,7 @@ export async function markReconciled(
 // ---------------------------------------------------------------------------
 
 /** One journal entry posted into a signed-off period after its sign-off. */
-export interface StaleJournalEntry {
+export type StaleJournalEntry = {
   entryNumber: string;
   /** True (business) date of the entry. */
   postingDate: string;
@@ -1211,13 +1211,13 @@ export interface StaleJournalEntry {
   amount: string;
   postedBy: string | null;
   postedAt: string | null;
-}
+};
 
 /** A matched line the sign-off relied on that was later reversed. */
-export interface ReversedMatchEntry extends StaleJournalEntry {
+export type ReversedMatchEntry = StaleJournalEntry & {
   reversalNumber: string | null;
   reversedAt: string | null;
-}
+};
 
 export interface ReconciliationStaleness {
   stale: boolean;

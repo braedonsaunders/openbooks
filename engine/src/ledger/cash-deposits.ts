@@ -69,7 +69,7 @@ export interface CashDepositResult {
 const SETTINGS_REMEDY = "Choose the deposit accounts in Company Settings → Cash sales till defaults, then record the drop again.";
 
 /** One recorded till drop against a cash sale, for the sale's drop list. */
-export interface CashDepositRow {
+export type CashDepositRow = {
   transferId: string;
   documentNumber: string;
   dropDate: string;
@@ -77,7 +77,7 @@ export interface CashDepositRow {
   amount: string;
   status: string;
   slipNumber: string | null;
-}
+};
 
 /**
  * List a cash sale's recorded till drops (voided drops stay listed: the
@@ -176,12 +176,12 @@ function parseDepositInput(input: CashDepositInput): {
   return { amountMinor, slip };
 }
 
-interface DropSale {
+type DropSale = {
   id: string;
   documentNumber: string;
   subsidiaryId: string | null;
   currency: string;
-}
+};
 
 /**
  * Record one till drop against a posted cash sale and post its transfer.

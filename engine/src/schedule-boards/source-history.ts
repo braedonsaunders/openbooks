@@ -67,7 +67,7 @@ export function validateSourceBatch(batch: SourceScheduleBatch): void {
   }
 }
 
-interface SourceHead { id: string; sourceKey: string; assessmentHash: string }
+type SourceHead = { id: string; sourceKey: string; assessmentHash: string };
 export interface SourceHistoryOutcome { readonly sourceKey: string; readonly id: string; readonly state: "created" | "unchanged" }
 
 export interface BoardSourceRecord {

@@ -375,13 +375,13 @@ export async function resolveCashCloseoutForPosting(
   };
 }
 
-export interface TipsPayableExposureRow {
+export type TipsPayableExposureRow = {
   partyId: string | null;
   partyName: string | null;
   day: string;
   documentNumber: string;
   amountMinor: string;
-}
+};
 
 /**
  * Tips payable carried for payroll pay-out: posted cash-sale tips legs on

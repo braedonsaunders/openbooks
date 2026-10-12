@@ -21,7 +21,7 @@ export interface ScheduleActor {
 
 export type PeopleSchedulePermission = "hrm.shifts.read" | "hrm.shifts.manage" | "hrm.shifts.approve";
 
-export interface ScheduleBoard {
+export type ScheduleBoard = {
   readonly id: string;
   readonly code: string;
   readonly name: string;
@@ -61,6 +61,13 @@ export interface ScheduleBoard {
   readonly notifyAssignees: boolean;
   readonly sortOrder: number;
   readonly isActive: boolean;
+};
+
+/** Board storage uses ISO weekday strings (Monday 1, Sunday 7); report
+ * layouts use JavaScript weekdays (Sunday 0). Keep conversion at the report
+ * boundary so the native window and retained board policy stay unchanged. */
+export function scheduleReportWeekendDays(board: Pick<ScheduleBoard, "weekendDays">): number[] {
+  return board.weekendDays.map(day => Number(day) % 7);
 }
 
 export const BOARD_COLUMNS = sql`b.id, b.code, b.name, b.description, b.row_kind as "rowKind", b.resource_kind as "resourceKind",

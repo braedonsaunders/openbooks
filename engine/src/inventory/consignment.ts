@@ -43,7 +43,7 @@ export interface ConsignmentInput {
   unitCost?: string;
   offsetAccountId?: string;
 }
-interface CustodyRow {
+type CustodyRow = {
   id: string;
   item_id: string;
   stock_location_id: string;
@@ -54,7 +54,7 @@ interface CustodyRow {
   serial_id: string | null;
   remaining_quantity: string;
   received_on: string;
-}
+};
 /** External custody records physical quantity only. Ownership recognition uses the native valued receipt. */
 export async function moveConsignment(
   orgId: string,
@@ -78,7 +78,7 @@ export async function moveConsignment(
           await db.execute<CustodyRow>(
             sql`select stock.*,received_on::text as received_on from consignment_stock stock where org_id=${orgId} and id=${input.stockId}`,
           )
-        ).rows[0]
+        ).rows[0] ?? null
       : null;
     if (input.action !== "receive" && !source)
       throw new InventoryNotFoundError("Consigned stock not found");

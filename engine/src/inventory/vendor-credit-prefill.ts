@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import { type SqlExecutor } from "../platform/db.ts";
 
-export interface PrefillBillLine {
+export type PrefillBillLine = {
   lineId: string;
   itemId: string | null;
   accountId: string;
@@ -16,7 +16,7 @@ export interface PrefillBillLine {
   receiptMovementId: string | null;
   received: string | null;
   returned: string;
-}
+};
 
 /**
  * Returnable (unreturned) receipt quantities per bill line for the vendor

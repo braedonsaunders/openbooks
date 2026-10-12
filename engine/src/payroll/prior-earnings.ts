@@ -12,12 +12,12 @@ import { resolvePayrollRunContext } from './pack-run-context.ts';
 import { PayrollError } from './error.ts';
 import { preparePriorEarnings, priorEarningsEvidence, priorEarningsInWindow, type PriorEarningsPeriod, type PriorEarningBucket } from './prior-earnings-contract.ts';
 
-export interface PayrollPriorEarningsRecord {
+export type PayrollPriorEarningsRecord = {
   id: string; employeePartyId: string; subsidiaryId: string; country: string; currency: string;
   historyFrom: string; historyThrough: string; periods: PriorEarningsPeriod[];
   sourceFileId: string; sourceVersionId: string; sourceHash: string;
   sourceReference: string; reason: string; revision: number; contentHash: string; updatedAt: string;
-}
+};
 const COLUMNS = sql`id,employee_party_id as "employeePartyId",subsidiary_id as "subsidiaryId",country,currency,
  history_from::text as "historyFrom",history_through::text as "historyThrough",periods,
  source_file_id as "sourceFileId",source_version_id as "sourceVersionId",source_hash as "sourceHash",

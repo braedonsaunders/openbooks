@@ -28,7 +28,7 @@ import {
   readOrgEmailConfigView,
 } from '../delivery/email-config.ts';
 import { enqueueFlowEmail } from '../delivery/outbox-enqueue.ts';
-import { getBoard, boardAuthority, type ScheduleActor } from './boards.ts';
+import { getBoard, boardAuthority, scheduleReportWeekendDays, type ScheduleActor } from './boards.ts';
 import { loadBoardWindow, type BoardWindow } from './window.ts';
 import { ScheduleError, scheduleDatabaseRefusal } from './errors.ts';
 import {
@@ -65,6 +65,11 @@ export interface ScheduleRecipient {
   }[];
   lines: readonly ScheduleEmailLine[];
 }
+type ScheduleRecipientDraft = Omit<ScheduleRecipient, "contacts" | "subjects" | "lines"> & {
+  contacts: ScheduleRecipient["contacts"][number][];
+  subjects: ScheduleRecipient["subjects"][number][];
+  lines: ScheduleEmailLine[];
+};
 export interface ScheduleDistributionPreview {
   boardId: string;
   boardName: string;
@@ -371,7 +376,7 @@ async function preview(
         )
       ).rows
     : [];
-  const recipients: ScheduleRecipient[] = [];
+  const recipients: ScheduleRecipientDraft[] = [];
   const refusals: string[] = [];
   for (const row of rows) {
     const binding = bindings.find((b) => b.subjectId === row.subjectId),
@@ -402,13 +407,7 @@ async function preview(
       };
       recipients.push(recipient);
     }
-    (
-      recipient.subjects as {
-        id: string;
-        kind: 'person' | 'equipment' | 'location';
-        name: string;
-      }[]
-    ).push({ id: row.subjectId, kind: row.subjectKind, name: row.name });
+    recipient.subjects.push({ id: row.subjectId, kind: row.subjectKind, name: row.name });
   }
   for (const id of extras) {
     const party = parties.find((contact) => contact.id === id);
@@ -455,7 +454,7 @@ async function preview(
     ? scheduleReportLines(window, relevant, window.rows.filter(row => relevant.has(row.subjectId)))
     : null;
   for (const recipient of recipients)
-    (recipient as { lines: ScheduleEmailLine[] }).lines = sharedReport ?? scheduleReportLines(window, new Set(recipient.subjects.map(subject => subject.id)), recipient.subjects.map(subject => ({ subjectId: subject.id, name: subject.name })));
+    recipient.lines = sharedReport ?? scheduleReportLines(window, new Set(recipient.subjects.map(subject => subject.id)), recipient.subjects.map(subject => ({ subjectId: subject.id, name: subject.name })));
   // One native mailbox owns one delivery; the preview retains all associated identities.
   for (let i = 0; i < recipients.length; i++)
     for (let j = recipients.length - 1; j > i; j--)
@@ -466,23 +465,16 @@ async function preview(
       ) {
         const keep = recipients[i]!,
           other = recipients[j]!;
-        (keep.contacts as { id: string; name: string }[]).push(
+        keep.contacts.push(
           ...other.contacts,
         );
-        (
-          keep.subjects as {
-            id: string;
-            kind: "person" | "equipment" | "location";
-            name: string;
-            recipientPartyId?: string;
-          }[]
-        ).push(
+        keep.subjects.push(
           ...other.subjects.map((subject) => ({
             ...subject,
             recipientPartyId: other.partyId,
           })),
         );
-        if (!sharedReport) (keep as { lines: ScheduleEmailLine[] }).lines = [
+        if (!sharedReport) keep.lines = [
           ...new Map([...keep.lines, ...other.lines].map(line => [canonicalJson(line), line])).values(),
         ];
         recipients.splice(j, 1);
@@ -548,7 +540,7 @@ async function preview(
       subsidiaryId: board.subsidiaryId,
       distributionVisibility: board.distributionVisibility,
       automaticDeliveryPolicy: board.automaticDeliveryPolicy,
-      weekendDays: board.weekendDays,
+      weekendDays: scheduleReportWeekendDays(board),
     },
     from,
     through,
@@ -580,7 +572,7 @@ async function preview(
     through,
     timeZone: board.timeZone,
     generatedAt: new Date().toISOString(),
-    weekendDays: board.weekendDays,
+    weekendDays: scheduleReportWeekendDays(board),
     version,
     audience: {
       ...audience,
@@ -608,7 +600,7 @@ export function previewScheduleDistribution(
     { isolationLevel: 'REPEATABLE READ' },
   );
 }
-interface RequestRow {
+type RequestRow = {
   id: string;
   boardId: string;
   from: string;
@@ -618,7 +610,7 @@ interface RequestRow {
   reason: string;
   createdBy: string;
   status: 'previewed' | 'queued';
-}
+};
 async function persist(
   actor: ScheduleActor,
   p: ScheduleDistributionPreview,

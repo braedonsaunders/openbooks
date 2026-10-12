@@ -5,14 +5,14 @@ import { actorHasPermission } from "../organization/actor-permissions.ts";
 import { cmp, normalizeMoney } from "../money/money.ts";
 import { PayrollError } from "./error.ts";
 
-export interface EntitlementAdjustment {
+export type EntitlementAdjustment = {
   readonly id: string;
   readonly planId: string;
   readonly employeePartyId: string;
   readonly movementDate: string;
   readonly amount: string | null;
   readonly hours: string | null;
-}
+};
 
 /**
  * Correct an employee's entitlement balance (vacation, banked time) with a

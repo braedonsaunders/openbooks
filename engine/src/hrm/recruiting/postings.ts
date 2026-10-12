@@ -396,14 +396,14 @@ export async function resolveFeedOrg(feedToken: string): Promise<string> {
   return row.orgId;
 }
 
-export interface FeedPosting {
+export type FeedPosting = {
   readonly postingId: string;
   readonly requisitionNumber: string;
   readonly title: string;
   readonly employmentKind: string | null;
   readonly description: string | null;
   readonly publishedAt: string | null;
-}
+};
 
 /** Feed entries: published postings with open requisitions (public, aggregate only — no PII). */
 export async function listFeedPostings(orgId: string): Promise<readonly FeedPosting[]> {

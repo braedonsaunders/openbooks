@@ -7,7 +7,7 @@ import { toBaseQuantity, toExactStockQuantity } from "./costing.ts";
 import { divideDecimal } from "../money/exact-decimal.ts";
 import { InventoryError } from "./contracts.ts";
 
-export interface PhysicalAllocation {
+export type PhysicalAllocation = {
   binId: string;
   binCode: string;
   lotId: string | null;
@@ -16,7 +16,7 @@ export interface PhysicalAllocation {
   serialNumber: string | null;
   expiresOn: string | null;
   quantity: string;
-}
+};
 /** FEFO chooses physical stock; consumeLayers retains its FIFO accounting order. */
 export async function allocationCandidates(
   runner: SqlExecutor,

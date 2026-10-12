@@ -16,12 +16,12 @@ export interface CompensationWageSummary {
   groups: { currency: string; basis: PayRateBasis; workers: number; average: string; min: string; max: string }[];
 }
 
-export interface CompensationArchitectureSummary {
+export type CompensationArchitectureSummary = {
   families: number;
   levels: number;
   bands: number;
   bandVersions: number;
-}
+};
 
 /** Architecture totals share one live permission and employer-scope read. */
 export async function compensationArchitectureSummary(query: {

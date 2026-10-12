@@ -82,11 +82,11 @@ async function findTargets(actor: ScheduleActor & { boardId: string; query: stri
   return rows.map(({ score: _score, ...target }) => target);
 }
 
-export interface ProjectTaskOption {
+export type ProjectTaskOption = {
   readonly id: string;
   readonly code: string | null;
   readonly name: string;
-}
+};
 
 export function listProjectTaskOptions(actor: ScheduleActor & { boardId: string; projectId: string }): Promise<ProjectTaskOption[]> {
   return withOrgTransaction(actor.orgId, () => readProjectTaskOptions(actor)).catch((error: unknown) => { throw scheduleDatabaseRefusal(error); });

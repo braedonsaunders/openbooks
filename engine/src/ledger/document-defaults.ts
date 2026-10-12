@@ -128,14 +128,14 @@ export async function resolveCompanyTermsDueDate(
   return { termsId: terms.id, termsName: terms.name, netDays, dueDate: dueDateFromNetDays(documentDate, netDays), source: 'company' }
 }
 
-interface ItemDefaultsRow {
+type ItemDefaultsRow = {
   id: string
   income_account_id: string | null
   expense_account_id: string | null
   tax_code_id: string | null
   inventory_asset_account_id: string | null
   inventory_clearing_account_id: string | null
-}
+};
 
 /**
  * Account and tax defaults for each named item on a line of `kind`, in the

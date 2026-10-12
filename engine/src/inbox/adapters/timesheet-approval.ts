@@ -27,7 +27,7 @@ import type { InboxAdapter } from "../registry.ts";
 import type { InboxItem, InboxListContext } from "../types.ts";
 import { inboxItemId, priorityForDueDate } from "../types.ts";
 
-export interface DirectApprovalWeek {
+export type DirectApprovalWeek = {
   id: string;
   employee_party_id: string;
   person_name: string | null;
@@ -35,7 +35,7 @@ export interface DirectApprovalWeek {
   submitted_at: string | null;
   entries: number;
   hours: string;
-}
+};
 
 async function mayApprove(ctx: InboxListContext): Promise<boolean> {
   return (await actorPermissionOn(ctx, 'time.approve')) && (await orgFeatureOn(ctx, 'timeTracking'));

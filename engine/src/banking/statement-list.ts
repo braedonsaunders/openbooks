@@ -23,7 +23,7 @@ export interface AccountStatementListInput {
   perPage: number;
 }
 
-export interface AccountStatementRow {
+export type AccountStatementRow = {
   id: string;
   source: string;
   statement_date: string;
@@ -35,7 +35,7 @@ export interface AccountStatementRow {
   unmatched_count: number;
   matched_count: number;
   excluded_count: number;
-}
+};
 
 const MAX_PER_PAGE = 200;
 
