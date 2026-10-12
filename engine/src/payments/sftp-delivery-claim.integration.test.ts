@@ -27,7 +27,7 @@ const {
 const { PaymentError } = await import("../payments-core/payment-errors.ts");
 const { deliverRunToSftp } = await import("../sftp/import-job.ts");
 const { db, pool, withBypass, withOrgContext } = await import("../platform/db.ts");
-const { createScratchOrg, createScratchUser, dropScratchOrg } =
+const { createScratchOrg, createScratchUser, grantScratchPermissions, dropScratchOrg } =
   await import("../testing/fixtures.ts");
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
@@ -60,6 +60,7 @@ async function seedDeliveryFixture(): Promise<DeliveryFixture> {
   const leased = await withBypass(async () => {
     const org = await createScratchOrg();
     const actorId = await createScratchUser(org.orgId, "Delivery Operator", "admin");
+    await grantScratchPermissions(org.orgId, actorId, ["ap.pay"]);
     return { org, actorId };
   });
   const { org, actorId } = leased;

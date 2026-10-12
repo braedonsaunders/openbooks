@@ -24,7 +24,7 @@ import { reversePaymentForReturn } from "./payment-return.ts";
 import { openItemsForParty, suggestApplications } from "./payment-queries.ts";
 import { sameCurrencyAllocation } from "./settlement-policy.ts";
 import { postDocument } from "../ledger/posting-document.ts";
-import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
+import { createScratchOrg, createScratchUser, grantScratchPermissions, dropScratchOrg } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -188,6 +188,7 @@ async function seedPostingClaimRun(
   instructionCount = 1,
   options: SeedPostingClaimRunOptions = {},
 ): Promise<SeededPostingClaimRun> {
+  await withBypass(() => grantScratchPermissions(org.orgId, actorId, ["ap.pay"]));
   const runId = randomUUID();
   const formatId = randomUUID();
   const profileId = randomUUID();
@@ -428,6 +429,7 @@ test("cross-currency payment, dual-amount application, realized FX, evidence, an
 async function seedPaymentRunSelectionFixture(org: Awaited<ReturnType<typeof createScratchOrg>>): Promise<PaymentRunSelectionFixture> {
   return withBypass(async () => {
     const actorId = await createScratchUser(org.orgId, "Run Operator", "accountant");
+    await grantScratchPermissions(org.orgId, actorId, ["ap.pay"]);
     const formatId = randomUUID();
     const profileId = randomUUID();
     const billId = randomUUID();

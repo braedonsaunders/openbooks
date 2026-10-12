@@ -7,6 +7,8 @@ import { db, pool, withOrgContext } from "../platform/db.ts";
 import { releasePayRunBankFile } from "./bank-file-artifact.ts";
 import {
   createScratchOrg,
+  createScratchUser,
+  grantScratchPermissions,
   dropScratchOrgReporting,
   type ScratchOrg,
 } from "../testing/fixtures.ts";
@@ -43,7 +45,8 @@ function errorChain(error: unknown): string {
 async function bankFileFixture(): Promise<BankFileFixture> {
   const org = await createScratchOrg();
   try {
-    const actorId = randomUUID();
+    const actorId = await createScratchUser(org.orgId, "Payroll release operator", "payroll_release");
+    await grantScratchPermissions(org.orgId, actorId, ["payroll.run"]);
     const documentId = randomUUID();
     const scheduleId = randomUUID();
     const formatId = randomUUID();
@@ -211,9 +214,11 @@ test("payroll bank-file release is tenant-isolated", { skip: !DB }, async () => 
   const fixture = await bankFileFixture();
   const otherOrg = await createScratchOrg();
   try {
+    const otherActorId = await createScratchUser(otherOrg.orgId, "Other payroll release operator", "payroll_release");
+    await grantScratchPermissions(otherOrg.orgId, otherActorId, ["payroll.run"]);
     await assert.rejects(
       withOrgContext(otherOrg.orgId, () =>
-        releasePayRunBankFile(otherOrg.orgId, fixture.artifactId, fixture.actorId)),
+        releasePayRunBankFile(otherOrg.orgId, fixture.artifactId, otherActorId)),
       /payroll bank file not found/,
     );
     const row = (await db.execute<{ status: string; releaseCount: number }>(sql`

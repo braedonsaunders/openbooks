@@ -12,7 +12,7 @@ import { encryptAccountNumber } from "../payments-core/rail-settings.ts";
 import { loadCpa005RunFile, loadNachaRunFile, loadSepaRunFile } from "./run-files.ts";
 import { paymentRunReadiness, type RailBankMethod } from "./run-readiness.ts";
 import { sealJson } from "../platform/secrets.ts";
-import { createScratchOrg, createScratchUser, dropScratchOrgReporting } from "../testing/fixtures.ts";
+import { createScratchOrg, createScratchUser, grantScratchPermissions, dropScratchOrgReporting } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -86,6 +86,7 @@ async function seedRailRun(
   method: RailBankMethod,
 ): Promise<RailFixture> {
   const actorId = await createScratchUser(org.orgId, "Payment Operator", "accountant");
+  await grantScratchPermissions(org.orgId, actorId, ["ap.pay"]);
   const formatId = randomUUID();
   const profileId = randomUUID();
   const runId = randomUUID();
