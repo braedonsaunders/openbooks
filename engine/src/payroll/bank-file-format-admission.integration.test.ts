@@ -1,16 +1,19 @@
 import { createHash, randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
-import test, { before } from "node:test";
+import test, { before, after } from "node:test";
 import { sql } from "drizzle-orm";
 import { db, pool } from "../platform/db.ts";
 import {
   createScratchOrg,
   dropScratchOrgReporting,
   type ScratchOrg,
+  assertDedicatedFixtureDatabase,
 } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
+const FORMAT_CONSTRAINTS = ["pay_run_bank_files_format", "pay_run_bank_files_format_numbering"] as const;
+let originalConstraints: { name: string; definition: string; validated: boolean; comment: string | null }[] = [];
 const MIGRATION_0201 = readFileSync(
   new URL("../../../schema/migrations/generated/0201_pay_run_bank_file_sepa_cemtex.sql", import.meta.url),
   "utf8",
@@ -198,6 +201,13 @@ async function insertArtifact(
 
 before(async () => {
   if (DB) {
+    await assertDedicatedFixtureDatabase();
+    originalConstraints = (await pool.query<{ name: string; definition: string; validated: boolean; comment: string | null }>(`
+      select conname as name, pg_get_constraintdef(oid) as definition, convalidated as validated,
+             obj_description(oid,'pg_constraint') as comment
+        from pg_constraint where conrelid='public.pay_run_bank_files'::regclass and conname=any($1::text[])
+       order by conname`, [FORMAT_CONSTRAINTS])).rows;
+    assert.equal(originalConstraints.length, FORMAT_CONSTRAINTS.length);
     // Each migration assumes its predecessor has run: apply in ordinal
     // order, each twice to prove the replay the header promises.
     await pool.query(MIGRATION_0201);
@@ -206,6 +216,35 @@ before(async () => {
     await pool.query(MIGRATION_0206);
     await pool.query(MIGRATION_0211);
     await pool.query(MIGRATION_0211);
+  }
+});
+
+after(async () => {
+  if (!DB || originalConstraints.length === 0) return;
+  // Historical admission tests must not replace newer published protections
+  // for subsequent callers in the same isolated database.
+  const client = await pool.connect();
+  try {
+    await client.query("begin");
+    for (const original of originalConstraints) {
+      assert(FORMAT_CONSTRAINTS.includes(original.name as typeof FORMAT_CONSTRAINTS[number]));
+      await client.query(`alter table public.pay_run_bank_files drop constraint ${original.name}`);
+      await client.query(`alter table public.pay_run_bank_files add constraint ${original.name} ${original.definition}`);
+      const literal = original.comment === null ? "null" : "'" + original.comment.replaceAll("'", "''") + "'";
+      await client.query(`comment on constraint ${original.name} on public.pay_run_bank_files is ${literal}`);
+    }
+    const restored = (await client.query<{ name: string; definition: string; validated: boolean; comment: string | null }>(`
+      select conname as name, pg_get_constraintdef(oid) as definition, convalidated as validated,
+             obj_description(oid,'pg_constraint') as comment
+        from pg_constraint where conrelid='public.pay_run_bank_files'::regclass and conname=any($1::text[])
+       order by conname`, [FORMAT_CONSTRAINTS])).rows;
+    assert.deepEqual(restored, originalConstraints);
+    await client.query("commit");
+  } catch (error) {
+    await client.query("rollback");
+    throw error;
+  } finally {
+    client.release();
   }
 });
 

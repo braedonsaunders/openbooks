@@ -11,6 +11,8 @@ import {previewRevenueRecognition} from './recognition-preview.ts';
 import {runRevenueRecognition} from './recognition-run.ts';
 import {approveRebateAgreement,generateRebateClaim,approveRebateClaim,settleRebatePayment,reverseRebatePayment,accrueRebatesForDocument} from './rebates.ts';
 import {createRebateSettlement} from '../composition/rebate-settlement.ts';
+import {generateAccountingPeriods} from '../close/calendar.ts';
+import {neg} from '../money/money.ts';
 
 const enabled=Boolean(process.env.OPENBOOKS_DB_URL);
 async function commercialActors(org:ScratchOrg) {
@@ -21,6 +23,9 @@ async function commercialActors(org:ScratchOrg) {
   await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"multiCurrency":true,"revenueRecognition":true}'::jsonb) where id=${org.orgId}`);
   await db.execute(sql`insert into customer_roles(org_id,party_id,ar_account_id,is_active,created_by) values(${org.orgId},${org.customerId},${org.accounts.ar},true,${actors.adminId})`);
   await db.execute(sql`insert into vendor_roles(org_id,party_id,ap_account_id,is_active,created_by) values(${org.orgId},${org.vendorId},${org.accounts.ap},true,${actors.adminId})`);
+  const calendar=(await db.execute<{id:string}>(sql`select fiscal_calendar_id as id from accounting_periods where org_id=${org.orgId} and id=${org.periodId}`)).rows[0]!.id;
+  await generateAccountingPeriods(org.orgId,calendar,2026,actors.adminId);
+  await generateAccountingPeriods(org.orgId,calendar,2027,actors.adminId);
   return actors;
  });
 }
@@ -78,7 +83,10 @@ test('retrospective tiers append balanced catch-up facts and claims enforce inde
   assert.equal((await settleRebatePayment(org.orgId,actors.adminId,claim.id,input)).entryId,settlement.entryId);
   await assert.rejects(()=>settleRebatePayment(org.orgId,actors.adminId,claim.id,{...input,reason:'Different payment request image'}),/different payment/);
   const imbalance=(await withOrg(org.orgId,()=>db.execute<{amount:string}>(sql`select sum(amount)::text as amount from journal_lines where org_id=${org.orgId} and entry_id=${settlement.entryId}`))).rows[0]!.amount;assert.equal(imbalance,'0.0000');
-  await reverseRebatePayment(org.orgId,actors.adminId,claim.id,org.date,'Bank settlement reversed for correction');
+  const reversed=await reverseRebatePayment(org.orgId,actors.adminId,claim.id,org.date,'Bank settlement reversed for correction');
+  const mirrored=(await withOrg(org.orgId,()=>db.execute<{amount:string;txn_amount:string;currency:string;fx_rate:string;account_id:string;line_number:number;entry_id:string}>(sql`select amount::text,txn_amount::text,currency,fx_rate::text,account_id,line_number,entry_id from journal_lines where org_id=${org.orgId} and entry_id in (${settlement.entryId},${reversed.entryId}) order by entry_id,line_number`))).rows;
+  const originalLines=mirrored.filter(line=>line.entry_id===settlement.entryId);
+  assert.deepEqual(mirrored.filter(line=>line.entry_id===reversed.entryId).map(({entry_id,...line})=>line),originalLines.map(({entry_id,...line})=>({...line,amount:neg(line.amount),txn_amount:neg(line.txn_amount)})));
   assert.equal((await withOrg(org.orgId,()=>db.execute<{status:string}>(sql`select status from rebate_claims where org_id=${org.orgId} and id=${claim.id}`))).rows[0]!.status,'approved');
   await assert.rejects(()=>generateRebateClaim(org.orgId,actors.adminId,agreementId,org.customerId,org.date,'Duplicate earned claim refusal'),/No unclaimed/);
  } finally {await dropScratchOrg(org.orgId);}
