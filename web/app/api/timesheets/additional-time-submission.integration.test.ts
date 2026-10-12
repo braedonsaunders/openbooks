@@ -85,11 +85,11 @@ test('selective submission and native approval preserve earlier approved time an
     for (const id of [f.prior,f.untouched]) assert.equal(afterSubmit.find(row=>row.id===id)?.value,
       before.find(row=>row.id===id)?.value,'unselected financial/approval/source fields are immutable under this command')
     const audit = await withOrgContext(f.org.orgId,async () => (await db.execute<{ changes: {
-      entries: {id:string}[]; before:{approval:{actorId:string}}; reason:string
+      entries: {id:string;updatedAt:string}[]; before:{approval:{actorId:string}}; reason:string
     } }>(sql`select changes from audit_log where org_id=${f.org.orgId} and row_id=${f.header}
       and changes->>'event'='additional_time_submitted'`)).rows)
     assert.equal(audit.length,1)
-    assert.deepEqual(audit[0]!.changes.entries.map(entry=>entry.id),[f.chosen])
+    assert.deepEqual(audit[0]!.changes.entries.map(({id,updatedAt})=>({id,updatedAt})),choice)
     assert.equal(audit[0]!.changes.before.approval.actorId,f.actor)
     assert.match(audit[0]!.changes.reason,/independently reviewed/)
     const approved = await f.approveSelected()

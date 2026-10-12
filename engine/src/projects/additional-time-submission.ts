@@ -9,7 +9,7 @@ export type AdditionalTimeSelection = { id: string; updatedAt: string }
 export type PreparedAdditionalTimeSubmission = {
   headerId: string
   priorApproval: { actorId: string | null; approvedAt: string | null }
-  entries: { id: string; status: string; workedOn: string; hours: string; fieldTicketId: string | null }[]
+  entries: { id: string; status: string; updatedAt: string; workedOn: string; hours: string; fieldTicketId: string | null }[]
 }
 
 /** Pin an explicitly reviewed selection in the same transaction as its
@@ -84,6 +84,6 @@ export async function prepareAdditionalTimeSubmission(
   }
   return {
     headerId: header.id, priorApproval: { actorId: header.approvedBy, approvedAt: header.approvedAt },
-    entries: selected.map(({ id, status, workedOn, hours, fieldTicketId }) => ({ id, status, workedOn, hours, fieldTicketId })),
+    entries: selected.map(({ id, status, updatedAt, workedOn, hours, fieldTicketId }) => ({ id, status, updatedAt, workedOn, hours, fieldTicketId })),
   }
 }
