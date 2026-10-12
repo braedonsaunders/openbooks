@@ -356,7 +356,7 @@ settlementTest("hourly incentives retain dated approved time through settlement,
   assert.deepEqual((source.entryIds as string[]).sort(), entries.slice(1, 3).sort());
   assert.equal(source.measuredValue, "1.0000");
   await refuses(() => updateBenefitProgram({ orgId:h.org.orgId,actorId:h.settlerId,programId:program.id,
-    fixedAmount:"4",reason:"Change hourly price" }), /active.*immutable|close.*replacement/i);
+    fixedAmount:"4",reason:"Change hourly price" }), /changing an active program needs the date the change applies from — earlier periods keep the current rules/);
   assert.equal((await getBenefitProgram(db, h.org.orgId, h.settlerId, program.id)).fixedAmount, "0.3333");
   const runDocumentId = await seedRun(h, worker.employmentId, worker.workerPartyId);
   const delivery = { orgId:h.org.orgId, actorId:h.financeId, awardId:award.id, runDocumentId };
@@ -622,7 +622,7 @@ settlementTest("transaction policies govern dated shares, group ceilings, approv
   };
   const source = await seedSource("2026-07-09");
   await activateBenefitProgram(command);
-  await refuses(async () => saveBenefitTransactionPolicy({ ...command, expectedRevision: (await getBenefitProgram(db,h.org.orgId,h.settlerId,program.id)).revision }), /Only draft.*replacement/);
+  await refuses(async () => saveBenefitTransactionPolicy({ ...command, expectedRevision: (await getBenefitProgram(db,h.org.orgId,h.settlerId,program.id)).revision }), /changing an active program needs the date the change applies from — earlier periods keep the current rules/);
   await assert.rejects(() => db.execute(sql`update hrm_benefit_transaction_positions set weight=3 where org_id=${h.org.orgId} and program_id=${program.id}`), error => errorChainMatches(error,/immutable.*replacement/));
   const query = settlementQuery(h, program.id), preview = await previewIncentiveSettlement(query);
   assert.equal(preview.computation.measuredValue, "1000.0000");
