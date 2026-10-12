@@ -476,10 +476,20 @@ export async function generateInvoiceFromBillingRequest(
 
       for (const te of timeRows.rows) {
         const hours = persistInvoiceDecimal(te.hours ?? '0', 'A time entry hours value is invalid')
+        const sourceRate = invoicing.lineBuilder === 'cost_plus'
+          ? te.cost_rate
+          : te.bill_rate ?? te.default_rate
+        // Missing pricing cannot consume a billable source as a free line.
+        // An explicitly recorded zero remains a valid agreed rate.
+        if (sourceRate == null) {
+          throw new BillingError(invoicing.lineBuilder === 'cost_plus'
+            ? `Time entry ${te.id} has no approved cost rate. Resolve its standard-cost or governed time-amendment policy before cost-plus billing.`
+            : `Time entry ${te.id} has no billing rate. Configure its item or dated rate-book pricing before generating the invoice.`)
+        }
         const rate =
           invoicing.lineBuilder === 'cost_plus'
-            ? applyMarkup(persistInvoiceDecimal(te.cost_rate ?? '0', 'A time entry rate is invalid'), markup)
-            : persistInvoiceDecimal(te.bill_rate ?? te.default_rate ?? '0', 'A time entry rate is invalid')
+            ? applyMarkup(persistInvoiceDecimal(sourceRate, 'A time entry rate is invalid'), markup)
+            : persistInvoiceDecimal(sourceRate, 'A time entry rate is invalid')
         const amount = mulDecimal(hours, rate)
         built.push({
           itemId: te.item_id,

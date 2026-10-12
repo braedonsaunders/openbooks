@@ -11,7 +11,7 @@ import { isUuid } from '../platform/uuid.ts'
 import { isIsoCalendarDate } from '../platform/business-date.ts'
 
 export class TimeWorkTargetError extends Error {
-  constructor(message: string, readonly status = 422, readonly code = 'time_work_target_refused', readonly remedy = 'Choose an available released production order and an open operation, or record project time separately.') { super(message); this.name = 'TimeWorkTargetError' }
+  constructor(message: string, readonly status = 422, readonly code = 'time_work_target_refused', readonly remedy = 'Reload the time record and review the employee, enabled time workspace and work references.') { super(message); this.name = 'TimeWorkTargetError' }
 }
 /** Shared time references the production record; it never creates a second job or posts production WIP. */
 export async function lockTimeWorkOrderTarget(tx: SqlExecutor, orgId: string, actorId: string, input: { workOrderId: string; operationId?: string | null; requestedScope: ReadonlySet<string> | null; permission?: 'time.read' | 'time.manage' | 'time.approve' | 'time.reopen' | 'time.self' | 'time.clock'; requireOpen?: boolean; lockMode?: 'share' | 'update' }) {
