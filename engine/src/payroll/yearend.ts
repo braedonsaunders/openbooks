@@ -1016,28 +1016,47 @@ export async function roeRecord(orgId: string, employeePartyId: string): Promise
   if (event.employment_id !== row.employment_id || event.subsidiary_id !== row.subsidiary_id) {
     throw new PayrollError(`${row.display_name}'s confirmed separation belongs to a different native employment or legal employer — review the employment attribution before preparing this ROE`);
   }
-  // Earnings dated after the separation's last insurable date are a lie or a
-  // stale declaration: the stub belongs to a later spell or the separation
-  // facts are wrong. Refuse by name before the ROE is built.
+  // A final cheque may be paid after the last day for which wages were
+  // earned. Retained earning dates distinguish that payment from later work;
+  // incomplete attribution must not be accepted as proof of earlier service.
   const earningsCutoff = event.salary_continuance_end_on ?? event.last_insurable_earnings_on;
-  const lateEarnings = (await db.execute<{ payDate: string }>(sql`
-    select distinct stub.pay_date::text as "payDate"
+  const lateEarnings = (await db.execute<{
+    payDate: string; employmentId: string | null; earnedFrom: string | null; earnedTo: string | null;
+  }>(sql`
+    select stub.pay_date::text as "payDate",
+           stub.employment_id::text as "employmentId",
+           line.earned_from::text as "earnedFrom", line.earned_to::text as "earnedTo"
       from pay_stubs stub
       join pay_runs run on run.org_id = stub.org_id
         and run.document_id = stub.pay_run_document_id and run.run_status = 'committed'
       join pay_stub_lines line on line.org_id = stub.org_id and line.stub_id = stub.id
         and line.kind = 'earning'
      where stub.org_id = ${orgId} and stub.employee_party_id = ${employeePartyId}
-       and stub.pay_date > ${earningsCutoff}::date
-     order by "payDate" desc
+       and (stub.employment_id = ${event.employment_id} or stub.employment_id is null)
+       and (line.amount <> 0 or (line.hours is not null and line.hours <> 0))
+       and (
+         line.earned_from > ${earningsCutoff}::date
+         or line.earned_to > ${earningsCutoff}::date
+         or line.earned_from > line.earned_to
+         or (stub.pay_date > ${earningsCutoff}::date
+             and (stub.employment_id is null or line.earned_from is null or line.earned_to is null))
+       )
+     order by stub.pay_date desc, stub.id desc, line.id desc
      limit 1
   `)).rows[0];
   if (lateEarnings) {
+    if (!lateEarnings.employmentId || !lateEarnings.earnedFrom || !lateEarnings.earnedTo
+      || lateEarnings.earnedFrom > lateEarnings.earnedTo) {
+      throw new PayrollError(
+        `${row.display_name}'s committed earnings paid ${lateEarnings.payDate} have incomplete or invalid employment or earned-period evidence — `
+        + "review the original earning source and use a supported payroll correction for missing or incorrect retained dates before issuing the ROE",
+      );
+    }
     throw new PayrollError(
-      `${row.display_name} has committed earnings dated ${lateEarnings.payDate}, after the confirmed `
+      `${row.display_name} has committed earnings earned through ${lateEarnings.earnedTo}, after the confirmed `
       + `separation's last insurable earnings date ${event.last_insurable_earnings_on}`
       + (event.salary_continuance_end_on ? ` (salary continuance through ${event.salary_continuance_end_on})` : "")
-      + " — correct the separation dates or void the stub before issuing the ROE",
+      + " — review the separation facts and earned-period source before issuing the ROE",
     );
   }
   const earningComponents = (await db.execute<{

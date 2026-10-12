@@ -10,6 +10,8 @@ import { errorChainMatches } from '../testing/error-chain.ts';
 import { createPayRun } from './run-lifecycle.ts';
 import { calculatePayRun } from './run-calculation.ts';
 import { commitPayRun } from './run-commit.ts';
+import { mutatePayRunAdjustment } from './run-adjustments.ts';
+import { roeRecord } from './yearend.ts';
 import { recordFilingIssue } from './yearend-amendments.ts';
 import { readRoeSeparationFacts, saveRoeSeparationFacts } from './roe-separation-facts.ts';
 const DB=!!process.env.OPENBOOKS_DB_URL;
@@ -25,6 +27,63 @@ async function setup() {
 const declaration={ firstDayWorked:'2009-03-16',interruptionOn:'2026-05-09',lastInsurableEarningsOn:'2026-05-08',salaryContinuanceEndOn:null,
  sourceReference:'Original employer separation record, Block 11',reason:'Record the confirmed interruption facts',
  status:'draft' as const,expectedId:null,expectedUpdatedAt:null };
+
+for (const dated of [true, false]) {
+ test(dated
+  ? 'ROE accepts a later final cheque with retained earned dates and refuses genuinely later service'
+  : 'ROE refuses a later final cheque whose retained earned-period attribution is missing',
+ {skip:!DB},async()=>{
+  const f=await withBypassContext(setup);
+  try{await withOrgContext(f.orgId,async()=>{
+   const filingAccountId=randomUUID();
+   const account=await db.execute(sql`insert into payroll_filing_accounts
+    (id,org_id,subsidiary_id,country,program_type,account_number,name,remitter_type,is_default,is_active,created_by,updated_by)
+    values (${filingAccountId},${f.orgId},${f.subsidiaryId},'CA','ca_rp','123456789RP0001',
+     'Canadian payroll account','regular',true,true,${f.actorId},${f.actorId}) returning id`);
+   assert.equal(account.rows.length,1);
+   const profile=await db.execute(sql`update employee_payroll_profiles set filing_account_id=${filingAccountId}
+    where org_id=${f.orgId} and employee_party_id=${f.employeeId} returning employee_party_id`);
+   assert.equal(profile.rows.length,1);
+   await seedRoeIssuanceFixture(f.orgId,f.employeeId);
+   const scope={orgId:f.orgId,actorId:f.actorId,employeePartyId:f.employeeId,
+    employmentId:f.employmentId,subsidiaryId:f.subsidiaryId,allowedSubsidiaryIds:null};
+   const original=await readRoeSeparationFacts(scope);assert.ok(original);
+   const confirmed=await saveRoeSeparationFacts({...scope,...declaration,status:'confirmed',
+    expectedId:original.id,expectedUpdatedAt:original.updatedAt});
+   const component=(await db.execute<{id:string}>(sql`select id from pay_components
+    where org_id=${f.orgId} and system_key='base_pay'`)).rows;
+   assert.equal(component.length,1);
+   const run=await createPayRun({orgId:f.orgId,actorId:f.actorId,payScheduleId:f.scheduleId,
+    periodStart:'2026-04-26',periodEnd:'2026-05-09',payDate:'2026-05-13'});
+   await mutatePayRunAdjustment({orgId:f.orgId,actorId:f.actorId,documentId:run.documentId,
+    reason:'Original final wage instruction',mutation:{action:'add',employeePartyId:f.employeeId,
+     componentId:component[0]!.id,amount:'100',replaceComponent:true,
+     ...(dated?{earnedFrom:'2026-05-08',earnedTo:'2026-05-08'}:{})}});
+   assert.deepEqual((await calculatePayRun({orgId:f.orgId,actorId:f.actorId,documentId:run.documentId})).errors,[]);
+   await commitPayRun({orgId:f.orgId,actorId:f.actorId,documentId:run.documentId});
+   const before=(await db.execute(sql`select to_jsonb(stub) as snapshot from pay_stubs stub
+    where org_id=${f.orgId} and pay_run_document_id=${run.documentId}`)).rows;
+   const retained=(await db.execute<{earnedFrom:string|null;earnedTo:string|null}>(sql`
+    select line.earned_from::text as "earnedFrom",line.earned_to::text as "earnedTo"
+      from pay_stub_lines line join pay_stubs stub on stub.org_id=line.org_id and stub.id=line.stub_id
+     where stub.org_id=${f.orgId} and stub.pay_run_document_id=${run.documentId}
+       and line.component_id=${component[0]!.id} and line.kind='earning' and line.amount=100`)).rows;
+   assert.deepEqual(retained,[{earnedFrom:dated?'2026-05-08':null,earnedTo:dated?'2026-05-08':null}]);
+   if(dated){
+    const record=await roeRecord(f.orgId,f.employeeId);assert.ok(record);
+    assert.equal(record.lastDayPaid,'2026-05-08');assert.equal(record.finalPayPeriodEnd,'2026-05-09');
+    await saveRoeSeparationFacts({...scope,...declaration,status:'confirmed',
+     lastInsurableEarningsOn:'2026-05-07',expectedId:confirmed.id,expectedUpdatedAt:confirmed.updatedAt});
+    await assert.rejects(roeRecord(f.orgId,f.employeeId),/earned through 2026-05-08, after/);
+   }else{
+    await assert.rejects(roeRecord(f.orgId,f.employeeId),/incomplete or invalid employment or earned-period evidence/);
+   }
+   assert.deepEqual((await db.execute(sql`select to_jsonb(stub) as snapshot from pay_stubs stub
+    where org_id=${f.orgId} and pay_run_document_id=${run.documentId}`)).rows,before,
+    'ROE preview and refusal preserve committed payroll');
+  });}finally{await withBypassContext(()=>dropScratchOrgReporting(f.orgId));}
+ });
+}
 
 test('native separation facts preserve source and audit, confirm explicitly and refuse stale edits', {skip:!DB},async()=>{
  const f=await withBypassContext(setup);
