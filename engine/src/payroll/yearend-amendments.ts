@@ -833,7 +833,15 @@ async function issueOriginal(
     throw alreadyIssued(last.revisionNumber, last.revision);
   }
   const data = await filing.population(orgId, taxYear, input.scope);
-  const rows = data.rows;
+  const selection = filing.originalIssueRowIds?.(input.params ?? {});
+  const selected = selection ? new Set(selection) : null;
+  if (selection && (selection.length === 0 || selected!.size !== selection.length)) {
+    throw new PayrollError('Choose each filing row exactly once before recording the original artifact');
+  }
+  const rows = selected ? data.rows.filter(row => selected.has(String(row[data.rowKey] ?? ""))) : data.rows;
+  if (selected && rows.length !== selected.size) {
+    throw new PayrollError('The original filing selection contains unavailable rows — reload the filing population');
+  }
   if (rows.length === 0) {
     throw new PayrollError(
       `${filing.label} has no rows for ${taxYear} — there is nothing to issue`,

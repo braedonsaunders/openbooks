@@ -443,6 +443,8 @@ export interface PayrollYearEndFiling {
   /** Why no file exists, when it does not — named, never implied. */
   downloadRefusal?: string;
   issue?: PayrollFilingIssue;
+  /** Exact original-artifact selection, when the pack issues only selected population rows. */
+  originalIssueRowIds?: (params: Readonly<Record<string, string>>) => readonly string[];
   /** Native source locks held while an explicit issued artifact is snapshotted. */
   lockIssueSources?: (orgId: string, actorId: string, rowIds: readonly string[]) => Promise<void>;
   /** Source lifecycle recorded in the same transaction as the issued artifact. */

@@ -496,6 +496,7 @@ function buildCaPackFilings(): PayrollPackFilings {
     },
     {
       key: "roe",
+      originalIssueRowIds: params => parseRoeIssueParam(params.employees ?? "").map(issue => issue.employeePartyId),
       lockIssueSources: lockRoeIssueFacts,
       recordIssueSources: recordRoeFactsIssued,
       label: "Records of Employment",

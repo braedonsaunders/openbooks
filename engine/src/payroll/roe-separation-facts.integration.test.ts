@@ -1,9 +1,11 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
+import { randomUUID } from 'node:crypto';
+import { sealSecret } from '../platform/secrets.ts';
 import { sql } from 'drizzle-orm';
 import { db, withBypassContext, withOrgContext } from '../platform/db.ts';
-import { seedAdoption, seedRoeIssuanceFixture } from './filing-test-fixtures.ts';
-import { dropScratchOrgReporting } from '../testing/fixtures.ts';
+import { seedAdoption, seedHiredEmployee, seedRoeIssuanceFixture } from './filing-test-fixtures.ts';
+import { dropScratchOrgReporting, seedPayrollSettings } from '../testing/fixtures.ts';
 import { errorChainMatches } from '../testing/error-chain.ts';
 import { createPayRun } from './run-lifecycle.ts';
 import { calculatePayRun } from './run-calculation.ts';
@@ -11,12 +13,21 @@ import { commitPayRun } from './run-commit.ts';
 import { recordFilingIssue } from './yearend-amendments.ts';
 import { readRoeSeparationFacts, saveRoeSeparationFacts } from './roe-separation-facts.ts';
 const DB=!!process.env.OPENBOOKS_DB_URL;
+async function setup() {
+ const f=await seedAdoption({hiredOn:'1998-08-25'});
+ await seedPayrollSettings(f.orgId,{features:{payroll:true}});
+ const grants=await db.execute(sql`insert into user_permission_overrides(org_id,user_id,permission,effect)
+  values (${f.orgId},${f.actorId},'payroll.read','grant'),(${f.orgId},${f.actorId},'payroll.run','grant') returning permission`);
+ assert.equal(grants.rows.length,2);
+ return f;
+}
+
 const declaration={ firstDayWorked:'2009-03-16',interruptionOn:'2026-05-09',lastInsurableEarningsOn:'2026-05-08',salaryContinuanceEndOn:null,
  sourceReference:'Original employer separation record, Block 11',reason:'Record the confirmed interruption facts',
  status:'draft' as const,expectedId:null,expectedUpdatedAt:null };
 
 test('native separation facts preserve source and audit, confirm explicitly and refuse stale edits', {skip:!DB},async()=>{
- const f=await withBypassContext(seedAdoption);
+ const f=await withBypassContext(setup);
  try{await withOrgContext(f.orgId,async()=>{
   const scope={orgId:f.orgId,actorId:f.actorId,employeePartyId:f.employeeId,employmentId:f.employmentId,subsidiaryId:f.subsidiaryId,allowedSubsidiaryIds:null};
   assert.equal(await readRoeSeparationFacts(scope),null);
@@ -41,7 +52,7 @@ test('native separation facts preserve source and audit, confirm explicitly and 
 });
 
 test('native separation facts refuse impossible dates and out-of-scope identities without writing', {skip:!DB},async()=>{
- const f=await withBypassContext(seedAdoption),other=await withBypassContext(seedAdoption);
+ const f=await withBypassContext(setup),other=await withBypassContext(setup);
  try{await withOrgContext(f.orgId,async()=>{
   const scope={orgId:f.orgId,actorId:f.actorId,employeePartyId:f.employeeId,employmentId:f.employmentId,subsidiaryId:f.subsidiaryId,allowedSubsidiaryIds:null};
   await assert.rejects(saveRoeSeparationFacts({...scope,...declaration,status:'confirmed',firstDayWorked:null}),/first day worked/);
@@ -56,7 +67,7 @@ test('native separation facts refuse impossible dates and out-of-scope identitie
 });
 
 test('issued separation facts remain immutable through the native authoring command', {skip:!DB},async()=>{
- const f=await withBypassContext(seedAdoption);
+ const f=await withBypassContext(setup);
  try{await withOrgContext(f.orgId,async()=>{
   const scope={orgId:f.orgId,actorId:f.actorId,employeePartyId:f.employeeId,employmentId:f.employmentId,subsidiaryId:f.subsidiaryId,allowedSubsidiaryIds:null};
   const saved=await saveRoeSeparationFacts({...scope,...declaration,status:'confirmed'});
@@ -71,18 +82,41 @@ test('issued separation facts remain immutable through the native authoring comm
 });
 
 
-test('native ROE issuance freezes the declared source alongside the retained artifact', {skip:!DB},async()=>{
- const f=await withBypassContext(seedAdoption);
+test('native ROE issuance freezes only selected employee facts alongside the retained artifact', {skip:!DB},async()=>{
+ const f=await withBypassContext(setup);
  try{await withOrgContext(f.orgId,async()=>{
+  const unselected=await seedHiredEmployee(f.orgId,f.actorId,{scheduleId:f.scheduleId,subsidiaryId:f.subsidiaryId,
+   partySubsidiaryId:f.subsidiaryId,name:'Unselected employee',country:'CA',province:'ON',payBasis:'hourly',
+   currency:'CAD',rate:'30',rateBasis:'hour',hiredOn:'2026-05-07',federalClaimCode:1,provincialClaimCode:1,
+   wcbExempt:true,wcbExemptReason:'Declared fixture coverage exclusion'});
+  const filingAccountId=randomUUID();
+  const account=await db.execute(sql`insert into payroll_filing_accounts
+   (id,org_id,subsidiary_id,country,program_type,account_number,name,remitter_type,is_default,is_active,created_by,updated_by)
+   values (${filingAccountId},${f.orgId},${f.subsidiaryId},'CA','ca_rp','123456789RP0001',
+    'Canadian payroll account','regular',true,true,${f.actorId},${f.actorId}) returning id`);
+  assert.equal(account.rows.length,1);
+  const profiles=await db.execute(sql`update employee_payroll_profiles set filing_account_id=${filingAccountId}
+   where org_id=${f.orgId} and employee_party_id in (${f.employeeId},${unselected.employeeId}) returning employee_party_id`);
+  assert.equal(profiles.rows.length,2);
+  const identity=await db.execute(sql`update employee_payroll_profiles
+   set sin_encrypted=${sealSecret('046454286',{orgId:f.orgId,purpose:'payroll.employee.sin'})},sin_last3='286'
+   where org_id=${f.orgId} and employee_party_id=${f.employeeId} returning employee_party_id`);
+  assert.equal(identity.rows.length,1);
+  const config=await db.execute(sql`update orgs set settings=jsonb_set(settings,'{payroll,t4Transmitter}',
+   ${JSON.stringify({bn:'123456789RP0001',name:'Fixture employer',contactName:'Pat Payroll',contactPhone:'5555550100'})}::jsonb)
+   where id=${f.orgId} returning id`);
+  assert.equal(config.rows.length,1);
   await seedRoeIssuanceFixture(f.orgId,f.employeeId);
   const scope={orgId:f.orgId,actorId:f.actorId,employeePartyId:f.employeeId,employmentId:f.employmentId,subsidiaryId:f.subsidiaryId,allowedSubsidiaryIds:null};
   const original=await readRoeSeparationFacts(scope);assert.ok(original);
   await saveRoeSeparationFacts({...scope,...declaration,firstDayWorked:'2026-05-07',interruptionOn:'2026-05-10',
    lastInsurableEarningsOn:'2026-05-09',status:'confirmed',expectedId:original.id,expectedUpdatedAt:original.updatedAt});
-  for(const day of ['2026-05-07','2026-05-08','2026-05-09'])await db.execute(sql`insert into time_entries
+  for(const employeeId of [f.employeeId,unselected.employeeId])for(const day of ['2026-05-07','2026-05-08','2026-05-09'])await db.execute(sql`insert into time_entries
    (org_id,employee_party_id,worked_on,hours,status,is_billable,billing_status,costing_basis,created_by,updated_by)
-   values (${f.orgId},${f.employeeId},${day},8,'approved',false,'unbilled','actual',${f.actorId},${f.actorId})`);
-  await db.execute(sql`update employee_roles set terminated_on='2026-05-10' where org_id=${f.orgId} and party_id=${f.employeeId}`);
+   values (${f.orgId},${employeeId},${day},8,'approved',false,'unbilled','actual',${f.actorId},${f.actorId})`);
+  const terminations=await db.execute(sql`update employee_roles set terminated_on='2026-05-10'
+   where org_id=${f.orgId} and party_id in (${f.employeeId},${unselected.employeeId}) returning party_id`);
+  assert.equal(terminations.rows.length,2);
   const run=await createPayRun({orgId:f.orgId,actorId:f.actorId,payScheduleId:f.scheduleId,
    periodStart:'2026-04-26',periodEnd:'2026-05-09',payDate:'2026-05-09'});
   assert.deepEqual((await calculatePayRun({orgId:f.orgId,actorId:f.actorId,documentId:run.documentId})).errors,[]);
@@ -90,6 +124,10 @@ test('native ROE issuance freezes the declared source alongside the retained art
   const filed=await recordFilingIssue({orgId:f.orgId,actorId:f.actorId,country:'CA',filingKey:'roe',taxYear:2026,
    revision:'original',params:{employees:f.employeeId+':E'},note:'Employer confirmed source and original ROE filing'});
   assert.equal(filed.submission.slipCount,1);
+  assert.equal(await readRoeSeparationFacts({...scope,employeePartyId:unselected.employeeId}),null);
+  const retainedRows=(await db.execute<{row_id:string}>(sql`select row_id from payroll_filing_submission_slips
+   where org_id=${f.orgId} and submission_id=${filed.submission.id}`)).rows;
+  assert.deepEqual(retainedRows.map(row=>row.row_id),[f.employeeId]);
   const issued=await readRoeSeparationFacts(scope);assert.equal(issued!.status,'issued');
   assert.equal(issued!.firstDayWorked,'2026-05-07');assert.equal(issued!.id,original.id);
   const before=(await db.execute(sql`select to_jsonb(s) as snapshot from payroll_filing_submissions s where org_id=${f.orgId} and id=${filed.submission.id}`)).rows;
