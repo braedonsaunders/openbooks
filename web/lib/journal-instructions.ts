@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { exactMoney, isoDate } from './api/json'
+import { exactMoney, isoDate } from './api/json-schema'
 import { canonicalDecimal, compareDecimal } from './exact-decimal'
 
 /** All native journal save boundaries accept the same exact instruction fields. */
