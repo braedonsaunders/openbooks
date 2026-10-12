@@ -968,6 +968,9 @@ test("posting reviews saved accounts before sending one command and retains a re
   assert.ok(document.body.textContent?.includes("Primary book"));
   const dialog = document.querySelector('[role="dialog"]');
   assert.ok(dialog);
+  const entityLabel = [...dialog.querySelectorAll("dt")].find(label => label.textContent === messages.common.labels.subsidiary);
+  assert.ok(entityLabel, "the posting entity uses the native translated subsidiary label");
+  assert.equal(entityLabel.nextElementSibling?.textContent, "Coffee company");
   const post = [...dialog.querySelectorAll("button")].find(button => button.textContent === "Post");
   assert.ok(post);
   await act(async () => { post.click(); post.click(); }); await tick(); await tick();
