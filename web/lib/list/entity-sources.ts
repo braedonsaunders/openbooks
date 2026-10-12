@@ -1310,27 +1310,38 @@ const SOURCES: Record<string, EntityListSource> = {
   },
   timesheet_week: {
     recordType: 'timesheet_week',
-    table: (orgId) => sql`(select t.org_id, t.employee_party_id,
-                    (t.worked_on - ((extract(dow from t.worked_on))::int) * interval '1 day')::date as week_start,
-                    sum(t.hours) as total_hours,
-                    coalesce(sum(t.hours) filter (where t.is_billable), 0) as billable_hours,
-                    case
-                      when bool_and(t.status='approved') then 'approved'
+    table: (orgId) => sql`(
+      select coalesce(entries.org_id, header.org_id) as org_id,
+             coalesce(entries.employee_party_id, header.employee_party_id) as employee_party_id,
+             coalesce(entries.week_start, header.week_start) as week_start,
+             coalesce(entries.total_hours, 0) as total_hours,
+             coalesce(entries.billable_hours, 0) as billable_hours,
+             coalesce(header.status, entries.status) as status
+        from (
+          select t.org_id, t.employee_party_id,
+                 (t.worked_on - ((extract(dow from t.worked_on))::int) * interval '1 day')::date as week_start,
+                 sum(t.hours) as total_hours,
+                 coalesce(sum(t.hours) filter (where t.is_billable), 0) as billable_hours,
+                 case when bool_and(t.status='approved') then 'approved'
                       when bool_or(t.status='submitted') then 'submitted'
                       when bool_or(t.status='rejected') then 'rejected'
-                      else 'draft'
-                    end as status
-               from time_entries t
-              where t.org_id = ${orgId}
-              group by t.org_id, t.employee_party_id,
-                       (t.worked_on - ((extract(dow from t.worked_on))::int) * interval '1 day')::date)`,
+                      else 'draft' end as status
+            from time_entries t
+           where t.org_id = ${orgId}
+           group by t.org_id, t.employee_party_id,
+                    (t.worked_on - ((extract(dow from t.worked_on))::int) * interval '1 day')::date
+        ) entries
+        full join (
+          select org_id, employee_party_id, week_start, status
+            from timesheet_weeks where org_id = ${orgId}
+        ) header on header.org_id=entries.org_id
+                and header.employee_party_id=entries.employee_party_id
+                and header.week_start=entries.week_start
+    )`,
     alias: 'tw',
     idExpr: sql`tw.employee_party_id::text || ':' || tw.week_start::text`,
-    // No customFieldTable: a week is an aggregate over time_entries, not a
-    // record, so it has no header of its own to extend. Tenant fields belong on
-    // the LINE (time_entries) and surface as grid columns in the flyout.
-    // ('timesheet_weeks' used to be named here; no such table has ever existed,
-    // so any field defined against it could never be stored.)
+    // The saved header owns week lifecycle. Legacy entry-only weeks retain
+    // their entry-derived status; custom grid fields remain on time_entries.
     baseJoins: sql`left join parties employee on employee.id=tw.employee_party_id and employee.org_id=tw.org_id`,
     builtInExpr: TIMESHEET_WEEK_BUILT_IN_EXPR,
     sorts: TIMESHEET_WEEK_SORTS,

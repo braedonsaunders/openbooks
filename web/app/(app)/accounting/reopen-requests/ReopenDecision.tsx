@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
-import { fetchAction } from '@braedonsaunders/appkit-errors'
+import { ActionError, fetchAction } from '@braedonsaunders/appkit-errors'
 import { ActionAlert } from '@braedonsaunders/appkit-errors/react'
 import { Button } from '@openbooks/ui'
 import { useAppAction } from '@/lib/use-app-action'
@@ -25,6 +25,23 @@ interface DecisionPreview {
   conflictAcknowledgementAllowed: boolean
 }
 
+function decisionPreview(value: unknown): DecisionPreview | null {
+  if (!value || typeof value !== 'object') return null
+  const data = value as Record<string, unknown>
+  const names = (items: unknown): items is string[] =>
+    Array.isArray(items) && items.every((item) => typeof item === 'string')
+  if (!Array.isArray(data.conflicts) || !data.conflicts.every((item: unknown) => {
+    if (!item || typeof item !== 'object') return false
+    const conflict = item as Record<string, unknown>
+    return typeof conflict.kind === 'string'
+      && Number.isSafeInteger(conflict.count) && Number(conflict.count) >= 0
+      && names(conflict.examples)
+  }) || !['ownRequest', 'independenceRequired', 'selfApprovalAllowed', 'conflictAcknowledgementAllowed']
+    .every((key) => typeof data[key] === 'boolean')
+    || !names(data.eligibleApprovers) || !names(data.unconflictedApprovers)) return null
+  return data as unknown as DecisionPreview
+}
+
 /**
  * Approve or reject one pending reopen request through the native close
  * command. The Approve control mirrors the engine's decision before the
@@ -40,37 +57,36 @@ export function ReopenDecision({ requestId, ownRequest }: { requestId: string; o
   const t = useTranslations('accounting.reopenRequests')
   const router = useRouter()
   const { busy, refusal, execute } = useAppAction()
-  const [preview, setPreview] = useState<DecisionPreview | null>(null)
+  const previewAction = useAppAction()
+  const [loadedPreview, setPreview] = useState<{ requestId: string; data: DecisionPreview } | null>(null)
+  const [previewAttempt, setPreviewAttempt] = useState(0)
+  const preview = loadedPreview?.requestId === requestId ? loadedPreview.data : null
   const [attestation, setAttestation] = useState('')
   const [attested, setAttested] = useState(false)
   useEffect(() => {
     let live = true
-    void fetchAction('/api/admin/close', {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({ action: 'reopen-conflicts', requestId }),
-    }).then((result) => {
-      if (!live || !result.ok) return
-      const data = result.data as Partial<DecisionPreview> | null
-      if (!data || !Array.isArray(data.conflicts)) return
-      setPreview({
-        conflicts: data.conflicts,
-        ownRequest: data.ownRequest === true,
-        independenceRequired: data.independenceRequired === true,
-        selfApprovalAllowed: data.selfApprovalAllowed === true,
-        eligibleApprovers: Array.isArray(data.eligibleApprovers)
-          ? data.eligibleApprovers.filter((name): name is string => typeof name === 'string')
-          : [],
-        unconflictedApprovers: Array.isArray(data.unconflictedApprovers)
-          ? data.unconflictedApprovers.filter((name): name is string => typeof name === 'string')
-          : [],
-        conflictAcknowledgementAllowed: data.conflictAcknowledgementAllowed === true,
+    setAttestation('')
+    setAttested(false)
+    void previewAction.execute<DecisionPreview | null>(async () => {
+      const result = await fetchAction('/api/admin/close', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ action: 'reopen-conflicts', requestId }),
       })
+      if (!live) return { ok: true, data: null }
+      if (!result.ok) return result
+      const data = decisionPreview(result.data)
+      return data
+        ? { ok: true, data }
+        : { ok: false, error: new ActionError({ kind: 'refused', serverMessage: t('previewFailed') }) }
+    }, {
+      fallbackMessage: t('previewFailed'),
+      onOk: (data) => { if (live && data) setPreview({ requestId, data }) },
     })
     return () => {
       live = false
     }
-  }, [requestId])
+  }, [requestId, previewAttempt, previewAction.execute, t])
   const isOwn = preview?.ownRequest ?? ownRequest
   const conflicts = preview?.conflicts ?? []
   const conflictTotal = conflicts.reduce((sum, item) => sum + item.count, 0)
@@ -146,6 +162,17 @@ export function ReopenDecision({ requestId, ownRequest }: { requestId: string; o
   const withdrawButton = (
     <Button size="sm" variant="outline" disabled={busy} onClick={() => void withdraw()}>{t('withdraw')}</Button>
   )
+  if (!preview)
+    return (
+      <div className="flex max-w-xs flex-col items-end gap-2">
+        <p role="status" className="text-xs text-muted-foreground">{previewAction.busy ? t('previewLoading') : t('previewRequired')}</p>
+        <ActionAlert error={previewAction.refusal} fallbackMessage={t('previewFailed')} />
+        <div className="flex justify-end gap-2">
+          {ownRequest ? withdrawButton : null}
+          <Button size="sm" variant="outline" disabled={previewAction.busy} onClick={() => setPreviewAttempt((attempt) => attempt + 1)}>{t('previewRetry')}</Button>
+        </div>
+      </div>
+    )
   if (isOwn && !selfApproval)
     return (
       <div className="flex max-w-xs flex-col items-end gap-2">

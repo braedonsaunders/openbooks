@@ -1777,10 +1777,8 @@ const TIMESHEET_WEEK: RecordTypeMeta = {
   category: "entity",
   featureKey: "timeTracking",
   supportsForms: false,
-  // A week is an aggregate over time_entries, not a record, so it has no header
-  // of its own to extend; tenant fields belong on the LINE and render as grid
-  // columns in the flyout. (customFieldTable used to name 'timesheet_weeks' —
-  // a table that has never existed, so those defs could never be stored.)
+  // The week header owns lifecycle. Custom values belong to individual
+  // time entries and surface as grid columns rather than header fields.
   customFieldTable: undefined,
   customFieldLineTable: "time_entries",
   headerFields: [],

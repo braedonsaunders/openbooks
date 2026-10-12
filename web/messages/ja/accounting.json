@@ -463,6 +463,10 @@
     "impairmentEvidence": "関連資産の減損確認証拠"
   },
   "reopenRequests": {
+    "previewLoading": "利益相反の確認を読み込み中…",
+    "previewRequired": "判断する前に利益相反を確認してください。",
+    "previewFailed": "利益相反の確認を読み込めませんでした。判断する前に再試行してください。",
+    "previewRetry": "確認を再試行",
     "title": "期間再オープン申請",
     "description": "締め済み期間の再オープン申請です。申請者以外で再オープン権限を持つ人が各申請を承認または却下します。",
     "empty": "再オープン申請はまだありません。",

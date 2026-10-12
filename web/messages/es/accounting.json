@@ -463,6 +463,10 @@
     "impairmentEvidence": "Evidencia de revisión del deterioro de activos relacionados"
   },
   "reopenRequests": {
+    "previewLoading": "Cargando la revisión de conflictos…",
+    "previewRequired": "Revise los conflictos antes de decidir.",
+    "previewFailed": "No se pudo cargar la revisión de conflictos. Reinténtela antes de decidir.",
+    "previewRetry": "Reintentar revisión",
     "title": "Solicitudes de reapertura de período",
     "description": "Solicitudes para reabrir un período cerrado. Una persona distinta del solicitante que tenga el permiso de reapertura aprueba o rechaza cada una.",
     "empty": "No se ha presentado ninguna solicitud de reapertura.",

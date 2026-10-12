@@ -81,7 +81,10 @@ function stubPreview(response: unknown, bodies: unknown[]) {
   const prior = globalThis.fetch
   globalThis.fetch = (async (_input: unknown, init?: { body?: string }) => {
     const body = JSON.parse(String(init?.body ?? '{}')) as { action?: string }
-    if (body.action === 'reopen-conflicts') return Response.json(response)
+    if (body.action === 'reopen-conflicts') return Response.json({
+      eligibleApprovers: [], unconflictedApprovers: [], conflictAcknowledgementAllowed: false,
+      ...(response && typeof response === 'object' ? response : {}),
+    })
     bodies.push(body)
     return Response.json({ ok: true })
   }) as typeof fetch

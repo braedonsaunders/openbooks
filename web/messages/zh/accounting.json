@@ -463,6 +463,10 @@
     "impairmentEvidence": "相关资产减值审核证据"
   },
   "reopenRequests": {
+    "previewLoading": "正在加载利益冲突审查…",
+    "previewRequired": "请先审查利益冲突再作出决定。",
+    "previewFailed": "无法加载利益冲突审查。请先重试审查再作出决定。",
+    "previewRetry": "重试审查",
     "title": "期间重新打开申请",
     "description": "重新打开已结账期间的申请。由申请人以外、拥有重新打开权限的人员批准或拒绝每项申请。",
     "empty": "尚未提交任何重新打开申请。",

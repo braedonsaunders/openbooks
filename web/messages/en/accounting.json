@@ -463,6 +463,10 @@
     "impairmentEvidence": "Related-asset impairment review evidence"
   },
   "reopenRequests": {
+    "previewLoading": "Loading the conflict review…",
+    "previewRequired": "Review conflicts before deciding this request.",
+    "previewFailed": "The conflict review could not be loaded. Retry the review before deciding.",
+    "previewRetry": "Retry review",
     "title": "Period reopen requests",
     "description": "Requests to reopen a closed period. Someone other than the requester who holds the reopen permission approves or rejects each one.",
     "empty": "No reopen requests have been filed.",

@@ -463,6 +463,10 @@
     "impairmentEvidence": "Evidências de revisão da recuperabilidade dos ativos relacionados"
   },
   "reopenRequests": {
+    "previewLoading": "Carregando a análise de conflitos…",
+    "previewRequired": "Analise os conflitos antes de decidir.",
+    "previewFailed": "Não foi possível carregar a análise de conflitos. Tente novamente antes de decidir.",
+    "previewRetry": "Tentar análise novamente",
     "title": "Solicitações de reabertura de período",
     "description": "Solicitações para reabrir um período fechado. Uma pessoa diferente do solicitante, com a permissão de reabertura, aprova ou rejeita cada uma.",
     "empty": "Nenhuma solicitação de reabertura foi registrada.",
