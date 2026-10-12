@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { NextResponse } from 'next/server'
-import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
+import { withOrgTransaction } from '@openbooks/engine/platform/db'
 import { correctUnapprovedTimeType } from '@openbooks/engine/projects/time-type-correction'
 import { TimeWorkTargetError } from '@openbooks/engine/projects/time-work-target'
 import { authorizeTimeWorkspace, timeWorkFamily } from '@/lib/time-workspace'

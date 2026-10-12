@@ -162,7 +162,17 @@ test('same-command concurrency is once-only, an aborted transaction rolls back, 
     assert.deepEqual(await f.snapshots(),before)
     const responses=await Promise.all([f.call(body),f.call(body)])
     assert.deepEqual(responses.map(response=>response.status),[200,200])
-    const after=await f.snapshots();assert.equal(after.audits,before.audits+1)
+    const afterConcurrent=await f.snapshots();assert.equal(afterConcurrent.audits,before.audits+1)
+    const current=(await f.read()).pendingEntries!.find(row=>row.id===f.entry)!
+    const regular=(await f.inOrg(()=>loadPickers(f.org.orgId,f.employee,null))).timeTypes.find(type=>type.value===f.regular)!
+    // A non-API caller receives the same transaction and audit guarantee.
+    const direct=await f.inOrg(()=>correctUnapprovedTimeType({...body,orgId:f.org.orgId,actorId:f.actor,requestedScope:null,
+      commandId:randomUUID(),expectedUpdatedAt:current.updatedAt,timeTypeId:f.regular,timeTypeUpdatedAt:regular.updatedAt!}))
+    assert.deepEqual(direct,{changed:true,replayed:false})
+    const after=await f.snapshots();assert.equal(after.audits,before.audits+2)
+    assert.deepEqual(after.ticket,before.ticket)
+    assert.deepEqual(after.header,before.header)
+    assert.equal(after.journals,before.journals)
     const payload=await f.read()
     const saved=await f.inOrg(async()=>withAuthzContext(await f.authority(),()=>save(new Request('http://time.local/api/timesheets',{
       method:'PUT',headers:{'content-type':'application/json'},body:JSON.stringify({employee:f.employee,week:WEEK,expectedRevision:payload.revision,rows:[]}),
