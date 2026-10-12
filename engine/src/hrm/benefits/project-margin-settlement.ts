@@ -9,7 +9,7 @@ import type { BenefitProgram, BenefitProgramMember } from "./program-types.ts";
 /**
  * Project-margin incentives pay each project once, in the settlement whose
  * period holds all of the project's revenue recorded by the settlement date. The base is
- * the project's lifetime margin on the program's named accounts — revenue
+ * the project's lifetime margin through the settlement date on the program's named accounts — revenue
  * less cost across every posted or reversed line tagged to the project — less
  * open purchase commitments when the program counts them. A profit pays the
  * profit rate and a loss charges the loss rate, each capped per project. The
@@ -24,6 +24,8 @@ export interface ProjectMarginSnapshot {
   readonly metric: "project_margin";
   readonly scope: "company";
   readonly digest: string;
+  /** Retained on new snapshots; earlier immutable snapshots predate this field. */
+  readonly asOf?: string;
   readonly projects: readonly {
     readonly projectId: string;
     readonly revenueOn: string;
@@ -69,7 +71,7 @@ export async function measureProjectMarginSettlement(input: {
   readonly orgId: string; readonly program: BenefitProgram; readonly members: readonly BenefitProgramMember[];
   readonly minorUnits: number; readonly basis: IncentivePeriodBasis; readonly periodFrom: string; readonly periodTo: string;
   readonly revenueAccountIds: readonly string[]; readonly expenseAccountIds: readonly string[];
-  /** Revenue recorded after this date has not happened yet for this settlement. */
+  /** Financial sources dated after this date do not enter this settlement. */
   readonly asOf: string;
 }): Promise<{ measured: IncentiveMeasured; computation: IncentiveComputation; excluded: string[]; projectMarginSnapshot: ProjectMarginSnapshot }> {
   const { orgId, program, periodFrom, periodTo, minorUnits } = input;
@@ -99,19 +101,21 @@ export async function measureProjectMarginSettlement(input: {
      order by p.id`)).rows.filter((p) => !paid.has(p.id) && !excludedProjects.has(p.id)
        && p.starts_on !== null && p.starts_on >= program.effectiveFrom);
   const excluded: string[] = [];
-  if (!candidates.length) return empty(program, periodFrom, periodTo, excluded);
+  if (!candidates.length) return empty(program, periodFrom, periodTo, input.asOf, excluded);
   const ids = candidates.map((p) => p.id);
   const ledger = (await db.execute<{ project_id: string; account_id: string; amount: string }>(sql`
     select l.project_id::text as project_id, l.account_id::text as account_id, sum(l.amount)::text as amount
       from journal_lines l join journal_entries e on e.org_id = l.org_id and e.id = l.entry_id and e.status in ('posted','reversed')
      where l.org_id = ${orgId} and l.project_id = any(${`{${ids.join(",")}}`}::uuid[])
        and l.account_id = any(${`{${accounts.join(",")}}`}::uuid[])
+       and l.posting_date <= ${input.asOf}::date
      group by 1, 2`)).rows;
   const commitments = program.includeOpenCommitments ? new Map((await db.execute<{ project_id: string; amount: string }>(sql`
     select coalesce(l.project_id, d.project_id)::text as project_id,
            sum(case when coalesce(l.quantity,0) > 0 then l.amount * greatest(0, 1 - coalesce(l.quantity_billed,0) / l.quantity) else l.amount end)::text as amount
       from documents d join document_lines l on l.org_id = d.org_id and l.document_id = d.id
      where d.org_id = ${orgId} and d.kind = 'purchase_order' and d.status = 'approved'
+       and d.document_date <= ${input.asOf}::date
        and coalesce(l.project_id, d.project_id) = any(${`{${ids.join(",")}}`}::uuid[])
      group by 1`)).rows.map((r) => [r.project_id, toUnits(r.amount)])) : new Map<string, bigint>();
   const members = (await db.execute<{ id: string; party: string }>(sql`
@@ -175,7 +179,7 @@ export async function measureProjectMarginSettlement(input: {
     throw new BenefitsError("REFUSED", "Every recipient nets a project-margin loss this period, so no award can carry the losses forward — settle a longer span that includes a payment.");
   }
   const totalAwarded = awarded.reduce((sum, [, value]) => sum + value, 0n);
-  const body = { metric: "project_margin" as const, scope: "company" as const, projects, ...(Object.keys(carryForward).length ? { carryForward } : {}) };
+  const body = { metric: "project_margin" as const, scope: "company" as const, asOf: input.asOf, projects, ...(Object.keys(carryForward).length ? { carryForward } : {}) };
   const projectMarginSnapshot = { ...body, digest: createHash("sha256").update(JSON.stringify(body)).digest("hex") };
   const computation: IncentiveComputation = {
     measuredValue: fromUnits(measuredTotal), poolValue: fromUnits(poolTotal), thresholdMet: true, currency: program.currency,
@@ -194,8 +198,8 @@ export async function measureProjectMarginSettlement(input: {
   return { measured: { metric: "project_margin", scope: "company", sourceAccountIds: accounts, periodFrom, periodTo, value: fromUnits(measuredTotal), currency: program.currency }, computation, excluded, projectMarginSnapshot };
 }
 
-function empty(program: BenefitProgram, periodFrom: string, periodTo: string, excluded: string[]) {
-  const body = { metric: "project_margin" as const, scope: "company" as const, projects: [] };
+function empty(program: BenefitProgram, periodFrom: string, periodTo: string, asOf: string, excluded: string[]) {
+  const body = { metric: "project_margin" as const, scope: "company" as const, asOf, projects: [] };
   return {
     measured: { metric: "project_margin" as const, scope: "company" as const, sourceAccountIds: [], periodFrom, periodTo, value: "0.0000", currency: program.currency },
     computation: { measuredValue: "0.0000", poolValue: "0.0000", thresholdMet: true, currency: program.currency, totalAwarded: "0.0000", undistributed: "0.0000", excludedZero: [],
