@@ -162,6 +162,9 @@ export interface ReconcileStaleReversedEntry extends Record<string, unknown> {
 }
 
 export interface ReconcileStaleness extends Record<string, unknown> {
+  reviewed: boolean
+  reviewedHref: string | null
+  reviewedText: string | null
   badge: string
   effect: string
   late: ReconcileStaleLateEntry[]
@@ -416,9 +419,12 @@ export async function loadReconciliation(
   // the ledger under a frozen sign-off. Unsigned sessions instead explain
   // their opening difference from earlier signed-off periods' late effects.
   const detail = await reconciliationStaleness(reconciliationId, ctx)
-  const stale: ReconcileStaleness | null = detail.stale
+  const stale: ReconcileStaleness | null = detail.stale || detail.revalidation
     ? {
-        badge: t('stale.badge', { date: detail.staleSince ?? recon.through_date }),
+        reviewed: !!detail.revalidation,
+        reviewedHref: detail.revalidation ? `/banking/${accountId}/reconcile/${detail.revalidation.reviewedReconciliationId}` : null,
+        reviewedText: detail.revalidation ? t('revalidation.reviewedBasis',{date:detail.revalidation.appliesFromThroughDate}) : null,
+        badge: detail.revalidation ? t('revalidation.reviewedBadge') : t('stale.badge', { date: detail.staleSince ?? recon.through_date }),
         effect: t('stale.effect', { amount: money(detail.clearedEffect, { maximumFractionDigits: 4 }) }),
         late: detail.lateEntries.map((entry) => ({
           entryNumber: entry.entryNumber,

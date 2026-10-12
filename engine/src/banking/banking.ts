@@ -26,6 +26,9 @@ export { listAccountStatements } from "./statement-list"
 export type { AccountStatementListInput, AccountStatementRow, AccountStatementSort } from "./statement-list"
 export { startReconciliation, reconciliationBookId, reconciliationTotals, listSignOffBlockers, adjustReconciliation, discardReconciliation, markReconciled, withdrawReconciliationSignOff, reconciliationStaleness, reconciliationStalenessSummaries, priorPeriodLateEffect, confirmOpeningBalance, openingPosition } from "./reconciliation"
 export type { ReconciliationTotals, SignOffBlocker, ReconciliationStaleness, ReconciliationStalenessSummary, StaleJournalEntry, ReversedMatchEntry, PriorPeriodLateEffect, OpeningPosition, OpeningConfirmation } from "./reconciliation"
+export { previewSignOffRevalidation, revalidateReconciliationSignOff } from './reconciliation-revalidation'
+export type { SignOffRevalidationPreview } from './reconciliation-revalidation'
+export type { SignOffRevalidationCertificate } from './reconciliation-review-proof'
 export { reconciliationEvidence } from "./reconciliation-evidence"
 export type { ReconciliationEvidence, ReconciliationHistoryEvent, EvidenceStatement, EvidenceExcludedLine } from "./reconciliation-evidence"
 export { autoMatch, createMatchWithJournal, createMatch, unmatchStatementLine, unmatchStatementImport, createGlClearingGroup, unmatchGlClearingGroup, excludeStatementLine, clearPossibleDuplicateFlag, excludePossibleDuplicates, restoreStatementLine, correctStatementLine } from "./matching"

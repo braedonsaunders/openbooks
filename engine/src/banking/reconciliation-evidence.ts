@@ -61,6 +61,15 @@ interface SessionState {
 
 export type ReconciliationHistoryEvent = HistoryBase & (
   | {
+      kind: "revalidate_sign_off";
+      reason: string | null;
+      throughDate: string | null;
+      statementBalance: string | null;
+      originalSignedOffAt: string | null;
+      lateEntries: number | null;
+      evidenceDigest: string | null;
+    }
+  | {
       kind: "sign_off";
       evidenceKind: "statement" | "source";
       throughDate: string | null;
@@ -220,6 +229,15 @@ function historyEvent(row: HistoryRow): ReconciliationHistoryEvent {
   }
   const before = objectValue(changes.before);
   switch (changes.operation) {
+    case "revalidate_sign_off": {
+      const proof = objectValue(changes.proof);
+      return {
+        ...base,kind:"revalidate_sign_off",reason:textValue(changes.reason),
+        throughDate:textValue(changes.throughDate),statementBalance:moneyText(changes.statementBalance),
+        originalSignedOffAt:payloadInstant(changes.originalSignedOffAt),
+        lateEntries:countValue(proof.lateEntries),evidenceDigest:textValue(proof.digest),
+      };
+    }
     case "sign_off": {
       const evidenceKind = changes.evidenceKind === "source" ? "source" : "statement";
       return {
@@ -379,7 +397,7 @@ export async function reconciliationEvidence(
          and al.table_name = 'reconciliations'
          and (
            (al.row_id = ${session.id}::uuid and (
-              al.changes->>'operation' in ('sign_off', 'withdraw_sign_off', 'confirm_opening')
+              al.changes->>'operation' in ('sign_off', 'withdraw_sign_off', 'confirm_opening', 'revalidate_sign_off')
               or al.changes->>'mode' = 'session_adjustment'))
            or (al.changes->>'operation' = 'discard'
                and al.changes->'before'->>'accountId' = ${session.account_id}::text)

@@ -1386,7 +1386,8 @@
         "withdraw_sign_off": "承認取消",
         "discard": "セッション破棄",
         "confirm_opening": "開始残高確定",
-        "session_adjustment": "セッション調整"
+        "session_adjustment": "セッション調整",
+        "revalidate_sign_off": "独立した承認確認"
       },
       "signOffStatement": "明細残高 {balance} · {date} まで · 仕訳行 {matched} 件を確定 · 明細行 {excluded} 件を除外",
       "signOffSource": "ソースデータ · 残高 {balance} · {date} まで · 消込済み仕訳行 {matched} 件",
@@ -1395,7 +1396,21 @@
       "withdrawReleased": "解放された仕訳行: {count} 件 · セッションは現在 {status}",
       "discardDetail": "{date} まで · 残高 {balance} · 照合 {matches} 件と明細行 {lines} 件を解放",
       "confirmDetail": "開始残高 {amount}（{date} から）· 理由: {reason}",
-      "adjustDetail": "{beforeDate} → {afterDate} まで · 残高 {beforeBalance} → {afterBalance}"
+      "adjustDetail": "{beforeDate} → {afterDate} まで · 残高 {beforeBalance} → {afterBalance}",
+      "revalidationReason": "確認理由：{reason}",
+      "revalidationBasis": "{date}までの残高{balance}。遅延仕訳{entries}件を確認しました。元の承認{original}は保持され、遅延明細は未照合のままです。"
     }
+  },
+  "revalidation": {
+    "action": "残高に影響しない遅延仕訳を確認",
+    "title": "この承認を独立して確認",
+    "reason": "確認理由（10〜500文字）",
+    "confirm": "確認を記録",
+    "preview": "{date}までの承認済残高は{balance}のままです。現在の証憑には遅延仕訳が{entries}件（口座明細{lines}行）あり、各法人の純額への影響はゼロです。元の銀行明細、照合、承認は変更されません。これらの遅延明細は未照合のままです。表示された取引を確認してから確定してください。",
+    "failed": "承認の確認を完了できませんでした。証憑を再読み込みして再試行してください。",
+    "recorded": "独立した承認確認を記録しました",
+    "reasonRequired": "確認理由を10〜500文字で入力してください。",
+    "reviewedBadge": "残高に影響しない履歴を確認済み",
+    "reviewedBasis": "{date}までの確認証拠"
   }
 }

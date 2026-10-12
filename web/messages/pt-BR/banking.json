@@ -1386,7 +1386,8 @@
         "withdraw_sign_off": "Aprovação retirada",
         "discard": "Sessão descartada",
         "confirm_opening": "Abertura confirmada",
-        "session_adjustment": "Sessão ajustada"
+        "session_adjustment": "Sessão ajustada",
+        "revalidate_sign_off": "Revisão independente da aprovação"
       },
       "signOffStatement": "Saldo do extrato {balance} · até {date} · {matched} linhas de diário marcadas · {excluded} linhas de extrato excluídas",
       "signOffSource": "Evidência de origem · saldo {balance} · até {date} · {matched} linhas de diário conciliadas",
@@ -1395,7 +1396,21 @@
       "withdrawReleased": "Linhas de diário liberadas: {count} · sessão agora {status}",
       "discardDetail": "Até {date} · saldo {balance} · {matches} conciliações e {lines} linhas de extrato liberadas",
       "confirmDetail": "Abertura {amount} a partir de {date} · motivo: {reason}",
-      "adjustDetail": "Até {beforeDate} → {afterDate} · saldo {beforeBalance} → {afterBalance}"
+      "adjustDetail": "Até {beforeDate} → {afterDate} · saldo {beforeBalance} → {afterBalance}",
+      "revalidationReason": "Motivo da revisão: {reason}",
+      "revalidationBasis": "Saldo {balance} até {date}; {entries} lançamentos tardios revisados. A aprovação original {original} é mantida; as linhas tardias continuam sem conciliação."
     }
+  },
+  "revalidation": {
+    "action": "Revisar lançamentos tardios neutros",
+    "title": "Revisar esta aprovação de forma independente",
+    "reason": "Motivo da revisão (10–500 caracteres)",
+    "confirm": "Registrar revisão",
+    "preview": "O saldo aprovado até {date} permanece {balance}. As evidências atuais contêm {entries} lançamentos tardios ({lines} linhas da conta), sem efeito líquido em cada entidade jurídica. O extrato, os vínculos de conciliação e a aprovação originais permanecem inalterados. Essas linhas tardias continuam sem conciliação. Confirme somente após revisar os movimentos exibidos.",
+    "failed": "Não foi possível concluir esta revisão. Recarregue as evidências e tente novamente.",
+    "recorded": "Revisão independente registrada",
+    "reasonRequired": "Informe um motivo de revisão de 10–500 caracteres.",
+    "reviewedBadge": "Histórico neutro revisado",
+    "reviewedBasis": "Evidência revisada até {date}"
   }
 }

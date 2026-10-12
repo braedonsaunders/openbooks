@@ -1386,7 +1386,8 @@
         "withdraw_sign_off": "Approbation retirée",
         "discard": "Session abandonnée",
         "confirm_opening": "Ouverture confirmée",
-        "session_adjustment": "Session ajustée"
+        "session_adjustment": "Session ajustée",
+        "revalidate_sign_off": "Examen indépendant de la validation"
       },
       "signOffStatement": "Solde du relevé {balance} · jusqu'au {date} · {matched} lignes de journal marquées · {excluded} lignes de relevé exclues",
       "signOffSource": "Données source · solde {balance} · jusqu'au {date} · {matched} lignes de journal rapprochées",
@@ -1395,7 +1396,21 @@
       "withdrawReleased": "Lignes de journal libérées : {count} · session désormais {status}",
       "discardDetail": "Jusqu'au {date} · solde {balance} · {matches} rapprochements et {lines} lignes de relevé libérés",
       "confirmDetail": "Ouverture {amount} à partir du {date} · motif : {reason}",
-      "adjustDetail": "Jusqu'au {beforeDate} → {afterDate} · solde {beforeBalance} → {afterBalance}"
+      "adjustDetail": "Jusqu'au {beforeDate} → {afterDate} · solde {beforeBalance} → {afterBalance}",
+      "revalidationReason": "Motif de l’examen : {reason}",
+      "revalidationBasis": "Solde {balance} au {date} ; {entries} écritures tardives examinées. La validation d’origine du {original} est conservée ; les lignes tardives restent non rapprochées."
     }
+  },
+  "revalidation": {
+    "action": "Examiner les écritures tardives neutres",
+    "title": "Examiner cette validation indépendamment",
+    "reason": "Motif de l’examen (10 à 500 caractères)",
+    "confirm": "Enregistrer l’examen",
+    "preview": "Le solde validé au {date} reste {balance}. Les pièces actuelles contiennent {entries} écritures tardives ({lines} lignes du compte), sans effet net dans chaque entité juridique. Le relevé, les rapprochements et la validation d’origine restent inchangés. Ces lignes tardives restent non rapprochées. Confirmez uniquement après avoir examiné les mouvements affichés.",
+    "failed": "L’examen de cette validation n’a pas pu aboutir. Rechargez les pièces et réessayez.",
+    "recorded": "Examen indépendant de la validation enregistré",
+    "reasonRequired": "Saisissez un motif de 10 à 500 caractères.",
+    "reviewedBadge": "Historique neutre examiné",
+    "reviewedBasis": "Preuve examinée au {date}"
   }
 }

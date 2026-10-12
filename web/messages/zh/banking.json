@@ -1386,7 +1386,8 @@
         "withdraw_sign_off": "已撤回签核",
         "discard": "已丢弃会话",
         "confirm_opening": "已确认期初余额",
-        "session_adjustment": "已调整会话"
+        "session_adjustment": "已调整会话",
+        "revalidate_sign_off": "独立签核审核"
       },
       "signOffStatement": "对账单余额 {balance} · 截至 {date} · 已标记 {matched} 条日记账行 · 已排除 {excluded} 条对账单行",
       "signOffSource": "源数据 · 余额 {balance} · 截至 {date} · 已清算 {matched} 条日记账行",
@@ -1395,7 +1396,21 @@
       "withdrawReleased": "已释放日记账行：{count} · 会话当前状态 {status}",
       "discardDetail": "截至 {date} · 余额 {balance} · 已释放 {matches} 笔匹配和 {lines} 条对账单行",
       "confirmDetail": "期初余额 {amount}（自 {date} 起）· 原因：{reason}",
-      "adjustDetail": "截至 {beforeDate} → {afterDate} · 余额 {beforeBalance} → {afterBalance}"
+      "adjustDetail": "截至 {beforeDate} → {afterDate} · 余额 {beforeBalance} → {afterBalance}",
+      "revalidationReason": "审核理由：{reason}",
+      "revalidationBasis": "截至{date}的余额为{balance}；已审核{entries}笔迟记分录。原签核{original}保留，迟记行仍未对账。"
     }
+  },
+  "revalidation": {
+    "action": "审核无净影响的迟记分录",
+    "title": "独立审核此次签核",
+    "reason": "审核理由（10–500字符）",
+    "confirm": "记录审核",
+    "preview": "截至{date}的签核余额仍为{balance}。当前凭证包含{entries}笔迟记分录（该账户共{lines}行），对每个法律实体的净影响均为零。原始银行对账单、匹配和签核保持不变。这些迟记行仍未对账。请先审核所显示的变动，再确认。",
+    "failed": "无法完成此次签核审核。请重新加载凭证后重试。",
+    "recorded": "已记录独立签核审核",
+    "reasonRequired": "请输入10–500字符的审核理由。",
+    "reviewedBadge": "已复核余额无变化的历史记录",
+    "reviewedBasis": "截至{date}的复核证据"
   }
 }

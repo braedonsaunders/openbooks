@@ -1386,7 +1386,8 @@
         "withdraw_sign_off": "Sign-off withdrawn",
         "discard": "Session discarded",
         "confirm_opening": "Opening confirmed",
-        "session_adjustment": "Session adjusted"
+        "session_adjustment": "Session adjusted",
+        "revalidate_sign_off": "Independent sign-off review"
       },
       "signOffStatement": "Statement balance {balance} · through {date} · {matched} journal lines stamped · {excluded} statement lines excluded",
       "signOffSource": "Source evidence · balance {balance} · through {date} · {matched} cleared journal lines",
@@ -1395,7 +1396,21 @@
       "withdrawReleased": "Journal lines released: {count} · session now {status}",
       "discardDetail": "Through {date} · balance {balance} · {matches} matches and {lines} statement lines released",
       "confirmDetail": "Opening {amount} from {date} · reason: {reason}",
-      "adjustDetail": "Through {beforeDate} → {afterDate} · balance {beforeBalance} → {afterBalance}"
+      "adjustDetail": "Through {beforeDate} → {afterDate} · balance {beforeBalance} → {afterBalance}",
+      "revalidationReason": "Review reason: {reason}",
+      "revalidationBasis": "Balance {balance} through {date}; reviewed {entries} late entries. Original sign-off {original} is retained; late lines remain uncleared."
     }
+  },
+  "revalidation": {
+    "action": "Review neutral late history",
+    "title": "Independently review this sign-off",
+    "reason": "Review reason (10–500 characters)",
+    "confirm": "Record review",
+    "preview": "The signed balance through {date} remains {balance}. The current evidence contains {entries} late entries ({lines} account lines), with zero net effect in every legal entity. The original statement, matches and sign-off remain unchanged. These late lines remain uncleared. Confirm only after reviewing the displayed movements.",
+    "failed": "This sign-off review could not complete. Reload its evidence and try again.",
+    "recorded": "Independent sign-off review recorded",
+    "reasonRequired": "Enter a review reason of 10–500 characters.",
+    "reviewedBadge": "Neutral history reviewed",
+    "reviewedBasis": "Review evidence through {date}"
   }
 }

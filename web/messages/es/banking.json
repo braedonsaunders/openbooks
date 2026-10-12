@@ -1386,7 +1386,8 @@
         "withdraw_sign_off": "Aprobación retirada",
         "discard": "Sesión descartada",
         "confirm_opening": "Apertura confirmada",
-        "session_adjustment": "Sesión ajustada"
+        "session_adjustment": "Sesión ajustada",
+        "revalidate_sign_off": "Revisión independiente de la validación"
       },
       "signOffStatement": "Saldo del extracto {balance} · hasta {date} · {matched} líneas de diario marcadas · {excluded} líneas de extracto excluidas",
       "signOffSource": "Evidencia de origen · saldo {balance} · hasta {date} · {matched} líneas de diario conciliadas",
@@ -1395,7 +1396,21 @@
       "withdrawReleased": "Líneas de diario liberadas: {count} · sesión ahora {status}",
       "discardDetail": "Hasta {date} · saldo {balance} · {matches} conciliaciones y {lines} líneas de extracto liberadas",
       "confirmDetail": "Apertura {amount} desde {date} · motivo: {reason}",
-      "adjustDetail": "Hasta {beforeDate} → {afterDate} · saldo {beforeBalance} → {afterBalance}"
+      "adjustDetail": "Hasta {beforeDate} → {afterDate} · saldo {beforeBalance} → {afterBalance}",
+      "revalidationReason": "Motivo de revisión: {reason}",
+      "revalidationBasis": "Saldo {balance} al {date}; {entries} asientos tardíos revisados. Se conserva la validación original {original}; las líneas tardías siguen sin conciliar."
     }
+  },
+  "revalidation": {
+    "action": "Revisar movimientos tardíos neutros",
+    "title": "Revisar esta validación de forma independiente",
+    "reason": "Motivo de la revisión (10–500 caracteres)",
+    "confirm": "Registrar revisión",
+    "preview": "El saldo validado al {date} sigue siendo {balance}. La evidencia actual contiene {entries} asientos tardíos ({lines} líneas de la cuenta), sin efecto neto en ninguna entidad legal. El extracto, las conciliaciones y la validación originales se conservan. Estas líneas tardías siguen sin conciliar. Confirme solo después de revisar los movimientos mostrados.",
+    "failed": "No se pudo completar la revisión. Recargue la evidencia e inténtelo de nuevo.",
+    "recorded": "Revisión independiente registrada",
+    "reasonRequired": "Introduzca un motivo de revisión de 10–500 caracteres.",
+    "reviewedBadge": "Historial neutro revisado",
+    "reviewedBasis": "Evidencia revisada hasta {date}"
   }
 }

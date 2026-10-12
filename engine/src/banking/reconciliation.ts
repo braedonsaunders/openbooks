@@ -8,6 +8,7 @@ import { fromUnits, isZero, toUnits } from "../money/money.ts"
 import { excludePeriodEndJournals } from "../records/period-end-origins.ts"
 import { ScopeNotFoundError, subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts"
 import { resolveCoveringPeriod } from "../periods/period-resolution.ts"
+import { applicableSignOffRevalidation, originalSignOffProofAgrees, reconciliationReviewProof, type SignOffRevalidationCertificate } from './reconciliation-review-proof.ts'
 
 export type ReconciliationRow = {
   id: string;
@@ -1229,6 +1230,9 @@ export interface ReconciliationStaleness {
   reversedMatches: ReversedMatchEntry[];
   /** Net effect of the late entries on the cleared balance. */
   clearedEffect: string;
+  /** Independent append-only review of this exact neutral late history.
+   * The late entries stay visible and retain their uncleared ledger state. */
+  revalidation?: SignOffRevalidationCertificate;
 }
 
 const CLEAN_STALENESS: ReconciliationStaleness = {
@@ -1329,12 +1333,41 @@ export async function reconciliationStaleness(
       .filter((value): value is string => value !== null)
       .map((value) => value.slice(0, 10))
       .sort()[0] ?? null;
+    let revalidation: SignOffRevalidationCertificate | null = null;
+    if (late.length > 0 && reversed.length === 0 && isZero(clearedEffect)) {
+      // Healthy unreviewed sessions retain the ordinary lightweight read.
+      // A retained certificate requires full keyed evidence comparison;
+      // its timestamp alone never suppresses a later financial event.
+      const recorded = (await db.execute(sql`
+        select al.id from audit_log al join reconciliations r on r.org_id=al.org_id and r.id=al.row_id
+          where al.org_id=${ctx.orgId} and al.table_name='reconciliations'
+          and r.account_id=${recon.account_id} and r.currency=${recon.currency}
+          and r.through_date<=${recon.through_date}::date and r.status='signed_off'
+          and al.action='update' and al.changes->>'operation'='revalidate_sign_off'
+        limit 1
+      `)).rows[0];
+      const signer = recorded ? (await db.execute<{id:string;signed_off_by:string|null;evidence_kind:string}>(sql`
+        select id,signed_off_by,evidence_kind from reconciliations where org_id=${ctx.orgId} and id=${recon.id}
+      `)).rows[0] : null;
+      if (signer?.signed_off_by && signer.evidence_kind==='statement') {
+        const subject = {orgId:ctx.orgId,id:recon.id,accountId:recon.account_id,bookId,
+          currency:recon.currency,throughDate:recon.through_date,signedOffAt:recon.signed_off_at,
+          statementBalance:fromUnits(toUnits(recon.statement_balance)),signedOffBy:signer.signed_off_by};
+        const proof = await reconciliationReviewProof(db,subject);
+        const totals = await reconciliationTotals(recon.id,ctx);
+        if (await originalSignOffProofAgrees(db,subject,proof) && totals.unmatchedStatementLines===0
+          && isZero(totals.difference) && toUnits(totals.statementBalance)===toUnits(subject.statementBalance)) {
+          revalidation = await applicableSignOffRevalidation(db,subject,proof);
+        }
+      }
+    }
     return {
-      stale: late.length > 0 || reversed.length > 0,
-      staleSince: late.length > 0 || reversed.length > 0 ? since : null,
+      stale: !revalidation && (late.length > 0 || reversed.length > 0),
+      staleSince: !revalidation && (late.length > 0 || reversed.length > 0) ? since : null,
       lateEntries: late,
       reversedMatches: reversed,
       clearedEffect,
+      ...(revalidation ? {revalidation} : {}),
     };
   });
 }

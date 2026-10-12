@@ -7,6 +7,7 @@ import { readApiErrorMessage } from '@/lib/api-error'
 import type { Dispatch, SetStateAction } from 'react'
 import { useId, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import { Ban, CheckCheck, Link2, Pencil, RotateCcw, Trash2, Wand2 } from 'lucide-react'
 import { toast } from 'sonner'
@@ -33,6 +34,7 @@ import { promptDialog } from '../../../../../../lib/prompt'
 import { isZeroAmount } from './DifferenceBadge'
 import { canonicalDecimal } from '../../../../../../lib/exact-decimal'
 import { useDirtyClose } from '../../../../../../lib/use-dirty-close'
+import { NeutralHistoryReview } from './NeutralHistoryReview'
 import { InteractiveTableRow } from '@/components/interactive-table-row'
 
 type Search = Record<string, string | string[] | undefined>
@@ -99,6 +101,9 @@ interface StaleReversedEntry {
 }
 
 interface Staleness {
+  reviewed?: boolean
+  reviewedHref?: string | null
+  reviewedText?: string | null
   badge: string
   effect: string
   late: StaleLateEntry[]
@@ -633,9 +638,9 @@ function ReconcileWorkspaceForId({
       ) : null}
 
       {stale ? (
-        <Alert variant="warning">
+        <Alert variant={stale.reviewed ? "info" : "warning"}>
           <div className="flex flex-wrap items-center gap-2">
-            <Badge variant="warning">{stale.badge}</Badge>
+            <Badge variant={stale.reviewed ? "success" : "warning"}>{stale.badge}</Badge>
             <span className="font-medium tabular-nums">{stale.effect}</span>
           </div>
           {stale.late.length > 0 ? (
@@ -678,7 +683,10 @@ function ReconcileWorkspaceForId({
               </ul>
             </div>
           ) : null}
-          <p className="mt-2">{tStale('remedy')}</p>
+          {stale.reviewed && stale.reviewedHref ? <p className="mt-2"><Link href={stale.reviewedHref} className="underline">{stale.reviewedText}</Link></p> : <p className="mt-2">{tStale('remedy')}</p>}
+          {canReconcile && signedOff && !stale.reviewed && stale.reversed.length===0 ? (
+            <NeutralHistoryReview key={reconciliation.id} reconciliationId={reconciliation.id} disabled={busy} />
+          ) : null}
         </Alert>
       ) : null}
 

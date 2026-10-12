@@ -86,6 +86,7 @@ async function mountWorkspace(
     glOutstandingTotal?: string;
     glClearings?: { group_id: string; lines: number; entries: string | null; total: string }[];
     stale?: {
+      reviewed?:boolean;reviewedHref?:string|null;reviewedText?:string|null;
       badge: string;
       effect: string;
       late: { entryNumber: string; postingDate: string; amount: string; postedBy: string | null; postedAt: string | null }[];
@@ -738,4 +739,36 @@ test('a sign-off blocker that is a possible duplicate names the line it duplicat
   const text = alert.textContent ?? ''
   assert.ok(text.includes('Possible duplicate'), `the blocker must be labelled a possible duplicate, got ${JSON.stringify(text)}`)
   assert.ok(text.includes('of 2026-09-01'), `the blocker must name the duplicated line's date, got ${JSON.stringify(text)}`)
+})
+
+
+test('neutral review obtains the exact basis before its reasoned confirmation, and a refusal remains visible', async (t) => {
+  const calls: {method:string;body:unknown}[] = []
+  const digest='a'.repeat(64)
+  await mountWorkspace(t,(async (_input,init)=>{
+    calls.push({method:init?.method??'GET',body:init?.body?JSON.parse(String(init.body)):null})
+    return init?.method==='POST'
+      ? Response.json({error:'The reviewed ledger evidence changed. Reload the review.'},{status:409})
+      : Response.json({reconciliationId:'rec-1',throughDate:'2026-09-10',currency:'CAD',statementBalance:'17070.0100',
+        proof:{digest,lateEntries:2,lateJournalLines:2,lateEffect:'0.0000'}})
+  }) as typeof fetch,{status:'signed_off',stale:{badge:'Stale',effect:'0',late:[],reversed:[]}})
+  const button=[...document.querySelectorAll('button')].find(row=>row.textContent?.includes('Review neutral late history'))
+  assert.ok(button)
+  await act(async()=>{button.click();await tick();await tick();await tick()})
+  assert.deepEqual(calls,[{method:'GET',body:null},{method:'POST',body:{expectedDigest:digest,reason:'not a transaction'}}])
+  assert.ok(document.body.textContent?.includes('The reviewed ledger evidence changed. Reload the review.'))
+  assert.equal(button.disabled,false)
+})
+
+test('a reviewed later sign-off retains late movements and links its actual earlier review without offering another mutation', async (t) => {
+  const calls:unknown[]=[]
+  await mountWorkspace(t,(async (...args)=>{calls.push(args);return Response.json({})}) as typeof fetch,{
+    status:'signed_off',stale:{reviewed:true,reviewedHref:'/banking/acc/reconcile/earlier',
+      reviewedText:'Review evidence through 2026-07-31',badge:'Neutral history reviewed',effect:'0',
+      late:[{entryNumber:'ADJ-1',postingDate:'2026-07-15',amount:'10.0000',postedBy:'Reviewer',postedAt:'2026-10-01'}],reversed:[]},
+  })
+  assert.ok(document.body.textContent?.includes('ADJ-1'))
+  assert.equal(document.querySelector('a[href="/banking/acc/reconcile/earlier"]')?.textContent,'Review evidence through 2026-07-31')
+  assert.equal([...document.querySelectorAll('button')].some(row=>row.textContent?.includes('Review neutral late history')),false)
+  assert.equal(calls.length,0)
 })

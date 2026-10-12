@@ -59,6 +59,15 @@ interface SessionStateRow {
 
 export type HistoryEventRow =
   | {
+      kind:'revalidate_sign_off'
+      reason:string
+      throughDate:string
+      statementBalance:string
+      originalSignedOffAt:string
+      lateEntries:string
+      evidenceDigest:string
+    }
+  | {
       kind: 'sign_off'
       evidence: 'statement' | 'source'
       throughDate: string
@@ -171,6 +180,11 @@ export function formatStatementEvidence(
 
 function historyEventRow(event: ReconciliationHistoryEvent, f: EvidenceFormatters): HistoryEventRow {
   switch (event.kind) {
+    case 'revalidate_sign_off':
+      return {kind:'revalidate_sign_off',reason:orMissing(event.reason,value=>value),
+        throughDate:orMissing(event.throughDate,f.civilDate),statementBalance:orMissing(event.statementBalance,f.money),
+        originalSignedOffAt:orMissing(event.originalSignedOffAt,f.timestamp),
+        lateEntries:orMissing(event.lateEntries,f.count),evidenceDigest:orMissing(event.evidenceDigest,value=>value)}
     case 'sign_off':
       return {
         kind: 'sign_off',
