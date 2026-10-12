@@ -535,7 +535,12 @@ export async function computeCaStatutory(
     ...taxFactors,
     ...qcFactors,
     ...(referencedBonusTax && bonusIncomeReference ? {
-      A: referencedBonusTax.factors.A!, A_step2: referencedBonusTax.factors.A_step2!,
+      ...referencedBonusTax.factors,
+      // Annual claims and brackets belong to the bonus reference calculation;
+      // periodic withholding still belongs to this payment alone.
+      TF: currentTax.factors.TF ?? "0.0000",
+      TP: currentTax.factors.TP ?? "0.0000",
+      T: currentTax.factors.T ?? currentTax.periodicTax,
       TB: referencedBonusTax.bonusTax,
       CA_BONUS_I_REFERENCE: bonusIncomeReference.income,
       CA_BONUS_REFERENCE_STUB: bonusIncomeReference.stub_id,

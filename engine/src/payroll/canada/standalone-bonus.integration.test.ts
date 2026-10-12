@@ -62,6 +62,8 @@ test('separate Option 1 bonus references committed regular income without paying
       // 2026 Ontario: federal 20.5% + provincial 9.15% over this interval;
       // personal credits and the $600 health premium cancel between legs.
       assert.equal(stub.factors.TB, '2965.0000');
+      assert.equal(stub.factors.TF, '0.0000');
+      assert.equal(stub.factors.TP, '0.0000');
       assert.equal(stub.factors.CA_T_BASE, '0.0000');
       assert.equal(stub.net_pay, '7035.0000');
       assert.equal(stub.factors.C, '0.0000');
