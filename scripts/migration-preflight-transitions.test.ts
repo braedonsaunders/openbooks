@@ -76,3 +76,47 @@ test("currency-binding consumer defers only its pinned pending publisher and rev
     assert.equal(preflightNeedsRecordedGuardTransition({ ...bindingEvidence, published: changed }), false);
   }
 });
+
+test("measurement consumer defers only the complete pinned instruction publisher chain", () => {
+  const binding = "generated/0702_journal_instruction_currency_binding.sql";
+  const measurement = "generated/0703_journal_measurement_and_instruction_guards.sql";
+  const files = new Map([...published, [binding, read(binding)], [measurement, read(measurement)]]);
+  const body = (filename: string) => files.get(filename)!.split("AS $$")[1]!.split("$$;")[0]!;
+  const measurementEvidence: PreflightTransitionEvidence = {
+    ...evidence, migration: measurement, published: files,
+    consumerSql: read("preflight/0703_journal_measurement_and_instruction_guards.sql"),
+    findings: [{ ...evidence.findings[0]!, migration: measurement,
+      code: "0703.instruction_guard_definition", subject: "public.journal_instruction_line_guard()" }],
+    pendingBeforeConsumer: new Set([next, binding]),
+  };
+  assert.equal(preflightNeedsRecordedGuardTransition(measurementEvidence), true);
+  const fromClone: PreflightTransitionEvidence = {
+    ...measurementEvidence,
+    recorded: new Map([...evidence.recorded, [next, hash(files.get(next)!)] ]),
+    currentBody: body(next), pendingBeforeConsumer: new Set([binding]),
+  };
+  assert.equal(preflightNeedsRecordedGuardTransition(fromClone), true);
+  for (const changed of [
+    { recorded: new Map() },
+    { recorded: new Map([[current, "0".repeat(64)]]) },
+    { pendingBeforeConsumer: new Set([binding]) },
+    { pendingBeforeConsumer: new Set([next]) },
+    { currentBody: body(next) },
+    { currentBody: null },
+    { currentBody: currentBody + "\n" },
+    { consumerSql: measurementEvidence.consumerSql + "\n" },
+    { findings: [{ ...measurementEvidence.findings[0]!, code: "0703.nonzero_constraint_definition" }] },
+    { findings: [...measurementEvidence.findings, { ...measurementEvidence.findings[0]!, code: "0703.measurement_guard_presence" }] },
+  ]) assert.equal(preflightNeedsRecordedGuardTransition({ ...measurementEvidence, ...changed }), false);
+  assert.equal(preflightNeedsRecordedGuardTransition({ ...fromClone, pendingBeforeConsumer: new Set() }), false);
+  assert.equal(preflightNeedsRecordedGuardTransition({ ...fromClone,
+    recorded: new Map([...fromClone.recorded, [binding, hash(files.get(binding)!)] ]), currentBody: body(binding) }), false);
+  for (const filename of [current, next, binding, measurement]) {
+    const changed = new Map(files); changed.set(filename, changed.get(filename)! + "\n");
+    assert.equal(preflightNeedsRecordedGuardTransition({ ...measurementEvidence, published: changed }), false);
+  }
+  const unexpected = "generated/0702_unknown_instruction_guard.sql";
+  assert.equal(preflightNeedsRecordedGuardTransition({ ...fromClone,
+    published: new Map([...files, [unexpected, files.get(next)!]]),
+    recorded: new Map([...fromClone.recorded, [unexpected, hash(files.get(next)!)]]) }), false);
+});

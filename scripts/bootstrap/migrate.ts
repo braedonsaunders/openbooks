@@ -330,7 +330,8 @@ async function evaluatePendingMigrations(
         continue;
       }
       if (evaluation.status === "ready" && evaluation.findings.some(finding =>
-        finding.code === "0700.instruction_guard_definition" || finding.code === "0702.instruction_guard_definition")) {
+        finding.code === "0700.instruction_guard_definition" || finding.code === "0702.instruction_guard_definition"
+        || finding.code === "0703.instruction_guard_definition")) {
         const recorded = await client.query<{ filename: string; sha256: string }>("select filename,sha256 from public._applied_migrations order by filename");
         const published = new Map<string, string>();
         for (const filename of generatedMigrationFiles().map(file => `generated/${file}`)) {
