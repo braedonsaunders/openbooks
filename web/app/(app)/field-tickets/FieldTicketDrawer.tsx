@@ -10,6 +10,9 @@ import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { useViewerFormat } from '@/lib/viewer-format'
 import { toast } from 'sonner'
+import { ActionAlert } from '@braedonsaunders/appkit-errors/react'
+import { useAppAction } from '@/lib/use-app-action'
+import { canonicalDecimal, isPositiveDecimal } from '@/lib/exact-decimal'
 import { CalendarCheck, Mail, Plus, Send, Trash2 } from 'lucide-react'
 import type { ScheduledWork } from '@openbooks/engine/schedule-boards/prefill'
 import { fillTicketFromSchedule } from '@/lib/field-ticket-schedule-fill'
@@ -170,7 +173,7 @@ export interface CrewGridSaveRow {
   itemId: string | null
   projectTaskId: string | null
   timeTypeId: string | null
-  hours: Record<string, number>
+  hours: Record<string, string>
 }
 
 /** A legacy/native entry can be missing its time type. Keep it in the same
@@ -225,12 +228,15 @@ export function serializeGridRows(grid: GridRow[]): CrewGridSaveRow[] {
   return grid
     .filter((r) => r.employeePartyId)
     .flatMap((r) => {
-      const byType: Record<string, Record<string, number>> = {}
+      const byType: Record<string, Record<string, string>> = {}
       for (const [k, v] of Object.entries(r.cells)) {
         const [timeTypeId, day] = k.split('|')
-        const h = Number(v)
-        if (!Number.isFinite(h) || h <= 0) continue
-        ;(byType[timeTypeId!] ??= {})[day!] = h
+        if (v.trim() === '') continue
+        const h = canonicalDecimal(v, 4)
+        if (h !== null && !isPositiveDecimal(h)) continue
+        // Keep invalid nonblank input for the native named refusal; never
+        // round through binary floats or silently remove a draft crew cell.
+        ;(byType[timeTypeId!] ??= {})[day!] = h ?? v
       }
       return Object.entries(byType).map(([timeTypeId, hours]) => ({
         employeePartyId: r.employeePartyId,
@@ -355,6 +361,7 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
   const [scheduleRetry, setScheduleRetry] = useState(0)
   const [filledWindow, setFilledWindow] = useState<{ start: string; end: string } | null>(null)
   const [busy, setBusy] = useState(false)
+  const { refusal, refuse, clearRefusal } = useAppAction()
   const [sending, setSending] = useState(false)
   const [sendTo, setSendTo] = useState(props.ticket.customerEmail ?? '')
   const [sendMessage, setSendMessage] = useState('')
@@ -652,15 +659,17 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
     options: { preserveDraft?: boolean; onErrorMessage?: (message: string) => void } = {},
   ): Promise<boolean> {
     setBusy(true)
+    clearRefusal()
     try {
       const result = await sendFieldTicketMutation({
         ticketId: ticket.id,
         revision: latestRevisionRef.current,
         method,
         body: payload,
+        fallbackMessage: tCommon('feedback.saveFailed'),
       })
       if (result.status !== 'saved') {
-        toast.error(result.message)
+        refuse(result.message, tCommon('feedback.saveFailed'))
         options.onErrorMessage?.(result.message)
         if (result.status === 'conflict') await reloadTicketAfterConflict()
         return false
@@ -1192,6 +1201,7 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
       }
     >
       <div className="space-y-6 p-1">
+        <ActionAlert error={refusal} fallbackMessage={tCommon('feedback.saveFailed')} />
         {discardError ? (
           <p role="alert" className="rounded-lg border border-red-300 bg-red-50 px-3 py-2 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-300">
             {discardError}

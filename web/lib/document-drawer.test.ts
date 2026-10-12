@@ -27,7 +27,7 @@ const FALLBACK_MESSAGE = 'save failed fallback'
 // are the exact functions the drawers' Save buttons execute.
 const { saveExpenseReport } = await import('../app/(app)/expenses/ExpenseDrawer.tsx')
 const { saveJournalDraft } = await import('../app/(app)/journal/JournalDrawer.tsx')
-const { sendFieldTicketMutation } = await import('../app/(app)/field-tickets/FieldTicketDrawer.tsx')
+const { sendFieldTicketMutation, serializeGridRows } = await import('../app/(app)/field-tickets/FieldTicketDrawer.tsx')
 
 type RecordedRequest = { path: string; method: string; body: Record<string, unknown> }
 
@@ -459,4 +459,35 @@ test('a canonical read adopts clean editors, pins unchanged dirty content, and c
     reconcileCanonicalDraftRead({ current, incoming: movedOn, isDirty: true }),
     { action: 'conflict', snapshot: movedOn },
   )
+})
+
+
+test('field-ticket crew transport preserves exact decimal text and native refusals', async () => {
+  const rows = serializeGridRows([{
+    employeePartyId: 'employee-1', itemId: 'labor-1', projectTaskId: null,
+    cells: {
+      'regular|2026-04-01': '2',
+      'regular|2026-04-02': '2.1250',
+      'regular|2026-04-03': '9007199254740993.0001',
+      'regular|2026-04-04': '',
+      'regular|2026-04-05': '0.0000',
+      'regular|2026-04-06': '2.00001',
+    },
+  }])
+  assert.deepEqual(rows[0]!.hours, {
+    '2026-04-01': '2', '2026-04-02': '2.125',
+    '2026-04-03': '9007199254740993.0001', '2026-04-06': '2.00001',
+  })
+  const transport = (async (_url: unknown, init?: RequestInit) => {
+    const body = JSON.parse(String(init?.body))
+    assert.equal(body.expectedRevision, OPENED_REVISION)
+    assert.deepEqual(body.rows, rows, 'JSON transport retains every exact spelling')
+    return Response.json({ error: 'Hours must be a number with at most 4 decimal places' }, { status: 422 })
+  }) as typeof fetch
+  const result = await sendFieldTicketMutation({
+    ticketId: 'ft-1', revision: OPENED_REVISION, method: 'POST',
+    body: { action: 'save-grid', rows }, transport,
+  })
+  assert.equal(result.status, 'error')
+  assert.match(result.status === 'error' ? result.message : '', /at most 4 decimal places/)
 })

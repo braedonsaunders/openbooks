@@ -78,6 +78,7 @@ async function mount(
   rateResponder: () => Response,
   deleteResponder: () => Response = () => Response.json({ ok: true }),
   initialMode: 'edit' | 'view' = 'edit',
+  postResponder: () => Response = () => Response.json(TICKET),
 ): Promise<{ requests: { url: string; method: string }[] }> {
   const requests: { url: string; method: string }[] = []
   const prior = globalThis.fetch
@@ -90,6 +91,7 @@ async function mount(
       return Response.json({ approvalState: { status: 'draft', pendingWith: [], myActions: null }, history: [] })
     }
     if (url.startsWith('/api/field-tickets/item-rate')) return rateResponder()
+    if (url === `/api/field-tickets/${TICKET.id}` && method === 'POST') return postResponder()
     if (url === `/api/field-tickets/${TICKET.id}` && method === 'DELETE') return deleteResponder()
     throw new Error(`unexpected fetch ${(init?.method ?? 'GET')} ${url}`)
   }) as typeof fetch
@@ -221,4 +223,26 @@ test('explicit discard keeps a refused draft open with its reason pinned', async
   })
   assert.ok(requests.some((request) => request.url === `/api/field-tickets/${TICKET.id}` && request.method === 'DELETE'))
   assert.match(document.querySelector('[role="alert"]')?.textContent ?? '', /Ticket contains billable time/)
+})
+
+
+test('a refused ticket mutation pins its reason and keeps the draft for a successful retry', async (t) => {
+  let refused = true
+  await mount(t,
+    () => Response.json({ rate: '150.00', amount: '150.00', source: 'rate_book', rateUnits: [] }),
+    () => Response.json({ ok: true }), 'edit',
+    () => refused
+      ? Response.json({ error: 'Choose an active item' }, { status: 422 })
+      : Response.json({ ...TICKET, revision: '2026-09-01T10:00:00.000001Z' }),
+  )
+  await pickItem()
+  await setQty('1')
+  const add = [...document.querySelectorAll('button')].find(button => button.textContent?.includes('Add line'))
+  assert.ok(add)
+  await act(async () => { add.click(); for (let i = 0; i < 10; i++) await tick() })
+  assert.match(document.querySelector('[role="alert"]')?.textContent ?? '', /Choose an active item/)
+  assert.equal((document.querySelector('#ft-qty') as HTMLInputElement | null)?.value, '1')
+  refused = false
+  await act(async () => { add.click(); for (let i = 0; i < 10; i++) await tick() })
+  assert.ok(!document.querySelector('[role="alert"]'), 'successful retry clears the prior refusal')
 })
