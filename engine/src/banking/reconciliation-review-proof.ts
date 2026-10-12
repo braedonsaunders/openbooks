@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto'
 import { sql, type SQL } from 'drizzle-orm'
 import type { SqlExecutor } from '../platform/db.ts'
+import { canonicalJson } from '../platform/canonical-json.ts'
 import { fromUnits, toUnits } from '../money/money.ts'
 import { BankingError } from './banking-core.ts'
 
@@ -125,7 +126,7 @@ export async function reconciliationReviewProof(tx: SqlExecutor, subject: Signed
     lateEffect:fromUnits([...effects.values()].reduce((total,amount)=>total+amount,0n)),
     legalEntityEffects,reversedMatches,
   }
-  return { ...proof,digest:createHash('sha256').update(JSON.stringify({subject,...proof})).digest('hex') }
+  return { ...proof,digest:createHash('sha256').update(canonicalJson({subject,...proof})).digest('hex') }
 }
 
 export type SignOffRevalidationCertificate = {

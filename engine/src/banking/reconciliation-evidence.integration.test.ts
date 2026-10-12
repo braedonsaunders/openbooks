@@ -50,7 +50,7 @@ async function importLines(
   tag: string,
   lines: { id: string; amount: string; description: string }[],
 ): Promise<string> {
-  const content = `nonce,${tag}\n${lines.map((line) => `${line.id},${line.amount},${line.description}`).join("\n")}\n`;
+  const content = `date,amount,description,bank_transaction_id\n${lines.map((line) => `${org.date},${line.amount},"${line.description.replaceAll('"', '""')}",${line.id}`).join("\n")}\n`;
   const imported = await importStatement({
     accountId: org.accounts.bank,
     source: "csv",
@@ -62,7 +62,8 @@ async function importLines(
       description: line.description,
       bankTransactionId: line.id,
     })),
-    sourceEvidence: { content, filename: `${tag}.csv`, contentType: "text/csv" },
+    sourceEvidence: { content, filename: `${tag}.csv`, contentType: "text/csv",
+      csvMapping: { date: 0, amount: 1, description: 2, bankTransactionId: 3 } },
   }, ctx);
   assert.ok(imported.statementId, `statement ${tag} imports`);
   return imported.statementId;
