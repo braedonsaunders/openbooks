@@ -7,7 +7,7 @@ import { InventoryError, InventoryOwnershipError, UnitConversionError } from '@o
 import { resolveDefaultWarehouse, WarehouseRefusal } from '@openbooks/engine/inventory/warehouses'
 import { defineRoute } from '@/lib/api/route'
 import { notFound } from '@/lib/api/responses'
-import { can, guardSubsidiaryScope } from '../../../../../lib/authz'
+import { can, guardSubsidiaryScope, type Authz } from '../../../../../lib/authz'
 import { isFeatureEnabled } from '../../../../../lib/features'
 import { unexpectedServerError } from '../../../../../lib/api/unexpected'
 import { ConversionError, receivePurchaseOrder } from '../../../../../lib/order-cycle'
@@ -30,17 +30,13 @@ const receiveBody = z.object({
   idempotencyKey: z.string().min(1).max(500).optional(),
 }).strict()
 
-type ReceiveAuthz = Parameters<typeof guardSubsidiaryScope>[0] & {
-  user: { orgId: string; id: string }
-}
-
 /** The source must be this org's purchase order inside the caller's scope. */
-async function scopedSource(authz: ReceiveAuthz, id: string) {
+async function scopedSource(authz: Authz, id: string) {
   const source = await readDocumentScope(authz.user.orgId, id, { kind: 'purchase_order' })
-  if (!source) return { denied: notFound('record') as NextResponse }
+  if (!source) return { ok: false as const, response: notFound('record') }
   const denied = guardSubsidiaryScope(authz, source.subsidiaryId)
-  if (denied) return { denied }
-  return { source }
+  if (denied) return { ok: false as const, response: denied }
+  return { ok: true as const, source }
 }
 
 function conversionResponse(error: ConversionError) {
@@ -66,13 +62,12 @@ export const GET = defineRoute({
   feature: 'orders',
   params,
   handler: async ({ authz, params: { id } }) => {
-    const gate = authz as unknown as ReceiveAuthz
-    const scoped = await scopedSource(gate, id)
-    if ('denied' in scoped) return scoped.denied
+    const scoped = await scopedSource(authz, id)
+    if (!scoped.ok) return scoped.response
     try {
-      const receiptDate = await businessToday(gate.user.orgId)
-      const rows = await readPurchaseOrderLinesForReceipt(gate.user.orgId, id)
-      const defaultWarehouse = await resolveDefaultWarehouse(db, gate.user.orgId, scoped.source.subsidiaryId)
+      const receiptDate = await businessToday(authz.user.orgId)
+      const rows = await readPurchaseOrderLinesForReceipt(authz.user.orgId, id)
+      const defaultWarehouse = await resolveDefaultWarehouse(db, authz.user.orgId, scoped.source.subsidiaryId)
       // The tolerated maximum rides the prefill so the form admits an
       // over-receipt within policy; the save path re-resolves the policy
       // effective on the entered receipt date and owns the final check.
@@ -80,7 +75,7 @@ export const GET = defineRoute({
         if (line.item_id == null || !lineRequiresReceipt(line.item_kind)) return null
         const remaining = toQuantityUnits(String(line.quantity)) - toQuantityUnits(String(line.quantity_fulfilled))
         if (remaining <= 0n) return null
-        const tolerance = await resolveOverReceiptTolerance(db, gate.user.orgId, line.item_category, receiptDate)
+        const tolerance = await resolveOverReceiptTolerance(db, authz.user.orgId, line.item_category, receiptDate)
         return {
           sourceLineId: line.id,
           lineNumber: line.line_number,
@@ -118,13 +113,12 @@ export const POST = defineRoute({
   params,
   body: receiveBody,
   handler: async ({ request, authz, params: { id }, body }) => {
-    const gate = authz as unknown as ReceiveAuthz
-    const scoped = await scopedSource(gate, id)
-    if ('denied' in scoped) return scoped.denied
+    const scoped = await scopedSource(authz, id)
+    if (!scoped.ok) return scoped.response
     // Receiving moves stock and posts value-carrying inventory journals when
     // Inventory is enabled, so it takes items.post on top of the receiving
     // grant — the same authority the convert endpoint demands.
-    if ((await isFeatureEnabled(gate.user.orgId, 'inventory')) && !can(gate, 'items.post')) {
+    if ((await isFeatureEnabled(authz.user.orgId, 'inventory')) && !can(authz, 'items.post')) {
       return NextResponse.json({ error: 'missing permission: items.post' }, { status: 403 })
     }
     const key = request.headers.get('Idempotency-Key')?.trim() || body.idempotencyKey?.trim() || ''
@@ -135,7 +129,7 @@ export const POST = defineRoute({
       )
     }
     try {
-      const res = await receivePurchaseOrder(gate.user.orgId, gate.user.id, id, {
+      const res = await receivePurchaseOrder(authz.user.orgId, authz.user.id, id, {
         receiptDate: body.receiptDate,
         idempotencyKey: key,
         lines: body.lines,

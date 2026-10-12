@@ -177,7 +177,7 @@ export async function loadPaymentFlyout({
     const prefillParty = prefill?.partyId
       ? parties.rows.find((party) => party.id === prefill.partyId) ?? null
       : null
-    const prefillItems: OpenItemClient[] = prefillParty
+    const prefillItems = prefillParty
       ? await openItemsForParty(prefillParty.id, side, orgId, fundingSubsidiaryId ? new Set([fundingSubsidiaryId]) : new Set())
       : []
     // Same-currency items of the named document, unreserved, on one control

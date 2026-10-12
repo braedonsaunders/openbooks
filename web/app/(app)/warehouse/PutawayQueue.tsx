@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { AsyncUrlDrawer } from "@/components/async-url-drawer";
+import { AsyncDrawer } from "@/components/async-url-drawer";
 import {
   DirectedExecutionForm,
   useDirectedExecution,
@@ -142,14 +142,13 @@ export function PutawayQueue({
             : []),
         ]}
       />
-      <AsyncUrlDrawer
+      <AsyncDrawer
         open={execution.open}
-        openKey={execution.selectionKey}
         pending={!execution.task && execution.busy}
         error={!execution.task ? execution.error : null}
         onRetry={execution.retry}
-        onOpenChange={(open) => {
-          if (!open && !execution.busy) execution.clear();
+        onClose={() => {
+          if (!execution.busy) execution.clear();
         }}
         title="Confirm putaway"
       >
@@ -163,7 +162,7 @@ export function PutawayQueue({
             onBack={execution.clear}
           />
         ) : null}
-      </AsyncUrlDrawer>
+      </AsyncDrawer>
     </>
   );
 }

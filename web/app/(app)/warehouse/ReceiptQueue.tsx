@@ -1,7 +1,7 @@
 "use client";
 import { useRouter } from "next/navigation";
 import { Button } from "@openbooks/ui";
-import { AsyncUrlDrawer } from "@/components/async-url-drawer";
+import { AsyncDrawer } from "@/components/async-url-drawer";
 import { PagedTable } from "@/components/paged-table";
 import {
   DirectedExecutionForm,
@@ -74,14 +74,13 @@ export function ReceiptQueue({
           },
         ]}
       />
-      <AsyncUrlDrawer
+      <AsyncDrawer
         open={execution.open}
-        openKey={execution.selectionKey}
         pending={!execution.task && execution.busy}
         error={!execution.task ? execution.error : null}
         onRetry={execution.retry}
-        onOpenChange={(open) => {
-          if (!open && !execution.busy) execution.clear();
+        onClose={() => {
+          if (!execution.busy) execution.clear();
         }}
         title="Confirm purchase receipt"
       >
@@ -95,7 +94,7 @@ export function ReceiptQueue({
             onBack={execution.clear}
           />
         ) : null}
-      </AsyncUrlDrawer>
+      </AsyncDrawer>
     </>
   );
 }

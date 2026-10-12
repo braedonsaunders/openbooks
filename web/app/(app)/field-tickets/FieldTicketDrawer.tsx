@@ -1220,9 +1220,10 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
                 {(schedulePreview?.timeTypes.length ?? 0) > 1 ? <Select
                   value={scheduleTimeTypeId} onChange={(event) => setScheduleTimeTypeId(event.target.value)}
                   aria-label={tScheduling('prefill.timeType')}
-                  options={[{ value: '', label: tScheduling('prefill.timeType') },
-                    ...(schedulePreview?.timeTypes ?? []).map((type) => ({ value: type.id, label: type.name }))]}
-                  disabled={busy || scheduleLoading} /> : null}
+                  disabled={busy || scheduleLoading}>
+                  <option value="">{tScheduling('prefill.timeType')}</option>
+                  {(schedulePreview?.timeTypes ?? []).map((type) => <option key={type.id} value={type.id}>{type.name}</option>)}
+                </Select> : null}
                 <Button size="sm" variant="outline" onClick={onFillFromSchedule}
                   disabled={busy || scheduleLoading || !scheduleTimeTypeId}
                   title={tScheduling('prefill.ticketHint')}>

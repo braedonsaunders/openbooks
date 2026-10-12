@@ -29,6 +29,10 @@ import { subsidiaryVisibleFilter } from '../../../lib/subsidiaries'
 
 export const dynamic = 'force-dynamic'
 
+type ReceivablePurchaseOrderRow = {
+  [Field in keyof ReceivablePurchaseOrder]: ReceivablePurchaseOrder[Field]
+}
+
 type InventoryView = 'onhand' | 'movements' | 'counts' | 'locations' | 'bom' | 'holds' | 'consignment' | 'cycles'
 
 function selectedView(sp: Record<string, string | string[] | undefined>): InventoryView {
@@ -109,7 +113,7 @@ export default async function Inventory({
   // Approved purchase orders still waiting for stock: the standalone
   // receive entry offers exactly the orders the receive route will accept.
   const receivablePos = showReceivePicker
-    ? await db.execute<ReceivablePurchaseOrder>(sql`
+    ? await db.execute<ReceivablePurchaseOrderRow>(sql`
         select d.id, d.document_number as "number", p.display_name as "vendor",
                count(*)::int as "openLines"
           from documents d

@@ -1160,7 +1160,7 @@ export function PspSettlementsWorkspace({
             {canReconcile ? (
               <BatchJournalPanel
                 batchId={detail.batch.id}
-                batchStatus={detail.batch.rawStatus}
+                batchStatus={detail.batch.status}
                 t={t}
                 onChanged={reloadDetail}
               />
@@ -1173,7 +1173,7 @@ export function PspSettlementsWorkspace({
               return line ? (
                 <LineEvidencePanel
                   batchId={detail.batch.id}
-                  batchStatus={detail.batch.rawStatus}
+                  batchStatus={detail.batch.status}
                   line={line}
                   t={t}
                   common={common}

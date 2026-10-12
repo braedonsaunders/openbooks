@@ -8,6 +8,7 @@ import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Badge, Button, Input, Label, SearchSelect, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
 import { sum } from '@openbooks/engine/money/money'
+import { isUuid } from '@openbooks/engine/platform/identifiers'
 import { SortTh } from '../../../components/sortable-th'
 import { readApiErrorMessage } from '../../../lib/api-error'
 /**
@@ -149,14 +150,20 @@ export function RunBuilder({
         toast.error(message)
         return
       }
-      const data = await res.json().catch(() => ({})) as { runNumber?: unknown; id?: unknown }
+      const data: unknown = await res.json().catch(() => null)
+      if (data === null || typeof data !== 'object' || !('id' in data) || !isUuid(data.id)
+        || !('runNumber' in data) || typeof data.runNumber !== 'string' || !data.runNumber.trim()) {
+        throw new Error('Payment run response did not identify the created run')
+      }
       setFieldError(null)
       toast.success(t('toasts.created', { number: data.runNumber }))
       setSelected({})
       router.push((`${basePath}?view=runs&run=${data.id}`))
       router.refresh()
     } catch {
-      toast.error(t('toasts.createFailed'))
+      const message = t('toasts.createFailed')
+      setFieldError(message)
+      toast.error(message)
     } finally {
       // A rejected transport must not wedge the button on: without this,
       // every later click silently dies on the stuck disabled button.

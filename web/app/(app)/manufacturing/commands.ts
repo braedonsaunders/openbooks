@@ -80,17 +80,17 @@ export function headerCommand(
   record?: ManufacturingRow,
 ): Command {
   const existing = !!record,
-    r = record ?? {};
+    r = record;
   const fields: Field[] =
     view === "work-orders"
       ? [
           ...(!existing
             ? [
-                select("producedItemId", options.items, r.producedItemId, true),
+                select("producedItemId", options.items, r?.producedItemId, true),
                 select(
                   "subsidiaryId",
                   options.subsidiaries,
-                  r.subsidiaryId,
+                  r?.subsidiaryId,
                   true,
                 ),
                 select(
@@ -101,31 +101,31 @@ export function headerCommand(
                 ),
               ]
             : []),
-          decimal("quantityOrdered", r.quantityOrdered),
-          select("routingId", options.routings, r.routingId),
-          select("issueLocationId", options.locations, r.issueLocationId),
-          select("receiptLocationId", options.locations, r.receiptLocationId),
-          date("plannedStart", r.plannedStart),
-          date("plannedEnd", r.plannedEnd),
-          field("productionMode",r.productionMode,{type:"select",options:enums(["order","batch","continuous"]),section:"process"}),
-          field("campaignReference",r.campaignReference,{nullable:true,section:"process"}),
+          decimal("quantityOrdered", r?.quantityOrdered),
+          select("routingId", options.routings, r?.routingId),
+          select("issueLocationId", options.locations, r?.issueLocationId),
+          select("receiptLocationId", options.locations, r?.receiptLocationId),
+          date("plannedStart", r?.plannedStart),
+          date("plannedEnd", r?.plannedEnd),
+          field("productionMode",r?.productionMode,{type:"select",options:enums(["order","batch","continuous"]),section:"process"}),
+          field("campaignReference",r?.campaignReference,{nullable:true,section:"process"}),
         ]
       : view === "work-centers"
         ? [
-            field("code", r.code, { required: true }),
-            field("name", r.name, { required: true }),
-            select("subsidiaryId", options.subsidiaries, r.subsidiaryId, true),
+            field("code", r?.code, { required: true }),
+            field("name", r?.name, { required: true }),
+            select("subsidiaryId", options.subsidiaries, r?.subsidiaryId, true),
             select(
               "kind",
               enums(["machine", "labor", "cell"]),
-              r.kind ?? "machine",
+              r?.kind ?? "machine",
               true,
             ),
-            decimal("capacityHoursPerDay", r.capacityHoursPerDay ?? "8"),
-            decimal("efficiencyPct", r.efficiencyPct ?? "100"),
-            select("departmentId", options.departments, r.departmentId),
-            select("calendarId", options.calendars, r.calendarId),
-            field("absorbsOverhead", r.absorbsOverhead ?? true, {
+            decimal("capacityHoursPerDay", r?.capacityHoursPerDay ?? "8"),
+            decimal("efficiencyPct", r?.efficiencyPct ?? "100"),
+            select("departmentId", options.departments, r?.departmentId),
+            select("calendarId", options.calendars, r?.calendarId),
+            field("absorbsOverhead", r?.absorbsOverhead ?? true, {
               type: "boolean",
             }),
           ]
@@ -136,29 +136,29 @@ export function headerCommand(
                     select(
                       "producedItemId",
                       options.items,
-                      r.producedItemId,
+                      r?.producedItemId,
                       true,
                     ),
                   ]
                 : []),
-              field("code", r.code, { required: true }),
-              field("name", r.name, { required: true }),
-              date("effectiveFrom", r.effectiveFrom, true),
-              date("effectiveTo", r.effectiveTo),
+              field("code", r?.code, { required: true }),
+              field("name", r?.name, { required: true }),
+              date("effectiveFrom", r?.effectiveFrom, true),
+              date("effectiveTo", r?.effectiveTo),
               select(
                 "defaultIssueLocationId",
                 options.locations,
-                r.defaultIssueLocationId,
+                r?.defaultIssueLocationId,
               ),
               select(
                 "defaultReceiptLocationId",
                 options.locations,
-                r.defaultReceiptLocationId,
+                r?.defaultReceiptLocationId,
               ),
               select(
                 "overheadBasis",
                 enums(["labor_hours", "machine_hours", "units"]),
-                r.overheadBasis ?? "labor_hours",
+                r?.overheadBasis ?? "labor_hours",
                 true,
               ),
             ]
@@ -170,17 +170,17 @@ export function headerCommand(
   const path =
     "/api/manufacturing/" +
     (view === "mrp" ? "mrp/runs" : view) +
-    (existing ? "/" + r.id : "");
+    (record ? "/" + record.id : "");
   return {
     key: existing ? "save" : "create",
     path,
     method: existing ? "PATCH" : "POST",
-    fields: view==="work-orders" && r.receiptReworkInspectionId ? fields.filter(field=>!["quantityOrdered","issueLocationId"].includes(field.key)) : fields,
+    fields: view==="work-orders" && r?.receiptReworkInspectionId ? fields.filter(field=>!["quantityOrdered","issueLocationId"].includes(field.key)) : fields,
     create: !existing,
     opensRecord: !existing,
     note:
       view === "work-orders"
-        ? r.receiptReworkInspectionId ? "repairDraftNote" : "draftNote"
+        ? r?.receiptReworkInspectionId ? "repairDraftNote" : "draftNote"
         : view === "mrp"
           ? "mrpNote"
           : undefined,
@@ -323,7 +323,7 @@ export function operationCommand(
   options: ManufacturingOptions,
   op?: ManufacturingRow,
 ): Command {
-  const r = op ?? {};
+  const r = op;
   return {
     key: op ? "editOperation" : "addOperation",
     path:
@@ -334,23 +334,23 @@ export function operationCommand(
     method: op ? "PATCH" : "POST",
     create: !op,
     fields: [
-      field("sequence", r.sequence, { type: "integer", required: true }),
-      field("name", r.name, { required: true }),
-      select("workCenterId", options.centers, r.workCenterId, true),
-      decimal("setupMinutes", r.setupMinutes ?? "0"),
-      decimal("runMinutesPerUnit", r.runMinutesPerUnit ?? "0"),
-      decimal("laborMinutesPerUnit", r.laborMinutesPerUnit, false),
-      select("laborTimeSource", enums(["operation", "approved_time"]), r.laborTimeSource ?? "operation", true),
+      field("sequence", r?.sequence, { type: "integer", required: true }),
+      field("name", r?.name, { required: true }),
+      select("workCenterId", options.centers, r?.workCenterId, true),
+      decimal("setupMinutes", r?.setupMinutes ?? "0"),
+      decimal("runMinutesPerUnit", r?.runMinutesPerUnit ?? "0"),
+      decimal("laborMinutesPerUnit", r?.laborMinutesPerUnit, false),
+      select("laborTimeSource", enums(["operation", "approved_time"]), r?.laborTimeSource ?? "operation", true),
       select(
         "backflushAt",
         enums(["none", "start", "finish"]),
-        r.backflushAt ?? "none",
+        r?.backflushAt ?? "none",
         true,
       ),
       select(
         "qualityGate",
         enums(["none", "measure"]),
-        r.qualityGate ?? "none",
+        r?.qualityGate ?? "none",
         true,
       ),
     ],

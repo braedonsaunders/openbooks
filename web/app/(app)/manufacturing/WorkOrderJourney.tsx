@@ -9,29 +9,27 @@ import { formatDecimal } from "@/lib/money-format";
 import type { ManufacturingRecordData, ManufacturingRow } from "@openbooks/engine/manufacturing/workspace";
 import { productionJourney } from "@openbooks/engine/manufacturing/journey";
 import type { Command } from "./commands";
-import { readApiErrorMessage } from "@/lib/api-error";
+import { apiJson, ApiResponseError } from "@/lib/api-error";
 
 type ReleaseReadiness = { status: "not_draft" | "ready" | "blocked"; findings: { code: string; message: string; remedy: string | null; href: string }[] };
 
 /** Every unmet release prerequisite for a draft order, read from the engine at once. */
-function useReleaseReadiness(workOrderId: string, enabled: boolean) {
-  const [state, setState] = useState<{ readiness: ReleaseReadiness | null; error: string | null }>({ readiness: null, error: null });
+function useReleaseReadiness(workOrderId: string, enabled: boolean, fallback: string) {
+  const [state, setState] = useState<{ workOrderId: string | null; readiness: ReleaseReadiness | null; error: string | null }>({ workOrderId: null, readiness: null, error: null });
   useEffect(() => {
     if (!enabled) return;
     let live = true;
     void (async () => {
-      const res = await fetch(`/api/manufacturing/work-orders/${workOrderId}/release-readiness`, { cache: "no-store" });
-      if (!res.ok) {
-        const error = await readApiErrorMessage(res);
-        if (live) setState({ readiness: null, error });
-        return;
+      try {
+        const readiness = await apiJson<ReleaseReadiness>(`/api/manufacturing/work-orders/${workOrderId}/release-readiness`, { cache: "no-store" }, fallback);
+        if (live) setState({ workOrderId, readiness, error: null });
+      } catch (cause) {
+        if (live) setState({ workOrderId, readiness: null, error: cause instanceof ApiResponseError ? cause.message : fallback });
       }
-      const readiness = (await res.json()) as ReleaseReadiness;
-      if (live) setState({ readiness, error: null });
     })();
     return () => { live = false; };
-  }, [workOrderId, enabled]);
-  return state;
+  }, [workOrderId, enabled, fallback]);
+  return enabled && state.workOrderId === workOrderId ? state : { readiness: null, error: null };
 }
 
 export function WorkOrderJourney({ data, next, onCommand, onOpen, busy,canReadQuality=false }: {
@@ -46,7 +44,7 @@ export function WorkOrderJourney({ data, next, onCommand, onOpen, busy,canReadQu
   const quantity=(value:unknown)=>formatDecimal(locale,String(value??"0"),{maximumFractionDigits:4});
   const progress=productionJourney({status:String(r.status),routingVersion:r.routingVersion===null?null:Number(r.routingVersion),quantityOrdered:String(r.quantityOrdered),quantityCompleted:String(r.quantityCompleted),quantityScrapped:String(r.quantityScrapped),operations:operations.map(o=>({status:String(o.status)}))});
   const checkRelease=r.status==="draft"&&next?.key==="release";
-  const {readiness,error:readinessError}=useReleaseReadiness(String(r.id),checkRelease);
+  const {readiness,error:readinessError}=useReleaseReadiness(String(r.id),checkRelease,t("loadFailed"));
   const releaseBlocked=checkRelease&&readiness?.status==="blocked";
   const steps=[{key:"plan",done:progress.planned},{key:"make",done:progress.made},{key:"receive",done:progress.received},{key:"finish",done:progress.finished}];
   return <div className="space-y-5 py-4">

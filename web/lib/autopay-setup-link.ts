@@ -25,12 +25,12 @@ export interface SetupLinkOptions {
   emailConfigured: boolean
 }
 
-interface PartyRow {
+type PartyRow = {
   display_name: string
   email: string | null
   subsidiary_id: string | null
   customer_currency: string | null
-}
+};
 
 async function loadParty(orgId: string, partyId: string): Promise<PartyRow | null> {
   return (await db.execute<PartyRow>(sql`
