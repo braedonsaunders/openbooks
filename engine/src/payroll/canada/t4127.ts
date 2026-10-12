@@ -209,8 +209,8 @@ export interface T4127Result {
 
 /**
  * Trace-factor labels for the stub calculation trace, keyed by the trace
- * keys above (including the annualTax parts). Every letter is the CRA T4127
- * guide's own factor notation — see the module header.
+ * keys above, including the distinct periodic and bonus annual-tax passes.
+ * CRA factor notation is retained alongside the explicit pass identities.
  */
 export const T4127_FACTOR_LABELS: Readonly<Record<string, string>> = {
   S1_NUM: "Averaging projection periods",
@@ -220,6 +220,15 @@ export const T4127_FACTOR_LABELS: Readonly<Record<string, string>> = {
   L: "Additional tax requested this pay",
   A: "Annual taxable income",
   A_step2: "Annual taxable income excluding this bonus",
+  A_bonus: "Annual taxable income including this bonus",
+  A_periodic: "Annual income for periodic withholding",
+  B1: "Prior non-periodic payments",
+  F4: "Pension deductions from prior non-periodic payments",
+  F5B_YTD: "Enhanced-CPP deductions from prior non-periodic payments",
+  TC_periodic: "Federal claim for periodic withholding",
+  TCP_periodic: "Provincial claim for periodic withholding",
+  T1_periodic: "Annual federal tax for periodic withholding",
+  T2_periodic: "Annual provincial tax for periodic withholding",
   C: "CPP/QPP contribution",
   C2: "Second additional CPP/QPP (CPP2)",
   EI: "EI premium",
@@ -453,8 +462,16 @@ export function calculateT4127(input: T4127Input): T4127Result {
   const bonusYtdNet = Q(max0(B1 - F4 - F5BYtd));
   const aWithBonus = qsum(annualPeriodic, bonusNet, bonusYtdNet);
   const aWithoutBonus = qa(annualPeriodic, bonusYtdNet);
-  traceExact("A", aWithBonus);
+  // Option 1 regular pay projects periodic remuneration alone. Previous
+  // bonuses belong to the bonus comparison; Option 2 retains them in its
+  // cumulative annual projection and credits their tax through M1.
+  const aPeriodic = averaging ? aWithoutBonus : annualPeriodic;
+  const aTrace = bonus > ZERO ? aWithBonus : aPeriodic;
+  traceExact("A", aTrace);
   traceExact("A_step2", aWithoutBonus);
+  traceExact("A_bonus", aWithBonus);
+  traceExact("A_periodic", aPeriodic);
+  trace("B1", B1); trace("F4", F4); trace("F5B_YTD", F5BYtd);
 
   // Each bonus-method tax pass resolves its own income-phased claims.
   const claimsFor = (A: Rational): { TC: Rational; TCP: Rational } => {
@@ -483,7 +500,7 @@ export function calculateT4127(input: T4127Input): T4127Result {
     }
     return { TC, TCP };
   };
-  const { TC, TCP } = claimsFor(aWithBonus);
+  const { TC, TCP } = claimsFor(aTrace);
   traceExact("TC", TC); traceExact("TCP", TCP);
 
   const maxBaseProrated = qratio(Q(U(plan.maxBase)), BigInt(PM), 12n);
@@ -586,7 +603,12 @@ export function calculateT4127(input: T4127Input): T4127Result {
   const L = opt(input.additionalTaxPerPeriod);
   const withBonus = annualTax(aWithBonus);
   const withoutBonus = bonus > ZERO ? annualTax(aWithoutBonus) : withBonus;
-  for (const [key, value] of Object.entries(withBonus.parts)) traceExact(key, value);
+  const periodic = averaging ? withoutBonus : annualTax(aPeriodic);
+  const traceParts = bonus > ZERO ? withBonus.parts : periodic.parts;
+  for (const [key, value] of Object.entries(traceParts)) traceExact(key, value);
+  const periodicClaims = claimsFor(aPeriodic);
+  traceExact("TC_periodic", periodicClaims.TC); traceExact("TCP_periodic", periodicClaims.TCP);
+  traceExact("T1_periodic", periodic.t1); traceExact("T2_periodic", periodic.t2);
 
   let periodicTax: bigint;
   if (averaging) {
@@ -594,9 +616,9 @@ export function calculateT4127(input: T4127Input): T4127Result {
     const beforeCurrent = qs(qratio(qs(qa(withoutBonus.t1, withoutBonus.t2), M1), BigInt(averaging.elapsedPeriods), BigInt(P)), M);
     periodicTax = roundRational(qmax0(beforeCurrent), 100n) + L;
     trace("S1_NUM", U(String(P))); trace("S1_DEN", U(String(averaging.elapsedPeriods))); trace("M", roundRational(M)); trace("M1", roundRational(M1));
-  } else if (qc(aWithoutBonus, QZERO) <= 0) periodicTax = L;
+  } else if (qc(aPeriodic, QZERO) <= 0) periodicTax = L;
   else {
-    const legs = periodTaxLegs(withoutBonus.t1, withoutBonus.t2, P);
+    const legs = periodTaxLegs(periodic.t1, periodic.t2, P);
     trace("TF", legs.federal); trace("TP", legs.provincial);
     periodicTax = legs.federal + legs.provincial + L;
   }

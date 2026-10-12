@@ -532,6 +532,11 @@ export async function computeCaStatutory(
       ...referencedBonusTax.factors,
       // Annual claims and brackets belong to the bonus reference calculation;
       // periodic withholding still belongs to this payment alone.
+      A_periodic: currentTax.factors.A_periodic!,
+      TC_periodic: currentTax.factors.TC_periodic!,
+      TCP_periodic: currentTax.factors.TCP_periodic!,
+      T1_periodic: currentTax.factors.T1_periodic!,
+      T2_periodic: currentTax.factors.T2_periodic!,
       TF: currentTax.factors.TF ?? "0.0000",
       TP: currentTax.factors.TP ?? "0.0000",
       T: currentTax.factors.T ?? currentTax.periodicTax,
