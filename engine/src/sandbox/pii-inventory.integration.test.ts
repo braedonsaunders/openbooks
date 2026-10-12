@@ -38,6 +38,26 @@ const SENSITIVE_TYPES: ReadonlySet<string> = new Set([
  * without a named column), plus the table.column pairs below.
  */
 const CONSTRUCTION_COVERED: ReadonlySet<string> = new Set([
+  // Financial clone projections redact authored prose and rebase retained evidence.
+  "account_translation_policies.reason",
+  "fx_rate_types.name",
+  "gl_audit_number_policies.reason",
+  "performance_obligations.allocation_basis",
+  "rebate_accruals.basis",
+  "rebate_agreements.name",
+  "rebate_agreements.reason",
+  "rebate_claims.reason",
+  "rebate_claims.basis",
+  "rebate_claims.settlement_basis",
+  "rebate_cost_attestations.evidence",
+  "rebate_cost_attestations.line_basis",
+  "rebate_settlement_reversals.reason",
+  "recognition_control_events.reason",
+  "recognition_control_events.evidence",
+  "recognition_control_events.before_state",
+  "recognition_control_events.after_state",
+  "segment_balancing_policies.reason",
+  "subsidiary_accounting_preferences.reason",
   "handling_unit_moves.request", // native projection preserves dated destination identity and redacts prose
   "handling_unit_moves.movements", // native projection preserves only rebased movement IDs and exact values
   // Native production evidence retains typed quantities and rebased identity while redacting authored prose.
@@ -88,6 +108,33 @@ function isCoveredByConstruction(table: string, column: string, udtName: string)
  *   with faked names they identify nobody.
  */
 const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
+  // Native rate, journal, audit and rebate classifications retain financial identity.
+  "account_translation_policies.general_rate_type",
+  "account_translation_policies.cash_flow_rate_type",
+  "document_lines.journal_currency",
+  "documents.journal_mode",
+  "fair_value_prices.calculation_method",
+  "fx_rate_types.key",
+  "gl_audit_number_assignments.scope_key",
+  "gl_audit_number_assignments.audit_number",
+  "gl_audit_number_policies.reset_rule",
+  "gl_audit_number_policies.prefix",
+  "rebate_agreements.code",
+  "rebate_agreements.status",
+  "rebate_agreements.side",
+  "rebate_agreements.activity",
+  "rebate_agreements.currency",
+  "rebate_agreements.method",
+  "rebate_agreements.tier_basis",
+  "rebate_agreements.tiers", // typed threshold/rate financial configuration
+  "rebate_agreements.stacking",
+  "rebate_agreements.selection_group",
+  "rebate_agreements.tax_treatment",
+  "rebate_claims.status",
+  "rebate_cost_attestations.currency",
+  "recognition_control_events.action",
+  "segment_balancing_policies.segment_key",
+  "subsidiary_accounting_preferences.posting_rate_type",
   // Constrained policy classifications and opaque delivery digests carry no identity or prose.
   "hrm_benefit_programs.unassigned_time",
   "hrm_benefit_programs.pool_rounding",
@@ -2823,12 +2870,11 @@ test("every sensitive column of every cloned table is masked or allow-listed, an
     if (ALLOW_LISTED_NON_PERSONAL.has(key)) continue;
     offenders.push(`${key} (${col.udtName})`);
   }
-  const shown = offenders.slice(0, 20);
   assert.deepEqual(
-    shown,
+    offenders,
     [],
     `${offenders.length} sensitive column(s) copy verbatim into masked sandboxes ` +
-      `with neither a masking policy nor an allow-list entry (showing first 20): ${shown.join(", ")}`,
+      `with neither a masking policy nor an allow-list entry: ${offenders.join(", ")}`,
   );
   // Derive the rule-column projection from the real clone catalog, then
   // execute its generated masked expression against tenant-authored prose.
@@ -2864,6 +2910,41 @@ test("every sensitive column of every cloned table is masked or allow-listed, an
     }
   }
   assert.deepEqual(stale, [], `allow-list entries that must be removed: ${stale.join(", ")}`);
+});
+
+test("financial clone projections redact source prose and preserve rebased fair-value measurements", async () => {
+  const catalog = await loadCatalog();
+  const seed = "42b3d7dd-9674-4f3c-8d6a-8ba5d2308130";
+  const fairValueId = "65fa9dc7-228f-4e19-8bf1-17d52efeb78d";
+  const options = {productionOrgId:fairValueId,sandboxOrgId:"47df30a3-4fd1-4570-bb67-09641053ee3b",
+    seed,tier:"full" as const,masked:true};
+  const masking = new Map<string,Map<string,MaskTransform>>();
+  for (const policy of DEFAULT_POLICIES) {
+    if (!masking.has(policy.tableName)) masking.set(policy.tableName,new Map());
+    masking.get(policy.tableName)!.set(policy.columnName,policy.transform);
+  }
+  async function project(tableName: string, columnName: string, value: unknown, masked = true) {
+    const table = catalog.tables.find(table => table.name === tableName);
+    assert.ok(table);
+    const column = table.columns.find(column => column.name === columnName);
+    assert.ok(column);
+    const generated = generateCopySql({...table,columns:[column]}, {...options,masked},new Set([tableName]),new Set(),masking,null);
+    assert.ok(generated);
+    const expression = generated.split(") select ")[1]?.split(` from "${tableName}"`)[0];
+    assert.ok(expression);
+    const supplied = column.udtName === "jsonb" ? sql`${JSON.stringify(value)}::jsonb` : sql`${value}::text`;
+    return (await db.execute<{value:unknown}>(sql`select ${sql.raw(expression)} as value
+      from (values (${supplied})) source(${sql.identifier(columnName)})`)).rows[0]!.value;
+  }
+  const rebased = (await db.execute<{id:string}>(sql`select ob_rebase(${fairValueId}::uuid,${seed}::uuid)::text as id`)).rows[0]!.id;
+  const basis = {fairValuePriceId:fairValueId,quantity:"2.00000000",allocated:"25.0000",reason:"Customer Jane approval"};
+  assert.deepEqual(await project("performance_obligations","allocation_basis",basis),
+    {...basis,fairValuePriceId:rebased,reason:"REDACTED"});
+  assert.deepEqual(await project("performance_obligations","allocation_basis",basis,false),
+    {...basis,fairValuePriceId:rebased});
+  assert.equal(await project("performance_obligations","hold_reason","Customer Jane approval"),"REDACTED");
+  assert.equal(await project("fx_rate_types","name","Jane's corporate treasury"),"REDACTED");
+  assert.equal(await project("account_translation_policies","reason","Jane's corporate treasury"),"REDACTED");
 });
 
 test("warehouse evidence masking removes arbitrary prose and preserves native dated movement values", async () => {

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, withMaintenanceTransaction, withOrgContext } from "../platform/db.ts";
+import { db, withBypassContext, withMaintenanceTransaction, withOrgContext } from "../platform/db.ts";
 import { assertDedicatedFixtureDatabase, assertFixtureDatabase, createScratchOrg, dropScratchOrg, dropScratchOrgReporting } from "../testing/fixtures.ts";
 import { errorChainMatches } from "../testing/error-chain.ts";
 import { postEntry } from "../journal/post-entry.ts";
@@ -40,7 +40,7 @@ test("native typed residual insertion and registered historical copy preserve bo
     });
     // The destination headers are already posted when their lines are copied:
     // this INSERT executes the statement trigger's authoritative two-argument guard.
-    sandbox = await createSandbox({productionOrgId:org.orgId,name:"Scratch typed FX history",tier:"full",masked:false});
+    sandbox = await withBypassContext(() => createSandbox({productionOrgId:org.orgId,name:"Scratch typed FX history",tier:"full",masked:false}));
     const rows = (await db.execute<{amount:string;txn:string;tagged:boolean}>(sql`select l.amount::text,l.txn_amount::text as txn,l.is_currency_adjustment as tagged
       from journal_lines l join orgs o on o.id=l.org_id where l.org_id=${sandbox.sandboxOrgId}
         and l.entry_id=ob_rebase(${entryId}::uuid,o.sandbox_seed) order by l.line_number`)).rows;

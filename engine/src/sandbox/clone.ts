@@ -324,7 +324,8 @@ export function generateCopySql(
       exprs.push(`(case when "${c.name}" is null then null else ob_rebase("${c.name}", '${seed}'::uuid) end)`);
       continue;
     }
-    if ((t.name === "recognition_control_events" && ["before_state", "after_state"].includes(c.name))
+    if ((t.name === "performance_obligations" && c.name === "allocation_basis")
+        || (t.name === "recognition_control_events" && ["before_state", "after_state"].includes(c.name))
         || (t.name === "rebate_cost_attestations" && c.name === "line_basis")
         || (t.name === "rebate_accruals" && c.name === "basis")
         || (t.name === "rebate_claims" && ["basis", "settlement_basis"].includes(c.name))) {

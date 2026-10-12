@@ -9,6 +9,7 @@ import { installEngineSeams } from "../composition/install.ts";
 import {
   createScratchOrg,
   dropScratchOrg,
+  dropScratchOrgReporting,
   seedApprovalFlow,
   seedFlowActors,
   seedPostingAccount,
@@ -24,6 +25,7 @@ import {
 import { classifyAccountReference, discoverAccountReferenceColumns } from "./account-references.ts";
 import { closeBookAccountMap, createBookAccountMap, createBookCurrencyVersion } from "../multibook/settings.ts";
 import { changeBookReplication } from "../multibook/replication-runs.ts";
+import { createSandbox, deleteSandbox, refreshSandbox } from "../sandbox/lifecycle.ts";
 
 // Merging a duplicate account into its survivor: the preview names every
 // refusal and consequence, execution moves the balance through the posting
@@ -95,7 +97,7 @@ async function balance(orgId: string, accountId: string): Promise<string> {
      where l.org_id = ${orgId} and l.account_id = ${accountId}`)).rows[0]!.total);
 }
 
-function request(s: Scenario, overrides: Partial<Parameters<typeof requestAccountMerge>[1]> = {}) {
+function request(s: Pick<Scenario, "source" | "target" | "actorId">, overrides: Partial<Parameters<typeof requestAccountMerge>[1]> = {}) {
   return {
     sourceAccountId: s.source,
     targetAccountId: s.target,
@@ -414,13 +416,91 @@ test("every live foreign key into accounts is classified and guarded against mer
     assert.ok(columns.length > 50);
     const unclassified = columns.filter((column) => classifyAccountReference(column) === null);
     assert.deepEqual(unclassified, []);
-    const guarded = new Set((await db.execute<{ table_name: string }>(sql`
-      select c.relname::text as table_name from pg_trigger t join pg_class c on c.oid = t.tgrelid
-       where not t.tgisinternal and t.tgname like '%merged_account_guard'`)).rows.map((row) => row.table_name));
+    const guarded = new Set((await db.execute<{ table_name: string; column_name: string }>(sql`
+      select c.relname::text as table_name,a.attname::text as column_name
+        from pg_trigger t join pg_class c on c.oid=t.tgrelid
+        join pg_namespace n on n.oid=c.relnamespace and n.nspname='public'
+        join pg_attribute a on a.attrelid=t.tgrelid and a.attnum=any(t.tgattr::smallint[]) and not a.attisdropped
+       where t.tgname=left(c.relname,40)||'_merged_account_guard'
+         and t.tgfoid='public.refuse_merged_account_reference()'::regprocedure
+         and t.tgtype=23 and t.tgenabled in ('O','A') and not t.tgisinternal
+         and t.tgconstraint=0 and not t.tgdeferrable and not t.tginitdeferred
+         and t.tgqual is null and t.tgoldtable is null and t.tgnewtable is null
+         and t.tgnargs=cardinality(t.tgattr::smallint[])
+         and t.tgargs=(select decode(string_agg(encode(convert_to(ga.attname::text,'UTF8'),'hex')||'00','' order by ga.attname::text COLLATE "C"),'hex')
+           from unnest(t.tgattr::smallint[]) k(attnum)
+           join pg_attribute ga on ga.attrelid=t.tgrelid and ga.attnum=k.attnum and not ga.attisdropped)
+    `)).rows.map((row) => `${row.table_name}.${row.column_name}`));
     const unguarded = columns
       .filter((column) => classifyAccountReference(column) !== "owned")
-      .filter((column) => !guarded.has(column.table))
-      .map((column) => `${column.table}.${column.column}`);
-    assert.deepEqual(unguarded, [], "every table referencing accounts refuses new references to merged accounts");
+      .map((column) => `${column.table}.${column.column}`)
+      .filter((column) => !guarded.has(column));
+    assert.deepEqual(unguarded, [], "every account FK column has an unconditional native insert and column-update guard");
   });
+});
+
+
+test("balancing policy successors fence the requested merge date and retained merged-account policies clone unchanged", { skip: !DB }, async () => {
+  installEngineSeams();
+  const org = await createScratchOrg();
+  let sandbox: Awaited<ReturnType<typeof createSandbox>> | undefined;
+  try {
+    const actors = await seedFlowActors(org.orgId);
+    await enableMerges(org.orgId);
+    const source = await withBypassContext(() => seedPostingAccount(org.orgId, "1491", "Duplicate clearing", "asset_other"));
+    const target = await withBypassContext(() => seedPostingAccount(org.orgId, "1490", "Clearing", "asset_other"));
+    const policyId = randomUUID();
+    const translationId = randomUUID();
+    await withBypassContext(async () => {
+      await db.execute(sql`insert into segment_definitions(org_id,key,name,plural_name,is_balancing)
+        values(${org.orgId},'clearing_group','Clearing group','Clearing groups',true)`);
+      await db.execute(sql`insert into segment_balancing_policies(id,org_id,segment_key,effective_from,clearing_account_id,reason)
+        values(${policyId},${org.orgId},'clearing_group','2026-07-01',${source},'Initial clearing policy'),
+          (${randomUUID()},${org.orgId},'clearing_group','2026-07-30',${target},'Replacement clearing policy')`);
+      await db.execute(sql`insert into account_translation_policies(id,org_id,account_id,effective_from,general_rate_type,cash_flow_rate_type,reason)
+        values(${translationId},${org.orgId},${source},'2026-07-01','current','current','Initial reporting policy')`);
+    });
+    const earlier = await previewAccountMerge(org.orgId, { sourceAccountId: source, targetAccountId: target, effectiveDate: "2026-07-29" }, null);
+    assert.equal(earlier.references.find(row => row.key === "segment_balancing_policies.clearing_account_id")?.blocked, 1);
+    assert.ok(earlier.refusals.some(row => row.code === "reference_in_flight"));
+    await assert.rejects(requestAccountMerge(org.orgId, request({source,target,actorId:actors.adminId}, {
+      effectiveDate:"2026-07-29", expectedDigest:earlier.digest,
+    })), error => error instanceof AccountMergeError && error.code === "reference_in_flight");
+
+    const onDate = await previewAccountMerge(org.orgId, { sourceAccountId: source, targetAccountId: target, effectiveDate: "2026-07-30" }, null);
+    assert.deepEqual(onDate.refusals, []);
+    const outcome = await requestAccountMerge(org.orgId, request({source,target,actorId:actors.adminId}, {
+      effectiveDate:"2026-07-30", expectedDigest:onDate.digest,
+    }));
+    assert.equal(outcome.status, "completed");
+    const retained = async (orgId: string) => (await withBypassContext(() => db.execute<{ account_id: string; clearing_account_id: string }>(sql`
+      select p.account_id,b.clearing_account_id from account_translation_policies p
+        join segment_balancing_policies b on b.org_id=p.org_id and b.effective_from=p.effective_from
+       where p.org_id=${orgId}`))).rows;
+    assert.deepEqual(await retained(org.orgId), [{account_id:source,clearing_account_id:source}]);
+    await assert.rejects(() => withBypassContext(() => db.execute(sql`
+      insert into account_translation_policies(org_id,account_id,effective_from,general_rate_type,cash_flow_rate_type,reason)
+      values(${org.orgId},${source},'2026-07-31','current','current','New reporting policy')`
+    )), error => errorChainMatches(error,/was merged into account/));
+    await assert.rejects(() => withBypassContext(() => db.execute(sql`
+      insert into segment_balancing_policies(org_id,segment_key,effective_from,clearing_account_id,reason)
+      values(${org.orgId},'clearing_group','2026-07-31',${source},'New clearing policy')`
+    )), error => errorChainMatches(error,/was merged into account/));
+    await assert.rejects(() => withBypassContext(() => db.execute(sql`
+      update account_translation_policies set account_id=${target} where org_id=${org.orgId} and id=${translationId}`
+    )), error => errorChainMatches(error,/retained history/));
+
+    sandbox = await withBypassContext(() => createSandbox({ productionOrgId:org.orgId,name:"Retained merged policies",tier:"full",masked:false }));
+    const clonedSource = (await withBypassContext(() => db.execute<{ id: string }>(sql`
+      select ob_rebase(${source}::uuid,o.sandbox_seed)::text as id from orgs o where o.id=${sandbox!.sandboxOrgId}`))).rows[0]!.id;
+    assert.deepEqual(await retained(sandbox.sandboxOrgId), [{account_id:clonedSource,clearing_account_id:clonedSource}]);
+    await refreshSandbox(sandbox.sandboxId);
+    assert.deepEqual(await retained(sandbox.sandboxOrgId), [{account_id:clonedSource,clearing_account_id:clonedSource}]);
+    assert.deepEqual(await retained(org.orgId), [{account_id:source,clearing_account_id:source}]);
+    await deleteSandbox(sandbox.sandboxId);
+    sandbox = undefined;
+  } finally {
+    if (sandbox) await dropScratchOrgReporting(sandbox.sandboxOrgId);
+    await dropScratchOrg(org.orgId);
+  }
 });

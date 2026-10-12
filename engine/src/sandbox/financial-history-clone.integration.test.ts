@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, withMaintenanceTransaction, withOrgContext } from "../platform/db.ts";
+import { db, withBypassContext, withMaintenanceTransaction, withOrgContext } from "../platform/db.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg, dropScratchOrgReporting } from "../testing/fixtures.ts";
 import { errorChainMatches } from "../testing/error-chain.ts";
 import { postEntry } from "../journal/post-entry.ts";
@@ -40,7 +40,7 @@ for (const masked of [false, true]) {
         await db.execute(sql`update documents set status='approved',updated_by=${actor} where org_id=${source.orgId} and id=${documentId}`);
         await postDocument(documentId,{control:{ar:source.accounts.ar,ap:source.accounts.ap,bank:source.accounts.bank}},{audit:{actorId:actor,source:'ui'}});
       });
-      sandbox = await createSandbox({ productionOrgId: source.orgId, name: "Scratch financial history", tier: masked ? "masked" : "full", masked });
+      sandbox = await withBypassContext(() => createSandbox({ productionOrgId: source.orgId, name: "Scratch financial history", tier: masked ? "masked" : "full", masked }));
       const target = sandbox.sandboxOrgId;
       const projection = async () => (await db.execute<{ amount: string; txn: string; currency: string; tagged: boolean; residual: string }>(sql`
         select l.amount::text,l.txn_amount::text as txn,l.currency,l.is_currency_adjustment as tagged,
@@ -84,7 +84,7 @@ test("clone flags cannot exempt a production destination or a modified historica
       await db.execute(sql`insert into account_translation_policies(org_id,account_id,effective_from,general_rate_type,cash_flow_rate_type,reason)
         values(${source.orgId},${source.accounts.bank},'2026-09-01','current','current','Forged clone admission')`);
     }), error => errorChainMatches(error, /exact registered source row/));
-    sandbox = await createSandbox({ productionOrgId: source.orgId, name: "Scratch clone refusal", tier: "full", masked: false });
+    sandbox = await withBypassContext(() => createSandbox({ productionOrgId: source.orgId, name: "Scratch clone refusal", tier: "full", masked: false }));
     await assert.rejects(() => withMaintenanceTransaction(null, async () => {
       await db.execute(sql`select set_config('openbooks.clone','on',true),set_config('openbooks.migration','on',true),set_config('openbooks.amend','on',true)`);
       await db.execute(sql`update sandboxes set status='refreshing' where id=${sandbox!.sandboxId}`);
