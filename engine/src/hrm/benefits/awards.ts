@@ -544,7 +544,8 @@ async function recordAward(
         "benefit award not found in this organization — reload the award list and retry",
       );
     }
-    if (adjustsAwardId === null && service.service_start !== null && String(service.service_start).slice(0, 10) > periodFrom) {
+    const serviceBoundary = origin === "settlement" ? periodTo ?? periodFrom : periodFrom;
+    if (adjustsAwardId === null && service.service_start !== null && String(service.service_start).slice(0, 10) > serviceBoundary) {
       throw new BenefitsError(
         "REFUSED",
         `employment service starts after the award period — issue awards inside the employment span`,

@@ -30,6 +30,7 @@ import {
   updateBenefitProgram,
 } from "./programs.ts";
 import {
+  createBenefitAward,
   submitBenefitAward,
 } from "./awards.ts";
 import {
@@ -369,6 +370,61 @@ settlementTest("hourly incentives retain dated approved time through settlement,
     select amount::text,hours::text from pay_run_adjustments where org_id=${h.org.orgId} and id=${queued.adjustmentId}`)).rows;
   assert.equal(inputs.length, 1); assert.equal(inputs[0]!.amount, "0.3300");
   assert.ok(inputs[0]!.hours === null || toUnits(inputs[0]!.hours) === 0n, "an incentive payout never creates more worked hours");
+});
+
+settlementTest("midweek hires settle only approved activity inside active service", async (h) => {
+  const program = await seedProgram(h, {
+    valuation: "per_unit", metric: "approved_hours", allocation: "hours",
+    percentRate: null, fixedAmount: "2", sourceAccountIds: [],
+  });
+  const worker = await seedMember(h, program.id, {
+    displayName: "Midweek hire", from: "2026-07-15",
+  });
+  const payableEntry = randomUUID();
+  for (const [id, date, hours, status] of [
+    [randomUUID(), "2026-07-13", "100", "approved"],
+    [payableEntry, "2026-07-15", "8", "approved"],
+    [randomUUID(), "2026-07-16", "3", "draft"],
+  ] as const) {
+    await db.execute(sql`insert into time_entries (id,org_id,employee_party_id,worked_on,hours,status,approved_at)
+      values (${id},${h.org.orgId},${worker.workerPartyId},${date}::date,${hours},${status},${status === "approved" ? new Date() : null})`);
+  }
+  const query = {
+    orgId: h.org.orgId, actorId: h.settlerId, programId: program.id,
+    periodFrom: "2026-07-12", periodTo: "2026-07-18",
+  };
+  const settled = await settleIncentivePeriod(query);
+  assert.equal(settled.awards.length, 1);
+  const award = settled.awards[0]!;
+  assert.equal(award.employmentId, worker.employmentId);
+  assert.equal(award.value, "16.0000");
+  assert.deepEqual((await settleIncentivePeriod(query)).awards.map(a => a.id), [award.id]);
+  const source = (await db.execute<{ source_snapshot: Record<string, Record<string, Record<string, unknown>>> }>(sql`
+    select source_snapshot from hrm_benefit_awards where org_id=${h.org.orgId} and id=${award.id}`)).rows[0]!.source_snapshot.measurement!.settlement!;
+  assert.deepEqual(source.entryIds, [payableEntry]);
+  assert.deepEqual(source.hoursAttribution, [{ employmentId: worker.employmentId, hours: "8.0000" }]);
+  assert.equal(await awardCount(h.org.orgId), 1);
+});
+
+settlementTest("direct awards still require service from the start of the full award period", async (h) => {
+  const program = await seedProgram(h, {
+    family: "reward", valuation: "fixed", fixedAmount: "16", percentRate: null,
+    metric: null, metricScope: null,
+    periodBasis: null, sourceAccountIds: [],
+  });
+  const worker = await seedMember(h, program.id, {
+    displayName: "Direct award midweek hire", from: "2026-07-15",
+  });
+  const query = {
+    orgId: h.org.orgId, actorId: h.settlerId, programId: program.id,
+    employmentId: worker.employmentId, periodFrom: "2026-07-12",
+    periodTo: "2026-07-18", value: "16", currency: "USD",
+  };
+  await refuses(() => createBenefitAward(query), /employment service starts after the award period/);
+  assert.equal(await awardCount(h.org.orgId), 0);
+  const award = await createBenefitAward({ ...query, periodFrom: "2026-07-15" });
+  assert.equal(award.value, "16.0000");
+  assert.equal(await awardCount(h.org.orgId), 1);
 });
 
 settlementTest("approved awards queue onto a draft run as one idempotent adjustment", async (h) => {
