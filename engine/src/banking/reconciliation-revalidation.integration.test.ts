@@ -14,8 +14,8 @@ const enabled = {skip:!process.env.OPENBOOKS_DB_URL}
 const reason = 'Independent review of neutral late history against the retained statement and sign-off'
 async function fixture() {
   const org = await createScratchOrg()
-  const signer = await createScratchUser(org.orgId,'Original reconciler','bank-sign-off')
-  const reviewer = await createScratchUser(org.orgId,'Independent reconciler','bank-review')
+  const signer = await withBypassContext(()=>createScratchUser(org.orgId,'Original reconciler','bank-sign-off'))
+  const reviewer = await withBypassContext(()=>createScratchUser(org.orgId,'Independent reconciler','bank-review'))
   await withBypassContext(async()=>{
     assert.equal((await db.execute(sql`update app_roles set permissions='["banking.reconcile","gl.post"]'::jsonb
       where org_id=${org.orgId} and key in ('bank-sign-off','bank-review') returning id`)).rows.length,2)
