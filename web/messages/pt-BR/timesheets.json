@@ -1,4 +1,21 @@
 {
+  "additional": {
+    "title": "Revisar horas adicionais",
+    "action": "Revisar {count} registros pendentes",
+    "description": "Somente os registros selecionados em rascunho ou devolvidos são enviados. As horas aprovadas e os registros não selecionados permanecem inalterados.",
+    "empty": "Nenhum registro pendente.",
+    "date": "Data",
+    "project": "Projeto",
+    "source": "Origem",
+    "directTime": "Registro direto de horas",
+    "item": "Item de serviço",
+    "hours": "Horas",
+    "timeStatus": "Status das horas",
+    "reason": "Motivo do envio adicional (10–500 caracteres)",
+    "back": "Voltar à folha de horas",
+    "submitting": "Enviando…",
+    "submit": "Enviar {count} registros selecionados"
+  },
   "list": {
     "title": "Quadros de horas semanais",
     "description": "Horas dos funcionários por semana — registre, envie e aprove horas em todos os trabalhos.",

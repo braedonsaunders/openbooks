@@ -1,4 +1,21 @@
 {
+  "additional": {
+    "title": "Review additional time",
+    "action": "Review {count} pending entries",
+    "description": "Only the selected draft or returned entries are submitted. Previously approved time and unselected entries remain unchanged.",
+    "empty": "No pending entries.",
+    "date": "Date",
+    "project": "Project",
+    "source": "Source",
+    "directTime": "Direct time entry",
+    "item": "Service item",
+    "hours": "Hours",
+    "timeStatus": "Time status",
+    "reason": "Reason for additional submission (10–500 characters)",
+    "back": "Back to timesheet",
+    "submitting": "Submitting…",
+    "submit": "Submit {count} selected entries"
+  },
   "list": {
     "title": "Weekly timesheets",
     "description": "Employee time by the week — enter, submit, and approve hours across every job.",

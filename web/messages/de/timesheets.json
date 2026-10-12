@@ -1,4 +1,21 @@
 {
+  "additional": {
+    "title": "Zusätzliche Zeiteinträge prüfen",
+    "action": "{count} ausstehende Einträge prüfen",
+    "description": "Nur ausgewählte Entwürfe oder zurückgegebene Einträge werden eingereicht. Bereits genehmigte Zeiten und nicht ausgewählte Einträge bleiben unverändert.",
+    "empty": "Keine ausstehenden Einträge.",
+    "date": "Datum",
+    "project": "Projekt",
+    "source": "Quelle",
+    "directTime": "Direkter Zeiteintrag",
+    "item": "Dienstleistungsartikel",
+    "hours": "Stunden",
+    "timeStatus": "Zeitstatus",
+    "reason": "Grund für die zusätzliche Einreichung (10–500 Zeichen)",
+    "back": "Zurück zum Stundenzettel",
+    "submitting": "Wird eingereicht…",
+    "submit": "{count} ausgewählte Einträge einreichen"
+  },
   "list": {
     "title": "Wöchentliche Stundenzettel",
     "description": "Arbeitszeit der Mitarbeiter nach Woche — Stunden über alle Aufträge erfassen, einreichen und genehmigen.",

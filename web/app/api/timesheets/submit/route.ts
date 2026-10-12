@@ -8,6 +8,7 @@ import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from "next/server";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "@openbooks/engine/platform/db";
+import { prepareAdditionalTimeSubmission, type AdditionalTimeSelection } from "@openbooks/engine/projects/additional-time-submission";
 import { isUuid } from "../../../../lib/list-params";
 import { runRecordFlows } from "@openbooks/engine/flows/run";
 import { TIMESHEET_WEEK_SUBJECT_KIND } from "@openbooks/engine/flows/timesheet-weeks-adapter";
@@ -22,7 +23,7 @@ import {
   weekStart,
   weekWindow,
 } from "../_lib";
-const postBodySchema0 = z.strictObject({
+const ordinarySubmission = z.strictObject({
   employee: uuidId,
   week: isoDate("week must be a valid calendar date"),
   // An explicit declaration that the week holds no hours (leave, no work),
@@ -31,6 +32,14 @@ const postBodySchema0 = z.strictObject({
   noHours: z.literal(true).optional(),
   reason: z.string().trim().min(1).max(500).optional(),
 });
+const postBodySchema0 = z.union([
+  ordinarySubmission,
+  z.strictObject({
+    employee: uuidId, week: isoDate("week must be a valid calendar date"),
+    selections: z.array(z.strictObject({ id: uuidId, updatedAt: z.string().min(1).max(40) })).min(1).max(250),
+    reason: z.string().trim().min(10).max(500),
+  }),
+]);
 
 export const runtime = "nodejs";
 
@@ -50,6 +59,7 @@ interface Body {
   week?: string;
   noHours?: true;
   reason?: string;
+  selections?: AdditionalTimeSelection[];
 }
 
 /** POST { employee, week } → move the week's draft entries to submitted. */
@@ -90,8 +100,14 @@ export const POST = defineRoute({
       // tenant transaction, so a failed dispatch rolls back every submission
       // write instead of compensating with a second, failure-prone update.
       flow = await withOrgTransaction(orgId, async () => {
-        await lockSharedTimeAuthority(db, orgId, user.id, { employeeId: ownedEmployee, from: days[0]!, through: days[6]!, requestedScope: gate.allowedSubsidiaryIds, permission: "time.manage", workFamily: timeWorkFamily(workspaceRequest) });
-        const moved = await db.execute(sql`
+        const additional = body.selections ? await prepareAdditionalTimeSubmission(db, {
+          orgId, actorId: user.id, employeePartyId: ownedEmployee, weekStart: week,
+          selections: body.selections, requestedScope: gate.allowedSubsidiaryIds,
+          workFamily: timeWorkFamily(workspaceRequest),
+        }) : null;
+        if (!additional) await lockSharedTimeAuthority(db, orgId, user.id, { employeeId: ownedEmployee, from: days[0]!, through: days[6]!, requestedScope: gate.allowedSubsidiaryIds, permission: "time.manage", workFamily: timeWorkFamily(workspaceRequest) });
+        const selectionIds = additional?.entries.map(entry => entry.id);
+        const moved = await db.execute<{ id: string }>(sql`
         update time_entries
            set status = 'submitted', rejection_reason = null,
                updated_at = now(), updated_by = ${user.id}
@@ -99,7 +115,13 @@ export const POST = defineRoute({
            and employee_party_id = ${ownedEmployee}
            and worked_on >= ${days[0]} and worked_on <= ${days[6]}
            and status in ('draft', 'rejected')
+           ${selectionIds ? sql`and id = any(${`{${selectionIds.join(',')}}`}::uuid[])` : sql``}
+         returning id
       `);
+        if (selectionIds && moved.rows.length !== selectionIds.length) {
+          throw new TimeWorkTargetError('The selected time changed before submission.', 409,
+            'additional_time_selection_changed', 'Reload the week and review the pending entries again.');
+        }
 
         // Hand the submission to Flows, exactly as documents do. A flow that
         // raises approval gates OWNS the week: it stays submitted until the
@@ -151,6 +173,19 @@ export const POST = defineRoute({
           null,
           gate.allowedSubsidiaryIds,
         );
+        if (additional) {
+          const audited = (await db.execute<{ id: string }>(sql`
+            insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+            values (${orgId}, 'timesheet_weeks', ${additional.headerId}, 'update',
+              ${JSON.stringify({
+                event: 'additional_time_submitted', reason: body.reason,
+                before: { status: 'approved', approval: additional.priorApproval },
+                after: { status: 'submitted' }, entries: additional.entries,
+                unchangedEarlierApprovedTime: true,
+              })}::jsonb, ${user.id}) returning id
+          `)).rows[0];
+          if (!audited) throw new Error('Additional-time submission evidence was not recorded.');
+        }
 
         const dispatched = await runRecordFlows(
           { kind: "on_submit" },

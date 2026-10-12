@@ -1,4 +1,21 @@
 {
+  "additional": {
+    "title": "Revisar tiempo adicional",
+    "action": "Revisar {count} entradas pendientes",
+    "description": "Solo se envían las entradas seleccionadas en borrador o devueltas. El tiempo aprobado y las entradas no seleccionadas no cambian.",
+    "empty": "No hay entradas pendientes.",
+    "date": "Fecha",
+    "project": "Proyecto",
+    "source": "Origen",
+    "directTime": "Entrada directa de tiempo",
+    "item": "Artículo de servicio",
+    "hours": "Horas",
+    "timeStatus": "Estado del tiempo",
+    "reason": "Motivo del envío adicional (10–500 caracteres)",
+    "back": "Volver a la hoja de horas",
+    "submitting": "Enviando…",
+    "submit": "Enviar {count} entradas seleccionadas"
+  },
   "list": {
     "title": "Hojas de horas semanales",
     "description": "Tiempo de los empleados por semana — registre, envíe y apruebe horas en todas las obras.",

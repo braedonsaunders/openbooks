@@ -15,6 +15,8 @@
 import Link from 'next/link'
 import { RemoteRecordChoice } from '@/components/remote-record-choice'
 import type { TimeWorkFamily } from '@openbooks/engine/projects/time-work-target'
+import type { AdditionalTimeSelection } from '@openbooks/engine/projects/additional-time-submission'
+import { AdditionalTimeReview } from './AdditionalTimeReview'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useLocale, useTranslations } from 'next-intl'
@@ -290,6 +292,8 @@ export function WeeklyGrid({
   const today = useBusinessToday()
   const [rows, setRows] = useState<GridRow[]>(() => seedRows(payload, pickers,workFamily,quickProjectId))
   const [status, setStatus] = useState(payload.status)
+  const [pendingEntries, setPendingEntries] = useState(payload.pendingEntries ?? [])
+  const [additionalReview, setAdditionalReview] = useState(false)
   const [dirty, setDirty] = useState(false)
   const [busy, setBusy] = useState(false)
   // Which decision is in flight (save/submit/approve/…). The button for that
@@ -327,11 +331,16 @@ export function WeeklyGrid({
   const seededKey = useRef(loadedKey)
   const seededRevision = useRef(payload.revision)
   useEffect(() => {
+    setPendingEntries(payload.pendingEntries ?? [])
+  }, [loadedKey, payload.pendingEntries])
+  useEffect(() => {
     if (seededKey.current === loadedKey && seededRevision.current === payload.revision) return
     seededKey.current = loadedKey
     seededRevision.current = payload.revision
     setRows(seedRows(payload, pickers,workFamily,quickProjectId))
     setStatus(payload.status)
+    setPendingEntries(payload.pendingEntries ?? [])
+    setAdditionalReview(false)
     setRevision(payload.revision)
     setDirty(false)
     setStaleError(null)
@@ -490,6 +499,7 @@ export function WeeklyGrid({
   const applyPayload = (data: WeekPayload) => {
     setRows(seedRows(data, pickers,workFamily,quickProjectId))
     setStatus(data.status)
+    setPendingEntries(data.pendingEntries ?? [])
     setDirty(false)
     router.refresh()
   }
@@ -532,6 +542,16 @@ export function WeeklyGrid({
       applyPayload(data)
       setNotice(t('grid.submittedToast'))
       toast.success(t('grid.submittedToast'))
+    }
+  }
+  const onSubmitAdditional = async (selections: AdditionalTimeSelection[], reason: string) => {
+    if (!employeeId || !canManage || !requireApproval || status !== 'approved') return
+    const data = await post('/api/timesheets/submit', { employee: employeeId, week, selections, reason },
+      'POST', undefined, 'submit-additional')
+    if (data) {
+      applyPayload(data)
+      setAdditionalReview(false)
+      setNotice(t('grid.submittedToast'))
     }
   }
 
@@ -723,6 +743,15 @@ export function WeeklyGrid({
   const cellInput =
     'w-full rounded-sm border-0 bg-transparent px-1.5 py-1 text-sm outline-none focus:ring-2 focus:ring-teal-500/60 dark:text-slate-100'
 
+  if (additionalReview && requireApproval && canManage && status === 'approved') {
+    return <UrlDrawer open closeHref={closeHref} size="2xl" initialFullscreen
+      beforeClose={async () => !busy && await confirmDiscard()}
+      title={<span>{t('additional.title')} · {pickers.employees.find(employee => employee.value === employeeId)?.label}
+        {' · '}{t('grid.weekOf', weekRange(week, locale))}</span>}>
+      <AdditionalTimeReview key={`${loadedKey}:${revision}`} entries={pendingEntries} pickers={pickers}
+        busy={busy} refusal={refusal} onBack={() => setAdditionalReview(false)} onSubmit={onSubmitAdditional} />
+    </UrlDrawer>
+  }
   return (
     <UrlDrawer
       open
@@ -740,6 +769,11 @@ export function WeeklyGrid({
       }
       headerActions={
         <>
+          {requireApproval && canManage && status === 'approved' && pendingEntries.length > 0 ? (
+            <Button size="sm" variant="outline" disabled={busy} onClick={() => setAdditionalReview(true)}>
+              {t('additional.action', { count: pendingEntries.length })}
+            </Button>
+          ) : null}
           {canSave && (payload.scheduled?.length ?? 0) > 0 ? (
             <Button size="sm" variant="outline" onClick={onFillFromSchedule} disabled={busy} title={tScheduling('prefill.timesheetHint')}>
               <CalendarCheck size={14} /> {tScheduling('prefill.fill')}

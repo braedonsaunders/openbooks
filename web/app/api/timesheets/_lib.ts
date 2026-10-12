@@ -258,11 +258,20 @@ export async function weekLeaveCover(
   `)).rows
 }
 
+export type PendingWeekEntry = {
+  id: string; updatedAt: string; workedOn: string; hours: string; status: string
+  projectId: string | null; itemId: string | null; fieldTicketId: string | null
+  fieldTicketNumber: string | null; fieldTicketStatus: string | null
+}
+
 export interface WeekPayload {
   employeeId: string | null
   week: string
   days: string[]
   rows: WeekRow[]
+  /** Saved pending entries are selected individually; aggregate grid rows
+   * never identify which additional time an operator intends to submit. */
+  pendingEntries?: PendingWeekEntry[]
   planned: PlannedRow[]
   /** Published bookings from boards that pre-fill timesheets, for one-click entry while the week is editable. */
   scheduled: ScheduledWork[]
@@ -329,16 +338,23 @@ export async function loadWeek(
       billing_status: 'unbilled' | 'billed'
       amends_entry_id: string | null
       corrects_entry_id: string | null
+      entry_updated_at: string
+      field_ticket_number: string | null
+      field_ticket_status: string | null
     }>(sql`
-    select id, worked_on, hours, time_type_id, item_id, project_id, work_order_id, wo_operation_id,
-           department_id, memo, is_billable, status, custom, rejection_reason,
-           invoiced_by_line_id, payroll_batch_ref, cost_journal_entry_id,
-           overhead_journal_entry_id, production_consumed_operation_id, field_ticket_id, billing_status, amends_entry_id, corrects_entry_id
-      from time_entries
-     where org_id = ${orgId}
-       and employee_party_id = ${ownedEmployee}
-       and worked_on >= ${days[0]} and worked_on <= ${days[6]}
-     order by created_at, id
+    select te.id, te.worked_on, te.hours, te.time_type_id, te.item_id, te.project_id, te.work_order_id, te.wo_operation_id,
+           te.department_id, te.memo, te.is_billable, te.status, te.custom, te.rejection_reason,
+           te.invoiced_by_line_id, te.payroll_batch_ref, te.cost_journal_entry_id,
+           te.overhead_journal_entry_id, te.production_consumed_operation_id, te.field_ticket_id, te.billing_status,
+           te.amends_entry_id, te.corrects_entry_id,
+           to_char(te.updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as entry_updated_at,
+           ticket.document_number as field_ticket_number, ticket.status as field_ticket_status
+      from time_entries te
+      left join documents ticket on ticket.org_id = te.org_id and ticket.id = te.field_ticket_id
+     where te.org_id = ${orgId}
+       and te.employee_party_id = ${ownedEmployee}
+       and te.worked_on >= ${days[0]} and te.worked_on <= ${days[6]}
+     order by te.created_at, te.id
   `))
   const provenance: EntryProvenance[] = res.rows.map((r) => ({
     invoicedByLineId: r.invoiced_by_line_id,
@@ -415,6 +431,11 @@ export async function loadWeek(
     week,
     days,
     rows,
+    pendingEntries: res.rows.filter(entry => entry.status === 'draft' || entry.status === 'rejected').map(entry => ({
+      id: entry.id, updatedAt: entry.entry_updated_at, workedOn: entry.worked_on, hours: String(entry.hours),
+      status: entry.status, projectId: entry.project_id, itemId: entry.item_id, fieldTicketId: entry.field_ticket_id,
+      fieldTicketNumber: entry.field_ticket_number, fieldTicketStatus: entry.field_ticket_status,
+    })),
     planned,
     scheduled,
     leaveCover,

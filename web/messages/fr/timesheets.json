@@ -1,4 +1,21 @@
 {
+  "additional": {
+    "title": "Examiner les heures supplémentaires à soumettre",
+    "action": "Examiner {count} écritures en attente",
+    "description": "Seules les écritures sélectionnées, en brouillon ou retournées, sont soumises. Les heures déjà approuvées et les écritures non sélectionnées restent inchangées.",
+    "empty": "Aucune écriture en attente.",
+    "date": "Date",
+    "project": "Projet",
+    "source": "Source",
+    "directTime": "Saisie directe des heures",
+    "item": "Article de service",
+    "hours": "Heures",
+    "timeStatus": "Statut des heures",
+    "reason": "Motif de la soumission complémentaire (10–500 caractères)",
+    "back": "Retour à la feuille de temps",
+    "submitting": "Soumission…",
+    "submit": "Soumettre {count} écritures sélectionnées"
+  },
   "list": {
     "title": "Feuilles de temps hebdomadaires",
     "description": "Le temps des employés par semaine — saisissez, soumettez et approuvez les heures sur chaque chantier.",
