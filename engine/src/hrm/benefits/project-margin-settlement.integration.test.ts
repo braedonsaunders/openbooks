@@ -151,9 +151,13 @@ for (const legacy of [false, true]) {
       const retried = await settleIncentivePeriod(query);
       assert.deepEqual(retried.awards.map(a => a.id),[awardId]);
       assert.deepEqual(await readHistory(),before,"same-span retry makes no new award or history write");
-      const snapshot = retried.awards[0]!.sourceSnapshot as {
-        measurement:{ settlement:{ projectMargin:ProjectMarginSnapshot;digest:string } } };
-      const retained = snapshot.measurement.settlement;
+      const stored = (await db.execute<{ id:string;source_snapshot:{
+        measurement:{ settlement:{ projectMargin:ProjectMarginSnapshot;digest:string } } } }>(sql`
+        select id,source_snapshot from hrm_benefit_awards
+        where org_id=${h.org.orgId} and program_id=${program.id} and id=${awardId}`)).rows;
+      assert.equal(stored.length,1,"retained protected award evidence exists in the same organization");
+      assert.equal(stored[0]!.id,awardId);
+      const retained = stored[0]!.source_snapshot.measurement.settlement;
       assert.equal(Object.hasOwn(retained.projectMargin,"asOf"),!legacy);
       assert.equal(retained.digest,retained.projectMargin.digest);
       if (!legacy) assert.equal(retained.projectMargin.asOf,query.asOf);
