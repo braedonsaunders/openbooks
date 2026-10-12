@@ -12,6 +12,9 @@ export type SignedReviewSubject = {
 export type ReconciliationReviewProof = {
   digest: string; signOffDigest: string; statementDigest: string; matchDigest: string; ledgerDigest: string
   completeLedgerDigest:string; completeLedgerLines:number
+  outstandingDigest:string; outstandingEntries:number; outstandingJournalLines:number; outstandingEffect:string
+  outstandingLegalEntityEffects:{subsidiaryId:string|null;amount:string}[]
+  lateUnclearedJournalLines:number; neutralBasis:'late_movements'|'outstanding_movements'|null
   statements: number; statementLines: number; matches: number; journalLines: number
   lateEntries: number; lateJournalLines: number; lateEffect: string
   legalEntityEffects: { subsidiaryId: string | null; amount: string }[]
@@ -44,8 +47,8 @@ async function hashRows(
   return { digest: hash.digest('hex'), count }
 }
 
-/** Complete current statement, match and late-ledger evidence for the
- * immutable original sign-off. Reviewed late lines remain uncleared. */
+/** Complete current statement, match and account-ledger evidence for the
+ * immutable original sign-off. Review preserves every clearing stamp. */
 export async function reconciliationReviewProof(tx: SqlExecutor, subject: SignedReviewSubject, deadline = Date.now()+120_000): Promise<ReconciliationReviewProof> {
   const signOff = await hashRows(tx,after=>sql`
     select al.id::text as id,encode(sha256(convert_to(to_jsonb(al)::text,'UTF8')),'hex') as value
@@ -108,12 +111,30 @@ export async function reconciliationReviewProof(tx: SqlExecutor, subject: Signed
        ${after ? sql`and jl.id>${after}::uuid` : sql``}
      order by jl.id limit 500 for share of jl,je
   `,deadline)
+  const outstandingIds = new Set<string>(), outstandingEffects = new Map<string|null,bigint>()
+  const outstanding = await hashRows(tx,after=>sql`
+    select jl.id::text as id,encode(sha256(convert_to(jsonb_build_object('line',to_jsonb(jl),
+      'journal',to_jsonb(je))::text,'UTF8')),'hex') as value,
+      jsonb_build_object('entryId',je.id,'subsidiaryId',jl.subsidiary_id,'transactionAmount',jl.txn_amount::text,'reconciledAt',jl.reconciled_at)::text as detail
+      from journal_lines jl join journal_entries je on je.org_id=jl.org_id and je.id=jl.entry_id
+     where jl.org_id=${subject.orgId} and jl.account_id=${subject.accountId} and jl.currency=${subject.currency}
+       and je.book_id=${subject.bookId} and je.status in ('posted','reversed')
+       and je.posting_date<=${subject.throughDate}::date and jl.reconciled_at is null
+       ${after ? sql`and jl.id>${after}::uuid` : sql``}
+     order by jl.id limit 500 for share of jl,je
+  `,deadline,row=>{
+    const value=JSON.parse(row.detail??'null') as {entryId:string;subsidiaryId:string|null;transactionAmount:string}|null
+    if (!value) throw new BankingError('An uncleared account line has no retained review identity.')
+    outstandingIds.add(value.entryId)
+    outstandingEffects.set(value.subsidiaryId,(outstandingEffects.get(value.subsidiaryId)??0n)+toUnits(value.transactionAmount))
+  })
   const lateEntryIds = new Set<string>()
   const effects = new Map<string | null, bigint>()
+  let lateUnclearedJournalLines=0
   const late = await hashRows(tx, after => sql`
     select jl.id::text as id,encode(sha256(convert_to(jsonb_build_object('line',to_jsonb(jl),
       'journal',to_jsonb(je))::text,'UTF8')),'hex') as value,
-      jsonb_build_object('entryId',je.id,'subsidiaryId',jl.subsidiary_id,'transactionAmount',jl.txn_amount::text)::text as detail
+      jsonb_build_object('entryId',je.id,'subsidiaryId',jl.subsidiary_id,'transactionAmount',jl.txn_amount::text,'reconciledAt',jl.reconciled_at)::text as detail
       from journal_lines jl join journal_entries je on je.org_id=jl.org_id and je.id=jl.entry_id
      where jl.org_id=${subject.orgId} and jl.account_id=${subject.accountId}
        and jl.currency=${subject.currency} and je.book_id=${subject.bookId}
@@ -123,19 +144,29 @@ export async function reconciliationReviewProof(tx: SqlExecutor, subject: Signed
      order by jl.id limit 500 for share of jl,je
   `,deadline,row => {
     const value = JSON.parse(row.detail ?? 'null') as {
-      subsidiaryId:string|null;entryId:string;transactionAmount:string
+      subsidiaryId:string|null;entryId:string;transactionAmount:string;reconciledAt:string|null
     } | null
     if (!value) throw new BankingError('A late ledger line has no retained review identity.')
     lateEntryIds.add(value.entryId)
+    if (value.reconciledAt===null) lateUnclearedJournalLines++
     const entity = value.subsidiaryId
     effects.set(entity,(effects.get(entity) ?? 0n)+toUnits(value.transactionAmount))
   })
   const legalEntityEffects = [...effects].sort(([a],[b]) => (a ?? '').localeCompare(b ?? ''))
     .map(([subsidiaryId,amount])=>({subsidiaryId,amount:fromUnits(amount)}))
+  const outstandingLegalEntityEffects = [...outstandingEffects].sort(([a],[b])=>(a??'').localeCompare(b??''))
+    .map(([subsidiaryId,amount])=>({subsidiaryId,amount:fromUnits(amount)}))
+  const neutralBasis: ReconciliationReviewProof['neutralBasis'] = legalEntityEffects.every(effect=>toUnits(effect.amount)===0n)
+    ? 'late_movements'
+    : lateUnclearedJournalLines===late.count && outstanding.count>0
+      && outstandingLegalEntityEffects.every(effect=>toUnits(effect.amount)===0n) ? 'outstanding_movements' : null
   const statementDigest = createHash('sha256').update(statements.digest).update(statementLines.digest).digest('hex')
   const proof = {
     signOffDigest:signOff.digest,statementDigest, matchDigest:matches.digest, ledgerDigest:late.digest,
     completeLedgerDigest:completeLedger.digest,completeLedgerLines:completeLedger.count,
+    outstandingDigest:outstanding.digest,outstandingEntries:outstandingIds.size,outstandingJournalLines:outstanding.count,
+    outstandingEffect:fromUnits([...outstandingEffects.values()].reduce((sum,amount)=>sum+amount,0n)),
+    outstandingLegalEntityEffects,lateUnclearedJournalLines,neutralBasis,
     statements:statements.count, statementLines:statementLines.count, matches:matches.count,
     journalLines:matchedJournalIds.size, lateEntries:lateEntryIds.size, lateJournalLines:late.count,
     lateEffect:fromUnits([...effects.values()].reduce((total,amount)=>total+amount,0n)),
@@ -183,7 +214,7 @@ export async function applicableSignOffRevalidation(
   const own = await currentSignOffRevalidation(tx,subject,proof)
   if (own) return own
   if (proof.reversedMatches>0 || proof.lateEntries===0
-    || proof.legalEntityEffects.some(effect=>toUnits(effect.amount)!==0n)) return null
+    || proof.neutralBasis===null) return null
   type Candidate = {id:string;throughDate:string;statementBalance:string;signedOffAt:string;signedOffBy:string}
   const candidates = (await tx.execute<Candidate>(sql`
     select r.id,r.through_date::text as "throughDate",r.statement_balance::text as "statementBalance",
@@ -203,8 +234,8 @@ export async function applicableSignOffRevalidation(
       statementBalance:fromUnits(toUnits(candidate.statementBalance)),signedOffAt:candidate.signedOffAt,
       signedOffBy:candidate.signedOffBy}
     const current = await reconciliationReviewProof(tx,original,deadline)
-    if (current.ledgerDigest!==proof.ledgerDigest || current.reversedMatches>0
-      || current.legalEntityEffects.some(effect=>toUnits(effect.amount)!==0n)) continue
+    if (current.ledgerDigest!==proof.ledgerDigest || current.reversedMatches>0 || current.neutralBasis===null
+      || (current.neutralBasis==='outstanding_movements' && current.outstandingDigest!==proof.outstandingDigest)) continue
     const certificate = await currentSignOffRevalidation(tx,original,current)
     if (certificate) return {...certificate,inherited:true}
   }
@@ -237,8 +268,8 @@ export async function originalSignOffProofAgrees(
 export function assertNeutralReviewProof(proof: ReconciliationReviewProof): void {
   if (proof.statements===0 || proof.statementLines===0) throw new BankingError('Imported statement evidence through the cutoff is missing. Restore and review its retained source before changing reconciliation history.')
   if (proof.reversedMatches>0) throw new BankingError('A matched journal has been reversed. Correct its reconciliation evidence through the governed withdrawal process.')
-  if (proof.legalEntityEffects.some(effect=>toUnits(effect.amount)!==0n)) {
-    throw new BankingError('Late postings change the balance of a legal entity. Review and correct the reconciliation; a neutral-history review cannot clear this difference.')
+  if (proof.neutralBasis===null) {
+    throw new BankingError('Late postings change the statement-currency balance of a legal entity and the complete uncleared set does not offset it. Review and correct the reconciliation; a neutral-history review cannot clear this difference.')
   }
   if (proof.lateEntries===0) throw new BankingError('There are no late postings to review for this sign-off.')
 }

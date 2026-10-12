@@ -1398,19 +1398,22 @@
       "confirmDetail": "Eröffnungssaldo {amount} ab {date} · Grund: {reason}",
       "adjustDetail": "Bis {beforeDate} → {afterDate} · Saldo {beforeBalance} → {afterBalance}",
       "revalidationReason": "Prüfgrund: {reason}",
-      "revalidationBasis": "Saldo {balance} zum {date}; {entries} verspätete Buchungen geprüft. Ursprüngliche Freigabe {original} bleibt erhalten; verspätete Positionen bleiben unabgestimmt."
+      "revalidationBasis": "Saldo {balance} zum {date}; {entries} Kontobewegungen geprüft. Ursprüngliche Freigabe {original} bleibt erhalten; Ausgleichsmarkierungen bleiben unverändert."
     }
   },
   "revalidation": {
-    "action": "Neutrale verspätete Buchungen prüfen",
+    "action": "Neutrale Kontohistorie prüfen",
     "title": "Diese Freigabe unabhängig prüfen",
     "reason": "Prüfgrund (10–500 Zeichen)",
     "confirm": "Prüfung erfassen",
-    "preview": "Der freigegebene Saldo zum {date} bleibt {balance}. Die aktuellen Nachweise enthalten {entries} verspätete Buchungen ({lines} Kontopositionen), ohne Nettoauswirkung je Rechtseinheit. Ursprünglicher Kontoauszug, Zuordnungen und Freigabe bleiben unverändert. Diese verspäteten Positionen bleiben unabgestimmt. Bestätigen Sie erst nach Prüfung der angezeigten Bewegungen.",
+    "preview": "Der bestätigte Saldo bis {date} bleibt {balance}. Prüfen Sie {entries} verspätete Buchungen ({lines} Kontenzeilen) anhand der erhaltenen Nachweise. Auszug, Zuordnungen, Bestätigung und Ausgleichsmarkierungen bleiben unverändert.",
     "failed": "Diese Freigabeprüfung konnte nicht abgeschlossen werden. Laden Sie die Nachweise erneut und versuchen Sie es noch einmal.",
     "recorded": "Unabhängige Freigabeprüfung erfasst",
     "reasonRequired": "Geben Sie einen Prüfgrund mit 10–500 Zeichen ein.",
     "reviewedBadge": "Neutrale Historie geprüft",
-    "reviewedBasis": "Prüfnachweis bis {date}"
+    "reviewedBasis": "Prüfnachweis bis {date}",
+    "latePreview": "Verspätete Bewegungen haben in jeder rechtlichen Einheit einen Nettoeffekt von null.",
+    "outstandingPreview": "Alle offenen Bewegungen umfassen {entries} Buchungen ({lines} Zeilen), netto {amount} je Einheit, einschließlich {lateAmount} verspäteter Bewegungen und ihrer erhaltenen Gegenbuchungen. Prüfen Sie alle Bewegungen vor der Bestätigung.",
+    "reviewedOutstandingEffect": "Verspätete Bewegung {lateAmount}; geprüfte offene Bewegungen {amount}."
   }
 }

@@ -190,7 +190,7 @@ function HistoryDetail({ row }: { row: HistoryRow }) {
       return <div className="space-y-1">
         <p>{t('history.revalidationReason',{reason:event.reason})}</p>
         <p>{t('history.revalidationBasis',{date:event.throughDate,balance:event.statementBalance,
-          entries:event.lateEntries,original:event.originalSignedOffAt})}</p>
+          entries:event.reviewedEntries,original:event.originalSignedOffAt})}</p>
         <p className="break-all font-mono text-xs">{event.evidenceDigest}</p>
       </div>
     case 'sign_off':

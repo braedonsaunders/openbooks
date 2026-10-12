@@ -1,5 +1,6 @@
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction, type SqlExecutor } from '../platform/db.ts'
+import { canonicalJson } from '../platform/canonical-json.ts'
 import { isUuid } from '../platform/uuid.ts'
 import { fromUnits, toUnits } from '../money/money.ts'
 import { lockActorCommandAuthority } from '../organization/actor-command-authority.ts'
@@ -64,7 +65,8 @@ async function reviewInTransaction(tx: SqlExecutor, id: string, ctx: BankingCont
       join journal_entries je on je.org_id=jl.org_id and je.id=jl.entry_id
      where jl.org_id=${ctx.orgId} and jl.account_id=${row.account_id} and jl.currency=${row.currency}
       and je.book_id=${bookId} and je.status in ('posted','reversed')
-      and je.posting_date<=${row.through_date}::date and je.posted_at>${row.signed_off_at}::timestamptz
+      and je.posting_date<=${row.through_date}::date
+      and (je.posted_at>${row.signed_off_at}::timestamptz or jl.reconciled_at is null)
   `)).rows
   const entities = [...new Set([row.subsidiary_id,...affected.map(effect=>effect.subsidiaryId)])]
   const periods: {id:string;name:string;subsidiaryId:string|null}[] = []
@@ -102,11 +104,24 @@ async function reviewInTransaction(tx: SqlExecutor, id: string, ctx: BankingCont
     statementBalance:fromUnits(toUnits(row.statement_balance)),signedOffAt:row.signed_off_at,signedOffBy:row.signed_off_by,
   }
   const proof = await reconciliationReviewProof(tx,subject)
+  const previous = (await tx.execute<{proof:{ledgerDigest?:string;completeLedgerDigest?:string;
+    outstandingLegalEntityEffects?:{subsidiaryId:string|null;amount:string}[]}}>(sql`
+    select changes->'proof' as proof from audit_log where org_id=${ctx.orgId} and table_name='reconciliations'
+      and row_id=${id} and action='update' and changes->>'operation'='revalidate_sign_off'
+      and changes->>'originalSignedOffAt'=${row.signed_off_at}
+     order by at desc,id desc limit 1
+  `)).rows[0]?.proof
+  if (previous?.ledgerDigest===proof.ledgerDigest && previous.completeLedgerDigest!==proof.completeLedgerDigest
+    && Array.isArray(previous.outstandingLegalEntityEffects)
+    && canonicalJson(previous.outstandingLegalEntityEffects.filter(effect=>toUnits(effect.amount)!==0n))
+      !==canonicalJson(proof.outstandingLegalEntityEffects.filter(effect=>toUnits(effect.amount)!==0n))) {
+    throw new BankingError('The uncleared balance changed outside the identified late movements. Review the new ledger sources before recording another neutral-history review.')
+  }
   assertNeutralReviewProof(proof)
-  if (proof.legalEntityEffects.some(effect=>!entities.includes(effect.subsidiaryId))) {
+  if ([...proof.legalEntityEffects,...proof.outstandingLegalEntityEffects].some(effect=>!entities.includes(effect.subsidiaryId))) {
     throw new BankingError('The affected legal entities changed during review. Reload its current evidence before confirming.')
   }
-  if (proof.legalEntityEffects.some(effect=>!subsidiaryScopeAllows(actualScope,effect.subsidiaryId)
+  if ([...proof.legalEntityEffects,...proof.outstandingLegalEntityEffects].some(effect=>!subsidiaryScopeAllows(actualScope,effect.subsidiaryId)
     || !subsidiaryScopeAllows(ctx.allowedSubsidiaryIds,effect.subsidiaryId))) throw new ScopeNotFoundError()
   const excluded = (await tx.execute<{count:number}>(sql`
     select count(*)::int as count from bank_statement_lines where org_id=${ctx.orgId}
@@ -163,7 +178,8 @@ export async function revalidateReconciliationSignOff(id: string, input: {
         originalSignedOffAt:review.subject.signedOffAt,originalSignedOffBy:review.subject.signedOffBy,
         proof:review.preview.proof,statementBalance:review.preview.statementBalance,
         throughDate:review.subject.throughDate,currency:review.subject.currency,
-        lateLinesRemainUncleared:true,originalEvidenceUnchanged:true,
+        lateLinesRemainUncleared:review.preview.proof.lateUnclearedJournalLines===review.preview.proof.lateJournalLines,
+        clearingStampsUnchanged:true,neutralBasis:review.preview.proof.neutralBasis,originalEvidenceUnchanged:true,
       })}::jsonb,${ctx.userId}) returning id,at::text as at
     `)).rows[0]
     if (!audit) throw new BankingError('The review certificate was not recorded. Nothing changed.')

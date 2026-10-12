@@ -1334,7 +1334,7 @@ export async function reconciliationStaleness(
       .map((value) => value.slice(0, 10))
       .sort()[0] ?? null;
     let revalidation: SignOffRevalidationCertificate | null = null;
-    if (late.length > 0 && reversed.length === 0 && isZero(clearedEffect)) {
+    if (late.length > 0 && reversed.length === 0) {
       // Healthy unreviewed sessions retain the ordinary lightweight read.
       // A retained certificate requires full keyed evidence comparison;
       // its timestamp alone never suppresses a later financial event.

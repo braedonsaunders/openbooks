@@ -1398,19 +1398,22 @@
       "confirmDetail": "期初余额 {amount}（自 {date} 起）· 原因：{reason}",
       "adjustDetail": "截至 {beforeDate} → {afterDate} · 余额 {beforeBalance} → {afterBalance}",
       "revalidationReason": "审核理由：{reason}",
-      "revalidationBasis": "截至{date}的余额为{balance}；已审核{entries}笔迟记分录。原签核{original}保留，迟记行仍未对账。"
+      "revalidationBasis": "截至{date}的余额为{balance}；已复核{entries}笔账户变动。原签核{original}和核销标记保持不变。"
     }
   },
   "revalidation": {
-    "action": "审核无净影响的迟记分录",
+    "action": "复核余额无变化的账户历史",
     "title": "独立审核此次签核",
     "reason": "审核理由（10–500字符）",
     "confirm": "记录审核",
-    "preview": "截至{date}的签核余额仍为{balance}。当前凭证包含{entries}笔迟记分录（该账户共{lines}行），对每个法律实体的净影响均为零。原始银行对账单、匹配和签核保持不变。这些迟记行仍未对账。请先审核所显示的变动，再确认。",
+    "preview": "截至{date}的已签署余额仍为{balance}。请根据保留证据复核{entries}笔迟记分录（{lines}行）。账单、匹配、签署及核销标记均保持不变。",
     "failed": "无法完成此次签核审核。请重新加载凭证后重试。",
     "recorded": "已记录独立签核审核",
     "reasonRequired": "请输入10–500字符的审核理由。",
     "reviewedBadge": "已复核余额无变化的历史记录",
-    "reviewedBasis": "截至{date}的复核证据"
+    "reviewedBasis": "截至{date}的复核证据",
+    "latePreview": "迟记变动在每个法律实体中的净影响均为零。",
+    "outstandingPreview": "完整未核销集合含{entries}笔分录（{lines}行），每个实体净额为{amount}，包括迟记变动{lateAmount}及其保留的对应分录。确认前请复核全部变动。",
+    "reviewedOutstandingEffect": "迟记变动{lateAmount}；已复核未核销集合{amount}。"
   }
 }

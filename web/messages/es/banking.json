@@ -1398,19 +1398,22 @@
       "confirmDetail": "Apertura {amount} desde {date} · motivo: {reason}",
       "adjustDetail": "Hasta {beforeDate} → {afterDate} · saldo {beforeBalance} → {afterBalance}",
       "revalidationReason": "Motivo de revisión: {reason}",
-      "revalidationBasis": "Saldo {balance} al {date}; {entries} asientos tardíos revisados. Se conserva la validación original {original}; las líneas tardías siguen sin conciliar."
+      "revalidationBasis": "Saldo {balance} al {date}; {entries} movimientos de la cuenta revisados. Se conserva la validación original {original}; las marcas de conciliación permanecen sin cambios."
     }
   },
   "revalidation": {
-    "action": "Revisar movimientos tardíos neutros",
+    "action": "Revisar historial neutro de la cuenta",
     "title": "Revisar esta validación de forma independiente",
     "reason": "Motivo de la revisión (10–500 caracteres)",
     "confirm": "Registrar revisión",
-    "preview": "El saldo validado al {date} sigue siendo {balance}. La evidencia actual contiene {entries} asientos tardíos ({lines} líneas de la cuenta), sin efecto neto en ninguna entidad legal. El extracto, las conciliaciones y la validación originales se conservan. Estas líneas tardías siguen sin conciliar. Confirme solo después de revisar los movimientos mostrados.",
+    "preview": "El saldo firmado hasta {date} sigue siendo {balance}. Revise {entries} asientos tardíos ({lines} líneas) con la evidencia conservada. El estado, las coincidencias, la firma y las marcas de conciliación permanecen sin cambios.",
     "failed": "No se pudo completar la revisión. Recargue la evidencia e inténtelo de nuevo.",
     "recorded": "Revisión independiente registrada",
     "reasonRequired": "Introduzca un motivo de revisión de 10–500 caracteres.",
     "reviewedBadge": "Historial neutro revisado",
-    "reviewedBasis": "Evidencia revisada hasta {date}"
+    "reviewedBasis": "Evidencia revisada hasta {date}",
+    "latePreview": "Los movimientos tardíos tienen efecto neto cero en cada entidad legal.",
+    "outstandingPreview": "El conjunto completo sin conciliar contiene {entries} asientos ({lines} líneas), neto {amount} por entidad, incluido el movimiento tardío de {lateAmount} y sus contrapartidas conservadas. Revise todos los movimientos antes de confirmar.",
+    "reviewedOutstandingEffect": "Movimiento tardío {lateAmount}; conjunto sin conciliar revisado {amount}."
   }
 }

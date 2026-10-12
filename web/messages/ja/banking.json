@@ -1398,19 +1398,22 @@
       "confirmDetail": "開始残高 {amount}（{date} から）· 理由: {reason}",
       "adjustDetail": "{beforeDate} → {afterDate} まで · 残高 {beforeBalance} → {afterBalance}",
       "revalidationReason": "確認理由：{reason}",
-      "revalidationBasis": "{date}までの残高{balance}。遅延仕訳{entries}件を確認しました。元の承認{original}は保持され、遅延明細は未照合のままです。"
+      "revalidationBasis": "{date}までの残高{balance}。口座の変動{entries}件を確認しました。元の承認{original}と消込状態は変更されません。"
     }
   },
   "revalidation": {
-    "action": "残高に影響しない遅延仕訳を確認",
+    "action": "残高に影響しない口座履歴を確認",
     "title": "この承認を独立して確認",
     "reason": "確認理由（10〜500文字）",
     "confirm": "確認を記録",
-    "preview": "{date}までの承認済残高は{balance}のままです。現在の証憑には遅延仕訳が{entries}件（口座明細{lines}行）あり、各法人の純額への影響はゼロです。元の銀行明細、照合、承認は変更されません。これらの遅延明細は未照合のままです。表示された取引を確認してから確定してください。",
+    "preview": "{date}までの署名済み残高は{balance}のままです。保存された証拠と{entries}件の遅延仕訳（{lines}行）を照合してください。明細、対応関係、署名、消込状態は変更されません。",
     "failed": "承認の確認を完了できませんでした。証憑を再読み込みして再試行してください。",
     "recorded": "独立した承認確認を記録しました",
     "reasonRequired": "確認理由を10〜500文字で入力してください。",
     "reviewedBadge": "残高に影響しない履歴を確認済み",
-    "reviewedBasis": "{date}までの確認証拠"
+    "reviewedBasis": "{date}までの確認証拠",
+    "latePreview": "遅延した変動の純額は各法人でゼロです。",
+    "outstandingPreview": "未消込の全体は{entries}件（{lines}行）で、各法人の純額は{amount}です。遅延変動{lateAmount}と保存された対応仕訳を含め、確認前にすべての変動を確認してください。",
+    "reviewedOutstandingEffect": "遅延変動{lateAmount}、確認済み未消込集合{amount}。"
   }
 }

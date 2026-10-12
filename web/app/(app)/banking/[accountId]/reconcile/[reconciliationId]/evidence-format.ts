@@ -64,7 +64,7 @@ export type HistoryEventRow =
       throughDate:string
       statementBalance:string
       originalSignedOffAt:string
-      lateEntries:string
+      reviewedEntries:string
       evidenceDigest:string
     }
   | {
@@ -184,7 +184,7 @@ function historyEventRow(event: ReconciliationHistoryEvent, f: EvidenceFormatter
       return {kind:'revalidate_sign_off',reason:orMissing(event.reason,value=>value),
         throughDate:orMissing(event.throughDate,f.civilDate),statementBalance:orMissing(event.statementBalance,f.money),
         originalSignedOffAt:orMissing(event.originalSignedOffAt,f.timestamp),
-        lateEntries:orMissing(event.lateEntries,f.count),evidenceDigest:orMissing(event.evidenceDigest,value=>value)}
+        reviewedEntries:orMissing(event.reviewedEntries,f.count),evidenceDigest:orMissing(event.evidenceDigest,value=>value)}
     case 'sign_off':
       return {
         kind: 'sign_off',

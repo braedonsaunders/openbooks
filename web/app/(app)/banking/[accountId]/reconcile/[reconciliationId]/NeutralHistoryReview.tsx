@@ -14,7 +14,7 @@ import { viewerDate } from '@/lib/format'
 
 type Preview = {
   reconciliationId: string; throughDate: string; currency: string; statementBalance: string
-  proof: {digest:string;lateEntries:number;lateJournalLines:number;lateEffect:string}
+  proof: {digest:string;lateEntries:number;lateJournalLines:number;lateEffect:string;neutralBasis:'late_movements'|'outstanding_movements';outstandingEntries:number;outstandingJournalLines:number;outstandingEffect:string}
 }
 function previewValue(value: unknown, id: string): Preview | null {
   if (!value || typeof value!=='object') return null
@@ -26,7 +26,13 @@ function previewValue(value: unknown, id: string): Preview | null {
     || typeof proof.lateEntries!=='number' || !Number.isSafeInteger(proof.lateEntries) || proof.lateEntries<1
     || typeof proof.lateJournalLines!=='number' || !Number.isSafeInteger(proof.lateJournalLines)
     || proof.lateJournalLines<proof.lateEntries || typeof proof.lateEffect!=='string'
-    || canonicalDecimal(proof.lateEffect,4)!=='0') return null
+    || canonicalDecimal(proof.lateEffect,4)===null
+    || !['late_movements','outstanding_movements'].includes(String(proof.neutralBasis))
+    || (proof.neutralBasis==='late_movements' && canonicalDecimal(proof.lateEffect,4)!=='0')
+    || (proof.neutralBasis==='outstanding_movements' && (typeof proof.outstandingEffect!=='string'
+      || canonicalDecimal(proof.outstandingEffect,4)!=='0' || !Number.isSafeInteger(proof.outstandingEntries)
+      || Number(proof.outstandingEntries)<1 || !Number.isSafeInteger(proof.outstandingJournalLines)
+      || Number(proof.outstandingJournalLines)<Number(proof.lateJournalLines)))) return null
   return data as Preview
 }
 
@@ -53,7 +59,9 @@ export function NeutralHistoryReview({ reconciliationId, disabled }: {reconcilia
     const current: Preview = preview
     const reason = await promptDialog({title:t('title'),label:t('reason'),multiline:true,confirmLabel:t('confirm'),
       message:t('preview',{date:viewerDate(current.throughDate,locale,'UTC'),balance:money(current.statementBalance,{currency:current.currency}),
-        entries:current.proof.lateEntries,lines:current.proof.lateJournalLines})})
+        entries:current.proof.lateEntries,lines:current.proof.lateJournalLines})+(current.proof.neutralBasis==='outstanding_movements'
+        ? ' '+t('outstandingPreview',{entries:current.proof.outstandingEntries,lines:current.proof.outstandingJournalLines,
+          amount:money(current.proof.outstandingEffect,{currency:current.currency}),lateAmount:money(current.proof.lateEffect,{currency:current.currency})}) : ' '+t('latePreview'))})
     if (!live.current || reason===null) return
     if (reason.trim().length<10 || reason.trim().length>500) {action.refuse(t('reasonRequired'),t('failed'));return}
     await action.execute(async () => {

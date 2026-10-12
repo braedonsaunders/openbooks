@@ -45,7 +45,7 @@ registerHooks({
     if (specifier.endsWith('/lib/prompt')) {
       return {
         shortCircuit: true,
-        url: 'data:text/javascript,export async function promptDialog(o){globalThis.__reconcileTestPromptOptions=o;return globalThis.__reconcileTestPrompt ?? "not a transaction"}',
+        url: 'data:text/javascript,export async function promptDialog(o){globalThis.__reconcileTestPromptOptions=o;return Object.hasOwn(globalThis,"__reconcileTestPrompt")?globalThis.__reconcileTestPrompt:"not a transaction"}',
       }
     }
     return next(specifier, context)
@@ -750,9 +750,9 @@ test('neutral review obtains the exact basis before its reasoned confirmation, a
     return init?.method==='POST'
       ? Response.json({error:'The reviewed ledger evidence changed. Reload the review.'},{status:409})
       : Response.json({reconciliationId:'rec-1',throughDate:'2026-09-10',currency:'CAD',statementBalance:'17070.0100',
-        proof:{digest,lateEntries:2,lateJournalLines:2,lateEffect:'0.0000'}})
+        proof:{digest,lateEntries:2,lateJournalLines:2,lateEffect:'0.0000',neutralBasis:'late_movements'}})
   }) as typeof fetch,{status:'signed_off',stale:{badge:'Stale',effect:'0',late:[],reversed:[]}})
-  const button=[...document.querySelectorAll('button')].find(row=>row.textContent?.includes('Review neutral late history'))
+  const button=[...document.querySelectorAll('button')].find(row=>row.textContent?.includes('Review neutral account history'))
   assert.ok(button)
   await act(async()=>{button.click();await tick();await tick();await tick()})
   assert.deepEqual(calls,[{method:'GET',body:null},{method:'POST',body:{expectedDigest:digest,reason:'not a transaction'}}])
@@ -769,6 +769,28 @@ test('a reviewed later sign-off retains late movements and links its actual earl
   })
   assert.ok(document.body.textContent?.includes('ADJ-1'))
   assert.equal(document.querySelector('a[href="/banking/acc/reconcile/earlier"]')?.textContent,'Review evidence through 2026-07-31')
-  assert.equal([...document.querySelectorAll('button')].some(row=>row.textContent?.includes('Review neutral late history')),false)
+  assert.equal([...document.querySelectorAll('button')].some(row=>row.textContent?.includes('Review neutral account history')),false)
   assert.equal(calls.length,0)
+})
+
+
+test('the review discloses a nonzero late movement and its complete zero-net uncleared set before a cancelled confirmation',async(t)=>{
+  const state=globalThis as Record<string,unknown>
+  const previous=state.__reconcileTestPrompt
+  state.__reconcileTestPrompt=null
+  t.after(()=>{if(previous===undefined)delete state.__reconcileTestPrompt;else state.__reconcileTestPrompt=previous})
+  const calls:string[]=[]
+  await mountWorkspace(t,(async(_input,init)=>{
+    calls.push(init?.method??'GET')
+    return Response.json({reconciliationId:'rec-1',throughDate:'2026-09-10',currency:'CAD',statementBalance:'17070.0100',
+      proof:{digest:'b'.repeat(64),lateEntries:1,lateJournalLines:1,lateEffect:'8000.0000',neutralBasis:'outstanding_movements',
+        outstandingEntries:2,outstandingJournalLines:2,outstandingEffect:'0.0000'}})
+  }) as typeof fetch,{status:'signed_off',stale:{badge:'Stale',effect:'8000',late:[],reversed:[]}})
+  const button=[...document.querySelectorAll('button')].find(row=>row.textContent?.includes('Review neutral account history'))
+  assert.ok(button)
+  await act(async()=>{button.click();await tick();await tick();await tick()})
+  const prompt=state.__reconcileTestPromptOptions as {message:string}
+  assert.ok(prompt.message.includes('8,000'),'the actual nonzero late movement is disclosed')
+  assert.ok(prompt.message.includes('retained counterparts'),'the complete reviewed set includes the older evidence')
+  assert.deepEqual(calls,['GET'],'cancelling review records no financial or audit command')
 })

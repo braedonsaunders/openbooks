@@ -1398,19 +1398,22 @@
       "confirmDetail": "Ouverture {amount} à partir du {date} · motif : {reason}",
       "adjustDetail": "Jusqu'au {beforeDate} → {afterDate} · solde {beforeBalance} → {afterBalance}",
       "revalidationReason": "Motif de l’examen : {reason}",
-      "revalidationBasis": "Solde {balance} au {date} ; {entries} écritures tardives examinées. La validation d’origine du {original} est conservée ; les lignes tardives restent non rapprochées."
+      "revalidationBasis": "Solde {balance} au {date} ; {entries} mouvements du compte examinées. La validation d’origine du {original} est conservée ; les marques de compensation restent inchangées."
     }
   },
   "revalidation": {
-    "action": "Examiner les écritures tardives neutres",
+    "action": "Examiner l’historique neutre du compte",
     "title": "Examiner cette validation indépendamment",
     "reason": "Motif de l’examen (10 à 500 caractères)",
     "confirm": "Enregistrer l’examen",
-    "preview": "Le solde validé au {date} reste {balance}. Les pièces actuelles contiennent {entries} écritures tardives ({lines} lignes du compte), sans effet net dans chaque entité juridique. Le relevé, les rapprochements et la validation d’origine restent inchangés. Ces lignes tardives restent non rapprochées. Confirmez uniquement après avoir examiné les mouvements affichés.",
+    "preview": "Le solde signé au {date} reste {balance}. Examinez {entries} écritures tardives ({lines} lignes du compte) avec les preuves conservées. Le relevé, les rapprochements, la signature et les marques de compensation restent inchangés.",
     "failed": "L’examen de cette validation n’a pas pu aboutir. Rechargez les pièces et réessayez.",
     "recorded": "Examen indépendant de la validation enregistré",
     "reasonRequired": "Saisissez un motif de 10 à 500 caractères.",
     "reviewedBadge": "Historique neutre examiné",
-    "reviewedBasis": "Preuve examinée au {date}"
+    "reviewedBasis": "Preuve examinée au {date}",
+    "latePreview": "Les mouvements tardifs ont un effet net nul dans chaque entité juridique.",
+    "outstandingPreview": "L’ensemble non compensé contient {entries} écritures ({lines} lignes), soit {amount} dans chaque entité, y compris le mouvement tardif de {lateAmount} et ses contreparties conservées. Examinez tous ces mouvements avant confirmation.",
+    "reviewedOutstandingEffect": "Mouvement tardif {lateAmount} ; ensemble non compensé examiné {amount}."
   }
 }

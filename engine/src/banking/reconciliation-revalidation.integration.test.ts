@@ -137,7 +137,7 @@ test('a balance-changing late posting refuses neutral review without changing an
     const id=await f.signed(f.org.date,'250.00','250.00')
     await f.post('0.01')
     const before=await f.snapshot()
-    await assert.rejects(f.inOrg(()=>previewSignOffRevalidation(id,f.ctx())),/Late postings change the balance/)
+    await assert.rejects(f.inOrg(()=>previewSignOffRevalidation(id,f.ctx())),/Late postings change the statement-currency balance/)
     assert.equal(await f.auditCount(),0)
     assert.deepEqual(await f.snapshot(),before)
   }finally{await f.close()}
@@ -175,9 +175,37 @@ test('a transaction that began before sign-off and commits after review invalida
     assert.equal(changed.lateEntries.length,2,'the legacy timestamp predicate alone does not identify this later commit')
     assert.equal(changed.stale,true,'the complete ledger fingerprint invalidates the old certificate')
     assert.equal(await f.auditCount(),1)
+    await assert.rejects(f.inOrg(()=>previewSignOffRevalidation(id,f.ctx())),/uncleared balance changed outside the identified late movements/)
   }finally{
     release()
     await pending.catch(()=>{})
     await f.close()
   }
+})
+
+
+test('a late movement offset by retained older uncleared evidence is reviewed as one neutral set without clearing or discarding either source',enabled,async()=>{
+  const f=await fixture()
+  try {
+    await f.post('-8000.00')
+    const id=await f.signed(f.org.date,'250.00','250.00')
+    const next=new Date(f.org.date+'T00:00:00Z');next.setUTCDate(next.getUTCDate()+1)
+    const later=await f.signed(next.toISOString().slice(0,10),'100.00','350.00')
+    await f.post('8000.00')
+    const before=await f.snapshot()
+    const preview=await f.inOrg(()=>previewSignOffRevalidation(id,f.ctx()))
+    assert.equal(preview.proof.lateEffect,'8000.0000')
+    assert.equal(preview.proof.outstandingEffect,'0.0000')
+    assert.equal(preview.proof.neutralBasis,'outstanding_movements')
+    assert.equal(preview.proof.outstandingJournalLines,2)
+    await f.inOrg(()=>revalidateReconciliationSignOff(id,{expectedDigest:preview.proof.digest,reason},f.ctx()))
+    const reviewed=await f.inOrg(()=>reconciliationStaleness(id,f.ctx()))
+    assert.equal(reviewed.stale,false)
+    assert.equal(reviewed.clearedEffect,'8000.0000','the late movement is retained truthfully, not relabelled as zero')
+    const inherited=await f.inOrg(()=>reconciliationStaleness(later,f.ctx()))
+    assert.equal(inherited.stale,false)
+    assert.equal(inherited.revalidation?.inherited,true)
+    assert.deepEqual(await f.snapshot(),before)
+    assert.equal(await f.auditCount(),1)
+  }finally{await f.close()}
 })

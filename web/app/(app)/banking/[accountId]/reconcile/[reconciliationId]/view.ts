@@ -425,7 +425,10 @@ export async function loadReconciliation(
         reviewedHref: detail.revalidation ? `/banking/${accountId}/reconcile/${detail.revalidation.reviewedReconciliationId}` : null,
         reviewedText: detail.revalidation ? t('revalidation.reviewedBasis',{date:detail.revalidation.appliesFromThroughDate}) : null,
         badge: detail.revalidation ? t('revalidation.reviewedBadge') : t('stale.badge', { date: detail.staleSince ?? recon.through_date }),
-        effect: t('stale.effect', { amount: money(detail.clearedEffect, { maximumFractionDigits: 4 }) }),
+        effect: detail.revalidation?.proof.neutralBasis==='outstanding_movements'
+          ? t('revalidation.reviewedOutstandingEffect',{lateAmount:money(detail.clearedEffect,{maximumFractionDigits:4}),
+            amount:money(detail.revalidation.proof.outstandingEffect,{maximumFractionDigits:4})})
+          : t('stale.effect', { amount: money(detail.clearedEffect, { maximumFractionDigits: 4 }) }),
         late: detail.lateEntries.map((entry) => ({
           entryNumber: entry.entryNumber,
           postingDate: entry.postingDate,

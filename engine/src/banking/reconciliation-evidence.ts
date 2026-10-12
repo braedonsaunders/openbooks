@@ -66,7 +66,7 @@ export type ReconciliationHistoryEvent = HistoryBase & (
       throughDate: string | null;
       statementBalance: string | null;
       originalSignedOffAt: string | null;
-      lateEntries: number | null;
+      reviewedEntries: number | null;
       evidenceDigest: string | null;
     }
   | {
@@ -235,7 +235,7 @@ function historyEvent(row: HistoryRow): ReconciliationHistoryEvent {
         ...base,kind:"revalidate_sign_off",reason:textValue(changes.reason),
         throughDate:textValue(changes.throughDate),statementBalance:moneyText(changes.statementBalance),
         originalSignedOffAt:payloadInstant(changes.originalSignedOffAt),
-        lateEntries:countValue(proof.lateEntries),evidenceDigest:textValue(proof.digest),
+        reviewedEntries:countValue(proof.neutralBasis==='outstanding_movements' ? proof.outstandingEntries : proof.lateEntries),evidenceDigest:textValue(proof.digest),
       };
     }
     case "sign_off": {

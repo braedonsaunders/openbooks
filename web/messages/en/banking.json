@@ -1398,19 +1398,22 @@
       "confirmDetail": "Opening {amount} from {date} · reason: {reason}",
       "adjustDetail": "Through {beforeDate} → {afterDate} · balance {beforeBalance} → {afterBalance}",
       "revalidationReason": "Review reason: {reason}",
-      "revalidationBasis": "Balance {balance} through {date}; reviewed {entries} late entries. Original sign-off {original} is retained; late lines remain uncleared."
+      "revalidationBasis": "Balance {balance} through {date}; reviewed {entries} account movements. Original sign-off {original} is retained; clearing stamps remain unchanged."
     }
   },
   "revalidation": {
-    "action": "Review neutral late history",
+    "action": "Review neutral account history",
     "title": "Independently review this sign-off",
     "reason": "Review reason (10–500 characters)",
     "confirm": "Record review",
-    "preview": "The signed balance through {date} remains {balance}. The current evidence contains {entries} late entries ({lines} account lines), with zero net effect in every legal entity. The original statement, matches and sign-off remain unchanged. These late lines remain uncleared. Confirm only after reviewing the displayed movements.",
+    "preview": "The signed balance through {date} remains {balance}. Review {entries} late entries ({lines} account lines) against the retained account evidence. The original statement, matches, sign-off and all clearing stamps remain unchanged.",
     "failed": "This sign-off review could not complete. Reload its evidence and try again.",
     "recorded": "Independent sign-off review recorded",
     "reasonRequired": "Enter a review reason of 10–500 characters.",
     "reviewedBadge": "Neutral history reviewed",
-    "reviewedBasis": "Review evidence through {date}"
+    "reviewedBasis": "Review evidence through {date}",
+    "latePreview": "The late movements have zero net effect in every legal entity.",
+    "outstandingPreview": "The complete uncleared set contains {entries} entries ({lines} account lines), net {amount} in every legal entity, including the late movement of {lateAmount} and its retained counterparts. Review all these movements before confirming.",
+    "reviewedOutstandingEffect": "Late movement {lateAmount}; reviewed uncleared set {amount}."
   }
 }
