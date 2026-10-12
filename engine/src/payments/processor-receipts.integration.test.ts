@@ -93,6 +93,14 @@ test("a foreign-currency processor receipt refuses missing quotes and retains it
         (select count(*)::int from document_links where org_id = ${org.orgId}) as links,
         (select count(*)::int from audit_log where org_id = ${org.orgId} and table_name = 'documents' and row_id = ${receipt.id}) as payment_audits`)).rows[0]!;
     const original = await accounting();
+    const effect = async () => (await db.execute<{ id: string; status: string; attempt_count: number }>(sql`
+      select id, status, attempt_count from posting_effects where org_id = ${org.orgId} and document_id = ${receipt.id}`)).rows[0]!;
+    const pending = await effect();
+    await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features,banking}', 'false'::jsonb) where id = ${org.orgId}`);
+    await assert.rejects(postPaymentWithApplications(receipt.id, undefined, h.userId), /Enable Banking/);
+    assert.deepEqual(await effect(), pending, "disabled Banking refuses before claiming or draining the native receipt effect");
+    assert.deepEqual(await accounting(), original);
+    await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features,banking}', 'true'::jsonb) where id = ${org.orgId}`);
     assert.deepEqual(await postPaymentWithApplications(receipt.id, undefined, h.userId), posted);
     assert.equal((await db.execute<{ status: string }>(sql`select status from posting_effects
       where org_id = ${org.orgId} and document_id = ${receipt.id}`)).rows[0]!.status, "succeeded", "posted replay drains the actual native receipt effect");

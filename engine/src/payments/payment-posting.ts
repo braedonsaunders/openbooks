@@ -19,6 +19,7 @@ import { assertCreditSourcesExist, validateCreditAllocations } from "./credit-al
 import { isPaymentKind } from "./payment-documents.ts";
 import { redeemStoredValue } from "../stored-value/accounts.ts";
 import { lockLedgerSetupFence } from "../organization/ledger-setup-fence.ts";
+import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { lockActorCommandAuthority } from "../organization/actor-command-authority.ts";
 import { documentPostingPermission } from "../records/document-kind-permissions.ts";
 import { expireStalePaymentLinkSessions } from "./payment-link-session-expiry.ts";
@@ -190,6 +191,11 @@ export async function postPaymentWithApplications(
         const permission = documentPostingPermission(doc.kind);
         if (!userId || !permission) throw new PaymentError("Payment posting replay requires an authorized posting actor.");
         await lockActorCommandAuthority(db, doc.orgId, userId, doc.subsidiaryId, permission);
+      }
+      // Every replay authority shares the same feature boundary. The org
+      // mutex above already precedes book and accounting-evidence locks.
+      if (!await lockAndCheckOrgFeature(db, doc.orgId, "banking")) {
+        throw new PaymentError("Enable Banking in Company Settings → Features before replaying payment posting effects.");
       }
       if (!doc.postedEntryId || doc.postedEntryId !== retained?.posted_entry_id) {
         throw new PaymentError("The posted payment's retained journal identity is unavailable; reconcile its native accounting before replaying.");
