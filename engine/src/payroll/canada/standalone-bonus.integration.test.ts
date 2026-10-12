@@ -35,6 +35,13 @@ test('separate Option 1 bonus references committed regular income without paying
       assert.equal(missing.errors.length, 1);
       assert.match(missing.errors[0]!.message, /no committed regular income.*calculate and commit its regular pay/);
       await assert.rejects(commitPayRun(bonus), /refused at calculation/);
+      // An explicit tax exemption does not need regular income to price TB.
+      await db.execute(sql`update employee_payroll_profiles set tax_exempt=true where org_id=${fx.orgId} and employee_party_id=${fx.employeeId}`);
+      assert.deepEqual((await calculatePayRun(bonus)).errors, []);
+      const exempt = (await db.execute<{ factors: Record<string,string> }>(sql`select factors from pay_stubs where org_id=${fx.orgId} and pay_run_document_id=${bonus.documentId}`)).rows[0]!.factors;
+      assert.equal(exempt.TB, '0.0000');
+      assert.equal(exempt.CA_BONUS_REFERENCE_STUB, undefined);
+      await db.execute(sql`update employee_payroll_profiles set tax_exempt=false where org_id=${fx.orgId} and employee_party_id=${fx.employeeId}`);
       const regular = await create('2026-01-01', '2026-01-31', '5000', 'regular');
       assert.deepEqual((await calculatePayRun(regular)).errors, []);
       await commitPayRun(regular);

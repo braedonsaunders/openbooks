@@ -433,6 +433,7 @@ export async function computeCaStatutory(
   let bonusIncomeReference: { stub_id: string; document_id: string; income: string; pay_date: string } | null = null;
   let referencedBonusTax: ReturnType<typeof calculateT4127> | null = null;
   if (!cumulative?.averaging && !foldBonus && region !== "QC"
+      && !bool(empFact("CA", emp, "tax_exempt"))
       && cmp(income, "0") === 0 && cmp(nonPeriodic, "0") > 0) {
     if (!ctx.employmentId || !ctx.subsidiaryId || !run.doc_currency || !run.pay_schedule_id || !ctx.filingAccountId) {
       throw new PayrollError("A separately paid Canadian bonus requires its native employment, employer, currency, schedule and filing account before resolving regular income");
