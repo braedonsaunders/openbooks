@@ -186,7 +186,7 @@ test("a complete draft shows an enabled primary Post action", async () => {
     assert.equal(posts.length, 1, "a complete draft must offer exactly one primary Post");
     assert.equal(posts[0]!.disabled, false, "no blocker means the primary Post is enabled");
     assert.ok(
-      !(document.body.textContent ?? "").includes("Choose a deposit account"),
+      !(document.body.textContent ?? "").includes("Select a receipt account."),
       "no blocker text may show when nothing blocks",
     );
     await act(async () => {
@@ -205,7 +205,7 @@ test("a complete draft shows an enabled primary Post action", async () => {
   }
 });
 
-test("a draft without a deposit account names the blocker beside a disabled Post", async () => {
+test("a draft without a receipt funding account names the blocker beside a disabled Post", async () => {
   const { done } = await renderDrawer({
     bankAccountId: null,
     allocations: [ALLOCATION],
@@ -214,10 +214,10 @@ test("a draft without a deposit account names the blocker beside a disabled Post
   try {
     const posts = buttonsNamed("Receive & post");
     assert.equal(posts.length, 1, "Post stays visible even while blocked");
-    assert.equal(posts[0]!.disabled, true, "a missing deposit account blocks posting");
+    assert.equal(posts[0]!.disabled, true, "a missing receipt funding account blocks posting");
     assert.ok(
-      (document.body.textContent ?? "").includes("Choose a deposit account"),
-      "the drawer must say the deposit account is missing",
+      (document.body.textContent ?? "").includes("Select a receipt account."),
+      "the drawer must name the missing receipt funding account",
     );
   } finally {
     await done();

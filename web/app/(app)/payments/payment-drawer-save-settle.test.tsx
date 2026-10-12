@@ -227,7 +227,8 @@ test("a save without a committed revision holds Post until the refreshed record 
     }
     return Response.json({ rates: [] });
   }) as typeof fetch;
-  const { render, done } = await renderDrawer(draftDoc("41"), "edit");
+  const loaded = draftDoc("41");
+  const { render, done } = await renderDrawer(loaded, "edit");
   try {
     const save = buttonsNamed("Save");
     await act(async () => {
@@ -251,7 +252,7 @@ test("a save without a committed revision holds Post until the refreshed record 
     });
     assert.deepEqual(posts, [], "a settling post posts nothing");
     // The refresh delivers revision 42: Post enables and carries it.
-    await render(draftDoc("42"));
+    await render({ ...loaded, updated_at: "42" });
     const fresh = buttonsNamed("Receive & post");
     assert.equal(fresh.length, 1);
     assert.equal(fresh[0]!.disabled, false, "post enables once the record arrives");

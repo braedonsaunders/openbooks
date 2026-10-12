@@ -55,7 +55,7 @@ async function mount(options: { effect?: string; canRetry?: boolean; status?: st
   return { doc, render, done: async () => { globalThis.fetch = priorFetch; await act(async () => root.unmount()); host.remove() } }
 }
 
-test('posted receipts and vendor payments show one reasoned native retry beside their existing lifecycle actions', async () => {
+test('posted receipts and vendor payments show one reasoned native retry while retaining their existing Actions menu', async () => {
   for (const side of ['ar', 'ap'] as const) {
     state.refreshes = 0
     state.reason = 'Receipt projection configuration reviewed and corrected'
@@ -67,13 +67,13 @@ test('posted receipts and vendor payments show one reasoned native retry beside 
     }) as typeof fetch
     try {
       assert.equal(buttons('Retry posting effects').length, 1)
-      assert.equal(buttons('Void').length, 1)
+      assert.equal(buttons('Actions').length, 1, 'recovery retains the existing closed lifecycle menu')
       assert.match(document.body.textContent ?? '', /Receipt projection could not complete/)
       const shells = document.querySelectorAll('[role="dialog"]').length
       await act(async () => { buttons('Retry posting effects')[0]!.click(); await tick() })
       assert.deepEqual(calls, [{ url: `/api/payments/${f.doc.id}/retry-effects`, body: { reason: state.reason } }])
       assert.equal(buttons('Retry posting effects').length, 0, 'the same drawer observes pending effects without offering another reset')
-      assert.equal(buttons('Void').length, 1)
+      assert.equal(buttons('Actions').length, 1, 'recovery retains the existing closed lifecycle menu')
       assert.ok(state.refreshes > 0)
       assert.equal(document.querySelectorAll('[role="dialog"]').length, shells, 'retry preserves one URL drawer shell')
       assert.match(document.body.textContent ?? '', /queued/i)
@@ -108,6 +108,6 @@ test('invalid reasons and API refusals retain the receipt and its recoverable ac
     assert.equal(writes, 1)
     assert.match(document.body.textContent ?? '', /resolve the projection cause before retrying/)
     assert.equal(buttons('Retry posting effects')[0]!.disabled, false)
-    assert.equal(buttons('Void').length, 1)
+    assert.equal(buttons('Actions').length, 1, 'recovery retains the existing closed lifecycle menu')
   } finally { await f.done() }
 })
