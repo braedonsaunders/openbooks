@@ -3,7 +3,7 @@ import { refusal } from "../../testing/refusal.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { sql } from "drizzle-orm";
+import { DrizzleQueryError, sql } from "drizzle-orm";
 import { neg, toUnits } from "../../money/money.ts";
 import { db } from "../../platform/db.ts";
 import { seedBenefitIncentivePosting as postEntry } from "../../testing/benefit-incentive-posting.ts";
@@ -623,7 +623,13 @@ settlementTest("transaction policies govern dated shares, group ceilings, approv
   const source = await seedSource("2026-07-09");
   await activateBenefitProgram(command);
   await refuses(async () => saveBenefitTransactionPolicy({ ...command, expectedRevision: (await getBenefitProgram(db,h.org.orgId,h.settlerId,program.id)).revision }), /changing an active program needs the date the change applies from — earlier periods keep the current rules/);
-  await assert.rejects(() => db.execute(sql`update hrm_benefit_transaction_positions set weight=3 where org_id=${h.org.orgId} and program_id=${program.id}`), error => errorChainMatches(error,/immutable.*replacement/));
+  const storedPositions = async () => (await db.execute<{ position_key: string; weight: string }>(sql`
+    select position_key,weight::text from hrm_benefit_transaction_positions
+    where org_id=${h.org.orgId} and program_id=${program.id} order by position_key`)).rows;
+  const positionsBefore = await storedPositions();
+  const guard = await refusal(db.execute(sql`update hrm_benefit_transaction_positions set weight=3 where org_id=${h.org.orgId} and program_id=${program.id}`), DrizzleQueryError);
+  assert.ok(errorChainMatches(guard, /Active benefit transaction rules change through a dated program revision; save them with a change date\./));
+  assert.deepEqual(await storedPositions(), positionsBefore);
   const query = settlementQuery(h, program.id), preview = await previewIncentiveSettlement(query);
   assert.equal(preview.computation.measuredValue, "1000.0000");
   assert.equal(preview.computation.totalAwarded, "60.0000");
