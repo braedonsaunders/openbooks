@@ -16,7 +16,11 @@ test('separate Option 1 bonus references committed regular income without paying
   try {
     await withBypassContext(async () => {
       await db.execute(sql`update pay_schedules set frequency='monthly',periods_per_year=12,anchor_period_end='2026-01-31',pay_date_offset_days=0 where org_id=${fx.orgId} and id=${fx.scheduleId}`);
-      await db.execute(sql`update employee_payroll_profiles set cpp_exempt=true,ei_exempt=true where org_id=${fx.orgId} and employee_party_id=${fx.employeeId}`);
+      const filingAccountId = randomUUID();
+      await db.execute(sql`insert into payroll_filing_accounts(id,org_id,subsidiary_id,country,program_type,account_number,name,remitter_type,is_default,is_active,created_by,updated_by)
+        values(${filingAccountId},${fx.orgId},${fx.subsidiaryId},'CA','ca_rp','123456789RP0001','Canadian payroll account','regular',true,true,${fx.actorId},${fx.actorId})`);
+      const profile = await db.execute(sql`update employee_payroll_profiles set cpp_exempt=true,ei_exempt=true,filing_account_id=${filingAccountId} where org_id=${fx.orgId} and employee_party_id=${fx.employeeId} returning employee_party_id`);
+      assert.equal(profile.rows.length, 1);
     });
     await withOrgContext(fx.orgId, async () => {
       const components = (await db.execute<{ id: string; system_key: string }>(sql`select id,system_key from pay_components where org_id=${fx.orgId} and system_key in ('base_pay','bonus')`)).rows;
@@ -79,7 +83,11 @@ test('Option 1 bonus uses actual periodic I retained under an earlier cumulative
   try {
     await withBypassContext(async () => {
       await db.execute(sql`update pay_schedules set frequency='monthly',periods_per_year=12,anchor_period_end='2026-01-31',pay_date_offset_days=0 where org_id=${fx.orgId} and id=${fx.scheduleId}`);
-      await db.execute(sql`update employee_payroll_profiles set cpp_exempt=true,ei_exempt=true where org_id=${fx.orgId} and employee_party_id=${fx.employeeId}`);
+      const filingAccountId = randomUUID();
+      await db.execute(sql`insert into payroll_filing_accounts(id,org_id,subsidiary_id,country,program_type,account_number,name,remitter_type,is_default,is_active,created_by,updated_by)
+        values(${filingAccountId},${fx.orgId},${fx.subsidiaryId},'CA','ca_rp','123456789RP0001','Canadian payroll account','regular',true,true,${fx.actorId},${fx.actorId})`);
+      const profile = await db.execute(sql`update employee_payroll_profiles set cpp_exempt=true,ei_exempt=true,filing_account_id=${filingAccountId} where org_id=${fx.orgId} and employee_party_id=${fx.employeeId} returning employee_party_id`);
+      assert.equal(profile.rows.length, 1);
       await db.execute(sql`insert into employee_tax_certificates(org_id,employee_party_id,country,certificate_key,answers,effective_from,created_by,updated_by)
         values(${fx.orgId},${fx.employeeId},'CA','ca_t4127_method','{"method":"option2","reason":"Employer elected cumulative withholding"}'::jsonb,'2026-01-01',${fx.actorId},${fx.actorId})`);
     });
