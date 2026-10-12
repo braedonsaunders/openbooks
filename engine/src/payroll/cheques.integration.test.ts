@@ -121,7 +121,11 @@ test("cheque bank identity is frozen at issuance and live print authority refuse
     await db.transaction(tx=>assertIssuedChequeFunding(tx,fx.orgId,input.documentId,bank.id));
     await assert.rejects(db.transaction(tx=>assertIssuedChequeFunding(tx,fx.orgId,input.documentId,randomUUID())),/bank account bound/);
     await db.execute(sql`update payment_bank_profiles set originator_secrets_encrypted=${sealJson({...specification,accountEncoding:'0099-999'},{orgId:fx.orgId,purpose:'payment.originator.secrets'})},is_active=false where org_id=${fx.orgId} and id=${profile.id}`);
-    assert.equal((await issuePayRunCheques(request)).issued,0);
+    await db.execute(sql`update parties set display_name='Renamed after cheque issuance' where org_id=${fx.orgId} and id=${first.cheques[0]!.employeePartyId}`);
+    const reprint = await issuePayRunCheques(request);
+    assert.equal(reprint.issued,0);
+    assert.equal(reprint.cheques[0]!.employeeName,first.cheques[0]!.employeeName);
+    assert.equal((await payRunCheques(fx.orgId,input.documentId)).cheques[0]!.employeeName,first.cheques[0]!.employeeName);
     assert.equal((await issuedChequeBank(fx.orgId,first.cheques[0]!.stubId))!.bank!.accountEncoding,'0012-345');
     await assert.rejects(issuePayRunCheques({...request,bankProfileId:randomUUID()}),/original cheque bank profile/);
     const audit=(await db.execute<{changes:Record<string,unknown>}>(sql`select changes from audit_log where org_id=${fx.orgId} and row_id=${first.cheques[0]!.stubId} and changes->>'event'='cheque_issued'`)).rows[0]!;

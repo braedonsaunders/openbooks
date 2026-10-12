@@ -133,7 +133,7 @@ export async function issuePayRunCheques(input: {
           if (profiles.length !== 1) throw new PayrollError("Configure a cheque bank profile in Payment Operations Setup and select it in the cheque designer when more than one profile applies");
           profileId=profiles[0]!.id;
         }
-        bankBasis = await lockChequeBank(tx, orgId, profileId, run.subsidiary_id, stub.currency_code, stub.pay_date);
+        bankBasis = { ...await lockChequeBank(tx, orgId, profileId, run.subsidiary_id, stub.currency_code, stub.pay_date), payeeName: stub.name };
       }
       if (input.printMicr && !bankBasis?.bank) throw new PayrollError("Configure the Canadian MICR bank fields on the cheque bank profile before printing blank stock");
       if (bankBasis && run.paid_entry_id) {
@@ -170,7 +170,7 @@ export async function issuePayRunCheques(input: {
       cheques.push({
         stubId: stub.id,
         employeePartyId: stub.employee_party_id,
-        employeeName: stub.name,
+        employeeName: bankBasis?.payeeName ?? stub.name,
         chequeNumber: number,
         amount: stub.net_pay,
       });
@@ -183,7 +183,7 @@ export async function issuePayRunCheques(input: {
 }
 
 
-export interface IssuedChequeBank { profileId: string; bankAccountId: string; bank: CanadianChequeBank | null }
+export interface IssuedChequeBank { profileId: string; bankAccountId: string; bank: CanadianChequeBank | null; payeeName?: string }
 
 /** The issued instrument retains encrypted bank identity independently of mutable setup. */
 async function readIssuedChequeBank(tx: import("../platform/db.ts").SqlExecutor, orgId: string, stubId: string): Promise<IssuedChequeBank | null> {
@@ -246,13 +246,12 @@ export async function payRunCheques(
        ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
      order by p.display_name, s.id
   `));
-  const cheques = rows.rows.map((row) => ({
-    stubId: row.id,
-    employeePartyId: row.employee_party_id,
-    employeeName: row.name,
-    chequeNumber: row.cheque_number ?? "",
-    amount: row.net_pay,
-  }));
+  const cheques: PayRunCheque[] = [];
+  for (const row of rows.rows) {
+    const basis = row.cheque_number ? await readIssuedChequeBank(db, orgId, row.id) : null;
+    cheques.push({stubId: row.id, employeePartyId: row.employee_party_id,
+      employeeName: basis?.payeeName ?? row.name, chequeNumber: row.cheque_number ?? "", amount: row.net_pay});
+  }
   return { cheques, total: sum(cheques.map((c) => c.amount)), issued: 0 };
 }
 

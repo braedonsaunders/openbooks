@@ -607,12 +607,14 @@ async function loadPayrollChequeValues(
 
   const net = String(stub.net_pay ?? '0')
   const nonCash = sum(lines.rows.filter(l => l.kind === 'earning' && l.payment_kind === 'non_cash').map(l => String(l.amount)))
+  const chequeBankValues = await chequeBankMergeValues(orgId, id, String(stub.cheque_number))
+  const payeeName = chequeBankValues.issued_payee_name ?? stub.employee_name ?? ''
 
   const values: Record<string, unknown> = {
-    ...await chequeBankMergeValues(orgId, id, String(stub.cheque_number)),
+    ...chequeBankValues,
     cheque_number: stub.cheque_number ?? '',
-    employee_name: stub.employee_name ?? '',
-    party_name: stub.employee_name ?? '',
+    employee_name: payeeName,
+    party_name: payeeName,
     employee_address: address,
     party_address: address,
     pay_date: fmtDate(stub.pay_date, locale),
@@ -639,15 +641,15 @@ async function loadPayrollChequeValues(
   }
   return {
     values,
-    reference: `${stub.cheque_number ?? 'Cheque'} ${stub.employee_name ?? ''}`.trim(),
+    reference: `${stub.cheque_number ?? 'Cheque'} ${payeeName}`.trim(),
   }
 }
 
 async function chequeBankMergeValues(orgId: string, stubId: string, number: string) {
   const basis = await issuedChequeBank(orgId, stubId)
-  if (!basis?.bank) return {cheque_bank_profile:basis?.profileId??'',bank_name:'',bank_branch_address:'',bank_account:'',micr_serial:'',micr_transit:'',micr_account:''}
+  if (!basis?.bank) return {issued_payee_name:basis?.payeeName,cheque_bank_profile:basis?.profileId??'',bank_name:'',bank_branch_address:'',bank_account:'',micr_serial:'',micr_transit:'',micr_account:''}
   const fields = /^\d{1,11}$/.test(number) ? chequeMicrFields(number,basis.bank) : null
-  return {cheque_bank_profile:basis.profileId, bank_name:basis.bank.bankName, bank_branch_address:basis.bank.branchAddress,
+  return {issued_payee_name:basis.payeeName,cheque_bank_profile:basis.profileId, bank_name:basis.bank.bankName, bank_branch_address:basis.bank.branchAddress,
     bank_account:basis.bank.accountEncoding, micr_serial:fields?.micrSerial??'',micr_transit:fields?.micrTransit??'',micr_account:fields?.micrAccount??''}
 }
 
