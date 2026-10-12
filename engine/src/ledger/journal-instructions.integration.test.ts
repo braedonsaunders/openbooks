@@ -176,8 +176,8 @@ test("native statistical storage accepts measurements and refuses zero-money mon
  try{await withOrgContext(org.orgId,async()=>{
   const account=randomUUID(),entry=randomUUID();
   await db.execute(sql`insert into accounts(id,org_id,number,name,type) values(${account},${org.orgId},'STAT-STORAGE','Measured area','statistical')`);
-  await db.execute(sql`insert into journal_entries(id,org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,origin,status,currency)
-   values(${entry},${org.orgId},${org.bookId},${org.subsidiaryId},'STAT-STORAGE',${org.date},${org.periodId},'manual','draft','CAD')`);
+  await db.execute(sql`insert into journal_entries(id,org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,origin,status)
+   values(${entry},${org.orgId},${org.bookId},${org.subsidiaryId},'STAT-STORAGE',${org.date},${org.periodId},'manual','draft')`);
   await db.execute(sql`insert into journal_lines(org_id,entry_id,line_number,account_id,subsidiary_id,amount,currency,txn_amount,fx_rate,quantity,unit)
    values(${org.orgId},${entry},1,${account},${org.subsidiaryId},0,'CAD',0,1,'25.1234','sqm')`);
   const snapshot=async()=>(await db.execute(sql`select account_id,amount::text,txn_amount::text,quantity::text,unit from journal_lines
@@ -200,17 +200,18 @@ test("native statistical storage accepts measurements and refuses zero-money mon
 test("native statistical document precision refuses rounding and retains monetary item precision across atomic mode edits",{skip:!DB},async()=>{
  const org=await createScratchOrg();
  try{await withOrgContext(org.orgId,async()=>{
-  const statistical=randomUUID(),monetary=randomUUID();
+  const statistical=randomUUID(),monetary=randomUUID(),account=randomUUID();
+  await db.execute(sql`insert into accounts(id,org_id,number,name,type) values(${account},${org.orgId},'STAT-QUANTITY','Measured area','statistical')`);
   await db.execute(sql`insert into documents(id,org_id,kind,status,document_number,subsidiary_id,document_date,currency,fx_rate,journal_mode,subtotal,total)
    values(${statistical},${org.orgId},'journal','draft','STAT-QUANTITY',${org.subsidiaryId},${org.date},'CAD',1,'statistical',0,0),
    (${monetary},${org.orgId},'journal','draft','MONEY-QUANTITY',${org.subsidiaryId},${org.date},'CAD',1,'monetary',0,0)`);
-  await assert.rejects(()=>db.execute(sql`insert into document_lines(org_id,document_id,line_number,quantity,unit_price,amount)
-   values(${org.orgId},${statistical},1,'25.12345000',0,0)`),error=>errorChainMatches(error,/Statistical quantities require at most four exact decimal places/));
-  await db.execute(sql`insert into document_lines(org_id,document_id,line_number,quantity,unit_price,amount)
-   values(${org.orgId},${statistical},1,'25.12340000',0,0),(${org.orgId},${monetary},1,'25.12345678',0,0)`);
+  await assert.rejects(()=>db.execute(sql`insert into document_lines(org_id,document_id,line_number,account_id,quantity,unit,unit_price,amount)
+   values(${org.orgId},${statistical},1,${account},'25.12345000','sqm',0,0)`),error=>errorChainMatches(error,/Statistical quantities require at most four exact decimal places/));
+  await db.execute(sql`insert into document_lines(org_id,document_id,line_number,account_id,quantity,unit,unit_price,amount)
+   values(${org.orgId},${statistical},1,${account},'25.12340000','sqm',0,0),(${org.orgId},${monetary},1,${org.accounts.cogs},'25.12345678','sqm',0,0)`);
   await assert.rejects(()=>db.execute(sql`update document_lines set quantity='25.12345000' where org_id=${org.orgId} and document_id=${statistical}`),
    error=>errorChainMatches(error,/Statistical quantities require at most four exact decimal places/));
-  await assert.rejects(()=>db.execute(sql`update document_lines set document_id=${statistical},line_number=2 where org_id=${org.orgId} and document_id=${monetary}`),
+  await assert.rejects(()=>db.execute(sql`update document_lines set document_id=${statistical},line_number=2,account_id=${account} where org_id=${org.orgId} and document_id=${monetary}`),
    error=>errorChainMatches(error,/Statistical quantities require at most four exact decimal places/));
   const quantity=async(documentId:string)=>(await db.execute<{quantity:string}>(sql`select quantity::text from document_lines where org_id=${org.orgId} and document_id=${documentId}`)).rows[0]?.quantity;
   assert.equal(await quantity(statistical),'25.12340000');assert.equal(await quantity(monetary),'25.12345678');
@@ -218,7 +219,7 @@ test("native statistical document precision refuses rounding and retains monetar
    error=>errorChainMatches(error,/correct the journal quantities before changing its mode/));
   await withOrgTransaction(org.orgId,async()=>{
    await db.execute(sql`update documents set journal_mode='statistical' where org_id=${org.orgId} and id=${monetary}`);
-   await db.execute(sql`update document_lines set quantity='25.12340000' where org_id=${org.orgId} and document_id=${monetary}`);
+   await db.execute(sql`update document_lines set quantity='25.12340000',account_id=${account} where org_id=${org.orgId} and document_id=${monetary}`);
   });
   assert.equal(await quantity(monetary),'25.12340000');
  });}finally{await dropScratchOrg(org.orgId);}
