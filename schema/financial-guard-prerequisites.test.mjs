@@ -48,3 +48,22 @@ test('currency binding pins the latest instruction guard and changes only its fo
   assert.equal(restored, published);
   assert.match(amended, /f\.currency<>journal_instruction_line_guard\.v_book_currency/);
 });
+
+
+test('statistical storage upgrade pins its predecessor and uses an explicit local block namespace', () => {
+  const file = '0703_journal_measurement_and_instruction_guards.sql';
+  const published = latestBefore(703, 'journal_instruction_line_guard');
+  const migration = readFileSync(join(generated, file), 'utf8');
+  const gate = readFileSync(join(preflight, file), 'utf8');
+  assert.equal(expected(gate), published);
+  const amended = body(migration, 'journal_instruction_line_guard');
+  assert.ok(amended);
+  assert.match(amended, /<<instruction_line>>\nDECLARE/);
+  assert.match(amended, /f\.currency<>instruction_line\.v_book_currency/);
+  const restored = amended.replace('<<instruction_line>>\n', '')
+    .replaceAll('instruction_line.v_book_currency', 'journal_instruction_line_guard.v_book_currency');
+  assert.equal(restored, published);
+  const baseline = readFileSync(join(generated, '0001_baseline.sql'), 'utf8');
+  assert.ok(baseline.includes('CONSTRAINT jl_nonzero CHECK ((amount <> (0)::numeric))'));
+  assert.ok(gate.includes("pg_get_constraintdef(oid)='CHECK ((amount <> (0)::numeric))'"));
+});

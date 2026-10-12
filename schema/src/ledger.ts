@@ -344,7 +344,11 @@ export const journalLines = pgTable(
     index("jl_org_foreign_currency")
       .on(t.orgId)
       .where(sql`${t.fxRate} <> 1`),
-    check("jl_nonzero", sql`${t.amount} <> 0`),
+    check("jl_nonzero", sql`${t.amount} <> 0 OR (
+      ${t.txnAmount} = 0 AND ${t.quantity} IS NOT NULL AND ${t.quantity} <> 0 AND ${t.quantity} = trunc(${t.quantity}, 4)
+      AND coalesce(length(btrim(${t.unit})), 0) > 0
+      AND NOT ${t.isOpenItem} AND NOT ${t.isCurrencyAdjustment}
+    )`),
   ],
 );
 

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { guardRefusalMessage } from "../platform/database-refusal.ts";
 import { sql } from "drizzle-orm";
-import { db, longPool, orgContext, schema, withBypassContext, withMaintenanceTransaction, withOrg, type MaintenanceTransactionOptions } from "../platform/db.ts";
+import { db, longPool, orgContext, schema, withBypassContext, withMaintenanceTransaction, withOrg, withTransactionSavepoint, type MaintenanceTransactionOptions } from "../platform/db.ts";
 import {
   assertUuid,
   deferredDeletionTables,
@@ -229,6 +229,14 @@ function resolveLifecycleAuthority(
   throw new Error("sandbox lifecycle requires an authenticated actor or named system reason");
 }
 
+async function assertLifecycleActor(orgId: string, authority: ResolvedLifecycleAuthority): Promise<void> {
+  if (authority.actorId) {
+    const actor = (await db.execute<{ id: string }>(sql`
+      select id from users where id = ${authority.actorId} and org_id = ${orgId} and is_active for share`)).rows[0];
+    if (!actor) throw new Error(`sandbox lifecycle actor ${authority.actorId} is not an active user of the production organization`);
+  }
+}
+
 async function auditSandboxLifecycle(
   orgId: string,
   sandboxId: string,
@@ -237,11 +245,7 @@ async function auditSandboxLifecycle(
   before: Record<string, unknown> | null,
   after: Record<string, unknown> | null,
 ): Promise<void> {
-  if (authority.actorId) {
-    const actor = (await db.execute<{ id: string }>(sql`
-      select id from users where id = ${authority.actorId} and org_id = ${orgId} and is_active`)).rows[0];
-    if (!actor) throw new Error(`sandbox lifecycle actor ${authority.actorId} is not an active user of the production organization`);
-  }
+  await assertLifecycleActor(orgId, authority);
   await db.execute(sql`
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
     values (${orgId}, 'sandbox_lifecycle', ${sandboxId}, 'insert',
@@ -565,20 +569,45 @@ export async function createSandbox(input: CreateSandboxInput): Promise<{
   // exists finds no row and reports not-found. The lock must precede the
   // insert: insert-then-lock would admit a wipe under a live clone.
   return withSandboxRefreshLock(sandboxId, async () => {
-    // Birth the org and lifecycle row together and record the initiating actor
-    // in the same production-owner scope before any clone work begins.
-    const sb = await withOrg(input.productionOrgId, async () => {
-      await db.execute(sql`
-      insert into orgs (
-        id, name, legal_name, base_currency, country, tax_ids, settings,
-        env_kind, sandbox_of, sandbox_seed, created_by
-      )
-      values (
-        ${sandboxOrgId}, ${input.name}, ${p.legal_name}, ${p.base_currency}, ${p.country},
-        ${JSON.stringify(masked ? {} : (p.tax_ids ?? {}))}::jsonb,
-        (${JSON.stringify(p.settings ?? {})}::jsonb || ${JSON.stringify(input.settingsOverlay ?? {})}::jsonb),
-        'sandbox', ${input.productionOrgId}, ${seed}, ${input.createdBy ?? null}
-      )`);
+    // Source authority, destination birth and ownership audit are one atomic unit.
+    // The org's automatic tenant seeds use destination RLS only for its birth.
+    const sb = await withOrg(input.productionOrgId, () => withTransactionSavepoint(db, async () => {
+      const source = (await db.execute<{ env_kind: string; settings: Record<string, unknown> | null }>(sql`
+        select env_kind,settings from orgs where id=${input.productionOrgId} for share`)).rows[0];
+      if (input.allowTemplateSource === true) assertTemplateSandboxSource(source,input.productionOrgId);
+      else assertProductionSandboxSource(source,input.productionOrgId);
+      await assertLifecycleActor(input.productionOrgId,authority);
+      if (input.createdBy && input.createdBy !== authority.actorId) {
+        await assertLifecycleActor(input.productionOrgId,{actorId:assertUuid(input.createdBy)});
+      }
+      const active = orgContext.getStore();
+      const state = (await db.execute<{ org_id: string | null; bypass: string | null }>(sql`
+        select current_setting('app.current_org',true) as org_id,current_setting('app.bypass_rls',true) as bypass`)).rows[0];
+      if (!active?.txDb || active.bypass || active.orgId !== input.productionOrgId ||
+          state?.org_id !== input.productionOrgId || state.bypass !== 'off') {
+        throw new Error("Sandbox birth requires the source organization's tenant transaction with RLS enforced.");
+      }
+      await db.execute(sql`select set_config('app.current_org',${sandboxOrgId},true)`);
+      try {
+        // A failed statement is rolled back before the finally restores scope;
+        // PostgreSQL's aborted transaction state cannot hide the original refusal.
+        await withTransactionSavepoint(db, () => orgContext.run({...active,orgId:sandboxOrgId}, async () => {
+          const born = await db.execute<{ id: string }>(sql`
+            insert into orgs (
+              id, name, legal_name, base_currency, country, tax_ids, settings,
+              env_kind, sandbox_of, sandbox_seed, created_by
+            )
+            values (
+              ${sandboxOrgId}, ${input.name}, ${p.legal_name}, ${p.base_currency}, ${p.country},
+              ${JSON.stringify(masked ? {} : (p.tax_ids ?? {}))}::jsonb,
+              (${JSON.stringify(p.settings ?? {})}::jsonb || ${JSON.stringify(input.settingsOverlay ?? {})}::jsonb),
+              'sandbox', ${input.productionOrgId}, ${seed}, ${input.createdBy ?? null}
+            ) returning id`);
+          if (born.rows.length !== 1 || born.rows[0]?.id !== sandboxOrgId) throw new Error("Sandbox organization was not created.");
+        }));
+      } finally {
+        await db.execute(sql`select set_config('app.current_org',${input.productionOrgId},true)`);
+      }
 
       const inserted = await db
         .insert(schema.sandboxes)
@@ -603,7 +632,7 @@ export async function createSandbox(input: CreateSandboxInput): Promise<{
         masked,
       });
       return inserted[0];
-    });
+    }));
 
     try {
       if (masked) await seedDefaultMaskingPolicies(input.productionOrgId);
