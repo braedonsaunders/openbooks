@@ -427,12 +427,64 @@ export async function computeCaStatutory(
   const f5a = nonNegative(add(add(statutory.f5A, neg(priorFactor("F5A"))), neg(foldBonus ? priorFactor("F5B") : "0")));
   const f5b = foldBonus ? "0" : nonNegative(add(statutory.f5B, neg(priorFactor("F5B"))));
   const f5 = add(f5a, f5b);
-  const federalTax = standaloneTax !== null
+  // CRA's regular bonus method uses the most recent periodic I when a
+  // separately paid bonus has no periodic remuneration of its own. The
+  // reference affects only bonus tax, never current earnings or premiums.
+  let bonusIncomeReference: { stub_id: string; document_id: string; income: string; pay_date: string } | null = null;
+  let referencedBonusTax: ReturnType<typeof calculateT4127> | null = null;
+  if (!cumulative?.averaging && !foldBonus && region !== "QC"
+      && cmp(income, "0") === 0 && cmp(nonPeriodic, "0") > 0) {
+    if (!ctx.employmentId || !ctx.subsidiaryId || !run.doc_currency || !run.pay_schedule_id || !ctx.filingAccountId) {
+      throw new PayrollError("A separately paid Canadian bonus requires its native employment, employer, currency, schedule and filing account before resolving regular income");
+    }
+    const references = (await tx.execute<{
+      stub_id: string; document_id: string; income: string; pay_date: string; averaging: string | null;
+    }>(sql`
+      select s.id as stub_id, r.document_id, s.factors->>'I' as income,
+             s.pay_date::text as pay_date, s.factors->>'S1_DEN' as averaging
+        from pay_stubs s
+        join pay_runs r on r.org_id=s.org_id and r.document_id=s.pay_run_document_id
+        join documents d on d.org_id=r.org_id and d.id=r.document_id
+       where s.org_id=${orgId} and s.employee_party_id=${employeePartyId}
+         and s.employment_id=${ctx.employmentId} and s.filing_account_id=${ctx.filingAccountId}
+         and s.country='CA' and s.tax_year=${taxYear}
+         and d.subsidiary_id=${ctx.subsidiaryId} and d.currency=${run.doc_currency}
+         and r.pay_schedule_id=${run.pay_schedule_id} and r.run_status='committed'
+         and d.status<>'voided' and r.document_id<>${documentId}
+         and s.pay_date<=${run.pay_date}::date and r.period_end<=${run.period_end}::date
+         and (s.factors->>'I')::numeric>0
+       order by s.pay_date desc, r.period_end desc, r.updated_at desc, r.document_id desc, s.id desc
+       limit 1
+    `)).rows;
+    const reference = references[0];
+    if (!reference) throw new PayrollError("A separately paid Canadian bonus has no committed regular income for this employment, employer, currency, schedule and filing account — calculate and commit its regular pay before the bonus");
+    if (reference.averaging !== null) throw new PayrollError("The latest regular income uses cumulative averaging — review the effective Canadian withholding method before calculating a separate Option 1 bonus");
+    bonusIncomeReference = reference;
+    referencedBonusTax = calculateT4127({
+      ...t4127Input, averaging: undefined, income: reference.income, nonPeriodic,
+      pensionable, insurable, qpipInsurable,
+      pensionableNonPeriodic: ctx.pensionableNonPeriodic,
+      insurableNonPeriodic: ctx.insurableNonPeriodic,
+      qpipNonPeriodic: ctx.programNonPeriodicBases?.qpip,
+      cppWithheld: cpp, cpp2Withheld: cpp2, eiWithheld: ei, qpipWithheld: qpip,
+      pensionDeductions: deduction("pension_f"), alimonyDeductions: deduction("alimony"),
+      unionDues: deduction("union_dues"), nonPeriodicPensionDeductions: deduction("pension_f_bonus"),
+      ytd: { cpp:ytd.cpp, cpp2:ytd.cpp2, ei:ytd.ei, qpip:ytd.qpip,
+        qpipEmployer:ytd.qpip_employer, pensionable:ytd.pensionable,
+        nonPeriodic:ytd.non_periodic, nonPeriodicPensionDeductions:ytd.pension_deductions_bonus,
+        nonPeriodicCppEnhancedDeductions:ytd.f5b },
+    });
+  }
+  const currentFederalTax = standaloneTax !== null
     ? standaloneTax.totalTax
     : hasPriors && supplementalMethod === "period_cumulative"
       ? nonNegative(add(statutory.totalTax, neg(priorFederalTax)))
       : statutory.totalTax;
 
+  const currentTax = standaloneTax ?? statutory;
+  const federalTax = referencedBonusTax
+    ? add(add(currentFederalTax, neg(currentTax.bonusTax)), referencedBonusTax.bonusTax)
+    : currentFederalTax;
   pushStatutory("income_tax", "deduction", "Income tax", federalTax, 110);
   pushStatutory("cpp", "deduction", region === "QC" ? "QPP" : "CPP", cpp, 120);
   pushStatutory("cpp2", "deduction", region === "QC" ? "QPP2" : "CPP2", cpp2, 130);
@@ -482,6 +534,14 @@ export async function computeCaStatutory(
   return {
     ...taxFactors,
     ...qcFactors,
+    ...(referencedBonusTax && bonusIncomeReference ? {
+      A: referencedBonusTax.factors.A!, A_step2: referencedBonusTax.factors.A_step2!,
+      TB: referencedBonusTax.bonusTax,
+      CA_BONUS_I_REFERENCE: bonusIncomeReference.income,
+      CA_BONUS_REFERENCE_STUB: bonusIncomeReference.stub_id,
+      CA_BONUS_REFERENCE_RUN: bonusIncomeReference.document_id,
+      CA_BONUS_REFERENCE_PAY_DATE: bonusIncomeReference.pay_date,
+    } : {}),
     B: nonPeriodic, I: income, PI: pensionable, IE: insurable,
     F:deduction("pension_f"),F2:deduction("alimony"),U1:deduction("union_dues"),F3:deduction("pension_f_bonus"),
     C: cpp, C2: cpp2, EI: ei, QPIP: qpip, QPIP_ER: qpipEmployer, EI_ER: eiEmployer,
