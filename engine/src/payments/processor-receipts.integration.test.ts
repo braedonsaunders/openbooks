@@ -84,8 +84,33 @@ test("a foreign-currency processor receipt refuses missing quotes and retains it
     assert.equal(custom.paymentCurrencyEvidence.observations[0]!.storedRate, "1.2500000000");
     await submitAndReleaseIfUngated("customer_payment", receipt.id, h.userId);
     await db.execute(sql`update fx_rates set rate = '1.4' where org_id = ${org.orgId} and from_currency = 'USD' and to_currency = 'CAD'`);
-    const posted = await postPaymentWithApplications(receipt.id, undefined, h.userId);
+    const posted = await postPaymentWithApplications(receipt.id, undefined, h.userId, "api", { deferEffects: true });
+    assert.equal((await db.execute<{ status: string }>(sql`select status from posting_effects
+      where org_id = ${org.orgId} and document_id = ${receipt.id}`)).rows[0]!.status, "pending");
+    const accounting = async () => (await db.execute<{ entries: number; applications: number; links: number; payment_audits: number }>(sql`
+      select (select count(*)::int from journal_entries where org_id = ${org.orgId}) as entries,
+        (select count(*)::int from applications where org_id = ${org.orgId}) as applications,
+        (select count(*)::int from document_links where org_id = ${org.orgId}) as links,
+        (select count(*)::int from audit_log where org_id = ${org.orgId} and table_name = 'documents' and row_id = ${receipt.id}) as payment_audits`)).rows[0]!;
+    const original = await accounting();
     assert.deepEqual(await postPaymentWithApplications(receipt.id, undefined, h.userId), posted);
+    assert.equal((await db.execute<{ status: string }>(sql`select status from posting_effects
+      where org_id = ${org.orgId} and document_id = ${receipt.id}`)).rows[0]!.status, "succeeded", "posted replay drains the actual native receipt effect");
+    const item = (saved!.doc.custom as { allocations: Parameters<typeof postPaymentWithApplications>[1] }).allocations![0]!;
+    await assert.rejects(postPaymentWithApplications(receipt.id, [{ ...item, settlementRateReference: "Changed collection contract" }], h.userId), /posted document/);
+    await db.execute(sql`update user_permission_overrides set effect = 'deny' where org_id = ${org.orgId}
+      and user_id = ${h.userId} and permission = 'ar.pay'`);
+    await assert.rejects(postPaymentWithApplications(receipt.id, undefined, h.userId), ScopeNotFoundError);
+    await grantScratchPermissions(org.orgId, h.userId, ["ar.pay"]);
+    await db.execute(sql`update app_roles set subsidiary_restriction = '{"mode":"list","subsidiaryIds":[]}'::jsonb
+      where org_id = ${org.orgId} and key = 'admin'`);
+    await assert.rejects(postPaymentWithApplications(receipt.id, undefined, h.userId), ScopeNotFoundError);
+    await db.execute(sql`update app_roles set subsidiary_restriction = '{"mode":"all"}'::jsonb where org_id = ${org.orgId} and key = 'admin'`);
+    await assert.rejects(postPaymentWithApplications(receipt.id), /authorized posting actor/);
+    // Historical accounting does not depend on the current collection policy.
+    await db.execute(sql`update psp_provider_configs set is_enabled = false where org_id = ${org.orgId} and provider = 'stripe'`);
+    assert.deepEqual(await postPaymentWithApplications(receipt.id, undefined, h.userId), posted);
+    assert.deepEqual(await accounting(), original, "replay and refusals cannot allocate cash, links, journals or payment audit again");
     assert.equal(await invoiceOpen(org.orgId, h.invoiceId), "0.0000");
     const amount = (await db.execute<{ amount: string }>(sql`select jl.amount::text as amount from journal_lines jl
       join journal_entries e on e.id = jl.entry_id and e.org_id = jl.org_id

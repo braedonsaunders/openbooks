@@ -127,6 +127,14 @@ export function documentKindPermissions(kind: string): DocumentKindPermissions |
   return NON_REGISTRY_DOCUMENT_PERMISSIONS[kind] ?? null;
 }
 
+/** Posting authority for retained ledger effects, including kinds whose
+ * lifecycle is served by a dedicated surface. Pay-run workflow approval
+ * remains separate from its GL posting duty. Unknown kinds fail closed. */
+export function documentPostingPermission(kind: string): string | null {
+  if (DOCUMENT_PERMISSION_NAMESPACE[kind]) return postPermission(kind);
+  return NON_REGISTRY_DOCUMENT_PERMISSIONS[kind]?.approve ?? null;
+}
+
 /** Read grant through the generic documents endpoints; null when the kind is not served there. */
 export function documentRouteReadPermission(kind: string): string | null {
   return documentKindPermissions(kind)?.read ?? null;

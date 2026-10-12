@@ -387,10 +387,13 @@ export async function loadPaymentDocument(id: string, kind: PaymentKind, orgId: 
   const doc = (await db.execute<Record<string, unknown>>(sql`
     select d.*, (d.revision_seq)::text as updated_at,
            p.display_name as party_name, e.id as entry_id, e.entry_number,
-           ba.id as bank_account_id_line, ba.number as bank_account_number, ba.name as bank_account_name
+           ba.id as bank_account_id_line, ba.number as bank_account_number, ba.name as bank_account_name,
+           pe.status as posting_effect_status, pe.error as posting_effect_error,
+           pe.updated_at::text as posting_effect_updated_at
       from documents d
       left join parties p on p.id = d.party_id and p.org_id = d.org_id
       left join journal_entries e on e.id = d.posted_entry_id and e.org_id = d.org_id
+      left join posting_effects pe on pe.document_id = d.id and pe.org_id = d.org_id
       left join document_lines dl on dl.document_id = d.id and dl.org_id = d.org_id and dl.line_number = 1
       left join accounts ba on ba.id = coalesce((d.custom->>'bankAccountId')::uuid, dl.account_id) and ba.org_id = d.org_id
      where d.id = ${id} and d.kind = ${kind} and d.org_id = ${orgId}

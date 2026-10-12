@@ -122,6 +122,8 @@ export interface PaymentPayload {
    *  approval instead of posting directly. Resolved by the loader so the
    *  drawer labels the primary action honestly. */
   governedByFlow?: boolean
+  /** Server-resolved payment duty and Banking feature for effect recovery. */
+  canRetryPostingEffects?: boolean
   /** Live applications as the loader hands them; narrowed to
    *  PaymentAppliedRow for rendering below. */
   applied: Record<string, unknown>[]
@@ -150,6 +152,8 @@ export interface PaymentDoc extends Record<string, unknown> {
   entry_id: string | null
   bank_account_number: string | null
   bank_account_name: string | null
+  posting_effect_status: string | null
+  posting_effect_updated_at: string | null
 }
 
 function docText(value: unknown): string | null {
@@ -185,6 +189,8 @@ export function asPaymentDoc(raw: Record<string, unknown>): PaymentDoc {
     entry_id: docText(raw.entry_id),
     bank_account_number: docText(raw.bank_account_number),
     bank_account_name: docText(raw.bank_account_name),
+    posting_effect_status: docText(raw.posting_effect_status),
+    posting_effect_updated_at: docText(raw.posting_effect_updated_at),
   }
 }
 
@@ -303,8 +309,15 @@ function PaymentDrawerBody({
   const tCommon = useTranslations('common')
   const tStoredValue = useTranslations('storedValue')
   const tWithholding = useTranslations('ap.withholding')
+  const tPostingEffects = useTranslations('common.postingEffects')
   const router = useRouter()
   const doc = asPaymentDoc(payment.doc)
+  const [postingEffectStatus, setPostingEffectStatus] = useState(doc.posting_effect_status)
+  const [postingEffectsQueued, setPostingEffectsQueued] = useState(false)
+  useEffect(() => {
+    setPostingEffectStatus(doc.posting_effect_status)
+    setPostingEffectsQueued(false)
+  }, [doc.id, doc.posting_effect_status, doc.posting_effect_updated_at])
   const tFunding = useTranslations('processorReceipts')
   const [fundingAccounts, setFundingAccounts] = useState(bankAccounts)
   const [fundingError, setFundingError] = useState<string | null>(null)
@@ -783,6 +796,25 @@ function PaymentDrawerBody({
     )
   }
 
+  async function retryPostingEffects() {
+    const reason = await promptDialog({ title: tPostingEffects('retry'), label: tPostingEffects('reason'),
+      placeholder: tPostingEffects('reasonHelp') })
+    if (reason === null) return
+    if (reason.trim().length < 10 || reason.trim().length > 1000) {
+      toast.error(tPostingEffects('reasonHelp'))
+      return
+    }
+    await execute(() => fetchAction(`/api/payments/${doc.id}/retry-effects`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ reason }),
+    }), { fallbackMessage: t('toasts.postFailed'), successMessage: tPostingEffects('queued'),
+      onOk: (data) => {
+        const updated = data as { payment?: { doc?: Record<string, unknown> } } | null
+        setPostingEffectStatus(docText(updated?.payment?.doc?.posting_effect_status) ?? 'pending')
+        setPostingEffectsQueued(true)
+        router.refresh()
+      } })
+  }
+
   async function voidPayment() {
     const reason = await promptDialog({
       title: tCommon('amendment.voidTitle'),
@@ -1008,6 +1040,10 @@ function PaymentDrawerBody({
               ) : null}
             </>
           )
+        ) : doc.status === 'posted' && postingEffectStatus === 'terminal_failed' && payment.canRetryPostingEffects === true ? (
+          <Button variant="outline" size="sm" className="h-8 px-2.5 text-xs" disabled={busy} onClick={retryPostingEffects}>
+            {tPostingEffects('retry')}
+          </Button>
         ) : null
       }
       actions={
@@ -1120,6 +1156,9 @@ function PaymentDrawerBody({
     >
       <div className="space-y-6 p-1">
         <ActionAlert error={refusal} fallbackMessage={t('toasts.postFailed')} />
+        {postingEffectStatus === 'terminal_failed' && docText(doc.posting_effect_error) ?
+          <p role="alert" className="text-sm text-red-600">{docText(doc.posting_effect_error)}</p> : null}
+        {postingEffectsQueued ? <p role="status" className="text-sm text-muted-foreground">{tPostingEffects('queued')}</p> : null}
         {fundingError && editable ? <div role="alert" className="text-sm text-red-600">
           {fundingError} <Button variant="outline" size="sm" onClick={() => setFundingRetry(value => value + 1)}>{tCommon('actions.retry')}</Button>
         </div> : null}

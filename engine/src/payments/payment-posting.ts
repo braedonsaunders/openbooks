@@ -19,6 +19,8 @@ import { assertCreditSourcesExist, validateCreditAllocations } from "./credit-al
 import { isPaymentKind } from "./payment-documents.ts";
 import { redeemStoredValue } from "../stored-value/accounts.ts";
 import { lockLedgerSetupFence } from "../organization/ledger-setup-fence.ts";
+import { lockActorCommandAuthority } from "../organization/actor-command-authority.ts";
+import { documentPostingPermission } from "../records/document-kind-permissions.ts";
 import { expireStalePaymentLinkSessions } from "./payment-link-session-expiry.ts";
 // ---------------------------------------------------------------------------
 // Post + apply
@@ -161,9 +163,43 @@ export async function postPaymentWithApplications(
     }
     // Application triggers update invoice open balances. Lock every source
     // document, entry and line (and the payment document) in the shared order.
-    await lockApplicationEvidence(db, preflight.orgId, discoveredEndpoints, [paymentDocId]);
+    const retained = (await db.execute<{ posted_entry_id: string | null }>(sql`select posted_entry_id from documents
+      where org_id = ${preflight.orgId} and id = ${paymentDocId}`)).rows[0];
+    await lockApplicationEvidence(db, preflight.orgId, discoveredEndpoints, [paymentDocId],
+      retained?.posted_entry_id ? [retained.posted_entry_id] : []);
     const [doc] = await db.select().from(schema.documents).where(and(eq(schema.documents.id, paymentDocId), eq(schema.documents.orgId, preflight.orgId)));
     if (!doc || !isPaymentKind(doc.kind)) throw new PaymentError("payment document not found");
+    assertProviderReturnPosting(doc);
+    if (doc.status === "posted") {
+      const snapshot = (doc.custom ?? {}) as {
+        allocations?: AllocationInput[]; creditAllocations?: CreditAllocationInput[];
+        discountAmount?: string; withholdingAmount?: string; providerReturn?: unknown;
+      };
+      // Replay resolves immutable accounting; it cannot re-price an approved
+      // payment, re-apply its open items, or turn a caller's body into a change.
+      if (allocations !== undefined) {
+        validateAllocationInputs(allocations);
+        if (!allocationsMatchApprovedSnapshot(allocations, snapshot.allocations ?? [])) {
+          throw new PaymentError("payment allocations differ from the posted document; use a governed correction instead of replaying changed settlement evidence");
+        }
+      }
+      if (options.runClaim) {
+        await assertPaymentRunComposition(options.runClaim.runId, doc.id, snapshot.allocations ?? [],
+          snapshot.creditAllocations ?? [], snapshot.discountAmount ?? "0", snapshot.withholdingAmount ?? "0", doc.orgId);
+      } else if (snapshot.providerReturn === undefined) {
+        const permission = documentPostingPermission(doc.kind);
+        if (!userId || !permission) throw new PaymentError("Payment posting replay requires an authorized posting actor.");
+        await lockActorCommandAuthority(db, doc.orgId, userId, doc.subsidiaryId, permission);
+      }
+      if (!doc.postedEntryId || doc.postedEntryId !== retained?.posted_entry_id) {
+        throw new PaymentError("The posted payment's retained journal identity is unavailable; reconcile its native accounting before replaying.");
+      }
+      const entry = (await db.execute<{ id: string }>(sql`select id from journal_entries
+        where org_id = ${doc.orgId} and id = ${doc.postedEntryId} and source_document_id = ${doc.id}
+          and status = 'posted'`)).rows[0];
+      if (!entry) throw new PaymentError("The posted payment's retained journal is not posted for this receipt; reconcile its native accounting before replaying.");
+      return { entryId: entry.id };
+    }
     if (doc.status !== "approved") {
       throw new PaymentError(
         `${doc.documentNumber} is ${doc.status}; it must complete the approval submission lifecycle before posting`,

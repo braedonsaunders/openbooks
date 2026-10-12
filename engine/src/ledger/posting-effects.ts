@@ -1,8 +1,9 @@
 import { actorHasPermission } from "../organization/actor-permissions.ts";
 import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
 import { lockActorCommandAuthority } from "../organization/actor-command-authority.ts";
-import { postPermission } from "../records/document-kind-permissions.ts";
-import { ScopeNotFoundError } from "../organization/subsidiary-scope.ts";
+import { documentPostingPermission } from "../records/document-kind-permissions.ts";
+import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
+import { subsidiaryScopeAllows, ScopeNotFoundError } from "../organization/subsidiary-scope.ts";
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor, withOrgContext } from "../platform/db.ts";
 import {
@@ -87,6 +88,8 @@ async function notifyPostingEffectTerminalFailed(row: TerminalizedPostingEffects
        where id = ${row.document_id} and org_id = ${row.org_id}
     `)).rows[0];
     if (!doc) throw new Error("posting-effect document was not found; terminal evidence remains on the outbox row");
+    const permission = documentPostingPermission(doc.kind);
+    if (!permission) throw new PostingEffectsReplayError("This document kind has no native posting authority; reconcile its posting-effects evidence before replaying.");
     const notice = postingEffectTerminalNotice({
       documentNumber: doc?.document_number ?? row.document_id,
       documentId: row.document_id,
@@ -98,7 +101,7 @@ async function notifyPostingEffectTerminalFailed(row: TerminalizedPostingEffects
       select id::text as id from users where org_id=${row.org_id} and is_active
     `)).rows;
     for (const recipient of recipients) {
-      if (!await actorHasPermission(db, row.org_id, recipient.id, postPermission(doc.kind))) continue;
+      if (!await actorHasPermission(db, row.org_id, recipient.id, permission)) continue;
       const allowed = await actorAllowedSubsidiaryIds(db, row.org_id, recipient.id);
       if (doc.subsidiary_id !== null && allowed !== null && !allowed.has(doc.subsidiary_id)) continue;
       const existing = (await db.execute(sql`
@@ -515,6 +518,7 @@ export async function replayTerminalPostingEffect(input: {
   actorId: string;
   reason: string;
   now?: Date;
+  allowedSubsidiaryIds?: ReadonlySet<string> | null;
 }): Promise<void> {
   const reason = input.reason.trim();
   if (reason.length < 10 || reason.length > 1000) {
@@ -556,13 +560,24 @@ export async function replayTerminalPostingEffect(input: {
        where id=${before.document_id} and org_id=${input.orgId} for update
     `)).rows[0];
     if (!document) throw new PostingEffectsReplayError("posting effect document was not found in the organization");
+    if (input.allowedSubsidiaryIds !== undefined && !subsidiaryScopeAllows(input.allowedSubsidiaryIds, document.subsidiary_id)) {
+      throw new ScopeNotFoundError();
+    }
+    const permission = documentPostingPermission(document.kind);
+    if (!permission) throw new PostingEffectsReplayError("This document kind has no native posting authority; reconcile its posting-effects evidence before replaying.");
     try {
-      await lockActorCommandAuthority(tx, input.orgId, input.actorId, document.subsidiary_id, postPermission(document.kind));
+      await lockActorCommandAuthority(tx, input.orgId, input.actorId, document.subsidiary_id, permission);
     } catch (error) {
       if (error instanceof ScopeNotFoundError) {
-        throw new PostingEffectsReplayError("replay requires the document's posting permission and legal-entity access; ask an authorized posting operator to review the document");
+        const refusal = new PostingEffectsReplayError("replay requires the document's posting permission and legal-entity access; ask an authorized posting operator to review the document");
+        refusal.cause = error;
+        throw refusal;
       }
       throw error;
+    }
+    if ((document.kind === "customer_payment" || document.kind === "vendor_payment")
+        && !await lockAndCheckOrgFeature(tx, input.orgId, "banking")) {
+      throw new PostingEffectsReplayError("Enable Banking in Company Settings → Features before retrying payment posting effects.");
     }
     if (document.status !== "posted") {
       throw new PostingEffectsReplayError("only a posted document's terminal-failed effects can be replayed; review the document status before retrying");

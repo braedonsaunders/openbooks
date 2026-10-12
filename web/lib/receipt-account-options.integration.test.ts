@@ -5,7 +5,7 @@ import { sql } from "drizzle-orm";
 import { db, withBypassContext } from "@openbooks/engine/platform/db";
 import { createScratchOrg, createScratchUser, dropScratchOrg, grantScratchPermissions, seedPostingAccount } from "@openbooks/engine/testing/fixtures";
 import { saveProcessorReceiptPolicy } from "@openbooks/engine/payments/documents";
-import { ScopeNotFoundError } from "@openbooks/engine/organization/subsidiary-scope";
+import { ScopeNotFoundError } from "@openbooks/engine/organization/scope";
 import { bankAccountOptions, receiptAccountOptions } from "./documents.ts";
 
 test("receipt options add only a dated provider pool and leave native bank options unchanged", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {

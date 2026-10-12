@@ -7,7 +7,7 @@ import { ScopeNotFoundError } from "../organization/subsidiary-scope.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg, grantScratchPermissions, seedApprovalFlow } from "../testing/fixtures.ts";
 import { decideGate } from "../flows/gates.ts";
 import { claimPostingEffectsForDocument, markPostingEffectsFailed, MAX_POSTING_EFFECTS_ATTEMPTS,
-  processDuePostingEffects, replayTerminalPostingEffect } from "../ledger/posting-effects.ts";
+  processDuePostingEffects, replayTerminalPostingEffect, POSTING_EFFECT_TERMINAL_NOTICE_KIND } from "../ledger/posting-effects.ts";
 import { submitAndReleaseIfUngated } from "../flows/submit.ts";
 import { finalizePaymentAcceptanceForDocument } from "../payments-core/acceptance-effect.ts";
 import { PaymentError } from "../payments-core/payment-errors.ts";
@@ -38,8 +38,10 @@ async function receipts(orgId: string) {
 }
 
 async function enableReceiptEvents(orgId: string) {
-  await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features,outboundWebhooks}', 'true'::jsonb)
+  const enabled = await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features}',
+    coalesce(settings->'features', '{}'::jsonb) || '{"apiAccess":true,"outboundWebhooks":true}'::jsonb)
     where id = ${orgId}`);
+  assert.equal(enabled.rowCount, 1);
 }
 
 async function receiptEffect(orgId: string, documentId: string) {
@@ -452,6 +454,16 @@ test("terminal receipt effects require the native reasoned replay before a provi
     });
     const effect = await receiptEffect(org.orgId, receiptId);
     assert.equal(effect.status, "terminal_failed");
+    const notice = (await db.execute<{ count: number }>(sql`select count(*)::int as count from notifications
+      where org_id = ${org.orgId} and user_id = ${h.userId} and kind = ${POSTING_EFFECT_TERMINAL_NOTICE_KIND}`)).rows[0]!;
+    assert.equal(notice.count, 1, "terminal payment effects notify the native ar.pay operator");
+    const invoicePoster = await createScratchUser(org.orgId, "Invoice posting operator", "invoice_poster");
+    await grantScratchPermissions(org.orgId, invoicePoster, ["ar.post"]);
+    await assert.rejects(replayTerminalPostingEffect({ orgId: org.orgId, id: effect.id, actorId: invoicePoster,
+      reason: "Invoice authority does not authorize receipt recovery" }), /posting permission and legal-entity access/);
+    await assert.rejects(replayTerminalPostingEffect({ orgId: org.orgId, id: effect.id, actorId: h.userId,
+      reason: "Recovery requested outside the selected legal entity", allowedSubsidiaryIds: new Set() }), ScopeNotFoundError);
+    assert.deepEqual(await receiptEffect(org.orgId, receiptId), effect);
     assert.equal((await h.fire(event))?.status, "refunded_pending_review");
     assert.equal((await receipts(org.orgId)).find(row => row.id === receiptId)!.status, "posted");
     assert.equal(await invoiceOpen(org.orgId, h.invoiceId), "0.0000");
