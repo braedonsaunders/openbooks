@@ -118,22 +118,20 @@ async function countRows(query: ReturnType<typeof sql>): Promise<number> {
 }
 
 /** Poll until the expected number of document lifecycle commands waits on a row lock. */
-async function waitForDocumentLockWaiters(expected: number): Promise<void> {
+async function waitForDocumentLockWaiters(holderPid: number, expected: number): Promise<void> {
   for (let attempt = 0; attempt < 400; attempt++) {
-    // Read the lock table, not the statement text: pg_stat_activity truncates
-    // long statements, so a wide row-locking select can lose its FOR UPDATE.
-    // A backend queued on a held row lock waits on the holder's transaction
-    // id (first in line) or on the tuple lock of the documents row.
+    // Follow the known holder's wait queue, including contenders blocked by
+    // an earlier waiter. Wide document reads can truncate before their FROM
+    // clause, so statement text cannot identify a document lock reliably.
     const waiting = await db.execute<{ count: number }>(sql`
-      select count(distinct activity.pid)::int as count
-        from pg_stat_activity activity
-        join pg_locks lock on lock.pid = activity.pid and not lock.granted
-       where activity.datname = current_database()
-         and activity.state = 'active'
-         and activity.wait_event_type = 'Lock'
-         and activity.query ilike '%documents%'
-         and (lock.locktype = 'transactionid'
-              or (lock.locktype = 'tuple' and lock.relation = 'public.documents'::regclass))`);
+      with recursive waiting(pid) as (
+        select activity.pid from pg_stat_activity activity
+         where activity.datname=current_database() and ${holderPid}=any(pg_blocking_pids(activity.pid))
+        union
+        select activity.pid from pg_stat_activity activity join waiting parent
+          on parent.pid=any(pg_blocking_pids(activity.pid))
+         where activity.datname=current_database()
+      ) select count(*)::int as count from waiting`);
     if (Number(waiting.rows[0]?.count ?? 0) >= expected) return;
     await new Promise((resolve) => setTimeout(resolve, 25));
   }
@@ -537,6 +535,7 @@ test("delete and submit serialize on the document row before approval gates comm
   const org = await createScratchOrg();
   let releaseHolder = () => {};
   let holder: Promise<void> | undefined;
+  let holderPid = 0;
   try {
     const actors = await seedFlowActors(org.orgId);
     await seedApprovalFlow(org.orgId, {
@@ -557,6 +556,7 @@ test("delete and submit serialize on the document row before approval gates comm
       releaseHolder = resolve;
     });
     holder = withOrgTransaction(org.orgId, async () => {
+      holderPid = (await db.execute<{ pid: number }>(sql`select pg_backend_pid()::int as pid`)).rows[0]!.pid;
       await db.execute(sql`
         select id
           from documents
@@ -570,9 +570,9 @@ test("delete and submit serialize on the document row before approval gates comm
     // Queue submission first, then deletion, behind the same held row lock.
     // Releasing the holder lets PostgreSQL grant the lock in queue order.
     const submitting = submitForApproval("vendor_bill", documentId, actors.submitterId);
-    await waitForDocumentLockWaiters(1);
+    await waitForDocumentLockWaiters(holderPid, 1);
     const deleting = deleteDocument(documentId, actors.submitterId, org.orgId, { source: "test", allowedSubsidiaryIds: null });
-    await waitForDocumentLockWaiters(2);
+    await waitForDocumentLockWaiters(holderPid, 2);
     releaseHolder();
 
     const [submitted, deleted] = await Promise.allSettled([submitting, deleting]);
