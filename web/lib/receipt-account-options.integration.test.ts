@@ -5,6 +5,7 @@ import { sql } from "drizzle-orm";
 import { db, withBypassContext } from "@openbooks/engine/platform/db";
 import { createScratchOrg, createScratchUser, dropScratchOrg, grantScratchPermissions, seedPostingAccount } from "@openbooks/engine/testing/fixtures";
 import { saveProcessorReceiptPolicy } from "@openbooks/engine/payments/documents";
+import { ScopeNotFoundError } from "@openbooks/engine/organization/subsidiary-scope";
 import { bankAccountOptions, receiptAccountOptions } from "./documents.ts";
 
 test("receipt options add only a dated provider pool and leave native bank options unchanged", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
@@ -24,6 +25,6 @@ test("receipt options add only a dated provider pool and leave native bank optio
     assert.ok(!eligible.includes(unconfigured));
     assert.ok(!(await receiptAccountOptions({ ...input, onDate: "2000-01-01" })).some(row => row.id === pool));
     assert.ok(!(await withBypassContext(() => bankAccountOptions(org.orgId))).some(row => row.id === pool));
-    await assert.rejects(receiptAccountOptions({ ...input, allowedSubsidiaryIds: new Set() }), /record not found/);
+    await assert.rejects(receiptAccountOptions({ ...input, allowedSubsidiaryIds: new Set() }), ScopeNotFoundError);
   } finally { await withBypassContext(() => dropScratchOrg(org.orgId)); }
 });

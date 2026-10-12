@@ -64,7 +64,7 @@ for (const capability of ["cip", "proposals"] as const) {
         where org_id = ${org.orgId} and key = 'asset_accountant'`));
       await refused("subsidiary_scope", () => replay());
       await withOrgContext(org.orgId, async () => {
-        await db.execute(sql`update app_roles set subsidiary_restriction = null where org_id = ${org.orgId} and key = 'asset_accountant'`);
+        await db.execute(sql`update app_roles set subsidiary_restriction = '{"mode":"all"}'::jsonb where org_id = ${org.orgId} and key = 'asset_accountant'`);
         await db.execute(sql`update user_permission_overrides set effect = 'deny'
           where org_id = ${org.orgId} and user_id = ${actorId} and permission = 'assets.capitalize'`);
       });

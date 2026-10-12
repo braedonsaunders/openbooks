@@ -2,6 +2,32 @@ import { sql } from "drizzle-orm";
 import { db, withOrg } from "../platform/db.ts";
 import { businessToday } from "../platform/business-date.ts";
 import { PaymentError } from "../payments-core/payment-errors.ts";
+import { runPostDocumentEffects } from "../ledger/posting-dispatch.ts";
+
+/** Drain native receipt effects before a later return makes the posted
+ * document unavailable to its retry action. Lease and terminal refusals
+ * retain the original outbox ownership and operator remediation path. */
+export async function completePaymentPostingEffectsForReturn(orgId: string, documentId: string,
+  options: { requireEvidence?: boolean } = {}): Promise<void> {
+  const effect = (await db.execute<{ status: string }>(sql`select status from posting_effects
+    where org_id = ${orgId} and document_id = ${documentId}`)).rows[0];
+  // Historical postings without an outbox retain the native void contract.
+  if (!effect) {
+    if (options.requireEvidence) throw new PaymentError("Receipt posting-effects evidence is unavailable; reconcile its native posting before resuming the provider return.");
+    return;
+  }
+  if (effect.status === "succeeded") return;
+  try {
+    await runPostDocumentEffects(documentId, "approved");
+  } catch (error) {
+    throw new PaymentError(`Receipt posting effects could not complete: ${error instanceof Error ? error.message : "unknown effect refusal"}. Resolve the cause on the posted receipt; terminal failures require Retry posting effects with a review reason before resuming the provider return.`, { cause: error });
+  }
+  const completed = (await db.execute<{ status: string }>(sql`select status from posting_effects
+    where org_id = ${orgId} and document_id = ${documentId}`)).rows[0];
+  if (completed?.status !== "succeeded") throw new PaymentError(
+    `Receipt posting effects are ${completed?.status ?? "unavailable"}; wait for their native completion before resuming the provider return. Terminal failures require Retry posting effects on the posted receipt with a review reason.`,
+  );
+}
 /** Reverse a posted payment after a bank return and reopen its applications. */
 export async function reversePaymentForReturn(
   paymentDocumentId: string,
@@ -20,6 +46,7 @@ export async function reversePaymentForReturn(
     `));
     const payment = row.rows[0];
     if (!payment?.posted_entry_id) throw new PaymentError("returned payment is not posted");
+    await completePaymentPostingEffectsForReturn(orgId, payment.id);
     // The void-evidence CHECK caps void_reason at 500 chars, but bank return
     // reasons arrive unbounded (route text, file memos): a pasted reason
     // longer than the prefix leaves room for died at storage as a raw 500.

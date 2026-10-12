@@ -193,7 +193,7 @@ test("native RBC AP refuses revoked duty, current role scope, disabled banking a
       where org_id=${org.orgId} and key='ap_treasury'`));
     await assert.rejects(f.download(first.id),ScopeNotFoundError);
     await assert.rejects(f.generate(),ScopeNotFoundError);
-    await withBypassContext(() => db.execute(sql`update app_roles set subsidiary_restriction=null where org_id=${org.orgId} and key='ap_treasury'`));
+    await withBypassContext(() => db.execute(sql`update app_roles set subsidiary_restriction='{"mode":"all"}'::jsonb where org_id=${org.orgId} and key='ap_treasury'`));
     await withBypassContext(() => db.execute(sql`update orgs set settings=jsonb_set(settings,'{features,banking}','false'::jsonb) where id=${org.orgId}`));
     await assert.rejects(f.download(first.id),/Enable Banking/);
     await assert.rejects(f.generate({reprocessFileId:first.id}),/Enable Banking/);

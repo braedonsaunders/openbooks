@@ -1,4 +1,5 @@
 import { sql } from "drizzle-orm";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { db, withTransactionSavepoint } from "../platform/db.ts";
 import { canonicalJson } from "../platform/canonical-json.ts";
 import { isUuid } from "../platform/uuid.ts";
@@ -10,6 +11,7 @@ import { postDocument } from "../ledger/posting-document.ts";
 import { createPaymentDocument } from "./payment-documents.ts";
 import { paymentControlDeps } from "./payment-accounts.ts";
 import { postPaymentWithApplications } from "./payment-posting.ts";
+import { completePaymentPostingEffectsForReturn } from "./payment-return.ts";
 import { persistPaymentMoney, sameCurrencyAllocation, type AllocationInput } from "./settlement-policy.ts";
 import { disputeRow } from "./psp-automation-disputes.ts";
 import { PSP_AUTOMATION_SYSTEM_ACTOR_ID, PspAutomationError } from "./psp-automation-context.ts";
@@ -32,6 +34,7 @@ export interface ReturnReceiptPlan {
 }
 
 type Stage = { plan: ReturnReceiptPlan; documentId: string; documentDate: string; allocations: AllocationInput[]; onAccountAmount: string };
+const financialReceiptEffects = new AsyncLocalStorage<Map<string, string>>();
 
 function stages(history: unknown): Stage[] {
   if (!Array.isArray(history)) return [];
@@ -157,7 +160,9 @@ export async function postReturnReceipt(orgId: string, receiptId: string): Promi
   if (row.status !== "pending_review" && row.status !== "opened") throw new PspAutomationError("The provider return no longer admits receipt posting.");
   const stage = stages(row.status_history).find(item => item.documentId === receiptId);
   if (!stage || !(await stageReturnReceipt(orgId, stage.plan)).ready) throw new PspAutomationError("Approve the staged return receipt before resuming its review.");
-  return withProviderReturnPosting(orgId, receiptId, async () => {
+  const unit = financialReceiptEffects.getStore();
+  if (!unit) throw new PspAutomationError("Provider return receipts must post inside their native financial stage.");
+  const entryId = await withProviderReturnPosting(orgId, receiptId, async () => {
     // A credit-backed refund is a cash-out receipt with a debit open item.
     // The receipt kernel posts it; the parent command then applies the credit
     // through the native credit settlement service in the same savepoint.
@@ -168,11 +173,26 @@ export async function postReturnReceipt(orgId: string, receiptId: string): Promi
     }
     return (await postPaymentWithApplications(receiptId, undefined, PSP_AUTOMATION_SYSTEM_ACTOR_ID, "api", { deferEffects: true })).entryId;
   });
+  unit.set(receiptId, orgId);
+  return entryId;
 }
 
-/** A refused financial stage rolls back before its review is parked. */
+/** A refused financial stage rolls back before its review is parked. Effects
+ * drain only after the complete return accounting unit has settled its
+ * applications and lifecycle. Nested refused stages contribute no receipts. */
 export async function returnFinancialStage<T>(work: () => Promise<T>): Promise<T> {
-  return withTransactionSavepoint(db, work);
+  const parent = financialReceiptEffects.getStore();
+  const unit = new Map<string, string>();
+  const result = await withTransactionSavepoint(db, () => financialReceiptEffects.run(unit, async () => {
+    const result = await work();
+    if (!parent) {
+      for (const [documentId, orgId] of unit) await completePaymentPostingEffectsForReturn(orgId, documentId, { requireEvidence: true });
+    }
+    return result;
+  }));
+  // Admit nested receipts only after their savepoint has been released.
+  if (parent) for (const [documentId, orgId] of unit) parent.set(documentId, orgId);
+  return result;
 }
 
 export async function withdrawReturnReceipts(orgId: string, disputeId: string, actorId: string, reason: string): Promise<void> {

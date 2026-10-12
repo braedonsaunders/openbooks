@@ -52,6 +52,7 @@ export type Harness = {
 
 export async function settleHarness(org: Awaited<ReturnType<typeof createScratchOrg>>, opts: {
   invoiceTotal?: string;
+  invoiceFxRate?: string;
   currency?: string;
   policy?: "automatic" | "review";
   disputeAccounts?: boolean;
@@ -70,7 +71,7 @@ export async function settleHarness(org: Awaited<ReturnType<typeof createScratch
       (id, org_id, kind, status, document_number, subsidiary_id, party_id,
        document_date, currency, fx_rate, subtotal, tax_total, total, created_by)
     values (${invoiceId}, ${org.orgId}, 'customer_invoice', 'draft', ${`INV-${randomUUID().slice(0, 8)}`},
-            ${org.subsidiaryId}, ${org.customerId}, ${org.date}, ${currency}, '1',
+            ${org.subsidiaryId}, ${org.customerId}, ${org.date}, ${currency}, ${opts.invoiceFxRate ?? "1"},
             ${total}, '0', ${total}, ${userId})`);
   await db.execute(sql`
     insert into document_lines

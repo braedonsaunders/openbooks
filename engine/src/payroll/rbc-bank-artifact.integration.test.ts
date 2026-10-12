@@ -3,13 +3,17 @@ import { createHash, randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withBypassContext, withOrgContext } from "../platform/db.ts";
+import { withSimClock } from "../platform/clock.ts";
+import { assignEmployeeWorkerCompGroup } from "./employee-worker-comp.ts";
+import { recordHistoricalEmployerAssignment } from "./employer-assignment-history.ts";
+import { setPackSlotAccount } from "./packs.ts";
 import { add, cmp, toUnits } from "../money/money.ts";
 import { encryptAccountNumber } from "../payments-core/rail-settings.ts";
 import { ScopeNotFoundError } from "../organization/subsidiary-scope.ts";
 import { createPaymentBankProfile, ensureBuiltInPaymentFormats, updatePaymentBankProfile } from "../payments/operations.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg, grantScratchPermissions,
   seedPayrollEmployeeRole, seedPayrollPerson, seedPayrollProfile, seedPayrollSchedule,
-  seedPayrollTime, seedPayrollWage, seedWorkerEmployment } from "../testing/fixtures.ts";
+  seedPayrollTime, seedPayrollWage, seedPostingAccount, seedWorkerEmployment } from "../testing/fixtures.ts";
 import { seedCanadianPostingAccounts } from "../testing/payroll-posting-fixture.ts";
 import { seedOntarioEhtFixture } from "./filing-test-fixtures.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
@@ -26,11 +30,17 @@ const ORIGINATOR = { clientNumber: "0123456789", originatorLongName: "Boreal-Rid
 
 async function fixture(org: Awaited<ReturnType<typeof createScratchOrg>>) {
   const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Payroll treasury operator", "payroll_treasury"));
+  const workerCompGroupId = randomUUID();
   await withBypassContext(async () => {
-    await grantScratchPermissions(org.orgId, actorId, ["payroll.run", "admin.setup.manage"]);
+    await grantScratchPermissions(org.orgId, actorId, ["payroll.run", "payroll.manage", "parties.manage", "admin.setup.manage"]);
     await seedCanadianPostingAccounts(org.orgId);
     await seedPayrollComponents(org.orgId, actorId, "CA");
     await seedOntarioEhtFixture(org.orgId, actorId);
+    const workerCompPayable = await seedPostingAccount(org.orgId, "2330", "Workers compensation payable", "liability_current");
+    await setPackSlotAccount(org.orgId, actorId, "CA", "wcb", workerCompPayable);
+    await db.execute(sql`insert into worker_comp_groups
+      (id, org_id, code, name, rate_percent, max_assessable, is_active, created_by, updated_by)
+      values (${workerCompGroupId}, ${org.orgId}, 'CONSTRUCTION', 'Construction workers', '1.32', '121700', true, ${actorId}, ${actorId})`);
   });
   await withOrgContext(org.orgId, () => ensureBuiltInPaymentFormats(org.orgId, actorId));
   const formatId = (await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`
@@ -70,6 +80,17 @@ async function fixture(org: Awaited<ReturnType<typeof createScratchOrg>>) {
       }
     }
   });
+  for (const employee of employees) {
+    await assignEmployeeWorkerCompGroup({ orgId: org.orgId, actorId, employeePartyId: employee.id,
+      groupId: workerCompGroupId, expectedGroupId: null, reason: "Construction workers covered by the employer compensation class",
+      dryRun: false, allowedSubsidiaryIds: null });
+    await withSimClock("2026-07-22", () => recordHistoricalEmployerAssignment({
+      orgId: org.orgId, actorId, employeePartyId: employee.id, kind: "worker_comp", assignmentId: workerCompGroupId,
+      expectedCurrentId: workerCompGroupId, effectiveFrom: "2026-07-05", effectiveTo: "2026-07-21",
+      sourceReference: "Employer compensation coverage for July payroll", reason: "Retain the workers compensation class used on the pay date",
+      allowedSubsidiaryIds: null, dryRun: false,
+    }));
+  }
   const run = await withOrgContext(org.orgId, () => createPayRun({ orgId: org.orgId, actorId, payScheduleId: scheduleId,
     periodStart: "2026-07-05", periodEnd: "2026-07-18", payDate: "2026-07-21" }));
   const calc = await withOrgContext(org.orgId, () => calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId }));
@@ -213,7 +234,7 @@ test("RBC payroll refuses revoked duties, live entity scope, disabled payroll an
       where org_id=${org.orgId} and key='payroll_treasury'`));
     await assert.rejects(f.release(file.id), /not found/);
     await assert.rejects(f.generate({ supersedeReason: "A narrowed role cannot export the prior population" }), /not found/);
-    await withBypassContext(() => db.execute(sql`update app_roles set subsidiary_restriction=null where org_id=${org.orgId} and key='payroll_treasury'`));
+    await withBypassContext(() => db.execute(sql`update app_roles set subsidiary_restriction='{"mode":"all"}'::jsonb where org_id=${org.orgId} and key='payroll_treasury'`));
     await withBypassContext(() => db.execute(sql`update orgs set settings=jsonb_set(settings,'{features,payroll}','false'::jsonb) where id=${org.orgId}`));
     await assert.rejects(f.release(file.id), /Enable Payroll/);
     await assert.rejects(f.generate({ supersedeReason: "Payroll must remain enabled during replacement" }), /Enable Payroll/);

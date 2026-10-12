@@ -21,7 +21,10 @@ import { saveAcceptanceConfig } from "./acceptance.ts";
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
 async function fixture(org: Awaited<ReturnType<typeof createScratchOrg>>, currency = "CAD") {
-  const h = await settleHarness(org, { invoiceTotal: "459.96", currency });
+  // The invoice carries its own agreed rate. Receipt collection still needs
+  // an independent dated quote from the native exchange-rate policy.
+  const h = await settleHarness(org, { invoiceTotal: "459.96", currency,
+    ...(currency === "USD" ? { invoiceFxRate: "1.25" } : {}) });
   await grantScratchPermissions(org.orgId, h.userId, ["ar.pay", "ap.pay", "admin.setup.manage"]);
   const clearing = await seedPostingAccount(org.orgId, "1040", "Processor clearing", "asset_current_other");
   await db.execute(sql`update accounts set reconcilable = false where org_id = ${org.orgId} and id = ${clearing}`);

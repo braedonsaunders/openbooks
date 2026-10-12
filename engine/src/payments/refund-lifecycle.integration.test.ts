@@ -2,10 +2,20 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "../platform/db.ts";
+import { db, withOrgTransaction } from "../platform/db.ts";
 import { ScopeNotFoundError } from "../organization/subsidiary-scope.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg, grantScratchPermissions, seedApprovalFlow } from "../testing/fixtures.ts";
 import { decideGate } from "../flows/gates.ts";
+import { claimPostingEffectsForDocument, markPostingEffectsFailed, MAX_POSTING_EFFECTS_ATTEMPTS,
+  processDuePostingEffects, replayTerminalPostingEffect } from "../ledger/posting-effects.ts";
+import { submitAndReleaseIfUngated } from "../flows/submit.ts";
+import { finalizePaymentAcceptanceForDocument } from "../payments-core/acceptance-effect.ts";
+import { PaymentError } from "../payments-core/payment-errors.ts";
+import { createPaymentDocument, updateDraftPayment } from "./payment-documents.ts";
+import { openItemsForParty } from "./payment-queries.ts";
+import { sameCurrencyAllocation } from "./settlement-policy.ts";
+import { reversePaymentForReturn } from "./payment-return.ts";
+import { postReturnReceipt, returnFinancialStage } from "./psp-return-stages.ts";
 import { postDocument } from "../ledger/posting-document.ts";
 import { postPaymentWithApplications } from "./payment-posting.ts";
 import { approveDisputeReview, rejectDisputeReview, processProviderDisputeEvent } from "./psp-refund-automation.ts";
@@ -27,6 +37,54 @@ async function receipts(orgId: string) {
     select id, status, total::text as total from documents where org_id = ${orgId} and kind = 'customer_payment' order by created_at, id`)).rows;
 }
 
+async function enableReceiptEvents(orgId: string) {
+  await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features,outboundWebhooks}', 'true'::jsonb)
+    where id = ${orgId}`);
+}
+
+async function receiptEffect(orgId: string, documentId: string) {
+  return (await db.execute<{ id: string; status: string; attempt_count: number }>(sql`
+    select id, status, attempt_count from posting_effects where org_id = ${orgId} and document_id = ${documentId}`)).rows[0]!;
+}
+
+async function assertReceiptEffectsCompleted(orgId: string) {
+  for (const receipt of (await receipts(orgId)).filter(row => row.status === "posted" || row.status === "voided")) {
+    assert.equal((await receiptEffect(orgId, receipt.id)).status, "succeeded", receipt.id);
+    const events = (await db.execute<{ count: number }>(sql`select count(*)::int as count from webhook_events
+      where org_id = ${orgId} and entity_id = ${receipt.id} and event_type = 'payment.received'`)).rows[0]!;
+    assert.equal(events.count, 1, "native receipt completion emits once across provider replay");
+  }
+}
+
+/** A native posted receipt with its outbox intentionally deferred models an
+ * interrupted acceptance close before the projection worker runs. */
+async function pendingReceipt(org: Awaited<ReturnType<typeof createScratchOrg>>) {
+  await enableReceiptEvents(org.orgId);
+  const h = await settleHarness(org);
+  await grantScratchPermissions(org.orgId, h.userId, ["ar.pay"]);
+  const receiptId = await withOrgTransaction(org.orgId, async () => {
+    const receipt = await createPaymentDocument({ orgId: org.orgId, kind: "customer_payment", createdBy: h.userId,
+      allowedSubsidiaryIds: null, partyId: org.customerId, bankAccountId: org.accounts.bank,
+      subsidiaryId: org.subsidiaryId, currency: "CAD", documentDate: org.date });
+    const item = (await openItemsForParty(org.customerId, "ar", org.orgId, null)).find(row => row.documentId === h.invoiceId)!;
+    await updateDraftPayment(receipt.id, { allocations: [sameCurrencyAllocation(item.lineId, "100")] }, h.userId, org.orgId,
+      { allowedSubsidiaryIds: null });
+    // Reserve the provider identity as acceptance does before posting. The
+    // native finalizer, rather than fixture status writes, closes the attempt.
+    const reserved = await db.execute(sql`update payment_attempts set payment_document_id = ${receipt.id},
+      event_payload = coalesce(event_payload, '{}'::jsonb) || ${JSON.stringify({ paymentIntent: h.intentId })}::jsonb
+      where org_id = ${org.orgId} and id = ${h.attemptId} and journal_entry_id is null`);
+    assert.equal(reserved.rowCount, 1);
+    await submitAndReleaseIfUngated("customer_payment", receipt.id, h.userId);
+    await postPaymentWithApplications(receipt.id, undefined, h.userId, "api", { deferEffects: true });
+    await finalizePaymentAcceptanceForDocument(receipt.id);
+    return receipt.id;
+  });
+  assert.equal((await receiptEffect(org.orgId, receiptId)).status, "pending");
+  assert.equal(await invoiceOpen(org.orgId, h.invoiceId), "0.0000");
+  return { h, receiptId };
+}
+
 async function approveReceipts(orgId: string, actorId: string) {
   const gates = (await db.execute<{ id: string }>(sql`select id from flow_gates
     where org_id = ${orgId} and subject_kind = 'customer_payment' and status = 'pending' order by created_at, id`)).rows;
@@ -43,6 +101,7 @@ async function gateReceipts(orgId: string) {
 test("successive, repeated and stale Stripe refund snapshots reconcile the original charge", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
+    await enableReceiptEvents(org.orgId);
     const h = await settleHarness(org);
     await settle(h, 10000);
     assert.equal((await h.fire(refund(h, 3000)))?.status, "refunded_posted");
@@ -57,6 +116,7 @@ test("successive, repeated and stale Stripe refund snapshots reconcile the origi
     assert.equal((await h.fire(refund(h, 10000)))?.status, "refunded_posted");
     assert.equal(await invoiceOpen(org.orgId, h.invoiceId), "100.0000");
     assert.equal((await receipts(org.orgId)).filter(row => row.status === "posted").length, 0);
+    await assertReceiptEffectsCompleted(org.orgId);
   } finally { await dropScratchOrg(org.orgId); }
 });
 
@@ -145,6 +205,7 @@ test("a late receipt posting refusal rolls the source reversal and applications 
 test("an opened dispute releases its actual hold receipt when won", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
+    await enableReceiptEvents(org.orgId);
     const h = await settleHarness(org, { disputeAccounts: true });
     await settle(h, 10000);
     const ref = `dispute-${randomUUID()}`;
@@ -160,6 +221,7 @@ test("an opened dispute releases its actual hold receipt when won", { skip: !DB 
       join accounts a on a.org_id = jl.org_id and a.id = jl.account_id
       where jl.org_id = ${org.orgId} and a.name = 'Disputed Funds Clearing'`)).rows[0];
     assert.equal(hold?.total, "0.0000");
+    await assertReceiptEffectsCompleted(org.orgId);
   } finally { await dropScratchOrg(org.orgId); }
 });
 
@@ -171,10 +233,12 @@ test("credit-backed refund approvals retain one cash-out receipt and settle the 
     const creditId = randomUUID();
     await db.execute(sql`insert into documents
       (id, org_id, kind, status, document_number, subsidiary_id, party_id, document_date, currency, fx_rate, subtotal, tax_total, total, created_by)
-      values (${creditId}, ${org.orgId}, 'customer_credit', 'approved', ${`CREDIT-${randomUUID()}`}, ${org.subsidiaryId}, ${org.customerId},
+      values (${creditId}, ${org.orgId}, 'customer_credit', 'draft', ${`CREDIT-${randomUUID()}`}, ${org.subsidiaryId}, ${org.customerId},
               ${org.date}, 'CAD', '1', '30', '0', '30', ${h.userId})`);
     await db.execute(sql`insert into document_lines (org_id, document_id, line_number, account_id, quantity, unit_price, amount, tax_amount, tax_input_amount)
       values (${org.orgId}, ${creditId}, 1, ${org.accounts.revenue}, '1', '30', '30', '0', '0')`);
+    await db.execute(sql`update documents set status = 'approved', updated_at = now()
+      where org_id = ${org.orgId} and id = ${creditId} and status = 'draft'`);
     await postDocument(creditId, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } });
     const approver = await gateReceipts(org.orgId);
     const event = refund(h, 3000);
@@ -263,6 +327,7 @@ test("reviewing a lost dispute preserves the confirmed provider fee", { skip: !D
 test("gated dispute receipts preserve the source and a gated win preserves the hold until resumption", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
+    await enableReceiptEvents(org.orgId);
     const h = await settleHarness(org, { disputeAccounts: true });
     await settle(h, 10000);
     const approver = await gateReceipts(org.orgId);
@@ -279,6 +344,7 @@ test("gated dispute receipts preserve the source and a gated win preserves the h
     assert.equal((await approveDisputeReview(org.orgId, review.id, h.userId, null)).status, "posted");
     assert.equal(await invoiceOpen(org.orgId, h.invoiceId), "0.0000");
     assert.equal((await disputeRows(org.orgId))[0]?.status, "won");
+    await assertReceiptEffectsCompleted(org.orgId);
   } finally { await dropScratchOrg(org.orgId); }
 });
 
@@ -297,7 +363,7 @@ test("rejected refunds stay rejected across delivery identities and scoped revie
       where org_id = ${org.orgId} and key = 'admin'`);
     await assert.rejects(approveDisputeReview(org.orgId, row.id, h.userId, null), ScopeNotFoundError);
     await assert.rejects(rejectDisputeReview(org.orgId, row.id, h.userId, "Cannot act after scope revocation", null), ScopeNotFoundError);
-    await db.execute(sql`update app_roles set subsidiary_restriction = null where org_id = ${org.orgId} and key = 'admin'`);
+    await db.execute(sql`update app_roles set subsidiary_restriction = '{"mode":"all"}'::jsonb where org_id = ${org.orgId} and key = 'admin'`);
     await rejectDisputeReview(org.orgId, row.id, h.userId, "Customer confirmed a duplicate provider notice", null);
     assert.equal((await h.fire(event))?.status, "refunded_duplicate");
     assert.equal((await h.fire(refund(h, 10000)))?.status, "refunded_duplicate");
@@ -306,5 +372,145 @@ test("rejected refunds stay rejected across delivery identities and scoped revie
     await db.execute(sql`update user_permission_overrides set effect = 'deny'
       where org_id = ${org.orgId} and user_id = ${h.userId} and permission = 'banking.reconcile'`);
     await assert.rejects(approveDisputeReview(org.orgId, row.id, h.userId, null), ScopeNotFoundError);
+  } finally { await dropScratchOrg(org.orgId); }
+});
+
+for (const initialState of ["pending", "failed"] as const) {
+  test(`a provider refund completes ${initialState} native receipt effects before reversal and completes its replacement once`, { skip: !DB }, async () => {
+    const org = await createScratchOrg();
+    try {
+      const { h, receiptId } = await pendingReceipt(org);
+      if (initialState === "failed") {
+        await withOrgTransaction(org.orgId, async () => {
+          const claim = await claimPostingEffectsForDocument(receiptId);
+          assert.ok(claim && typeof claim === "object");
+          await markPostingEffectsFailed(claim, new Error("Receipt projection worker interrupted before processing"));
+        });
+        assert.equal((await receiptEffect(org.orgId, receiptId)).status, "failed");
+      }
+      const event = refund(h, 3000);
+      assert.equal((await h.fire(event))?.status, "refunded_posted");
+      assert.equal((await receipts(org.orgId)).find(row => row.id === receiptId)!.status, "voided");
+      assert.equal(await invoiceOpen(org.orgId, h.invoiceId), "30.0000");
+      await assertReceiptEffectsCompleted(org.orgId);
+      const completed = await receiptEffect(org.orgId, receiptId);
+      assert.equal(completed.attempt_count, initialState === "failed" ? 2 : 1);
+      assert.equal((await h.fire(event))?.status, "refunded_duplicate");
+      assert.equal((await receipts(org.orgId)).length, 2);
+      assert.deepEqual(await receiptEffect(org.orgId, receiptId), completed);
+      await assertReceiptEffectsCompleted(org.orgId);
+    } finally { await dropScratchOrg(org.orgId); }
+  });
+}
+
+test("a running receipt effect keeps a provider return recoverable until the native worker recovers its lease", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const { h, receiptId } = await pendingReceipt(org);
+    const approver = await gateReceipts(org.orgId);
+    const event = refund(h, 3000);
+    assert.equal((await h.fire(event))?.status, "refunded_pending_review");
+    await approveReceipts(org.orgId, approver);
+    await withOrgTransaction(org.orgId, async () => {
+      const claim = await claimPostingEffectsForDocument(receiptId, new Date("2000-01-01T00:00:00Z"));
+      assert.ok(claim && typeof claim === "object");
+    });
+    assert.equal((await h.fire(event))?.status, "refunded_pending_review");
+    assert.equal((await receiptEffect(org.orgId, receiptId)).status, "running");
+    assert.equal((await receipts(org.orgId)).find(row => row.id === receiptId)!.status, "posted");
+    assert.equal(await invoiceOpen(org.orgId, h.invoiceId), "0.0000");
+    const review = (await disputeRows(org.orgId))[0]!;
+    const refusal = (await db.execute<{ reason: string }>(sql`select reason from payment_disputes
+      where org_id = ${org.orgId} and id = ${review.id}`)).rows[0]!;
+    assert.match(refusal.reason, /running.*wait for their native completion/);
+    const identities = (await receipts(org.orgId)).map(row => row.id).sort();
+    const recovered = await withOrgTransaction(org.orgId, () => processDuePostingEffects(new Date(), 10));
+    assert.equal(recovered.failed, 0);
+    assert.equal(recovered.succeeded, 1);
+    assert.equal((await receiptEffect(org.orgId, receiptId)).status, "succeeded");
+    assert.equal((await approveDisputeReview(org.orgId, review.id, h.userId, null)).status, "posted");
+    assert.deepEqual((await receipts(org.orgId)).map(row => row.id).sort(), identities);
+    assert.equal(await invoiceOpen(org.orgId, h.invoiceId), "30.0000");
+    await assertReceiptEffectsCompleted(org.orgId);
+  } finally { await dropScratchOrg(org.orgId); }
+});
+
+test("terminal receipt effects require the native reasoned replay before a provider return can resume", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const { h, receiptId } = await pendingReceipt(org);
+    const approver = await gateReceipts(org.orgId);
+    const event = refund(h, 3000);
+    assert.equal((await h.fire(event))?.status, "refunded_pending_review");
+    await approveReceipts(org.orgId, approver);
+    await withOrgTransaction(org.orgId, async () => {
+      for (let attempt = 0; attempt < MAX_POSTING_EFFECTS_ATTEMPTS; attempt++) {
+        const claim = await claimPostingEffectsForDocument(receiptId);
+        assert.ok(claim && typeof claim === "object");
+        await markPostingEffectsFailed(claim, new Error("Receipt projection worker could not complete its task"));
+      }
+    });
+    const effect = await receiptEffect(org.orgId, receiptId);
+    assert.equal(effect.status, "terminal_failed");
+    assert.equal((await h.fire(event))?.status, "refunded_pending_review");
+    assert.equal((await receipts(org.orgId)).find(row => row.id === receiptId)!.status, "posted");
+    assert.equal(await invoiceOpen(org.orgId, h.invoiceId), "0.0000");
+    const review = (await disputeRows(org.orgId))[0]!;
+    const refusal = (await db.execute<{ reason: string }>(sql`select reason from payment_disputes
+      where org_id = ${org.orgId} and id = ${review.id}`)).rows[0]!;
+    assert.match(refusal.reason, /Retry posting effects.*review reason/);
+    assert.equal((await approveDisputeReview(org.orgId, review.id, h.userId, null)).status, "pending_review");
+    assert.deepEqual(await receiptEffect(org.orgId, receiptId), effect);
+    const identities = (await receipts(org.orgId)).map(row => row.id).sort();
+    await assert.rejects(replayTerminalPostingEffect({ orgId: org.orgId, id: effect.id, actorId: h.userId, reason: "" }), /reason/);
+    await replayTerminalPostingEffect({ orgId: org.orgId, id: effect.id, actorId: h.userId,
+      reason: "Receipt projection cause resolved; retry before the provider return" });
+    assert.equal((await receiptEffect(org.orgId, receiptId)).status, "pending");
+    const audit = (await db.execute<{ actor_id: string; changes: { reason: string } }>(sql`
+      select actor_id, changes from audit_log where org_id = ${org.orgId} and row_id = ${effect.id}
+        and changes->>'event' = 'posting_effects_replay_authorized'`)).rows;
+    assert.equal(audit.length, 1);
+    assert.equal(audit[0]!.actor_id, h.userId);
+    assert.equal(audit[0]!.changes.reason, "Receipt projection cause resolved; retry before the provider return");
+    assert.equal((await approveDisputeReview(org.orgId, review.id, h.userId, null)).status, "posted");
+    assert.deepEqual((await receipts(org.orgId)).map(row => row.id).sort(), identities);
+    assert.equal(await invoiceOpen(org.orgId, h.invoiceId), "30.0000");
+    await assertReceiptEffectsCompleted(org.orgId);
+    assert.equal((await h.fire(event))?.status, "refunded_duplicate");
+    await assertReceiptEffectsCompleted(org.orgId);
+  } finally { await dropScratchOrg(org.orgId); }
+});
+
+test("a caught nested financial rollback admits no receipt effects and the same approved receipt remains resumable", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    await enableReceiptEvents(org.orgId);
+    const h = await settleHarness(org);
+    await settle(h, 10000);
+    const original = (await receipts(org.orgId))[0]!;
+    const approver = await gateReceipts(org.orgId);
+    assert.equal((await h.fire(refund(h, 3000)))?.status, "refunded_pending_review");
+    const staged = (await receipts(org.orgId)).find(row => row.status === "pending_approval")!;
+    await approveReceipts(org.orgId, approver);
+    await withOrgTransaction(org.orgId, () => returnFinancialStage(async () => {
+      await assert.rejects(returnFinancialStage(async () => {
+        await reversePaymentForReturn(original.id, org.orgId, "Return accounting must settle as one unit", h.userId);
+        await postReturnReceipt(org.orgId, staged.id);
+        throw new PaymentError("The parent accounting unit refused its final allocation");
+      }), /parent accounting unit/);
+    }));
+    assert.equal(await invoiceOpen(org.orgId, h.invoiceId), "0.0000");
+    assert.equal((await receipts(org.orgId)).find(row => row.id === original.id)!.status, "posted");
+    assert.equal((await receipts(org.orgId)).find(row => row.id === staged.id)!.status, "approved");
+    assert.equal(await receiptEffect(org.orgId, staged.id), undefined);
+    assert.equal((await db.execute<{ count: number }>(sql`select count(*)::int as count from webhook_events
+      where org_id = ${org.orgId} and entity_id = ${staged.id}`)).rows[0]!.count, 0);
+    assert.equal((await db.execute<{ count: number }>(sql`select count(*)::int as count from journal_entries
+      where org_id = ${org.orgId} and reverses_entry_id is not null`)).rows[0]!.count, 0);
+    assert.equal((await approveDisputeReview(org.orgId, (await disputeRows(org.orgId))[0]!.id, h.userId, null)).status, "posted");
+    assert.equal((await receipts(org.orgId)).find(row => row.id === staged.id)!.status, "posted");
+    assert.equal((await receipts(org.orgId)).length, 2);
+    assert.equal(await invoiceOpen(org.orgId, h.invoiceId), "30.0000");
+    await assertReceiptEffectsCompleted(org.orgId);
   } finally { await dropScratchOrg(org.orgId); }
 });
