@@ -21,7 +21,7 @@ export async function journalMeasurementExportData(kind: 'statistical-journal' |
      where n.org_id=${input.orgId} and e.posting_date between ${input.from}::date and ${input.to}::date
        and n.book_id in ${statementBookIdsExpr(input.orgId,input.bookId)}
        ${subsidiaryVisibleFilter(sql`n.subsidiary_id`,input.allowedSubsidiaryIds)}
-     order by e.posting_date,n.book_id,n.subsidiary_id,n.scope_key,n.ordinal`)).rows
+     order by e.posting_date,n.book_id,n.subsidiary_id,n.scope_key,n.ordinal`)).rows.map(row => [row.number,row.entry,row.date,row.entity,row.period,row.book])
     : (await db.execute<{ entry: string; date: string; entity: string; account: string; quantity: string; unit: string; department: string | null }>(sql`
     select e.entry_number as entry,e.posting_date::text as date,s.name as entity,concat_ws(' ',a.number,a.name) as account,
       l.quantity::text,l.unit,d.name as department
@@ -32,10 +32,10 @@ export async function journalMeasurementExportData(kind: 'statistical-journal' |
      where l.org_id=${input.orgId} and e.status in ('posted','reversed') and e.posting_date between ${input.from}::date and ${input.to}::date
        and e.book_id in ${statementBookIdsExpr(input.orgId,input.bookId)}
        ${subsidiaryVisibleFilter(sql`l.subsidiary_id`,input.allowedSubsidiaryIds)}
-     order by e.posting_date,e.entry_number,l.line_number`)).rows
+     order by e.posting_date,e.entry_number,l.line_number`)).rows.map(row => [row.entry,row.date,row.entity,row.account,row.quantity ?? '',row.unit ?? '',row.department ?? ''])
   const keys = audit ? ['number','entry','date','entity','period','book'] : ['entry','date','entity','account','quantity','unit','department']
-  return { title: t(audit ? 'auditTitle' : 'statisticalTitle'), dateRangeLabel: input.label,
+  return { title: t(audit ? 'auditTitle' : 'statisticalTitle'), dateRangeLabel: input.label, summary: [],
     groups: [{ kind: 'results', title: t(audit ? 'auditTitle' : 'statisticalTitle'), columns: keys.map(key => t(key)),
-      rows: rows.map(row => keys.map(key => (row as Record<string, unknown>)[key] as string ?? '')), money: keys.map(() => false),
+      rows, money: keys.map(() => false),
       align: keys.map(key => key === 'quantity' ? 'right' : 'left') }] }
 }

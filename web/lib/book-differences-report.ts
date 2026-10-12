@@ -27,7 +27,7 @@ export class BookDifferenceSelectionError extends Error {
   }
 }
 
-export interface BookOption { id: string; code: string; name: string; isPrimary: boolean }
+export type BookOption = { id: string; code: string; name: string; isPrimary: boolean }
 
 export interface BookDifferenceRow {
   id: string

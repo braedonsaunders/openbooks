@@ -28,9 +28,10 @@ import {
   Select,
 } from "@openbooks/ui";
 import { AdvancedSubscriptionsPanel } from "./AdvancedSubscriptionsPanel";
-import { readApiErrorMessage } from "../../../lib/api-error";
+import { fetchAppAction, readApiErrorMessage } from "../../../lib/api-error";
 import { ActionError, fetchAction } from "@braedonsaunders/appkit-errors";
 import { useAppAction } from "../../../lib/use-app-action";
+import { z } from "zod";
 
 interface Schedule {
   id: string;
@@ -1231,16 +1232,17 @@ function SubscriptionsPanel({
   );
 }
 
-type CatchUpPreview = {
-  occurrences: string[];
-  truncated: boolean;
-  templateTotal: string;
-  currency: string;
-  estimatedTotal: string;
-  sample: { occurrenceOn: string; description: string | null; memo: string | null } | null;
-  maxOccurrences: number | null;
-  skippedRunOns: string[];
-};
+const catchUpPreviewSchema = z.object({
+  occurrences: z.array(z.string()),
+  truncated: z.boolean(),
+  templateTotal: z.string(),
+  currency: z.string(),
+  estimatedTotal: z.string(),
+  sample: z.object({ occurrenceOn: z.string(), description: z.string().nullable(), memo: z.string().nullable() }).nullable(),
+  maxOccurrences: z.number().int().nonnegative().nullable(),
+  skippedRunOns: z.array(z.string()),
+});
+type CatchUpPreview = z.infer<typeof catchUpPreviewSchema>;
 
 type SubCatchUpPreview = {
   periods: string[];
@@ -1432,8 +1434,8 @@ function RecurringPanel({ creating, onClose }: EditorProps) {
     )
       .then(async (res) => {
         if (!live || !res.ok) return;
-        const previewed = (await res.json()) as CatchUpPreview;
-        if (live) setTokenSample(previewed.sample);
+        const previewed = catchUpPreviewSchema.safeParse(await res.json());
+        if (live && previewed.success) setTokenSample(previewed.data.sample);
       })
       .catch(() => {});
     return () => {
@@ -1457,6 +1459,7 @@ function RecurringPanel({ creating, onClose }: EditorProps) {
     // chooses post-all/drafts/skip with the list and totals in front of
     // them, instead of the scheduler silently bulk-posting it.
     if (!editingSchedule && !catchUpMode && form.nextRunOn) {
+      let needsCatchUpReview = false;
       const previewed = await action.execute(
         async () => {
           const params = new URLSearchParams({
@@ -1468,24 +1471,27 @@ function RecurringPanel({ creating, onClose }: EditorProps) {
             ...(form.maxOccurrences.trim() ? { maxOccurrences: form.maxOccurrences.trim() } : {}),
           });
           for (const skipped of form.skippedRunOns) params.append("skippedRunOn", skipped);
-          const res = await fetch(`/api/recurring/preview?${params.toString()}`);
-          if (!res.ok) return { ok: false as const, error: new ActionError({ kind: "unexpected" }) };
-          const data = (await res.json()) as CatchUpPreview;
-          return { ok: true as const, data };
+          const result = await fetchAppAction(`/api/recurring/preview?${params.toString()}`, undefined, { fallback: tErrors("couldNotCreate") });
+          if (!result.ok) return result;
+          const parsed = catchUpPreviewSchema.safeParse(result.data);
+          if (!parsed.success) return { ok: false as const, error: new ActionError({ kind: "unexpected", serverMessage: tErrors("couldNotCreate") }) };
+          return { ...result, data: parsed.data };
         },
         {
           fallbackMessage: tErrors("couldNotCreate"),
+          onOk: (data) => {
+            setTokenSample(data.sample);
+            if (data.occurrences.length >= 2) {
+              setPreview(data);
+              setSelectedDates(data.occurrences);
+              needsCatchUpReview = true;
+            }
+          },
           onRefused: (refusal) =>
             setError(refusal.displayMessage(tErrors("couldNotCreate"))),
         },
       );
-      if (!previewed) return;
-      setTokenSample(previewed.sample);
-      if (previewed.occurrences.length >= 2) {
-        setPreview(previewed);
-        setSelectedDates(previewed.occurrences);
-        return;
-      }
+      if (!previewed || needsCatchUpReview) return;
     }
     await action.execute(
       () =>

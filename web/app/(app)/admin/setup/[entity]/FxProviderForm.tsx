@@ -7,6 +7,15 @@ import { CheckCircle2, CircleAlert, Clock3, KeyRound, RefreshCw, X } from 'lucid
 import { toast } from 'sonner'
 import { Badge, Button, Input, Label, SearchSelect, Select } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../../../../lib/api-error'
+import { z } from 'zod'
+
+const runResponseSchema = z.object({
+  ok: z.literal(true),
+  result: z.object({
+    observationsReceived: z.number().int().nonnegative(),
+    normalizedRates: z.number().int().nonnegative(),
+  }),
+})
 
 type Provider = 'bank_of_canada' | 'ecb' | 'open_exchange_rates'
 type Schedule = 'manual' | 'daily' | 'weekdays' | 'weekly'
@@ -132,17 +141,20 @@ export function FxProviderForm({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: kind }),
       })
-      // The body parses from a clone so the refusal can read through the
-      // shared helper while the success path keeps its result counts.
-      const data = await res.clone().json().catch(() => ({})) as { result?: { observationsReceived?: unknown; normalizedRates?: unknown } }
-      if (!res.ok) toast.error(await readApiErrorMessage(res, t(`${kind}Failed`)))
-      else {
-        toast.success(t(kind === 'test' ? 'testPassed' : 'syncPassed', {
-          observations: data.result?.observationsReceived ?? 0,
-          rates: data.result?.normalizedRates ?? 0,
-        }))
-        router.refresh()
+      if (!res.ok) {
+        toast.error(await readApiErrorMessage(res, t(`${kind}Failed`)))
+        return
       }
+      const parsed = runResponseSchema.safeParse(await res.json())
+      if (!parsed.success) {
+        toast.error(t(`${kind}Failed`))
+        return
+      }
+      toast.success(t(kind === 'test' ? 'testPassed' : 'syncPassed', {
+        observations: parsed.data.result.observationsReceived,
+        rates: parsed.data.result.normalizedRates,
+      }))
+      router.refresh()
     } catch {
       // Transport failure: name it and always release the button.
       toast.error(t(`${kind}Failed`))

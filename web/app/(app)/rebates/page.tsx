@@ -45,7 +45,7 @@ export default async function RebatesPage({searchParams}:{searchParams:Promise<R
   <ModuleHomeTabs tabs={[{href:'/rebates',label:'Agreements',active:view==='agreements'},{href:'/rebates?view=claims',label:'Claims',active:view==='claims'}]} placement="local"/>
   <div className="flex flex-wrap items-center gap-3"><SearchInput/><Link className="text-sm underline" href="/admin/setup/rebate-agreements">Agreement settings</Link><Link className="text-sm underline" href="/reports?category=orders">Rebate reports</Link></div>
   <RegisteredListTable source={view==='claims'?'rebate_claims':'rebate_agreements'} rows={rows} rowKey={r=>r.id} empty="No rebate records in this view." basePath="/rebates" currentParams={sp} state={{total:count,page,perPage}}
-   columns={[{key:'agreement',label:'Agreement',cell:r=><Link className="underline" href={`/rebates?view=${view}&record=${r.id}`}>{r.label}</Link>},{key:'party',label:'Counterparty',cell:r=>r.party},{key:'side',label:'Side',cell:r=>r.side},{key:'status',label:'Status',cell:r=>r.status},...(view==='claims'?[{key:'amount',label:'Claim amount',cell:(r:RegisterRow)=>`${r.amount} ${r.currency}`}]:[])]}/>
+   columns={[{key:'agreement',header:'Agreement',cell:r=><Link className="underline" href={`/rebates?view=${view}&record=${r.id}`}>{r.label}</Link>},{key:'party',header:'Counterparty',cell:r=>r.party},{key:'side',header:'Side',cell:r=>r.side},{key:'status',header:'Status',cell:r=>r.status},...(view==='claims'?[{key:'amount',header:'Claim amount',cell:(r:RegisterRow)=>`${r.amount} ${r.currency}`}]:[])]}/>
   {selected?<RebateDrawer data={selected} closeHref={view==='claims'?'/rebates?view=claims':'/rebates'}/>:null}
  </ListPageLayout>;
 }

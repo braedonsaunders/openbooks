@@ -12,6 +12,7 @@ import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { ActionError } from '@braedonsaunders/appkit-errors'
+import { z } from 'zod'
 import { fetchAppAction } from '@/lib/api-error'
 import { ActionAlert } from '@braedonsaunders/appkit-errors/react'
 import { PeriodClosedRefusal } from '@/components/period-closed-refusal'
@@ -1332,9 +1333,15 @@ function JournalDrawerBody({
           <p>{t('instructions.reversalStatus',{status:String(doc.reversal_instruction_status),date:reverseOn})}</p>
           {doc.reversal_instruction_error ? <p role="alert">{String(doc.reversal_instruction_error)}</p> : null}
           {doc.automatic_reversal_entry_id ? <JournalEntryLink entryId={String(doc.automatic_reversal_entry_id)}>{t('instructions.viewReversal')}</JournalEntryLink> : null}
-          {canPost && doc.reversal_instruction_status === 'blocked' ? <Button variant="outline" size="sm" onClick={async () => {
-            try { await fetchAppAction('/api/journals/reversals',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'}); router.refresh() }
-            catch(error) { toast.error(error instanceof Error ? error.message : t('postFailed')) }
+          {canPost && doc.reversal_instruction_status === 'blocked' ? <Button variant="outline" size="sm" disabled={busy} onClick={async () => {
+            await execute(async () => {
+              const result = await fetchAppAction('/api/journals/reversals',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'},{fallback:t('postFailed')})
+              if (!result.ok) return result
+              const parsed = z.object({reversed:z.number().int().nonnegative(),blocked:z.array(z.object({id:z.string().uuid(),message:z.string().min(1)}))}).safeParse(result.data)
+              if (!parsed.success) return {ok:false,error:new ActionError({kind:'unexpected',serverMessage:t('postFailed')})}
+              if (parsed.data.blocked.length) return {ok:false,error:new ActionError({kind:'refused',serverMessage:parsed.data.blocked.map(row=>row.message).join('; ')})}
+              return {...result,data:parsed.data}
+            },{fallbackMessage:t('postFailed'),onOk:()=>router.refresh(),onRefused:()=>router.refresh()})
           }}>{t('instructions.retryReversals')}</Button> : null}
         </div> : null}
         {postWarnings.map((warning, index) => (

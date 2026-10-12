@@ -5,7 +5,7 @@ import { db, schema, withOrgTransaction, type SqlExecutor } from '@openbooks/eng
 import { isIsoCalendarDate } from '@openbooks/engine/platform/business-date/module'
 import { normalizeMoney } from '@openbooks/engine/money/money'
 import { computeBillTotals, nextDocumentNumber, persistLineTaxComponents, taxProfileMap } from "./bills.ts";
-import { type BillLineInput } from "@openbooks/engine/ledger/document-input";
+import { type BillLineInput, type DocumentLineInput } from "@openbooks/engine/ledger/document-input";
 import { assertNoExistingDocumentCorrection, buildReversalLinkEvidence, DocumentEditError, requireDocumentEditRevision, runDocumentVersionedTransaction, validateCorrectionReason } from "@openbooks/engine/records/document-edit-policy";
 import { documentRevisionCounterSql } from "@openbooks/engine/records/revision";
 import { validateEditableDocumentLines } from "./documents.ts";
@@ -33,7 +33,7 @@ export interface ExpenseEditBody {
   memo?: string | null
   extraDims?: Record<string, string | null>
   custom?: Record<string, unknown>
-  lines?: (BillLineInput & {
+  lines?: (BillLineInput & Pick<DocumentLineInput, 'amortizationTemplateId' | 'amortizationStartOn' | 'amortizationEndOn'> & {
     departmentId?: string | null
     projectId?: string | null
     extraDims?: Record<string, string | null>
@@ -305,23 +305,21 @@ export async function prepareExpenseEdit(
     totals = { subtotal, taxTotal, total }
     preparedLines = []
     for (let i = 0; i < computed.lines.length; i++) {
-      const l = computed.lines[i]! as (typeof computed.lines)[number] & {
-        departmentId?: string | null
-        projectId?: string | null
-        extraDims?: Record<string, string | null>
-        custom?: Record<string, unknown>
-        settlementType?: string | null
-      }
+      const l = computed.lines[i]!
+      // Tax totals preserve input order; native instructions remain on the
+      // validated source line rather than the tax computation's narrower result.
+      const source = exactLines[i]!
+      const settlementType = body.lines[i]!.settlementType
       // Settlement is required on every newly written line (0171): NULL is an
       // honest state for pre-migration history, never for a line this API
       // writes. Fail closed with the line number, like every other line gate.
-      if (!EXPENSE_SETTLEMENT_TYPES.includes(l.settlementType as ExpenseSettlementType)) {
+      if (settlementType !== 'out_of_pocket' && settlementType !== 'company_paid' && settlementType !== 'personal') {
         throw new DocumentEditError(
           422,
           `Line ${i + 1}: settlement is required — out_of_pocket, company_paid, or personal`,
         )
       }
-      const lv = validateCustomValues(lineDefs, l.custom)
+      const lv = validateCustomValues(lineDefs, source.custom)
       if (!lv.ok) {
         throw new DocumentEditError(422, `Line ${i + 1}: ${Object.values(lv.errors)[0]}`, lv.errors)
       }
@@ -333,7 +331,7 @@ export async function prepareExpenseEdit(
         const def = unownedLineRefs[0]!
         throw new DocumentEditError(404, `Line ${i + 1}: ${def.label} not found in this organization`)
       }
-      const lineDims = validateExtraDims(l.extraDims, segments)
+      const lineDims = validateExtraDims(source.extraDims, segments)
       if (!lineDims.ok) throw new DocumentEditError(422, `Line ${i + 1}: ${lineDims.error}`)
       const amount = exactMoney(l.amount)
       if (amount === 'invalid') {
@@ -348,12 +346,12 @@ export async function prepareExpenseEdit(
         throw new DocumentEditError(422, 'Expense line tax amount is not a valid amount')
       }
       preparedLines.push({
-        amortizationTemplateId: l.amortizationTemplateId ?? null,
-        amortizationStartOn: l.amortizationStartOn ?? null,
-        amortizationEndOn: l.amortizationEndOn ?? null,
-        accountId: l.accountId!,
-        description: l.description ?? null,
-        settlementType: l.settlementType as ExpenseSettlementType,
+        amortizationTemplateId: source.amortizationTemplateId ?? null,
+        amortizationStartOn: source.amortizationStartOn ?? null,
+        amortizationEndOn: source.amortizationEndOn ?? null,
+        accountId: source.accountId,
+        description: source.description ?? null,
+        settlementType,
         amount,
         taxCodeId: l.taxCodeId ?? null,
         taxGroupId: l.taxGroupId ?? null,
@@ -361,8 +359,8 @@ export async function prepareExpenseEdit(
         taxAmount,
         taxOverridden: l.taxOverridden === true,
         taxComponents: l.taxComponents,
-        departmentId: l.departmentId ?? null,
-        projectId: l.projectId ?? null,
+        departmentId: source.departmentId ?? null,
+        projectId: source.projectId ?? null,
         extraDims: lineDims.cleaned,
         custom: lv.cleaned,
       })
