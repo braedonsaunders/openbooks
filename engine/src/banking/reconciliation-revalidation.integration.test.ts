@@ -209,3 +209,50 @@ test('a late movement offset by retained older uncleared evidence is reviewed as
     assert.equal(await f.auditCount(),1)
   }finally{await f.close()}
 })
+
+
+test('a later sign-off cannot inherit an earlier review when an older transaction changes only its uncleared cutoff history',enabled,async()=>{
+  const f=await fixture()
+  const next=new Date(f.org.date+'T00:00:00Z');next.setUTCDate(next.getUTCDate()+1)
+  const laterDate=next.toISOString().slice(0,10)
+  let release!:()=>void,began!:()=>void
+  const ready=new Promise<void>(resolve=>{began=resolve})
+  const gate=new Promise<void>(resolve=>{release=resolve})
+  const pending=f.inOrg(()=>withOrgTransaction(f.org.orgId,async()=>{
+    await db.execute(sql`select now()`)
+    began()
+    await gate
+    return f.postInTransaction('1.00',laterDate)
+  }))
+  try {
+    await ready
+    const first=await f.signed(f.org.date,'250.00','250.00')
+    const later=await f.signed(laterDate,'100.00','350.00')
+    await f.post('5.00');await f.post('-5.00')
+    const preview=await f.inOrg(()=>previewSignOffRevalidation(first,f.ctx()))
+    await f.inOrg(()=>revalidateReconciliationSignOff(first,{expectedDigest:preview.proof.digest,reason},f.ctx()))
+    assert.equal((await f.inOrg(()=>reconciliationStaleness(later,f.ctx()))).revalidation?.inherited,true)
+    const before=await f.snapshot()
+    release()
+    const line=await pending
+    const timestamp=await f.inOrg(async()=>(await db.execute<{older:boolean}>(sql`
+      select je.posted_at<=r.signed_off_at as older from journal_lines jl
+       join journal_entries je on je.org_id=jl.org_id and je.id=jl.entry_id
+       join reconciliations r on r.org_id=jl.org_id and r.id=${later}
+       where jl.org_id=${f.org.orgId} and jl.id=${line}
+    `)).rows[0])
+    assert.equal(timestamp?.older,true)
+    assert.equal((await f.inOrg(()=>reconciliationStaleness(first,f.ctx()))).stale,false,'the earlier cutoff evidence is unchanged')
+    const changed=await f.inOrg(()=>reconciliationStaleness(later,f.ctx()))
+    assert.equal(changed.lateEntries.length,2,'the new line is absent from the legacy late-timestamp selection')
+    assert.equal(changed.stale,true,'a different uncleared set cannot inherit an earlier certificate')
+    assert.equal(changed.revalidation,undefined)
+    const after=await f.snapshot()
+    for(const key of ['sessions','matches','statements'] as const)assert.deepEqual(after[key],before[key])
+    assert.equal(await f.auditCount(),1)
+  }finally{
+    release()
+    await pending.catch(()=>{})
+    await f.close()
+  }
+})

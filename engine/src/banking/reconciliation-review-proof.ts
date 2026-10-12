@@ -235,7 +235,7 @@ export async function applicableSignOffRevalidation(
       signedOffBy:candidate.signedOffBy}
     const current = await reconciliationReviewProof(tx,original,deadline)
     if (current.ledgerDigest!==proof.ledgerDigest || current.reversedMatches>0 || current.neutralBasis===null
-      || (current.neutralBasis==='outstanding_movements' && current.outstandingDigest!==proof.outstandingDigest)) continue
+      || current.outstandingDigest!==proof.outstandingDigest) continue
     const certificate = await currentSignOffRevalidation(tx,original,current)
     if (certificate) return {...certificate,inherited:true}
   }
