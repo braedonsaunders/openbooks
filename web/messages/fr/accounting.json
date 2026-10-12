@@ -466,6 +466,7 @@
     "previewLoading": "Chargement de la revue des conflits…",
     "previewRequired": "Examinez les conflits avant de décider.",
     "previewFailed": "Impossible de charger la revue des conflits. Réessayez avant de décider.",
+    "reviewNoConflicts": "Examen des conflits terminé : aucun enregistrement en conflit trouvé.",
     "previewRetry": "Réessayer la revue",
     "title": "Demandes de réouverture de période",
     "description": "Demandes de réouverture d’une période clôturée. Une personne autre que le demandeur, disposant de l’autorisation de réouverture, approuve ou rejette chacune.",

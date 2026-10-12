@@ -215,6 +215,11 @@ export function ReopenDecision({ requestId, ownRequest }: { requestId: string; o
     )
   return (
     <div className="flex flex-col items-end gap-1">
+      {conflictTotal === 0 ? (
+        <p role="status" className="max-w-xs text-xs text-muted-foreground">
+          {t('reviewNoConflicts')}
+        </p>
+      ) : null}
       {approveBlocked ? (
         <p role="note" className="max-w-xs text-xs text-amber-800 dark:text-amber-200">
           {conflictNotice}

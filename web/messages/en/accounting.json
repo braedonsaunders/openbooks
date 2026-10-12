@@ -466,6 +466,7 @@
     "previewLoading": "Loading the conflict review…",
     "previewRequired": "Review conflicts before deciding this request.",
     "previewFailed": "The conflict review could not be loaded. Retry the review before deciding.",
+    "reviewNoConflicts": "Conflict review complete: no conflicting records found.",
     "previewRetry": "Retry review",
     "title": "Period reopen requests",
     "description": "Requests to reopen a closed period. Someone other than the requester who holds the reopen permission approves or rejects each one.",
