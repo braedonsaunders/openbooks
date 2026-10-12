@@ -296,5 +296,20 @@
     "status": "Status",
     "activeBadge": "Active",
     "inactiveBadge": "Inactive"
+  },
+  "timeTypeCorrection": {
+    "title": "Correct time type",
+    "description": "Change only this unapproved entry’s time type. Hours, dates, source ticket evidence and approval status stay unchanged. Approval resolves cost and billing rates separately.",
+    "current": "Current time type",
+    "replacement": "New time type",
+    "choose": "Select a worked-time type",
+    "multipliers": "Cost multiplier: {cost}; default billing multiplier: {bill}. Rate-book rules may override the billing multiplier.",
+    "reason": "Reason for correction (10–500 characters)",
+    "changed": "This entry changed. Go back and review its current revision.",
+    "back": "Back to pending time",
+    "save": "Save correction",
+    "action": "Correct type",
+    "reviewDescription": "Review individual pending entries before submitting or correcting their time types.",
+    "saved": "Time type corrected."
   }
 }

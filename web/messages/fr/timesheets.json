@@ -296,5 +296,20 @@
     "status": "Statut",
     "activeBadge": "Activée",
     "inactiveBadge": "Désactivée"
+  },
+  "timeTypeCorrection": {
+    "title": "Corriger le type de temps",
+    "description": "Modifiez uniquement le type de cette saisie non approuvée. Les heures, les dates, les preuves du bon source et le statut restent inchangés. L’approbation détermine séparément les coûts et les tarifs de facturation.",
+    "current": "Type de temps actuel",
+    "replacement": "Nouveau type de temps",
+    "choose": "Choisir un type de temps travaillé",
+    "multipliers": "Multiplicateur de coût : {cost} ; multiplicateur de facturation par défaut : {bill}. Les règles du barème peuvent remplacer ce dernier.",
+    "reason": "Motif de correction (10–500 caractères)",
+    "changed": "Cette saisie a changé. Revenez examiner sa version actuelle.",
+    "back": "Retour au temps en attente",
+    "save": "Enregistrer la correction",
+    "action": "Corriger le type",
+    "reviewDescription": "Examinez chaque saisie en attente avant de la soumettre ou de corriger son type.",
+    "saved": "Type de temps corrigé."
   }
 }

@@ -262,6 +262,8 @@ export type PendingWeekEntry = {
   id: string; updatedAt: string; workedOn: string; hours: string; status: string
   projectId: string | null; itemId: string | null; fieldTicketId: string | null
   fieldTicketNumber: string | null; fieldTicketStatus: string | null
+  timeTypeId?: string | null
+  workOrderId?: string | null
 }
 
 export interface WeekPayload {
@@ -399,7 +401,8 @@ export async function loadWeek(
         entryStatuses: [],
         custom: r.custom ?? {},
         amendsEntryId: r.amends_entry_id,
-        immutable: r.status === 'approved' || r.status === 'submitted' || (r.amends_entry_id != null || r.corrects_entry_id != null),
+        immutable: r.status === 'approved' || r.status === 'submitted' || r.field_ticket_id != null
+          || (r.amends_entry_id != null || r.corrects_entry_id != null),
       }
       byKey.set(key, row)
     }
@@ -409,7 +412,8 @@ export async function loadWeek(
       row.hours[idx] = add(row.hours[idx] === '' ? '0' : row.hours[idx]!, String(r.hours))
     }
     row.entryStatuses.push(r.status)
-    if (r.status === 'approved' || r.status === 'submitted' || (r.amends_entry_id != null || r.corrects_entry_id != null)) {
+    if (r.status === 'approved' || r.status === 'submitted' || r.field_ticket_id != null
+      || (r.amends_entry_id != null || r.corrects_entry_id != null)) {
       row.immutable = true
     }
   }
@@ -435,6 +439,7 @@ export async function loadWeek(
       id: entry.id, updatedAt: entry.entry_updated_at, workedOn: entry.worked_on, hours: String(entry.hours),
       status: entry.status, projectId: entry.project_id, itemId: entry.item_id, fieldTicketId: entry.field_ticket_id,
       fieldTicketNumber: entry.field_ticket_number, fieldTicketStatus: entry.field_ticket_status,
+      timeTypeId: entry.time_type_id, workOrderId: entry.work_order_id,
     })),
     planned,
     scheduled,
@@ -579,6 +584,10 @@ export interface PickerOption {
 }
 export interface TimeTypeOption extends PickerOption {
   costMultiplier: string
+  /** Present in current native picker responses; older cached pickers cannot authorize corrections. */
+  billMultiplier?: string
+  excludeFromWages?: boolean
+  updatedAt?: string
   isBillableDefault: boolean
   /** Semantic class (regular, overtime, …); the grid default is the standard type, never list position. */
   classification: string
@@ -668,7 +677,8 @@ export async function loadPickers(
          and kind in (${sql.join(catalogItemKinds.map((kind) => sql`${kind}`), sql`, `)})
        order by name`),
     db.execute<Record<string, unknown>>(sql`
-      select id, name, classification, cost_multiplier, is_billable_default from time_types
+      select id, name, classification, cost_multiplier, bill_multiplier, exclude_from_wages, is_billable_default,
+        to_char(updated_at at time zone 'UTC','YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as updated_at from time_types
        where org_id = ${orgId} and is_active order by cost_multiplier`),
     db.execute<Record<string, unknown>>(sql`
           select d.id, d.code, d.name from departments d
@@ -695,6 +705,9 @@ export async function loadPickers(
       label: r.name as string,
       classification: String(r.classification ?? 'regular'),
       costMultiplier: String(r.cost_multiplier),
+      billMultiplier: String(r.bill_multiplier),
+      excludeFromWages: r.exclude_from_wages === true,
+      updatedAt: String(r.updated_at),
       isBillableDefault: r.is_billable_default === true,
       isDefault: false,
     }))),

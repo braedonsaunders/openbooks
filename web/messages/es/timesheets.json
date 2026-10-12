@@ -296,5 +296,20 @@
     "status": "Estado",
     "activeBadge": "Activa",
     "inactiveBadge": "Inactiva"
+  },
+  "timeTypeCorrection": {
+    "title": "Corregir tipo de tiempo",
+    "description": "Cambie solo el tipo de esta entrada sin aprobar. Las horas, fechas, evidencia del parte de origen y estado no cambian. La aprobación determina por separado los costes y tarifas de facturación.",
+    "current": "Tipo de tiempo actual",
+    "replacement": "Nuevo tipo de tiempo",
+    "choose": "Seleccione un tipo de tiempo trabajado",
+    "multipliers": "Multiplicador de coste: {cost}; multiplicador de facturación predeterminado: {bill}. Las reglas de la tarifa pueden sustituir este último.",
+    "reason": "Motivo de corrección (10–500 caracteres)",
+    "changed": "Esta entrada ha cambiado. Vuelva y revise su versión actual.",
+    "back": "Volver al tiempo pendiente",
+    "save": "Guardar corrección",
+    "action": "Corregir tipo",
+    "reviewDescription": "Revise las entradas pendientes antes de enviarlas o corregir sus tipos.",
+    "saved": "Tipo de tiempo corregido."
   }
 }

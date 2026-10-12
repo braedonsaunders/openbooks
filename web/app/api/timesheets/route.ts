@@ -524,6 +524,11 @@ const save = defineRoute({
         }
         const replaceable = (row: (typeof stored)[number]): boolean => {
           if (row.amends_entry_id != null || row.corrects_entry_id != null || row.has_contra) return false;
+          // Crew capture owns ticket rows. A weekly aggregate must not delete
+          // their stable source identities, even after a time-only rejection.
+          if (row.field_ticket_id != null || row.invoiced_by_line_id != null || row.payroll_batch_ref != null
+            || row.cost_journal_entry_id != null || row.production_consumed_operation_id != null
+            || row.overhead_journal_entry_id != null || row.billing_status !== "unbilled") return false;
           if (row.status === "draft" || row.status === "rejected") return true;
           return (
             !policy.requireApproval &&

@@ -296,5 +296,20 @@
     "status": "Situação",
     "activeBadge": "Ativa",
     "inactiveBadge": "Inativa"
+  },
+  "timeTypeCorrection": {
+    "title": "Corrigir tipo de tempo",
+    "description": "Altere apenas o tipo desta entrada não aprovada. Horas, datas, evidências do ticket de origem e status permanecem iguais. A aprovação determina separadamente os custos e as taxas de faturamento.",
+    "current": "Tipo de tempo atual",
+    "replacement": "Novo tipo de tempo",
+    "choose": "Selecione um tipo de tempo trabalhado",
+    "multipliers": "Multiplicador de custo: {cost}; multiplicador padrão de faturamento: {bill}. As regras da tabela podem substituir este último.",
+    "reason": "Motivo da correção (10–500 caracteres)",
+    "changed": "Esta entrada mudou. Volte e revise a versão atual.",
+    "back": "Voltar ao tempo pendente",
+    "save": "Salvar correção",
+    "action": "Corrigir tipo",
+    "reviewDescription": "Revise as entradas pendentes antes de enviá-las ou corrigir seus tipos.",
+    "saved": "Tipo de tempo corrigido."
   }
 }

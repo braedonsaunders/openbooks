@@ -27,13 +27,13 @@ const rows: Props['entries'] = [
     projectId: 'project', itemId: 'labor', fieldTicketId: 'ticket2', fieldTicketNumber: 'FT-102', fieldTicketStatus: 'draft' },
 ]
 
-async function mount(t: TestContext) {
+async function mount(t: TestContext, options: Partial<Props> = {}) {
   const host = document.createElement('div')
   document.body.append(host)
   const root = createRoot(host)
   const submitted: { selections: Parameters<Props['onSubmit']>[0]; reason: string }[] = []
   let props: Props = { entries: rows, pickers, busy: false, refusal: null, onBack() {},
-    async onSubmit(selections, reason) { submitted.push({ selections, reason }) } }
+    async onSubmit(selections, reason) { submitted.push({ selections, reason }) }, ...options }
   t.after(async () => { await act(async () => root.unmount()); host.remove() })
   const render = async (change: Partial<Props> = {}) => {
     props = { ...props, ...change }
@@ -87,4 +87,51 @@ test('a refreshed entry must be reviewed again while a refused submission retain
   await f.render({ busy: false, refusal: null })
   await act(async () => submitButton(f.host).click())
   assert.deepEqual(f.submitted[0]?.selections, [{ id: 'reviewed', updatedAt: newer }])
+})
+
+test('returned ticket time uses one scoped correction body and keeps reviewed identities through a refusal', async t => {
+  const corrected: unknown[][] = []
+  const f = await mount(t, { canSubmit: false, entries: rows.map(row => ({ ...row, timeTypeId: 'regular' })),
+    pickers: { ...pickers, timeTypes: [
+      { value: 'regular', label: 'Regular', classification: 'regular', isDefault: true, isBillableDefault: true,
+        costMultiplier: '1.0000', billMultiplier: '1.0000', excludeFromWages: false, updatedAt: revision },
+      { value: 'overtime', label: 'Overtime', classification: 'overtime', isDefault: false, isBillableDefault: true,
+        costMultiplier: '1.5000', billMultiplier: '1.0000', excludeFromWages: false, updatedAt: revision },
+    ] },
+    async onCorrect(...args) { corrected.push(args); return false },
+  })
+  assert.equal(f.host.querySelectorAll('input[type="checkbox"]').length, 0)
+  const actions = [...f.host.querySelectorAll('button')].filter(button => button.textContent === 'Correct type')
+  assert.equal(actions.length, 1, 'draft source tickets are corrected on their own crew grid')
+  await act(async () => actions[0]!.click())
+  assert.equal(f.host.querySelectorAll('table').length, 0, 'the selected entry replaces the review table')
+  assert.equal(f.host.querySelectorAll('[role="dialog"]').length, 0, 'the caller owns the existing drawer shell')
+  const select = f.host.querySelector('select')!
+  await act(async () => { select.value = 'overtime'; select.dispatchEvent(new window.Event('change', { bubbles: true })) })
+  assert.match(f.host.textContent ?? '', /Cost multiplier: 1.5000; default billing multiplier: 1.0000/)
+  await setValue(f.host.querySelector('textarea')!, 'Apply the independently reviewed worked-time classification')
+  const save = [...f.host.querySelectorAll('button')].find(button => button.textContent === 'Save correction')!
+  await act(async () => save.click())
+  await f.render({ refusal: { message: 'The reviewed time entry changed.', remedy: 'Reload the week.' } })
+  assert.equal(corrected.length, 1)
+  assert.equal((corrected[0]![0] as Props['entries'][number]).id, 'reviewed')
+  assert.equal(corrected[0]![1], 'overtime')
+  assert.equal(corrected[0]![2], revision)
+  assert.match(String(corrected[0]![3]), /^[0-9a-f-]{36}$/)
+  assert.equal(f.host.querySelector('textarea')!.value, 'Apply the independently reviewed worked-time classification')
+  assert.match(f.host.querySelector('[role="alert"]')?.textContent ?? '', /Reload the week/)
+  await act(async () => save.click())
+  assert.equal(corrected[1]![3], corrected[0]![3], 'a refused retry keeps the native command identity')
+  await f.render({ busy: true })
+  assert.equal(f.host.querySelector('select')!.disabled, true)
+  assert.equal(f.host.querySelector('textarea')!.disabled, true)
+})
+
+test('a changed correction revision requires review again and does not silently move selection', async t => {
+  const f = await mount(t, { canSubmit: false, async onCorrect() { throw new Error('Stale time must not be sent') } })
+  const action = [...f.host.querySelectorAll('button')].find(button => button.textContent === 'Correct type')!
+  await act(async () => action.click())
+  await f.render({ entries: rows.map(row => ({ ...row, updatedAt: '2026-04-12T12:00:00.000000Z' })) })
+  assert.equal(f.host.querySelector('select')!.disabled, true)
+  assert.match(f.host.querySelector('[role="alert"]')?.textContent ?? '', /review its current revision/)
 })

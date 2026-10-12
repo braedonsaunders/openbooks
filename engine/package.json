@@ -287,6 +287,7 @@
     "./projects/time-work-target": "./src/projects/time-work-target.ts",
     "./projects/timesheet-weeks": "./src/projects/timesheet-weeks.ts",
     "./projects/additional-time-submission": "./src/projects/additional-time-submission.ts",
+    "./projects/time-type-correction": "./src/projects/time-type-correction.ts",
     "./receivables/statement-batches": "./src/receivables/statement-batches.ts",
     "./records/control-accounts": "./src/records/control-accounts.ts",
     "./records/document-edit-policy": "./src/records/document-edit-policy.ts",

@@ -296,5 +296,20 @@
     "status": "Zustand",
     "activeBadge": "Aktiv",
     "inactiveBadge": "Inaktiv"
+  },
+  "timeTypeCorrection": {
+    "title": "Zeitart korrigieren",
+    "description": "Ändern Sie nur die Zeitart dieses nicht genehmigten Eintrags. Stunden, Daten, Belege des Quelltickets und Status bleiben unverändert. Bei der Genehmigung werden Kosten und Abrechnungssätze separat ermittelt.",
+    "current": "Aktuelle Zeitart",
+    "replacement": "Neue Zeitart",
+    "choose": "Eine Arbeitszeitart auswählen",
+    "multipliers": "Kostenmultiplikator: {cost}; standardmäßiger Abrechnungsmultiplikator: {bill}. Preisbuchregeln können diesen überschreiben.",
+    "reason": "Korrekturgrund (10–500 Zeichen)",
+    "changed": "Dieser Eintrag wurde geändert. Prüfen Sie die aktuelle Version erneut.",
+    "back": "Zurück zu ausstehenden Zeiten",
+    "save": "Korrektur speichern",
+    "action": "Zeitart korrigieren",
+    "reviewDescription": "Prüfen Sie einzelne ausstehende Einträge vor dem Einreichen oder Korrigieren der Zeitart.",
+    "saved": "Zeitart korrigiert."
   }
 }

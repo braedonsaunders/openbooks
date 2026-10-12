@@ -500,6 +500,7 @@ export function WeeklyGrid({
     setRows(seedRows(data, pickers,workFamily,quickProjectId))
     setStatus(data.status)
     setPendingEntries(data.pendingEntries ?? [])
+    setRevision(data.revision)
     setDirty(false)
     router.refresh()
   }
@@ -553,6 +554,17 @@ export function WeeklyGrid({
       setAdditionalReview(false)
       setNotice(t('grid.submittedToast'))
     }
+  }
+  const onCorrectTimeType = async (entry: NonNullable<WeekPayload['pendingEntries']>[number], timeTypeId: string,
+    timeTypeUpdatedAt: string, commandId: string, reason: string) => {
+    if (!employeeId || !canManage || dirty || status === 'submitted') return false
+    const data = await post('/api/timesheets/time-type', { employeePartyId: employeeId, weekStart: week,
+      entryId: entry.id, expectedUpdatedAt: entry.updatedAt, timeTypeId, timeTypeUpdatedAt, commandId, reason },
+      'POST', undefined, 'correct-time-type')
+    if (!data) return false
+    applyPayload(data)
+    toast.success(t('timeTypeCorrection.saved'))
+    return true
   }
 
   // A week with nothing recorded (leave, no work) is closed by an explicit
@@ -743,13 +755,14 @@ export function WeeklyGrid({
   const cellInput =
     'w-full rounded-sm border-0 bg-transparent px-1.5 py-1 text-sm outline-none focus:ring-2 focus:ring-teal-500/60 dark:text-slate-100'
 
-  if (additionalReview && requireApproval && canManage && status === 'approved') {
+  if (additionalReview && canManage && status !== 'submitted') {
     return <UrlDrawer open closeHref={closeHref} size="2xl" initialFullscreen
       beforeClose={async () => !busy && await confirmDiscard()}
       title={<span>{t('additional.title')} · {pickers.employees.find(employee => employee.value === employeeId)?.label}
         {' · '}{t('grid.weekOf', weekRange(week, locale))}</span>}>
       <AdditionalTimeReview key={`${loadedKey}:${revision}`} entries={pendingEntries} pickers={pickers}
-        busy={busy} refusal={refusal} onBack={() => setAdditionalReview(false)} onSubmit={onSubmitAdditional} />
+        busy={busy} refusal={refusal} onBack={() => setAdditionalReview(false)} onSubmit={onSubmitAdditional}
+        canSubmit={requireApproval && status === 'approved'} onCorrect={onCorrectTimeType} />
     </UrlDrawer>
   }
   return (
@@ -769,8 +782,8 @@ export function WeeklyGrid({
       }
       headerActions={
         <>
-          {requireApproval && canManage && status === 'approved' && pendingEntries.length > 0 ? (
-            <Button size="sm" variant="outline" disabled={busy} onClick={() => setAdditionalReview(true)}>
+          {canManage && status !== 'submitted' && pendingEntries.length > 0 ? (
+            <Button size="sm" variant="outline" disabled={busy || dirty} onClick={() => setAdditionalReview(true)}>
               {t('additional.action', { count: pendingEntries.length })}
             </Button>
           ) : null}

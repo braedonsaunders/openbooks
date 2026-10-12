@@ -296,5 +296,20 @@
     "status": "状态",
     "activeBadge": "启用",
     "inactiveBadge": "停用"
+  },
+  "timeTypeCorrection": {
+    "title": "更正工时类型",
+    "description": "仅更改此未批准记录的工时类型。工时、日期、来源工单证据和审批状态保持不变。批准时会分别确定成本和计费费率。",
+    "current": "当前工时类型",
+    "replacement": "新工时类型",
+    "choose": "选择工作工时类型",
+    "multipliers": "成本系数：{cost}；默认计费系数：{bill}。价目表规则可能覆盖计费系数。",
+    "reason": "更正原因（10–500 个字符）",
+    "changed": "此记录已更改。请返回并检查当前版本。",
+    "back": "返回待处理工时",
+    "save": "保存更正",
+    "action": "更正类型",
+    "reviewDescription": "在提交或更正工时类型之前，请逐条检查待处理记录。",
+    "saved": "工时类型已更正。"
   }
 }
