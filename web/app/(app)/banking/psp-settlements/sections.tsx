@@ -1636,7 +1636,7 @@ function SettlementDetailBody({
         <p className="text-xs text-muted-foreground">{t(batch.postingBasis === 'current' ? 'postingConfigurationCurrent' : 'postingConfigurationRecorded')}</p>
         <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
           {([
-            [t('subsidiaryLabel'), batch.postingEntityName],
+            [common('labels.subsidiary'), batch.postingEntityName],
             [t('postingBook'), batch.postingBookName],
             [t('settlementDate'), dateLabel(new Date(`${batch.settlementDate}T12:00:00Z`), locale)],
             [t('postingCurrency'), batch.currency],
