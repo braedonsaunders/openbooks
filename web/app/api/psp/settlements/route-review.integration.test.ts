@@ -7,7 +7,7 @@ const auth = { orgId: "", actorId: "", allowed: null as Set<string> | null };
 Object.assign(globalThis, { __settlementReviewAuth: auth });
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier === "@/lib/authz" || specifier.endsWith("/lib/authz")) return {
+    if (specifier === "@/lib/authz" || (specifier.endsWith("/lib/authz") || (specifier === "./authz" && context.parentURL?.includes("/web/lib/")))) return {
       shortCircuit: true,
       url: "data:text/javascript," + encodeURIComponent(`
         export async function getAuthz() {
@@ -15,6 +15,7 @@ registerHooks({
           return {user:{orgId:s.orgId,id:s.actorId},permissions:new Set(['banking.read','banking.reconcile']),allowedSubsidiaryIds:s.allowed};
         }
         export function can(a,p){return a.permissions.has(p)}
+        export async function guardPermission(p){const a=await getAuthz();if(!can(a,p))throw Error('Fixture authority missing');return a;}
         export function guardSubsidiaryScope(){return null}
         export function guardUnrestrictedScope(){return null}
       `),
