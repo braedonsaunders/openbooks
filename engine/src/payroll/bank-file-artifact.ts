@@ -3,7 +3,9 @@ import { createHash } from "node:crypto";
 import { unsealJson } from "../platform/secrets.ts";
 import { validateRbcStd152Settings, type RbcStd152Settings } from "../payments-core/rail-rbc-std152.ts";
 import { sql } from "drizzle-orm";
-import { db, type SqlExecutor } from "../platform/db.ts";
+import { db, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
+import { lockActorCommandAuthority } from "../organization/actor-command-authority.ts";
+import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { activeStorageKind, getS3Blob, putS3Blob, refuseMaskedStorageKind } from "../platform/file-storage.ts";
 import { add, cmp, sum } from "../money/money.ts";
 import { assertPayRunApprovalReleased, payRunApprovalState } from "./approval.ts";
@@ -738,13 +740,30 @@ export async function allocatePayrollNachaModifier(
 /**
  * Produce a new, immutable bank-file artifact for a committed pay run.
  *
- * Reads used to prepare the file happen before the transaction; the transaction
+ * Live duty and feature locks cover preparation. The financial write then
  * locks the run and document, re-verifies approval and run status, allocates the
  * bank-facing number, renders the characters (pure — the number has to be
  * inside the characters it numbers), stores them, and writes the artifact and
  * its audit record together. Nothing here ever rewrites an existing artifact.
  */
 export async function generatePayRunBankFile(
+  input: GeneratePayRunBankFileInput,
+): Promise<PayRunBankFileArtifact> {
+  return withOrgTransaction(input.orgId, async () => {
+    const scope = await payrollBankFileCommandScope(input.orgId, input.actorId, input.allowedSubsidiaryIds);
+    return generateAuthorizedPayRunBankFile({ ...input, allowedSubsidiaryIds: scope });
+  });
+}
+
+/** Live duties are pinned until the bytes and their audit evidence commit.
+ * Caller-provided scope can narrow current role authority, never widen it. */
+async function payrollBankFileCommandScope(orgId: string, actorId: string, requested: PayrollSubsidiaryScope) {
+  const live = await lockActorCommandAuthority(db, orgId, actorId, null, "payroll.run");
+  if (!(await lockAndCheckOrgFeature(db, orgId, "payroll"))) throw new PayrollError("Enable Payroll in Company Settings → Features before generating or releasing a payroll bank file.");
+  return requested == null ? live : live === null ? requested : new Set([...requested].filter(id => live.has(id)));
+}
+
+async function generateAuthorizedPayRunBankFile(
   input: GeneratePayRunBankFileInput,
 ): Promise<PayRunBankFileArtifact> {
   const { orgId, documentId, actorId } = input;
@@ -827,6 +846,7 @@ export async function generatePayRunBankFile(
         from pay_runs r
         join documents d on d.id = r.document_id and d.org_id = r.org_id
        where r.org_id = ${orgId} and r.document_id = ${documentId}
+       ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, input.allowedSubsidiaryIds)}
        for update of r, d
     `));
     const lockedRun = locked.rows[0];
@@ -1067,14 +1087,24 @@ export interface ReleasedPayRunBankFile {
  * artifact's release counters are advanced so the run page can show the
  * operator, loudly, that this file has already been out of the building.
  *
- * Callers MUST have `payroll.run` — the same permission as producing the
- * payroll these bytes pay.
+ * The service pins the caller's live `payroll.run` duty — the same permission
+ * as producing the payroll these bytes pay.
  */
 export async function releasePayRunBankFile(
   orgId: string,
   artifactId: string,
   actorId: string,
   allowedSubsidiaryIds?: PayrollSubsidiaryScope,
+): Promise<ReleasedPayRunBankFile> {
+  return withOrgTransaction(orgId, async () => {
+    const scope = await payrollBankFileCommandScope(orgId, actorId, allowedSubsidiaryIds);
+    await assertNotSandbox(orgId, "release a payroll bank file");
+    return releaseAuthorizedPayRunBankFile(orgId, artifactId, actorId, scope);
+  });
+}
+
+async function releaseAuthorizedPayRunBankFile(
+  orgId: string, artifactId: string, actorId: string, allowedSubsidiaryIds: PayrollSubsidiaryScope,
 ): Promise<ReleasedPayRunBankFile> {
   const rows = (await db.execute<(PayRunBankFileArtifact & {
       storageKind: string;
@@ -1124,6 +1154,7 @@ export async function releasePayRunBankFile(
         left join pay_run_bank_files replacement
           on replacement.org_id = f.org_id and replacement.id = f.superseded_by_file_id
        where f.org_id = ${orgId} and f.id = ${artifactId}
+       ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
        for update of f, r, d
     `)).rows[0];
     if (!lifecycle) throw new PayrollError("payroll bank file not found");
