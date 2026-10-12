@@ -14,7 +14,6 @@ import {
 } from "./demand-planning-policy.ts";
 import {
   buildSeries,
-  listPlanSuggestions,
   readHistoryRows,
   type DemandPlanRun,
   type HistoryRow,

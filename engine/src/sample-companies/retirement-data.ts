@@ -111,7 +111,7 @@ export async function deleteRetiredTenantRows(catalog: Catalog, orgId: string, o
     for (;;) {
       const journal = table.name === "journal_lines";
       if (journal && leaves.length) throw new Error("Journal retirement cannot split self-referencing entries");
-      const candidates = journal ? sql`
+      const candidates: SQL = journal ? sql`
         select distinct owned_row.entry_id from public.journal_lines owned_row
         where ${retirementPredicate(table, orgId)}
           ${lastEntryId ? sql`and owned_row.entry_id>${lastEntryId}::uuid` : sql``}

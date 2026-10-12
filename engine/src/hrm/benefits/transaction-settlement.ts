@@ -89,7 +89,7 @@ async function budgetCeilings(orgId:string,program:BenefitProgram,policy:Benefit
        and coalesce(l.project_id,d.project_id)=any(${`{${projectIds.join(",")}}`}::uuid[])
      group by 1`)).rows.map(r=>[r.project_id,r.amount]));
   const rateUnits=toUnits(rate);
-  return new Map(projects.map(p=>{
+  return new Map<string,TransactionIncentiveLimit>(projects.map(p=>{
     if (policy.capProjectTypeId && p.project_type_id!==policy.capProjectTypeId) return [p.id,{kind:"none" as const}];
     const consumed=fromUnits(toUnits(earlier.get(p.id)??"0")*rateUnits/1_000_000n);
     return [p.id,{kind:"percent_of_base" as const,base:p.budget??"0",rate:policy.capPercent!,previouslyAwarded:consumed,consumption:"measured" as const}];

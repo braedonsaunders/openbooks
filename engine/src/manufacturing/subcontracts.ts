@@ -24,7 +24,7 @@ import { auditChange,decimalValue,isoDate } from "./master-support.ts";
 
 type Contract={id:string;workOrderId:string;operationId:string;vendorId:string;custodyLocationId:string;quantityExpected:string;status:string;requestSnapshot:Record<string,unknown>};
 const contractColumns=sql`id,work_order_id as "workOrderId",operation_id as "operationId",vendor_id as "vendorId",custody_location_id as "custodyLocationId",quantity_expected::text as "quantityExpected",status,request_snapshot as "requestSnapshot"`;
-const refuse=(message:string,code:string,remedy:string):never=>{throw new ManufacturingError(message,{status:409,code,remedy});};
+function refuse(message:string,code:string,remedy:string):never {throw new ManufacturingError(message,{status:409,code,remedy});}
 const identifiers=(ids:unknown[])=>{if(ids.some(id=>typeof id!=="string"||!isUuid(id))) throw new ManufacturingNotFoundError();};
 
 async function lockSubcontract(tx:SqlExecutor,orgId:string,actorId:string,id:string) {

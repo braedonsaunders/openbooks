@@ -144,6 +144,7 @@ function describeMetric(metric: BenefitMetric): string {
     case "net_profit": return "net profit";
     case "approved_hours": return "approved hours";
     case "transactions": return "commercial transactions";
+    case "project_margin": return "project margin";
   }
 }
 

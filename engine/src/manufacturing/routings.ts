@@ -62,7 +62,7 @@ async function validateHeaderRefs(tx: SqlExecutor, orgId: string, input: Routing
 }
 
 async function routing(tx: SqlExecutor, orgId: string, id: string) {
-  const result = await tx.execute<Record<string, unknown>>(sql`select ${routingColumns} from mfg_routings where org_id=${orgId} and id=${id}`);
+  const result = await tx.execute<Record<string, unknown> & { id: string }>(sql`select ${routingColumns} from mfg_routings where org_id=${orgId} and id=${id}`);
   return result.rows[0] ?? null;
 }
 
@@ -142,7 +142,7 @@ export async function createNextRoutingVersion(tx: SqlExecutor, orgId: string, a
   return { ...after, operations: copiedOperations };
 }
 
-export async function getRouting(tx: SqlExecutor, orgId: string, id: string): Promise<(Record<string, unknown> & RoutingSubsidiaryScope) | null> {
+export async function getRouting(tx: SqlExecutor, orgId: string, id: string): Promise<(Record<string, unknown> & { id: string } & RoutingSubsidiaryScope) | null> {
   await assertManufacturingFeature(tx, orgId, "manufacturing");
   const row = await routing(tx, orgId, id);
   if (!row) return null;

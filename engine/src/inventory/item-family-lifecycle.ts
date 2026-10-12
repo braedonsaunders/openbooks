@@ -23,13 +23,13 @@ import {
   type FamilyOptionInput,
   type FamilyOptionRecord,
   type FamilyRow,
-  type GeneratedVariant,
   type ItemFamilyDetail,
   type ItemFamilyRecord,
   type OptionCombination,
   type VariantRecord,
 } from "./item-family-model.ts";
 import { loadOptions, lockFamily, writeFamilyAudit } from "./item-family-store.ts";
+import type { GeneratedVariant } from "./item-family-generation.ts";
 
 /**
  * Family lifecycle: create, edit, convert a standalone item into a family,

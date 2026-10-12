@@ -14,7 +14,6 @@ import {
   toFamilyRecord,
   variantDisplayName,
   type FamilyRow,
-  type GeneratedVariant,
   type OptionCombination,
 } from "./item-family-model.ts";
 import { loadOptions, loadVariants, lockFamily, writeFamilyAudit } from "./item-family-store.ts";

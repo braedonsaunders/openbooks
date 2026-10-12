@@ -878,6 +878,7 @@ async function defaultReleaseDepartmentId(
   centerCode: string,
   opLabel: string,
 ): Promise<{ id: string; subsidiaryId: string | null; includeChildren: boolean }> {
+  if (!order.subsidiaryId) refuse(`Work order ${order.number} has no subsidiary.`, "work_order_subsidiary_required", "Choose an operating subsidiary before release.");
   const rows = (await tx.execute<{ id: string; subsidiaryId: string | null; includeChildren: boolean }>(sql`
     select id, subsidiary_id as "subsidiaryId", subsidiary_include_children as "includeChildren"
       from departments where org_id = ${orgId} and is_active order by id for share`)).rows;

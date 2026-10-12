@@ -3,7 +3,7 @@ import { PgDialect } from "drizzle-orm/pg-core";
 import type { PoolClient } from "pg";
 import { schema, type SqlExecutor } from "../platform/db.ts";
 import { fromUnits, toUnits } from "../money/money.ts";
-import { markEntryReversed, postEntry } from "../journal/post-entry.ts";
+import { markEntryReversed, postEntry, type PostEntryLineInput } from "../journal/post-entry.ts";
 import { reversalJournalLines } from "../records/reversal-journal-lines.ts";
 import { assertPeriodModulesOpen, CloseError } from "../periods/period-policy.ts";
 import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
@@ -246,7 +246,11 @@ export async function releaseSourceApplications(
       memo: "Source settlement allocation changed", origin: "fx_settlement",
       sourceDocumentId: entry.source_document_id, reversesEntryId: entry.id,
       actorId: replayActor, allowInactiveAccounts: true,
-      lines: reversalJournalLines(lines, { orgId, entryId: "" }),
+      lines: reversalJournalLines(lines, { orgId, entryId: "" }).map(line => ({
+        ...line,
+        custom: line.custom as PostEntryLineInput["custom"],
+        extraDims: line.extraDims as PostEntryLineInput["extraDims"],
+      })),
     });
     await markEntryReversed(runner, { orgId, entryId, actorId: replayActor });
   }

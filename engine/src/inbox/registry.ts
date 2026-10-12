@@ -171,7 +171,7 @@ async function readSources<T>(
   notices: InboxSourceNotice[] | undefined,
 ): Promise<(T | InboxItem[])[]> {
   const kinds = requested ?? inboxAdapterKinds();
-  const settled = await Promise.all(kinds.map(async (kind) => {
+  const settled = await Promise.all(kinds.map(async (kind): Promise<{ value: T | InboxItem[] } | { kind: InboxKind; error: unknown } | null> => {
     const adapter = adapterFor(kind);
     if (!adapter) return null;
     const cacheKey = JSON.stringify({

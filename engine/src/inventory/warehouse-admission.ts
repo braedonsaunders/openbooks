@@ -5,7 +5,6 @@ import { lockAndCheckOrgFeature, orgFeatureEnabled } from "../organization/org-f
 import { InventoryError, type Runner } from "./contracts.ts";
 
 export type { WarehouseStatus };
-export type { WarehouseStatus };
 
 /**
  * A named warehouse refusal. It extends InventoryError so every existing

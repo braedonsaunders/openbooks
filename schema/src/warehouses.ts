@@ -7,6 +7,7 @@ import {
   pgTable,
   text,
   timestamp,
+  unique,
   uniqueIndex,
   uuid,
 } from "drizzle-orm/pg-core";
@@ -93,7 +94,7 @@ export const warehouseDefaults = pgTable(
   },
   (t) => [
     uniqueIndex("warehouse_defaults_org_id_id_unique").on(t.orgId, t.id),
-    uniqueIndex("warehouse_defaults_org_subsidiary_unique")
+    unique("warehouse_defaults_org_company_unique")
       .on(t.orgId, t.subsidiaryId)
       .nullsNotDistinct(),
   ],

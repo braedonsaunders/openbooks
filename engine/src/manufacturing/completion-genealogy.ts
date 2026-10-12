@@ -7,7 +7,7 @@ import { auditChange, decimalValue } from "./master-support.ts";
 
 export interface CompletionComponentSelection { movementId: string; quantity: string }
 type Source = { id: string; itemId: string; quantity: string; assigned: string };
-const fail = (message: string): never => { throw new ManufacturingError(message,{code:"completion_genealogy_refused",status:409,remedy:"Review the posted material issues and prior receipt batches; select only unassigned component quantities from this work order."}); };
+function fail(message: string): never { throw new ManufacturingError(message,{code:"completion_genealogy_refused",status:409,remedy:"Review the posted material issues and prior receipt batches; select only unassigned component quantities from this work order."}); }
 
 /** A receipt batch records its inputs independently of financial WIP allocation.
  * Recorded selections identify actual inputs; automatic proportional allocation

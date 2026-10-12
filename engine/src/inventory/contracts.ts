@@ -1,4 +1,5 @@
 import type { db } from "../platform/db.ts";
+export type { SqlExecutor } from "../platform/db.ts";
 export interface InventoryAccounts {
   assetAccountId: string;
   cogsAccountId: string;

@@ -310,7 +310,7 @@ export function waLocationRateOn(
  * locations: load each new quarter's workbook through
  * parseWaLocationRateCsv plus loadWaLocationRateQuarter.
  */
-const WA_LOCATION_RATE_SOURCES: Readonly<Record<string, WaLocationRateSource>> = {
+const WA_LOCATION_RATE_SOURCES = {
   wa_dor_lsu_q2_2026: {
     id: "wa_dor_lsu_q2_2026",
     title: "Washington Department of Revenue — City of Tacoma local law enforcement programs change notice, quarter 2 (April 1 – June 30, 2026)",
@@ -329,7 +329,7 @@ const WA_LOCATION_RATE_SOURCES: Readonly<Record<string, WaLocationRateSource>> =
     url: "https://dor.wa.gov/sites/default/files/2026-08/Q426_Excel_LSU-rates-alpha.xlsx",
     asOf: "2026-10-10",
   },
-};
+} as const satisfies Readonly<Record<string, WaLocationRateSource>>;
 
 function quarterFixture(
   quarter: string,

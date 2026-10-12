@@ -34,7 +34,9 @@ export const operatingProfileScopes = pgTable('operating_profile_scopes', {
   profileIds: jsonb('profile_ids').$type<string[]>().notNull(), defaultProfileId: uuid('default_profile_id'),
   revision: integer('revision').notNull().default(1), ...auditColumns,
 }, (t): PgTableExtraConfigValue[] => [
-  uniqueIndex('operating_profile_scope_identity').on(t.orgId, t.departmentId, t.family).nullsNotDistinct(),
+  // The published SQL owns NULLS NOT DISTINCT; the ORM index builder cannot
+  // express that clause. Preserve the SQL definition when evolving this key.
+  uniqueIndex('operating_profile_scope_identity').on(t.orgId, t.departmentId, t.family),
   uniqueIndex('operating_profile_scopes_org_id_id_unique').on(t.orgId, t.id),
   foreignKey({ name: 'operating_profile_scope_department_fk', columns: [t.orgId, t.departmentId], foreignColumns: [departments.orgId, departments.id] }),
   foreignKey({ name: 'operating_profile_scope_default_fk', columns: [t.orgId, t.defaultProfileId, t.family], foreignColumns: [operatingProfiles.orgId, operatingProfiles.id, operatingProfiles.family] }),

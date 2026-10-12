@@ -41,7 +41,7 @@ export async function listOperatingProfileChoices(tx: SqlExecutor, orgId: string
     select p.id,p.code,p.name,v.id as "versionId",v.version,v.definition from operating_profiles p
     join operating_profile_versions v on v.org_id=p.org_id and v.profile_id=p.id and v.id=p.current_version_id
     where p.org_id=${orgId} and p.family=${family} and p.is_active order by p.name`)).rows
-  const choices = rows.filter(r => operatingProfileAvailable(validateOperatingProfile(r.definition), features)).map(r => ({ value: r.versionId, profileId: r.id, name: r.name, description: '', version: r.version, definition: r.definition }))
+  const choices: OperatingProfileChoice[] = rows.filter(r => operatingProfileAvailable(validateOperatingProfile(r.definition), features)).map(r => ({ value: r.versionId, profileId: r.id, name: r.name, description: '', version: r.version, definition: r.definition }))
   for (const preset of OPERATING_PRESETS) {
     if (preset.definition.family === family && !rows.some(r => r.code === preset.key) && operatingProfileAvailable(preset.definition, features)) {
       // Built-in choices are materialized only when selected; no optional gate is enabled by a preset.

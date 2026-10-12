@@ -57,12 +57,13 @@ export async function readSubcontractWorkspace(tx:SqlExecutor,orgId:string,actor
     where shipment.org_id=${orgId} and shipment.subcontract_id=${selected.id} order by shipment.created_at,shipment.id`)).rows:[];
   const sourceLocations=(await tx.execute<{value:string;label:string}>(sql`select stock.id as value,stock.code as label from stock_locations stock join locations location on location.org_id=stock.org_id and location.id=stock.location_id
     where stock.org_id=${orgId} and stock.is_active ${subsidiaryVisibleFilter(sql`location.subsidiary_id`,scope,{orgWideNull:true})} and ${saleableLocation(sql`${orgId}`,sql`stock.id`)} order by stock.code`)).rows;
+  const subsidiaryId=order.subsidiaryId;
   async function payablesScope(permission:string) {
     if(!await actorHasPermission(tx,orgId,actorId,permission))return {canUse:false,scope};
     const granted=await lockActorCommandAuthority(tx,orgId,actorId,null,permission);
     const effective=granted===null?scope:scope===null?granted:new Set([...scope].filter(id=>granted.has(id)));
     const visible=(await tx.execute<{visible:boolean}>(sql`select ${subcontractServiceResourcesVisible(effective,sql`${orgId}`,sql`${workOrderId}::uuid`)} as visible`)).rows[0]?.visible;
-    return {canUse:subsidiaryScopeAllows(effective,order.subsidiaryId)&&visible===true,scope:effective};
+    return {canUse:subsidiaryScopeAllows(effective,subsidiaryId)&&visible===true,scope:effective};
   }
   const reading=await payablesScope('ap.read'),posting=await payablesScope('ap.post');
   const canReadBills=reading.canUse,canRecordService=posting.canUse;

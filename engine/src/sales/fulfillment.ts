@@ -43,6 +43,7 @@ export type FulfillmentRefusalCode =
   | "lot_or_serial_mismatch"
   | "exceeds_open_quantity"
   | "bin_short"
+  | "insufficient_bin_stock"
   | "approval_routing_failed"
   | "wrong_stage"
   | "shipment_exists"
