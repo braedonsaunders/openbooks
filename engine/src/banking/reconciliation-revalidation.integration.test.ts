@@ -27,7 +27,7 @@ async function fixture() {
   })
   const ctx = (userId=reviewer)=>({orgId:org.orgId,userId,allowedSubsidiaryIds:null})
   const inOrg = <T>(fn:()=>Promise<T>)=>withOrgContext(org.orgId,fn)
-  const post = async (amount:string,date=org.date)=>inOrg(async()=>{
+  const postInTransaction = async (amount:string,date=org.date)=>{
     const result = await postEntry(db,{orgId:org.orgId,bookId:org.bookId,subsidiaryId:org.subsidiaryId,
       periodId:org.periodId,postingDate:date,entryNumber:`REV-${randomUUID()}`,origin:'manual',actorId:signer,currency:'CAD',
       lines:[{accountId:org.accounts.bank,amount,txnAmount:amount,fxRate:'1'},
@@ -36,7 +36,8 @@ async function fixture() {
       and entry_id=${result.entryId} and account_id=${org.accounts.bank}`)).rows[0]
     assert.ok(row)
     return row.id
-  })
+  }
+  const post = (amount:string,date=org.date)=>inOrg(()=>postInTransaction(amount,date))
   const signed = async (date:string,amount:string,balance:string)=>{
     const line = await post(amount,date)
     return inOrg(async()=>{
@@ -64,7 +65,7 @@ async function fixture() {
   const auditCount=()=>inOrg(async()=>(await db.execute<{count:number}>(sql`select count(*)::int as count from audit_log
     where org_id=${org.orgId} and table_name='reconciliations' and changes->>'operation'='revalidate_sign_off'`)).rows[0]!.count)
   const close=()=>dropScratchOrgReporting(org.orgId)
-  return {org,signer,reviewer,ctx,inOrg,post,signed,snapshot,auditCount,close}
+  return {org,signer,reviewer,ctx,inOrg,post,postInTransaction,signed,snapshot,auditCount,close}
 }
 
 test('neutral late history is independently reviewed once without changing signed evidence, and later sign-offs inherit only identical current proof',enabled,async()=>{
@@ -140,4 +141,43 @@ test('a balance-changing late posting refuses neutral review without changing an
     assert.equal(await f.auditCount(),0)
     assert.deepEqual(await f.snapshot(),before)
   }finally{await f.close()}
+})
+
+
+test('a transaction that began before sign-off and commits after review invalidates the full cut-off proof even with an older posting timestamp',enabled,async()=>{
+  const f=await fixture()
+  let release!:()=>void, began!:()=>void
+  const ready=new Promise<void>(resolve=>{began=resolve})
+  const gate=new Promise<void>(resolve=>{release=resolve})
+  const pending=f.inOrg(()=>withOrgTransaction(f.org.orgId,async()=>{
+    await db.execute(sql`select now()`)
+    began()
+    await gate
+    return f.postInTransaction('1.00')
+  }))
+  try {
+    await ready
+    const id=await f.signed(f.org.date,'250.00','250.00')
+    await f.post('5.00');await f.post('-5.00')
+    const preview=await f.inOrg(()=>previewSignOffRevalidation(id,f.ctx()))
+    await f.inOrg(()=>revalidateReconciliationSignOff(id,{expectedDigest:preview.proof.digest,reason},f.ctx()))
+    assert.equal((await f.inOrg(()=>reconciliationStaleness(id,f.ctx()))).stale,false)
+    release()
+    const line=await pending
+    const oldTimestamp=await f.inOrg(async()=>(await db.execute<{older:boolean}>(sql`
+      select je.posted_at<=r.signed_off_at as older from journal_lines jl
+       join journal_entries je on je.org_id=jl.org_id and je.id=jl.entry_id
+       join reconciliations r on r.org_id=jl.org_id and r.id=${id}
+       where jl.org_id=${f.org.orgId} and jl.id=${line}
+    `)).rows[0])
+    assert.equal(oldTimestamp?.older,true)
+    const changed=await f.inOrg(()=>reconciliationStaleness(id,f.ctx()))
+    assert.equal(changed.lateEntries.length,2,'the legacy timestamp predicate alone does not identify this later commit')
+    assert.equal(changed.stale,true,'the complete ledger fingerprint invalidates the old certificate')
+    assert.equal(await f.auditCount(),1)
+  }finally{
+    release()
+    await pending.catch(()=>{})
+    await f.close()
+  }
 })

@@ -11,6 +11,7 @@ export type SignedReviewSubject = {
 }
 export type ReconciliationReviewProof = {
   digest: string; signOffDigest: string; statementDigest: string; matchDigest: string; ledgerDigest: string
+  completeLedgerDigest:string; completeLedgerLines:number
   statements: number; statementLines: number; matches: number; journalLines: number
   lateEntries: number; lateJournalLines: number; lateEffect: string
   legalEntityEffects: { subsidiaryId: string | null; amount: string }[]
@@ -94,6 +95,19 @@ export async function reconciliationReviewProof(tx: SqlExecutor, subject: Signed
     matchedJournalIds.add(value.id)
     if (value.status !== 'posted') reversedMatches++
   })
+  // PostgreSQL transaction timestamps can precede the transaction's eventual
+  // commit. Hash every cut-off ledger row as well as known late movements so
+  // a subsequent commit cannot remain covered by an older review certificate.
+  const completeLedger = await hashRows(tx,after=>sql`
+    select jl.id::text as id,encode(sha256(convert_to(jsonb_build_object('line',to_jsonb(jl),
+      'journal',to_jsonb(je))::text,'UTF8')),'hex') as value
+      from journal_lines jl join journal_entries je on je.org_id=jl.org_id and je.id=jl.entry_id
+     where jl.org_id=${subject.orgId} and jl.account_id=${subject.accountId}
+       and jl.currency=${subject.currency} and je.book_id=${subject.bookId}
+       and je.status in ('posted','reversed') and je.posting_date<=${subject.throughDate}::date
+       ${after ? sql`and jl.id>${after}::uuid` : sql``}
+     order by jl.id limit 500 for share of jl,je
+  `,deadline)
   const lateEntryIds = new Set<string>()
   const effects = new Map<string | null, bigint>()
   const late = await hashRows(tx, after => sql`
@@ -121,6 +135,7 @@ export async function reconciliationReviewProof(tx: SqlExecutor, subject: Signed
   const statementDigest = createHash('sha256').update(statements.digest).update(statementLines.digest).digest('hex')
   const proof = {
     signOffDigest:signOff.digest,statementDigest, matchDigest:matches.digest, ledgerDigest:late.digest,
+    completeLedgerDigest:completeLedger.digest,completeLedgerLines:completeLedger.count,
     statements:statements.count, statementLines:statementLines.count, matches:matches.count,
     journalLines:matchedJournalIds.size, lateEntries:lateEntryIds.size, lateJournalLines:late.count,
     lateEffect:fromUnits([...effects.values()].reduce((total,amount)=>total+amount,0n)),
