@@ -311,7 +311,14 @@ export async function computeCaStatutory(
       + "process the period's pay in a single run while cumulative averaging is elected",
     );
   }
+  // Contribution payment classification uses actual current and prior
+  // remuneration, before supplemental tax folding or a bonus I reference.
+  const periodNonPeriodicPensionable = add(priorFactor("CA_BPE"), ctx.pensionableNonPeriodic ?? nonPeriodic);
+  const separateNonPeriodicPayment = cmp(add(priorFactor("I"), income), "0") === 0 &&
+    (cmp(add(priorFactor("B"), nonPeriodic), "0") > 0 || cmp(periodNonPeriodicPensionable, "0") > 0) &&
+    cmp(periodPensionable, periodNonPeriodicPensionable) <= 0;
   const t4127Input: T4127Input = {
+    separateNonPeriodicPayment,
     averaging:cumulative?.averaging,
     pensionableNonPeriodic: foldBonus ? "0" : ctx.pensionableNonPeriodic,
     insurableNonPeriodic: foldBonus ? "0" : ctx.insurableNonPeriodic,
@@ -533,6 +540,7 @@ export async function computeCaStatutory(
     } : {}),
     B: nonPeriodic, I: income, PI: pensionable, IE: insurable,
     F:deduction("pension_f"),F2:deduction("alimony"),U1:deduction("union_dues"),F3:deduction("pension_f_bonus"),
+    ...(region !== "QC" ? { CPP_EXEMPTION: statutory.factors.CPP_EXEMPTION! } : {}),
     C: cpp, C2: cpp2, EI: ei, QPIP: qpip, QPIP_ER: qpipEmployer, EI_ER: eiEmployer,
     F5: f5, F5A: f5a, F5B: f5b,
     ...(hasPriors || foldBonus ? { T: federalTax } : {}),

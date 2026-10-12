@@ -84,6 +84,13 @@ export interface T4127Input {
   nonPeriodic?: string;
   /** PI — pensionable income this period. Defaults to income + nonPeriodic. */
   pensionable?: string;
+  /**
+   * Actual payment contains only separately paid non-periodic remuneration.
+   * Resolved before any regular-income reference used solely for bonus tax.
+   * Omitted pure inputs classify their actual income and pensionable bases.
+   * This CPP rule does not change QPP treatment.
+   */
+  separateNonPeriodicPayment?: boolean;
   /** IE — insurable earnings this period. Defaults to income + nonPeriodic. */
   insurable?: string;
   /**
@@ -220,6 +227,7 @@ export const T4127_FACTOR_LABELS: Readonly<Record<string, string>> = {
   F5: "Enhanced-CPP tax deduction",
   F5A: "Enhanced-CPP deduction on periodic pay",
   F5B: "Enhanced-CPP deduction on the bonus",
+  CPP_EXEMPTION: "CPP basic exemption for contribution basis",
   TC: "Federal TD1 claim amount",
   TCP: "Provincial TD1 claim amount",
   K1: "Federal personal credit",
@@ -355,6 +363,9 @@ export function calculateT4127(input: T4127Input): T4127Result {
   if(averaging&&bonus>ZERO&&[input.pensionableNonPeriodic,input.insurableNonPeriodic,input.qpipNonPeriodic].some(value=>value===undefined))
     throw new PayrollError('Cumulative averaging requires the pensionable, EI and QPIP bases of non-periodic pay — review its earning-component classifications before calculating');
   const PI = input.pensionable === undefined ? income + bonus : U(input.pensionable);
+  const pensionableBonus = input.pensionableNonPeriodic === undefined ? bonus : U(input.pensionableNonPeriodic);
+  const separateNonPeriodicPayment = input.separateNonPeriodicPayment ??
+    (income === ZERO && (bonus > ZERO || pensionableBonus > ZERO) && PI <= pensionableBonus);
   const IE = input.insurable === undefined ? income + bonus : U(input.insurable);
   const ytd = input.ytd ?? {};
 
@@ -363,7 +374,11 @@ export function calculateT4127(input: T4127Input): T4127Result {
   const priorCpp = opt(ytd.cpp);
   const priorCpp2 = opt(ytd.cpp2);
   const priorPensionable = opt(ytd.pensionable);
-  const exemption = cppExemptionForP(P);
+  // CRA CPP bonus/retroactive payments made separately from regular pay
+  // do not receive a pay-period basic exemption. Regular mixed payments
+  // retain it, and CPP2 continues to price its unchanged annual band.
+  const exemption = !isQuebec && separateNonPeriodicPayment ? ZERO : cppExemptionForP(P);
+  if (!isQuebec) trace("CPP_EXEMPTION", exemption);
   const maxTotalProrated = mulRatioCents(U(plan.maxTotal), BigInt(PM), 12n);
   let C = ZERO;
   if (!input.cppExempt && PM > 0) {
@@ -414,7 +429,6 @@ export function calculateT4127(input: T4127Input): T4127Result {
   const F5 = qa(qratio(Q(creditCpp), rate6(plan.addlRate), rate6(plan.totalRate)), Q(creditCpp2));
   let F5A = F5;
   let F5B = QZERO;
-  const pensionableBonus = input.pensionableNonPeriodic === undefined ? bonus : U(input.pensionableNonPeriodic);
   if (pensionableBonus > ZERO && PI > ZERO) {
     F5A = qratio(F5, max0(PI - pensionableBonus), PI);
     F5B = qs(F5, F5A);
