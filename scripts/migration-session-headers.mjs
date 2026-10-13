@@ -444,6 +444,160 @@ const PUBLISHED_HEADER_POLICIES = Object.freeze([
     settings: Object.freeze([]),
     runnerOwnsLockTimeout: true,
   }),
+  Object.freeze({
+    filename: "generated/0667_benefit_program_revisions.sql",
+    sha256: "9d0cd0c8bc1902af60496c66362d929afbd02e767a1cd6e8aeeb9c08d4021fe1",
+    settings: Object.freeze([
+      Object.freeze({"name": "statement_timeout", "sql": "SET statement_timeout = 0;"}),
+      Object.freeze({"name": "idle_in_transaction_session_timeout", "sql": "SET idle_in_transaction_session_timeout = 0;"}),
+      Object.freeze({"name": "client_encoding", "sql": "SET client_encoding = 'UTF8';"}),
+      Object.freeze({"name": "standard_conforming_strings", "sql": "SET standard_conforming_strings = on;"}),
+      Object.freeze({"name": "client_min_messages", "sql": "SET client_min_messages = warning;"}),
+    ]),
+  }),
+  Object.freeze({
+    filename: "generated/0668_benefit_program_eligibility.sql",
+    sha256: "d60af95fa8e92d892b907b8d7e51802057f720308c07b097478e81ff7bcfd453",
+    settings: Object.freeze([
+      Object.freeze({"name": "statement_timeout", "sql": "SET statement_timeout = 0;"}),
+      Object.freeze({"name": "idle_in_transaction_session_timeout", "sql": "SET idle_in_transaction_session_timeout = 0;"}),
+      Object.freeze({"name": "client_encoding", "sql": "SET client_encoding = 'UTF8';"}),
+      Object.freeze({"name": "standard_conforming_strings", "sql": "SET standard_conforming_strings = on;"}),
+      Object.freeze({"name": "client_min_messages", "sql": "SET client_min_messages = warning;"}),
+    ]),
+  }),
+  Object.freeze({
+    filename: "generated/0669_reconciliation_signoff_withdrawal.sql",
+    sha256: "1a6a9765f61c5072f5a720a670041e9a9bbeb687ff39b3345407fa052b26dbd6",
+    settings: Object.freeze([]),
+    runnerOwnsLockTimeout: true,
+  }),
+  Object.freeze({
+    filename: "generated/0670_benefit_program_member_exclusions.sql",
+    sha256: "897c2ee5a26f3d785bf43fcd8168e0067b4a0ffbd5f076aeea00513e8dc401fb",
+    settings: Object.freeze([
+      Object.freeze({"name": "statement_timeout", "sql": "SET statement_timeout = 0;"}),
+      Object.freeze({"name": "idle_in_transaction_session_timeout", "sql": "SET idle_in_transaction_session_timeout = 0;"}),
+      Object.freeze({"name": "client_encoding", "sql": "SET client_encoding = 'UTF8';"}),
+      Object.freeze({"name": "standard_conforming_strings", "sql": "SET standard_conforming_strings = on;"}),
+      Object.freeze({"name": "client_min_messages", "sql": "SET client_min_messages = warning;"}),
+    ]),
+  }),
+  Object.freeze({
+    filename: "generated/0692_journal_instruction_modes.sql",
+    sha256: "e31bcb469f0082873620ec3cdca678a6f55ab043843da9f8147b6dc1aa7e7000",
+    settings: Object.freeze([
+      Object.freeze({"name": "client_min_messages", "sql": "SET client_min_messages = warning;"}),
+    ]),
+  }),
+  Object.freeze({
+    filename: "generated/0693_balancing_segment_policy_versions.sql",
+    sha256: "fb9ab6abeff4120e80bc146fd32dab8a5e94459ded8796a0b4b61cdb57038ec6",
+    settings: Object.freeze([
+      Object.freeze({"name": "client_min_messages", "sql": "SET client_min_messages = warning;"}),
+    ]),
+  }),
+  Object.freeze({
+    filename: "generated/0694_period_entity_gl_audit_numbering.sql",
+    sha256: "293ad0866b39810833bb5f1537fe7dbc079f89fecbc6da03b8efc44e53ff5fd8",
+    settings: Object.freeze([
+      Object.freeze({"name": "client_min_messages", "sql": "SET client_min_messages = warning;"}),
+    ]),
+  }),
+  Object.freeze({
+    filename: "generated/0695_revenue_recognition_fair_value_delivery.sql",
+    sha256: "77d7a1ecd78d543a3f8924d9c4959bcdda61b22362607e2b1b4e680cc056a0aa",
+    settings: Object.freeze([
+      Object.freeze({"name": "statement_timeout", "sql": "SET statement_timeout = 0;"}),
+      Object.freeze({"name": "idle_in_transaction_session_timeout", "sql": "SET idle_in_transaction_session_timeout = 0;"}),
+      Object.freeze({"name": "client_encoding", "sql": "SET client_encoding = 'UTF8';"}),
+      Object.freeze({"name": "standard_conforming_strings", "sql": "SET standard_conforming_strings = on;"}),
+      Object.freeze({"name": "client_min_messages", "sql": "SET client_min_messages = warning;"}),
+    ]),
+  }),
+  Object.freeze({
+    filename: "generated/0696_renewal_policy_documents.sql",
+    sha256: "4113a95e03e8959313b923b367e85b152fb965f6f4509e9ad41b69766c92e54f",
+    settings: Object.freeze([
+      Object.freeze({"name": "statement_timeout", "sql": "SET statement_timeout = 0;"}),
+      Object.freeze({"name": "idle_in_transaction_session_timeout", "sql": "SET idle_in_transaction_session_timeout = 0;"}),
+      Object.freeze({"name": "client_encoding", "sql": "SET client_encoding = 'UTF8';"}),
+      Object.freeze({"name": "standard_conforming_strings", "sql": "SET standard_conforming_strings = on;"}),
+      Object.freeze({"name": "client_min_messages", "sql": "SET client_min_messages = warning;"}),
+    ]),
+  }),
+  Object.freeze({
+    filename: "generated/0697_rebate_policy_settlements.sql",
+    sha256: "ad7464233f3b0846d85220e91b48801283f0dd80043be4de6b129c9d03ca51af",
+    settings: Object.freeze([
+      Object.freeze({"name": "statement_timeout", "sql": "SET statement_timeout = 0;"}),
+      Object.freeze({"name": "idle_in_transaction_session_timeout", "sql": "SET idle_in_transaction_session_timeout = 0;"}),
+      Object.freeze({"name": "client_encoding", "sql": "SET client_encoding = 'UTF8';"}),
+      Object.freeze({"name": "standard_conforming_strings", "sql": "SET standard_conforming_strings = on;"}),
+      Object.freeze({"name": "client_min_messages", "sql": "SET client_min_messages = warning;"}),
+    ]),
+  }),
+  Object.freeze({
+    filename: "generated/0698_rbc_std152_bank_files.sql",
+    sha256: "b305c8da41216d8a1b06ee569dc20bc1cc087dc605adfb63881e526de13bdbea",
+    settings: Object.freeze([
+      Object.freeze({"name": "statement_timeout", "sql": "SET statement_timeout = 0;"}),
+      Object.freeze({"name": "idle_in_transaction_session_timeout", "sql": "SET idle_in_transaction_session_timeout = 0;"}),
+      Object.freeze({"name": "client_encoding", "sql": "SET client_encoding = 'UTF8';"}),
+      Object.freeze({"name": "standard_conforming_strings", "sql": "SET standard_conforming_strings = on;"}),
+      Object.freeze({"name": "client_min_messages", "sql": "SET client_min_messages = warning;"}),
+    ]),
+  }),
+  Object.freeze({
+    filename: "generated/0699_financial_history_native_clone_guards.sql",
+    sha256: "eb192fe9113093021a6b6998c18fb08f671e9a1a22182e4265bd2132fad67e5a",
+    settings: Object.freeze([
+      Object.freeze({"name": "client_min_messages", "sql": "SET client_min_messages = warning;"}),
+    ]),
+  }),
+  Object.freeze({
+    filename: "generated/0701_merged_account_reference_guards.sql",
+    sha256: "99f9758828e1906421264c6cf2d81ee94a47c7c0db9ee056e92093dd0a6c298c",
+    settings: Object.freeze([
+      Object.freeze({"name": "client_min_messages", "sql": "SET client_min_messages = warning;"}),
+    ]),
+  }),
+  Object.freeze({
+    filename: "generated/0702_journal_instruction_currency_binding.sql",
+    sha256: "3b7ebba6fe31c5a9e8e8925a0fd894b35db029648737b2b5d28dc306d1274334",
+    settings: Object.freeze([
+      Object.freeze({"name": "client_min_messages", "sql": "SET client_min_messages = warning;"}),
+    ]),
+  }),
+  Object.freeze({
+    filename: "generated/0703_journal_measurement_and_instruction_guards.sql",
+    sha256: "3a60b33ec04dd05de7bd219c4d2852439ac7c43a9ea1984a48f1bd895dbabae1",
+    settings: Object.freeze([
+      Object.freeze({"name": "client_min_messages", "sql": "SET client_min_messages = warning;"}),
+    ]),
+  }),
+  Object.freeze({
+    filename: "generated/0704_bank_rule_validator_catalog_references.sql",
+    sha256: "639da3812f7516193790fb2898fea8a3079410e27860d17de512bea2eb5bd561",
+    settings: Object.freeze([
+      Object.freeze({"name": "statement_timeout", "sql": "SET statement_timeout = 0;"}),
+      Object.freeze({"name": "idle_in_transaction_session_timeout", "sql": "SET idle_in_transaction_session_timeout = 0;"}),
+      Object.freeze({"name": "client_encoding", "sql": "SET client_encoding = 'UTF8';"}),
+      Object.freeze({"name": "standard_conforming_strings", "sql": "SET standard_conforming_strings = on;"}),
+      Object.freeze({"name": "client_min_messages", "sql": "SET client_min_messages = warning;"}),
+    ]),
+  }),
+  Object.freeze({
+    filename: "generated/0705_rbc_std152_existing_organization_format.sql",
+    sha256: "525633b7278b9113fe402a23d58f23417857d8a1c5ee272811d8b6134982c97a",
+    settings: Object.freeze([
+      Object.freeze({"name": "statement_timeout", "sql": "SET statement_timeout = 0;"}),
+      Object.freeze({"name": "idle_in_transaction_session_timeout", "sql": "SET idle_in_transaction_session_timeout = 0;"}),
+      Object.freeze({"name": "client_encoding", "sql": "SET client_encoding = 'UTF8';"}),
+      Object.freeze({"name": "standard_conforming_strings", "sql": "SET standard_conforming_strings = on;"}),
+      Object.freeze({"name": "client_min_messages", "sql": "SET client_min_messages = warning;"}),
+    ]),
+  }),
 ]);
 
 function publishedSessionPolicy(filename, content) {
