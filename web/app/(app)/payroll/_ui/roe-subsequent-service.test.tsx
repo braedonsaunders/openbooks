@@ -38,7 +38,7 @@ test('issued event shows its exact retained return source without authoring cont
  assert.equal((host.querySelector('#roe-return-first-worked') as HTMLInputElement).disabled,true)
  assert.equal(host.querySelector('#roe-return-file'),null)
  assert.ok(![...host.querySelectorAll('button')].some(b=>b.textContent==='Save return-to-work evidence'))
- const query=new URL(requests[0]!).searchParams
+ const query=new URL(requests[0]!, window.location.origin).searchParams
  assert.equal(query.get('precedingEventId'),event.id);assert.equal(query.get('employmentId'),event.employmentId)
  assert.equal(query.get('subsidiaryId'),event.subsidiaryId)
 })
