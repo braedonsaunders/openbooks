@@ -61,7 +61,7 @@ export const TABLE_CEILING = 1;
 export const DIALOG_WINDOW_CEILING = 0;
 export const BESPOKE_PAGE_CEILING = 13;
 
-const LIST_COMPONENTS = ["PagedTable", "RecordListView", "EntityListView"];
+const LIST_COMPONENTS = ["PagedTable", "RecordListView", "EntityListView", "RegisteredListTable", "ServerPagedTable", "PreparedPagedTable"];
 const LIST_KEY_PROPS = ["source", "entity", "recordType"];
 
 function repoRoot() {
@@ -222,7 +222,7 @@ function rendersSharedSetupList(path, text, stripped) {
         const names = binding.trim().split(/\s+as\s+/);
         if (names[0] !== symbol) continue;
         const local = names[1] ?? names[0];
-        if (new RegExp(`<${local}(?=[\\s/>])`).test(stripped)) return true;
+        if (new RegExp(`<${local}(?=[\\s/< >])`).test(stripped)) return true;
       }
     }
     return false;
@@ -256,7 +256,7 @@ export function scanText(path, text, registeredKeys = new Set()) {
   // (not string-blanked) source with a string-aware element walk.
   const code = stripComments(text);
   if (LIST_COMPONENTS.some((name) => code.includes(`<${name}`))) {
-    const openRe = /<(PagedTable|RecordListView|EntityListView)\b/g;
+    const openRe = /<(PagedTable|RecordListView|EntityListView|RegisteredListTable|ServerPagedTable|PreparedPagedTable)\b/g;
     let m;
     while ((m = openRe.exec(code))) {
       const line = lineOf(code, m.index);
@@ -342,6 +342,53 @@ function reconcileFiles(violationPaths, entries) {
   return { fresh, stale: entries.filter((entry) => !matched.has(entry.path)) };
 }
 
+/** Follow only rendered local components, so page delegates retain the same
+ * shell and registered-source proof as their native list implementation. */
+export function sharedPageComposition(file, text, readSource, seen = new Set()) {
+  if (seen.has(file) || seen.size >= 24) return { shell: false, body: false };
+  const visited = new Set([...seen, file]);
+  const code = stripComments(text);
+  const rendered = stripCode(text);
+  let shell = false, body = false;
+  const terminals = new Map([
+    ["web/components/page-layout", { shell: true, body: false }],
+    ["web/components/registered-list-table", { shell: false, body: true }],
+    ["web/components/server-paged-table", { shell: false, body: true }],
+    ["web/components/prepared-paged-table", { shell: false, body: true }],
+    ["web/components/paged-table", { shell: false, body: true }],
+    ["web/app/(app)/admin/setup/[entity]/SetupEntitySection", { shell: false, body: true }],
+    ["web/components/viewspec/module-view", { shell: true, body: true }],
+  ]);
+  for (const match of code.matchAll(/import\s*\{([^{}]*)\}\s*from\s*['"]([^'"]+)['"]/g)) {
+    const specifier = match[2];
+    const target = specifier.startsWith("@/") ? `web/${specifier.slice(2)}`
+      : specifier.startsWith(".") ? posix.normalize(posix.join(posix.dirname(file), specifier)) : null;
+    if (!target || !target.startsWith("web/")) continue;
+    const key = target.replace(/\.tsx?$/, "");
+    for (const binding of match[1].split(",")) {
+      const names = binding.trim().split(/\s+as\s+/), symbol = names[0], local = names[1] ?? symbol;
+      if (!/^[A-Z]\w*$/.test(local) || !new RegExp(`<${local}(?=[\\s/< >])`).test(rendered)) continue;
+      const terminal = terminals.get(key);
+      if (terminal) {
+        if (key.endsWith("page-layout") && !["ListPageLayout", "DetailPageLayout"].includes(symbol)) continue;
+        // A generic unregistered table is not a registered list proof.
+        if (key.endsWith("paged-table") && !new RegExp(`<${local}(?:<[^>]+>)?(?=[\\s/>])[^>]*\\bsource\\s*=`, "s").test(code)) continue;
+        shell ||= terminal.shell; body ||= terminal.body;
+        continue;
+      }
+      for (const extension of ["", ".tsx", ".ts"]) {
+        let child;
+        try { child = readSource(target + extension); } catch { continue; }
+        if (typeof child !== "string") continue;
+        const proof = sharedPageComposition(target + extension, child, readSource, visited);
+        shell ||= proof.shell; body ||= proof.body;
+        break;
+      }
+    }
+  }
+  return { shell, body };
+}
+
 export function auditRepository(files, registeredKeys, readFile) {
   const root = repoRoot();
   const violations = [];
@@ -352,7 +399,12 @@ export function auditRepository(files, registeredKeys, readFile) {
     } catch {
       continue;
     }
-    violations.push(...scanText(file, text, registeredKeys));
+    const found = scanText(file, text, registeredKeys);
+    const proof = found.some(violation => violation.rule === "bespoke-page")
+      ? sharedPageComposition(file, text, (child) => readFile(join(root, child), "utf8"))
+      : { shell: false, body: false };
+    violations.push(...found.filter((violation) =>
+      violation.rule !== "bespoke-page" || !proof.shell || !proof.body));
   }
   return violations;
 }

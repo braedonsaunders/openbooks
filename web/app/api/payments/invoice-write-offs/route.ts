@@ -1,8 +1,7 @@
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from 'next/server'
-import { sql } from 'drizzle-orm'
 import { z } from 'zod'
-import { db } from '@openbooks/engine/platform/db'
+import { invoiceWriteOffSubject } from '@/lib/posting-review-subjects'
 import { InvoiceWriteOffConflictError, writeOffInvoice } from '@openbooks/engine/payments/documents'
 import { DocumentEditError } from '@openbooks/engine/records/document-edit-policy'
 import { ScopeNotFoundError } from '@openbooks/engine/organization/scope'
@@ -47,10 +46,7 @@ async function postWriteOff(request: Request) {
   // The invoice is read before any write so a record the caller cannot see
   // answers with the uniform 404, and a subsidiary outside the caller's scope
   // never reaches the engine.
-  const invoice = (await db.execute<{ subsidiaryId: string | null }>(sql`
-    select subsidiary_id as "subsidiaryId" from documents
-     where id = ${parsed.data.invoiceId} and org_id = ${gate.user.orgId} and kind = 'customer_invoice'
-  `)).rows[0]
+  const invoice = await invoiceWriteOffSubject(gate.user.orgId, parsed.data.invoiceId)
   if (!invoice) return notFound('record')
   const denied = guardSubsidiaryScope(gate, invoice.subsidiaryId)
   if (denied) return denied

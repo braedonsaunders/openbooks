@@ -135,6 +135,7 @@ export const WIDGET_FAMILY: Readonly<Record<string, WidgetFamily>> = {
   'capture-upload': 'commerce',
   'card-name-cell': 'home',
   'card-studio': 'home',
+  'cash-daily-summary': 'commerce',
   'cash-cockpit': 'banking',
   'cashflow-horizon-control': 'reporting',
   'cashflow-view': 'reporting',

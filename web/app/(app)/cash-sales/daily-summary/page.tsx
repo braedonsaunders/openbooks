@@ -1,5 +1,4 @@
 import { getTranslations } from 'next-intl/server'
-import Link from 'next/link'
 import { notFound } from 'next/navigation'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/platform/database'
@@ -10,7 +9,8 @@ import { DOC_KINDS } from '../../../../lib/document-kinds'
 import { accountOptions, taxCodeOptions } from '../../../../lib/documents'
 import { listScopedPartyOptions } from '../../../../lib/scoped-options'
 import { isMultiSubsidiary, subsidiaryOptions } from '../../../../lib/subsidiaries'
-import { CashDailySummaryForm } from '../../../../components/cash-daily-summary-form'
+import { ModuleView } from '@/components/viewspec/module-view'
+import { page, pageHeader, widgetBlock } from '@braedonsaunders/appkit-viewspec'
 
 export const dynamic = 'force-dynamic'
 
@@ -67,25 +67,15 @@ export default async function CashDailySummary() {
   const taxCodeItems = taxCodes.map((option) => ({ value: option.id, label: optionLabel(option) }))
   const defaultTenderAccountId = tenderAccounts[0]?.value ?? null
 
-  return (
-    <main className="mx-auto max-w-4xl space-y-4 p-4">
-      <div>
-        <Link href="/cash-sales" className="text-sm text-teal-700 hover:underline dark:text-teal-300">
-          {t('dailySummary.back')}
-        </Link>
-        <h1 className="mt-1 text-xl font-semibold">{t('list.cashDailySummary')}</h1>
-      </div>
-      <CashDailySummaryForm
-        currency={currency}
-        defaultDate={today}
-        accounts={lineAccounts}
-        taxCodes={taxCodeItems}
-        tenderAccounts={tenderAccounts}
-        defaultTenderAccountId={defaultTenderAccountId}
-        serverOptions={servers}
-        subsidiaries={subsidiaries}
-        defaultSubsidiaryId={subsidiaries?.[0]?.value ?? null}
-      />
-    </main>
-  )
+  const spec = page({
+    route: '/cash-sales/daily-summary',
+    layout: 'detail',
+    header: [pageHeader({ title: t('list.cashDailySummary'), back: { href: '/cash-sales', label: t('dailySummary.back') } })],
+    body: [widgetBlock('cash-daily-summary', {
+      currency, defaultDate: today, accounts: lineAccounts, taxCodes: taxCodeItems,
+      tenderAccounts, defaultTenderAccountId, serverOptions: servers, subsidiaries,
+      defaultSubsidiaryId: subsidiaries?.[0]?.value ?? null,
+    })],
+  })
+  return <ModuleView spec={spec} data={{}} searchParams={{}} trusted />
 }

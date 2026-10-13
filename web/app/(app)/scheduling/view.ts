@@ -153,6 +153,8 @@ export function schedulingSpec(data: SchedulingPageData): PageSpec {
     header: [pageHeader({ title: f('title'), description: f('description') })],
     body: [
       widgetBlock('scheduling-workspace', {
+        hostPath: data.hostPath,
+        contextProjectId: data.contextProjectId,
         boards: data.boards,
         board: data.board,
         view: data.view,

@@ -5,7 +5,7 @@ import { useLocale, useTranslations } from 'next-intl'
 import { SchedulingAlert } from './SchedulingAlert'
 import { refusalMessageFromBody } from '../../lib/api-error'
 import { Search } from 'lucide-react'
-import { Input, cn } from '@openbooks/ui'
+import { Input, cn, Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@openbooks/ui'
 import { ScheduleTab } from '../../app/(app)/projects/tabs/ScheduleTab'
 import { projectProgress, SchedulingRequestError } from './api'
 import type { ProjectProgress, TaskProgress } from '@openbooks/engine/schedule-boards/progress'
@@ -157,38 +157,38 @@ function ProgressView({ boardId, projectId, canManage }: { boardId: string; proj
         ))}
       </div>
       <div className="overflow-x-auto rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950">
-        <table className="w-full text-sm">
-          <thead className="border-b border-slate-200 text-[11px] uppercase tracking-wide text-slate-500 dark:border-slate-800">
-            <tr>
-              <th className="px-3 py-2 text-left font-semibold">{t('progress.task')}</th>
-              <th className="px-3 py-2 text-right font-semibold">{t('progress.budget')}</th>
-              <th className="px-3 py-2 text-right font-semibold">{t('progress.actual')}</th>
-              <th className="w-56 px-3 py-2 text-left font-semibold">{t('progress.complete')}</th>
-              <th className="px-3 py-2 text-right font-semibold">{t('progress.earned')}</th>
-              <th className="px-3 py-2 text-right font-semibold">{t('progress.factor')}</th>
-              <th className="px-3 py-2 text-right font-semibold">{t('progress.toComplete')}</th>
-              <th className="px-3 py-2 text-right font-semibold">{t('progress.estimate')}</th>
-              <th className="px-3 py-2 text-right font-semibold">{t('progress.variance')}</th>
-            </tr>
-          </thead>
-          <tbody>
+        <Table containerClassName="overflow-visible rounded-none border-0 bg-transparent shadow-none" className="w-full text-sm">
+          <TableHeader className="border-b border-slate-200 text-[11px] uppercase tracking-wide text-slate-500 dark:border-slate-800">
+            <TableRow noAnimate>
+              <TableHead className="px-3 py-2 text-left font-semibold">{t('progress.task')}</TableHead>
+              <TableHead className="px-3 py-2 text-right font-semibold">{t('progress.budget')}</TableHead>
+              <TableHead className="px-3 py-2 text-right font-semibold">{t('progress.actual')}</TableHead>
+              <TableHead className="w-56 px-3 py-2 text-left font-semibold">{t('progress.complete')}</TableHead>
+              <TableHead className="px-3 py-2 text-right font-semibold">{t('progress.earned')}</TableHead>
+              <TableHead className="px-3 py-2 text-right font-semibold">{t('progress.factor')}</TableHead>
+              <TableHead className="px-3 py-2 text-right font-semibold">{t('progress.toComplete')}</TableHead>
+              <TableHead className="px-3 py-2 text-right font-semibold">{t('progress.estimate')}</TableHead>
+              <TableHead className="px-3 py-2 text-right font-semibold">{t('progress.variance')}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {data.tasks.map((task) => {
               const done = Math.min(100, Math.round(Number(task.percentComplete) * 100))
               const used = task.hoursUsed === null ? null : Math.min(150, Math.round(Number(task.hoursUsed) * 100))
               return (
-                <tr key={task.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/60 dark:border-slate-800 dark:hover:bg-slate-900/40">
-                  <td className="px-3 py-2">
+                <TableRow noAnimate key={task.id} className="border-b border-slate-100 last:border-0 hover:bg-slate-50/60 dark:border-slate-800 dark:hover:bg-slate-900/40">
+                  <TableCell className="px-3 py-2">
                     <div className="flex items-center gap-2" style={{ paddingLeft: task.outlineLevel * 14 }}>
                       <span className="truncate font-medium text-slate-900 dark:text-slate-100">{task.code ? `${task.code} · ${task.name}` : task.name}</span>
                     </div>
                     {task.phase ? <div className="text-[11px] text-slate-400" style={{ paddingLeft: task.outlineLevel * 14 }}>{task.phase}</div> : null}
-                  </td>
-                  <td className="px-3 py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">{hours(task.budgetHours)}</td>
-                  <td className="px-3 py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">
+                  </TableCell>
+                  <TableCell className="px-3 py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">{hours(task.budgetHours)}</TableCell>
+                  <TableCell className="px-3 py-2 text-right tabular-nums text-slate-600 dark:text-slate-300">
                     {hours(task.actualHours)}
                     {Number(task.pendingHours) > 0 ? <div className="text-[10px] text-slate-400">{t('progress.pending', { hours: hours(task.pendingHours) })}</div> : null}
-                  </td>
-                  <td className="px-3 py-2">
+                  </TableCell>
+                  <TableCell className="px-3 py-2">
                     <div className="flex items-center gap-2">
                       <div className="relative h-2 flex-1 overflow-hidden rounded-full bg-slate-100 dark:bg-slate-800" title={used === null ? undefined : t('progress.used', { percent: used })}>
                         <div className="absolute inset-y-0 left-0 rounded-full bg-teal-500" style={{ width: `${done}%` }} />
@@ -210,20 +210,20 @@ function ProgressView({ boardId, projectId, canManage }: { boardId: string; proj
                         <span className="w-10 text-right text-xs tabular-nums">{done}%</span>
                       )}
                     </div>
-                  </td>
-                  <td className="px-3 py-2 text-right tabular-nums">{hours(task.earnedHours)}</td>
-                  <td className={cn('px-3 py-2 text-right font-semibold tabular-nums', factorTone(task.performanceFactor))}>{task.performanceFactor === null ? '—' : Number(task.performanceFactor).toFixed(2)}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{hours(task.hoursToComplete)}</td>
-                  <td className="px-3 py-2 text-right tabular-nums">{hours(task.estimateAtCompletion)}</td>
-                  <td className={cn('px-3 py-2 text-right tabular-nums', task.varianceAtCompletion !== null && Number(task.varianceAtCompletion) < 0 && 'text-rose-700 dark:text-rose-300')}>{hours(task.varianceAtCompletion)}</td>
-                </tr>
+                  </TableCell>
+                  <TableCell className="px-3 py-2 text-right tabular-nums">{hours(task.earnedHours)}</TableCell>
+                  <TableCell className={cn('px-3 py-2 text-right font-semibold tabular-nums', factorTone(task.performanceFactor))}>{task.performanceFactor === null ? '—' : Number(task.performanceFactor).toFixed(2)}</TableCell>
+                  <TableCell className="px-3 py-2 text-right tabular-nums">{hours(task.hoursToComplete)}</TableCell>
+                  <TableCell className="px-3 py-2 text-right tabular-nums">{hours(task.estimateAtCompletion)}</TableCell>
+                  <TableCell className={cn('px-3 py-2 text-right tabular-nums', task.varianceAtCompletion !== null && Number(task.varianceAtCompletion) < 0 && 'text-rose-700 dark:text-rose-300')}>{hours(task.varianceAtCompletion)}</TableCell>
+                </TableRow>
               )
             })}
             {data.tasks.length === 0 ? (
-              <tr><td colSpan={9} className="px-3 py-10 text-center text-sm text-slate-500">{t('progress.noTasks')}</td></tr>
+              <TableRow noAnimate><TableCell colSpan={9} className="px-3 py-10 text-center text-sm text-slate-500">{t('progress.noTasks')}</TableCell></TableRow>
             ) : null}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </div>
       <p className="text-[11px] text-slate-500">{t('progress.explain')}</p>
     </div>

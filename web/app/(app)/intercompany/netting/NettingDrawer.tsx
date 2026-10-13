@@ -4,7 +4,7 @@ import Link from 'next/link'
 import { useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
-import { Badge, Button, Input, Label, Select, Textarea, UrlDrawer } from '@openbooks/ui'
+import { Badge, Button, Input, Label, Select, Textarea, UrlDrawer, Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@openbooks/ui'
 import { promptDialog } from '../../../../lib/prompt'
 import { readApiErrorMessage } from '../../../../lib/api-error'
 
@@ -238,32 +238,32 @@ function PairTable({ rows }: { rows: RunView['pairs'] }) {
   const t = useTranslations('intercompany')
   return (
     <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-800">
-      <table className="w-full">
-        <thead className="bg-slate-50 text-xs text-slate-500 dark:bg-slate-900">
-          <tr>
-            <th className={`${CELL} text-left`}>{t('netting.pairColumns.pair')}</th>
-            <th className={`${CELL} text-left`}>{t('netting.pairColumns.currency')}</th>
-            <th className={`${CELL} text-right`}>{t('netting.pairColumns.fromNet')}</th>
-            <th className={`${CELL} text-right`}>{t('netting.pairColumns.toNet')}</th>
-            <th className={`${CELL} text-right`}>{t('netting.pairColumns.unreconciled')}</th>
-            <th className={`${CELL} text-right`}>{t('netting.pairColumns.netted')}</th>
-            <th className={`${CELL} text-right`}>{t('netting.pairColumns.cash')}</th>
-          </tr>
-        </thead>
-        <tbody>
+      <Table containerClassName="overflow-visible rounded-none border-0 bg-transparent shadow-none" className="w-full">
+        <TableHeader className="bg-slate-50 text-xs text-slate-500 dark:bg-slate-900">
+          <TableRow noAnimate>
+            <TableHead className={`${CELL} text-left`}>{t('netting.pairColumns.pair')}</TableHead>
+            <TableHead className={`${CELL} text-left`}>{t('netting.pairColumns.currency')}</TableHead>
+            <TableHead className={`${CELL} text-right`}>{t('netting.pairColumns.fromNet')}</TableHead>
+            <TableHead className={`${CELL} text-right`}>{t('netting.pairColumns.toNet')}</TableHead>
+            <TableHead className={`${CELL} text-right`}>{t('netting.pairColumns.unreconciled')}</TableHead>
+            <TableHead className={`${CELL} text-right`}>{t('netting.pairColumns.netted')}</TableHead>
+            <TableHead className={`${CELL} text-right`}>{t('netting.pairColumns.cash')}</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
           {rows.map((row) => (
-            <tr key={row.key} className="border-t border-slate-100 dark:border-slate-800">
-              <td className={CELL}>{row.label}</td>
-              <td className={CELL}>{row.currency}</td>
-              <td className={NUM}>{row.fromNet}</td>
-              <td className={NUM}>{row.toNet}</td>
-              <td className={NUM}>{row.unreconciled}</td>
-              <td className={NUM}>{row.netted}</td>
-              <td className={NUM}>{row.cash}</td>
-            </tr>
+            <TableRow noAnimate key={row.key} className="border-t border-slate-100 dark:border-slate-800">
+              <TableCell className={CELL}>{row.label}</TableCell>
+              <TableCell className={CELL}>{row.currency}</TableCell>
+              <TableCell className={NUM}>{row.fromNet}</TableCell>
+              <TableCell className={NUM}>{row.toNet}</TableCell>
+              <TableCell className={NUM}>{row.unreconciled}</TableCell>
+              <TableCell className={NUM}>{row.netted}</TableCell>
+              <TableCell className={NUM}>{row.cash}</TableCell>
+            </TableRow>
           ))}
-        </tbody>
-      </table>
+        </TableBody>
+      </Table>
     </div>
   )
 }
@@ -355,34 +355,34 @@ function ExistingRun({ closeHref, today, run, canManage, canSettle }: Extract<Ne
       <PairTable rows={run.pairs} />
       <h3 className="mb-2 mt-6 text-sm font-semibold">{t('netting.linesTitle')}</h3>
       <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-800">
-        <table className="w-full">
-          <thead className="bg-slate-50 text-xs text-slate-500 dark:bg-slate-900">
-            <tr>
-              <th className={`${CELL} text-left`}>{t('netting.lineColumns.component')}</th>
-              <th className={`${CELL} text-left`}>{t('netting.lineColumns.entity')}</th>
-              <th className={`${CELL} text-left`}>{t('netting.lineColumns.reference')}</th>
-              <th className={`${CELL} text-right`}>{t('netting.lineColumns.open')}</th>
-              <th className={`${CELL} text-right`}>{t('netting.lineColumns.netted')}</th>
-              <th className={`${CELL} text-right`}>{t('netting.lineColumns.cash')}</th>
-              <th className={`${CELL} text-right`}>{t('netting.lineColumns.rate')}</th>
-              <th className={`${CELL} text-right`}>{t('netting.lineColumns.realizedFx')}</th>
-            </tr>
-          </thead>
-          <tbody>
+        <Table containerClassName="overflow-visible rounded-none border-0 bg-transparent shadow-none" className="w-full">
+          <TableHeader className="bg-slate-50 text-xs text-slate-500 dark:bg-slate-900">
+            <TableRow noAnimate>
+              <TableHead className={`${CELL} text-left`}>{t('netting.lineColumns.component')}</TableHead>
+              <TableHead className={`${CELL} text-left`}>{t('netting.lineColumns.entity')}</TableHead>
+              <TableHead className={`${CELL} text-left`}>{t('netting.lineColumns.reference')}</TableHead>
+              <TableHead className={`${CELL} text-right`}>{t('netting.lineColumns.open')}</TableHead>
+              <TableHead className={`${CELL} text-right`}>{t('netting.lineColumns.netted')}</TableHead>
+              <TableHead className={`${CELL} text-right`}>{t('netting.lineColumns.cash')}</TableHead>
+              <TableHead className={`${CELL} text-right`}>{t('netting.lineColumns.rate')}</TableHead>
+              <TableHead className={`${CELL} text-right`}>{t('netting.lineColumns.realizedFx')}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
             {run.lines.map((line) => (
-              <tr key={line.key} className="border-t border-slate-100 dark:border-slate-800">
-                <td className={CELL}>{line.component}</td>
-                <td className={CELL}>{line.entity} → {line.counterparty}</td>
-                <td className={CELL}>{line.href ? <Link className="underline-offset-2 hover:underline" href={line.href as never}>{line.reference}</Link> : line.reference}</td>
-                <td className={NUM}>{line.open}</td>
-                <td className={NUM}>{line.netted}</td>
-                <td className={NUM}>{line.cash}</td>
-                <td className={NUM}>{line.rate}</td>
-                <td className={NUM}>{line.realizedFx}</td>
-              </tr>
+              <TableRow noAnimate key={line.key} className="border-t border-slate-100 dark:border-slate-800">
+                <TableCell className={CELL}>{line.component}</TableCell>
+                <TableCell className={CELL}>{line.entity} → {line.counterparty}</TableCell>
+                <TableCell className={CELL}>{line.href ? <Link className="underline-offset-2 hover:underline" href={line.href as never}>{line.reference}</Link> : line.reference}</TableCell>
+                <TableCell className={NUM}>{line.open}</TableCell>
+                <TableCell className={NUM}>{line.netted}</TableCell>
+                <TableCell className={NUM}>{line.cash}</TableCell>
+                <TableCell className={NUM}>{line.rate}</TableCell>
+                <TableCell className={NUM}>{line.realizedFx}</TableCell>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </div>
       {run.entryHrefs.length > 0 ? (
         <p className="mt-4 flex flex-wrap gap-3 text-sm">

@@ -1,3 +1,4 @@
+import { ListPageLayout } from '@/components/page-layout'
 import Link from 'next/link'
 import { getTranslations } from 'next-intl/server'
 import { PageHeader } from '@openbooks/ui'
@@ -59,13 +60,12 @@ export default async function AssistantActionSetup({ searchParams }: {
       ]} />
   }
 
-  return <div className="space-y-4">
-    <PageHeader title={t('title')} description={activity ? t('activityDescription') : t('description')} />
+  return <ListPageLayout header={<PageHeader title={t('title')} description={activity ? t('activityDescription') : t('description')} />}><div className="space-y-4">
     <ModuleHomeTabs placement="local" tabs={[
       { href: BASE, label: t('capabilitiesTitle'), active: !activity },
       { href: `${BASE}?tab=activity`, label: t('decisionsTitle'), active: activity },
     ]} />
     <p className="text-sm text-slate-500 dark:text-slate-400">{t('authorityHelp')} <Link href="/admin/setup/features" className="text-teal-700 hover:underline dark:text-teal-300">{t('featuresLink')}</Link></p>
     {content}
-  </div>
+  </div></ListPageLayout>
 }

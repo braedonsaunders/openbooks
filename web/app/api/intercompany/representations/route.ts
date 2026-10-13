@@ -1,8 +1,7 @@
 import { NextResponse } from 'next/server'
-import { sql } from 'drizzle-orm'
 import { z } from 'zod'
 import { defineRoute } from '@/lib/api/route'
-import { db } from '@openbooks/engine/platform/db'
+import { intercompanyPartySubject } from '@/lib/posting-review-subjects'
 import { subsidiaryScopeAllows } from '@openbooks/engine/organization/scope'
 import { intercompanyRepresentationsOfParty } from '@openbooks/engine/intercompany'
 import { notFound } from '@/lib/api/responses'
@@ -18,8 +17,7 @@ export const GET = defineRoute({
   handler: async ({ request, authz }) => {
     const parsed = query.safeParse(Object.fromEntries(new URL(request.url).searchParams))
     if (!parsed.success) return NextResponse.json({ error: 'a party id is required' }, { status: 400 })
-    const party = (await db.execute<{ subsidiary_id: string | null }>(sql`
-      select subsidiary_id from parties where org_id = ${authz.user.orgId} and id = ${parsed.data.partyId}`)).rows[0]
+    const party = await intercompanyPartySubject(authz.user.orgId, parsed.data.partyId)
     if (!party || !subsidiaryScopeAllows(authz.allowedSubsidiaryIds, party.subsidiary_id, { orgWideNull: true })) {
       return notFound('record')
     }

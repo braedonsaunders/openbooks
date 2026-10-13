@@ -34,7 +34,7 @@ const PATCHBodySchema1 = z.object({
   extraDims: z.record(z.string(), z.unknown()).optional(),
   custom: z.record(z.string(), z.unknown()).optional(),
   lines: z.array(z.looseObject({})).optional(),
-});
+}).refine(body => Object.keys(body).length > 0, { message: 'Supply the expense changes to save.' });
 
 
 

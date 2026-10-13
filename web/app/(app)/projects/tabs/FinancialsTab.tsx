@@ -4,7 +4,7 @@ import { useMoney } from '@/components/money-provider'
 import { useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
-import { Card, CardContent, cn } from '@openbooks/ui'
+import { Card, CardContent, cn, Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@openbooks/ui'
 import type { PnlLine } from '@openbooks/schema'
 import { PagedTable } from '../../../../components/paged-table'
 import { add, cmp, neg, roundDiv, toUnits } from '@openbooks/engine/money/money'
@@ -86,29 +86,29 @@ function BudgetVsActualCard({ data }: { data: BudgetVsActualSummary }) {
             {t('card.openReport')}
           </Link>
         </div>
-        <table className="w-full text-sm">
-          <thead>
-            <tr className="text-[11px] uppercase tracking-wider text-slate-400 dark:text-slate-500">
-              <th className="px-4 py-2 text-left font-semibold"><span className="sr-only">{t('card.measure')}</span></th>
-              <th className="px-4 py-2 text-right font-semibold">{t('card.original')}</th>
-              <th className="px-4 py-2 text-right font-semibold">{t('card.current')}</th>
-              <th className="px-4 py-2 text-right font-semibold">{t('card.actual')}</th>
-            </tr>
-          </thead>
-          <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
+        <Table containerClassName="overflow-visible rounded-none border-0 bg-transparent shadow-none" className="w-full text-sm">
+          <TableHeader>
+            <TableRow noAnimate className="text-[11px] uppercase tracking-wider text-slate-400 dark:text-slate-500">
+              <TableHead className="px-4 py-2 text-left font-semibold"><span className="sr-only">{t('card.measure')}</span></TableHead>
+              <TableHead className="px-4 py-2 text-right font-semibold">{t('card.original')}</TableHead>
+              <TableHead className="px-4 py-2 text-right font-semibold">{t('card.current')}</TableHead>
+              <TableHead className="px-4 py-2 text-right font-semibold">{t('card.actual')}</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody className="divide-y divide-slate-100 dark:divide-slate-800/60">
             {rows.map((row) => (
-              <tr key={row.label}>
-                <th scope="row" className="px-4 py-2 text-left font-normal text-slate-600 dark:text-slate-300">{row.label}</th>
-                <td className="px-4 py-2 text-right tabular-nums text-slate-700 dark:text-slate-200">{row.original}</td>
-                <td className="px-4 py-2 text-right tabular-nums text-slate-700 dark:text-slate-200">{row.current}</td>
-                <td className="px-4 py-2 text-right tabular-nums text-slate-900 dark:text-slate-100">
+              <TableRow noAnimate key={row.label}>
+                <TableHead scope="row" className="px-4 py-2 text-left font-normal text-slate-600 dark:text-slate-300">{row.label}</TableHead>
+                <TableCell className="px-4 py-2 text-right tabular-nums text-slate-700 dark:text-slate-200">{row.original}</TableCell>
+                <TableCell className="px-4 py-2 text-right tabular-nums text-slate-700 dark:text-slate-200">{row.current}</TableCell>
+                <TableCell className="px-4 py-2 text-right tabular-nums text-slate-900 dark:text-slate-100">
                   {row.actual}
                   {row.actualLabel ? <span className="ml-1 text-[11px] text-slate-400 dark:text-slate-500">{row.actualLabel}</span> : null}
-                </td>
-              </tr>
+                </TableCell>
+              </TableRow>
             ))}
-          </tbody>
-        </table>
+          </TableBody>
+        </Table>
       </CardContent>
     </Card>
   )

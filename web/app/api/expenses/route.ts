@@ -20,7 +20,7 @@ const nullableId = z.string().uuid().nullable();
 const POSTBodySchema = z.object({
   // Same edit shape as the draft PATCH; prepareExpenseEdit owns every domain
   // rule and refuses by name with the line number.
-  documentDate: z.string().optional(),
+  documentDate: z.string().min(1),
   memo: z.string().nullable().optional(),
   partyId: nullableId.optional(), paymentCardId: nullableId.optional(),
   extraDims: z.record(z.string(), z.unknown()).optional(),

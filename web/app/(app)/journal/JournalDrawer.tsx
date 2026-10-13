@@ -1335,7 +1335,7 @@ function JournalDrawerBody({
           {doc.automatic_reversal_entry_id ? <JournalEntryLink entryId={String(doc.automatic_reversal_entry_id)}>{t('instructions.viewReversal')}</JournalEntryLink> : null}
           {canPost && doc.reversal_instruction_status === 'blocked' ? <Button variant="outline" size="sm" disabled={busy} onClick={async () => {
             await execute(async () => {
-              const result = await fetchAppAction('/api/journals/reversals',{method:'POST',headers:{'Content-Type':'application/json'},body:'{}'},{fallback:t('postFailed')})
+              const result = await fetchAppAction('/api/journals/reversals',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({action:'run_due'})},{fallback:t('postFailed')})
               if (!result.ok) return result
               const parsed = z.object({reversed:z.number().int().nonnegative(),blocked:z.array(z.object({id:z.string().uuid(),message:z.string().min(1)}))}).safeParse(result.data)
               if (!parsed.success) return {ok:false,error:new ActionError({kind:'unexpected',serverMessage:t('postFailed')})}

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
-import { Button } from '@openbooks/ui'
+import { Button, Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@openbooks/ui'
 import { AsyncUrlDrawer } from '../../../../../components/async-url-drawer'
 import { readApiErrorMessage } from '../../../../../lib/api-error'
 
@@ -100,29 +100,29 @@ export function StatementBatchRunDrawer({ runId }: { runId: string | null }) {
             <div><dt className="text-xs text-slate-500">{t('columnFailed')}</dt><dd className="font-medium tabular-nums">{detail.run.counts.failed}</dd></div>
             <div><dt className="text-xs text-slate-500">{t('columnSkipped')}</dt><dd className="font-medium tabular-nums">{detail.run.counts.skipped}</dd></div>
           </dl>
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b text-left text-xs text-slate-500">
-                <th className="py-1.5 pr-2 font-medium">{t('columnCustomer')}</th>
-                <th className="py-1.5 pr-2 text-right font-medium">{t('columnBalance')}</th>
-                <th className="py-1.5 pr-2 font-medium">{t('columnStatus')}</th>
-                <th className="py-1.5 font-medium">{t('columnError')}</th>
-              </tr>
-            </thead>
-            <tbody>
+          <Table containerClassName="overflow-visible rounded-none border-0 bg-transparent shadow-none" className="w-full text-sm">
+            <TableHeader>
+              <TableRow noAnimate className="border-b text-left text-xs text-slate-500">
+                <TableHead className="py-1.5 pr-2 font-medium">{t('columnCustomer')}</TableHead>
+                <TableHead className="py-1.5 pr-2 text-right font-medium">{t('columnBalance')}</TableHead>
+                <TableHead className="py-1.5 pr-2 font-medium">{t('columnStatus')}</TableHead>
+                <TableHead className="py-1.5 font-medium">{t('columnError')}</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
               {detail.items.map((item) => (
-                <tr key={item.partyId} className="border-b last:border-0">
-                  <td className="py-1.5 pr-2">
+                <TableRow noAnimate key={item.partyId} className="border-b last:border-0">
+                  <TableCell className="py-1.5 pr-2">
                     <div className="font-medium">{item.partyName ?? item.partyId}</div>
                     <div className="text-xs text-slate-500">{item.toEmail ?? t('exclusionsTitle')}</div>
-                  </td>
-                  <td className="py-1.5 pr-2 text-right tabular-nums">{item.balance}</td>
-                  <td className="py-1.5 pr-2">{statusLabel(item.status)}</td>
-                  <td className="py-1.5 text-xs text-slate-500">{item.error ?? '—'}</td>
-                </tr>
+                  </TableCell>
+                  <TableCell className="py-1.5 pr-2 text-right tabular-nums">{item.balance}</TableCell>
+                  <TableCell className="py-1.5 pr-2">{statusLabel(item.status)}</TableCell>
+                  <TableCell className="py-1.5 text-xs text-slate-500">{item.error ?? '—'}</TableCell>
+                </TableRow>
               ))}
-            </tbody>
-          </table>
+            </TableBody>
+          </Table>
           {detail.run.counts.failed > 0 ? (
             <span className="inline-flex flex-col gap-1">
               <Button

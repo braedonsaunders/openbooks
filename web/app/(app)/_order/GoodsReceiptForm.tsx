@@ -4,7 +4,7 @@ import * as React from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useTranslations } from 'next-intl'
-import { Button, FieldLabel, Input } from '@openbooks/ui'
+import { Button, FieldLabel, Input, Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@openbooks/ui'
 
 export interface ReceiptPrefillLine {
   sourceLineId: string
@@ -208,25 +208,25 @@ export function GoodsReceiptForm({ orderId, apiBase, warehouses, onSubmit, onClo
                     onChange={(e) => setReceiptDate(e.target.value)}
                   />
                 </div>
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="text-left">
-                      <th className="py-1 pr-2 font-medium">{t('columns.item')}</th>
-                      <th className="py-1 pr-2 font-medium">{t('assignWarehouseLabel')}</th>
-                      <th className="py-1 pr-2 font-medium">{t('receive.receiveQty')}</th>
-                    </tr>
-                  </thead>
-                  <tbody>
+                <Table containerClassName="overflow-visible rounded-none border-0 bg-transparent shadow-none" className="w-full text-sm">
+                  <TableHeader>
+                    <TableRow noAnimate className="text-left">
+                      <TableHead className="py-1 pr-2 font-medium">{t('columns.item')}</TableHead>
+                      <TableHead className="py-1 pr-2 font-medium">{t('assignWarehouseLabel')}</TableHead>
+                      <TableHead className="py-1 pr-2 font-medium">{t('receive.receiveQty')}</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
                     {prefill.lines.map((line) => (
-                      <tr key={line.sourceLineId} className="border-t border-slate-200 dark:border-slate-800">
-                        <td className="py-2 pr-2">
+                      <TableRow noAnimate key={line.sourceLineId} className="border-t border-slate-200 dark:border-slate-800">
+                        <TableCell className="py-2 pr-2">
                           <div>{line.description ?? line.sourceLineId}</div>
                           <div className="text-xs text-slate-500">
                             {t('receive.remaining', { remaining: `${line.remaining}${line.unit ? ` ${line.unit}` : ''}` })}
                           </div>
-                        </td>
-                        <td className="py-2 pr-2">{warehouseById.get(line.stockLocationId ?? '') ?? '—'}</td>
-                        <td className="py-2">
+                        </TableCell>
+                        <TableCell className="py-2 pr-2">{warehouseById.get(line.stockLocationId ?? '') ?? '—'}</TableCell>
+                        <TableCell className="py-2">
                           <Input
                             aria-label={`${t('receive.receiveQty')} ${line.lineNumber}`}
                             type="number"
@@ -238,11 +238,11 @@ export function GoodsReceiptForm({ orderId, apiBase, warehouses, onSubmit, onClo
                               setQuantities((current) => ({ ...current, [line.sourceLineId]: e.target.value }))
                             }
                           />
-                        </td>
-                      </tr>
+                        </TableCell>
+                      </TableRow>
                     ))}
-                  </tbody>
-                </table>
+                  </TableBody>
+                </Table>
                 {inlineError ? <p role="alert">{inlineError}</p> : null}
                 <div className="flex justify-end gap-2">
                   <Button variant="secondary" disabled={saving} onClick={onClose}>{tCommon('actions.cancel')}</Button>

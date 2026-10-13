@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { Button, DisclosureSection, Drawer, Input, Label, Select } from '@openbooks/ui'
+import { Button, DisclosureSection, Drawer, Input, Label, Select, Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@openbooks/ui'
 import { Info } from 'lucide-react'
 import { useMoney } from '@/components/money-provider'
 import {
@@ -397,22 +397,22 @@ export function QuoteAwardAction({ quoteId, docStatus, canAward = true }: { quot
 
           <DisclosureSection title={t('customize')}>
             <div className="space-y-4">
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="text-left text-[11px] uppercase tracking-wider text-slate-400 dark:text-slate-500">
-                    <th className="py-1.5 pr-2 font-semibold">{t('columns.line')}</th>
-                    <th className="py-1.5 pr-2 font-semibold">{t('columns.description')}</th>
-                    <th className="py-1.5 pr-2 text-right font-semibold">{t('columns.price')}</th>
-                    <th className="py-1.5 font-semibold">{t('columns.task')}</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100 dark:divide-slate-800/60">
+              <Table containerClassName="overflow-visible rounded-none border-0 bg-transparent shadow-none" className="w-full text-sm">
+                <TableHeader>
+                  <TableRow noAnimate className="text-left text-[11px] uppercase tracking-wider text-slate-400 dark:text-slate-500">
+                    <TableHead className="py-1.5 pr-2 font-semibold">{t('columns.line')}</TableHead>
+                    <TableHead className="py-1.5 pr-2 font-semibold">{t('columns.description')}</TableHead>
+                    <TableHead className="py-1.5 pr-2 text-right font-semibold">{t('columns.price')}</TableHead>
+                    <TableHead className="py-1.5 font-semibold">{t('columns.task')}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody className="divide-y divide-slate-100 dark:divide-slate-800/60">
                   {preview.lines.map((line) => (
-                    <tr key={line.lineId}>
-                      <td className="py-1.5 pr-2 tabular-nums text-slate-500">{line.lineNumber}</td>
-                      <td className="max-w-[16rem] truncate py-1.5 pr-2">{line.description ?? line.itemName ?? ''}</td>
-                      <td className="py-1.5 pr-2 text-right tabular-nums">{money(plan?.lines.find((planned) => planned.lineId === line.lineId)?.price ?? line.amount)}</td>
-                      <td className="py-1.5">
+                    <TableRow noAnimate key={line.lineId}>
+                      <TableCell className="py-1.5 pr-2 tabular-nums text-slate-500">{line.lineNumber}</TableCell>
+                      <TableCell className="max-w-[16rem] truncate py-1.5 pr-2">{line.description ?? line.itemName ?? ''}</TableCell>
+                      <TableCell className="py-1.5 pr-2 text-right tabular-nums">{money(plan?.lines.find((planned) => planned.lineId === line.lineId)?.price ?? line.amount)}</TableCell>
+                      <TableCell className="py-1.5">
                         <Select
                           aria-label={t('columns.task')}
                           value={mapping[line.lineId] ?? ''}
@@ -433,11 +433,11 @@ export function QuoteAwardAction({ quoteId, docStatus, canAward = true }: { quot
                           {taskOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
                           <option value="__own">{t('ownTask')}</option>
                         </Select>
-                      </td>
-                    </tr>
+                      </TableCell>
+                    </TableRow>
                   ))}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
 
               {grouping.specs.some((task) => !task.existingTaskId) ? (
                 <div className="space-y-2">

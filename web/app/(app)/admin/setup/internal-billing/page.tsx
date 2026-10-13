@@ -1,3 +1,5 @@
+import { ListPageLayout } from '@/components/page-layout'
+import { PageHeader } from '@openbooks/ui'
 import { getTranslations } from 'next-intl/server'
 import { businessToday } from '@openbooks/engine/platform/business-date'
 import { SetupEntitySection } from '../[entity]/SetupEntitySection'
@@ -38,8 +40,9 @@ export default async function InternalBillingSetupPage({
       ? internalBillingCreateChooser(await businessToday(orgId), await suggestInternalBillingAccounts(orgId))
       : undefined,
   }
+  const t = await getTranslations('admin')
   return (
-    <SetupEntitySection
+    <ListPageLayout header={<PageHeader title={t('setup.entities.internal-billing.title')} />}><SetupEntitySection
       entity={entity}
       orgId={orgId}
       actorId={authz.user.id}
@@ -47,6 +50,6 @@ export default async function InternalBillingSetupPage({
       basePath="/admin/setup/internal-billing"
       canManage={can(authz, 'admin.setup.manage')}
       allowedSubsidiaryIds={authz.allowedSubsidiaryIds}
-    />
+    /></ListPageLayout>
   )
 }

@@ -122,7 +122,7 @@ const journalPatchBody = z.object({
   extraDims: z.record(z.string(), z.string().nullable()).optional(),
   custom: z.record(z.string(), z.json()).optional(),
   lines: z.array(journalLineInput).optional(),
-})
+}).refine(body => Object.keys(body).length > 0, { message: 'Supply the journal changes to save.' })
 
 /**
  * Autosave a manual-journal draft. Once it enters approval or posts, the

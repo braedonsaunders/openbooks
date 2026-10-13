@@ -1,3 +1,4 @@
+import { CashDailySummaryForm } from '../cash-daily-summary-form'
 import {
   NativeListDrawer,
   ArCockpit,
@@ -50,6 +51,8 @@ import { str, type WidgetRenderer } from './widget-props'
 
 /** Commerce adapters. Compose native components without changing their props or boundaries. */
 export const COMMERCE_WIDGETS = {
+  'cash-daily-summary': (props) => <CashDailySummaryForm {...props as unknown as ComponentProps<typeof CashDailySummaryForm>} />,
+
 
   /* --- subcontracts ----------------------------------------------------------------- */
   /** SIX FLAT props (`projects`, `vendors`, `expenseAccounts`, `parties`,

@@ -1,6 +1,6 @@
-import { SchedulingWorkspace } from '@/components/scheduling/SchedulingWorkspace'
+import { ModuleView } from '@/components/viewspec/module-view'
 import { SetupEntitySection } from '../../../../admin/setup/[entity]/SetupEntitySection'
-import { loadSchedulingPage } from '../../../../scheduling/view'
+import { loadSchedulingPage, schedulingSpec } from '../../../../scheduling/view'
 import { SETUP_ENTITY_BY_KEY } from '@/lib/setup/registry'
 import { getAuthz } from '@/lib/authz'
 import { pickString } from '@/lib/list-params'
@@ -23,7 +23,7 @@ export default async function ProjectBoard({
   return (
     <div className="flex h-full min-h-0 min-w-0 flex-col gap-2">
       <div className="min-h-0 flex-1">
-        <SchedulingWorkspace {...data} />
+        <ModuleView spec={{ ...schedulingSpec(data), route: data.hostPath }} data={data} searchParams={sp} trusted contained />
       </div>
       {authz && data.canConfigure && pickString(sp.boardRow) ? (
         <SetupEntitySection

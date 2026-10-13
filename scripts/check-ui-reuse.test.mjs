@@ -7,6 +7,7 @@ import {
   extractRegistryKeys,
   loadAllowlist,
   scanText,
+  sharedPageComposition,
 } from './check-ui-reuse.mjs'
 
 /**
@@ -114,4 +115,31 @@ test('setup catalog pages compose the actual registered list and shared layout, 
   assert.deepEqual(rules(path, native + 'export default function Page(){return <Layout><p>Unregistered rows</p></Layout>}'), ['bespoke-page'])
   assert.deepEqual(rules(path, native.replace('@/app/(app)/admin/setup/[entity]/SetupEntitySection', './SetupEntitySection') + 'export default function Page(){return <Layout><Catalog /></Layout>}'), ['bespoke-page'])
   assert.deepEqual(rules(path, native.replace('@/components/page-layout', './page-layout') + 'export default function Page(){return <Layout><Catalog /></Layout>}'), ['bespoke-page'])
+})
+
+
+test('rendered native delegates prove both shared shell and registered body without trusting import-only claims', () => {
+  const files = new Map([
+    ['web/app/(app)/x/Workspace.tsx', `import { ListPageLayout as Shell } from '@/components/page-layout';
+      import { RegisteredListTable as Records } from '@/components/registered-list-table';
+      export function Workspace() { return <Shell header={null}><Records<Row> source="vendor_bill" /></Shell> }`],
+  ])
+  const read = path => { if (!files.has(path)) throw Error('missing'); return files.get(path) }
+  const page = `import { Workspace } from './Workspace'; export default function Page(){return <Workspace/>}`
+  assert.deepEqual(sharedPageComposition('web/app/(app)/x/page.tsx', page, read), {shell:true,body:true})
+  assert.deepEqual(sharedPageComposition('web/app/(app)/x/page.tsx', page.replace('<Workspace/>','<p/>'), read), {shell:false,body:false})
+  assert.deepEqual(sharedPageComposition('web/app/(app)/x/page.tsx', page.replace('./Workspace','./Missing'), read), {shell:false,body:false})
+  const generic = `import { ListPageLayout } from '@/components/page-layout'; import { PagedTable } from '@/components/paged-table';
+    export default function Page(){return <ListPageLayout header={null}><PagedTable rows={[]} /></ListPageLayout>}`
+  assert.deepEqual(sharedPageComposition('web/app/(app)/x/page.tsx', generic, read), {shell:true,body:false})
+  const cycle = `import { Loop } from './Loop'; export function Loop(){return <Loop/>}`
+  files.set('web/app/(app)/x/Loop.tsx', cycle)
+  assert.deepEqual(sharedPageComposition('web/app/(app)/x/Loop.tsx', cycle, read), {shell:false,body:false})
+})
+
+test('registered server and prepared adapters retain unknown-source refusal', () => {
+  for (const name of ['RegisteredListTable','ServerPagedTable','PreparedPagedTable']) {
+    const violations = scanText('web/components/x.tsx', `<${name} source="unregistered"/>`, KEYS)
+    assert.equal(violations.filter(value => value.rule === 'unknown-list-key').length, 1)
+  }
 })

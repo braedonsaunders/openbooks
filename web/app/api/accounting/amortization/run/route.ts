@@ -12,7 +12,7 @@ const runBody = z
     asOf: isoDate().optional(),
     scheduleIds: z.array(uuidId).max(500).optional(),
   })
-  .refine((body) => (body.periodId === undefined) !== (body.asOf === undefined), {
+  .refine((body) => (body.periodId !== undefined && body.asOf === undefined) || (body.periodId === undefined && body.asOf !== undefined), {
     message: 'name exactly one of periodId or asOf',
   })
 

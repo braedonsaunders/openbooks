@@ -5,7 +5,7 @@ import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { ActionAlert } from '@braedonsaunders/appkit-errors/react'
-import { Badge, Button, Input, Label, Select } from '@openbooks/ui'
+import { Badge, Button, Input, Label, Select, Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@openbooks/ui'
 import { PagedTable } from '@/components/paged-table'
 import { useMoney } from '@/components/money-provider'
 import { useBusinessToday } from '@/components/business-date-provider'
@@ -130,17 +130,17 @@ export function AssetComponentsPanel({
       />
       <section className="space-y-2">
         <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('components.rollupTitle')}</h3>
-        <table className="w-full text-sm">
-          <thead><tr className="text-left text-slate-500 dark:text-slate-400"><th className="py-1 font-medium">{t('run.book')}</th><th className="py-1 text-right font-medium">{t('labels.cost')}</th><th className="py-1 text-right font-medium">{t('labels.accumulated')}</th><th className="py-1 text-right font-medium">{t('labels.nbv')}</th></tr></thead>
-          <tbody>{payload.rollup.map((book) => (
-            <tr key={book.bookId} className="border-t border-slate-100 dark:border-slate-800">
-              <td className="py-1">{book.bookName}{book.isPrimary ? <Badge variant="outline" className="ml-2">{t('components.primary')}</Badge> : null}</td>
-              <td className="py-1 text-right tabular-nums">{money(book.cost)}</td>
-              <td className="py-1 text-right tabular-nums">{money(book.accumulated)}</td>
-              <td className="py-1 text-right font-semibold tabular-nums">{money(book.carryingValue)}</td>
-            </tr>
-          ))}</tbody>
-        </table>
+        <Table containerClassName="overflow-visible rounded-none border-0 bg-transparent shadow-none" className="w-full text-sm">
+          <TableHeader><TableRow noAnimate className="text-left text-slate-500 dark:text-slate-400"><TableHead className="py-1 font-medium">{t('run.book')}</TableHead><TableHead className="py-1 text-right font-medium">{t('labels.cost')}</TableHead><TableHead className="py-1 text-right font-medium">{t('labels.accumulated')}</TableHead><TableHead className="py-1 text-right font-medium">{t('labels.nbv')}</TableHead></TableRow></TableHeader>
+          <TableBody>{payload.rollup.map((book) => (
+            <TableRow noAnimate key={book.bookId} className="border-t border-slate-100 dark:border-slate-800">
+              <TableCell className="py-1">{book.bookName}{book.isPrimary ? <Badge variant="outline" className="ml-2">{t('components.primary')}</Badge> : null}</TableCell>
+              <TableCell className="py-1 text-right tabular-nums">{money(book.cost)}</TableCell>
+              <TableCell className="py-1 text-right tabular-nums">{money(book.accumulated)}</TableCell>
+              <TableCell className="py-1 text-right font-semibold tabular-nums">{money(book.carryingValue)}</TableCell>
+            </TableRow>
+          ))}</TableBody>
+        </Table>
       </section>
 
       {canManage ? (

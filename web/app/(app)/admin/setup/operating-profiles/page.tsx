@@ -1,3 +1,5 @@
+import { ListPageLayout } from '@/components/page-layout';
+import { PageHeader } from '@openbooks/ui';
 import { getTranslations } from 'next-intl/server';
 import { notFound } from 'next/navigation';
 import { requirePermission,guardRootSubsidiaryScope } from '@/lib/authz';
@@ -20,8 +22,8 @@ export default async function OperatingProfilesSetup({searchParams}:{searchParam
  const selected=entities.find(entity=>entity.tab===tab),entity=selected?SETUP_ENTITY_BY_KEY.get(selected.key):null;
  if(selected&&!entity)notFound();
  const t=await getTranslations('admin'),m=await getTranslations('manufacturing');
- return <div className="space-y-4"><div className="space-y-1"><h2 className="text-base font-semibold">{t('setup.entities.operating-profiles.title')}</h2><p className="text-sm text-slate-500">{t('setup.entities.operating-profiles.description')}</p></div>
+ return <ListPageLayout header={<PageHeader title={t('setup.entities.operating-profiles.title')} description={t('setup.entities.operating-profiles.description')} /> }><div className="space-y-4">
   <ModuleHomeTabs tabs={[{href:'/admin/setup/operating-profiles?tab=start',label:m('cockpit.setup'),active:tab==='start'},...entities.map(row=>({href:'/admin/setup/operating-profiles?tab='+row.tab,label:t('setup.entities.'+row.key+'.title'),active:tab===row.tab}))]}/>
   {tab==='start'?<WorkSetupJourney/>:entity?<SetupEntitySection entity={entity} orgId={authz.user.orgId} actorId={authz.user.id} searchParams={sp} basePath="/admin/setup/operating-profiles" canManage allowedSubsidiaryIds={authz.allowedSubsidiaryIds}/>:null}
- </div>;
+ </div></ListPageLayout>;
 }

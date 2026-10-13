@@ -109,6 +109,7 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'capitalize-cost',
   'card-name-cell',
   'card-studio',
+  'cash-daily-summary',
   'cash-cockpit',
   'cashflow-horizon-control',
   'cashflow-view',

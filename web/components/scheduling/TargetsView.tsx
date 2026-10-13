@@ -3,7 +3,7 @@
 import { useMemo, useState, type DragEvent } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import { Plus, Users } from 'lucide-react'
-import { cn } from '@openbooks/ui'
+import { cn, Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@openbooks/ui'
 import { CHIP_COLORS, chipStyle } from './BookingChip'
 import { SourceRecordChip } from './SourceRecord'
 import type { BoardSourceRecord } from '@openbooks/engine/schedule-boards/source-history'
@@ -98,35 +98,35 @@ export function TargetsView({ controller, window: board, search, today, onOpenEn
   return (
     <div className="flex min-h-0 min-w-0 flex-1 gap-4">
       <div className="min-h-0 min-w-0 flex-1 overflow-auto rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950">
-        <table className="w-full border-separate border-spacing-0 text-sm">
-          <thead className="sticky top-0 z-10 bg-white/95 backdrop-blur dark:bg-slate-950/95">
-            <tr>
-              <th className="sticky left-0 z-10 w-56 border-b border-slate-200 bg-white/95 px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-800 dark:bg-slate-950/95">{t('targets.where')}</th>
+        <Table containerClassName="overflow-visible rounded-none border-0 bg-transparent shadow-none" className="w-full border-separate border-spacing-0 text-sm">
+          <TableHeader className="sticky top-0 z-10 bg-white/95 backdrop-blur dark:bg-slate-950/95">
+            <TableRow noAnimate>
+              <TableHead className="sticky left-0 z-10 w-56 border-b border-slate-200 bg-white/95 px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500 dark:border-slate-800 dark:bg-slate-950/95">{t('targets.where')}</TableHead>
               {days.map((day) => (
-                <th key={day.date} className={cn('min-w-[110px] border-b border-l border-slate-100 px-2 py-2 text-center text-[11px] font-semibold dark:border-slate-800', day.date === today ? 'text-teal-700 dark:text-teal-300' : 'text-slate-500', day.isWeekend && 'bg-slate-50/80 dark:bg-slate-900/60')}>
+                <TableHead key={day.date} className={cn('min-w-[110px] border-b border-l border-slate-100 px-2 py-2 text-center text-[11px] font-semibold dark:border-slate-800', day.date === today ? 'text-teal-700 dark:text-teal-300' : 'text-slate-500', day.isWeekend && 'bg-slate-50/80 dark:bg-slate-900/60')}>
                   {weekday.format(new Date(`${day.date}T00:00:00Z`))}
-                </th>
+                </TableHead>
               ))}
-            </tr>
-          </thead>
-          <tbody>
-            {sourceRows.map(([label,records]) => <tr key={`source-${label}`}>
-              <td className="sticky left-0 z-[5] max-w-[250px] border-b bg-white px-3 py-2 align-top dark:bg-slate-950">
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {sourceRows.map(([label,records]) => <TableRow noAnimate key={`source-${label}`}>
+              <TableCell className="sticky left-0 z-[5] max-w-[250px] border-b bg-white px-3 py-2 align-top dark:bg-slate-950">
                 <div className="truncate font-semibold" title={label}>{label || '—'}</div>
                 <div className="text-[11px] text-slate-500">{t('source.unknownHours')}</div>
-              </td>
-              {days.map(day => <td key={day.date} className="border-b border-l p-1 align-top">
+              </TableCell>
+              {days.map(day => <TableCell key={day.date} className="border-b border-l p-1 align-top">
                 <div className="flex flex-col gap-0.5">{records.filter(r=>r.onDate===day.date).map(record=>
                   <div key={record.id} title={personName.get(record.workerPartyId)}>
                     <SourceRecordChip records={[record]} workerName={personName.get(record.workerPartyId)} subjectOnly compact onOpen={onOpenSourceRecord} />
                   </div>)}</div>
-              </td>)}
-            </tr>)}
+              </TableCell>)}
+            </TableRow>)}
             {rows.map((row) => {
               const hue = targetHue(row.target)
               return (
-                <tr key={keyOf(row.target)} className="group">
-                  <td className="sticky left-0 z-[5] border-b border-slate-100 bg-white px-3 py-2 align-top dark:border-slate-800 dark:bg-slate-950">
+                <TableRow noAnimate key={keyOf(row.target)} className="group">
+                  <TableCell className="sticky left-0 z-[5] border-b border-slate-100 bg-white px-3 py-2 align-top dark:border-slate-800 dark:bg-slate-950">
                     <div className="flex items-center gap-2">
                       <span className="h-8 w-1.5 shrink-0 rounded-full" style={{ backgroundColor: `hsl(${hue} 65% 55%)` }} />
                       <div className="min-w-0">
@@ -135,11 +135,11 @@ export function TargetsView({ controller, window: board, search, today, onOpenEn
                       </div>
                       <span className="ml-auto inline-flex items-center gap-1 rounded-full bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold text-slate-600 dark:bg-slate-800 dark:text-slate-300"><Users className="h-3 w-3" />{row.people.size}</span>
                     </div>
-                  </td>
+                  </TableCell>
                   {days.map((day) => {
                     const entries = row.cells.get(day.date) ?? []
                     return (
-                      <td
+                      <TableCell
                         key={day.date}
                         onDragOver={(event) => board.canManage && event.preventDefault()}
                         onDrop={(event) => void drop(event, row.target, day.date)}
@@ -163,14 +163,14 @@ export function TargetsView({ controller, window: board, search, today, onOpenEn
                           ))}
                           {entries.length > 1 ? <span className="px-1 text-[10px] font-semibold text-slate-400">{t('targets.count', { count: entries.length })}</span> : null}
                         </div>
-                      </td>
+                      </TableCell>
                     )
                   })}
-                </tr>
+                </TableRow>
               )
             })}
-            <tr>
-              <td colSpan={days.length + 1} className="px-3 py-2">
+            <TableRow noAnimate>
+              <TableCell colSpan={days.length + 1} className="px-3 py-2">
                 {board.canManage ? (
                   <button
                     type="button"
@@ -184,10 +184,10 @@ export function TargetsView({ controller, window: board, search, today, onOpenEn
                   </button>
                 ) : null}
                 {rows.length === 0 && sourceRows.length === 0 ? <p className="py-6 text-center text-sm text-slate-500">{t('targets.empty')}</p> : null}
-              </td>
-            </tr>
-          </tbody>
-        </table>
+              </TableCell>
+            </TableRow>
+          </TableBody>
+        </Table>
       </div>
 
       <aside className="hidden w-60 shrink-0 flex-col rounded-xl border border-slate-200 bg-white dark:border-slate-800 dark:bg-slate-950 lg:flex">
