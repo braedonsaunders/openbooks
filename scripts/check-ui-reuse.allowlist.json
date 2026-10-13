@@ -17,10 +17,6 @@
       "reason": "Administration console page with its own shell, outside module navigation."
     },
     {
-      "path": "web/app/(app)/close/posting-periods/page.tsx",
-      "reason": "Thin workflow route delegates to a registered client collection whose view composes the shared ListPageLayout."
-    },
-    {
       "path": "web/app/(app)/feature-required/page.tsx",
       "reason": "Error/gate page outside the module shell; no ModuleView spec applies."
     },
@@ -55,10 +51,6 @@
     {
       "path": "web/app/(app)/platform/users/page.tsx",
       "reason": "Platform operations console page with its own shell, outside module navigation."
-    },
-    {
-      "path": "web/app/(app)/projects/duplicates/page.tsx",
-      "reason": "Thin workflow route delegates to a registered client collection whose view composes the shared ListPageLayout."
     }
   ]
 }

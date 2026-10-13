@@ -59,7 +59,7 @@ const PREPARED_SOURCES_PATH = "web/lib/list/prepared-sources.ts";
  */
 export const TABLE_CEILING = 1;
 export const DIALOG_WINDOW_CEILING = 0;
-export const BESPOKE_PAGE_CEILING = 13;
+export const BESPOKE_PAGE_CEILING = 11;
 
 const LIST_COMPONENTS = ["PagedTable", "RecordListView", "EntityListView", "RegisteredListTable", "ServerPagedTable", "PreparedPagedTable"];
 const LIST_KEY_PROPS = ["source", "entity", "recordType"];
