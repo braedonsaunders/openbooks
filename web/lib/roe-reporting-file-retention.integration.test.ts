@@ -3,7 +3,7 @@ import test from 'node:test'
 import { createHash, randomUUID } from 'node:crypto'
 import { sql } from 'drizzle-orm'
 import { db, withBypassContext, withOrgContext } from '@openbooks/engine/platform/db'
-import { dropScratchOrgReporting, seedPayrollSettings } from '@openbooks/engine/testing/fixtures'
+import { dropScratchOrg, seedPayrollSettings } from '@openbooks/engine/testing/fixtures'
 import { importRoePriorPeriod } from '@openbooks/engine/payroll/roe-history'
 import { saveRoeSeparationFacts } from '@openbooks/engine/payroll/roe-separation-facts'
 import { saveRoeSubsequentService } from '@openbooks/engine/payroll/canada/roe-subsequent-service'
@@ -98,6 +98,8 @@ test('qualified ROE reporting sources refuse cabinet trash, replacement and purg
         assert.deepEqual(originalReturn.bytes, returnBytes)
       })
     } finally {
-      await withBypassContext(() => dropScratchOrgReporting(f.orgId))
+      // Retained certificates must also leave an owned disposable fixture
+      // cleanly; teardown verifies its complete org-scoped removal or reset.
+      await withBypassContext(() => dropScratchOrg(f.orgId))
     }
   })
