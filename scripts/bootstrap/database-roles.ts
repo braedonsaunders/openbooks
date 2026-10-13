@@ -475,6 +475,22 @@ export async function ensureRuntimeDatabaseRole(
   if (!precreated) {
     await ensureRuntimeRoleExists(config);
     await pool.query(`grant connect, temporary on database ${database} to ${role}`);
+    // Fresh privileged installation separates business ownership from private
+    // maintenance authority. Its query-context definer must still inherit the
+    // runtime's temporary-table rights, in the same one-way direction required
+    // by host-managed provisioning. Never grant the owner to the runtime.
+    const contextOwner = (await pool.query<{ owner: string }>(`
+      select owner.rolname as owner
+        from pg_proc function_row
+        join pg_roles owner on owner.oid = function_row.proowner
+        join pg_class business on business.oid = 'public.orgs'::regclass
+       where function_row.oid = 'public.openbooks_query_org_id()'::regprocedure
+         and function_row.prosecdef and business.relowner = owner.oid
+         and owner.rolname = 'openbooks_schema_owner'
+    `)).rows[0];
+    if (contextOwner) {
+      await pool.query(`grant ${role} to openbooks_schema_owner with inherit true, set false, admin false`);
+    }
   }
   await pool.query(`grant usage on schema public to ${role}`);
   await pool.query(

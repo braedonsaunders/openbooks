@@ -11,7 +11,7 @@ export const intercompany: DocArticle = {
   keywords: [
     'intercompany', 'representing customer', 'representing vendor', 'due to', 'due from', 'pairing',
     'transfer pricing', 'cost plus', 'netting', 'settlement', 'elimination', 'cross-subsidiary fulfillment',
-    'reconciliation', 'oneworld',
+    'reconciliation', 'multi-subsidiary',
   ],
   related: ['allocations', 'fixed-assets-depreciation', 'setup-accounting-group'],
   body: `# Intercompany Transactions, Netting and Fulfillment

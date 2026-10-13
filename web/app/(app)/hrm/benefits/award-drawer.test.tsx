@@ -212,7 +212,7 @@ test('no-approval submission states readiness without inventing an approver or r
 
 test('an active program keeps lifecycle in the header and hides an empty Actions menu', async (t) => {
   const programDrawer = {
-    program: { id: 'program', name: 'Summit Incentive', code: 'SUMMIT', family: 'incentive', familyLabel: 'Incentive', metric: 'net_profit', approvalMode: 'none', status: 'active', statusLabel: 'Active', statusVariant: 'success', valueLabel: '5%', effectiveFrom: '2026-01-01', effectiveTo: null, programHref: '/hrm/benefits?view=programs&program=program' },
+    program: { id: 'program', name: 'Project Incentive', code: 'PROJECT', family: 'incentive', familyLabel: 'Incentive', metric: 'net_profit', approvalMode: 'none', status: 'active', statusLabel: 'Active', statusVariant: 'success', valueLabel: '5%', effectiveFrom: '2026-01-01', effectiveTo: null, programHref: '/hrm/benefits?view=programs&program=program' },
     policyLines: [], members: [], membersEmpty: 'No members', sources: [], sourcesEmpty: 'No sources', activity: [], activityRefusal: null, activityTruncated: false,
     drawerRefusal: null, simulation: null, simulationRefusal: null, editHref: '/hrm/benefits?view=programs&program=program&edit=1', simulateHref: '/hrm/benefits?view=programs&program=program',
     canConfigureApprovalPolicies: false, approvalPoliciesRefusal: null, approvalPolicies: null,

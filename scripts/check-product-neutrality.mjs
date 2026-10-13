@@ -189,6 +189,15 @@ function discoverPublicFiles() {
  * files) and return every neutrality violation as a human-readable line.
  * Exported so the gate's policy is testable without a git fixture.
  */
+/** Connector export names are interoperability contracts, not product copy.
+ * Only exact mappings to existing connector sources receive that scope. */
+export function connectorManifestVendorSource(source) {
+  return source.split('\n').map(line => {
+    const entry = /^\s*"\.\/connectors\/([a-z0-9-]+)": "\.\/src\/connectors\/\1\.ts",?\s*$/.exec(line);
+    return entry && existsSync(`engine/src/connectors/${entry[1]}.ts`) ? '' : line;
+  }).join('\n');
+}
+
 export function auditPublicSnapshot(publicFiles) {
   const violations = [];
 
@@ -238,9 +247,10 @@ export function auditPublicSnapshot(publicFiles) {
     }
 
     if (!isConnectorPath(filePath)) {
-      const vendorMatch = firstMatch(source, vendorPatterns);
+      const vendorSource = filePath === 'engine/package.json' ? connectorManifestVendorSource(source) : source;
+      const vendorMatch = firstMatch(vendorSource, vendorPatterns);
       if (vendorMatch) {
-        const line = source.slice(0, vendorMatch.index).split("\n").length;
+        const line = vendorSource.slice(0, vendorMatch.index).split("\n").length;
         violations.push(
           `${filePath}:${line}: accounting-vendor name outside connector scope`,
         );

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict'
 import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { auditPublicSnapshot, isConnectorPath } from './check-product-neutrality.mjs'
+import { auditPublicSnapshot, isConnectorPath, connectorManifestVendorSource } from './check-product-neutrality.mjs'
 
 /**
  * The neutrality gate decides which files may name an accounting vendor, so a
@@ -41,6 +41,18 @@ const CONNECTOR_IMPLEMENTATION_FILES = [
   'engine/src/connectors/erpnext.ts',
   'engine/src/connectors/dynamics.ts',
 ]
+
+test('connector manifest scope admits only exact existing connector export mappings', () => {
+  const valid = '    "./connectors/xero": "./src/connectors/xero.ts",';
+  assert.equal(connectorManifestVendorSource(valid), '');
+  for (const invalid of [
+    '"description": "Xero accounting workflows",',
+    '"./connectors/xero": "./src/ledger/posting.ts",',
+    '"./ledger/xero": "./src/connectors/xero.ts",',
+    '"./connectors/xero-missing": "./src/connectors/xero-missing.ts",',
+  ]) assert.equal(connectorManifestVendorSource(invalid), invalid);
+  assert.deepEqual(auditPublicSnapshot(['engine/package.json']), []);
+})
 
 test('connector regression tests may name the connector they exercise', () => {
   const outside = CONNECTOR_TEST_FILES.filter((file) => !isConnectorPath(file))
