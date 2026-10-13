@@ -206,7 +206,9 @@ export function CashDepositSection({
       if (body.posted) toast.success(outcomeMessage)
       else toast.warning(outcomeMessage)
     } catch {
-      setRefusal(t('tenders.depositFailed'))
+      // A lost response does not prove that the native transfer was rolled
+      // back. Its saved identity must be checked before another command.
+      setRefusal(t('tenders.depositOutcomeUnknown'))
     } finally {
       setBusy(false)
     }

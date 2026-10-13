@@ -337,3 +337,20 @@ test('a malformed successful outcome never implies the drop was posted', async (
   assert.equal((globalThis.__drawerToasts ?? []).filter(toast => toast.kind === 'success').length, 0)
   assert.equal(calls.filter(call => typeof call.body.amount === 'string').length, 1)
 })
+
+
+test('a lost deposit response requires native readback before another command', async (t) => {
+  const { calls, restore } = scriptFetch((_url, init) => {
+    if (init?.method === 'POST') throw new TypeError('Network response lost')
+    return null
+  })
+  t.after(restore)
+  const { host, root } = await mount({ bankOptions: [{ value: BANK_A, label: 'Operating Bank' }] })
+  t.after(async () => { await act(async () => root.unmount()); host.remove() })
+  setInput(host, messages.ar.tenders.depositAmount, '50.00')
+  await act(async () => { recordButton(host).click(); await tick() })
+  await tick()
+  assert.ok(host.querySelector('[role="alert"]')?.textContent?.includes('Check Banking before recording it again'))
+  assert.equal((globalThis.__drawerToasts ?? []).filter(toast => toast.kind === 'success').length, 0)
+  assert.equal(calls.filter(call => typeof call.body.amount === 'string').length, 1, 'the caller never automatically replays an uncertain write')
+})
