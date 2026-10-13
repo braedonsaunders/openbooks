@@ -25,6 +25,7 @@ export const PROJECT_BASE_JOINS = sql`
 export const PROJECT_COUNT_JOINS = PROJECT_BASE_JOINS
 
 const CONTRACT_EXPR = sql`p.contract_value`
+const BILLING_METHOD_EXPR = sql`coalesce((select pt.billing_method from project_types pt where pt.id = p.project_type_id and pt.org_id = p.org_id), 'time_and_materials')`
 
 /** Built-in column key → select expression for the projects list. */
 export const PROJECT_BUILT_IN_EXPR: Record<string, SQL> = {
@@ -33,6 +34,7 @@ export const PROJECT_BUILT_IN_EXPR: Record<string, SQL> = {
   customer: sql`cust.display_name`,
   status: sql`p.status`,
   project_type: sql`coalesce((select pt.key from project_types pt where pt.id = p.project_type_id and pt.org_id = p.org_id), 'time_and_materials')`,
+  billing_method: BILLING_METHOD_EXPR,
   contract: CONTRACT_EXPR,
   // Placeholder: `enrichRows` overwrites every displayed row with the
   // profile-driven reader before render, so SQL never values this column
@@ -47,6 +49,7 @@ export const PROJECT_SORTS: Record<string, SQL> = {
   name: sql`p.name`,
   customer: sql`cust.display_name`,
   status: sql`p.status`,
+  billing_method: BILLING_METHOD_EXPR,
   contract: CONTRACT_EXPR,
   // Sort-by-actual never reaches SQL ordering: the projects source plans the
   // page through `orderedPageIds` (batched profile reader over the filtered
@@ -79,6 +82,11 @@ function projectFilterPredicate(clause: FilterClause): SQL | null {
       if (operator === "in" || operator === "not_in") return inList(typeExpr)
       return null
     }
+    case "billing_method":
+      if (operator === "eq") return sql`${BILLING_METHOD_EXPR} = ${single(value)}`
+      if (operator === "ne") return sql`${BILLING_METHOD_EXPR} <> ${single(value)}`
+      if (operator === "in" || operator === "not_in") return inList(BILLING_METHOD_EXPR)
+      return null
     case "workflow":
     case "operating_department": {
       const predicate=(selection:string)=>key==='workflow'

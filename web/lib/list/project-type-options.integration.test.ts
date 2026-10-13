@@ -21,6 +21,7 @@ const { BUILTIN_PROJECT_TYPES } = await import("@openbooks/schema");
 const { createScratchOrg, createScratchUser, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
 const { entityListSource } = await import("./entity-sources.ts");
 const { EntityListView } = await import("../../components/entity-list-view.tsx");
+const { defaultListView } = await import('@openbooks/customization');
 
 installTrustedTestDatabaseBypass();
 
@@ -75,4 +76,39 @@ test("the project list displays a tenant-defined type by its name", { skip: !DB 
   } finally {
     await dropScratchOrg(org.orgId);
   }
+});
+
+test('the Projects page loads a stored billing-method view without rewriting it', { skip: !DB }, async () => {
+  const org = await withBypassContext(() => createScratchOrg());
+  try {
+    const userId = await withBypassContext(() => createScratchUser(org.orgId,'Project view reader','reviewer'));
+    const viewId = randomUUID();
+    const config = {
+      ...defaultListView('project'),
+      columns:['name','code','customer','status','billing_method','contract','actual','created','_actions']
+        .map(key=>({key,visible:true,...(key==='billing_method'?{labelOverride:'Saved billing classification',width:172}:{})})),
+      sort:{column:'billing_method',dir:'asc' as const},
+      filters:[{key:'billing_method',operator:'eq' as const,value:'fixed_price'}],
+    };
+    await withBypassContext(async()=>{
+      await db.execute(sql`update app_roles set permissions='["projects.read","gl.read"]'::jsonb where org_id=${org.orgId} and key='reviewer'`);
+      await db.execute(sql`update orgs set settings=settings||'{"features":{"projects":true}}'::jsonb where id=${org.orgId}`);
+      const fixed=BUILTIN_PROJECT_TYPES.find(type=>type.key==='fixed_price')!,typeId=randomUUID();
+      await db.execute(sql`insert into project_types(id,org_id,key,name,billing_method,invoicing_profile,backup_profile)
+        values(${typeId},${org.orgId},'service_agreement','Service agreement','fixed_price',
+          ${JSON.stringify(fixed.invoicingProfile)}::jsonb,${JSON.stringify(fixed.backupProfile)}::jsonb)`);
+      await db.execute(sql`insert into projects(org_id,subsidiary_id,name,project_type_id)
+        values(${org.orgId},${org.subsidiaryId},'Stored view project',${typeId})`);
+      await db.execute(sql`insert into list_views(id,org_id,record_type,name,scope,is_default,config,created_by,updated_by)
+        values(${viewId},${org.orgId},'project','Saved billing view','org',false,${JSON.stringify(config)}::jsonb,${userId},${userId})`);
+    });
+    const before=await withOrgContext(org.orgId,()=>db.execute(sql`select config,updated_at::text from list_views where org_id=${org.orgId} and id=${viewId}`));
+    const element=await withOrgContext(org.orgId,()=>EntityListView({recordType:'project',orgId:org.orgId,userId,canManage:false,sp:{view:viewId}}));
+    const markup=renderToStaticMarkup(element);
+    assert.match(markup,/Stored view project/);
+    assert.match(markup,/Saved billing classification/);
+    assert.doesNotMatch(markup,/unknown column/);
+    const after=await withOrgContext(org.orgId,()=>db.execute(sql`select config,updated_at::text from list_views where org_id=${org.orgId} and id=${viewId}`));
+    assert.deepEqual(after.rows,before.rows,'a read preserves the stored view and its revision');
+  } finally { await dropScratchOrg(org.orgId); }
 });

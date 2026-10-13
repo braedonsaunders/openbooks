@@ -11,6 +11,23 @@ import {
 } from './schema.ts'
 import { getRecordType, recordTypeForFeatureState } from './registry.ts'
 
+test('stored project billing-method views retain their columns, filters and sort', () => {
+  const view = {
+    ...defaultListView('project'),
+    columns: ['name', 'code', 'customer', 'status', 'billing_method', 'contract', 'actual', 'created', '_actions']
+      .map(key => ({ key, visible: true })),
+    sort: { column: 'billing_method', dir: 'asc' as const },
+    filters: [{ key: 'billing_method', operator: 'eq' as const, value: 'fixed_price' }],
+  }
+  const parsed = parseListView(view)
+  assert.equal(parsed.ok, true)
+  assert.deepEqual(lintListView(view), [])
+  assert.equal(view.columns[4]!.key, 'billing_method')
+  const defaults = defaultListView('project')
+  assert.equal(defaults.columns.find(column => column.key === 'billing_method')?.visible, false)
+  assert.equal(defaults.columns.find(column => column.key === 'project_type')?.visible, true)
+})
+
 test('the default project form composes complete four-column rows', () => {
   const layout = defaultFormLayout('project')
   const fields = layout.header.groups[0]!.fields
