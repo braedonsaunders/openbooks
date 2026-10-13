@@ -5,7 +5,7 @@ import { bootJsdomEnvironment } from "../../../testing/jsdom-env";
 import { stubModules } from "../../../testing/stub-modules";
 
 declare global {
-  var __payRouter: { push(url: string): void; refresh(): void } | undefined;
+  var __payRouter: { push(url: string): void; replace(url: string): void; refresh(): void } | undefined;
 }
 
 // A draft receipt whose prerequisites are not met hid its only path to
@@ -128,7 +128,7 @@ async function renderDrawer(options: {
   const prior = globalThis.fetch;
   globalThis.fetch = (async () =>
     Response.json({ rates: [] })) as typeof fetch;
-  globalThis.__payRouter = { push() {}, refresh() {} };
+  globalThis.__payRouter = { push() {}, replace() {}, refresh() {} };
   const host = document.createElement("div");
   document.body.appendChild(host);
   const root = createRoot(host);

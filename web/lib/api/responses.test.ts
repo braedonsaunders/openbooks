@@ -80,7 +80,7 @@ test("status-less engine refusals map by family, 409 on conflict", async () => {
 });
 
 test("closed-period refusals keep their locked scope for the shared renderer", async () => {
-  const scope = { kind: "period-closed", periodId: "period-1", bookId: "book-1", subsidiaryId: "sub-1", module: "gl" };
+  const scope = { kind: "period-closed" as const, periodId: "period-1", bookId: "book-1", subsidiaryId: "sub-1", module: "gl" };
   const wrapped = new PostingError("journal entry JE-1: GL is closed for this period", { details: scope });
   const wrappedResponse = postingRefusal(wrapped);
   assert.ok(wrappedResponse);

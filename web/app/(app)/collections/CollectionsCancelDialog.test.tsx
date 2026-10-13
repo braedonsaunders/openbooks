@@ -13,10 +13,7 @@ Object.assign(globalThis, { React })
 const { act } = await import('react')
 const { createRoot } = await import('react-dom/client')
 const { NextIntlClientProvider } = await import('next-intl')
-const messages = (await import('../../../messages/en')).default as {
-  ar: { collections: { subscriptions: Record<string, string> } }
-  common: { confirm: Record<string, string> }
-}
+const messages = (await import('../../../messages/en')).default
 const { ConfirmRoot, confirmDialog } = await import('../../../lib/confirm.tsx')
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30))
@@ -32,7 +29,7 @@ async function mountRoot(): Promise<() => Promise<void>> {
     root.render(
       React.createElement(
         NextIntlClientProvider,
-        { locale: 'en', messages, timeZone: 'UTC' },
+        { children: null, locale: 'en', messages, timeZone: 'UTC' },
         React.createElement(ConfirmRoot),
       ),
     )

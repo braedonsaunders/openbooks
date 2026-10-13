@@ -211,7 +211,7 @@ for (const refuseAfter of [null, 1] as const) {
     const bulk = [...host.querySelectorAll('button')].find((button) => button.textContent?.includes('Answer all 4 questions'))
     assert.ok(bulk)
     await act(async () => { bulk.click(); await settle() })
-    assert.deepEqual(filed, [], 'confirmation precedes every write')
+    assert.equal(filed.length, 0, 'confirmation precedes every write')
     const dialog = document.querySelector('[role="dialog"]')
     assert.ok(dialog)
     const confirm = [...dialog.querySelectorAll('button')].find((button) => button.textContent?.includes('Answer all 4 questions'))
@@ -228,8 +228,8 @@ for (const refuseAfter of [null, 1] as const) {
       assert.deepEqual(errors, [])
     } else {
       assert.equal(filed.length, 1)
-      assert.equal(filed[0]?.employeePartyId, 'employee-1')
-      assert.equal(filed[0]?.absentWithoutConsent, false)
+      assert.equal(filed.at(0)?.employeePartyId, 'employee-1')
+      assert.equal(filed.at(0)?.absentWithoutConsent, false)
       assert.ok(errors.some((error) => /pay run changed; reload/.test(error)))
     }
   })

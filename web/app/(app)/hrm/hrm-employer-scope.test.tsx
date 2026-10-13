@@ -38,6 +38,7 @@ const ENTITY_ID = 'd726d187-0000-0000-0000-000000000001'
 const REFUSAL = 'No legal entity is visible to you — ask an administrator for access.'
 
 const RECRUITING_LABELS = {
+  jobDescription: 'Job description', noJobDescription: 'No job description', jobDescriptionNote: 'Select a job description', description: 'Description',
   title: 'Title',
   employer: 'Employer',
   department: 'Department',

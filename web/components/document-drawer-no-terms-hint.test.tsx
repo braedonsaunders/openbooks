@@ -109,7 +109,7 @@ async function mountInvoice(defaultsBody: unknown) {
     root.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
         <MoneyProvider currency="USD">
-          <DocumentDrawer
+          <DocumentDrawer canPost={false}
             payload={{ doc: { ...UNSAVED_INVOICE }, lines: [] }}
             config={DOC_KINDS["customer_invoice"]!}
             basePath="/ar/invoices"

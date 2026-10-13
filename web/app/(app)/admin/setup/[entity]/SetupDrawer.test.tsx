@@ -193,7 +193,7 @@ test('required setup fields are visibly marked, and only those validate enforces
 test('a blank required save keeps an inline alert naming the field, with no write', async (t) => {
   const { seen } = await mountDrawer(t, null, () => Response.json({ ok: true }))
   await clickSave(true)
-  assert.deepEqual(seen, [], 'a blocked save must not reach the API')
+  assert.equal(seen.length, 0, 'a blocked save must not reach the API')
   assert.equal(alertText(), requiredCopy(FIELD_LABEL.key!), 'the alert names the first missing field')
 })
 
@@ -217,7 +217,7 @@ test('blank keepDefault fields never block saving', async (t) => {
   const { seen, pushes } = await mountDrawer(t, null, savedOwnership, 'subsidiary-ownership-interests', ownershipValues)
   await clickSave(true)
   assert.equal(seen.length, 1, 'blank keepDefault fields must not block the create')
-  assert.equal(seen[0]!.method, 'POST')
+  assert.equal(seen.at(0)!.method, 'POST')
   assert.deepEqual(pushes.length, 1, 'a successful create navigates home')
 })
 
@@ -313,7 +313,7 @@ for (const [input, expected, message] of [
     await tick()
     await clickSave(true)
     assert.equal(seen.length, 1, 'the save reaches the native API once')
-    assert.equal((seen[0]!.body as Record<string, unknown>).ownershipPercent, expected, message)
+    assert.equal((seen.at(0)!.body as Record<string, unknown>).ownershipPercent, expected, message)
   })
 }
 
@@ -330,14 +330,14 @@ test('the idempotency key travels only on create POSTs, never on PATCH', async (
   const { seen } = await mountDrawer(t, row, () => Response.json({ ok: true }))
   await clickSave(false)
   assert.equal(seen.length, 1, 'the edit must save once')
-  assert.equal(seen[0]!.method, 'PATCH')
-  assert.ok(!('idempotency-key' in seen[0]!.headers), 'an edit must never replay as a create')
+  assert.equal(seen.at(0)!.method, 'PATCH')
+  assert.ok(!('idempotency-key' in seen.at(0)!.headers), 'an edit must never replay as a create')
 })
 
 test('command-owned entities save through their setup command', async (t) => {
   const { seen } = await mountDrawer(t, null, () => Response.json({ ok: true }), 'fund-pairs', { fromFundId: '1', toFundId: '2', dueFromAccountId: '3', dueToAccountId: '4', reason: 'r' })
   await clickSave(true)
-  assert.deepEqual([seen[0]?.method, seen[0]?.url], ['POST', '/api/admin/setup/fund-pairs/command'])
+  assert.deepEqual([seen.at(0)?.method, seen.at(0)?.url], ['POST', '/api/admin/setup/fund-pairs/command'])
 })
 
 
@@ -356,11 +356,11 @@ test(`${kind} guided creation uses the Benefits adapter and retains request iden
   await clickSave(true)
   assert.equal(seen.length, 2)
   assert.ok(seen.every((request) => request.url === '/api/hrm/benefit-plan-configuration/benefit-plans'))
-  assert.ok(isUuid(seen[0]!.headers['idempotency-key']!))
-  assert.equal(seen[0]!.headers['idempotency-key'], seen[1]!.headers['idempotency-key'])
+  assert.ok(isUuid(seen.at(0)!.headers['idempotency-key']!))
+  assert.equal(seen.at(0)!.headers['idempotency-key'], seen[1]!.headers['idempotency-key'])
   assert.equal(alertText(), 'Choose a payroll component in this legal entity.')
   assert.equal(document.querySelector('[role="dialog"]'), shell)
-  assert.equal((seen[0]!.body as Record<string, unknown>).kind, kind)
+  assert.equal((seen.at(0)!.body as Record<string, unknown>).kind, kind)
 })
 }
 
@@ -372,7 +372,7 @@ test('availability rows use named inputs and preserve zoned instants while editi
   await act(async () => setTextInput(FIELD_LABEL.endsAt!, '2026-10-01T11:00:00-04:00'))
   await clickSave(false)
   assert.equal(ui.seen.length, 1)
-  assert.deepEqual((ui.seen[0]!.body as Record<string, unknown>).availability, [{ ...windows[0], endsAt: '2026-10-01T11:00:00-04:00' }])
+  assert.deepEqual((ui.seen.at(0)!.body as Record<string, unknown>).availability, [{ ...windows[0], endsAt: '2026-10-01T11:00:00-04:00' }])
   assert.equal(document.querySelector('[role="dialog"]'), shell)
   await act(async () => clickButton(commonCatalog.actions!.edit!).click())
   await act(async () => clickButton(adminCatalog.structuredFields!.addRow!).click())
@@ -392,7 +392,7 @@ test('clause controls retain underscore storage keys and explicitly toggle defau
   const checkbox = fieldset.querySelector('input[type="checkbox"]') as HTMLInputElement
   await act(async () => checkbox.click())
   await clickSave(false)
-  assert.deepEqual((ui.seen[0]!.body as Record<string, unknown>).clauses, [{ ...clause, default_on: true }])
+  assert.deepEqual((ui.seen.at(0)!.body as Record<string, unknown>).clauses, [{ ...clause, default_on: true }])
 })
 
 test('retention scope shows native region choices and country chips without a JSON editor', async (t) => {
@@ -402,7 +402,7 @@ test('retention scope shows native region choices and country chips without a JS
   assert.ok(document.body.textContent?.includes('Canada'))
   assert.ok(document.body.textContent?.includes('United States'))
   await clickSave(false)
-  assert.deepEqual((ui.seen[0]!.body as Record<string, unknown>).regionScope, region)
+  assert.deepEqual((ui.seen.at(0)!.body as Record<string, unknown>).regionScope, region)
 })
 
 for (const target of ['plan', 'component'] as const) {
@@ -414,7 +414,7 @@ for (const target of ['plan', 'component'] as const) {
     assert.equal(Boolean(document.querySelector(`input[aria-label="${FIELD_LABEL.annualDays}"]`)), target === 'plan')
     await clickSave(true)
     assert.equal(seen.length, 1)
-    const payload = seen[0]!.body as Record<string, unknown>
+    const payload = seen.at(0)!.body as Record<string, unknown>
     assert.equal(payload.eligible, target === 'component' ? false : null)
     assert.equal(payload.annualDays, target === 'plan' ? '20' : null)
     assert.equal(payload.accrualValue, target === 'plan' ? '0' : null)
@@ -487,7 +487,7 @@ test('an unknown-precision amount opens blank and saves nothing, naming the stor
   assert.ok(spend, 'the locked amount stays editable for deliberate re-entry')
   assert.equal(spend.value, '', 'stored minors never show as a major amount')
   await clickSave(false)
-  assert.deepEqual(seen, [], 'an untouched locked save must not reach the API')
+  assert.equal(seen.length, 0, 'an untouched locked save must not reach the API')
   assert.match(alertText() ?? '', /777/, 'the refusal names the stored minor units')
 })
 
@@ -509,9 +509,9 @@ test('a known-precision amount reopens as majors and saves minors', async (t) =>
   assert.equal(spend.value, '120.50', 'the stored minors reopen as operator majors')
   await clickSave(false)
   assert.equal(seen.length, 1, 'reopening and saving posts exactly one command')
-  assert.ok(String(seen[0]!.url).endsWith('/channel-ad-spend/command'), 'command-owned rows save through their command')
-  assert.ok(seen[0]!.headers['idempotency-key'], 'the command save carries its idempotency key')
-  assert.deepEqual((seen[0]!.body as Record<string, unknown>)['amountMinor'], 12050)
+  assert.ok(String(seen.at(0)!.url).endsWith('/channel-ad-spend/command'), 'command-owned rows save through their command')
+  assert.ok(seen.at(0)!.headers['idempotency-key'], 'the command save carries its idempotency key')
+  assert.deepEqual((seen.at(0)!.body as Record<string, unknown>)['amountMinor'], 12050)
 })
 
 test('a cancelled re-entry restores the precision lock for the next save', async (t) => {
@@ -535,7 +535,7 @@ test('a cancelled re-entry restores the precision lock for the next save', async
   await tick()
   assert.equal(amount()!.value, '', 'cancel restores the blank, not the typed figure')
   await clickSave(false)
-  assert.deepEqual(seen, [], 'the restored lock still guards the save')
+  assert.equal(seen.length, 0, 'the restored lock still guards the save')
   assert.match(alertText() ?? '', /500/, 'the original precision remedy returns')
 })
 
@@ -557,7 +557,7 @@ test('option-backed board views reopen as named choices and edit through native 
   const targets = choices.find(node => node.textContent?.trim() === viewLabels.targets)!.querySelector('input')!
   await act(async () => { targets.click(); await tick() })
   await clickSave(false)
-  assert.deepEqual((seen[0]!.body as Record<string, unknown>).views, ['grid', 'calendar', 'targets'])
+  assert.deepEqual((seen.at(0)!.body as Record<string, unknown>).views, ['grid', 'calendar', 'targets'])
 })
 
 
@@ -578,17 +578,17 @@ test('choosing a new board family removes hidden incompatible views before selec
   assert.ok(defaultView, 'the default view uses the selected task family options')
   assert.equal(defaultView.value, '')
   await clickSave(true)
-  assert.deepEqual(seen, [], 'hidden people views cannot satisfy the new family required views')
+  assert.equal(seen.length, 0, 'hidden people views cannot satisfy the new family required views')
   assert.equal(alertText(), requiredCopy(FIELD_LABEL.views!))
   const gantt = choices.find(node => node.textContent?.trim() === viewLabels.gantt)!.querySelector('input')!
   await act(async () => { gantt.click(); await tick() })
   await clickSave(true)
-  assert.deepEqual(seen, [], 'the incompatible people default is cleared for an explicit supported choice')
+  assert.equal(seen.length, 0, 'the incompatible people default is cleared for an explicit supported choice')
   assert.equal(alertText(), requiredCopy(FIELD_LABEL.defaultView!))
   await act(async () => { defaultView.value = 'gantt'; defaultView.dispatchEvent(new window.Event('change', { bubbles: true })); await tick() })
   await clickSave(true)
-  assert.equal(seen[0]!.method, 'POST')
-  const body = seen[0]!.body as Record<string, unknown>
+  assert.equal(seen.at(0)!.method, 'POST')
+  const body = seen.at(0)!.body as Record<string, unknown>
   assert.equal(body.rowKind, 'tasks')
   assert.deepEqual(body.views, ['gantt'])
   assert.equal(body.defaultView, 'gantt')
@@ -615,7 +615,7 @@ test('optional delivery policy clears through native save without required hidde
   assert.equal(document.querySelector(`input[aria-label="${FIELD_LABEL.scheduleDeliveryTimeZone}"]`), null);
   await clickSave(false);
   assert.equal(seen.length, 1);
-  assert.equal((seen[0]!.body as Record<string, unknown>).automaticDeliveryPolicy, null);
+  assert.equal((seen.at(0)!.body as Record<string, unknown>).automaticDeliveryPolicy, null);
 });
 
 test('cleared delivery policy reopens unconfigured; deliberate configuration retains real required operator refusal', async t => {
@@ -627,7 +627,7 @@ test('cleared delivery policy reopens unconfigured; deliberate configuration ret
   assert.equal(configure.checked, false);
   await act(async () => { configure.click(); await tick() });
   await clickSave(false);
-  assert.deepEqual(seen, []);
+  assert.equal(seen.length, 0);
   assert.match(alertText() ?? '', /operatorId.*required/);
 });
 
@@ -654,7 +654,7 @@ test('tenant PDF style and color choices save and reopen through the native boar
   });
   await clickSave(false);
   assert.equal(seen.length, 1, alertText() ?? 'expected native policy save');
-  const policy = (seen[0]!.body as { automaticDeliveryPolicy: { pdfLayout: unknown } }).automaticDeliveryPolicy;
+  const policy = (seen.at(0)!.body as { automaticDeliveryPolicy: { pdfLayout: unknown } }).automaticDeliveryPolicy;
   assert.deepEqual(policy.pdfLayout, { ...layout, style: 'classic', accentColor: '#7c3aed', colorTreatment: 'strong' });
   await act(async () => { clickButton('Edit').click(); await tick(); });
   const reopenedTrigger = document.querySelector(`button[aria-label="${FIELD_LABEL.schedulePdfStyle}"]`);

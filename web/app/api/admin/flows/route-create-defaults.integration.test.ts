@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
-import type { SessionUser } from '../../../../../lib/auth'
+import type { SessionUser } from '../../../../lib/auth'
 
 /**
  * A new flow starts enabled exactly when its initial graph validates: the

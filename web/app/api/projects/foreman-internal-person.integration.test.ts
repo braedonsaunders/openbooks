@@ -122,7 +122,7 @@ test("projects POST accepts an employed employee and refuses customers, vendors,
     const employed = await POST(postRequest(randomUUID(), { name: "Employed Job", foremanId: employee }));
     assert.equal(employed.status, 201, JSON.stringify(await employed.clone().json()));
 
-    for (const [kind, name] of [["customer", "Acme Customer"], ["vendor", "Vera Vendor"], ["company", "C-Corp"]]) {
+    for (const [kind, name] of [["customer", "Acme Customer"], ["vendor", "Vera Vendor"], ["company", "C-Corp"]] as const) {
       const outsider = await seedParty(org.orgId, kind, name, org.subsidiaryId);
       const refused = await POST(postRequest(randomUUID(), { name: `Refused ${name}`, foremanId: outsider }));
       assert.equal(refused.status, 422);

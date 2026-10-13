@@ -30,7 +30,7 @@ function ListWithDrawer() {
       React.createElement('ul', null,
         React.createElement('li', null, React.createElement(ListDrawerLink, { href: `/ap/bills?doc=${ID_A}` }, 'Bill A')),
         React.createElement('li', null, React.createElement(ListDrawerLink, { href: `/ap/bills?doc=${ID_B}` }, 'Bill B'))),
-      React.createElement(UrlDrawer, {
+      React.createElement(UrlDrawer, { children: null,
         open: id !== null, openKey: id ?? undefined, closeHref: '/ap/bills',
         title: `Bill ${id ?? ''}`, beforeClose: () => !draft.dirty,
       }, id ? React.createElement('div', { 'data-record': id }, `Record ${id}`) : null)),
@@ -49,7 +49,7 @@ async function renderList(t: TestContext) {
     host.remove()
   })
   const render = async () => act(async () => {
-    root.render(React.createElement(NextIntlClientProvider, { locale: 'en', messages, timeZone: 'UTC' },
+    root.render(React.createElement(NextIntlClientProvider, { children: null, locale: 'en', messages, timeZone: 'UTC' },
       React.createElement(ListWithDrawer, null)))
     await tick()
   })

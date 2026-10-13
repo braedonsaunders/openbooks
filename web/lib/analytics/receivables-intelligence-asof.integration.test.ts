@@ -73,7 +73,7 @@ test('collection attention follows the stated as-of date and ages untermed lines
     })
     await withOrgContext(org.orgId, async () => {
       const authz = { user: { orgId: org.orgId, id: actor }, permissions: new Set(['reports.read', 'ar.read']), allowedSubsidiaryIds: null }
-      const context = { authz, slug: 'receivables-intelligence', locale: 'en', revision: randomUUID(), observedAt: Date.now(), projection: 'summary', tab: '' }
+      const context = { authz, slug: 'receivables-intelligence', locale: 'en', revision: randomUUID(), observedAt: Date.now(), projection: 'summary' as const, tab: '' }
       await withAnalyticsRead(context, async () => {
         const mid = await receivablesIntelligenceData(org.orgId, '2026-07-01', '2026-07-15', null, {})
         const late = await receivablesIntelligenceData(org.orgId, '2026-07-01', '2026-07-25', null, {})

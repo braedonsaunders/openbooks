@@ -34,11 +34,7 @@ const labels = {
 }
 
 function stubFetch(rows: unknown, ok = true, status = 200) {
-  ;(globalThis as Record<string, unknown>).fetch = (async () => ({
-    ok,
-    status,
-    json: async () => rows,
-  })) as typeof fetch
+  ;(globalThis as Record<string, unknown>).fetch = (async () => Response.json(rows, { status: ok ? status : (status >= 400 ? status : 500) })) as typeof fetch
 }
 
 async function renderChoice(

@@ -28,7 +28,7 @@ async function mountRoot(): Promise<() => Promise<void>> {
     root.render(
       React.createElement(
         NextIntlClientProvider,
-        { locale: 'en', messages, timeZone: 'UTC' },
+        { children: null, locale: 'en', messages, timeZone: 'UTC' },
         React.createElement(PromptRoot),
       ),
     )

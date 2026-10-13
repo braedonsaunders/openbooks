@@ -5,6 +5,8 @@
 
 import assert from "node:assert/strict";
 import test from "node:test";
+
+declare global { var __payrollTabProps: { onPartyRecordChanged: () => void } | undefined; }
 import { bootJsdomEnvironment } from "../../../testing/jsdom-env";
 import { stubModules } from "../../../testing/stub-modules";
 
@@ -166,7 +168,7 @@ async function mount() {
               paymentTerms={[]}
               departments={[]}
               trades={[]}
-              workerCompGroups={[{ value: "wc-old", label: "Old" }, { value: "wc-new", label: "New" }]}
+              workerCompGroups={[{ id: "wc-old", name: "Old" }, { id: "wc-new", name: "New" }]}
               fieldDefs={[]}
               subsidiaries={[]}
               canManage
@@ -217,7 +219,8 @@ test("the drawer Save uses the revision a payroll section save produced", async 
   // the party revision on the server. The section then reports the commit.
   state.server = { updatedAt: SECTION_SAVED_AT, workerCompGroupId: "wc-new" };
   await act(async () => {
-    (globalThis as { __payrollTabProps: { onPartyRecordChanged: () => void } }).__payrollTabProps.onPartyRecordChanged();
+    assert.ok(globalThis.__payrollTabProps);
+    globalThis.__payrollTabProps.onPartyRecordChanged();
     await tick(60);
   });
   await clickSave();

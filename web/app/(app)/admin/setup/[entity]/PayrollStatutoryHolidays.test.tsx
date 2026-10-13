@@ -28,9 +28,7 @@ const { createRoot } = await import('react-dom/client')
 const { act } = await import('react')
 const { NextIntlClientProvider } = await import('next-intl')
 const messages = (await import('../../../../../messages/en')).default
-const adminSetup = (await import('../../../../../messages/en/admin.json', { with: { type: 'json' } })).default.setup as unknown as {
-  payrollStatutoryHolidays: Record<string, string>
-}
+const adminSetup = (await import('../../../../../messages/en/admin.json', { with: { type: 'json' } })).default.setup
 const { PayrollStatutoryHolidaysSection } = await import('./PayrollStatutoryHolidays')
 
 const copy = adminSetup.payrollStatutoryHolidays

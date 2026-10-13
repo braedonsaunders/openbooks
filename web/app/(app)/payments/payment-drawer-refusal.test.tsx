@@ -6,7 +6,7 @@ import { stubModules } from "../../../testing/stub-modules";
 
 declare global {
   var __payToasts: { kind: string; message: string }[] | undefined;
-  var __payRouter: { push(url: string): void; refresh(): void } | undefined;
+  var __payRouter: { push(url: string): void; replace(url: string): void; refresh(): void } | undefined;
   var __payConfirmCalls: { title: string; message: string; confirmLabel: string }[] | undefined;
 }
 
@@ -113,7 +113,7 @@ async function mountPayment(
   localeMessages: typeof messages = messages,
 ) {
   globalThis.__payToasts = [];
-  globalThis.__payRouter = { push() {}, refresh() {} };
+  globalThis.__payRouter = { push() {}, replace() {}, refresh() {} };
   globalThis.__payConfirmCalls = [];
   const host = document.createElement("div");
   document.body.appendChild(host);
@@ -445,7 +445,7 @@ test('opening another prefilled payment resets the header, applications and fail
   });
   t.after(restoreFetch);
   globalThis.__payToasts = [];
-  globalThis.__payRouter = {push(){},refresh(){}};
+  globalThis.__payRouter = {push(){}, replace() {},refresh(){}};
   const host = document.createElement('div'); document.body.appendChild(host);
   const root = createRoot(host);
   t.after(async()=>{await act(async()=>root.unmount());host.remove()});

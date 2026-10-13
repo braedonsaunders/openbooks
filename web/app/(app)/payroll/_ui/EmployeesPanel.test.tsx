@@ -92,6 +92,7 @@ function render(
         section={editor.section}
         profile={{
           id: '',
+          wcb_exempt: false, wcb_exempt_reason: null,
           employee_party_id: 'emp',
           employee_name: 'Fixture Hire',
           pay_schedule_id: 'sched',

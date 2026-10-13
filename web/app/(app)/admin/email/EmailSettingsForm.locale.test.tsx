@@ -45,7 +45,7 @@ const { EmailSettingsForm } = await import("./EmailSettingsForm");
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 
-async function renderForm(readiness = { state: "ready" }) {
+async function renderForm(readiness: NonNullable<React.ComponentProps<typeof EmailSettingsForm>["initial"]["readiness"]> = { state: "ready" }) {
   document.body.innerHTML = "";
   const host = document.createElement("div");
   document.body.appendChild(host);

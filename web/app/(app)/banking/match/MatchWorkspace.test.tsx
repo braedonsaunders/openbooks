@@ -65,7 +65,7 @@ const data = {
   stmtTotal: 1,
   stmtParams: { page: 1, perPage: 25 },
   flaggedTotal: 0,
-  glRows: [],
+  glRows: [] as { id: string; posting_date: string; entry_number: string; amount: string; memo: string | null; party: string | null }[],
   glTotal: 0,
   glParams: { page: 1, perPage: 25 },
   reviewRows: [],

@@ -95,11 +95,11 @@ test('structured delivery controls retain parent board scope while coercing sibl
   const raw = { operatorId: '00000000-0000-4000-8000-000000000001', timeZone: 'America/Toronto', days: 14, anchor: 'week', weekStartsOn: 0, visibility: 'board', recipientMode: 'automatic', cohort: 'scope', subjectIds: [], additionalPartyIds: [], additionalRoleKeys: [], includePdf: true };
   const resource = setupDomainPayload(entity, { rowKind: 'resources', automaticDeliveryPolicy: raw });
   assert.equal(resource.ok, true);
-  if (!resource.ok) throw new Error(resource.error);
+
   assert.equal((resource.body.automaticDeliveryPolicy as Record<string, unknown>).cohort, undefined);
   const people = setupDomainPayload(entity, { rowKind: 'people', automaticDeliveryPolicy: raw });
   assert.equal(people.ok, true);
-  if (!people.ok) throw new Error(people.error);
+
   assert.equal((people.body.automaticDeliveryPolicy as Record<string, unknown>).cohort, 'scope');
 });
 

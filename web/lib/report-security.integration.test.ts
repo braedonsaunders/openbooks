@@ -271,7 +271,7 @@ test(
         )
         assert.ok(
           !visible.rows.some(
-            (row: { id: string }) =>
+            (row) =>
               row.id === privateCard || row.id === draftCard,
           ),
         )

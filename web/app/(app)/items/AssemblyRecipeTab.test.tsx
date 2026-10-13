@@ -37,7 +37,7 @@ test('a profile-less assembly names the costing prerequisite and loads nothing',
   let fetched = 0
   ;(globalThis as Record<string, unknown>).fetch = (async () => {
     fetched += 1
-    return { ok: true, json: async () => ({}) }
+    return Response.json({})
   }) as typeof fetch
   const host = document.createElement('div')
   document.body.appendChild(host)
@@ -61,10 +61,7 @@ test('a profile-less assembly names the costing prerequisite and loads nothing',
 })
 
 test('a profiled assembly with no recipe offers to add one', async () => {
-  ;(globalThis as Record<string, unknown>).fetch = (async () => ({
-    ok: true,
-    json: async () => ({ assemblyItemId: 'asm-1', version: null, components: [], validItems: [] }),
-  })) as typeof fetch
+  ;(globalThis as Record<string, unknown>).fetch = (async () => Response.json({ assemblyItemId: 'asm-1', version: null, components: [], validItems: [] })) as typeof fetch
   const host = document.createElement('div')
   document.body.appendChild(host)
   const root = createRoot(host)

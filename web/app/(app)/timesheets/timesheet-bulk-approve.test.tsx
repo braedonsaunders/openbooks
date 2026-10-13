@@ -65,7 +65,7 @@ async function mount() {
     root.render(
       React.createElement(
         NextIntlClientProvider,
-        { locale: "en", messages, timeZone: "UTC" },
+        { children: null, locale: "en", messages, timeZone: "UTC" },
         React.createElement(TimesheetBulkApprove, { weeks: WEEKS }),
       ),
     );

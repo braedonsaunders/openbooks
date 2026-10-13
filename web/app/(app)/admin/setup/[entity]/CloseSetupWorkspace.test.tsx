@@ -170,7 +170,7 @@ test('period drawer surfaces pending reopen requests for its period and book', a
     name: 'Jan 2026',
     starts_on: '2026-01-01',
     ends_on: '2026-01-31',
-    entries: 0,
+    entries: "0", fiscal_year: 2025, period_number: 12,
     locks: {},
     calendar_name: 'Gregorian',
   }
@@ -238,11 +238,11 @@ function partiallyClosedPeriod() {
     ends_on: '2025-12-31',
     entries: 3,
     locks: {
-      ar: { state: 'closed' },
-      ap: { state: 'closed' },
+      ar: { state: 'closed', lockedAt: null, reason: null, reopenExpiresAt: null },
+      ap: { state: 'closed', lockedAt: null, reason: null, reopenExpiresAt: null },
       banking: { state: 'open' },
-      assets: { state: 'closed' },
-      tax: { state: 'closed' },
+      assets: { state: 'closed', lockedAt: null, reason: null, reopenExpiresAt: null },
+      tax: { state: 'closed', lockedAt: null, reason: null, reopenExpiresAt: null },
       gl: { state: 'open' },
     },
     calendar_name: 'Gregorian',
@@ -431,7 +431,8 @@ test('an approved reopen offers an end action that posts its reason', async () =
     id: 'r9', period_id: 'p1', book_id: 'b1', status: 'approved',
     reason: 'correction window', modules: ['gl'],
     period_name: 'Nov 2025', book_name: 'Main',
-    requester_name: 'Rae', approver_name: 'Ari',
+    requested_by: 'requester-1', requester_name: 'Rae', approved_by: 'approver-1', approver_name: 'Ari',
+    decision_action: null, decision_attestation: null, end_actor_name: null, end_reason: null,
     expires_at: '2026-01-02T03:04:05.000Z',
   }] as WorkspaceProps['reopenRequests']
   const { unmount } = await mountWorkspace(props)
@@ -747,15 +748,16 @@ test('the period row ends an active reopen window with its reason', async () => 
     is_adjustment: false,
     starts_on: '2025-12-01',
     ends_on: '2025-12-31',
-    entries: 0,
-    locks: { gl: { state: 'closed' }, ap: { state: 'closed' }, ar: { state: 'closed' } },
+    entries: "0", fiscal_year: 2025, period_number: 12,
+    locks: { gl: { state: 'closed', lockedAt: null, reason: null, reopenExpiresAt: null }, ap: { state: 'closed', lockedAt: null, reason: null, reopenExpiresAt: null }, ar: { state: 'closed', lockedAt: null, reason: null, reopenExpiresAt: null } },
     calendar_name: 'Gregorian',
   }] as WorkspaceProps['periods']
   props.reopenRequests = [{
     id: 'r9', period_id: 'p1', book_id: 'b1', status: 'approved',
     reason: 'stale correction window', modules: ['gl', 'ap', 'ar'],
     period_name: 'Dec 2025', book_name: 'Main',
-    requester_name: 'Rae', approver_name: 'Ari',
+    requested_by: 'requester-1', requester_name: 'Rae', approved_by: 'approver-1', approver_name: 'Ari',
+    decision_action: null, decision_attestation: null, end_actor_name: null, end_reason: null,
     expires_at: '2026-01-02T03:04:05.000Z',
   }] as WorkspaceProps['reopenRequests']
   const { unmount } = await mountWorkspace(props)
@@ -802,8 +804,8 @@ test('a refusal deep link arms the reopen form with period, book, entity and mod
     is_adjustment: false,
     starts_on: '2025-12-01',
     ends_on: '2025-12-31',
-    entries: 0,
-    locks: { banking: { state: 'closed' }, gl: { state: 'closed' } },
+    entries: "0", fiscal_year: 2025, period_number: 12,
+    locks: { banking: { state: 'closed', lockedAt: null, reason: null, reopenExpiresAt: null }, gl: { state: 'closed', lockedAt: null, reason: null, reopenExpiresAt: null } },
     calendar_name: 'Gregorian',
   }] as WorkspaceProps['periods']
   props.subsidiaries = [{ id: entityId, name: 'East' }] as WorkspaceProps['subsidiaries']

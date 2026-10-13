@@ -253,6 +253,7 @@ export function clearedDistributionFields(): DistributionLineFields {
 export interface DocPayload {
   doc: Record<string, unknown>
   lines: Record<string, unknown>[]
+  tenders?: unknown
 }
 
 /** The document header: `documents` plus the loader's joins. Dates, uuids

@@ -10,7 +10,7 @@ import { stubModules } from '../../../../testing/stub-modules'
 await bootJsdomEnvironment({ url: 'http://localhost:4800/insights/dashboards' })
 
 declare global {
-  var __dashToasts: { kind: string; message: string }[]
+  var __dashToasts: { kind: string; message: string; description?: string }[]
   var __dashPosted: Record<string, unknown>[] | undefined
 }
 

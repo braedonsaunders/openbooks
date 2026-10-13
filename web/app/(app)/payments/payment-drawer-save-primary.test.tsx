@@ -6,7 +6,7 @@ import { stubModules } from "../../../testing/stub-modules";
 
 declare global {
   var __payToasts: { kind: string; message: string }[] | undefined;
-  var __payRouter: { push(url: string): void; refresh(): void } | undefined;
+  var __payRouter: { push(url: string): void; replace(url: string): void; refresh(): void } | undefined;
 }
 
 // receipt/payment Save lived inside the Actions menu, so routine
@@ -94,7 +94,7 @@ test("edit mode offers Save as a primary button, not inside the Actions menu", a
     globalThis.fetch = prior;
   });
   globalThis.__payToasts = [];
-  globalThis.__payRouter = { push() {}, refresh() {} };
+  globalThis.__payRouter = { push() {}, replace() {}, refresh() {} };
   const doc = DRAFT_RECEIPT();
   const host = document.createElement("div");
   document.body.appendChild(host);
@@ -157,7 +157,7 @@ test("stored-value tenders replace allocations and retain drafts while unreadabl
     if (init?.method && init.method !== 'GET') writes.push(String(input));
     return Response.json({ rows: [], credits: [], attachments: [] });
   }) as typeof fetch;
-  globalThis.__payRouter = { push() {}, refresh() {} };
+  globalThis.__payRouter = { push() {}, replace() {}, refresh() {} };
   const host = document.createElement('div');
   document.body.append(host);
   const root = createRoot(host);

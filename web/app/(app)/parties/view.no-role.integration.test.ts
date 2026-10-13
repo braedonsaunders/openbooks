@@ -104,8 +104,8 @@ test('unsaved-create presets a person or company kind with no role', { skip: !pr
     )
     state.user = sessionFor(org.orgId, manager)
 
-    const partyOf = (data: { drawer?: { payload?: { party?: { kind?: unknown }; customer?: unknown; vendor?: unknown; employee?: unknown } } | null }) =>
-      data.drawer?.payload
+    const partyOf = (data: Awaited<ReturnType<typeof loadParties>>) =>
+      data.drawer?.payload as { party?: { kind?: unknown }; customer?: unknown; vendor?: unknown; employee?: unknown } | undefined
     const person = await withOrgContext(org.orgId, () => loadParties({ partyNew: '1', kind: 'person' }))
     assert.equal(partyOf(person)?.party?.kind, 'person')
     assert.deepEqual(

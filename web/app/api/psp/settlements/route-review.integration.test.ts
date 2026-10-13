@@ -48,7 +48,7 @@ async function detail(orgId: string, batchId: string) {
 async function importDraft(fx: Awaited<ReturnType<typeof fixture>>, subsidiaryId: string | null) {
   const parsed = parseStripeBalanceTransactions([{id:"charge-1",type:"charge",amount:45996,fee:1844,net:44152,currency:"cad"}],randomUUID(),fx.date);
   return withOrgContext(fx.orgId, () => importSettlementBatch(fx.orgId,fx.actorId,parsed,{
-    bankAccountId:fx.accounts.bank,feeAccountId:fx.accounts.freight,clearingAccountId:fx.accounts.clearing,subsidiaryId,
+    bankAccountId:fx.accounts.bank,feeAccountId:fx.accounts.freight,clearingAccountId:fx.accounts.clearing,subsidiaryId: subsidiaryId ?? undefined,
   }));
 }
 

@@ -265,7 +265,7 @@ function buttonNamed(label: string): HTMLButtonElement | undefined {
   ) as HTMLButtonElement | undefined
 }
 
-function answerPrompt(reason: string | null) {
+function answerPrompt(reason: string | null | undefined) {
   globalThis.__reopenTestPrompt = reason
   globalThis.__reopenTestPromptCalls = []
 }

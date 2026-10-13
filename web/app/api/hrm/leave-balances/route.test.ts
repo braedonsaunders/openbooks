@@ -87,7 +87,7 @@ const hooks = registerHooks({
     return nextLoad(url);
   },
 });
-const balancesRoute: typeof import("./route.ts") | undefined = (await import("./route.ts?hrm-leave-balances")) as typeof import("./route.ts");
+const balancesRoute: typeof import("./route.ts") | undefined = (await import(new URL("./route.ts?hrm-leave-balances", import.meta.url).href)) as typeof import("./route.ts");
 test.after(() => hooks.deregister());
 
 const EMPLOYMENT_ID = "00000000-0000-4000-8000-000000000021";

@@ -280,7 +280,7 @@ test('uncategorized subgroups keep future features visible under Other', () => {
 });
 
 test('effective state turns off every child and dependent of an off parent, keeping the rest', () => {
-  const chosen = { ...ALL_ON, projects: false, flows: false }
+  const chosen: Record<string, boolean> = { ...ALL_ON, projects: false, flows: false }
   const effective = effectiveFeatureState(ROWS, chosen)
   for (const key of ['projects', 'timeTracking', 'fieldTickets', 'projectScheduling', 'subcontracts', 'flows', 'advancedClose']) {
     assert.equal(effective[key], false, `${key} resolves off`)

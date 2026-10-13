@@ -134,11 +134,11 @@ async function mountWorkspace(
             difference="0.00"
             canReconcile={override.canReconcile ?? true}
             canReviewSignOff={override.canReviewSignOff}
-            stmtRows={override.stmtRows ?? []}
+            stmtRows={(override.stmtRows ?? []).map(row => ({ counterparty_ref: null, possible_duplicate_of: null, dup_posted_on: null, dup_amount: null, ...row }))}
             stmtTotal={override.stmtTotal ?? 0}
             stmtOutstandingTotal={override.stmtOutstandingTotal ?? '0'}
             stmtParams={pane}
-            glRows={override.glRows ?? []}
+            glRows={(override.glRows ?? []).map(row => ({ party: null, ...row }))}
             glTotal={override.glTotal ?? 0}
             glOutstandingTotal={override.glOutstandingTotal ?? '0'}
             glParams={pane}

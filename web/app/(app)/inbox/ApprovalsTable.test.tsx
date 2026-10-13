@@ -34,6 +34,7 @@ function row(
 ): ApprovalRow {
   return {
     key,
+    timesheetItemId: null,
     gateId,
     documentNumber: key,
     kind: 'vendor_bill',

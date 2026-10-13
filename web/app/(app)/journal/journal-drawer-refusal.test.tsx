@@ -6,7 +6,7 @@ import { stubModules } from "../../../testing/stub-modules";
 
 declare global {
   var __journalToasts: { kind: string; message: string }[] | undefined;
-  var __journalRouter: { push(url: string): void; refresh(): void } | undefined;
+  var __journalRouter: { push(url: string): void; replace(url: string): void; refresh(): void } | undefined;
   var __journalGets: number | undefined;
   var __journalQuery: string | undefined;
 }
@@ -101,7 +101,7 @@ async function click(button: HTMLButtonElement) {
 
 function freshGlobals() {
   globalThis.__journalToasts = [];
-  globalThis.__journalRouter = { push() {}, refresh() {} };
+  globalThis.__journalRouter = { push() {}, replace() {}, refresh() {} };
   globalThis.__journalGets = 0;
   globalThis.__journalQuery = undefined;
 }

@@ -42,8 +42,8 @@ registerHooks({
   },
 });
 
-const { POST } = await import("./route.ts?account-duplicate-post");
-const { PATCH } = await import("./[id]/route.ts?account-duplicate-patch");
+const { POST } = (await import(new URL("./route.ts?account-duplicate-post", import.meta.url).href)) as typeof import("./route.ts");
+const { PATCH } = (await import(new URL("./[id]/route.ts?account-duplicate-patch", import.meta.url).href)) as typeof import("./[id]/route.ts");
 const { withBypassContext, db } = await import("@openbooks/engine/platform/db");
 const { createScratchOrg, dropScratchOrg, seedFlowActors } = await import("@openbooks/engine/testing/fixtures");
 

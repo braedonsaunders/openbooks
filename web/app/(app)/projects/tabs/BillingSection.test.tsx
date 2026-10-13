@@ -222,5 +222,5 @@ test("a fixed-price project without a contract value names the remedy instead of
 test("time-and-materials projects keep the valued-work figure", () => {
   const html = renderBanner({ basis: "rates", amount: "54000.0000" });
   assert.ok(html.includes("$54,000.00"));
-  assert.ok(!html.includes(messages.projects.billing.contractRemaining.split(" ")[0]));
+  assert.ok(!html.includes(messages.projects.billing.contractRemaining.split(" ")[0]!));
 });

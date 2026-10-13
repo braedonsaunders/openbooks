@@ -38,6 +38,7 @@ const { defaultFormLayout } = await import('@openbooks/customization')
 const tick = () => new Promise((resolve) => setTimeout(resolve, 20))
 
 const payload = {
+  incomeAccountName: null, expenseAccountName: null, payrollCostingAccountName: null, taxCodeName: null,
   item: {
     id: '',
     kind: 'service',

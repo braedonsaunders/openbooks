@@ -71,7 +71,7 @@ async function fixture() {
   const plainRow = { projectId: null, itemId: org.items.service, isBillable: false, hours: ['', '', '', '8', '', '', ''] }
   const read = (employee: string) => withOrgContext(org.orgId, () =>
     GET(new Request(`http://time.local/api/timesheets?employee=${employee}&week=${WEEK}`)))
-  const save = async (employee: string, rows = [plainRow]) => {
+  const save = async (employee: string, rows: { projectId: string | null; itemId: string | null; isBillable: boolean; hours: string[] }[] = [plainRow]) => {
     const expectedRevision = (await withOrgContext(org.orgId, () => loadWeek(org.orgId, employee, WEEK))).revision
     return withOrgContext(org.orgId, () => PUT(new Request('http://time.local/api/timesheets', {
       method: 'PUT', body: JSON.stringify({ employee, week: WEEK, rows, expectedRevision }),

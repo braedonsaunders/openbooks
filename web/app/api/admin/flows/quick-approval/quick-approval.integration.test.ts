@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
-import type { SessionUser } from '../../../../../../lib/auth'
+import type { SessionUser } from '../../../../../lib/auth'
 
 /**
  * One-step approval setup end to end: POST /quick-approval creates an

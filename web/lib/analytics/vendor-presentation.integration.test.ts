@@ -91,13 +91,13 @@ test('vendor overview bounds chart rows without changing translated portfolio to
       assert.equal(full.totals.priorSpend, '130.0000')
       const authz = { user: { orgId: org.orgId }, permissions: new Set(['reports.read']), allowedSubsidiaryIds: null } as Authz
       const read = { authz, slug: 'vendor-performance', projection: 'tab' as const, tab: 'overview', locale: 'en', revision: 'test', observedAt: Date.now() }
-      const overview = withAnalyticsRead(read, () => projectVendorDashboard(full))
+      const overview = await withAnalyticsRead(read, async () => projectVendorDashboard(full))
       assert.deepEqual(overview.rows, full.rows.slice(0, 10))
       assert.deepEqual({ ...overview, rows: full.rows }, full, 'every portfolio figure, breakdown and month retains the complete translated population')
       assert.equal(full.rows.length, 13, 'projection cannot mutate the source used by other readers')
       assert.strictEqual(projectVendorDashboard(full), full, 'direct readers retain all vendors')
       for (const tab of ['payment', 'scorecard', 'matrix', 'vendors', 'configuration']) {
-        assert.strictEqual(withAnalyticsRead({ ...read, tab }, () => projectVendorDashboard(full)), full)
+        assert.strictEqual(await withAnalyticsRead({ ...read, tab }, async () => projectVendorDashboard(full)), full)
       }
       const { registerQueryObserver } = await import('@openbooks/engine/platform/query-observer')
       for (const tab of ['overview', 'payment', 'scorecard', 'matrix', 'vendors']) {
@@ -105,7 +105,7 @@ test('vendor overview bounds chart rows without changing translated portfolio to
         const close = registerQueryObserver(statement => statements.push(statement))
         let selected
         try {
-          selected = await withAnalyticsRead({ ...read, tab, revision: randomUUID() }, () => vendorData(P, org.orgId, null))
+          selected = await await withAnalyticsRead({ ...read, tab, revision: randomUUID() }, () => vendorData(P, org.orgId, null))
         } finally { close() }
         const needsTrend = tab === 'overview'
         assert.deepEqual(selected, { ...full, monthly: needsTrend ? full.monthly : [] },
@@ -113,13 +113,13 @@ test('vendor overview bounds chart rows without changing translated portfolio to
         assert.equal(statements.filter(statement => statement.includes('as bucket,')).length, needsTrend ? 1 : 0,
           `${tab} reads the twelve-month ledger only when its trend is displayed`)
       }
-      const summary = await withAnalyticsRead({ ...read, projection: 'summary', revision: randomUUID() },
+      const summary = await await withAnalyticsRead({ ...read, projection: 'summary', revision: randomUUID() },
         () => vendorData(P, org.orgId, null))
       assert.deepEqual(summary.monthly, full.monthly, 'hub sparklines retain the complete translated trend')
-      assert.strictEqual(withAnalyticsRead({ ...read, projection: 'summary' }, () => projectVendorDashboard(full)), full)
-      assert.strictEqual(withAnalyticsRead({ ...read, slug: 'customer-intelligence' }, () => projectVendorDashboard(full)), full)
+      assert.strictEqual(await withAnalyticsRead({ ...read, projection: 'summary' }, async () => projectVendorDashboard(full)), full)
+      assert.strictEqual(await withAnalyticsRead({ ...read, slug: 'customer-intelligence' }, async () => projectVendorDashboard(full)), full)
       const empty = await vendorData(P, org.orgId, new Set())
-      const emptyOverview = withAnalyticsRead(read, () => projectVendorDashboard(empty))
+      const emptyOverview = await withAnalyticsRead(read, async () => projectVendorDashboard(empty))
       assert.deepEqual(emptyOverview, empty, 'an empty subsidiary lens remains empty')
     }))
   } finally {

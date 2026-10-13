@@ -351,7 +351,7 @@ test('readAppActionResult trusts the status, never the body', async () => {
   const result = await readAppActionResult<{ id: string }>(refusalResponse({ error: 'stale' }, 200), COPY)
   assert.equal(result.ok, true)
   if (!result.ok) throw new Error('unreachable')
-  assert.equal(result.data.error, 'stale')
+  assert.equal((result.data as { id: string; error?: string }).error, 'stale')
 })
 
 test('fetchAppAction turns a rejected fetch into a transport refusal, never a throw', async () => {

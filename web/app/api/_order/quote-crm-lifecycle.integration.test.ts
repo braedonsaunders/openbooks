@@ -379,7 +379,7 @@ test("a lifecycle refusal on edit answers 422 with its message", { skip: !DB }, 
             userId: actorId,
             user: { orgId: org.orgId, id: actorId } as never,
             allowedSubsidiaryIds: null,
-            permissions: [],
+            permissions: new Set<string>(),
             services,
           },
           { kind: "quote", createPerm: "ar.create" },
@@ -399,7 +399,7 @@ test("a lifecycle refusal on edit answers 422 with its message", { skip: !DB }, 
 });
 
 test("repointing an estimate at a customer with an open balance saves", { skip: !DB }, async () => {
-  const PATCH = makePATCH({ kind: "quote", createPerm: "ar.create" });
+  const PATCH = makePATCH({ kind: "quote", createPerm: "ar.create", readPerm: "ar.read" });
   const org = await withBypassContext(() => createScratchOrg());
   gateState.authz = null;
   try {
@@ -436,7 +436,7 @@ test("repointing an estimate at a customer with an open balance saves", { skip: 
           from documents where id = ${quoteId}`)).rows[0]!.revision);
     const res = await withOrgContext(
       org.orgId,
-      () =>
+      async () =>
         PATCH(
           new Request(`http://openbooks.test/api/estimates/${quoteId}`, {
             method: "PATCH",

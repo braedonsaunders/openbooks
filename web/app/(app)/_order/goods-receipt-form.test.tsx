@@ -321,7 +321,7 @@ async function setQtyN(n: number, value: string) {
 }
 
 function formAlert(): HTMLElement | null {
-  return dialog()?.querySelector('[role="alert"]')
+  return dialog()?.querySelector<HTMLElement>('[role="alert"]') ?? null
 }
 
 test('a zero line is left out so a partial receipt posts the other line', async (t) => {

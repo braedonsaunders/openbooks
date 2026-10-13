@@ -6,7 +6,7 @@ import { stubModules } from "../../../testing/stub-modules";
 
 declare global {
   var __journalToasts: { kind: string; message: string }[] | undefined;
-  var __journalRouter: { push(url: string): void; refresh(): void } | undefined;
+  var __journalRouter: { push(url: string): void; replace(url: string): void; refresh(): void } | undefined;
 }
 
 // journal Memo and Reference sat adjacently with bare labels, so entry
@@ -77,7 +77,7 @@ test("an editable journal names what belongs in Reference vs Memo", async (t) =>
     globalThis.fetch = prior;
   });
   globalThis.__journalToasts = [];
-  globalThis.__journalRouter = { push() {}, refresh() {} };
+  globalThis.__journalRouter = { push() {}, replace() {}, refresh() {} };
   const host = document.createElement("div");
   document.body.appendChild(host);
   const root = createRoot(host);

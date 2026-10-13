@@ -35,7 +35,7 @@ test('mapping catalog and saved rules use native organization reads, permissions
     });
     const { GET } = await import('./route');
     const { PATCH } = await import('../route');
-    const call = (query = '', connectionId = id) => withOrgContext(org.orgId, () => GET(new Request(`http://localhost/api/platform/connections/${connectionId}/mapping-catalog?${query}`), { params: Promise.resolve({ id: connectionId }) }));
+    const call = (query = '', connectionId: string = id) => withOrgContext(org.orgId, () => GET(new Request(`http://localhost/api/platform/connections/${connectionId}/mapping-catalog?${query}`), { params: Promise.resolve({ id: connectionId }) }));
     const save = (entityMappings: unknown) => withOrgContext(org.orgId, () => PATCH(new Request(`http://localhost/api/platform/connections/${id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ config: { entityMappings } }) }), { params: Promise.resolve({ id }) }));
     state.denied = true; assert.equal((await call()).status, 403);
     state.denied = false; state.restricted = true; assert.equal((await call()).status, 403);

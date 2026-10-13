@@ -89,7 +89,7 @@ const PROFILE: FlowSubjectProfile = {
   roles: ['admin', 'accountant', 'approver'],
 }
 
-function at(id: string, kind: FlowNode['data']['kind'], x: number): FlowNode {
+function at(id: string, kind: FlowNode['data']['kind'], x = 0): FlowNode {
   const n = node(id, kind)
   return { ...n, position: { x, y: 0 } }
 }

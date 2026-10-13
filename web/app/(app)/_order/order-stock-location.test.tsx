@@ -104,7 +104,7 @@ async function mountDraft(lines: Record<string, unknown>[], stockLocations: { id
       parties={[{ id: 'vendor-1', display_name: 'Acme Supplies' }]}
       accounts={[]}
       items={ITEMS}
-      stockLocations={stockLocations}
+      stockLocations={stockLocations.map(location => ({ ...location, subsidiaryId: null }))}
       taxCodes={[]}
       taxGroups={[]}
       departments={[]}
@@ -250,7 +250,7 @@ test('sales-order routing stays on its parent line and related records use their
   order.links = [{ direction: 'to', link_type: 'conversion', id: 'invoice-1', kind: 'customer_invoice', document_number: 'INV-RELATED', status: 'posted' }]
   const { unmount } = await mountDashboard(<OrderDrawer
     order={order} kind="sales_order" parties={[]} accounts={[]} items={ITEMS}
-    stockLocations={LOCATIONS} taxCodes={[]} taxGroups={[]} departments={[]}
+    stockLocations={LOCATIONS.map(location => ({ ...location, subsidiaryId: null }))} taxCodes={[]} taxGroups={[]} departments={[]}
     projects={[]} subsidiaries={[]} segments={[]} canManage dropShipping canRouteDropShip
     closeHref="/sales-orders"
   />, messages)

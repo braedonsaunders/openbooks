@@ -26,7 +26,7 @@ function repeatedKeys(text: string): string[] {
       let k = j + 1
       while (/\s/.test(text[k] ?? '')) k += 1
       if (text[k] === ':' && seen.length > 0) {
-        const keys = seen[seen.length - 1]
+        const keys = seen[seen.length - 1]!
         if (keys.has(value)) repeats.push([...path, value].join('.'))
         keys.add(value)
         pendingKey = value

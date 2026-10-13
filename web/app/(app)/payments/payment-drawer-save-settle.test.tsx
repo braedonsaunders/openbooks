@@ -203,7 +203,7 @@ test("one Post click right after Save posts on the revision the save committed",
     assert.equal(saves[0]!.body.expectedUpdatedAt, "41", "the save is fenced on the loaded revision");
     assert.equal(posts.length, 1, "the single Post click posts exactly once");
     assert.equal(
-      (posts[0]!.body as { expectedUpdatedAt?: string }).expectedUpdatedAt,
+      (posts.at(0)!.body as { expectedUpdatedAt?: string }).expectedUpdatedAt,
       "42",
       "post carries the committed revision, not the pre-save token",
     );
@@ -250,7 +250,7 @@ test("a save without a committed revision holds Post until the refreshed record 
       settling[0]!.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
       await tick();
     });
-    assert.deepEqual(posts, [], "a settling post posts nothing");
+    assert.equal(posts.length, 0, "a settling post posts nothing");
     // The refresh delivers revision 42: Post enables and carries it.
     await render({ ...loaded, updated_at: "42" });
     const fresh = buttonsNamed("Receive & post");
@@ -263,7 +263,7 @@ test("a save without a committed revision holds Post until the refreshed record 
     });
     assert.equal(posts.length, 1, "post fires after settling");
     assert.equal(
-      (posts[0]!.body as { expectedUpdatedAt?: string }).expectedUpdatedAt,
+      (posts.at(0)!.body as { expectedUpdatedAt?: string }).expectedUpdatedAt,
       "42",
       "post carries the refreshed revision, not the pre-save token",
     );
@@ -333,9 +333,9 @@ test("a stale-revision post refuses loudly with a toast and an inline pin", asyn
   try {
     const posts = buttonsNamed("Receive & post");
     assert.equal(posts.length, 1);
-    assert.equal(posts[0]!.disabled, false, "no save is settling, so post is live");
+    assert.equal(posts.at(0)!.disabled, false, "no save is settling, so post is live");
     await act(async () => {
-      posts[0]!.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
+      posts.at(0)!.dispatchEvent(new window.MouseEvent("click", { bubbles: true }));
       await tick();
       await tick();
     });

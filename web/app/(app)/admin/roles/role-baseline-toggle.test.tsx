@@ -71,7 +71,7 @@ async function mount(node: React.ReactElement): Promise<() => Promise<void>> {
     root.render(
       React.createElement(
         NextIntlClientProvider,
-        { locale: "en", messages, timeZone: "UTC" },
+        { children: null, locale: "en", messages, timeZone: "UTC" },
         node,
       ),
     );
@@ -152,7 +152,7 @@ test("editing a role without the baseline opens with the toggle off and its warn
     description: null,
     isBuiltIn: false,
     permissions: ["gl.read"],
-    subsidiaryRestriction: { mode: "all" },
+    subsidiaryRestriction: { mode: "all" as const },
     updatedAt: "t1",
   };
   const unmount = await mount(React.createElement(EditRoleButton, { role, subsidiaries: [] }));

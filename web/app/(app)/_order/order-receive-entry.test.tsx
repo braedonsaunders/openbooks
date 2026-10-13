@@ -156,9 +156,9 @@ test('the inventory picker links each open order to its raised receipt form', as
     (a as HTMLAnchorElement).href.includes('receive=1'),
   ) as HTMLAnchorElement[]
   assert.equal(links.length, 2, 'every open order links to its receipt form')
-  assert.ok(links[0].href.includes(`order=${po}`), 'the link carries the order identity')
-  assert.match(links[0].textContent ?? '', /PO-2001/, 'the link names the order')
-  assert.match(links[0].textContent ?? '', /Acme Supplies/, 'the link names the vendor')
+  assert.ok(links[0]!.href.includes(`order=${po}`), 'the link carries the order identity')
+  assert.match(links[0]!.textContent ?? '', /PO-2001/, 'the link names the order')
+  assert.match(links[0]!.textContent ?? '', /Acme Supplies/, 'the link names the vendor')
 })
 
 test('the inventory picker says plainly when nothing is waiting', async (t) => {

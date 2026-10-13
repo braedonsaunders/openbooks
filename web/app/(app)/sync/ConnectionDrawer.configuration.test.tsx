@@ -65,6 +65,7 @@ test('structured connection mappings and content save and reopen without losing 
     mirrorEnabled: true, mirrorSchedule: 'daily', postedChangePolicy: 'review_required' as const,
     postedChangeAuthorizedAt: null, cursor: null, lastRunAt: null, lastError: null, hasSecrets: true }
   let saved: { config: Record<string, unknown> } | undefined
+  const readSaved = (): { config: Record<string, unknown> } | undefined => saved
   const previousFetch = globalThis.fetch
   const reads: string[] = []
   globalThis.fetch = (async (input, init) => {
@@ -121,14 +122,14 @@ test('structured connection mappings and content save and reopen without losing 
   await act(async () => { (document.getElementById(filesLabel.htmlFor) as HTMLInputElement).click(); await tick() })
   await click('Save changes')
   assert.ok(saved, `save must send a request after completing the mapping: ${errorMessages().at(-1) ?? 'no refusal'}`)
-  assert.equal(saved.config.realmId, undefined, 'callback identity is not edited')
-  assert.deepEqual(saved.config.syncOptions, { attachments: false, projectFinancials: true, crm: true, fixedAssets: true })
-  assert.equal(saved.config.mappingJson, undefined, 'legacy storage is retired when saving')
-  const mappings = (saved.config.entityMappings as { sourceOptions: Record<string, unknown> }).sourceOptions
+  assert.equal(readSaved()!.config.realmId, undefined, 'callback identity is not edited')
+  assert.deepEqual(readSaved()!.config.syncOptions, { attachments: false, projectFinancials: true, crm: true, fixedAssets: true })
+  assert.equal(readSaved()!.config.mappingJson, undefined, 'legacy storage is retired when saving')
+  const mappings = (readSaved()!.config.entityMappings as { sourceOptions: Record<string, unknown> }).sourceOptions
   assert.deepEqual(mappings.projectStatuses, { 'In Progress': 'active', Completed: 'closed' })
   assert.deepEqual(mappings.taxCodeFallbacks, { sales: '13' })
   assert.equal(mappings.timeTypeMultiplierField, 'custrecord_multiplier')
-  editing = { ...editing, config: { ...saved.config, realmId: 'callback-owned' } }
+  editing = { ...editing, config: { ...readSaved()!.config, realmId: 'callback-owned' } }
   await act(async () => { show(false); await tick() })
   await act(async () => { show(true); await tick() })
   await click('Mappings'); await click('Source options'); await click('Time types')
@@ -147,6 +148,7 @@ test('entity field and value mappings support custom targets, defaults, drafts, 
     config: { realmId: 'callback-owned' } as Record<string, unknown>, mirrorEnabled: true, mirrorSchedule: 'daily', postedChangePolicy: 'review_required' as const,
     postedChangeAuthorizedAt: null, cursor: null, lastRunAt: null, lastError: null, hasSecrets: true }
   let saved: { config: Record<string, unknown> } | undefined
+  const readSaved = (): { config: Record<string, unknown> } | undefined => saved
   const previousFetch = globalThis.fetch
   globalThis.fetch = (async (input, init) => {
     if (String(input).includes('/mapping-catalog')) {
@@ -174,10 +176,10 @@ test('entity field and value mappings support custom targets, defaults, drafts, 
   await fill('Entity', 'Items'); await click('Edit'); await fill('Native value', 'Services'); await click('Apply mapping')
   await click('Save changes')
   assert.ok(saved, errorMessages().at(-1))
-  assert.deepEqual(saved.config.entityMappings, { version: 1, entities: {
+  assert.deepEqual(readSaved()!.config.entityMappings, { version: 1, entities: {
     items: [{ source: 'kind', target: 'custom.category', missing: 'default', values: [{ source: 'inventory', target: 'Services' }], defaultValue: 'Services' }], customers: [],
   } })
-  editing = { ...editing, config: { ...saved.config, realmId: 'callback-owned' } }
+  editing = { ...editing, config: { ...readSaved()!.config, realmId: 'callback-owned' } }
   await act(async () => { show(false); await tick() }); await act(async () => { show(true); await tick() })
   await click('Mappings'); await click('Edit')
   assert.equal((document.getElementById([...document.querySelectorAll('label')].find(label => !label.closest('[hidden]') && label.textContent?.startsWith('Native value'))!.htmlFor) as HTMLButtonElement).textContent?.trim(), 'Services')
@@ -234,6 +236,7 @@ test('unrepresentable saved mappings are read-only, preserve nested values, bloc
     config: { mappingJson: JSON.stringify({ projectForemanField: 'custentity_foreman', obsolete: { nested: ['Original saved value', '100.0100'] } }) },
     mirrorEnabled: true, mirrorSchedule: 'daily', postedChangePolicy: 'review_required' as const, postedChangeAuthorizedAt: null, cursor: null, lastRunAt: null, lastError: null, hasSecrets: true }
   let saved: { config: Record<string, unknown> } | undefined
+  const readSaved = (): { config: Record<string, unknown> } | undefined => saved
   const previousFetch = globalThis.fetch
   globalThis.fetch = (async (input, init) => {
     if (String(input).includes('/mapping-catalog')) return Response.json({ entities: [] })
@@ -252,6 +255,6 @@ test('unrepresentable saved mappings are read-only, preserve nested values, bloc
   assert.match(errorMessages().at(-1) ?? '', /Remove or resolve/)
   await click('Remove'); await click('Save changes')
   assert.ok(saved)
-  assert.equal(saved.config.mappingJson, undefined)
-  assert.deepEqual(saved.config.entityMappings, { version: 1, entities: {}, sourceOptions: { projectForemanField: 'custentity_foreman' }, unavailableRules: [] })
+  assert.equal(readSaved()!.config.mappingJson, undefined)
+  assert.deepEqual(readSaved()!.config.entityMappings, { version: 1, entities: {}, sourceOptions: { projectForemanField: 'custentity_foreman' }, unavailableRules: [] })
 })

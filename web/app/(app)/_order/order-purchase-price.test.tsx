@@ -46,6 +46,7 @@ function mountPo(items: Record<string, unknown>[], lines: Record<string, unknown
   window.matchMedia = ((query: string) => ({
     matches: true,
     media: query,
+    onchange: null, addListener() {}, removeListener() {}, dispatchEvent() { return true },
     addEventListener() {},
     removeEventListener() {},
   })) as typeof window.matchMedia

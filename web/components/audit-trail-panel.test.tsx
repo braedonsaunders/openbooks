@@ -80,7 +80,7 @@ async function settle(host: HTMLElement, expected: string) {
   }
 }
 
-const en = (messages as { common: { auditTrail: Record<string, string> } }).common.auditTrail
+const en = messages.common.auditTrail
 
 test('a no-access answer names the unavailable history without a retry', async (t) => {
   script.status = 404

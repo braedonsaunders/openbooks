@@ -53,7 +53,8 @@ const tick = (ms = 30) => new Promise((resolve) => setTimeout(resolve, 30));
 
 const DAYS = ["2026-07-12", "2026-07-13", "2026-07-14", "2026-07-15", "2026-07-16", "2026-07-17", "2026-07-18"];
 
-const PICKERS = {
+const PICKERS: React.ComponentProps<typeof WeeklyGrid>["pickers"] = {
+  internalProjectIds: [],
   employees: [{ value: "emp-7", label: "Recall Worker" }],
   projects: [{ value: "proj-7", label: "DAY · Day job" }],
   items: [],
@@ -61,7 +62,7 @@ const PICKERS = {
   departments: [],
 };
 
-const PAYLOAD = {
+const PAYLOAD: React.ComponentProps<typeof WeeklyGrid>["payload"] = {
   employeeId: "emp-7",
   week: "2026-07-12",
   days: DAYS,
@@ -80,6 +81,7 @@ const PAYLOAD = {
       immutable: true,
     },
   ],
+  planned: [], scheduled: [], leaveCover: [],
   status: "submitted",
   hasApproved: false,
   lockReasons: [],
@@ -87,7 +89,7 @@ const PAYLOAD = {
   rejectionReason: null,
   weekId: "week-7",
   revision: "rev-7",
-} as never;
+};
 
 async function mountGrid() {
   script.withdrawBodies = [];

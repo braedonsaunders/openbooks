@@ -5,6 +5,7 @@ import test from 'node:test'
 
 type Pricing = { priced: string; entries: string }
 const capture = { result: null as Pricing | null }
+const readCapturedPricing = (): Pricing | null => capture.result
 const captureKey = Symbol.for('openbooks.true-cost-card-pricing-test')
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[captureKey] = capture
 const queryModule = new URL('./query.ts', import.meta.url).href
@@ -119,10 +120,10 @@ test('grouped standard-card pricing preserves exact entries, dated specificity, 
       capture.result = null
       const model = await trueCostData(orgId, JULY, scope)
       assert.ok(capture.result, 'the native aggregate must execute')
-      assert.equal(compareDecimal(String(capture.result.priced), String(reference.priced)), 0)
-      assert.equal(compareDecimal(String(capture.result.priced), amount), 0)
-      assert.equal(Number(capture.result.entries), Number(reference.entries))
-      assert.equal(Number(capture.result.entries), entries)
+      assert.equal(compareDecimal(String(readCapturedPricing()!.priced), String(reference.priced)), 0)
+      assert.equal(compareDecimal(String(readCapturedPricing()!.priced), amount), 0)
+      assert.equal(Number(readCapturedPricing()!.entries), Number(reference.entries))
+      assert.equal(Number(readCapturedPricing()!.entries), entries)
       assert.equal(model.appliedSource, entries ? 'standard-cards' : null)
     }
     await compare(null, '4.3435', 106)
@@ -141,8 +142,8 @@ test('grouped standard-card pricing preserves exact entries, dated specificity, 
     capture.result = null
     await assert.rejects(() => trueCostData(orgId, JULY, scope), /loses precision beyond 4 decimal places/)
     assert.ok(capture.result)
-    assert.equal(compareDecimal(String(capture.result.priced), String(reference.priced)), 0)
-    assert.equal(Number(capture.result.entries), 106)
+    assert.equal(compareDecimal(String(readCapturedPricing()!.priced), String(reference.priced)), 0)
+    assert.equal(Number(readCapturedPricing()!.entries), 106)
     assert.deepEqual(await history(), before, 'pricing reads must preserve posted history')
   })
 })

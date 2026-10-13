@@ -230,7 +230,7 @@ const dialogScript = {
     duplicates: 0,
     possibleDuplicates: 0,
     skipped: [],
-    balanceCandidates: [],
+    balanceCandidates: [] as { postedOn: string; amount: string; description: string; role: string }[],
     statementDate: '2026-11-30',
     closingBalance: null as string | null,
     currency: 'CAD',
@@ -366,7 +366,7 @@ test('a statement currency mismatch warns before the engine refuses', async (t) 
     duplicates: 0,
     possibleDuplicates: 0,
     skipped: [],
-    balanceCandidates: [],
+    balanceCandidates: [] as { postedOn: string; amount: string; description: string; role: string }[],
     statementDate: '2026-11-30',
     closingBalance: null as string | null,
     currency: 'USD',
@@ -636,7 +636,7 @@ const DUPLICATE_PREVIEW = {
     { postedOn: '2026-11-02', amount: '-5.0000', description: 'COFFEE SHOP', possibleDuplicateOf: 'line-coffee' },
   ],
   skipped: [],
-  balanceCandidates: [],
+  balanceCandidates: [] as { postedOn: string; amount: string; description: string; role: string }[],
 }
 
 test('possible duplicates are listed in the preview and held out of the default import', async (t) => {

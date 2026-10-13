@@ -174,7 +174,7 @@ test('a blank display name pins an inline required error on the field', async ()
       await tick()
     })
     await tick()
-    assert.deepEqual(seen, [], 'a blank name must never reach the API')
+    assert.equal(seen.length, 0, 'a blank name must never reach the API')
     assert.equal(name.getAttribute('aria-invalid'), 'true', 'the input exposes its invalid state')
     const alert = document.getElementById('name-error')
     assert.equal(alert?.getAttribute('role'), 'alert', 'the error persists as an alert, not only a toast')
@@ -262,7 +262,7 @@ test('legal identity offers the country\'s tax numbers, checks them before savin
       saveButton().click()
       await tick()
     })
-    assert.deepEqual(seen, [], 'a number failing its check digit never reaches the API')
+    assert.equal(seen.length, 0, 'a number failing its check digit never reaches the API')
     assert.equal(bn.getAttribute('aria-invalid'), 'true')
     assert.match(document.getElementById('company-tax-id-ca_bn-error')?.textContent ?? '', /enter it like 123456782/)
 
@@ -287,7 +287,7 @@ test('legal identity offers the country\'s tax numbers, checks them before savin
     })
     await tick()
     assert.equal(seen.length, 1)
-    const body = seen[0]!.body as Record<string, unknown>
+    const body = seen.at(0)!.body as Record<string, unknown>
     assert.deepEqual(body.taxIds, { ca_bn: '123456782', ca_gst_hst: null, ca_qst: null, tax_id: null, registration: null })
     assert.deepEqual(body.address, { line1: '400 King St W', line2: '', city: 'Toronto', region: '', postalCode: '', country: 'CA' })
     assert.equal(body.legalForm, 'sole_proprietorship')
@@ -388,7 +388,7 @@ test('the organization card exposes the business time zone picker', async () => 
     await tick()
     assert.equal(seen.length, 1, 'the save must PUT once')
     assert.equal(
-      (seen[0]!.body as Record<string, unknown>).timeZone,
+      (seen.at(0)!.body as Record<string, unknown>).timeZone,
       'America/Toronto',
       'the chosen zone travels with the save',
     )
@@ -438,7 +438,7 @@ test('contract creation travels only while scoped contracts are on', async () =>
     await tick()
     assert.equal(gated.seen.length, 1, 'the save must PUT once')
     assert.equal(
-      (gated.seen[0]!.body as Record<string, unknown>).contractCreation,
+      (gated.seen.at(0)!.body as Record<string, unknown>).contractCreation,
       'booking',
       'the booking choice travels with the save',
     )
@@ -461,7 +461,7 @@ test('contract creation travels only while scoped contracts are on', async () =>
     await tick()
     assert.equal(ungated.seen.length, 1, 'the save must PUT once')
     assert.ok(
-      !('contractCreation' in ((ungated.seen[0]!.body as Record<string, unknown>) ?? {})),
+      !('contractCreation' in ((ungated.seen.at(0)!.body as Record<string, unknown>) ?? {})),
       'the stored choice is left alone while the switch is off',
     )
   } finally {

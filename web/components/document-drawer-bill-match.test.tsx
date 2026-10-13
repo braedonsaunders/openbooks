@@ -84,7 +84,7 @@ async function mountBill(doc: Record<string, unknown>, createMode: boolean) {
     root.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
         <MoneyProvider currency="USD">
-          <DocumentDrawer
+          <DocumentDrawer canPost={false}
             payload={{ doc, lines: [] }}
             config={DOC_KINDS["vendor_bill"]!}
             basePath="/ap/bills"

@@ -56,7 +56,7 @@ for (const locale of LOCALES) {
       globalSearch?: { groups?: Record<string, string> }
     }
     const label = shell.globalSearch?.groups?.workOrders
-    assert.equal(typeof label, 'string', `${locale}: shell.globalSearch.groups.workOrders`)
+    assert.ok(typeof label === 'string', `${locale}: shell.globalSearch.groups.workOrders`)
     assert.notEqual(label.trim(), '')
   })
 }

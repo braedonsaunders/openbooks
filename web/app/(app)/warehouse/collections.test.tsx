@@ -132,7 +132,7 @@ test('the putaway queue keeps its rows searchable with the action behind the pos
     subsidiaryId: 'sub-1',
     quantity: '3.0000',
   }
-  await mount(t, <PutawayQueue rows={[row]} canPost />)
+  await mount(t, <PutawayQueue rows={[{ ...row, lotId: null, serialId: null, lotNumber: null, serialNumber: null }]} canPost />)
   assert.match(bodyText(), /STAGE/)
   assert.match(bodyText(), /Widget/)
   assert.ok(searchBoxes().length > 0, 'the putaway queue keeps the shared list search toolbar')

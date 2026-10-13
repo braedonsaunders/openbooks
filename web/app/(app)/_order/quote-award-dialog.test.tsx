@@ -64,6 +64,7 @@ test('award from the estimate drawer picks a project type and creates the projec
   window.matchMedia = ((query: string) => ({
     matches: true,
     media: query,
+    onchange: null, addListener() {}, removeListener() {}, dispatchEvent() { return true },
     addEventListener() {},
     removeEventListener() {},
   })) as typeof window.matchMedia

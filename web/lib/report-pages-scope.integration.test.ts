@@ -59,7 +59,7 @@ const { REPORT_ENTITY_MAP } = await import(root + 'packages/reports/src/index.ts
 const { GET: drill } = await import(root + 'web/app/api/reports/drill/route.ts')
 const { GET: exportStatement } = await import(root + 'web/app/api/reports/statement/[kind]/export/route.ts')
 const { GET: render } = await import(root + 'web/app/api/internal/reports/render/route.ts')
-const { POST: schedule } = await import(root + 'web/app/api/reports/schedules/route.ts')
+const { POST: schedule } = (await import(root + 'web/app/api/reports/schedules/route.ts')) as typeof import('../app/api/reports/schedules/route.ts')
 const pages = {
   aging: (await import(root + 'web/app/(app)/reports/aging/page.tsx')).default,
   'general-ledger': (await import(root + 'web/app/(app)/reports/general-ledger/page.tsx')).default,
@@ -184,7 +184,7 @@ test('scheduled deliveries render the definition as saved now under the pinned a
       await seedEntity(org, org.subsidiaryId, VISIBLE, '123')
     })
     state.user = principal(org, uid)
-    const created = await withOrgContext(org.orgId, () => schedule(json({
+    const created: Response = await withOrgContext(org.orgId, () => schedule(json({
       definitionId: def, cadence: 'daily', hour: 9, minute: 0, timezone: 'UTC', recipientEmails: ['recipient@example.test'], active: true,
     })))
     assert.equal(created.status, 201, await created.clone().text())

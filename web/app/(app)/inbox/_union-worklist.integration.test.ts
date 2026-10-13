@@ -164,7 +164,7 @@ for (const tab of ["mine", "all", "submitted"] as const) {
           loadApprovals(tab === "all" ? { tab: "all" } : {}),
         );
         assert.ok(data, "loader returns data");
-        const row = data!.approvalRows.find((r) => r.documentNumber === pending.name);
+        const row: NonNullable<typeof data>["approvalRows"][number] | undefined = data!.approvalRows.find((r) => r.documentNumber === pending.name);
         assert.ok(row, `${tab} tab lists the pending budget`);
         assert.equal(row!.href, `/budgets?budget=${pending.budgetId}`);
       }
@@ -230,7 +230,7 @@ test("approvals mine tab lists gateless submitted weeks with one shared count", 
     assert.equal(data!.approvalRows.length, 3, "the tab lists the three weeks");
     assert.equal(data!.tabs.find((t) => t.key === "mine")!.count, 3, "the bubble ties the rows");
     for (const week of seeded) {
-      const row = data!.approvalRows.find((r) => r.timesheetItemId === `timesheet_approval:${week.weekId}`);
+      const row: NonNullable<typeof data>["approvalRows"][number] | undefined = data!.approvalRows.find((r) => r.timesheetItemId === `timesheet_approval:${week.weekId}`);
       assert.ok(row, "each week carries its inbox item for Approve");
       assert.equal(row!.kind, "timesheet_week");
       assert.equal(row!.href, `/timesheets?timesheet=${week.employeeId}:${["2026-07-12", "2026-07-19", "2026-07-26"][seeded.indexOf(week)]!}`, "Open lands in the week drawer");

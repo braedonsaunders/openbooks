@@ -45,7 +45,7 @@ test('an unexpected error cannot publish forged refusal metadata', async (t) => 
 })
 
 test('a status-less posting refusal answers 422 with its scope, never a 500', async () => {
-  const scope = { kind: 'period-closed', periodId: 'period-1', bookId: 'book-1', subsidiaryId: null, module: 'gl' }
+  const scope = { kind: 'period-closed' as const, periodId: 'period-1', bookId: 'book-1', subsidiaryId: null, module: 'gl' }
   const response = await apiErrorResponse(new PostingError('journal entry JE-1: GL is closed for this period', { details: scope }))
   assert.equal(response.status, 422)
   assert.deepEqual(await response.json(), {
@@ -54,7 +54,7 @@ test('a status-less posting refusal answers 422 with its scope, never a 500', as
 })
 
 test('a raw closed-period refusal answers 422 with its scope, never a 500', async () => {
-  const scope = { kind: 'period-closed', periodId: 'period-1', bookId: 'book-1', subsidiaryId: 'sub-1', module: 'gl' }
+  const scope = { kind: 'period-closed' as const, periodId: 'period-1', bookId: 'book-1', subsidiaryId: 'sub-1', module: 'gl' }
   const response = await apiErrorResponse(new PeriodClosedError('GL is closed for this period', scope))
   assert.equal(response.status, 422)
   assert.deepEqual(await response.json(), {
@@ -63,7 +63,7 @@ test('a raw closed-period refusal answers 422 with its scope, never a 500', asyn
 })
 
 test('a consolidation period-closed refusal answers 422 with remedy and scope, never a 500', async () => {
-  const scope = { kind: 'period-closed', periodId: 'period-1', bookId: 'book-1', subsidiaryId: null, module: 'gl' }
+  const scope = { kind: 'period-closed' as const, periodId: 'period-1', bookId: 'book-1', subsidiaryId: null, module: 'gl' }
   const response = await apiErrorResponse(new ConsolidationError(
     'GL is closed for this period — consolidated exchange rates are close evidence',
     'period-closed',

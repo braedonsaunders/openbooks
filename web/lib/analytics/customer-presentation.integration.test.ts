@@ -47,23 +47,23 @@ test('customer overview keeps the complete financial population while detail tab
       const sourceOrder = full.rows.map(row => row.id)
       const authz = { user: { orgId: org.orgId }, permissions: new Set(['reports.read']), allowedSubsidiaryIds: null } as Authz
       const read = { authz, slug: 'customer-intelligence', projection: 'tab' as const, tab: 'overview', locale: 'en', revision: 'test', observedAt: Date.now() }
-      const overview = withAnalyticsRead(read, () => projectCustomerDashboard(full))
+      const overview = await withAnalyticsRead(read, async () => projectCustomerDashboard(full))
       assert.deepEqual(overview.rows.map(row => row.id), customers.slice(3).reverse(), 'the chart receives the ten largest revenues')
       assert.deepEqual({ ...overview, rows: full.rows }, full, 'KPIs, intelligence, insights, cohorts and breakdowns retain all customers')
       assert.deepEqual(full.rows.map(row => row.id), sourceOrder, 'overview ranking cannot change the native health ordering')
       assert.strictEqual(projectCustomerDashboard(full), full)
       for (const tab of ['health', 'segmentation', 'lifetime', 'churn', 'growth', 'profitability', 'configuration']) {
-        assert.strictEqual(withAnalyticsRead({ ...read, tab }, () => projectCustomerDashboard(full)), full)
+        assert.strictEqual(await withAnalyticsRead({ ...read, tab }, async () => projectCustomerDashboard(full)), full)
       }
-      assert.strictEqual(withAnalyticsRead({ ...read, projection: 'summary' }, () => projectCustomerDashboard(full)), full)
-      assert.strictEqual(withAnalyticsRead({ ...read, slug: 'vendor-performance' }, () => projectCustomerDashboard(full)), full)
+      assert.strictEqual(await withAnalyticsRead({ ...read, projection: 'summary' }, async () => projectCustomerDashboard(full)), full)
+      assert.strictEqual(await withAnalyticsRead({ ...read, slug: 'vendor-performance' }, async () => projectCustomerDashboard(full)), full)
       const { registerQueryObserver } = await import('@openbooks/engine/platform/query-observer')
       for (const tab of ['overview', 'growth', 'configuration']) {
         const statements: string[] = []
         const close = registerQueryObserver(statement => statements.push(statement))
         let selected
         try {
-          selected = await withAnalyticsRead({ ...read, tab, revision: randomUUID() }, () => customerData(period, org.orgId, null))
+          selected = await await withAnalyticsRead({ ...read, tab, revision: randomUUID() }, () => customerData(period, org.orgId, null))
         } finally { close() }
         assert.equal(statements.filter(statement => statement.includes("settings->>'fiscalYearStartMonth'")).length,
           tab === 'growth' ? 1 : 0, 'only the cohort view reads its fiscal grouping policy')
@@ -74,7 +74,7 @@ test('customer overview keeps the complete financial population while detail tab
           full.rows.map(row => [row.id, row.revenue, row.invoicedRevenue]))
       }
       const empty = await customerData(period, org.orgId, new Set())
-      assert.deepEqual(withAnalyticsRead(read, () => projectCustomerDashboard(empty)), empty)
+      assert.deepEqual(await withAnalyticsRead(read, async () => projectCustomerDashboard(empty)), empty)
     }))
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId))

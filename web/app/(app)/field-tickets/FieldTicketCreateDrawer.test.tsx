@@ -42,7 +42,7 @@ const messages = (await import('../../../messages/en')).default
 const { FieldTicketCreateDrawer } = await import('./FieldTicketCreateDrawer')
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30))
-const en = (messages as { fieldTickets: { list: Record<string, string> } }).fieldTickets.list
+const en = messages.fieldTickets.list
 
 type Sent = { url: string; method: string; key: string | null; body: unknown }
 

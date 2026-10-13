@@ -209,7 +209,7 @@ test("guard and match dialog agree across partial and full receipts, then the bi
     `)).rows;
     await withOrg(seed.orgId, () => matchVendorBillLines({
       orgId: seed.orgId, billId, actorId: seed.actorId,
-      matches: [{ billLineId: billLineIds[1].id, purchaseOrderLineId: po.lineB }],
+      matches: [{ billLineId: billLineIds[1]!.id, purchaseOrderLineId: po.lineB }],
     }));
 
     await postBill(seed, billId);

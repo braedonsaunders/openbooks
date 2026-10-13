@@ -83,6 +83,7 @@ function payload() {
 }
 
 const PICKERS = {
+  internalProjectIds: [],
   employees: [{ value: "emp-1", label: "Approval Worker" }],
   projects: [],
   items: [],
@@ -112,13 +113,13 @@ async function mountGrid(approveBlockedReason: string | null) {
     root.render(
       React.createElement(
         BusinessDateProvider,
-        { today: "2026-07-14" },
+        { children: null, today: "2026-07-14" },
         React.createElement(
           NextIntlClientProvider,
-          { locale: "en", messages, timeZone: "UTC" },
+          { children: null, locale: "en", messages, timeZone: "UTC" },
           React.createElement(
             MoneyProvider,
-            { currency: "USD" },
+            { children: null, currency: "USD" },
             React.createElement(WeeklyGrid, {
               employeeId: "emp-1",
               week: "2026-07-12",

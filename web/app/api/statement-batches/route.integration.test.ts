@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import { registerHooks } from 'node:module'
-import type { SessionUser } from '../../../../lib/auth'
+import type { SessionUser } from '../../../lib/auth'
 
 const session: { user: SessionUser | null } = { user: null }
 Object.assign(globalThis, { __statementBatchSession: session })

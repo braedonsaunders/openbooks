@@ -103,9 +103,9 @@ test('an approver marks a submitted line non-billable with per-entry audit, and 
        where org_id=${f.org.orgId} and table_name='time_entries'
     `)
     assert.equal(audit.rows.length, 1, 'the flag change leaves exactly one audit row for the entry')
-    assert.equal(audit.rows[0].action, 'update')
-    assert.equal(audit.rows[0].actor_id, f.supervisor, 'the audit names the approver, not the timekeeper')
-    const changes = audit.rows[0].changes as { event: string; before: { is_billable: boolean }; after: { is_billable: boolean } }
+    assert.equal(audit.rows[0]!.action, 'update')
+    assert.equal(audit.rows[0]!.actor_id, f.supervisor, 'the audit names the approver, not the timekeeper')
+    const changes = audit.rows[0]!.changes as { event: string; before: { is_billable: boolean }; after: { is_billable: boolean } }
     assert.equal(changes.event, 'billable_changed')
     assert.deepEqual([changes.before.is_billable, changes.after.is_billable], [true, false])
     const approved = await f.approve()

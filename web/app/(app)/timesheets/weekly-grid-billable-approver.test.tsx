@@ -54,7 +54,7 @@ const { WeeklyGrid } = await import("./WeeklyGrid");
 const tick = (ms = 30) => new Promise((resolve) => setTimeout(resolve, ms));
 const DAYS = ["2026-07-12", "2026-07-13", "2026-07-14", "2026-07-15", "2026-07-16", "2026-07-17", "2026-07-18"];
 
-function submittedPayload() {
+function submittedPayload(): React.ComponentProps<typeof WeeklyGrid>["payload"] {
   return {
     employeeId: "emp-9",
     week: "2026-07-12",
@@ -74,6 +74,7 @@ function submittedPayload() {
         immutable: true,
       },
     ],
+    planned: [], scheduled: [], leaveCover: [],
     status: "submitted",
     hasApproved: false,
     lockReasons: [],
@@ -81,18 +82,19 @@ function submittedPayload() {
     rejectionReason: null,
     weekId: "week-9",
     revision: "rev-1",
-  } as never;
+  };
 }
 
 const PICKERS = {
+  internalProjectIds: [],
   employees: [{ value: "emp-9", label: "Billable Approver Worker" }],
   projects: [{ value: "proj-9", label: "Client job" }],
   items: [{ value: "item-9", label: "Service" }],
-  timeTypes: [{ value: "tt-9", label: "Regular" }],
+  timeTypes: [{ value: "tt-9", label: "Regular", classification: "regular", costMultiplier: "1", isBillableDefault: true, isDefault: true }],
   departments: [],
 };
 
-async function mountGrid(status: string, entryStatuses: string[]) {
+async function mountGrid(status: React.ComponentProps<typeof WeeklyGrid>["payload"]["status"], entryStatuses: string[]) {
   script.toasts = [];
   script.posts = [];
   const prior = globalThis.fetch;
@@ -107,10 +109,10 @@ async function mountGrid(status: string, entryStatuses: string[]) {
     }
     return Response.json({});
   }) as typeof fetch;
-  const payload = submittedPayload() as unknown as Record<string, unknown>;
+  const payload = submittedPayload();
   payload.status = status;
-  (payload.rows as Record<string, unknown>[])[0]!.entryStatuses = entryStatuses;
-  (payload.rows as Record<string, unknown>[])[0]!.immutable = entryStatuses.some((s) => s === "approved" || s === "submitted");
+  payload.rows[0]!.entryStatuses = entryStatuses;
+  payload.rows[0]!.immutable = entryStatuses.some((s) => s === "approved" || s === "submitted");
   const host = document.createElement("div");
   document.body.appendChild(host);
   const root = createRoot(host);
@@ -118,13 +120,13 @@ async function mountGrid(status: string, entryStatuses: string[]) {
     root.render(
       React.createElement(
         BusinessDateProvider,
-        { today: "2026-07-14" },
+        { children: null, today: "2026-07-14" },
         React.createElement(
           NextIntlClientProvider,
-          { locale: "en", messages, timeZone: "UTC" },
+          { children: null, locale: "en", messages, timeZone: "UTC" },
           React.createElement(
             MoneyProvider,
-            { currency: "USD" },
+            { children: null, currency: "USD" },
             React.createElement(WeeklyGrid, {
               employeeId: "emp-9",
               week: "2026-07-12",
@@ -161,8 +163,8 @@ function billableBox(): HTMLInputElement {
 }
 
 function flippedPayload() {
-  const payload = submittedPayload() as unknown as Record<string, unknown>;
-  (payload.rows as Record<string, unknown>[])[0]!.isBillable = false;
+  const payload = submittedPayload();
+  payload.rows[0]!.isBillable = false;
   payload.revision = "rev-2";
   return payload;
 }

@@ -124,7 +124,7 @@ async function seedFulfillment(seed: Seed, quantity: string): Promise<string> {
 }
 
 async function fulfilledOf(seed: Seed, poLineId: string): Promise<string> {
-  return (await db.execute(sql`
+  return (await db.execute<{ f: string }>(sql`
     select quantity_fulfilled::text as f from document_lines where id = ${poLineId}`)).rows[0]!.f;
 }
 

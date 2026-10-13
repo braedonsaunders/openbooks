@@ -101,7 +101,7 @@ async function mountInvoice(doc: Record<string, unknown>) {
     root.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
         <MoneyProvider currency="USD">
-          <DocumentDrawer
+          <DocumentDrawer canPost={false}
             payload={{ doc, lines: [] }}
             config={DOC_KINDS["customer_invoice"]!}
             basePath="/ar/invoices"

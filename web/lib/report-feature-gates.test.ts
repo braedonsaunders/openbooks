@@ -30,12 +30,12 @@ test('an unrelated feature never hides a gated route', () => {
 
 test('ungated report paths always stay visible', () => {
   for (const path of ['/reports/pnl', '/reports/partners', '/reports/statements/abc', '/reports/custom/run/def']) {
-    assert.equal(savedReportPathVisible(path, { projects: false, projectProgress: false, budgets: false, orders: false, inventory: false, warehousing: false, resourcing: false, payroll: false, multiBookAccounting: false }), true)
+    assert.equal(savedReportPathVisible(path, { projects: false, projectProgress: false, budgets: false, orders: false, inventory: false, warehousing: false, resourcing: false, payroll: false, multiBookAccounting: false, multiSubsidiary: false }), true)
   }
 })
 
 test('matching is segment-boundary, so siblings of gated routes stay visible', () => {
-  const off = { projects: false, projectProgress: false, budgets: false, orders: false, inventory: false, warehousing: false, resourcing: false, payroll: false, multiBookAccounting: false }
+  const off = { projects: false, projectProgress: false, budgets: false, orders: false, inventory: false, warehousing: false, resourcing: false, payroll: false, multiBookAccounting: false, multiSubsidiary: false }
   assert.equal(savedReportPathVisible('/reports/budgetary', off), true)
   assert.equal(savedReportPathVisible('/reports/true-costume', off), true)
   assert.equal(savedReportPathVisible('/reports/true-cost', off), false)

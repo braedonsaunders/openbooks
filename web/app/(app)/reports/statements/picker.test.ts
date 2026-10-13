@@ -13,6 +13,7 @@ const { statementPickerSpec } = await import('./view')
 function stubData(rows: StatementPickerData['rows']): StatementPickerData {
   return {
     title: 'Customer statements',
+    primaryFilter: null, sendHref: "/reports/statements/send", sendLabel: 'Send statements', canSend: false,
     backHref: '/reports',
     backLabel: 'Reports',
     searchPlaceholder: 'Search customer…',
@@ -54,7 +55,7 @@ function walkBlocks(node: unknown, kind: string): { kind: string; title?: string
 function tableBlock(spec: ReturnType<typeof statementPickerSpec>) {
   const tables = walkBlocks(JSON.parse(JSON.stringify(spec)), 'table')
   assert.equal(tables.length, 1, 'the picker renders exactly one table')
-  return tables[0]
+  return tables[0]!
 }
 
 test('each customer row links its name to that customer statement', () => {
@@ -70,13 +71,13 @@ test('each customer row links its name to that customer statement', () => {
   const table = tableBlock(spec)
   assert.ok(table.columns, 'the picker table must declare columns')
   assert.equal(table.columns.length, 2, 'customer + outstanding, nothing else')
-  const nameCell = table.columns[0].cell
+  const nameCell = table.columns[0]!.cell
   assert.equal(nameCell.kind, 'link', 'the customer name is a link, not plain text')
   assert.ok(
     nameCell.href?.$.endsWith('href'),
     `the link must bind the row href (got ${nameCell.href?.$})`,
   )
-  assert.equal(table.columns[1].cell.kind, 'money', 'the balance stays a money cell')
+  assert.equal(table.columns[1]!.cell.kind, 'money', 'the balance stays a money cell')
 })
 
 test('an empty customer list names the empty state instead of a bare table', () => {

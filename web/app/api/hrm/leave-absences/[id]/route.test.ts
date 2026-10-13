@@ -86,7 +86,7 @@ const hooks = registerHooks({
     return nextLoad(url);
   },
 });
-const detailRoute: typeof import("./route.ts") | undefined = (await import("./route.ts?hrm-leave-absence-detail")) as typeof import("./route.ts");
+const detailRoute: typeof import("./route.ts") | undefined = (await import(new URL("./route.ts?hrm-leave-absence-detail", import.meta.url).href)) as typeof import("./route.ts");
 test.after(() => hooks.deregister());
 
 const ABSENCE_ID = "00000000-0000-4000-8000-0000000000d1";

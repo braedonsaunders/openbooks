@@ -135,7 +135,7 @@ const projectFeatureCases = [
                   projectId,
                   actorId: actor,
                   allowedSubsidiaryIds: null,
-                  input: { code: null, name: 'Should not persist', status: 'open', estimatedHours: '1', estimatedCost: '10' },
+                  input: { code: null, name: 'Should not persist', status: 'open', estimatedHours: '1', estimatedCost: '10', estimatedPrice: '0' },
                 }),
                 (error: unknown) => error instanceof ProjectWorkBreakdownError && error.status === 404 && /projects feature is disabled/i.test(error.message),
               )
