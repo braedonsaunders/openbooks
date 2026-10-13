@@ -27,6 +27,7 @@ export async function ensureOpenPeriod(orgId: string, periodId: string): Promise
            ${utcDateFromParts(year, month, 0).toISOString().slice(0, 10)}, false
       from accounting_periods
      where id = ${periodId}
+    -- A repeated fixture retains the existing month in the same fiscal calendar.
     on conflict (org_id, fiscal_calendar_id, fiscal_year, period_number) do nothing
   `);
 }

@@ -577,6 +577,7 @@ export async function executeMigrationAttempt(
       )`);
       const recorded = await client.query(`insert into public._migration_execution_corrections
         (filename,correction_id,published_sha256,executed_sha256) values ($1,$2,$3,$4)
+        -- Replay is benign only when every retained evidence field matches below.
         on conflict (filename) do nothing returning filename`,
       [filename, executionCorrection.id, executionCorrection.publishedSha256, executionCorrection.executedSha256]);
       if (recorded.rowCount !== 1) {

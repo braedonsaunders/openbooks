@@ -110,6 +110,7 @@ export const POST = defineRoute({
              currency, subtotal, tax_total, total, created_by)
           values (${key}, ${user.orgId}, 'expense_report', ${subsidiaryId}, ${documentNumber},
                   ${body.documentDate ?? today}, ${currencyRow?.base_currency ?? 'CAD'}, '0', '0', '0', ${user.id})
+          -- A conflicting key is rejected below; it never completes a create.
           on conflict (id) do nothing
           returning id`);
         // A same-key row of this org was found above under the advisory lock,
