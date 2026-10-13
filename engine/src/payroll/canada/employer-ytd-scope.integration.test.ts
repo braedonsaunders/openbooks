@@ -2,7 +2,7 @@ import {payRunStaleness} from '../readiness.ts';
 import {calculatePayRun} from '../run-calculation.ts';
 import {commitPayRun} from '../run-commit.ts';
 import {listPeriodSiblings} from '../period-priors.ts';
-import {payRunCalculationSourceDigest,type PayRunCalculationSourceSnapshot} from '../run-calculation-evidence.ts';
+import {canonicalJson,parsePayRunCalculationErrors,payRunCalculationSourceDigest,type PayRunCalculationError,type PayRunCalculationSourceSnapshot} from '../run-calculation-evidence.ts';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {randomUUID,createHash} from 'node:crypto';
@@ -32,6 +32,7 @@ async function run(f:Fixture,owner:string,status:'draft'|'committed',amount='0',
  const created=await createPayRun({orgId:f.orgId,actorId:f.actorId,payScheduleId:f.scheduleId,
   periodStart:'2026-05-31',periodEnd:'2026-06-13',payDate:'2026-06-15',runType:'supplemental'});
  const id=created.documentId;
+ let calculationWarnings:PayRunCalculationError[]=[];
  await reresolveRunToSubsidiary(db,{orgId:f.orgId,actorId:f.actorId,documentId:id,subsidiaryId:owner});
  if(status==='committed'){
   assert.ok(account,'A native calculation retains its actual employer filing account');
@@ -45,13 +46,22 @@ async function run(f:Fixture,owner:string,status:'draft'|'committed',amount='0',
    mutation:{action:'add',employeePartyId:f.employeeId,componentId:base[0]!.id,amount,hours:'100',replaceComponent:true,
     earnedFrom:'2026-06-12',earnedTo:'2026-06-12'}});
   const input={orgId:f.orgId,actorId:f.actorId,documentId:id};
-  assert.deepEqual((await calculatePayRun(input)).errors,[]);await commitPayRun(input);
+  const calculation=await calculatePayRun(input);
+  const parsed=parsePayRunCalculationErrors(calculation.errors);assert.ok(parsed,'Native calculation outcomes must be well formed');
+  const stored=(await db.execute<{errors:unknown}>(sql`select calculation_errors as errors from pay_runs
+    where org_id=${f.orgId} and document_id=${id}`)).rows;
+  assert.equal(stored.length,1);
+  const retainedOutcomes=parsePayRunCalculationErrors(stored[0]!.errors);assert.ok(retainedOutcomes);
+  assert.equal(canonicalJson(retainedOutcomes),canonicalJson(parsed),'Every native warning remains in retained calculation evidence');
+  assert.deepEqual(parsed.filter(entry=>entry.kind!=='warning'),[],'No refusal, out-of-scope or unknown outcome may be waived');
+  calculationWarnings=parsed.filter(entry=>entry.kind==='warning');
+  await commitPayRun(input);
   const retained=(await db.execute<{employmentId:string;account:string;gross:string}>(sql`select employment_id as "employmentId",
     filing_account_id as account,gross::text as gross from pay_stubs where org_id=${f.orgId} and pay_run_document_id=${id}`)).rows;
   assert.equal(retained.length,1);assert.equal(retained[0]!.employmentId,employment);assert.equal(retained[0]!.account,account);
   assert.equal(cmp(retained[0]!.gross,amount),0);
  }
- return {tx:db,orgId:f.orgId,employeePartyId:f.employeeId,taxYear:2026,documentId:id,subsidiaryId:owner};
+ return {tx:db,orgId:f.orgId,employeePartyId:f.employeeId,taxYear:2026,documentId:id,subsidiaryId:owner,calculationWarnings};
 }
 async function source(f:Fixture,amounts:Record<string,string>={pensionableYtd:'10000',insurableYtd:'10000',cppYtd:'100'}){
  const folder=randomUUID(),file=randomUUID(),version=randomUUID(),bytes=Buffer.from(JSON.stringify({employeePartyId:f.employeeId,legalEmployerSubsidiaryId:f.subsidiaryId,taxYear:2026,amounts}));
@@ -67,7 +77,7 @@ async function source(f:Fixture,amounts:Record<string,string>={pensionableYtd:'1
  return {sourceFileId:file,sourceVersionId:version,sourceSha256:sha,sourceReference:'Original employer A employee opening report',reason:'Qualify original employer ownership'};
 }
 
-test('different employers retain independent annual contribution room while same-employer employment and RP changes retain history',{skip:!DB},async()=>{
+test('different employers retain independent annual contribution room while same-employer employment and RP changes retain history',{skip:!DB},async t=>{
  const f=await withBypassContext(setup);
  try{await withOrgContext(f.orgId,async()=>{
   const accountA=randomUUID(),accountB=randomUUID();
@@ -83,6 +93,7 @@ test('different employers retain independent annual contribution room while same
    values(${accountOther},${f.orgId},${f.other},'CA','ca_rp','987654321RP0001','Second employer payroll',true) returning id`)).rows.length,1);
   await seedVacationTerms(f.orgId,f.employmentB,f.actorId);
   const third=await run(f,f.other,'committed','100000',f.employmentB,accountOther);
+  t.diagnostic(JSON.stringify([first,second,third].map(run=>({documentId:run.documentId,warnings:run.calculationWarnings}))));
   const contributions=async(documentId:string)=>(await db.execute<{cpp:string;cpp2:string;ei:string}>(sql`
    select factors->>'C' as cpp,factors->>'C2' as cpp2,factors->>'EI' as ei from pay_stubs
    where org_id=${f.orgId} and pay_run_document_id=${documentId}`)).rows[0]!;
