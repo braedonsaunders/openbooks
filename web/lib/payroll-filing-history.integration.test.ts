@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { registerHooks } from "node:module";
+import { resolveEngineSpecifier } from "../testing/engine-resolve-hooks.ts";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withBypassContext, withOrgContext } from "@openbooks/engine/platform/db";
@@ -75,19 +76,12 @@ const webRoot = new URL("../", import.meta.url);
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    // Keep workspace imports inside the checkout under test. node_modules
-    // symlinks resolve @openbooks/* to the main checkout, so without this a
-    // worktree route test would silently exercise main's engine instead of
-    // the worktree's. In the main checkout this maps to the same files.
-    if (specifier === "@openbooks/schema" || specifier.startsWith("@openbooks/")) {
-      const rest =
-        specifier === "@openbooks/schema"
-          ? "schema/src/index.ts"
-          : specifier.slice("@openbooks/".length);
-      const workspacePath = rest.includes("/")
-        ? rest
-        : `packages/${rest}/src/index.ts`;
-      return nextResolve(new URL(`../${workspacePath}`, webRoot).href, context);
+    // Engine contracts stay pinned to this checkout; other workspaces retain
+    // their native package export resolution, including named subpaths.
+    const engine = resolveEngineSpecifier(specifier);
+    if (engine) return nextResolve(engine, context);
+    if (specifier === "@openbooks/schema") {
+      return nextResolve(new URL("../schema/src/index.ts", webRoot).href, context);
     }
     // Only the cookie→identity step is scripted: the real permission reader,
     // feature gate, and scope resolver run against the fixture below.
