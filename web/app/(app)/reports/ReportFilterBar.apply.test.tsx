@@ -54,12 +54,15 @@ function applyButton(): HTMLButtonElement | null {
 }
 
 async function selectPeriod(value: string): Promise<void> {
-  const select = document.querySelector('select[aria-label="Period"]') as HTMLSelectElement | null
-  assert.ok(select, 'the native period picker renders')
-  await act(async () => {
-    select.value = value
-    select.dispatchEvent(new window.Event('change', { bubbles: true }))
-  })
+  const trigger = document.querySelector('button[aria-label="Period"][aria-haspopup="listbox"]')
+  assert.ok(trigger, 'the native period picker trigger renders')
+  await click(trigger)
+  const label = (messages.reports.filterBar.periodPresets as Record<string, string>)[value]
+  const option = [...document.querySelectorAll('button[role="option"]')].find(
+    option => option.textContent?.trim() === label,
+  )
+  assert.ok(option, `the native period option ${value} renders`)
+  await click(option)
 }
 
 test('choosing Custom stages a complete range before navigating', async () => {
