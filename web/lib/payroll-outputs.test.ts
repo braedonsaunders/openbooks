@@ -113,7 +113,7 @@ const mockSources = new Map<string, string>([
     'mock:openbooks-pdf',
     `
       export * from '${pdfIndexUrl}'
-      export { RendererUnavailableError } from '${pdfIndexUrl}'
+      export { RendererUnavailableError, PdfTemplateValidationError } from '${pdfIndexUrl}'
       const harness = globalThis[Symbol.for('openbooks.payroll-outputs-test')]
 
       export async function encryptPdf(pdf, options) {

@@ -48,6 +48,8 @@ const mockSources = new Map<string, string>([
     `
       export async function loadPaymentDocument() { return null }
       export async function openItemsForParty() { return [] }
+      export async function receiptFundingAccountOptions() { return [] }
+      export async function receiptFundingSubsidiaryOptions() { return [] }
       export const PAYMENT_KIND_SIDE = { vendor_payment: "ap", customer_payment: "ar" }
     `,
   ],

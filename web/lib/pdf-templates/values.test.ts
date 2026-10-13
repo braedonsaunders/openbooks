@@ -140,7 +140,7 @@ const mockSources = new Map<string, string>([
   // float-shaped behavior. The real bigint kernel loads through tsx.
   [
     'mock:payroll-cheques',
-    `export function amountInWords(value) { return String(value) }`,
+    `export { amountInWords, issuedChequeBank } from '@openbooks/engine/payroll/cheques'`,
   ],
   [
     'mock:money-format',
