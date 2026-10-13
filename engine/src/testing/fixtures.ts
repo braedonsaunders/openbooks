@@ -1283,6 +1283,14 @@ async function genericDeletePasses(
  * context-only bypass scope, giving every internal transaction its own
  * connection, commit, and rollback.
  */
+const RETAINED_PAYROLL_FILE_SOURCES = [
+  "payroll_roe_issued_event_sources",
+  "payroll_roe_subsequent_service_sources",
+  "payroll_roe_line_evidence",
+  "payroll_roe_historical_periods",
+  "payroll_opening_employer_authorities",
+] as const;
+
 async function dropScratchOrgEscaped(orgId: string): Promise<void> {
   return dropDisposableOrgEscaped(orgId, "scratch");
 }
@@ -1390,6 +1398,11 @@ async function dropDisposableOrgEscaped(orgId: string, kind: DisposableOrgKind):
     // Unpaid holiday rights retain exact Cabinet versions. Remove their
     // disposable-org claims before deleting the protected source versions.
     for (const table of ["pay_run_holiday_allocations", "payroll_holiday_occurrences", "payroll_holiday_obligations"]) {
+      if (present.has(table)) await tx.execute(sql`delete from ${qualified(table)} where org_id=${orgId}`);
+    }
+    // Retained reporting and opening certificates pin Cabinet versions. The
+    // guarded disposable-org transaction removes bindings before their sources.
+    for (const table of RETAINED_PAYROLL_FILE_SOURCES) {
       if (present.has(table)) await tx.execute(sql`delete from ${qualified(table)} where org_id=${orgId}`);
     }
     await tx.execute(sql`delete from file_blobs where version_id in
@@ -2048,6 +2061,9 @@ async function resetScratchOrgEscaped(org: ScratchOrg, tables: readonly string[]
             await tx.execute(sql.raw(`alter table public."${table}" enable trigger ${trigger}`));
           }
           await tx.execute(sql`delete from ap_capture_items where org_id = ${org.orgId}`);
+        }
+        for (const table of RETAINED_PAYROLL_FILE_SOURCES) {
+          if (tables.includes(table)) await tx.execute(sql`delete from ${qualified(table)} where org_id=${org.orgId}`);
         }
         await tx.execute(sql`delete from file_blobs where version_id in
           (select v.id from file_versions v join files f on f.id = v.file_id where f.org_id = ${org.orgId})`);
