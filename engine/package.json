@@ -652,6 +652,7 @@
     "./payroll/holidays": "./src/payroll/holidays.ts",
     "./payroll/it/saldo-carryins": "./src/payroll/it/saldo-carryins.ts",
     "./payroll/liability-reconciliation": "./src/payroll/liability-reconciliation.ts",
+    "./payroll/opening-employer-authority": "./src/payroll/opening-employer-authority.ts",
     "./payroll/opening-balances": "./src/payroll/opening-balances.ts",
     "./payroll/packs": "./src/payroll/packs.ts",
     "./payroll/parallel-run-store": "./src/payroll/parallel-run-store.ts",

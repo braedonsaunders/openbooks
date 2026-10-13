@@ -629,7 +629,8 @@ export const TENANT_TABLE_POLICIES = {
   "payroll_remittance_coverage": "clone:catalog-uuid-rebase",
   "payroll_retro_allocations": "clone:catalog-uuid-rebase",
   "payroll_retro_settlements": "clone:catalog-uuid-rebase",
-  // Reporting certificates pin original payroll-line and file hashes; a destination qualifies its own evidence.
+  // Source certificates pin original payroll and file hashes; a destination qualifies its own evidence.
+  "payroll_opening_employer_authorities": "skip:no-copy",
   "payroll_roe_historical_periods": "skip:no-copy",
   "payroll_roe_line_evidence": "skip:no-copy",
   "payroll_roe_issued_event_sources": "skip:no-copy",

@@ -111,6 +111,9 @@ export async function listPeriodSiblings(
   orgId: string,
   run: PeriodRunIdentity,
 ): Promise<PeriodSibling[]> {
+  const employer=(await tx.execute<{id:string}>(sql`select subsidiary_id as id from documents
+    where org_id=${orgId} and id=${run.documentId} and kind='pay_run'`)).rows;
+  if(employer.length!==1||!employer[0]!.id)throw new PayrollError('Pay-period sequencing requires the actual legal employer of the pay run');
   const rows = (await tx.execute<PeriodSibling>(sql`
     select r.document_id::text as document_id, d.document_number,
            r.run_type, r.run_status, d.status as doc_status,
@@ -119,6 +122,7 @@ export async function listPeriodSiblings(
       join documents d on d.id = r.document_id and d.org_id = r.org_id
      where r.org_id = ${orgId}
        and r.pay_schedule_id = ${run.payScheduleId}
+       and d.subsidiary_id=${employer[0]!.id}
        and r.run_type = any(${`{${[...PERIODIC_RUN_TYPES].join(",")}}`}::text[])
        and r.period_start <= ${run.periodEnd}
        and r.period_end >= ${run.periodStart}

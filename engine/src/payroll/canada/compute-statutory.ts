@@ -87,46 +87,91 @@ export type CanadaYtdRow = {
  * unpaid figures consume CPP/EI/tax room in a later run.
  */
 export async function employeeYtd(
-  ctx: Pick<PayrollStatutoryComputeContext, "tx" | "orgId" | "employeePartyId" | "taxYear" | "documentId">,
+  ctx: Pick<PayrollStatutoryComputeContext, "tx" | "orgId" | "employeePartyId" | "taxYear" | "documentId" | "subsidiaryId">,
 ): Promise<CanadaYtdRow> {
   const { tx, orgId, employeePartyId, taxYear, documentId } = ctx;
   const cpp2BonusColumn = CA_OPENING_YTD_FIELDS.find((field) => field.key === "cpp2BonusYtd")!.column;
   const qcCsbColumn = CA_OPENING_YTD_FIELDS.find((field) => field.key === "qcCsbYtd")!.column;
   const qpipEmployerColumn = CA_OPENING_YTD_FIELDS.find((field) => field.key === "qpipEmployerYtd")!.column;
+  const employer=(await tx.execute<{id:string}>(sql`select d.subsidiary_id as id from documents d
+    join pay_runs r on r.org_id=d.org_id and r.document_id=d.id
+    where d.org_id=${orgId} and d.id=${documentId} and d.kind='pay_run'`)).rows;
+  if(employer.length!==1||!employer[0]!.id||ctx.subsidiaryId!==undefined&&ctx.subsidiaryId!==employer[0]!.id)
+    throw new PayrollError('Canadian annual contribution history requires the actual pay-run legal employer');
+  const subsidiaryId=employer[0]!.id;
+  const unknownHistory=(await tx.execute(sql`select s.id from pay_stubs s
+    join pay_runs r on r.org_id=s.org_id and r.document_id=s.pay_run_document_id
+    join documents d on d.org_id=r.org_id and d.id=r.document_id
+    where s.org_id=${orgId} and s.employee_party_id=${employeePartyId} and s.tax_year=${taxYear}
+      and s.pay_run_document_id<>${documentId} and r.run_status='committed' and d.status<>'voided'
+      and d.subsidiary_id=${subsidiaryId}
+      and (s.country is null or (s.country='CA' and (s.currency_code<>'CAD' or d.currency<>'CAD'))) limit 1`)).rows;
+  if(unknownHistory.length)throw new PayrollError('Canadian annual contribution history has unknown country or currency attribution — qualify the original retained payroll source before calculating');
+  const opening=(await tx.execute<{id:string;material:boolean;qualified:boolean}>(sql`select b.id,
+    (b.pensionable_ytd<>0 or b.insurable_ytd<>0 or b.cpp_ytd<>0 or b.cpp2_ytd<>0 or b.ei_ytd<>0 or b.qpip_ytd<>0
+      or b.non_periodic_ytd<>0 or b.non_periodic_pension_deductions_ytd<>0 or b.${sql.raw(cpp2BonusColumn)}<>0
+      or b.${sql.raw(qcCsbColumn)}<>0 or b.${sql.raw(qpipEmployerColumn)}<>0) as material,
+    (a.id is not null and a.opening_snapshot=to_jsonb(b)
+      and a.opening_sha256=encode(public.digest(to_jsonb(b)::text,'sha256'),'hex')) as qualified
+    from payroll_opening_balances b left join payroll_opening_employer_authorities a on a.org_id=b.org_id and a.opening_balance_id=b.id
+    where b.org_id=${orgId} and b.employee_party_id=${employeePartyId} and b.tax_year=${taxYear}`)).rows;
+  if(opening.some(row=>row.material&&!row.qualified))throw new PayrollError('Canadian opening contributions have no qualified original legal-employer authority — qualify the retained opening source before calculating');
   const r = (await tx.execute<CanadaYtdRow>(sql`
     select
-      coalesce((select pensionable_ytd from payroll_opening_balances
-                 where org_id = ${orgId} and employee_party_id = ${employeePartyId} and tax_year = ${taxYear}), 0)
+      coalesce((select pensionable_ytd from payroll_opening_balances opening
+                 where opening.org_id = ${orgId} and opening.employee_party_id = ${employeePartyId} and opening.tax_year = ${taxYear}
+                   and exists(select 1 from payroll_opening_employer_authorities authority where authority.org_id=opening.org_id
+                     and authority.opening_balance_id=opening.id and authority.subsidiary_id=${subsidiaryId})), 0)
       + coalesce(sum(s.pensionable_earnings), 0) as pensionable,
-      coalesce((select insurable_ytd from payroll_opening_balances
-                 where org_id = ${orgId} and employee_party_id = ${employeePartyId} and tax_year = ${taxYear}), 0)
+      coalesce((select insurable_ytd from payroll_opening_balances opening
+                 where opening.org_id = ${orgId} and opening.employee_party_id = ${employeePartyId} and opening.tax_year = ${taxYear}
+                   and exists(select 1 from payroll_opening_employer_authorities authority where authority.org_id=opening.org_id
+                     and authority.opening_balance_id=opening.id and authority.subsidiary_id=${subsidiaryId})), 0)
       + coalesce(sum(s.insurable_earnings), 0) as insurable,
-      coalesce((select cpp_ytd from payroll_opening_balances
-                 where org_id = ${orgId} and employee_party_id = ${employeePartyId} and tax_year = ${taxYear}), 0)
+      coalesce((select cpp_ytd from payroll_opening_balances opening
+                 where opening.org_id = ${orgId} and opening.employee_party_id = ${employeePartyId} and opening.tax_year = ${taxYear}
+                   and exists(select 1 from payroll_opening_employer_authorities authority where authority.org_id=opening.org_id
+                     and authority.opening_balance_id=opening.id and authority.subsidiary_id=${subsidiaryId})), 0)
       + coalesce(sum((s.factors->>'C')::numeric), 0) as cpp,
-      coalesce((select cpp2_ytd from payroll_opening_balances
-                 where org_id = ${orgId} and employee_party_id = ${employeePartyId} and tax_year = ${taxYear}), 0)
+      coalesce((select cpp2_ytd from payroll_opening_balances opening
+                 where opening.org_id = ${orgId} and opening.employee_party_id = ${employeePartyId} and opening.tax_year = ${taxYear}
+                   and exists(select 1 from payroll_opening_employer_authorities authority where authority.org_id=opening.org_id
+                     and authority.opening_balance_id=opening.id and authority.subsidiary_id=${subsidiaryId})), 0)
       + coalesce(sum((s.factors->>'C2')::numeric), 0) as cpp2,
-      coalesce((select ei_ytd from payroll_opening_balances
-                 where org_id = ${orgId} and employee_party_id = ${employeePartyId} and tax_year = ${taxYear}), 0)
+      coalesce((select ei_ytd from payroll_opening_balances opening
+                 where opening.org_id = ${orgId} and opening.employee_party_id = ${employeePartyId} and opening.tax_year = ${taxYear}
+                   and exists(select 1 from payroll_opening_employer_authorities authority where authority.org_id=opening.org_id
+                     and authority.opening_balance_id=opening.id and authority.subsidiary_id=${subsidiaryId})), 0)
       + coalesce(sum((s.factors->>'EI')::numeric), 0) as ei,
-      coalesce((select qpip_ytd from payroll_opening_balances
-                 where org_id = ${orgId} and employee_party_id = ${employeePartyId} and tax_year = ${taxYear}), 0)
+      coalesce((select qpip_ytd from payroll_opening_balances opening
+                 where opening.org_id = ${orgId} and opening.employee_party_id = ${employeePartyId} and opening.tax_year = ${taxYear}
+                   and exists(select 1 from payroll_opening_employer_authorities authority where authority.org_id=opening.org_id
+                     and authority.opening_balance_id=opening.id and authority.subsidiary_id=${subsidiaryId})), 0)
       + coalesce(sum((s.factors->>'QPIP')::numeric), 0) as qpip,
-      coalesce((select ${sql.raw(qpipEmployerColumn)} from payroll_opening_balances
-                 where org_id = ${orgId} and employee_party_id = ${employeePartyId} and tax_year = ${taxYear}), 0)
+      coalesce((select ${sql.raw(qpipEmployerColumn)} from payroll_opening_balances opening
+                 where opening.org_id = ${orgId} and opening.employee_party_id = ${employeePartyId} and opening.tax_year = ${taxYear}
+                   and exists(select 1 from payroll_opening_employer_authorities authority where authority.org_id=opening.org_id
+                     and authority.opening_balance_id=opening.id and authority.subsidiary_id=${subsidiaryId})), 0)
       + coalesce(sum((s.factors->>'QPIP_ER')::numeric), 0) as qpip_employer,
-      coalesce((select non_periodic_pension_deductions_ytd from payroll_opening_balances
-                 where org_id=${orgId} and employee_party_id=${employeePartyId} and tax_year=${taxYear}),0)
+      coalesce((select non_periodic_pension_deductions_ytd from payroll_opening_balances opening
+                 where opening.org_id=${orgId} and opening.employee_party_id=${employeePartyId} and opening.tax_year=${taxYear}
+                   and exists(select 1 from payroll_opening_employer_authorities authority where authority.org_id=opening.org_id
+                     and authority.opening_balance_id=opening.id and authority.subsidiary_id=${subsidiaryId})),0)
       + coalesce(sum((s.factors->>'F3')::numeric),0) as pension_deductions_bonus,
-      coalesce((select non_periodic_ytd from payroll_opening_balances
-                 where org_id = ${orgId} and employee_party_id = ${employeePartyId} and tax_year = ${taxYear}), 0)
+      coalesce((select non_periodic_ytd from payroll_opening_balances opening
+                 where opening.org_id = ${orgId} and opening.employee_party_id = ${employeePartyId} and opening.tax_year = ${taxYear}
+                   and exists(select 1 from payroll_opening_employer_authorities authority where authority.org_id=opening.org_id
+                     and authority.opening_balance_id=opening.id and authority.subsidiary_id=${subsidiaryId})), 0)
       + coalesce(sum((s.factors->>'B')::numeric), 0) as non_periodic,
-      coalesce((select ${sql.raw(cpp2BonusColumn)} from payroll_opening_balances
-                 where org_id = ${orgId} and employee_party_id = ${employeePartyId} and tax_year = ${taxYear}), 0)
+      coalesce((select ${sql.raw(cpp2BonusColumn)} from payroll_opening_balances opening
+                 where opening.org_id = ${orgId} and opening.employee_party_id = ${employeePartyId} and opening.tax_year = ${taxYear}
+                   and exists(select 1 from payroll_opening_employer_authorities authority where authority.org_id=opening.org_id
+                     and authority.opening_balance_id=opening.id and authority.subsidiary_id=${subsidiaryId})), 0)
       + coalesce(sum((s.factors->>'F5B')::numeric), 0) as f5b,
-      coalesce((select ${sql.raw(qcCsbColumn)} from payroll_opening_balances
-                 where org_id = ${orgId} and employee_party_id = ${employeePartyId} and tax_year = ${taxYear}), 0)
+      coalesce((select ${sql.raw(qcCsbColumn)} from payroll_opening_balances opening
+                 where opening.org_id = ${orgId} and opening.employee_party_id = ${employeePartyId} and opening.tax_year = ${taxYear}
+                   and exists(select 1 from payroll_opening_employer_authorities authority where authority.org_id=opening.org_id
+                     and authority.opening_balance_id=opening.id and authority.subsidiary_id=${subsidiaryId})), 0)
       + coalesce(sum((s.factors->>'QC_CSB')::numeric), 0) as qc_csb
     from pay_stubs s
     join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
@@ -134,7 +179,7 @@ export async function employeeYtd(
     where s.org_id = ${orgId} and s.employee_party_id = ${employeePartyId}
       and s.tax_year = ${taxYear} and s.pay_run_document_id <> ${documentId}
       and r.run_status = 'committed'
-      and d.status <> 'voided'
+      and d.status <> 'voided' and d.subsidiary_id=${subsidiaryId} and s.country='CA' and s.currency_code='CAD'
   `));
   return r.rows[0]!;
 }
@@ -213,7 +258,7 @@ export async function computeCaStatutory(
 
   assertRegionSupported(region);
 
-  const ytd = await employeeYtd({ tx, orgId, employeePartyId, taxYear, documentId });
+  const ytd = await employeeYtd({ tx, orgId, employeePartyId, taxYear, documentId, subsidiaryId:ctx.subsidiaryId });
   const runAdditionalTax = (await tx.execute<{ amount: string }>(sql`
     select coalesce(sum(a.amount),0)::text as amount from pay_run_adjustments a
       join pay_components c on c.org_id=a.org_id and c.id=a.component_id

@@ -635,6 +635,9 @@ export function retainedFileEvidence(orgId: string, fileId: SQL): SQL {
        where pm.proof_file_id = ${fileId} and pm.org_id = ${orgId}
          and pm.status not in ('revoked', 'expired'))
     or exists (
+      select 1 from payroll_opening_employer_authorities authority
+       where authority.org_id=${orgId} and authority.source_file_id=${fileId}
+    ) or exists (
       select 1 from payroll_roe_historical_periods rh
        where rh.source_file_id = ${fileId} and rh.org_id = ${orgId})
     or exists (

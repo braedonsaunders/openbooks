@@ -21,6 +21,7 @@ import { apiJson, ApiResponseError } from '../../../../lib/api-error'
 import { PagedTable } from '../../../../components/paged-table'
 import { RecordTabs } from '../../../../components/module-home/record-tabs'
 import { MoneyInput, moneyFieldError } from '../../../../components/money-input'
+import { OpeningEmployerAuthorityForm } from './OpeningEmployerAuthorityForm'
 import { PeriodOpeningForm, type PeriodOpeningDraft } from './PeriodOpeningForm'
 import type {
   OpeningBalanceRow,
@@ -142,7 +143,7 @@ function OpeningBalancesYearView({
   const [skipped, setSkipped] = useState<SaveError[]>([])
   const [onlyMissing, setOnlyMissing] = useState(false)
   const [activeId, setActiveId] = useState<string | null>(null)
-  const [section, setSection] = useState<'ytd' | 'bases' | 'caps' | 'period'>('ytd')
+  const [section, setSection] = useState<'ytd' | 'bases' | 'caps' | 'period' | 'employer'>('ytd')
   const [periodDrafts, setPeriodDrafts] = useState<Record<string, PeriodOpeningDraft>>({})
   const [periodBusy, setPeriodBusy] = useState(false)
   const workspace = useTranslations('payroll.openingBalances.workspace')
@@ -799,6 +800,7 @@ function OpeningBalancesYearView({
             onChange={next => { if (!periodBusy) setSection(next) }}
             tabs={[
               { key: 'ytd', label: workspace('ytd') },
+              {key:'employer',label:text('employerAuthority.title','Employer source')},
               {
                 key: 'bases',
                 label: workspace('bases'),
@@ -838,6 +840,9 @@ function OpeningBalancesYearView({
       >
         {activeRow && (
           <div className="space-y-5">
+            {section === 'employer' && <OpeningEmployerAuthorityForm key={activeRow.employeePartyId+':'+year}
+              employeePartyId={activeRow.employeePartyId} year={year} canManage={canManage}
+              annualDirty={dirtyIds.includes(activeRow.employeePartyId)} onSaved={()=>router.refresh()}/> }
             {section === 'period' && <PeriodOpeningForm
               employeePartyId={activeRow.employeePartyId} employeeName={activeRow.employeeName} year={year}
               draft={periodDrafts[activeRow.employeePartyId]} canManage={canManage} locked={activeRow.locked}
