@@ -23,7 +23,6 @@ import {
   PDFDocument,
   PDFHexString,
   PDFName,
-  PDFRawStream,
   PDFRef,
   PDFStream,
   PDFString,

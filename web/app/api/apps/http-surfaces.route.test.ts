@@ -2,7 +2,7 @@ import { resolveEngineSpecifier } from '../../../testing/engine-resolve-hooks.ts
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
-import { fileURLToPath, pathToFileURL } from 'node:url'
+import { fileURLToPath } from 'node:url'
 
 // Every /api/apps handler must refuse an unauthenticated caller BEFORE any
 // package, file, or store I/O. This imports the real route modules with only
@@ -10,7 +10,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 // and any handler that touched I/O first would throw (no database, no
 // session) instead of answering the gate's 401.
 
-const repoRoot = fileURLToPath(new URL('../../../..', import.meta.url))
+fileURLToPath(new URL('../../../..', import.meta.url));
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {

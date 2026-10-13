@@ -4,7 +4,7 @@ import { randomUUID } from 'node:crypto';
 import { sql } from 'drizzle-orm';
 import { db } from '../platform/db.ts';
 import { createScratchOrg, dropScratchOrg, createScratchUser, seedApprovalFlow } from '../testing/fixtures.ts';
-import { CloseError } from "../periods/period-policy.ts";
+
 import { decidePeriodReopen, recloseApprovedReopen, reopenDecisionPreview, requestPeriodReopen, withdrawPeriodReopen } from "./reopening.ts";
 import { setPeriodLockState } from "../periods/period-locks.ts";
 

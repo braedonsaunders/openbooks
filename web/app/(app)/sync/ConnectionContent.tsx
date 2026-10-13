@@ -1,5 +1,7 @@
 'use client'
 
+import { useIdentityState } from '@/lib/use-identity-state'
+
 import { useEffect, useId, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { Badge, Button, Label, SearchSelect, Select } from '@openbooks/ui'
@@ -189,18 +191,17 @@ function MappingChoice({ id, label, connectionId, field, parent, disabled, value
   value: string; onChange: (value: string) => void;
 }) {
   const t = useTranslations('sync.drawer.mappings')
-  const [rows, setRows] = useState<{ value: string; label: string }[]>([])
-  const [error, setError] = useState<string>()
-  const [loading, setLoading] = useState(false)
   const [attempt, setAttempt] = useState(0)
   const canLoad = Boolean(connectionId && !disabled)
+  const requestIdentity = [connectionId, field, parent, canLoad, attempt]
+  const [rows, setRows] = useIdentityState<{ value: string; label: string }[]>(requestIdentity, [])
+  const [error, setError] = useIdentityState<string | undefined>(requestIdentity, undefined)
+  const [loading, setLoading] = useIdentityState(requestIdentity, canLoad)
   useEffect(() => {
-    setRows([]); setError(undefined)
-    if (!canLoad) { setLoading(false); return }
+    if (!canLoad) return
     const controller = new AbortController()
     const query = new URLSearchParams({ field })
     if (parent) query.set('parent', parent)
-    setLoading(true)
     fetch(`/api/platform/connections/${encodeURIComponent(connectionId!)}/mapping-options?${query}`, { signal: controller.signal })
       .then(async (response) => {
         if (!response.ok) throw new Error(await readApiErrorMessage(response, t('choicesFailed')))
@@ -211,7 +212,7 @@ function MappingChoice({ id, label, connectionId, field, parent, disabled, value
       .catch((cause) => { if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : t('choicesFailed')) })
       .finally(() => { if (!controller.signal.aborted) setLoading(false) })
     return () => controller.abort()
-  }, [connectionId, field, parent, canLoad, attempt, t])
+  }, [connectionId, field, parent, canLoad, attempt, t, setRows, setError, setLoading])
   const options = value && !rows.some((row) => row.value === value) ? [{ value, label: t('savedChoice', { value }) }, ...rows] : rows
   return <div className="space-y-1">
     <SearchSelect id={id} ariaLabel={label} value={value} options={options} onChange={onChange}

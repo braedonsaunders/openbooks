@@ -47,7 +47,7 @@ export function NeutralHistoryReview({ reconciliationId, disabled }: {reconcilia
   const { money } = useMoney()
   const live = useRef(true)
   useEffect(()=>{live.current=true;return()=>{live.current=false}},[])
-  const review = action.runExclusive(async () => {
+  const review = async () => action.runExclusive(async () => {
     let preview: Preview | null = null
     await action.execute(async () => {
       const result = await fetchAction(`/api/banking/reconciliations/${reconciliationId}/revalidate-sign-off`)
@@ -74,7 +74,7 @@ export function NeutralHistoryReview({ reconciliationId, disabled }: {reconcilia
       return body?.certificate?.proof?.digest===current.proof.digest && typeof body.replayed==='boolean'
         ? result : {ok:false,error:new ActionError({kind:'refused',serverMessage:t('failed')})}
     },{fallbackMessage:t('failed'),successMessage:t('recorded'),onOk:()=>{if(live.current)router.refresh()}})
-  })
+  })()
   return <div className="mt-3 space-y-2">
     <Button variant="outline" size="sm" disabled={disabled || action.busy} onClick={()=>void review()}>{t('action')}</Button>
     <ActionAlert error={action.refusal} fallbackMessage={t('failed')} />

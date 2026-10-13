@@ -55,7 +55,7 @@ export function PeopleGrid({ controller, window: board, groupBy, search, compact
   const footerH = board.board.showTotals ? FOOTER_H : 0
   const days = useMemo(() => board.days.filter((day) => board.board.showWeekends || !day.isWeekend), [board.days, board.board.showWeekends])
   const dates = useMemo(() => days.map((day) => day.date), [days])
-  const presented = useMemo(() => presentedBoardEntries(board), [board.entries, board.sourceRecords])
+  const presented = useMemo(() => presentedBoardEntries(board), [board])
   const index = useMemo(() => indexEntries(presented), [presented])
   const sourceIndex = useMemo(() => {
     const out = new Map<string, BoardSourceRecord[]>()
@@ -83,15 +83,20 @@ export function PeopleGrid({ controller, window: board, groupBy, search, compact
   }, [items, rowH])
 
   const scrollRef = useRef<HTMLDivElement>(null)
-  const [viewport, setViewport] = useState({ width: 1200, height: 600, scrollTop: 0 })
+  const [viewport, setViewport] = useState({ width: 1200, height: 600, scrollTop: 0, scrollLeft: 0, left: 0, top: 0 })
   useLayoutEffect(() => {
     const element = scrollRef.current
     if (!element) return
-    const measure = () => setViewport((current) => ({ ...current, width: element.clientWidth, height: element.clientHeight }))
+    const measure = () => {
+      const box = element.getBoundingClientRect()
+      setViewport({ width: element.clientWidth, height: element.clientHeight, scrollTop: element.scrollTop, scrollLeft: element.scrollLeft, left: box.left, top: box.top })
+    }
     measure()
     const observer = new ResizeObserver(measure)
     observer.observe(element)
-    return () => observer.disconnect()
+    window.addEventListener("scroll", measure, true)
+    window.addEventListener("resize", measure)
+    return () => { observer.disconnect(); window.removeEventListener("scroll", measure, true); window.removeEventListener("resize", measure) }
   }, [])
   const dayW = Math.max(compact ? 74 : 92, Math.floor((viewport.width - NAME_W - totalW) / Math.max(1, dates.length)))
   const contentW = NAME_W + dayW * dates.length + totalW
@@ -104,7 +109,7 @@ export function PeopleGrid({ controller, window: board, groupBy, search, compact
   const [editing, setEditing] = useState<{ text: string; replaceExisting: boolean } | null>(null)
   const [fillTo, setFillTo] = useState<CellAddress | null>(null)
   const dragMode = useRef<'select' | 'fill' | null>(null)
-  const clip = useRef<Clip | null>(null)
+  const [clip, setClip] = useState<Clip | null>(null)
   const [hoverTarget, setHoverTarget] = useState<string | null>(null)
   const activeSpotlight = spotlight ?? hoverTarget
   const canManage = board.canManage
@@ -113,9 +118,7 @@ export function PeopleGrid({ controller, window: board, groupBy, search, compact
   const rows = persons.length
 
   // Reset the selection when the shown cells change underneath it.
-  useEffect(() => {
-    setSelection((current) => (current && (current.focus.row >= rows || current.focus.col >= cols) ? null : current))
-  }, [rows, cols])
+  if (selection && (selection.focus.row >= rows || selection.focus.col >= cols)) setSelection(null)
 
   const totals = useMemo(() => dayTotals(dates, persons, index, replaced), [dates, index, persons, replaced])
   const personMinutes = useMemo(() => {
@@ -215,7 +218,7 @@ export function PeopleGrid({ controller, window: board, groupBy, search, compact
       const entries = person && date ? (index.get(cellKey(person.subjectId, date)) ?? []).filter((entry) => entry.startsOn === date) : []
       return entries.map((entry) => `${entry.target?.code ?? entry.target?.label ?? ''}${entry.detail ? `/${entry.detail}` : ''}`).join(' + ')
     }).join('\t')).join('\n')
-    clip.current = { block, text }
+    setClip({ block, text })
     if (event) {
       event.clipboardData.setData('text/plain', text)
       event.preventDefault()
@@ -267,9 +270,9 @@ export function PeopleGrid({ controller, window: board, groupBy, search, compact
     if (!canManage || !rect || editing) return
     const text = event.clipboardData.getData('text/plain')
     event.preventDefault()
-    if (clip.current && (text === '' || text === clip.current.text)) void pasteBlock(clip.current.block)
+    if (clip && (text === '' || text === clip.text)) void pasteBlock(clip.block)
     else if (text) void pasteText(text)
-  }, [canManage, editing, pasteBlock, pasteText, rect])
+  }, [canManage, editing, pasteBlock, pasteText, rect, clip])
 
   const fill = useCallback(async (direction: 'down' | 'right') => {
     if (!rect) return
@@ -396,7 +399,7 @@ export function PeopleGrid({ controller, window: board, groupBy, search, compact
     const left = NAME_W + cell.col * dayW
     if (left < element.scrollLeft + NAME_W) element.scrollLeft = left - NAME_W
     else if (left + dayW > element.scrollLeft + element.clientWidth - totalW) element.scrollLeft = left + dayW - element.clientWidth + totalW
-  }, [dayW, offsets.personTop, rowH])
+  }, [dayW, offsets.personTop, rowH, footerH, totalW])
 
   const onKeyDown = useCallback((event: KeyboardEvent<HTMLDivElement>) => {
     if (editing || rows === 0) return
@@ -483,27 +486,26 @@ export function PeopleGrid({ controller, window: board, groupBy, search, compact
     items.push({ key: 'copy', label: t('menu.copy'), icon: Copy, onSelect: () => copySelection() })
     if (canManage) {
       items.push({ key: 'cut', label: t('menu.cut'), icon: Scissors, onSelect: () => { copySelection(); void clearSelection() } })
-      items.push({ key: 'paste', label: t('menu.paste'), icon: ClipboardPaste, disabled: !clip.current, onSelect: () => clip.current && void pasteBlock(clip.current.block) })
+      items.push({ key: 'paste', label: t('menu.paste'), icon: ClipboardPaste, disabled: !clip, onSelect: () => clip && void pasteBlock(clip.block) })
       items.push({ key: 'fillDown', label: t('menu.fillDown'), icon: Eraser, onSelect: () => void fill('down') })
       items.push({ key: 'fillRight', label: t('menu.fillRight'), icon: Eraser, onSelect: () => void fill('right') })
       items.push({ key: 'sep2', separator: true })
       items.push({ key: 'clear', label: t('menu.clear'), icon: Trash2, danger: true, onSelect: () => void clearSelection() })
     }
     return items
-  }, [canManage, clearSelection, copySelection, editableIn, fill, onOpenEntry, pasteBlock, selection, splitDay, t])
+  }, [canManage, clearSelection, copySelection, editableIn, fill, onOpenEntry, pasteBlock, selection, splitDay, t, clip])
 
   // ---------------------------------------------------------------- geometry
   const pickerAnchor = useMemo(() => {
-    if (!editing || !rect || !scrollRef.current) return null
-    const box = scrollRef.current.getBoundingClientRect()
+    if (!editing || !rect) return null
     const top = offsets.personTop.get(rect.top)
     if (top === undefined) return null
     return {
-      left: box.left + NAME_W + rect.left * dayW - scrollRef.current.scrollLeft,
-      top: box.top + HEADER_H + top - scrollRef.current.scrollTop + rowH + 2,
+      left: viewport.left + NAME_W + rect.left * dayW - viewport.scrollLeft,
+      top: viewport.top + HEADER_H + top - viewport.scrollTop + rowH + 2,
       width: dayW * (rect.right - rect.left + 1),
     }
-  }, [dayW, editing, offsets.personTop, rect, rowH])
+  }, [dayW, editing, offsets.personTop, rect, rowH, viewport])
 
   const overlay = useMemo(() => {
     if (!rect) return null

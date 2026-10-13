@@ -40,7 +40,7 @@ async function lineState(orgId: string, orderId: string) {
 }
 
 async function latestDocumentAudit(orgId: string, id: string) {
-  const rows = (await db.execute<{ action: string; changes: Record<string, any>; requestId: string | null }>(sql`
+  const rows = (await db.execute<{ action: string; changes: { reason?: unknown; mode?: unknown; before: { document: Record<string, unknown> }; after: { document: Record<string, unknown> } }; requestId: string | null }>(sql`
     select action, changes, request_id as "requestId" from audit_log
      where org_id = ${orgId} and table_name = 'documents' and row_id = ${id}
      order by at desc, id desc limit 1`)).rows;

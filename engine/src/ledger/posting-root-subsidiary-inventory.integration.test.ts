@@ -14,7 +14,6 @@ import {
 } from "./posting-effects.ts";
 import {
   createScratchOrg,
-  createScratchUser,
   dropScratchOrg,
   type ScratchOrg,
 } from "../testing/fixtures.ts";

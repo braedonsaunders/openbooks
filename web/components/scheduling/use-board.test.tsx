@@ -79,11 +79,20 @@ test('matching server snapshots avoid duplicate initial work, stale windows stay
   await act(async () => requests[1]!.resolve(Response.json(current)))
   assert.match(host.textContent ?? '', /Current,Blair/)
   assert.equal(latest!.loading, false)
+  // Returning to the initially rendered dates still requests that exact
+  // window when the current client state belongs to a different range.
+  await render(initial.from)
+  assert.equal(latest!.window, null)
+  assert.equal(latest!.loading, true)
+  await act(async () => requests.at(-1)!.resolve(Response.json(initial)))
+  assert.equal(latest!.loading, false)
+  await render('2026-10-14')
+  await act(async () => requests.at(-1)!.resolve(Response.json(current)))
   let refresh: Promise<void>
   await act(async () => {
     refresh = latest!.reload()
   })
-  assert.equal(requests.length, 3)
+  assert.equal(requests.length, 5)
   const updated = {
     ...scheduleWindow('2026-10-14'),
     rows: [
@@ -92,7 +101,7 @@ test('matching server snapshots avoid duplicate initial work, stale windows stay
     ],
   }
   await act(async () => {
-    requests[2]!.resolve(Response.json(updated))
+    requests[4]!.resolve(Response.json(updated))
     await refresh!
   })
   assert.match(host.textContent ?? '', /Authoritative update/)

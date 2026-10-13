@@ -1,5 +1,7 @@
 'use client'
 
+import { useIdentityState } from '@/lib/use-identity-state'
+
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
@@ -39,18 +41,15 @@ interface RunDetail {
 export function StatementBatchRunDrawer({ runId }: { runId: string | null }) {
   const router = useRouter()
   const t = useTranslations('reports.statementBatch')
-  const [detail, setDetail] = useState<RunDetail | null>(null)
-  const [failure, setFailure] = useState<string | null>(null)
-  const [pending, setPending] = useState(false)
+  const [generation, setGeneration] = useState(0)
+  const [detail, setDetail] = useIdentityState<RunDetail | null>([runId, generation], null)
+  const [failure, setFailure] = useIdentityState<string | null>([runId, generation], null)
+  const [pending, setPending] = useIdentityState([runId, generation], Boolean(runId))
   const [retrying, setRetrying] = useState(false)
   const [retryError, setRetryError] = useState<string | null>(null)
-  const [generation, setGeneration] = useState(0)
 
   useEffect(() => {
     if (!runId) return
-    setDetail(null)
-    setFailure(null)
-    setPending(true)
     const controller = new AbortController()
     fetch(`/api/statement-batches/${encodeURIComponent(runId)}`, { signal: controller.signal, cache: 'no-store' })
       .then(async (response) => {
@@ -70,7 +69,7 @@ export function StatementBatchRunDrawer({ runId }: { runId: string | null }) {
         setPending(false)
       })
     return () => controller.abort()
-  }, [runId, generation])
+  }, [runId, generation, setDetail, setPending, setFailure])
 
   if (!runId) return null
   const statusLabel = (status: string): string => {

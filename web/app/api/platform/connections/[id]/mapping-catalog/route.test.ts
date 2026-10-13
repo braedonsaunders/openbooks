@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
 import test from 'node:test';
 import { sql } from 'drizzle-orm';
-import { NextResponse } from 'next/server';
+
 import { db, withBypassContext, withOrgContext } from '@openbooks/engine/platform/db';
 import { createScratchOrg, createScratchUser, dropScratchOrg } from '@openbooks/engine/testing/fixtures';
 import { getConnection } from '@openbooks/engine/sync/connection';

@@ -5,7 +5,7 @@ import { sql } from "drizzle-orm";
 import { addCalendarDays } from "../platform/civil-date.ts";
 import { db, withBypassContext } from "../platform/db.ts";
 import { createScratchOrg, dropScratchOrg, type ScratchOrg } from "../testing/fixtures.ts";
-import { PostingError } from "../journal/posting-contracts.ts";
+
 import { postDocument } from "./posting-document.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;

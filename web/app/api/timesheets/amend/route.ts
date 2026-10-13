@@ -37,7 +37,7 @@ export const POST = defineRoute({
   authorize: authorizeTimeWorkspace("time.reopen"),
   feature: { none: "The explicit workspace pins Time Tracking or Manufacturing; native commands fence every actual target." },
   body: postBodySchema0,
-  handler: async ({ request: workspaceRequest, authz: gate, body: routeBody }) => {
+  handler: async ({ request: _workspaceRequest, authz: gate, body: routeBody }) => {
     const body = routeBody as {
       entryId?: string;
       replacement?: {hours:string;reason:string};

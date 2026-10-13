@@ -65,7 +65,7 @@ async function seedOrg(): Promise<Seed> {
   };
 }
 
-async function seedApprovedPo(seed: Seed, number: string): Promise<{ orderId: string; lineId: string }> {
+async function seedApprovedPo(seed: Seed, _number: string): Promise<{ orderId: string; lineId: string }> {
   const order = await createOrderDraft(seed.orgId, seed.actorId, "purchase_order", randomUUID(), null);
   const lineId = randomUUID();
   await db.execute(sql`

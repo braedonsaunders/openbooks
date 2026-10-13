@@ -1,7 +1,7 @@
 import { createPermission } from '../records/document-kind-permissions.ts';
 import { lockActorCommandAuthority } from '../organization/actor-command-authority.ts';
 import { randomUUID } from 'node:crypto';
-import { sql } from 'drizzle-orm';
+
 import { db, withOrg } from '../platform/db.ts';
 import { createDocument } from '../ledger/document-write.ts';
 import { rebateClaimContext, recordRebateSettlementDocument, rebateSettlementKind, RebateError } from '../revenue/rebates.ts';

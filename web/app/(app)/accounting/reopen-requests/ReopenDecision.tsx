@@ -1,5 +1,7 @@
 'use client'
 
+import { useIdentityState } from '@/lib/use-identity-state'
+
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
@@ -57,17 +59,15 @@ export function ReopenDecision({ requestId, ownRequest }: { requestId: string; o
   const t = useTranslations('accounting.reopenRequests')
   const router = useRouter()
   const { busy, refusal, execute } = useAppAction()
-  const previewAction = useAppAction()
+  const { execute: previewExecute, busy: previewBusy, refusal: previewRefusal } = useAppAction()
   const [loadedPreview, setPreview] = useState<{ requestId: string; data: DecisionPreview } | null>(null)
   const [previewAttempt, setPreviewAttempt] = useState(0)
   const preview = loadedPreview?.requestId === requestId ? loadedPreview.data : null
-  const [attestation, setAttestation] = useState('')
-  const [attested, setAttested] = useState(false)
+  const [attestation, setAttestation] = useIdentityState([requestId, previewAttempt], '')
+  const [attested, setAttested] = useIdentityState([requestId, previewAttempt], false)
   useEffect(() => {
     let live = true
-    setAttestation('')
-    setAttested(false)
-    void previewAction.execute<DecisionPreview | null>(async () => {
+    void previewExecute<DecisionPreview | null>(async () => {
       const result = await fetchAction('/api/admin/close', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
@@ -86,7 +86,7 @@ export function ReopenDecision({ requestId, ownRequest }: { requestId: string; o
     return () => {
       live = false
     }
-  }, [requestId, previewAttempt, previewAction.execute, t])
+  }, [requestId, previewAttempt, previewExecute, t])
   const isOwn = preview?.ownRequest ?? ownRequest
   const conflicts = preview?.conflicts ?? []
   const conflictTotal = conflicts.reduce((sum, item) => sum + item.count, 0)
@@ -165,11 +165,11 @@ export function ReopenDecision({ requestId, ownRequest }: { requestId: string; o
   if (!preview)
     return (
       <div className="flex max-w-xs flex-col items-end gap-2">
-        <p role="status" className="text-xs text-muted-foreground">{previewAction.busy ? t('previewLoading') : t('previewRequired')}</p>
-        <ActionAlert error={previewAction.refusal} fallbackMessage={t('previewFailed')} />
+        <p role="status" className="text-xs text-muted-foreground">{previewBusy ? t('previewLoading') : t('previewRequired')}</p>
+        <ActionAlert error={previewRefusal} fallbackMessage={t('previewFailed')} />
         <div className="flex justify-end gap-2">
           {ownRequest ? withdrawButton : null}
-          <Button size="sm" variant="outline" disabled={previewAction.busy} onClick={() => setPreviewAttempt((attempt) => attempt + 1)}>{t('previewRetry')}</Button>
+          <Button size="sm" variant="outline" disabled={previewBusy} onClick={() => setPreviewAttempt((attempt) => attempt + 1)}>{t('previewRetry')}</Button>
         </div>
       </div>
     )

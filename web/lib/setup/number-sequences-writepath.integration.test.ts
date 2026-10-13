@@ -80,7 +80,7 @@ test('the fix stays writable: a colliding row can move series or keep counting',
 })
 
 test('an existing pay_run collision warns in payroll setup without renumbering', { skip: !DB }, async () => {
-  const { orgId, actorId } = await seedOrg()
+  const { orgId } = await seedOrg()
   try {
     await withBypass(() => db.execute(sql`
       update orgs set settings = settings || '{"features":{"payroll":true},"payroll":{"countries":["US"]}}'::jsonb

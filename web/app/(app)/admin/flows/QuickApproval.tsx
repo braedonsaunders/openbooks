@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
@@ -48,7 +48,9 @@ export function QuickApprovalButton() {
   const [approver, setApprover] = useState('')
   const [preventSelfApproval, setPreventSelfApproval] = useState(true)
   const [busy, setBusy] = useState(false)
-  const autoOpened = useRef(false)
+  const [autoSubject, setAutoSubject] = useState<string | null>(null)
+  const currentSubject = useRef(subjectKind)
+  useLayoutEffect(() => { currentSubject.current = subjectKind }, [subjectKind])
 
   useEffect(() => {
     if (profiles !== null) return
@@ -63,17 +65,32 @@ export function QuickApprovalButton() {
       .catch(() => setProfiles([]))
   }, [profiles])
 
-  // Deep link from record-kind settings (?quickApproval=vendor_bill).
+  // Offer the supported deep link once after the subject catalog arrives.
+  const preset = params.get('quickApproval')
+  if (autoSubject === null && profiles !== null && preset && profiles.some(p => p.subjectKind === preset)) {
+    setAutoSubject(preset)
+    setOpen(true)
+    setSubjectKind(preset)
+    setLoading(true)
+  }
   useEffect(() => {
-    if (autoOpened.current || profiles === null) return
-    const preset = params.get('quickApproval')
-    if (preset && profiles.some((p) => p.subjectKind === preset)) {
-      autoOpened.current = true
-      setOpen(true)
-      setSubjectKind(preset)
-      void loadState(preset)
-    }
-  }, [params, profiles])
+    if (!autoSubject) return
+    const controller = new AbortController()
+    fetch(`/api/admin/flows/quick-approval?subjectKind=${encodeURIComponent(autoSubject)}`, { signal: controller.signal })
+      .then(async response => response.ok ? await response.json() as QuickState : null)
+      .then(data => {
+        if (controller.signal.aborted || currentSubject.current !== autoSubject) return
+        setState(data)
+        if (!data) return
+        setApproverKind('role')
+        setApprover(data.roles.some(r => r.key === 'admin') ? 'admin' : data.roles[0]?.key ?? '')
+        setThreshold('')
+        setPreventSelfApproval(true)
+      })
+      .catch(() => { if (!controller.signal.aborted && currentSubject.current === autoSubject) setState(null) })
+      .finally(() => { if (!controller.signal.aborted && currentSubject.current === autoSubject) setLoading(false) })
+    return () => controller.abort()
+  }, [autoSubject])
 
   async function loadState(kind: string) {
     setLoading(true)

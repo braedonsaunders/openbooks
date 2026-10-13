@@ -17,7 +17,6 @@ import {
 import {
   createWarehouseOperator,
   confirmFixturePick,
-  packFixtureShipment,
 } from "../testing/warehouse-execution.ts";
 import { receiveInventory } from "../inventory/movements.ts";
 import { getOnHandWith } from "../inventory/position.ts";

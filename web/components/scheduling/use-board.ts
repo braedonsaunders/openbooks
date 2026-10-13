@@ -1,6 +1,8 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useIdentityState } from '@/lib/use-identity-state'
+
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { fetchWindow, saveChanges, SchedulingRequestError } from './api'
 import { inverseOf, type BoardChange, type BoardEntry, type BoardWindow, type ChangeResult } from './model'
@@ -27,8 +29,8 @@ const newId = () => crypto.randomUUID()
 export function useBoard(boardId: string, initial: BoardWindow | null, range: { from: string; through: string }, enabled = true) {
   const t = useTranslations('scheduling')
   const compatible = (value: BoardWindow | null) => value?.board.id === boardId && value.from === range.from && value.through === range.through
-  const [window, setWindow] = useState<BoardWindow | null>(compatible(initial) ? initial : null)
-  const [loading, setLoading] = useState(enabled && !compatible(initial))
+  const [window, setWindow] = useIdentityState<BoardWindow | null>([boardId, initial], compatible(initial) ? initial : null)
+  const [loading, setLoading] = useIdentityState([boardId, initial, range.from, range.through, enabled], enabled && !compatible(initial))
   const [saving, setSaving] = useState(0)
   const [notices, setNotices] = useState<BoardNotice[]>([])
   const [undoStack, setUndoStack] = useState<HistoryStep[]>([])
@@ -38,9 +40,10 @@ export function useBoard(boardId: string, initial: BoardWindow | null, range: { 
   const loadedRange=useRef(compatible(initial)?`${boardId}|${range.from}|${range.through}`:'')
   const pending = useRef<AbortController | null>(null)
   const mounted = useRef(true)
-  useEffect(() => { mounted.current=true; return () => { mounted.current=false; ++requestSeq.current; pending.current?.abort() } }, [])
+  const invalidatePending = useCallback(() => { ++requestSeq.current; pending.current?.abort() }, [])
+  useEffect(() => { mounted.current=true; return () => { mounted.current=false; invalidatePending() } }, [invalidatePending])
   const rangeRef = useRef(range)
-  rangeRef.current = range
+  useLayoutEffect(() => { rangeRef.current = range }, [range])
 
   const notify = useCallback((tone: BoardNotice['tone'], message: string, remedy: string | null = null) => {
     const id = ++noticeSeq.current
@@ -66,23 +69,22 @@ export function useBoard(boardId: string, initial: BoardWindow | null, range: { 
     } finally {
       if (seq === requestSeq.current) setLoading(false)
     }
-  }, [boardId, notify, t])
+  }, [boardId, notify, t, setWindow, setLoading])
 
   // A new board or date range loads its window; the server render already
   // supplied the first one.
   useEffect(() => {
     const key = `${boardId}|${range.from}|${range.through}`
     if (!enabled || key === loadedRange.current) return
-    setLoading(true)
     void reload()
   }, [boardId, enabled, range.from, range.through, reload])
 
   // A refreshed server snapshot is authoritative only for its exact window.
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (initial?.board.id !== boardId || initial.from !== range.from || initial.through !== range.through) return
     pending.current?.abort(); ++requestSeq.current
-    loadedRange.current=`${boardId}|${initial.from}|${initial.through}`;setWindow(initial); setLoading(false)
-  }, [initial, boardId])
+    loadedRange.current=`${boardId}|${initial.from}|${initial.through}`
+  }, [initial, boardId, range.from, range.through])
 
   const shownWindow = compatible(window) ? window : null
   const entriesById = useMemo(() => new Map((window?.entries ?? []).map((entry) => [entry.id, entry])), [window])
@@ -113,7 +115,7 @@ export function useBoard(boardId: string, initial: BoardWindow | null, range: { 
         replaced: [...replaced],
       }
     })
-  }, [])
+  }, [setWindow])
 
   const run = useCallback(async (changes: BoardChange[], label: string, history: 'record' | 'undo' | 'redo' = 'record'): Promise<ChangeResult[] | null> => {
     if (changes.length === 0) return []
@@ -164,7 +166,7 @@ export function useBoard(boardId: string, initial: BoardWindow | null, range: { 
 
   return {
     window: shownWindow,
-    loading,
+    loading: loading || (enabled && shownWindow === null),
     saving: saving > 0,
     notices,
     notify,

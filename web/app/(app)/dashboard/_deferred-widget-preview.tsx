@@ -1,5 +1,7 @@
 'use client'
 
+import { useIdentityState } from '@/lib/use-identity-state'
+
 import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { Button } from '@openbooks/ui'
@@ -20,20 +22,18 @@ export function DeferredWidgetPreview({
   const t = useTranslations('dashboard')
   const common = useTranslations('common')
   const [attempt, setAttempt] = useState(0)
-  const [result, setResult] = useState<PreviewResult | null>(null)
-  const [failed, setFailed] = useState(false)
+  const [result, setResult] = useIdentityState<PreviewResult | null>([widgetId, attempt, loadPreview], null)
+  const [failed, setFailed] = useIdentityState([widgetId, attempt, loadPreview], false)
 
   useEffect(() => {
     let active = true
-    setResult(null)
-    setFailed(false)
     void loadPreview(widgetId).then(
       (value) => { if (active) setResult(value) },
       () => { if (active) setFailed(true) },
     )
     // Removing a tile or leaving the editor must discard an old response.
     return () => { active = false }
-  }, [widgetId, attempt, loadPreview])
+  }, [widgetId, attempt, loadPreview, setResult, setFailed])
 
   if (result?.ok) return <WidgetCard widgetId={widgetId} data={result.data} />
 

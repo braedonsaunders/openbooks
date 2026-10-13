@@ -39,7 +39,7 @@ registerHooks({
 })
 const { db, withOrgContext, withOrg } = await import('@openbooks/engine/platform/db')
 const { sql } = await import('drizzle-orm')
-const { createScratchOrg, createScratchUser, dropScratchOrg, seedPostingAccount } = await import('@openbooks/engine/testing/fixtures')
+const { createScratchOrg, createScratchUser, dropScratchOrg } = await import('@openbooks/engine/testing/fixtures')
 const { postDocument } = await import('@openbooks/engine/ledger/posting-document')
 const { GET, POST } = await import('./route.ts')
 const { installTrustedTestDatabaseBypass } = await import('@openbooks/engine/testing/database-bypass')

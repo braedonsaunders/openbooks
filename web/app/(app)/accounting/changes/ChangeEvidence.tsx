@@ -268,7 +268,7 @@ export function RoutingRevisionEvidence({
   evidence: unknown;
   names?: Record<string, string>;
 }) {
-  const t = useTranslations("accounting");
+  useTranslations("accounting");
   const label = useFieldLabel();
   const root = (evidence && typeof evidence === "object" ? evidence : {}) as Record<string, unknown>;
   const candidate = (root.candidate && typeof root.candidate === "object" ? root.candidate : {}) as Record<string, unknown>;

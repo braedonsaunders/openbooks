@@ -1,5 +1,7 @@
 "use client";
-import {useEffect,useId,useRef,useState} from 'react';
+
+import { useIdentityState } from "@/lib/use-identity-state"
+import {useEffect,useLayoutEffect,useId,useRef,useState} from 'react';
 import Link from 'next/link';
 import {useRouter} from 'next/navigation';
 import {useTranslations,useLocale} from 'next-intl';
@@ -18,14 +20,15 @@ type Stage='ship'|'service'|'return'|'components';
 /** Vendor work stays within its selected production order and the existing drawer shell. */
 export function SubcontractPanel({workOrderId,canWrite,canBuy,onDirty,onSaved}:{workOrderId:string;canWrite:boolean;canBuy:boolean;onDirty:()=>void;onSaved:()=>void}) {
   const t=useTranslations('manufacturing.subcontract'),common=useTranslations('manufacturing'),locale=useLocale(),router=useRouter(),prefix=useId();
-  const [data,setData]=useState<Workspace|null>(null),[selected,setSelected]=useState(''),[attempt,setAttempt]=useState(0),[pending,setPending]=useState(true),[error,setError]=useState<string|null>(null),[busy,setBusy]=useState(false),[create,setCreate]=useState(false),[stage,setStage]=useState<Stage>('ship');
+  const [selected,setSelected]=useState(''),[attempt,setAttempt]=useState(0);
+  const [data,setData]=useIdentityState<Workspace|null>([workOrderId,selected,attempt],null),[pending,setPending]=useIdentityState([workOrderId,selected,attempt],true),[error,setError]=useIdentityState<string|null>([workOrderId,selected,attempt],null),[busy,setBusy]=useState(false),[create,setCreate]=useState(false),[stage,setStage]=useState<Stage>('ship');
   const [operation,setOperation]=useState(''),[custody,setCustody]=useState(''),[material,setMaterial]=useState(''),[source,setSource]=useState(''),[quantity,setQuantity]=useState(''),[lot,setLot]=useState(''),[serial,setSerial]=useState(''),[bill,setBill]=useState(''),[finish,setFinish]=useState(false),[reason,setReason]=useState(''),[measured,setMeasured]=useState(''),[consumption,setConsumption]=useState<Record<string,string>>({}),[shipment,setShipment]=useState(''),[claim,setClaim]=useState(''),[correction,setCorrection]=useState<'reverseService'|'cancel'|null>(null),[setupMinutes,setSetupMinutes]=useState(''),[runMinutes,setRunMinutes]=useState(''),[laborMinutes,setLaborMinutes]=useState('');
-  const request=useRef<{body:string;key:string}|null>(null),lock=useRef(false),dirty=useRef(false),current=useRef(workOrderId);current.current=workOrderId;
+  const request=useRef<{body:string;key:string}|null>(null),lock=useRef(false),dirty=useRef(false),current=useRef(workOrderId);
   const endpoint='/api/manufacturing/work-orders/'+workOrderId+'/subcontracts';
-  useEffect(()=>()=>{current.current='';},[]);
-  useEffect(()=>{const controller=new AbortController();setPending(true);setError(null);setData(null);request.current=null;
+  useLayoutEffect(()=>{current.current=workOrderId;return()=>{current.current='';}},[workOrderId]);
+  useEffect(()=>{const controller=new AbortController();request.current=null;
     fetch(endpoint+(selected?'?selected='+selected:''),{signal:controller.signal}).then(async response=>{if(!response.ok)throw new Error(await readApiErrorMessage(response,t('failed')));return response.json() as Promise<Workspace>}).then(value=>{if(controller.signal.aborted)return;setData(value);setCreate(!value.contracts.length);setSource(value.order.issueLocationId??'');setOperation(value.operations[0]?.value??'');setCustody(value.custody[0]?.value??'');setMaterial(value.materials[0]?.value??'');setBill(value.bills[0]?.value??'');setShipment(value.shipments.find(row=>row.remaining!=='0.0000')?.id??'');setConsumption({});setQuantity('');setReason('');setLot('');setSerial('');setFinish(false);setMeasured('');setSetupMinutes('');setRunMinutes('');setLaborMinutes('');setCorrection(null);setClaim(value.services.find(row=>row.entryId&&!row.reversalId)?.id??'');}).catch(cause=>{if(!controller.signal.aborted)setError(cause instanceof Error?cause.message:t('failed'))}).finally(()=>{if(!controller.signal.aborted)setPending(false)});return()=>controller.abort();
-  },[endpoint,selected,attempt,t]);
+  },[endpoint,selected,attempt,t, setData, setError, setPending]);
   function changed(){dirty.current=true;request.current=null;setError(null);onDirty();}
   async function save(command:'create'|'ship'|'service'|'return'|'returnComponents'|'reverseService'|'cancel') {
     if(!data||lock.current)return;lock.current=true;setBusy(true);setError(null);const identity=workOrderId;
@@ -39,7 +42,7 @@ export function SubcontractPanel({workOrderId,canWrite,canBuy,onDirty,onSaved}:{
     }catch(cause){if(current.current===identity)setError(cause instanceof Error?cause.message:t('failed'));}finally{lock.current=false;if(current.current===identity)setBusy(false);}
   }
   const selectedMaterial=data?.materials.find(row=>row.value===material);
-  const formField=(key:string,value:string,change:(value:string)=>void,options?:Array<{value:string;label:string}>,required=true)=><div className="space-y-1"><Label htmlFor={prefix+key}>{t(key)}</Label>{options?<Select id={prefix+key} value={value} required={required} disabled={busy} onChange={event=>{changed();change(event.target.value)}}><option value="">{common('choose')}</option>{options.map(option=><option key={option.value} value={option.value}>{option.label}</option>)}</Select>:<Input id={prefix+key} value={value} required={required} disabled={busy} inputMode="decimal" onChange={event=>{changed();change(event.target.value)}}/>}</div>;
+  const formField=(key:string,value:string,change:(value:string)=>void,options?:Array<{value:string;label:string}>,required=true)=><SubcontractField id={prefix+key} label={t(key)} choose={common('choose')} value={value} options={options} required={required} disabled={busy} onDirty={changed} onChange={change}/>;
   if(pending)return <p role="status" className="py-6 text-sm text-slate-500">{t('loading')}</p>;
   if(!data)return <div className="space-y-3 py-5"><p role="alert">{error}</p><Button variant="outline" onClick={()=>setAttempt(value=>value+1)}>{common('retry')}</Button></div>;
   const open=!!data.selected&&['ready','sent'].includes(data.selected.status)&&['released','in_progress'].includes(data.order.status);
@@ -68,4 +71,14 @@ export function SubcontractPanel({workOrderId,canWrite,canBuy,onDirty,onSaved}:{
     </>:<p className="text-sm text-slate-500">{t('empty')}</p>}
     {error?<p role="alert" className="text-sm text-red-700">{error}</p>:null}
   </div>;
+}
+
+function SubcontractField({id,label,choose,value,options,required,disabled,onDirty,onChange}:{
+  id:string;label:string;choose:string;value:string;options?:Array<{value:string;label:string}>;
+  required:boolean;disabled:boolean;onDirty:()=>void;onChange:(value:string)=>void;
+}) {
+  const change=(event:React.ChangeEvent<HTMLInputElement|HTMLSelectElement>)=>{onDirty();onChange(event.target.value)};
+  return <div className="space-y-1"><Label htmlFor={id}>{label}</Label>{options?
+    <Select id={id} value={value} required={required} disabled={disabled} onChange={change}><option value="">{choose}</option>{options.map(option=><option key={option.value} value={option.value}>{option.label}</option>)}</Select>:
+    <Input id={id} value={value} required={required} disabled={disabled} inputMode="decimal" onChange={change}/>}</div>;
 }

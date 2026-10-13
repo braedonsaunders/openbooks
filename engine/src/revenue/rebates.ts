@@ -10,7 +10,7 @@ import { isIsoCalendarDate } from '../platform/business-date.ts';
 import { resolveCoveringPeriod } from '../periods/period-resolution.ts';
 import { reversalJournalLines } from '../records/reversal-journal-lines.ts';
 import { postEntry, markEntryReversed, type PostEntryLineInput } from '../journal/post-entry.ts';
-import { add, cmp, divRate, mulRate, neg, sum } from '../money/money.ts';
+import { add, cmp, mulRate, neg, sum } from '../money/money.ts';
 import { earnedRebates, selectRebateDeals, validateRebateTerms, RebateError, type RebateTerms, type RebateCandidate } from './rebate-math.ts';
 export { RebateError } from './rebate-math.ts';
 
@@ -204,7 +204,7 @@ export async function approveRebateClaim(orgId:string,actorId:string,id:string,r
   if (reason.trim().length<8) throw new RebateError('Enter an approval reason');
   return withOrg(orgId,async()=>{
     await lockLedgerSetupFence(db,orgId,'shared');
-    const {claim,agreement:a}=await rebateClaimContext(db,orgId,actorId,id);
+    const {claim}=await rebateClaimContext(db,orgId,actorId,id);
     if (claim.status!=='draft') throw new RebateError('Only a draft claim can be approved');
     if (claim.created_by===actorId) throw new RebateError('An independent operator must approve the rebate claim');
     if (!(await db.execute(sql`update rebate_claims set status='approved',approved_by=${actorId},approved_at=now(),updated_at=now(),updated_by=${actorId} where org_id=${orgId} and id=${id} and status='draft' returning id`)).rows[0]) throw new RebateError('Claim approval could not be saved');
@@ -246,7 +246,7 @@ export async function settleRebatePayment(orgId:string,actorId:string,id:string,
  * financial leg. Linking the document does not settle a claim; only its posted
  * journal, checked here inside the posting unit, clears the claim. */
 export async function recordRebateSettlementDocument(orgId:string,actorId:string,claimId:string,documentId:string) {
-  const {claim,agreement:a}=await rebateClaimContext(db,orgId,actorId,claimId);
+  const {claim}=await rebateClaimContext(db,orgId,actorId,claimId);
   if (claim.status!=='approved') throw new RebateError('Only an approved claim can create a settlement document');
   if (!(await db.execute(sql`update rebate_claims set status='document_pending',settlement_document_id=${documentId},updated_by=${actorId},updated_at=now()
     where org_id=${orgId} and id=${claimId} and status='approved' returning id`)).rows[0]) throw new RebateError('Settlement document could not be linked');

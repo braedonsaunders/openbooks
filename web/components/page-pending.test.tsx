@@ -20,7 +20,7 @@ const { onRouterTransitionStart } = await import('../instrumentation-client.ts')
 const content = document.createElement('main')
 document.body.append(content)
 const root = createRoot(content)
-let page = React.createElement('input', { defaultValue: 'Unsaved worksheet' })
+const page = React.createElement('input', { defaultValue: 'Unsaved worksheet' })
 function show(child: React.ReactNode = page) {
   root.render(React.createElement(NavigationPendingBoundary, null, React.createElement(NavigationCommit, null, child)))
 }

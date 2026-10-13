@@ -37,13 +37,7 @@ const { PostingPeriodsView } = await import("./PostingPeriodsView");
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 
-function clickButton(name: string): HTMLButtonElement {
-  const found = [...document.querySelectorAll("button")].find(
-    (el) => (el.textContent ?? "").trim() === name,
-  );
-  assert.ok(found, `a ${name} button must render`);
-  return found as HTMLButtonElement;
-}
+
 
 /** Every decided document kind renders its operator label: a preview row
  * for pick lists, shipments or field tickets must never read Unknown. */

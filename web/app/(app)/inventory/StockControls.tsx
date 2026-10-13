@@ -1,4 +1,6 @@
 "use client";
+
+import { useIdentityState } from '@/lib/use-identity-state'
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -139,7 +141,7 @@ export function StockControls({
       ? requestedPage - 1
       : 0;
   const [rows, setRows] = useState<Row[]>([]),
-    [search, setSearch] = useState(urlSearch),
+    [search, setSearch] = useIdentityState([urlSearch], urlSearch),
     [total, setTotal] = useState(0);
   function resetPage() {
     if (page !== 0) {
@@ -148,16 +150,10 @@ export function StockControls({
       router.replace(`${pathname}?${next}`);
     }
   }
-  const [closed, setClosed] = useState(urlClosed),
+  const [closed, setClosed] = useIdentityState([urlClosed], urlClosed),
     [loading, setLoading] = useState(false),
     [error, setError] = useState<string | null>(null),
     [revision, setRevision] = useState(0);
-  useEffect(() => {
-    setSearch(urlSearch);
-  }, [urlSearch]);
-  useEffect(() => {
-    setClosed(urlClosed);
-  }, [urlClosed]);
   const selectedLayer = view === "layers" ? url.get("costLayer") : null;
   const selectedCustody = view === "consignment" ? url.get("custody") : null;
   function recordHref(key: "costLayer" | "custody", id: string | null) {
@@ -413,10 +409,10 @@ function CustodyDrawerHost({
   onSaved: () => void;
 }) {
   const t = useTranslations("inventory.controls");
-  const [source, setSource] = useState<Row | null>(null),
-    [pending, setPending] = useState(stockId !== "new"),
-    [error, setError] = useState<string | null>(null),
-    [revision, setRevision] = useState(0);
+  const [revision, setRevision] = useState(0);
+  const [source, setSource] = useIdentityState<Row | null>([stockId, revision], null),
+    [pending, setPending] = useIdentityState([stockId, revision], stockId !== "new"),
+    [error, setError] = useIdentityState<string | null>([stockId, revision], null);
   const guard = useRef<(() => Promise<boolean>) | null>(null);
   const registerGuard = useCallback((next: (() => Promise<boolean>) | null) => {
     guard.current = next;
@@ -424,8 +420,6 @@ function CustodyDrawerHost({
   useEffect(() => {
     if (stockId === "new") return;
     const abort = new AbortController();
-    setPending(true);
-    setError(null);
     void fetch(
       `/api/inventory/controls?${new URLSearchParams({ view: "consignment", stockId })}`,
       { signal: abort.signal },
@@ -446,7 +440,7 @@ function CustodyDrawerHost({
         if (!abort.signal.aborted) setPending(false);
       });
     return () => abort.abort();
-  }, [stockId, revision, t]);
+  }, [stockId, revision, t, setSource, setError, setPending]);
   return (
     <AsyncUrlDrawer
       open

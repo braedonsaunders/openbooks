@@ -1,5 +1,7 @@
 'use client'
 
+import { useIdentityState } from '@/lib/use-identity-state'
+
 // HR-15 inbox badge: the live count on the inbox nav entry. Polls the count
 // route on a 60s cadence (no websocket — the inbox is a live read model, so
 // polling the same read the page renders from can never disagree with it).
@@ -16,14 +18,11 @@ const POLL_MS = 60_000
 export function NavCountBadge({ source }: { source: string }) {
   const t = useTranslations('shell.topNav')
   const hidden = useDocumentHidden()
-  const [count, setCount] = useState<number | null>(null)
+  const [count, setCount] = useIdentityState<number | null>([hidden, source], null)
   const [partial, setPartial] = useState(false)
 
   useEffect(() => {
-    if (hidden) {
-      setCount(null)
-      return
-    }
+    if (hidden) return
     let alive = true
     let loading = false
     const controller = new AbortController()
@@ -58,7 +57,7 @@ export function NavCountBadge({ source }: { source: string }) {
       controller.abort()
       clearInterval(timer)
     }
-  }, [source, hidden])
+  }, [source, hidden, setCount])
 
   if (count === null || count <= 0) return null
   // A partial count names a source that failed to load: the badge keeps

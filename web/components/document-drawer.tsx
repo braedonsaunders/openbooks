@@ -1,5 +1,7 @@
 'use client'
 
+import { useIdentityState } from '@/lib/use-identity-state'
+
 import { amortizationLineColumns } from './transaction-form/amortization-columns'
 
 import { apportionWithholdingMaterialsCost, collapseWithholdingLineMetadata } from '@openbooks/engine/allocations/withholding-cost'
@@ -1363,10 +1365,10 @@ export function DocumentDrawer({
   // A saved due date is the operator's until the terms resolve to the same
   // date; a blank one follows the party's payment terms.
   const [dueOverridden, setDueOverridden] = useState<boolean>(Boolean(doc.due_date))
-  const lastDerivedDue = useRef<string | null>(null)
+  const [lastDerivedDue, setLastDerivedDue] = useState<string | null>(null)
   // Display name shown beside the due date when neither the party nor the
   // company default names payment terms (null hides the hint).
-  const [noTermsHint, setNoTermsHint] = useState<string | null>(null)
+  const [noTermsHint, setNoTermsHint] = useIdentityState<string | null>([partyId, documentDate], null)
   const [referenceNumber, setReferenceNumber] = useState<string>(doc.reference_number ?? '')
   const [memo, setMemo] = useState<string>(doc.memo ?? '')
   // Full-schema header built-ins (off by default; shown when a form enables them).
@@ -1438,13 +1440,11 @@ export function DocumentDrawer({
   // The till window this unposted sale closes, when a drop has closed it
   // and this is its last sale: the close-out offers the window's
   // dropped-minus-tendered difference as over/short for the operator.
-  const [tillSuggestion, setTillSuggestion] = useState<{ difference: string; after: string | null; through: string; tillAccountId: string } | null>(null)
   const tillWindowSaleId = config.kind === 'cash_sale' && !isCreate && !isPosted && doc.status !== 'voided' ? String(doc.id) : null
+  const [tillSuggestion, setTillSuggestion] = useIdentityState<{ difference: string; after: string | null; through: string; tillAccountId: string } | null>([tillWindowSaleId], null)
+
   useEffect(() => {
-    if (!tillWindowSaleId) {
-      setTillSuggestion(null)
-      return
-    }
+    if (!tillWindowSaleId) return
     let live = true
     fetch(`/api/cash-sales/${tillWindowSaleId}/till-window`, { headers: { accept: 'application/json' } })
       .then((res) => (res.ok ? res.json() : null))
@@ -1457,7 +1457,7 @@ export function DocumentDrawer({
     return () => {
       live = false
     }
-  }, [tillWindowSaleId])
+  }, [tillWindowSaleId, setTillSuggestion])
 
   const resolveStoredValueCode = useCallback(async (code: string) => {
     const response = await fetch(`/api/stored-value/lookup?code=${encodeURIComponent(code)}`, {
@@ -1684,6 +1684,16 @@ export function DocumentDrawer({
   // arrives, not as it was when the request left.
   const dueState = useRef({ dueDate, overridden: dueOverridden })
   useEffect(() => { dueState.current = { dueDate, overridden: dueOverridden } }, [dueDate, dueOverridden])
+  const termsIdentity = JSON.stringify([partyId, documentDate, editable, config.dueDateFromTerms])
+  const [observedTermsIdentity, setObservedTermsIdentity] = useState(termsIdentity)
+  if (observedTermsIdentity !== termsIdentity) {
+    setObservedTermsIdentity(termsIdentity)
+    if (!partyId && config.dueDateFromTerms && editable && /^\d{4}-\d{2}-\d{2}$/.test(documentDate)) {
+      const next = followTermsDueDate({ dueDate, overridden: dueOverridden, lastDerived: lastDerivedDue, derived: null })
+      if (next !== dueDate) setDueDate(next)
+      setLastDerivedDue(null)
+    }
+  }
   useEffect(() => {
     if (!config.dueDateFromTerms || !editable || !/^\d{4}-\d{2}-\d{2}$/.test(documentDate)) return
     const calibrateOnly = initialTermsKey.current === `${partyId}|${documentDate}`
@@ -1694,16 +1704,16 @@ export function DocumentDrawer({
       if (calibrateOnly) {
         if (derived !== null && current.dueDate === derived) setDueOverridden(false)
       } else {
-        const next = followTermsDueDate({ dueDate: current.dueDate, overridden: current.overridden, lastDerived: lastDerivedDue.current, derived })
+        const next = followTermsDueDate({ dueDate: current.dueDate, overridden: current.overridden, lastDerived: lastDerivedDue, derived })
         if (next !== current.dueDate) setDueDate(next)
         if (derived !== null && next === derived) setDueOverridden(false)
       }
-      lastDerivedDue.current = derived
+      setLastDerivedDue(derived)
     }
     if (!partyId) {
-      setNoTermsHint(null)
-      settle(null)
-    } else void fetchDocumentDefaults({ partyId, documentDate }).then((result) => {
+      return
+    }
+    void fetchDocumentDefaults({ partyId, documentDate }).then((result) => {
       if (!result) return
       // A resolved answer with no terms means neither the party nor the
       // company default names usable terms: name the counterparty so the
@@ -1716,12 +1726,12 @@ export function DocumentDrawer({
     })
     return () => { cancelled = true }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [partyId, documentDate, editable, config.dueDateFromTerms])
+  }, [partyId, documentDate, editable, config.dueDateFromTerms, setNoTermsHint])
 
   /** An operator-typed due date (or an explicit clear) stops following the terms. */
   const editDueDate = (value: string) => {
     setDueDate(value)
-    setDueOverridden(value === '' || value !== lastDerivedDue.current)
+    setDueOverridden(value === '' || value !== lastDerivedDue)
   }
 
   // -- entry-mode distributions -------------------------------------------

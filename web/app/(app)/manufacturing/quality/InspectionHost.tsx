@@ -1,5 +1,7 @@
 "use client";
-import { useEffect, useId, useRef, useState } from 'react';
+
+import { useIdentityState } from "@/lib/use-identity-state"
+import { useEffect, useLayoutEffect, useId, useRef, useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useTranslations, useLocale } from 'next-intl';
@@ -14,14 +16,15 @@ type Detail=Awaited<ReturnType<typeof readManufacturingInspection>>;
 
 export function InspectionHost({recordId,closeHref,canInspect,canPost,scrapReasons}:{recordId?:string;closeHref:string;canInspect:boolean;canPost:boolean;scrapReasons:Array<{value:string;label:string}>}) {
   const t=useTranslations('manufacturing.quality'),common=useTranslations('manufacturing'),locale=useLocale(),router=useRouter(),controlId=useId();
-  const [data,setData]=useState<Detail|null>(null),[loaded,setLoaded]=useState<string|null>(null),[pending,setPending]=useState(false),[loadError,setLoadError]=useState<string|null>(null),[attempt,setAttempt]=useState(0),[error,setError]=useState<string|null>(null),[busy,setBusy]=useState(false),[dirty,setDirty]=useState(false);
+  const [attempt,setAttempt]=useState(0);
+  const [data,setData]=useIdentityState<Detail|null>([recordId,attempt],null),[loaded,setLoaded]=useIdentityState<string|null>([recordId,attempt],null),[pending,setPending]=useIdentityState([recordId,attempt],Boolean(recordId)),[loadError,setLoadError]=useIdentityState<string|null>([recordId,attempt],null),[error,setError]=useIdentityState<string|null>([recordId,attempt],null),[busy,setBusy]=useState(false),[dirty,setDirty]=useIdentityState([recordId,attempt],false);
   const [outcome,setOutcome]=useState<'pass'|'fail'>('pass'),[measurements,setMeasurements]=useState<Record<string,string>>({}),[quantity,setQuantity]=useState(''),[lotId,setLotId]=useState(''),[serialId,setSerialId]=useState(''),[reason,setReason]=useState(''),[disposition,setDisposition]=useState<'use_as_is'|'scrap'|'rework'>('use_as_is'),[scrapReasonId,setScrapReasonId]=useState(''),[reworkOperation,setReworkOperation]=useState('');
   const lock=useRef(false),request=useRef<{body:string;key:string}|null>(null);
-  const currentIdentity=useRef(recordId);currentIdentity.current=recordId;
-  useEffect(()=>()=>{currentIdentity.current=undefined;},[]);
-  useEffect(()=>{if(!recordId)return;const controller=new AbortController();setPending(true);setLoadError(null);setError(null);setDirty(false);request.current=null;
+  const currentIdentity=useRef(recordId);
+  useLayoutEffect(()=>{currentIdentity.current=recordId;return()=>{currentIdentity.current=undefined;}},[recordId]);
+  useEffect(()=>{if(!recordId)return;const controller=new AbortController();request.current=null;
     fetch('/api/manufacturing/inspections/'+recordId,{signal:controller.signal}).then(async response=>{if(!response.ok)throw new Error(await readApiErrorMessage(response,t('failed')));return response.json() as Promise<Detail>}).then(value=>{if(controller.signal.aborted)return;setData(value);setLoaded(recordId);setMeasurements(value.measurements);setQuantity(value.disposition==='scrap'?value.remainingInspectionQuantity??'':value.quantity);setLotId(value.lotId??'');setSerialId(value.serialId??'');setReason('');setDisposition('use_as_is');setOutcome('pass');setReworkOperation(value.reworkOperations[0]?.value??'');}).catch(cause=>{if(!controller.signal.aborted)setLoadError(cause instanceof Error?cause.message:t('failed'));}).finally(()=>{if(!controller.signal.aborted)setPending(false);});return()=>controller.abort();
-  },[recordId,attempt,t]);
+  },[recordId,attempt,t, setData, setLoaded, setLoadError, setPending]);
   function changed(){setDirty(true);setError(null);request.current=null;}
   async function save(command:'inspect'|'dispose'|'followup') {
     if(!data||data.id!==recordId||lock.current)return;lock.current=true;setBusy(true);setError(null);

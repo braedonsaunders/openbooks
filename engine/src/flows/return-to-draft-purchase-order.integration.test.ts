@@ -35,7 +35,7 @@ async function docStatus(orgId: string, id: string): Promise<string> {
 }
 
 async function latestDocumentAudit(orgId: string, id: string) {
-  const rows = (await db.execute<{ action: string; changes: Record<string, any> }>(sql`
+  const rows = (await db.execute<{ action: string; changes: { reason?: unknown; mode?: unknown; before: { document: Record<string, unknown> }; after: { document: Record<string, unknown> } } }>(sql`
     select action, changes from audit_log
      where org_id = ${orgId} and table_name = 'documents' and row_id = ${id}
      order by at desc, id desc limit 1`)).rows;

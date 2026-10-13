@@ -1,5 +1,7 @@
 'use client'
 
+import { useIdentityState } from '@/lib/use-identity-state'
+
 import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
@@ -78,17 +80,15 @@ export function CashDepositSection({
   >(null)
   const [reload, setReload] = useState(0)
   const [reason, setReason] = useState('')
-  const [tillWindow, setTillWindow] = useState<TillWindow | null>(null)
-  const [windowRefusal, setWindowRefusal] = useState<string | null>(null)
   const tillAccountId = mode === 'till'
     ? (sourceOptions.some((o) => o.value === sourceAccountId) ? sourceAccountId : (sourceOptions[0]?.value ?? ''))
     : ''
+  const [tillWindow, setTillWindow] = useIdentityState<TillWindow | null>([mode, tillAccountId, cutoff, reload, subsidiaryId], null)
+  const [windowRefusal, setWindowRefusal] = useIdentityState<string | null>([mode, tillAccountId, cutoff, reload, subsidiaryId], null)
 
   // The till's window a drop on this date closes: refreshed when the till,
   // the date or a recorded drop changes.
   useEffect(() => {
-    setTillWindow(null)
-    setWindowRefusal(null)
     if (mode !== 'till' || !tillAccountId || !/^\d{4}-\d{2}-\d{2}$/.test(cutoff)) {
       return
     }
@@ -110,7 +110,7 @@ export function CashDepositSection({
     return () => {
       live = false
     }
-  }, [mode, tillAccountId, cutoff, reload, subsidiaryId, t])
+  }, [mode, tillAccountId, cutoff, reload, subsidiaryId, t, setWindowRefusal, setTillWindow])
 
   // Recorded drops beside the form: the cashier sees what already left the
   // till (a refused POST still records a draft drop), so a double drop

@@ -21,7 +21,6 @@ import {
   planVersionInForce,
   prepareAdvancedSubscriptionBilling,
   subscriptionComponentTotal,
-  subscriptionPaidThrough,
   unbilledBoundary,
   type AdvancedBillingLine,
   type PlanChangeFact,

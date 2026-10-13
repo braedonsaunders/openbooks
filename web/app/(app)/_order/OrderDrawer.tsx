@@ -1138,11 +1138,11 @@ export function OrderDrawer({
   // Without the calling org there is no retention — saving stays explicit.
   const draftKey = orgId ? orderDraftKey(orgId, kind, createMode ? 'new' : String(doc.id ?? '')) : null
   const restoreOfferedRef = useRef(false)
-  async function maybeOfferDraftRestore() {
-    if (!draftKey || restoreOfferedRef.current) return
+  async function offerDraftRestore(): Promise<OrderDraftSnapshot | null> {
+    if (!draftKey || restoreOfferedRef.current) return null
     restoreOfferedRef.current = true
     const snapshot = readOrderDraft(draftKey)
-    if (!snapshot) return
+    if (!snapshot) return null
     const restore = await confirmDialog({
       title: t('restoreDraftTitle'),
       message: t('restoreDraftPrompt', { time: viewerDateTime(snapshot.savedAt, viewerLocale, Intl.DateTimeFormat(viewerLocale).resolvedOptions().timeZone) }),
@@ -1151,8 +1151,11 @@ export function OrderDrawer({
     if (!restore) {
       // Declining discards the retained draft; the pristine form is untouched.
       clearOrderDraft(draftKey)
-      return
+      return null
     }
+    return snapshot
+  }
+  function restoreDraft(snapshot: OrderDraftSnapshot) {
     setPartyId(snapshot.header.partyId)
     setDocumentDate(snapshot.header.documentDate)
     setDueDate(snapshot.header.dueDate)
@@ -1170,6 +1173,9 @@ export function OrderDrawer({
       .map((row) => ({ ...blank, ...(row as Record<string, unknown>) }))
     setRows((restored.length > 0 ? restored : [{ ...blank }]) as LineRow[])
     setDirty(true)
+  }
+  function maybeOfferDraftRestore() {
+    return offerDraftRestore().then(snapshot => { if (snapshot) restoreDraft(snapshot) })
   }
   // Retain unsaved create/edit state locally on every dirty change, so a
   // failed save, a stall, or navigating away loses nothing. Restoring only

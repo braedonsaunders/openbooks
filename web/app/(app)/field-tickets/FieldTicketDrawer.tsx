@@ -1,5 +1,7 @@
 'use client'
 
+import { useIdentityState } from '@/lib/use-identity-state'
+
 import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "@openbooks/ui"
 import { useMoney } from '@/components/money-provider'
 import { initialDrawerMode, type DrawerMode } from '@/lib/drawer-mode'
@@ -354,10 +356,7 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
   )
   const [grid, setGrid] = useState<GridRow[]>(() => buildGrid(props.ticket.entries))
   const [gridDirty, setGridDirty] = useState(false)
-  const [schedulePreview, setSchedulePreview] = useState<{ scheduled: ScheduledWork[]; timeTypes: Opt[] } | null>(null)
   const [scheduleTimeTypeId, setScheduleTimeTypeId] = useState('')
-  const [scheduleError, setScheduleError] = useState<string | null>(null)
-  const [scheduleLoading, setScheduleLoading] = useState(false)
   const [scheduleRetry, setScheduleRetry] = useState(0)
   const [filledWindow, setFilledWindow] = useState<{ start: string; end: string } | null>(null)
   const [busy, setBusy] = useState(false)
@@ -419,15 +418,15 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
   )
   const days = useMemo(() => daysInWindow(visibleWindow.start, visibleWindow.end), [visibleWindow])
   const sig = ticket.fieldTicket.signatures
+  const [schedulePreview, setSchedulePreview] = useIdentityState<{ scheduled: ScheduledWork[]; timeTypes: Opt[] } | null>([editable, props.schedulingEnabled, projectId, ticket.id, visibleWindow.start, visibleWindow.end, scheduleRetry], null)
+  const [scheduleError, setScheduleError] = useIdentityState<string | null>([editable, props.schedulingEnabled, projectId, ticket.id, visibleWindow.start, visibleWindow.end, scheduleRetry], null)
+  const [scheduleLoading, setScheduleLoading] = useIdentityState([editable, props.schedulingEnabled, projectId, ticket.id, visibleWindow.start, visibleWindow.end, scheduleRetry], Boolean(editable && props.schedulingEnabled && projectId))
+
 
   useEffect(() => {
-    setSchedulePreview(null)
-    setScheduleError(null)
-    setScheduleLoading(false)
     if (!editable || !props.schedulingEnabled || !projectId) return
     const controller = new AbortController()
     let active = true
-    setScheduleLoading(true)
     const query = new URLSearchParams({ projectId, from: visibleWindow.start, through: visibleWindow.end })
     void fetch(`/api/field-tickets/${ticket.id}/schedule-preview?${query}`, { signal: controller.signal })
       .then(async (response) => {
@@ -446,7 +445,7 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
       })
       .finally(() => { if (active) setScheduleLoading(false) })
     return () => { active = false; controller.abort() }
-  }, [editable, projectId, props.schedulingEnabled, scheduleRetry, ticket.id, visibleWindow.start, visibleWindow.end, tScheduling])
+  }, [editable, projectId, props.schedulingEnabled, scheduleRetry, ticket.id, visibleWindow.start, visibleWindow.end, tScheduling, setSchedulePreview, setScheduleError, setScheduleLoading])
 
   function onFillFromSchedule() {
     if (!schedulePreview || !schedulePreview.timeTypes.some((type) => type.id === scheduleTimeTypeId) || !editable || busy) return

@@ -158,9 +158,7 @@ export async function loadStatementBatchComposer(
     select distinct cr.currency from customer_roles cr
      where cr.org_id = ${authz.user.orgId} and cr.currency is not null
      order by cr.currency`)).rows
-  const currencies = currencyRows.length > 0
-    ? [{ value: '', label: tp('currencyAll') }, ...currencyRows.map((row) => ({ value: row.currency, label: row.currency }))]
-    : null
+
 
   return {
     title: tp('title'),

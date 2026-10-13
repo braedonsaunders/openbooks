@@ -1,6 +1,5 @@
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
-import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 
 // SIM OPP-00002 (titled, Closed-lost, no account, no
@@ -15,7 +14,7 @@ import test from 'node:test'
 // opportunity activates it into the Status=All list, while a
 // placeholder-titled stub stays hidden. Fails on pre-fix code, which
 // required an account for every activation.
-const root = pathToFileURL(process.cwd() + '/').href
+
 const state: { orgId: string; actorId: string } = { orgId: '', actorId: '' }
 Object.assign(globalThis, { __opportunityActivationState: state })
 const virtual = (source: string) => ({ shortCircuit: true as const, url: 'data:text/javascript,' + encodeURIComponent(source) })

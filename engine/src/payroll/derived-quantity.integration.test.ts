@@ -1,3 +1,4 @@
+import { errorChainMatches } from '../testing/error-chain.ts';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {randomUUID} from 'node:crypto';
@@ -68,9 +69,9 @@ test('derived rule quantities survive native recalculation and posted evidence c
    }
    await commitPayRun({orgId:fx.orgId,actorId:fx.actorId,documentId:run.documentId});
    await assert.rejects(db.execute(sql`update pay_stub_lines set derived_quantity=9
-    where org_id=${fx.orgId} and component_id=${componentId}`),(error:any)=>/immutable after posting/.test(error.cause?.message??error.message));
+    where org_id=${fx.orgId} and component_id=${componentId}`),(error: unknown) => errorChainMatches(error, /immutable after posting/));
    await assert.rejects(db.execute(sql`update pay_stub_lines set derived_rule_code='OTHER'
-    where org_id=${fx.orgId} and component_id=${componentId}`),(error:any)=>/immutable after posting/.test(error.cause?.message??error.message));
+    where org_id=${fx.orgId} and component_id=${componentId}`),(error: unknown) => errorChainMatches(error, /immutable after posting/));
    const simulation=await calculatePayRun({orgId:fx.orgId,actorId:fx.actorId,documentId:run.documentId,simulate:true});
    assert.deepEqual(simulation.errors,[]);
    const retained=(await captureCalculatedStubs(db,fx.orgId,run.documentId)).find(stub=>stub.employeePartyId===partyId)!;

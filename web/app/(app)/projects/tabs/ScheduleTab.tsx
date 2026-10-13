@@ -57,6 +57,7 @@ export function ScheduleTab({
   } | null>(null)
   const boardCode =
     boardSelection?.projectId === projectId ? boardSelection.code : ''
+  const [error, setError] = useState<string | null>(null)
   useEffect(() => {
     const abort = new AbortController()
     void fetch(`/api/projects/${projectId}/schedule-boards`, {
@@ -83,8 +84,7 @@ export function ScheduleTab({
           )
       })
     return () => abort.abort()
-  }, [projectId, tCommon])
-  const [error, setError] = useState<string | null>(null)
+  }, [projectId, tCommon, setError])
 
   // Fetch chain: every state update sits in a promise continuation (the fetch
   // response), never synchronously in the effect body.
@@ -104,7 +104,7 @@ export function ScheduleTab({
         },
       )
     })
-  }, [projectId, tCommon])
+  }, [projectId, tCommon, setError])
 
   useEffect(() => {
     void refresh()
@@ -133,7 +133,7 @@ export function ScheduleTab({
       await refresh()
       return true
     },
-    [canManage, projectId, refresh, t, tCommon],
+    [canManage, projectId, refresh, t, tCommon, setError],
   )
 
   const adapter: ScheduleAdapter = useMemo(

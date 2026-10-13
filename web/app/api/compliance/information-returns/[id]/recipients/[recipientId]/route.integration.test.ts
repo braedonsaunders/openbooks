@@ -73,6 +73,7 @@ const hooks = registerHooks({
     return nextLoad(url, context);
   },
 });
+test.after(() => hooks.deregister());
 
 const routeUrl = "./route.ts?ir-recipient-freeze-test";
 const { PATCH } = (await import(routeUrl)) as typeof import("./route.ts");

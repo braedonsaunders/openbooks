@@ -1,5 +1,7 @@
 "use client";
 
+import { useIdentityState } from "@/lib/use-identity-state"
+
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -65,26 +67,23 @@ export function UnbilledAccrualPanel({ periodId, canPost }: { periodId: string; 
   const t = useTranslations("close.unbilledAccrual");
   const router = useRouter();
   const { money } = useMoney();
-  const [state, setState] = useState<LoadState>({ status: "loading" });
+  const [attempt, setAttempt] = useState(0);
+  const [state, setState] = useIdentityState<LoadState>([periodId, attempt], { status: "loading" });
   const [posting, setPosting] = useState(false);
 
-  const load = useCallback(async () => {
-    setState({ status: "loading" });
-    try {
-      const response = await fetch(`/api/close/unbilled-revenue-accrual?periodId=${encodeURIComponent(periodId)}`);
-      if (!response.ok) {
-        setState({ status: "failed", message: await readError(response, t("loadFailed")) });
-        return;
-      }
-      setState({ status: "ready", preview: (await response.json()) as AccrualPreview });
-    } catch {
-      setState({ status: "failed", message: t("loadFailed") });
-    }
-  }, [periodId, t]);
+  const load = useCallback(() => {
+    return fetch(`/api/close/unbilled-revenue-accrual?periodId=${encodeURIComponent(periodId)}`)
+      .then(async response => {
+        if (!response.ok) throw new Error(await readError(response, t("loadFailed")));
+        return await response.json() as AccrualPreview;
+      })
+      .then(preview => setState({ status: "ready", preview }))
+      .catch((cause: unknown) => setState({ status: "failed", message: cause instanceof Error ? cause.message : t("loadFailed") }));
+  }, [periodId, t, setState]);
 
   useEffect(() => {
     void load();
-  }, [load]);
+  }, [load, attempt]);
 
   async function post() {
     setPosting(true);
@@ -99,7 +98,7 @@ export function UnbilledAccrualPanel({ periodId, canPost }: { periodId: string; 
         return;
       }
       toast.success(t("posted"));
-      await load();
+      setAttempt(value => value + 1);
       router.refresh();
     } catch {
       toast.error(t("postFailed"));
@@ -115,7 +114,7 @@ export function UnbilledAccrualPanel({ periodId, canPost }: { periodId: string; 
     return (
       <div className="flex flex-wrap items-center gap-2">
         <p role="alert" className="text-sm text-red-700 dark:text-red-300">{state.message}</p>
-        <Button variant="outline" size="sm" onClick={() => void load()}>
+        <Button variant="outline" size="sm" onClick={() => setAttempt(value => value + 1)}>
           <RefreshCw size={14} />
           {t("retry")}
         </Button>

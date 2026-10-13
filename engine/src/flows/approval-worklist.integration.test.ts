@@ -294,7 +294,7 @@ test("inbox text search matches non-document subject labels", { skip: !DB }, asy
       assignees: [{ type: "user", userId: actors.approver1Id }],
       mode: "any",
     }));
-    const today = await run((tx) => businessTodayInTx(tx, org.orgId));
+    await run((tx) => businessTodayInTx(tx, org.orgId));
     const version = await run((tx) => readBomPolicyVersion(tx, org.orgId, org.items.assembly));
     const proposal = await run((tx) => saveBomPolicy(tx, org.orgId, maker, {
       assemblyItemId: org.items.assembly, expectedVersion: version, reason: "Approve the next material requirement",

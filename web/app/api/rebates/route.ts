@@ -6,7 +6,7 @@ import { canonicalDecimal } from '@/lib/exact-decimal';
 import { moneyRefusal } from '@/lib/payroll-decimal-refusal';
 import { normalizeMoney, wholeDigits } from '@openbooks/engine/money/money';
 import { isIsoCalendarDate } from '@openbooks/engine/platform/business-date/module';
-import { cancelRebateClaim, approveRebateAgreement, generateRebateClaim, approveRebateClaim, settleRebatePayment, reverseRebatePayment, attestRebateCost, accrueRebatesForDocument } from '@openbooks/engine/revenue/rebates';
+import { cancelRebateClaim, approveRebateAgreement, generateRebateClaim, approveRebateClaim, settleRebatePayment, reverseRebatePayment, attestRebateCost } from '@openbooks/engine/revenue/rebates';
 import { createRebateSettlement } from '@openbooks/engine/composition/rebate-settlement';
 const reason=z.string().trim().min(8).max(2000);
 const date=z.string().refine(isIsoCalendarDate,'Enter a calendar date');

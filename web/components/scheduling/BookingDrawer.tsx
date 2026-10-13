@@ -1,5 +1,7 @@
 'use client'
 
+import { useIdentityState } from '@/lib/use-identity-state'
+
 import { useEffect, useMemo, useState } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import { CalendarClock, Repeat2, Trash2 } from 'lucide-react'
@@ -29,34 +31,24 @@ export function BookingDrawer({
   const t = useTranslations('scheduling')
   const locale = useLocale()
   const editable = Boolean(entry && entry.boardId === board.board.id && board.canManage)
-  const [target, setTarget] = useState<BoardTarget | null>(entry?.target ?? null)
-  const [taskId, setTaskId] = useState<string>(entry?.projectTaskId ?? '')
-  const [tasks, setTasks] = useState<ProjectTaskOption[]>([])
-  const [mode, setMode] = useState<'day' | 'timed'>(entry?.spanMode ?? 'day')
-  const [starts, setStarts] = useState(entry?.startClock ?? board.board.dayStarts)
-  const [ends, setEnds] = useState(entry?.endClock ?? board.board.dayEnds)
-  const [breakMinutes, setBreakMinutes] = useState(String(entry?.breakMinutes ?? board.board.dayBreakMinutes))
-  const [detail, setDetail] = useState(entry?.detail ?? '')
-  const [notes, setNotes] = useState(entry?.notes ?? '')
+  const draftIdentity = [entry, board.board.dayStarts, board.board.dayEnds, board.board.dayBreakMinutes]
+  const [target, setTarget] = useIdentityState<BoardTarget | null>(draftIdentity, entry?.target ?? null)
+  const [taskId, setTaskId] = useIdentityState<string>(draftIdentity, entry?.projectTaskId ?? '')
+  const [mode, setMode] = useIdentityState<'day' | 'timed'>(draftIdentity, entry?.spanMode ?? 'day')
+  const [starts, setStarts] = useIdentityState(draftIdentity, entry?.startClock ?? board.board.dayStarts)
+  const [ends, setEnds] = useIdentityState(draftIdentity, entry?.endClock ?? board.board.dayEnds)
+  const [breakMinutes, setBreakMinutes] = useIdentityState(draftIdentity, String(entry?.breakMinutes ?? board.board.dayBreakMinutes))
+  const [detail, setDetail] = useIdentityState(draftIdentity, entry?.detail ?? '')
+  const [notes, setNotes] = useIdentityState(draftIdentity, entry?.notes ?? '')
   const [picking, setPicking] = useState(false)
-  const [repeatDays, setRepeatDays] = useState<Set<string>>(new Set())
+  const [repeatDays, setRepeatDays] = useIdentityState<Set<string>>(draftIdentity, new Set())
   const [saving, setSaving] = useState(false)
 
-  useEffect(() => {
-    setTarget(entry?.target ?? null)
-    setTaskId(entry?.projectTaskId ?? '')
-    setMode(entry?.spanMode ?? 'day')
-    setStarts(entry?.startClock ?? board.board.dayStarts)
-    setEnds(entry?.endClock ?? board.board.dayEnds)
-    setBreakMinutes(String(entry?.breakMinutes ?? board.board.dayBreakMinutes))
-    setDetail(entry?.detail ?? '')
-    setNotes(entry?.notes ?? '')
-    setRepeatDays(new Set())
-  }, [entry, board.board.dayStarts, board.board.dayEnds, board.board.dayBreakMinutes])
+
+  const [tasks, setTasks] = useIdentityState<ProjectTaskOption[]>([board.board.id, target?.kind, target?.id], [])
 
   useEffect(() => {
     if (target?.kind !== 'project') {
-      setTasks([])
       return
     }
     let cancelled = false
@@ -64,7 +56,7 @@ export function BookingDrawer({
     return () => {
       cancelled = true
     }
-  }, [board.board.id, t, target])
+  }, [board.board.id, t, target, setTasks])
 
   const person = board.rows.find((candidate) => candidate.subjectId === entry?.subjectId)
   const dateLabel = useMemo(() => entry

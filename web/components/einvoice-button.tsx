@@ -33,20 +33,21 @@ export function EInvoiceButton({ documentId }: { documentId: string }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const refresh = useCallback(async (signal?: AbortSignal) => {
-    const response = await fetch(base, { signal })
-    if (!response.ok) {
-      if (response.status === 403 || response.status === 404) { setAvailable(false); return }
+  const refresh = useCallback((signal?: AbortSignal) => {
+    return fetch(base, { signal }).then(async response => {
+      if (signal?.aborted) return;
+      if (!response.ok) {
+        if (response.status === 403 || response.status === 404) { setAvailable(false); return }
+        setAvailable(true)
+        const failure = await response.json().catch(() => null) as { error?: string } | null
+        throw new Error(refusalMessageFromBody(failure, { fallback: t('failed') }) ?? t('failed'))
+      }
+      const data = await response.json() as EInvoiceMetadata
+      if (signal?.aborted) return;
+      setMetadata(data)
       setAvailable(true)
-      // The refusal reads through the shared helper so message, remedy and
-      // code render instead of the bare `error` field.
-      const failure = await response.json().catch(() => null) as { error?: string } | null
-      throw new Error(refusalMessageFromBody(failure, { fallback: t('failed') }) ?? t('failed'))
-    }
-    const data = await response.json() as EInvoiceMetadata
-    setMetadata(data)
-    setAvailable(true)
-    return data
+      return data
+    })
   }, [base, t])
 
   useEffect(() => {
@@ -57,7 +58,7 @@ export function EInvoiceButton({ documentId }: { documentId: string }) {
       setReference(data.buyerReference ?? '')
     }).catch(cause => { if (!controller.signal.aborted) { setAvailable(true); setError(cause instanceof Error ? cause.message : t('failed')) } })
     return () => controller.abort()
-  }, [refresh])
+  }, [refresh, t])
 
   async function validate() {
     setBusy(true)

@@ -1,5 +1,7 @@
 'use client'
 
+import { useIdentityState } from '@/lib/use-identity-state'
+
 import { type WizardStep, STALE_REASON_FALLBACK, type Readiness, type Staleness, type Funding, type StubChange, type RunHeader, type StubRow, type RosterRow, type RemittanceRow, type GlLeg, type AdjustmentRow, type ComponentOption, runTypeLabel } from './run-wizard-model'
 import { PeriodStep } from './steps/PeriodStep'
 import { ReadinessStep } from './steps/ReadinessStep'
@@ -161,22 +163,12 @@ export function RunWizard(props: {
    * props only move on revisit, so without this the strip reads stale after
    * Save & recalculate until the operator leaves and comes back.
    */
-  const [vitals, setVitals] = useState({
+  const [vitals, setVitals] = useIdentityState([run.gross_total, run.net_total, run.employer_cost_total, run.employee_count], {
     gross: run.gross_total,
     net: run.net_total,
     employerCost: run.employer_cost_total,
     employees: run.employee_count,
   })
-  // Revisit (or any server refresh) replaces the props: take them, so the
-  // strip never pins an older mutation result over newer server state.
-  useEffect(() => {
-    setVitals({
-      gross: run.gross_total,
-      net: run.net_total,
-      employerCost: run.employer_cost_total,
-      employees: run.employee_count,
-    })
-  }, [run.gross_total, run.net_total, run.employer_cost_total, run.employee_count])
   /** Fold a calculate response's totals into the header strip. */
   const applyVitals = (j: { gross?: unknown; net?: unknown; employerCost?: unknown; employees?: unknown }) => {
     setVitals((prev) => ({

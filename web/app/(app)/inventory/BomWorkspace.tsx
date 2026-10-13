@@ -1,5 +1,7 @@
 'use client'
 
+import { useIdentityState } from '@/lib/use-identity-state'
+
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
@@ -174,7 +176,6 @@ export function BomDrawer({
   const router = useRouter()
   const creating = assembly === null && !fixedAssemblyItemId
   const [manufacturingEnabled, setManufacturingEnabled] = useState(false)
-  const [detailReady, setDetailReady] = useState(false)
   const [canProposeRevision,setCanProposeRevision] = useState(false)
   const [parentKind,setParentKind] = useState<string|null>(null)
   const [subsidiaries,setSubsidiaries] = useState<Array<{id:string;name:string}>>([])
@@ -184,6 +185,7 @@ export function BomDrawer({
   const [routingOperations,setRoutingOperations] = useState<Array<{sequence:number;name:string;backflushAt:string}>>([])
   const requestRef = useRef<{body:string;key:string}|null>(null)
   const [assemblyItemId, setAssemblyItemId] = useState(fixedAssemblyItemId ?? assembly?.assemblyItemId ?? '')
+  const [detailReady, setDetailReady] = useIdentityState([assembly, assemblyItemId], false)
   const [lines, setLines] = useState<EditableBomLine[]>(() =>
     assembly?.components.map((line) => editableLine(line)) ?? [editableLine()],
   )
@@ -237,10 +239,9 @@ export function BomDrawer({
         if (current) setSaveError(error instanceof Error ? error.message : tCommon('feedback.loadFailed'))
       }
     }
-    setDetailReady(false)
     void loadBom()
     return () => { current = false }
-  }, [assembly, assemblyItemId, tCommon])
+  }, [assembly, assemblyItemId, tCommon, setDetailReady])
   const closeGuard = useDirtyClose({
     dirty: assemblyItemId !== (fixedAssemblyItemId ?? assembly?.assemblyItemId ?? '') ||
       JSON.stringify(lines) !== JSON.stringify(originalLines) || reason !== '',

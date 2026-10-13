@@ -74,14 +74,7 @@ async function setup() {
   return { org, actor, ctx };
 }
 
-async function lineIdByRef(orgId: string, statementId: string, ref: string): Promise<string> {
-  const row = (await db.execute<{ id: string }>(sql`
-    select id from bank_statement_lines
-     where org_id = ${orgId} and statement_id = ${statementId} and bank_transaction_id = ${ref}
-  `)).rows[0];
-  assert.ok(row, `imported line ${ref} must exist`);
-  return row.id;
-}
+
 
 async function lineIdByContent(
   orgId: string,

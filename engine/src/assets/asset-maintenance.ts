@@ -53,11 +53,7 @@ function exactNonNegative(value: string | null | undefined, label: string): stri
   return parsed;
 }
 
-function optionalDate(value: string | null | undefined, label: string): string | null {
-  if (value === null || value === undefined || value === "") return null;
-  if (!isIsoCalendarDate(value)) refuse("date_invalid", `${label} must be a calendar date (YYYY-MM-DD)`);
-  return value;
-}
+
 
 async function assertVendor(tx: SqlExecutor, orgId: string, partyId: string | null): Promise<void> {
   if (!partyId) return;

@@ -177,7 +177,7 @@ export async function acceptRenewalDocument(orgId:string,actorId:string,document
     if(lines.length!==occurrence.snapshot.request.lines.length||lines.some((l,i)=>{const expected=occurrence.snapshot.request.lines[i]!;return cmp(l.quantity,expected.quantity)!==0||cmp(l.unit_price,expected.unitPrice)!==0||l.account_id!==expected.accountId||l.item_id!==expected.itemId;})) throw new AdvancedSubscriptionError('Restore the renewal document component quantities and quoted prices to its dated policy terms before acceptance');
     const {applyAmendment}=await import('./advanced-subscriptions.ts');
     await applyAmendment(orgId,actorId,{subscriptionId:occurrence.subscription_id,type:'renew',effectiveOn:occurrence.term_ends_on,renewalTermMonths:occurrence.snapshot.policy.term_months,idempotencyKey:`renewal-document:${documentId}:term`,reason});
-    for(const [i,c] of occurrence.snapshot.components.entries()) {
+    for(const [,c] of occurrence.snapshot.components.entries()) {
       const price=renewalUnitPrice(c.unit_price,occurrence.snapshot.policy.uplift_percent);
       await applyAmendment(orgId,actorId,{subscriptionId:occurrence.subscription_id,type:'change_component',componentKey:c.component_key,effectiveOn:occurrence.term_ends_on,quantity:c.quantity,unitPrice:price,idempotencyKey:`renewal-document:${documentId}:component:${c.component_key}`,reason});
     }

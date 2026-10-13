@@ -26,7 +26,7 @@ async function setFeatures(orgId: string, features: Record<string, boolean>) {
 }
 
 async function audits(orgId: string, rowId: string) {
-  return (await db.execute<{ action: string; changes: Record<string, any> }>(sql`
+  return (await db.execute<{ action: string; changes: { before: { tolerance_percent?: string; reason?: string }; after: { tolerance_percent?: string; reason?: string } } }>(sql`
     select action, changes from audit_log
      where org_id = ${orgId} and table_name = 'purchase_over_receipt_tolerances' and row_id = ${rowId}
      order by at desc, id desc`)).rows;

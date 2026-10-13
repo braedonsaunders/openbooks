@@ -140,10 +140,11 @@ export function MatchWorkspace({
     currentParams.glPage ?? null,
   ])
   const selectionIsCurrent = matchSelectionMatchesScope(selection.scope, matchScope)
-  const visibleStmtIds = new Set((data?.stmtRows ?? []).map((row) => row.id))
-  const selectedStmts = selectionIsCurrent
-    ? new Set([...selection.stmt].filter((id) => visibleStmtIds.has(id)))
-    : new Set<string>()
+  const selectedStmts = useMemo(() => {
+    if (!selectionIsCurrent) return new Set<string>()
+    const visibleIds = new Set((data?.stmtRows ?? []).map(row => row.id))
+    return new Set([...selection.stmt].filter(id => visibleIds.has(id)))
+  }, [selectionIsCurrent, selection.stmt, data?.stmtRows])
   const selectedGl = useMemo<ReadonlySet<string>>(() => {
     if (!matchSelectionMatchesScope(selection.scope, matchScope)) return NO_SELECTED_GL
     const visibleIds = new Set((data?.glRows ?? []).map((row) => row.id))

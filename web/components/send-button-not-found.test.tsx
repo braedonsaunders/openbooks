@@ -79,7 +79,7 @@ test("a not_found send failure shows the localized message with retry, never the
   (globalThis as Record<string, unknown>).__sendNotFoundPosts = 0;
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
-    const url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
+    const _url = String(typeof input === "string" ? input : input instanceof URL ? input.href : input.url);
     if (init?.method === "POST") {
       (globalThis as Record<string, unknown>).__sendNotFoundPosts =
         Number((globalThis as Record<string, unknown>).__sendNotFoundPosts ?? 0) + 1;

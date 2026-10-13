@@ -278,7 +278,7 @@ test("a row edit gate exposes the warehouse picker only on applicable lines", as
   assert.equal(gated.querySelector("button, input, select"), null, "the gated cell offers no control");
 });
 
-test("every declared column renders a cell on every row, gated or read-only", async (t) => {
+test("every declared column renders a cell on every row, gated or read-only", async (_t) => {
   const rows = [
     { ...line("stocked", "1"), itemId: "stocked-item", stockLocationId: "loc-1" },
     { ...line("service", "2"), itemId: "service-item", stockLocationId: "" },

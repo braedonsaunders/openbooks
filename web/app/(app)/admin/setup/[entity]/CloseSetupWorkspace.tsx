@@ -1,4 +1,6 @@
 "use client";
+
+import { useIdentityState } from "@/lib/use-identity-state"
 import { ModuleHomeTabs } from '@/components/module-home/tabs'
 
 import { apiJson, ApiResponseError } from "@/lib/api-error";
@@ -1462,7 +1464,11 @@ function PeriodDrawer({ row, props }: { row?: PeriodRow; props: Props }) {
   // is the operator's read of the same statuses plus the acknowledgement
   // the close requires when any account is unsigned or stale.
   const [bankingAck, setBankingAck] = useState("");
-  const [bankingStatus, setBankingStatus] = useState<{
+  const bankingClosePending =
+    (action?.module === "banking" &&
+      (action.state === "closed" || action.state === "soft_closed")) ||
+    closeAll;
+  const [bankingStatus, setBankingStatus] = useIdentityState<{
     accounts: {
       accountId: string;
       number: string | null;
@@ -1476,23 +1482,15 @@ function PeriodDrawer({ row, props }: { row?: PeriodRow; props: Props }) {
     }[];
     issues: unknown[];
     unmatchedStatementLines: number | null;
-  } | null>(null);
+  } | null>([bankingClosePending, row?.id, selectedBook?.id], null);
   // Arming the close confirm: the first Confirm click names the module and
   // its consequences (plus live Banking counts) instead of posting, so a
   // tap on the wrong module row can still be cancelled. Resets whenever the
   // pending action changes.
-  const [closeArmed, setCloseArmed] = useState(false);
-  const [bankingUnavailable, setBankingUnavailable] = useState(false);
-  const bankingClosePending =
-    (action?.module === "banking" &&
-      (action.state === "closed" || action.state === "soft_closed")) ||
-    closeAll;
+  const [closeArmed, setCloseArmed] = useIdentityState([action?.module, action?.state], false);
+  const [bankingUnavailable, setBankingUnavailable] = useIdentityState([bankingClosePending, row?.id, selectedBook?.id], false);
   useEffect(() => {
-    if (!bankingClosePending || !row || !selectedBook) {
-      setBankingStatus(null);
-      setBankingUnavailable(false);
-      return;
-    }
+    if (!bankingClosePending || !row || !selectedBook) return;
     let live = true;
     post(
       {
@@ -1522,12 +1520,9 @@ function PeriodDrawer({ row, props }: { row?: PeriodRow; props: Props }) {
     return () => {
       live = false;
     };
-  }, [bankingClosePending, row?.id, selectedBook?.id]);
+  }, [bankingClosePending, row, selectedBook, t, setBankingStatus, setBankingUnavailable]);
   // The armed close confirm belongs to one pending module action: changing
   // the module or the target state disarms it.
-  useEffect(() => {
-    setCloseArmed(false);
-  }, [action?.module, action?.state]);
   // Deep link from a closed-period refusal: ?reopenModule=<module> arms
   // that module's reopen form on open, and ?reopenEntity=<subsidiary>
   // carries the refused entity through the request. Both validate here;
@@ -2385,7 +2380,7 @@ function ReopenDrawer({ row, props }: { row: ReopenRow; props: Props }) {
     return () => {
       live = false;
     };
-  }, [row.id, row.status]);
+  }, [row.id, row.status, t]);
   const conflictTotal = (conflicts ?? []).reduce((sum, item) => sum + item.count, 0);
   const conflictExamples = (conflicts ?? [])
     .flatMap((item) => item.examples)

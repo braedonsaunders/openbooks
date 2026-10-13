@@ -1,5 +1,7 @@
 'use client'
 
+import { useIdentityState } from '@/lib/use-identity-state'
+
 import { useCallback, useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
@@ -27,7 +29,6 @@ export function ProcessorReceiptPolicies() {
   const { busy, execute } = useAppAction()
   const [data, setData] = useState<Configuration | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const [saveError, setSaveError] = useState<string | null>(null)
   const router = useRouter()
   const pathname = usePathname()
   const params = useSearchParams()
@@ -41,34 +42,29 @@ export function ProcessorReceiptPolicies() {
   }
   const closeHref = href({ receiptPolicy: undefined, receiptNew: undefined })
   const [editing, setEditing] = useState<{ policy: ProcessorReceiptPolicy; original: ProcessorReceiptPolicy; existing: boolean; provider: string } | null>(null)
-  const [reason, setReason] = useState('')
-  const load = useCallback(async () => {
-    const result = await fetchAction<Configuration>('/api/admin/setup/payment-providers/receipt-funding')
-    if (result.ok) { setData(result.data); setError(null) }
-    else setError(result.error.serverMessage ?? t('loadFailed'))
+  const load = useCallback(() => {
+    return fetchAction<Configuration>('/api/admin/setup/payment-providers/receipt-funding').then(result => {
+      if (result.ok) { setData(result.data); setError(null) }
+      else setError(result.error.serverMessage ?? t('loadFailed'))
+    })
   }, [t])
   useEffect(() => { void load() }, [load])
   const selected = provider ? data?.providers.find(row => row.provider === provider) : data?.providers[0]
+  const [saveError, setSaveError] = useIdentityState<string | null>([policyId, provider], null)
+  const [reason, setReason] = useIdentityState([policyId, provider], '')
   const patch = (fields: Partial<ProcessorReceiptPolicy>) => setEditing(current => current ? { ...current, policy: { ...current.policy, ...fields } } : null)
-  useEffect(() => {
-    setSaveError(null)
-    setReason('')
-  }, [policyId, provider])
-  useEffect(() => {
-    if (!policyId) { setEditing(null); return }
-    if (!data) return
-    if (!selected || !isUuid(policyId)) { setEditing(null); return }
-    setEditing(current => {
-      if (current?.policy.id === policyId && current.provider === selected.provider) return current
-      const existing = selected.policies.find(policy => policy.id === policyId)
-      if (existing) return { policy: existing, original: existing, existing: true, provider: selected.provider }
-      const sub = data.subsidiaries[0]
-      if (!creating || !sub) return null
-      const policy = { id: policyId, accountId: selected.clearingAccountId ?? '',
-        subsidiaryId: sub.id, currency: sub.currency, effectiveFrom: today, effectiveTo: null }
-      return { existing: false, provider: selected.provider, policy, original: policy }
-    })
-  }, [policyId, creating, selected, data, today])
+  const [resolvedIdentity, setResolvedIdentity] = useState('')
+  const editorIdentity = JSON.stringify([policyId, selected?.provider, creating, !!data])
+  if (resolvedIdentity !== editorIdentity) {
+    setResolvedIdentity(editorIdentity)
+    const existing = selected?.policies.find(policy => policy.id === policyId)
+    const sub = data?.subsidiaries[0]
+    if (existing && selected) setEditing({ policy: existing, original: existing, existing: true, provider: selected.provider })
+    else if (policyId && isUuid(policyId) && creating && selected && sub) {
+      const policy = { id: policyId, accountId: selected.clearingAccountId ?? '', subsidiaryId: sub.id, currency: sub.currency, effectiveFrom: today, effectiveTo: null }
+      setEditing({ policy, original: policy, existing: false, provider: selected.provider })
+    } else setEditing(null)
+  }
   const confirmClose = async () => {
     if (busy) return false
     if (!editing || (!reason.trim() && JSON.stringify(editing.policy) === JSON.stringify(editing.original))) return true

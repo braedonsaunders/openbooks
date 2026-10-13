@@ -50,7 +50,7 @@ export function WithholdingWorkspace({ enrollments, canManage, canReadJournal, c
   const [statementIndex, setStatementIndex] = useState(-1)
   const [returnBody, setReturnBody] = useState<'payees' | 'payments'>('payees')
   const currentReturn = payload?.return.id === returnId ? payload : null
-  function href(values: Record<string, string | null>) { const query = new URLSearchParams(params.toString()); for (const [key, value] of Object.entries(values)) value ? query.set(key, value) : query.delete(key); return `${pathname}${query.size ? `?${query}` : ''}` }
+  function href(values: Record<string, string | null>) { const query = new URLSearchParams(params.toString()); for (const [key, value] of Object.entries(values)) { if (value) query.set(key, value); else query.delete(key); } return `${pathname}${query.size ? `?${query}` : ''}` }
   function authorityHref(id: string, kind: unknown) { return kind === 'journal' ? `/journal?entry=${encodeURIComponent(id)}` : `/ap/bills?doc=${encodeURIComponent(id)}` }
   function openAuthority(data: Record<string, unknown>) {
     if (data.kind === 'journal' && !canReadJournal) { setNotice(t('journalPreparedForReview', { number: String(data.documentNumber ?? '') })); return }

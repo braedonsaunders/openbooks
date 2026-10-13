@@ -1,5 +1,7 @@
 'use client'
 
+import { useIdentityState } from '@/lib/use-identity-state'
+
 import { type Opt, type AddressApiRecord, type ContactApiRecord, type PartyPayload, type SubsidiaryOpt, type AddressRow, type ContactRow, PAYMENT_METHOD_OPTIONS, emptyAddress, emptyContact, addressFromApi, contactFromApi, serializeAddresses, serializeContacts, type PartyTab, toShellTab, fromShellTab, rememberDrawerTab, checkboxClass, field, formatCreditLimit } from './party-drawer-model'
 import { PartyReadOnlyField, PartySummary, ReadOnlyLineSublist } from './PartySummary'
 import { SublistAddButton } from '../../../components/drawer-sublist'
@@ -514,11 +516,11 @@ export function PartyDrawer({
   const [existingPersonLabel, setExistingPersonLabel] = useState('')
   const [existingPersonOptions, setExistingPersonOptions] = useState<{ value: string; label: string; hasEmployeeRole?: boolean }[]>([])
   const [existingPersonQuery, setExistingPersonQuery] = useState('')
-  const [existingPersonLoading, setExistingPersonLoading] = useState(false)
   const [existingPersonStatus, setExistingPersonStatus] = useState<string | undefined>(undefined)
   const existingPersonRequestId = useRef(0)
   const showExistingPersonPicker = createMode && recordType === 'employee' && canHire
   const identityLocked = createMode && existingPersonId !== ''
+  const [existingPersonLoading, setExistingPersonLoading] = useIdentityState([showExistingPersonPicker, existingPersonQuery, existingPersonId], showExistingPersonPicker)
 
   // Existing-person options over the employable-people source: bounded
   // page per query, sequence-guarded, refusal in the status line. Loads
@@ -526,7 +528,6 @@ export function PartyDrawer({
   useEffect(() => {
     if (!showExistingPersonPicker) return
     const id = (existingPersonRequestId.current += 1)
-    setExistingPersonLoading(true)
     const params = new URLSearchParams()
     params.set('source', 'employable-people')
     params.set('limit', '25')
@@ -567,7 +568,7 @@ export function PartyDrawer({
         setExistingPersonStatus(th('employment.hire.existingPersonFailed'))
         setExistingPersonLoading(false)
       })
-  }, [showExistingPersonPicker, existingPersonQuery, existingPersonId, existingPersonLabel, th])
+  }, [showExistingPersonPicker, existingPersonQuery, existingPersonId, existingPersonLabel, th, setExistingPersonLoading])
   // Address/contact rows save on their own lifecycle beside the main form —
   // one pin per surface, so a refused row save pins in its own editor.
   const relatedAction = useAppAction()
@@ -1611,8 +1612,7 @@ export function PartyDrawer({
                   statusTone={existingPersonStatus ? 'error' : 'muted'}
                   onSearchChange={(next) => {
                     setExistingPersonQuery(next)
-                    setExistingPersonLoading(true)
-                    setExistingPersonStatus(undefined)
+                                    setExistingPersonStatus(undefined)
                   }}
                   disabled={busy}
                 />

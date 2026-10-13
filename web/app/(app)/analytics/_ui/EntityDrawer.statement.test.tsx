@@ -55,7 +55,7 @@ async function mountDrawer(side: 'ar' | 'ap') {
 }
 
 test('the customer drawer links the statement, its PDF, and Send', async () => {
-  const { host, done } = await mountDrawer('ar')
+  const { done } = await mountDrawer('ar')
   try {
     const view = document.querySelector('a[href="/reports/statements/customer-9?side=ar"]')
     assert.ok(view, 'the AR drawer links the customer statement report')
@@ -73,7 +73,7 @@ test('the customer drawer links the statement, its PDF, and Send', async () => {
 })
 
 test('the vendor drawer shows no statement actions', async () => {
-  const { host, done } = await mountDrawer('ap')
+  const { done } = await mountDrawer('ap')
   try {
     assert.equal(document.querySelector('a[href^="/reports/statements/"]'), null)
     assert.equal(document.querySelector('a[href*="partner-statement/export"]'), null)

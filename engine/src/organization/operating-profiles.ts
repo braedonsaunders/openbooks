@@ -56,7 +56,7 @@ async function audit(tx: SqlExecutor, orgId: string, actorId: string, table: str
 }
 async function publish(tx: SqlExecutor, orgId: string, actorId: string, input: { id: string; code: string; name: string; definition: OperatingProfileDefinition; expectedVersion: number; reason: string; isActive?: boolean }) {
   await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`openbooks:operating-profile:${orgId}:${input.code}`},0))`)
-  let row = (await tx.execute<{ id: string; family: WorkFamily; current_version_id: string | null; name: string; is_active: boolean }>(sql`select id,family,current_version_id,name,is_active from operating_profiles where org_id=${orgId} and code=${input.code} for update`)).rows[0]
+  const row = (await tx.execute<{ id: string; family: WorkFamily; current_version_id: string | null; name: string; is_active: boolean }>(sql`select id,family,current_version_id,name,is_active from operating_profiles where org_id=${orgId} and code=${input.code} for update`)).rows[0]
   if (row && row.id !== input.id) throw new OperatingProfileError('That workflow code already exists.', 409)
   if (row && row.family !== input.definition.family) throw new OperatingProfileError('A published workflow cannot change its native work family. Create another workflow.')
   const previous = row?.current_version_id ? (await tx.execute<{ version: number; definition: OperatingProfileDefinition }>(sql`select version,definition from operating_profile_versions where org_id=${orgId} and id=${row.current_version_id}`)).rows[0] : null

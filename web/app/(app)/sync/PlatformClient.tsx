@@ -754,7 +754,14 @@ export function PlatformClient() {
     if (c.authKind === "oauth2") items.push({ key: "reconnect", label: t("actions.reconnect"), icon: Plug,
       onSelect: () => { window.open(`/api/platform/connections/oauth/${c.source}/start?connectionId=${c.id}`, "_blank"); } });
     if (c.source === "qbd") items.push({ key: "qwc", label: t("actions.downloadQwc"), icon: Download,
-      onSelect: () => { window.location.assign(`/api/platform/connections/${c.id}/qwc`); } });
+      onSelect: () => {
+        const download = document.createElement("a");
+        download.href = `/api/platform/connections/${c.id}/qwc`;
+        download.download = "";
+        document.body.append(download);
+        download.click();
+        download.remove();
+      } });
     if (canManage) items.push(
       { key: "management", separator: true },
       { key: "edit", label: t("actions.edit"), icon: Pencil, disabled: busy !== null, onSelect: () => setDrawer({ editing: c }) },

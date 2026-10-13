@@ -49,7 +49,7 @@ const { MoneyProvider } = await import("../../../components/money-provider");
 const { BusinessDateProvider } = await import("../../../components/business-date-provider");
 const { WeeklyGrid } = await import("./WeeklyGrid");
 
-const tick = (ms = 30) => new Promise((resolve) => setTimeout(resolve, 30));
+const tick = (_ms = 30) => new Promise((resolve) => setTimeout(resolve, 30));
 
 const DAYS = ["2026-07-12", "2026-07-13", "2026-07-14", "2026-07-15", "2026-07-16", "2026-07-17", "2026-07-18"];
 

@@ -337,7 +337,6 @@ function CreateCountDrawer({
   canManageStockLocations,
   canManageItems,
   itemsExcludedCount,
-  lots,
   onClose,
 }: {
   locationOptions: { value: string; label: string }[]
@@ -525,9 +524,6 @@ function CreateCountDrawer({
             </p>
           ) : null}
           {lines.map((line, i) => {
-            const lotOptions = lots
-              .filter((lot) => lot.item_id === line.itemId)
-              .map((lot) => ({ value: lot.id, label: lot.lot_number }))
             // Stock locations belong to a business location: only the ones
             // under the chosen count location are offered on each line.
             const visibleStockLocations = locationId

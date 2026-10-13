@@ -200,7 +200,7 @@ test("a unit-conversion row saves through the costing section with a before/afte
     const stored = (await withBypassContext(() => db.execute<{ unit_conversions: unknown }>(sql`
       select unit_conversions from item_inventory_profiles where org_id = ${fx.orgId} and item_id = ${fx.itemId}`))).rows[0];
     assert.deepEqual(stored?.unit_conversions, { box: 12 }, "the conversion row persists");
-    const audit = (await withBypassContext(() => db.execute<{ action: string; changes: Record<string, any> }>(sql`
+    const audit = (await withBypassContext(() => db.execute<{ action: string; changes: { before: { unit_conversions?: Record<string, unknown> }; after: { unit_conversions?: Record<string, unknown> } } }>(sql`
       select action, changes from audit_log
        where org_id = ${fx.orgId} and table_name = 'item_inventory_profiles' and row_id = ${fx.itemId}
        order by at desc, id desc limit 1`))).rows[0];

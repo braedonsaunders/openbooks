@@ -43,7 +43,7 @@ export function TimelineView({ controller, window: board, groupBy, search, zoom,
 }) {
   const t = useTranslations('scheduling')
   const locale = useLocale()
-  const presented = useMemo(() => presentedBoardEntries(board), [board.entries, board.sourceRecords])
+  const presented = useMemo(() => presentedBoardEntries(board), [board])
   const rowHeight = (board.sourceRecords?.length ?? 0) > 0 ? ROW_H + 26 : ROW_H
   const hourW = TIMELINE_ZOOMS[zoom]!
   const dayW = hourW * 24
@@ -56,12 +56,13 @@ export function TimelineView({ controller, window: board, groupBy, search, zoom,
   const tops = useMemo(() => {
     let y = 0
     const personTop = new Map<number, number>()
-    const out = items.map((item) => {
+    const out: number[] = []
+    for (const item of items) {
       const top = y
       if (item.kind === 'person') personTop.set(item.personIndex!, top)
       y += item.kind === 'group' ? 26 : rowHeight
-      return top
-    })
+      out.push(top)
+    }
     return { out, personTop, height: y }
   }, [items, rowHeight])
 

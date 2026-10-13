@@ -46,7 +46,7 @@ async function seedOrg() {
   return { org, actor }
 }
 
-async function seedPo(org: Awaited<ReturnType<typeof createScratchOrg>>, actor: string, number: string) {
+async function seedPo(org: Awaited<ReturnType<typeof createScratchOrg>>, actor: string, _number: string) {
   const order = await withOrgContext(org.orgId, () => createOrderDraft(org.orgId, actor, 'purchase_order', randomUUID(), null))
   const lineId = randomUUID()
   await withBypassContext(() => db.execute(sql`

@@ -320,7 +320,7 @@ test("a Post refused right after Save pins the server reason and toasts it", asy
 
 test("a stale-revision post refuses loudly with a toast and an inline pin", async () => {
   const prior = globalThis.fetch;
-  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+  globalThis.fetch = (async (input: RequestInfo | URL, _init?: RequestInit) => {
     if (String(input) === "/api/payments/post-with-applications") {
       return Response.json(
         { error: "this payment changed after you opened it; reload and review the latest revision" },

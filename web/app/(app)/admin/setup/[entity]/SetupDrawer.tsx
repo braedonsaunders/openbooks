@@ -1237,7 +1237,7 @@ export function FieldControl({
 
   if (field.kind === 'multiref') {
     const refScopeField = field.refScopeField
-    if (refScopeField) refOptions=refOptions.filter(option=>option.scopeValue==null || option.scopeValue===String((Object.hasOwn(formValues,refScopeField) ? formValues : recordValues)[refScopeField] ?? ''))
+    const scopedRefOptions = refScopeField ? refOptions.filter(option=>option.scopeValue==null || option.scopeValue===String((Object.hasOwn(formValues,refScopeField) ? formValues : recordValues)[refScopeField] ?? '')) : refOptions
     const selected: string[] = Array.isArray(value) ? value : []
     if (field.searchableReferences)
       return (
@@ -1246,7 +1246,7 @@ export function FieldControl({
           <TagInput
             value={selected}
             onChange={onChange}
-            options={refOptions}
+            options={scopedRefOptions}
             disabled={Boolean(locked)}
             allowNew={false}
             ariaLabel={label}
@@ -1256,11 +1256,11 @@ export function FieldControl({
     return (
       <div className={wrap}>
         <Label help={help}>{label}</Label>
-        {refOptions.length === 0 ? (
+        {scopedRefOptions.length === 0 ? (
           <p className="text-xs text-slate-400">{t('empty')}</p>
         ) : (
           <div className="flex flex-wrap gap-2">
-            {refOptions.map((o) => {
+            {scopedRefOptions.map((o) => {
               const on = selected.includes(o.value)
               return (
                 <label

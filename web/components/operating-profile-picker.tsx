@@ -1,4 +1,6 @@
 'use client'
+
+import { useIdentityState } from '@/lib/use-identity-state'
 import { useEffect,useId,useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { Button,Label } from '@openbooks/ui'
@@ -16,13 +18,12 @@ export function OperatingProfilePicker({family,initialChoices,departmentId='',va
   const t=useTranslations('operatingProfiles')
   const departmentControlId=useId()
   const [department,setDepartment]=useState(departmentId)
-  const [choices,setChoices]=useState<OperatingProfileChoice[]|null>(initialChoices ?? null)
-  const [error,setError]=useState<string|null>(null)
   const [retry,setRetry]=useState(0)
-  const [loading,setLoading]=useState(!initialChoices)
+  const [choices,setChoices]=useIdentityState<OperatingProfileChoice[]|null>([family,department,retry], initialChoices ?? null)
+  const [error,setError]=useIdentityState<string|null>([family,department,retry], null)
+  const [loading,setLoading]=useIdentityState([family,department,retry], true)
   useEffect(()=>{
     const controller=new AbortController()
-    setLoading(true);setError(null)
     const query=new URLSearchParams({family,...(department ? {departmentId:department} : {})})
     void fetch('/api/operating-profiles/choices?'+query,{signal:controller.signal}).then(async response=>{
       if(!response.ok) throw new Error(await readApiErrorMessage(response,t('loadFailed')))
@@ -31,7 +32,7 @@ export function OperatingProfilePicker({family,initialChoices,departmentId='',va
       if(!controller.signal.aborted) setError(cause instanceof Error ? cause.message : t('loadFailed'))
     }).finally(()=>{if(!controller.signal.aborted)setLoading(false)})
     return ()=>controller.abort()
-  },[family,department,retry,t])
+  },[family,department,retry,t, setChoices, setError, setLoading])
   return <div className="space-y-5">
     <div className="max-w-sm space-y-1.5"><Label htmlFor={departmentControlId}>{t('department')}</Label>
       <RemoteRecordChoice id={departmentControlId} value={department} options={[]} endpoint={'/api/operating-profiles/departments?family='+family} disabled={loading} clearable onChange={next=>{setDepartment(next);onDepartmentChange?.(next)}}

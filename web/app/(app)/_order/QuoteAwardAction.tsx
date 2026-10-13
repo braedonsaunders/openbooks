@@ -90,7 +90,7 @@ export function QuoteAwardAction({ quoteId, docStatus, canAward = true }: { quot
       // simply leaves the action out.
       .catch(() => { if (!cancelled) setPreview(null) })
     return () => { cancelled = true }
-  }, [eligible, load])
+  }, [eligible, canAward, load])
 
   function resetGrouping(data: AwardPreview) {
     const plan = data.plan

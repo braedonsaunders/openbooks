@@ -26,7 +26,7 @@ export function CalendarView({ window: board, month, personId, search, today, on
   const [open, setOpen] = useState<string | null>(null)
   const replaced = useMemo(() => new Set(board.replaced), [board.replaced])
   const names = useMemo(() => new Map(board.rows.map((person) => [person.subjectId, person.name])), [board.rows])
-  const presented = useMemo(() => presentedBoardEntries(board), [board.entries, board.sourceRecords])
+  const presented = useMemo(() => presentedBoardEntries(board), [board])
   const byDate = useMemo(() => {
     const map = new Map<string, BoardEntry[]>()
     for (const entry of presented) {
@@ -57,7 +57,7 @@ export function CalendarView({ window: board, month, personId, search, today, on
     const rows: (typeof board.days)[] = []
     for (let i = 0; i < board.days.length; i += 7) rows.push(board.days.slice(i, i + 7))
     return rows
-  }, [board.days])
+  }, [board])
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2">

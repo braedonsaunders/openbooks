@@ -2015,7 +2015,7 @@ export async function applyDocumentEdit(
     }
   }
 
-  let generatedWithholdingUpdates: { id: string; treatment: DocumentLineInput['withholdingTreatment']; cost: string | null }[] = []
+  const generatedWithholdingUpdates: { id: string; treatment: DocumentLineInput['withholdingTreatment']; cost: string | null }[] = []
   // Filled under the document lock for line-level flow change detection.
   let oldLines: {
     lineNumber: number

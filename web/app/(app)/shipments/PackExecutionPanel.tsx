@@ -47,21 +47,13 @@ export function PackExecutionPanel({
     [busy, setBusy] = useState(false),
     [error, setError] = useState<string | null>(null);
   const [moveKey, setMoveKey] = useState(() => crypto.randomUUID());
-  const load = useCallback(async () => {
-    const response = await fetch(
-      `/api/shipping/handling-units?shipmentId=${shipment.id}`,
-      { cache: "no-store" },
-    );
-    if (!response.ok)
-      throw new Error(
-        await readApiErrorMessage(response, "Cartons could not be loaded"),
-      );
-    const result = (await response.json()) as {
-      units: UnitView[];
-      bins: { id: string; code: string }[];
-    };
-    setUnits(result.units);
-    setBins(result.bins);
+  const load = useCallback(() => {
+    return fetch(`/api/shipping/handling-units?shipmentId=${shipment.id}`, { cache: "no-store" })
+      .then(async response => {
+        if (!response.ok) throw new Error(await readApiErrorMessage(response, "Cartons could not be loaded"));
+        return await response.json() as { units: UnitView[]; bins: { id: string; code: string }[] };
+      })
+      .then(result => { setUnits(result.units); setBins(result.bins); });
   }, [shipment.id]);
   useEffect(() => {
     let active = true;

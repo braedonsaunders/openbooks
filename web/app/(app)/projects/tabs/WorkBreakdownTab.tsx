@@ -138,17 +138,20 @@ export function WorkBreakdownTab({
   const [productionQuantities, setProductionQuantities] = useState(false)
   const [baselineBusy, setBaselineBusy] = useState(false)
 
-  const loadBaselines = useCallback(async () => {
-    try {
-      const response = await fetch(`/api/projects/${projectId}/baselines`, { cache: 'no-store' })
-      if (!response.ok) throw new Error(await readApiErrorMessage(response, tb('baselinesLoadFailed')))
-      const data = (await response.json()) as { baselines?: BudgetBaseline[]; productionQuantities?: boolean }
-      setBaselines(data.baselines ?? [])
-      setProductionQuantities(data.productionQuantities === true)
-    } catch (loadError) {
-      setBaselines([])
-      toast.error(loadError instanceof Error ? loadError.message : tb('baselinesLoadFailed'))
-    }
+  const loadBaselines = useCallback(() => {
+    return fetch(`/api/projects/${projectId}/baselines`, { cache: 'no-store' })
+      .then(async response => {
+        if (!response.ok) throw new Error(await readApiErrorMessage(response, tb('baselinesLoadFailed')))
+        return await response.json() as { baselines?: BudgetBaseline[]; productionQuantities?: boolean }
+      })
+      .then(data => {
+        setBaselines(data.baselines ?? [])
+        setProductionQuantities(data.productionQuantities === true)
+      })
+      .catch((loadError: unknown) => {
+        setBaselines([])
+        toast.error(loadError instanceof Error ? loadError.message : tb('baselinesLoadFailed'))
+      })
   }, [projectId, tb])
 
   useEffect(() => {

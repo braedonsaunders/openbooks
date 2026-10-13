@@ -41,7 +41,7 @@ export function TargetsView({ controller, window: board, search, today, onOpenEn
   const absences = useMemo(() => indexAbsences(board.absences), [board.absences])
 
   const visibleSubjects = useMemo(() => new Set(filterBoardRows(board,search,null).map(r=>r.subjectId)),[board,search])
-  const live = useMemo(() => presentedBoardEntries(board).filter((entry) => !replaced.has(entry.id) && visibleSubjects.has(entry.subjectId)), [board.entries, board.sourceRecords, replaced, visibleSubjects])
+  const live = useMemo(() => presentedBoardEntries(board).filter((entry) => !replaced.has(entry.id) && visibleSubjects.has(entry.subjectId)), [board, replaced, visibleSubjects])
   const rows = useMemo(() => {
     const byTarget = new Map<string, { target: BoardTarget; cells: Map<string, BoardEntry[]>; people: Set<string> }>()
     for (const entry of live) {

@@ -12,7 +12,7 @@ import type { SessionUser } from '../../../lib/auth';
  * closed with a named error and nothing written.
  * property_units.rentable_area is numeric(19,4).
  */
-const engineRoot = new URL('../../../../engine/', import.meta.url).href;
+
 const state: { user: SessionUser | null } = { user: null };
 Object.assign(globalThis, { __pmUnitBoundState: state });
 registerHooks({ resolve(specifier, context, next) {

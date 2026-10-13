@@ -1,5 +1,7 @@
 'use client'
 
+import { useIdentityState } from '@/lib/use-identity-state'
+
 import { useEffect, useMemo, useState } from 'react'
 import type { Dispatch, SetStateAction } from 'react'
 import Link from 'next/link'
@@ -81,13 +83,12 @@ export function DocsSidebar({
 
   const needle = q.trim().toLowerCase()
   const [searchArticles, setSearchArticles] = useState<DocNavArticle[] | null>(null)
-  const [searchError, setSearchError] = useState(false)
   const [searchAttempt, setSearchAttempt] = useState(0)
+  const [searchError, setSearchError] = useIdentityState([searchAttempt], false)
   const needsSearchIndex = Boolean(needle) && searchArticles === null
   useEffect(() => {
     if (!needsSearchIndex) return
     let current = true
-    setSearchError(false)
     // Article contents live in a versioned lazy chunk, loaded only when the
     // reader searches. Browsing and article navigation carry metadata alone.
     import('../../lib/docs').then(
@@ -95,7 +96,7 @@ export function DocsSidebar({
       () => { if (current) setSearchError(true) },
     )
     return () => { current = false }
-  }, [needsSearchIndex, searchAttempt])
+  }, [needsSearchIndex, searchAttempt, setSearchError])
   const filtered = useMemo(() => {
     if (!needle) return articles
     return (searchArticles ?? articles).filter((article) => {

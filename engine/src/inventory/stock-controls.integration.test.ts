@@ -5,7 +5,7 @@ import { sql } from "drizzle-orm";
 import { db, withBypassContext, withOrgTransaction } from "../platform/db.ts";
 import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
 import { receiveInventory, issueInventory } from "./movements.ts";
-import { transferInventory } from "./transfers.ts";
+
 import { ensureLot, ensureSerial } from "./tracking.ts";
 import { allocationCandidates } from "./allocation.ts";
 import { setStockHold } from "./stock-holds.ts";

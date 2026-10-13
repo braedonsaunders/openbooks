@@ -44,6 +44,7 @@ const hooks = registerHooks({
     return nextLoad(url, context);
   },
 });
+test.after(() => hooks.deregister());
 
 const routeUrl = "./route.ts?asset-reverse-event-test";
 const { GET, POST } = (await import(routeUrl)) as typeof import("./route.ts");

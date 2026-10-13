@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Button, Label, SearchSelect, Skeleton } from "@openbooks/ui";
 import { readApiErrorMessage } from "@/lib/api-error";
@@ -49,7 +49,7 @@ export function InventoryTrackingFields({
   const [loading,setLoading]=useState(false),[creating,setCreating]=useState(false),[loadedKey,setLoadedKey]=useState('');
   const recordKey=itemId+':'+(optionsEndpoint??'');
   const currentKey=useRef(recordKey),createLock=useRef(false),mounted=useRef(true);
-  currentKey.current=recordKey;
+  useLayoutEffect(() => { currentKey.current = recordKey; }, [recordKey]);
   useEffect(()=>{mounted.current=true;return()=>{mounted.current=false;};},[]);
   const [data, setData] = useState<{
     tracking: string;

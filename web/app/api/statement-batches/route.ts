@@ -67,7 +67,6 @@ export const POST = defineRoute({
   if (delivery.state !== 'ready') {
     return NextResponse.json({ error: emailDeliveryBlockedMessage(delivery) }, { status: 422 })
   }
-  const transport = delivery.transport
   let preview
   try {
     preview = await buildStatementBatchPreview(

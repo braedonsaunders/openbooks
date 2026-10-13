@@ -1,5 +1,7 @@
 'use client'
 
+import { useIdentityState } from '@/lib/use-identity-state'
+
 import { useEffect, useId, useState } from 'react'
 import { MultiSelectInput } from '../../../components/custom-field-input'
 import Link from 'next/link'
@@ -15,9 +17,9 @@ export function EntityMappingEditor({ connectionId, value, onChange, onPendingCh
   const id = useId()
   const [entities, setEntities] = useState<EntityMappingMetadata[]>([])
   const [selected, setSelected] = useState('')
-  const [error, setError] = useState<string>()
-  const [loading, setLoading] = useState(false)
   const [attempt, setAttempt] = useState(0)
+  const [error, setError] = useIdentityState<string | undefined>([connectionId, selected, attempt], undefined)
+  const [loading, setLoading] = useIdentityState([connectionId, selected, attempt], Boolean(connectionId))
   const [draft, setDraft] = useState<EntityFieldMapping>()
   const [editing, setEditing] = useState<number>()
   const [formError, setFormError] = useState<string>()
@@ -25,7 +27,6 @@ export function EntityMappingEditor({ connectionId, value, onChange, onPendingCh
   useEffect(() => {
     if (!connectionId) return
     const controller = new AbortController()
-    setLoading(true); setError(undefined)
     const query = selected ? `?entity=${encodeURIComponent(selected)}` : ''
     fetch(`/api/platform/connections/${encodeURIComponent(connectionId)}/mapping-catalog${query}`, { signal: controller.signal })
       .then(async response => {
@@ -44,7 +45,7 @@ export function EntityMappingEditor({ connectionId, value, onChange, onPendingCh
       }).catch(cause => { if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : t('metadataFailed')) })
       .finally(() => { if (!controller.signal.aborted) setLoading(false) })
     return () => controller.abort()
-  }, [connectionId, selected, attempt, t])
+  }, [connectionId, selected, attempt, t, value, setError, setLoading])
   let model: ConnectionEntityMappings
   try { model = decodeEntityMappings(value) }
   catch (cause) { return <p role="alert">{cause instanceof Error ? cause.message : t('invalid')}</p> }
@@ -130,16 +131,15 @@ function MappingValueControl({ id, field, value, onChange, connectionId, entity,
   id: string; field: EntityMappingField; value: MappingScalar | undefined; onChange: (value: MappingScalar | undefined) => void; connectionId: string; entity: string; sourceValue?: boolean
 }) {
   const t = useTranslations('sync.drawer.entityMappings')
-  const [options, setOptions] = useState<{ value: string; label: string }[]>([])
   const [search, setSearch] = useState('')
-  const [referenceLoading, setReferenceLoading] = useState(false)
-  const [error, setError] = useState<string>()
   const [attempt, setAttempt] = useState(0)
+  const requestIdentity = [connectionId, entity, field.key, field.kind, sourceValue, attempt, search, value]
+  const [options, setOptions] = useIdentityState<{ value: string; label: string }[]>(requestIdentity, [])
+  const [referenceLoading, setReferenceLoading] = useIdentityState(requestIdentity, field.kind === 'reference')
+  const [error, setError] = useIdentityState<string | undefined>(requestIdentity, undefined)
   useEffect(() => {
-    setOptions([]); setError(undefined)
     if (field.kind !== 'reference') return
     const controller = new AbortController()
-    setReferenceLoading(true)
     const query = new URLSearchParams({ entity, [sourceValue ? 'sourceField' : 'target']: field.key, q: search, selected: String(value ?? '') })
     fetch(`/api/platform/connections/${encodeURIComponent(connectionId)}/mapping-catalog?${query}`, { signal: controller.signal })
       .then(async response => {
@@ -150,7 +150,7 @@ function MappingValueControl({ id, field, value, onChange, connectionId, entity,
       }).catch(cause => { if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : t('metadataFailed')) })
       .finally(() => { if (!controller.signal.aborted) setReferenceLoading(false) })
     return () => controller.abort()
-  }, [connectionId, entity, field.key, field.kind, sourceValue, attempt, search, value, t])
+  }, [connectionId, entity, field.key, field.kind, sourceValue, attempt, search, value, t, setOptions, setError, setReferenceLoading])
   if (field.kind === 'multi-choice') return <MultiSelectInput id={id} label={field.label} options={(field.options ?? []).map(option => option.value)} value={Array.isArray(value) ? value : []} onChange={onChange} />
   if (field.kind === 'reference') return <div><SearchSelect id={id} value={String(value ?? '')} clearable searchable remote onSearchChange={setSearch} loading={referenceLoading} options={options} onChange={value => onChange(value || undefined)} placeholder={t('chooseRecord')} statusMessage={error} statusTone="error" />
     {error ? <Button variant="outline" onClick={() => setAttempt(attempt => attempt + 1)}>{t('retry')}</Button> : null}</div>

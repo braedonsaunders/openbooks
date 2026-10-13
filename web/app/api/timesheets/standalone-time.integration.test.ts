@@ -26,7 +26,7 @@ registerHooks({ resolve(specifier, context, next) {
   return next(specifier, context)
 }})
 const { sql } = await import('drizzle-orm')
-const { db, withOrgContext, withOrgTransaction } = await import('@openbooks/engine/platform/db')
+const { db, withOrgContext } = await import('@openbooks/engine/platform/db')
 const { createScratchOrg, createScratchUser, dropScratchOrgReporting } = await import('@openbooks/engine/testing/fixtures')
 const { fieldClockOwnerKey } = await import('../../../lib/field-clock-owner')
 const { GET, PUT } = await import('./route')

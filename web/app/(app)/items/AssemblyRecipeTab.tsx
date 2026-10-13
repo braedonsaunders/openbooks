@@ -161,7 +161,7 @@ export function AssemblyRecipeTab({
         render: (row) => trimKitQty(row.quantityPer),
       },
     ],
-    [tCommon, tInventory],
+    [tCommon, tInventory, t],
   )
 
   if (!hasCostingProfile) {

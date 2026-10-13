@@ -37,7 +37,7 @@ async function select(label: string, value: string) {
 function button(text: string) { return [...document.querySelectorAll('button')].find(button => button.textContent === text)! }
 
 test('email recipients stay in one borderless native section before PDF/message; rich drafts survive recipient changes and reviewed selectors stay in that section', async t => {
-  const original = globalThis.fetch, requests: Record<string, any>[] = []
+  const original = globalThis.fetch, requests: { audience: { message: string; messageContent: { blocks: { spans: { bold?: boolean }[] }[] } } }[] = []
   const board = {...scheduleWindow(), canManage: true}
   globalThis.fetch = async (_url, init) => {
     if (!init?.body) return Response.json({contacts: [], roles: [{key: 'manager', name: 'Managers'}], more: false})
@@ -69,7 +69,7 @@ test('email recipients stay in one borderless native section before PDF/message;
   await act(async () => {button(labels.preview).click()})
   assert.equal(requests.length, 1)
   assert.equal(requests[0]!.audience.message, 'Bring <tools>')
-  assert.equal(requests[0]!.audience.messageContent.blocks[0].spans[0].bold, true)
+  assert.equal(requests[0]!.audience.messageContent.blocks[0]!.spans[0]!.bold, true)
   assert.ok(section.querySelector('[data-reviewed-recipients]'))
   assert.ok(section.querySelector('[data-reviewed-recipients] select'))
   assert.ok(document.querySelector('iframe')!.getAttribute('sandbox') === '')
@@ -108,7 +108,7 @@ test('shared editor reads actual formatting without resources/executable links a
 })
 
 test('standalone PDF host uses board report only, keeps one drawer and invalidates version when configured layout changes', async t => {
-  const original = globalThis.fetch, requests: {url: string; body: any}[] = []
+  const original = globalThis.fetch, requests: {url: string; body: Record<string, unknown>}[] = []
   const board = scheduleWindow()
   globalThis.fetch = async (url, init) => {
     const body = JSON.parse(String(init?.body)); requests.push({url: String(url), body})

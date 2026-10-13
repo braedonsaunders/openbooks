@@ -1,5 +1,7 @@
 "use client";
-import { useEffect, useRef, useState } from "react";
+
+import { useIdentityState } from "@/lib/use-identity-state"
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useTranslations, useLocale } from "next-intl";
@@ -215,42 +217,27 @@ export function ManufacturingRecordHost({
     router = useRouter(),
     locale = useLocale(),
     { money } = useMoney();
-  const [data, setData] = useState<ManufacturingRecordData | null>(null),
-    [loadedId, setLoadedId] = useState<string | null>(null),
-    [error, setError] = useState<string | null>(null),
-    [attempt, setAttempt] = useState(0),
-    [pending, setPending] = useState(false);
-  const [requestedTab, setTab] = useState("summary"),
-    [selected, setSelected] = useState<ManufacturingRow | null>(null),
-    [command, setCommand] = useState<Command | null>(null),
-    [dirty, setDirty] = useState(false),
-    [peerDirty, setPeerDirty] = useState(false);
   const requestedIdentity = JSON.stringify(recordId === "new"
     ? [view,recordId,initialWorkflow?.value,initialDepartmentId,initialValues?.producedItemId,initialValues?.subsidiaryId,initialValues?.quantityOrdered]
     : [view,recordId]);
+  const [attempt, setAttempt] = useState(0);
+  const [data, setData] = useIdentityState<ManufacturingRecordData | null>([requestedIdentity, attempt], null),
+    [loadedId, setLoadedId] = useIdentityState<string | null>([requestedIdentity, attempt], recordId === "new" ? "new" : null),
+    [error, setError] = useIdentityState<string | null>([requestedIdentity, attempt], null),
+    [pending, setPending] = useIdentityState([requestedIdentity, attempt], Boolean(recordId && recordId !== "new"));
+  const [requestedTab, setTab] = useIdentityState([requestedIdentity], "summary"),
+    [selected, setSelected] = useIdentityState<ManufacturingRow | null>([requestedIdentity], null),
+    [command, setCommand] = useIdentityState<Command | null>([requestedIdentity], null),
+    [dirty, setDirty] = useIdentityState([requestedIdentity], false),
+    [peerDirty, setPeerDirty] = useIdentityState([requestedIdentity], false);
   const identity = useRef<string | undefined>(requestedIdentity);
-  identity.current = requestedIdentity;
-  useEffect(() => {
+  useLayoutEffect(() => {
     identity.current = requestedIdentity;
     return () => { identity.current = undefined; };
   }, [requestedIdentity]);
   useEffect(() => {
-    setCommand(null);
-    setSelected(null);
-    setTab("summary");
-    setDirty(false);
-    setPeerDirty(false);
-    setError(null);
-  }, [requestedIdentity]);
-  useEffect(() => {
-    if (!recordId || recordId === "new") {
-      setData(null);
-      setLoadedId(recordId ?? null);
-      return;
-    }
+    if (!recordId || recordId === "new") return;
     const controller = new AbortController();
-    setPending(true);
-    setError(null);
     fetch("/api/manufacturing/workspace/" + view + "/" + recordId, {
       signal: controller.signal,
     })
@@ -272,7 +259,7 @@ export function ManufacturingRecordHost({
         if (!controller.signal.aborted) setPending(false);
       });
     return () => controller.abort();
-  }, [recordId, view, attempt, t]);
+  }, [recordId, view, attempt, t, setData, setLoadedId, setError, setPending]);
   if (!recordId) return null;
   const isNew = recordId === "new",
     visibleData = loadedId === recordId ? data : null;

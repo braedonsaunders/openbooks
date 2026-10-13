@@ -1,5 +1,7 @@
 'use client'
 
+import { useIdentityState } from '@/lib/use-identity-state'
+
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
@@ -107,7 +109,7 @@ function BoardShell(props: SchedulingWorkspaceProps & { board: ScheduleBoard; on
   const [compact, setCompact] = useState(false)
   const [personId, setPersonId] = useState('')
   const [zoom, setZoom] = useState(props.rangeDays <= 3 ? 3 : props.rangeDays <= 7 ? 2 : 1)
-  const [showHoursColumn, setShowHoursColumn] = useState(board.showHoursColumn!==false)
+  const [showHoursColumn, setShowHoursColumn] = useIdentityState([board.showHoursColumn], board.showHoursColumn!==false)
   const [savingDisplay, setSavingDisplay] = useState(false)
   const [spotlight, setSpotlight] = useState<string | null>(null)
   const [openEntry, setOpenEntry] = useState<BoardEntry | null>(null)
@@ -158,7 +160,7 @@ function BoardShell(props: SchedulingWorkspaceProps & { board: ScheduleBoard; on
   if (people) { settingsParams.set('from', anchor); settingsParams.set('days', String(rangeDays)) }
   else if (projectId) settingsParams.set('project', projectId)
   const settingsHref = props.canConfigure ? `${props.hostPath??'/scheduling'}?${settingsParams.toString()}` : null
-  useEffect(() => { if (!board.views.includes(view)) setView(board.defaultView) }, [board.defaultView, board.views, view])
+  if (view !== board.defaultView && !board.views.includes(view)) setView(board.defaultView)
 
   // Undo and redo answer anywhere on the page, not only inside the grid.
   useEffect(() => {
@@ -188,7 +190,6 @@ function BoardShell(props: SchedulingWorkspaceProps & { board: ScheduleBoard; on
     }
   }
 
-  useEffect(()=>setShowHoursColumn(board.showHoursColumn!==false),[board.showHoursColumn])
   async function saveHoursColumn(value:boolean) {
     setSavingDisplay(true)
     try {

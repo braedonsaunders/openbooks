@@ -1,5 +1,7 @@
 'use client'
 
+import { useIdentityState } from '@/lib/use-identity-state'
+
 import { Table as SharedTable, TableHeader as SharedTableHeader, TableRow as SharedTableRow, TableHead as SharedTableHead, TableBody as SharedTableBody, TableCell as SharedTableCell } from "@openbooks/ui"
 import { PagedTable } from '@/components/paged-table'
 import { useMoney } from '@/components/money-provider'
@@ -7,7 +9,7 @@ import { MoneyInput } from '@/components/money-input'
 import { initialDrawerMode, type DrawerMode } from '@/lib/drawer-mode'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { useTranslations } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Wand2 } from 'lucide-react'
 import { Badge, Button, FieldLabel, Input, Label, SearchSelect, Select } from '@openbooks/ui'
@@ -305,6 +307,7 @@ function PaymentDrawerBody({
   } | null
 }) {
   const { money } = useMoney()
+  const locale = useLocale()
   const t = useTranslations('payments.drawer')
   const tCommon = useTranslations('common')
   const tStoredValue = useTranslations('storedValue')
@@ -312,15 +315,11 @@ function PaymentDrawerBody({
   const tPostingEffects = useTranslations('common.postingEffects')
   const router = useRouter()
   const doc = asPaymentDoc(payment.doc)
-  const [postingEffectStatus, setPostingEffectStatus] = useState(doc.posting_effect_status)
-  const [postingEffectsQueued, setPostingEffectsQueued] = useState(false)
-  useEffect(() => {
-    setPostingEffectStatus(doc.posting_effect_status)
-    setPostingEffectsQueued(false)
-  }, [doc.id, doc.posting_effect_status, doc.posting_effect_updated_at])
+  const currency = `${doc.currency}`
+  const documentRevision = `${doc.updated_at}`
+  const [postingEffectStatus, setPostingEffectStatus] = useIdentityState([doc.id, doc.posting_effect_status, doc.posting_effect_updated_at], doc.posting_effect_status)
+  const [postingEffectsQueued, setPostingEffectsQueued] = useIdentityState([doc.id, doc.posting_effect_status, doc.posting_effect_updated_at], false)
   const tFunding = useTranslations('processorReceipts')
-  const [fundingAccounts, setFundingAccounts] = useState(bankAccounts)
-  const [fundingError, setFundingError] = useState<string | null>(null)
   const [fundingRetry, setFundingRetry] = useState(0)
   const [fundingSubsidiaryId, setFundingSubsidiaryId] = useState(typeof doc.subsidiary_id === 'string' ? doc.subsidiary_id : '')
   const fundingSubsidiaries = (Array.isArray(doc.funding_subsidiaries) ? doc.funding_subsidiaries : []) as { id: string; name: string; currency: string }[]
@@ -353,6 +352,8 @@ function PaymentDrawerBody({
   const [partyId, setPartyId] = useState<string>(doc.party_id ?? '')
   const [bankAccountId, setBankAccountId] = useState<string>(payment.bankAccountId ?? '')
   const [documentDate, setDocumentDate] = useState<string>(doc.document_date ?? '')
+  const [fundingAccounts, setFundingAccounts] = useIdentityState<Opt[]>([editable, fundingSubsidiaryId, currency, documentDate, side, fundingRetry, locale, bankAccounts], editable ? [] : bankAccounts)
+  const [fundingError, setFundingError] = useIdentityState<string | null>([editable, fundingSubsidiaryId, currency, documentDate, side, fundingRetry, locale, bankAccounts], null)
   const [referenceNumber, setReferenceNumber] = useState<string>(doc.reference_number ?? '')
   const [memo, setMemo] = useState<string>(doc.memo ?? '')
   const custom = doc.custom && typeof doc.custom === 'object' ? doc.custom as Record<string, unknown> : {}
@@ -397,7 +398,7 @@ function PaymentDrawerBody({
       ? { code: draft.code, amount: draft.amount }
       : { accountId: draft.accountId ?? '', amount: draft.amount })
     : null, [showTenders, tenderDrafts])
-  const settlementRateKey = `${doc.currency}:${documentDate}:${side}:${openItems.map((item) => item.currency).join(',')}`
+  const settlementRateKey = `${currency}:${documentDate}:${side}:${openItems.map((item) => item.currency).join(',')}`
   const [settlementRateResult, setSettlementRateResult] = useState<{
     key: string
     rates: SettlementRateOption[]
@@ -407,16 +408,13 @@ function PaymentDrawerBody({
   // The last successful save: the revision it was fenced on and the revision
   // the row holds after it. The save response carries the committed token, so
   // Post chains directly on it; the refreshed record arriving later changes
-  // doc.updated_at and retires this receipt. A save response without a token
+  // documentRevision and retires this receipt. A save response without a token
   // keeps Post settling (disabled, with the reason shown) until the refreshed
   // record arrives, so Post never fires on the pre-save revision.
-  const [saveReceipt, setSaveReceipt] = useState<{ fencedRevision: string; committedRevision: string | null } | null>(null)
-  const pendingCommit = saveReceipt !== null && doc.updated_at === saveReceipt.fencedRevision ? saveReceipt : null
-  const postRevision = pendingCommit?.committedRevision ?? doc.updated_at
+  const [saveReceipt, setSaveReceipt] = useIdentityState<{ fencedRevision: string; committedRevision: string | null } | null>([doc.id], null)
+  const pendingCommit = saveReceipt !== null && documentRevision === saveReceipt.fencedRevision ? saveReceipt : null
+  const postRevision = pendingCommit?.committedRevision ?? documentRevision
   const saveSettling = pendingCommit !== null && pendingCommit.committedRevision === null
-  useEffect(() => {
-    setSaveReceipt(null)
-  }, [doc.id])
   // A refused save/post must stay visible past its toast: the
   // typed refusal pins as a record-level alert until the next action, and
   // busy always releases through the shared path's finally.
@@ -432,7 +430,7 @@ function PaymentDrawerBody({
     if (isDraft) {
       setAllocs({})
       setOpenItems([])
-      if (partyId) setLoadingItems(true)
+      setLoadingItems(Boolean(partyId && fundingSubsidiaryId))
     }
   }
   // Mount-skip mirror: the mount pass keeps the passed initialOpenItems; only
@@ -445,7 +443,7 @@ function PaymentDrawerBody({
       partyFetchArmed.current = true
       return
     }
-    if (!partyId || !fundingSubsidiaryId) { setLoadingItems(false); return }
+    if (!partyId || !fundingSubsidiaryId) return
     let cancelled = false
     fetch(`/api/payments/open-items?partyId=${partyId}&side=${side}&subsidiaryId=${fundingSubsidiaryId}`)
       .then(async (res) => {
@@ -471,10 +469,8 @@ function PaymentDrawerBody({
   useEffect(() => {
     if (!editable || !fundingSubsidiaryId || !documentDate) return
     const controller = new AbortController()
-    setFundingAccounts([])
-    setFundingError(null)
     const query = new URLSearchParams({ kind: side === 'ar' ? 'customer_payment' : 'vendor_payment',
-      subsidiaryId: fundingSubsidiaryId, currency: doc.currency, date: documentDate })
+      subsidiaryId: fundingSubsidiaryId, currency: currency, date: documentDate })
     fetch(`/api/payments/funding-accounts?${query}`, { signal: controller.signal }).then(async response => {
       if (!response.ok) {
         const message = await readApiErrorMessage(response, tFunding('loadFailed'))
@@ -485,19 +481,19 @@ function PaymentDrawerBody({
       if (!controller.signal.aborted) setFundingAccounts(data.accounts)
     }).catch(() => { if (!controller.signal.aborted) setFundingError(tFunding('loadFailed')) })
     return () => controller.abort()
-  }, [editable, fundingSubsidiaryId, doc.currency, documentDate, side, fundingRetry, tFunding])
+  }, [editable, fundingSubsidiaryId, currency, documentDate, side, fundingRetry, tFunding, setFundingError, setFundingAccounts])
 
   // Results are scoped to the submitted inputs, so old evidence disappears
   // immediately on a date/currency/party-side change. Effect cleanup prevents
   // superseded requests from publishing their response.
   useEffect(() => {
     const key = settlementRateKey
-    const targets = [...new Set(openItems.filter((item) => item.currency !== doc.currency).map((item) => item.currency))]
+    const targets = [...new Set(openItems.filter((item) => item.currency !== currency).map((item) => item.currency))]
     if (!targets.length || !documentDate) return
     let cancelled = false
     const query = new URLSearchParams({
       side,
-      from: doc.currency,
+      from: currency,
       to: targets.join(','),
       date: documentDate,
     })
@@ -511,7 +507,7 @@ function PaymentDrawerBody({
     return () => {
       cancelled = true
     }
-  }, [doc.currency, documentDate, openItems, side, settlementRateKey])
+  }, [currency, documentDate, openItems, side, settlementRateKey])
 
   // useCallback: validAllocations below depends on this; a bare closure would be
   // a fresh identity every render and defeat that memo.
@@ -524,7 +520,7 @@ function PaymentDrawerBody({
       if (cmp(source, '0') <= 0 || cmp(target, '0') <= 0 || cmp(target, item.transactionOpen) > 0) return false
       if (cmp(mulRate(source, allocation.settlementRate), target) !== 0) return false
       if (!allocation.settlementRateReference.trim()) return false
-      if (item.currency === doc.currency) {
+      if (item.currency === currency) {
         return cmp(source, target) === 0 && cmp(allocation.settlementRate, '1') === 0 && allocation.settlementRateSource === 'same_currency'
       }
       return allocation.settlementRateSource !== 'same_currency' &&
@@ -532,7 +528,7 @@ function PaymentDrawerBody({
     } catch {
       return false
     }
-  }, [allocs, doc.currency])
+  }, [allocs, currency])
   const validAllocations = useMemo(
     () =>
       openItems
@@ -567,13 +563,13 @@ function PaymentDrawerBody({
   // Received less than applied cannot post: the applications would claim
   // cash the bank never saw.
   const receivedShort = received !== null && cmp(received, appliedTotal) < 0
-  const onAccount = received !== null && cmp(received, appliedTotal) > 0 ? sum([received, `-${appliedTotal}`]) : '0'
+  const onAccount = received !== null && cmp(received, appliedTotal) > 0 ? `${sum([received, `-${appliedTotal}`])}` : '0'
   const total = sum([appliedTotal, onAccount])
 
   // -- explicit save (no autosave) -----------------------------------------
   const payload = useMemo(
     () => ({
-      expectedUpdatedAt: doc.updated_at,
+      expectedUpdatedAt: documentRevision,
       ...(createMode ? { subsidiaryId: fundingSubsidiaryId || null } : {}),
       partyId: partyId || null,
       bankAccountId: bankAccountId || null,
@@ -585,7 +581,7 @@ function PaymentDrawerBody({
       ...(showWithholding ? { withholdingAuthorisation: withholdingAuthorisation || null, withholdingAuthorisedAmount: withholdingAuthorisedAmount.trim() || null } : {}),
       ...(tenderPatch !== null ? { storedValueTenders: tenderPatch } : {}),
     }),
-    [partyId, bankAccountId, documentDate, referenceNumber, memo, validAllocations, onAccount, side, tenderPatch, doc.updated_at, showWithholding, withholdingAuthorisation, withholdingAuthorisedAmount, createMode, fundingSubsidiaryId],
+    [partyId, bankAccountId, documentDate, referenceNumber, memo, validAllocations, onAccount, side, tenderPatch, documentRevision, showWithholding, withholdingAuthorisation, withholdingAuthorisedAmount, createMode, fundingSubsidiaryId],
   )
   // Track unsaved edits (no autosave — Save is an explicit button). Adjusted
   // during render (same committed value, no extra render). `editable` is read
@@ -655,7 +651,7 @@ function PaymentDrawerBody({
       partyId: partyId || null,
       bankAccountId: bankAccountId || null,
       subsidiaryId: fundingSubsidiaryId || undefined,
-      currency: doc.currency,
+      currency: currency,
       documentDate: documentDate || undefined,
       referenceNumber,
       memo,
@@ -830,7 +826,7 @@ function PaymentDrawerBody({
           headers: { 'Content-Type': 'application/json' },
           // The void API fences on the exact revision like every other document
           // write: without it every void answers 409 and the button is dead.
-          body: JSON.stringify({ reason, expectedUpdatedAt: doc.updated_at }),
+          body: JSON.stringify({ reason, expectedUpdatedAt: documentRevision }),
         }),
       {
         fallbackMessage: t('toasts.postFailed'),
@@ -864,7 +860,7 @@ function PaymentDrawerBody({
   function updateTargetAmount(item: OpenItemClient, value: string) {
     updateAllocation(
       item.lineId,
-      item.currency === doc.currency
+      item.currency === currency
         ? { targetTransactionAmount: value, sourceTransactionAmount: value }
         : { targetTransactionAmount: value },
     )
@@ -875,7 +871,7 @@ function PaymentDrawerBody({
       const next = { ...prev }
       if (next[item.lineId] === undefined) {
         const targetAmount = normalizeMoney(item.transactionOpen)
-        if (item.currency === doc.currency) {
+        if (item.currency === currency) {
           next[item.lineId] = {
             openLineId: item.lineId,
             sourceTransactionAmount: targetAmount,
@@ -905,17 +901,17 @@ function PaymentDrawerBody({
   // across the party's open items (reference → exact → FIFO) and fill the rows.
   async function autoApply() {
     if (!partyId) return
-    const sameCurrencyItems = openItems.filter((item) => item.currency === doc.currency && !item.reservedByRun)
+    const sameCurrencyItems = openItems.filter((item) => item.currency === currency && !item.reservedByRun)
     // The suggestion seed is an exact decimal in the document currency, not
     // hard-coded 2dp: 3-decimal currencies (KWD, BHD) would otherwise
     // under-apply by the rounded tail.
-    const amount = receivedAmount.trim() || formatMoney(sum(sameCurrencyItems.map((item) => item.transactionOpen)), currencyMinorUnits(doc.currency))
+    const amount = receivedAmount.trim() || formatMoney(sum(sameCurrencyItems.map((item) => item.transactionOpen)), currencyMinorUnits(currency))
     await execute(
       () =>
         fetchAction('/api/payments/suggest', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ partyId, amount, side, currency: doc.currency, reference: referenceNumber || null }),
+          body: JSON.stringify({ partyId, amount, side, currency: currency, reference: referenceNumber || null }),
         }),
       {
         fallbackMessage: t('autoApplyFailed'),
@@ -1092,20 +1088,20 @@ function PaymentDrawerBody({
             <div><Label>{tWithholding('authorisation')}</Label><Input value={withholdingAuthorisation} disabled={!editable} maxLength={100} onChange={event => setWithholdingAuthorisation(event.target.value)} /><p className="mt-1 text-sm text-muted-foreground">{tWithholding('authorisationHelp')}</p></div>
             {showAuthorisedAmount ? <div><Label htmlFor="withholding-authorised-amount">{tWithholding('authorisedAmount')} {payment.withholdingAuthorisationCurrency ? `(${payment.withholdingAuthorisationCurrency})` : ''}</Label><MoneyInput id="withholding-authorised-amount" field={tWithholding('authorisedAmount')} value={withholdingAuthorisedAmount} onChange={setWithholdingAuthorisedAmount} disabled={!editable} maxScale={4} placeholder="0.0000" /><p className="mt-1 text-sm text-muted-foreground">{tWithholding('authorisedAmountHelp')}</p></div> : null}
             <p className="text-sm">{tWithholding('savedEvidence')}</p>
-            <dl className="grid grid-cols-2 gap-3"><div><dt>{tWithholding('deducted')}</dt><dd>{money(savedWithholdingAmount, { currency: doc.currency })}</dd></div><div><dt>{tWithholding('cash')}</dt><dd>{money(doc.total, { currency: doc.currency })}</dd></div></dl>
+            <dl className="grid grid-cols-2 gap-3"><div><dt>{tWithholding('deducted')}</dt><dd>{money(savedWithholdingAmount, { currency: currency })}</dd></div><div><dt>{tWithholding('cash')}</dt><dd>{money(doc.total, { currency: currency })}</dd></div></dl>
             <PagedTable source="contractor_withholding_payment_deductions" rows={savedWithholdings} rowKey={row => row.openLineId} empty={tWithholding('emptyPayees')} columns={[
               { key: 'bill', header: tWithholding('bill'), cell: row => row.billDocumentNumber },
               { key: 'scheme', header: tWithholding('scheme'), cell: row => row.schemeCode },
               { key: 'band', header: tWithholding('band'), cell: row => `${row.bandCode} · ${row.ratePercent}%` },
-              { key: 'base', header: tWithholding('base'), align: 'right', cell: row => money(row.base, { currency: doc.currency }) },
-              { key: 'deducted', header: tWithholding('deducted'), align: 'right', cell: row => <div>{money(row.deducted, { currency: doc.currency })}{row.reporting && row.reporting.currency !== doc.currency ? <div className="text-xs text-muted-foreground">{tWithholding('reportedDeduction')}: {money(row.reporting.deducted, { currency: row.reporting.currency })}</div> : null}</div> },
+              { key: 'base', header: tWithholding('base'), align: 'right', cell: row => money(row.base, { currency: currency }) },
+              { key: 'deducted', header: tWithholding('deducted'), align: 'right', cell: row => <div>{money(row.deducted, { currency: currency })}{row.reporting && row.reporting.currency !== currency ? <div className="text-xs text-muted-foreground">{tWithholding('reportedDeduction')}: {money(row.reporting.deducted, { currency: row.reporting.currency })}</div> : null}</div> },
             ]} />
           </div>,
         }] : []),
         ...(showTenders ? [{
           key: 'tenders',
           label: tStoredValue('payment.tenderLabel'),
-          content: <StoredValueTendersSection currency={doc.currency} receiptTotal={total} partyId={partyId || null} drafts={tenderDrafts} onChange={setTenderDrafts} initialCredits={storedValue?.customerCredits ?? []} disabled={!editable} />,
+          content: <StoredValueTendersSection currency={currency} receiptTotal={total} partyId={partyId || null} drafts={tenderDrafts} onChange={setTenderDrafts} initialCredits={storedValue?.customerCredits ?? []} disabled={!editable} />,
         }] : []),
         ...(!createMode ? [
         {
@@ -1140,14 +1136,14 @@ function PaymentDrawerBody({
             {isDraft ? (
               t.rich('applyingSummary', {
                 count: validAllocations.length,
-                amount: money(total, { currency: doc.currency }),
+                amount: money(total, { currency: currency }),
                 total: (chunks) => (
                   <strong className="text-slate-900 dark:text-slate-100">{chunks}</strong>
                 ),
               })
             ) : (
               <strong className="text-slate-900 dark:text-slate-100">
-                {t('totalAmount', { amount: money(doc.total, { currency: doc.currency }) })}
+                {t('totalAmount', { amount: money(doc.total, { currency: currency }) })}
               </strong>
             )}
           </span>
@@ -1349,14 +1345,14 @@ function PaymentDrawerBody({
                                     aria-invalid={invalid}
                                   />
                                 </div>
-                                {item.currency !== doc.currency ? (
+                                {item.currency !== currency ? (
                                   <div className="space-y-2 rounded-md bg-slate-50 p-2 dark:bg-slate-900/60">
                                     <div>
-                                      <span className="mb-1 block text-[11px] text-slate-500">{t('sourceAmount', { currency: doc.currency })}</span>
+                                      <span className="mb-1 block text-[11px] text-slate-500">{t('sourceAmount', { currency: currency })}</span>
                                       <Input inputMode="decimal" className="h-8 text-right tabular-nums" value={allocs[item.lineId]!.sourceTransactionAmount} onChange={(event) => updateAllocation(item.lineId, { sourceTransactionAmount: event.target.value })} />
                                     </div>
                                     <div>
-                                      <span className="mb-1 block text-[11px] text-slate-500">{t('settlementRate', { target: item.currency, source: doc.currency })}</span>
+                                      <span className="mb-1 block text-[11px] text-slate-500">{t('settlementRate', { target: item.currency, source: currency })}</span>
                                       <Input inputMode="decimal" className="h-8 text-right tabular-nums" value={allocs[item.lineId]!.settlementRate} disabled={allocs[item.lineId]!.settlementRateSource === 'provider'} onChange={(event) => updateAllocation(item.lineId, { settlementRate: event.target.value })} />
                                     </div>
                                     <select
@@ -1405,9 +1401,9 @@ function PaymentDrawerBody({
                               </div> : (
                                 <div className="space-y-1 text-right tabular-nums">
                                   <div>{money(allocs[item.lineId]!.targetTransactionAmount || '0', { currency: item.currency })}</div>
-                                  {item.currency !== doc.currency ? (
+                                  {item.currency !== currency ? (
                                     <>
-                                      <div className="text-xs text-slate-500 dark:text-slate-400">{money(allocs[item.lineId]!.sourceTransactionAmount || '0', { currency: doc.currency })}</div>
+                                      <div className="text-xs text-slate-500 dark:text-slate-400">{money(allocs[item.lineId]!.sourceTransactionAmount || '0', { currency: currency })}</div>
                                       <div className="text-xs text-slate-500 dark:text-slate-400">{allocs[item.lineId]!.settlementRate} · {t(`rateSource.${allocs[item.lineId]!.settlementRateSource}`)}</div>
                                       {allocs[item.lineId]!.settlementRateReference ? <div className="text-xs text-slate-500 dark:text-slate-400">{allocs[item.lineId]!.settlementRateReference}</div> : null}
                                     </>
@@ -1429,7 +1425,7 @@ function PaymentDrawerBody({
             {editable && (receivedInvalid || receivedShort) ? (
               <p className="text-xs text-red-600 dark:text-red-400">{t('receivedShort')}</p>
             ) : editable && cmp(onAccount, '0') > 0 ? (
-              <p role="note" className="text-xs text-amber-700 dark:text-amber-300">{t('receivedOnAccount', { amount: onAccount, currency: doc.currency })}</p>
+              <p role="note" className="text-xs text-amber-700 dark:text-amber-300">{t('receivedOnAccount', { amount: onAccount, currency: currency })}</p>
             ) : null}
           </div>
         ) : (

@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { Button, SearchSelect } from "@openbooks/ui";
 import { readApiErrorMessage } from "@/lib/api-error";
 export type RemoteRecordOption = { value: string; label: string; parentId?: string | null };
@@ -38,7 +38,7 @@ export function RemoteRecordChoice({
     [error, setError] = useState<string | null>(null),
     [loading, setLoading] = useState(false),
     [attempt, setAttempt] = useState(0);
-  const chosen = useRef<RemoteRecordOption | undefined>(
+  const [chosen, setChosen] = useState<RemoteRecordOption | undefined>(
     options.find((o) => o.value === value),
   );
   useEffect(() => {
@@ -62,7 +62,7 @@ export function RemoteRecordChoice({
           if (!controller.signal.aborted) {
             setRows(result);
             const selected = result.find((o) => o.value === value);
-            chosen.current = selected;
+            if (selected) setChosen(selected);
           }
         })
         .catch((cause) => {
@@ -82,7 +82,7 @@ export function RemoteRecordChoice({
   }, [endpoint, query, value, resultKey, labels.loadFailed, attempt]);
   const selected =
     rows.find((o) => o.value === value) ??
-    (chosen.current?.value === value ? chosen.current : undefined);
+    (chosen?.value === value ? chosen : undefined);
   const choices =
     selected && !rows.some((o) => o.value === value)
       ? [selected, ...rows]
@@ -101,7 +101,7 @@ export function RemoteRecordChoice({
         value={value}
         options={choices}
         onChange={(next) => {
-          chosen.current = choices.find((o) => o.value === next);
+          setChosen(choices.find((o) => o.value === next));
           onChange(next);
         }}
         placeholder={labels.choose}

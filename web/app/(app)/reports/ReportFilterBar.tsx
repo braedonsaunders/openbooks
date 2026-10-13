@@ -1,6 +1,8 @@
 'use client'
 
-import { useCallback, useEffect, useMemo, useState, type KeyboardEvent, type ReactNode } from 'react'
+import { useIdentityState } from '@/lib/use-identity-state'
+
+import { useCallback, useMemo, useState, type KeyboardEvent, type ReactNode } from 'react'
 import { usePathname, useRouter, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { ChevronsDown, ChevronsUp, SlidersHorizontal } from 'lucide-react'
@@ -181,10 +183,9 @@ export function ReportFilterBar({
   // Custom From/To stage locally until the operator applies them: committing
   // per change re-ran the report on half-typed ranges, and typed dates never
   // had an explicit moment to take effect (Enter and blur included).
-  const [rangeDraft, setRangeDraft] = useState<{ from: string; to: string } | null>(null)
+  const [rangeDraft, setRangeDraft] = useIdentityState<{ from: string; to: string } | null>([periodFrom, periodTo], null)
   // An outside change (preset pick, another control) discards the draft, so a
   // staged range can never leak into a navigation it was not applied to.
-  useEffect(() => { setRangeDraft(null) }, [periodFrom, periodTo])
   const rangeBaseFrom = periodFrom ?? (controls.dateRange ? dateRange?.from : undefined) ?? ''
   const rangeBaseTo = periodTo ?? (controls.dateRange ? dateRange?.to : undefined) ?? ''
   const shownFrom = rangeDraft?.from ?? rangeBaseFrom

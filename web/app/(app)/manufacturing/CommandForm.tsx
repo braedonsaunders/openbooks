@@ -1,4 +1,6 @@
 "use client";
+
+import { useIdentityState } from '@/lib/use-identity-state'
 import Link from "next/link";
 import { LineGrid } from "@/components/line-grid";
 import { cmp } from "@openbooks/engine/money/money";
@@ -9,7 +11,6 @@ import {
   Input,
   Label,
   Select,
-  SearchSelect,
   Textarea,
 } from "@openbooks/ui";
 import { RemoteRecordChoice } from "@/components/remote-record-choice";
@@ -255,7 +256,7 @@ export function CommandForm({
             throw new Error(t("choose") + " · " + t("issueLines"));
         }
         body.lines = lines.map(
-          ({ key, materialId, quantity, lotId, serialId }) => ({
+          ({ key: _key, materialId, quantity, lotId, serialId }) => ({
             materialId,
             quantity,
             ...(lotId ? { lotId } : {}),
@@ -267,7 +268,7 @@ export function CommandForm({
         if (lines.length)
           body.lots = lines.map(
             ({
-              key,
+              key: _key,
               itemId,
               quantity,
               lotNumber,
@@ -505,23 +506,20 @@ function CaptureLine({
 }) {
   const t = useTranslations("manufacturing"),
     id = useId();
-  const [tracking, setTracking] = useState<{
-      lots: Choice[];
-      serials: Choice[];
-    }>({ lots: [], serials: [] }),
-    [error, setError] = useState<string | null>(null),
-    [loading, setLoading] = useState(false),
-    [attempt, setAttempt] = useState(0);
+  const [attempt, setAttempt] = useState(0);
   const material = data?.sections.materials?.find(
       (m) => m.id === line.materialId,
     ),
     itemId = String(material?.itemId ?? "");
+  const [tracking, setTracking] = useIdentityState<{
+      lots: Choice[];
+      serials: Choice[];
+    }>([mode, itemId, attempt], { lots: [], serials: [] }),
+    [error, setError] = useIdentityState<string | null>([mode, itemId, attempt], null),
+    [loading, setLoading] = useIdentityState([mode, itemId, attempt], mode === "issue" && Boolean(itemId));
   useEffect(() => {
     if (mode !== "issue" || !itemId) return;
     const controller = new AbortController();
-    setLoading(true);
-    setError(null);
-    setTracking({ lots: [], serials: [] });
     fetch("/api/manufacturing/tracking/" + itemId, {
       signal: controller.signal,
     })
@@ -530,7 +528,7 @@ function CaptureLine({
           throw new Error(await readApiErrorMessage(r, t("loadFailed")));
         return r.json();
       })
-      .then((v) => setTracking(v))
+      .then((v) => { if (!controller.signal.aborted) setTracking(v) })
       .catch((e) => {
         if (!controller.signal.aborted)
           setError(e instanceof Error ? e.message : t("loadFailed"));
@@ -539,7 +537,7 @@ function CaptureLine({
         if (!controller.signal.aborted) setLoading(false);
       });
     return () => controller.abort();
-  }, [mode, itemId, t, attempt]);
+  }, [mode, itemId, t, attempt, setTracking, setError, setLoading]);
   const input = (key: string, required = false, type = "text") => (
     <div className="space-y-1.5">
       <Label htmlFor={id + "-" + key}>{t("fields." + key)}</Label>

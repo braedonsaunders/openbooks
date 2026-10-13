@@ -1,5 +1,7 @@
 'use client'
 
+import { useIdentityState } from '@/lib/use-identity-state'
+
 import { useEffect, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
@@ -798,15 +800,15 @@ function LeaveRecordForm({
   const [onDate, setOnDate] = useState('')
   const [hours, setHours] = useState('')
   const [reason, setReason] = useState('')
-  const [balances, setBalances] = useState<{
+  const todayText = new Date().toISOString().slice(0, 10)
+  const [balances, setBalances] = useIdentityState<{
     rows: { leaveTypeId: string; code: string; remaining: string | null }[]
     effect: { leaveTypeId: string; remainingAfter: string | null } | null
-  } | null>(null)
+  } | null>([employmentId, leaveTypeId, hours, onDate, todayText], null)
   const [status, setStatus] = useState<string | undefined>(undefined)
   const { busy: saving, execute } = useAppAction()
   // Client-side today only marks the reason required; the engine decides
   // from the org business day and the actor's employments, never this.
-  const todayText = new Date().toISOString().slice(0, 10)
   const reasonRequired = onDate !== '' && onDate < todayText
 
   // Leave-type options ride the HRM options route with its refusals; the
@@ -885,10 +887,7 @@ function LeaveRecordForm({
   // through the engine, which re-prices the balance at write time. A
   // balances refusal never blocks the form; the engine refusal would.
   useEffect(() => {
-    if (!employmentId) {
-      setBalances(null)
-      return
-    }
+    if (!employmentId) return
     const params = new URLSearchParams({ employmentId, asOf: onDate || todayText })
     if (leaveTypeId && hours.trim() !== '') {
       params.set('leaveTypeId', leaveTypeId)
@@ -926,7 +925,7 @@ function LeaveRecordForm({
       live = false
       clearTimeout(timer)
     }
-  }, [employmentId, leaveTypeId, hours, onDate, todayText])
+  }, [employmentId, leaveTypeId, hours, onDate, todayText, setBalances])
 
   const balanceRow = leaveTypeId ? (balances?.rows.find((row) => row.leaveTypeId === leaveTypeId) ?? null) : null
 

@@ -1088,7 +1088,7 @@ test('standalone board PDF preview is provider/recipient/Flows-independent, vers
     await db.execute(sql`update parties set is_active=false where org_id=${f.orgId} and id=${f.ben}`);
     await db.execute(sql`update employee_roles set is_active=false,terminated_on='2026-10-11' where org_id=${f.orgId} and party_id=${f.ben}`);
   });
-  const auditBefore = await withOrgTransaction(f.orgId, async () => (await db.execute<{n: number}>(sql`select count(*)::int n from audit_log`)).rows[0]!.n);
+  await withOrgTransaction(f.orgId, async () => (await db.execute<{n: number}>(sql`select count(*)::int n from audit_log`)).rows[0]!.n);
   const p = await previewScheduleBoardReport(f, {boardId: f.boardId, ...dates});
   assert.equal(p.audience.visibility, 'board');
   assert.ok(p.lines.some(line => line.assignment === 'SHOP/ N' && line.hours === 'Hours unknown'));

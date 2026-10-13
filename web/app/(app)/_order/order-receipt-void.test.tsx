@@ -179,7 +179,7 @@ function mockVoidEndpoints(
 
 test('voiding a linked goods receipt posts with its revision and toasts its number', async (t) => {
   window.sessionStorage.clear()
-  let posts: Record<string, unknown>[] = []
+  const posts: Record<string, unknown>[] = []
   const restoreFetch = mockVoidEndpoints(t, (body) => {
     posts.push(body)
     return Response.json({ ok: true, status: 'voided', reversalEntryId: 'entry-1' })

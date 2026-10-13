@@ -38,20 +38,20 @@ export async function CompensationPackagesSection({ sp }: { sp: Record<string, s
       throw error
     }
     selected = workspace.package.id
-    sp = { ...sp, package: selected }
   }
+  const effectiveParams = selected ? { ...sp, package: selected } : sp
   const pack = workspace?.package
   const manage = can(authz, 'payroll.manage'), approve = can(authz, 'hrm.compensation.approve')
   const tabs = []
   if (pack && workspace) {
-    const version = workspace.versions.find(item => item.id === pickString(sp.packageVersionsRow))
-    const assignment = workspace.assignments.find(item => item.id === pickString(sp.packageAssignmentsRow))
+    const version = workspace.versions.find(item => item.id === pickString(effectiveParams.packageVersionsRow))
+    const assignment = workspace.assignments.find(item => item.id === pickString(effectiveParams.packageAssignmentsRow))
     const approved = workspace.versions.filter(item => item.status === 'approved')
-    const assignmentVersion = workspace.versions.find(item => item.id === (assignment?.versionId ?? pickString(sp.assignmentVersion)) && item.status === 'approved')
+    const assignmentVersion = workspace.versions.find(item => item.id === (assignment?.versionId ?? pickString(effectiveParams.assignmentVersion)) && item.status === 'approved')
     tabs.push({ key: 'history', label: t('compensationPackages.history'), content: <AuditTrailPanel table="payroll_compensation_packages" recordId={pack.id} /> })
     const versionEntity = packageVersionPresentation(pack, actor.orgId, !version)
     const assignmentEntity = packageAssignmentPresentation(pack, assignmentVersion)
-    const base = { orgId: actor.orgId, actorId: actor.actorId, searchParams: sp, basePath: '/admin/setup/payroll', canManage: true, allowedSubsidiaryIds: authz.allowedSubsidiaryIds, parent: { recordKey: 'payroll-compensation-packages', value: pack.id }, stacked: true }
+    const base = { orgId: actor.orgId, actorId: actor.actorId, searchParams: effectiveParams, basePath: '/admin/setup/payroll', canManage: true, allowedSubsidiaryIds: authz.allowedSubsidiaryIds, parent: { recordKey: 'payroll-compensation-packages', value: pack.id }, stacked: true }
     tabs.push({ key: 'versions', label: t('compensationPackages.versions'), content: <SetupEntitySection {...base} entity={{ ...versionEntity, readOnly: !manage || Boolean(version && version.status !== 'draft'), allowCreate: manage && pack.status === 'active' }} rowParam="packageVersionsRow" paramPrefix="packageVersions" visibleRowIds={new Set(workspace.versions.map(item => item.id))}
       additionalRecordTabs={version ? [{ key: 'review', label: t('compensationPackages.review'), content: <CompensationPackageActions packageId={pack.id} version={version} canManage={manage} canApprove={approve} /> }, { key: 'preview', label: t('compensationPackages.preview'), content: <CompensationPackagePreview packageId={pack.id} version={version} /> }, { key: 'history', label: t('compensationPackages.history'), content: <AuditTrailPanel table="payroll_compensation_versions" recordId={version.id} /> }] : []} /> })
     tabs.push({ key: 'assignments', label: t('compensationPackages.assignments'), content: <div className="space-y-4">
@@ -61,5 +61,5 @@ export async function CompensationPackagesSection({ sp }: { sp: Record<string, s
         additionalRecordTabs={assignment ? [{ key: 'review', label: t('compensationPackages.review'), content: <CompensationPackageActions packageId={pack.id} assignment={assignment} canManage={manage} canApprove={approve} /> }, { key: 'history', label: t('compensationPackages.history'), content: <AuditTrailPanel table="payroll_compensation_assignments" recordId={assignment.id} /> }] : []} />
     </div> })
   }
-  return <SetupEntitySection entity={{ ...PAYROLL_COMPENSATION_PACKAGES_ENTITY, recordChildren: [], readOnly: !manage || pack?.status === 'retired' }} orgId={actor.orgId} actorId={actor.actorId} searchParams={sp} basePath="/admin/setup/payroll" rowParam="package" canManage allowedSubsidiaryIds={authz.allowedSubsidiaryIds} visibleRowIds={new Set(packages.map(item => item.id))} recordTitle={pack?.name} additionalRecordTabs={tabs} />
+  return <SetupEntitySection entity={{ ...PAYROLL_COMPENSATION_PACKAGES_ENTITY, recordChildren: [], readOnly: !manage || pack?.status === 'retired' }} orgId={actor.orgId} actorId={actor.actorId} searchParams={effectiveParams} basePath="/admin/setup/payroll" rowParam="package" canManage allowedSubsidiaryIds={authz.allowedSubsidiaryIds} visibleRowIds={new Set(packages.map(item => item.id))} recordTitle={pack?.name} additionalRecordTabs={tabs} />
 }
