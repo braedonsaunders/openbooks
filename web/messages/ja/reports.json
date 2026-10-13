@@ -367,7 +367,9 @@
       "age": "経過日数",
       "bucket": "区分",
       "currency": "通貨",
-      "txnOpen": "未消込（取引通貨）"
+      "txnOpen": "未消込（取引通貨）",
+      "ageBasisDate": "滞留期間の基準日",
+      "ageBasisSource": "滞留期間の基準"
     },
     "buckets": {
       "current": "期日内",
@@ -389,6 +391,11 @@
       "label": "未消込の統制勘定仕訳",
       "hint": "対応する請求書・支払請求書・クレジットメモがないまま統制勘定に計上された仕訳",
       "more": "他 {count} 件"
+    },
+    "dateSources": {
+      "due_date": "支払期日",
+      "posting_date": "転記日",
+      "document_date": "伝票日"
     }
   },
   "cashFlow": {

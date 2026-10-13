@@ -90,6 +90,8 @@ export interface AgingDetailRow {
   reference: string
   /** Open items without terms carry no due date. */
   dueDate: string | null
+  ageBasisDate: string
+  ageBasisSource: string
   ageDays: string
   bucketLabel: string
   open: string
@@ -115,6 +117,8 @@ export interface AgingData {
   labelParty: string
   labelEntry: string
   labelDue: string
+  labelAgeBasisDate: string
+  labelAgeBasisSource: string
   labelAge: string
   labelBucket: string
   labelTotal: string
@@ -344,6 +348,8 @@ export async function loadAging(sp: Record<string, string | undefined>): Promise
     labelParty: tc('labels.party'),
     labelEntry: tr('generalLedger.columns.entry'),
     labelDue: t('columns.due'),
+    labelAgeBasisDate: t('columns.ageBasisDate'),
+    labelAgeBasisSource: t('columns.ageBasisSource'),
     labelAge: t('columns.age'),
     labelBucket: t('columns.bucket'),
     labelTotal: t('columns.total'),
@@ -389,6 +395,8 @@ export async function loadAging(sp: Record<string, string | undefined>): Promise
       partyNote: r.partyId ? null : noPartyNote,
       reference: r.reference ?? '',
       dueDate: r.dueDate,
+      ageBasisDate: r.ageBasisDate,
+      ageBasisSource: t(`dateSources.${r.ageBasisSource}`),
       ageDays: String(r.ageDays),
       bucketLabel: bucketLabels[r.bucket],
       open: m(r.open),
@@ -538,13 +546,15 @@ export function agingSpec(data: AgingData): PageSpec {
           variant: 'report',
           rows: f('detailRows'),
           rowKey: item('key'),
-          emptyRow: { text: f('emptyLabel'), colSpan: 8, className: EMPTY_ROW_CLASS },
+          emptyRow: { text: f('emptyLabel'), colSpan: 10, className: EMPTY_ROW_CLASS },
           columns: [
             column(rootF('labelParty'), partyCell()),
             column(rootF('labelEntry'), txn(item('txn'), text(item('reference'))), {
               className: 'font-mono text-xs',
             }),
             column(rootF('labelDue'), text(item('dueDate')), { className: 'tabular-nums' }),
+            column(rootF('labelAgeBasisDate'), text(item('ageBasisDate')), { className: 'tabular-nums' }),
+            column(rootF('labelAgeBasisSource'), text(item('ageBasisSource'))),
             column(rootF('labelAge'), txn(item('txn'), text(item('ageDays'))), {
               align: 'right',
               className: 'tabular-nums',

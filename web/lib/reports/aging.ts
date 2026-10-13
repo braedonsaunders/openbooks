@@ -185,6 +185,8 @@ interface OpenDocument {
   partyName: string | null;
   reference: string | null;
   due: string | null;
+  ageBasisDate: string;
+  ageBasisSource: 'due_date' | 'posting_date' | 'document_date';
   ageDays: number;
   docCurrency: string;
   txnCcy: string;
@@ -259,7 +261,10 @@ function openDocumentsSql(
     -- toggle, decided in JS below — the SQL stays one rebuild.
     with doc_lines as materialized (
       select d.id as doc_id, d.kind, d.party_id, d.document_number,
-             coalesce(d.due_date, d.posting_date, d.document_date)::text as due,
+             d.due_date::text as due,
+             coalesce(d.due_date, d.posting_date, d.document_date)::text as age_basis_date,
+             case when d.due_date is not null then 'due_date'
+                  when d.posting_date is not null then 'posting_date' else 'document_date' end as age_basis_source,
              (${asOf}::date - coalesce(d.due_date, d.posting_date, d.document_date))::int as age_days,
              d.currency as doc_currency,
              jl.id as line_id,
@@ -288,7 +293,7 @@ function openDocumentsSql(
          and ${agingBucketSql(asOf, scope?.bucket)}
     ),
     open_docs as (
-      select dl.doc_id, dl.kind, dl.party_id, dl.document_number, dl.due, dl.age_days,
+      select dl.doc_id, dl.kind, dl.party_id, dl.document_number, dl.due, dl.age_basis_date, dl.age_basis_source, dl.age_days,
              dl.doc_currency, dl.txn_ccy, dl.func_ccy,
              -- Credits and settlement remainders present negative: a payment's
              -- open is its UNAPPLIED remainder (gross control leg minus dated
@@ -315,7 +320,7 @@ function openDocumentsSql(
             and (a.unapplied_at is null or a.unapplied_at::date > ${asOf}::date)
             and (a.from_line_id = dl.line_id or a.to_line_id = dl.line_id)
         ) al on true
-       group by dl.doc_id, dl.kind, dl.party_id, dl.document_number, dl.due,
+       group by dl.doc_id, dl.kind, dl.party_id, dl.document_number, dl.due, dl.age_basis_date, dl.age_basis_source,
                 dl.age_days, dl.doc_currency, dl.txn_ccy, dl.func_ccy
       -- Settlement completeness is a ledger (base-leg) question under both
       -- bases, so the population rule never moves with the toggle: the base
@@ -323,7 +328,7 @@ function openDocumentsSql(
       having (sum(dl.base_gross) - coalesce(sum(al.applied_base), 0)) > 0
     )
     select od.doc_id, od.kind, od.party_id, p.display_name as party_name,
-           od.document_number as reference, od.due, od.age_days,
+           od.document_number as reference, od.due, od.age_basis_date, od.age_basis_source, od.age_days,
            od.doc_currency, od.txn_ccy, od.func_ccy,
            od.open_base, od.open_txn
       from open_docs od
@@ -335,6 +340,7 @@ function openDocumentsSql(
 interface OpenDocumentSource extends Record<string, unknown> {
   doc_id: string; kind: string; party_id: string | null; party_name: string | null;
   reference: string | null; due: string | null; age_days: number;
+  age_basis_date: string; age_basis_source: OpenDocument['ageBasisSource'];
   doc_currency: string; txn_ccy: string; func_ccy: string;
   open_base: string; open_txn: string;
 }
@@ -349,6 +355,8 @@ async function openDocuments(...args: Parameters<typeof openDocumentsSql>): Prom
     partyName: x.party_name,
     reference: x.reference,
     due: x.due,
+    ageBasisDate: x.age_basis_date,
+    ageBasisSource: x.age_basis_source,
     ageDays: x.age_days,
     docCurrency: x.doc_currency,
     txnCcy: x.txn_ccy,
@@ -717,6 +725,8 @@ export interface AgingDetailRow {
   partyName: string | null
   reference: string | null
   dueDate: string | null
+  ageBasisDate: string
+  ageBasisSource: OpenDocument['ageBasisSource']
   ageDays: number
   bucket: AgingBucket
   open: ExactDecimal
@@ -854,6 +864,7 @@ export async function agingDetailPage(
         'docId', selected.doc_id, 'docKind', selected.kind,
         'partyId', selected.party_id, 'partyName', selected.party_name,
         'reference', selected.reference, 'dueDate', selected.due,
+        'ageBasisDate', selected.age_basis_date, 'ageBasisSource', selected.age_basis_source,
         'ageDays', selected.age_days, 'bucket', selected.bucket,
         'open', selected.presented_open::text, 'docCurrency', selected.doc_currency,
         'txnOpen', selected.open_txn::text
@@ -897,7 +908,8 @@ function presentAgingDetail(
     totals.total = decimalAdd(totals.total, open)
     rows.push({
       docId: d.docId, docKind: d.kind, partyId: d.partyId, partyName: d.partyName,
-      reference: d.reference, dueDate: d.due, ageDays: d.ageDays, bucket, open,
+      reference: d.reference, dueDate: d.due, ageBasisDate: d.ageBasisDate, ageBasisSource: d.ageBasisSource,
+      ageDays: d.ageDays, bucket, open,
       docCurrency: d.docCurrency, txnOpen: d.openTxn as ExactDecimal,
     })
   }

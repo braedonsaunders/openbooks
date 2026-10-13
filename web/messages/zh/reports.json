@@ -367,7 +367,9 @@
       "age": "账龄（天）",
       "bucket": "分档",
       "currency": "币种",
-      "txnOpen": "未清（交易币种）"
+      "txnOpen": "未清（交易币种）",
+      "ageBasisDate": "账龄基准日期",
+      "ageBasisSource": "账龄基准"
     },
     "buckets": {
       "current": "未逾期",
@@ -389,6 +391,11 @@
       "label": "无未清项目的控制账户分录",
       "hint": "记入控制账户、但没有对应发票、账单或贷项通知单的分录",
       "more": "另有 {count} 条"
+    },
+    "dateSources": {
+      "due_date": "到期日",
+      "posting_date": "过账日期",
+      "document_date": "单据日期"
     }
   },
   "cashFlow": {

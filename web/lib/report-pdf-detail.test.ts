@@ -6,7 +6,7 @@ import { generalLedgerExportData, isExactDecimalText, pdfMoney } from './report-
 // `report-pdf` is server-only in production. This suite runs it directly so
 // the shared CSV/XLSX boundary is covered without weakening that production
 // guard.
-const { exportDataToPdfInput, exportDataToCsv, exportDataToRunResult, exportDataToXlsx, projectProfitabilityExportData, journalExportData, registerExportData, partnerStatementExportData } = await import('./report-pdf.ts')
+const { exportDataToPdfInput, exportDataToCsv, exportDataToRunResult, exportDataToXlsx, projectProfitabilityExportData, agingDetailExportData, journalExportData, registerExportData, partnerStatementExportData } = await import('./report-pdf.ts')
 const { decimalRatio } = await import('./reports/decimals.ts')
 
 const t = (key: string) => key
@@ -345,4 +345,30 @@ test('styled observations retain exact values in tabular exports and their ident
   const pdf = exportDataToPdfInput(data, { orgName: 'Example' }, { paperSize: 'letter', orientation: 'portrait', marginMm: 12, density: 'standard' }, { locale: 'en' })
   assert.deepEqual(pdf.groups[0]?.rows[0]?.[0], { text: pdfMoney(exact, 'en'), textColor: '#123456', bold: true })
   assert.deepEqual(pdf.groups[0]?.rows[0]?.[1], data.groups[0]?.rows[0]?.[1])
+})
+
+
+test('aging exports preserve unknown due dates and disclose the actual aging basis without moving money columns', () => {
+  const data = agingDetailExportData('ap', {
+    asOf: '2026-07-15',
+    rows: [
+      { partyName: 'Supplier', reference: 'BILL-1', dueDate: null,
+        ageBasisDate: '2026-05-10', ageBasisSource: 'posting_date', ageDays: 66, bucket: 'b3',
+        open: '500.0000', docCurrency: 'CAD', txnOpen: '500.0000' },
+      { partyName: 'Supplier', reference: 'BILL-2', dueDate: '2026-07-31',
+        ageBasisDate: '2026-07-31', ageBasisSource: 'due_date', ageDays: -16, bucket: 'current',
+        open: '200.0000', docCurrency: 'CAD', txnOpen: '200.0000' },
+    ],
+    totals: { current: '200.0000', b1: '0.0000', b2: '0.0000', b3: '500.0000', b4: '0.0000', total: '700.0000' },
+  }, t)
+  const group = data.groups[0]!
+  assert.deepEqual(group.columns.slice(2, 5), ['aging.columns.due', 'aging.columns.ageBasisDate', 'aging.columns.ageBasisSource'])
+  assert.deepEqual(group.rows[0], ['Supplier', 'BILL-1', '', '2026-05-10', 'aging.dateSources.posting_date', 66, 'aging.buckets.b3', '500.0000', 'CAD', '500.0000'])
+  assert.deepEqual(group.rows[1]?.slice(2, 5), ['2026-07-31', '2026-07-31', 'aging.dateSources.due_date'])
+  assert.equal(group.rows[2]?.[7], '700.0000')
+  assert.deepEqual(group.money, [false, false, false, false, false, false, false, true, false, true])
+  const csv = exportDataToCsv(data, {})
+  assert.match(csv, /aging.columns.due/)
+  assert.match(csv, /BILL-1,,2026-05-10,aging.dateSources.posting_date,66/)
+  assert.match(csv, /BILL-2,2026-07-31,2026-07-31,aging.dateSources.due_date,-16/)
 })

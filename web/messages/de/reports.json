@@ -367,7 +367,9 @@
       "age": "Alter (Tage)",
       "bucket": "Kategorie",
       "currency": "Währ.",
-      "txnOpen": "Offen (Transaktion)"
+      "txnOpen": "Offen (Transaktion)",
+      "ageBasisDate": "Altersbasisdatum",
+      "ageBasisSource": "Altersbasis"
     },
     "buckets": {
       "current": "Aktuell",
@@ -389,6 +391,11 @@
       "label": "Kontobuchungen ohne offene Position",
       "hint": "Auf dem Kontrollkonto gebucht, ohne Rechnung, Beleg oder Gutschrift dahinter",
       "more": "+{count} weitere"
+    },
+    "dateSources": {
+      "due_date": "Fälligkeitsdatum",
+      "posting_date": "Buchungsdatum",
+      "document_date": "Belegdatum"
     }
   },
   "cashFlow": {

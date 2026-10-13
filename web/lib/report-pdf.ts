@@ -15,6 +15,7 @@ import {
 } from '@openbooks/pdf'
 import { COMPUTED_RETAINED_EARNINGS_PRIOR_ID } from './computed-earnings'
 import type { StatementView } from './statement-matrix'
+import type { AgingDetailRow } from './reports/aging'
 import { decimalIsMaterial, decimalIsZero, decimalScaleWhole, decimalSum, decimalToNumber, marginRatioToPercent, type ExactDecimal } from './statement-format'
 import {
   reportResultToXlsx,
@@ -443,7 +444,7 @@ export function agingExportData(
 export function agingDetailExportData(
   side: 'ar' | 'ap',
   result: {
-    rows: { partyName: string | null; reference: string | null; dueDate: string | null; ageDays: number; bucket: 'current' | 'b1' | 'b2' | 'b3' | 'b4'; open: ExactDecimal; docCurrency: string; txnOpen: ExactDecimal }[]
+    rows: Pick<AgingDetailRow, 'partyName' | 'reference' | 'dueDate' | 'ageBasisDate' | 'ageBasisSource' | 'ageDays' | 'bucket' | 'open' | 'docCurrency' | 'txnOpen'>[]
     totals: { current: ExactDecimal; b1: ExactDecimal; b2: ExactDecimal; b3: ExactDecimal; b4: ExactDecimal; total: ExactDecimal }
     asOf: string
   },
@@ -455,6 +456,8 @@ export function agingDetailExportData(
     row.partyName ?? t('aging.noParty'),
     row.reference ?? '',
     row.dueDate ?? '',
+    row.ageBasisDate,
+    t(`aging.dateSources.${row.ageBasisSource}`),
     row.ageDays,
     bucketLabel(row.bucket),
     row.open,
@@ -462,7 +465,7 @@ export function agingDetailExportData(
     row.txnOpen,
   ] as (string | number)[])
   rows.push([
-    t('trialBalance.totals'), '', '', '', '', result.totals.total, '', '',
+    t('trialBalance.totals'), '', '', '', '', '', '', result.totals.total, '', '',
   ])
   return {
     title,
@@ -471,10 +474,10 @@ export function agingDetailExportData(
     groups: [{
       kind: 'results',
       title,
-      columns: [t('export.columns.party'), t('export.columns.type'), t('aging.columns.due'), t('aging.columns.age'), t('aging.columns.bucket'), t('aging.columns.total'), t('aging.columns.currency'), t('aging.columns.txnOpen')],
+      columns: [t('export.columns.party'), t('export.columns.type'), t('aging.columns.due'), t('aging.columns.ageBasisDate'), t('aging.columns.ageBasisSource'), t('aging.columns.age'), t('aging.columns.bucket'), t('aging.columns.total'), t('aging.columns.currency'), t('aging.columns.txnOpen')],
       rows,
-      align: ['left', 'left', 'left', 'right', 'left', 'right', 'left', 'right'],
-      money: [false, false, false, false, false, true, false, true],
+      align: ['left', 'left', 'left', 'left', 'left', 'right', 'left', 'right', 'left', 'right'],
+      money: [false, false, false, false, false, false, false, true, false, true],
     }],
   }
 }

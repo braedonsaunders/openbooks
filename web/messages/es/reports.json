@@ -367,7 +367,9 @@
       "age": "Antigüedad (días)",
       "bucket": "Rango",
       "currency": "Mon.",
-      "txnOpen": "Abierto (transacción)"
+      "txnOpen": "Abierto (transacción)",
+      "ageBasisDate": "Fecha base de antigüedad",
+      "ageBasisSource": "Base de antigüedad"
     },
     "buckets": {
       "current": "Corriente",
@@ -389,6 +391,11 @@
       "label": "Asientos de cuenta de control sin partida abierta",
       "hint": "Contabilizados en la cuenta de control sin factura, documento o nota de crédito que los respalde",
       "more": "+{count} más"
+    },
+    "dateSources": {
+      "due_date": "Fecha de vencimiento",
+      "posting_date": "Fecha de contabilización",
+      "document_date": "Fecha del documento"
     }
   },
   "cashFlow": {

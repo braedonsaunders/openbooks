@@ -367,7 +367,9 @@
       "age": "Age (days)",
       "bucket": "Bucket",
       "currency": "Ccy",
-      "txnOpen": "Open (txn)"
+      "txnOpen": "Open (txn)",
+      "ageBasisDate": "Aging basis date",
+      "ageBasisSource": "Aging basis"
     },
     "buckets": {
       "current": "Current",
@@ -389,6 +391,11 @@
       "label": "Control-account entries without an open item",
       "hint": "Posted to the control account with no invoice, bill or credit behind them",
       "more": "+{count} more"
+    },
+    "dateSources": {
+      "due_date": "Due date",
+      "posting_date": "Posting date",
+      "document_date": "Document date"
     }
   },
   "cashFlow": {

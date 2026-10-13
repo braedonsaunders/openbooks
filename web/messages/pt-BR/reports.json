@@ -367,7 +367,9 @@
       "age": "Idade (dias)",
       "bucket": "Faixa",
       "currency": "Moeda",
-      "txnOpen": "Em aberto (transação)"
+      "txnOpen": "Em aberto (transação)",
+      "ageBasisDate": "Data-base de antiguidade",
+      "ageBasisSource": "Base de antiguidade"
     },
     "buckets": {
       "current": "A vencer",
@@ -389,6 +391,11 @@
       "label": "Lançamentos da conta de controle sem item em aberto",
       "hint": "Lançados na conta de controle sem fatura, conta a pagar ou nota de crédito correspondente",
       "more": "+{count} mais"
+    },
+    "dateSources": {
+      "due_date": "Data de vencimento",
+      "posting_date": "Data de contabilização",
+      "document_date": "Data do documento"
     }
   },
   "cashFlow": {

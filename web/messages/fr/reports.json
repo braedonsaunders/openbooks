@@ -367,7 +367,9 @@
       "age": "Ancienneté (jours)",
       "bucket": "Tranche",
       "currency": "Dev.",
-      "txnOpen": "Ouvert (transaction)"
+      "txnOpen": "Ouvert (transaction)",
+      "ageBasisDate": "Date de référence d’ancienneté",
+      "ageBasisSource": "Base d’ancienneté"
     },
     "buckets": {
       "current": "Courant",
@@ -389,6 +391,11 @@
       "label": "Écritures du compte de contrôle sans élément ouvert",
       "hint": "Comptabilisées sur le compte de contrôle sans facture, pièce ou avoir correspondant",
       "more": "+{count} autres"
+    },
+    "dateSources": {
+      "due_date": "Date d’échéance",
+      "posting_date": "Date de comptabilisation",
+      "document_date": "Date du document"
     }
   },
   "cashFlow": {

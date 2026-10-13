@@ -222,6 +222,9 @@ test('aging puts a 90-day-old invoice in the 90+ bucket', { skip: !process.env.O
       assert.deepEqual(paged.totals, detail.totals)
       assert.equal(paged.total, detail.rows.length)
       assert.equal(detail.rows[0]?.bucket, 'b4')
+      assert.equal(detail.rows[0]?.dueDate, '2026-06-02')
+      assert.equal(detail.rows[0]?.ageBasisDate, '2026-06-02')
+      assert.equal(detail.rows[0]?.ageBasisSource, 'due_date')
     })
   } finally {
     await withBypassContext(() => dropScratchOrg(scratch.orgId))
