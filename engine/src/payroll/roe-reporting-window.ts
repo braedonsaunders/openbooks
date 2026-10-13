@@ -122,7 +122,9 @@ export function assembleRoeReportingWindow(
       ||prior.periodStart!==p.periodStart||prior.periodEnd!==p.periodEnd||prior.payDate!==p.payDate||prior.nilPeriod!==p.explicitlyExcluded
       ||prior.earnedFrom!==null&&prior.earnedFrom<context.event.first_day_worked
       ||prior.earnedTo!==null&&prior.earnedTo>cutoff))throw new PayrollError('Historical reporting evidence conflicts with the confirmed employment spell or earned cutoff');
-    return {...p,insurableEarnings:prior?.insurableEarnings??'0',insurableHours:prior?.insurableHours??'0',stubs:[] as RoeWindowStub[]};
+    // A scheduled run date is not evidence that this employee received pay.
+    // Native periods acquire the actual date from their retained paid stubs.
+    return {...p,payDate:prior?.payDate??null,insurableEarnings:prior?.insurableEarnings??'0',insurableHours:prior?.insurableHours??'0',stubs:[] as RoeWindowStub[]};
   });
   const included: RoeWindowStub[]=[];
   const seenStubs=new Set<string>();

@@ -29,6 +29,7 @@ test('an explicitly excluded nil period retains its consecutive position rather 
  const {calendar,stubs}=fixture(3);calendar[1]!.explicitlyExcluded=true;stubs.splice(1,1);
  const window=assembleRoeReportingWindow(context(calendar[0]!.periodStart,calendar[2]!.periodEnd),calendar,stubs);
  assert.equal(window.periods.length,3);assert.equal(window.periods[1]!.insurableEarnings,'0');
+ assert.equal(window.periods[1]!.payDate,null,'an excluded employee has no payment on the scheduled run date');
  assert.equal(window.totalInsurableEarnings,'200.0200');assert.equal(window.totalInsurableHours,'15.5000');
 });
 test('ROE refuses absent history and unqualified nil periods instead of inventing zero coverage',()=>{
@@ -96,4 +97,14 @@ test('qualified reporting allocations include an earlier-paid immutable source o
  assert.equal(result.periods[0]!.insurableEarnings,'112.3500');assert.equal(result.totalInsurableEarnings,'212.3600');
  assert.equal(result.sourceDocuments.at(-1)!.documentId,'earlier-payment');
  assert.throws(()=>assembleRoeReportingWindow(ctx,calendar,[...stubs,{...allocated,reportPeriodEnd:'2025-01-17'}]),/spanning multiple/);
+});
+
+
+test('a reporting period retains the actual employee payment date rather than its scheduled run date',()=>{
+ const {calendar,stubs}=fixture(1);const ctx=context(calendar[0]!.periodStart,calendar[0]!.periodEnd);
+ calendar[0]!.payDate='2025-01-20';stubs[0]!.payDate='2025-01-15';
+ const window=assembleRoeReportingWindow(ctx,calendar,stubs);
+ assert.equal(window.periods[0]!.payDate,'2025-01-15');
+ assert.equal(window.sourceDocuments[0]!.payDate,'2025-01-15');
+ assert.equal(calendar[0]!.payDate,'2025-01-20','reporting never changes the scheduled source');
 });
