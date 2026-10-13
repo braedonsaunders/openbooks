@@ -110,6 +110,8 @@ export async function generateRenewalDocument(orgId: string, actorId: string, su
 /** Scheduler uses each policy's current operator authority; disabling the
  * feature or revoking that operator stops generation without deleting history. */
 export async function runRenewalScan() {
+  // bypass: scheduler-tick — discover renewal policies across organizations;
+  // each target is re-entered with its tenant, feature and operator authority.
   const targets = await withBypassContext(() => db.execute<{ org_id: string; subscription_id: string; owner_id: string }>(sql`
     select distinct p.org_id,p.subscription_id,p.owner_id from subscription_renewal_policies p
     join subscriptions s on s.org_id=p.org_id and s.id=p.subscription_id and s.status='active'

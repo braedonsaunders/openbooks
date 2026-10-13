@@ -111,6 +111,8 @@ export async function runScheduledJournalReversals(input: { orgId: string; actor
 
 /** Scheduled duty discovers tenants once, then executes each approved instruction in its own tenant context. */
 export async function runDueJournalReversals(): Promise<void> {
+  // bypass: scheduler-tick — discover organizations with pending instructions;
+  // execute each retained instruction through its tenant-scoped native command.
   const orgs = await withBypass(async () => (await db.execute<{ org_id: string }>(sql`
     select distinct org_id from journal_reversal_instructions where status in ('planned','blocked') order by org_id`)).rows);
   for (const row of orgs) {
