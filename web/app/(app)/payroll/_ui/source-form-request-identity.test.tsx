@@ -24,7 +24,9 @@ function employee(name: string) {
 test('a new ROE event clears issued fields and a changed employee ignores the late prior request', async t => {
   const requests: { url: string; resolve: (response: Response) => void }[] = []
   const previous = globalThis.fetch
-  globalThis.fetch = (url => new Promise<Response>(resolve => requests.push({ url: String(url), resolve }))) as typeof fetch
+  globalThis.fetch = (url => String(url).includes('/separations/subsequent-service')
+    ? Promise.resolve(Response.json({ record: null, source: null }))
+    : new Promise<Response>(resolve => requests.push({ url: String(url), resolve }))) as typeof fetch
   const host = document.createElement('div'); document.body.append(host)
   const root = createRoot(host)
   t.after(async () => { await act(() => root.unmount()); host.remove(); globalThis.fetch = previous })
