@@ -24,17 +24,13 @@ const draft = { dirty: false }
 
 function ListWithDrawer() {
   const id = new URLSearchParams(window.location.search).get('doc')
-  return React.createElement(DrawerNavigateContext.Provider, {
-    value: (href: string) => window.history.pushState(null, '', href),
-    children: React.createElement(React.Fragment, null,
+  return <DrawerNavigateContext.Provider value={(href: string) => window.history.pushState(null, '', href)}>
+    {React.createElement(React.Fragment, null,
       React.createElement('ul', null,
         React.createElement('li', null, React.createElement(ListDrawerLink, { href: `/ap/bills?doc=${ID_A}` }, 'Bill A')),
         React.createElement('li', null, React.createElement(ListDrawerLink, { href: `/ap/bills?doc=${ID_B}` }, 'Bill B'))),
-      React.createElement(UrlDrawer, { children: null,
-        open: id !== null, openKey: id ?? undefined, closeHref: '/ap/bills',
-        title: `Bill ${id ?? ''}`, beforeClose: () => !draft.dirty,
-      }, id ? React.createElement('div', { 'data-record': id }, `Record ${id}`) : null)),
-  })
+      <UrlDrawer {...{open: id !== null, openKey: id ?? undefined, closeHref: '/ap/bills', title: `Bill ${id ?? ''}`, beforeClose: () => !draft.dirty}}>{id ? React.createElement('div', { 'data-record': id }, `Record ${id}`) : null}</UrlDrawer>)}
+  </DrawerNavigateContext.Provider>
 }
 
 async function renderList(t: TestContext) {
@@ -49,8 +45,9 @@ async function renderList(t: TestContext) {
     host.remove()
   })
   const render = async () => act(async () => {
-    root.render(React.createElement(NextIntlClientProvider, { children: null, locale: 'en', messages, timeZone: 'UTC' },
-      React.createElement(ListWithDrawer, null)))
+    root.render(<NextIntlClientProvider locale={'en'} messages={messages} timeZone={'UTC'}>
+      {React.createElement(ListWithDrawer, null)}
+    </NextIntlClientProvider>)
     await tick()
   })
   await render()

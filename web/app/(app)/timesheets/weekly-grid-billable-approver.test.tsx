@@ -118,16 +118,10 @@ async function mountGrid(status: React.ComponentProps<typeof WeeklyGrid>["payloa
   const root = createRoot(host);
   await act(async () => {
     root.render(
-      React.createElement(
-        BusinessDateProvider,
-        { children: null, today: "2026-07-14" },
-        React.createElement(
-          NextIntlClientProvider,
-          { children: null, locale: "en", messages, timeZone: "UTC" },
-          React.createElement(
-            MoneyProvider,
-            { children: null, currency: "USD" },
-            React.createElement(WeeklyGrid, {
+      <BusinessDateProvider today={"2026-07-14"}>
+        <NextIntlClientProvider locale={"en"} messages={messages} timeZone={"UTC"}>
+          <MoneyProvider currency={"USD"}>
+            {React.createElement(WeeklyGrid, {
               employeeId: "emp-9",
               week: "2026-07-12",
               payload,
@@ -136,10 +130,10 @@ async function mountGrid(status: React.ComponentProps<typeof WeeklyGrid>["payloa
               canApprove: true,
               canReopen: false,
               approveBlockedReason: null,
-            }),
-          ),
-        ),
-      ),
+            })}
+          </MoneyProvider>
+        </NextIntlClientProvider>
+      </BusinessDateProvider>,
     );
     await tick();
   });

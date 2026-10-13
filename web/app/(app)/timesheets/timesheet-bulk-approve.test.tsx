@@ -63,11 +63,9 @@ async function mount() {
   const root = createRoot(host);
   await act(async () => {
     root.render(
-      React.createElement(
-        NextIntlClientProvider,
-        { children: null, locale: "en", messages, timeZone: "UTC" },
-        React.createElement(TimesheetBulkApprove, { weeks: WEEKS }),
-      ),
+      <NextIntlClientProvider locale={"en"} messages={messages} timeZone={"UTC"}>
+        {React.createElement(TimesheetBulkApprove, { weeks: WEEKS })}
+      </NextIntlClientProvider>,
     );
     await tick();
   });

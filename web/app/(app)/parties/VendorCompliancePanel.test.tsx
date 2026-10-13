@@ -44,7 +44,7 @@ let recordSave: Registry | null = null;
 
 function RecordHost({ children }: { children: React.ReactNode }) {
   const registry = useRecordSaveRegistry(true);
-  recordSave = registry;
+  React.useLayoutEffect(() => { recordSave = registry; }, [registry]);
   return <RecordSaveContext.Provider value={registry.context}>{children}</RecordSaveContext.Provider>;
 }
 

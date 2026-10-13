@@ -75,8 +75,9 @@ test("overflow headers with children open them; headers without children never r
   })
   await act(async () => {
     root.render(
-      React.createElement(NextIntlClientProvider, { children: null, locale: 'en', messages, timeZone: 'UTC' },
-        React.createElement(TopNav, { groups })),
+      <NextIntlClientProvider locale={'en'} messages={messages} timeZone={'UTC'}>
+        {React.createElement(TopNav, { groups })}
+      </NextIntlClientProvider>,
     )
     await tick()
     await tick()

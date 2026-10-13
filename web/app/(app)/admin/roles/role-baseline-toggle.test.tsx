@@ -69,11 +69,9 @@ async function mount(node: React.ReactElement): Promise<() => Promise<void>> {
   const root = createRoot(host);
   await act(async () => {
     root.render(
-      React.createElement(
-        NextIntlClientProvider,
-        { children: null, locale: "en", messages, timeZone: "UTC" },
-        node,
-      ),
+      <NextIntlClientProvider locale={"en"} messages={messages} timeZone={"UTC"}>
+        {node}
+      </NextIntlClientProvider>,
     );
     await tick();
   });

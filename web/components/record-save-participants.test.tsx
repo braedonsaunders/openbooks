@@ -19,7 +19,7 @@ let registry: Registry | null = null;
 
 function Host({ children }: { children: React.ReactNode }) {
   const value = useRecordSaveRegistry(true);
-  registry = value;
+  React.useLayoutEffect(() => { registry = value; }, [value]);
   return <RecordSaveContext.Provider value={value.context}>{children}</RecordSaveContext.Provider>;
 }
 

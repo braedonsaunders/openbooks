@@ -646,7 +646,7 @@ test('tenant PDF style and color choices save and reopen through the native boar
     style.dispatchEvent(new window.Event('change', { bubbles: true }));
     setTextInput(FIELD_LABEL.schedulePdfAccent!, '#7c3aed');
     const treatmentTrigger = document.querySelector(`button[aria-label="${FIELD_LABEL.schedulePdfColorTreatment}"]`);
-    const treatment = treatmentTrigger?.closest('span')?.querySelector('select')!;
+    const treatment = treatmentTrigger?.closest('span')?.querySelector('select');
     assert.ok(treatment);
     treatment.value = 'strong';
     treatment.dispatchEvent(new window.Event('change', { bubbles: true }));

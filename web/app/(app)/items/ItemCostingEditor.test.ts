@@ -33,7 +33,7 @@ let recordSave: ReturnType<typeof useRecordSaveRegistry> | null = null
 /** The item drawer's side of the contract: one registry, one Save. */
 function RecordHost({ children }: { children?: ReactNode }) {
   const registry = useRecordSaveRegistry(true)
-  recordSave = registry
+  React.useLayoutEffect(() => { recordSave = registry }, [registry])
   return React.createElement(RecordSaveContext.Provider, { value: registry.context }, children)
 }
 

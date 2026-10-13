@@ -47,12 +47,11 @@ async function renderDrawer(t: TestContext, actions: React.ReactNode) {
   })
   await act(async () => {
     root.render(
-      React.createElement(NextIntlClientProvider, { children: null, locale: 'en', messages, timeZone: 'UTC' },
-        React.createElement(TransactionDrawer, { children: null,
-          closeHref: '/parties', recordId: '11111111-1111-4111-8111-111111111111',
-          title: 'Vendor', showEvidenceTabs: false,
-          actions,
-        }, React.createElement('div', null, 'body'))),
+      <NextIntlClientProvider locale={'en'} messages={messages} timeZone={'UTC'}>
+        <TransactionDrawer closeHref={'/parties'} recordId={'11111111-1111-4111-8111-111111111111'} title={'Vendor'} showEvidenceTabs={false} actions={actions}>
+          {React.createElement('div', null, 'body')}
+        </TransactionDrawer>
+      </NextIntlClientProvider>,
     )
     await tick()
     await tick()

@@ -123,16 +123,10 @@ async function mountGrid() {
   const root = createRoot(host);
   await act(async () => {
     root.render(
-      React.createElement(
-        BusinessDateProvider,
-        { children: null, today: "2026-07-14" },
-        React.createElement(
-          NextIntlClientProvider,
-          { children: null, locale: "en", messages, timeZone: "UTC" },
-          React.createElement(
-            MoneyProvider,
-            { children: null, currency: "USD" },
-            React.createElement(WeeklyGrid, {
+      <BusinessDateProvider today={"2026-07-14"}>
+        <NextIntlClientProvider locale={"en"} messages={messages} timeZone={"UTC"}>
+          <MoneyProvider currency={"USD"}>
+            {React.createElement(WeeklyGrid, {
               employeeId: "emp-1",
               week: "2026-07-12",
               payload: weekPayload(),
@@ -141,10 +135,10 @@ async function mountGrid() {
               canApprove: true,
               canReopen: false,
               approveBlockedReason: null,
-            }),
-          ),
-        ),
-      ),
+            })}
+          </MoneyProvider>
+        </NextIntlClientProvider>
+      </BusinessDateProvider>,
     );
     await tick();
   });
