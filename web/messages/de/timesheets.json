@@ -310,6 +310,12 @@
     "save": "Korrektur speichern",
     "action": "Zeitart korrigieren",
     "reviewDescription": "Prüfen Sie einzelne ausstehende Einträge vor dem Einreichen oder Korrigieren der Zeitart.",
-    "saved": "Zeitart korrigiert."
+    "saved": "Zeitart korrigiert.",
+    "classification": "Festgelegte Einstufung: {value}",
+    "classRegular": "Regulär",
+    "classOvertime": "Überstunden",
+    "classDoubleTime": "Doppelte Arbeitszeit",
+    "classOther": "Sonstige",
+    "classUnknown": "Unbekannt"
   }
 }

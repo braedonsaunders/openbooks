@@ -9,6 +9,7 @@ import { withAuthzContext } from '../../../lib/authz-context'
 import { loadWeek } from './_lib'
 import { POST as submit } from './submit/route'
 import { POST as approve } from './approve/route'
+import { POST as withdraw } from './withdraw/route'
 
 const enabled = { skip: !process.env.OPENBOOKS_DB_URL }
 const WEEK = '2026-04-05'
@@ -61,11 +62,52 @@ async function fixture() {
     withAuthzContext(await auth(), () => approve(new Request('http://time.local/api/timesheets/approve', {
       method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({employee,week:WEEK}),
     }))))
+  const withdrawSelected = async () => withOrgContext(org.orgId, async () =>
+    withAuthzContext(await auth(), () => withdraw(new Request('http://time.local/api/timesheets/withdraw', {
+      method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({employee,week:WEEK}),
+    }))))
   const selections = async () => (await read()).pendingEntries!.filter(entry=>entry.id===chosen)
     .map(({id,updatedAt})=>({id,updatedAt}))
   const close = () => dropScratchOrgReporting(org.orgId)
-  return {org,actor,employee,header,prior,chosen,untouched,auth,read,snapshot,post,approveSelected,selections,close}
+  return {org,actor,employee,header,prior,chosen,untouched,auth,read,snapshot,post,approveSelected,withdrawSelected,selections,close}
 }
+
+test('withdrawn selected time can be reviewed and resubmitted without submitting held drafts or changing prior approvals', enabled, async () => {
+  const f = await fixture()
+  try {
+    const before = await f.snapshot(), originalChoice = await f.selections()
+    const submitted = await f.post(originalChoice)
+    assert.equal(submitted.status,200,await submitted.clone().text())
+    const withdrawn = await f.withdrawSelected()
+    assert.equal(withdrawn.status,200,await withdrawn.clone().text())
+    assert.equal((await f.read()).status,'draft')
+    const afterWithdraw = await f.snapshot()
+    const stale = await f.post(originalChoice)
+    assert.equal(stale.status,409,await stale.clone().text())
+    assert.deepEqual(await f.snapshot(),afterWithdraw)
+    const choice = await f.selections()
+    const resubmitted = await f.post(choice)
+    assert.equal(resubmitted.status,200,await resubmitted.clone().text())
+    assert.equal((await f.read()).status,'submitted')
+    const repeated = await f.post(choice)
+    assert.equal(repeated.status,409,await repeated.clone().text())
+    const audits = await withOrgContext(f.org.orgId,async () => (await db.execute<{
+      changes:{before:{status:string};entries:Selection[]}
+    }>(sql`select changes from audit_log where org_id=${f.org.orgId} and row_id=${f.header}
+      and changes->>'event'='additional_time_submitted'`)).rows)
+    assert.equal(audits.length,2)
+    const recalled = audits.find(row=>row.changes.before.status==='draft')
+    assert.ok(recalled,'the new audit records the actual withdrawn draft state')
+    assert.deepEqual(recalled.changes.entries.map(({id,updatedAt})=>({id,updatedAt})),choice)
+    const approved = await f.approveSelected()
+    assert.equal(approved.status,200,await approved.clone().text())
+    const after = await f.snapshot()
+    for (const id of [f.prior,f.untouched]) assert.equal(after.find(row=>row.id===id)?.value,
+      before.find(row=>row.id===id)?.value,'recall, resubmission and approval preserve every unselected row field')
+    assert.equal(JSON.parse(after.find(row=>row.id===f.chosen)!.value).status,'approved')
+    assert.deepEqual((await f.read()).pendingEntries!.map(entry=>entry.id),[f.untouched])
+  } finally { await f.close() }
+})
 
 test('selective submission and native approval preserve earlier approved time and unselected drafts', enabled, async () => {
   const f = await fixture()

@@ -762,7 +762,7 @@ export function WeeklyGrid({
         {' · '}{t('grid.weekOf', weekRange(week, locale))}</span>}>
       <AdditionalTimeReview key={`${loadedKey}:${revision}`} entries={pendingEntries} pickers={pickers}
         busy={busy} refusal={refusal} onBack={() => setAdditionalReview(false)} onSubmit={onSubmitAdditional}
-        canSubmit={requireApproval && status === 'approved'} onCorrect={onCorrectTimeType} />
+        canSubmit={requireApproval && ['approved', 'draft', 'rejected'].includes(status)} onCorrect={onCorrectTimeType} />
     </UrlDrawer>
   }
   return (

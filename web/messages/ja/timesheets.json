@@ -310,6 +310,12 @@
     "save": "訂正を保存",
     "action": "区分を訂正",
     "reviewDescription": "提出や時間区分の訂正を行う前に、未処理の記録を個別に確認してください。",
-    "saved": "時間区分を訂正しました。"
+    "saved": "時間区分を訂正しました。",
+    "classification": "設定された分類：{value}",
+    "classRegular": "通常",
+    "classOvertime": "時間外",
+    "classDoubleTime": "倍額時間",
+    "classOther": "その他",
+    "classUnknown": "不明"
   }
 }

@@ -310,6 +310,12 @@
     "save": "保存更正",
     "action": "更正类型",
     "reviewDescription": "在提交或更正工时类型之前，请逐条检查待处理记录。",
-    "saved": "工时类型已更正。"
+    "saved": "工时类型已更正。",
+    "classification": "已设置的分类：{value}",
+    "classRegular": "正常工时",
+    "classOvertime": "加班",
+    "classDoubleTime": "双倍工时",
+    "classOther": "其他",
+    "classUnknown": "未知"
   }
 }

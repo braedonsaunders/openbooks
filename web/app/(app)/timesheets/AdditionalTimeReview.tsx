@@ -25,6 +25,15 @@ export function AdditionalTimeReview({ entries, pickers, busy, refusal, onBack, 
   const [selected, setSelected] = useState<Map<string, string>>(new Map())
   const [reason, setReason] = useState('')
   const correctionCopy = useTranslations('timesheets.timeTypeCorrection')
+  const classificationLabel = (classification: string | undefined) => {
+    switch (classification) {
+      case 'regular': return correctionCopy('classRegular')
+      case 'overtime': return correctionCopy('classOvertime')
+      case 'double_time': return correctionCopy('classDoubleTime')
+      case 'other': return correctionCopy('classOther')
+      default: return correctionCopy('classUnknown')
+    }
+  }
   const [correcting, setCorrecting] = useState<{ entry: PendingWeekEntry; commandId: string } | null>(null)
   const [typeId, setTypeId] = useState('')
   const [correctionReason, setCorrectionReason] = useState('')
@@ -37,22 +46,27 @@ export function AdditionalTimeReview({ entries, pickers, busy, refusal, onBack, 
   if (correcting) {
     const entry = correcting.entry
     const type = pickers.timeTypes.find(option => option.value === typeId)
+    const currentType = pickers.timeTypes.find(option => option.value === entry.timeTypeId)
     const changed = entries.find(row => row.id === entry.id)?.updatedAt !== entry.updatedAt
     return <div className="space-y-4 p-6">
       <h2 className="font-medium">{correctionCopy('title')}</h2>
       <p>{viewerDate(entry.workedOn, locale, 'UTC')} · {entry.hours} {t('hours')} · {entry.fieldTicketNumber ?? t('directTime')}</p>
       <p className="text-sm text-muted-foreground">{correctionCopy('description')}</p>
       <label className="block space-y-1 text-sm"><span>{correctionCopy('current')}</span>
-        <p>{pickers.timeTypes.find(option => option.value === entry.timeTypeId)?.label ?? '—'}</p>
+        <p>{currentType?.label ?? '—'}</p>
+        <p className="text-muted-foreground">{correctionCopy('classification', { value: classificationLabel(currentType?.classification) })}</p>
       </label>
       <label className="block space-y-1 text-sm"><span>{correctionCopy('replacement')}</span>
         <Select value={typeId} disabled={busy || changed} onChange={event => setTypeId(event.target.value)}>
           <option value="">{correctionCopy('choose')}</option>
           {pickers.timeTypes.filter(option => option.updatedAt && option.billMultiplier != null && option.excludeFromWages === false)
-            .map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+            .map(option => <option key={option.value} value={option.value}>{option.label} · {classificationLabel(option.classification)}</option>)}
         </Select>
       </label>
-      {type ? <p className="text-sm">{correctionCopy('multipliers', { cost: type.costMultiplier, bill: type.billMultiplier ?? '—' })}</p> : null}
+      {type ? <div className="space-y-1 text-sm">
+        <p>{correctionCopy('classification', { value: classificationLabel(type.classification) })}</p>
+        <p>{correctionCopy('multipliers', { cost: type.costMultiplier, bill: type.billMultiplier ?? '—' })}</p>
+      </div> : null}
       <label className="block space-y-1 text-sm"><span>{correctionCopy('reason')}</span>
         <textarea className="w-full rounded-md border bg-background p-2" rows={3} maxLength={500}
           value={correctionReason} disabled={busy} onChange={event => setCorrectionReason(event.target.value)} />

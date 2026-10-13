@@ -135,3 +135,23 @@ test('a changed correction revision requires review again and does not silently 
   assert.equal(f.host.querySelector('select')!.disabled, true)
   assert.match(f.host.querySelector('[role="alert"]')?.textContent ?? '', /review its current revision/)
 })
+
+
+test('time correction shows the declared class when a name and premium multiplier suggest another class', async t => {
+  const f = await mount(t, { canSubmit: false, entries: rows.map(row => ({ ...row, timeTypeId: 'regular' })),
+    pickers: { ...pickers, timeTypes: [
+      { value: 'regular', label: 'Regular', classification: 'regular', isDefault: true, isBillableDefault: true,
+        costMultiplier: '1.0000', billMultiplier: '1.0000', excludeFromWages: false, updatedAt: revision },
+      { value: 'premium', label: 'Overtime', classification: 'regular', isDefault: false, isBillableDefault: true,
+        costMultiplier: '1.5000', billMultiplier: '1.5000', excludeFromWages: false, updatedAt: revision },
+    ] }, async onCorrect() { return false },
+  })
+  const action = [...f.host.querySelectorAll('button')].find(button => button.textContent === 'Correct type')!
+  await act(async () => action.click())
+  const select = f.host.querySelector('select')!
+  assert.equal([...select.options].find(option => option.value === 'premium')?.textContent, 'Overtime · Regular')
+  await act(async () => { select.value = 'premium'; select.dispatchEvent(new window.Event('change', { bubbles: true })) })
+  assert.equal((f.host.textContent ?? '').includes('Declared classification: Regular'), true)
+  assert.equal((f.host.textContent ?? '').includes('Declared classification: Overtime'), false)
+  assert.match(f.host.textContent ?? '', /Cost multiplier: 1.5000; default billing multiplier: 1.5000/)
+})

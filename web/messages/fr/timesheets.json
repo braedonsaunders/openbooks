@@ -310,6 +310,12 @@
     "save": "Enregistrer la correction",
     "action": "Corriger le type",
     "reviewDescription": "Examinez chaque saisie en attente avant de la soumettre ou de corriger son type.",
-    "saved": "Type de temps corrigé."
+    "saved": "Type de temps corrigé.",
+    "classification": "Classification déclarée : {value}",
+    "classRegular": "Normal",
+    "classOvertime": "Heures supplémentaires",
+    "classDoubleTime": "Temps double",
+    "classOther": "Autre",
+    "classUnknown": "Inconnue"
   }
 }

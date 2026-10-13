@@ -310,6 +310,12 @@
     "save": "Save correction",
     "action": "Correct type",
     "reviewDescription": "Review individual pending entries before submitting or correcting their time types.",
-    "saved": "Time type corrected."
+    "saved": "Time type corrected.",
+    "classification": "Declared classification: {value}",
+    "classRegular": "Regular",
+    "classOvertime": "Overtime",
+    "classDoubleTime": "Double time",
+    "classOther": "Other",
+    "classUnknown": "Unknown"
   }
 }

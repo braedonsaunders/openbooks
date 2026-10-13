@@ -8,6 +8,7 @@ import { timesheetWeekStart } from './timesheet-weeks.ts'
 export type AdditionalTimeSelection = { id: string; updatedAt: string }
 export type PreparedAdditionalTimeSubmission = {
   headerId: string
+  headerStatus: string
   priorApproval: { actorId: string | null; approvedAt: string | null }
   entries: { id: string; status: string; updatedAt: string; workedOn: string; hours: string; fieldTicketId: string | null }[]
 }
@@ -45,8 +46,8 @@ export async function prepareAdditionalTimeSubmission(
        and employee_party_id = ${input.employeePartyId} and week_start = ${input.weekStart}::date
      for update
   `)).rows[0]
-  if (!header || header.status !== 'approved') {
-    throw refuse('Additional-time review requires an approved week.', 'additional_time_week_changed')
+  if (!header || !['approved', 'draft', 'rejected'].includes(header.status)) {
+    throw refuse('Selected time can be submitted only from a draft, returned or approved week.', 'additional_time_week_changed')
   }
   const waiting = (await tx.execute<{ count: number }>(sql`
     select count(*)::int as count from time_entries
@@ -83,7 +84,8 @@ export async function prepareAdditionalTimeSubmission(
     throw refuse('The selected time changed or is no longer available for submission.', 'additional_time_selection_changed')
   }
   return {
-    headerId: header.id, priorApproval: { actorId: header.approvedBy, approvedAt: header.approvedAt },
+    headerId: header.id, headerStatus: header.status,
+    priorApproval: { actorId: header.approvedBy, approvedAt: header.approvedAt },
     entries: selected.map(({ id, status, updatedAt, workedOn, hours, fieldTicketId }) => ({ id, status, updatedAt, workedOn, hours, fieldTicketId })),
   }
 }

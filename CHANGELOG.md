@@ -6,6 +6,39 @@ changes; each release documents required operator action.
 
 ## [Unreleased]
 
+## [0.1.0-alpha.31] - 2026-10-13
+
+- Add multi-book accounting, account mappings and translation, intercompany
+  settlement, period-end journals, account merges and segment dependencies.
+- Add prepaid amortization, compound assets, construction in progress,
+  maintenance, insurance, recognition, renewal and rebate workflows.
+- Add governed journal instructions, statistical measurements, typed FX
+  adjustments, accounting preferences and GL audit numbering. Preserve posted
+  history and published migration identities during upgrades.
+- Add RBC STD152 payment and payroll artifacts with live authority checks,
+  retained numbering and governed replacement. Improve payroll cheque design
+  and preserve issued payee identity.
+- Add processor receipt funding, saved settlement account review and native
+  posting-effects recovery for payments. Require complete evidence before
+  period-reopen decisions and independent reconciliation sign-off reviews.
+- Correct Canadian separate-payment CPP exemptions and separate periodic and
+  bonus tax bases. Retain the committed regular-income reference used for
+  standalone bonus calculations without altering historical payroll.
+- Preserve field-ticket revisions and exact crew hours. Review, correct and
+  selectively submit pending time, including resubmission after withdrawal,
+  without changing prior approvals or unselected entries. Use declared time
+  classifications for billing adjustments and refuse missing pricing.
+- Consolidate payroll navigation, lists and review actions; improve shared
+  drawers, audit context, Setup help and localized financial reports.
+
+Migrations 0568 through 0705 apply forward through the native migration runner.
+Run the release's read-only upgrade check and retain a verified backup before
+applying them. Resolve exact schema or published-body drift refusals instead of
+editing migration files or existing ledger identities. Enable new capabilities
+through Company Settings and configure their native accounts and policies
+before use. This release does not reprice or reconcile historical payroll,
+issue incomplete separation records, or transmit payments automatically.
+
 ## [0.1.0-alpha.30] - 2026-10-05
 
 - Add commerce channels: sales channels and channel orders, a Shopify

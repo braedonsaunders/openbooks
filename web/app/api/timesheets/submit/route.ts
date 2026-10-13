@@ -179,7 +179,7 @@ export const POST = defineRoute({
             values (${orgId}, 'timesheet_weeks', ${additional.headerId}, 'update',
               ${JSON.stringify({
                 event: 'additional_time_submitted', reason: body.reason,
-                before: { status: 'approved', approval: additional.priorApproval },
+                before: { status: additional.headerStatus, approval: additional.priorApproval },
                 after: { status: 'submitted' }, entries: additional.entries,
                 unchangedEarlierApprovedTime: true,
               })}::jsonb, ${user.id}) returning id
