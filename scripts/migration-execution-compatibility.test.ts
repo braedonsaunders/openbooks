@@ -1,3 +1,4 @@
+// source-pin-contract: Published immutable migration bytes and their ledger digest remain fixed across the exact native execution correction.
 import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";

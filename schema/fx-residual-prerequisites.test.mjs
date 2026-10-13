@@ -1,3 +1,4 @@
+// source-pin-contract: Published0692/0700 immutable residual overload definitions and exact prerequisite body pins govern upgrade admission.
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';

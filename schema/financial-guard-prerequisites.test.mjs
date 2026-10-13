@@ -1,3 +1,4 @@
+// source-pin-contract: Published0701–0703 immutable SQL and preflight predecessor bodies are the migration admission contract.
 import assert from 'node:assert/strict';
 import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';

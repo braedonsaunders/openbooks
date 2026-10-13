@@ -1,3 +1,4 @@
+// source-pin-contract: Published migration and consumer-query digests govern baseline deferral; changed source identities must retain refusal.
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { createHash } from "node:crypto";
