@@ -23,6 +23,11 @@ test(
   async () => {
     const fx = await seedAdoption();
     try {
+      const filingAccountId=randomUUID();
+      assert.equal((await db.execute(sql`insert into payroll_filing_accounts(id,org_id,subsidiary_id,country,program_type,account_number,name,is_active)
+        values(${filingAccountId},${fx.orgId},${fx.subsidiaryId},'CA','ca_rp','123456789RP0001','Original payroll account',true) returning id`)).rows.length,1);
+      assert.equal((await db.execute(sql`update employee_payroll_profiles set filing_account_id=${filingAccountId}
+        where org_id=${fx.orgId} and employee_party_id=${fx.employeeId} returning employee_party_id`)).rows.length,1);
       // No EHT insert here: seedAdoption already carries the decided ON EHT
       // rate, and a second row for the same key conflicts.
       await db.execute(sql`insert into addresses (org_id, party_id, line1, city, region, postal_code, country)
