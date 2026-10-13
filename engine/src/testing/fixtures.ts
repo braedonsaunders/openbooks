@@ -1265,6 +1265,14 @@ async function genericDeletePasses(
   return { remaining, errors };
 }
 
+const RETAINED_PAYROLL_FILE_SOURCES = [
+  "payroll_roe_issued_event_sources",
+  "payroll_roe_subsequent_service_sources",
+  "payroll_roe_line_evidence",
+  "payroll_roe_historical_periods",
+  "payroll_opening_employer_authorities",
+] as const;
+
 /**
  * Remove ALL scratch-org data and verify nothing is left. Refuses any org not
  * named 'Scratch %' — the shared dev database also holds real production
@@ -1283,14 +1291,6 @@ async function genericDeletePasses(
  * context-only bypass scope, giving every internal transaction its own
  * connection, commit, and rollback.
  */
-const RETAINED_PAYROLL_FILE_SOURCES = [
-  "payroll_roe_issued_event_sources",
-  "payroll_roe_subsequent_service_sources",
-  "payroll_roe_line_evidence",
-  "payroll_roe_historical_periods",
-  "payroll_opening_employer_authorities",
-] as const;
-
 async function dropScratchOrgEscaped(orgId: string): Promise<void> {
   return dropDisposableOrgEscaped(orgId, "scratch");
 }
