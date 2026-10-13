@@ -1,5 +1,9 @@
 -- Source-qualified prior reporting periods and retained payroll-line attribution for Canadian ROEs.
 SET statement_timeout = 0;
+SET idle_in_transaction_session_timeout = 0;
+SET client_encoding = 'UTF8';
+SET standard_conforming_strings = on;
+SET client_min_messages = warning;
 SET search_path = public, pg_catalog;
 
 CREATE TABLE public.payroll_roe_historical_periods (
