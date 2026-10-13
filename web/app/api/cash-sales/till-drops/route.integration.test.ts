@@ -22,8 +22,8 @@ test('till preview enforces the real cashier entity scope before returning sales
         where org_id=${org.orgId} and key='till-window-reader'`)
       await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features,cashSales}','true'::jsonb)
         where id=${org.orgId}`)
-      await db.execute(sql`insert into subsidiaries(id,org_id,name,parent_id,base_currency,is_active,is_elimination,custom)
-        values(${branch},${org.orgId},'Other cashier entity',${org.subsidiaryId},'CAD',true,false,'{}'::jsonb)`)
+      await db.execute(sql`insert into subsidiaries(id,org_id,name,parent_id,base_currency,country,is_active,is_elimination,custom)
+        values(${branch},${org.orgId},'Other cashier entity',${org.subsidiaryId},'CAD','CA',true,false,'{}'::jsonb)`)
       for (const [entity,amount] of [[org.subsidiaryId,'1200000'],[branch,'9000000']] as const) {
         const sale = randomUUID()
         await db.execute(sql`insert into documents(id,org_id,kind,status,document_number,subsidiary_id,

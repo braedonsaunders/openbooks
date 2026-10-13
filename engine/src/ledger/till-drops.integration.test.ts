@@ -60,8 +60,8 @@ test('shared till accounts retain independent entity windows and refuse hidden o
   const branchId = randomUUID();
   try {
     await withBypassContext(async () => {
-      await db.execute(sql`insert into subsidiaries(id,org_id,name,parent_id,base_currency,is_active,is_elimination,custom)
-        values(${branchId},${org.orgId},'Second till entity',${org.subsidiaryId},'CAD',true,false,'{}'::jsonb)`);
+      await db.execute(sql`insert into subsidiaries(id,org_id,name,parent_id,base_currency,country,is_active,is_elimination,custom)
+        values(${branchId},${org.orgId},'Second till entity',${org.subsidiaryId},'CAD','CA',true,false,'{}'::jsonb)`);
       await db.execute(sql`update accounts set subsidiary_id=null where org_id=${org.orgId} and id=${tillId}`);
       await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features,multiSubsidiary}','true'::jsonb)
         where id=${org.orgId}`);

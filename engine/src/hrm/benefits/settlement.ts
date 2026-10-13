@@ -9,7 +9,7 @@ import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
 import { actorHasPermission } from "../../organization/actor-permissions.ts";
 import { PayrollError } from "../../payroll/error.ts";
 import { mutatePayRunAdjustment, PayRunAdjustmentIdempotencyConflict } from "../../payroll/run-adjustments.ts";
-import { addCalendarDays } from "../../platform/civil-date.ts";
+import { addCalendarDays, isIsoCalendarDate } from "../../platform/civil-date.ts";
 import type {
   BenefitAward,
   BenefitProgram,
@@ -989,7 +989,7 @@ function settlementSnapshotsMatch(
   const old = oldMargin as Record<string, unknown>;
   const fresh = newMargin as Record<string, unknown>;
   if (Object.hasOwn(old, "asOf") || typeof fresh.asOf !== "string" ||
-      !/^\d{4}-\d{2}-\d{2}$/.test(fresh.asOf) ||
+      !isIsoCalendarDate(fresh.asOf) ||
       fresh.metric !== "project_margin" || fresh.scope !== "company" ||
       !Array.isArray(fresh.projects)) return false;
   const legacyBody = {
