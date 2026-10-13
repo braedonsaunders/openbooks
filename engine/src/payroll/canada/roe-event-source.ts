@@ -66,26 +66,12 @@ export async function roeEventPayrollIdentity(orgId:string,event:SelectedRoeEven
  return {scheduleId:rows[0]!.scheduleId!,frequency:rows[0]!.frequency!,filingAccountId:rows[0]!.filingAccountId!};
 }
 
-/** A later declared spell excludes only sources wholly attributed to its retained service dates. */
+/** Filing population and reporting use the same source-qualified later-service resolver. */
 export function roeLaterSpellStubSql(orgId:string,employeeId:string,employmentId:string,eventId:string,cutoff:string){
- return sql`exists(select 1 from payroll_roe_separation_events later
-   where later.org_id=${orgId} and later.employee_party_id=${employeeId} and later.employment_id=${employmentId}
-     and stub.employment_id=${employmentId}
-     and exists(select 1 from documents owner where owner.org_id=stub.org_id and owner.id=stub.pay_run_document_id and owner.subsidiary_id=later.subsidiary_id)
-     and later.id<>${eventId} and later.status in ('confirmed','issued') and later.first_day_worked>${cutoff}::date
-     and later.source_reference is not null and length(btrim(later.source_reference))>0
-     and exists(select 1 from pay_stub_lines material where material.org_id=stub.org_id and material.stub_id=stub.id
-       and material.kind='earning' and (material.amount<>0 or material.hours<>0))
-     and not exists(select 1 from pay_stub_lines material
-       left join payroll_roe_line_evidence attributed on attributed.org_id=material.org_id and attributed.pay_stub_line_id=material.id
-         and attributed.line_snapshot=public.payroll_roe_reporting_line_snapshot(material.id,material.org_id)
-       where material.org_id=stub.org_id and material.stub_id=stub.id and material.kind='earning'
-         and (material.amount<>0 or material.hours<>0)
-         and (coalesce(attributed.earned_from,material.earned_from) is null
-           or coalesce(attributed.earned_to,material.earned_to) is null
-           or coalesce(attributed.earned_from,material.earned_from)<later.first_day_worked
-           or coalesce(attributed.earned_from,material.earned_from)>coalesce(attributed.earned_to,material.earned_to)
-           or coalesce(attributed.earned_to,material.earned_to)>coalesce(later.salary_continuance_end_on,later.last_insurable_earnings_on))))`;
+ return sql`(stub.employee_party_id=${employeeId} and stub.employment_id=${employmentId}
+   and exists(select 1 from payroll_roe_separation_events selected where selected.org_id=${orgId}
+     and selected.id=${eventId} and coalesce(selected.salary_continuance_end_on,selected.last_insurable_earnings_on)=${cutoff}::date)
+   and public.payroll_roe_later_stub_source(${orgId}::uuid,${eventId}::uuid,stub.id) is not null)`;
 }
 
 export function assertRoeReportingCurrency(currency:string,name:string):void{

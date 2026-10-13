@@ -1,4 +1,4 @@
-import { assertRoeReportingCurrency,selectRoeEvent,roeEventPayrollIdentity,roeLaterSpellStubSql } from './canada/roe-event-source.ts';
+import { assertRoeReportingCurrency,selectRoeEvent,roeEventPayrollIdentity } from './canada/roe-event-source.ts';
 import type { RoePriorPeriod } from './roe-history.ts';
 import { roeQualifiedLineAllocations, type RoeRetainedLine } from './roe-line-allocation.ts';
 import { sql } from 'drizzle-orm';
@@ -118,6 +118,7 @@ export function assembleRoeReportingWindow(
     if(!earnedFrom || !earnedTo || !isIsoCalendarDate(earnedFrom) || !isIsoCalendarDate(earnedTo) || earnedFrom>earnedTo) throw new PayrollError('ROE earning-source dates are incomplete or invalid');
     if((stub.reportPeriodEnd??earnedTo)<first) continue;
     if(stub.earnedDatesComplete && earnedFrom<context.event.first_day_worked) throw new PayrollError(`${context.name} has retained earnings before the confirmed first day worked — reconcile the employment-spell source before filing`);
+    if(earnedTo>cutoff && earnedFrom<=finalEnd) throw new PayrollError(`${context.name} has earning evidence after the confirmed insurable or continuance cutoff — qualify the original service allocation before filing`);
     if(earnedFrom>finalEnd) throw new PayrollError(`${context.name} has a later payment without qualified ROE service-period or separation-payment allocation`);
     if(stub.employmentId!==context.employmentId || stub.subsidiaryId!==context.subsidiaryId) throw new PayrollError(`${context.name} has unknown or conflicting retained payroll employment or legal-employer attribution`);
     assertRoeReportingCurrency(stub.currency,context.name);
@@ -182,8 +183,9 @@ export async function readRoeReportingWindow(context: RoeWindowContext) {
   // bases proves every positive earning is insurable. Mixed bases and earning
   // lines without retained hours cannot establish historical insurable hours from this
   // proof; current component settings cannot reinterpret committed history.
-  const stubs=(await db.execute<RoeWindowStub>(sql`
-    select stub.id,stub.pay_run_document_id as "documentId",document.subsidiary_id as "subsidiaryId",
+  const candidates=(await db.execute<RoeWindowStub & {excludedLaterService:Record<string,unknown>|null}>(sql`
+    select public.payroll_roe_later_stub_source(${context.orgId}::uuid,${context.event.id}::uuid,stub.id) as "excludedLaterService",
+           stub.id,stub.pay_run_document_id as "documentId",document.subsidiary_id as "subsidiaryId",
            stub.employment_id as "employmentId",stub.filing_account_id as "filingAccountId",stub.currency_code as currency,
            (stub.gross=stub.insurable_earnings and not exists(
              select 1 from pay_stub_lines evidence
@@ -216,9 +218,10 @@ export async function readRoeReportingWindow(context: RoeWindowContext) {
                and qualified.report_period_start<=${final[0]!.periodEnd}::date and qualified.report_period_end>=${from}::date)
          or (run.period_start>${final[0]!.periodEnd}::date and stub.insurable_earnings<>0))
        and (stub.employment_id=${context.employmentId} or stub.employment_id is null)
-       and not ${roeLaterSpellStubSql(context.orgId,context.employeeId,context.employmentId,context.event.id,cutoff)}
      order by run.period_end desc,stub.id limit 5001`)).rows;
-  if(stubs.length>5000) throw new PayrollError('ROE reporting source exceeds the bounded retained-stub window');
+  if(candidates.length>5000) throw new PayrollError('ROE reporting source exceeds the bounded retained-stub window');
+  const excludedLaterStubIds=candidates.filter(stub=>stub.excludedLaterService!==null).map(stub=>stub.id);
+  const stubs=candidates.filter(stub=>stub.excludedLaterService===null);
     const lineRows=stubs.length?(await db.execute<RoeRetainedLine>(sql`
     select l.id as "lineId",l.stub_id as "stubId",l.amount::text as amount,l.hours::text as hours,
       e.id as "evidenceId",(e.line_snapshot=public.payroll_roe_reporting_line_snapshot(l.id,l.org_id)) as "snapshotMatches",
@@ -230,5 +233,5 @@ export async function readRoeReportingWindow(context: RoeWindowContext) {
       and l.kind='earning' and (l.amount<>0 or l.hours<>0) order by l.stub_id,l.id limit 50001`)).rows:[];
   if(lineRows.length>50000)throw new PayrollError('ROE line attribution exceeds the bounded retained-source window');
   const allocated=stubs.flatMap(stub=>roeQualifiedLineAllocations(stub,lineRows.filter(line=>line.stubId===stub.id)));
-  return assembleRoeReportingWindow(context,calendar,allocated,historicalPeriods);
+  return {...assembleRoeReportingWindow(context,calendar,allocated,historicalPeriods),excludedLaterStubIds};
 }

@@ -633,6 +633,7 @@ export const TENANT_TABLE_POLICIES = {
   "payroll_opening_employer_authorities": "skip:no-copy",
   "payroll_roe_historical_periods": "skip:no-copy",
   "payroll_roe_line_evidence": "skip:no-copy",
+  "payroll_roe_subsequent_service_sources": "skip:no-copy",
   "payroll_roe_issued_event_sources": "skip:no-copy",
   "payroll_roe_component_classifications": "clone:catalog-uuid-rebase",
   "payroll_roe_separation_events": "clone:catalog-uuid-rebase",

@@ -27,6 +27,7 @@ export const payrollRoeIssuedEventSources=pgTable('payroll_roe_issued_event_sour
   issuedSlipId:uuid('issued_slip_id').notNull(),
   historicalPeriodIds:uuid('historical_period_ids').array().notNull().default(sql`'{}'::uuid[]`),
   lineEvidenceIds:uuid('line_evidence_ids').array().notNull().default(sql`'{}'::uuid[]`),
+  excludedStubIds:uuid('excluded_stub_ids').array().notNull().default(sql`'{}'::uuid[]`),
   sourceSnapshot:jsonb('source_snapshot').notNull(),sourceSha256:text('source_sha256').notNull(),
   createdAt:timestamp('created_at',{withTimezone:true}).notNull().defaultNow(),createdBy:uuid('created_by').notNull(),
 },t=>[
@@ -37,5 +38,6 @@ export const payrollRoeIssuedEventSources=pgTable('payroll_roe_issued_event_sour
   check('payroll_roe_issued_event_sources_digest',sql`${t.sourceSha256}~'^[a-f0-9]{64}$'`),
   check('payroll_roe_issued_event_sources_snapshot',sql`jsonb_typeof(${t.sourceSnapshot})='object'`),
   check('payroll_roe_issued_event_sources_period_ids',sql`array_position(${t.historicalPeriodIds},NULL) is null`),
+  check('payroll_roe_issued_event_sources_excluded_ids',sql`array_position(${t.excludedStubIds},NULL) is null and cardinality(${t.excludedStubIds})<=5000`),
   check('payroll_roe_issued_event_sources_line_ids',sql`array_position(${t.lineEvidenceIds},NULL) is null`),
 ]);

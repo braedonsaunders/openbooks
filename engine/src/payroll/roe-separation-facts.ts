@@ -207,13 +207,14 @@ export async function recordRoeFactsIssued(orgId:string,actorId:string,rowIds:re
   const {roeWindowContext,readRoeReportingWindow}=await import('./roe-reporting-window.ts');
   const reporting=await readRoeReportingWindow(await roeWindowContext(orgId,selected.employeePartyId,event.id));
   const periods=reporting.historicalPeriods.map(p=>p.id);
+  const excluded=reporting.excludedLaterStubIds;
   const lines=[...new Set(reporting.sourceDocuments.flatMap(p=>p.reportingEvidenceIds??[]))];
   const bound=(await db.execute<{id:string;sourceSha256:string}>(sql`
-    with snapshot as (select public.payroll_roe_issued_source_snapshot(${orgId}::uuid,${event.id}::uuid,
-      ${`{${periods.join(',')}}`}::uuid[],${`{${lines.join(',')}}`}::uuid[]) as body)
-    insert into payroll_roe_issued_event_sources(org_id,event_id,employee_party_id,issued_slip_id,historical_period_ids,line_evidence_ids,source_snapshot,source_sha256,created_by)
+    with snapshot as (select public.payroll_roe_issued_source_snapshot_with_returns(${orgId}::uuid,${event.id}::uuid,
+      ${`{${periods.join(',')}}`}::uuid[],${`{${lines.join(',')}}`}::uuid[],${`{${excluded.join(',')}}`}::uuid[]) as body)
+    insert into payroll_roe_issued_event_sources(org_id,event_id,employee_party_id,issued_slip_id,historical_period_ids,line_evidence_ids,excluded_stub_ids,source_snapshot,source_sha256,created_by)
     select ${orgId},${event.id},${selected.employeePartyId},${slips[0]!.id},
-      ${`{${periods.join(',')}}`}::uuid[],${`{${lines.join(',')}}`}::uuid[],body,encode(public.digest(body::text,'sha256'),'hex'),${actorId}
+      ${`{${periods.join(',')}}`}::uuid[],${`{${lines.join(',')}}`}::uuid[],${`{${excluded.join(',')}}`}::uuid[],body,encode(public.digest(body::text,'sha256'),'hex'),${actorId}
     from snapshot returning id,source_sha256 as "sourceSha256"`)).rows;
   if(bound.length!==1)throw new PayrollError('The exact issued ROE event source snapshot was not retained');
   const after=(await db.execute(sql`update payroll_roe_separation_events set status='issued',updated_by=${actorId},
@@ -223,7 +224,7 @@ export async function recordRoeFactsIssued(orgId:string,actorId:string,rowIds:re
     select ${orgId},'payroll_roe_separation_events',${event.id},'update',
       jsonb_build_object('event','roe_source_issued','submissionId',${submissionId}::text,'sourceBindingId',b.id,
         'sourceSha256',b.source_sha256,'before',b.source_snapshot->'event','after',to_jsonb(e),
-        'reportingEvidence',jsonb_build_object('historicalPeriods',b.source_snapshot->'historicalPeriods','lineEvidence',b.source_snapshot->'lineEvidence')),
+        'reportingEvidence',jsonb_build_object('historicalPeriods',b.source_snapshot->'historicalPeriods','lineEvidence',b.source_snapshot->'lineEvidence','excludedLaterService',b.source_snapshot->'excludedLaterService')),
       ${actorId} from payroll_roe_issued_event_sources b join payroll_roe_separation_events e on e.org_id=b.org_id and e.id=b.event_id
       where b.org_id=${orgId} and b.id=${bound[0]!.id} returning id`)).rows;
   if(audit.length!==1)throw new PayrollError('The issued ROE event and exact source audit were not retained');

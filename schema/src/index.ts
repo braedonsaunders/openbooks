@@ -136,5 +136,6 @@ export * from "./journal-instructions";
 export * from "./payroll-roe-separation";
 
 export * from "./payroll-roe-history";
+export * from "./payroll-roe-subsequent-service";
 
 export * from "./payroll-opening-employer-authority";
