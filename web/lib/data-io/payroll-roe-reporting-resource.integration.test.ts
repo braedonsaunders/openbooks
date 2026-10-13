@@ -4,7 +4,7 @@ import { createHash, randomUUID } from 'node:crypto'
 import { sql } from 'drizzle-orm'
 import { db, withBypassContext, withOrgContext } from '@openbooks/engine/platform/db'
 import { dropScratchOrgReporting, seedPayrollSettings } from '@openbooks/engine/testing/fixtures'
-import { seedAdoption } from '../../../engine/src/payroll/filing-test-fixtures.ts'
+import { seedAdoption } from '@openbooks/engine/testing/payroll/filing-test-fixtures'
 import { payrollRoeReportingResource } from './payroll-roe-reporting-resource'
 
 async function fixture(){

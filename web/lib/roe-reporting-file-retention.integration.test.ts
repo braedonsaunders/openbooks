@@ -5,7 +5,7 @@ import { sql } from 'drizzle-orm'
 import { db, withBypassContext, withOrgContext } from '@openbooks/engine/platform/db'
 import { dropScratchOrgReporting, seedPayrollSettings } from '@openbooks/engine/testing/fixtures'
 import { importRoePriorPeriod } from '@openbooks/engine/payroll/roe-history'
-import { seedAdoption } from '../../engine/src/payroll/filing-test-fixtures.ts'
+import { seedAdoption } from '@openbooks/engine/testing/payroll/filing-test-fixtures'
 import { deleteFile, getFileBlob, isRetainedFileEvidence, purgeFile, replaceFile } from './file-cabinet'
 
 test('qualified ROE reporting sources refuse cabinet trash, replacement and purge while preserving pinned bytes',
