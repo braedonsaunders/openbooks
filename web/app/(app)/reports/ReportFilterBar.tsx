@@ -164,13 +164,14 @@ export function ReportFilterBar({
   const periodFrom = params.get(fromParamKey)
   const periodTo = params.get(toParamKey)
   const rawPeriod = params.get(periodParamKey) ?? defaultPeriod
+  const [customDraft, setCustomDraft] = useIdentityState([pathname, liveSearch], false)
   // A hand-edited URL can carry a preset the page doesn't offer (e.g. a range
   // preset on an as-of report); show the page default rather than an option
   // that isn't in the list. The server re-clamps the param authoritatively.
-  const period = periodPresets && !periodPresets.includes(rawPeriod) ? defaultPeriod : rawPeriod
+  const period = customDraft ? 'custom' : periodPresets && !periodPresets.includes(rawPeriod) ? defaultPeriod : rawPeriod
   // An extra window is stored as period=custom + its exact bounds; keep the
   // select showing the named entry rather than the anonymous Custom row.
-  const activeExtra = period === 'custom'
+  const activeExtra = !customDraft && period === 'custom'
     ? extraPeriods?.find((x) => x.from === periodFrom && x.to === periodTo)
     : undefined
   const selectValue = activeExtra ? `x:${activeExtra.id}` : period
@@ -183,14 +184,14 @@ export function ReportFilterBar({
   // Custom From/To stage locally until the operator applies them: committing
   // per change re-ran the report on half-typed ranges, and typed dates never
   // had an explicit moment to take effect (Enter and blur included).
-  const [rangeDraft, setRangeDraft] = useIdentityState<{ from: string; to: string } | null>([periodFrom, periodTo], null)
+  const [rangeDraft, setRangeDraft] = useIdentityState<{ from: string; to: string } | null>([pathname, liveSearch], null)
   // An outside change (preset pick, another control) discards the draft, so a
   // staged range can never leak into a navigation it was not applied to.
   const rangeBaseFrom = periodFrom ?? (controls.dateRange ? dateRange?.from : undefined) ?? ''
   const rangeBaseTo = periodTo ?? (controls.dateRange ? dateRange?.to : undefined) ?? ''
   const shownFrom = rangeDraft?.from ?? rangeBaseFrom
   const shownTo = rangeDraft?.to ?? rangeBaseTo
-  const rangeDirty = rangeDraft !== null && (rangeDraft.from !== rangeBaseFrom || rangeDraft.to !== rangeBaseTo)
+  const rangeDirty = customDraft || (rangeDraft !== null && (rangeDraft.from !== rangeBaseFrom || rangeDraft.to !== rangeBaseTo))
   // A custom window commits only with both bounds and From on or before To;
   // a half-typed range would otherwise reach the report, its exports and any
   // saved view with no window to resolve.
@@ -270,6 +271,14 @@ export function ReportFilterBar({
           <Select
             value={selectValue}
             onChange={(e) => {
+              // Custom selection opens editable bounds without issuing an
+              // incomplete report request. Apply commits the complete window.
+              if (e.target.value === 'custom') {
+                setCustomDraft(true)
+                return
+              }
+              setCustomDraft(false)
+              setRangeDraft(null)
               const extra = e.target.value.startsWith('x:')
                 ? extraPeriods?.find((x) => `x:${x.id}` === e.target.value)
                 : undefined
