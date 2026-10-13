@@ -95,3 +95,41 @@ test('an explicit time billing snapshot outranks a configured item default, incl
     assert.deepEqual(line,{rate:'0.00000000',amount:'0.0000'})
   } finally { await f.cleanup() }
 })
+
+for (const [name,classification,expected] of [
+  ['Heures supplémentaires','overtime','0.0000'],
+  ['Double checking','regular','30.0000'],
+  ['Majoré','double_time','0.0000'],
+] as const) {
+  test(`invoice adjustments use ${classification} classification independently of the name ${name}`, enabled, async () => {
+    const f = await fixture('tm_actual')
+    try {
+      const timeType = randomUUID(), book = randomUUID(), version = randomUUID(), adjustment = randomUUID()
+      await withBypassContext(async () => {
+        // Deliberately neutral multipliers prove they cannot classify the work.
+        await db.execute(sql`insert into time_types(id,org_id,name,classification,cost_multiplier,bill_multiplier)
+          values(${timeType},${f.org.orgId},${name},${classification},'1','1')`)
+        await db.execute(sql`update time_entries set time_type_id=${timeType},bill_rate='100'
+          where org_id=${f.org.orgId} and id in (${f.priced},${f.missing})`)
+        await db.execute(sql`insert into item_rate_books(id,org_id,code,name,currency,is_active)
+          values(${book},${f.org.orgId},'LABOR','Labor adjustments','CAD',true)`)
+        await db.execute(sql`insert into item_rate_versions(id,org_id,rate_book_id,effective_from,status)
+          values(${version},${f.org.orgId},${book},'2000-01-01','draft')`)
+        await db.execute(sql`insert into labor_rate_version_policies(org_id,version_id,derivation_policy)
+          values(${f.org.orgId},${version},'explicit')`)
+        await db.execute(sql`insert into labor_rate_adjustments(id,org_id,version_id,code,name,category,calculation,value,
+          presentation,applies_regular,applies_overtime,applies_double_time)
+          values(${adjustment},${f.org.orgId},${version},'REGULAR','Regular surcharge','surcharge','percent','10',
+            'separate',true,false,false)`)
+        await db.execute(sql`update item_rate_versions set status='active' where org_id=${f.org.orgId} and id=${version}`)
+        await db.execute(sql`insert into item_rate_book_assignments(org_id,rate_book_id,project_id,date_basis,is_active)
+          values(${f.org.orgId},${book},${f.project},'usage_date',true)`)
+      })
+      const invoice = await f.inOrg(() => generateInvoiceFromBillingRequest(f.org.orgId,f.actor,f.request.id))
+      const measured = await f.inOrg(async () => (await db.execute<{amount:string;count:number}>(sql`
+        select coalesce(sum(amount),0)::numeric(19,4)::text as amount,count(*)::int as count from document_lines
+        where org_id=${f.org.orgId} and document_id=${invoice.id} and description='Regular surcharge'`)).rows[0]!)
+      assert.deepEqual(measured,{amount:expected,count:classification==='regular'?1:0})
+    } finally { await f.cleanup() }
+  })
+}

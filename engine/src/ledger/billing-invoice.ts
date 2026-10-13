@@ -23,13 +23,11 @@ function rateDateOf(lines: { workedOn?: string | null }[]): string | null {
   )
 }
 
-/** Map a time type's name onto the buckets a rate-card adjustment can exclude. */
-function timeKindOf(name: unknown): 'regular' | 'overtime' | 'double_time' | null {
-  const n = String(name ?? '').toLowerCase()
-  if (!n) return null
-  if (n.includes('double')) return 'double_time'
-  if (n.includes('over')) return 'overtime'
-  return 'regular'
+/** Commercial eligibility follows the declared semantic class, independently
+ * of translated names and wage or billing multipliers. */
+function timeKindOf(classification: string | null): 'regular' | 'overtime' | 'double_time' | null {
+  return classification === 'regular' || classification === 'overtime' || classification === 'double_time'
+    ? classification : null
 }
 import { recognitionAccounts } from '../projects/recognition.ts'
 import { loadProjectType } from '../projects/type.ts'
@@ -116,7 +114,7 @@ interface BillingTimeRow extends Record<string, unknown> {
   item_name: string | null
   item_kind: string | null
   item_category: string | null
-  time_type_name: string | null
+  time_type_classification: string | null
   /** Every active trade / job title held by the time entry's employee. */
   trades: string[] | null
   job_titles: string[] | null
@@ -440,7 +438,7 @@ export async function generateInvoiceFromBillingRequest(
         select te.id, te.hours, te.cost_rate, te.bill_rate, te.item_id, te.time_type_id,
                te.employee_party_id, te.memo, te.department_id, te.worked_on,
                i.income_account_id, i.default_rate, i.tax_code_id, i.name as item_name,
-               i.kind as item_kind, i.category as item_category, tt.name as time_type_name,
+               i.kind as item_kind, i.category as item_category, tt.classification as time_type_classification,
                er.trades, er.job_titles
           from time_entries te
           left join items i on i.id = te.item_id and i.org_id = te.org_id
@@ -510,7 +508,7 @@ export async function generateInvoiceFromBillingRequest(
           itemCategory: te.item_category ?? null,
           tradeIds: te.trades ?? null,
           jobTitles: te.job_titles ?? null,
-          timeKind: timeKindOf(te.time_type_name),
+          timeKind: timeKindOf(te.time_type_classification),
           departmentId: te.department_id ?? null,
           // Time carries no subsidiary of its own: the work belongs to the
           // billed project's subsidiary.
