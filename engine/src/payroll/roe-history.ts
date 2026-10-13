@@ -7,6 +7,7 @@ import { isIsoCalendarDate } from '../platform/iso-date.ts';
 import { fromUnits, toUnits, wholeDigits } from '../money/money.ts';
 import { authorizeRoeReportingEmployee, type RoeEmployeeScope } from './roe-separation-facts.ts';
 import { takeEmployeeConfigurationFence } from './fences.ts';
+import { assertRoeLegacySourcesBound } from './canada/roe-event-source.ts';
 import { PayrollError } from './error.ts';
 
 export type RoeReportingSource = {
@@ -103,10 +104,7 @@ async function retainSource(input:RoeHistorySubject,ref:RoeReportingSource){
   if(rows.length!==1)throw new PayrollError('Upload the original source to File Cabinet as the importing operator, then select its exact retained version and hash');
 }
 async function unissued(input:RoeHistorySubject){
-  const rows=(await db.execute(sql`select sl.id from payroll_filing_submission_slips sl join payroll_filing_submissions f
-    on f.org_id=sl.org_id and f.id=sl.submission_id where sl.org_id=${input.orgId} and sl.row_id=${input.employeePartyId}
-      and f.country='CA' and f.filing_key='roe' limit 1`)).rows;
-  if(rows.length)throw new PayrollError('An issued ROE retains this employee reporting evidence; its source cannot be changed');
+  await assertRoeLegacySourcesBound(input.orgId,input.employeePartyId);
 }
 async function audit(input:RoeHistorySubject,table:string,id:string,before:unknown,after:unknown,reason:string){
   const rows=(await db.execute(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id)

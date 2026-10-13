@@ -1356,6 +1356,7 @@
       "viewAll": "查看全部"
     },
     "separationFacts": {
+      "newEvent": "新离职事件",
       "title": "离职事实",
       "help": "准备就业记录前，请根据原始离职文件确认这些日期。",
       "interruption": "收入中断日期",

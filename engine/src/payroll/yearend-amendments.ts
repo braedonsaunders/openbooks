@@ -821,7 +821,7 @@ async function issueOriginal(
     + "is not produced here: file those slips through the agency's own service and record "
     + "them there",
   );
-  if (submissions.length > 0) {
+  if (submissions.length > 0 && !filing.additionalSelectedOriginals) {
     // A slip DISCOVERED after the return went out is neither an amendment nor
     // a cancellation: every agency here files it as an ADDITIONAL original
     // (the CRA's "adding slips"; an additional W-2 rather than a W-2c). That
@@ -833,8 +833,12 @@ async function issueOriginal(
     throw alreadyIssued(last.revisionNumber, last.revision);
   }
   const data = await filing.population(orgId, taxYear, input.scope);
-  const selection = filing.originalIssueRowIds?.(input.params ?? {});
+  const selection = await filing.originalIssueRowIds?.(input.params ?? {}, orgId);
+  if(filing.additionalSelectedOriginals && (!selection || !filing.lockIssueSources || !filing.recordIssueSources))
+    throw new PayrollError('Independent original filings require an exact selection and protected native source lifecycle');
   const selected = selection ? new Set(selection) : null;
+  if(selected && filing.additionalSelectedOriginals && submissions.some(submission=>submission.slips.some(slip=>selected.has(slip.rowId))))
+    throw new PayrollError('This separation event already has an issued ROE — preserve the original artifact and use the Service Canada correction workflow');
   if (selection && (selection.length === 0 || selected!.size !== selection.length)) {
     throw new PayrollError('Choose each filing row exactly once before recording the original artifact');
   }
@@ -875,11 +879,12 @@ async function issueOriginal(
   }
 
   const submission = await persist(input, {
-    revision: "original", revisionNumber: 1, supersedesId: null, file, slips,
+    revision: "original", revisionNumber: submissions.length ? submissions.at(-1)!.revisionNumber+1 : 1, supersedesId: null, file, slips,
   }).catch((error: unknown) => {
     // A rival issue committed revision 1 first: the fence held, so the
     // standing refusal is the accurate one. (No re-read here: the
     // violation aborted this unit's transaction.)
+    if (error instanceof ConcurrentFilingIssue && filing.additionalSelectedOriginals) throw new PayrollError('The separation filing history changed — reload and review the exact unissued event');
     if (error instanceof ConcurrentFilingIssue) throw alreadyIssued(1, "original");
     throw error;
   });

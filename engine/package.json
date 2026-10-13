@@ -661,6 +661,8 @@
     "./payroll/remittance": "./src/payroll/remittance.ts",
     "./payroll/retro-store": "./src/payroll/retro-store.ts",
     "./payroll/roe-separation-facts": "./src/payroll/roe-separation-facts.ts",
+    "./payroll/roe-event-row": "./src/payroll/roe-event-row.ts",
+    "./payroll/roe-event-source": "./src/payroll/canada/roe-event-source.ts",
     "./payroll/roe-history": "./src/payroll/roe-history.ts",
     "./payroll/run-adjustments": "./src/payroll/run-adjustments.ts",
     "./testing/payroll/run-allocation": "./src/payroll/run-allocation.ts",

@@ -1,4 +1,5 @@
 'use client'
+import { parseRoeEventRow, roeEventRow } from '@openbooks/engine/payroll/roe-event-row'
 import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
@@ -11,11 +12,13 @@ type State = { status: 'loading' } | { status: 'error'; message: string }
 
 /** The employee's declaration stays in the shared ROE drawer, including refusal and retry. */
 export function RoeSeparationFactsForm({ employeePartyId, canEdit, onSaved }: {
-  employeePartyId: string; canEdit: boolean; onSaved: () => void
+  employeePartyId: string; canEdit: boolean; onSaved: (rowId:string) => void
 }) {
   const t = useTranslations('payroll.filings.separationFacts')
   const [state, setState] = useState<State>({ status: 'loading' })
   const [reload, setReload] = useState(0)
+  const [newEvent, setNewEvent] = useState(false)
+  const selection = parseRoeEventRow(employeePartyId)
   const [firstDayWorked, setFirstDayWorked] = useState('')
   const [interruptionOn, setInterruptionOn] = useState('')
   const [lastInsurableEarningsOn, setLastInsurableEarningsOn] = useState('')
@@ -29,7 +32,11 @@ export function RoeSeparationFactsForm({ employeePartyId, canEdit, onSaved }: {
     let alive = true
     setState({ status: 'loading' })
     void (async () => {
-      const response = await fetch(`/api/payroll/separations/facts?employeePartyId=${encodeURIComponent(employeePartyId)}`)
+      if(!selection) throw new Error(t('loadFailed'))
+      const params=new URLSearchParams({employeePartyId:selection.employeePartyId})
+      if(newEvent) params.set('newEvent','true')
+      else if(selection.eventId) params.set('eventId',selection.eventId)
+      const response = await fetch(`/api/payroll/separations/facts?${params}`)
       if (!response.ok) throw new Error(await readApiErrorMessage(response, t('loadFailed')))
       const body = await response.json() as { record: RoeSeparationFacts | null; employee: RoeSeparationEmployee }
       if (!alive) return
@@ -46,14 +53,14 @@ export function RoeSeparationFactsForm({ employeePartyId, canEdit, onSaved }: {
       if (alive) setState({ status: 'error', message: cause instanceof Error ? cause.message : t('loadFailed') })
     })
     return () => { alive = false }
-  }, [employeePartyId, reload, t])
+  }, [employeePartyId, newEvent, reload, t])
 
   async function save() {
-    if (!canEdit || busy || state.status !== 'ready') return
+    if (!canEdit || busy || state.status !== 'ready' || !selection) return
     setBusy(true); setError('')
     try {
       const response = await fetch('/api/payroll/separations/facts', { method: 'POST',
-        headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ employeePartyId,
+        headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ employeePartyId:selection.employeePartyId,
           employmentId: state.employee.employmentId, subsidiaryId: state.employee.subsidiaryId,
           firstDayWorked: firstDayWorked || null, interruptionOn, lastInsurableEarningsOn, salaryContinuanceEndOn: salaryContinuanceEndOn || null,
           sourceReference, reason, status, expectedId: state.record?.id ?? null,
@@ -61,7 +68,7 @@ export function RoeSeparationFactsForm({ employeePartyId, canEdit, onSaved }: {
       if (!response.ok) throw new Error(await readApiErrorMessage(response, t('saveFailed')))
       const body = await response.json() as { record: RoeSeparationFacts }
       setState({ status: 'ready', record: body.record, employee: state.employee })
-      onSaved()
+      onSaved(roeEventRow(selection.employeePartyId,body.record.id))
     } catch (cause: unknown) { setError(cause instanceof Error ? cause.message : t('saveFailed')) }
     finally { setBusy(false) }
   }
@@ -73,7 +80,8 @@ export function RoeSeparationFactsForm({ employeePartyId, canEdit, onSaved }: {
     {state.status === 'error' && <><Alert variant="warning"><AlertDescription>{state.message}</AlertDescription></Alert>
       <Button variant="outline" onClick={() => setReload(value => value + 1)}>{t('retry')}</Button></>}
     {state.status === 'ready' && <>
-      {immutable && <Alert><AlertDescription>{t('issued')}</AlertDescription></Alert>}
+      {immutable && <><Alert><AlertDescription>{t('issued')}</AlertDescription></Alert>
+        {canEdit && <Button variant="outline" onClick={()=>setNewEvent(true)}>{t('newEvent')}</Button>}</>}
       <p className="text-xs text-slate-500">{t('employer', { name: state.employee.employerName })}</p>
       {canEdit && !immutable && <p className="text-xs text-slate-500">
         <Link className="underline underline-offset-2" href={'/data/import' as never}>{t('importHistory')}</Link>{' '}

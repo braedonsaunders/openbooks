@@ -1,0 +1,1 @@
+New immutable ROE event-source binding table and forward source guards; no existing rows are rewritten or validated by DDL. Legacy issued artifacts without exact bindings remain blocked.

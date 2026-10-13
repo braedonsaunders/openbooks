@@ -1,3 +1,4 @@
+import { parseRoeEventRow } from '@openbooks/engine/payroll/roe-event-row'
 import { sql } from 'drizzle-orm'
 import { NextResponse } from 'next/server'
 import { db } from '@openbooks/engine/platform/db'
@@ -163,7 +164,7 @@ export async function guardPayrollFilingRowIds(
   // monthly periodic returns (e.g. ES Modelo 111 mensual) aggregate by filing account exactly like quarterly ones
   if (kind === 'quarterly' || kind === 'monthly') return guardPayroll941Rows(gate, country, rowIds, taxYear)
   const employees = parsed.flatMap((row) => row!.employees)
-  if (kind === 'separation') return guardPayrollRoeEmployees(gate, employees)
+  if (kind === 'separation') return guardPayrollRoeEmployees(gate, rowIds)
   const employeeDenied = await guardPayrollFilingEmployees(gate, country, employees, taxYear)
   if (employeeDenied) return employeeDenied
   const accounts = parsed.flatMap((row) => row!.accounts)
@@ -283,15 +284,14 @@ export async function guardPayrollRoeEmployees(
   // uuid check here would run only for restricted callers.
   if (gate.allowedSubsidiaryIds === null) return null
   const ids = [...new Set(employeeIds)]
-  const employeeDenied = await guardPayrollEmployees(gate, ids)
-  if (employeeDenied) return employeeDenied
+  const selections=ids.map(parseRoeEventRow)
+  if(selections.some(selection=>selection===null)) return malformedInput('Choose the native employee and separation event')
+  const employees=new Set(selections.map(selection=>selection!.employeePartyId))
   const sources = await roeSourceScope(gate.user.orgId, ids)
-  if (new Set(sources.map(row => row.employeeId)).size !== ids.length) return notFound("payroll record")
+  if (new Set(sources.map(row => row.employeeId)).size !== employees.size) return notFound("payroll record")
   for (const row of sources) {
-    if (row.sourceDocumentId) {
-      const denied = guardSubsidiaryScope(gate, row.sourceSubsidiaryId)
-      if (denied) return denied
-    }
+    const denied = guardSubsidiaryScope(gate, row.sourceSubsidiaryId)
+    if (denied) return denied
   }
   const accounts = sources.map(row => row.filingAccountId).filter((id): id is string => id !== null)
   return accounts.length ? guardPayrollFilingAccounts(gate, accounts, true) : null

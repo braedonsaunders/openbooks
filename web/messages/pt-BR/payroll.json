@@ -1356,6 +1356,7 @@
       "viewAll": "Ver tudo"
     },
     "separationFacts": {
+      "newEvent": "Novo evento de desligamento",
       "title": "Dados de desligamento",
       "help": "Confirme estas datas nos documentos originais antes de preparar o Registro de emprego.",
       "interruption": "Interrupção de rendimentos",

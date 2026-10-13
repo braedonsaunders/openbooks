@@ -6,8 +6,10 @@ import { defineRoute } from '@/lib/api/route';
 import { apiErrorResponse } from '@/lib/api/error-response';
 import { uuidId } from '@/lib/api/json-schema';
 export const dynamic = 'force-dynamic';
-const query = z.strictObject({ employeePartyId: uuidId });
-const body = query.extend({
+const query = z.strictObject({ employeePartyId: uuidId, eventId: uuidId.optional(),
+  newEvent: z.enum(['true','false']).transform(value=>value==='true').optional(),
+  employmentId: uuidId.optional(), subsidiaryId: uuidId.optional() });
+const body = z.strictObject({ employeePartyId: uuidId,
   employmentId: uuidId, subsidiaryId: uuidId, firstDayWorked: z.string().nullable(),
   interruptionOn: z.string(), lastInsurableEarningsOn: z.string(), salaryContinuanceEndOn: z.string().nullable(),
   sourceReference: z.string().trim().min(1).max(2000), reason: z.string().trim().min(1).max(2000),

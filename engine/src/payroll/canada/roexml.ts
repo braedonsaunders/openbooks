@@ -54,6 +54,7 @@ function payrollExtractV2Xsd(): string {
 /** Blocks the payroll data cannot supply: the employer declares them. */
 export interface RoeIssueInput {
   employeePartyId: string;
+  eventId?: string | null;
   /** Block 16 — see ROE_REASON_CODES. */
   reasonCode: RoeReasonCode;
   /** Block 18 — mandatory for reason K (other). */
@@ -138,7 +139,7 @@ export async function buildRoeXml(
   const sins = (await db.execute<{ employee_party_id: string; sin_encrypted: string | null }>(sql`
     select prof.employee_party_id, prof.sin_encrypted
       from employee_payroll_profiles prof
-     where prof.org_id = ${orgId}
+     where prof.org_id = ${orgId} and prof.country = 'CA'
   `));
   const sinByEmployee = new Map(sins.rows.map((row) => [row.employee_party_id, row.sin_encrypted]));
 
@@ -151,7 +152,7 @@ export async function buildRoeXml(
     if (!isRoeReasonCode(issue.reasonCode)) {
       throw new PayrollError(`unknown ROE reason for issue "${issue.reasonCode}"`);
     }
-    const record = await roeRecord(orgId, issue.employeePartyId);
+    const record = await roeRecord(orgId, issue.employeePartyId, issue.eventId);
     if (!record) throw new PayrollError("employee not found");
     if (record.periods.length === 0) {
       missingEarnings.push(record.employeeName);

@@ -1356,6 +1356,7 @@
       "viewAll": "Ver todo"
     },
     "separationFacts": {
+      "newEvent": "Nuevo evento de separación",
       "title": "Datos de separación",
       "help": "Confirme estas fechas con los documentos originales antes de preparar el Registro de empleo.",
       "interruption": "Interrupción de ingresos",

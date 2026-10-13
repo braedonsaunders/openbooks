@@ -1,3 +1,5 @@
+import { roeLaterSpellStubSql } from './canada/roe-event-source.ts';
+import { parseRoeEventRow, roeEventRow } from './roe-event-row.ts';
 import { roeWindowContext, readRoeReportingWindow, ROE_REPORTING_COUNTS } from './roe-reporting-window.ts';
 import { assertPayrollCountryKnown } from "./country.ts";
 import { sql } from "drizzle-orm";
@@ -748,8 +750,9 @@ export async function roeWorksheet(
   orgId: string,
   employeePartyId: string,
   limit?: number,
+  eventId?: string | null,
 ): Promise<{ periods: RoePeriod[]; totalInsurableEarnings: string; totalInsurableHours: string }> {
-  const context=await roeWindowContext(orgId,employeePartyId);
+  const context=await roeWindowContext(orgId,employeePartyId,eventId);
   if(limit!==undefined && limit!==ROE_REPORTING_COUNTS[context.frequency]!.hours) {
     throw new PayrollError('The ROE reporting window follows the configured pay-period type — use its statutory period count');
   }
@@ -768,8 +771,11 @@ export async function roeSourceScope(orgId: string, employeeIds: readonly string
 }[]> {
   if (employeeIds.length === 0) return [];
   const sources: { employeeId: string; filingAccountId: string | null; sourceDocumentId: string | null; sourceSubsidiaryId: string | null }[]=[];
-  for(const employeeId of employeeIds){
-    const context=await roeWindowContext(orgId,employeeId);
+  for(const rowId of employeeIds){
+    const selection=parseRoeEventRow(rowId);
+    if(!selection) throw new PayrollError('Choose the native employee and separation event');
+    const employeeId=selection.employeePartyId;
+    const context=await roeWindowContext(orgId,employeeId,selection.eventId);
     const window=await readRoeReportingWindow(context);
     sources.push({employeeId,filingAccountId:context.filingAccountId,sourceDocumentId:null,sourceSubsidiaryId:context.subsidiaryId});
     for(const period of window.historicalPeriods) sources.push({employeeId,filingAccountId:period.filingAccountId,sourceDocumentId:null,sourceSubsidiaryId:period.subsidiaryId});
@@ -864,7 +870,7 @@ export interface RoeRecord {
  * statutory return that also discloses their SSN. Returns null for a non-CA
  * employee so every caller (including the XML builder) fails closed.
  */
-export async function roeRecord(orgId: string, employeePartyId: string): Promise<RoeRecord | null> {
+export async function roeRecord(orgId: string, employeePartyId: string, eventId?: string | null): Promise<RoeRecord | null> {
   const header = (await db.execute<{
       display_name: string; employee_number: string | null; job_title: string | null;
       hired_on: string | null; terminated_on: string | null; sin_last3: string | null;
@@ -880,34 +886,23 @@ export async function roeRecord(orgId: string, employeePartyId: string): Promise
       left join employee_payroll_profiles prof
         on prof.org_id = p.org_id and prof.employee_party_id = p.id
       left join pay_schedules sched on sched.id = prof.pay_schedule_id and sched.org_id = prof.org_id
-     -- Strict country selection (single equals, never a coalesce default), with
-     -- the unknown-attribution path kept open: a missing profile row passes
-     -- with its null country so the TypeScript refusal below fires by name.
-     -- A genuinely foreign employee matches no row and gets the null.
      where p.org_id = ${orgId} and p.id = ${employeePartyId}
-       and (prof.country = 'CA' or prof.employee_party_id is null)
   `));
   const row = header.rows[0];
   if (!row) return null;
-  // No coalesce default anywhere on this path: the predicate below lets a
-  // missing profile row through WITH its null country (rather than folding
-  // it into Canada), and null is UNKNOWN — not Canadian. Refuse by name (the
-  // remedy names where the country is set) rather than filing a Service
-  // Canada return for an employee of unknown attribution; a genuinely foreign
-  // employee matches no row and still gets the documented null.
-  if (row.country == null) {
-    throw new PayrollError(
-      `${row.display_name} has no payroll country on file — a Record of Employment is a Service `
-      + "Canada return and cannot be issued without one. Set the employee's country on their "
-      + "Payroll tab before issuing the ROE",
-    );
+  const retainedEvent=(await db.execute(sql`select id from payroll_roe_separation_events
+    where org_id=${orgId} and employee_party_id=${employeePartyId} and status in ('draft','confirmed','issued') limit 1`)).rows.length>0;
+  if(!retainedEvent && row.country!=='CA'){
+    if(row.country===null)throw new PayrollError(`${row.display_name} has no payroll country on file — record the original Canadian employment and separation evidence before preparing an ROE`);
+    return null;
   }
+  const context = await roeWindowContext(orgId, employeePartyId, eventId);
   // Block 6 and the Block 15 window are STATUTORY declarations derived from
   // the employee's pay-period type. An employee with no pay schedule used to
   // get `?? "biweekly"` / `?? 27` / `?? "B"` — an invented filing. Refuse by
   // name instead: nothing in the payroll data can stand in for a pay-period
   // type that was never configured.
-  const frequency = row.frequency;
+  const frequency = context.frequency;
   if (!frequency) {
     throw new PayrollError(
       `${row.display_name} has no pay schedule on their payroll profile — Block 6 `
@@ -923,7 +918,6 @@ export async function roeRecord(orgId: string, employeePartyId: string): Promise
       + "type — Service Canada accepts weekly, biweekly, semi-monthly and monthly ROEs",
     );
   }
-  const context = await roeWindowContext(orgId, employeePartyId);
   const worksheet = await readRoeReportingWindow(context);
   const finalPeriod = worksheet.periods[0] ?? null;
   if (!finalPeriod) {
@@ -958,9 +952,6 @@ export async function roeRecord(orgId: string, employeePartyId: string): Promise
   if (!event.first_day_worked || !event.employment_id || !event.subsidiary_id || !event.source_reference?.trim()) {
     throw new PayrollError(`${row.display_name} has incomplete ROE employment-spell facts — record the original first day worked, native employment, legal employer and source in the ROE drawer before preparing the filing`);
   }
-  if (event.employment_id !== row.employment_id || event.subsidiary_id !== row.subsidiary_id) {
-    throw new PayrollError(`${row.display_name}'s confirmed separation belongs to a different native employment or legal employer — review the employment attribution before preparing this ROE`);
-  }
   // A final cheque may be paid after the last day for which wages were
   // earned. Retained earning dates distinguish that payment from later work;
   // incomplete attribution must not be accepted as proof of earlier service.
@@ -980,6 +971,7 @@ export async function roeRecord(orgId: string, employeePartyId: string): Promise
         and evidence.line_snapshot=public.payroll_roe_reporting_line_snapshot(line.id,line.org_id)
      where stub.org_id = ${orgId} and stub.employee_party_id = ${employeePartyId}
        and (stub.employment_id = ${event.employment_id} or stub.employment_id is null)
+       and not ${roeLaterSpellStubSql(orgId,employeePartyId,event.employment_id,event.id,earningsCutoff)}
        and (evidence.is_insurable is null or evidence.is_insurable)
        and (line.amount <> 0 or (line.hours is not null and line.hours <> 0))
        and (
@@ -1113,11 +1105,10 @@ export async function roeRecord(orgId: string, employeePartyId: string): Promise
   return {
     employeePartyId,
     employeeName: row.display_name,
-    // Guaranteed "CA" by the refusal and the foreign-null above — never a
-    // default. The XML builder re-asserts it where the file is written.
-    country: row.country,
+    // The selected spell has a retained Canadian payroll account and CAD source basis.
+    country: "CA",
     payrollReference: row.employee_number,
-    filingAccount: filingAccountRef(row.filing_account_id, accounts),
+    filingAccount: filingAccountRef(context.filingAccountId, accounts),
     payPeriodType: periodType,
     sinLast3: row.sin_last3,
     firstDayWorked: event.first_day_worked,
@@ -1152,6 +1143,8 @@ export async function roeRecord(orgId: string, employeePartyId: string): Promise
  * A US employee has no Record of Employment and must never be offered as one.
  */
 export async function roeCandidates(orgId: string, taxYear: number): Promise<{
+  roeRowId: string;
+  eventId: string | null;
   employeePartyId: string;
   employeeName: string;
   terminatedOn: string | null;
@@ -1185,12 +1178,19 @@ export async function roeCandidates(orgId: string, taxYear: number): Promise<{
       + "before issuing Records of Employment",
     );
   }
-  return rows.rows.map((row) => ({
-    employeePartyId: row.id,
-    employeeName: row.display_name,
-    terminatedOn: row.terminated_on,
-    lastPayDate: row.last_pay_date,
-  }));
+  const events=(await db.execute<{id:string;employeePartyId:string;employeeName:string;lastDay:string}>(sql`
+    select e.id,e.employee_party_id as "employeePartyId",p.display_name as "employeeName",
+      e.last_insurable_earnings_on::text as "lastDay"
+    from payroll_roe_separation_events e join parties p on p.org_id=e.org_id and p.id=e.employee_party_id
+    where e.org_id=${orgId} and extract(year from e.interruption_on)::int=${taxYear}
+      and e.status in ('draft','confirmed','issued') order by p.display_name,e.interruption_on,e.id`)).rows;
+  const declaredEmployees=new Set(events.map(e=>e.employeePartyId));
+  return [
+    ...events.map(e=>({roeRowId:roeEventRow(e.employeePartyId,e.id),eventId:e.id,employeePartyId:e.employeePartyId,
+      employeeName:e.employeeName,terminatedOn:e.lastDay,lastPayDate:null})),
+    ...rows.rows.filter(row=>!declaredEmployees.has(row.id)).map(row=>({roeRowId:row.id,eventId:null,
+      employeePartyId:row.id,employeeName:row.display_name,terminatedOn:row.terminated_on,lastPayDate:row.last_pay_date})),
+  ];
 }
 
 /**

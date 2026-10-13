@@ -1,3 +1,4 @@
+import { assertRoeReportingCurrency,selectRoeEvent,roeEventPayrollIdentity,roeLaterSpellStubSql } from './canada/roe-event-source.ts';
 import type { RoePriorPeriod } from './roe-history.ts';
 import { roeQualifiedLineAllocations, type RoeRetainedLine } from './roe-line-allocation.ts';
 import { sql } from 'drizzle-orm';
@@ -40,46 +41,25 @@ export type RoeWindowStub = {
 };
 
 /** The employer's confirmed employment spell is the boundary for every ROE read. */
-export async function roeWindowContext(orgId: string, employeeId: string): Promise<RoeWindowContext> {
-  await requirePayrollFeature(db,orgId);
-  const rows = (await db.execute<{
-    name: string; country: string | null; employmentMatched: boolean; employmentId: string | null; subsidiaryId: string | null;
-    scheduleId: string | null; frequency: string | null; filingAccountId: string | null;
-    eventId: string | null; eventStatus: string | null; eventEmploymentId: string | null; eventSubsidiaryId: string | null;
-    firstDayWorked: string | null; interruptionOn: string | null; lastEarnedOn: string | null;
-    continuanceEnd: string | null; sourceReference: string | null;
-  }>(sql`
-    select party.display_name as name, profile.country,(employment.id is not null) as "employmentMatched", profile.employment_id as "employmentId",
-           party.subsidiary_id as "subsidiaryId", profile.pay_schedule_id as "scheduleId",
-           schedule.frequency, profile.filing_account_id as "filingAccountId",
-           event.id as "eventId",event.status as "eventStatus",event.employment_id as "eventEmploymentId",event.subsidiary_id as "eventSubsidiaryId",
-           event.first_day_worked::text as "firstDayWorked",event.interruption_on::text as "interruptionOn",
-           event.last_insurable_earnings_on::text as "lastEarnedOn",
-           event.salary_continuance_end_on::text as "continuanceEnd",event.source_reference as "sourceReference"
-      from parties party
-      left join employee_payroll_profiles profile on profile.org_id=party.org_id and profile.employee_party_id=party.id
-      left join worker_employments employment on employment.org_id=profile.org_id and employment.id=profile.employment_id
-        and employment.worker_party_id=party.id and employment.employer_subsidiary_id=party.subsidiary_id
-      left join pay_schedules schedule on schedule.org_id=profile.org_id and schedule.id=profile.pay_schedule_id
-      left join lateral (
-        select * from payroll_roe_separation_events
-         where org_id=party.org_id and employee_party_id=party.id and status in ('draft','confirmed','issued')
-         order by interruption_on desc,id desc limit 1
-      ) event on true
-     where party.org_id=${orgId} and party.id=${employeeId}`)).rows;
-  const row=rows[0];
-  if(!row || row.country!=='CA') throw new PayrollError('Choose a Canadian employee with a declared payroll country for the ROE');
-  if(!row.scheduleId || !row.frequency || !ROE_REPORTING_COUNTS[row.frequency]) throw new PayrollError(`${row.name} needs a supported native pay schedule for the ROE reporting window`);
-  if(!row.eventId || !['confirmed','issued'].includes(row.eventStatus??'')) throw new PayrollError(`${row.name} has no confirmed Record of Employment separation facts — record the interruption date, last insurable earnings date, and any salary-continuance or paid-leave end before issuing the ROE`);
-  if(!row.employmentMatched || !row.employmentId || !row.subsidiaryId || row.eventEmploymentId!==row.employmentId || row.eventSubsidiaryId!==row.subsidiaryId) throw new PayrollError(`${row.name}'s separation does not identify the current native employment and legal employer`);
-  if(!row.firstDayWorked || !row.lastEarnedOn || !row.interruptionOn || !row.sourceReference?.trim()
-    || ![row.firstDayWorked,row.lastEarnedOn,row.interruptionOn,...(row.continuanceEnd?[row.continuanceEnd]:[])].every(isIsoCalendarDate)
-    || row.firstDayWorked>(row.continuanceEnd??row.lastEarnedOn)) throw new PayrollError(`${row.name} has incomplete ROE employment-spell facts — record the original first day worked and confirmed earned dates with their source`);
-  return {orgId,employeeId,name:row.name,employmentId:row.employmentId,subsidiaryId:row.subsidiaryId,
-    scheduleId:row.scheduleId,frequency:row.frequency,filingAccountId:row.filingAccountId,
-    event:{id:row.eventId,employment_id:row.employmentId,subsidiary_id:row.subsidiaryId,
-      first_day_worked:row.firstDayWorked,interruption_on:row.interruptionOn,last_insurable_earnings_on:row.lastEarnedOn,
-      salary_continuance_end_on:row.continuanceEnd,source_reference:row.sourceReference}};
+export async function roeWindowContext(orgId:string,employeeId:string,eventId?:string|null):Promise<RoeWindowContext>{
+ await requirePayrollFeature(db,orgId);
+ const event=await selectRoeEvent(orgId,employeeId,eventId);
+ const subject=(await db.execute<{name:string}>(sql`select p.display_name as name from parties p
+   join worker_employments e on e.org_id=p.org_id and e.worker_party_id=p.id and e.id=${event.employmentId}
+   where p.org_id=${orgId} and p.id=${employeeId} and e.employer_subsidiary_id=${event.subsidiaryId}`)).rows;
+ if(subject.length!==1)throw new PayrollError('The selected separation event does not belong to this native employee and employer');
+ const name=subject[0]!.name;
+ if(!['confirmed','issued'].includes(event.status)||!event.firstDayWorked||!event.sourceReference?.trim())
+   throw new PayrollError(`${name} has no confirmed original employment-spell and separation facts for this event`);
+ const dates=[event.firstDayWorked,event.lastInsurableEarningsOn,event.interruptionOn,...(event.salaryContinuanceEndOn?[event.salaryContinuanceEndOn]:[])];
+ if(!dates.every(isIsoCalendarDate)||event.firstDayWorked>event.lastInsurableEarningsOn)throw new PayrollError('The selected event has incomplete or invalid original earned dates');
+ const identity=await roeEventPayrollIdentity(orgId,event);
+ if(!ROE_REPORTING_COUNTS[identity.frequency])throw new PayrollError('The selected event needs a supported source-qualified ROE pay-period type');
+ return {orgId,employeeId,name,employmentId:event.employmentId,subsidiaryId:event.subsidiaryId,scheduleId:identity.scheduleId,
+   frequency:identity.frequency,filingAccountId:identity.filingAccountId,
+   event:{id:event.id,employment_id:event.employmentId,subsidiary_id:event.subsidiaryId,first_day_worked:event.firstDayWorked,
+    interruption_on:event.interruptionOn,last_insurable_earnings_on:event.lastInsurableEarningsOn,
+    salary_continuance_end_on:event.salaryContinuanceEndOn,source_reference:event.sourceReference}};
 }
 
 export function assembleRoeReportingWindow(
@@ -140,7 +120,7 @@ export function assembleRoeReportingWindow(
     if(stub.earnedDatesComplete && earnedFrom<context.event.first_day_worked) throw new PayrollError(`${context.name} has retained earnings before the confirmed first day worked — reconcile the employment-spell source before filing`);
     if(earnedFrom>finalEnd) throw new PayrollError(`${context.name} has a later payment without qualified ROE service-period or separation-payment allocation`);
     if(stub.employmentId!==context.employmentId || stub.subsidiaryId!==context.subsidiaryId) throw new PayrollError(`${context.name} has unknown or conflicting retained payroll employment or legal-employer attribution`);
-    if(stub.currency!=='CAD') throw new PayrollError(`${context.name} needs a qualified Canadian-dollar statutory reporting basis for this ROE`);
+    assertRoeReportingCurrency(stub.currency,context.name);
     if(!stub.hoursBasisQualified) throw new PayrollError(`${context.name} needs retained insurable-hour attribution for mixed, undated salary or correcting earnings before filing the ROE`);
     const matching=buckets.filter(p=>stub.reportPeriodStart!==undefined
       ? p.periodStart===stub.reportPeriodStart&&p.periodEnd===stub.reportPeriodEnd
@@ -236,6 +216,7 @@ export async function readRoeReportingWindow(context: RoeWindowContext) {
                and qualified.report_period_start<=${final[0]!.periodEnd}::date and qualified.report_period_end>=${from}::date)
          or (run.period_start>${final[0]!.periodEnd}::date and stub.insurable_earnings<>0))
        and (stub.employment_id=${context.employmentId} or stub.employment_id is null)
+       and not ${roeLaterSpellStubSql(context.orgId,context.employeeId,context.employmentId,context.event.id,cutoff)}
      order by run.period_end desc,stub.id limit 5001`)).rows;
   if(stubs.length>5000) throw new PayrollError('ROE reporting source exceeds the bounded retained-stub window');
     const lineRows=stubs.length?(await db.execute<RoeRetainedLine>(sql`

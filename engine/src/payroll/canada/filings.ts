@@ -1,3 +1,4 @@
+import { parseRoeEventRow, roeEventRow, selectRoeEvent } from './roe-event-source.ts';
 import { sql } from "drizzle-orm";
 import { db } from "../../platform/db.ts";
 import { add } from "../../money/money.ts";
@@ -47,12 +48,13 @@ export function parseT4RowId(rowId: string): PayrollFilingRowScope | null {
 }
 
 /**
- * The ROE row grammar: a bare employee id, matching roePopulation's rowKey.
+ * The ROE row grammar binds an employee to one separation event; legacy bare keys require unambiguous native resolution.
  * Owned here for the same reason as the T4's.
  */
 export function parseRoeRowId(rowId: string): PayrollFilingRowScope | null {
-  if (!isUuid(rowId)) return null;
-  return { employees: [rowId], accounts: [] };
+  const selection=parseRoeEventRow(rowId);
+  if (!selection) return null;
+  return { employees: [selection.employeePartyId], accounts: [] };
 }
 
 /** Block 16 reason labels, per the Service Canada ROE instructions. */
@@ -184,7 +186,9 @@ async function t4Slip(orgId: string, taxYear: number, rowId: string): Promise<Pa
  * made when the ROE Web file is issued — never printed as a guess.
  */
 async function roeSlip(orgId: string, _taxYear: number, rowId: string): Promise<PayrollFilingSlipData> {
-  const record = await roeRecord(orgId, rowId);
+  const selection=parseRoeEventRow(rowId);
+  if(!selection) throw new PayrollError('Choose the native employee and separation event');
+  const record = await roeRecord(orgId, selection.employeePartyId, selection.eventId);
   if (!record) {
     throw new PayrollError(
       "no Record of Employment can be assembled for this employee — ROEs exist for Canadian-pack employees only",
@@ -230,12 +234,13 @@ async function roeSlip(orgId: string, _taxYear: number, rowId: string): Promise<
 async function roePopulation(orgId: string, taxYear: number): Promise<PayrollFilingData> {
   const candidates = await roeCandidates(orgId, taxYear);
   return {
-    rowKey: "employeePartyId",
+    rowKey: "roeRowId",
     columns: [
       { key: "employee", label: "Employee" },
       { key: "lastDay", label: "Last day paid" },
     ],
     rows: candidates.map((candidate) => ({
+      roeRowId: candidate.roeRowId,
       employeePartyId: candidate.employeePartyId,
       employee: candidate.employeeName,
       lastDay: candidate.terminatedOn ?? candidate.lastPayDate,
@@ -244,15 +249,16 @@ async function roePopulation(orgId: string, taxYear: number): Promise<PayrollFil
 }
 
 /**
- * Parse the surface's `employees=<partyId>:<reasonCode>[:<comment>],…`
+ * Parse the surface's `employees=<partyId>~<eventId>:<reasonCode>[:<comment>],…`
  * selection into ROE issue inputs. This parsing used to live in the roe-xml
  * API route; it is the filing's own contract, so it lives with the filing.
  */
 export function parseRoeIssueParam(raw: string): RoeIssueInput[] {
   const issues: RoeIssueInput[] = [];
   for (const entry of raw.split(",").filter(Boolean)) {
-    const [employeePartyId, reasonCode, ...comment] = entry.split(":");
-    if (!isUuid(employeePartyId ?? "")
+    const [rowId, reasonCode, ...comment] = entry.split(":");
+    const selection=parseRoeEventRow(rowId ?? "");
+    if (!selection
       || !(ROE_REASON_CODES as readonly string[]).includes(reasonCode ?? "")) {
       throw new PayrollError("invalid employee selection");
     }
@@ -267,7 +273,8 @@ export function parseRoeIssueParam(raw: string): RoeIssueInput[] {
     }
     if (text.length > 160) throw new PayrollError("comment too long");
     issues.push({
-      employeePartyId: employeePartyId!,
+      employeePartyId: selection.employeePartyId,
+      ...(selection.eventId?{eventId:selection.eventId}:{}),
       reasonCode: reasonCode as RoeReasonCode,
       comment: text || null,
     });
@@ -496,7 +503,11 @@ function buildCaPackFilings(): PayrollPackFilings {
     },
     {
       key: "roe",
-      originalIssueRowIds: params => parseRoeIssueParam(params.employees ?? "").map(issue => issue.employeePartyId),
+      additionalSelectedOriginals: true,
+      originalIssueRowIds: async (params,orgId) => Promise.all(parseRoeIssueParam(params.employees ?? "").map(async issue => {
+        const event=await selectRoeEvent(orgId,issue.employeePartyId,issue.eventId);
+        return roeEventRow(issue.employeePartyId,event.id);
+      })),
       lockIssueSources: lockRoeIssueFacts,
       recordIssueSources: recordRoeFactsIssued,
       label: "Records of Employment",
@@ -532,7 +543,7 @@ function buildCaPackFilings(): PayrollPackFilings {
       },
       issue: {
         param: "employees",
-        idColumn: "employeePartyId",
+        idColumn: "roeRowId",
         reasonCodes: ROE_REASON_CODES.map((code) => ({
           code,
           label: ROE_REASON_LABELS[code],

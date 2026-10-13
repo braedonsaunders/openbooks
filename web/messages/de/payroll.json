@@ -1356,6 +1356,7 @@
       "viewAll": "Alle ansehen"
     },
     "separationFacts": {
+      "newEvent": "Neues Beendigungsereignis",
       "title": "Angaben zum Beschäftigungsende",
       "help": "Bestätigen Sie diese Daten anhand der Originalunterlagen, bevor Sie den Record of Employment vorbereiten.",
       "interruption": "Unterbrechung des Verdienstes",

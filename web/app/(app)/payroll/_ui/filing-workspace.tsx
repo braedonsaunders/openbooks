@@ -610,6 +610,7 @@ export function SlipDrawer({
   /** Whether the operator may file (payroll.run) — gates any correction. */
   canFile: boolean
 }) {
+  const router = useRouter()
   const t = useTranslations('payroll.filings')
   const tCommon = useTranslations('common')
   const rowId = String(row[section.data.rowKey] ?? '')
@@ -687,7 +688,10 @@ export function SlipDrawer({
       <div className="space-y-5">
         {section.country === 'CA' && section.key === 'roe' && <RoeSeparationFactsForm
           key={rowId} employeePartyId={rowId} canEdit={canFile}
-          onSaved={() => { setState({ status: 'loading' }); setFactsRevision(value => value + 1) }} />}
+          onSaved={(savedRowId) => {
+            if(savedRowId!==rowId){onClose();router.refresh();return}
+            setState({ status: 'loading' }); setFactsRevision(value => value + 1)
+          }} />}
         {state.status === 'loading' && (
           <div className="space-y-3">
             <Skeleton className="h-6 w-2/3" />

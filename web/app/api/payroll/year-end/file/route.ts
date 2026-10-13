@@ -1,3 +1,4 @@
+import { parseRoeEventRow } from '@openbooks/engine/payroll/roe-event-row'
 import { z } from 'zod'
 import { defineRoute } from '@/lib/api/route'
 import { apiErrorResponse } from '@/lib/api/error-response'
@@ -9,7 +10,6 @@ import { PayrollError } from "@openbooks/engine/payroll/error";
 import { orgYearEndFilings } from '@openbooks/engine/payroll/yearend'
 import '../../../../../lib/feature-gates';
 import { payrollYearRefusal } from '../../../../../lib/payroll-year'
-import { isUuid } from '../../../../../lib/list-params'
 import type { Authz } from '../../../../../lib/authz'
 import { guardPayrollRoeEmployees, guardPayrollFilingData } from '../../subsidiary-scope'
 
@@ -104,7 +104,7 @@ async function serveFile(gate: Authz, input: FileInput, method: 'GET' | 'POST' =
     }
     const ids = entries.map((entry) => entry.split(':', 1)[0]!)
     // Shape is settled here, for every caller, before any scope guard runs.
-    if (ids.some((id) => !isUuid(id))) {
+    if (ids.some((id) => !parseRoeEventRow(id))) {
       return NextResponse.json({ error: 'invalid employee selection' }, { status: 422 })
     }
     const denied = await guardPayrollRoeEmployees(gate, ids)

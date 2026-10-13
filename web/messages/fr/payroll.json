@@ -1356,6 +1356,7 @@
       "viewAll": "Tout voir"
     },
     "separationFacts": {
+      "newEvent": "Nouvel événement de cessation",
       "title": "Faits relatifs à la cessation d’emploi",
       "help": "Confirmez ces dates à partir des documents originaux avant de préparer le relevé d’emploi.",
       "interruption": "Arrêt de rémunération",

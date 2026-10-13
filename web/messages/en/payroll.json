@@ -1356,6 +1356,7 @@
       "viewAll": "View all"
     },
     "separationFacts": {
+      "newEvent": "New separation event",
       "title": "Separation facts",
       "help": "Confirm these dates from the original separation documents before preparing the Record of Employment.",
       "interruption": "Interruption of earnings",
