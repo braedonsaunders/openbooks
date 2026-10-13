@@ -7317,6 +7317,8 @@
         "reason": "Begründung",
         "changeEffectiveFrom": "Änderungen gelten ab",
         "recipientSource": "Empfänger stammt aus",
+        "fallbackOnlyWhenContextAbsent": "Ersatzrolle nur bei fehlendem Quellkontext verwenden",
+        "fallbackOnlyWhenContextAbsentHint": "Bei einem vorhandenen Arbeitsbeleg oder Projekt ohne Rolleninhaber bleibt die Rolle unbesetzt. Die Ersatzrolle gilt nur, wenn kein primärer Beleg oder Projekt erfasst ist.",
         "fallbackSource": "Wenn diese Rolle leer ist, verwenden",
         "unassignedShare": "Anteil ohne eingeschriebenen Empfänger",
         "rounding": "Rundung",

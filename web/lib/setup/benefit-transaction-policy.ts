@@ -31,6 +31,7 @@ export const BENEFIT_TRANSACTION_POLICY_ENTITY: SetupEntity = {
     field('positions', 'objectArray', { required: true, fullWidth: true, itemTitleField: 'name', fields: [
       field('key', 'text', { required: true }), field('name', 'text', { required: true }), field('weight', 'decimal', { required: true, decimalScale: 4, defaultValue: '1' }),
       field('recipientSource', 'select', { required: true, defaultValue: 'assignment', options: RECIPIENT_SOURCES.map(value => ({ value, labelKey: `transactionBenefits.sources.${value}` })) }),
+      field('fallbackOnlyWhenContextAbsent','boolean',{showWhen:{field:'fallbackSource',in:[...ROLE_SOURCES]},clearWhenHidden:true,helpTextKey:'transactionBenefits.fields.fallbackOnlyWhenContextAbsentHint'}),
       field('fallbackSource', 'select', { options: ROLE_SOURCES.map(value => ({ value, labelKey: `transactionBenefits.sources.${value}` })), showWhen: { field: 'recipientSource', in: [...ROLE_SOURCES] }, clearWhenHidden: true }),
     ] }),
     field('unassignedShare', 'select', { required: true, defaultValue: 'refuse', options: ['refuse', 'forfeit'].map(value => ({ value, labelKey: `transactionBenefits.unassigned.${value}` })) }),

@@ -7317,6 +7317,8 @@
         "reason": "Reason",
         "changeEffectiveFrom": "Changes apply from",
         "recipientSource": "Recipient comes from",
+        "fallbackOnlyWhenContextAbsent": "Fall back only when the source context is absent",
+        "fallbackOnlyWhenContextAbsentHint": "An existing ticket or project with an empty role keeps that role unassigned. Use the fallback only when no primary ticket or project is recorded.",
         "fallbackSource": "When that role is empty, use",
         "unassignedShare": "Share without an enrolled recipient",
         "rounding": "Rounding",

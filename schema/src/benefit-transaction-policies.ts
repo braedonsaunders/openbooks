@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { check, date, foreignKey, numeric, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
+import { boolean, check, date, foreignKey, numeric, pgTable, text, uniqueIndex, uuid } from "drizzle-orm/pg-core";
 import { auditColumns, id, orgRef } from "./helpers";
 import { users } from "./extension";
 import { items } from "./documents";
@@ -34,7 +34,7 @@ export const benefitTransactionItems = pgTable("hrm_benefit_transaction_items", 
  check("hrm_benefit_transaction_items_reason",sql`length(btrim(${t.reason})) BETWEEN 1 AND 2000`),
 ]);
 export const benefitTransactionPositions = pgTable("hrm_benefit_transaction_positions", {
- ...ruleColumns(), positionKey: text("position_key").notNull(), name: text("name").notNull(), weight: numeric("weight", { precision: 19, scale: 4 }).notNull(), recipientSource: text("recipient_source").notNull().default("assignment"), fallbackSource: text("fallback_source"),
+ ...ruleColumns(), positionKey: text("position_key").notNull(), name: text("name").notNull(), weight: numeric("weight", { precision: 19, scale: 4 }).notNull(), recipientSource: text("recipient_source").notNull().default("assignment"), fallbackSource: text("fallback_source"), fallbackOnlyWhenContextAbsent: boolean("fallback_only_when_context_absent").notNull().default(false),
 }, (t) => [
  uniqueIndex("hrm_benefit_transaction_positions_org_id_unique").on(t.orgId,t.id),
  uniqueIndex("hrm_benefit_transaction_positions_position_unique").on(t.orgId,t.programId,t.positionKey), check("hrm_benefit_transaction_positions_weight",sql`${t.weight}>0`), check("hrm_benefit_transaction_positions_key",sql`length(btrim(${t.positionKey})) BETWEEN 1 AND 120`), check("hrm_benefit_transaction_positions_name",sql`length(btrim(${t.name})) BETWEEN 1 AND 200`),
@@ -43,6 +43,7 @@ export const benefitTransactionPositions = pgTable("hrm_benefit_transaction_posi
  foreignKey({columns:[t.orgId],foreignColumns:[orgs.id]}),
  foreignKey({columns:[t.orgId,t.createdBy],foreignColumns:[users.orgId,users.id]}),
  foreignKey({columns:[t.orgId,t.updatedBy],foreignColumns:[users.orgId,users.id]}),
+ check("hrm_benefit_transaction_positions_context_fallback",sql`NOT ${t.fallbackOnlyWhenContextAbsent} OR (${t.recipientSource} <> 'assignment' AND ${t.fallbackSource} IS NOT NULL)`),
  check("hrm_benefit_transaction_positions_reason",sql`length(btrim(${t.reason})) BETWEEN 1 AND 2000`),
 ]);
 export const benefitTransactionLimits = pgTable("hrm_benefit_transaction_limits", {

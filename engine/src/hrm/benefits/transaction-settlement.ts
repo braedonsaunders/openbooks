@@ -1,3 +1,4 @@
+import {transactionRoleRecipient,type TransactionRoleEvidence} from "./transaction-role-recipient.ts";
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { apportion, fromUnits, toUnits } from "../../money/money.ts";
@@ -21,6 +22,7 @@ export interface TransactionSettlementSnapshot {
   readonly policy: BenefitTransactionPolicy;
   readonly source: TransactionIncentiveSourceSnapshot;
   readonly result: TransactionIncentiveResult;
+  readonly recipientContexts?: readonly (TransactionRoleEvidence & {id:string;work_date:string})[];
   readonly priorAwards: readonly { readonly id: string; readonly value: string; readonly status: string; readonly employmentId: string; readonly groups: readonly { readonly groupId: string; readonly value: string }[] }[];
 }
 interface PriorAward extends Record<string, unknown> { id:string; employment_id:string; value:string; status:string; adjusts_award_id:string|null; source_snapshot:Record<string,unknown>; period_from:string; period_to:string|null }
@@ -122,8 +124,20 @@ export async function measureTransactionSettlement(input: {
   const covered=new Set(partitionMembers(input.members,periodFrom,periodTo).covered.map(r=>r.employmentId));
   // Roles recorded on each source: its field ticket (the document itself, or
   // the ticket the line references) and its project.
-  const roles=new Map((await db.execute<{id:string;work_date:string;ticket_foreman:string|null;ticket_superintendent:string|null;project_foreman:string|null;project_manager:string|null}>(sql`
+  const retainContexts=policy.positions.some(position=>position.fallbackOnlyWhenContextAbsent===true);
+  if(retainContexts){
+    // Serialize role changes with the new context-bound financial measurement.
+    await db.execute(sql`select ft.document_id from document_lines l join documents d on d.org_id=l.org_id and d.id=l.document_id
+      join field_tickets ft on ft.org_id=l.org_id and ft.document_id=(case when d.kind='field_ticket' then d.id else l.field_ticket_id end)
+      where l.org_id=${orgId} and l.id=any(${`{${selected.map(row=>row.id).join(",")}}`}::uuid[]) order by ft.document_id for share of ft`);
+    await db.execute(sql`select p.id from document_lines l join documents d on d.org_id=l.org_id and d.id=l.document_id
+      join projects p on p.org_id=l.org_id and p.id=coalesce(l.project_id,d.project_id)
+      where l.org_id=${orgId} and l.id=any(${`{${selected.map(row=>row.id).join(",")}}`}::uuid[]) order by p.id for share of p`);
+  }
+  const roles=new Map((await db.execute<TransactionRoleEvidence & {id:string;work_date:string}>(sql`
     select l.id::text as id, coalesce(l.work_from,d.document_date)::text as work_date,
+           (case when d.kind='field_ticket' then d.id else l.field_ticket_id end)::text as ticket_reference,
+           ft.document_id::text as ticket_id,coalesce(l.project_id,d.project_id)::text as project_reference,p.id::text as project_id,
            ft.foreman_party_id::text as ticket_foreman, ft.superintendent_party_id::text as ticket_superintendent,
            p.foreman_id::text as project_foreman, p.manager_id::text as project_manager
       from document_lines l join documents d on d.org_id=l.org_id and d.id=l.document_id
@@ -131,7 +145,6 @@ export async function measureTransactionSettlement(input: {
       left join projects p on p.org_id=d.org_id and p.id=coalesce(l.project_id,d.project_id)
      where l.org_id=${orgId} and l.id=any(${`{${selected.map(r=>r.id).join(",")}}`}::uuid[])`)).rows.map(r=>[r.id,r]));
   const memberByParty=new Map((await db.execute<{employment_id:string;party:string}>(sql`select id::text as employment_id,worker_party_id::text as party from worker_employments where org_id=${orgId} and id=any(${`{${[...covered].join(",")}}`}::uuid[])`)).rows.map(r=>[r.party,r.employment_id]));
-  const roleColumn={field_ticket_foreman:"ticket_foreman",field_ticket_superintendent:"ticket_superintendent",project_foreman:"project_foreman",project_manager:"project_manager"} as const;
   const forfeit=policy.unassignedShare==="forfeit";
   const facts=source.lines.map(line=>{
     if (prior.usedSources.has(line.sourceId)) throw new BenefitsError("REFUSED",`Source line ${line.sourceId} already belongs to an earlier award — preserve that obligation and use its native adjusting-award action instead of paying the line again.`);
@@ -140,7 +153,7 @@ export async function measureTransactionSettlement(input: {
     const recipients=policy.positions.flatMap(position=>{
       const source=position.recipientSource ?? "assignment";
       if (source!=="assignment") {
-        const holder=role?.[roleColumn[source]] ?? (position.fallbackSource ? role?.[roleColumn[position.fallbackSource]] ?? null : null);
+        const holder=transactionRoleRecipient(source,position.fallbackSource??null,position.fallbackOnlyWhenContextAbsent,role);
         const employmentId=holder ? memberByParty.get(holder) : undefined;
         if (employmentId) return [{shareKey:position.key,employmentId}];
         if (forfeit) return [];
@@ -167,7 +180,11 @@ export async function measureTransactionSettlement(input: {
   const measuredValue=program.valuation==="percent" ? fromUnits(facts.reduce((s,r)=>s+toUnits(r.amount),0n)) : fromQuantityUnits(facts.reduce((s,r)=>s+toQuantityUnits(r.quantity),0n));
   const potential=fromUnits(result.groups.reduce((s,g)=>s+toUnits(g.potentialAward),0n));
   const computation:IncentiveComputation={measuredValue,poolValue:potential,thresholdMet:true,currency:program.currency,totalAwarded:result.totalAwarded,undistributed:fromUnits(toUnits(potential)-toUnits(result.totalAwarded)),excludedZero:[],summaryLines:[`${program.code}: ${rate} ${program.valuation==="percent" ? "% of approved source amount" : `${program.currency} per approved source unit`}; ${source.lines.length} source lines grouped by ${source.grouping?.key??"employer"}.`,`Dates use the recorded ${policy.dateBasis==="work_date" ? "line work date (document date when none)" : "document date"}; payment is available ${program.paymentDelayDays} days after the earning period closes.`,policy.rounding==="per_recipient" ? `Recipient shares accumulate exactly across groups and round once to ${minorUnits} currency places per recipient.` : `Each group rounds once to ${minorUnits} currency places, then apportions recipient shares.`,policy.unassignedShare==="forfeit" ? "A share without a program member in its role is forfeited, never redistributed." : "Every share needs a program member in its role.",budgetCaps ? `Ceilings: ${policy.capPercent}% of program items on each ${policy.capProjectTypeId ? "capped-type " : ""}project's original budget, less ${rate}% of all earlier sources.` : "Existing obligations consume recorded group ceilings."],recipients:result.recipients.map(r=>({employmentId:r.employmentId,share:"dated responsibility",grossValue:uncapped.recipients.find(g=>g.employmentId===r.employmentId)?.value??"0.0000",value:r.value,capped:result.groups.some(g=>g.availableLimit!==null && toUnits(g.awarded)<toUnits(g.potentialAward) && g.recipients.some(x=>x.employmentId===r.employmentId)),explanation:`${r.value} ${program.currency} from dated responsibility shares across ${result.groups.filter(g=>g.recipients.some(x=>x.employmentId===r.employmentId)).length} transaction groups.`}))};
-  const evidence={metric:"transactions" as const,scope:"company" as const,value:measuredValue,currency:program.currency,entryCount:new Set(source.lines.map(r=>r.documentId)).size,lineCount:source.lines.length,policy,source,result,priorAwards:prior.evidence};
+  const evidence={...(retainContexts?{recipientContexts:selected.map(row=>{
+    const context=roles.get(row.id);
+    if(!context)throw new BenefitsError("REFUSED","A selected transaction has no retained recipient-source context — reconcile its native source before settlement.");
+    return context;
+  }).sort((a,b)=>a.id.localeCompare(b.id))}:{}),metric:"transactions" as const,scope:"company" as const,value:measuredValue,currency:program.currency,entryCount:new Set(source.lines.map(r=>r.documentId)).size,lineCount:source.lines.length,policy,source,result,priorAwards:prior.evidence};
   const transactionSnapshot={...evidence,digest:createHash("sha256").update(JSON.stringify(evidence)).digest("hex")};
   return {measured:{metric:"transactions",scope:"company",sourceAccountIds:[],periodFrom,periodTo,value:measuredValue,currency:program.valuation==="percent" ? program.currency:null},computation,excluded:result.excluded.map(r=>`${r.sourceId}: ${r.reason}`),transactionSnapshot};
 }

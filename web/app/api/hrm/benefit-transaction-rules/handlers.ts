@@ -25,6 +25,7 @@ export const transactionPolicyBody = z.object({
     name: z.string().trim().min(1).max(200),
     weight: decimal,
     recipientSource: z.enum(["assignment", "field_ticket_foreman", "field_ticket_superintendent", "project_foreman", "project_manager"]).default("assignment"),
+    fallbackOnlyWhenContextAbsent: z.boolean().optional(),
     fallbackSource: z.enum(["field_ticket_foreman", "field_ticket_superintendent", "project_foreman", "project_manager"]).nullish().transform((value) => value ?? null),
   })).min(1).max(100),
   responsibilities: z.array(z.object({

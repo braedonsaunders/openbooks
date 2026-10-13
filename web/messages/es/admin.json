@@ -7317,6 +7317,8 @@
         "reason": "Motivo",
         "changeEffectiveFrom": "Los cambios aplican desde",
         "recipientSource": "El destinatario proviene de",
+        "fallbackOnlyWhenContextAbsent": "Usar el rol alternativo solo si falta el contexto de origen",
+        "fallbackOnlyWhenContextAbsentHint": "Un parte o proyecto existente sin titular conserva el rol sin asignar. Use el rol alternativo solo cuando no haya un parte o proyecto principal registrado.",
         "fallbackSource": "Si ese rol está vacío, usar",
         "unassignedShare": "Parte sin destinatario inscrito",
         "rounding": "Redondeo",

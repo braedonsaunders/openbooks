@@ -663,3 +663,74 @@ settlementTest("transaction policies govern dated shares, group ceilings, approv
   assert.ok(!JSON.stringify(exported.benefitTransactionResponsibilities).includes(support.employmentId));
   for (const key of ["group_id","reason","created_by","updated_by","source_snapshot","limits"]) assert.equal(own[key],undefined,"the subject export excludes company policy and operator data");
 });
+
+settlementTest("context-only recipient fallback preserves legacy snapshots and applies only to a later dated policy",async h=>{
+ await setFeatures(h.org.orgId,{orders:true,projects:true});
+ const program=await seedProgram(h,{metric:"transactions",allocation:"responsibility",sourceAccountIds:[]},false);
+ const foreman=await seedMember(h,program.id,{displayName:"Recorded Foreman"});
+ const manager=await seedMember(h,program.id,{displayName:"Recorded Manager"});
+ const project=randomUUID();
+ assert.equal((await db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,status,is_active,foreman_id,manager_id)
+  values(${project},${h.org.orgId},${h.org.subsidiaryId},'ROLE-SOURCE','Recipient source project','active',true,
+   ${foreman.workerPartyId},${manager.workerPartyId}) returning id`)).rows.length,1);
+ const seedSources=async(day:string)=>{
+  const ticket=randomUUID();
+  assert.equal((await db.execute(sql`insert into documents(id,org_id,subsidiary_id,kind,document_number,document_date,currency,project_id)
+   values(${ticket},${h.org.orgId},${h.org.subsidiaryId},'field_ticket',${ticket},${day},'USD',${project}) returning id`)).rows.length,1);
+  assert.equal((await db.execute(sql`insert into field_tickets(document_id,org_id,period,period_start,period_end,foreman_party_id,superintendent_party_id)
+   values(${ticket},${h.org.orgId},'daily',${day},${day},${foreman.workerPartyId},null) returning document_id`)).rows.length,1);
+  assert.equal((await db.execute(sql`update documents set status='approved' where org_id=${h.org.orgId} and id=${ticket} returning id`)).rows.length,1);
+  for(const reference of [ticket,null]){
+   const id=randomUUID();
+   assert.equal((await db.execute(sql`insert into documents(id,org_id,subsidiary_id,kind,document_number,document_date,currency,project_id)
+    values(${id},${h.org.orgId},${h.org.subsidiaryId},'sales_order',${id},${day},'USD',${project}) returning id`)).rows.length,1);
+   assert.equal((await db.execute(sql`insert into document_lines(org_id,document_id,line_number,item_id,quantity,unit_price,amount,field_ticket_id,project_id)
+    values(${h.org.orgId},${id},1,${h.org.items.service},1,100,100,${reference},${project}) returning id`)).rows.length,1);
+   assert.equal((await db.execute(sql`update documents set status='approved' where org_id=${h.org.orgId} and id=${id} returning id`)).rows.length,1);
+  }
+ };
+ const policy:BenefitTransactionPolicy={documentKind:"sales_order",dateBasis:"document_date",groupingSegmentId:null,
+  itemIds:[h.org.items.service],unassignedShare:"forfeit",rounding:"per_recipient",
+  positions:[{key:"foreman",name:"Foreman",weight:"1",recipientSource:"field_ticket_foreman",fallbackSource:"project_foreman"},
+   {key:"superintendent",name:"Superintendent",weight:"1",recipientSource:"field_ticket_superintendent",fallbackSource:"project_manager"}],
+  responsibilities:[],limits:[{groupId:h.org.subsidiaryId,kind:"none",amount:null}]};
+ const command={orgId:h.org.orgId,actorId:h.settlerId,programId:program.id,reason:"Declare original source role policy"};
+ const initialRevision=(await getBenefitProgram(db,h.org.orgId,h.settlerId,program.id)).revision;
+ await refuses(()=>saveBenefitTransactionPolicy({...command,expectedRevision:initialRevision,policy:{...policy,
+  positions:[{key:"invalid",name:"Invalid",weight:"1",recipientSource:"assignment",fallbackOnlyWhenContextAbsent:true}]}}),/requires a recorded primary role and a fallback role/);
+ assert.equal(await getBenefitTransactionPolicy(command),null,"Invalid context fallback leaves no partial configuration");
+ const omitted=await saveBenefitTransactionPolicy({...command,expectedRevision:initialRevision,policy});
+ const explicitFalse=await saveBenefitTransactionPolicy({...command,expectedRevision:omitted.programRevision,
+  policy:{...policy,positions:policy.positions.map(position=>({...position,fallbackOnlyWhenContextAbsent:false}))}});
+ assert.deepEqual(explicitFalse.policy,omitted.policy,"False emits the original protected policy shape without additional digest fields");
+ assert.ok(explicitFalse.policy.positions.every(position=>!("fallbackOnlyWhenContextAbsent" in position)));
+ await seedSources("2026-07-09");await activateBenefitProgram(command);
+ const july=settlementQuery(h,program.id),legacy=await settleIncentivePeriod(july);
+ assert.equal(legacy.preview.computation.totalAwarded,"20.0000");
+ const legacyTransaction=legacy.preview.sourceSnapshot.transaction as Record<string,unknown>;
+ assert.ok(legacyTransaction);assert.equal("recipientContexts" in legacyTransaction,false,"Legacy snapshot bytes gain no context metadata");
+ const retained=async()=>(await db.execute(sql`select id,source_snapshot from hrm_benefit_awards
+  where org_id=${h.org.orgId} and program_id=${program.id} order by id`)).rows;
+ const before=await retained();
+ assert.deepEqual((await settleIncentivePeriod(july)).awards.map(award=>award.id),legacy.awards.map(award=>award.id));
+ assert.deepEqual(await retained(),before);
+ const revision=(await getBenefitProgram(db,h.org.orgId,h.settlerId,program.id)).revision;
+ const contextPolicy={...policy,positions:policy.positions.map(position=>({...position,fallbackOnlyWhenContextAbsent:true}))};
+ await refuses(()=>saveBenefitTransactionPolicy({...command,expectedRevision:revision,policy:contextPolicy}),/changing an active program needs the date/);
+ await saveBenefitTransactionPolicy({...command,expectedRevision:revision,policy:contextPolicy,changeEffectiveFrom:"2026-08-01"});
+ assert.deepEqual((await settleIncentivePeriod(july)).awards.map(award=>award.id),legacy.awards.map(award=>award.id));
+ assert.deepEqual(await retained(),before,"A new dated context rule does not rewrite prior award evidence");
+ await seedSources("2026-08-09");
+ const august={...july,periodFrom:"2026-08-01",periodTo:"2026-08-31"};
+ const current=await settleIncentivePeriod(august);
+ const transaction=current.preview.sourceSnapshot.transaction as {recipientContexts:{ticket_reference:string|null;ticket_id:string|null;ticket_superintendent:string|null;project_reference:string|null}[]};
+ assert.ok(transaction);assert.ok(Array.isArray(transaction.recipientContexts));assert.equal(transaction.recipientContexts.length,2);
+ assert.equal(transaction.recipientContexts.filter(context=>context.ticket_reference!==null&&context.ticket_id===context.ticket_reference&&context.ticket_superintendent===null).length,1);
+ assert.equal(transaction.recipientContexts.filter(context=>context.ticket_reference===null&&context.ticket_id===null&&context.project_reference===project).length,1);
+ assert.equal(current.preview.computation.totalAwarded,"15.0000","Present empty superintendent forfeits5; absent ticket selects the project manager5");
+ assert.deepEqual(current.awards.map(award=>({employmentId:award.employmentId,value:award.value})).sort((a,b)=>a.employmentId.localeCompare(b.employmentId)),
+  [{employmentId:foreman.employmentId,value:"10.0000"},{employmentId:manager.employmentId,value:"5.0000"}].sort((a,b)=>a.employmentId.localeCompare(b.employmentId)));
+ const after=await retained();
+ assert.deepEqual((await settleIncentivePeriod(august)).awards.map(award=>award.id),current.awards.map(award=>award.id));
+ assert.deepEqual(await retained(),after);
+});

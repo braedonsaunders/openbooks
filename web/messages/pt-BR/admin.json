@@ -7317,6 +7317,8 @@
         "reason": "Motivo",
         "changeEffectiveFrom": "Alterações valem a partir de",
         "recipientSource": "O beneficiário vem de",
+        "fallbackOnlyWhenContextAbsent": "Usar a função alternativa apenas quando faltar o contexto de origem",
+        "fallbackOnlyWhenContextAbsentHint": "Um registro de trabalho ou projeto existente sem responsável mantém a função sem atribuição. Use a alternativa apenas quando nenhum registro ou projeto principal estiver registrado.",
         "fallbackSource": "Quando essa função estiver vazia, usar",
         "unassignedShare": "Parcela sem beneficiário inscrito",
         "rounding": "Arredondamento",

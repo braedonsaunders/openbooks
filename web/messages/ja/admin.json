@@ -7317,6 +7317,8 @@
         "reason": "理由",
         "changeEffectiveFrom": "変更の適用開始日",
         "recipientSource": "受取人の取得元",
+        "fallbackOnlyWhenContextAbsent": "元の作業票またはプロジェクトがない場合のみ代替担当を使用",
+        "fallbackOnlyWhenContextAbsentHint": "既存の作業票またはプロジェクトに担当者がいない場合、その役割は未割り当てのままです。元の作業票またはプロジェクトが記録されていない場合のみ代替担当を使用します。",
         "fallbackSource": "その役割が空の場合に使用",
         "unassignedShare": "登録済み受取人のいない配分",
         "rounding": "端数処理",

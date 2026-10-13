@@ -85,6 +85,7 @@ for (const address of addresses) {
     assert.equal((await address.route.GET(request(address.path, "GET"), context("not-an-id"))).status, 400);
     const invalidBodies = [
       { ...validBody(), expectedRevision: 0 }, { ...validBody(), reason: " " },
+      { ...validBody(), positions: [{ ...validBody().positions[0], fallbackOnlyWhenContextAbsent: "true" }] },
       { ...validBody(), itemIds: [] }, { ...validBody(), groupingSegmentId: "foreign-name" },
       { ...validBody(), positions: Array.from({ length: 101 }, () => validBody().positions[0]) },
       { ...validBody(), limits: [{ groupId: itemId, kind: "none", amount: "1" }] },
@@ -98,6 +99,17 @@ for (const address of addresses) {
     assert.equal(oversized.status, 413);
     assert.deepEqual(state.calls, []);
     assert.deepEqual(state.invalidations, []);
+  });
+
+  test(`${address.name} preserves an explicit context-only role fallback through the typed native command`, async () => {
+    reset();
+    const body = { ...validBody(), positions: [{ key: "lead", name: "Lead", weight: "1",
+      recipientSource: "field_ticket_superintendent", fallbackSource: "project_manager", fallbackOnlyWhenContextAbsent: true }] };
+    const response = await address.route.PATCH(request(address.path,"PATCH",body),context());
+    assert.equal(response.status,200,await response.clone().text());
+    assert.equal(state.calls.length,1);
+    const forwarded=state.calls[0]!.input as {policy:{positions:unknown[]}};
+    assert.deepEqual(forwarded.policy.positions,body.positions);
   });
 
   test(`${address.name} forwards the verified actor, program, revision and exact policy through one command`, async () => {

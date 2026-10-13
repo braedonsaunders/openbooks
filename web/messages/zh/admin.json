@@ -7317,6 +7317,8 @@
         "reason": "原因",
         "changeEffectiveFrom": "更改生效日期",
         "recipientSource": "接收人来源",
+        "fallbackOnlyWhenContextAbsent": "仅在来源上下文缺失时使用备用角色",
+        "fallbackOnlyWhenContextAbsentHint": "已有工单或项目的角色为空时，该角色保持未分配。仅在未记录主要工单或项目时使用备用角色。",
         "fallbackSource": "该角色为空时使用",
         "unassignedShare": "无已登记接收人的份额",
         "rounding": "舍入",

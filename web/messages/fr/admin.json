@@ -7317,6 +7317,8 @@
         "reason": "Motif",
         "changeEffectiveFrom": "Modifications applicables à partir du",
         "recipientSource": "Le bénéficiaire provient de",
+        "fallbackOnlyWhenContextAbsent": "Utiliser le rôle de remplacement uniquement si la source est absente",
+        "fallbackOnlyWhenContextAbsentHint": "Un billet ou projet existant sans titulaire conserve le rôle non attribué. Le remplacement ne s’applique que si aucun billet ou projet principal n’est enregistré.",
         "fallbackSource": "Si ce rôle est vide, utiliser",
         "unassignedShare": "Part sans bénéficiaire inscrit",
         "rounding": "Arrondi",
