@@ -1,9 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { sql } from "drizzle-orm";
-import { closePeriodAllModules, setPeriodLockState, type CloseModule } from "./period-locks.ts";
+import { closePeriodAllModules, setPeriodLockState } from "./period-locks.ts";
 import { decidePeriodReopen, requestPeriodReopen } from "../close/reopening.ts";
-import { CLOSE_MODULES } from "./period-policy.ts";
+import { CLOSE_MODULES, type CloseModule } from "./period-policy.ts";
 import { db } from "../platform/db.ts";
 import {
   createScratchOrg,

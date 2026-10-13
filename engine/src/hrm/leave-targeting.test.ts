@@ -10,6 +10,7 @@ import {
   targetingSpecificity,
   tieredHoursForDate,
   type PolicyCandidate,
+  type AccrualRule,
 } from "./leave-math.ts";
 
 /**
@@ -93,14 +94,14 @@ test("completed service years counts whole anniversaries only", () => {
 });
 
 test("tiers: base below the first tier, tier in force on the anniversary date", () => {
-  const rule = { kind: "per_year", hours: "80", tiers: [{ after_years: 5, hours: "120" }] } as const;
+  const rule: AccrualRule = { kind: "per_year", hours: "80", tiers: [{ after_years: 5, hours: "120" }] };
   assert.equal(tieredHoursForDate(rule, "80", "2021-06-15", "2026-06-14"), "80");
   assert.equal(tieredHoursForDate(rule, "80", "2021-06-15", "2026-06-15"), "120");
   assert.equal(tieredHoursForDate(rule, "80", null, "2026-06-15"), "80");
 });
 
 test("per_year grants price at the tier in force on asOf, never re-rated by a later balance day", () => {
-  const rule = { kind: "per_year", hours: "80", tiers: [{ after_years: 5, hours: "120" }] };
+  const rule: AccrualRule = { kind: "per_year", hours: "80", tiers: [{ after_years: 5, hours: "120" }] };
   // Anniversary 2026-06-15: an as-of before it prices base, after it prices the tier.
   assert.equal(accrualEarned(rule, "2026-01-01", "2026-06-14", { serviceStart: "2021-06-15" }), "80");
   assert.equal(accrualEarned(rule, "2026-01-01", "2026-06-15", { serviceStart: "2021-06-15" }), "120");
@@ -109,7 +110,7 @@ test("per_year grants price at the tier in force on asOf, never re-rated by a la
 });
 
 test("per_period slices accrue at the tier in force on each slice's vesting day", () => {
-  const rule = { kind: "per_period", hours: "10", periods_per_year: 12, tiers: [{ after_years: 5, hours: "20" }] };
+  const rule: AccrualRule = { kind: "per_period", hours: "10", periods_per_year: 12, tiers: [{ after_years: 5, hours: "20" }] };
   // Service start 2021-02-15: the January slice vests 2026-01-30, before
   // the fifth anniversary, and earns base; every later slice vests after
   // it and earns the tier — earlier slices are never re-rated.
@@ -120,11 +121,11 @@ test("per_period slices accrue at the tier in force on each slice's vesting day"
 });
 
 test("malformed tiers fail closed instead of accruing zero", () => {
-  const descending = { kind: "per_year", hours: "80", tiers: [{ after_years: 5, hours: "120" }, { after_years: 3, hours: "100" }] };
+  const descending: AccrualRule = { kind: "per_year", hours: "80", tiers: [{ after_years: 5, hours: "120" }, { after_years: 3, hours: "100" }] };
   assert.throws(() => accrualEarned(descending, "2026-01-01", "2026-06-01", { serviceStart: "2010-01-01" }), /ascends strictly/);
-  const empty = { kind: "per_year", hours: "80", tiers: [] as { after_years: number; hours: string }[] };
+  const empty: AccrualRule = { kind: "per_year", hours: "80", tiers: [] as { after_years: number; hours: string }[] };
   assert.throws(() => accrualEarned(empty, "2026-01-01", "2026-06-01"), /non-empty list/);
-  const zero = { kind: "per_year", hours: "80", tiers: [{ after_years: 0, hours: "120" }] };
+  const zero: AccrualRule = { kind: "per_year", hours: "80", tiers: [{ after_years: 0, hours: "120" }] };
   assert.throws(() => accrualEarned(zero, "2026-01-01", "2026-06-01"), /positive whole number/);
 });
 

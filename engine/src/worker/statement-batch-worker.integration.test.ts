@@ -1,3 +1,4 @@
+import type { StatementBatchJobData } from "@openbooks/jobs";
 import assert from "node:assert/strict";
 import test from "node:test";
 import { randomUUID } from "node:crypto";
@@ -18,7 +19,6 @@ import {
 import {
   processStatementBatchJob,
   transmitStatementBatchEmail,
-  type StatementBatchJobData,
 } from "./statement-batch-worker.ts";
 
 /**

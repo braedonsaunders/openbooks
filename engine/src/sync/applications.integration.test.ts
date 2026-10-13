@@ -1460,7 +1460,7 @@ test("complete source snapshots move a voided payment from bills to its reversin
     const payment = await snapshotDoc(org, "payment", "611.52");
     const refs = ["bill-a", "bill-b", "bill-c"];
     const amounts = ["20.65", "371.68", "219.19"];
-    const bills = [];
+    const bills: Awaited<ReturnType<typeof snapshotDoc>>[] = [];
     for (let i=0;i<refs.length;i++) bills.push(await snapshotDoc(org, refs[i]!, `-${amounts[i]}`));
     const links = refs.map((appliedRef,i) => ({ paymentRef:"payment",appliedRef,amount:amounts[i]!,currency:"CAD" }));
     await reconcileApplications(org.orgId,"nsId",links);
@@ -1743,7 +1743,7 @@ test("historical source settlement replay requires the active owning connection 
     const audit = (await db.execute<{actor_id:string; changes:{historicalReplay:{authorizations:{authorizationId:string}[]}}}>(sql`
       select actor_id,changes from audit_log where org_id=${org.orgId} and row_id=${before[0]!.id}`)).rows[0]!;
     assert.equal(audit.actor_id,actorId);
-    assert.equal(audit.changes.historicalReplay.authorizations[0].authorizationId,grant[0]!.id);
+    assert.equal(audit.changes.historicalReplay.authorizations[0]!.authorizationId,grant[0]!.id);
     assert.deepEqual((await db.execute(sql`select * from period_locks where org_id=${org.orgId} order by id`)).rows,locks);
     const settled = await settlementSnapshot(org.orgId);
     const replay = await reconcileApplications(org.orgId,"nsId",[{ ...links[0]!,amount:'50' }],authenticated);

@@ -109,7 +109,7 @@ test("unified worklist shows gates, gateless documents, and payment runs", { ski
       roles: ["approver"], allowedSubsidiaryIds: null,
     }), 3);
     assert.equal(await assertCountMatchesWorklist(org.orgId, actors.approver1Id, {
-      roles: ["approver"], allowedSubsidiaryIds: [],
+      roles: ["approver"], allowedSubsidiaryIds: new Set<string>(),
     }), 0, "an empty legal-entity scope withholds both document and gate counts");
 
     // The submitter cannot approve their own work anywhere.

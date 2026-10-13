@@ -688,7 +688,7 @@ test(
         shipmentId: shipment.id, code: "TWO-LINE-CARTON", binId: org.stockLocationId,
         lineIds: ship!.lines.map((line) => line.lineId).reverse(),
       })).id, unitId, "reordered multi-member selection reopens the same carton");
-      const suggestions = [];
+      const suggestions: Awaited<ReturnType<typeof suggestPackConfirmation>>[] = [];
       for (const line of ship!.lines)
         suggestions.push(
           await suggestPackConfirmation(org.orgId, actor, {

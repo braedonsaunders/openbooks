@@ -46,6 +46,7 @@ async function seedOrg(): Promise<Seed> {
   const profile = (await db.execute<{ adjustment_account_id: string }>(sql`
     select adjustment_account_id from item_inventory_profiles
      where org_id = ${org.orgId} and item_id = ${org.items.fifo}`)).rows[0];
+  assert.ok(profile, "the seeded inventory profile must be present");
   return {
     orgId: org.orgId,
     actorId,
@@ -92,6 +93,7 @@ async function seedReceipt(seed: Seed, orderId: string, lineId: string, quantity
   });
   const line = (await db.execute<{ id: string }>(sql`
     select id from document_lines where document_id = ${receipt.id} and org_id = ${seed.orgId}`)).rows[0];
+  assert.ok(line, "the native receipt must retain its source line");
   return { receiptId: receipt.id, lineId: line.id };
 }
 
@@ -123,7 +125,7 @@ async function seedFulfillment(seed: Seed, quantity: string): Promise<string> {
 
 async function fulfilledOf(seed: Seed, poLineId: string): Promise<string> {
   return (await db.execute(sql`
-    select quantity_fulfilled::text as f from document_lines where id = ${poLineId}`)).rows[0].f;
+    select quantity_fulfilled::text as f from document_lines where id = ${poLineId}`)).rows[0]!.f;
 }
 
 /**
@@ -157,24 +159,24 @@ test("a consumed-by-sale receipt line corrects to its true delivered quantity", 
     assert.equal(toUnits(result.correctedLines[0]!.correctedQuantity), toUnits("70"));
     assert.equal(toUnits((await getOnHand(seed.orgId, seed.fifo, seed.location)).quantity), toUnits("10"), "seventy delivered less sixty sold");
     assert.equal(toUnits(await fulfilledOf(seed, po.lineId)), toUnits("70"), "the order's received counter restores");
-    const status = (await db.execute(sql`
-      select status from documents where id = ${receipt.receiptId}`)).rows[0].status;
+    const status = (await db.execute<{ status: string }>(sql`
+      select status from documents where id = ${receipt.receiptId}`)).rows[0]!.status;
     assert.equal(status, "approved", "the receipt stands as immutable evidence");
-    const lineQty = (await db.execute(sql`
-      select quantity::text as q from document_lines where id = ${receipt.lineId}`)).rows[0].q;
+    const lineQty = (await db.execute<{ q: string }>(sql`
+      select quantity::text as q from document_lines where id = ${receipt.lineId}`)).rows[0]!.q;
     assert.equal(toUnits(lineQty), toUnits("100"), "the receipt line quantity is never edited");
-    const fulfillmentStatus = (await db.execute(sql`
-      select status from documents where id = ${fulfillmentId}`)).rows[0].status;
+    const fulfillmentStatus = (await db.execute<{ status: string }>(sql`
+      select status from documents where id = ${fulfillmentId}`)).rows[0]!.status;
     assert.equal(fulfillmentStatus, "approved", "the sale stands");
-    const adjustment = (await db.execute(sql`
+    const adjustment = (await db.execute<{ amount: string }>(sql`
       select coalesce(sum(l.amount), 0)::text as amount from journal_lines l
         join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
-       where l.org_id = ${seed.orgId} and l.account_id = ${seed.adjustment} and e.status = 'posted'`)).rows[0].amount;
+       where l.org_id = ${seed.orgId} and l.account_id = ${seed.adjustment} and e.status = 'posted'`)).rows[0]!.amount;
     assert.equal(toUnits(adjustment), toUnits("60"), "thirty units at two dollars of carried cost hit shrink");
-    const audit = (await db.execute(sql`
+    const audit = (await db.execute<{ count: number }>(sql`
       select count(*)::int as count from audit_log
        where org_id = ${seed.orgId} and row_id = ${receipt.receiptId}
-         and changes->>'mode' = 'receipt_quantity_corrected'`)).rows[0].count;
+         and changes->>'mode' = 'receipt_quantity_corrected'`)).rows[0]!.count;
     assert.equal(audit, 1, "the correction is audited against the receipt");
   } finally {
     await dropScratchOrg(seed.orgId);

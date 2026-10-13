@@ -31,7 +31,7 @@ test("holiday source binding refuses foreign, retired, absent and unverifiable e
     { orgId: foreignId }, { fileId: foreignId }, { versionId: foreignId },
     { fileInactive: true }, { folderInactive: true }, { versionNumber: 0 },
     { versionNumber: 1.5 }, { contentHash: null }, { contentHash: "unverified" },
-  ]) assert.throws(() => bindHolidayPaymentSource(orgId, instruction, reference, { ...retained, ...changes }), undefined, JSON.stringify(changes));
+  ]) assert.throws(() => bindHolidayPaymentSource(orgId, instruction, reference, { ...retained, ...changes }), JSON.stringify(changes));
   assert.throws(() => bindHolidayPaymentSource("unknown", instruction, reference, retained));
   assert.throws(() => bindHolidayPaymentSource(orgId, { ...instruction, amount: "1080" }, reference, retained));
 });

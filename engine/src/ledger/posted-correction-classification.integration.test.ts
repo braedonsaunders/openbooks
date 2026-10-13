@@ -232,7 +232,7 @@ test("an open-period amount change voids with the reversal in the original perio
       documentDate: org.date,
       lines: [{
         accountId: org.accounts.revenue, quantity: "1", unitPrice: "5000",
-        amount: "5000", taxInputAmount: "5000", taxAmount: "0",
+        amount: "5000", taxAmount: "0",
       }],
       expectedUpdatedAt: token,
       amendmentReason: "Rebill the posted invoice at the agreed five thousand",

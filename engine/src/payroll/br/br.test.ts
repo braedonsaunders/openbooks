@@ -267,8 +267,8 @@ test("BR rate lookup carries the region, or no saved rate resolves", () => {
   // whole pack refuses with rates on file. That was the shipped shape.
   const account = "11111111-1111-1111-1111-111111111111";
   const rows = [
-    { id: "r1", country: "BR", rateKey: "br_rat", region: "BR", filingAccountId: null, taxYear: 2026, values: { aliquota: "2.00" }, supersededOn: null },
-    { id: "r2", country: "BR", rateKey: "br_rat", region: "BR", filingAccountId: account, taxYear: 2026, values: { aliquota: "3.00" }, supersededOn: null },
+    { id: "r1", country: "BR", rateKey: "br_rat", region: "BR", filingAccountId: null, taxYear: 2026, values: { aliquota: "2.00" }, sourceCitation: null, reason: null, supersededOn: null },
+    { id: "r2", country: "BR", rateKey: "br_rat", region: "BR", filingAccountId: account, taxYear: 2026, values: { aliquota: "3.00" }, sourceCitation: null, reason: null, supersededOn: null },
   ];
   const resolution = buildResolution({ country: "BR", taxYear: 2026, pack: BR_PACK_RATES, rows });
   const scope = brRateLookupScope({ region: "BR", filingAccountId: account });

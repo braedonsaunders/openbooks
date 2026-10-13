@@ -48,7 +48,7 @@ async function seedOrg(): Promise<Seed> {
     update item_inventory_profiles set unit_conversions = '{"lb": 1}'::jsonb
      where org_id = ${org.orgId} and item_id = ${org.items.fifo}
   `);
-  const currency = (await db.execute(sql`select base_currency as c from orgs where id = ${org.orgId}`)).rows[0].c;
+  const currency = (await db.execute<{ c: string }>(sql`select base_currency as c from orgs where id = ${org.orgId}`)).rows[0]!.c;
   return {
     orgId: org.orgId,
     actorId,
@@ -126,16 +126,16 @@ async function seedDoubleReceipt(seed: Seed, quantity: string) {
 }
 
 async function onHand(seed: Seed): Promise<string> {
-  return (await db.execute(sql`
+  return (await db.execute<{ q: string }>(sql`
     select coalesce(sum(quantity), 0)::text as q from inventory_movements
-     where org_id = ${seed.orgId} and status = 'posted' and item_id = ${seed.fifo}`)).rows[0].q;
+     where org_id = ${seed.orgId} and status = 'posted' and item_id = ${seed.fifo}`)).rows[0]!.q;
 }
 
 async function balanceOfAll(seed: Seed, accountId: string): Promise<string> {
-  return (await db.execute(sql`
+  return (await db.execute<{ amount: string }>(sql`
     select coalesce(sum(l.amount), 0)::text as amount from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
-     where l.org_id = ${seed.orgId} and l.account_id = ${accountId} and e.status in ('posted', 'reversed')`)).rows[0].amount;
+     where l.org_id = ${seed.orgId} and l.account_id = ${accountId} and e.status in ('posted', 'reversed')`)).rows[0]!.amount;
 }
 
 async function seedFulfillment(seed: Seed, quantity: string): Promise<string> {
@@ -234,8 +234,8 @@ test("voiding a double-receipt bill refuses when its stock was sold", { skip: !D
     assert.ok(failure instanceof DocumentVoidError, "consumed stock blocks the void");
     assert.match(failure.message, /downstream consumption/);
     assert.match(failure.message, /sales fulfillment/);
-    const status = (await db.execute(sql`
-      select status from documents where id = ${bill.billId}`)).rows[0].status;
+    const status = (await db.execute<{ status: string }>(sql`
+      select status from documents where id = ${bill.billId}`)).rows[0]!.status;
     assert.equal(status, "posted", "the refused void leaves the bill posted");
     assert.equal(toUnits(await onHand(seed)), toUnits("20"), "no stock moved");
   } finally {

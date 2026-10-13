@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { sql } from "drizzle-orm";
-import { db } from "../platform/db.ts";
+import { db } from "../../platform/db.ts";
 import {
   DB,
   gateOf,
@@ -10,16 +10,16 @@ import {
   withHarness,
   seedEmployment,
   seedFlow,
-} from "../testing/hrm-harness.ts";
-import { SelfServiceError } from "./self-service/actor.ts";
+} from "../../testing/hrm-harness.ts";
+import { SelfServiceError } from "./actor.ts";
 import {
   fileBankDetailsChange,
   listOwnBankAccounts,
   validateBankChange,
   type BankChangeNotifier,
-} from "./self-service/bank-changes.ts";
-import { decideGate } from "../flows/gates.ts";
-import { installEngineSeams } from "../composition/install.ts";
+} from "./bank-changes.ts";
+import { decideGate } from "../../flows/gates.ts";
+import { installEngineSeams } from "../../composition/install.ts";
 
 // Gate releases run through the installed engine seams; without this the
 // approval gates strand on a not-registered refusal instead of releasing.

@@ -43,6 +43,7 @@ function program(overrides: Partial<BenefitProgram> = {}): BenefitProgram {
     includeOpenCommitments: false,
     hourClassifications: [],
     allocation: "equal",
+    eligibility: "members",
     percentRate: "10",
     fixedAmount: null,
     capAmount: null,
@@ -80,6 +81,7 @@ function member(employmentId: string, overrides: Partial<BenefitProgramMember> =
     effectiveTo: null,
     weight: null,
     role: null,
+    excluded: false,
     ...overrides,
   };
 }

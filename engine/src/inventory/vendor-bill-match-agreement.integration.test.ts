@@ -92,7 +92,7 @@ async function seedApprovedPo(seed: OrgSeed, number: string, vendorId: string): 
 
 async function seedHandBill(seed: OrgSeed, number: string, vendorId: string): Promise<string> {
   const billId = randomUUID();
-  const currency = (await db.execute(sql`select base_currency as c from orgs where id = ${seed.orgId}`)).rows[0].c;
+  const currency = (await db.execute<{ c: string }>(sql`select base_currency as c from orgs where id = ${seed.orgId}`)).rows[0]!.c;
   await db.execute(sql`
     insert into documents (id, org_id, kind, document_number, party_id, document_date, due_date, currency,
                            status, subsidiary_id, subtotal, tax_total, total, custom, created_by)
@@ -180,9 +180,9 @@ test("guard and match dialog agree across partial and full receipts, then the bi
     assert.deepEqual(dialog.lines.length, 3);
     const line1 = dialog.lines.find((entry) => entry.lineNumber === 1)!;
     assert.equal(line1.candidates.length, 1, "the partly received line offers its order line");
-    assert.equal(line1.candidates[0].purchaseOrderLineNumber, 1);
-    assert.equal(toUnits(line1.candidates[0].billableQuantity), toUnits("2128"), "only received-and-unbilled cover is billable");
-    assert.equal(line1.candidates[0].receipts.length, 1, "the candidate names its goods receipt");
+    assert.equal(line1.candidates[0]!.purchaseOrderLineNumber, 1);
+    assert.equal(toUnits(line1.candidates[0]!.billableQuantity), toUnits("2128"), "only received-and-unbilled cover is billable");
+    assert.equal(line1.candidates[0]!.receipts.length, 1, "the candidate names its goods receipt");
     const line2 = dialog.lines.find((entry) => entry.lineNumber === 2)!;
     assert.equal(line2.candidates.length, 2, "the twice-covered line offers both order lines");
     assert.deepEqual(candidateNumbers(dialog.lines, 3), [], "the freight line has nothing to match");
@@ -249,7 +249,7 @@ test("ordered-but-unreceived order lines are invisible to the guard and the dial
   try {
     await seedApprovedPo(seed, "PO-M38-02", seed.vendorId);
     const billId = randomUUID();
-    const currency = (await db.execute(sql`select base_currency as c from orgs where id = ${seed.orgId}`)).rows[0].c;
+    const currency = (await db.execute<{ c: string }>(sql`select base_currency as c from orgs where id = ${seed.orgId}`)).rows[0]!.c;
     await db.execute(sql`
       insert into documents (id, org_id, kind, document_number, party_id, document_date, due_date, currency,
                              status, subsidiary_id, subtotal, tax_total, total, custom, created_by)
@@ -267,7 +267,7 @@ test("ordered-but-unreceived order lines are invisible to the guard and the dial
     const dialog = await withOrg(seed.orgId, () => billMatchCandidates(seed.orgId, billId));
     assert.deepEqual(candidateNumbers(dialog.lines, 1), [], "nothing received means nothing to match");
     await postBill(seed, billId);
-    const status = (await db.execute(sql`select status from documents where id = ${billId}`)).rows[0].status;
+    const status = (await db.execute<{ status: string }>(sql`select status from documents where id = ${billId}`)).rows[0]!.status;
     assert.equal(status, "posted", "with no matchable line the bill posts as its own receipt");
   } finally {
     await dropScratchOrg(seed.orgId);
@@ -293,7 +293,7 @@ test("another vendor's received cover is invisible to the guard and the dialog",
       lines: [{ sourceLineId: po.lineA, quantity: "2888" }],
     });
     const billId = randomUUID();
-    const currency = (await db.execute(sql`select base_currency as c from orgs where id = ${seed.orgId}`)).rows[0].c;
+    const currency = (await db.execute<{ c: string }>(sql`select base_currency as c from orgs where id = ${seed.orgId}`)).rows[0]!.c;
     await db.execute(sql`
       insert into documents (id, org_id, kind, document_number, party_id, document_date, due_date, currency,
                              status, subsidiary_id, subtotal, tax_total, total, custom, created_by)
@@ -311,7 +311,7 @@ test("another vendor's received cover is invisible to the guard and the dialog",
     const dialog = await withOrg(seed.orgId, () => billMatchCandidates(seed.orgId, billId));
     assert.deepEqual(candidateNumbers(dialog.lines, 1), [], "a different vendor's order is never offered");
     await postBill(seed, billId);
-    const status = (await db.execute(sql`select status from documents where id = ${billId}`)).rows[0].status;
+    const status = (await db.execute<{ status: string }>(sql`select status from documents where id = ${billId}`)).rows[0]!.status;
     assert.equal(status, "posted", "with no matchable line the bill posts as its own receipt");
   } finally {
     await dropScratchOrg(seed.orgId);

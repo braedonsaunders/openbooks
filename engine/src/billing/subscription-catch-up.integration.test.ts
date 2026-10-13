@@ -265,7 +265,7 @@ test("selected refuses periods outside the preview by name", { skip: !DB }, asyn
   try {
     const actorId = await createScratchUser(org.orgId, "Catch-up controller", "admin");
     const subscriptionId = await seedSubscription(org, actorId, { nextBillOn: "2025-12-10" });
-    const run = (input: Parameters<typeof runSubscriptionCatchUp>[2]) =>
+    const run = (input: Omit<Parameters<typeof runSubscriptionCatchUp>[2], "actorId" | "allowedSubsidiaryIds">) =>
       runSubscriptionCatchUp(org.orgId, subscriptionId, { asOf: "2026-02-10", actorId, allowedSubsidiaryIds: null, ...input });
     await assert.rejects(
       run({ mode: "selected", selectedPeriods: [] }),

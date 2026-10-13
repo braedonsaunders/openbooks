@@ -130,7 +130,7 @@ const hooks = registerHooks({
   },
 });
 
-const inbox = (await import("./index.ts?inbox-read-memo-test")) as typeof import("./index.ts");
+const inbox = (await import(new URL("./index.ts?inbox-read-memo-test", import.meta.url).href)) as typeof import("./index.ts");
 const { beginInboxRead, memoizeForRead } = await import("./read-memo.ts");
 const { actorPermissionOn } = await import("./guard.ts");
 hooks.deregister();
@@ -199,7 +199,7 @@ describe("inbox read memo", () => {
   });
 
   it("derives each shared actor fact once per badge read and counts every source", async () => {
-    const notices: { kind: string; message: string }[] = [];
+    const notices: import("./index.ts").InboxSourceNotice[] = [];
     const count = await inbox.countInbox(CTX, { kinds: [...BADGE_KINDS], notices });
     assert.deepEqual(notices, []);
     assert.equal(count, 2, "both gates count once, each under its own adapter");
@@ -248,7 +248,7 @@ describe("inbox read memo", () => {
 
   it("names every source that depends on a failed shared fact instead of counting zero", async () => {
     state.gatesFail = true;
-    const notices: { kind: string; message: string }[] = [];
+    const notices: import("./index.ts").InboxSourceNotice[] = [];
     const count = await inbox.countInbox(CTX, { kinds: ["hrm_leave_request", "hrm_change_request", "timesheet_week"], notices });
     assert.equal(count, 0);
     assert.deepEqual(notices.map((notice) => notice.kind), ["hrm_leave_request", "hrm_change_request", "timesheet_week"]);

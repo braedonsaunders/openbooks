@@ -187,10 +187,10 @@ test("invoice consumption names its document, link and order of operations witho
       remainderQuantity: string;
     };
     assert.equal(details.blockers.length, 1);
-    assert.equal(details.blockers[0].dependents.length, 1);
-    assert.equal(details.blockers[0].dependents[0].sourceDocument?.number, "INV-M38-1");
-    assert.equal(details.blockers[0].dependents[0].sourceDocument?.kind, "customer_invoice");
-    assert.ok(details.blockers[0].dependents[0].sourceDocument?.id, "the dialog links the source document");
+    assert.equal(details.blockers[0]!.dependents.length, 1);
+    assert.equal(details.blockers[0]!.dependents[0]!.sourceDocument?.number, "INV-M38-1");
+    assert.equal(details.blockers[0]!.dependents[0]!.sourceDocument?.kind, "customer_invoice");
+    assert.ok(details.blockers[0]!.dependents[0]!.sourceDocument?.id, "the dialog links the source document");
     assert.equal(details.allowVoidWithDependents, false);
     assert.equal(toUnits(details.remainderQuantity), toUnits("6"));
 

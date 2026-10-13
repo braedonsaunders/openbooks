@@ -545,6 +545,7 @@ test("consolidation rechecks current unrestricted operator and posting authority
     await refuse({ actorId });
     await grantConsolidationOperator(org.orgId, actorId);
     const [replay] = await runConsolidationGroup(org.orgId, groupId, "2026-07-01", "2026-07-31", { actorId });
+    assert.ok(replay);
     assert.equal(replay.invoiceId, run.invoiceId); assert.equal(replay.replayed, true);
   } finally { await dropScratchOrgReporting(org.orgId); }
 });

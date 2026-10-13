@@ -3008,8 +3008,8 @@ test("full and masked native clone projections clear schedule automatic policy r
   const policyColumn = boards.columns.find(column => column.name === "automatic_delivery_policy");
   assert.ok(policyColumn);
   for (const masked of [false, true]) {
-    const copied = generateCopySql({ ...boards, columns: [policyColumn] }, { ...options, masked }, new Set(['schedule_boards']), new Set(), new Map(), null)!;
-    const policyExpression = copied.split(') select ')[1]?.split(' from "schedule_boards"')[0];
+    const copied: string = generateCopySql({ ...boards, columns: [policyColumn] }, { ...options, masked }, new Set(['schedule_boards']), new Set(), new Map(), null)!;
+    const policyExpression: string | undefined = copied.split(') select ')[1]?.split(' from "schedule_boards"')[0];
     assert.equal(policyExpression, "null::jsonb");
     const result = await db.execute<{policy: unknown}>(sql`select ${sql.raw(policyExpression!)} policy from (values ('{"operatorId":"65fa9dc7-228f-4e19-8bf1-17d52efeb78d","additionalPartyIds":["private-contact"]}'::jsonb)) source(automatic_delivery_policy)`);
     assert.equal(result.rows[0]?.policy, null);

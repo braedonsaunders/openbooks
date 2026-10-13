@@ -41,7 +41,7 @@ async function seedOrg(): Promise<Seed> {
     update item_inventory_profiles set unit_conversions = '{"lb": 1}'::jsonb
      where org_id = ${org.orgId} and item_id = ${org.items.fifo}
   `);
-  const currency = (await db.execute(sql`select base_currency as c from orgs where id = ${org.orgId}`)).rows[0].c;
+  const currency = (await db.execute<{ c: string }>(sql`select base_currency as c from orgs where id = ${org.orgId}`)).rows[0]!.c;
   return {
     orgId: org.orgId,
     actorId,
@@ -80,15 +80,15 @@ async function seedApprovedPo(seed: Seed, quantity: string): Promise<{ orderId: 
 }
 
 async function onHand(seed: Seed): Promise<string> {
-  return (await db.execute(sql`
+  return (await db.execute<{ q: string }>(sql`
     select coalesce(sum(quantity), 0)::text as q from inventory_movements
-     where org_id = ${seed.orgId} and status = 'posted' and item_id = ${seed.fifo}`)).rows[0].q;
+     where org_id = ${seed.orgId} and status = 'posted' and item_id = ${seed.fifo}`)).rows[0]!.q;
 }
 
 async function receiptCount(seed: Seed): Promise<number> {
-  return (await db.execute(sql`
+  return (await db.execute<{ count: number }>(sql`
     select count(*)::int as count from documents
-     where org_id = ${seed.orgId} and kind = 'purchase_receipt'`)).rows[0].count;
+     where org_id = ${seed.orgId} and kind = 'purchase_receipt'`)).rows[0]!.count;
 }
 
 /**
@@ -229,8 +229,8 @@ async function stampBillLink(
   billLineId: string,
   po: { orderId: string; lineId: string },
 ): Promise<void> {
-  const billId = (await db.execute(sql`
-    select document_id as id from document_lines where id = ${billLineId}`)).rows[0].id as string;
+  const billId = (await db.execute<{ id: string }>(sql`
+    select document_id as id from document_lines where id = ${billLineId}`)).rows[0]!.id;
   await db.execute(sql`update documents set status = 'draft' where id = ${billId} and org_id = ${seed.orgId}`);
   try {
     await db.execute(sql`

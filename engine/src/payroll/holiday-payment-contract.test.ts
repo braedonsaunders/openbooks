@@ -28,7 +28,7 @@ test("holiday payment refuses cash fitting and incomplete or contradictory sourc
     { employeePartyId: "unknown" }, { sourceDigest: "unverified" }, { instructionKey: " " },
     { sourceReference: " " }, { hours: "0" }, { hours: "-1" }, { hours: "0.001" },
     { hours: "1e1" }, { hours: "1,000" }, { hours: 24 }, { hours: "10000000000" },
-  ]) assert.throws(() => readAdjudicatedHolidayPayment({ ...instruction, ...changes }), undefined, JSON.stringify(changes));
+  ]) assert.throws(() => readAdjudicatedHolidayPayment({ ...instruction, ...changes }), JSON.stringify(changes));
 });
 
 test("holiday pricing uses the native wage cadence and declared rate precision", () => {

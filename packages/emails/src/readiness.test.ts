@@ -13,7 +13,6 @@ const ORG = "00000000-0000-4000-8000-000000000001";
 test("an organization that has not enabled delivery is refused with a remedy it can perform", () => {
   const block = resolveEmailTransportDetailed(null, ORG);
   assert.equal(block.state, "unconfigured");
-  if (block.state === "ready") return;
   const parts = emailDeliveryBlockedParts(block);
   assert.equal(parts.summary, "Email delivery is not enabled for this organization.");
   assert.ok(parts.remedy.includes(EMAIL_SETUP_LOCATION), "the remedy names the page the organization can open");

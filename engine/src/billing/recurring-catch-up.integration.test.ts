@@ -438,7 +438,7 @@ test("selected refuses dates outside the preview by name", { skip: !DB }, async 
   try {
     const actorId = await createScratchUser(org.orgId, "Catch-up controller", "admin");
     const { scheduleId, templateId } = await seedSchedule(org, actorId);
-    const run = (input: Parameters<typeof runScheduleCatchUp>[2]) =>
+    const run = (input: Omit<Parameters<typeof runScheduleCatchUp>[2], "actorId" | "allowedSubsidiaryIds">) =>
       runScheduleCatchUp(org.orgId, scheduleId, { asOf: AS_OF, actorId, allowedSubsidiaryIds: null, ...input });
     await assert.rejects(
       run({ mode: "selected", selectedDates: [] }),

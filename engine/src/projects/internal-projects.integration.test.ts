@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { registerHooks } from "node:module";
-import type { SessionUser } from "../../../lib/auth";
+import type { SessionUser } from "../../../web/lib/auth";
 
 /**
  * Internal (shop/overhead) projects: a non-billable time target per legal
@@ -33,7 +33,7 @@ const { createScratchOrg, createScratchUser, dropScratchOrg } = await import(
 );
 const { createProject } = await import("./project-create.ts");
 const { postProjectLaborCost } = await import("./recognition.ts");
-const projectRoute = await import("../../../app/api/projects/[id]/route.ts");
+const projectRoute = await import("../../../web/app/api/projects/[id]/route.ts");
 
 function asUser(id: string, orgId: string): SessionUser {
   return {

@@ -48,8 +48,8 @@ async function seedVendorlessOctober() {
   }
   const craVendorId = randomUUID();
   const wcbVendorId = randomUUID();
-  await seedPayrollParty(org.orgId, craVendorId, { kind: "organization", displayName: "CRA - Payroll Deductions", isActive: true });
-  await seedPayrollParty(org.orgId, wcbVendorId, { kind: "organization", displayName: "WCB Alberta", isActive: true });
+  await seedPayrollParty(org.orgId, craVendorId, { kind: "company", displayName: "CRA - Payroll Deductions", isActive: true });
+  await seedPayrollParty(org.orgId, wcbVendorId, { kind: "company", displayName: "WCB Alberta", isActive: true });
   await seedPayrollVendorRole(org.orgId, craVendorId, actorId);
   await seedPayrollVendorRole(org.orgId, wcbVendorId, actorId);
   // Deliberately no org-level payroll vendor settings and no component
@@ -152,7 +152,7 @@ test(
       // billed October lines keep the issued bill's vendor, the draft stays
       // current, and nothing new is billable to the new vendor.
       const thirdVendorId = randomUUID();
-      await seedPayrollParty(fx.org.orgId, thirdVendorId, { kind: "organization", displayName: "Other Collector", isActive: true });
+      await seedPayrollParty(fx.org.orgId, thirdVendorId, { kind: "company", displayName: "Other Collector", isActive: true });
       await seedPayrollVendorRole(fx.org.orgId, thirdVendorId, fx.actorId);
       await assignComponentVendor(fx.org.orgId, fx.taxComponentId, thirdVendorId);
       const after = await payrollRemittanceSummary(fx.org.orgId, RANGE);

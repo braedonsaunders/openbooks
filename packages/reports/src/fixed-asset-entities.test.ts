@@ -65,6 +65,7 @@ test('the roll-forward balances open and close semi-additively and sum only move
     assert.notEqual(rollforward.columns.find((column) => column.key === key)?.snapshot, true, `${key} is a movement`)
   }
   const plan = BUILT_IN_REPORT_DEFINITION_MAP['fixed-asset-roll-forward']!.query
+  assert.ok(plan.measures);
   assert.deepEqual(plan.measures.map((measure) => measure.fn), ['opening', 'sum', 'sum', 'sum', 'sum', 'closing'])
 })
 
