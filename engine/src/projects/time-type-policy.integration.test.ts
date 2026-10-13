@@ -80,8 +80,8 @@ test('a financial document line binds its time policy even without atomic time a
       const docId = randomUUID();
       await db.execute(sql`insert into documents(id,org_id,kind,status,document_number,subsidiary_id,document_date,currency,subtotal,tax_total,total)
         values(${docId},${f.org.orgId},'sales_order','draft',${docId},${f.org.subsidiaryId},${f.org.date},'CAD',125,0,125)`);
-      const line = await db.execute(sql`insert into document_lines(org_id,document_id,line_number,time_type_id,quantity,unit_price,amount)
-        values(${f.org.orgId},${docId},1,${f.typeId},1,125,125) returning id`).catch((error: unknown) => {
+      const line = await db.execute(sql`insert into document_lines(org_id,document_id,line_number,time_type_id,account_id,quantity,unit_price,amount)
+        values(${f.org.orgId},${docId},1,${f.typeId},${f.org.accounts.revenue},1,125,125) returning id`).catch((error: unknown) => {
           const cause = (error as { cause?: unknown }).cause;
           throw cause instanceof Error ? cause : error;
         });
@@ -91,10 +91,10 @@ test('a financial document line binds its time policy even without atomic time a
     });
     await withOrgContext(foreign.orgId, async () => {
       const foreignDoc = randomUUID();
-      await db.execute(sql`insert into documents(id,org_id,kind,status,document_number,subsidiary_id,document_date,currency)
-        values(${foreignDoc},${foreign.orgId},'sales_order','draft',${foreignDoc},${foreign.subsidiaryId},${foreign.date},'CAD')`);
-      await assert.rejects(db.execute(sql`insert into document_lines(org_id,document_id,line_number,time_type_id)
-        values(${foreign.orgId},${foreignDoc},1,${f.typeId})`), (error: unknown) => {
+      await db.execute(sql`insert into documents(id,org_id,kind,status,document_number,subsidiary_id,document_date,currency,subtotal,tax_total,total)
+        values(${foreignDoc},${foreign.orgId},'sales_order','draft',${foreignDoc},${foreign.subsidiaryId},${foreign.date},'CAD',125,0,125)`);
+      await assert.rejects(db.execute(sql`insert into document_lines(org_id,document_id,line_number,time_type_id,account_id,quantity,unit_price,amount)
+        values(${foreign.orgId},${foreignDoc},1,${f.typeId},${foreign.accounts.revenue},1,125,125)`), (error: unknown) => {
         const cause = error as { cause?: { code?: string; message?: string } };
         assert.equal(cause.cause?.code, '23503');
         assert.match(cause.cause?.message ?? '', /time type does not exist in this organization/);
