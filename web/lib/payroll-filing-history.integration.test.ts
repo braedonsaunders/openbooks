@@ -1320,101 +1320,60 @@ const payrollFilingScopeCases = [
         );
 
         test(
-          "ROE authorization follows the declared period window and includes final-date ties outside it",
+          "ROE authorization uses the monthly service calendar and refuses conflicting final-period employer evidence",
           { skip: !process.env.OPENBOOKS_DB_URL },
           async () => {
-            const fx = await withBypassContext(() => seedAdoption());
-            try {
-              const hidden = randomUUID();
-              await withBypassContext(async () => {
-                await db.execute(
-                  sql`update parties set subsidiary_id=${fx.subsidiaryId} where org_id=${fx.orgId} and id=${fx.employeeId}`,
-                );
-                await db.execute(
-                  sql`update pay_schedules set frequency='monthly',periods_per_year=12 where org_id=${fx.orgId} and id=${fx.scheduleId}`,
-                );
-                await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country) values(${hidden},${fx.orgId},${fx.subsidiaryId},'Historical source outside the window','CAD','CA')`);
-                await seedRoeIssuanceFixture(fx.orgId, fx.employeeId);
+            const fx=await withBypassContext(()=>seedAdoption());
+            try{
+              const hidden=randomUUID(),accountId=randomUUID();
+              await withBypassContext(async()=>{
+                await db.execute(sql`update pay_schedules set frequency='monthly',periods_per_year=12 where org_id=${fx.orgId} and id=${fx.scheduleId}`);
+                await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country)
+                  values(${hidden},${fx.orgId},${fx.subsidiaryId},'Other source employer','CAD','CA')`);
+                await db.execute(sql`insert into payroll_filing_accounts(id,org_id,subsidiary_id,country,program_type,account_number,name,is_active)
+                  values(${accountId},${fx.orgId},${fx.subsidiaryId},'CA','ca_rp','123456789RP0001','Retained payroll account',true)`);
+                await db.execute(sql`update employee_payroll_profiles set filing_account_id=${accountId} where org_id=${fx.orgId} and employee_party_id=${fx.employeeId}`);
+                await seedRoeIssuanceFixture(fx.orgId,fx.employeeId);
+                await db.execute(sql`update payroll_roe_separation_events set first_day_worked='2025-07-01',
+                  interruption_on='2026-08-01',last_insurable_earnings_on='2026-07-31' where org_id=${fx.orgId} and employee_party_id=${fx.employeeId}`);
               });
-              // Minimal committed source history for exercising the selector itself.
-              // Thirteen monthly-window stubs supersede one older hidden source.
-              await withBypassContext(() => db.transaction(async (tx) => {
-                for (let index = 0; index <= 13; index++) {
-                  const documentId = randomUUID();
-                  const stubId =
-                    index === 0 ? "00000000-0000-4000-8000-000000000001" : randomUUID();
-                  const date =
-                    index === 0
-                      ? "2026-06-30"
-                      : `2026-07-${String(index).padStart(2, "0")}`;
-                  await tx.execute(
-                    sql`insert into documents(id,org_id,kind,document_number,subsidiary_id,document_date,currency,status) values(${documentId},${fx.orgId},'pay_run',${`ROE-WINDOW-${index}`},${index === 0 ? hidden : fx.subsidiaryId},${date},'CAD','draft')`,
-                  );
-                  await tx.execute(
-                    sql`insert into pay_runs(document_id,org_id,pay_schedule_id,period_start,period_end,pay_date,tax_year,run_status,run_type) values(${documentId},${fx.orgId},${fx.scheduleId},${date},${date},${date},2026,'committed','bonus')`,
-                  );
-                  await tx.execute(
-                    sql`insert into pay_stubs(id,org_id,pay_run_document_id,employee_party_id,employment_id,country,country_source,province,periods_per_year,pay_date,tax_year,currency_code,insurable_earnings) values(${stubId},${fx.orgId},${documentId},${fx.employeeId},${fx.employmentId},'CA','calculation','ON',12,${date},2026,'CAD',${index === 0 ? "999" : "1"})`,
-                  );
-                }
-              }));
-              const gate = {
-                user: { orgId: fx.orgId, id: fx.actorId },
-                permissions: new Set(["payroll.read"]),
-                allowedSubsidiaryIds: new Set([fx.subsidiaryId]),
-              } as Authz;
-              assert.equal(
-                await withOrgContext(fx.orgId, () =>
-                  guardPayrollFilingRowIds(
-                    gate,
-                    "CA",
-                    "roe",
-                    [fx.employeeId],
-                    2026,
-                  ),
-                ),
-                null,
-                "older history outside the actual window does not block access",
-              );
-              const before = await withOrgContext(fx.orgId, () =>
-                roeRecord(fx.orgId, fx.employeeId),
-              );
-              assert.equal(before?.periods.length, 13);
-              assert.equal(before?.totalInsurableEarnings, "13.0000");
-              // All records now tie on the final pay date. The hidden UUID sorts last and
-              // stays outside Block 15, but Block 17 reads that complete final date.
-              await withBypassContext(() =>
-                db.execute(
-                  sql`update pay_stubs set pay_date='2026-07-13' where org_id=${fx.orgId}`,
-                ),
-              );
-              const tied = await withOrgContext(fx.orgId, () =>
-                roeRecord(fx.orgId, fx.employeeId),
-              );
-              assert.equal(tied?.periods.length, 13);
-              assert.equal(
-                tied?.totalInsurableEarnings,
-                "13.0000",
-                "window ties have deterministic ordering",
-              );
-              assert.equal(
-                (
-                  await withOrgContext(fx.orgId, () =>
-                    guardPayrollFilingRowIds(
-                      gate,
-                      "CA",
-                      "roe",
-                      [fx.employeeId],
-                      2026,
-                    ),
-                  )
-                )?.status,
-                404,
-                "the separate final-date source must also be authorized",
-              );
-            } finally {
-              await dropScratchOrgReporting(fx.orgId);
-            }
+              const component=await withOrgContext(fx.orgId,async()=>{
+                const rows=(await db.execute<{id:string}>(sql`select id from pay_components where org_id=${fx.orgId} and system_key='base_pay'`)).rows;
+                assert.equal(rows.length,1);return rows[0]!.id;
+              });
+              // Retained monthly calendar, employee hours and dated earning evidence are coherent.
+              async function retainedPeriod(start:string,end:string,owner:string,runType:'regular'|'supplemental'){
+                await withBypassContext(()=>db.transaction(async tx=>{
+                  const documentId=randomUUID(),stubId=randomUUID();
+                  await tx.execute(sql`insert into documents(id,org_id,kind,document_number,subsidiary_id,document_date,currency,status)
+                    values(${documentId},${fx.orgId},'pay_run',${'ROE-'+documentId},${owner},${end},'CAD','draft')`);
+                  await tx.execute(sql`insert into pay_runs(document_id,org_id,pay_schedule_id,period_start,period_end,pay_date,tax_year,run_status,run_type)
+                    values(${documentId},${fx.orgId},${fx.scheduleId},${start},${end},${end},${Number(end.slice(0,4))},'committed',${runType})`);
+                  await tx.execute(sql`insert into pay_stubs(id,org_id,pay_run_document_id,employee_party_id,employment_id,filing_account_id,
+                    country,country_source,province,periods_per_year,pay_date,tax_year,currency_code,gross,insurable_earnings)
+                    values(${stubId},${fx.orgId},${documentId},${fx.employeeId},${fx.employmentId},${accountId},
+                      'CA','calculation','ON',12,${end},${Number(end.slice(0,4))},'CAD',1,1)`);
+                  await tx.execute(sql`insert into pay_stub_lines(org_id,stub_id,component_id,kind,description,amount,hours,earned_from,earned_to)
+                    values(${fx.orgId},${stubId},${component},'earning','Retained monthly insured service',1,1,${start},${end})`);
+                }));
+              }
+              await retainedPeriod('2025-06-01','2025-06-30',hidden,'regular');
+              for(let index=0;index<13;index++){
+                const date=new Date(Date.UTC(2025,6+index,1)),next=new Date(Date.UTC(2025,7+index,0));
+                await retainedPeriod(date.toISOString().slice(0,10),next.toISOString().slice(0,10),fx.subsidiaryId,'regular');
+              }
+              const gate={user:{orgId:fx.orgId,id:fx.actorId},permissions:new Set(['payroll.read']),
+                allowedSubsidiaryIds:new Set([fx.subsidiaryId])} as Authz;
+              assert.equal(await withOrgContext(fx.orgId,()=>guardPayrollFilingRowIds(gate,'CA','roe',[fx.employeeId],2026)),null,
+                'an older source outside the declared employment window cannot move its ownership');
+              const before=await withOrgContext(fx.orgId,()=>roeRecord(fx.orgId,fx.employeeId));
+              assert.equal(before?.periods.length,13);assert.equal(before?.totalInsurableHours,'13.0000');
+              assert.equal(before?.totalInsurableEarnings,'7.0000','monthly earnings use seven service periods, hours use thirteen');
+              await retainedPeriod('2026-07-01','2026-07-31',hidden,'supplemental');
+              await assert.rejects(withOrgContext(fx.orgId,()=>roeRecord(fx.orgId,fx.employeeId)),/conflicting retained payroll employment or legal-employer/);
+              await assert.rejects(withOrgContext(fx.orgId,()=>guardPayrollFilingRowIds(gate,'CA','roe',[fx.employeeId],2026)),
+                /conflicting retained payroll employment or legal-employer/,'a same-period source must retain its actual employer');
+            }finally{await dropScratchOrgReporting(fx.orgId);}
           },
         );
   } },

@@ -62,6 +62,13 @@ test(
       })).errors, []);
       await commitPayRun({ orgId: fx.orgId, documentId: final.documentId, actorId: fx.actorId });
 
+      // Paid salary-continuance service occupies its actual scheduled period.
+      await hours('2026-08-05','8');
+      const continuance=await createPayRun({orgId:fx.orgId,actorId:fx.actorId,payScheduleId:fx.scheduleId,
+        periodStart:'2026-08-02',periodEnd:'2026-08-15'});
+      assert.deepEqual((await calculatePayRun({orgId:fx.orgId,actorId:fx.actorId,documentId:continuance.documentId})).errors,[]);
+      await commitPayRun({orgId:fx.orgId,actorId:fx.actorId,documentId:continuance.documentId});
+
       // Ground truth, straight from committed stubs.
       const agg = (await db.execute<{ gross: string }>(sql`
         select sum(s.gross)::text as gross
@@ -96,6 +103,8 @@ test(
       const record = await roeRecord(fx.orgId, fx.employeeId);
       assert.ok(record, "a Canadian terminated employee gets an ROE record");
       assert.equal(record!.lastDayPaid, "2026-08-05");
+      assert.equal(record!.finalPayPeriodEnd,"2026-08-15");
+      assert.equal(record!.periods.length,3);
       assert.equal(record!.vacationPayOnSeparation, "67.6000");
 
       const candidates = await roeCandidates(fx.orgId, 2026);

@@ -60,6 +60,8 @@ function prior(f:Fixture,ref:RoeReportingSource,changes:Partial<RoePriorPeriodIn
     expectedId:null,expectedUpdatedAt:null,...changes};
 }
 async function finalRun(f:Fixture,mixed=false){
+  const separation=await db.execute(sql`update employee_roles set terminated_on='2026-05-09'
+    where org_id=${f.orgId} and party_id=${f.employeeId} returning party_id`);assert.equal(separation.rows.length,1);
   await seedRoeIssuanceFixture(f.orgId,f.employeeId);
   const current=await readRoeSeparationFacts(scope(f));assert.ok(current);
   await saveRoeSeparationFacts({...scope(f),firstDayWorked:'2026-03-30',interruptionOn:'2026-05-09',lastInsurableEarningsOn:'2026-05-08',

@@ -1,3 +1,9 @@
+import { seedAdoption,seedRoeIssuanceFixture } from './filing-test-fixtures.ts';
+import { readRoeSeparationFacts,saveRoeSeparationFacts } from './roe-separation-facts.ts';
+import { createPayRun } from './run-lifecycle.ts';
+import { mutatePayRunAdjustment } from './run-adjustments.ts';
+import { calculatePayRun } from './run-calculation.ts';
+import { commitPayRun } from './run-commit.ts';
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -7,7 +13,7 @@ import { withSimClock } from "../platform/clock.ts";
 import { db } from "../platform/db.ts";
 import { buildRoeXml, isRoeReasonCode, renderRoeXml, validateRoeXml, type RoeRecordToFile } from "./canada/roexml.ts";
 import { sealSecret } from "../platform/secrets.ts";
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from "../testing/fixtures.ts";
+import { dropScratchOrgReporting, seedPayrollSettings } from "../testing/fixtures.ts";
 import type { RoeRecord } from "./yearend.ts";
 
 /**
@@ -122,67 +128,39 @@ test("reason-for-issue codes are a closed statutory set", () => {
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
 test("ROE XML filenames stamp the org calendar day, not UTC today", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
+  const f=await seedAdoption();
+  const org={orgId:f.orgId};
   try {
-    const actorId = (await seedFlowActors(org.orgId)).adminId;
-    await db.execute(sql`
-      update orgs set settings = ${JSON.stringify({
-        timeZone: "Pacific/Auckland",
-        payroll: {
-          t4Transmitter: {
-            bn: "999999999RP0001",
-            name: "Acme Ltd",
-            contactName: "Pat Payroll",
-            contactPhone: "5555550100",
-          },
-        },
-      })}::jsonb where id = ${org.orgId}`);
-
-    const employeeId = randomUUID();
-    const scheduleId = randomUUID();
-    await db.execute(sql`
-      insert into parties (id, org_id, kind, display_name, is_active, subsidiary_id, custom)
-      values (${employeeId}, ${org.orgId}, 'person', 'Grace Hopper', true, ${org.subsidiaryId}, '{}'::jsonb)`);
-    const employmentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
-    await db.execute(sql`
-      insert into addresses (org_id, party_id, line1, city, region, postal_code, country)
-      values (${org.orgId}, ${employeeId}, '10 Main Street', 'Toronto', 'ON', 'M5V 2T6', 'CA')`);
-    await db.execute(sql`
-      insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
-                                 pay_date_offset_days, is_active, created_by, updated_by)
-      values (${scheduleId}, ${org.orgId}, 'Biweekly', 'biweekly', 26, '2026-07-18', 3, true,
-              ${actorId}, ${actorId})`);
-    await db.execute(sql`
-      insert into employee_payroll_profiles (org_id, employee_party_id, pay_schedule_id, province, pay_basis, country, federal_claim_code, provincial_claim_code, sin_encrypted, sin_last3, is_active, created_by, updated_by)
-        values (${org.orgId}, ${employeeId}, ${scheduleId}, 'ON', 'hourly', 'CA', 1, 1, ${sealSecret("046454286", { orgId: org.orgId, purpose: "payroll.employee.sin" })}, '286', true, ${actorId}, ${actorId})`);
-
-    const documentId = randomUUID();
-    await db.execute(sql`
-      insert into documents (org_id, id, kind, document_number, subsidiary_id, document_date,
-                             currency, status, created_by, updated_by)
-      values (${org.orgId}, ${documentId}, 'pay_run', ${`PAY-${documentId.slice(0, 8)}`},
-              ${org.subsidiaryId}, '2026-07-21', 'CAD', 'draft', ${actorId}, ${actorId})`);
-    await db.execute(sql`
-      insert into pay_runs (document_id, org_id, pay_schedule_id, period_start, period_end, pay_date,
-                            tax_year, run_status, calculated_at, created_by, updated_by)
-      values (${documentId}, ${org.orgId}, ${scheduleId}, '2026-07-05', '2026-07-18', '2026-07-21',
-              2026, 'committed', now(), ${actorId}, ${actorId})`);
-    await db.execute(sql`
-      insert into pay_stubs (id, org_id, pay_run_document_id, employee_party_id, employment_id,
-                             province, periods_per_year, pay_date, tax_year, currency_code, gross,
-                             net_pay, pensionable_earnings, insurable_earnings, factors, created_by,
-                             updated_by)
-      values (${randomUUID()}, ${org.orgId}, ${documentId}, ${employeeId}, ${employmentId}, 'ON',
-              26, '2026-07-21', 2026, 'CAD', '2000.0000', '2000.0000', '2000.0000', '2000.0000',
-              '{}'::jsonb, ${actorId}, ${actorId})`);
-    // Confirmed separation facts: the ROE refuses by name without them.
-    await db.execute(sql`
-      insert into payroll_roe_separation_events
-        (id, org_id, employee_party_id,employment_id,subsidiary_id,first_day_worked,source_reference,
-         interruption_on, last_insurable_earnings_on, salary_continuance_end_on, status, change_reason)
-      values (${randomUUID()}, ${org.orgId}, ${employeeId},${employmentId},${org.subsidiaryId},'2026-07-05','Original separation declaration', '2026-07-22', '2026-07-21',
-              null, 'confirmed', 'fixture separation')`);
-
+    await seedPayrollSettings(f.orgId,{features:{payroll:true}});
+    await db.execute(sql`insert into user_permission_overrides(org_id,user_id,permission,effect)
+      values(${f.orgId},${f.actorId},'payroll.read','grant'),(${f.orgId},${f.actorId},'payroll.run','grant')`);
+    await db.execute(sql`update orgs set settings=jsonb_set(jsonb_set(settings,'{timeZone}','"Pacific/Auckland"'::jsonb),
+      '{payroll,t4Transmitter}',${JSON.stringify(EMPLOYER)}::jsonb) where id=${f.orgId}`);
+    const accountId=randomUUID();
+    await db.execute(sql`insert into payroll_filing_accounts(id,org_id,subsidiary_id,country,program_type,account_number,name,is_active)
+      values(${accountId},${f.orgId},${f.subsidiaryId},'CA','ca_rp','999999999RP0001','Canadian payroll account',true)`);
+    await db.execute(sql`update employee_payroll_profiles set filing_account_id=${accountId},
+      sin_encrypted=${sealSecret('046454286',{orgId:f.orgId,purpose:'payroll.employee.sin'})},sin_last3='286'
+      where org_id=${f.orgId} and employee_party_id=${f.employeeId}`);
+    await seedRoeIssuanceFixture(f.orgId,f.employeeId);
+    const current=await readRoeSeparationFacts({orgId:f.orgId,actorId:f.actorId,employeePartyId:f.employeeId,allowedSubsidiaryIds:null});assert.ok(current);
+    await saveRoeSeparationFacts({orgId:f.orgId,actorId:f.actorId,employeePartyId:f.employeeId,
+      employmentId:f.employmentId,subsidiaryId:f.subsidiaryId,allowedSubsidiaryIds:null,firstDayWorked:'2026-07-05',
+      interruptionOn:'2026-07-19',lastInsurableEarningsOn:'2026-07-18',salaryContinuanceEndOn:null,
+      sourceReference:'Original employer final service declaration',reason:'Confirm final worked date',status:'confirmed',
+      expectedId:current.id,expectedUpdatedAt:current.updatedAt});
+    const component=(await db.execute<{id:string}>(sql`select id from pay_components where org_id=${f.orgId} and system_key='base_pay'`)).rows;
+    assert.equal(component.length,1);
+    const run=await createPayRun({orgId:f.orgId,actorId:f.actorId,payScheduleId:f.scheduleId,
+      periodStart:'2026-07-05',periodEnd:'2026-07-18',payDate:'2026-07-21'});
+    await mutatePayRunAdjustment({orgId:f.orgId,actorId:f.actorId,documentId:run.documentId,reason:'Original employee final wages',
+      mutation:{action:'add',employeePartyId:f.employeeId,componentId:component[0]!.id,amount:'2000',hours:'80',
+        replaceComponent:true,earnedFrom:'2026-07-05',earnedTo:'2026-07-18'}});
+    assert.deepEqual((await calculatePayRun({orgId:f.orgId,actorId:f.actorId,documentId:run.documentId})).errors,[]);
+    await commitPayRun({orgId:f.orgId,actorId:f.actorId,documentId:run.documentId});
+    const before=(await db.execute<{snapshot:string}>(sql`select to_jsonb(stub)::text as snapshot from pay_stubs stub
+      where org_id=${f.orgId} and pay_run_document_id=${run.documentId} order by id`)).rows;
+    const employeeId=f.employeeId;
     // 13:00Z on Jun 15 is already Jun 16 in Auckland. UTC today and wall-clock
     // today must not leak into a Service Canada upload filename.
     await withSimClock("2026-06-15T13:00:00Z", async () => {
@@ -191,6 +169,8 @@ test("ROE XML filenames stamp the org calendar day, not UTC today", { skip: !DB 
       assert.equal(file.filename, "ROE-2026-06-16.xml");
       assert.notEqual(file.filename, `ROE-${new Date().toISOString().slice(0, 10)}.xml`);
       assert.notEqual(file.filename, "ROE-2026-06-15.xml");
+      assert.deepEqual((await db.execute<{snapshot:string}>(sql`select to_jsonb(stub)::text as snapshot from pay_stubs stub
+        where org_id=${f.orgId} and pay_run_document_id=${run.documentId} order by id`)).rows,before,'filename generation preserves committed employee payroll');
     });
   } finally {
     await dropScratchOrgReporting(org.orgId);
