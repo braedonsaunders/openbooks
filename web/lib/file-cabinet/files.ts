@@ -612,7 +612,7 @@ export const RETAINED_ATTACHMENT: SQL = sql`(
  * retained attachment links (above), files pinned by a live HRM document,
  * live payment-run artifacts (payment_files rows are immutable; readers fetch
  * the pinned version regardless of files.is_inactive), and proof files of
- * live payment mandates. Callers pass the files-id expression; the fragment
+ * live payment mandates, and source-qualified ROE reporting records. Callers pass the files-id expression; the fragment
  * reserves the `fa`, `d`, `pf`, and `pm` aliases. Enforced in trash, folder
  * trash, replace, purge, folder purge, and detach — the DSAR and payment
  * readers intentionally keep serving pinned bytes, so hiding the cabinet row
@@ -634,6 +634,12 @@ export function retainedFileEvidence(orgId: string, fileId: SQL): SQL {
       select 1 from payment_mandates pm
        where pm.proof_file_id = ${fileId} and pm.org_id = ${orgId}
          and pm.status not in ('revoked', 'expired'))
+    or exists (
+      select 1 from payroll_roe_historical_periods rh
+       where rh.source_file_id = ${fileId} and rh.org_id = ${orgId})
+    or exists (
+      select 1 from payroll_roe_line_evidence rl
+       where rl.source_file_id = ${fileId} and rl.org_id = ${orgId})
   )`
 }
 
