@@ -18,7 +18,7 @@ test('historical import refuses daily monthly and incomplete semi-monthly positi
 });
 test('monthly retained dates support non-month-end anchors and February clamping without rewriting dates',()=>{
  for(const [periodStart,periodEnd] of [['2026-01-21','2026-02-20'],['2026-02-21','2026-03-20'],
-  ['2026-02-01','2026-02-28'],['2024-02-01','2024-02-29'],['2026-01-31','2026-02-28'],['2026-03-01','2026-03-30']]){
+  ['2026-02-01','2026-02-28'],['2024-02-01','2024-02-29'],['2026-01-31','2026-02-28'],['2026-03-01','2026-03-30']] as const){
   const input={...source,periodStart,periodEnd,earnedFrom:periodStart,earnedTo:periodEnd};const before=JSON.stringify(input);
   const qualified=validateRoePriorPeriod(input);assert.equal(qualified.periodStart,periodStart);assert.equal(qualified.periodEnd,periodEnd);
   assert.equal(JSON.stringify(input),before);
@@ -27,7 +27,7 @@ test('monthly retained dates support non-month-end anchors and February clamping
 });
 test('semi-monthly retained dates support cross-month fixed boundaries and February month end',()=>{
  for(const [periodStart,periodEnd] of [['2026-01-21','2026-02-05'],['2026-02-06','2026-02-20'],
-  ['2026-02-21','2026-03-05'],['2026-02-01','2026-02-15'],['2026-02-16','2026-02-28'],['2024-02-16','2024-02-29']]){
+  ['2026-02-21','2026-03-05'],['2026-02-01','2026-02-15'],['2026-02-16','2026-02-28'],['2024-02-16','2024-02-29']] as const){
   assert.equal(retainedPayPeriodProblem('semi_monthly',periodStart,periodEnd),null);
   assert.equal(validateRoePriorPeriod({...source,frequency:'semi_monthly',periodStart,periodEnd,earnedFrom:periodStart,earnedTo:periodEnd}).periodEnd,periodEnd);
  }
