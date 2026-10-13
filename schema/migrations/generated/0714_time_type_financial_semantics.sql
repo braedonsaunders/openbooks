@@ -6,6 +6,18 @@ SET standard_conforming_strings = on;
 SET client_min_messages = warning;
 SET search_path = public, pg_catalog;
 
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM public.time_entries r WHERE r.time_type_id IS NOT NULL
+    AND NOT EXISTS (SELECT 1 FROM public.time_types t WHERE t.org_id=r.org_id AND t.id=r.time_type_id))
+    OR EXISTS (SELECT 1 FROM public.pay_stub_lines r WHERE r.time_type_id IS NOT NULL
+    AND NOT EXISTS (SELECT 1 FROM public.time_types t WHERE t.org_id=r.org_id AND t.id=r.time_type_id))
+  THEN
+    RAISE EXCEPTION 'Recorded time or payroll lines have an unknown or foreign-organization time type. Preserve the records and qualify their original policy ownership before upgrading.';
+  END IF;
+END;
+$$;
+
 CREATE INDEX pay_stub_lines_time_type_policy ON public.pay_stub_lines (org_id, time_type_id)
 WHERE time_type_id IS NOT NULL;
 
