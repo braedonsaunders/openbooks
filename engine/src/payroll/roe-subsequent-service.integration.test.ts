@@ -58,11 +58,14 @@ async function source(f:Fixture){
   return {sourceFileId:file,sourceVersionId:version,sourceSha256:hash,sourceReference:'Original returned service and paid-work record',
     reason:'Retain actual service scope without creating an interruption',expectedId:null,expectedUpdatedAt:null,firstDayWorked:'2026-07-19'};
 }
-async function committed(f:Fixture,start:string,end:string,earned:string|null){
+async function committed(f:Fixture,start:string,end:string,earned:string|null,earlierExtra?:string){
   const run=await createPayRun({orgId:f.orgId,actorId:f.actorId,payScheduleId:f.scheduleId,periodStart:start,periodEnd:end,payDate:end});
   await mutatePayRunAdjustment({orgId:f.orgId,actorId:f.actorId,documentId:run.documentId,reason:'Original wage and earned span',
     mutation:{action:'add',employeePartyId:f.employeeId,componentId:f.base,amount:'100',hours:'4',replaceComponent:true,
       earnedFrom:earned,earnedTo:earned}});
+  if(earlierExtra)await mutatePayRunAdjustment({orgId:f.orgId,actorId:f.actorId,documentId:run.documentId,
+    reason:'Original separate earlier-work wage instruction',mutation:{action:'add',employeePartyId:f.employeeId,
+      componentId:f.base,amount:'25',hours:'1',replaceComponent:false,earnedFrom:earlierExtra,earnedTo:earlierExtra}});
   const input={orgId:f.orgId,actorId:f.actorId,documentId:run.documentId};
   assert.deepEqual((await calculatePayRun(input)).errors,[]);await commitPayRun(input);return run;
 }
@@ -73,13 +76,26 @@ async function retained(f:Fixture){return (await db.execute<{body:string}>(sql`s
 test('an active returned spell permits the earlier ROE, freezes its exact exclusion source and preserves native payroll history',{skip:!DB},async()=>{
   const f=await withBypassContext(setup);
   try{await withOrgContext(f.orgId,async()=>{
-    const event=await confirmEarlier(f);await committed(f,'2026-07-05','2026-07-18','2026-07-18');
+    const event=await confirmEarlier(f);const earlier=await committed(f,'2026-07-05','2026-07-18','2026-07-18');
     const later=await committed(f,'2026-07-19','2026-08-01','2026-07-20');
     const before=await retained(f);await assert.rejects(readRoeReportingWindow(await roeWindowContext(f.orgId,f.employeeId,event.id)),/after|later|attribut|earned/);
     const input={...await source(f),precedingEventId:event.id};
     const certificate=await saveRoeSubsequentService(scope(f),input);
     assert.deepEqual(await saveRoeSubsequentService(scope(f),input),certificate,'an exact native replay retains the certificate identity and audit');
     assert.equal((await readRoeSubsequentService(scope(f),event.id))?.id,certificate.id);
+    const selected=(await db.execute<{id:string;documentId:string;proof:{stubId:string;lines:{retained:{stubId:string}}[]}|null}>(sql`
+      select s.id,s.pay_run_document_id as "documentId",public.payroll_roe_later_stub_source(${f.orgId},${event.id},s.id) as proof
+      from pay_stubs s where s.org_id=${f.orgId} and s.employee_party_id=${f.employeeId}
+        and s.pay_run_document_id in (${earlier.documentId},${later.documentId}) order by s.id`)).rows;
+    assert.equal(selected.length,2);
+    const earlierSource=selected.find(row=>row.documentId===earlier.documentId)!;
+    const laterSource=selected.find(row=>row.documentId===later.documentId)!;
+    assert.equal(earlierSource.proof,null,'earlier work cannot be attributed to the certified later spell');
+    assert.ok(laterSource.proof,'a selected later stub must not scan unrelated earlier earnings');
+    assert.equal(laterSource.proof.stubId,laterSource.id);
+    assert.ok(laterSource.proof.lines.length>0);
+    assert.ok(laterSource.proof.lines.every(line=>line.retained.stubId===laterSource.id),'every material source belongs to the exact argument stub');
+
     const window=await readRoeReportingWindow(await roeWindowContext(f.orgId,f.employeeId,event.id));
     assert.equal(window.sourceDocuments.length,1);assert.equal(window.totalInsurableEarnings,'100.0000');
     assert.equal(await retained(f),before,'reporting certification cannot change payroll or employment history');
@@ -118,7 +134,17 @@ test('later payment for earlier work and unknown earned dates cannot be excluded
     assert.equal(proof.length,1);assert.equal(proof[0]!.proof,null,'pay date cannot convert earlier earned work into later service');
     const window=await readRoeReportingWindow(await roeWindowContext(f.orgId,f.employeeId,event.id));
     assert.equal(window.totalInsurableEarnings,'200.0000','qualified late earlier-work remains reportable');
-    const undated=await committed(f,'2026-08-02','2026-08-15',null);
+    const mixed=await committed(f,'2026-08-02','2026-08-15','2026-08-03','2026-07-18');
+    const mixedSource=(await db.execute<{proof:unknown;earlierCount:number;laterCount:number}>(sql`select
+      public.payroll_roe_later_stub_source(${f.orgId}::uuid,${event.id}::uuid,s.id) as proof,
+      (select count(*)::int from pay_stub_lines l where l.org_id=s.org_id and l.stub_id=s.id
+        and l.kind='earning' and l.amount<>0 and l.earned_from='2026-07-18') as "earlierCount",
+      (select count(*)::int from pay_stub_lines l where l.org_id=s.org_id and l.stub_id=s.id
+        and l.kind='earning' and l.amount<>0 and l.earned_from='2026-08-03') as "laterCount"
+      from pay_stubs s where s.org_id=${f.orgId} and s.pay_run_document_id=${mixed.documentId} and s.employee_party_id=${f.employeeId}`)).rows;
+    assert.equal(mixedSource.length,1);assert.equal(mixedSource[0]!.earlierCount,1);assert.equal(mixedSource[0]!.laterCount,1);
+    assert.equal(mixedSource[0]!.proof,null,'a selected stub mixing earlier and later service cannot be wholly excluded');
+    const undated=await committed(f,'2026-08-16','2026-08-29',null);
     const undatedProof=(await db.execute<{proof:unknown;missing:boolean}>(sql`select
       public.payroll_roe_later_stub_source(${f.orgId}::uuid,${event.id}::uuid,s.id) as proof,
       exists(select 1 from pay_stub_lines l where l.org_id=s.org_id and l.stub_id=s.id and l.kind='earning'
