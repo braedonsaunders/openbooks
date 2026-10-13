@@ -78,10 +78,13 @@ test('a financial document line binds its time policy even without atomic time a
   try {
     await f.inOrg(async () => {
       const docId = randomUUID();
-      await db.execute(sql`insert into documents(id,org_id,kind,status,document_number,subsidiary_id,document_date,currency)
-        values(${docId},${f.org.orgId},'sales_order','draft',${docId},${f.org.subsidiaryId},${f.org.date},'CAD')`);
+      await db.execute(sql`insert into documents(id,org_id,kind,status,document_number,subsidiary_id,document_date,currency,subtotal,tax_total,total)
+        values(${docId},${f.org.orgId},'sales_order','draft',${docId},${f.org.subsidiaryId},${f.org.date},'CAD',125,0,125)`);
       const line = await db.execute(sql`insert into document_lines(org_id,document_id,line_number,time_type_id,quantity,unit_price,amount)
-        values(${f.org.orgId},${docId},1,${f.typeId},1,125,125) returning id`);
+        values(${f.org.orgId},${docId},1,${f.typeId},1,125,125) returning id`).catch((error: unknown) => {
+          const cause = (error as { cause?: unknown }).cause;
+          throw cause instanceof Error ? cause : error;
+        });
       assert.equal(line.rows.length, 1);
       await assert.rejects(db.execute(sql`update time_types set classification='regular'
         where org_id=${f.org.orgId} and id=${f.typeId}`), policyRefusal);
