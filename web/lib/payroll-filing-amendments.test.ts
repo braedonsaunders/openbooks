@@ -163,7 +163,6 @@ const sectionHooks = registerHooks({
         url: 'data:text/javascript,export function useMoney() { return { money: (v) => `money:${v ?? ""}` } }',
       }
     }
-    if (specifier === '../../../../lib/viewer-format') return {shortCircuit:true,url:'data:text/javascript,export function useViewerFormat(){return {date:value=>value}}'}
     if (specifier === '../../../../lib/confirm') {
       return {
         shortCircuit: true,
