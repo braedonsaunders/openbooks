@@ -7,6 +7,7 @@ import { add, cmp } from '../money/money.ts';
 import { isIsoCalendarDate } from '../platform/iso-date.ts';
 import { at, iso, DAY } from './run-calendar.ts';
 import { PayrollError } from './error.ts';
+import { retainedPayPeriodProblem } from './retained-period-calendar.ts';
 import { requirePayrollFeature } from './feature-gate.ts';
 
 export const ROE_REPORTING_COUNTS: Record<string, { hours: number; earnings: number }> = {
@@ -75,8 +76,8 @@ export function assembleRoeReportingWindow(
   const unique=new Map<string,RoeCalendarPeriod>();
   for(const p of calendar){
     if(!isIsoCalendarDate(p.periodStart)||!isIsoCalendarDate(p.periodEnd)||p.periodStart>p.periodEnd) throw new PayrollError('Invalid retained ROE service-period dates');
-    const days=(at(p.periodEnd).getTime()-at(p.periodStart).getTime())/DAY+1;
-    if((context.frequency==='weekly' && days!==7)||(context.frequency==='biweekly' && days!==14)) throw new PayrollError('Retained ROE periods do not match the declared pay-period type');
+    const periodProblem=retainedPayPeriodProblem(context.frequency,p.periodStart,p.periodEnd);
+    if(periodProblem)throw new PayrollError(periodProblem);
     if(p.periodEnd>finalEnd || p.periodEnd<context.event.first_day_worked) continue;
     const key=p.periodStart+':'+p.periodEnd;
     const prior=unique.get(key);

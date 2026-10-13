@@ -9,6 +9,7 @@ import { authorizeRoeReportingEmployee, type RoeEmployeeScope } from './roe-sepa
 import { takeEmployeeConfigurationFence } from './fences.ts';
 import { assertRoeLegacySourcesBound } from './canada/roe-event-source.ts';
 import { PayrollError } from './error.ts';
+import { retainedPayPeriodProblem } from './retained-period-calendar.ts';
 
 export type RoeReportingSource = {
   sourceFileId:string; sourceVersionId:string; sourceSha256:string;
@@ -74,6 +75,8 @@ export function validateRoePriorPeriod(input:RoePriorPeriodInput):Omit<RoePriorP
   const qualified=source(input);expected(input);dates(input.periodStart,input.periodEnd,'The prior reporting period');
   if(!isUuid(input.filingAccountId)||!isUuid(input.payScheduleId)||!['weekly','biweekly','semi_monthly','monthly'].includes(input.frequency)
     ||typeof input.nilPeriod!=='boolean')throw new PayrollError('Choose the native filing account, pay schedule and reporting frequency');
+  const periodProblem=retainedPayPeriodProblem(input.frequency,input.periodStart,input.periodEnd);
+  if(periodProblem)throw new PayrollError(periodProblem);
   const insurableEarnings=amount(input.insurableEarnings,'Insurable earnings'),insurableHours=amount(input.insurableHours,'Insurable hours');
   if(input.nilPeriod){
     if(input.payDate!==null||input.earnedFrom!==null||input.earnedTo!==null||toUnits(insurableEarnings)!==0n||toUnits(insurableHours)!==0n)throw new PayrollError('A source-qualified nil period has no payment, earned span, insurable earnings or hours');
