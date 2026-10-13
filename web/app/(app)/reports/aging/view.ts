@@ -21,9 +21,9 @@ import { getMoneyFormatter } from '@/lib/money-server'
 import { agingByParty, agingCurrenciesInScope, agingDetail, agingSummaryAndDetail, AgingRatesUnavailableError, dimensionOptions, type AgingCurrencyBasis, type AgingRow, type AgingSide } from '../../../../lib/reports'
 import { orgInfo } from '../../../../lib/data'
 import { MissingRatesError, reportSubsidiaryView, type RatesBlockedNotice } from '../../../../lib/consolidation'
-import { resolvePeriod } from '../../../../lib/periods'
+import { resolvePeriod, type ResolvedPeriod } from '../../../../lib/periods'
 import { AGING_PERIOD_PRESETS, agingPeriodPreset } from '../../../../lib/aging-periods'
-import { parseReportQuery, resolveAgingCurrencyParams } from '../../../../lib/report-filters'
+import { IncompleteReportPeriodError, parseReportQuery, resolveAgingCurrencyParams } from '../../../../lib/report-filters'
 import { reportScheduleAnchor, scheduleParamsFrom } from '../../../../lib/report-schedule-anchor'
 import { getAuthz } from '@/lib/authz'
 import { dimensionOptionsScope } from '../../../../lib/reports/filters'
@@ -134,7 +134,9 @@ export interface AgingData {
   /** Set when underived consolidated rates block the report:
    * the page renders a typed banner with a derive link instead of numbers. */
   ratesBlocked: RatesBlockedNotice | null
-  /** False exactly when ratesBlocked is set; the paper hides with it. */
+  periodRefusal: string | null
+  filterPeriodLabel: string
+  /** False while rates or the requested period cannot resolve. */
   ratesReady: boolean
   summaryRows: AgingSummaryRow[]
   detailRows: AgingDetailRow[]
@@ -162,8 +164,17 @@ export async function loadAging(sp: Record<string, string | undefined>): Promise
   // (say ?period=this_fiscal_year) must not compute a future as-of, so coerce
   // it to today instead of resolving it.
   const requestedPeriod = agingPeriodPreset(sp.period)
-  const period = await resolvePeriod(requestedPeriod, { customFrom: q.from, customTo: q.to })
-  const asOf = period.to
+  let period: ResolvedPeriod | null = null
+  let periodRefusal: string | null = null
+  try {
+    period = await resolvePeriod(requestedPeriod, { customFrom: q.from, customTo: q.to })
+  } catch (error) {
+    if (!(error instanceof IncompleteReportPeriodError)) throw error
+    periodRefusal = error.message
+  }
+  // No substitute date may broaden a refused custom report. Unresolved
+  // drill targets remain hidden with the paper until a valid date is set.
+  const asOf = period?.to ?? ''
   // Legal-entity scope is enforced here, not by the picker: a restricted
   // reader's view resolves to the subsidiaries they may see (empty = no rows)
   // and every query below carries it — the same contract as the export path.
@@ -173,7 +184,7 @@ export async function loadAging(sp: Record<string, string | undefined>): Promise
   // only with a resolved subsidiary scope — never scope-less (fail-closed).
   let subView: Awaited<ReturnType<typeof reportSubsidiaryView>> | undefined
   let ratesBlocked: RatesBlockedNotice | null = null
-  try {
+  if (period) try {
     subView = await reportSubsidiaryView(q.subsidiaryId, asOf)
   } catch (e) {
     if (!(e instanceof MissingRatesError)) throw e
@@ -321,12 +332,14 @@ export async function loadAging(sp: Record<string, string | undefined>): Promise
     backHref: '/reports',
     backLabel: tr('hub.title'),
     company: org?.name ?? '',
-    periodPhrase: `${t('asOf', { date: asOf })} · ${basisPhrase} · ${t('inCurrency', { currency: target || org?.base_currency || '' })}`,
+    periodPhrase: period ? `${t('asOf', { date: asOf })} · ${basisPhrase} · ${t('inCurrency', { currency: target || org?.base_currency || '' })}` : '',
     isDetail: Boolean(detailResult),
     isSummary: !detailResult,
     hasSummaryRows: (summary?.rows.length ?? 0) > 0,
     ratesBlocked,
-    ratesReady: ratesBlocked === null,
+    periodRefusal,
+    filterPeriodLabel: tr('filterBar.period'),
+    ratesReady: ratesBlocked === null && periodRefusal === null,
     emptyLabel: t('empty'),
     labelParty: tc('labels.party'),
     labelEntry: tr('generalLedger.columns.entry'),
@@ -502,6 +515,13 @@ export function agingSpec(data: AgingData): PageSpec {
           },
         }),
         when: f('ratesBlocked'),
+      },
+      {
+        ...widgetBlock('empty-state', {
+          title: data.filterPeriodLabel,
+          description: data.periodRefusal ?? '',
+        }),
+        when: f('periodRefusal'),
       },
     ],
     paper: {

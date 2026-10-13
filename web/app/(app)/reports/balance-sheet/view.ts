@@ -16,8 +16,8 @@ import { MissingRatesError, reportSubsidiaryView, type RatesBlockedNotice } from
 import { balanceSheetView } from '../../../../lib/statement-matrix'
 import { decimalAbs, decimalAdd, decimalCmp, decimalNeg } from '../../../../lib/statement-format'
 import { AS_OF_DEFAULT_PERIOD_PRESET } from '@openbooks/reports'
-import { resolvePeriod } from '../../../../lib/periods'
-import { parseReportQuery, scaleFactor } from '../../../../lib/report-filters'
+import { resolvePeriod, type ResolvedPeriod } from '../../../../lib/periods'
+import { IncompleteReportPeriodError, parseReportQuery, scaleFactor } from '../../../../lib/report-filters'
 import { reportScheduleAnchor, scheduleParamsFrom } from '../../../../lib/report-schedule-anchor'
 import { getAuthz } from '@/lib/authz'
 import { dimensionOptionsScope } from '../../../../lib/reports/filters'
@@ -57,11 +57,14 @@ export interface BalanceSheetData {
   /** Set when underived consolidated rates block the statement:
    * the page renders a typed banner with a derive link instead of numbers. */
   ratesBlocked: RatesBlockedNotice | null
+  /** An incomplete custom window keeps its filters and hides the statement. */
+  periodRefusal: string | null
+  filterPeriodLabel: string
   /** Set when the requested accounting context cannot label the accounts. */
   contextBlocked: { title: string; description: string } | null
-  /** False exactly when ratesBlocked is set; the paper hides with it. */
+  /** False while rates, accounting context or the period cannot resolve. */
   ratesReady: boolean
-  /** Null exactly when ratesBlocked is set; never rendered then. */
+  /** Never rendered while report prerequisites are refused. */
   view: unknown
   /** True when the breakout produced more dimension columns than
    * MAX_MATRIX_COLUMNS and the matrix was capped. */
@@ -82,7 +85,14 @@ export async function loadBalanceSheet(
   // Point-in-time: an unfiltered statement is dated today, never at a
   // fiscal year end that has not happened yet.
   const q = parseReportQuery(sp, { defaultPeriod: AS_OF_DEFAULT_PERIOD_PRESET })
-  const period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to })
+  let period: ResolvedPeriod | null = null
+  let periodRefusal: string | null = null
+  try {
+    period = await resolvePeriod(q.period, { customFrom: q.from, customTo: q.to })
+  } catch (error) {
+    if (!(error instanceof IncompleteReportPeriodError)) throw error
+    periodRefusal = error.message
+  }
   const { books, selectedBook } = await reportBookSelection(await resolveOrgId(), sp.book)
 
   const secTotal = (section: string) => t('statement.sectionTotal', { section })
@@ -108,32 +118,34 @@ export async function loadBalanceSheet(
   let ratesBlocked: RatesBlockedNotice | null = null
   let accountingContext: ReportAccountingContext | null = null
   let contextBlocked: { title: string; description: string } | null = null
-  try {
-    accountingContext = await reportAccountingContext(await resolveOrgId(), sp.ctx, { asOf: period.to, subsidiaryId: q.subsidiaryId ?? null })
-  } catch (e) {
-    if (!(e instanceof AccountingContextError)) throw e
-    contextBlocked = { title: t('accountingContext.blockedTitle'), description: `${e.message} ${e.remedy}` }
-  }
-  try {
-    subView = await reportSubsidiaryView(q.subsidiaryId, period.to, selectedBook.id)
-    if (!contextBlocked) view = await balanceSheetView({ from: period.from, to: period.to }, period.label, labels, {
-      accountLabels: accountingContext?.labels ?? null,
-      breakout: q.breakout,
-      compare: q.compare,
-      basis: q.basis,
-      dims: q.dims,
-      subsidiary: subView.subsidiary,
-      showZero: q.showZero,
-      bookId: selectedBook.id,
-    })
-  } catch (e) {
-    if (!(e instanceof MissingRatesError)) throw e
-    ratesBlocked = {
-      code: 'rates-not-derived',
-      title: t('statement.ratesBlockedTitle'),
-      description: (e as Error).message,
-      deriveLabel: t('statement.ratesBlockedAction'),
-      deriveHref: '/close',
+  if (period) {
+    try {
+      accountingContext = await reportAccountingContext(await resolveOrgId(), sp.ctx, { asOf: period.to, subsidiaryId: q.subsidiaryId ?? null })
+    } catch (e) {
+      if (!(e instanceof AccountingContextError)) throw e
+      contextBlocked = { title: t('accountingContext.blockedTitle'), description: `${e.message} ${e.remedy}` }
+    }
+    try {
+      subView = await reportSubsidiaryView(q.subsidiaryId, period.to, selectedBook.id)
+      if (!contextBlocked) view = await balanceSheetView({ from: period.from, to: period.to }, period.label, labels, {
+        accountLabels: accountingContext?.labels ?? null,
+        breakout: q.breakout,
+        compare: q.compare,
+        basis: q.basis,
+        dims: q.dims,
+        subsidiary: subView.subsidiary,
+        showZero: q.showZero,
+        bookId: selectedBook.id,
+      })
+    } catch (e) {
+      if (!(e instanceof MissingRatesError)) throw e
+      ratesBlocked = {
+        code: 'rates-not-derived',
+        title: t('statement.ratesBlockedTitle'),
+        description: (e as Error).message,
+        deriveLabel: t('statement.ratesBlockedAction'),
+        deriveHref: '/close',
+      }
     }
   }
   const authz = await getAuthz()
@@ -167,7 +179,7 @@ export async function loadBalanceSheet(
 
   return {
     title: t('balanceSheet.title'),
-    description: `${selectedBook.name} · ${subView?.label ? `${subView.label} · ` : ''}${t('balanceSheet.asOf', { date: period.to })}`,
+    description: [selectedBook.name, subView?.label, period ? t('balanceSheet.asOf', { date: period.to }) : null].filter(Boolean).join(' · '),
     backHref: '/reports',
     backLabel: t('hub.title'),
     dimensions: opts,
@@ -195,11 +207,13 @@ export async function loadBalanceSheet(
       ? t('balanceSheet.balanced')
       : t('balanceSheet.offBy', { amount: money(difference) }),
     company: org?.name ?? '',
-    periodPhrase: [selectedBook.name, t('balanceSheet.asOf', { date: period.to }), accountingContext ? accountingContextLegend(accountingContext, t) : null].filter(Boolean).join(' · '),
+    periodPhrase: [selectedBook.name, period ? t('balanceSheet.asOf', { date: period.to }) : null, accountingContext ? accountingContextLegend(accountingContext, t) : null].filter(Boolean).join(' · '),
     note: scaleFactor(q.scale).note || '',
     wide: view ? view.columns.length > 4 : false,
     ratesBlocked,
-    ratesReady: ratesBlocked === null && contextBlocked === null,
+    periodRefusal,
+    filterPeriodLabel: t('filterBar.period'),
+    ratesReady: ratesBlocked === null && contextBlocked === null && periodRefusal === null,
     contextBlocked,
     view,
     truncated: view?.truncated ?? false,
@@ -280,6 +294,13 @@ export function balanceSheetSpec(data: BalanceSheetData): PageSpec {
           },
         }),
         when: f('ratesBlocked'),
+      },
+      {
+        ...widgetBlock('empty-state', {
+          title: data.filterPeriodLabel,
+          description: data.periodRefusal ?? '',
+        }),
+        when: f('periodRefusal'),
       },
       ...(data.contextBlocked
         ? [{
