@@ -48,7 +48,7 @@ for (const dated of [true, false]) {
    const scope={orgId:f.orgId,actorId:f.actorId,employeePartyId:f.employeeId,
     employmentId:f.employmentId,subsidiaryId:f.subsidiaryId,allowedSubsidiaryIds:null};
    const original=await readRoeSeparationFacts(scope);assert.ok(original);
-   const confirmed=await saveRoeSeparationFacts({...scope,...declaration,status:'confirmed',
+   const confirmed=await saveRoeSeparationFacts({...scope,...declaration,firstDayWorked:'2026-05-07',status:'confirmed',
     expectedId:original.id,expectedUpdatedAt:original.updatedAt});
    const component=(await db.execute<{id:string}>(sql`select id from pay_components
     where org_id=${f.orgId} and system_key='base_pay'`)).rows;
@@ -57,12 +57,24 @@ for (const dated of [true, false]) {
     periodStart:'2026-04-26',periodEnd:'2026-05-09',payDate:'2026-05-13'});
    await mutatePayRunAdjustment({orgId:f.orgId,actorId:f.actorId,documentId:run.documentId,
     reason:'Original final wage instruction',mutation:{action:'add',employeePartyId:f.employeeId,
-     componentId:component[0]!.id,amount:'100',replaceComponent:true,
+     componentId:component[0]!.id,amount:'100',hours:'1',replaceComponent:true,
      ...(dated?{earnedFrom:'2026-05-08',earnedTo:'2026-05-08'}:{})}});
    assert.deepEqual((await calculatePayRun({orgId:f.orgId,actorId:f.actorId,documentId:run.documentId})).errors,[]);
    await commitPayRun({orgId:f.orgId,actorId:f.actorId,documentId:run.documentId});
+   const sourceDocumentIds=[run.documentId];
+   if(dated){
+    const supplemental=await createPayRun({orgId:f.orgId,actorId:f.actorId,payScheduleId:f.scheduleId,
+     runType:'supplemental',periodStart:'2026-04-26',periodEnd:'2026-05-09',payDate:'2026-05-14'});
+    await mutatePayRunAdjustment({orgId:f.orgId,actorId:f.actorId,documentId:supplemental.documentId,
+     reason:'Additional dated final wage',mutation:{action:'add',employeePartyId:f.employeeId,
+      componentId:component[0]!.id,amount:'25',hours:'0.25',replaceComponent:true,
+      earnedFrom:'2026-05-08',earnedTo:'2026-05-08'}});
+    assert.deepEqual((await calculatePayRun({orgId:f.orgId,actorId:f.actorId,documentId:supplemental.documentId})).errors,[]);
+    await commitPayRun({orgId:f.orgId,actorId:f.actorId,documentId:supplemental.documentId});
+    sourceDocumentIds.push(supplemental.documentId);
+   }
    const before=(await db.execute(sql`select to_jsonb(stub) as snapshot from pay_stubs stub
-    where org_id=${f.orgId} and pay_run_document_id=${run.documentId}`)).rows;
+    where org_id=${f.orgId} and pay_run_document_id in (${sql.join(sourceDocumentIds.map(id=>sql`${id}::uuid`),sql`, `)}) order by id`)).rows;
    const retained=(await db.execute<{earnedFrom:string|null;earnedTo:string|null}>(sql`
     select line.earned_from::text as "earnedFrom",line.earned_to::text as "earnedTo"
       from pay_stub_lines line join pay_stubs stub on stub.org_id=line.org_id and stub.id=line.stub_id
@@ -72,14 +84,16 @@ for (const dated of [true, false]) {
    if(dated){
     const record=await roeRecord(f.orgId,f.employeeId);assert.ok(record);
     assert.equal(record.lastDayPaid,'2026-05-08');assert.equal(record.finalPayPeriodEnd,'2026-05-09');
-    await saveRoeSeparationFacts({...scope,...declaration,status:'confirmed',
+    assert.equal(record.periods.length,1);assert.equal(record.totalInsurableEarnings,'125.0000');
+    assert.equal(record.totalInsurableHours,'1.2500');
+    await saveRoeSeparationFacts({...scope,...declaration,firstDayWorked:'2026-05-07',status:'confirmed',
      lastInsurableEarningsOn:'2026-05-07',expectedId:confirmed.id,expectedUpdatedAt:confirmed.updatedAt});
     await assert.rejects(roeRecord(f.orgId,f.employeeId),/earned through 2026-05-08, after/);
    }else{
     await assert.rejects(roeRecord(f.orgId,f.employeeId),/incomplete or invalid employment or earned-period evidence/);
    }
    assert.deepEqual((await db.execute(sql`select to_jsonb(stub) as snapshot from pay_stubs stub
-    where org_id=${f.orgId} and pay_run_document_id=${run.documentId}`)).rows,before,
+    where org_id=${f.orgId} and pay_run_document_id in (${sql.join(sourceDocumentIds.map(id=>sql`${id}::uuid`),sql`, `)}) order by id`)).rows,before,
     'ROE preview and refusal preserve committed payroll');
   });}finally{await withBypassContext(()=>dropScratchOrgReporting(f.orgId));}
  });

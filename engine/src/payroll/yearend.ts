@@ -1,3 +1,4 @@
+import { roeWindowContext, readRoeReportingWindow, ROE_REPORTING_COUNTS } from './roe-reporting-window.ts';
 import { assertPayrollCountryKnown } from "./country.ts";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
@@ -742,49 +743,22 @@ export interface RoeMailingAddress {
   country: string;
 }
 
-/** ROE worksheet: recent committed periods, newest first (blocks 15A–15C). */
+/** ROE worksheet uses the confirmed employment spell and statutory service-period window. */
 export async function roeWorksheet(
   orgId: string,
   employeePartyId: string,
-  limit = 27,
+  limit?: number,
 ): Promise<{ periods: RoePeriod[]; totalInsurableEarnings: string; totalInsurableHours: string }> {
-  const rows = (await db.execute<{ pay_date: string; period_start: string; period_end: string; insurable_earnings: string; hours: string }>(sql`
-    select s.pay_date, r.period_start, r.period_end, s.insurable_earnings,
-           (select coalesce(sum(l.hours), 0) from pay_stub_lines l
-             where l.org_id = ${orgId} and l.stub_id = s.id and l.kind = 'earning') as hours
-      from pay_stubs s
-      join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
-     where s.org_id = ${orgId} and s.employee_party_id = ${employeePartyId}
-     order by s.pay_date desc, s.id desc
-     limit ${limit}
-  `));
-  const periods = rows.rows.map((row) => ({
-    payDate: row.pay_date, periodStart: row.period_start, periodEnd: row.period_end,
-    insurableEarnings: row.insurable_earnings, insurableHours: num(row.hours),
-  }));
-  return {
-    periods,
-    totalInsurableEarnings: periods.reduce((acc, p) => add(acc, p.insurableEarnings), "0"),
-    totalInsurableHours: periods.reduce((acc, p) => add(acc, p.insurableHours), "0"),
-  };
+  const context=await roeWindowContext(orgId,employeePartyId);
+  if(limit!==undefined && limit!==ROE_REPORTING_COUNTS[context.frequency]!.hours) {
+    throw new PayrollError('The ROE reporting window follows the configured pay-period type — use its statutory period count');
+  }
+  const {periods,totalInsurableEarnings,totalInsurableHours}=await readRoeReportingWindow(context);
+  return {periods,totalInsurableEarnings,totalInsurableHours};
 }
 
-/**
- * Block 15C consecutive-pay-period count by pay-period type, per the Service
- * Canada ROE instructions. Block 15A's insurable hours are reported over the
- * same window.
- */
-const ROE_PERIODS_BY_FREQUENCY: Record<string, number> = {
-  weekly: 53,
-  biweekly: 27,
-  semi_monthly: 25,
-  monthly: 13,
-};
-
-/** Ownership inputs for the exact ROE earnings window and current header.
- * The frequency declaration is shared with roeRecord. Block 17 reads every
- * committed stub on the final pay date, including ties outside Block 15's
- * period count, so those sources must also be authorized.
+/** Authorize the header, retained pay sources and explicit nil-period calendar
+ * documents used by the same confirmed employment-spell reporting window.
  */
 export async function roeSourceScope(orgId: string, employeeIds: readonly string[]): Promise<{
   employeeId: string;
@@ -793,35 +767,17 @@ export async function roeSourceScope(orgId: string, employeeIds: readonly string
   sourceSubsidiaryId: string | null;
 }[]> {
   if (employeeIds.length === 0) return [];
-  const periodCount = sql`case sched.frequency ${sql.join(
-    Object.entries(ROE_PERIODS_BY_FREQUENCY).map(([frequency, count]) => sql`when ${frequency} then ${count}::int`),
-    sql` `,
-  )} else 0 end`;
-  return (await db.execute<{
-    employeeId: string; filingAccountId: string | null;
-    sourceDocumentId: string | null; sourceSubsidiaryId: string | null;
-  }>(sql`
-    select prof.employee_party_id as "employeeId", prof.filing_account_id as "filingAccountId",
-           source.document_id as "sourceDocumentId", source.subsidiary_id as "sourceSubsidiaryId"
-      from employee_payroll_profiles prof
-      left join pay_schedules sched on sched.org_id = prof.org_id and sched.id = prof.pay_schedule_id
-      left join lateral (
-        select distinct history.document_id, d.subsidiary_id
-          from (
-            select s.pay_run_document_id as document_id, s.pay_date,
-                   row_number() over (order by s.pay_date desc, s.id desc) as position,
-                   max(s.pay_date) over () as final_pay_date
-              from pay_stubs s
-              join pay_runs r on r.org_id = s.org_id and r.document_id = s.pay_run_document_id
-             where s.org_id = prof.org_id and s.employee_party_id = prof.employee_party_id
-               and r.run_status = 'committed'
-          ) history
-          left join documents d on d.org_id = prof.org_id and d.id = history.document_id
-         where history.position <= ${periodCount} or history.pay_date = history.final_pay_date
-      ) source on true
-     where prof.org_id = ${orgId}
-       and prof.employee_party_id in (${sql.join(employeeIds.map(id => sql`${id}`), sql`, `)})
-  `)).rows;
+  const sources: { employeeId: string; filingAccountId: string | null; sourceDocumentId: string | null; sourceSubsidiaryId: string | null }[]=[];
+  for(const employeeId of employeeIds){
+    const context=await roeWindowContext(orgId,employeeId);
+    const window=await readRoeReportingWindow(context);
+    sources.push({employeeId,filingAccountId:context.filingAccountId,sourceDocumentId:null,sourceSubsidiaryId:context.subsidiaryId});
+    for(const stub of window.sourceDocuments) sources.push({employeeId,filingAccountId:stub.filingAccountId,
+      sourceDocumentId:stub.documentId,sourceSubsidiaryId:stub.subsidiaryId});
+    for(const documentId of window.calendarDocuments) if(!window.sourceDocuments.some(stub=>stub.documentId===documentId))
+      sources.push({employeeId,filingAccountId:context.filingAccountId,sourceDocumentId:documentId,sourceSubsidiaryId:context.subsidiaryId});
+  }
+  return sources;
 }
 
 /** ROE Block 6 pay-period type codes. */
@@ -958,15 +914,16 @@ export async function roeRecord(orgId: string, employeePartyId: string): Promise
       + "assign a pay schedule before issuing the ROE",
     );
   }
-  const periodCount = ROE_PERIODS_BY_FREQUENCY[frequency];
+  const reportingCounts = ROE_REPORTING_COUNTS[frequency];
   const periodType = ROE_PERIOD_TYPE[frequency];
-  if (!periodCount || !periodType) {
+  if (!reportingCounts || !periodType) {
     throw new PayrollError(
       `${row.display_name}'s pay schedule frequency "${frequency}" has no ROE pay-period `
       + "type — Service Canada accepts weekly, biweekly, semi-monthly and monthly ROEs",
     );
   }
-  const worksheet = await roeWorksheet(orgId, employeePartyId, periodCount);
+  const context = await roeWindowContext(orgId, employeePartyId);
+  const worksheet = await readRoeReportingWindow(context);
   const finalPeriod = worksheet.periods[0] ?? null;
   if (!finalPeriod) {
     throw new PayrollError(`${row.display_name} has no committed pay periods for the ROE reporting window`);
@@ -990,20 +947,7 @@ export async function roeRecord(orgId: string, employeePartyId: string): Promise
     );
   }
 
-  const event = (await db.execute<{
-    id: string; interruption_on: string; last_insurable_earnings_on: string;
-    employment_id: string | null; subsidiary_id: string | null; first_day_worked: string | null; source_reference: string | null;
-    salary_continuance_end_on: string | null;
-  }>(sql`
-    select id, employment_id,subsidiary_id,first_day_worked::text as first_day_worked,source_reference,
-           interruption_on::text as interruption_on, last_insurable_earnings_on::text as last_insurable_earnings_on,
-           salary_continuance_end_on::text as salary_continuance_end_on
-      from payroll_roe_separation_events
-     where org_id = ${orgId} and employee_party_id = ${employeePartyId}
-       and status in ('confirmed','issued')
-     order by interruption_on desc, id desc
-     limit 1
-  `)).rows[0];
+  const event = context.event;
   if (!event) {
     throw new PayrollError(
       `${row.display_name} has no confirmed Record of Employment separation facts — `
@@ -1059,6 +1003,9 @@ export async function roeRecord(orgId: string, employeePartyId: string): Promise
       + " — review the separation facts and earned-period source before issuing the ROE",
     );
   }
+  if (!worksheet.sourceDocuments.length) {
+    throw new PayrollError(`${row.display_name} has no retained insurable-pay source in the confirmed ROE employment spell — qualify the original payroll periods before filing`);
+  }
   const earningComponents = (await db.execute<{
     component_id: string; component_name: string; pay_date: string; block: "none" | "17A" | "17C" | null;
   }>(sql`
@@ -1080,8 +1027,9 @@ export async function roeRecord(orgId: string, employeePartyId: string): Promise
          limit 1
       ) classification on true
      where line.org_id = ${orgId} and stub.employee_party_id = ${employeePartyId}
-       and line.kind = 'earning' and stub.pay_date in (
-         ${sql.join(worksheet.periods.map((period) => sql`${period.payDate}::date`), sql`, `)}
+       and stub.employment_id = ${event.employment_id}
+       and line.kind = 'earning' and stub.id in (
+         ${sql.join(worksheet.sourceDocuments.map((stub) => sql`${stub.id}::uuid`), sql`, `)}
        )
   `)).rows;
   const unmapped = earningComponents.filter((component) => component.block == null);
