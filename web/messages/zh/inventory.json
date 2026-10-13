@@ -286,6 +286,8 @@
     },
     "secondCount": "保存第二次盘点",
     "recordedQuantity": "已记录 {quantity}",
+    "observationContext": "{item}的观察背景（可选）",
+    "observationContextHint": "本次观察的来源或方法",
     "secondReason": "第二次盘点实测",
     "secondReasonHint": "第二次盘点与第一次不同。请说明差异原因（至少5个字符），以便与本次盘点一并记录。",
     "secondNotRecorded": "未记录。与第一次不同的第二次盘点需先填写差异原因（至少{minLength}个字符）才能保存。"

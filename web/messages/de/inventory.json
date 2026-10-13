@@ -286,6 +286,8 @@
     },
     "secondCount": "Zweite Zählung speichern",
     "recordedQuantity": "Erfasst: {quantity}",
+    "observationContext": "Beobachtungskontext für {item} (optional)",
+    "observationContextHint": "Quelle oder Methode dieser Beobachtung",
     "secondReason": "Zweite Zählbeobachtung",
     "secondReasonHint": "Die zweite Zählung weicht von der ersten ab. Erklären Sie die Abweichung (mindestens 5 Zeichen), damit sie mit dieser Zählung erfasst wird.",
     "secondNotRecorded": "Nicht erfasst. Eine zweite Zählung, die von der ersten abweicht, benötigt ihre Begründung (mindestens {minLength} Zeichen), bevor sie gespeichert wird."

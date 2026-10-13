@@ -244,6 +244,22 @@ test(
           countedQuantity: "8",
         }),
       );
+      const defaultAudit = await run(() => db.execute<{ reason: string; actor_id: string }>(sql`
+        select changes->>'reason' as reason, actor_id from audit_log
+        where org_id=${org.orgId} and row_id=${line.id} and changes->>'operation'='second_count'
+        order by at desc,id desc limit 1`));
+      assert.deepEqual(defaultAudit.rows, [{ reason: "Second count observation", actor_id: actor }]);
+      const preserved = await run(() => db.execute(sql`select expected_quantity::text,first_counted_quantity::text,
+        counted_quantity::text from stock_count_lines where org_id=${org.orgId} and id=${line.id}`));
+      await run(() => recordSecondCount(org.orgId, actor, { countId: count.id, lineId: line.id,
+        countedQuantity: "8", reason: "Modeled source review; not a physical count" }));
+      const sourceAudit = await run(() => db.execute<{ reason: string; actor_id: string }>(sql`
+        select changes->>'reason' as reason, actor_id from audit_log
+        where org_id=${org.orgId} and row_id=${line.id} and changes->>'operation'='second_count'
+        order by at desc,id desc limit 1`));
+      assert.deepEqual(sourceAudit.rows, [{ reason: "Modeled source review; not a physical count", actor_id: actor }]);
+      assert.deepEqual((await run(() => db.execute(sql`select expected_quantity::text,first_counted_quantity::text,
+        counted_quantity::text from stock_count_lines where org_id=${org.orgId} and id=${line.id}`))).rows,preserved.rows);
       detail = await run(() => getStockCountDetail(org.orgId, count.id, null));
       assert.equal(detail.lines[0]!.expectedQuantity, null);
       await run(() => submitStockCountForReview(org.orgId, actor, count.id));

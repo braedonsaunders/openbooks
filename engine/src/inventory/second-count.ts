@@ -14,7 +14,7 @@ import {
 } from "./stock-count-gates.ts";
 import { requiresSecondCount } from "./count-policy.ts";
 
-/** A second physical observation preserves the first and never re-snapshots expected stock. */
+/** A second count observation preserves the first and never re-snapshots expected stock. */
 export async function recordSecondCount(
   orgId: string,
   actorId: string | null,
@@ -100,7 +100,7 @@ export async function recordSecondCount(
     const audit =
       await tx.execute(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id)
       values(${orgId},'stock_count_lines',${input.lineId},'update',
-      ${JSON.stringify({ operation: "second_count", countId: header.id, reason: reason || "Independent physical observation", before, after: { secondCountedQuantity: quantity } })}::jsonb,${actorId}) returning id`);
+      ${JSON.stringify({ operation: "second_count", countId: header.id, reason: reason || "Second count observation", before, after: { secondCountedQuantity: quantity } })}::jsonb,${actorId}) returning id`);
     if (!audit.rows.length)
       throw new InventoryError("Second count was not audited");
     return { lineId: input.lineId, secondCountedQuantity: quantity };

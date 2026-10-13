@@ -286,6 +286,8 @@
     },
     "secondCount": "Salvar segunda contagem",
     "recordedQuantity": "Registrado: {quantity}",
+    "observationContext": "Contexto da observação de {item} (opcional)",
+    "observationContextHint": "Fonte ou método desta observação",
     "secondReason": "Observação da segunda contagem",
     "secondReasonHint": "A segunda contagem difere da primeira. Explique a diferença (pelo menos 5 caracteres) para registrá-la com esta contagem.",
     "secondNotRecorded": "Não registrado. Uma segunda contagem que difere da primeira precisa do seu motivo (pelo menos {minLength} caracteres) antes de ser salva."

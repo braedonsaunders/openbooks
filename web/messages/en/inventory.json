@@ -286,6 +286,8 @@
     },
     "secondCount": "Save second count",
     "recordedQuantity": "Recorded {quantity}",
+    "observationContext": "Observation context for {item} (optional)",
+    "observationContextHint": "Source or method of this observation",
     "secondReason": "Second count observation",
     "secondReasonHint": "The second count differs from the first. Explain the difference (at least 5 characters) so it is recorded with this count.",
     "secondNotRecorded": "Not recorded. A second count that differs from the first needs its reason, at least {minLength} characters, before it is saved."

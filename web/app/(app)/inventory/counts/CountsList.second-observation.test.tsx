@@ -205,6 +205,22 @@ test('an agreeing second observation is recorded without a reason prompt', async
   assert.equal('reason' in script.executionBodies[0]!, false)
 })
 
+test('an agreeing second observation retains optional source context without a difference prompt', async t => {
+  await mount(t)
+  await typeCount('7')
+  const context = document.querySelector('input[aria-label="Observation context for W-1 (optional)"]') as HTMLInputElement | null
+  assert.ok(context, 'the real row offers observation context even when quantities agree')
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(context, 'Modeled source review; not a physical count')
+    context.dispatchEvent(new window.Event('input', { bubbles: true }))
+    await tick()
+  })
+  await click(buttonNamed(messages.inventory.counts.secondCount))
+  assert.equal(script.promptCalls.length, 0)
+  assert.equal(script.executionBodies.length, 1)
+  assert.equal(script.executionBodies[0]!.reason, 'Modeled source review; not a physical count')
+})
+
 test('a differing second observation asks for its reason, and cancelling records nothing', async (t) => {
   await mount(t)
   await typeCount('8')

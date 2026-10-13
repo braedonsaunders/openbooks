@@ -286,6 +286,8 @@
     },
     "secondCount": "二次棚卸を保存",
     "recordedQuantity": "記録済み {quantity}",
+    "observationContext": "{item}の観測情報（任意）",
+    "observationContextHint": "この観測の情報源または方法",
     "secondReason": "二次棚卸の実測",
     "secondReasonHint": "二次棚卸の数量が初回と異なります。差異の理由を5文字以上で入力すると、この棚卸と一緒に記録されます。",
     "secondNotRecorded": "未記録です。初回と異なる二次棚卸は、保存前に差異の理由（{minLength}文字以上）が必要です。"

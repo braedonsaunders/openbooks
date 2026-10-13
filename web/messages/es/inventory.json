@@ -286,6 +286,8 @@
     },
     "secondCount": "Guardar segundo conteo",
     "recordedQuantity": "Registrado: {quantity}",
+    "observationContext": "Contexto de la observación de {item} (opcional)",
+    "observationContextHint": "Fuente o método de esta observación",
     "secondReason": "Observación del segundo conteo",
     "secondReasonHint": "El segundo conteo difiere del primero. Explique la diferencia (al menos 5 caracteres) para registrarla con este conteo.",
     "secondNotRecorded": "No registrado. Un segundo conteo que difiere del primero necesita su motivo (al menos {minLength} caracteres) antes de guardarse."

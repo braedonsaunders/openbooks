@@ -651,6 +651,7 @@ function CountDetailBody({
   const [busy, setBusy] = useState(false)
   const [postError, setPostError] = useState<string | null>(null)
   const [counted, setCounted] = useState<Record<string, string>>({})
+  const [observationContexts, setObservationContexts] = useState<Record<string, string>>({})
   // Unit cost for found (positive-variance) quantities, sent with Post. An
   // item with nothing valued on hand has no average, so the post refuses
   // that line until its cost is entered here.
@@ -674,7 +675,10 @@ function CountDetailBody({
   const unsavedObservation = header.status === 'counting' && canPost && lines.some(
     (l) => !l.adjustmentMovementId && hasUnsavedObservation(counted[l.id] ?? '', l.secondCountRequired ? null : l.countedQuantity),
   )
-  const hasUnsaved = unsavedObservation || Object.values(foundCosts).some((cost) => cost.trim() !== '')
+  const unsavedContext = header.status === 'counting' && canPost && lines.some(
+    line => line.secondCountRequired && !line.adjustmentMovementId && (observationContexts[line.id] ?? '').trim() !== '',
+  )
+  const hasUnsaved = unsavedObservation || unsavedContext || Object.values(foundCosts).some((cost) => cost.trim() !== '')
   useEffect(() => {
     registerDirty(COUNT_DETAIL_DIRTY_SOURCE, hasUnsaved)
     return () => registerDirty(COUNT_DETAIL_DIRTY_SOURCE, false)
@@ -683,8 +687,8 @@ function CountDetailBody({
   // The reason prompt re-asks when the reason is under the engine's minimum,
   // keeping the typed text so the operator corrects it instead of retyping.
   // Cancelling or dismissing it returns null.
-  async function askSecondReason(): Promise<string | null> {
-    let typed = ''
+  async function askSecondReason(initialValue: string): Promise<string | null> {
+    let typed = initialValue
     for (;;) {
       const answer = await promptDialog({
         title: t('counts.secondReason'),
@@ -705,9 +709,9 @@ function CountDetailBody({
   async function observeCount(line: StockCountDetail['lines'][number]) {
     setPostError(null)
     const quantity = (counted[line.id] ?? '').trim()
-    let reason: string | null = null
-    if (line.secondCountRequired && secondObservationNeedsReason(quantity, line.countedQuantity)) {
-      reason = await askSecondReason()
+    let reason: string | null = line.secondCountRequired ? (observationContexts[line.id] ?? '').trim() : null
+    if (line.secondCountRequired && secondObservationNeedsReason(quantity, line.countedQuantity) && (reason?.length ?? 0) < SECOND_COUNT_REASON_MIN_LENGTH) {
+      reason = await askSecondReason(reason ?? '')
       if (reason === null) {
         setPostError(t('counts.secondNotRecorded', { minLength: SECOND_COUNT_REASON_MIN_LENGTH }))
         return
@@ -786,6 +790,15 @@ function CountDetailBody({
               value={counted[l.id] ?? ''}
               onChange={(e) => setCounted((prev) => ({ ...prev, [l.id]: e.target.value }))}
             />
+            {l.secondCountRequired && <Input
+              disabled={busy || execution.busy}
+              className="w-56 text-left"
+              aria-label={t('counts.observationContext', { item: l.itemCode ?? itemLabel(l.itemId) })}
+              placeholder={t('counts.observationContextHint')}
+              maxLength={500}
+              value={observationContexts[l.id] ?? ''}
+              onChange={event => setObservationContexts(previous => ({ ...previous, [l.id]: event.target.value }))}
+            />}
             {/* A saved count clears the entry field for the next observation;
                 the recorded quantity stays in view so it never reads as lost. */}
             {l.countedQuantity != null && !(counted[l.id] ?? '').trim() ? (
