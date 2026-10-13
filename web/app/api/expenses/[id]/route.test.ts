@@ -147,8 +147,8 @@ registerHooks({
 const routeUrl = './route.ts?expense-occ-test'
 const { GET, PATCH } = (await import(routeUrl)) as typeof import('./route.ts')
 
-const STORED_REVISION = '2026-08-24T12:00:00.100001Z'
-const NEXT_REVISION = '2026-08-24T12:00:00.100002Z'
+const STORED_REVISION = '42'
+const NEXT_REVISION = '43'
 const EXPENSE_ID = '00000000-0000-4000-8000-00000000e001'
 
 function reset(): void {
@@ -239,9 +239,9 @@ test('PATCH saves only under an exact matching revision and returns the fresh to
       return { rows: [{ status: 'draft', updatedAt: storedRevision }] }
     }
     if (text.includes('update documents')) {
-      assert.match(text, /greatest\(/, 'the token advances monotonically inside the lock')
+      assert.match(text, /returning id/, 'the required header write must return its persisted identity')
       storedRevision = NEXT_REVISION
-      return { rows: [] }
+      return { rows: [{ id: EXPENSE_ID }] }
     }
     return { rows: [] }
   }
@@ -254,6 +254,7 @@ test('PATCH saves only under an exact matching revision and returns the fresh to
   assert.deepEqual(routeState.auditCalls, [{ action: 'update', documentId: EXPENSE_ID }])
   const lock = routeState.calls.find((call) => call.kind === 'tx-execute' && call.text.includes('for update'))
   assert.ok(lock, 'the write transaction locks the row first')
+  assert.match(lock.text, /revision_seq/, 'the lock reads the native counter revision')
 })
 
 test('GET exposes the exact persisted revision so callers can fence their next save', async () => {
