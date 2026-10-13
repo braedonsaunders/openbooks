@@ -251,7 +251,8 @@
       "tax_class_invalid": "Choisissez une catégorie fiscale active pour ce régime.",
       "invalid_idempotency_key": "Ce formulaire a déjà été envoyé avec des valeurs différentes. Fermez-le et créez une nouvelle fiche.",
       "save_failed": "Impossible de créer l’immobilisation."
-    }
+    },
+    "proposedBasis": "Base proposée"
   },
   "equipment": {
     "title": "Équipement",

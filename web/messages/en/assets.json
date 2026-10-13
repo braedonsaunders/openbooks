@@ -251,7 +251,8 @@
       "tax_class_invalid": "Choose an active tax class for that regime.",
       "invalid_idempotency_key": "This form was already submitted with different values. Close and start a new record.",
       "save_failed": "Could not create the asset."
-    }
+    },
+    "proposedBasis": "Proposed basis"
   },
   "equipment": {
     "title": "Equipment",

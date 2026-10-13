@@ -251,7 +251,8 @@
       "tax_class_invalid": "请选择该税制下的有效税务类别。",
       "invalid_idempotency_key": "此表单已使用不同的值提交。请关闭并新建记录。",
       "save_failed": "无法创建资产。"
-    }
+    },
+    "proposedBasis": "拟定金额"
   },
   "equipment": {
     "title": "设备",

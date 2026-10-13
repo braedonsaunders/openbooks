@@ -1,6 +1,8 @@
 'use client'
 
 
+import { canonicalNonNegativeDecimal } from '@openbooks/engine/money/decimal'
+import { cmp, sub } from '@openbooks/engine/money/money'
 import { useMoney } from '@/components/money-provider'
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
@@ -208,6 +210,18 @@ export function AssetDrawer({
   const [inServiceOn, setInServiceOn] = useState(a.in_service_on ?? '')
   const [openingAccumulated, setOpeningAccumulated] = useState(a.opening_accumulated_depreciation != null ? String(a.opening_accumulated_depreciation) : '')
   const [openingAsOf, setOpeningAsOf] = useState(a.opening_accumulated_as_of ?? '')
+  const summary = createMode
+    ? (() => {
+      const remainingCost = canonicalNonNegativeDecimal(cost)
+      const accumulated = canonicalNonNegativeDecimal(openingAccumulated === '' ? '0' : openingAccumulated)
+      return {
+        remainingCost, accumulated,
+        netBookValue: remainingCost !== null && accumulated !== null && cmp(accumulated, remainingCost) <= 0
+          ? sub(remainingCost, accumulated) : null,
+      }
+    })()
+    : payload.totals
+  const summaryMoney = (value: string | null) => value === null ? '—' : money(value)
   const [serialNumber, setSerialNumber] = useState(a.serial_number ?? '')
   const [method, setMethod] = useState(a.depreciation_method ?? payload.category?.default_method ?? 'straight_line')
   const [depreciationMethodId, setDepreciationMethodId] = useState<string>(a.depreciation_method_id ?? payload.category?.default_depreciation_method_id ?? '')
@@ -641,7 +655,7 @@ export function AssetDrawer({
       </div>
       </Popover>
     </div> : undefined}
-    footer={<div className="flex w-full items-center gap-3"><span className={cn('text-xs', saveState === 'error' ? 'text-red-600 dark:text-red-400' : 'text-slate-500 dark:text-slate-400')}>{mode === 'edit' ? saveState === 'saving' ? tCommon('actions.saving') : dirty ? t('drawer.unsavedChanges') : null : null}</span><span className="flex-1" /><span className="text-sm text-slate-600 tabular-nums dark:text-slate-300">{t('labels.cost')} {money(payload.totals.remainingCost)} · {t('labels.accumulated')} {money(payload.totals.accumulated)} · <strong className="text-slate-900 dark:text-slate-100">{t('labels.nbv')} {money(payload.totals.netBookValue)}</strong></span></div>}
+    footer={<div className="flex w-full items-center gap-3"><span className={cn('text-xs', saveState === 'error' ? 'text-red-600 dark:text-red-400' : 'text-slate-500 dark:text-slate-400')}>{mode === 'edit' ? saveState === 'saving' ? tCommon('actions.saving') : dirty ? t('drawer.unsavedChanges') : null : null}</span><span className="flex-1" /><span className="text-sm text-slate-600 tabular-nums dark:text-slate-300">{createMode ? <>{t('create.proposedBasis')} · </> : null}{t('labels.cost')} {summaryMoney(summary.remainingCost)} · {t('labels.accumulated')} {summaryMoney(summary.accumulated)} · <strong className="text-slate-900 dark:text-slate-100">{t('labels.nbv')} {summaryMoney(summary.netBookValue)}</strong></span></div>}
   >
     <ActionAlert error={deleteAction.refusal} fallbackMessage={t('drawer.saveFailed')} />
     {tab === 'details' ? <div className="p-1"><HeaderFields layout={effectiveLayout} editable={editable} renderField={renderAssetField} /></div> : null}

@@ -251,7 +251,8 @@
       "tax_class_invalid": "その制度で有効な税務クラスを選択してください。",
       "invalid_idempotency_key": "このフォームは異なる値で既に送信されています。閉じて新しいレコードを開始してください。",
       "save_failed": "固定資産を作成できませんでした。"
-    }
+    },
+    "proposedBasis": "提案額"
   },
   "equipment": {
     "title": "設備",

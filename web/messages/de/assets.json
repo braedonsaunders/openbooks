@@ -251,7 +251,8 @@
       "tax_class_invalid": "Wählen Sie eine aktive Steuerklasse für dieses Regelwerk.",
       "invalid_idempotency_key": "Dieses Formular wurde bereits mit anderen Werten übermittelt. Schließen Sie es und beginnen Sie einen neuen Datensatz.",
       "save_failed": "Die Anlage konnte nicht erstellt werden."
-    }
+    },
+    "proposedBasis": "Vorgeschlagene Basis"
   },
   "equipment": {
     "title": "Geräte",

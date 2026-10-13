@@ -251,7 +251,8 @@
       "tax_class_invalid": "Seleccione una clase fiscal activa para ese régimen.",
       "invalid_idempotency_key": "Este formulario ya se envió con valores diferentes. Ciérrelo e inicie un registro nuevo.",
       "save_failed": "No se pudo crear el activo."
-    }
+    },
+    "proposedBasis": "Base propuesta"
   },
   "equipment": {
     "title": "Equipo",

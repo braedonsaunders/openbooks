@@ -285,3 +285,38 @@ test('a draft names exactly the fields still missing on the schedule tab', async
   )
   assert.doesNotMatch(body, /set cost, in-service date/, 'the generic instruction must not replace the named fields')
 })
+
+
+async function enterAssetAmount(labelText: string, value: string) {
+  const label = [...document.querySelectorAll('label')].find(item => item.textContent === labelText)
+  assert.ok(label?.htmlFor, `native amount label ${labelText} must name its input`)
+  const input = document.getElementById(label.htmlFor)
+  assert.ok(input instanceof HTMLInputElement)
+  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!
+  await act(async () => {
+    setter.call(input, value)
+    input.dispatchEvent(new window.Event('input', { bubbles: true }))
+    await tick()
+  })
+}
+
+test('unsaved asset basis follows exact proposed inputs without manufacturing stored totals', async (t) => {
+  await mountDrawer(t, baseProps())
+  await enterAssetAmount('Cost', '94200')
+  await enterAssetAmount('Opening accumulated', '31400')
+  assert.match(document.body.textContent ?? '', /Proposed basis.*Cost.*94,200.*Accumulated depreciation.*31,400.*Net book value.*62,800/s)
+  await enterAssetAmount('Opening accumulated', '94200.0001')
+  assert.match(document.body.textContent ?? '', /Proposed basis.*Net book value —/s, 'an invalid opening cannot become a negative proposed book value')
+  await enterAssetAmount('Cost', '')
+  assert.match(document.body.textContent ?? '', /Proposed basis.*Cost —/s, 'missing proposed cost cannot reuse the placeholder zero')
+})
+
+test('saved asset summary retains authoritative financial totals', async (t) => {
+  const saved = payload()
+  saved.asset.id = '01a1265a-0619-7f7a-b63b-e72cc86eb7ef'
+  saved.asset.acquisition_cost = '12000.0000'
+  saved.totals = { remainingCost: '10000.0000', accumulated: '4000.0000', netBookValue: '6000.0000', posted: '4000.0000', planned: '0.0000' }
+  await mountDrawer(t, baseProps({ payload: saved, createMode: false }))
+  assert.match(document.body.textContent ?? '', /Cost.*10,000.*Accumulated depreciation.*4,000.*Net book value.*6,000/s)
+  assert.doesNotMatch(document.body.textContent ?? '', /Proposed basis/)
+})
