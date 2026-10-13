@@ -26,7 +26,7 @@ import {
   postedAssetBasisEditRefusal,
   type RequestedAssetBasis,
 } from "../../../../lib/asset-basis-guard";
-import { loadAsset, loadAssetWithRunner } from "../_lib";
+import { loadAsset, loadAssetWithRunner, type AssetPayload } from "../_lib";
 import { moneyRefusal } from "../../../../lib/payroll-decimal-refusal";
 import { exactMoney, isoDate } from "../../../../lib/api/json";
 import {
@@ -803,6 +803,7 @@ export const PATCH = defineRoute({
                     before: lockedExisting,
                     after: updated,
                   })}::jsonb, ${user.id})`);
+        let scheduleBuild: NonNullable<AssetPayload["scheduleBuild"]> | undefined;
         try {
           // Metadata and unchanged-account saves must retain controlled valuation
           // schedules. Financial-history assets cannot change basis through PATCH.
@@ -814,7 +815,7 @@ export const PATCH = defineRoute({
             (effectiveStatus === "in_service" ||
               effectiveStatus === "fully_depreciated")
           ) {
-            await buildAllSchedulesWithRunner(
+            scheduleBuild = await buildAllSchedulesWithRunner(
               tx,
               id,
               user.orgId,
@@ -829,9 +830,11 @@ export const PATCH = defineRoute({
           // Partial drafts legitimately have no category/date/life yet.
         }
         // Return the saved revision while still holding the parent lock.
-        return loadAssetWithRunner(tx, id, user.orgId, {
+        const saved = await loadAssetWithRunner(tx, id, user.orgId, {
           allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
         });
+        if (!saved) throw new AssetNotFoundError("asset not found");
+        return scheduleBuild ? { ...saved, scheduleBuild } : saved;
       });
       return NextResponse.json(payload);
     } catch (error) {

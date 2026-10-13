@@ -200,7 +200,9 @@
     "deleteMessage": "Esto elimina permanentemente el activo borrador y su cronograma. Esta acción no se puede deshacer.",
     "deleted": "Activo eliminado",
     "deleteOutcomeUnknown": "No se pudo confirmar la eliminación. Actualice la página para comprobar si se completó antes de volver a intentarlo.",
-    "unsavedChanges": "Cambios sin guardar"
+    "unsavedChanges": "Cambios sin guardar",
+    "scheduleHorizonTitle": "Debe ampliarse el calendario de depreciación",
+    "scheduleHorizonHelp": "El activo está en servicio, pero uno o varios libros no pudieron programar {count} meses futuros fuera del calendario contable disponible. Cree los períodos contables que faltan y reconstruya los planes antes de su vencimiento."
   },
   "create": {
     "title": "Nuevo activo",

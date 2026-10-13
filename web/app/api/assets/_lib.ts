@@ -124,6 +124,8 @@ export interface AssetPayload {
     depreciationMethodId: string | null
     methodName: string | null
   }[]
+  /** Actual results of this save's native schedule builds, including unmapped future months. */
+  scheduleBuild?: { scheduleId: string; lineCount: number; skippedMonths: string[] }[]
   schedulePage: { total: number; page: number; perPage: number; bookId: string | null; query: string }
   hasAccountingEvidence: boolean
   /** Fields a draft still lacks for placement in service; empty once ready. */

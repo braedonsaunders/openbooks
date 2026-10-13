@@ -258,11 +258,12 @@ export function AssetDrawer({
         toast.error(await readApiErrorMessage(res, t('review.rebuildFailed')))
         return
       }
-      const data = (await res.json()) as { rebuilt?: unknown[]; problems?: string[] }
+      const data = (await res.json()) as { rebuilt?: AssetPayload["scheduleBuild"]; problems?: string[] }
       if (data.problems?.length) {
         toast.error(data.problems[0] ?? t('review.rebuildFailed'))
         return
       }
+      if (data.rebuilt) setScheduleBuild(data.rebuilt)
       toast.success(t('review.rebuilt', { count: data.rebuilt?.length ?? 0 }))
       router.refresh()
     } catch {
@@ -275,6 +276,7 @@ export function AssetDrawer({
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty' | 'error'>('saved')
   const [dirty, setDirty] = useState(false)
   const [revision, setRevision] = useState<string>(a.updated_at)
+  const [scheduleBuild, setScheduleBuild] = useState(payload.scheduleBuild)
   const editVersion = useRef(0)
   const saveInFlight = useRef(false)
 
@@ -422,6 +424,7 @@ export function AssetDrawer({
     }
     const saved = await res.json() as AssetPayload
     setRevision(saved.asset.updated_at)
+    if (saved.scheduleBuild) setScheduleBuild(saved.scheduleBuild)
     return saved
   }
 
@@ -610,6 +613,7 @@ export function AssetDrawer({
     }
   }
 
+  const skippedMonths = [...new Set((scheduleBuild ?? []).flatMap(result => result.skippedMonths))].sort()
   const hasAccountingEvidence = payload.hasAccountingEvidence
   // The schedule empty state names only the fields still missing, from the
   // same placement rules the server applies; a complete draft says it is ready.
@@ -658,6 +662,11 @@ export function AssetDrawer({
     footer={<div className="flex w-full items-center gap-3"><span className={cn('text-xs', saveState === 'error' ? 'text-red-600 dark:text-red-400' : 'text-slate-500 dark:text-slate-400')}>{mode === 'edit' ? saveState === 'saving' ? tCommon('actions.saving') : dirty ? t('drawer.unsavedChanges') : null : null}</span><span className="flex-1" /><span className="text-sm text-slate-600 tabular-nums dark:text-slate-300">{createMode ? <>{t('create.proposedBasis')} · </> : null}{t('labels.cost')} {summaryMoney(summary.remainingCost)} · {t('labels.accumulated')} {summaryMoney(summary.accumulated)} · <strong className="text-slate-900 dark:text-slate-100">{t('labels.nbv')} {summaryMoney(summary.netBookValue)}</strong></span></div>}
   >
     <ActionAlert error={deleteAction.refusal} fallbackMessage={t('drawer.saveFailed')} />
+    {skippedMonths.length > 0 ? <section role="status" className="mb-4 rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-950 dark:border-amber-700 dark:bg-amber-950 dark:text-amber-100">
+      <p className="font-medium">{t('drawer.scheduleHorizonTitle')}</p>
+      <p>{t('drawer.scheduleHorizonHelp', { count: skippedMonths.length })}</p>
+      <p className="mt-1 tabular-nums">{skippedMonths.join(', ')}</p>
+    </section> : null}
     {tab === 'details' ? <div className="p-1"><HeaderFields layout={effectiveLayout} editable={editable} renderField={renderAssetField} /></div> : null}
     {tab === 'tax' ? <div className="space-y-5 p-1">{taxConfigurations.map((config) => {
       const values = taxValues[config.code] ?? {}

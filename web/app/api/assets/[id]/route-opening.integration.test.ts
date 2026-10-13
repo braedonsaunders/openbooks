@@ -133,6 +133,7 @@ interface OpeningDrawerPayload {
   asset: { opening_accumulated_depreciation: string | null; opening_accumulated_as_of: string | null };
   totals: { accumulated: string; netBookValue: string };
   schedule: { plannedAmount: string }[];
+  scheduleBuild?: { scheduleId: string; lineCount: number; skippedMonths: string[] }[];
 }
 
 async function getPayload(fixture: Fixture): Promise<{ status: number; body: OpeningDrawerPayload }> {
@@ -149,6 +150,7 @@ async function getPayload(fixture: Fixture): Promise<{ status: number; body: Ope
 test("PATCH places a mid-life asset in service with opening figures and the drawer ties out", async () => {
   const fixture = await seedFixture();
   try {
+    const journalBefore = (await db.execute(sql`select id from journal_entries where org_id=${fixture.orgId} order by id`)).rows;
     const response = await PATCH(
       await patchRequest(fixture, {
         acquisitionCost: "120000",
@@ -163,6 +165,14 @@ test("PATCH places a mid-life asset in service with opening figures and the draw
     );
     assert.equal(response.status, 200, `PATCH must accept the opening figures (${await response.clone().text().then((t) => t.slice(0, 200))})`);
     const saved = (await response.json()) as OpeningDrawerPayload;
+    assert.equal(saved.scheduleBuild?.length, 1);
+    const build = saved.scheduleBuild![0]!;
+    assert.ok(build.scheduleId);
+    assert.equal(build.skippedMonths.length, 53);
+    assert.equal(build.skippedMonths[0], '2027-01-01');
+    assert.equal(build.skippedMonths.at(-1), '2031-05-01');
+    assert.equal((await db.execute(sql`select count(*)::int as n from depreciation_schedule_lines where org_id=${fixture.orgId} and schedule_id=${build.scheduleId}`)).rows[0]!.n, build.lineCount);
+    assert.deepEqual((await db.execute(sql`select id from journal_entries where org_id=${fixture.orgId} order by id`)).rows, journalBefore, 'placement builds metadata without a journal entry');
     assert.equal(saved.asset.opening_accumulated_depreciation, "55000.0000");
     assert.equal(String(saved.asset.opening_accumulated_as_of).slice(0, 10), "2025-12-31");
     assert.equal(saved.totals.accumulated, "55000.0000", "drawer accumulated carries the opening figure");

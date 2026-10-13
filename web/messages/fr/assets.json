@@ -200,7 +200,9 @@
     "deleteMessage": "Cela supprime définitivement l'actif brouillon et son plan. Cette action est irréversible.",
     "deleted": "Actif supprimé",
     "deleteOutcomeUnknown": "La suppression n’a pas pu être confirmée. Actualisez la page pour vérifier si elle a abouti avant de réessayer.",
-    "unsavedChanges": "Modifications non enregistrées"
+    "unsavedChanges": "Modifications non enregistrées",
+    "scheduleHorizonTitle": "Le calendrier d’amortissement doit être prolongé",
+    "scheduleHorizonHelp": "L’actif est en service, mais un ou plusieurs livres n’ont pas pu planifier {count} mois futurs au-delà du calendrier comptable disponible. Créez les périodes comptables manquantes, puis reconstruisez les plans avant ces échéances."
   },
   "create": {
     "title": "Nouvelle immobilisation",

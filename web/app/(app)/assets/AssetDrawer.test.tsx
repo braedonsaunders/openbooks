@@ -318,3 +318,29 @@ test('saved asset summary retains authoritative financial totals', async (t) => 
   assert.match(document.body.textContent ?? '', /Cost.*10,000.*Accumulated depreciation.*4,000.*Net book value.*6,000/s)
   assert.doesNotMatch(document.body.textContent ?? '', /Proposed basis/)
 })
+
+
+test('successful placement keeps the actual unmapped-month warning visible after the save', async (t) => {
+  const draft = draftPayload([])
+  const saved = { ...draft, asset: { ...draft.asset, status: 'in_service', updated_at: 'rev-2' },
+    scheduleBuild: [
+      { scheduleId: 'primary-plan', lineCount: 12, skippedMonths: ['2027-01-01', '2027-02-01'] },
+      { scheduleId: 'secondary-plan', lineCount: 12, skippedMonths: ['2027-01-01'] },
+    ] }
+  t.mock.method(globalThis, 'fetch', async (_url: unknown, options?: RequestInit) => {
+    assert.equal(options?.method, 'PATCH')
+    const body = JSON.parse(String(options?.body))
+    assert.equal(body.status, 'in_service')
+    assert.equal(body.expectedUpdatedAt, 'rev-1')
+    return new Response(JSON.stringify(saved), { status: 200 })
+  })
+  await mountDrawer(t, baseProps({ payload: draft, categories: [EQUIPMENT], accounts: CATEGORY_ACCOUNTS, createMode: false }))
+  const place = [...document.querySelectorAll('button')].find(button => button.textContent?.trim() === 'Place in service')
+  assert.ok(place)
+  await act(async () => { place.click(); await tick() })
+  assert.match(document.body.textContent ?? '', /Depreciation calendar needs extension/)
+  assert.match(document.body.textContent ?? '', /could not schedule 2 future month/)
+  assert.match(document.body.textContent ?? '', /2027-01-01, 2027-02-01/)
+  await openScheduleTab()
+  assert.match(document.body.textContent ?? '', /Create the missing accounting periods, then rebuild schedules/)
+})

@@ -200,7 +200,9 @@
     "deleteMessage": "此操作将永久删除该草稿资产及其计划，且无法撤销。",
     "deleted": "资产已删除",
     "deleteOutcomeUnknown": "无法确认删除结果。请刷新页面确认是否已完成，再决定是否重试。",
-    "unsavedChanges": "有未保存的更改"
+    "unsavedChanges": "有未保存的更改",
+    "scheduleHorizonTitle": "需要延长折旧日历",
+    "scheduleHorizonHelp": "资产已投入使用，但一个或多个账簿无法为现有会计日历之外的 {count} 个未来月份生成计划。请创建缺失的会计期间，并在这些月份到期前重新生成计划。"
   },
   "create": {
     "title": "新建固定资产",

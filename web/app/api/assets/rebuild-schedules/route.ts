@@ -73,7 +73,9 @@ export const POST = defineRoute({
     const rebuilt: {
       assetId: string;
       assetNumber: string;
+      scheduleId: string;
       lineCount: number;
+      skippedMonths: string[];
     }[] = [];
     const problems: string[] = [];
     for (const assetId of assetIds) {
@@ -92,7 +94,9 @@ export const POST = defineRoute({
         rebuilt.push({
           assetId,
           assetNumber: byId.get(assetId) ?? assetId,
+          scheduleId: built.scheduleId,
           lineCount: built.lineCount,
+          skippedMonths: built.skippedMonths,
         });
       } catch (e: unknown) {
         const msg = e instanceof Error ? e.message : String(e);
