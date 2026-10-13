@@ -96,3 +96,20 @@ export async function readRoeSubsequentService(scope: RoeEmployeeScope,preceding
       where org_id=${scope.orgId} and preceding_event_id=${event.id}`)).rows[0]??null;
   });
 }
+
+/** Resolve the selected Cabinet version without accepting a client-supplied file hash. */
+export async function readRoeSubsequentServiceContext(scope: RoeEmployeeScope, precedingEventId: string, sourceFileId?: string) {
+  if (!isUuid(precedingEventId) || sourceFileId !== undefined && !isUuid(sourceFileId))
+    throw new PayrollError('Choose the original separation event and retained source file');
+  return withOrgTransaction(scope.orgId, async () => {
+    const record = await readRoeSubsequentService(scope, precedingEventId);
+    const source = sourceFileId ? (await db.execute<{id:string;versionId:string;sha256:string;name:string}>(sql`
+      select f.id,v.id as "versionId",v.content_hash as sha256,f.name from files f
+      join file_versions v on v.file_id=f.id and v.id=f.current_version_id
+      where f.org_id=${scope.orgId} and f.id=${sourceFileId} and not f.is_inactive
+        and v.created_by=${scope.actorId}`)).rows[0] ?? null : null;
+    if (sourceFileId && (!source || !/^[a-f0-9]{64}$/.test(source.sha256)))
+      throw new PayrollError('Select the original return-to-work file uploaded to Cabinet by the qualifying operator');
+    return {record,source};
+  });
+}

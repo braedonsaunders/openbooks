@@ -1377,6 +1377,19 @@
       "employer": "Legal employer: {name}",
       "importHistory": "Import ROE reporting evidence",
       "importHistoryHelp": "Use the shared importer for historical periods or retained earning-line evidence. Source-qualified insurance and hours are required; missing periods are not assumed to be nil."
+    },
+    "subsequentService": {
+      "title": "Return to work after this interruption",
+      "help": "Retain the original first day worked after this interruption, for the same employment and legal employer. A pay date or current hire date does not establish a return.",
+      "issued": "This issued event retains its original return-to-work evidence. It cannot be changed here.",
+      "retry": "Retry",
+      "retained": "Retained return",
+      "firstWorked": "First day worked after returning",
+      "file": "Original return-to-work source in File Cabinet",
+      "reference": "Employee and return reference in the source",
+      "reason": "Qualification or correction reason",
+      "saving": "Saving…",
+      "save": "Save return-to-work evidence"
     }
   },
   "separations": {
