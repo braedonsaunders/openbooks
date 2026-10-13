@@ -208,7 +208,7 @@ test("global-project margin excludes another legal entity's cost, commitments an
   }));
 
 test("new margin awards retain complete economic policy while dated changes and adjustments preserve original evidence",{skip:!DB},()=>withHarness(setup,async h=>{
- const {query,program,worker}=await seedMargin(h,"2026-07-31",{projectProfitCap:"1000",projectLossCap:"2000",poolRounding:"pool"});
+ const {query,program}=await seedMargin(h,"2026-07-31",{projectProfitCap:"1000",projectLossCap:"2000",poolRounding:"pool"});
  const first=await settleIncentivePeriod(query);assert.equal(first.awards.length,1);
  const award=first.awards[0]!;assert.equal(award.value,"350.0000");
  const approved=await submitBenefitAward({orgId:h.org.orgId,actorId:h.actorId,awardId:award.id});
