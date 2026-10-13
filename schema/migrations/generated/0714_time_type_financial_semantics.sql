@@ -6,6 +6,9 @@ SET standard_conforming_strings = on;
 SET client_min_messages = warning;
 SET search_path = public, pg_catalog;
 
+CREATE INDEX pay_stub_lines_time_type_policy ON public.pay_stub_lines (org_id, time_type_id)
+WHERE time_type_id IS NOT NULL;
+
 CREATE FUNCTION public.time_type_financial_semantics_guard() RETURNS trigger
 LANGUAGE plpgsql SET search_path = public, pg_catalog AS $$
 BEGIN

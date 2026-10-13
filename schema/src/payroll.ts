@@ -696,6 +696,8 @@ export const payStubLines = pgTable(
   },
   (t) => [
     index("pay_stub_lines_stub").on(t.stubId, t.sequence),
+    index("pay_stub_lines_time_type_policy").on(t.orgId, t.timeTypeId)
+      .where(sql`${t.timeTypeId} IS NOT NULL`),
     check("pay_stub_lines_derived_quantity_evidence", sql`
       (${t.derivedQuantity} is null and ${t.derivedRuleCode} is null) or
       (${t.derivedQuantity} is not null and ${t.derivedQuantity} > 0 and ${t.derivedQuantity} <> 'NaN'::numeric
