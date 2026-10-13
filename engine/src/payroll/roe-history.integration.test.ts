@@ -132,7 +132,7 @@ test('historical imports refuse native overlap, foreign source identity, source-
     await assert.rejects(importRoePriorPeriod(scope(f),prior(f,ref,{periodStart:'2026-04-26',periodEnd:'2026-05-09',earnedFrom:'2026-05-08',earnedTo:'2026-05-08'})),error=>errorChainMatches(error,/cannot replace or duplicate retained committed payroll/));
     await assert.rejects(importRoePriorPeriod(scope(f),prior(f,foreignRef)),/exact retained version and hash/);
     await assert.rejects(importRoePriorPeriod(scope(f),prior(f,{...ref,sourceSha256:'f'.repeat(64)})),/exact retained version and hash/);
-    await assert.rejects(importRoePriorPeriod({...scope(f),subsidiaryId:other.subsidiaryId},prior(f,ref)),/selected native employment and legal employer/);
+    await assert.rejects(importRoePriorPeriod({...scope(f),subsidiaryId:other.subsidiaryId},prior(f,ref)),/Choose one Canadian employee with a native legal employer in your payroll scope/);
     await assert.rejects(importRoePriorPeriod({...scope(f),allowedSubsidiaryIds:new Set<string>()},prior(f,ref)),/payroll scope|native legal employer/);
     await assert.rejects(importRoePriorPeriod(scope(f),prior(f,ref,{filingAccountId:other.filingAccountId})),error=>errorChainMatches(error,/native Canadian payroll filing account/));
     const accepted=await importRoePriorPeriod(scope(f),prior(f,ref));
