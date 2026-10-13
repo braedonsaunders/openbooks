@@ -9,10 +9,10 @@ import { seedPayrollBenefitProgram } from "../../testing/benefit-fixtures.ts";
 import { seedBenefitIncentivePosting } from "../../testing/benefit-incentive-posting.ts";
 import { mkSecondSubsidiary, seedComponent, seedEmployment, seedProject, setupHarness, withHarness } from "../../testing/hrm-harness.ts";
 import type { ProjectMarginSnapshot } from "./project-margin-settlement.ts";
-import { recordSettledAward } from "./awards.ts";
+import { recordSettledAward, submitBenefitAward } from "./awards.ts";
 import { errorChainMatches } from "../../testing/error-chain.ts";
 import { addProgramMembership,getBenefitProgram,updateBenefitProgram,type CreateBenefitProgramQuery } from "./programs.ts";
-import { previewIncentiveSettlement, settleIncentivePeriod, type IncentivePreview } from "./settlement.ts";
+import { createAdjustingAward, previewIncentiveSettlement, settleIncentivePeriod, type IncentivePreview } from "./settlement.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 const SPEC = {
@@ -211,6 +211,9 @@ test("new margin awards retain complete economic policy while dated changes and 
  const {query,program,worker}=await seedMargin(h,"2026-07-31",{projectProfitCap:"1000",projectLossCap:"2000",poolRounding:"pool"});
  const first=await settleIncentivePeriod(query);assert.equal(first.awards.length,1);
  const award=first.awards[0]!;assert.equal(award.value,"350.0000");
+ const approved=await submitBenefitAward({orgId:h.org.orgId,actorId:h.actorId,awardId:award.id});
+ assert.equal(approved.status,"approved","The pinned no-approval policy uses the supported submission lifecycle");
+
  type Retained={id:string;program_snapshot:Record<string,unknown>;source_snapshot:Record<string,unknown>};
  const read=async(id:string)=>{
   const rows=(await db.execute<Retained>(sql`select id,program_snapshot,source_snapshot from hrm_benefit_awards
@@ -231,14 +234,16 @@ test("new margin awards retain complete economic policy while dated changes and 
  const changed=await getBenefitProgram(db,h.org.orgId,h.actorId,program.id);assert.equal(changed.lossPercentRate,"20.0000");
  assert.equal(changed.includeOpenCommitments,false);
  assert.deepEqual((await settleIncentivePeriod(query)).awards.map(item=>item.id),[award.id]);assert.deepEqual(await read(award.id),original);
- const adjustmentInput={orgId:h.org.orgId,actorId:h.actorId,programId:program.id,employmentId:worker.employmentId,
-  periodFrom:query.periodFrom,periodTo:query.periodTo,currency:"USD",value:"10.00",sourceKey:`adjust:${award.id}:economic-evidence`,
-  adjustsAwardId:award.id,evidence:{reason:"Declared original-period adjustment",kind:"incentive-adjustment"}};
- const adjustment=await recordSettledAward(adjustmentInput);assert.equal(adjustment.value,"10.0000");
+ const adjustmentInput={orgId:h.org.orgId,actorId:h.actorId,awardId:award.id,correctionId:randomUUID(),
+  value:"10.00",reason:"Declared original-period adjustment"};
+ const adjustment=await createAdjustingAward(adjustmentInput);assert.equal(adjustment.value,"10.0000");
+ assert.equal(adjustment.adjustsAwardId,award.id);
  const retainedAdjustment=await read(adjustment.id);
  assert.deepEqual(retainedAdjustment.program_snapshot,original.program_snapshot,"An adjustment copies the retained original policy, including loss and cost terms");
  assert.deepEqual(retainedAdjustment.source_snapshot,original.source_snapshot,"Current policy and new evidence cannot reinterpret the original source");
- await assert.rejects(recordSettledAward(adjustmentInput),/already recorded/);
+ assert.equal((await createAdjustingAward(adjustmentInput)).id,adjustment.id,"The same native correction request returns the original adjustment");
+ await assert.rejects(createAdjustingAward({...adjustmentInput,value:"11.00"}),/this correction request was already recorded with different details/);
+ await assert.rejects(createAdjustingAward({...adjustmentInput,reason:"Changed original-period adjustment"}),/this correction request was already recorded with different details/);
  assert.deepEqual(await read(adjustment.id),retainedAdjustment);assert.deepEqual(await read(award.id),original);
  assert.equal((await db.execute<{n:number}>(sql`select count(*)::int n from hrm_benefit_awards
   where org_id=${h.org.orgId} and program_id=${program.id}`)).rows[0]!.n,2,"Retry creates no duplicate correction or replacement of original history");
