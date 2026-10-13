@@ -3406,7 +3406,7 @@ export async function updateSetupRecord(
   } catch (e) {
     if (e instanceof SetupWriteRefusal) return setupRefusalResult(e)
     const databaseError = e as { constraint?: string; cause?: { constraint?: string; message?: string }; message?: string }
-    if (['asset_category_posted_policy', 'pay_component_historical_policy', 'depreciation_book_posted_policy'].includes(databaseError.cause?.constraint ?? databaseError.constraint ?? '')) {
+    if (['asset_category_posted_policy', 'pay_component_historical_policy', 'depreciation_book_posted_policy', 'time_type_historical_policy'].includes(databaseError.cause?.constraint ?? databaseError.constraint ?? '')) {
       return { status: 409, body: { error: databaseError.cause?.message ?? databaseError.message } }
     }
     // Same storage-authority mapping as POST: an edit that moves a row onto an
@@ -3541,7 +3541,7 @@ export async function deleteSetupRecord(
       return { status: 409, body: { error: 'default-required' } }
     }
     const databaseError = e as { constraint?: string; cause?: { constraint?: string; message?: string }; message?: string }
-    if (['pay_component_historical_policy', 'depreciation_book_posted_policy'].includes(databaseError.cause?.constraint ?? databaseError.constraint ?? '')) {
+    if (['pay_component_historical_policy', 'depreciation_book_posted_policy', 'time_type_historical_policy'].includes(databaseError.cause?.constraint ?? databaseError.constraint ?? '')) {
       return { status: 409, body: { error: databaseError.cause?.message ?? databaseError.message } }
     }
     // Foreign-key violation → the record is referenced elsewhere.

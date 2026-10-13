@@ -126,6 +126,14 @@ for (const [name,classification,expected] of [
         await db.execute(sql`insert into item_rate_book_assignments(org_id,rate_book_id,project_id,date_basis,is_active)
           values(${f.org.orgId},${book},${f.project},'usage_date',true)`)
       })
+      await f.inOrg(async () => {
+        await assert.rejects(db.execute(sql`update time_types set classification=${classification === 'regular' ? 'overtime' : 'regular'}
+          where org_id=${f.org.orgId} and id=${timeType}`), (error: unknown) => {
+          const cause = error as { cause?: { constraint?: string } }
+          assert.equal(cause.cause?.constraint, 'time_type_historical_policy')
+          return true
+        })
+      })
       const invoice = await f.inOrg(() => generateInvoiceFromBillingRequest(f.org.orgId,f.actor,f.request.id))
       const measured = await f.inOrg(async () => (await db.execute<{amount:string;count:number}>(sql`
         select coalesce(sum(amount),0)::numeric(19,4)::text as amount,count(*)::int as count from document_lines
