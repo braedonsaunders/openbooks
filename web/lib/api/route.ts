@@ -121,6 +121,7 @@ interface LooseOptions {
   feature?: FeatureGate;
   scope?: RouteScope;
   params?: z.ZodType;
+  invalidParamsNotFound?: CommonOptions<unknown, z.ZodType | undefined, z.ZodType | undefined>["invalidParamsNotFound"];
   body?: z.ZodType;
   opaque?: Record<string, string>;
   maxBodyBytes?: number;
