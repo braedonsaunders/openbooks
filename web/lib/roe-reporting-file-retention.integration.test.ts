@@ -77,12 +77,12 @@ test('qualified ROE reporting sources refuse cabinet trash, replacement and purg
         const returnBytes = Buffer.from('Original returned-work declaration: first day worked 2026-07-19')
         const returned = await createFile({ orgId: f.orgId, folderId: folder, filename: 'returned-work.txt',
           contentType: 'text/plain', bytes: returnBytes, createdBy: f.actorId, audit })
-        const versions = (await db.execute<{ id: string; hash: string }>(sql`select v.id,v.content_hash as hash
+        const returnVersions = (await db.execute<{ id: string; hash: string }>(sql`select v.id,v.content_hash as hash
           from files f join file_versions v on v.file_id=f.id and v.id=f.current_version_id
           where f.org_id=${subject.orgId} and f.id=${returned.id}`)).rows
-        assert.equal(versions.length, 1)
+        assert.equal(returnVersions.length, 1)
         const certificate = { precedingEventId: event.id, firstDayWorked: '2026-07-19', sourceFileId: returned.id,
-          sourceVersionId: versions[0]!.id, sourceSha256: versions[0]!.hash, sourceReference: 'Original returned-work record',
+          sourceVersionId: returnVersions[0]!.id, sourceSha256: returnVersions[0]!.hash, sourceReference: 'Original returned-work record',
           reason: 'Retain returned service separately from an interruption', expectedId: null, expectedUpdatedAt: null }
         assert.equal(await deleteFile(f.orgId, returned.id, audit), true)
         await assert.rejects(saveRoeSubsequentService(subject, certificate), /active original return-to-work source/)
@@ -93,7 +93,7 @@ test('qualified ROE reporting sources refuse cabinet trash, replacement and purg
         assert.equal(await replaceFile({ orgId: f.orgId, fileId: returned.id, filename: 'changed-return.txt',
           contentType: 'text/plain', bytes: Buffer.from('Changed return'), updatedBy: f.actorId, audit }), false)
         assert.equal(await purgeFile(f.orgId, returned.id, audit), 'retained')
-        const originalReturn = await getFileBlob(f.orgId, returned.id, viewer, versions[0]!.id)
+        const originalReturn = await getFileBlob(f.orgId, returned.id, viewer, returnVersions[0]!.id)
         assert.ok(originalReturn)
         assert.deepEqual(originalReturn.bytes, returnBytes)
       })
