@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { bootJsdomEnvironment } from '../../../../testing/jsdom-env'
+import { bootJsdomEnvironment, setJsdomInput } from '../../../../testing/jsdom-env'
 import { stubModules } from '../../../../testing/stub-modules'
 
 await bootJsdomEnvironment({ url: 'http://localhost:4800/payroll' })
@@ -68,10 +68,7 @@ test('opening source inputs and prior responses cannot cross the selected employ
   await render(first)
   await act(async () => requests[0]!.resolve(Response.json(context('First employer'))))
   const reference = host.querySelector('#opening-source-reference') as HTMLInputElement
-  await act(() => {
-    Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!.call(reference, 'First employee source')
-    reference.dispatchEvent(new Event('input', { bubbles: true }))
-  })
+  await act(() => setJsdomInput(reference, 'First employee source'))
   await render(second)
   assert.equal(host.querySelector('#opening-source-reference'), null)
   await act(async () => requests[1]!.resolve(Response.json(context('Second employer'))))
