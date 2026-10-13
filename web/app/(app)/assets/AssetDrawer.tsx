@@ -2,7 +2,7 @@
 
 
 import { canonicalNonNegativeDecimal } from '@openbooks/engine/money/decimal'
-import { cmp, sub } from '@openbooks/engine/money/money'
+import { add, cmp, neg } from '@openbooks/engine/money/money'
 import { useMoney } from '@/components/money-provider'
 import { useEffect, useId, useMemo, useRef, useState } from 'react'
 import Link from 'next/link'
@@ -217,7 +217,7 @@ export function AssetDrawer({
       return {
         remainingCost, accumulated,
         netBookValue: remainingCost !== null && accumulated !== null && cmp(accumulated, remainingCost) <= 0
-          ? sub(remainingCost, accumulated) : null,
+          ? add(remainingCost, neg(accumulated)) : null,
       }
     })()
     : payload.totals
