@@ -112,9 +112,14 @@ test(
       // The employer's declared time and vacation records supply hours independently
       // of component settings and the retained statutory calculation.
       const sourceRows = [
-        {documentId:regular.documentId,key:"base_pay",amount:"960",hours:"32",start:"2026-07-05",end:"2026-07-18",from:"2026-07-06",to:"2026-07-14"},
-        {documentId:final.documentId,key:"base_pay",amount:"480",hours:"16",start:"2026-07-19",end:"2026-08-01",from:"2026-07-20",to:"2026-07-22"},
-        {documentId:final.documentId,key:"vacation_payout",amount:"57.60",hours:"0",start:"2026-07-19",end:"2026-08-01",from:"2026-07-19",to:"2026-08-01"},
+        ...["2026-07-06","2026-07-08","2026-07-10","2026-07-14"].map(day=>
+          ({documentId:regular.documentId,key:"base_pay",amount:"240",hours:"8",start:"2026-07-05",end:"2026-07-18",from:day,to:day})),
+        ...["2026-07-20","2026-07-22"].map(day=>
+          ({documentId:final.documentId,key:"base_pay",amount:"240",hours:"8",start:"2026-07-19",end:"2026-08-01",from:day,to:day})),
+        // Final pay separately pays the prior 960 × 4% accrued balance and
+        // the current 480 × 4% cash vacation entitlement.
+        {documentId:final.documentId,key:"vacation_payout",amount:"38.40",hours:"0",start:"2026-07-19",end:"2026-08-01",from:"2026-07-19",to:"2026-08-01"},
+        {documentId:final.documentId,key:"vacation_payout",amount:"19.20",hours:"0",start:"2026-07-19",end:"2026-08-01",from:"2026-07-19",to:"2026-08-01"},
         {documentId:continuance.documentId,key:"base_pay",amount:"240",hours:"8",start:"2026-08-02",end:"2026-08-15",from:"2026-08-05",to:"2026-08-05"},
       ];
       const bytes=Buffer.from(JSON.stringify({employeePartyId:fx.employeeId,employmentId:fx.employmentId,
@@ -129,15 +134,16 @@ test(
         values(${version},${file},1,${bytes.length},'application/json',${sourceSha256},${fx.actorId}) returning id`)).rows.length,1);
       assert.equal((await db.execute(sql`insert into file_blobs(version_id,bytes) values(${version},${bytes}) returning id`)).rows.length,1);
       assert.equal((await db.execute(sql`update files set current_version_id=${version} where org_id=${fx.orgId} and id=${file} returning id`)).rows.length,1);
-      const paidLines=(await db.execute<{id:string;documentId:string;key:string;amount:string}>(sql`
-        select line.id,stub.pay_run_document_id as "documentId",component.system_key as key,line.amount::text as amount
+      const paidLines=(await db.execute<{id:string;documentId:string;key:string;amount:string;earnedFrom:string|null;earnedTo:string|null}>(sql`
+        select line.id,stub.pay_run_document_id as "documentId",component.system_key as key,line.amount::text as amount,line.earned_from::text as "earnedFrom",line.earned_to::text as "earnedTo"
         from pay_stub_lines line join pay_stubs stub on stub.org_id=line.org_id and stub.id=line.stub_id
         join pay_components component on component.org_id=line.org_id and component.id=line.component_id
         where line.org_id=${fx.orgId} and stub.employee_party_id=${fx.employeeId} and line.kind='earning'
           and (line.amount<>0 or line.hours<>0)`)).rows;
-      assert.equal(paidLines.length,sourceRows.length);
+      assert.equal(paidLines.length,sourceRows.length,JSON.stringify(paidLines));
       for(const source of sourceRows){
-        const matches=paidLines.filter(line=>line.documentId===source.documentId&&line.key===source.key);
+        const matches=paidLines.filter(line=>line.documentId===source.documentId&&line.key===source.key&&cmp(line.amount,source.amount)===0
+          &&(source.key!=="base_pay"||(line.earnedFrom===source.from&&line.earnedTo===source.to)));
         assert.equal(matches.length,1);assert.equal(cmp(matches[0]!.amount,source.amount),0);
         await qualifyRoeLine({orgId:fx.orgId,actorId:fx.actorId,employeePartyId:fx.employeeId,employmentId:fx.employmentId,
           subsidiaryId:fx.subsidiaryId,eventId,allowedSubsidiaryIds:null},

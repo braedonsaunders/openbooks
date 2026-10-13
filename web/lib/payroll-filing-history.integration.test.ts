@@ -1120,6 +1120,14 @@ const payrollFilingScopeCases = [
                 assert.equal((await db.execute(sql`update employee_payroll_profiles set filing_account_id=${filingAccountId}
                   where org_id=${fx.orgId} and employee_party_id=${fx.employeeId} returning employee_party_id`)).rows.length,1);
                 await seedRoeIssuanceFixture(fx.orgId, fx.employeeId);
+                // This scenario's only wages were earned on July 14 in the
+                // committed July 5–18 schedule, before the interruption.
+                assert.equal((await db.execute(sql`update payroll_roe_separation_events
+                  set first_day_worked='2026-07-14',last_insurable_earnings_on='2026-07-14',
+                      interruption_on='2026-07-15'
+                  where org_id=${fx.orgId} and employee_party_id=${fx.employeeId}
+                    and status='confirmed' returning id`)).rows.length,1);
+
               });
               const { input } = await withOrgContext(fx.orgId, () => calculatedRun(fx));
               await withOrgContext(fx.orgId, () => commitPayRun(input));

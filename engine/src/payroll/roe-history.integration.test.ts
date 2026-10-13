@@ -177,11 +177,11 @@ test('mixed earning lines require complete insurance evidence and issued ROEs fr
       where org_id=${f.orgId} and table_name='payroll_roe_separation_events' and changes->>'event'='roe_source_issued'`)).rows;
     assert.equal(audit.length,1);assert.equal(audit[0]!.changes.reportingEvidence.historicalPeriods.length,2);
     assert.deepEqual(audit[0]!.changes.reportingEvidence.lineEvidence.map(line=>line.id).sort(),[insured.id,unqualified.id].sort());
-    await assert.rejects(qualifyRoeLine(scope(f),{...evidence,payStubLineId:reimbursement.id,isInsurable:false,insurableHours:'0',reason:'Replace the issued source reference',expectedId:unqualified.id,expectedUpdatedAt:unqualified.updatedAt}),error=>errorChainMatches(error,/An issued ROE retains this employee reporting evidence; its source cannot be changed/));
+    await assert.rejects(qualifyRoeLine(scope(f),{...evidence,payStubLineId:reimbursement.id,isInsurable:false,insurableHours:'0',reason:'Replace the issued source reference',expectedId:unqualified.id,expectedUpdatedAt:unqualified.updatedAt}),error=>errorChainMatches(error,/Issued ROE reporting evidence must be retained; its used source cannot be changed/));
     await assert.rejects(db.execute(sql`delete from payroll_roe_historical_periods where org_id=${f.orgId} and employee_party_id=${f.employeeId}`),
-      error=>errorChainMatches(error,/An issued ROE retains this employee reporting evidence; its source cannot be changed/));
+      error=>errorChainMatches(error,/Issued ROE reporting evidence must be retained; its used source cannot be changed/));
     await assert.rejects(db.execute(sql`delete from payroll_roe_line_evidence where org_id=${f.orgId} and id=${insured.id}`),
-      error=>errorChainMatches(error,/An issued ROE retains this employee reporting evidence; its source cannot be changed/));
+      error=>errorChainMatches(error,/Issued ROE reporting evidence must be retained; its used source cannot be changed/));
     assert.deepEqual(await financialSnapshot(f),before,'ROE source import and issuance preserve native paid payroll and its journal history');
   });}finally{await withBypassContext(()=>dropScratchOrgReporting(f.orgId));}
 });

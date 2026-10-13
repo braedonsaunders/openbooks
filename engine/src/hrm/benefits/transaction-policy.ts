@@ -46,6 +46,28 @@ export async function requireTransactionPolicyStorage(exec: SqlExecutor): Promis
   if (rows[0]?.present !== TABLES.length || rows[0]?.hasContextFallback!==true) throw new BenefitsError("REFUSED", "Transaction benefit configuration is not installed — have the administrator upgrade through the native bootstrap runner before configuring or settling transaction programs; existing awards are preserved.");
 }
 
+/** Restore the native reader's serialization order after a retained JSONB revision.
+ * Every supplied field survives; dates, arrays and policy facts are unchanged.
+ * Existing transaction digests use this order and must remain reproducible.
+ */
+export function retainedTransactionPolicyOrder(policy: BenefitTransactionPolicy): BenefitTransactionPolicy {
+  const ordered = <T extends object>(value: T, keys: readonly string[]): T => {
+    const source = value as Record<string, unknown>;
+    const result: Record<string, unknown> = {};
+    for (const key of keys) if (Object.hasOwn(source, key)) result[key] = source[key];
+    for (const key of Object.keys(source)) if (!Object.hasOwn(result, key)) result[key] = source[key];
+    return result as T;
+  };
+  return ordered({ ...policy,
+    positions: policy.positions.map(position => ordered(position,
+      ["key", "name", "weight", "recipientSource", "fallbackSource", "fallbackOnlyWhenContextAbsent"])),
+    responsibilities: policy.responsibilities.map(responsibility => ordered(responsibility,
+      ["groupId", "positionKey", "employmentId", "effectiveFrom", "effectiveTo"])),
+    limits: policy.limits.map(limit => ordered(limit, ["groupId", "kind", "amount"])),
+  }, ["documentKind", "dateBasis", "groupingSegmentId", "unassignedShare", "rounding",
+    "capPercent", "capProjectTypeId", "itemIds", "positions", "responsibilities", "limits"]);
+}
+
 export async function readTransactionPolicy(exec: SqlExecutor, orgId: string, programId: string): Promise<BenefitTransactionPolicy | null> {
   await requireTransactionPolicyStorage(exec);
   const row = (await exec.execute<{ documentKind: BenefitTransactionPolicy["documentKind"]; dateBasis: BenefitTransactionPolicy["dateBasis"]; groupingSegmentId: string | null; unassignedShare: "refuse" | "forfeit"; rounding: "per_group" | "per_recipient"; capPercent: string | null; capProjectTypeId: string | null }>(sql`select document_kind as "documentKind",date_basis as "dateBasis",grouping_segment_id as "groupingSegmentId",unassigned_share as "unassignedShare",rounding,cap_percent::text as "capPercent",cap_project_type_id as "capProjectTypeId" from hrm_benefit_transaction_policies where org_id=${orgId} and program_id=${programId}`)).rows[0];

@@ -1,4 +1,4 @@
-import { readTransactionPolicy, validateTransactionPolicy, requireTransactionPolicyStorage, type BenefitTransactionPolicy } from "./transaction-policy.ts";
+import { retainedTransactionPolicyOrder, readTransactionPolicy, validateTransactionPolicy, requireTransactionPolicyStorage, type BenefitTransactionPolicy } from "./transaction-policy.ts";
 import { programRevisionInForce, recordProgramRevision } from "./program-revisions.ts";
 import { requireBenefitCurrency } from "./currency-options.ts";
 import { sql } from "drizzle-orm";
@@ -360,7 +360,7 @@ export async function programPolicyInForce(
   return {
     program: { ...prior, status: live.status },
     sources: revision.snapshot.sources,
-    transactionPolicy: revision.snapshot.transactionPolicy,
+    transactionPolicy: revision.snapshot.transactionPolicy === null ? null : retainedTransactionPolicyOrder(revision.snapshot.transactionPolicy),
     revisionId: revision.revisionId,
   };
 }
