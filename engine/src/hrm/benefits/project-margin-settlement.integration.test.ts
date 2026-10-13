@@ -7,7 +7,7 @@ import { submitAndReleaseIfUngated } from "../../flows/submit.ts";
 import { installEngineSeams } from "../../composition/install.ts";
 import { seedPayrollBenefitProgram } from "../../testing/benefit-fixtures.ts";
 import { seedBenefitIncentivePosting } from "../../testing/benefit-incentive-posting.ts";
-import { seedComponent, seedEmployment, seedProject, setupHarness, withHarness } from "../../testing/hrm-harness.ts";
+import { mkSecondSubsidiary, seedComponent, seedEmployment, seedProject, setupHarness, withHarness } from "../../testing/hrm-harness.ts";
 import type { ProjectMarginSnapshot } from "./project-margin-settlement.ts";
 import { recordSettledAward } from "./awards.ts";
 import { errorChainMatches } from "../../testing/error-chain.ts";
@@ -173,3 +173,36 @@ for (const legacy of [false, true]) {
       assert.deepEqual(await readHistory(),before,"changed facts cannot rewrite retained awards");
     }));
 }
+
+
+test("global-project margin excludes another legal entity's cost, commitments and later revenue", { skip: !DB }, () =>
+  withHarness(setup, async h => {
+    const { query, projectId } = await seedMargin(h, "2026-08-10");
+    const global = await db.execute(sql`update projects set subsidiary_id=null
+      where org_id=${h.org.orgId} and id=${projectId} returning id`);
+    assert.equal(global.rows.length,1);
+    const baseline = await previewIncentiveSettlement(query);
+    assert.equal(baseline.computation.totalAwarded,"350.0000");
+    const original = projectSnapshot(baseline);
+    const otherEntity = await mkSecondSubsidiary(h.org.orgId,h.org.subsidiaryId,{currency:"USD",country:"US"});
+    await seedBenefitIncentivePosting(h,[
+      {account:h.org.accounts.cogs,amount:"500",project:projectId},
+      {account:h.org.accounts.bank,amount:"-500"},
+    ],{date:"2026-07-11",currency:"USD",subsidiary:otherEntity});
+    await purchaseCommitment({...h,org:{...h.org,subsidiaryId:otherEntity}},projectId,"2026-07-12","1200");
+    const afterCosts = await previewIncentiveSettlement(query);
+    assert.equal(afterCosts.computation.totalAwarded,"350.0000");
+    assert.deepEqual(projectSnapshot(afterCosts),original,"foreign cost and purchase commitments do not change employer margin");
+    await seedBenefitIncentivePosting(h,[
+      {account:h.org.accounts.revenue,amount:"-9000",project:projectId},
+      {account:h.org.accounts.bank,amount:"9000"},
+    ],{date:"2026-08-05",currency:"USD",subsidiary:otherEntity});
+    const afterRevenue = await previewIncentiveSettlement(query);
+    assert.equal(afterRevenue.computation.totalAwarded,"350.0000");
+    assert.deepEqual(projectSnapshot(afterRevenue),original,"foreign later revenue cannot postpone the employer's eligible project");
+    const settled = await settleIncentivePeriod(query);
+    assert.equal(settled.preview.computation.totalAwarded,"350.0000");
+    assert.equal(settled.awards.length,1);
+    const retried = await settleIncentivePeriod(query);
+    assert.equal(retried.awards[0]!.id,settled.awards[0]!.id);
+  }));

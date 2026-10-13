@@ -94,6 +94,7 @@ export async function measureProjectMarginSettlement(input: {
       join journal_lines l on l.org_id = p.org_id and l.project_id = p.id
       join journal_entries e on e.org_id = l.org_id and e.id = l.entry_id and e.status in ('posted','reversed')
      where p.org_id = ${orgId} and (p.subsidiary_id is null or p.subsidiary_id = ${program.legalEntityId}::uuid)
+       and l.subsidiary_id = ${program.legalEntityId}::uuid
        and l.account_id = any(${`{${input.revenueAccountIds.join(",")}}`}::uuid[])
        and l.posting_date <= ${input.asOf}::date
      group by p.id
@@ -106,7 +107,8 @@ export async function measureProjectMarginSettlement(input: {
   const ledger = (await db.execute<{ project_id: string; account_id: string; amount: string }>(sql`
     select l.project_id::text as project_id, l.account_id::text as account_id, sum(l.amount)::text as amount
       from journal_lines l join journal_entries e on e.org_id = l.org_id and e.id = l.entry_id and e.status in ('posted','reversed')
-     where l.org_id = ${orgId} and l.project_id = any(${`{${ids.join(",")}}`}::uuid[])
+     where l.org_id = ${orgId} and l.subsidiary_id = ${program.legalEntityId}::uuid
+       and l.project_id = any(${`{${ids.join(",")}}`}::uuid[])
        and l.account_id = any(${`{${accounts.join(",")}}`}::uuid[])
        and l.posting_date <= ${input.asOf}::date
      group by 1, 2`)).rows;
@@ -114,7 +116,9 @@ export async function measureProjectMarginSettlement(input: {
     select coalesce(l.project_id, d.project_id)::text as project_id,
            sum(case when coalesce(l.quantity,0) > 0 then l.amount * greatest(0, 1 - coalesce(l.quantity_billed,0) / l.quantity) else l.amount end)::text as amount
       from documents d join document_lines l on l.org_id = d.org_id and l.document_id = d.id
-     where d.org_id = ${orgId} and d.kind = 'purchase_order' and d.status = 'approved'
+     where d.org_id = ${orgId} and d.subsidiary_id = ${program.legalEntityId}::uuid
+       and (l.subsidiary_id is null or l.subsidiary_id = ${program.legalEntityId}::uuid)
+       and d.kind = 'purchase_order' and d.status = 'approved'
        and d.document_date <= ${input.asOf}::date
        and coalesce(l.project_id, d.project_id) = any(${`{${ids.join(",")}}`}::uuid[])
      group by 1`)).rows.map((r) => [r.project_id, toUnits(r.amount)])) : new Map<string, bigint>();
