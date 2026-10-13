@@ -9,6 +9,8 @@ import { act, click, mountDashboard } from '../dashboard/_dashboard-render-harne
 // Await-imports (not static imports): module hooks register while the
 // harness above evaluates, so only imports that resolve after that point see
 // the jsdom shims.
+// Shared controls dispatch genuine browser events, including on Node versions with a native Event.
+Object.assign(globalThis, { Event: window.Event })
 const { ReportFilterBar } = await import('./ReportFilterBar')
 
 const dir = dirname(fileURLToPath(import.meta.url));
