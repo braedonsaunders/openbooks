@@ -3,8 +3,8 @@ import { readFileSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import pg from "pg";
-import { withBypassContext } from "../../engine/src/platform/db.ts";
-import { createScratchOrg,dropScratchOrg } from "../../engine/src/testing/fixtures.ts";
+import { withBypassContext } from "@openbooks/engine/platform/db";
+import { createScratchOrg,dropScratchOrg } from "@openbooks/engine/testing/fixtures";
 
 const tables=["fx_rate_types","account_translation_policies","subsidiary_accounting_preferences",
   "journal_reversal_instructions","segment_balancing_policies","gl_audit_number_policies","gl_audit_number_assignments"];
