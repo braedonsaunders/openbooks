@@ -20,7 +20,7 @@ test('stored project billing-method views retain their columns, filters and sort
     filters: [{ key: 'billing_method', operator: 'eq' as const, value: 'fixed_price' }],
   }
   const parsed = parseListView(view)
-  assert.equal(parsed.ok, true)
+  assert.equal(parsed.success, true)
   assert.deepEqual(lintListView(view), [])
   assert.equal(view.columns[4]!.key, 'billing_method')
   const defaults = defaultListView('project')
