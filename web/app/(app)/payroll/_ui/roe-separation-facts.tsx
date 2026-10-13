@@ -1,4 +1,5 @@
 'use client'
+import Link from 'next/link'
 import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { Alert, AlertDescription, Button, FieldLabel, Input, Select, Skeleton } from '@openbooks/ui'
@@ -74,6 +75,10 @@ export function RoeSeparationFactsForm({ employeePartyId, canEdit, onSaved }: {
     {state.status === 'ready' && <>
       {immutable && <Alert><AlertDescription>{t('issued')}</AlertDescription></Alert>}
       <p className="text-xs text-slate-500">{t('employer', { name: state.employee.employerName })}</p>
+      {canEdit && !immutable && <p className="text-xs text-slate-500">
+        <Link className="underline underline-offset-2" href={'/data/import' as never}>{t('importHistory')}</Link>{' '}
+        {t('importHistoryHelp')}
+      </p>}
       <div className="grid gap-3 sm:grid-cols-2">
         <div><FieldLabel htmlFor="roe-first-worked">{t('firstWorked')}</FieldLabel>
           <Input id="roe-first-worked" type="date" value={firstDayWorked} onChange={event => setFirstDayWorked(event.target.value)} disabled={disabled} /></div>

@@ -1373,7 +1373,9 @@
       "saveFailed": "No se pudieron guardar los datos de separación",
       "issued": "Estos datos pertenecen a un ROE emitido. Consérvelos y utilice el procedimiento de corrección de Service Canada.",
       "firstWorked": "Primer día trabajado en este período de empleo",
-      "employer": "Empleador legal: {name}"
+      "employer": "Empleador legal: {name}",
+      "importHistory": "Importar evidencia del registro de empleo",
+      "importHistoryHelp": "Use el importador compartido para períodos históricos o evidencia de líneas de ingresos conservadas. Se requieren bases y horas asegurables documentadas; no se presume que los períodos faltantes sean nulos."
     }
   },
   "separations": {

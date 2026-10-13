@@ -1373,7 +1373,9 @@
       "saveFailed": "Die Angaben konnten nicht gespeichert werden",
       "issued": "Diese Angaben gehören zu einem ausgestellten ROE. Bewahren Sie sie auf und nutzen Sie das Korrekturverfahren von Service Canada.",
       "firstWorked": "Erster Arbeitstag in diesem Beschäftigungszeitraum",
-      "employer": "Rechtlicher Arbeitgeber: {name}"
+      "employer": "Rechtlicher Arbeitgeber: {name}",
+      "importHistory": "Nachweise für den Beschäftigungsnachweis importieren",
+      "importHistoryHelp": "Nutzen Sie den gemeinsamen Import für frühere Perioden oder Belege gespeicherter Verdienstzeilen. Versicherbare Beträge und Stunden benötigen Quellnachweise; fehlende Perioden gelten nicht automatisch als Nullperioden."
     }
   },
   "separations": {

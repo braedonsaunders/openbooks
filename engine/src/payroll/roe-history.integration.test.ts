@@ -8,7 +8,7 @@ import { seedAdoption, seedRoeIssuanceFixture } from './filing-test-fixtures.ts'
 import { dropScratchOrgReporting, seedPayrollSettings } from '../testing/fixtures.ts';
 import { seedComponent } from '../testing/hrm-harness.ts';
 import { errorChainMatches } from '../testing/error-chain.ts';
-import { importRoePriorPeriod, qualifyRoeLine, readRoeHistoricalEvidence, type RoePriorPeriodInput, type RoeReportingSource } from './roe-history.ts';
+import { importRoePriorPeriod, qualifyRoeLine, readRoeHistoricalEvidence, applyRoeReportingImport, type RoePriorPeriodInput, type RoeReportingSource } from './roe-history.ts';
 import { readRoeSeparationFacts, saveRoeSeparationFacts } from './roe-separation-facts.ts';
 import { readRoeReportingWindow, roeWindowContext } from './roe-reporting-window.ts';
 import { createPayRun } from './run-lifecycle.ts';
@@ -97,6 +97,11 @@ test('qualified prior and nil reporting periods extend the ROE window without cr
   try{await withOrgContext(f.orgId,async()=>{
     await finalRun(f);const before=await financialSnapshot(f);
     const ref=await originalSource(f,{employee:f.employeeId,period:'2026-03-29/2026-04-11',insurableEarnings:'80',insurableHours:'4'});
+    assert.deepEqual(await applyRoeReportingImport(scope(f),{kind:'period',evidence:prior(f,ref)},true),{action:'insert'});
+    assert.equal((await readRoeHistoricalEvidence(scope(f))).periods.length,0,'preview retains no provisional period');
+    const previewAudit=(await db.execute<{n:number}>(sql`select count(*)::int as n from audit_log
+      where org_id=${f.orgId} and table_name='payroll_roe_historical_periods'`)).rows;
+    assert.equal(previewAudit[0]!.n,0,'preview rolls back its native audit together with the reporting facts');
     const imported=await importRoePriorPeriod(scope(f),prior(f,ref));
     assert.deepEqual(await importRoePriorPeriod(scope(f),prior(f,ref)),imported,'exact import replay retains the same identity and version');
     const nilRef=await originalSource(f,{employee:f.employeeId,period:'2026-04-12/2026-04-25',nil:true});
@@ -147,6 +152,8 @@ test('mixed earning lines require complete insurance evidence and issued ROEs fr
     const evidence={...ref,reportPeriodStart:'2026-04-26',reportPeriodEnd:'2026-05-09',earnedFrom:'2026-05-08',earnedTo:'2026-05-08',expectedId:null,expectedUpdatedAt:null};
     const insured=await qualifyRoeLine(scope(f),{...evidence,payStubLineId:wage.id,isInsurable:true,insurableHours:'1'});
     await assert.rejects(readRoeReportingWindow(await roeWindowContext(f.orgId,f.employeeId)),/attribution is incomplete/);
+    assert.deepEqual(await applyRoeReportingImport(scope(f),{kind:'line',evidence:{...evidence,payStubLineId:reimbursement.id,isInsurable:false,insurableHours:'0'}},true),{action:'insert'});
+    assert.equal((await readRoeHistoricalEvidence(scope(f))).lines.length,1,'line preview retains only the previously qualified wage');
     const unqualified=await qualifyRoeLine(scope(f),{...evidence,payStubLineId:reimbursement.id,isInsurable:false,insurableHours:'0'});
 
     const window=await readRoeReportingWindow(await roeWindowContext(f.orgId,f.employeeId));assert.equal(window.totalInsurableEarnings,'180.0000');assert.equal(window.totalInsurableHours,'5.0000');

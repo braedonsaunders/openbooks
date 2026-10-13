@@ -1373,7 +1373,9 @@
       "saveFailed": "The separation facts could not be saved",
       "issued": "These facts belong to an issued ROE. Preserve them and use the Service Canada correction workflow.",
       "firstWorked": "First day worked in this employment spell",
-      "employer": "Legal employer: {name}"
+      "employer": "Legal employer: {name}",
+      "importHistory": "Import ROE reporting evidence",
+      "importHistoryHelp": "Use the shared importer for historical periods or retained earning-line evidence. Source-qualified insurance and hours are required; missing periods are not assumed to be nil."
     }
   },
   "separations": {

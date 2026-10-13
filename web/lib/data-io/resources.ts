@@ -24,6 +24,7 @@ import { PRIOR_PAYROLL_IDENTITIES_DESCRIPTOR, PRIOR_PAYROLL_IDENTITIES_KEY, prio
 import { PAYROLL_HISTORICAL_EMPLOYER_ASSIGNMENTS_DESCRIPTOR, PAYROLL_HISTORICAL_EMPLOYER_ASSIGNMENTS_KEY, payrollHistoricalEmployerAssignmentsResource } from './payroll-historical-employer-assignments-resource'
 import { PAYROLL_HISTORICAL_WITHHOLDING_DESCRIPTOR, PAYROLL_HISTORICAL_WITHHOLDING_KEY, payrollHistoricalWithholdingResource } from './payroll-historical-withholding-resource'
 import { PAYROLL_EMPLOYMENT_LINKS_DESCRIPTOR, PAYROLL_EMPLOYMENT_LINKS_KEY, payrollEmploymentLinksResource } from './payroll-employment-links-resource'
+import { ROE_PERIODS_DESCRIPTOR, ROE_PERIODS_KEY, ROE_LINES_DESCRIPTOR, ROE_LINES_KEY, payrollRoeReportingResource } from './payroll-roe-reporting-resource'
 import { PAYROLL_PERIOD_OPENINGS_DESCRIPTOR, PAYROLL_PERIOD_OPENINGS_KEY, payrollPeriodOpeningsResource } from './payroll-period-openings-resource'
 import { EMPLOYEE_WORKER_COMP_DESCRIPTOR, EMPLOYEE_WORKER_COMP_KEY, employeeWorkerCompResource } from './employee-worker-comp-resource'
 import {
@@ -265,6 +266,8 @@ export async function listResources(orgId: string): Promise<ResourceDescriptor[]
     ? [
         PAYROLL_OPENING_BALANCES_DESCRIPTOR,
         PAYROLL_PERIOD_OPENINGS_DESCRIPTOR,
+        ROE_PERIODS_DESCRIPTOR,
+        ROE_LINES_DESCRIPTOR,
         PAYROLL_OPENING_ENTITLEMENTS_DESCRIPTOR,
         PAYROLL_EMPLOYER_LEVY_OPENINGS_DESCRIPTOR,
         PRIOR_PAYROLL_REGISTER_DESCRIPTOR,
@@ -328,6 +331,10 @@ export async function getResource(
   if (key === PAYROLL_OPENING_BALANCES_KEY) {
     if (!(await orgFeatureEnabled(orgId, 'payroll'))) return null
     return bindReadScope(payrollOpeningBalancesResource(orgId), orgId, allowedSubsidiaryIds)
+  }
+  if (key === ROE_PERIODS_KEY || key === ROE_LINES_KEY) {
+    if (!(await orgFeatureEnabled(orgId, 'payroll'))) return null
+    return bindReadScope(payrollRoeReportingResource(orgId, key === ROE_PERIODS_KEY ? 'period' : 'line'), orgId, allowedSubsidiaryIds)
   }
   if (key === PAYROLL_PERIOD_OPENINGS_KEY) {
     if (!(await orgFeatureEnabled(orgId, 'payroll'))) return null

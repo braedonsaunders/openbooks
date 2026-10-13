@@ -1,7 +1,7 @@
 import { canonicalDecimal } from '../money/exact-decimal.ts';
 import { moneyRefusal } from '../money/decimal-refusal.ts';
 import { sql } from 'drizzle-orm';
-import { db, withOrgTransaction } from '../platform/db.ts';
+import { db, withOrgTransaction, withTransactionSavepoint } from '../platform/db.ts';
 import { isUuid } from '../platform/uuid.ts';
 import { isIsoCalendarDate } from '../platform/iso-date.ts';
 import { fromUnits, toUnits, wholeDigits } from '../money/money.ts';
@@ -205,5 +205,42 @@ export async function readRoeHistoricalEvidence(subject:RoeHistorySubject,range?
       order by report_period_end desc,id limit 5001`)).rows;
     if(periods.length>106||lines.length>5000)throw new PayrollError('Reporting evidence exceeds the supported per-employee review window — select a bounded reporting period');
     return {periods,lines};
+  });
+}
+
+
+export type RoeReportingImport = {kind:'period';evidence:RoePriorPeriodInput}|{kind:'line';evidence:RoeLineEvidenceInput};
+export type RoeReportingImportResult = {action:'insert'|'update'|'unchanged'};
+class ReportingPreviewRollback extends Error {
+  constructor(readonly result:RoeReportingImportResult){super('Reporting evidence preview rollback');}
+}
+
+/** Preview uses the same native guards and retains no reporting or audit rows. */
+export async function applyRoeReportingImport(
+  subject:RoeHistorySubject,input:RoeReportingImport,dryRun:boolean,
+):Promise<RoeReportingImportResult>{
+  input=input.kind==='period'?{kind:'period',evidence:validateRoePriorPeriod(input.evidence)}:{kind:'line',evidence:validateRoeLineEvidence(input.evidence)};
+  return withOrgTransaction(subject.orgId,async()=>{
+    try{
+      return await withTransactionSavepoint(db,async()=>{
+        await authorize(subject,true);
+        const before=input.kind==='period'
+          ? (await db.execute<{id:string;updatedAt:string}>(sql`select id,updated_at::text as "updatedAt" from payroll_roe_historical_periods
+              where org_id=${subject.orgId} and employment_id=${subject.employmentId}
+                and ${input.evidence.expectedId===null
+                  ?sql`period_start=${input.evidence.periodStart}::date and period_end=${input.evidence.periodEnd}::date`
+                  :sql`id=${input.evidence.expectedId}::uuid`} for update`)).rows[0]
+          : (await db.execute<{id:string;updatedAt:string}>(sql`select id,updated_at::text as "updatedAt" from payroll_roe_line_evidence
+              where org_id=${subject.orgId} and pay_stub_line_id=${input.evidence.payStubLineId} for update`)).rows[0];
+        const after=input.kind==='period'
+          ?await importRoePriorPeriod(subject,input.evidence):await qualifyRoeLine(subject,input.evidence);
+        const result:RoeReportingImportResult={action:!before?'insert':before.updatedAt===after.updatedAt?'unchanged':'update'};
+        if(dryRun)throw new ReportingPreviewRollback(result);
+        return result;
+      });
+    }catch(error){
+      if(error instanceof ReportingPreviewRollback)return error.result;
+      throw error;
+    }
   });
 }

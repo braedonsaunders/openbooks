@@ -1373,7 +1373,9 @@
       "saveFailed": "Impossible d’enregistrer les faits relatifs à la cessation d’emploi",
       "issued": "Ces faits appartiennent à un relevé d’emploi délivré. Conservez-les et utilisez la procédure de correction de Service Canada.",
       "firstWorked": "Premier jour travaillé de cette période d’emploi",
-      "employer": "Employeur légal : {name}"
+      "employer": "Employeur légal : {name}",
+      "importHistory": "Importer les preuves du relevé d’emploi",
+      "importHistoryHelp": "Utilisez l’importateur commun pour les périodes historiques ou les preuves des lignes de rémunération conservées. Les montants et heures assurables doivent être justifiés; une période manquante n’est pas présumée nulle."
     }
   },
   "separations": {

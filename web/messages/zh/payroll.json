@@ -1373,7 +1373,9 @@
       "saveFailed": "无法保存离职事实",
       "issued": "这些事实属于已签发的就业记录。请保留原记录，并使用加拿大服务局的更正流程。",
       "firstWorked": "本次雇佣期间的首个工作日",
-      "employer": "法定雇主：{name}"
+      "employer": "法定雇主：{name}",
+      "importHistory": "导入就业记录申报依据",
+      "importHistoryHelp": "使用统一导入工具导入历史期间或已保留收入行的依据。可保收入和工时须有原始依据；缺失期间不会自动视为零收入期间。"
     }
   },
   "separations": {

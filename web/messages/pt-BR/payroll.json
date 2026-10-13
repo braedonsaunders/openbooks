@@ -1373,7 +1373,9 @@
       "saveFailed": "Não foi possível salvar os dados de desligamento",
       "issued": "Estes dados pertencem a um ROE emitido. Preserve-os e use o procedimento de correção do Service Canada.",
       "firstWorked": "Primeiro dia trabalhado neste período de emprego",
-      "employer": "Empregador legal: {name}"
+      "employer": "Empregador legal: {name}",
+      "importHistory": "Importar evidências do registro de emprego",
+      "importHistoryHelp": "Use o importador compartilhado para períodos históricos ou evidências das linhas de remuneração preservadas. Valores e horas seguráveis exigem comprovação; períodos ausentes não são considerados nulos automaticamente."
     }
   },
   "separations": {
