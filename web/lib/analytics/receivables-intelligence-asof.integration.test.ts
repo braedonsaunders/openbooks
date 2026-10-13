@@ -55,11 +55,12 @@ async function payInvoice(org: Org, actor: string, invoiceId: string, amount: st
       '1', 'same_currency', 'T3-PROBE', ${actor}, ${actor})`)
 }
 
-test('collection attention follows the stated as-of date and ages untermed lines from posting', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+test('collection attention follows the stated as-of date and native due-on-receipt terms', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   await assertDedicatedFixtureDatabase()
   const org = await createScratchOrg()
   try {
     const actor = await createScratchUser(org.orgId, 'Collections Controller', 'admin')
+    let dueOnReceiptInvoice = '';
     await withBypassContext(async () => {
       const calendarId = (await db.execute(sql`select id from fiscal_calendars where org_id = ${org.orgId} limit 1`)).rows[0]!.id as string
       for (const [n, name, from, to] of [[4, '2026-04', '2026-04-01', '2026-04-30'], [5, '2026-05', '2026-05-01', '2026-05-31'], [6, '2026-06', '2026-06-01', '2026-06-30']] as const) {
@@ -68,7 +69,7 @@ test('collection attention follows the stated as-of date and ages untermed lines
       }
       const severe = await postInvoice(org, actor, { amount: '10000.0000', docDate: '2026-04-10', due: '2026-04-11' })
       await postInvoice(org, actor, { amount: '5000.0000', docDate: '2026-07-10', due: '2026-07-11' })
-      await postInvoice(org, actor, { amount: '7000.0000', docDate: '2026-07-05', due: null })
+      dueOnReceiptInvoice = await postInvoice(org, actor, { amount: '7000.0000', docDate: '2026-07-05', due: null })
       await payInvoice(org, actor, severe, '10000.0000', '2026-07-18')
     })
     await withOrgContext(org.orgId, async () => {
@@ -80,8 +81,10 @@ test('collection attention follows the stated as-of date and ages untermed lines
         const itemsMid = await openItems(org.orgId, 'ar', '2026-07-15')
         const itemsLate = await openItems(org.orgId, 'ar', '2026-07-25')
         assert.equal(mid.asOf, '2026-07-15')
-        // Native open items age the untermed line from its posting date.
-        assert.equal(itemsMid.filter((i) => i.dueDate === null).length, 1)
+        // Posting stamps due-on-receipt when neither party nor organization supplies terms.
+        const immediate = itemsMid.find(item => item.docId === dueOnReceiptInvoice)
+        assert.ok(immediate?.dueDate, 'the posted invoice retains its resolved due date')
+        assert.equal(immediate.dueDate.toISOString().slice(0, 10), '2026-07-05')
         // The intelligence overdue agrees with open items as of the same date.
         assert.equal(mid.summary.overdue, '22000.0000')
         assert.equal(late.summary.overdue, '12000.0000')
