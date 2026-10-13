@@ -287,6 +287,10 @@ export async function guardPayrollRoeEmployees(
   const selections=ids.map(parseRoeEventRow)
   if(selections.some(selection=>selection===null)) return malformedInput('Choose the native employee and separation event')
   const employees=new Set(selections.map(selection=>selection!.employeePartyId))
+  // Event and pay-window ownership do not authorize the current employee
+  // header (identity, occupation, SIN and mailing address) read by the ROE.
+  const headerDenied = await guardPayrollEmployees(gate, [...employees])
+  if (headerDenied) return headerDenied
   const sources = await roeSourceScope(gate.user.orgId, ids)
   if (new Set(sources.map(row => row.employeeId)).size !== employees.size) return notFound("payroll record")
   for (const row of sources) {
