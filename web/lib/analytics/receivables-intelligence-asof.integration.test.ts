@@ -72,7 +72,7 @@ test('collection attention follows the stated as-of date and ages untermed lines
       await payInvoice(org, actor, severe, '10000.0000', '2026-07-18')
     })
     await withOrgContext(org.orgId, async () => {
-      const authz = { user: { orgId: org.orgId, id: actor }, permissions: new Set(['reports.read', 'ar.read']), allowedSubsidiaryIds: null }
+      const authz = { user: { orgId: org.orgId, id: actor, email: 'controller@scratch.test', name: 'Collections Controller', roles: [], envKind: 'production' as const, productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: actor, isSuperAdmin: false }, permissions: new Set(['reports.read', 'ar.read']), allowedSubsidiaryIds: null }
       const context = { authz, slug: 'receivables-intelligence', locale: 'en', revision: randomUUID(), observedAt: Date.now(), projection: 'summary' as const, tab: '' }
       await withAnalyticsRead(context, async () => {
         const mid = await receivablesIntelligenceData(org.orgId, '2026-07-01', '2026-07-15', null, {})

@@ -382,7 +382,7 @@ test("a lifecycle refusal on edit answers 422 with its message", { skip: !DB }, 
             permissions: new Set<string>(),
             services,
           },
-          { kind: "quote", createPerm: "ar.create" },
+          { kind: "quote", createPerm: "ar.create", readPerm: "ar.read" },
           quoteId,
           { expectedUpdatedAt: revision, partyId: other } as never,
         ).then(

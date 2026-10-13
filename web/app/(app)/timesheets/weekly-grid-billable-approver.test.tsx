@@ -16,7 +16,7 @@ const script = {
   toasts: [] as { kind: string; message: unknown }[],
   posts: [] as { url: string; body: unknown }[],
   billableStatus: 200 as number,
-  billableBody: {} as Record<string, unknown>,
+  billableBody: {} as unknown,
 };
 Object.assign(globalThis, {
   __gridBillableApprover: script,
