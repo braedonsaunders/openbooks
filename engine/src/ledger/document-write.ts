@@ -2462,9 +2462,9 @@ export async function applyDocumentEdit(
         // time_entries.invoiced_by_line_id and by source cost lines'
         // billed_by_line_id, so a blind delete dies on those FKs as a raw
         // 500 — and would strand the provenance even if it did not. Snapshot
-        // the per-line identity; the replacement below carries it forward
-        // positionally (the same convention the editor already addresses
-        // lines by) and re-points the references onto the new rows.
+        // the persisted line identity. Replacement rows inherit only their
+        // submitted source identity, so reordering and deletion cannot move
+        // labor, cost or work-period evidence onto an unrelated line.
         const provenance = (await tx.execute<{
           id: string
           timeEntryId: string | null
@@ -2487,6 +2487,27 @@ export async function applyDocumentEdit(
            where document_id = ${id} and org_id = ${orgId}
            order by line_number
         `)).rows
+        const provenanceById = new Map(provenance.map(line => [line.id.toLowerCase(), line]));
+        const oldIds = `{${provenance.map(line => line.id).join(',')}}`;
+        const timeRefs = (await tx.execute<{ id: string; oldId: string }>(sql`
+          select id, invoiced_by_line_id as "oldId" from time_entries
+          where org_id=${orgId} and invoiced_by_line_id=any(${oldIds}::uuid[])
+          order by id for update`)).rows;
+        const costRefs = (await tx.execute<{ id: string; oldId: string }>(sql`
+          select id, billed_by_line_id as "oldId" from document_lines
+          where org_id=${orgId} and billed_by_line_id=any(${oldIds}::uuid[])
+          order by id for update`)).rows;
+        const hasProtectedProvenance = timeRefs.length > 0 || costRefs.length > 0 || provenance.some(line =>
+          line.timeEntryId !== null || line.employeeId !== null || line.timeTypeId !== null ||
+          line.equipmentUnitId !== null || line.rateVersionId !== null || line.billRate !== null ||
+          line.billAmount !== null || line.workFrom !== null || line.workTo !== null);
+        if (hasProtectedProvenance && preparedLines.length > 0 && (
+          submittedLineKeys?.length !== preparedLines.length || submittedLineKeys.every(key => key === null) ||
+          entryPlan?.exploded === true
+        )) {
+          throw new DocumentEditError(422, 'This draft retains billed work or cost evidence; reload it and save its existing line identities. Source-bound lines cannot be redistributed by an entry allocation.');
+        }
+        const replacementById = new Map<string, string>();
         const promotionsByLine = new Map(provenance.filter(line => line.promotionId).map(line => [line.id, line.promotionId]));
         if (promotionsByLine.size > 0 && preparedLines.length > 0 && (
           submittedLineKeys?.length !== preparedLines.length || submittedLineKeys.every(key => key === null)
@@ -2502,7 +2523,8 @@ export async function applyDocumentEdit(
         const insertedLineIds: string[] = []
         for (let i = 0; i < preparedLines.length; i++) {
           const l = preparedLines[i]!
-          const carry = i < provenance.length ? provenance[i]! : undefined
+          const sourceLineId = submittedLineKeys?.[i] ?? null
+          const carry = sourceLineId ? provenanceById.get(sourceLineId) : undefined
           // A carried billable-value snapshot follows the edit: the snapshot
           // columns mirror the commercial price (as generation writes them),
           // so leaving a stale zero behind would corrupt the earned views
@@ -2540,7 +2562,9 @@ export async function applyDocumentEdit(
                     ${l.amortizationTemplateId}, ${l.amortizationStartOn}, ${l.amortizationEndOn})
             returning id
           `))
+          if (inserted.rows.length !== 1) throw new DocumentEditError(409, 'The replacement line was not saved; reload the draft before retrying')
           insertedLineIds.push(inserted.rows[0]!.id)
+          if (sourceLineId) replacementById.set(sourceLineId, inserted.rows[0]!.id)
           await persistLineTaxComponents(tx, {
             orgId,
             documentLineId: inserted.rows[0]!.id,
@@ -2590,55 +2614,32 @@ export async function applyDocumentEdit(
             `)
           }
         }
-        // Re-home the billed references the snapshot carried: the
-        // new rows replaced the old ids, so time entries and source cost
-        // lines that pointed at the old rows must follow positionally.
-        // References off lines the edit removed are released — the work
-        // becomes billable again — instead of dangling at deleted rows.
-        // Ordinary edits reference nothing and skip both moves entirely, so
-        // the paired replay authority below is never raised for them.
-        const moves = provenance.map((oldLine, index) => ({
-          oldId: oldLine.id,
-          newId: index < insertedLineIds.length ? insertedLineIds[index]! : null,
-        }))
-        if (moves.length > 0) {
-          const oldIds = `{${moves.map((move) => move.oldId).join(',')}}`
-          const hasTimeRefs = (await tx.execute(sql`select 1 from time_entries
-            where org_id = ${orgId} and invoiced_by_line_id = any(${oldIds}::uuid[]) limit 1`)).rows.length > 0
-          const hasCostRefs = (await tx.execute(sql`select 1 from document_lines
-            where org_id = ${orgId} and billed_by_line_id = any(${oldIds}::uuid[]) limit 1`)).rows.length > 0
-          if (hasTimeRefs) {
-            for (const move of moves) {
-              if (move.newId) {
-                await tx.execute(sql`update time_entries set invoiced_by_line_id = ${move.newId}
-                  where org_id = ${orgId} and invoiced_by_line_id = ${move.oldId}`)
-              } else {
-                await tx.execute(sql`update time_entries set invoiced_by_line_id = null, billing_status = 'unbilled'
-                  where org_id = ${orgId} and invoiced_by_line_id = ${move.oldId}`)
-              }
+        // Relational sources follow their exact retained line, not its former
+        // position. Omitted persisted identities release only their own work.
+        for (const reference of timeRefs) {
+          const target = replacementById.get(reference.oldId) ?? null;
+          const moved = await tx.execute(target
+            ? sql`update time_entries set invoiced_by_line_id=${target}
+                where org_id=${orgId} and id=${reference.id} and invoiced_by_line_id=${reference.oldId} returning id`
+            : sql`update time_entries set invoiced_by_line_id=null,billing_status='unbilled'
+                where org_id=${orgId} and id=${reference.id} and invoiced_by_line_id=${reference.oldId} returning id`);
+          if (moved.rows.length !== 1) throw new DocumentEditError(409, 'A billed time source changed; reload the draft before saving');
+        }
+        if (costRefs.length > 0) {
+          // Native paired authority changes provenance metadata only; the
+          // source document's posted financial values remain immutable.
+          await tx.execute(sql`set local openbooks.migration = on`)
+          await tx.execute(sql`set local openbooks.amend = on`)
+          try {
+            for (const reference of costRefs) {
+              const target = replacementById.get(reference.oldId) ?? null;
+              const moved = await tx.execute(sql`update document_lines set billed_by_line_id=${target}
+                where org_id=${orgId} and id=${reference.id} and billed_by_line_id=${reference.oldId} returning id`);
+              if (moved.rows.length !== 1) throw new DocumentEditError(409, 'A billed cost source changed; reconcile its retained billing identity before saving');
             }
-          }
-          if (hasCostRefs) {
-            // Source cost lines live on (often non-draft) source documents,
-            // so their billed_by links move under the same paired replay
-            // authority the generator uses to stamp them — provenance
-            // metadata, never a financial edit — cleared before continuing.
-            await tx.execute(sql`set local openbooks.migration = on`)
-            await tx.execute(sql`set local openbooks.amend = on`)
-            try {
-              for (const move of moves) {
-                if (move.newId) {
-                  await tx.execute(sql`update document_lines set billed_by_line_id = ${move.newId}
-                    where org_id = ${orgId} and billed_by_line_id = ${move.oldId}`)
-                } else {
-                  await tx.execute(sql`update document_lines set billed_by_line_id = null
-                    where org_id = ${orgId} and billed_by_line_id = ${move.oldId}`)
-                }
-              }
-            } finally {
-              await tx.execute(sql`set local openbooks.migration = off`)
-              await tx.execute(sql`set local openbooks.amend = off`)
-            }
+          } finally {
+            await tx.execute(sql`set local openbooks.migration = off`)
+            await tx.execute(sql`set local openbooks.amend = off`)
           }
         }
       }
