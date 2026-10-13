@@ -280,3 +280,29 @@ test("successful organization writes invalidate analytics; reads, personal layou
   await refused(post({}));
   assert.deepEqual(invalidated, ["org-1"]);
 });
+
+
+test('record parameter refusals preserve opaque 404 before parsing edit bodies while authority still precedes identity', async () => {
+  reset()
+  let invoked = false
+  const handler = defineRoute({
+    permission: 'expenses.create', feature: 'expenses',
+    params: z.object({id: z.string().uuid()}), invalidParamsNotFound: 'record',
+    body: z.object({memo: z.string()}),
+    handler: async () => { invoked = true; return ok() },
+  })
+  const context = {params: Promise.resolve({id:'reports'})}
+  const refused = await handler(post({}), context)
+  assert.equal(refused.status, 404)
+  assert.deepEqual(await refused.json(), {error:'not_found'})
+  assert.equal(invoked, false)
+  reset({permission:'deny403'})
+  assert.equal((await handler(post({}), context)).status, 403)
+  assert.equal(invoked, false)
+  reset()
+  const valid = {params: Promise.resolve({id:'00000000-0000-4000-8000-000000000001'})}
+  assert.equal((await handler(post({}), valid)).status, 400)
+  assert.equal(invoked, false)
+  assert.equal((await handler(post({memo:'Reviewed edit'}), valid)).status, 200)
+  assert.equal(invoked, true)
+})

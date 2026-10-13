@@ -33,6 +33,8 @@ interface CommonOptions<
   B extends z.ZodType | undefined,
 > {
   params?: P;
+  /** Preserve an opaque missing-record response for malformed record identifiers. */
+  invalidParamsNotFound?: "record" | "route";
   body?: B;
   /** Top-level JSON body columns that intentionally remain uninterpreted. */
   opaque?: Record<string, string>;
@@ -229,6 +231,7 @@ export function defineRoute(options: LooseOptions) {
         if (options.params) {
           const parsed = (options.params as z.ZodType).safeParse(resolved);
           if (!parsed.success) {
+            if (options.invalidParamsNotFound) return notFound(options.invalidParamsNotFound);
             const first = parsed.error.issues[0];
             return NextResponse.json(
               { error: first?.message ?? "invalid request parameters" },

@@ -53,6 +53,8 @@ function malformedId(id: string): NextResponse | null {
 }
 
 export const GET = defineRoute({
+  params: z.object({ id: z.string().refine(isUuid) }),
+  invalidParamsNotFound: 'record',
   permission: 'expenses.read',
   feature: 'expenses',
   handler: async ({ authz: routeAuthz, params: routeParams }) => {
@@ -79,6 +81,8 @@ export const GET = defineRoute({
  * two concurrent saves can never silently overwrite one another.
  */
 export const PATCH = defineRoute({
+  params: z.object({ id: z.string().refine(isUuid) }),
+  invalidParamsNotFound: 'record',
   permission: 'expenses.create',
   feature: 'expenses',
   body: PATCHBodySchema1,
@@ -107,11 +111,6 @@ export const PATCH = defineRoute({
       }
 
     const body = (routeBody) as ExpenseEditBody
-    // An empty edit is refused only after the existence and scope gates, so a
-    // malformed or unknown id keeps its 404 contract on every verb.
-    if (Object.keys(body).length === 0) {
-      return NextResponse.json({ error: 'At least one field must be provided.' }, { status: 400 })
-    }
     let expectedRevision: string
     try {
         expectedRevision = requireDocumentEditRevision(body.expectedUpdatedAt)
@@ -216,6 +215,8 @@ export const PATCH = defineRoute({
 
 /** Delete an expense report (guarded: open period, no applied payments, no downstream conversion). */
 export const DELETE = defineRoute({
+  params: z.object({ id: z.string().refine(isUuid) }),
+  invalidParamsNotFound: 'record',
   permission: 'expenses.create',
   feature: 'expenses',
   body: DELETEBodySchema1,
