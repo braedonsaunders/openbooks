@@ -125,15 +125,10 @@ hooks.deregister();
 // workspace and server-only mapping live for them without any gate logic.
 registerHooks({
   resolve(specifier, context, nextResolve) {
-    if (specifier === "@openbooks/schema" || specifier.startsWith("@openbooks/")) {
-      const rest =
-        specifier === "@openbooks/schema"
-          ? "schema/src/index.ts"
-          : specifier.slice("@openbooks/".length);
-      const workspacePath = rest.includes("/")
-        ? rest
-        : `packages/${rest}/src/index.ts`;
-      return nextResolve(new URL(`../${workspacePath}`, webRoot).href, context);
+    const engine = resolveEngineSpecifier(specifier);
+    if (engine) return nextResolve(engine, context);
+    if (specifier === "@openbooks/schema") {
+      return nextResolve(new URL("../schema/src/index.ts", webRoot).href, context);
     }
     if (specifier === "server-only") {
       return { url: "data:text/javascript,export default {}", shortCircuit: true };
