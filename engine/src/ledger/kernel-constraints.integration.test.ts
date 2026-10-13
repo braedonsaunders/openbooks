@@ -598,12 +598,12 @@ test(
           insert into connections
             (id, org_id, source, display_name, status, posted_change_policy,
              posted_change_authorized_by, posted_change_authorized_at)
-          values (${connectionId}, ${org.orgId}, 'netsuite', 'Historical replay', 'active',
+          values (${connectionId}, ${org.orgId}, 'fixture', 'Historical replay', 'active',
                   'append_only_automatic', ${controllerId}, now() - interval '1 minute')
         `);
         await tx.execute(sql`
           insert into sync_runs (id, org_id, connection_id, source, kind, status, triggered_by)
-          values (${runId}, ${org.orgId}, ${connectionId}, 'netsuite', 'incremental', 'running', ${controllerId})
+          values (${runId}, ${org.orgId}, ${connectionId}, 'fixture', 'incremental', 'running', ${controllerId})
         `);
       }));
       const firstId = await draftEntry(org, "SOURCE-LOCK-REPLAY-1");
