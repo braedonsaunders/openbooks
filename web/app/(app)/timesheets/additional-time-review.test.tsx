@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import test, { type TestContext } from 'node:test'
+import { isUuid } from '@openbooks/engine/platform/uuid'
 import type { ComponentProps } from 'react'
 import { readFile } from 'node:fs/promises'
 
@@ -117,7 +118,7 @@ test('returned ticket time uses one scoped correction body and keeps reviewed id
   assert.equal((corrected[0]![0] as Props['entries'][number]).id, 'reviewed')
   assert.equal(corrected[0]![1], 'overtime')
   assert.equal(corrected[0]![2], revision)
-  assert.match(String(corrected[0]![3]), /^[0-9a-f-]{36}$/)
+  assert.equal(isUuid(corrected[0]![3]), true)
   assert.equal(f.host.querySelector('textarea')!.value, 'Apply the independently reviewed worked-time classification')
   assert.match(f.host.querySelector('[role="alert"]')?.textContent ?? '', /Reload the week/)
   await act(async () => save.click())

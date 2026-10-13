@@ -314,6 +314,16 @@ test("policy versions cannot reach back into a closed year and must name postabl
   const org = await createScratchOrg();
   try {
     const { actors, year, december } = await readyYear(org);
+    assert.match((await periodEndPolicyWriteRefusal(db,org.orgId,{
+      effectiveFrom:"2027-01-01",closingMethod:"income_summary",
+      retainedEarningsAccountId:year.retainedEarningsId,incomeSummaryAccountId:"-".repeat(36),
+    })) ?? "",/Choose the income summary account/);
+    assert.match((await periodEndPolicyWriteRefusal(db,org.orgId,{
+      effectiveFrom:"2027-01-01",retainedEarningsAccountId:"-".repeat(36),
+    })) ?? "",/Choose the retained earnings account/);
+    assert.match((await periodEndPolicyWriteRefusal(db,org.orgId,{
+      effectiveFrom:"2027-02-30",retainedEarningsAccountId:year.retainedEarningsId,
+    })) ?? "",/valid effective date/);
     assert.match(
       (await periodEndPolicyWriteRefusal(db, org.orgId, { effectiveFrom: "2027-01-01", closingMethod: "retained_earnings", retainedEarningsAccountId: org.accounts.revenue })) ?? "",
       /active, postable equity account/,

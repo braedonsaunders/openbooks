@@ -1,6 +1,8 @@
 import { resolveBookBases } from "../journal/book-basis.ts";
 import { BookTranslationError } from "../journal/book-translation.ts";
 import { randomUUID } from "node:crypto";
+import { isUuid } from "../platform/uuid.ts";
+import { isIsoCalendarDate } from "../platform/civil-date.ts";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, withTransactionSavepoint, type SqlExecutor } from "../platform/db.ts";
 import { neg, normalizeMoney, sum } from "../money/money.ts";
@@ -1718,8 +1720,12 @@ export async function periodEndPolicyWriteRefusal(
   if (method === "income_summary" && !summary) return "Choose the income summary account the closing passes through.";
   if (method === "retained_earnings" && summary) return "An income summary account applies only to the income summary closing method.";
   if (summary && summary === retained) return "Choose an income summary account different from the retained earnings account.";
-  const ids = [retained, ...(summary ? [summary] : [])].filter((id) => /^[0-9a-f-]{36}$/i.test(id));
-  if (!ids.includes(retained)) return "Choose the retained earnings account the closing credits.";
+  if (!isUuid(retained)) return "Choose the retained earnings account the closing credits.";
+  if (summary && !isUuid(summary)) return "Choose the income summary account the closing passes through.";
+  if (input.effectiveFrom !== undefined && !isIsoCalendarDate(input.effectiveFrom)) {
+    return "Choose a valid effective date for the closing policy.";
+  }
+  const ids = [retained, ...(summary ? [summary] : [])];
   const accounts = (await executor.execute<{ id: string; type: string; is_summary: boolean; is_active: boolean }>(sql`
     select id, type, is_summary, is_active from accounts
      where org_id = ${orgId} and id = any(${`{${ids.join(",")}}`}::uuid[])`)).rows;
@@ -1731,7 +1737,7 @@ export async function periodEndPolicyWriteRefusal(
         : "The income summary account must be an active, postable equity account.";
     }
   }
-  if (typeof input.effectiveFrom === "string" && /^\d{4}-\d{2}-\d{2}$/.test(input.effectiveFrom)) {
+  if (isIsoCalendarDate(input.effectiveFrom)) {
     const closed = (await executor.execute<{ fiscal_year: number; year_ends_on: string }>(sql`
       select fiscal_year, year_ends_on::text as year_ends_on from period_end_journal_sets
        where org_id = ${orgId} and status = 'posted' and year_ends_on >= ${input.effectiveFrom}::date

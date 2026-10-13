@@ -356,8 +356,8 @@ test('a protected payroll PDF cannot be sent without a protection pass', async (
   assert.equal(state.deliveryCalls.length, 0)
 })
 
-test('verified ciphertext is what actually reaches the transport', async () => {
-  if (!(await pdfEncryptionAvailable())) return // no qpdf here: skip honestly, never fake
+test('verified ciphertext is what actually reaches the transport', async (context) => {
+  if (!(await pdfEncryptionAvailable())) { context.skip('Native qpdf verifier is unavailable'); return }
   reset([], { enabled: true, expression: '{surname:3|upper}' })
   for (const recordType of protectedPayrollRecordTypes) {
     let encryptionCalls = 0
@@ -468,8 +468,8 @@ test('a disabled password policy delivers no eligible pay stubs', async () => {
   assert.equal(state.encryptionPasswords.length, 0)
 })
 
-test('every eligible delivery is encrypted with the employee-derived password', async () => {
-  if (!(await pdfEncryptionAvailable())) return // no qpdf here: skip honestly, never fake
+test('every eligible delivery is encrypted with the employee-derived password', async (context) => {
+  if (!(await pdfEncryptionAvailable())) { context.skip('Native qpdf verifier is unavailable'); return }
   reset([stub()], { enabled: true, expression: '{surname:3|upper}{dob:MMDDYYYY}' })
 
   const result = await emailRunStubs('org-1', 'run-1')
