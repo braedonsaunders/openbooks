@@ -202,7 +202,8 @@ export async function postPaymentWithApplications(
       }
       const entry = (await db.execute<{ id: string }>(sql`select id from journal_entries
         where org_id = ${doc.orgId} and id = ${doc.postedEntryId} and source_document_id = ${doc.id}
-          and status = 'posted'`)).rows[0];
+          and status = 'posted' -- Live entries only: payment effect replay requires its current unreversed journal.
+        `)).rows[0];
       if (!entry) throw new PaymentError("The posted payment's retained journal is not posted for this receipt; reconcile its native accounting before replaying.");
       return { entryId: entry.id };
     }

@@ -283,7 +283,7 @@ async function loadOpenItems(
       from journal_lines jl
       join journal_entries je
         on je.org_id = jl.org_id and je.id = jl.entry_id
-       and je.status = 'posted' and je.book_id = ${input.bookId}
+       and je.status = 'posted' and je.book_id = ${input.bookId} -- Live entries only: only current open items authorize settlement; position totals retain reversal history.
       left join lateral (
         select sum(case when a.to_line_id = jl.id then a.target_transaction_amount else a.source_transaction_amount end) as txn,
                sum(case when a.to_line_id = jl.id then a.amount else a.source_amount end) as base
@@ -1228,7 +1228,7 @@ export async function reverseNettingRun(
     // Settlement entries and their realized-exchange entries carry the run.
     const entries = (await db.execute<{ entry_id: string }>(sql`
       select id as entry_id from journal_entries
-       where org_id = ${orgId} and status = 'posted' and reverses_entry_id is null
+       where org_id = ${orgId} and status = 'posted' and reverses_entry_id is null -- Live entries only: an already reversed settlement cannot be reversed again.
          and custom->>'intercompanyNettingRunId' = ${runId}
        order by entry_number`)).rows;
     let index = 0;

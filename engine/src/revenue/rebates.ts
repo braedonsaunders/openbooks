@@ -317,7 +317,8 @@ export async function reverseRebatePayment(orgId:string,actorId:string,id:string
     await lockLedgerSetupFence(db,orgId,'shared');
     const {claim,agreement:a}=await rebateClaimContext(db,orgId,actorId,id);
     if (claim.status!=='settled'||claim.settlement_document_id||!claim.settlement_entry_id) throw new RebateError('Select a settled bank payment; reverse credit settlements through their native document');
-    const original=(await db.execute<{book_id:string}>(sql`select book_id from journal_entries where org_id=${orgId} and id=${claim.settlement_entry_id} and status='posted' for update`)).rows[0];
+    const original=(await db.execute<{book_id:string}>(sql`select book_id from journal_entries where org_id=${orgId} and id=${claim.settlement_entry_id} and status='posted' for update -- Live entries only: an already reversed rebate settlement cannot be reversed again.
+      `)).rows[0];
     const period=await resolveCoveringPeriod(db,orgId,date);
     if (!original||!period) throw new RebateError('The original settlement or reversal accounting period is unavailable');
     const lines=await db.select().from(schema.journalLines).where(and(eq(schema.journalLines.orgId,orgId),eq(schema.journalLines.entryId,claim.settlement_entry_id)));

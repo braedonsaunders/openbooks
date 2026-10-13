@@ -174,7 +174,7 @@ export async function listCipCandidateLines(
       join accounting_books b on b.org_id = je.org_id and b.id = je.book_id and b.is_primary and b.is_active and b.posts_gl
       left join documents d on d.org_id = je.org_id and d.id = je.source_document_id
      where jl.org_id = ${orgId} and jl.account_id = ${cip.asset_account_id} and jl.subsidiary_id = ${cip.subsidiary_id}
-       and je.status = 'posted' and je.reverses_entry_id is null and je.origin <> ${CAPITALIZATION_ORIGIN}
+       and je.status = 'posted' and je.reverses_entry_id is null and je.origin <> ${CAPITALIZATION_ORIGIN} -- Live entries only: reversed costs cannot become new CIP sources.
        and jl.amount <> 0
        and not exists (select 1 from asset_cip_costs c where c.org_id = jl.org_id and c.source_line_id = jl.id and c.status = 'linked')
        ${args.from ? sql`and je.posting_date >= ${args.from}` : sql``}

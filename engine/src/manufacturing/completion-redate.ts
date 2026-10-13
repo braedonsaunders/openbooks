@@ -162,7 +162,7 @@ async function liveCompletionEntries(tx: SqlExecutor, orgId: string, workOrderNu
     select id, entry_number, posting_date::text as posting_date, book_id, subsidiary_id, custom
       from journal_entries
      where org_id=${orgId} and origin='manufacturing' and custom->>'work_order_number'=${workOrderNumber}
-       and custom ? 'completion_quantity' and status='posted' and reverses_entry_id is null
+       and custom ? 'completion_quantity' and status='posted' and reverses_entry_id is null -- Live entries only: only current postings constrain or authorize completion correction.
      order by posting_date, created_at, id`)).rows;
 }
 
@@ -197,7 +197,7 @@ async function correctionFloor(tx: SqlExecutor, orgId: string, order: OrderRow, 
              where org_id=${orgId} and work_order_id=${workOrderId} and status='done') as last_operation,
            (select max(posting_date)::text from journal_entries
              where org_id=${orgId} and origin='manufacturing' and custom->>'work_order_number'=${order.number}
-               and status='posted' and reverses_entry_id is null
+               and status='posted' and reverses_entry_id is null -- Live entries only: only current postings constrain or authorize completion correction.
                -- Completions are the dates being corrected; a short-close variance is period-end WIP, not production.
                and not (custom ? 'completion_quantity') and not (custom ? 'shortCloseReason')) as posting_floor`)).rows[0];
   return latestDate([row?.last_operation ?? null, order.started_on, row?.posting_floor ?? null]);
@@ -207,7 +207,7 @@ async function correctionReplay(tx: SqlExecutor, orgId: string, key: string): Pr
   return (await tx.execute<{ id: string; entry_number: string }>(sql`
     select id, entry_number from journal_entries
      where org_id=${orgId} and origin='manufacturing' and custom->>'completion_redate_key'=${key}
-       and status='posted' and reverses_entry_id is null
+       and status='posted' and reverses_entry_id is null -- Live entries only: only current postings constrain or authorize completion correction.
      order by created_at, id`)).rows;
 }
 

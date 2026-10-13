@@ -124,7 +124,7 @@ async function candidateLines(tx: SqlExecutor, orgId: string, entryIds: readonly
         join accounting_books b on b.org_id = je.org_id and b.id = je.book_id
          and b.is_primary and b.is_active and b.posts_gl
        where je.org_id = ${orgId} and je.id = any(${uuidArray([...entryIds])}::uuid[])
-         and je.status = 'posted' and je.reverses_entry_id is null
+         and je.status = 'posted' and je.reverses_entry_id is null -- Live entries only: reversed source debits cannot authorize a new capitalization proposal.
          and je.origin = any(${textArrayLiteral(PROPOSAL_SOURCE_ORIGINS)}::text[])
     ), debits as (
       select jl.id, jl.entry_id, jl.account_id, jl.subsidiary_id, jl.amount::text as amount, jl.memo,
@@ -252,7 +252,7 @@ async function entriesInWindow(tx: SqlExecutor, orgId: string, window: { from?: 
       from journal_entries je
       join accounting_books b on b.org_id = je.org_id and b.id = je.book_id and b.is_primary and b.is_active and b.posts_gl
       join journal_lines jl on jl.org_id = je.org_id and jl.entry_id = je.id and jl.amount > 0
-     where je.org_id = ${orgId} and je.status = 'posted' and je.reverses_entry_id is null
+     where je.org_id = ${orgId} and je.status = 'posted' and je.reverses_entry_id is null -- Live entries only: reversed source debits cannot authorize a new capitalization proposal.
        and je.origin = any(${textArrayLiteral(PROPOSAL_SOURCE_ORIGINS)}::text[])
        ${window.from ? sql`and je.posting_date >= ${window.from}` : sql``}
        ${window.to ? sql`and je.posting_date <= ${window.to}` : sql``}

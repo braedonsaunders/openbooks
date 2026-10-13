@@ -68,7 +68,7 @@ export async function runScheduledJournalReversals(input: { orgId: string; actor
         if (!period) throw new JournalInstructionError("No accounting period covers the approved reversal date.", "Generate the entity's period, then retry the scheduled reversals.");
         const liveEntries=(await db.execute<{id:string;entry_number:string;origin:string}>(sql`
           select id,entry_number,origin from journal_entries where org_id=${input.orgId} and source_document_id=${instruction.document_id}
-            and book_id=${source.book_id} and status='posted' and reverses_entry_id is null
+            and book_id=${source.book_id} and status='posted' and reverses_entry_id is null -- Live entries only: scheduled reversal must not reverse an already reversed entry.
           order by (id=${instruction.source_entry_id}) desc,id for update`)).rows;
         let primaryReversalId:string|null=null;
         for(const live of liveEntries){

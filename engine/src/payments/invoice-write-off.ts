@@ -232,7 +232,7 @@ export async function writeOffInvoice(
       select jl.id, abs(jl.amount)::text as amount
         from journal_lines jl
         join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
-       where jl.org_id = ${orgId} and je.id = ${invoice.entryId} and je.status = 'posted'
+       where jl.org_id = ${orgId} and je.id = ${invoice.entryId} and je.status = 'posted' -- Live entries only: only a current invoice open item authorizes a write-off.
          and jl.is_open_item
        order by jl.id
        for update of jl`)).rows;

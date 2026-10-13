@@ -79,7 +79,7 @@ async function runDisputeWon(
   const holds = candidates.length ? (await db.execute<{ id: string; control_account_id: string }>(sql`
     select d.id, jl.account_id as control_account_id from documents d
       join journal_lines jl on jl.org_id = d.org_id and jl.entry_id = d.posted_entry_id and jl.is_open_item
-      join journal_entries entry on entry.org_id = d.org_id and entry.id = d.posted_entry_id and entry.status = 'posted'
+      join journal_entries entry on entry.org_id = d.org_id and entry.id = d.posted_entry_id and entry.status = 'posted' -- Live entries only: a reversed dispute hold cannot authorize settlement.
      where d.org_id = ${orgId} and d.id in (${sql.join(candidates.map(id => sql`${id}`), sql`, `)})
        and d.kind = 'customer_payment' and d.status = 'posted' and d.currency = ${row.currency}
        and d.party_id = ${ctx.link.party_id} and d.subsidiary_id = ${ctx.link.subsidiary_id}
