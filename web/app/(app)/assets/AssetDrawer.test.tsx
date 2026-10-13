@@ -6,7 +6,7 @@ import test, { type TestContext } from 'node:test'
 // readers without setup access must hear the grant instead of silence. A
 // configured tenant must see no prerequisite at all.
 
-const { bootJsdomEnvironment } = await import('../../../testing/jsdom-env')
+const { bootJsdomEnvironment, setJsdomInput } = await import('../../../testing/jsdom-env')
 await bootJsdomEnvironment({ url: 'http://localhost:4800/assets?assetNew=1', scrollIntoView: false })
 
 Object.assign(globalThis, {
@@ -288,14 +288,12 @@ test('a draft names exactly the fields still missing on the schedule tab', async
 
 
 async function enterAssetAmount(labelText: string, value: string) {
-  const label = [...document.querySelectorAll('label')].find(item => item.textContent === labelText)
+  const label = [...document.querySelectorAll('label')].find(item => item.textContent?.replace(/\s*\*$/, '').trim() === labelText)
   assert.ok(label?.htmlFor, `native amount label ${labelText} must name its input`)
   const input = document.getElementById(label.htmlFor)
   assert.ok(input instanceof HTMLInputElement)
-  const setter = Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, 'value')!.set!
   await act(async () => {
-    setter.call(input, value)
-    input.dispatchEvent(new window.Event('input', { bubbles: true }))
+    setJsdomInput(input, value)
     await tick()
   })
 }
