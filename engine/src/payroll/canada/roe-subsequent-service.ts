@@ -61,9 +61,9 @@ export async function saveRoeSubsequentService(scope: RoeEmployeeScope,input: Ro
     if((original?.id??null)!==value.expectedId||(original?.updatedAt??null)!==value.expectedUpdatedAt)
       throw new PayrollError('Return-to-service evidence changed — reload it before saving');
     const source=(await db.execute(sql`select v.id from files f join file_versions v on v.file_id=f.id
-      where f.org_id=${scope.orgId} and f.id=${value.sourceFileId} and v.id=${value.sourceVersionId}
+      where f.org_id=${scope.orgId} and f.id=${value.sourceFileId} and not f.is_inactive and v.id=${value.sourceVersionId}
         and v.content_hash=${value.sourceSha256} and v.created_by=${scope.actorId} for share of f,v`)).rows;
-    if(source.length!==1)throw new PayrollError('Upload the original return-to-work source to File Cabinet as the importing operator, then choose its retained version and hash');
+    if(source.length!==1)throw new PayrollError('Choose the active original return-to-work source uploaded to File Cabinet by the importing operator, with its retained version and hash');
     const rows=original?(await db.execute<RoeSubsequentService>(sql`update payroll_roe_subsequent_service_sources
       set first_day_worked=${value.firstDayWorked},source_file_id=${value.sourceFileId},source_version_id=${value.sourceVersionId},
         source_sha256=${value.sourceSha256},source_reference=${value.sourceReference},change_reason=${value.reason},

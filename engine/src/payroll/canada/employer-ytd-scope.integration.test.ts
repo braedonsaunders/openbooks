@@ -87,6 +87,11 @@ test('unqualified opening payer refuses, exact source qualification replays, and
   const context=await readOpeningEmployerContext({orgId:f.orgId,actorId:f.actorId,employeePartyId:f.employeeId,taxYear:2026,allowedSubsidiaryIds:null});assert.ok(context.record);
   const input={orgId:f.orgId,actorId:f.actorId,openingBalanceId:context.record.id,subsidiaryId:f.subsidiaryId,
    expectedOpeningSha256:context.record.openingSha256,...await source(f),allowedSubsidiaryIds:null};
+  const unrelated=randomUUID();
+  await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country)
+    values(${unrelated},${f.orgId},${f.subsidiaryId},'Unrelated legal employer','CAD','CA')`);
+  await assert.rejects(qualifyOpeningEmployerAuthority({...input,subsidiaryId:unrelated}),/retained native employment/);
+  assert.equal((await db.execute(sql`select id from payroll_opening_employer_authorities where org_id=${f.orgId}`)).rows.length,0);
   await assert.rejects(qualifyOpeningEmployerAuthority({...input,expectedOpeningSha256:'f'.repeat(64)}),/source changed/);
   const qualified=await qualifyOpeningEmployerAuthority(input);assert.deepEqual(await qualifyOpeningEmployerAuthority(input),qualified);
   assert.equal((await employeeYtd(current)).cpp,'100.0000');assert.equal((await employeeYtd(await run(f,f.other,'draft'))).cpp,'0');

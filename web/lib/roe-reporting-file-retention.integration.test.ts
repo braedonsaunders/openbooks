@@ -5,8 +5,10 @@ import { sql } from 'drizzle-orm'
 import { db, withBypassContext, withOrgContext } from '@openbooks/engine/platform/db'
 import { dropScratchOrgReporting, seedPayrollSettings } from '@openbooks/engine/testing/fixtures'
 import { importRoePriorPeriod } from '@openbooks/engine/payroll/roe-history'
+import { saveRoeSeparationFacts } from '@openbooks/engine/payroll/roe-separation-facts'
+import { saveRoeSubsequentService } from '@openbooks/engine/payroll/canada/roe-subsequent-service'
 import { seedAdoption } from '@openbooks/engine/testing/payroll/filing-test-fixtures'
-import { deleteFile, getFileBlob, isRetainedFileEvidence, purgeFile, replaceFile } from './file-cabinet'
+import { createFile, deleteFile, getFileBlob, isRetainedFileEvidence, purgeFile, replaceFile, restoreFile } from './file-cabinet'
 
 test('qualified ROE reporting sources refuse cabinet trash, replacement and purge while preserving pinned bytes',
   { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
@@ -66,6 +68,34 @@ test('qualified ROE reporting sources refuse cabinet trash, replacement and purg
         const rows = (await db.execute<{ id: string; sourceSha256: string }>(sql`select id,source_sha256 as "sourceSha256"
           from payroll_roe_historical_periods where org_id=${f.orgId} and id=${evidence.id}`)).rows
         assert.deepEqual(rows, [{ id: evidence.id, sourceSha256: hash }])
+        const subject = { orgId: f.orgId, actorId: f.actorId, employeePartyId: f.employeeId,
+          employmentId: f.employmentId, subsidiaryId: f.subsidiaryId, allowedSubsidiaryIds: null }
+        const event = await saveRoeSeparationFacts({ ...subject, firstDayWorked: '2026-07-05',
+          interruptionOn: '2026-07-18', lastInsurableEarningsOn: '2026-07-18', salaryContinuanceEndOn: null,
+          status: 'confirmed', sourceReference: 'Original service interruption', reason: 'Retain original event facts',
+          expectedId: null, expectedUpdatedAt: null })
+        const returnBytes = Buffer.from('Original returned-work declaration: first day worked 2026-07-19')
+        const returned = await createFile({ orgId: f.orgId, folderId: folder, filename: 'returned-work.txt',
+          contentType: 'text/plain', bytes: returnBytes, createdBy: f.actorId, audit })
+        const versions = (await db.execute<{ id: string; hash: string }>(sql`select v.id,v.content_hash as hash
+          from files f join file_versions v on v.file_id=f.id and v.id=f.current_version_id
+          where f.org_id=${subject.orgId} and f.id=${returned.id}`)).rows
+        assert.equal(versions.length, 1)
+        const certificate = { precedingEventId: event.id, firstDayWorked: '2026-07-19', sourceFileId: returned.id,
+          sourceVersionId: versions[0]!.id, sourceSha256: versions[0]!.hash, sourceReference: 'Original returned-work record',
+          reason: 'Retain returned service separately from an interruption', expectedId: null, expectedUpdatedAt: null }
+        assert.equal(await deleteFile(f.orgId, returned.id, audit), true)
+        await assert.rejects(saveRoeSubsequentService(subject, certificate), /active original return-to-work source/)
+        assert.equal(await restoreFile(f.orgId, returned.id, audit), true)
+        await saveRoeSubsequentService(subject, certificate)
+        assert.equal(await isRetainedFileEvidence(f.orgId, returned.id), true)
+        assert.equal(await deleteFile(f.orgId, returned.id, audit), false)
+        assert.equal(await replaceFile({ orgId: f.orgId, fileId: returned.id, filename: 'changed-return.txt',
+          contentType: 'text/plain', bytes: Buffer.from('Changed return'), updatedBy: f.actorId, audit }), false)
+        assert.equal(await purgeFile(f.orgId, returned.id, audit), 'retained')
+        const originalReturn = await getFileBlob(f.orgId, returned.id, viewer, versions[0]!.id)
+        assert.ok(originalReturn)
+        assert.deepEqual(originalReturn.bytes, returnBytes)
       })
     } finally {
       await withBypassContext(() => dropScratchOrgReporting(f.orgId))

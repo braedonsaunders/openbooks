@@ -643,6 +643,9 @@ export function retainedFileEvidence(orgId: string, fileId: SQL): SQL {
     or exists (
       select 1 from payroll_roe_line_evidence rl
        where rl.source_file_id = ${fileId} and rl.org_id = ${orgId})
+    or exists (
+      select 1 from payroll_roe_subsequent_service_sources rs
+       where rs.source_file_id = ${fileId} and rs.org_id = ${orgId})
   )`
 }
 

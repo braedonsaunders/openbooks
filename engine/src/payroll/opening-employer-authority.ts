@@ -27,6 +27,10 @@ export async function qualifyOpeningEmployerAuthority(input:OpeningEmployerAutho
    from payroll_opening_balances where org_id=${input.orgId} and id=${input.openingBalanceId}`)).rows;
   if(opening.length!==1)throw new PayrollError('The native opening record is unavailable');
   await takeEmployeeTaxYearFences(db,[employeeTaxYearFenceKey(input.orgId,opening[0]!.employeePartyId,opening[0]!.taxYear)]);
+  const employment=(await db.execute(sql`select id from worker_employments
+    where org_id=${input.orgId} and worker_party_id=${opening[0]!.employeePartyId}
+      and employer_subsidiary_id=${input.subsidiaryId} limit 1 for share`)).rows;
+  if(employment.length!==1)throw new PayrollError('The original opening employer needs a retained native employment for this employee — qualify that employment before its opening source');
   const existing=(await db.execute<{id:string;openingBalanceId:string;subsidiaryId:string;openingSha256:string;matches:boolean}>(sql`
    select a.id,a.opening_balance_id as "openingBalanceId",a.subsidiary_id as "subsidiaryId",a.opening_sha256 as "openingSha256",
     (a.subsidiary_id=${input.subsidiaryId} and a.source_file_id=${input.sourceFileId} and a.source_version_id=${input.sourceVersionId}
