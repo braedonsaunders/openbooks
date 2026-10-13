@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withBypassContext, withOrgContext, type SqlExecutor } from "../platform/db.ts";
-import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
+import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
 import { markEntryReversed, postEntry } from "../journal/post-entry.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -551,7 +551,7 @@ test(
 );
 
 test(
-  "source replay crosses only connector-owned historical locks",
+  "authenticated source replay crosses imported locks while bare flags do not",
   { skip: !DB },
   async () => {
     const org = await createScratchOrg();
@@ -568,6 +568,7 @@ test(
       tx: SqlExecutor,
       entryNumber: string,
       reversesEntryId: string,
+      actorId?: string,
     ) =>
       postEntry(tx, {
         orgId: org.orgId,
@@ -582,12 +583,29 @@ test(
         currency: "CAD",
         closeModules: ["gl"],
         allowImportedLocks: true,
+        actorId,
         lines: [
           { accountId: org.accounts.bank, amount: "-10" },
           { accountId: org.accounts.cogs, amount: "10" },
         ],
       });
     try {
+      const controllerId = await createScratchUser(org.orgId, "Replay controller", "admin");
+      const connectionId = randomUUID();
+      const runId = randomUUID();
+      await withBypassContext(() => db.transaction(async (tx) => {
+        await tx.execute(sql`
+          insert into connections
+            (id, org_id, source, display_name, status, posted_change_policy,
+             posted_change_authorized_by, posted_change_authorized_at)
+          values (${connectionId}, ${org.orgId}, 'netsuite', 'Historical replay', 'active',
+                  'append_only_automatic', ${controllerId}, now() - interval '1 minute')
+        `);
+        await tx.execute(sql`
+          insert into sync_runs (id, org_id, connection_id, source, kind, status, triggered_by)
+          values (${runId}, ${org.orgId}, ${connectionId}, 'netsuite', 'incremental', 'running', ${controllerId})
+        `);
+      }));
       const firstId = await draftEntry(org, "SOURCE-LOCK-REPLAY-1");
       const secondId = await draftEntry(org, "SOURCE-LOCK-REPLAY-2");
       let firstDebit = "";
@@ -618,15 +636,38 @@ test(
           errorChainMatches(error, /lines of a posted journal entry are immutable/),
       );
 
-      // Source replay through the ledger API crosses the connector-owned
-      // imported lock: reversal plus repost, then the lifecycle marker.
+      const locks = await withOrgContext(org.orgId, () => db.execute(sql`
+        select * from period_locks where org_id = ${org.orgId} order by id
+      `));
+      const unauthenticatedNumber = `SOURCE-REPLAY-UNAUTHENTICATED-${randomUUID().slice(0, 8)}`;
+      await assert.rejects(
+        withOrgContext(org.orgId, () => db.transaction(async (tx) => {
+          await tx.execute(sql`set local openbooks.migration = 'on'`);
+          await replayCorrection(tx, unauthenticatedNumber, firstId);
+        })),
+        (error: unknown) => errorChainMatches(error, /entity accounting period is closed/),
+      );
+      assert.equal((await withOrgContext(org.orgId, () => db.execute(sql`
+        select id from journal_entries where org_id = ${org.orgId} and entry_number = ${unauthenticatedNumber}
+      `))).rows.length, 0);
+
+      // The database validates the active run, owning connection and
+      // attributable automatic policy before admitting append-only replay.
       const replayNumber = `SOURCE-REPLAY-${randomUUID().slice(0, 8)}`;
       const replay = await withOrgContext(org.orgId, () => db.transaction(async (tx) => {
         await tx.execute(sql`set local openbooks.migration = 'on'`);
-        return replayCorrection(tx, replayNumber, firstId);
+        await tx.execute(sql`
+          select set_config('openbooks.connector_replay', 'on', true),
+                 set_config('openbooks.connector_replay_request', ${runId}, true),
+                 set_config('openbooks.connector_replay_actor', ${controllerId}, true)
+        `);
+        return replayCorrection(tx, replayNumber, firstId, controllerId);
       }));
       await withOrgContext(org.orgId, () =>
-        markEntryReversed(db, { orgId: org.orgId, entryId: firstId }));
+        markEntryReversed(db, { orgId: org.orgId, entryId: firstId, actorId: controllerId }));
+      assert.deepEqual((await withOrgContext(org.orgId, () => db.execute(sql`
+        select * from period_locks where org_id = ${org.orgId} order by id
+      `))).rows, locks.rows);
       const replayed = await withOrgContext(org.orgId, () => db.execute<{
         id: string;
         status: string;
