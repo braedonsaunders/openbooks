@@ -1099,8 +1099,8 @@ const payrollFilingScopeCases = [
         const { dropScratchOrgReporting } =
           await import("@openbooks/engine/testing/fixtures");
         const { commitPayRun } = await import("@openbooks/engine/payroll/run-commit");
-        const { roeRecord } = await import("@openbooks/engine/payroll/yearend");
-        const { guardPayrollFilingRowIds, guardPayrollFilingData } =
+        const { roeRecord, roeSourceScope } = await import("@openbooks/engine/payroll/yearend");
+        const { guardPayrollFilingRowIds, guardPayrollFilingData, guardPayrollFilingAccounts } =
           await import("../app/api/payroll/subsidiary-scope");
         const { POST } = await import("../app/api/payroll/year-end/file/route");
 
@@ -1263,35 +1263,32 @@ const payrollFilingScopeCases = [
                 ),
                 null,
               );
-              const accountOwner = randomUUID();
+              const retainedSources = await withOrgContext(fx.orgId, () => roeSourceScope(fx.orgId, [fx.employeeId]));
+              const retainedAccounts = [...new Set(retainedSources.map(source => source.filingAccountId))];
+              assert.equal(retainedAccounts.length, 1);
+              assert.ok(retainedAccounts[0]);
+              const accountOwner = randomUUID(), currentAccountId = randomUUID();
               await withBypassContext(async () => {
                 await db.execute(
                   sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country) values(${accountOwner},${fx.orgId},${fx.subsidiaryId},'Hidden ROE account','CAD','CA')`,
                 );
                 const account = (
                   await db.execute<{ id: string }>(
-                    sql`insert into payroll_filing_accounts(org_id,country,program_type,account_number,name,subsidiary_id) values(${fx.orgId},'CA','ca_rp','123456789RP0001','ROE profile account',${accountOwner}) returning id`,
+                    sql`insert into payroll_filing_accounts(id,org_id,country,program_type,account_number,name,subsidiary_id) values(${currentAccountId},${fx.orgId},'CA','ca_rp','123456789RP0002','Current profile payroll account',${accountOwner}) returning id`,
                   )
                 ).rows[0]!.id;
                 await db.execute(
                   sql`update employee_payroll_profiles set filing_account_id=${account} where org_id=${fx.orgId} and employee_party_id=${fx.employeeId}`,
                 );
               });
-              assert.equal(
-                (
-                  await withOrgContext(fx.orgId, () =>
-                    guardPayrollFilingRowIds(
-                      combined,
-                      "CA",
-                      "roe",
-                      [fx.employeeId],
-                      2026,
-                    ),
-                  )
-                )?.status,
-                404,
-                "the ROE header filing account is also protected",
-              );
+              assert.equal(await withOrgContext(fx.orgId, () =>
+                guardPayrollFilingRowIds(combined, "CA", "roe", [fx.employeeId], 2026)), null,
+                "An unrelated current-profile account cannot replace the selected historical ROE account");
+              assert.deepEqual(await withOrgContext(fx.orgId, () => roeSourceScope(fx.orgId, [fx.employeeId])), retainedSources);
+              assert.ok(retainedSources.every(source => source.filingAccountId !== currentAccountId));
+              assert.equal((await withOrgContext(fx.orgId, () =>
+                guardPayrollFilingAccounts(combined, [currentAccountId], true)))?.status, 404,
+                "An explicitly requested hidden account still requires its own entity authority");
               assert.equal(
                 await withOrgContext(fx.orgId, () =>
                   guardPayrollFilingRowIds(
