@@ -29,8 +29,13 @@ const newId = () => crypto.randomUUID()
 export function useBoard(boardId: string, initial: BoardWindow | null, range: { from: string; through: string }, enabled = true) {
   const t = useTranslations('scheduling')
   const compatible = (value: BoardWindow | null) => value?.board.id === boardId && value.from === range.from && value.through === range.through
-  const [window, setWindow] = useIdentityState<BoardWindow | null>([boardId, initial], compatible(initial) ? initial : null)
+  const [window, setWindow] = useIdentityState<BoardWindow | null>([boardId], compatible(initial) ? initial : null)
   const [loading, setLoading] = useIdentityState([boardId, initial, range.from, range.through, enabled], enabled && !compatible(initial))
+  const [observedInitial, setObservedInitial] = useState(initial)
+  if (observedInitial !== initial) {
+    setObservedInitial(initial)
+    if (compatible(initial)) setWindow(initial)
+  }
   const [saving, setSaving] = useState(0)
   const [notices, setNotices] = useState<BoardNotice[]>([])
   const [undoStack, setUndoStack] = useState<HistoryStep[]>([])
@@ -79,8 +84,11 @@ export function useBoard(boardId: string, initial: BoardWindow | null, range: { 
     void reload()
   }, [boardId, enabled, range.from, range.through, reload])
 
+  const appliedServerSnapshot = useRef({ boardId, initial })
   // A refreshed server snapshot is authoritative only for its exact window.
   useLayoutEffect(() => {
+    if (appliedServerSnapshot.current.boardId === boardId && appliedServerSnapshot.current.initial === initial) return
+    appliedServerSnapshot.current = { boardId, initial }
     if (initial?.board.id !== boardId || initial.from !== range.from || initial.through !== range.through) return
     pending.current?.abort(); ++requestSeq.current
     loadedRange.current=`${boardId}|${initial.from}|${initial.through}`
