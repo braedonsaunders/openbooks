@@ -1377,6 +1377,27 @@
       "employer": "Employeur légal : {name}",
       "importHistory": "Importer les preuves du relevé d’emploi",
       "importHistoryHelp": "Utilisez l’importateur commun pour les périodes historiques ou les preuves des lignes de rémunération conservées. Les montants et heures assurables doivent être justifiés; une période manquante n’est pas présumée nulle."
+    },
+    "subsequentService": {
+      "title": "Retour au travail après cette interruption",
+      "help": "Conservez le premier jour réellement travaillé après cette interruption, pour le même emploi et le même employeur légal. Une date de paiement ou la date d’embauche actuelle ne prouve pas le retour.",
+      "issued": "Cet événement déclaré conserve ses preuves originales de retour au travail. Elles ne peuvent pas être modifiées ici.",
+      "retry": "Réessayer",
+      "retained": "Retour conservé",
+      "firstWorked": "Premier jour travaillé après le retour",
+      "file": "Preuve originale du retour au travail dans le classeur",
+      "reference": "Référence de l’employé et du retour dans la source",
+      "reason": "Motif de qualification ou de correction",
+      "saving": "Enregistrement…",
+      "save": "Enregistrer les preuves du retour",
+      "evidenceTabs": "Preuves sources du RE",
+      "separationTab": "Séparation",
+      "returnTab": "Preuves du retour",
+      "saveFactsFirst": "Enregistrez les faits de séparation modifiés avant de qualifier le retour au travail.",
+      "missingScope": "L’événement sélectionné n’a pas d’emploi ni d’employeur légal confirmés. Qualifiez sa source originale avant d’enregistrer un retour.",
+      "loadFailed": "Impossible de charger les preuves du retour au travail",
+      "saveFailed": "Impossible d’enregistrer les preuves du retour au travail",
+      "loading": "Chargement des preuves du retour au travail"
     }
   },
   "separations": {

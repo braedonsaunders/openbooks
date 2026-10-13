@@ -1377,6 +1377,27 @@
       "employer": "Empregador legal: {name}",
       "importHistory": "Importar evidências do registro de emprego",
       "importHistoryHelp": "Use o importador compartilhado para períodos históricos ou evidências das linhas de remuneração preservadas. Valores e horas seguráveis exigem comprovação; períodos ausentes não são considerados nulos automaticamente."
+    },
+    "subsequentService": {
+      "title": "Retorno ao trabalho após esta interrupção",
+      "help": "Retenha o primeiro dia efetivamente trabalhado após esta interrupção, para o mesmo vínculo e empregador legal. A data de pagamento ou de contratação atual não comprova o retorno.",
+      "issued": "Este evento emitido mantém as evidências originais do retorno ao trabalho. Elas não podem ser alteradas aqui.",
+      "retry": "Tentar novamente",
+      "retained": "Retorno registrado",
+      "firstWorked": "Primeiro dia trabalhado após o retorno",
+      "file": "Fonte original do retorno ao trabalho no arquivo",
+      "reference": "Referência do funcionário e do retorno na fonte",
+      "reason": "Motivo da qualificação ou correção",
+      "saving": "Salvando…",
+      "save": "Salvar evidências do retorno",
+      "evidenceTabs": "Evidências de origem do ROE",
+      "separationTab": "Separação",
+      "returnTab": "Evidências do retorno",
+      "saveFactsFirst": "Salve os fatos de separação alterados antes de qualificar o retorno ao trabalho.",
+      "missingScope": "O evento selecionado não tem vínculo nem empregador legal confirmados. Qualifique a fonte original antes de registrar um retorno.",
+      "loadFailed": "Não foi possível carregar as evidências do retorno ao trabalho",
+      "saveFailed": "Não foi possível salvar as evidências do retorno ao trabalho",
+      "loading": "Carregando evidências do retorno ao trabalho"
     }
   },
   "separations": {

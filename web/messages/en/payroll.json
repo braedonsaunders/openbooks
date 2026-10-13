@@ -1389,7 +1389,15 @@
       "reference": "Employee and return reference in the source",
       "reason": "Qualification or correction reason",
       "saving": "Saving…",
-      "save": "Save return-to-work evidence"
+      "save": "Save return-to-work evidence",
+      "evidenceTabs": "ROE source evidence",
+      "separationTab": "Separation",
+      "returnTab": "Return evidence",
+      "saveFactsFirst": "Save the changed separation facts before qualifying a return to work.",
+      "missingScope": "The selected event has no confirmed employment and legal employer. Qualify its original source before recording a return.",
+      "loadFailed": "Return-to-work evidence could not be loaded",
+      "saveFailed": "Return-to-work evidence could not be saved",
+      "loading": "Loading return-to-work evidence"
     }
   },
   "separations": {

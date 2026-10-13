@@ -4,11 +4,11 @@ import { readRoeSubsequentServiceContext, saveRoeSubsequentService } from '@open
 import { PayrollError } from '@openbooks/engine/payroll/error';
 import { defineRoute } from '@/lib/api/route';
 import { apiErrorResponse } from '@/lib/api/error-response';
-import { uuidId } from '@/lib/api/json-schema';
+import { isoDate, uuidId } from '@/lib/api/json-schema';
 export const dynamic = 'force-dynamic';
 const subject = z.strictObject({ employeePartyId: uuidId, employmentId: uuidId, subsidiaryId: uuidId, precedingEventId: uuidId });
 const query = subject.extend({ sourceFileId: uuidId.optional() });
-const body = subject.extend({ firstDayWorked: z.string(), sourceFileId: uuidId, sourceVersionId: uuidId,
+const body = subject.extend({ firstDayWorked: isoDate(), sourceFileId: uuidId, sourceVersionId: uuidId,
   sourceSha256: z.string().regex(/^[a-f0-9]{64}$/), sourceReference: z.string().trim().min(1).max(2000),
   reason: z.string().trim().min(1).max(2000), expectedId: uuidId.nullable(), expectedUpdatedAt: z.string().nullable() });
 export const GET = defineRoute({ permission: 'payroll.read', feature: 'payroll', handler: async ({ request, authz }) => {

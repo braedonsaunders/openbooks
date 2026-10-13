@@ -58,3 +58,17 @@ test('read refusal stays in the same form and retry reads the selected event wit
  const save=[...host.querySelectorAll('button')].find(b=>b.textContent==='Save return-to-work evidence')
  assert.ok(save);assert.equal(save.disabled,true,'a retained record does not silently supply an editable source version')
 })
+test('an old event response cannot populate a newly selected employment event',async(t)=>{
+ const previous=globalThis.fetch;let release:(value:Response)=>void=()=>{}
+ const older=new Promise<Response>(resolve=>{release=resolve});let calls=0
+ globalThis.fetch=(async()=>++calls===1?older:Response.json({record:{...record,precedingEventId:'019f0000-0000-4000-8000-000000000009',
+  firstDayWorked:'2026-09-11',sourceReference:'Later original event'},source:null})) as typeof fetch
+ const {host,root}=await mount(event)
+ t.after(async()=>{await act(async()=>root.unmount());host.remove();globalThis.fetch=previous})
+ await act(async()=>{root.render(<NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+  <RoeSubsequentServiceForm employeePartyId={event.employeePartyId} event={{...event,id:'019f0000-0000-4000-8000-000000000009'}} canEdit onSaved={()=>{}}/>
+ </NextIntlClientProvider>);await tick();await tick()})
+ await act(async()=>{release(Response.json({record,source:null}));await tick()})
+ assert.match(host.textContent??'',/Later original event/);assert.doesNotMatch(host.textContent??'',/Signed return declaration/)
+ assert.equal((host.querySelector('#roe-return-first-worked') as HTMLInputElement).value,'2026-09-11')
+})

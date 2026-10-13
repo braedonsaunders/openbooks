@@ -1377,6 +1377,27 @@
       "employer": "Rechtlicher Arbeitgeber: {name}",
       "importHistory": "Nachweise für den Beschäftigungsnachweis importieren",
       "importHistoryHelp": "Nutzen Sie den gemeinsamen Import für frühere Perioden oder Belege gespeicherter Verdienstzeilen. Versicherbare Beträge und Stunden benötigen Quellnachweise; fehlende Perioden gelten nicht automatisch als Nullperioden."
+    },
+    "subsequentService": {
+      "title": "Rückkehr zur Arbeit nach dieser Unterbrechung",
+      "help": "Bewahren Sie den ursprünglichen ersten Arbeitstag nach dieser Unterbrechung für dasselbe Beschäftigungsverhältnis und denselben rechtlichen Arbeitgeber auf. Zahlungsdatum und aktuelles Einstellungsdatum belegen keine Rückkehr.",
+      "issued": "Dieses ausgestellte Ereignis bewahrt die ursprünglichen Rückkehrnachweise auf. Sie können hier nicht geändert werden.",
+      "retry": "Erneut versuchen",
+      "retained": "Gespeicherte Rückkehr",
+      "firstWorked": "Erster Arbeitstag nach der Rückkehr",
+      "file": "Originalnachweis der Rückkehr in der Dateiablage",
+      "reference": "Mitarbeiter- und Rückkehrreferenz im Nachweis",
+      "reason": "Grund für die Prüfung oder Berichtigung",
+      "saving": "Wird gespeichert…",
+      "save": "Rückkehrnachweise speichern",
+      "evidenceTabs": "ROE-Quellnachweise",
+      "separationTab": "Trennung",
+      "returnTab": "Rückkehrnachweise",
+      "saveFactsFirst": "Speichern Sie die geänderten Trennungsdaten, bevor Sie die Rückkehr zur Arbeit bestätigen.",
+      "missingScope": "Das ausgewählte Ereignis hat kein bestätigtes Beschäftigungsverhältnis und keinen rechtlichen Arbeitgeber. Prüfen Sie den Originalnachweis, bevor Sie eine Rückkehr erfassen.",
+      "loadFailed": "Rückkehrnachweise konnten nicht geladen werden",
+      "saveFailed": "Rückkehrnachweise konnten nicht gespeichert werden",
+      "loading": "Rückkehrnachweise werden geladen"
     }
   },
   "separations": {

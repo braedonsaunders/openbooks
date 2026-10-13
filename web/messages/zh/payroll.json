@@ -1377,6 +1377,27 @@
       "employer": "法定雇主：{name}",
       "importHistory": "导入就业记录申报依据",
       "importHistoryHelp": "使用统一导入工具导入历史期间或已保留收入行的依据。可保收入和工时须有原始依据；缺失期间不会自动视为零收入期间。"
+    },
+    "subsequentService": {
+      "title": "此次中断后的复工",
+      "help": "保留此次中断后在同一雇佣关系和法定雇主下实际工作的第一天。付款日期或当前入职日期不能证明复工。",
+      "issued": "此已签发事件保留原始复工证据，无法在此更改。",
+      "retry": "重试",
+      "retained": "已保留的复工记录",
+      "firstWorked": "复工后实际工作的第一天",
+      "file": "文件柜中的原始复工证明",
+      "reference": "原始资料中的员工及复工引用",
+      "reason": "核验或更正原因",
+      "saving": "正在保存…",
+      "save": "保存复工证据",
+      "evidenceTabs": "ROE原始证据",
+      "separationTab": "离职或工作中断",
+      "returnTab": "复工证据",
+      "saveFactsFirst": "请先保存更改后的工作中断事实，再核验复工。",
+      "missingScope": "所选事件的雇佣关系和法定雇主尚未确认。请先核验原始资料，再记录复工。",
+      "loadFailed": "无法加载复工证据",
+      "saveFailed": "无法保存复工证据",
+      "loading": "正在加载复工证据"
     }
   },
   "separations": {

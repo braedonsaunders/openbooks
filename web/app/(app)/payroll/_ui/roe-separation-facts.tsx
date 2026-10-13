@@ -1,6 +1,8 @@
 'use client'
 import { parseRoeEventRow, roeEventRow } from '@openbooks/engine/payroll/roe-event-row'
 import Link from 'next/link'
+import { RecordTabs } from '../../../../components/module-home/record-tabs'
+import { RoeSubsequentServiceForm } from './roe-subsequent-service'
 import { useEffect, useMemo, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { Alert, AlertDescription, Button, FieldLabel, Input, Select, Skeleton } from '@openbooks/ui'
@@ -18,6 +20,8 @@ export function RoeSeparationFactsForm(props: Props) {
 
 function RoeSeparationFactsBody({ employeePartyId, canEdit, onSaved }: Props) {
   const t = useTranslations('payroll.filings.separationFacts')
+  const returnText = useTranslations('payroll.filings.subsequentService')
+  const [activeEvidence, setActiveEvidence] = useState<'separation' | 'return'>('separation')
   const [reload, setReload] = useState(0)
   const [newEvent, setNewEvent] = useState(false)
   const requestKey = JSON.stringify([employeePartyId, newEvent, reload])
@@ -79,12 +83,23 @@ function RoeSeparationFactsBody({ employeePartyId, canEdit, onSaved }: Props) {
   }
   const immutable = state.status === 'ready' && state.record?.status === 'issued'
   const disabled = !canEdit || busy || immutable
+  const factsDirty = state.status === 'ready' && state.record !== null && (
+    firstDayWorked !== (state.record.firstDayWorked ?? '') || interruptionOn !== state.record.interruptionOn
+    || lastInsurableEarningsOn !== state.record.lastInsurableEarningsOn
+    || salaryContinuanceEndOn !== (state.record.salaryContinuanceEndOn ?? '')
+    || sourceReference !== (state.record.sourceReference ?? '')
+    || status !== (state.record.status === 'confirmed' ? 'confirmed' : 'draft'))
+  const returnAvailable = state.status === 'ready' && state.record !== null
+    && (state.record.status === 'confirmed' || state.record.status === 'issued') && !factsDirty && !busy
   return <section className="space-y-3 rounded-lg border border-slate-200 p-3 dark:border-slate-800" aria-label={t('title')}>
     <div><h3 className="text-sm font-semibold">{t('title')}</h3><p className="text-xs text-slate-500">{t('help')}</p></div>
     {state.status === 'loading' && <Skeleton className="h-24 w-full" />}
     {state.status === 'error' && <><Alert variant="warning"><AlertDescription>{state.message}</AlertDescription></Alert>
       <Button variant="outline" onClick={() => setReload(value => value + 1)}>{t('retry')}</Button></>}
-    {state.status === 'ready' && <>
+    {state.status === 'ready' && <RecordTabs label={returnText('evidenceTabs')} active={returnAvailable ? activeEvidence : 'separation'}
+      tabs={[{key: 'separation', label: returnText('separationTab')}, {key: 'return', label: returnText('returnTab'), disabled: !returnAvailable}]}
+      onChange={setActiveEvidence}>
+      <div hidden={returnAvailable && activeEvidence === 'return'} className="space-y-3">
       {immutable && <><Alert><AlertDescription>{t('issued')}</AlertDescription></Alert>
         {canEdit && <Button variant="outline" onClick={()=>setNewEvent(true)}>{t('newEvent')}</Button>}</>}
       <p className="text-xs text-slate-500">{t('employer', { name: state.employee.employerName })}</p>
@@ -109,8 +124,15 @@ function RoeSeparationFactsBody({ employeePartyId, canEdit, onSaved }: Props) {
         <div><FieldLabel htmlFor="roe-facts-reason">{t('reason')}</FieldLabel>
           <Input id="roe-facts-reason" value={reason} onChange={event => setReason(event.target.value)} maxLength={2000} disabled={disabled} /></div>
       </div>
+      {factsDirty && !immutable && <p className="text-xs text-slate-500">{returnText('saveFactsFirst')}</p>}
       {error && <Alert variant="warning"><AlertDescription>{error}</AlertDescription></Alert>}
       {canEdit && !immutable && <Button onClick={() => void save()} disabled={disabled || !sourceReference.trim() || !reason.trim() || !interruptionOn || !lastInsurableEarningsOn || (status === 'confirmed' && !firstDayWorked)}>{busy ? t('saving') : t('save')}</Button>}
-    </>}
+      </div>
+      {state.record && (state.record.status === 'confirmed' || state.record.status === 'issued') && <div hidden={!returnAvailable || activeEvidence !== 'return'}>
+        <RoeSubsequentServiceForm key={state.record.id} employeePartyId={selection!.employeePartyId}
+          event={state.record} canEdit={canEdit && returnAvailable}
+          onSaved={() => onSaved(roeEventRow(selection!.employeePartyId, state.record!.id))} />
+      </div>}
+    </RecordTabs>}
   </section>
 }

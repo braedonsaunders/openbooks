@@ -84,7 +84,7 @@ test('return API refuses entity/event substitution, inactive source and malforme
     const input = {...subject(f),firstDayWorked:'2026-08-11',sourceFileId:f.file,sourceVersionId:f.version,
       sourceSha256:f.hash,sourceReference:'Original return declaration',reason:'Retain actual service',expectedId:null,expectedUpdatedAt:null};
     for (const altered of [{...input,employmentId:randomUUID()},{...input,sourceSha256:'bad'},
-      {...input,firstDayWorked:'2026-08-10'},{...input,sourceVersionId:randomUUID()}]) {
+      {...input,firstDayWorked:'2026-08-10'},{...input,firstDayWorked:'2026-02-30'},{...input,sourceVersionId:randomUUID()}]) {
       const refused=await POST(request(altered));assert.equal(refused.status,422);
     }
     assert.equal((await db.execute(sql`update files set is_inactive=true where org_id=${f.orgId} and id=${f.file} returning id`)).rows.length,1);
