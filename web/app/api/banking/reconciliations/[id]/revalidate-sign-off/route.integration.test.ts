@@ -16,7 +16,7 @@ import { PATCH as adjust } from '../route.ts'
 const enabled = {skip:!process.env.OPENBOOKS_DB_URL}
 
 test('native review-only API records independent evidence while sign-off and adjustment remain forbidden',enabled,async()=>{
-  const org=await createScratchOrg()
+  const org=await withBypassContext(()=>createScratchOrg())
   try {
     const signer=await withBypassContext(()=>createScratchUser(org.orgId,'Original signer','signer'))
     const reviewer=await withBypassContext(()=>createScratchUser(org.orgId,'Independent evidence reviewer','reviewer'))
