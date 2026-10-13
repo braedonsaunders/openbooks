@@ -93,11 +93,12 @@ export async function employeeYtd(
   const cpp2BonusColumn = CA_OPENING_YTD_FIELDS.find((field) => field.key === "cpp2BonusYtd")!.column;
   const qcCsbColumn = CA_OPENING_YTD_FIELDS.find((field) => field.key === "qcCsbYtd")!.column;
   const qpipEmployerColumn = CA_OPENING_YTD_FIELDS.find((field) => field.key === "qpipEmployerYtd")!.column;
-  const employer=(await tx.execute<{id:string}>(sql`select d.subsidiary_id as id from documents d
+  const employer=(await tx.execute<{id:string;currency:string}>(sql`select d.subsidiary_id as id,d.currency from documents d
     join pay_runs r on r.org_id=d.org_id and r.document_id=d.id
     where d.org_id=${orgId} and d.id=${documentId} and d.kind='pay_run'`)).rows;
   if(employer.length!==1||!employer[0]!.id||ctx.subsidiaryId!==undefined&&ctx.subsidiaryId!==employer[0]!.id)
     throw new PayrollError('Canadian annual contribution history requires the actual pay-run legal employer');
+  if(employer[0]!.currency!=='CAD')throw new PayrollError('Canadian annual contribution calculation requires a qualified Canadian-dollar pay-run basis');
   const subsidiaryId=employer[0]!.id;
   const unknownHistory=(await tx.execute(sql`select s.id from pay_stubs s
     join pay_runs r on r.org_id=s.org_id and r.document_id=s.pay_run_document_id

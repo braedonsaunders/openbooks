@@ -15,7 +15,7 @@ export async function qualifyOpeningEmployerAuthority(input:OpeningEmployerAutho
   ||input.allowedSubsidiaryIds===undefined||!/^[a-f0-9]{64}$/.test(input.sourceSha256)||!/^[a-f0-9]{64}$/.test(input.expectedOpeningSha256))throw new PayrollError('Choose the native opening record, legal employer and exact source file version');
  if(typeof input.sourceReference!=='string'||typeof input.reason!=='string')throw new PayrollError('Record the original employer evidence and a qualification reason');
  const sourceReference=input.sourceReference.trim(),reason=input.reason.trim();
- if(!sourceReference||sourceReference.length>2000||!reason||reason.length>2000)throw new PayrollError('Record the original employer evidence and a qualification reason within2000 characters');
+ if(!sourceReference||sourceReference.length>2000||!reason||reason.length>2000)throw new PayrollError('Record the original employer evidence and a qualification reason within 2000 characters');
  return withOrgTransaction(input.orgId,async()=>{
   await requirePayrollFeature(db,input.orgId);
   if(!await actorHasPermission(db,input.orgId,input.actorId,'payroll.run'))throw new PayrollError('Payroll run permission is required to qualify opening employer authority');
@@ -36,6 +36,10 @@ export async function qualifyOpeningEmployerAuthority(input:OpeningEmployerAutho
    where a.org_id=${input.orgId} and a.opening_balance_id=${input.openingBalanceId}`)).rows;
   if(existing.length){if(existing.length!==1||!existing[0]!.matches)throw new PayrollError('Opening employer authority already retains different source evidence — preserve the original qualification');
    const {matches:_,...result}=existing[0]!;return result;}
+  const retainedFile=(await db.execute(sql`select v.id from files f join file_versions v on v.file_id=f.id
+    where f.org_id=${input.orgId} and f.id=${input.sourceFileId} and not f.is_inactive and v.id=${input.sourceVersionId}
+      and v.content_hash=${input.sourceSha256} and v.created_by=${input.actorId} for share of f,v`)).rows;
+  if(retainedFile.length!==1)throw new PayrollError('Select the active original Cabinet file and its exact retained version and hash');
   const rows=(await db.execute<{id:string;openingBalanceId:string;subsidiaryId:string;openingSha256:string}>(sql`
    insert into payroll_opening_employer_authorities(org_id,opening_balance_id,employee_party_id,tax_year,subsidiary_id,
     source_file_id,source_version_id,source_sha256,source_reference,change_reason,opening_snapshot,opening_sha256,created_by)
@@ -79,7 +83,7 @@ export async function readOpeningEmployerContext(input:{orgId:string;actorId:str
   const source=input.sourceFileId?(await db.execute<{id:string;versionId:string;sha256:string;name:string}>(sql`
    select f.id,v.id as "versionId",v.content_hash as sha256,f.name from files f
    join file_versions v on v.file_id=f.id and v.id=f.current_version_id
-   where f.org_id=${input.orgId} and f.id=${input.sourceFileId} and v.created_by=${input.actorId}`)).rows[0]??null:null;
+   where f.org_id=${input.orgId} and f.id=${input.sourceFileId} and not f.is_inactive and v.created_by=${input.actorId}`)).rows[0]??null:null;
   if(input.sourceFileId&&(!source||!/^[a-f0-9]{64}$/.test(source.sha256)))throw new PayrollError('Select the exact original file uploaded to Cabinet by the qualifying operator');
   return {record,employers,source};
  });

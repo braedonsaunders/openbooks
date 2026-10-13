@@ -50,7 +50,7 @@ BEGIN
   RAISE EXCEPTION 'Opening employer authority requires the employee native legal employer' USING ERRCODE='23514';
  END IF;
  IF NOT EXISTS(SELECT 1 FROM public.files f JOIN public.file_versions v ON v.file_id=f.id
-  WHERE f.org_id=NEW.org_id AND f.id=NEW.source_file_id AND v.id=NEW.source_version_id
+  WHERE f.org_id=NEW.org_id AND f.id=NEW.source_file_id AND NOT f.is_inactive AND v.id=NEW.source_version_id
    AND v.content_hash=NEW.source_sha256 AND v.created_by=NEW.created_by) THEN
   RAISE EXCEPTION 'Opening employer authority needs the importing operator exact retained source version and hash' USING ERRCODE='23514';
  END IF;
