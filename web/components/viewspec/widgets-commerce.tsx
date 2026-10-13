@@ -51,7 +51,17 @@ import { str, type WidgetRenderer } from './widget-props'
 
 /** Commerce adapters. Compose native components without changing their props or boundaries. */
 export const COMMERCE_WIDGETS = {
-  'cash-daily-summary': (props) => <CashDailySummaryForm {...props as unknown as ComponentProps<typeof CashDailySummaryForm>} />,
+  'cash-daily-summary': (props) => <CashDailySummaryForm
+    currency={props.currency as ComponentProps<typeof CashDailySummaryForm>['currency']}
+    defaultDate={props.defaultDate as ComponentProps<typeof CashDailySummaryForm>['defaultDate']}
+    accounts={props.accounts as ComponentProps<typeof CashDailySummaryForm>['accounts']}
+    taxCodes={props.taxCodes as ComponentProps<typeof CashDailySummaryForm>['taxCodes']}
+    tenderAccounts={props.tenderAccounts as ComponentProps<typeof CashDailySummaryForm>['tenderAccounts']}
+    defaultTenderAccountId={props.defaultTenderAccountId as ComponentProps<typeof CashDailySummaryForm>['defaultTenderAccountId']}
+    serverOptions={props.serverOptions as ComponentProps<typeof CashDailySummaryForm>['serverOptions']}
+    subsidiaries={props.subsidiaries as ComponentProps<typeof CashDailySummaryForm>['subsidiaries']}
+    defaultSubsidiaryId={props.defaultSubsidiaryId as ComponentProps<typeof CashDailySummaryForm>['defaultSubsidiaryId']}
+  />,
 
 
   /* --- subcontracts ----------------------------------------------------------------- */

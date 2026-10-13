@@ -201,6 +201,7 @@ export const WIDGET_NAMES: ReadonlySet<string> = new Set([
   'form-drawer',
   'fund-drawer',
   'grant-drawer',
+  'gl-audit-number-command',
   'grant-access-form',
   'grant-acting-cell',
   'grant-control-cell',

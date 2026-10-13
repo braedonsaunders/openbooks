@@ -92,7 +92,7 @@ test('registered keys derive from both list registries', () => {
 test('allow-list sections stay within their shrink-only ceilings', () => {
   assert.equal(TABLE_CEILING, 1)
   assert.equal(DIALOG_WINDOW_CEILING, 0)
-  assert.equal(BESPOKE_PAGE_CEILING, 13)
+  assert.equal(BESPOKE_PAGE_CEILING, 11)
   const allowlist = loadAllowlist()
   assert.ok(allowlist.tables.length <= TABLE_CEILING)
   assert.ok(allowlist.dialogWindow.length <= DIALOG_WINDOW_CEILING)
