@@ -1559,6 +1559,21 @@
       "save": "Salvar valores",
       "previewPassed": "Prévia validada. Nenhum pagamento ou saldo foi alterado. Revise os valores antes de salvar.",
       "saved": "Valores salvos com evidência de origem. Recalcule as folhas em rascunho afetadas antes de contabilizá-las."
+    },
+    "employerAuthority": {
+      "title": "Fonte do empregador",
+      "help": "Identifique o empregador legal no relatório original de saldos iniciais. A validação preserva os valores e a fonte originais sem alterar a folha contabilizada.",
+      "retry": "Tentar novamente",
+      "noOpening": "Salve os valores iniciais do funcionário antes de validar a fonte do empregador.",
+      "qualified": "Fonte original do empregador validada e preservada.",
+      "saveFirst": "Salve os valores iniciais alterados antes de validar a fonte.",
+      "employer": "Empregador legal original",
+      "chooseEmployer": "Escolha o empregador indicado na fonte",
+      "file": "Relatório original de saldos iniciais no arquivo",
+      "reference": "Referência do funcionário e do empregador na fonte",
+      "reason": "Motivo da validação",
+      "saving": "Salvando…",
+      "qualify": "Validar a fonte original do empregador"
     }
   },
   "readiness": {

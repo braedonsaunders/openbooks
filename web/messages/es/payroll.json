@@ -1559,6 +1559,21 @@
       "save": "Guardar importes",
       "previewPassed": "Previsualización correcta. No se modificaron pagos ni saldos. Revise los importes antes de guardarlos.",
       "saved": "Importes guardados con evidencia de origen. Recalcule las nóminas en borrador afectadas antes de contabilizarlas."
+    },
+    "employerAuthority": {
+      "title": "Fuente del empleador",
+      "help": "Identifique al empleador legal en el informe original de saldos iniciales. La validación conserva los importes y la fuente originales sin modificar la nómina contabilizada.",
+      "retry": "Reintentar",
+      "noOpening": "Guarde los importes iniciales del empleado antes de validar la fuente de su empleador.",
+      "qualified": "Fuente original del empleador validada y conservada.",
+      "saveFirst": "Guarde los importes iniciales modificados antes de validar su fuente.",
+      "employer": "Empleador legal original",
+      "chooseEmployer": "Elija el empleador indicado en la fuente",
+      "file": "Informe original de saldos iniciales en el archivador",
+      "reference": "Referencia del empleado y del empleador en la fuente",
+      "reason": "Motivo de la validación",
+      "saving": "Guardando…",
+      "qualify": "Validar la fuente original del empleador"
     }
   },
   "readiness": {

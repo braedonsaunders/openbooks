@@ -1559,6 +1559,21 @@
       "save": "Beträge speichern",
       "previewPassed": "Prüfung erfolgreich. Zahlungen und Salden wurden nicht geändert. Prüfen Sie die Beträge vor dem Speichern.",
       "saved": "Beträge mit Quellenbeleg gespeichert. Berechnen Sie betroffene Abrechnungsentwürfe vor der Verbuchung neu."
+    },
+    "employerAuthority": {
+      "title": "Arbeitgebernachweis",
+      "help": "Ermitteln Sie den rechtlichen Arbeitgeber anhand des ursprünglichen Eröffnungssaldenberichts. Die Bestätigung bewahrt die ursprünglichen Beträge und den Nachweis, ohne gebuchte Lohnabrechnungen zu ändern.",
+      "retry": "Erneut versuchen",
+      "noOpening": "Speichern Sie die Eröffnungsbeträge des Mitarbeiters, bevor Sie den Arbeitgebernachweis bestätigen.",
+      "qualified": "Ursprünglicher Arbeitgebernachweis bestätigt und aufbewahrt.",
+      "saveFirst": "Speichern Sie die geänderten Eröffnungsbeträge, bevor Sie den Nachweis bestätigen.",
+      "employer": "Ursprünglicher rechtlicher Arbeitgeber",
+      "chooseEmployer": "Wählen Sie den im Nachweis genannten Arbeitgeber",
+      "file": "Ursprünglicher Eröffnungssaldenbericht im Aktenschrank",
+      "reference": "Mitarbeiter- und Arbeitgeberreferenz im Nachweis",
+      "reason": "Grund für die Bestätigung",
+      "saving": "Wird gespeichert…",
+      "qualify": "Ursprünglichen Arbeitgebernachweis bestätigen"
     }
   },
   "readiness": {

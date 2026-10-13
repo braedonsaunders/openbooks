@@ -1559,6 +1559,21 @@
       "save": "Enregistrer les montants",
       "previewPassed": "Prévisualisation validée. Aucun paiement ni solde n’a été modifié. Vérifiez les montants avant de les enregistrer.",
       "saved": "Montants enregistrés avec les justificatifs. Recalculez les paies provisoires concernées avant de les valider."
+    },
+    "employerAuthority": {
+      "title": "Source de l’employeur",
+      "help": "Identifiez l’employeur légal dans le rapport original des soldes d’ouverture. La qualification conserve les montants et la source d’origine sans modifier la paie comptabilisée.",
+      "retry": "Réessayer",
+      "noOpening": "Enregistrez les montants d’ouverture de l’employé avant de qualifier la source de son employeur.",
+      "qualified": "Source originale de l’employeur qualifiée et conservée.",
+      "saveFirst": "Enregistrez les montants d’ouverture modifiés avant de qualifier leur source.",
+      "employer": "Employeur légal d’origine",
+      "chooseEmployer": "Choisissez l’employeur indiqué dans la source",
+      "file": "Rapport original des soldes d’ouverture dans le classeur",
+      "reference": "Référence de l’employé et de l’employeur dans la source",
+      "reason": "Motif de qualification",
+      "saving": "Enregistrement…",
+      "qualify": "Qualifier la source originale de l’employeur"
     }
   },
   "readiness": {

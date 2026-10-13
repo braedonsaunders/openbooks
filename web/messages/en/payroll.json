@@ -1559,6 +1559,21 @@
       "save": "Save period amounts",
       "previewPassed": "Preview passed. No payments or balances were changed. Review these amounts, then save.",
       "saved": "Period amounts saved with source evidence. Recalculate affected draft payrolls before committing."
+    },
+    "employerAuthority": {
+      "title": "Employer source",
+      "help": "Identify the legal employer from the original opening report. Qualification retains the original amounts and source; it does not change posted payroll.",
+      "retry": "Retry",
+      "noOpening": "Save the employee’s opening amounts before qualifying their employer source.",
+      "qualified": "Original employer source qualified and retained.",
+      "saveFirst": "Save the changed opening amounts before qualifying their source.",
+      "employer": "Original legal employer",
+      "chooseEmployer": "Choose the employer named by the source",
+      "file": "Original opening report in File Cabinet",
+      "reference": "Employee and employer reference in the source",
+      "reason": "Qualification reason",
+      "saving": "Saving…",
+      "qualify": "Qualify original employer source"
     }
   },
   "readiness": {
