@@ -4,12 +4,9 @@ import { registerHooks } from 'node:module'
 import { pathToFileURL } from 'node:url'
 import test from 'node:test'
 
-// A draft invoice generated from a T&M billing request carries
-// billed-time provenance (time_entries.invoiced_by_line_id -> its lines).
-// The generic editor replaces lines by delete-and-reinsert, so saving the
-// draft — e.g. after pricing its $0 lines — died on the provenance FK as a
-// raw 500 with an empty body. Only the session gate is stubbed; handler,
-// service, and storage are real.
+// Generated draft lines retain billed-time provenance across supported
+// pricing edits and line replacement. Only the session boundary is scripted;
+// handler, service, authority and storage remain native.
 const root = pathToFileURL(process.cwd() + '/').href
 const state: { orgId: string; actorId: string } = { orgId: '', actorId: '' }
 Object.assign(globalThis, { __billingProvenanceEditState: state })
@@ -57,7 +54,7 @@ async function patchDoc(orgId: string, id: string, body: unknown): Promise<{ sta
 
 type FixtureOrg = { orgId: string; subsidiaryId: string; date: string; customerId: string; accounts: { revenue: string }; items: { service: string } }
 
-/** A T&M project with approved, unpriced 8h time entries, billed to a draft invoice. */
+/** A T&M project with approved, explicitly zero-priced time, billed to a draft invoice. */
 async function billedTimeInvoice(org: FixtureOrg, actor: string, entryCount = 1) {
   await (await import('@openbooks/engine/testing/fixtures')).grantScratchPermissions(org.orgId, actor, ['ar.create'])
   await db.execute(sql`update orgs set settings = jsonb_set(settings, '{controlAccounts,projectRevenue}', to_jsonb(${org.accounts.revenue}::text), true) where id = ${org.orgId}`)
@@ -67,7 +64,7 @@ async function billedTimeInvoice(org: FixtureOrg, actor: string, entryCount = 1)
   const entries: string[] = []
   for (let i = 0; i < entryCount; i++) {
     const entry = randomUUID()
-    await db.execute(sql`insert into time_entries(id,org_id,employee_party_id,worked_on,hours,project_id,is_billable,status) values (${entry},${org.orgId},${employee},${org.date},8,${project},true,'approved')`)
+    await db.execute(sql`insert into time_entries(id,org_id,employee_party_id,worked_on,hours,project_id,is_billable,status,bill_rate) values (${entry},${org.orgId},${employee},${org.date},8,${project},true,'approved','0')`)
     entries.push(entry)
   }
   const req = await createBillingRequest(org.orgId, actor, { projectId: project, basis: 'time_selection', selectedTimeEntryIds: entries, cutoffDate: org.date, backupRequired: false })
