@@ -9,7 +9,8 @@ import {randomUUID,createHash} from 'node:crypto';
 import {sql} from 'drizzle-orm';
 import {db,withBypassContext,withOrgContext} from '../../platform/db.ts';
 import {seedAdoption,calculatedRun} from '../filing-test-fixtures.ts';
-import {seedPayrollDocument,seedPayrollStub,seedPayrollSettings,seedWorkerEmployment,dropScratchOrgReporting} from '../../testing/fixtures.ts';
+import {seedPayrollStub,seedPayrollSettings,seedWorkerEmployment,dropScratchOrgReporting} from '../../testing/fixtures.ts';
+import {createPayRun,reresolveRunToSubsidiary} from '../run-lifecycle.ts';
 import {employeeYtd} from './compute-statutory.ts';
 import {saveOpeningBalances} from '../opening-balances.ts';
 import {qualifyOpeningEmployerAuthority,readOpeningEmployerContext} from '../opening-employer-authority.ts';
@@ -26,18 +27,21 @@ async function setup(){
 }
 type Fixture=Awaited<ReturnType<typeof setup>>;
 async function run(f:Fixture,owner:string,status:'draft'|'committed',amount='0',employment=f.employmentId,account:string|null=null){
- const id=randomUUID();await seedPayrollDocument(f.orgId,id,{kind:'pay_run',documentNumber:'PAY-'+id.slice(0,8),
-  subsidiaryId:owner,documentDate:'2026-06-13',currency:'CAD',status:status==='committed'?'approved':'draft',createdBy:f.actorId,updatedBy:f.actorId});
- await db.execute(sql`insert into pay_runs(document_id,org_id,pay_schedule_id,period_start,period_end,pay_date,tax_year,run_status,created_by,updated_by)
-  values(${id},${f.orgId},${f.scheduleId},'2026-05-31','2026-06-13','2026-06-15',2026,${status},${f.actorId},${f.actorId})`);
+ const created=await createPayRun({orgId:f.orgId,actorId:f.actorId,payScheduleId:f.scheduleId,
+  periodStart:'2026-05-31',periodEnd:'2026-06-13',payDate:'2026-06-15',runType:'supplemental'});
+ const id=created.documentId;
+ if(owner!==f.subsidiaryId)await reresolveRunToSubsidiary(db,{orgId:f.orgId,actorId:f.actorId,documentId:id,subsidiaryId:owner});
+ // Historical contribution records remain explicit fixture facts; native creation owns their off-cycle document and period identity.
  if(status==='committed'){
   const stub=randomUUID();await seedPayrollStub(f.orgId,id,f.employeeId,employment,{id:stub,province:'ON',periodsPerYear:26,
    payDate:'2026-06-15',taxYear:2026,currency:'CAD',gross:'10000',pensionableEarnings:'10000',insurableEarnings:'10000',
    netPay:'10000',filingAccountId:account,country:'CA',countrySource:'calculation',factors:{C:amount,C2:'10',EI:'12',QPIP:'0',QPIP_ER:'0',B:'0',F3:'0',F5B:'0',QC_CSB:'0'},createdBy:f.actorId,updatedBy:f.actorId});
+  assert.equal((await db.execute(sql`update pay_runs set run_status='committed' where org_id=${f.orgId} and document_id=${id} returning document_id`)).rows.length,1);
+  assert.equal((await db.execute(sql`update documents set status='approved' where org_id=${f.orgId} and id=${id} returning id`)).rows.length,1);
  }
  return {tx:db,orgId:f.orgId,employeePartyId:f.employeeId,taxYear:2026,documentId:id,subsidiaryId:owner};
 }
-async function source(f:Fixture,amounts:Record<string,string>={pensionableYtd:'10000',cppYtd:'100'}){
+async function source(f:Fixture,amounts:Record<string,string>={pensionableYtd:'10000',insurableYtd:'10000',cppYtd:'100'}){
  const folder=randomUUID(),file=randomUUID(),version=randomUUID(),bytes=Buffer.from(JSON.stringify({employeePartyId:f.employeeId,legalEmployerSubsidiaryId:f.subsidiaryId,taxYear:2026,amounts}));
  const sha=createHash('sha256').update(bytes).digest('hex');
  await db.execute(sql`insert into folders(id,org_id,name,is_private,owner_id,created_by,updated_by)
@@ -67,7 +71,7 @@ test('different employers retain independent annual contribution room while same
   const identity=(await db.execute<{createdAt:string;documentNumber:string}>(sql`select r.created_at::text as "createdAt",d.document_number as "documentNumber"
     from pay_runs r join documents d on d.org_id=r.org_id and d.id=r.document_id where r.org_id=${f.orgId} and r.document_id=${currentB.documentId}`)).rows[0]!;
   const siblings=await listPeriodSiblings(db,f.orgId,{documentId:currentB.documentId,...identity,payScheduleId:f.scheduleId,
-    periodStart:'2026-05-31',periodEnd:'2026-06-13',payDate:'2026-06-15',runType:'regular'});
+    periodStart:'2026-05-31',periodEnd:'2026-06-13',payDate:'2026-06-15',runType:'supplemental'});
   assert.equal(siblings.length,2,'another employer cannot share period exemptions or sequencing');
   const ownerRows=(await db.execute<{subsidiaryId:string}>(sql`select subsidiary_id as "subsidiaryId" from documents
     where org_id=${f.orgId} and id=any(${`{${siblings.map(sibling=>sibling.document_id).join(',')}}`}::uuid[])`)).rows;
@@ -81,7 +85,7 @@ test('different employers retain independent annual contribution room while same
 test('unqualified opening payer refuses, exact source qualification replays, and another employer cannot consume it',{skip:!DB},async()=>{
  const f=await withBypassContext(setup);
  try{await withOrgContext(f.orgId,async()=>{
-  await saveOpeningBalances({orgId:f.orgId,actorId:f.actorId,taxYear:2026,rows:[{employeePartyId:f.employeeId,amounts:{cppYtd:'100',pensionableYtd:'10000'}}]});
+  await saveOpeningBalances({orgId:f.orgId,actorId:f.actorId,taxYear:2026,rows:[{employeePartyId:f.employeeId,amounts:{cppYtd:'100',pensionableYtd:'10000',insurableYtd:'10000'}}]});
   const current=await run(f,f.subsidiaryId,'draft');await assert.rejects(employeeYtd(current),/no qualified original legal-employer authority/);
   const before=(await db.execute<{snapshot:string}>(sql`select to_jsonb(b)::text as snapshot from payroll_opening_balances b where org_id=${f.orgId}`)).rows;
   const context=await readOpeningEmployerContext({orgId:f.orgId,actorId:f.actorId,employeePartyId:f.employeeId,taxYear:2026,allowedSubsidiaryIds:null});assert.ok(context.record);

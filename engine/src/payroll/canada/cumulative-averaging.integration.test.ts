@@ -3,7 +3,7 @@ import {randomUUID,createHash} from 'node:crypto'
 import test from 'node:test'
 import {sql} from 'drizzle-orm'
 import {db,withBypassContext,withOrgContext,withOrgTransaction} from '../../platform/db.ts'
-import {dropScratchOrgReporting,seedWorkerEmployment} from '../../testing/fixtures.ts'
+import {dropScratchOrgReporting,seedWorkerEmployment,grantScratchPermissions} from '../../testing/fixtures.ts'
 import {seedAdoption,type AdoptionFixture} from '../filing-test-fixtures.ts'
 import {readOpeningEmployerContext,qualifyOpeningEmployerAuthority} from '../opening-employer-authority.ts'
 import {createPayRun} from '../run-lifecycle.ts'
@@ -20,9 +20,7 @@ async function qualifyImportedOpening(f:AdoptionFixture,employerId=f.subsidiaryI
   assert.equal(original.length,1)
   const bytes=Buffer.from(original[0]!.report),sha=createHash('sha256').update(bytes).digest('hex')
   const folder=randomUUID(),file=randomUUID(),version=randomUUID()
-  await db.execute(sql`insert into user_permission_overrides(org_id,user_id,permission,effect)
-    values(${f.orgId},${f.actorId},'payroll.read','grant'),(${f.orgId},${f.actorId},'payroll.run','grant')
-    on conflict(org_id,user_id,permission) do update set effect='grant'`)
+  await grantScratchPermissions(f.orgId,f.actorId,['payroll.read','payroll.run'])
   await db.execute(sql`insert into folders(id,org_id,name,is_private,owner_id,created_by,updated_by)
     values(${folder},${f.orgId},'Original averaging reports',true,${f.actorId},${f.actorId},${f.actorId})`)
   await db.execute(sql`insert into files(id,org_id,folder_id,name,content_type,size_bytes,created_by,updated_by)
