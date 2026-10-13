@@ -2141,6 +2141,8 @@ const PROJECT: RecordTypeMeta = {
     { key: "customer", labelKey: "common.labels.customer", kind: "text", sortable: true, sortKey: "customer" },
     { key: "status", labelKey: "common.labels.status", kind: "status", sortable: true, sortKey: "status", defaultWidth: 120 },
     { key: "project_type", labelKey: "projects.drawer.projectType", kind: "text" },
+    // Stored views retain their billing classification independently of a type's name.
+    { key: "billing_method", labelKey: "common.labels.billingMethod", kind: "text", sortable: true, sortKey: "billing_method", defaultHidden: true },
     { key: "contract", labelKey: "projects.labels.contractValue", kind: "amount", sortable: true, sortKey: "contract", defaultWidth: 130 },
     { key: "actual", labelKey: "projects.labels.actualCost", kind: "amount", sortable: true, sortKey: "actual", defaultWidth: 130 },
     { key: "created", labelKey: "common.labels.created", kind: "date", sortable: true, sortKey: "created", defaultWidth: 120 },
@@ -2153,6 +2155,17 @@ const PROJECT: RecordTypeMeta = {
     {
       key: "project_type",
       labelKey: "projects.drawer.projectType",
+      kind: "select",
+      operators: OPERATORS_BY_KIND.select,
+      options: [
+        { value: "time_and_materials", labelKey: "projects.billing.time_and_materials" },
+        { value: "fixed_price", labelKey: "projects.billing.fixed_price" },
+        { value: "cost_plus", labelKey: "projects.billing.cost_plus" },
+      ],
+    },
+    {
+      key: "billing_method",
+      labelKey: "common.labels.billingMethod",
       kind: "select",
       operators: OPERATORS_BY_KIND.select,
       options: [
