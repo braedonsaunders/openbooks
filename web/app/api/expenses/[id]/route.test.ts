@@ -248,7 +248,7 @@ test('PATCH saves only under an exact matching revision and returns the fresh to
 
   const response = await patch({ memo: 'concurrent-safe save', expectedUpdatedAt: STORED_REVISION })
 
-  assert.equal(response.status, 200)
+  assert.equal(response.status, 200, JSON.stringify({ response: await response.clone().json(), calls: routeState.calls }))
   const payload = (await response.json()) as { doc: { updated_at: string } }
   assert.equal(payload.doc.updated_at, NEXT_REVISION, 'the caller can chain the next exact save')
   assert.deepEqual(routeState.auditCalls, [{ action: 'update', documentId: EXPENSE_ID }])
