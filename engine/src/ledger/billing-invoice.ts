@@ -202,7 +202,7 @@ export async function generateInvoiceFromBillingRequest(
   return db.transaction(async (tx) => {
     const actorScope = await lockActorCommandAuthority(tx, orgId, userId, null, 'ar.create')
     // Caller scope may narrow current authority, but cannot confer access.
-    allowedSubsidiaryIds = actorScope === null
+    const effectiveScope = actorScope === null
       ? allowedSubsidiaryIds
       : allowedSubsidiaryIds === null
         ? actorScope
@@ -218,7 +218,7 @@ export async function generateInvoiceFromBillingRequest(
       select br.* from billing_requests br
         join projects p on p.id = br.project_id and p.org_id = br.org_id
        where br.id = ${requestId} and br.org_id = ${orgId}
-         ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
+         ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, effectiveScope)}
        for update of br, p
     `))
     const req = reqRes.rows[0]
@@ -613,7 +613,7 @@ export async function generateInvoiceFromBillingRequest(
              or (d.status in ('posted','approved') and d.kind = any(${`{${costKinds.join(",")}}`}::text[])))
       `))
 
-      if (allowedSubsidiaryIds !== null && costRows.rows.some(row => !allowedSubsidiaryIds.has(String(row.subsidiary_id)))) {
+      if (effectiveScope !== null && costRows.rows.some(row => !effectiveScope.has(String(row.subsidiary_id)))) {
         throw new BillingError('Selected costs include subsidiaries outside your access')
       }
       for (const cl of costRows.rows) {

@@ -1,4 +1,4 @@
-import { roeLaterSpellStubSql } from './canada/roe-event-source.ts';
+import { roeLaterSpellStubSql, roeProfileAdmission } from './canada/roe-event-source.ts';
 import { parseRoeEventRow, roeEventRow } from './roe-event-row.ts';
 import { roeWindowContext, readRoeReportingWindow, ROE_REPORTING_COUNTS } from './roe-reporting-window.ts';
 import { assertPayrollCountryKnown } from "./country.ts";
@@ -892,10 +892,7 @@ export async function roeRecord(orgId: string, employeePartyId: string, eventId?
   if (!row) return null;
   const retainedEvent=(await db.execute(sql`select id from payroll_roe_separation_events
     where org_id=${orgId} and employee_party_id=${employeePartyId} and status in ('draft','confirmed','issued') limit 1`)).rows.length>0;
-  if(!retainedEvent && row.country!=='CA'){
-    if(row.country===null)throw new PayrollError(`${row.display_name} has no payroll country on file — record the original Canadian employment and separation evidence before preparing an ROE`);
-    return null;
-  }
+  if (!roeProfileAdmission(row.country, retainedEvent, row.display_name)) return null;
   const context = await roeWindowContext(orgId, employeePartyId, eventId);
   // Block 6 and the Block 15 window are STATUTORY declarations derived from
   // the employee's pay-period type. An employee with no pay schedule used to

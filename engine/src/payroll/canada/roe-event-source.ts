@@ -9,6 +9,13 @@ export type SelectedRoeEvent={
  interruptionOn:string;lastInsurableEarningsOn:string;salaryContinuanceEndOn:string|null;
  sourceReference:string|null;status:string;updatedAt:string;
 };
+
+/** A retained historical event governs admission even after the current profile changes. */
+export function roeProfileAdmission(country: string | null, hasRetainedEvent: boolean, employeeName: string): boolean {
+ if (hasRetainedEvent || country === 'CA') return true;
+ if (country === null) throw new PayrollError(`${employeeName} has no payroll country on file — record the original Canadian employment and separation evidence before preparing an ROE`);
+ return false;
+}
 export const ROE_EVENT_COLUMNS=sql`id,employee_party_id as "employeePartyId",employment_id as "employmentId",subsidiary_id as "subsidiaryId",
  first_day_worked::text as "firstDayWorked",interruption_on::text as "interruptionOn",last_insurable_earnings_on::text as "lastInsurableEarningsOn",
  salary_continuance_end_on::text as "salaryContinuanceEndOn",source_reference as "sourceReference",status,updated_at::text as "updatedAt"`;
