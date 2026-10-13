@@ -173,7 +173,7 @@ test('issued separation facts remain immutable through the native authoring comm
   const beforeAudit=(await db.execute<{n:number}>(sql`select count(*)::int n from audit_log where org_id=${f.orgId}
     and table_name='payroll_roe_separation_events' and row_id=${saved.id}`)).rows[0]!.n;
   const issued=await readRoeSeparationFacts(scope);assert.equal(issued!.status,'issued');
-  await assert.rejects(saveRoeSeparationFacts({...scope,...declaration,expectedId:issued!.id,expectedUpdatedAt:issued!.updatedAt}),/recorded as issued/);
+  await assert.rejects(saveRoeSeparationFacts({...scope,...declaration,expectedId:issued!.id,expectedUpdatedAt:issued!.updatedAt}),/This issued ROE event retains its source facts — preserve them and use the Service Canada correction workflow/);
   assert.deepEqual(await readRoeSeparationFacts(scope),issued);
   await assert.rejects(db.execute(sql`update payroll_roe_separation_events set first_day_worked='2009-03-17' where org_id=${f.orgId} and id=${saved.id}`),error => errorChainMatches(error,/Issued Record of Employment separation facts are immutable/));
   assert.equal((await db.execute<{n:number}>(sql`select count(*)::int n from audit_log where org_id=${f.orgId} and table_name='payroll_roe_separation_events' and row_id=${saved.id}`)).rows[0]!.n,beforeAudit);
@@ -227,11 +227,11 @@ test('native ROE issuance freezes only selected employee facts alongside the ret
   assert.equal(await readRoeSeparationFacts({...scope,employeePartyId:unselected.employeeId,employmentId:unselected.employmentId}),null);
   const retainedRows=(await db.execute<{row_id:string}>(sql`select row_id from payroll_filing_submission_slips
    where org_id=${f.orgId} and submission_id=${filed.submission.id}`)).rows;
-  assert.deepEqual(retainedRows.map(row=>row.row_id),[f.employeeId]);
+  assert.deepEqual(retainedRows.map(row=>row.row_id),[f.employeeId+'~'+original.id]);
   const issued=await readRoeSeparationFacts(scope);assert.equal(issued!.status,'issued');
   assert.equal(issued!.firstDayWorked,'2026-05-07');assert.equal(issued!.id,original.id);
   const before=(await db.execute(sql`select to_jsonb(s) as snapshot from payroll_filing_submissions s where org_id=${f.orgId} and id=${filed.submission.id}`)).rows;
-  await assert.rejects(saveRoeSeparationFacts({...scope,...declaration,expectedId:issued!.id,expectedUpdatedAt:issued!.updatedAt}),/recorded as issued/);
+  await assert.rejects(saveRoeSeparationFacts({...scope,...declaration,expectedId:issued!.id,expectedUpdatedAt:issued!.updatedAt}),/This issued ROE event retains its source facts — preserve them and use the Service Canada correction workflow/);
   assert.deepEqual((await db.execute(sql`select to_jsonb(s) as snapshot from payroll_filing_submissions s where org_id=${f.orgId} and id=${filed.submission.id}`)).rows,before);
   assert.equal((await db.execute<{n:number}>(sql`select count(*)::int n from audit_log where org_id=${f.orgId} and table_name='payroll_roe_separation_events'
     and row_id=${original.id} and changes->>'event'='roe_source_issued' and changes->>'submissionId'=${filed.submission.id}`)).rows[0]!.n,1);

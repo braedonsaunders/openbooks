@@ -1112,6 +1112,13 @@ const payrollFilingScopeCases = [
             try {
               await withBypassContext(async () => {
                 await db.execute(sql`update parties set subsidiary_id=${fx.subsidiaryId} where org_id=${fx.orgId} and id=${fx.employeeId}`);
+                const filingAccountId = randomUUID();
+                assert.equal((await db.execute(sql`insert into payroll_filing_accounts
+                  (id,org_id,subsidiary_id,country,program_type,account_number,name,is_active)
+                  values (${filingAccountId},${fx.orgId},${fx.subsidiaryId},'CA','ca_rp',
+                    '123456789RP0001','Retained employer payroll account',true) returning id`)).rows.length,1);
+                assert.equal((await db.execute(sql`update employee_payroll_profiles set filing_account_id=${filingAccountId}
+                  where org_id=${fx.orgId} and employee_party_id=${fx.employeeId} returning employee_party_id`)).rows.length,1);
                 await seedRoeIssuanceFixture(fx.orgId, fx.employeeId);
               });
               const { input } = await withOrgContext(fx.orgId, () => calculatedRun(fx));

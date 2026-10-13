@@ -9,8 +9,10 @@ import {randomUUID,createHash} from 'node:crypto';
 import {sql} from 'drizzle-orm';
 import {db,withBypassContext,withOrgContext} from '../../platform/db.ts';
 import {seedAdoption,calculatedRun} from '../filing-test-fixtures.ts';
-import {seedPayrollStub,seedPayrollSettings,seedWorkerEmployment,dropScratchOrgReporting} from '../../testing/fixtures.ts';
+import {seedVacationTerms,seedPayrollSettings,seedWorkerEmployment,dropScratchOrgReporting} from '../../testing/fixtures.ts';
 import {createPayRun,reresolveRunToSubsidiary} from '../run-lifecycle.ts';
+import {mutatePayRunAdjustment} from '../run-adjustments.ts';
+import {add,cmp} from '../../money/money.ts';
 import {employeeYtd} from './compute-statutory.ts';
 import {saveOpeningBalances} from '../opening-balances.ts';
 import {qualifyOpeningEmployerAuthority,readOpeningEmployerContext} from '../opening-employer-authority.ts';
@@ -30,14 +32,24 @@ async function run(f:Fixture,owner:string,status:'draft'|'committed',amount='0',
  const created=await createPayRun({orgId:f.orgId,actorId:f.actorId,payScheduleId:f.scheduleId,
   periodStart:'2026-05-31',periodEnd:'2026-06-13',payDate:'2026-06-15',runType:'supplemental'});
  const id=created.documentId;
- if(owner!==f.subsidiaryId)await reresolveRunToSubsidiary(db,{orgId:f.orgId,actorId:f.actorId,documentId:id,subsidiaryId:owner});
- // Historical contribution records remain explicit fixture facts; native creation owns their off-cycle document and period identity.
+ await reresolveRunToSubsidiary(db,{orgId:f.orgId,actorId:f.actorId,documentId:id,subsidiaryId:owner});
  if(status==='committed'){
-  const stub=randomUUID();await seedPayrollStub(f.orgId,id,f.employeeId,employment,{id:stub,province:'ON',periodsPerYear:26,
-   payDate:'2026-06-15',taxYear:2026,currency:'CAD',gross:'10000',pensionableEarnings:'10000',insurableEarnings:'10000',
-   netPay:'10000',filingAccountId:account,country:'CA',countrySource:'calculation',factors:{C:amount,C2:'10',EI:'12',QPIP:'0',QPIP_ER:'0',B:'0',F3:'0',F5B:'0',QC_CSB:'0'},createdBy:f.actorId,updatedBy:f.actorId});
-  assert.equal((await db.execute(sql`update pay_runs set run_status='committed' where org_id=${f.orgId} and document_id=${id} returning document_id`)).rows.length,1);
-  assert.equal((await db.execute(sql`update documents set status='approved' where org_id=${f.orgId} and id=${id} returning id`)).rows.length,1);
+  assert.ok(account,'A native calculation retains its actual employer filing account');
+  assert.equal((await db.execute(sql`update parties set subsidiary_id=${owner}
+   where org_id=${f.orgId} and id=${f.employeeId} returning id`)).rows.length,1);
+  assert.equal((await db.execute(sql`update employee_payroll_profiles set employment_id=${employment},filing_account_id=${account}
+   where org_id=${f.orgId} and employee_party_id=${f.employeeId} returning employee_party_id`)).rows.length,1);
+  const base=(await db.execute<{id:string}>(sql`select id from pay_components where org_id=${f.orgId} and system_key='base_pay'`)).rows;
+  assert.equal(base.length,1);
+  await mutatePayRunAdjustment({orgId:f.orgId,actorId:f.actorId,documentId:id,reason:'Declared supplemental wage for the selected employment',
+   mutation:{action:'add',employeePartyId:f.employeeId,componentId:base[0]!.id,amount,hours:'100',replaceComponent:true,
+    earnedFrom:'2026-06-12',earnedTo:'2026-06-12'}});
+  const input={orgId:f.orgId,actorId:f.actorId,documentId:id};
+  assert.deepEqual((await calculatePayRun(input)).errors,[]);await commitPayRun(input);
+  const retained=(await db.execute<{employmentId:string;account:string;gross:string}>(sql`select employment_id as "employmentId",
+    filing_account_id as account,gross::text as gross from pay_stubs where org_id=${f.orgId} and pay_run_document_id=${id}`)).rows;
+  assert.equal(retained.length,1);assert.equal(retained[0]!.employmentId,employment);assert.equal(retained[0]!.account,account);
+  assert.equal(cmp(retained[0]!.gross,amount),0);
  }
  return {tx:db,orgId:f.orgId,employeePartyId:f.employeeId,taxYear:2026,documentId:id,subsidiaryId:owner};
 }
@@ -62,10 +74,24 @@ test('different employers retain independent annual contribution room while same
   for(const [id,number] of [[accountA,'123456789RP0001'],[accountB,'123456789RP0002']])await db.execute(sql`
    insert into payroll_filing_accounts(id,org_id,subsidiary_id,country,program_type,account_number,name,is_active)
    values(${id},${f.orgId},${f.subsidiaryId},'CA','ca_rp',${number},'Payroll program',true)`);
-  await run(f,f.subsidiaryId,'committed','100',f.employmentId,accountA);
+  const first=await run(f,f.subsidiaryId,'committed','100000',f.employmentId,accountA);
   const rehire=await seedWorkerEmployment(f.orgId,f.employeeId,f.subsidiaryId);
-  await run(f,f.subsidiaryId,'committed','200',rehire,accountB);
-  await run(f,f.other,'committed','400',f.employmentB);
+  await seedVacationTerms(f.orgId,rehire,f.actorId);
+  const second=await run(f,f.subsidiaryId,'committed','100000',rehire,accountB);
+  const accountOther=randomUUID();
+  assert.equal((await db.execute(sql`insert into payroll_filing_accounts(id,org_id,subsidiary_id,country,program_type,account_number,name,is_active)
+   values(${accountOther},${f.orgId},${f.other},'CA','ca_rp','987654321RP0001','Second employer payroll',true) returning id`)).rows.length,1);
+  await seedVacationTerms(f.orgId,f.employmentB,f.actorId);
+  const third=await run(f,f.other,'committed','100000',f.employmentB,accountOther);
+  const contributions=async(documentId:string)=>(await db.execute<{cpp:string;cpp2:string;ei:string}>(sql`
+   select factors->>'C' as cpp,factors->>'C2' as cpp2,factors->>'EI' as ei from pay_stubs
+   where org_id=${f.orgId} and pay_run_document_id=${documentId}`)).rows[0]!;
+  const original=await contributions(first.documentId),rehired=await contributions(second.documentId),other=await contributions(third.documentId);
+  for(const key of ['cpp','cpp2','ei'] as const){
+   assert.ok(cmp(original[key],'0')>0,'The first native wage consumes each annual contribution limit');
+   assert.equal(cmp(rehired[key],'0'),0,'Same employer rehire and RP changes cannot reset annual room');
+   assert.equal(cmp(other[key],original[key]),0,'Another employer retains its independent annual room');
+  }
   const a=await employeeYtd(await run(f,f.subsidiaryId,'draft'));
   const currentB=await run(f,f.other,'draft');const b=await employeeYtd(currentB);
   const identity=(await db.execute<{createdAt:string;documentNumber:string}>(sql`select r.created_at::text as "createdAt",d.document_number as "documentNumber"
@@ -76,8 +102,11 @@ test('different employers retain independent annual contribution room while same
   const ownerRows=(await db.execute<{subsidiaryId:string}>(sql`select subsidiary_id as "subsidiaryId" from documents
     where org_id=${f.orgId} and id=any(${`{${siblings.map(sibling=>sibling.document_id).join(',')}}`}::uuid[])`)).rows;
   assert.ok(ownerRows.every(row=>row.subsidiaryId===f.other));
-  assert.equal(a.cpp,'300');assert.equal(a.cpp2,'20');assert.equal(a.ei,'24');
-  assert.equal(b.cpp,'400');assert.equal(b.cpp2,'10');assert.equal(b.ei,'12');
+  for(const key of ['cpp','cpp2','ei'] as const){
+   assert.equal(cmp(a[key],add(original[key],rehired[key])),0);
+   assert.equal(cmp(b[key],other[key]),0);
+  }
+  assert.deepEqual(await contributions(first.documentId),original,'Later employment and employer assignments preserve earlier committed factors');
   await assert.rejects(employeeYtd({...await run(f,f.other,'draft'),subsidiaryId:f.subsidiaryId}),/actual pay-run legal employer/);
  });}finally{await withBypassContext(()=>dropScratchOrgReporting(f.orgId));}
 });

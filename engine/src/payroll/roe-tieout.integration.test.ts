@@ -1,14 +1,16 @@
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import { add } from "../money/money.ts";
+import { add, cmp } from "../money/money.ts";
 import { seedAdoption } from "./filing-test-fixtures.ts";
 import { calculatePayRun } from "./run-calculation.ts";
 import { commitPayRun } from "./run-commit.ts";
 import { createPayRun } from "./run-lifecycle.ts";
 import { roeCandidates, roeRecord, t4Slips } from "./yearend.ts";
+import { qualifyRoeLine } from "./roe-history.ts";
+import { grantScratchPermissions } from "../testing/fixtures.ts";
 import { dropScratchOrgReporting } from "../testing/fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -105,11 +107,53 @@ test(
           from event cross join components where components.code = 'VACPAY'
       `);
 
+      await grantScratchPermissions(fx.orgId,fx.actorId,["payroll.read","payroll.run"]);
+      await assert.rejects(roeRecord(fx.orgId,fx.employeeId),/retained insurable-hour attribution/);
+      // The employer's declared time and vacation records supply hours independently
+      // of component settings and the retained statutory calculation.
+      const sourceRows = [
+        {documentId:regular.documentId,key:"base_pay",amount:"960",hours:"32",start:"2026-07-05",end:"2026-07-18",from:"2026-07-06",to:"2026-07-14"},
+        {documentId:final.documentId,key:"base_pay",amount:"480",hours:"16",start:"2026-07-19",end:"2026-08-01",from:"2026-07-20",to:"2026-07-22"},
+        {documentId:final.documentId,key:"vacation_payout",amount:"57.60",hours:"0",start:"2026-07-19",end:"2026-08-01",from:"2026-07-19",to:"2026-08-01"},
+        {documentId:continuance.documentId,key:"base_pay",amount:"240",hours:"8",start:"2026-08-02",end:"2026-08-15",from:"2026-08-05",to:"2026-08-05"},
+      ];
+      const bytes=Buffer.from(JSON.stringify({employeePartyId:fx.employeeId,employmentId:fx.employmentId,
+        employerSubsidiaryId:fx.subsidiaryId,insurable:true,sourceRows}));
+      const sourceSha256=createHash('sha256').update(bytes).digest('hex');
+      const folder=randomUUID(),file=randomUUID(),version=randomUUID();
+      assert.equal((await db.execute(sql`insert into folders(id,org_id,name,is_private,owner_id,created_by,updated_by)
+        values(${folder},${fx.orgId},'Original separation reporting evidence',true,${fx.actorId},${fx.actorId},${fx.actorId}) returning id`)).rows.length,1);
+      assert.equal((await db.execute(sql`insert into files(id,org_id,folder_id,name,content_type,size_bytes,created_by,updated_by)
+        values(${file},${fx.orgId},${folder},'original-paid-hours.json','application/json',${bytes.length},${fx.actorId},${fx.actorId}) returning id`)).rows.length,1);
+      assert.equal((await db.execute(sql`insert into file_versions(id,file_id,version_number,size_bytes,content_type,content_hash,created_by)
+        values(${version},${file},1,${bytes.length},'application/json',${sourceSha256},${fx.actorId}) returning id`)).rows.length,1);
+      assert.equal((await db.execute(sql`insert into file_blobs(version_id,bytes) values(${version},${bytes}) returning id`)).rows.length,1);
+      assert.equal((await db.execute(sql`update files set current_version_id=${version} where org_id=${fx.orgId} and id=${file} returning id`)).rows.length,1);
+      const paidLines=(await db.execute<{id:string;documentId:string;key:string;amount:string}>(sql`
+        select line.id,stub.pay_run_document_id as "documentId",component.system_key as key,line.amount::text as amount
+        from pay_stub_lines line join pay_stubs stub on stub.org_id=line.org_id and stub.id=line.stub_id
+        join pay_components component on component.org_id=line.org_id and component.id=line.component_id
+        where line.org_id=${fx.orgId} and stub.employee_party_id=${fx.employeeId} and line.kind='earning'
+          and (line.amount<>0 or line.hours<>0)`)).rows;
+      assert.equal(paidLines.length,sourceRows.length);
+      for(const source of sourceRows){
+        const matches=paidLines.filter(line=>line.documentId===source.documentId&&line.key===source.key);
+        assert.equal(matches.length,1);assert.equal(cmp(matches[0]!.amount,source.amount),0);
+        await qualifyRoeLine({orgId:fx.orgId,actorId:fx.actorId,employeePartyId:fx.employeeId,employmentId:fx.employmentId,
+          subsidiaryId:fx.subsidiaryId,eventId,allowedSubsidiaryIds:null},
+          {payStubLineId:matches[0]!.id,reportPeriodStart:source.start,reportPeriodEnd:source.end,
+            earnedFrom:source.from,earnedTo:source.to,isInsurable:true,insurableHours:source.hours,
+            sourceFileId:file,sourceVersionId:version,sourceSha256,
+            sourceReference:'Original employee separation pay and time record',insuranceReference:'Declared insurable wages and vacation payout',
+            hoursReference:'Recorded worked hours; vacation payout carries zero additional hours',reason:'Qualify original reporting allocations',
+            expectedId:null,expectedUpdatedAt:null});
+      }
       const record = await roeRecord(fx.orgId, fx.employeeId);
       assert.ok(record, "a Canadian terminated employee gets an ROE record");
       assert.equal(record!.lastDayPaid, "2026-08-05");
       assert.equal(record!.finalPayPeriodEnd,"2026-08-15");
       assert.equal(record!.periods.length,3);
+      assert.equal(record!.totalInsurableHours,"56.0000");
       assert.equal(record!.vacationPayOnSeparation, "67.6000");
 
       const candidates = await roeCandidates(fx.orgId, 2026);
