@@ -12,6 +12,7 @@ interface RecordedIssue {
   note?: string | null
   reason?: string | null
   scope?: unknown
+  params?: Record<string, string>
 }
 
 interface GuardCall {
@@ -24,10 +25,11 @@ interface RouteState {
   gateScope: string[] | null
   guardCalls: GuardCall[]
   sectionRows: string[] | null
+  selectedRows: string[] | null
 }
 
 const stateKey = Symbol.for('openbooks.payroll-amendments-route-test')
-const state: RouteState = { issues: [], gateScope: null, guardCalls: [], sectionRows: null }
+const state: RouteState = { issues: [], gateScope: null, guardCalls: [], sectionRows: null, selectedRows: null }
 ;(globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state
 ;(globalThis as typeof globalThis & Record<string, unknown>).openbooksPayrollAmendmentsNextResponse = NextResponse
 
@@ -95,6 +97,17 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
+    'mock:filing-registry',
+    `
+      const state = globalThis[Symbol.for('openbooks.payroll-amendments-route-test')]
+      export function yearEndFiling() {
+        return state.selectedRows === null ? {} : {
+          originalIssueRowIds: async () => [...state.selectedRows],
+        }
+      }
+    `,
+  ],
+  [
     'mock:packs',
     `
       export class PayrollPackError extends Error {}
@@ -121,7 +134,8 @@ const mockSources = new Map<string, string>([
         // transaction: an original persists the whole population even when
         // the caller named a subset (or nothing) — row-b arrived after the
         // route's pre-guard.
-        const persisted = input.revision === 'original' ? ['${ROW_A}', '${ROW_B}'] : (input.rowIds ?? [])
+        const persisted = input.revision === 'original'
+          ? (state.selectedRows ?? ['${ROW_A}', '${ROW_B}']) : (input.rowIds ?? [])
         if (input.authorizeRowIds) await input.authorizeRowIds(persisted)
         const { authorizeRowIds: _ignored, ...recorded } = input
         state.issues.push(recorded)
@@ -145,6 +159,7 @@ const mockUrls = new Map<string, string>([
   ['@openbooks/engine/platform/db', 'mock:db'],
   ['drizzle-orm', 'mock:drizzle'],
   ['@openbooks/engine/payroll/packs', 'mock:packs'],
+  ['@openbooks/engine/payroll/filing-registry', 'mock:filing-registry'],
   ['@openbooks/engine/payroll/error', 'mock:payroll-error'],
   ['@openbooks/engine/payroll/yearend', 'mock:yearend'],
   ['@openbooks/engine/payroll/yearend-amendments', 'mock:amendments'],
@@ -172,6 +187,7 @@ function reset(): void {
   state.guardCalls.length = 0
   state.gateScope = null
   state.sectionRows = null
+  state.selectedRows = null
 }
 
 function restrict(): void {
@@ -327,6 +343,32 @@ test('a restricted correction naming in-scope rows is allowed: it persists exact
     { kind: 'rowIds', rowIds: [ROW_A] },
     { kind: 'rowIds', rowIds: [ROW_A] },
   ])
+})
+
+test('a pack-selected original authorizes its declared rows and preserves selection parameters', async () => {
+  reset()
+  restrict()
+  state.selectedRows = [ROW_A]
+  const params = { event: 'selected-event' }
+  const response = await post({ revision: 'original', params, rowIds: [ROW_B] })
+
+  assert.equal(response.status, 200)
+  assert.deepEqual(state.issues[0]?.params, params)
+  assert.deepEqual(state.guardCalls, [
+    { kind: 'rowIds', rowIds: [ROW_A] },
+    { kind: 'rowIds', rowIds: [ROW_A] },
+  ])
+})
+
+test('caller row IDs cannot narrow an out-of-scope pack-selected original', async () => {
+  reset()
+  restrict()
+  state.selectedRows = [ROW_B]
+  const response = await post({ revision: 'original', params: { event: 'other-event' }, rowIds: [ROW_A] })
+
+  assert.equal(response.status, 403)
+  assert.deepEqual(state.issues, [])
+  assert.deepEqual(state.guardCalls, [{ kind: 'rowIds', rowIds: [ROW_B] }])
 })
 
 test('a restricted GET with filed history still guards the current population', async () => {
