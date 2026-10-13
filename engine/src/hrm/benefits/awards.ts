@@ -20,6 +20,7 @@ import { BenefitsError, isUniqueViolation } from "./errors.ts";
 import { getBenefitProgram, programPolicyInForce } from "./programs.ts";
 import {
   assertHrmEnabled,
+  assertHrmReadEnabled,
   requireActorId,
   requireCivilDate,
   requireId,
@@ -208,7 +209,7 @@ export async function getBenefitAward(
   awardId: string,
 ): Promise<BenefitAward> {
   const scope = await requireAggregateBenefitsRead(exec, orgId, actorId);
-  await assertHrmEnabled(exec, orgId);
+  await assertHrmReadEnabled(exec, orgId);
   const row = (
     await exec.execute<Record<string, unknown>>(sql`
       select a.id as id, a.program_id as "programId",

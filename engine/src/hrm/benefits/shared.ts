@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "../../platform/db.ts";
-import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
+import { orgFeatureEnabled, lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
 import { HRM_FEATURE_KEY } from "../employment-read.ts";
 import { BenefitsError } from "./errors.ts";
 import { parseCivilDate } from "../temporal.ts";
@@ -19,6 +19,14 @@ export async function assertHrmEnabled(exec: SqlExecutor, orgId: string): Promis
       "REFUSED",
       "benefits are unavailable while the hrm feature is off — enable it under Company Settings → Features; existing benefits data is preserved",
     );
+  }
+}
+
+/** Read admission uses the caller's snapshot without acquiring writer row locks. */
+export async function assertHrmReadEnabled(exec:SqlExecutor,orgId:string):Promise<void>{
+  const organization=(await exec.execute<{id:string}>(sql`select id from orgs where id=${orgId}`)).rows[0];
+  if(!organization||!(await orgFeatureEnabled(orgId,HRM_FEATURE_KEY,exec))){
+    throw new BenefitsError("REFUSED","benefits are unavailable while the hrm feature is off — enable it under Company Settings → Features; existing benefits data is preserved");
   }
 }
 
