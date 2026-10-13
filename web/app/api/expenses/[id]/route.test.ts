@@ -238,6 +238,9 @@ test('PATCH saves only under an exact matching revision and returns the fresh to
     if (text.includes('for update')) {
       return { rows: [{ status: 'draft', updatedAt: storedRevision }] }
     }
+    if (text.includes('select kind, document_date')) {
+      return { rows: [{ kind: 'expense_report', transactionDate: '2026-08-24' }] }
+    }
     if (text.includes('update documents')) {
       assert.match(text, /returning id/, 'the required header write must return its persisted identity')
       storedRevision = NEXT_REVISION
