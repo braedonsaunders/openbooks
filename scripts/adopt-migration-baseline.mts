@@ -53,7 +53,7 @@ async function main() {
     const actual = await baselineCatalog(client);
     assertBaselineCatalogsEqual(expected, actual);
     const ownerPlan=options.has("--isolate-business-owner")
-      ? await baselineBusinessOwnerPlan(client,options.get("--runtime-role")) : null;
+      ? await baselineBusinessOwnerPlan(client,options.get("--runtime-role")!) : null;
     if (!apply) {
       await client.query("rollback");
       console.log(`VERIFIED ${options.get("--database")}: schema, security attributes and system registries match ${manifest.filename}; no changes made`);

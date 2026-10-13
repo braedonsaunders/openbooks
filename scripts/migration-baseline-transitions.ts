@@ -44,7 +44,13 @@ export function baselineTransitionCatalogMatches(manifest: {
   covered.set("environments.sql",manifest.environmentSha256);
   if ([...recorded].some(([filename, hash]) => filename !== manifest.filename
     && covered.get(filename) !== hash)) return false;
-  try { assertBaselineCatalogsEqual(expected, actual); return true; }
+  try {
+    assertBaselineCatalogsEqual(
+      expected as Parameters<typeof assertBaselineCatalogsEqual>[0],
+      actual as Parameters<typeof assertBaselineCatalogsEqual>[1],
+    );
+    return true;
+  }
   catch { return false; }
 }
 
