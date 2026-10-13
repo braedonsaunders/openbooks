@@ -85,7 +85,7 @@ test("legacy evidence without item routing reads as empty and detects later rout
   assert.deepEqual(parsed.itemAccounts, []);
   const current = snapshot();
   current.itemAccounts.push({ id: "item", payrollExpenseAccountId: "expense", updatedAt: "2026-09-20" });
-  assert.deepEqual(payRunCalculationSourceChanges(parsed, current), { time: false, timeTypes: false, wages: false, items: true, components: false, compensationPackages: false, holidayObligations: false, roster: false });
+  assert.deepEqual(payRunCalculationSourceChanges(parsed, current), { time: false, timeTypes: false, wages: false, items: true, components: false, compensationPackages: false, holidayObligations: false, roster: false, openingBalances: false });
 });
 
 test("canonical evidence ignores object key order but preserves array order and values", () => {
@@ -155,5 +155,35 @@ test("historical roster admissions and changed windows stale a calculation while
   ]) assert.equal(payRunCalculationSourceChanges(calculated, { ...snapshot(), historicalEmploymentRoster: [replacement] }).roster, true);
   for (const malformed of [null, {}, false, "[]"]) {
     assert.equal(parsePayRunCalculationSource({ ...snapshot(), historicalEmploymentRoster: malformed }), null);
+  }
+});
+
+
+test('opening source identity remains auditable and changes invalidate opening evidence without rewriting legacy snapshots', () => {
+  const legacy = snapshot();
+  const source: NonNullable<PayRunCalculationSourceSnapshot['openingEmployerAuthorities']>[number] = {
+    id: '10000000-0000-4000-8000-000000000001', openingBalanceId: '10000000-0000-4000-8000-000000000002',
+    employeePartyId: '10000000-0000-4000-8000-000000000003', taxYear: 2026,
+    subsidiaryId: '10000000-0000-4000-8000-000000000004', sourceFileId: '10000000-0000-4000-8000-000000000005',
+    sourceVersionId: '10000000-0000-4000-8000-000000000006', sourceSha256: 'a'.repeat(64), openingSha256: 'b'.repeat(64),
+  };
+  const retained = { ...legacy, openingEmployerAuthorities: [source] };
+  assert.deepEqual(parsePayRunCalculationSource(legacy), legacy);
+  assert.deepEqual(parsePayRunCalculationSource(retained), retained);
+  assert.equal(payRunCalculationSourceChanges(legacy, { ...legacy, openingEmployerAuthorities: [] }).openingBalances, false);
+  assert.equal(payRunCalculationSourceChanges(legacy, retained).openingBalances, true);
+  assert.equal(payRunCalculationSourceChanges(retained, legacy).openingBalances, true);
+  for (const change of [
+    { subsidiaryId: '10000000-0000-4000-8000-000000000007' },
+    { sourceVersionId: '10000000-0000-4000-8000-000000000008' },
+    { sourceSha256: 'c'.repeat(64) }, { openingSha256: 'd'.repeat(64) }, { taxYear: 2027 },
+  ]) {
+    const current = { ...legacy, openingEmployerAuthorities: [{ ...source, ...change }] };
+    assert.equal(payRunCalculationSourceChanges(retained, current).openingBalances, true);
+    assert.notEqual(payRunCalculationSourceDigest(retained), payRunCalculationSourceDigest(current));
+  }
+  for (const malformed of [null, '[]', {}, [null], [{ ...source, sourceSha256: 'unknown' }],
+    [{ ...source, sourceFileId: 'missing' }], [{ ...source, taxYear: '2026' }]]) {
+    assert.equal(parsePayRunCalculationSource({ ...legacy, openingEmployerAuthorities: malformed }), null);
   }
 });

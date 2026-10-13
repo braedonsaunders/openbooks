@@ -513,6 +513,7 @@ export async function commitPayRun(input: {
       changes.wages ? "wages" : null,
       changes.items ? "items" : null,
       changes.roster ? "roster" : null,
+      changes.openingBalances ? "openingBalances" : null,
     ].filter((reason): reason is string => reason !== null);
     if (payRunCalculationSourceDigest(currentSource) !== storedDigest) {
       throw new PayrollError(staleCalculationMessage(

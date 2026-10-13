@@ -2,6 +2,7 @@ import {payRunStaleness} from '../readiness.ts';
 import {calculatePayRun} from '../run-calculation.ts';
 import {commitPayRun} from '../run-commit.ts';
 import {listPeriodSiblings} from '../period-priors.ts';
+import {payRunCalculationSourceDigest,type PayRunCalculationSourceSnapshot} from '../run-calculation-evidence.ts';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import {randomUUID,createHash} from 'node:crypto';
@@ -106,12 +107,22 @@ test('qualifying employer source after calculation makes unchanged opening amoun
   const {input}=await calculatedRun(f);assert.deepEqual((await payRunStaleness(f.orgId,input.documentId)).reasons,[]);
   const before=(await db.execute<{snapshot:string}>(sql`select to_jsonb(b)::text as snapshot from payroll_opening_balances b where org_id=${f.orgId}`)).rows;
   const context=await readOpeningEmployerContext({orgId:f.orgId,actorId:f.actorId,employeePartyId:f.employeeId,taxYear:2026,allowedSubsidiaryIds:null});assert.ok(context.record);
-  await qualifyOpeningEmployerAuthority({orgId:f.orgId,actorId:f.actorId,openingBalanceId:context.record.id,subsidiaryId:f.subsidiaryId,
-   expectedOpeningSha256:context.record.openingSha256,...await source(f,{taxableYtd:'1000'}),allowedSubsidiaryIds:null});
+  const sourceEvidence=await source(f,{taxableYtd:'1000'});
+  const qualified=await qualifyOpeningEmployerAuthority({orgId:f.orgId,actorId:f.actorId,openingBalanceId:context.record.id,subsidiaryId:f.subsidiaryId,
+   expectedOpeningSha256:context.record.openingSha256,...sourceEvidence,allowedSubsidiaryIds:null});
   assert.deepEqual((await db.execute<{snapshot:string}>(sql`select to_jsonb(b)::text as snapshot from payroll_opening_balances b where org_id=${f.orgId}`)).rows,before);
   assert.ok((await payRunStaleness(f.orgId,input.documentId)).reasons.includes('openingBalances'));
   await assert.rejects(commitPayRun(input),/openingBalances/);
   assert.deepEqual((await calculatePayRun(input)).errors,[]);
   assert.deepEqual((await payRunStaleness(f.orgId,input.documentId)).reasons,[]);
+  const retained=(await db.execute<{snapshot:PayRunCalculationSourceSnapshot;digest:string}>(sql`
+    select calculation_source_snapshot as snapshot,calculation_source_digest as digest
+    from pay_runs where org_id=${f.orgId} and document_id=${input.documentId}`)).rows;
+  assert.equal(retained.length,1);
+  assert.equal(payRunCalculationSourceDigest(retained[0]!.snapshot),retained[0]!.digest);
+  assert.deepEqual(retained[0]!.snapshot.openingEmployerAuthorities,[{id:qualified.id,openingBalanceId:context.record.id,
+    employeePartyId:f.employeeId,taxYear:2026,subsidiaryId:f.subsidiaryId,
+    sourceFileId:sourceEvidence.sourceFileId,sourceVersionId:sourceEvidence.sourceVersionId,
+    sourceSha256:sourceEvidence.sourceSha256,openingSha256:context.record.openingSha256}]);
  });}finally{await withBypassContext(()=>dropScratchOrgReporting(f.orgId));}
 });

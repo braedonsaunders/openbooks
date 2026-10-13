@@ -1812,6 +1812,7 @@ export async function payRunStaleness(
   let exactWagesChanged = false;
   let exactItemsChanged = false;
   let exactRosterChanged = false;
+  let exactOpeningBalancesChanged = false;
   const storedSource = parsePayRunCalculationSource(row.calculation_source_snapshot);
   // Legacy calculated rows predate migration 0040. Keep their informational
   // timestamp display intact; commit itself refuses the missing evidence and
@@ -1835,9 +1836,10 @@ export async function payRunStaleness(
       exactWagesChanged = changes.wages;
       exactItemsChanged = changes.items;
       exactRosterChanged = changes.roster;
+      exactOpeningBalancesChanged = changes.openingBalances;
       exactCompensationPackagesChanged = changes.compensationPackages;
       exactComponentsChanged = changes.components;
-      selectionChanged = !changes.time && !changes.timeTypes && !changes.wages && !changes.items && !changes.compensationPackages && !changes.components && !changes.roster;
+      selectionChanged = !changes.time && !changes.timeTypes && !changes.wages && !changes.items && !changes.compensationPackages && !changes.components && !changes.roster && !changes.openingBalances;
     }
   }
   const reasons = [
@@ -1859,7 +1861,7 @@ export async function payRunStaleness(
     exactItemsChanged ? "items" : null,
     settingsChanged ? "settings" : null,
     row.ytd_changed ? "ytd" : null,
-    row.opening_balances_changed ? "openingBalances" : null,
+    row.opening_balances_changed || exactOpeningBalancesChanged ? "openingBalances" : null,
     employerLevyYtdChanged ? "employerLevyYtd" : null,
   ].filter((r): r is string => r !== null);
   return {

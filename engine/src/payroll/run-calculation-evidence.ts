@@ -8,6 +8,22 @@ import { payrollSubsidiaryScopeFilter, type PayrollSubsidiaryScope } from "./sco
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
+import { isUuid } from "../platform/uuid.ts";
+
+export type OpeningEmployerAuthoritySource = {
+  id: string; openingBalanceId: string; employeePartyId: string; taxYear: number; subsidiaryId: string;
+  sourceFileId: string; sourceVersionId: string; sourceSha256: string; openingSha256: string;
+};
+
+function isOpeningEmployerAuthoritySource(value: unknown): value is OpeningEmployerAuthoritySource {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const row = value as Record<string, unknown>;
+  return ["id", "openingBalanceId", "employeePartyId", "subsidiaryId", "sourceFileId", "sourceVersionId"]
+    .every(key => { const value = row[key]; return typeof value === "string" && isUuid(value); })
+    && typeof row.taxYear === "number" && Number.isSafeInteger(row.taxYear)
+    && ["sourceSha256", "openingSha256"].every(key => { const value = row[key]; return typeof value === "string" && /^[a-f0-9]{64}$/.test(value); });
+}
+
 export interface PayRunCalculationSourceSnapshot {
   version: 1;
   timeEntries: {
@@ -75,6 +91,8 @@ export interface PayRunCalculationSourceSnapshot {
   historicalEmploymentRoster?: HistoricalEmploymentRosterSource[];
   holidayObligations?: HolidayObligationSource[];
   bonusIncomeReferences?: CaBonusIncomeReferenceSource[];
+  /** Exact retained employer and original-report identity of consumed opening history. */
+  openingEmployerAuthorities?: OpeningEmployerAuthoritySource[];
   claimEntryIds: string[];
 }
 
@@ -119,7 +137,9 @@ export function parsePayRunCalculationSource(
       || (Object.hasOwn(snapshot, 'historicalEmploymentRoster') && !Array.isArray(snapshot.historicalEmploymentRoster))
       || (Object.hasOwn(snapshot, 'employerAssignments') && !Array.isArray(snapshot.employerAssignments))
       || (Object.hasOwn(snapshot, 'holidayObligations') && !Array.isArray(snapshot.holidayObligations))
-      || (Object.hasOwn(snapshot, 'bonusIncomeReferences') && !Array.isArray(snapshot.bonusIncomeReferences))) return null;
+      || (Object.hasOwn(snapshot, 'bonusIncomeReferences') && !Array.isArray(snapshot.bonusIncomeReferences))
+      || (Object.hasOwn(snapshot, 'openingEmployerAuthorities') && (!Array.isArray(snapshot.openingEmployerAuthorities)
+        || snapshot.openingEmployerAuthorities.some(row => !isOpeningEmployerAuthoritySource(row))))) return null;
   // Snapshots stored before item routing existed carry no itemAccounts; they
   // read as "no mapped items", so the first post-upgrade commit compares
   // honestly and refuses with the items reason instead of a bare selection.
@@ -362,6 +382,27 @@ export async function payRunCalculationSource(
       and a.effective_from <= r.period_end and (a.effective_to is null or a.effective_to >= r.period_start)
     order by a.id
   `)).rows;
+  const openingRows = (await executor.execute<OpeningEmployerAuthoritySource & { matches: boolean }>(sql`
+    select a.id::text,a.opening_balance_id::text as "openingBalanceId",a.employee_party_id::text as "employeePartyId",
+      a.tax_year as "taxYear",a.subsidiary_id::text as "subsidiaryId",a.source_file_id::text as "sourceFileId",
+      a.source_version_id::text as "sourceVersionId",a.source_sha256 as "sourceSha256",a.opening_sha256 as "openingSha256",
+      (a.opening_snapshot=to_jsonb(b)
+        and a.opening_sha256=encode(public.digest(to_jsonb(b)::text,'sha256'),'hex')) as matches
+    from payroll_opening_employer_authorities a
+      join payroll_opening_balances b on b.org_id=a.org_id and b.id=a.opening_balance_id
+      join pay_runs r on r.org_id=a.org_id and r.document_id=${documentId}
+      join documents d on d.org_id=r.org_id and d.id=r.document_id
+    where a.org_id=${orgId} and a.tax_year=r.tax_year and a.subsidiary_id=d.subsidiary_id
+      and a.employee_party_id in (select jsonb_array_elements_text(${JSON.stringify(row.employee_party_ids ?? [])}::jsonb)::uuid)
+    order by a.employee_party_id,a.id
+    ${lockSources ? sql`for share of a,b` : sql``}
+  `)).rows;
+  const openingEmployerAuthorities: OpeningEmployerAuthoritySource[] = openingRows.map(({ matches, ...source }) => {
+    if (!matches || !isOpeningEmployerAuthoritySource(source)) {
+      throw new PayrollError('The original opening employer source no longer matches its retained amounts — preserve its evidence and review the native opening qualification before calculating or committing');
+    }
+    return source;
+  });
   const historicalEmploymentRoster = await historicalEmploymentRosterSource(executor, orgId, documentId, allowedSubsidiaryIds);
   const employerAssignments = await employeeEmployerAssignmentHistory(executor, { orgId, payDate: row.pay_date, employeePartyIds: row.employee_party_ids ?? [] });
   const compensationPackages = await compensationPackageRunSource(executor, orgId, documentId, allowedSubsidiaryIds, lockSources);
@@ -413,6 +454,7 @@ export async function payRunCalculationSource(
     ...(historicalEmploymentRoster.length ? { historicalEmploymentRoster } : {}),
     ...(holidayObligations.length ? { holidayObligations } : {}),
     ...(bonusIncomeReferences.length ? { bonusIncomeReferences } : {}),
+    ...(openingEmployerAuthorities.length ? { openingEmployerAuthorities } : {}),
     claimEntryIds: row.claim_entry_ids ?? [],
   };
 }
@@ -420,8 +462,9 @@ export async function payRunCalculationSource(
 export function payRunCalculationSourceChanges(
   stored: PayRunCalculationSourceSnapshot,
   current: PayRunCalculationSourceSnapshot,
-): { time: boolean; timeTypes: boolean; wages: boolean; items: boolean; components: boolean; compensationPackages: boolean; holidayObligations: boolean; roster: boolean } {
+): { time: boolean; timeTypes: boolean; wages: boolean; items: boolean; components: boolean; compensationPackages: boolean; holidayObligations: boolean; roster: boolean; openingBalances: boolean } {
   return {
+    openingBalances: canonicalJson(stored.openingEmployerAuthorities ?? []) !== canonicalJson(current.openingEmployerAuthorities ?? []),
     time: canonicalJson(stored.timeEntries) !== canonicalJson(current.timeEntries)
       || canonicalJson(stored.claimEntryIds) !== canonicalJson(current.claimEntryIds),
     timeTypes: canonicalJson(stored.timeTypes) !== canonicalJson(current.timeTypes),
