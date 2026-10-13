@@ -6,10 +6,11 @@ import {
   seedPayrollProfile, seedPayrollWage, createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment,
 } from "../testing/fixtures.ts";
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { randomUUID, createHash } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db } from "../platform/db.ts";
+import { db, withOrgContext } from "../platform/db.ts";
+import { qualifyOpeningEmployerAuthority, readOpeningEmployerContext } from "./opening-employer-authority.ts";
 import { add, cmp, mulPercent } from "../money/money.ts";
 import { calculateT4127 } from "./canada/t4127.ts";
 import { employeeYtd } from "./canada/compute-statutory.ts";
@@ -262,6 +263,44 @@ async function seedAdoption(options: { hiredOn?: string } = {}): Promise<Adoptio
   };
 }
 
+/** Retain the fixture's original employer report before exercising Canadian carry-ins. */
+async function qualifyOriginalOpening(fx: AdoptionFixture): Promise<void> {
+  const original = (await db.execute<{ report: string }>(sql`
+    select jsonb_build_object('legalEmployerId', ${fx.subsidiaryId}::text,
+                             'originalOpening', to_jsonb(b))::text as report
+      from payroll_opening_balances b
+     where b.org_id = ${fx.orgId} and b.employee_party_id = ${fx.employeeId}
+       and b.tax_year = 2026
+  `)).rows;
+  assert.equal(original.length, 1);
+  const bytes = Buffer.from(original[0]!.report);
+  const sha = createHash('sha256').update(bytes).digest('hex');
+  const folderId = randomUUID(), fileId = randomUUID(), versionId = randomUUID();
+  await db.execute(sql`insert into user_permission_overrides(org_id,user_id,permission,effect)
+    values(${fx.orgId},${fx.actorId},'payroll.read','grant'),
+          (${fx.orgId},${fx.actorId},'payroll.run','grant')
+    on conflict(org_id,user_id,permission) do update set effect='grant'`);
+  await db.execute(sql`insert into folders(id,org_id,name,is_private,owner_id,created_by,updated_by)
+    values(${folderId},${fx.orgId},'Original payroll reports',true,${fx.actorId},${fx.actorId},${fx.actorId})`);
+  await db.execute(sql`insert into files(id,org_id,folder_id,name,content_type,size_bytes,created_by,updated_by)
+    values(${fileId},${fx.orgId},${folderId},'original-employer-opening.json','application/json',${bytes.length},${fx.actorId},${fx.actorId})`);
+  await db.execute(sql`insert into file_versions(id,file_id,version_number,size_bytes,content_type,content_hash,created_by)
+    values(${versionId},${fileId},1,${bytes.length},'application/json',${sha},${fx.actorId})`);
+  await db.execute(sql`insert into file_blobs(version_id,bytes) values(${versionId},${bytes})`);
+  await db.execute(sql`update files set current_version_id=${versionId} where org_id=${fx.orgId} and id=${fileId}`);
+  await withOrgContext(fx.orgId, async () => {
+    const context = await readOpeningEmployerContext({orgId:fx.orgId,actorId:fx.actorId,
+      employeePartyId:fx.employeeId,taxYear:2026,allowedSubsidiaryIds:null});
+    assert.ok(context.record);
+    await qualifyOpeningEmployerAuthority({orgId:fx.orgId,actorId:fx.actorId,
+      openingBalanceId:context.record.id,subsidiaryId:fx.subsidiaryId,
+      expectedOpeningSha256:context.record.openingSha256,
+      sourceFileId:fileId,sourceVersionId:versionId,sourceSha256:sha,
+      sourceReference:'Original legal employer employee YTD report',
+      reason:'Retain original employer authority before Canadian calculation',allowedSubsidiaryIds:null});
+  });
+}
+
 /** A pay run on the fixture's schedule, calculated unless told otherwise. */
 async function seedRun(
   fx: AdoptionFixture,
@@ -318,6 +357,8 @@ test(
           },
         }],
       });
+
+      await qualifyOriginalOpening(fx);
 
       for (const workedOn of ["2026-07-06", "2026-07-08", "2026-07-10", "2026-07-14"]) {
         await seedPayrollTime(fx.orgId, fx.employeeId, fx.actorId, {
@@ -388,9 +429,13 @@ test(
         }],
       });
 
+      await qualifyOriginalOpening(fx);
+
+      const currentDocumentId = await seedRun(fx, {runStatus: "draft", calculated: false,
+        periodStart: "2026-06-07", periodEnd: "2026-06-20", payDate: "2026-06-23"});
       const ca = await employeeYtd({
         tx: db, orgId: fx.orgId, employeePartyId: fx.employeeId,
-        taxYear: 2026, documentId: randomUUID(),
+        taxYear: 2026, documentId: currentDocumentId, subsidiaryId: fx.subsidiaryId,
       });
       assert.equal(ca.f5b, "120.5000");
       assert.equal(ca.qc_csb, "85.0000");
@@ -448,9 +493,13 @@ test(
         }],
       });
 
+      await qualifyOriginalOpening(fx);
+
+      const currentDocumentId = await seedRun(fx, {runStatus: "draft", calculated: false,
+        periodStart: "2026-06-07", periodEnd: "2026-06-20", payDate: "2026-06-23"});
       const ytd = await employeeYtd({
         tx: db, orgId: fx.orgId, employeePartyId: fx.employeeId,
-        taxYear: 2026, documentId: randomUUID(),
+        taxYear: 2026, documentId: currentDocumentId, subsidiaryId: fx.subsidiaryId,
       });
       assert.equal(ytd.qpip_employer, "620.0600");
 
@@ -1217,6 +1266,8 @@ test(
           components: { RRSP: "23400.00" },
         }],
       });
+
+      await qualifyOriginalOpening(fx);
 
       for (const workedOn of ["2026-07-06", "2026-07-08", "2026-07-10", "2026-07-14"]) {
         await seedPayrollTime(fx.orgId, fx.employeeId, fx.actorId, {
