@@ -38,10 +38,8 @@ import { renderTaxFormFacsimileBody } from '../../../../lib/tax-form-facsimile-h
  * Québec's RL-1, an ROE whose Service Canada serial number this product never
  * held) the pack's sentence is what is shown, and there is no action to take.
  *
- * This is deliberately NOT rendered on the Separations surface: separation
- * documents are not year-end artifacts and were moved off that surface on
- * purpose. `FilingWorkspace` takes `amendments` and only the year-end cockpit
- * passes it.
+ * Independent separation events use the same issued-artifact history. The
+ * country pack continues to refuse unsupported agency amendment formats.
  */
 
 export type FilingRevision = 'original' | 'amended' | 'cancelled'
@@ -257,6 +255,7 @@ export function FilingLifecycleBar({
   year,
   lifecycle,
   busy,
+  originalSelectionReady = true,
   error,
   onRecordOriginal,
   canFile,
@@ -265,6 +264,7 @@ export function FilingLifecycleBar({
   year: number
   lifecycle: FilingLifecycle | null
   busy: boolean
+  originalSelectionReady?: boolean
   error: string | null
   onRecordOriginal: (note: string) => void
   /**
@@ -312,7 +312,7 @@ export function FilingLifecycleBar({
           {text('lifecycle.title', 'Filing status')}
         </FieldLabel>
         <div className="flex flex-wrap items-center gap-2">
-          {canFile && issued === 0 && section.data.rows.length > 0 && (
+          {canFile && (issued===0||section.additionalSelectedOriginals&&lifecycle?.rows.some(row=>row.status==='unfiled')) && section.data.rows.length > 0 && (
             <>
               <Input
                 aria-label={text('lifecycle.note', 'Filing note')}
@@ -322,7 +322,7 @@ export function FilingLifecycleBar({
                 className="w-64"
                 maxLength={500}
               />
-              <Button variant="outline" disabled={busy} onClick={() => onRecordOriginal(note)}>
+              <Button variant="outline" disabled={busy||!originalSelectionReady} onClick={() => onRecordOriginal(note)}>
                 {text('lifecycle.recordOriginal', 'Record as filed')}
               </Button>
             </>
@@ -721,7 +721,7 @@ function FilingCorrectionSectionBody({
               </AlertDescription>
             </Alert>
           )}
-          {review.status === 'unfiled' && lifecycle.submissions.length === 0 && (
+          {review.status === 'unfiled' && (lifecycle.submissions.length===0||section.additionalSelectedOriginals) && (
             <p className="text-xs text-slate-500 dark:text-slate-400">
               {text(
                 'lifecycle.unfiledHelp',
@@ -729,7 +729,7 @@ function FilingCorrectionSectionBody({
               )}
             </p>
           )}
-          {review.status === 'unfiled' && lifecycle.submissions.length > 0 && (
+          {review.status === 'unfiled' && lifecycle.submissions.length>0 && !section.additionalSelectedOriginals && (
             // A slip that appeared AFTER the return went out is an additional
             // original, not a correction — a real gap, named rather than
             // offered as an amendment that would misdescribe it.

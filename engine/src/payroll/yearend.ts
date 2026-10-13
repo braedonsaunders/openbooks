@@ -1168,7 +1168,14 @@ export async function roeCandidates(orgId: string, taxYear: number): Promise<{
      group by p.id, p.display_name, prof.country, er.terminated_on
      order by p.display_name
   `));
-  const unknown = rows.rows.filter((row) => row.country == null);
+  const events=(await db.execute<{id:string;employeePartyId:string;employeeName:string;lastDay:string}>(sql`
+    select e.id,e.employee_party_id as "employeePartyId",p.display_name as "employeeName",
+      e.last_insurable_earnings_on::text as "lastDay"
+    from payroll_roe_separation_events e join parties p on p.org_id=e.org_id and p.id=e.employee_party_id
+    where e.org_id=${orgId} and extract(year from e.interruption_on)::int=${taxYear}
+      and e.status in ('draft','confirmed','issued') order by p.display_name,e.interruption_on,e.id`)).rows;
+  const declaredEmployees=new Set(events.map(e=>e.employeePartyId));
+  const unknown = rows.rows.filter((row) => row.country == null && !declaredEmployees.has(row.id));
   if (unknown.length > 0) {
     const names = unknown.map((row) => row.display_name).sort().join(", ");
     throw new PayrollError(
@@ -1178,13 +1185,6 @@ export async function roeCandidates(orgId: string, taxYear: number): Promise<{
       + "before issuing Records of Employment",
     );
   }
-  const events=(await db.execute<{id:string;employeePartyId:string;employeeName:string;lastDay:string}>(sql`
-    select e.id,e.employee_party_id as "employeePartyId",p.display_name as "employeeName",
-      e.last_insurable_earnings_on::text as "lastDay"
-    from payroll_roe_separation_events e join parties p on p.org_id=e.org_id and p.id=e.employee_party_id
-    where e.org_id=${orgId} and extract(year from e.interruption_on)::int=${taxYear}
-      and e.status in ('draft','confirmed','issued') order by p.display_name,e.interruption_on,e.id`)).rows;
-  const declaredEmployees=new Set(events.map(e=>e.employeePartyId));
   return [
     ...events.map(e=>({roeRowId:roeEventRow(e.employeePartyId,e.id),eventId:e.id,employeePartyId:e.employeePartyId,
       employeeName:e.employeeName,terminatedOn:e.lastDay,lastPayDate:null})),
@@ -2169,6 +2169,7 @@ export interface YearEndFilingSection {
   /** Why there is no file, when the pack says so explicitly. */
   downloadRefusal: string | null;
   issue: PayrollFilingIssue | null;
+  additionalSelectedOriginals?: boolean;
 }
 
 /**
@@ -2230,6 +2231,7 @@ export async function orgYearEndFilings(
           : null,
         downloadRefusal: filing.downloadRefusal ?? null,
         issue: filing.issue ?? null,
+        additionalSelectedOriginals: filing.additionalSelectedOriginals ?? false,
       });
     }
   }

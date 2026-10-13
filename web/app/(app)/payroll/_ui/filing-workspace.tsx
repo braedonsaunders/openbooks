@@ -53,12 +53,14 @@ export async function recordFilingOriginal(
   section: YearEndFilingSection,
   year: number,
   note: string,
+  params?: Record<string,string>,
 ): Promise<string | null> {
   const res = await fetch('/api/payroll/year-end/amendments', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
       country: section.country, filing: section.key, year, revision: 'original', note,
+      ...(params ? {params} : {}),
     }),
   })
   if (!res.ok) throw new Error(await readApiErrorMessage(res, 'the filing could not be recorded'))
@@ -188,6 +190,11 @@ export function useFilingIssues(year: number) {
     comments,
     issueKey: keyFor,
     issueSelection,
+    clearSection: (section:YearEndFilingSection)=>{
+      const prefix=`${section.country}:${section.key}:${year}:`
+      setReasons(previous=>Object.fromEntries(Object.entries(previous).filter(([key])=>!key.startsWith(prefix))))
+      setComments(previous=>Object.fromEntries(Object.entries(previous).filter(([key])=>!key.startsWith(prefix))))
+    },
     downloadBusy,
     downloadError,
     downloadFile,
@@ -239,10 +246,9 @@ export function FilingWorkspace({
    * Show the original → amended → cancelled lifecycle (filing history, per-row
    * delta, correction actions).
    *
-   * Off by default and passed only by the year-end cockpit. Separation
-   * documents were deliberately moved OFF the year-end surface and their
-   * corrections belong to the agency's own separation workflow — the CA pack's
-   * ROE declaration refuses an amendment here by name for exactly that reason.
+   * Annual surfaces opt in. Independent event originals show their retained
+   * issue history automatically; unsupported agency amendments retain the
+   * pack's explicit refusal.
    */
   amendments?: boolean
   /**
@@ -270,7 +276,8 @@ export function FilingWorkspace({
   const [openRow, setOpenRow] = useState<FilingRow | null>(null)
   // One lifecycle fetch per selected filing — the correction review is a
   // per-row recompute and is not worth doing for filings nobody is looking at.
-  const lifecycle = useFilingLifecycle(selected ?? null, year, amendments)
+  const showLifecycle=amendments||selected?.additionalSelectedOriginals===true
+  const lifecycle = useFilingLifecycle(selected ?? null, year, showLifecycle)
   const [issueBusy, setIssueBusy] = useState(false)
   const [issueError, setIssueError] = useState<string | null>(null)
 
@@ -280,7 +287,9 @@ export function FilingWorkspace({
     try {
       // A filing with no electronic file is legitimately recorded — but the
       // pack's reason there is none is surfaced, never swallowed.
-      const fileRefusal = await recordFilingOriginal(section, year, note)
+      const params=section.issue?{[section.issue.param]:issues.issueSelection(section)}:undefined
+      const fileRefusal = await recordFilingOriginal(section, year, note,params)
+      issues.clearSection(section)
       if (fileRefusal) setIssueError(fileRefusal)
       lifecycle.refresh()
     } catch (e) {
@@ -374,7 +383,7 @@ export function FilingWorkspace({
           year={year}
           issues={issues}
           onOpenRow={(row) => setOpenRow(row)}
-          lifecycle={amendments ? lifecycle.state : null}
+          lifecycle={showLifecycle ? lifecycle.state : null}
           reviewByRow={lifecycle.reviewByRow}
           lifecycleBusy={issueBusy}
           lifecycleError={issueError}
@@ -390,7 +399,7 @@ export function FilingWorkspace({
           year={year}
           issues={issues}
           lifecycle={
-            amendments && lifecycle.state.status === 'ready' ? lifecycle.state.lifecycle : null
+            showLifecycle && lifecycle.state.status === 'ready' ? lifecycle.state.lifecycle : null
           }
           review={lifecycle.reviewByRow.get(String(openRow[selected.data.rowKey] ?? '')) ?? null}
           onIssued={() => lifecycle.refresh()}
@@ -530,6 +539,7 @@ export function FilingSection({
           year={year}
           lifecycle={lifecycle.lifecycle}
           busy={lifecycleBusy}
+          originalSelectionReady={!section.issue||Boolean(issues.issueSelection(section))}
           error={lifecycleError}
           onRecordOriginal={onRecordOriginal}
           canFile={canFile}
@@ -750,6 +760,7 @@ export function SlipDrawer({
                     <Select
                       id="slip-issue-reason"
                       value={reason}
+                      disabled={review!==null&&review.status!=='unfiled'}
                       onChange={(e) => issues.setReason(section, row, e.target.value)}
                     >
                       <option value="">{t('issue.notIncluded')}</option>
@@ -767,6 +778,7 @@ export function SlipDrawer({
                     <Input
                       id="slip-issue-comment"
                       value={comment}
+                      disabled={review!==null&&review.status!=='unfiled'}
                       onChange={(e) => issues.setComment(section, row, e.target.value)}
                       maxLength={section.issue.commentMaxLength}
                     />

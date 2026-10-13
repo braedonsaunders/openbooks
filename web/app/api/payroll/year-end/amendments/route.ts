@@ -1,3 +1,4 @@
+import { yearEndFiling } from '@openbooks/engine/payroll/filing-registry'
 import { z } from 'zod'
 import { defineRoute } from '@/lib/api/route'
 import { apiErrorResponse } from '@/lib/api/error-response'
@@ -34,7 +35,9 @@ const filingIssueInput = z.object({
 // against that declaration before the issue service writes anything.
 const correctionRows = z.array(z.string().min(1)).min(1)
 const requestBodySchema = z.discriminatedUnion('revision', [
-  filingIssueInput.extend({ revision: z.literal('original'), rowIds: z.array(z.string().min(1)).optional() }),
+  filingIssueInput.extend({ revision: z.literal('original'), rowIds: z.array(z.string().min(1)).optional(),
+    params:z.record(z.string().min(1).max(64),z.string().max(610000)).refine(value=>Object.keys(value).length<=8
+      &&Object.values(value).reduce((size,text)=>size+text.length,0)<=610000,'filing selection is too large').optional() }),
   filingIssueInput.extend({ revision: z.literal('amended'), confirmedAmendment: z.literal(true), rowIds: correctionRows }),
   filingIssueInput.extend({
     revision: z.literal('cancelled'), confirmedCancellation: z.literal(true, { error: 'cancellation must be explicitly confirmed' }), rowIds: correctionRows,
@@ -154,18 +157,26 @@ export const POST = defineRoute({
     const year = body.year
     const revision = body.revision
     const { country, filing } = body
-    // An original covers the WHOLE population by definition — the service
-    // ignores rowIds for it — so a caller-supplied list (empty, partial, or
-    // anything else) can never narrow this guard. Guarding only the list while
-    // persisting the population let a restricted actor issue the org-wide
-    // filing by passing []. A correction persists exactly its named rows, so
-    // the list IS its population and is guarded as such.
+    // Ordinary originals authorize their complete population. A pack-owned exact
+    // source selection authorizes those selected event rows here and again inside
+    // the native issue transaction; caller rowIds cannot narrow either path.
     if (revision === 'original') {
-      const section = (await orgYearEndFilings(gate.user.orgId, year))
-        .find((candidate) => candidate.country === country && candidate.key === filing)
-      if (section) {
-        const denied = await guardPayrollFilingData(gate, country, filing, section.data, year)
-        if (denied) return denied
+      let declared:ReturnType<typeof yearEndFiling>
+      try{declared=yearEndFiling(country,filing)}
+      catch(error){return apiErrorResponse(error,{...(error instanceof PayrollPackError?{safeStatus:404}:{})})}
+      if(declared.originalIssueRowIds){
+        try{
+          const selected=await declared.originalIssueRowIds(body.params??{},gate.user.orgId)
+          const denied=await guardPayrollFilingRowIds(gate,country,filing,[...selected],year)
+          if(denied)return denied
+        }catch(error){return apiErrorResponse(error,{...(error instanceof PayrollError?{safeStatus:422}:{})})}
+      }else{
+        const section=(await orgYearEndFilings(gate.user.orgId,year))
+          .find(candidate=>candidate.country===country&&candidate.key===filing)
+        if(section){
+          const denied=await guardPayrollFilingData(gate,country,filing,section.data,year)
+          if(denied)return denied
+        }
       }
     } else {
       const denied = await guardPayrollFilingRowIds(gate, country, filing, body.rowIds, year)
@@ -187,6 +198,7 @@ export const POST = defineRoute({
         filingKey: filing,
         taxYear: year,
         revision,
+        ...(body.revision==='original'?{params:body.params}:{}),
         rowIds: body.revision === 'original' ? body.rowIds : body.rowIds,
         scope: gate.allowedSubsidiaryIds ?? undefined,
         authorizeRowIds,

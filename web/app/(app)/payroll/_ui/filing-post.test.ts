@@ -113,3 +113,16 @@ test('issue correction: a named refusal surfaces, and a file refusal returns ins
     restore()
   }
 })
+
+
+test('recording an event original sends the exact selected event, reason and encoded comment',async()=>{
+  const employee='00000000-0000-4000-8000-000000000001',event='00000000-0000-4000-8000-000000000002'
+  const params={employees:employee+'~'+event+':K:'+encodeURIComponent('Original interruption: seasonal closure')}
+  const restore=stubFetch((url,init)=>{
+    assert.equal(url,'/api/payroll/year-end/amendments')
+    assert.deepEqual(JSON.parse(String(init?.body)),{country:'CA',filing:'roe',year:2026,revision:'original',note:'Original declared event',params})
+    return Response.json({fileRefusal:null})
+  })
+  try{assert.equal(await recordFilingOriginal({...section,key:'roe'},2026,'Original declared event',params),null)}
+  finally{restore()}
+})

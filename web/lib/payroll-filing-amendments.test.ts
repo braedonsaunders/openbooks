@@ -163,6 +163,7 @@ const sectionHooks = registerHooks({
         url: 'data:text/javascript,export function useMoney() { return { money: (v) => `money:${v ?? ""}` } }',
       }
     }
+    if (specifier === '../../../../lib/viewer-format') return {shortCircuit:true,url:'data:text/javascript,export function useViewerFormat(){return {date:value=>value}}'}
     if (specifier === '../../../../lib/confirm') {
       return {
         shortCircuit: true,
@@ -177,7 +178,7 @@ const React = await import('react')
 Object.assign(globalThis, { React })
 const { createRoot } = await import('react-dom/client')
 const { act } = await import('react')
-const { FilingCorrectionSection } = await import('../app/(app)/payroll/_ui/filing-amendments.tsx')
+const { FilingCorrectionSection,FilingLifecycleBar } = await import('../app/(app)/payroll/_ui/filing-amendments.tsx')
 sectionHooks.deregister()
 
 test('an unconfirmed cancellation is refused before any write', async () => {
@@ -397,4 +398,25 @@ test('a new evidence context clears the stale reason', async (t) => {
   const area = host.querySelector('textarea#cancellation-reason-row-1') as HTMLTextAreaElement | null
   assert.ok(area, 'the reason field renders after the context change')
   assert.equal(area.value, '', 'the stale reason does not survive the evidence change')
+})
+
+
+for(const independent of [true,false])test(independent
+  ? 'later independent event originals remain available only with a selected declaration'
+  : 'an annual return keeps its existing additional-original refusal',async(t)=>{
+  const host=document.createElement('div');document.body.appendChild(host);const root=createRoot(host)
+  t.after(async()=>{await act(async()=>root.unmount());host.remove()})
+  let recorded=0
+  const section={...SECTION,additionalSelectedOriginals:independent,data:{...SECTION.data,rows:[{rowId:'event-b'}]}}
+  const lifecycle:FilingLifecycle={...LIFECYCLE,submissions:[{id:'original-a',revision:'original',revisionNumber:1,supersedesId:null,
+    issuedAt:'2026-07-19T12:00:00Z',note:null,slipCount:1,artifact:null,slips:[{rowId:'event-a',label:'Earlier event',revision:'original'}]}],
+    rows:[{...REVIEW,rowId:'event-b',status:'unfiled',lastRevision:null,changes:[]}]}
+  async function render(ready:boolean){await act(async()=>{root.render(React.createElement(FilingLifecycleBar,{section,year:2026,
+    lifecycle,busy:false,error:null,canFile:true,originalSelectionReady:ready,onRecordOriginal:()=>{recorded++}}));await tick()})}
+  await render(false)
+  const button=buttonByText(host,'Record as filed')
+  if(!independent){assert.equal(button,null);return}
+  assert.ok(button);assert.equal(button.disabled,true);assert.equal(recorded,0)
+  await render(true);assert.equal(buttonByText(host,'Record as filed')!.disabled,false)
+  await click(buttonByText(host,'Record as filed')!);assert.equal(recorded,1)
 })
