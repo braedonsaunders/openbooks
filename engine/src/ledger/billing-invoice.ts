@@ -7,6 +7,7 @@ import { findLapsedRateCard, mergeCharges, priceAdjustments, RateAdjustmentPrici
 import { addInvoiceQuantities, applyRollup, resolveInvoicingProfile } from '../projects/invoice-rollup.ts'
 import { roundCurrencyMoney } from '../fx/currencies.ts'
 import { subsidiaryVisibleFilter } from '../organization/subsidiary-scope.ts'
+import { lockActorCommandAuthority } from '../organization/actor-command-authority.ts'
 import { projectContractCapacityUsed } from '../projects/contract-capacity.ts'
 import { businessToday } from '../platform/business-date.ts'
 import { presentedWorkPeriods, workCompletedOn } from '../records/work-period.ts'
@@ -199,6 +200,13 @@ export async function generateInvoiceFromBillingRequest(
   allowedSubsidiaryIds: ReadonlySet<string> | null = null,
 ): Promise<GenerateResult> {
   return db.transaction(async (tx) => {
+    const actorScope = await lockActorCommandAuthority(tx, orgId, userId, null, 'ar.create')
+    // Caller scope may narrow current authority, but cannot confer access.
+    allowedSubsidiaryIds = actorScope === null
+      ? allowedSubsidiaryIds
+      : allowedSubsidiaryIds === null
+        ? actorScope
+        : new Set([...allowedSubsidiaryIds].filter(id => actorScope.has(id)))
     const projectGate = (await tx.execute<{ features: FeatureState | null }>(sql`
       select settings->'features' as features
         from orgs where id = ${orgId} for share

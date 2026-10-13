@@ -16,6 +16,7 @@ test('generated invoices stamp each line work period and the latest work date as
     const org = await createScratchOrg()
     try {
       const actor = (await seedFlowActors(org.orgId)).adminId
+      await (await import('@openbooks/engine/testing/fixtures')).grantScratchPermissions(org.orgId, actor, ['ar.create'])
       const project = randomUUID()
       await db.execute(sql`update orgs set settings=jsonb_set(settings,'{controlAccounts,projectRevenue}',to_jsonb(${org.accounts.recognized}::text)) where id=${org.orgId}`)
       await db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,status,is_active,custom)

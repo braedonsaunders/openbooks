@@ -16,6 +16,7 @@ async function fixture(lineBuilder: 'tm_actual' | 'cost_plus') {
   const project = randomUUID(), employee = randomUUID(), priced = randomUUID(), missing = randomUUID()
   const actor = await withBypassContext(async () => {
     const actors = await seedFlowActors(org.orgId)
+    await (await import('@openbooks/engine/testing/fixtures')).grantScratchPermissions(org.orgId, actors.adminId, ['ar.create'])
     await db.execute(sql`update orgs set settings=jsonb_set(
       jsonb_set(settings,'{features,projects}','true'::jsonb),
       '{controlAccounts,projectRevenue}',to_jsonb(${org.accounts.revenue}::text)) where id=${org.orgId}`)
@@ -130,6 +131,33 @@ for (const [name,classification,expected] of [
         select coalesce(sum(amount),0)::numeric(19,4)::text as amount,count(*)::int as count from document_lines
         where org_id=${f.org.orgId} and document_id=${invoice.id} and description='Regular surcharge'`)).rows[0]!)
       assert.deepEqual(measured,{amount:expected,count:classification==='regular'?1:0})
+    } finally { await f.cleanup() }
+  })
+}
+
+
+for (const authority of ['denied', 'inactive', 'empty entity scope', 'caller scope'] as const) {
+  test(`native billing resolves current actor authority before consuming sources: ${authority}`, enabled, async () => {
+    const f = await fixture('tm_actual')
+    try {
+      await withBypassContext(async () => {
+        await db.execute(sql`update items set default_rate='0' where org_id=${f.org.orgId} and id=${f.org.items.service}`)
+        if (authority === 'denied') {
+          await db.execute(sql`update user_permission_overrides set effect='deny'
+            where org_id=${f.org.orgId} and user_id=${f.actor} and permission='ar.create'`)
+        } else if (authority === 'inactive') {
+          await db.execute(sql`update users set is_active=false where org_id=${f.org.orgId} and id=${f.actor}`)
+        } else if (authority === 'empty entity scope') {
+          await db.execute(sql`update app_roles set subsidiary_restriction='{"mode":"list","subsidiaryIds":[]}'::jsonb
+            where org_id=${f.org.orgId} and id in
+              (select role_id from role_assignments where org_id=${f.org.orgId} and user_id=${f.actor})`)
+        }
+      })
+      const before = await f.snapshot()
+      await assert.rejects(f.inOrg(() => generateInvoiceFromBillingRequest(
+        f.org.orgId, f.actor, f.request.id, authority === 'caller scope' ? new Set<string>() : null,
+      )), authority === 'denied' || authority === 'inactive' ? /not found/ : /Billing request not found/)
+      assert.deepEqual(await f.snapshot(), before, 'authority refusal preserves source consumption, numbering, requests, documents and audit')
     } finally { await f.cleanup() }
   })
 }

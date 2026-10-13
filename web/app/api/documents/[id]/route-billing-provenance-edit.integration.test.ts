@@ -59,6 +59,7 @@ type FixtureOrg = { orgId: string; subsidiaryId: string; date: string; customerI
 
 /** A T&M project with approved, unpriced 8h time entries, billed to a draft invoice. */
 async function billedTimeInvoice(org: FixtureOrg, actor: string, entryCount = 1) {
+  await (await import('@openbooks/engine/testing/fixtures')).grantScratchPermissions(org.orgId, actor, ['ar.create'])
   await db.execute(sql`update orgs set settings = jsonb_set(settings, '{controlAccounts,projectRevenue}', to_jsonb(${org.accounts.revenue}::text), true) where id = ${org.orgId}`)
   const project = randomUUID(), employee = randomUUID()
   await db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,status,is_active,custom) values (${project},${org.orgId},${org.subsidiaryId},'TM','Time job',${org.customerId},'active',true,'{}'::jsonb)`)

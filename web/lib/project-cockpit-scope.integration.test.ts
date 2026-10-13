@@ -462,6 +462,7 @@ const consolidatedRows = [
                   );
 
                   const actors = await seedFlowActors(org.orgId);
+                  await (await import('@openbooks/engine/testing/fixtures')).grantScratchPermissions(org.orgId, actors.adminId, ['ar.create'])
                   const request = await createBillingRequest(
                     org.orgId,
                     actors.adminId,

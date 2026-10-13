@@ -28,6 +28,7 @@ for(const scenario of ['hidden cost','concurrent time','project move']) {
    const {actor,project}=await withBypassContext(async ()=>{
     await db.execute(sql`update orgs set settings = jsonb_set(settings, '{controlAccounts,projectRevenue}', to_jsonb(${org.accounts.revenue}::text), true) where id = ${org.orgId}`);
     const actor=await createScratchUser(org.orgId,'Billing controller','reviewer');
+    await (await import('@openbooks/engine/testing/fixtures')).grantScratchPermissions(org.orgId, actor, ['ar.create'])
     const project=randomUUID();
     await db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,status,is_active) values (${project},${org.orgId},${org.subsidiaryId},'SOURCE','Source controls',${org.customerId},'active',true)`);
     return {actor,project};
@@ -124,6 +125,7 @@ const consolidatedRows = [
               await db.execute(sql`insert into accounts(id,org_id,number,name,type,is_summary,is_active) values (${unbilledReceivable},${org.orgId},'1150','Unbilled Receivable','asset_current_other',false,true)`)
               await db.execute(sql`update orgs set settings = jsonb_set(settings, '{controlAccounts,unbilledReceivable}', to_jsonb(${unbilledReceivable}::text), true) where id = ${org.orgId}`)
               const actor = (await seedFlowActors(org.orgId)).adminId
+              await (await import('@openbooks/engine/testing/fixtures')).grantScratchPermissions(org.orgId, actor, ['ar.create'])
               const fixed = BUILTIN_PROJECT_TYPES.find((t) => t.key === 'fixed_price')!
               const typeId = randomUUID(), project = randomUUID()
               await db.execute(sql`insert into project_types(id,org_id,key,name,billing_method,invoicing_profile,backup_profile)
@@ -243,6 +245,7 @@ const consolidatedRows = [
             try {
               await db.execute(sql`update orgs set settings = jsonb_set(settings, '{controlAccounts,projectRevenue}', to_jsonb(${org.accounts.revenue}::text), true) where id = ${org.orgId}`)
               const actor = (await seedFlowActors(org.orgId)).adminId
+              await (await import('@openbooks/engine/testing/fixtures')).grantScratchPermissions(org.orgId, actor, ['ar.create'])
               const tm = BUILTIN_PROJECT_TYPES.find((t) => t.key === 'time_and_materials')!
               const typeId = randomUUID(), project = randomUUID()
               await db.execute(sql`insert into project_types(id,org_id,key,name,billing_method,invoicing_profile,backup_profile)
@@ -294,6 +297,7 @@ const consolidatedRows = [
               try {
                 await db.execute(sql`update orgs set settings = jsonb_set(settings, '{controlAccounts,projectRevenue}', to_jsonb(${org.accounts.revenue}::text), true) where id = ${org.orgId}`)
                 const actors = await seedFlowActors(org.orgId)
+                await (await import('@openbooks/engine/testing/fixtures')).grantScratchPermissions(org.orgId, actors.adminId, ['ar.create'])
                 const project = randomUUID()
                 await db.execute(sql`update subsidiaries set base_currency=${currency} where id=${org.subsidiaryId} and org_id=${org.orgId}`)
                 await db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,status,is_active,custom) values (${project},${org.orgId},${org.subsidiaryId},'ROUND','Currency precision',${org.customerId},'active',true,'{}'::jsonb)`)
@@ -314,6 +318,7 @@ const consolidatedRows = [
               try {
                 if (expected !== null) await db.execute(sql`update orgs set settings = jsonb_set(settings, '{controlAccounts,projectRevenue}', to_jsonb(${org.accounts.revenue}::text), true) where id = ${org.orgId}`)
                 const actor = (await seedFlowActors(org.orgId)).adminId
+                await (await import('@openbooks/engine/testing/fixtures')).grantScratchPermissions(org.orgId, actor, ['ar.create'])
                 const project = randomUUID(), cost = randomUUID(), line = randomUUID()
                 await db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,status,is_active,custom) values (${project},${org.orgId},${org.subsidiaryId},'MARKUP','Exact markup',${org.customerId},'active',true,${JSON.stringify({markupPercent})}::jsonb)`)
                 await db.execute(sql`insert into documents(id,org_id,kind,document_number,party_id,subsidiary_id,project_id,document_date,posting_date,currency,fx_rate,status,subtotal,tax_total,total) values (${cost},${org.orgId},'vendor_bill','MARKUP-COST',${org.vendorId},${org.subsidiaryId},${project},${org.date},${org.date},'CAD',1,'draft','100000','0','100000')`)
@@ -349,6 +354,7 @@ const consolidatedRows = [
             try {
               await db.execute(sql`update orgs set settings = jsonb_set(settings, '{controlAccounts,projectRevenue}', to_jsonb(${org.accounts.revenue}::text), true) where id = ${org.orgId}`)
               const actor = (await seedFlowActors(org.orgId)).adminId
+              await (await import('@openbooks/engine/testing/fixtures')).grantScratchPermissions(org.orgId, actor, ['ar.create'])
               const project = randomUUID(), cost = randomUUID(), line1 = randomUUID(), line2 = randomUUID()
               await db.execute(sql`insert into projects(id,org_id,subsidiary_id,code,name,customer_id,status,is_active,custom,invoicing_profile) values (${project},${org.orgId},${org.subsidiaryId},'PERITEM','Per-item provenance',${org.customerId},'active',true,'{}'::jsonb,'{"lineGrouping":"per_item"}'::jsonb)`)
               await db.execute(sql`insert into documents(id,org_id,kind,document_number,party_id,subsidiary_id,project_id,document_date,posting_date,currency,fx_rate,status,subtotal,tax_total,total) values (${cost},${org.orgId},'vendor_bill','PERITEM-COST',${org.vendorId},${org.subsidiaryId},${project},${org.date},${org.date},'CAD',1,'draft','20','0','20')`)
@@ -497,6 +503,7 @@ const billingTimeSelectionCases = [
           const { actor, project } = await withBypassContext(async () => {
             await db.execute(sql`update orgs set settings = jsonb_set(settings, '{controlAccounts,projectRevenue}', to_jsonb(${org.accounts.revenue}::text), true) where id = ${org.orgId}`)
             const actor = await createScratchUser(org.orgId, 'Billing controller', 'reviewer')
+            await (await import('@openbooks/engine/testing/fixtures')).grantScratchPermissions(org.orgId, actor, ['ar.create'])
             const project = randomUUID()
             await db.execute(sql`insert into projects(id, org_id, subsidiary_id, code, name, customer_id, status, is_active) values (${project}, ${org.orgId}, ${org.subsidiaryId}, 'TIMESEL', 'Time selection probe', ${org.customerId}, 'active', true)`)
             return { actor, project }
@@ -582,6 +589,7 @@ const billingTimeSelectionCases = [
           const { actor, project } = await withBypassContext(async () => {
             await db.execute(sql`update orgs set settings = jsonb_set(settings, '{controlAccounts,projectRevenue}', to_jsonb(${org.accounts.revenue}::text), true) where id = ${org.orgId}`)
             const actor = await createScratchUser(org.orgId, 'Billing controller', 'reviewer')
+            await (await import('@openbooks/engine/testing/fixtures')).grantScratchPermissions(org.orgId, actor, ['ar.create'])
             const project = randomUUID()
             await db.execute(sql`insert into projects(id, org_id, subsidiary_id, code, name, customer_id, status, is_active) values (${project}, ${org.orgId}, ${org.subsidiaryId}, 'TIMESEL', 'Time selection probe', ${org.customerId}, 'active', true)`)
             return { actor, project }
@@ -731,6 +739,7 @@ const billingRateAndTaxCases = [
           const { actor, project, otherCustomer } = await withBypassContext(async () => {
             await db.execute(sql`update orgs set settings = jsonb_set(settings, '{controlAccounts,projectRevenue}', to_jsonb(${org.accounts.revenue}::text), true) where id = ${org.orgId}`)
             const actor = await createScratchUser(org.orgId, 'Billing controller', 'reviewer')
+            await (await import('@openbooks/engine/testing/fixtures')).grantScratchPermissions(org.orgId, actor, ['ar.create'])
             const project = randomUUID()
             await db.execute(sql`insert into projects(id, org_id, subsidiary_id, code, name, customer_id, status, is_active) values (${project}, ${org.orgId}, ${org.subsidiaryId}, 'ADJ', 'Adjustment probe', ${org.customerId}, 'active', true)`)
             const otherCustomer = randomUUID()
