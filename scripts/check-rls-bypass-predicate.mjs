@@ -65,6 +65,22 @@ export const INLINE_BYPASS_GUC = /current_setting\s*\(\s*'app\.bypass_rls'/
  * drop: `policies` lists [policy, table] pairs.
  */
 export const INLINE_BYPASS_GUC_SUPERSEDED = new Map([
+  ['0691_financial_rate_preferences_versions.sql', {
+    by: '0707_financial_policy_bypass_predicate.sql',
+    policies: [['org_isolation', 'fx_rate_types'], ['org_isolation', 'account_translation_policies'], ['org_isolation', 'subsidiary_accounting_preferences']],
+  }],
+  ['0692_journal_instruction_modes.sql', {
+    by: '0707_financial_policy_bypass_predicate.sql',
+    policies: [['org_isolation', 'journal_reversal_instructions']],
+  }],
+  ['0693_balancing_segment_policy_versions.sql', {
+    by: '0707_financial_policy_bypass_predicate.sql',
+    policies: [['org_isolation', 'segment_balancing_policies']],
+  }],
+  ['0694_period_entity_gl_audit_numbering.sql', {
+    by: '0707_financial_policy_bypass_predicate.sql',
+    policies: [['org_isolation', 'gl_audit_number_policies'], ['org_isolation', 'gl_audit_number_assignments']],
+  }],
   ['0489_pay_component_department_expenses.sql', {
     by: '0539_query_console_and_script_authority_hardening.sql',
     policies: [['tenant_isolation', 'pay_component_department_expenses']],

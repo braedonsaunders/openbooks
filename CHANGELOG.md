@@ -33,7 +33,7 @@ changes; each release documents required operator action.
 - Consolidate payroll navigation, lists and review actions; improve shared
   drawers, audit context, Setup help and localized financial reports.
 
-Migrations 0568 through 0705 apply forward through the native migration runner.
+Migrations 0568 through 0705 and 0707 apply forward through the native migration runner.
 Run the release's read-only upgrade check and retain a verified backup before
 applying them. Resolve exact schema or published-body drift refusals instead of
 editing migration files or existing ledger identities. Enable new capabilities

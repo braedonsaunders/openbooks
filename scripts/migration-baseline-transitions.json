@@ -1,0 +1,93 @@
+{
+  "format": 1,
+  "baseline": {
+    "filename": "baselines/alpha29.sql",
+    "sha256": "4b29a81bdc359b46b467634ae6d800f9ae9c33b8f17e7efa4b0696218428456c",
+    "catalogSha256": "aa3703a189494497ffc6e44c2a35696e61ed2a9966c3065e9c3ea7bf8eef562e"
+  },
+  "consumers": {
+    "generated/0626_tenant_retirement.sql": {
+      "migrationSha256": "4da9e2c44bff6ed85de4fa5eebf94075070e86f0308f65e243bb5c3a22352988",
+      "preflightSha256": "2e534aa7a81b86c1269684201bf8536170ea22a97240ecd9e7299934182e17c1",
+      "prerequisites": {
+        "generated/0551_payroll_compensation_packages.sql": "a685ac79807efbe4164a2764651470dc6e7f381590d1e0739da97c4f355b8239",
+        "generated/0569_clone_preserves_activated_rate_children.sql": "84c263d0464ef8d66af1749e1514e5d5410420ed280d5d4df43c2c0df02f54e3",
+        "generated/0571_sales_evidence_native_sandbox_teardown.sql": "1cbb995e767a364065caf522b98960ae575160871b7b7c1368872407ae93bd2b",
+        "generated/0580_clone_preserves_recorded_document_balances.sql": "1ee33f04b4c0cfe6c1725d19d08cc613e593bbc2c63a499ae9e58b0b419ca59b",
+        "generated/0581_field_ticket_evidence_native_sandbox_lifecycle.sql": "45e133506694b4b3b4ca50c36c39df919d8910ec1c5e0e38552f1af5acf79cbf",
+        "generated/0589_pre_billing_names.sql": "37feac1a7168379edf6460d54cba4f85ea66051661147ccaf45aeedeb9358f90",
+        "generated/0594_bound_journal_fx_entry_matching.sql": "1c6d3d800b2f0129a3785d3c04fab20fe0b4b8d8940ebd683fe2d82201b71cc7",
+        "generated/0609_payroll_service_configuration_historical_clone.sql": "6fb0d2167c3fa8e86cb83c296dff362cf83439e99ff0c15c035269007ce0af6b",
+        "generated/0616_serial_count_restoration.sql": "c14e319a9ba311f98561f85862c2513457fe640b387206682023c7e8badba269",
+        "generated/0623_reconciliation_match_clone_authority.sql": "4052996e444a1de24b569872bbb0c987e0408482087f48d7289bd5c6a6041bff",
+        "generated/0625_quota_sandbox_wipe_authority.sql": "46277ea64b6ff551d9756106a7b96588ec6e8c8134efdf944b4e6f62c2dd2245"
+      },
+      "findingCodes": [
+        "0626.guard_attributes_changed",
+        "0626.guard_body_changed",
+        "0626.unknown_delete_trigger"
+      ]
+    },
+    "generated/0628_production_retirement_contracts.sql": {
+      "migrationSha256": "1d68ab208b84f1ab23b98fd239530af8c1b9a361e6c827b1e31a5d4018e6dc0a",
+      "preflightSha256": "596de561ade9944bfed8b993ab8869a6df3dbb593b108439862411e6d2f1b610",
+      "prerequisites": {
+        "generated/0551_payroll_compensation_packages.sql": "a685ac79807efbe4164a2764651470dc6e7f381590d1e0739da97c4f355b8239",
+        "generated/0569_clone_preserves_activated_rate_children.sql": "84c263d0464ef8d66af1749e1514e5d5410420ed280d5d4df43c2c0df02f54e3",
+        "generated/0571_sales_evidence_native_sandbox_teardown.sql": "1cbb995e767a364065caf522b98960ae575160871b7b7c1368872407ae93bd2b",
+        "generated/0580_clone_preserves_recorded_document_balances.sql": "1ee33f04b4c0cfe6c1725d19d08cc613e593bbc2c63a499ae9e58b0b419ca59b",
+        "generated/0581_field_ticket_evidence_native_sandbox_lifecycle.sql": "45e133506694b4b3b4ca50c36c39df919d8910ec1c5e0e38552f1af5acf79cbf",
+        "generated/0589_pre_billing_names.sql": "37feac1a7168379edf6460d54cba4f85ea66051661147ccaf45aeedeb9358f90",
+        "generated/0594_bound_journal_fx_entry_matching.sql": "1c6d3d800b2f0129a3785d3c04fab20fe0b4b8d8940ebd683fe2d82201b71cc7",
+        "generated/0609_payroll_service_configuration_historical_clone.sql": "6fb0d2167c3fa8e86cb83c296dff362cf83439e99ff0c15c035269007ce0af6b",
+        "generated/0616_serial_count_restoration.sql": "c14e319a9ba311f98561f85862c2513457fe640b387206682023c7e8badba269",
+        "generated/0619_operating_profiles_production_extensions.sql": "42daad13839b4303794f5c7ede20d0c3a02387c789ae4db41316ea6c2a2728fa",
+        "generated/0620_payroll_prior_earnings.sql": "993391011fafe81c0e90e8bd213bd0afb53e76140e5aacadbb8ed63e08ed9432",
+        "generated/0623_reconciliation_match_clone_authority.sql": "4052996e444a1de24b569872bbb0c987e0408482087f48d7289bd5c6a6041bff",
+        "generated/0625_quota_sandbox_wipe_authority.sql": "46277ea64b6ff551d9756106a7b96588ec6e8c8134efdf944b4e6f62c2dd2245",
+        "generated/0626_tenant_retirement.sql": "4da9e2c44bff6ed85de4fa5eebf94075070e86f0308f65e243bb5c3a22352988",
+        "generated/0627_compensation_ungated_submission.sql": "35e82bdfbbc52f9241c448f91de4cd64f000a2815f0bb228be583b6ce3502dbe"
+      },
+      "findingCodes": [
+        "0628.guard_attributes_changed",
+        "0628.guard_body_changed",
+        "0628.production_function_missing",
+        "0628.production_table_changed",
+        "0628.production_trigger_changed",
+        "0628.retirement_authority_catalog_changed",
+        "0628.retirement_authority_changed",
+        "0628.retirement_fence_missing",
+        "0628.retirement_new_org_fence_missing",
+        "0628.retirement_owner_not_isolated",
+        "0628.unknown_delete_trigger"
+      ]
+    },
+    "generated/0630_warehouse_masked_clone.sql": {
+      "migrationSha256": "a8d7574eb0e8c5741357e9a80db51fb75a0fb1f5163a340192a9821c5a241b51",
+      "preflightSha256": "c2ea961739b60bc57ef5d45fd06ac9541633cb4e20dc4f4b5b63dca9d00d98a6",
+      "prerequisites": {
+        "generated/0619_operating_profiles_production_extensions.sql": "42daad13839b4303794f5c7ede20d0c3a02387c789ae4db41316ea6c2a2728fa",
+        "generated/0620_payroll_prior_earnings.sql": "993391011fafe81c0e90e8bd213bd0afb53e76140e5aacadbb8ed63e08ed9432",
+        "generated/0623_reconciliation_match_clone_authority.sql": "4052996e444a1de24b569872bbb0c987e0408482087f48d7289bd5c6a6041bff",
+        "generated/0625_quota_sandbox_wipe_authority.sql": "46277ea64b6ff551d9756106a7b96588ec6e8c8134efdf944b4e6f62c2dd2245",
+        "generated/0626_tenant_retirement.sql": "4da9e2c44bff6ed85de4fa5eebf94075070e86f0308f65e243bb5c3a22352988",
+        "generated/0627_compensation_ungated_submission.sql": "35e82bdfbbc52f9241c448f91de4cd64f000a2815f0bb228be583b6ce3502dbe",
+        "generated/0628_production_retirement_contracts.sql": "1d68ab208b84f1ab23b98fd239530af8c1b9a361e6c827b1e31a5d4018e6dc0a"
+      },
+      "findingCodes": [
+        "0630.warehouse_copy_contract_mismatch"
+      ]
+    },
+    "generated/0692_journal_instruction_modes.sql": {
+      "migrationSha256": "e31bcb469f0082873620ec3cdca678a6f55ab043843da9f8147b6dc1aa7e7000",
+      "preflightSha256": "d009f5c096ff6c94e950521560dca70889ce144c18df6d990d77b786168983ec",
+      "prerequisites": {
+        "generated/0594_bound_journal_fx_entry_matching.sql": "1c6d3d800b2f0129a3785d3c04fab20fe0b4b8d8940ebd683fe2d82201b71cc7",
+        "generated/0543_adjustment_period_dates_and_fx_bound_messages.sql": "a86256f42c947af33ba970513013925dcd47def719136603c2d50afd76963be6"
+      },
+      "findingCodes": [
+        "0692.guard_definition"
+      ]
+    }
+  }
+}

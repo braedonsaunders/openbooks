@@ -17,6 +17,7 @@ import { publishedMigrationSessionPrelude } from "../migration-session-headers.m
 import { ensureRetirementAuthorityOwnership } from "./retirement-ownership.ts"
 import { migrationExecutionCompatibility } from "../migration-execution-compatibility.ts"
 import { preflightNeedsRecordedGuardTransition, RECORDED_INSTRUCTION_GUARD_SIGNATURE } from "../migration-preflight-transitions.ts"
+import { baselineTransitionCandidate, verifyBaselineTransitionCatalog } from "../migration-baseline-transitions.ts"
 
 /**
  * A fresh installation hands business objects to the dedicated schema owner
@@ -277,6 +278,7 @@ async function evaluatePendingMigrations(
   const timeoutMs = preflightStatementTimeoutMs(env);
   const preflightDir = preflightDirFor(repoRoot);
   const client = await connectMigrationClient();
+  let verifiedBaseline: boolean | undefined;
   try {
     for (let index = 0; index < pending.length; index += 1) {
       const item = pending[index]!;
@@ -328,6 +330,22 @@ async function evaluatePendingMigrations(
             + `pending migration creates, so it runs at apply time (${evaluation.reason})`,
         );
         continue;
+      }
+      if (evaluation.status === "ready" && evaluation.findings.length) {
+        const published = new Map(generatedMigrationFiles().map(file => {
+          const filename = `generated/${file}`;
+          return [filename, readFileSync(join(migrationsDir, filename), "utf8")] as const;
+        }));
+        if (baselineTransitionCandidate({ migration: item.filename, consumerSql: sqlText,
+          findings: evaluation.findings, published,
+          pendingBeforeConsumer: new Set(pending.slice(0,index).map(row => row.filename)) })) {
+          verifiedBaseline ??= await verifyBaselineTransitionCatalog(client,migrationsDir,timeoutMs);
+          if (verifiedBaseline) {
+            report.deferred.push({ file: item.file, filename: item.filename, ordinal: item.ordinal, sql: sqlText });
+            console.log(`[bootstrap] migration preflight ${item.filename} is deferred from the verified complete baseline until its pinned publishers apply; its unchanged strict query runs at apply time`);
+            continue;
+          }
+        }
       }
       if (evaluation.status === "ready" && evaluation.findings.some(finding =>
         finding.code === "0700.instruction_guard_definition" || finding.code === "0702.instruction_guard_definition"
