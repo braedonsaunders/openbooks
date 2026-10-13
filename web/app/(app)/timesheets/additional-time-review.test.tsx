@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test, { type TestContext } from 'node:test'
-import { isUuid } from '@openbooks/engine/platform/uuid'
+import { isUuid } from '@openbooks/engine/platform/identifiers'
 import type { ComponentProps } from 'react'
 import { readFile } from 'node:fs/promises'
 
