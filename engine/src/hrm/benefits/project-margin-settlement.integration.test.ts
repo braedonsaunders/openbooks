@@ -11,7 +11,7 @@ import { mkSecondSubsidiary, seedComponent, seedEmployment, seedProject, setupHa
 import type { ProjectMarginSnapshot } from "./project-margin-settlement.ts";
 import { recordSettledAward } from "./awards.ts";
 import { errorChainMatches } from "../../testing/error-chain.ts";
-import { addProgramMembership } from "./programs.ts";
+import { addProgramMembership,getBenefitProgram,updateBenefitProgram,type CreateBenefitProgramQuery } from "./programs.ts";
 import { previewIncentiveSettlement, settleIncentivePeriod, type IncentivePreview } from "./settlement.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
@@ -57,7 +57,7 @@ function projectSnapshot(preview: IncentivePreview): ProjectMarginSnapshot {
   return preview.measured as ProjectMarginSnapshot;
 }
 
-async function seedMargin(h: Harness, asOf = "2026-07-20") {
+async function seedMargin(h: Harness, asOf = "2026-07-20", terms:Partial<CreateBenefitProgramQuery> = {}) {
     const component = await seedComponent(h.org.orgId, { kind: "earning", code: "MARGIN" });
     const worker = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { displayName: "Project Manager" });
     const projectId = await seedProject(h.org.orgId, "Margin source project");
@@ -68,7 +68,7 @@ async function seedMargin(h: Harness, asOf = "2026-07-20") {
       code:"PROJECT_MARGIN",name:"Project margin",family:"incentive",approvalMode:"none",
       metric:"project_margin",metricScope:"company",valuation:"percent",allocation:"responsibility",
       percentRate:"5",lossPercentRate:"10",frequency:"monthly",periodBasis:"calendar",
-      includeOpenCommitments:true,sourceAccountIds:[h.org.accounts.revenue,h.org.accounts.cogs],
+      includeOpenCommitments:true,sourceAccountIds:[h.org.accounts.revenue,h.org.accounts.cogs],...terms,
     }, { activate:false });
     await addProgramMembership({ orgId:h.org.orgId,actorId:h.actorId,programId:program.id,
       employmentId:worker.employmentId,effectiveFrom:"2026-01-01" });
@@ -206,3 +206,40 @@ test("global-project margin excludes another legal entity's cost, commitments an
     const retried = await settleIncentivePeriod(query);
     assert.equal(retried.awards[0]!.id,settled.awards[0]!.id);
   }));
+
+test("new margin awards retain complete economic policy while dated changes and adjustments preserve original evidence",{skip:!DB},()=>withHarness(setup,async h=>{
+ const {query,program,worker}=await seedMargin(h,"2026-07-31",{projectProfitCap:"1000",projectLossCap:"2000",poolRounding:"pool"});
+ const first=await settleIncentivePeriod(query);assert.equal(first.awards.length,1);
+ const award=first.awards[0]!;assert.equal(award.value,"350.0000");
+ type Retained={id:string;program_snapshot:Record<string,unknown>;source_snapshot:Record<string,unknown>};
+ const read=async(id:string)=>{
+  const rows=(await db.execute<Retained>(sql`select id,program_snapshot,source_snapshot from hrm_benefit_awards
+   where org_id=${h.org.orgId} and id=${id}`)).rows;assert.equal(rows.length,1);return rows[0]!;
+ };
+ const original=await read(award.id);
+ const policy=await getBenefitProgram(db,h.org.orgId,h.actorId,program.id);
+ const terms=["scopeCustomerIds","scopeDepartmentIds","unassignedTime","scopeExcludedProjectIds","lossPercentRate",
+  "projectProfitCap","projectLossCap","poolRounding","includeOpenCommitments","hourClassifications","eligibility"] as const;
+ for(const key of terms){assert.ok(Object.hasOwn(original.program_snapshot,key),`Retained policy must distinguish missing from ${key}'s actual value`);assert.deepEqual(original.program_snapshot[key],policy[key]);}
+ assert.equal(original.program_snapshot.lossPercentRate,"10.0000");assert.equal(original.program_snapshot.projectProfitCap,"1000.0000");
+ assert.equal(original.program_snapshot.projectLossCap,"2000.0000");assert.equal(original.program_snapshot.poolRounding,"pool");
+ assert.equal(original.program_snapshot.includeOpenCommitments,true);
+ assert.deepEqual((await settleIncentivePeriod(query)).awards.map(item=>item.id),[award.id]);assert.deepEqual(await read(award.id),original);
+ await updateBenefitProgram({orgId:h.org.orgId,actorId:h.actorId,programId:program.id,lossPercentRate:"20",
+  projectProfitCap:"500",projectLossCap:"1000",poolRounding:"share",includeOpenCommitments:false,
+  changeEffectiveFrom:"2026-08-01",reason:"Declare later project economics"});
+ const changed=await getBenefitProgram(db,h.org.orgId,h.actorId,program.id);assert.equal(changed.lossPercentRate,"20.0000");
+ assert.equal(changed.includeOpenCommitments,false);
+ assert.deepEqual((await settleIncentivePeriod(query)).awards.map(item=>item.id),[award.id]);assert.deepEqual(await read(award.id),original);
+ const adjustmentInput={orgId:h.org.orgId,actorId:h.actorId,programId:program.id,employmentId:worker.employmentId,
+  periodFrom:query.periodFrom,periodTo:query.periodTo,currency:"USD",value:"10.00",sourceKey:`adjust:${award.id}:economic-evidence`,
+  adjustsAwardId:award.id,evidence:{reason:"Declared original-period adjustment",kind:"incentive-adjustment"}};
+ const adjustment=await recordSettledAward(adjustmentInput);assert.equal(adjustment.value,"10.0000");
+ const retainedAdjustment=await read(adjustment.id);
+ assert.deepEqual(retainedAdjustment.program_snapshot,original.program_snapshot,"An adjustment copies the retained original policy, including loss and cost terms");
+ assert.deepEqual(retainedAdjustment.source_snapshot,original.source_snapshot,"Current policy and new evidence cannot reinterpret the original source");
+ await assert.rejects(recordSettledAward(adjustmentInput),/already recorded/);
+ assert.deepEqual(await read(adjustment.id),retainedAdjustment);assert.deepEqual(await read(award.id),original);
+ assert.equal((await db.execute<{n:number}>(sql`select count(*)::int n from hrm_benefit_awards
+  where org_id=${h.org.orgId} and program_id=${program.id}`)).rows[0]!.n,2,"Retry creates no duplicate correction or replacement of original history");
+}));
