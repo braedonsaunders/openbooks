@@ -6,28 +6,33 @@ import {CabinetFilePicker} from '../../../../components/cabinet-file-picker';
 import {readApiErrorMessage} from '../../../../lib/api-error';
 import type {readOpeningEmployerContext} from '@openbooks/engine/payroll/opening-employer-authority';
 type Context=Awaited<ReturnType<typeof readOpeningEmployerContext>>;
-type State={kind:'loading'}|{kind:'error';message:string}|{kind:'ready';context:Context};
+type State=({kind:'loading'}|{kind:'error';message:string}|{kind:'ready';context:Context})&{requestKey:string};
+type Props={employeePartyId:string;year:number;canManage:boolean;annualDirty:boolean;onSaved:()=>void};
 /** Source ownership is reviewed in the existing selected-employee drawer. */
-export function OpeningEmployerAuthorityForm({employeePartyId,year,canManage,annualDirty,onSaved}:{
- employeePartyId:string;year:number;canManage:boolean;annualDirty:boolean;onSaved:()=>void;
-}){
+export function OpeningEmployerAuthorityForm(props:Props){
+ return <OpeningEmployerAuthorityBody key={JSON.stringify([props.employeePartyId,props.year])} {...props}/>;
+}
+function OpeningEmployerAuthorityBody({employeePartyId,year,canManage,annualDirty,onSaved}:Props){
  const t=useTranslations('payroll');
  const text=(key:string,fallback:string)=>t.has(('openingBalances.employerAuthority.'+key) as never)?t(('openingBalances.employerAuthority.'+key) as never):fallback;
- const [state,setState]=useState<State>({kind:'loading'}),[fileId,setFileId]=useState(''),[subsidiaryId,setSubsidiaryId]=useState('');
+ const [fileId,setFileId]=useState(''),[subsidiaryId,setSubsidiaryId]=useState('');
  const [sourceReference,setSourceReference]=useState(''),[reason,setReason]=useState(''),[reload,setReload]=useState(0),[busy,setBusy]=useState(false),[error,setError]=useState('');
+ const requestKey=JSON.stringify([employeePartyId,year,fileId,reload]);
+ const [state,setState]=useState<State>({kind:'loading',requestKey});
+ if(state.requestKey!==requestKey)setState({kind:'loading',requestKey});
  useEffect(()=>{
   const controller=new AbortController();let active=true;
-  const timeout=setTimeout(()=>controller.abort(),15000);setState({kind:'loading'});
+  const timeout=setTimeout(()=>controller.abort(),15000);
   void(async()=>{
    const params=new URLSearchParams({employeePartyId,taxYear:String(year)});if(fileId)params.set('sourceFileId',fileId);
    const response=await fetch('/api/payroll/opening-balances/employer-authority?'+params,{signal:controller.signal});
    if(!response.ok)throw Error(await readApiErrorMessage(response,'The opening source could not be loaded'));
    const context=await response.json() as Context;
-   if(active)setState({kind:'ready',context});
-  })().catch((cause:unknown)=>{if(active)setState({kind:'error',message:cause instanceof Error?cause.message:'The opening source could not be loaded'});})
+   if(active)setState({kind:'ready',context,requestKey});
+  })().catch((cause:unknown)=>{if(active)setState({kind:'error',message:cause instanceof Error?cause.message:'The opening source could not be loaded',requestKey});})
    .finally(()=>clearTimeout(timeout));
   return()=>{active=false;clearTimeout(timeout);controller.abort();};
- },[employeePartyId,year,fileId,reload]);
+ },[employeePartyId,year,fileId,requestKey]);
  async function save(){
   if(state.kind!=='ready'||!state.context.record||!state.context.source||!canManage||annualDirty||busy)return;
   const {record,source}=state.context;setBusy(true);setError('');

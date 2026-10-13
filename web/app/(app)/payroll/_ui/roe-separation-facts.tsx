@@ -1,24 +1,30 @@
 'use client'
 import { parseRoeEventRow, roeEventRow } from '@openbooks/engine/payroll/roe-event-row'
 import Link from 'next/link'
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { Alert, AlertDescription, Button, FieldLabel, Input, Select, Skeleton } from '@openbooks/ui'
 import type { RoeSeparationFacts, RoeSeparationEmployee } from '@openbooks/engine/payroll/roe-separation-facts'
 import { readApiErrorMessage } from '../../../../lib/api-error'
 
-type State = { status: 'loading' } | { status: 'error'; message: string }
-  | { status: 'ready'; record: RoeSeparationFacts | null; employee: RoeSeparationEmployee }
+type State = ({ status: 'loading' } | { status: 'error'; message: string }
+  | { status: 'ready'; record: RoeSeparationFacts | null; employee: RoeSeparationEmployee }) & { requestKey: string }
+type Props = { employeePartyId: string; canEdit: boolean; onSaved: (rowId: string) => void }
 
 /** The employee's declaration stays in the shared ROE drawer, including refusal and retry. */
-export function RoeSeparationFactsForm({ employeePartyId, canEdit, onSaved }: {
-  employeePartyId: string; canEdit: boolean; onSaved: (rowId:string) => void
-}) {
+export function RoeSeparationFactsForm(props: Props) {
+  return <RoeSeparationFactsBody key={props.employeePartyId} {...props} />
+}
+
+function RoeSeparationFactsBody({ employeePartyId, canEdit, onSaved }: Props) {
   const t = useTranslations('payroll.filings.separationFacts')
-  const [state, setState] = useState<State>({ status: 'loading' })
   const [reload, setReload] = useState(0)
   const [newEvent, setNewEvent] = useState(false)
-  const selection = parseRoeEventRow(employeePartyId)
+  const requestKey = JSON.stringify([employeePartyId, newEvent, reload])
+  const [state, setState] = useState<State>({ status: 'loading', requestKey })
+  // As in the shared drawer resource, request identity clears stale data before commit.
+  if (state.requestKey !== requestKey) setState({ status: 'loading', requestKey })
+  const selection = useMemo(() => parseRoeEventRow(employeePartyId), [employeePartyId])
   const [firstDayWorked, setFirstDayWorked] = useState('')
   const [interruptionOn, setInterruptionOn] = useState('')
   const [lastInsurableEarningsOn, setLastInsurableEarningsOn] = useState('')
@@ -30,7 +36,6 @@ export function RoeSeparationFactsForm({ employeePartyId, canEdit, onSaved }: {
   const [error, setError] = useState('')
   useEffect(() => {
     let alive = true
-    setState({ status: 'loading' })
     void (async () => {
       if(!selection) throw new Error(t('loadFailed'))
       const params=new URLSearchParams({employeePartyId:selection.employeePartyId})
@@ -40,7 +45,7 @@ export function RoeSeparationFactsForm({ employeePartyId, canEdit, onSaved }: {
       if (!response.ok) throw new Error(await readApiErrorMessage(response, t('loadFailed')))
       const body = await response.json() as { record: RoeSeparationFacts | null; employee: RoeSeparationEmployee }
       if (!alive) return
-      setState({ status: 'ready', record: body.record, employee: body.employee })
+      setState({ status: 'ready', record: body.record, employee: body.employee, requestKey })
       setFirstDayWorked(body.record?.firstDayWorked ?? '')
       setInterruptionOn(body.record?.interruptionOn ?? '')
       setLastInsurableEarningsOn(body.record?.lastInsurableEarningsOn ?? '')
@@ -50,10 +55,10 @@ export function RoeSeparationFactsForm({ employeePartyId, canEdit, onSaved }: {
       setStatus(body.record?.status === 'confirmed' ? 'confirmed' : 'draft')
       setError('')
     })().catch((cause: unknown) => {
-      if (alive) setState({ status: 'error', message: cause instanceof Error ? cause.message : t('loadFailed') })
+      if (alive) setState({ status: 'error', message: cause instanceof Error ? cause.message : t('loadFailed'), requestKey })
     })
     return () => { alive = false }
-  }, [employeePartyId, newEvent, reload, t])
+  }, [selection, newEvent, requestKey, t])
 
   async function save() {
     if (!canEdit || busy || state.status !== 'ready' || !selection) return
@@ -67,7 +72,7 @@ export function RoeSeparationFactsForm({ employeePartyId, canEdit, onSaved }: {
           expectedUpdatedAt: state.record?.updatedAt ?? null }) })
       if (!response.ok) throw new Error(await readApiErrorMessage(response, t('saveFailed')))
       const body = await response.json() as { record: RoeSeparationFacts }
-      setState({ status: 'ready', record: body.record, employee: state.employee })
+      setState({ status: 'ready', record: body.record, employee: state.employee, requestKey })
       onSaved(roeEventRow(selection.employeePartyId,body.record.id))
     } catch (cause: unknown) { setError(cause instanceof Error ? cause.message : t('saveFailed')) }
     finally { setBusy(false) }
