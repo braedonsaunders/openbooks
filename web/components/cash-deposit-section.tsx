@@ -6,6 +6,8 @@ import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Button, FieldLabel, Input, Select } from '@openbooks/ui'
+import Link from 'next/link'
+import { isUuid } from '@openbooks/engine/platform/identifiers'
 
 export interface CashDepositAccountOption {
   value: string
@@ -31,6 +33,14 @@ type TillWindow = {
   tendered: string
   dropped: string
   difference: string
+}
+
+type SavedDeposit = {
+  id: string
+  documentNumber: string
+  posted: boolean
+  pendingApproval: boolean
+  postRefusal: string | null
 }
 
 /**
@@ -74,7 +84,7 @@ export function CashDepositSection({
   const [sourceAccountId, setSourceAccountId] = useState('')
   const [busy, setBusy] = useState(false)
   const [refusal, setRefusal] = useState<string | null>(null)
-  const [savedNumber, setSavedNumber] = useState<string | null>(null)
+  const [savedDeposit, setSavedDeposit] = useState<SavedDeposit | null>(null)
   const [drops, setDrops] = useState<
     { transferId: string; documentNumber: string; dropDate: string; amount: string; status: string; slipNumber: string | null }[] | null
   >(null)
@@ -138,7 +148,7 @@ export function CashDepositSection({
   async function record() {
     setBusy(true)
     setRefusal(null)
-    setSavedNumber(null)
+    setSavedDeposit(null)
     try {
       const response = mode === 'till'
         ? await fetch('/api/cash-sales/till-drops', {
@@ -173,14 +183,28 @@ export function CashDepositSection({
         setRefusal(`${message}${remedy}`)
         return
       }
-      const documentNumber = typeof body.documentNumber === 'string' ? body.documentNumber : ''
-      setSavedNumber(documentNumber)
+      const pendingApproval = body.pendingApproval === true
+      const postRefusal = typeof body.postRefusal === 'string' && body.postRefusal.trim() ? body.postRefusal : null
+      if (typeof body.id !== 'string' || !isUuid(body.id)
+        || typeof body.documentNumber !== 'string' || !body.documentNumber.trim()
+        || typeof body.posted !== 'boolean'
+        || (body.pendingApproval !== undefined && typeof body.pendingApproval !== 'boolean')
+        || (body.postRefusal !== undefined && typeof body.postRefusal !== 'string')
+        || (body.posted ? (typeof body.entryId !== 'string' || !isUuid(body.entryId) || pendingApproval || postRefusal !== null)
+          : (body.entryId !== null || (!pendingApproval && postRefusal === null)))) {
+        setRefusal(t('tenders.depositOutcomeUnknown'))
+        return
+      }
+      const documentNumber = body.documentNumber
+      setSavedDeposit({ id: body.id, documentNumber, posted: body.posted, pendingApproval, postRefusal })
       setAmount('')
       setSlipNumber('')
       setReason('')
       setCoversThrough(null)
       setReload((n) => n + 1)
-      toast.success(t('tenders.depositSaved', { documentNumber }))
+      const outcomeMessage = t(body.posted ? 'tenders.depositPosted' : pendingApproval ? 'tenders.depositPendingApproval' : 'tenders.depositNotPosted', { documentNumber })
+      if (body.posted) toast.success(outcomeMessage)
+      else toast.warning(outcomeMessage)
     } catch {
       setRefusal(t('tenders.depositFailed'))
     } finally {
@@ -278,10 +302,12 @@ export function CashDepositSection({
           {refusal ? (
             <p role="alert" className="text-xs text-red-600 dark:text-red-400">{refusal}</p>
           ) : null}
-          {savedNumber ? (
-            <p className="text-xs text-emerald-700 dark:text-emerald-300">
-              {t('tenders.depositSaved', { documentNumber: savedNumber })}
-            </p>
+          {savedDeposit ? (
+            <div role={savedDeposit.posted ? 'status' : 'alert'} className={savedDeposit.posted ? 'text-xs text-emerald-700 dark:text-emerald-300' : 'text-xs text-amber-700 dark:text-amber-300'}>
+              <p>{t(savedDeposit.posted ? 'tenders.depositPosted' : savedDeposit.pendingApproval ? 'tenders.depositPendingApproval' : 'tenders.depositNotPosted', { documentNumber: savedDeposit.documentNumber })}</p>
+              {savedDeposit.postRefusal ? <p>{savedDeposit.postRefusal}</p> : null}
+              <Link href={`/banking/transactions?doc=${savedDeposit.id}`} className="underline">{t('tenders.depositReview')}</Link>
+            </div>
           ) : null}
           <div>
             <Button type="button" variant="outline" size="sm" disabled={busy} onClick={() => void record()}>

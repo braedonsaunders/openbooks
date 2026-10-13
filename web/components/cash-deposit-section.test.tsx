@@ -31,7 +31,7 @@ registerHooks({
     if (specifier === "sonner") {
       return {
         shortCircuit: true,
-        url: "data:text/javascript,export const toast={success(m){(globalThis.__drawerToasts??=[]).push({kind:'success',message:String(m)})},error(m){(globalThis.__drawerToasts??=[]).push({kind:'error',message:String(m)})}};export function Toaster(){return null}",
+        url: "data:text/javascript,export const toast={success(m){(globalThis.__drawerToasts??=[]).push({kind:'success',message:String(m)})},error(m){(globalThis.__drawerToasts??=[]).push({kind:'error',message:String(m)})},warning(m){(globalThis.__drawerToasts??=[]).push({kind:'warning',message:String(m)})}};export function Toaster(){return null}",
       };
     }
     return next(specifier, context);
@@ -142,7 +142,7 @@ test("no configured deposit accounts names Company Settings instead of a form", 
 test("a recorded drop toasts the transfer number and clears the form", async (t) => {
   const { calls, restore } = scriptFetch((url, init) => {
     if (url === `/api/cash-sales/${SALE_ID}/deposit` && init?.method === "POST") {
-      return Response.json({ id: "transfer-1", documentNumber: "TRF-00007", posted: true }, { status: 201 });
+      return Response.json({ id: "44444444-4444-4444-8444-444444444441", documentNumber: "TRF-00007", posted: true, entryId: "55555555-5555-4555-8555-555555555555" }, { status: 201 });
     }
     return null;
   });
@@ -221,7 +221,7 @@ test("a refused drop shows the error with its remedy", async (t) => {
 test("two till accounts offer the source choice and send it", async (t) => {
   const { calls, restore } = scriptFetch((url, init) => {
     if (url === `/api/cash-sales/${SALE_ID}/deposit` && init?.method === "POST") {
-      return Response.json({ id: "transfer-2", documentNumber: "TRF-00008", posted: true }, { status: 201 });
+      return Response.json({ id: "44444444-4444-4444-8444-444444444442", documentNumber: "TRF-00008", posted: true, entryId: "55555555-5555-4555-8555-555555555555" }, { status: 201 });
     }
     return null;
   });
@@ -264,7 +264,7 @@ test("two till accounts offer the source choice and send it", async (t) => {
 test("a posted sale's till drop records against the till window, not the sale's own cash", async (t) => {
   const { calls, restore } = scriptFetch((url, init) => {
     if (url === "/api/cash-sales/till-drops" && init?.method === "POST") {
-      return Response.json({ id: "transfer-3", documentNumber: "TRF-00009", posted: true }, { status: 201 });
+      return Response.json({ id: "44444444-4444-4444-8444-444444444443", documentNumber: "TRF-00009", posted: true, entryId: "55555555-5555-4555-8555-555555555555" }, { status: 201 });
     }
     return null;
   });
@@ -293,3 +293,47 @@ test("a posted sale's till drop records against the till window, not the sale's 
     'preview and recording use the same host-selected entity');
   assert.equal(post?.body?.tillAccountId, "till-1", "a multi-day drop records against the till");
 });
+
+for (const mode of ['sale', 'till'] as const) {
+  for (const pendingApproval of [true, false]) {
+    test(`${mode} deposit retains its saved identity and actual unposted outcome`, async (t) => {
+      const postRefusal = pendingApproval ? 'Waiting on the configured approval flow.' : 'The period is closed; request a controlled reopen in Banking.'
+      const { calls, restore } = scriptFetch((_url, init) => init?.method === 'POST'
+        ? Response.json({ id: '44444444-4444-4444-8444-444444444449', documentNumber: 'TRF-00019', posted: false, entryId: null, ...(pendingApproval ? { pendingApproval: true } : {}), postRefusal }, { status: 201 })
+        : null)
+      t.after(restore)
+      const { host, root } = await mount({
+        bankOptions: [{ value: BANK_A, label: 'Operating Bank' }],
+        sourceOptions: [{ value: BANK_B, label: 'Till' }],
+        mode,
+      })
+      t.after(async () => { await act(async () => root.unmount()); host.remove() })
+      setInput(host, messages.ar.tenders.depositAmount, '50.00')
+      await act(async () => { recordButton(host).click(); await tick() })
+      await tick()
+      const notice = host.querySelector('[role="alert"]')
+      assert.ok(notice?.textContent?.includes('TRF-00019'), 'the saved transfer stays identifiable')
+      assert.ok(notice?.textContent?.includes(postRefusal), 'the actual native refusal remains visible')
+      assert.ok(notice?.textContent?.includes(pendingApproval ? 'awaiting approval' : 'posting refused'))
+      assert.equal((globalThis.__drawerToasts ?? []).filter(toast => toast.kind === 'success').length, 0, 'unposted is never presented as posted success')
+      assert.equal(calls.filter(call => typeof call.body.amount === 'string').length, 1, 'the saved drop is not retried')
+      const amount = host.querySelector('input[aria-label="Amount (USD)"]') as HTMLInputElement | null
+      assert.equal(amount?.value, '', 'a saved transfer clears its consumed amount even when posting is refused')
+    })
+  }
+}
+
+test('a malformed successful outcome never implies the drop was posted', async (t) => {
+  const { calls, restore } = scriptFetch((_url, init) => init?.method === 'POST'
+    ? Response.json({ documentNumber: 'TRF-00020', posted: 'true' }, { status: 201 })
+    : null)
+  t.after(restore)
+  const { host, root } = await mount({ bankOptions: [{ value: BANK_A, label: 'Operating Bank' }] })
+  t.after(async () => { await act(async () => root.unmount()); host.remove() })
+  setInput(host, messages.ar.tenders.depositAmount, '50.00')
+  await act(async () => { recordButton(host).click(); await tick() })
+  await tick()
+  assert.ok(host.querySelector('[role="alert"]')?.textContent?.includes('Check Banking before recording it again'))
+  assert.equal((globalThis.__drawerToasts ?? []).filter(toast => toast.kind === 'success').length, 0)
+  assert.equal(calls.filter(call => typeof call.body.amount === 'string').length, 1)
+})
