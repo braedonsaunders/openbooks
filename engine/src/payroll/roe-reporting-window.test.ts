@@ -9,7 +9,7 @@ function fixture(count:number){
   const start=iso(new Date(at('2025-01-05').getTime()+i*7*DAY));
   const end=iso(new Date(at(start).getTime()+6*DAY));
   const payDate=iso(new Date(at(end).getTime()+3*DAY));
-  calendar.push({periodStart:start,periodEnd:end,payDate,documentId:'regular-'+i,explicitlyExcluded:false});
+  calendar.push({periodStart:start,periodEnd:end,payDate,documentId:'regular-'+i,runType:'regular',explicitlyExcluded:false});
   stubs.push({id:'stub-'+i,documentId:'regular-'+i,subsidiaryId:'employer',employmentId:'employment',filingAccountId:'filing',currency:'CAD',hoursBasisQualified:true,periodStart:start,periodEnd:end,payDate,insurableEarnings:'100.01',insurableHours:'7.75',earnedFrom:start,earnedTo:end,earnedDatesComplete:true});
  }
  return {calendar,stubs};
@@ -49,4 +49,16 @@ test('ROE refuses cross-period aggregate allocation while preserving its source 
  const before=JSON.stringify(spanning);
  assert.throws(()=>assembleRoeReportingWindow(ctx,calendar,[spanning]),/spanning multiple ROE service periods/);
  assert.equal(JSON.stringify(spanning),before);
+});
+
+test('a retained final-pay period occupies one reporting position with or without its regular run',()=>{
+ const {calendar,stubs}=fixture(1);const ctx=context(calendar[0]!.periodStart,calendar[0]!.periodEnd);
+ const termination={...calendar[0]!,documentId:'termination',runType:'termination' as const};
+ const finalStub={...stubs[0]!,id:'final-stub',documentId:'termination',insurableEarnings:'25',insurableHours:'1'};
+ const combined=assembleRoeReportingWindow(ctx,[...calendar,termination],[...stubs,finalStub]);
+ assert.equal(combined.periods.length,1);assert.equal(combined.totalInsurableEarnings,'125.0100');
+ assert.deepEqual(combined.calendarDocuments,['regular-0','termination']);
+ const finalOnly=assembleRoeReportingWindow(ctx,[termination],[finalStub]);
+ assert.equal(finalOnly.periods.length,1);assert.equal(finalOnly.totalInsurableHours,'1.0000');
+ assert.throws(()=>assembleRoeReportingWindow(ctx,[termination,{...termination,documentId:'another-final'}],[finalStub]),/same ROE service period/);
 });

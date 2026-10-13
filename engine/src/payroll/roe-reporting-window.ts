@@ -27,7 +27,7 @@ export type RoeWindowContext = {
 };
 export type RoeCalendarPeriod = {
   periodStart: string; periodEnd: string; payDate: string;
-  documentId: string; explicitlyExcluded: boolean;
+  documentId: string; runType: 'regular' | 'termination'; explicitlyExcluded: boolean;
 };
 export type RoeWindowStub = {
   id: string; documentId: string; subsidiaryId: string | null; employmentId: string | null;
@@ -96,8 +96,13 @@ export function assembleRoeReportingWindow(
     if((context.frequency==='weekly' && days!==7)||(context.frequency==='biweekly' && days!==14)) throw new PayrollError('Retained ROE periods do not match the declared pay-period type');
     if(p.periodEnd>finalEnd || p.periodEnd<context.event.first_day_worked) continue;
     const key=p.periodStart+':'+p.periodEnd;
-    if(unique.has(key)) throw new PayrollError('Multiple committed regular runs describe the same ROE service period — reconcile their native calendar identity');
-    unique.set(key,p);
+    const prior=unique.get(key);
+    if(prior){
+      if(prior.runType===p.runType) throw new PayrollError('Multiple committed runs of the same type describe the same ROE service period — reconcile their native calendar identity');
+      // A final-pay run may share the scheduled period of the regular run.
+      // It contributes earnings without occupying another reporting position.
+      if(p.runType==='regular') unique.set(key,p);
+    }else unique.set(key,p);
   }
   const selected=[...unique.values()].sort((a,b)=>b.periodEnd.localeCompare(a.periodEnd)).slice(0,counts.hours);
   if(!selected.length) throw new PayrollError('No retained ROE service periods cover this employment spell');
@@ -136,7 +141,7 @@ export function assembleRoeReportingWindow(
   const periods=buckets.map(({payDate,periodStart,periodEnd,insurableEarnings,insurableHours})=>({payDate,periodStart,periodEnd,insurableEarnings,insurableHours}));
   return {periods,totalInsurableHours:periods.reduce((n,p)=>add(n,p.insurableHours),'0'),
     totalInsurableEarnings:periods.slice(0,counts.earnings).reduce((n,p)=>add(n,p.insurableEarnings),'0'),
-    sourceDocuments:included,calendarDocuments:selected.map(p=>p.documentId)};
+    sourceDocuments:included,calendarDocuments:calendar.filter(p=>selected.some(selected=>selected.periodStart===p.periodStart&&selected.periodEnd===p.periodEnd)).map(p=>p.documentId)};
 }
 
 export async function readRoeReportingWindow(context: RoeWindowContext) {
@@ -146,18 +151,23 @@ export async function readRoeReportingWindow(context: RoeWindowContext) {
   const limit=counts.hours;
   const calendar=(await db.execute<RoeCalendarPeriod>(sql`
     select run.period_start::text as "periodStart",run.period_end::text as "periodEnd",run.pay_date::text as "payDate",
-           run.document_id as "documentId",exists(select 1 from pay_run_adjustments adjustment
+           run.document_id as "documentId",run.run_type as "runType",exists(select 1 from pay_run_adjustments adjustment
              where adjustment.org_id=run.org_id and adjustment.pay_run_document_id=run.document_id
                and adjustment.employee_party_id=${context.employeeId} and adjustment.adjustment_type='exclude') as "explicitlyExcluded"
       from pay_runs run join documents document on document.org_id=run.org_id and document.id=run.document_id
      where run.org_id=${context.orgId} and run.pay_schedule_id=${context.scheduleId}
-       and document.subsidiary_id=${context.subsidiaryId} and run.run_status='committed' and run.run_type='regular'
+       and document.subsidiary_id=${context.subsidiaryId} and run.run_status='committed'
+       and (run.run_type='regular' or (run.run_type='termination' and exists(
+         select 1 from pay_stubs final_stub where final_stub.org_id=run.org_id
+           and final_stub.pay_run_document_id=run.document_id and final_stub.employee_party_id=${context.employeeId})))
        and run.period_start<=${cutoff}::date and run.period_end>=${context.event.first_day_worked}::date
-     order by run.period_end desc,run.document_id desc limit ${limit+1}`)).rows;
+     order by run.period_end desc,run.document_id desc limit ${(limit+1)*2}`)).rows;
   if(!calendar.length) throw new PayrollError(`${context.name} has no committed scheduled period for the ROE reporting window`);
   const final=calendar.filter(p=>p.periodStart<=cutoff && p.periodEnd>=cutoff);
   if(!final.length) throw new PayrollError(`${context.name} has no committed scheduled period containing ${cutoff}`);
-  const from=calendar.slice(0,limit).at(-1)!.periodStart;
+  const intervals=[...new Map(calendar.map(p=>[p.periodStart+':'+p.periodEnd,p])).values()]
+    .sort((a,b)=>b.periodEnd.localeCompare(a.periodEnd)).slice(0,limit);
+  const from=intervals.at(-1)!.periodStart;
   // For nonnegative earnings, equality of the retained gross and insurable
   // bases proves every positive earning is insurable. Mixed bases and earning
   // lines without retained hours cannot establish historical insurable hours from this
