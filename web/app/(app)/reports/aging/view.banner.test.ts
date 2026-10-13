@@ -63,3 +63,16 @@ test('the paper hides while rates are blocked', () => {
     'the paper shows only when rates are ready — no numbers beside the banner',
   )
 })
+
+
+test('an incomplete custom period preserves editable filters and hides report amounts', () => {
+  const data = { periodRefusal: 'Set both From and To dates, with From on or before To.', filterPeriodLabel: 'Period', ratesBlocked: null, ratesReady: false } as unknown as AgingData
+  const spec = agingSpec(data)
+  const header = (spec as unknown as { header: Record<string, unknown>[] }).header
+  assert.ok(header.some(block => block.kind === 'filter-bar'), 'the operator can correct the range in place')
+  const blocks = blocksOf(spec)
+  const notice = blocks.find(block => block.widget === 'empty-state' && JSON.stringify(block.when) === JSON.stringify({ $: 'periodRefusal' }))
+  assert.ok(notice, 'the original period refusal is presented in the report')
+  assert.equal((notice.props as Record<string, unknown>).description, data.periodRefusal)
+  assert.deepEqual(blocks.find(block => block.kind === 'paper')?.when, { $: 'ratesReady' }, 'no report amounts appear beside the refusal')
+})

@@ -69,6 +69,9 @@ const pages = {
   'cash-flow-indirect': (await import(root + 'web/app/(app)/reports/cash-flow-indirect/page.tsx')).default,
 } as const
 
+const { loadBalanceSheet } = await import(root + 'web/app/(app)/reports/balance-sheet/view.ts')
+const { loadAging } = await import(root + 'web/app/(app)/reports/aging/view.ts')
+
 const HIDDEN = 'SECRET-ENTITY-B'
 const VISIBLE = 'VISIBLE-ENTITY-A'
 
@@ -229,6 +232,47 @@ test('scheduled deliveries render the definition as saved now under the pinned a
     state.user = null
     if (previousToken === undefined) delete process.env.OPENBOOKS_INTERNAL_TOKEN
     else process.env.OPENBOOKS_INTERNAL_TOKEN = previousToken
+    await withBypassContext(() => dropScratchOrg(org.orgId))
+  }
+})
+
+
+test('native report loaders refuse incomplete custom periods in place without broadening the window', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const org = await withBypassContext(() => createScratchOrg())
+  try {
+    const uid = await withBypassContext(() => createScratchUser(org.orgId, 'Report date reviewer', 'report_date_reader'))
+    await withBypassContext(() => db.execute(sql`update app_roles set permissions='["reports.read","gl.read","ar.read","ap.read"]'::jsonb where org_id=${org.orgId} and key='report_date_reader'`))
+    state.user = principal(org, uid)
+    await withOrgContext(org.orgId, async () => {
+      const before = (await db.execute<{ count: string }>(sql`select count(*)::text as count from journal_entries where org_id=${org.orgId}`)).rows[0]!.count
+      for (const params of [
+        { period: 'custom' },
+        { period: 'custom', from: '2026-02-01' },
+        { period: 'custom', from: '2026-02-28', to: '2026-02-01' },
+        { period: 'custom', from: '2026-02-30', to: '2026-03-01' },
+      ]) {
+        const balance = await loadBalanceSheet(params)
+        assert.ok(balance.periodRefusal?.includes('From and a To date'))
+        assert.equal(balance.ratesReady, false)
+        assert.equal(balance.view, null, 'no substitute balance-sheet window is queried')
+        assert.equal(balance.description.includes('asOf'), false, 'no fabricated as-of labels the refusal')
+        for (const side of ['ar', 'ap']) {
+          const aging = await loadAging({ ...params, side })
+          assert.ok(aging.periodRefusal?.includes('From and a To date'))
+          assert.equal(aging.ratesReady, false)
+          assert.deepEqual(aging.summaryRows, [])
+          assert.deepEqual(aging.detailRows, [])
+          assert.equal(aging.periodPhrase, '', 'no substitute as-of labels an aging result')
+        }
+      }
+      const valid = { period: 'custom', from: org.date, to: org.date }
+      assert.equal((await loadBalanceSheet(valid)).periodRefusal, null, 'a valid range keeps the native resolution path')
+      assert.equal((await loadAging(valid)).periodRefusal, null)
+      const after = (await db.execute<{ count: string }>(sql`select count(*)::text as count from journal_entries where org_id=${org.orgId}`)).rows[0]!.count
+      assert.equal(after, before, 'report refusal and recovery do not change financial history')
+    })
+  } finally {
+    state.user = null
     await withBypassContext(() => dropScratchOrg(org.orgId))
   }
 })
