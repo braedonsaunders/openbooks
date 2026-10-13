@@ -53,6 +53,83 @@ function applyButton(): HTMLButtonElement | null {
   ) as HTMLButtonElement | null
 }
 
+async function selectPeriod(value: string): Promise<void> {
+  const select = document.querySelector('select[aria-label="Period"]') as HTMLSelectElement | null
+  assert.ok(select, 'the native period picker renders')
+  await act(async () => {
+    select.value = value
+    select.dispatchEvent(new window.Event('change', { bubbles: true }))
+  })
+}
+
+test('choosing Custom stages a complete range before navigating', async () => {
+  const { unmount } = await mountDashboard(
+    <ReportFilterBar controls={{ period: true }} />,
+    messages,
+  )
+  const { replaces } = recordReplaces()
+  try {
+    await selectPeriod('custom')
+    assert.equal(replaces.length, 0, 'choosing Custom does not request an empty range')
+    const [from, to] = dateInputs()
+    assert.ok(from && to, 'both custom bounds become editable')
+    await typeDate(from, '2026-02-01')
+    assert.equal(applyButton()?.disabled, true, 'one bound cannot reach the report')
+    await typeDate(to, '2026-02-28')
+    await click(applyButton()!)
+    assert.equal(replaces.length, 1, 'the complete range navigates once')
+    const params = new URL(replaces[0]!, 'https://example.test').searchParams
+    assert.equal(params.get('period'), 'custom')
+    assert.equal(params.get('from'), '2026-02-01')
+    assert.equal(params.get('to'), '2026-02-28')
+  } finally {
+    await unmount()
+  }
+})
+
+test('choosing Custom on an as-of report waits for one complete date', async () => {
+  const { unmount } = await mountDashboard(
+    <ReportFilterBar controls={{ period: true, asOf: true }} defaultPeriod="today" />,
+    messages,
+  )
+  const { replaces } = recordReplaces()
+  try {
+    await selectPeriod('custom')
+    assert.equal(replaces.length, 0)
+    const dates = dateInputs()
+    assert.equal(dates.length, 1, 'the as-of control remains a single date')
+    await typeDate(dates[0]!, '2026-02-28')
+    await pressEnter(dates[0]!)
+    assert.equal(replaces.length, 1)
+    const params = new URL(replaces[0]!, 'https://example.test').searchParams
+    assert.equal(params.get('from'), '2026-02-28')
+    assert.equal(params.get('to'), '2026-02-28')
+  } finally {
+    await unmount()
+  }
+})
+
+test('a preset discards unapplied Custom bounds', async () => {
+  const { unmount } = await mountDashboard(
+    <ReportFilterBar controls={{ period: true }} />,
+    messages,
+  )
+  const { replaces } = recordReplaces()
+  try {
+    await selectPeriod('custom')
+    await typeDate(dateInputs()[0]!, '2026-02-01')
+    await selectPeriod('today')
+    assert.equal(replaces.length, 1, 'only the selected preset navigates')
+    const params = new URL(replaces[0]!, 'https://example.test').searchParams
+    assert.equal(params.get('period'), 'today')
+    assert.equal(params.has('from'), false)
+    assert.equal(params.has('to'), false)
+    assert.equal(dateInputs().length, 0, 'the abandoned Custom draft closes')
+  } finally {
+    await unmount()
+  }
+})
+
 test('typing a custom bound stages it without navigating until Apply', async () => {
   const { unmount } = await mountDashboard(
     <ReportFilterBar controls={{ period: false }} defaultPeriod="custom" />,
