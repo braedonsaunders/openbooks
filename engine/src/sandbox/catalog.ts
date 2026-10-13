@@ -98,6 +98,12 @@ export const EXCLUDE = new Set([
   "hrm_benefit_catalog",
   // Initialized with the sandbox organization; generation counters are local concurrency state.
   "payroll_compensation_configuration",
+  // Employer and statutory reporting certificates retain their original tenant source identity.
+  "payroll_opening_employer_authorities",
+  "payroll_roe_historical_periods",
+  "payroll_roe_line_evidence",
+  "payroll_roe_issued_event_sources",
+  "payroll_roe_subsequent_service_sources",
   // Transfers and their immutable source evidence execute only in the original environment.
   "data_transfer_jobs",
   "data_transfer_chunks",
