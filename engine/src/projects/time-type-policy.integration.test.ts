@@ -41,7 +41,7 @@ test('recorded time preserves wage and billing semantics across policy edits whi
       // Draft use also binds the policy; an approval cannot race a global edit.
       await assert.rejects(db.execute(sql`update time_types set classification='regular'
         where org_id=${f.org.orgId} and id=${f.typeId}`), policyRefusal);
-      const approved = await db.execute(sql`update time_entries set status='approved'
+      const approved = await db.execute(sql`update time_entries set status='approved',approved_by=${f.actorId},approved_at=clock_timestamp()
         where org_id=${f.org.orgId} and employee_party_id=${f.employeeId} returning id`);
       assert.equal(approved.rows.length, 1);
       const input = { orgId: f.org.orgId, employeePartyIds: [f.employeeId], periodStart: f.org.date,
@@ -127,6 +127,36 @@ test('first time-policy binding serializes with a concurrent financial-semantic 
     await binding.query('rollback');
     await editing.query('rollback');
     binding.release(); editing.release();
+    await withBypassContext(() => dropScratchOrg(f.org.orgId));
+  }
+});
+
+test('a concurrent first binding waits for an unused policy edit and then uses its committed semantics', enabled, async () => {
+  const f = await fixture();
+  const editing = await f.inOrg(() => pool.connect());
+  const binding = await f.inOrg(() => pool.connect());
+  try {
+    await editing.query('begin');
+    const changed = await editing.query('update time_types set classification=$3,cost_multiplier=2 where org_id=$1 and id=$2 returning id',
+      [f.org.orgId, f.typeId, 'double_time']);
+    assert.equal(changed.rowCount, 1);
+    await binding.query('begin');
+    await binding.query("set local lock_timeout='100ms'");
+    const insert = `insert into time_entries(org_id,employee_party_id,worked_on,hours,status,costing_basis,billing_status,time_type_id)
+      values($1,$2,$3,1,'draft','actual','unbilled',$4) returning id`;
+    const params = [f.org.orgId, f.employeeId, f.org.date, f.typeId];
+    await assert.rejects(binding.query(insert, params), (error: unknown) => (error as { code?: string }).code === '55P03');
+    await binding.query('rollback');
+    await editing.query('commit');
+    assert.equal((await binding.query(insert, params)).rowCount, 1);
+    const policy = await binding.query(`select tt.classification,tt.cost_multiplier::text as multiplier
+      from time_entries te join time_types tt on tt.org_id=te.org_id and tt.id=te.time_type_id
+      where te.org_id=$1 and te.employee_party_id=$2`, [f.org.orgId, f.employeeId]);
+    assert.deepEqual(policy.rows, [{ classification: 'double_time', multiplier: '2.0000' }]);
+  } finally {
+    await editing.query('rollback');
+    await binding.query('rollback');
+    editing.release(); binding.release();
     await withBypassContext(() => dropScratchOrg(f.org.orgId));
   }
 });
