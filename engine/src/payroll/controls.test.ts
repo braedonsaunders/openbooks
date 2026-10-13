@@ -356,6 +356,7 @@ test(
                   ${periodEnd}, 2026, ${runStatus}, ${current.actorId}, ${current.actorId})`);
         await seedPayrollStub(current.orgId, documentId, current.employeeId, current.employmentId, {
           id: randomUUID(), province: 'ON', periodsPerYear: 26, payDate: periodEnd, taxYear: 2026, currency: 'CAD',
+          country: 'CA', countrySource: 'calculation',
           gross: gross, pensionableEarnings: gross, insurableEarnings: gross, netPay: gross,
           factors: {
                     C: gross, C2: gross, EI: gross, QPIP: gross,
