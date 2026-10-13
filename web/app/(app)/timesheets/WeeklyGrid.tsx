@@ -292,6 +292,7 @@ export function WeeklyGrid({
   const today = useBusinessToday()
   const [rows, setRows] = useState<GridRow[]>(() => seedRows(payload, pickers,workFamily,quickProjectId))
   const [status, setStatus] = useState(payload.status)
+  const canSubmitAdditional = canManage && requireApproval && ['approved', 'draft', 'rejected'].includes(status)
   const [pendingEntries, setPendingEntries] = useState(payload.pendingEntries ?? [])
   const [additionalReview, setAdditionalReview] = useState(false)
   const [dirty, setDirty] = useState(false)
@@ -546,7 +547,7 @@ export function WeeklyGrid({
     }
   }
   const onSubmitAdditional = async (selections: AdditionalTimeSelection[], reason: string) => {
-    if (!employeeId || !canManage || !requireApproval || status !== 'approved') return
+    if (!employeeId || !canSubmitAdditional) return
     const data = await post('/api/timesheets/submit', { employee: employeeId, week, selections, reason },
       'POST', undefined, 'submit-additional')
     if (data) {
@@ -762,7 +763,7 @@ export function WeeklyGrid({
         {' · '}{t('grid.weekOf', weekRange(week, locale))}</span>}>
       <AdditionalTimeReview key={`${loadedKey}:${revision}`} entries={pendingEntries} pickers={pickers}
         busy={busy} refusal={refusal} onBack={() => setAdditionalReview(false)} onSubmit={onSubmitAdditional}
-        canSubmit={requireApproval && ['approved', 'draft', 'rejected'].includes(status)} onCorrect={onCorrectTimeType} />
+        canSubmit={canSubmitAdditional} onCorrect={onCorrectTimeType} />
     </UrlDrawer>
   }
   return (
