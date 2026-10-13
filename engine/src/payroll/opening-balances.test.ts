@@ -3,7 +3,7 @@ import { seedPayrollLine } from '../testing/fixtures.ts';
 import { seedPayrollComponent, seedPayrollDocument, seedPayrollStub } from '../testing/fixtures.ts';
 import {
   seedPayrollSchedule, seedPayrollEmployeeRole, seedPayrollPerson, seedPayrollTime, seedPostingAccount,
-  seedPayrollProfile, seedPayrollWage, createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment,
+  seedPayrollProfile, seedPayrollWage, createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment, grantScratchPermissions,
 } from "../testing/fixtures.ts";
 import assert from "node:assert/strict";
 import { randomUUID, createHash } from "node:crypto";
@@ -276,10 +276,7 @@ async function qualifyOriginalOpening(fx: AdoptionFixture): Promise<void> {
   const bytes = Buffer.from(original[0]!.report);
   const sha = createHash('sha256').update(bytes).digest('hex');
   const folderId = randomUUID(), fileId = randomUUID(), versionId = randomUUID();
-  await db.execute(sql`insert into user_permission_overrides(org_id,user_id,permission,effect)
-    values(${fx.orgId},${fx.actorId},'payroll.read','grant'),
-          (${fx.orgId},${fx.actorId},'payroll.run','grant')
-    on conflict(org_id,user_id,permission) do update set effect='grant'`);
+  await grantScratchPermissions(fx.orgId, fx.actorId, ['payroll.read', 'payroll.run']);
   await db.execute(sql`insert into folders(id,org_id,name,is_private,owner_id,created_by,updated_by)
     values(${folderId},${fx.orgId},'Original payroll reports',true,${fx.actorId},${fx.actorId},${fx.actorId})`);
   await db.execute(sql`insert into files(id,org_id,folder_id,name,content_type,size_bytes,created_by,updated_by)
