@@ -88,6 +88,16 @@ node --import tsx scripts/adopt-migration-baseline.mts --database openbooks --ap
 ```
 
 Adoption shares the deployment bootstrap lock and refuses other client sessions.
+For a legacy installation whose business objects are still owned by its privileged
+maintenance login, add `--isolate-business-owner --runtime-role <runtime login>`
+to both check and apply. After complete catalog verification, the apply step hands
+only public/query business objects to the constrained `openbooks_schema_owner`.
+It requires a superuser, an existing unprivileged runtime login, no private
+retirement authority and no unresolved object owners. Private authority and the
+bypass predicate retain their ownership. The runtime cannot assume the schema
+owner. The adoption audit records the former owners, object counts and resulting
+owner. Any failure rolls back the ownership changes and adoption together.
+
 It appends the new baseline ledger identity and an adoption audit in one
 transaction. The audit records the database, login, operator, timestamp, reason,
 backup reference, catalog digest and complete previous ledger. Historical

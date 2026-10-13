@@ -767,7 +767,9 @@ async function main() {
       });
       await phase("baseline-adoption", async () => {
         const database = decodeURIComponent(new URL(dbUrl).pathname.slice(1));
-        const args = ["--import", "tsx", "scripts/adopt-migration-baseline.mts", "--database", database];
+        const runtimeRole=decodeURIComponent(new URL(requireEnv("OPENBOOKS_RUNTIME_DB_URL")).username);
+        const args = ["--import", "tsx", "scripts/adopt-migration-baseline.mts", "--database", database,
+          "--isolate-business-owner", "--runtime-role",runtimeRole];
         const env = { OPENBOOKS_BASELINE_TARGET_URL: dbUrl };
         await run("baseline-adoption", "node", [...args, "--check"], { cwd: CANDIDATE, env });
         await run("baseline-adoption", "node", [...args, "--apply", "--actor", "release-verification", "--reason", "Verified historical upgrade and baseline cutover", "--backup", join(reportDir, "before-baseline-adoption.dump")], { cwd: CANDIDATE, env });

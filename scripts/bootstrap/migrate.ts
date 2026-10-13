@@ -18,6 +18,7 @@ import { ensureRetirementAuthorityOwnership } from "./retirement-ownership.ts"
 import { migrationExecutionCompatibility } from "../migration-execution-compatibility.ts"
 import { preflightNeedsRecordedGuardTransition, RECORDED_INSTRUCTION_GUARD_SIGNATURE } from "../migration-preflight-transitions.ts"
 import { baselineTransitionCandidate, verifyBaselineTransitionCatalog } from "../migration-baseline-transitions.ts"
+import { migrationBusinessOwnerRole } from "../migration-owner-authority.ts"
 
 /**
  * A fresh installation hands business objects to the dedicated schema owner
@@ -93,7 +94,7 @@ async function executeTrackedMigration(
           if (codes.length) throw new Error(`[bootstrap] migration preflight ${filename} refuses this upgrade (${[...new Set(codes)].join(", ")}); this migration and its ledger record were not applied`);
           await migrationClient.query("set local statement_timeout = 0");
         } : undefined,
-        schemaOwnerRole: await provisionedSchemaOwnerRole(client),
+        schemaOwnerRole: migrationBusinessOwnerRole(filename,digest,await provisionedSchemaOwnerRole(client)),
         executeBody:
           filename === ORDER_QUANTITY_PROGRESS_MIGRATION_FILENAME
             ? (migrationClient, migrationBody) =>

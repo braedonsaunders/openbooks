@@ -5,6 +5,7 @@ import { fileURLToPath } from "node:url";
 import pg from "pg";
 import { assertBaselineCatalogsEqual, baselineCatalog, baselineDigest } from "./migration-baseline-catalog.mjs";
 import { validateBaselineManifest } from "./migration-baseline-plan.mjs";
+import { baselineBusinessOwnerPlan,applyBaselineBusinessOwnerPlan } from "./migration-baseline-ownership.mjs";
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const usage = "node --import tsx scripts/adopt-migration-baseline.mts --database <name> --check | --apply --actor <operator> --reason <reason> --backup <verified-backup-reference>";
@@ -14,8 +15,8 @@ async function main() {
   const options = new Map<string, string>();
   for (let i = 0; i < args.length; i += 1) {
     const flag = args[i]!;
-    if (!["--database", "--check", "--apply", "--actor", "--reason", "--backup"].includes(flag) || options.has(flag)) throw new Error(usage);
-    if (["--check", "--apply"].includes(flag)) options.set(flag, "true");
+    if (!["--database", "--check", "--apply", "--actor", "--reason", "--backup", "--isolate-business-owner", "--runtime-role"].includes(flag) || options.has(flag)) throw new Error(usage);
+    if (["--check", "--apply", "--isolate-business-owner"].includes(flag)) options.set(flag, "true");
     else {
       const value = args[++i];
       if (!value?.trim() || value.startsWith("--")) throw new Error(usage);
@@ -24,6 +25,7 @@ async function main() {
   }
   if (!options.has("--database") || options.has("--check") === options.has("--apply")) throw new Error(usage);
   const apply = options.has("--apply");
+  if (options.has("--isolate-business-owner") !== options.has("--runtime-role")) throw new Error("--isolate-business-owner requires --runtime-role and vice versa");
   if (apply && ["--actor", "--reason", "--backup"].some((flag) => !options.has(flag))) throw new Error(usage);
   const rawUrl = process.env.OPENBOOKS_BASELINE_TARGET_URL;
   if (!rawUrl) throw new Error("set OPENBOOKS_BASELINE_TARGET_URL explicitly; application .env credentials are never used for baseline adoption");
@@ -50,9 +52,12 @@ async function main() {
     }
     const actual = await baselineCatalog(client);
     assertBaselineCatalogsEqual(expected, actual);
+    const ownerPlan=options.has("--isolate-business-owner")
+      ? await baselineBusinessOwnerPlan(client,options.get("--runtime-role")) : null;
     if (!apply) {
       await client.query("rollback");
       console.log(`VERIFIED ${options.get("--database")}: schema, security attributes and system registries match ${manifest.filename}; no changes made`);
+      if(ownerPlan) console.log(`VERIFIED business-owner isolation plan: ${ownerPlan.statements.length} objects; runtime remains unprivileged`);
       return;
     }
     await client.query("create table if not exists public._applied_migrations (filename text primary key,sha256 text not null,applied_at timestamptz not null default now())");
@@ -60,10 +65,13 @@ async function main() {
     const existing = before.find((row) => row.filename === manifest.filename);
     if (existing && existing.sha256 !== manifest.baselineSha256) throw new Error("release baseline identity already exists with a different digest; investigate the ledger before adopting it");
     if (existing) {
+      if(ownerPlan?.statements.length) throw new Error("Baseline already adopted without isolated ownership; obtain a separate database-owner reconciliation rather than modifying its retained adoption");
       await client.query("rollback");
       console.log(`VERIFIED ${manifest.filename} already adopted; no changes made`);
       return;
     }
+    const ownership=ownerPlan ? await applyBaselineBusinessOwnerPlan(client,ownerPlan) : null;
+    if(ownership) assertBaselineCatalogsEqual(expected,await baselineCatalog(client));
     // The audit belongs to the installation migration ledger, never to one
     // tenant's transactional history. Historical ledger rows remain intact.
     await client.query("create schema if not exists openbooks_migrations");
@@ -77,7 +85,9 @@ async function main() {
     const audit = await client.query(`insert into openbooks_migrations.baseline_adoptions
       (filename,sha256,catalog_sha256,database_name,database_role,actor,reason,backup_reference,previous_ledger)
       values ($1,$2,$3,current_database(),current_user,$4,$5,$6,$7::jsonb)`,
-    [manifest.filename, manifest.baselineSha256, manifest.catalogSha256, options.get("--actor"), options.get("--reason"), options.get("--backup"), JSON.stringify(before)]);
+    [manifest.filename, manifest.baselineSha256, manifest.catalogSha256, options.get("--actor"),
+      ownership ? `${options.get("--reason")}\nBusiness-owner isolation: ${JSON.stringify(ownership)}` : options.get("--reason"),
+      options.get("--backup"), JSON.stringify(before)]);
     if (audit.rowCount !== 1) throw new Error("baseline adoption audit was not persisted; adoption is refused");
     await client.query("commit");
     console.log(`adopted ${manifest.filename}; historical ledger and tenant data preserved`);
