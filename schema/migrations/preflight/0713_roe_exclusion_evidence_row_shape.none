@@ -1,0 +1,1 @@
+Trigger row-shape admission only; no stored rows, source snapshots or schema constraints change. Existing issued evidence remains immutable.

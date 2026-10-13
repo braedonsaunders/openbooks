@@ -152,12 +152,19 @@ test('mixed earning lines require complete insurance evidence and issued ROEs fr
       where l.org_id=${f.orgId} and s.pay_run_document_id=${run.documentId} and l.kind='earning' and l.amount<>0 order by l.id`)).rows;
     const wage=lines.find(line=>line.componentId===base),reimbursement=lines.find(line=>line.componentId===uninsured);assert.ok(wage);assert.ok(reimbursement);
     const evidence={...ref,reportPeriodStart:'2026-04-26',reportPeriodEnd:'2026-05-09',earnedFrom:'2026-05-08',earnedTo:'2026-05-08',expectedId:null,expectedUpdatedAt:null};
-    const insured=await qualifyRoeLine(scope(f),{...evidence,payStubLineId:wage.id,isInsurable:true,insurableHours:'1'});
+    let insured=await qualifyRoeLine(scope(f),{...evidence,payStubLineId:wage.id,isInsurable:true,insurableHours:'1'});
     await assert.rejects(readRoeReportingWindow(await roeWindowContext(f.orgId,f.employeeId)),/attribution is incomplete/);
     assert.deepEqual(await applyRoeReportingImport(scope(f),{kind:'line',evidence:{...evidence,payStubLineId:reimbursement.id,isInsurable:false,insurableHours:'0'}},true),{action:'insert'});
     assert.equal((await readRoeHistoricalEvidence(scope(f))).lines.length,1,'line preview retains only the previously qualified wage');
     const unqualified=await qualifyRoeLine(scope(f),{...evidence,payStubLineId:reimbursement.id,isInsurable:false,insurableHours:'0'});
 
+    const retainedBeforeUpdate=await financialSnapshot(f);
+    const corrected=await qualifyRoeLine(scope(f),{...evidence,payStubLineId:wage.id,isInsurable:true,insurableHours:'1',
+      reason:'Clarify the original paid-hours source reference',expectedId:insured.id,expectedUpdatedAt:insured.updatedAt});
+    assert.equal(corrected.id,insured.id);assert.notEqual(corrected.updatedAt,insured.updatedAt);
+    assert.deepEqual(corrected.lineSnapshot,insured.lineSnapshot,'source-only clarification preserves every retained payroll fact');
+    insured=corrected;
+    assert.deepEqual(await financialSnapshot(f),retainedBeforeUpdate,'ordinary evidence INSERT/UPDATE cannot mutate committed payroll');
     const window=await readRoeReportingWindow(await roeWindowContext(f.orgId,f.employeeId));assert.equal(window.totalInsurableEarnings,'180.0000');assert.equal(window.totalInsurableHours,'5.0000');
     await assert.rejects(qualifyRoeLine(scope(f),{...evidence,payStubLineId:wage.id,isInsurable:true,insurableHours:'2',expectedId:insured.id,expectedUpdatedAt:insured.updatedAt}),/retained paid-hour source/);
     const profile=await db.execute(sql`update employee_payroll_profiles set sin_encrypted=${sealSecret('046454286',{orgId:f.orgId,purpose:'payroll.employee.sin'})},sin_last3='286'
