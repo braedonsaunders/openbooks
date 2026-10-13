@@ -15,9 +15,11 @@ export function transactionRoleRecipient(source:RecordedRole,fallback:RecordedRo
   const ticket=role.startsWith("field_ticket_");
   const reference=ticket?evidence.ticket_reference:evidence.project_reference;
   const identity=ticket?evidence.ticket_id:evidence.project_id;
+  const holder=evidence[columns[role]];
+  if(holder!==null&&typeof holder!=="string")throw new BenefitsError("REFUSED","A recipient source has unknown recorded role evidence — reconcile it before settlement.");
   if((reference!==null&&typeof reference!=="string")||(identity!==null&&typeof identity!=="string"))throw new BenefitsError("REFUSED","A recipient source has unknown native context — reconcile it before settlement.");
   if(reference!==null&&identity!==reference)throw new BenefitsError("REFUSED","A recipient source references an unavailable ticket or project — restore its native identity before settlement.");
-  if(reference===null&&(identity!==null||evidence[columns[role]]!==null))throw new BenefitsError("REFUSED","A recipient source context has conflicting native identity — reconcile it before settlement.");
+  if(reference===null&&(identity!==null||holder!==null))throw new BenefitsError("REFUSED","A recipient source context has conflicting native identity — reconcile it before settlement.");
   return reference!==null;
  };
  if(context(source))return evidence[columns[source]];

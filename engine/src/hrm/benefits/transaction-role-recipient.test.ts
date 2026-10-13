@@ -20,4 +20,8 @@ test("unknown selected or referenced source contexts refuse rather than become a
  assert.throws(()=>transactionRoleRecipient("field_ticket_foreman","project_manager",true,{...evidence,ticket_id:null}),/unavailable ticket or project/);
  assert.throws(()=>transactionRoleRecipient("field_ticket_foreman","project_manager",true,{...evidence,ticket_reference:null,ticket_id:null,project_id:null}),/unavailable ticket or project/);
  assert.throws(()=>transactionRoleRecipient("project_manager","field_ticket_foreman",true,{...evidence,project_reference:null}),/conflicting native identity/);
+ for(const holder of [undefined,42]){
+  const malformed={...evidence,ticket_foreman:holder} as unknown as TransactionRoleEvidence;
+  assert.throws(()=>transactionRoleRecipient("field_ticket_foreman","project_manager",true,malformed),/unknown recorded role evidence/);
+ }
 });
