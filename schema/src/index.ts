@@ -134,3 +134,5 @@ export * from "./financial-policies";
 export * from "./journal-instructions";
 
 export * from "./payroll-roe-separation";
+
+export * from "./payroll-roe-history";

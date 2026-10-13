@@ -1,3 +1,5 @@
+import type { RoePriorPeriod } from './roe-history.ts';
+import { roeQualifiedLineAllocations, type RoeRetainedLine } from './roe-line-allocation.ts';
 import { sql } from 'drizzle-orm';
 import { db } from '../platform/db.ts';
 import { add, cmp } from '../money/money.ts';
@@ -13,7 +15,7 @@ export const ROE_REPORTING_COUNTS: Record<string, { hours: number; earnings: num
   monthly: { hours: 13, earnings: 7 },
 };
 export type RoeReportingPeriod = {
-  payDate: string; periodStart: string; periodEnd: string;
+  payDate: string | null; periodStart: string; periodEnd: string;
   insurableEarnings: string; insurableHours: string;
 };
 export type RoeWindowContext = {
@@ -26,14 +28,15 @@ export type RoeWindowContext = {
   };
 };
 export type RoeCalendarPeriod = {
-  periodStart: string; periodEnd: string; payDate: string;
-  documentId: string; runType: 'regular' | 'termination'; explicitlyExcluded: boolean;
+  periodStart: string; periodEnd: string; payDate: string | null;
+  historicalEvidenceId?: string; documentId: string | null; runType: 'regular' | 'termination' | 'historical'; explicitlyExcluded: boolean;
 };
 export type RoeWindowStub = {
   id: string; documentId: string; subsidiaryId: string | null; employmentId: string | null;
   filingAccountId: string | null; currency: string; hoursBasisQualified: boolean; periodStart: string; periodEnd: string; payDate: string;
   insurableEarnings: string; insurableHours: string;
   earnedFrom: string | null; earnedTo: string | null; earnedDatesComplete: boolean;
+  allocationKey?:string;reportPeriodStart?:string;reportPeriodEnd?:string;reportingEvidenceIds?:string[];
 };
 
 /** The employer's confirmed employment spell is the boundary for every ROE read. */
@@ -80,8 +83,8 @@ export async function roeWindowContext(orgId: string, employeeId: string): Promi
 }
 
 export function assembleRoeReportingWindow(
-  context: RoeWindowContext, calendar: readonly RoeCalendarPeriod[], stubs: readonly RoeWindowStub[],
-): { periods: RoeReportingPeriod[]; totalInsurableEarnings: string; totalInsurableHours: string; sourceDocuments: RoeWindowStub[]; calendarDocuments: string[] } {
+  context: RoeWindowContext, calendar: readonly RoeCalendarPeriod[], stubs: readonly RoeWindowStub[], historicalPeriods:readonly RoePriorPeriod[]=[],
+): { periods: RoeReportingPeriod[]; totalInsurableEarnings: string; totalInsurableHours: string; sourceDocuments: RoeWindowStub[]; calendarDocuments: string[];historicalPeriods:RoePriorPeriod[] } {
   const counts=ROE_REPORTING_COUNTS[context.frequency];
   if(!counts) throw new PayrollError('Unsupported ROE reporting frequency');
   const cutoff=context.event.salary_continuance_end_on??context.event.last_insurable_earnings_on;
@@ -98,6 +101,7 @@ export function assembleRoeReportingWindow(
     const key=p.periodStart+':'+p.periodEnd;
     const prior=unique.get(key);
     if(prior){
+      if(prior.runType==='historical'||p.runType==='historical') throw new PayrollError('Imported reporting evidence overlaps native payroll — preserve the sources and reconcile the duplicate period before filing');
       if(prior.runType===p.runType) throw new PayrollError('Multiple committed runs of the same type describe the same ROE service period — reconcile their native calendar identity');
       // A final-pay run may share the scheduled period of the regular run.
       // It contributes earnings without occupying another reporting position.
@@ -110,38 +114,50 @@ export function assembleRoeReportingWindow(
     if(iso(new Date(at(selected[i]!.periodEnd).getTime()+DAY))!==selected[i-1]!.periodStart) throw new PayrollError(`${context.name} has a gap or overlap in committed ROE service-period coverage — qualify the missing period, including any nil period, before filing`);
   }
   if(selected.length<counts.hours && selected.at(-1)!.periodStart>context.event.first_day_worked) throw new PayrollError(`${context.name} lacks the earlier committed payroll coverage required for the ROE employment spell — import the original period evidence before filing`);
-  const buckets=selected.map(p=>({...p,insurableEarnings:'0',insurableHours:'0',stubs:[] as RoeWindowStub[]}));
+  const imported=historicalPeriods.filter(p=>selected.some(period=>period.historicalEvidenceId===p.id));
+  const buckets=selected.map(p=>{
+    const prior=imported.find(prior=>prior.id===p.historicalEvidenceId);
+    if(p.historicalEvidenceId&&!prior)throw new PayrollError('Historical reporting calendar identity has no qualified original period evidence');
+    if(prior&&(prior.employmentId!==context.employmentId||prior.subsidiaryId!==context.subsidiaryId||prior.frequency!==context.frequency||prior.payScheduleId!==context.scheduleId
+      ||prior.periodStart!==p.periodStart||prior.periodEnd!==p.periodEnd||prior.payDate!==p.payDate||prior.nilPeriod!==p.explicitlyExcluded
+      ||prior.earnedFrom!==null&&prior.earnedFrom<context.event.first_day_worked
+      ||prior.earnedTo!==null&&prior.earnedTo>cutoff))throw new PayrollError('Historical reporting evidence conflicts with the confirmed employment spell or earned cutoff');
+    return {...p,insurableEarnings:prior?.insurableEarnings??'0',insurableHours:prior?.insurableHours??'0',stubs:[] as RoeWindowStub[]};
+  });
   const included: RoeWindowStub[]=[];
   const seenStubs=new Set<string>();
   const first=buckets.at(-1)!.periodStart;
   for(const stub of stubs){
-    if(seenStubs.has(stub.id)) throw new PayrollError('Duplicate retained ROE stub evidence');
-    seenStubs.add(stub.id);
+    const allocationId=stub.id+':'+(stub.allocationKey??'whole');
+    if(seenStubs.has(allocationId)) throw new PayrollError('Duplicate retained ROE stub allocation evidence');
+    seenStubs.add(allocationId);
     const earnedFrom=stub.earnedDatesComplete ? stub.earnedFrom : stub.periodStart;
     const earnedTo=stub.earnedDatesComplete ? stub.earnedTo : stub.periodEnd;
     if(!earnedFrom || !earnedTo || !isIsoCalendarDate(earnedFrom) || !isIsoCalendarDate(earnedTo) || earnedFrom>earnedTo) throw new PayrollError('ROE earning-source dates are incomplete or invalid');
-    if(earnedTo<first) continue;
+    if((stub.reportPeriodEnd??earnedTo)<first) continue;
     if(stub.earnedDatesComplete && earnedFrom<context.event.first_day_worked) throw new PayrollError(`${context.name} has retained earnings before the confirmed first day worked — reconcile the employment-spell source before filing`);
     if(earnedFrom>finalEnd) throw new PayrollError(`${context.name} has a later payment without qualified ROE service-period or separation-payment allocation`);
     if(stub.employmentId!==context.employmentId || stub.subsidiaryId!==context.subsidiaryId) throw new PayrollError(`${context.name} has unknown or conflicting retained payroll employment or legal-employer attribution`);
     if(stub.currency!=='CAD') throw new PayrollError(`${context.name} needs a qualified Canadian-dollar statutory reporting basis for this ROE`);
     if(!stub.hoursBasisQualified) throw new PayrollError(`${context.name} needs retained insurable-hour attribution for mixed, undated salary or correcting earnings before filing the ROE`);
-    const matching=buckets.filter(p=>earnedFrom>=p.periodStart && earnedTo<=p.periodEnd);
+    const matching=buckets.filter(p=>stub.reportPeriodStart!==undefined
+      ? p.periodStart===stub.reportPeriodStart&&p.periodEnd===stub.reportPeriodEnd
+      : earnedFrom>=p.periodStart && earnedTo<=p.periodEnd);
     if(matching.length!==1) throw new PayrollError(`${context.name} has an earning run spanning multiple ROE service periods — qualify its insurable allocation before filing`);
     const bucket=matching[0]!;
     bucket.insurableEarnings=add(bucket.insurableEarnings,stub.insurableEarnings);
     bucket.insurableHours=add(bucket.insurableHours,stub.insurableHours);
-    if(stub.payDate>bucket.payDate) bucket.payDate=stub.payDate;
+    if(bucket.payDate===null||stub.payDate>bucket.payDate) bucket.payDate=stub.payDate;
     bucket.stubs.push(stub);included.push(stub);
   }
   for(const p of buckets){
-    if(!p.stubs.length && !p.explicitlyExcluded) throw new PayrollError(`${context.name} has no retained pay or explicit no-pay scope for ${p.periodEnd} — qualify the nil period before filing`);
+    if(!p.stubs.length && !p.explicitlyExcluded && !p.historicalEvidenceId) throw new PayrollError(`${context.name} has no retained pay or explicit no-pay scope for ${p.periodEnd} — qualify the nil period before filing`);
     if(cmp(p.insurableEarnings,'0')<0 || cmp(p.insurableHours,'0')<0) throw new PayrollError(`${context.name} has a negative net ROE period requiring a governed source correction`);
   }
   const periods=buckets.map(({payDate,periodStart,periodEnd,insurableEarnings,insurableHours})=>({payDate,periodStart,periodEnd,insurableEarnings,insurableHours}));
   return {periods,totalInsurableHours:periods.reduce((n,p)=>add(n,p.insurableHours),'0'),
     totalInsurableEarnings:periods.slice(0,counts.earnings).reduce((n,p)=>add(n,p.insurableEarnings),'0'),
-    sourceDocuments:included,calendarDocuments:calendar.filter(p=>selected.some(selected=>selected.periodStart===p.periodStart&&selected.periodEnd===p.periodEnd)).map(p=>p.documentId)};
+    sourceDocuments:[...new Map(included.map(stub=>[stub.id,stub])).values()],historicalPeriods:imported,calendarDocuments:calendar.filter(p=>selected.some(selected=>selected.periodStart===p.periodStart&&selected.periodEnd===p.periodEnd)).map(p=>p.documentId).filter((id):id is string=>id!==null)};
 }
 
 export async function readRoeReportingWindow(context: RoeWindowContext) {
@@ -149,7 +165,7 @@ export async function readRoeReportingWindow(context: RoeWindowContext) {
   const counts=ROE_REPORTING_COUNTS[context.frequency];
   if(!counts) throw new PayrollError('Unsupported ROE reporting frequency');
   const limit=counts.hours;
-  const calendar=(await db.execute<RoeCalendarPeriod>(sql`
+  const nativeCalendar=(await db.execute<RoeCalendarPeriod>(sql`
     select run.period_start::text as "periodStart",run.period_end::text as "periodEnd",run.pay_date::text as "payDate",
            run.document_id as "documentId",run.run_type as "runType",exists(select 1 from pay_run_adjustments adjustment
              where adjustment.org_id=run.org_id and adjustment.pay_run_document_id=run.document_id
@@ -162,6 +178,18 @@ export async function readRoeReportingWindow(context: RoeWindowContext) {
            and final_stub.pay_run_document_id=run.document_id and final_stub.employee_party_id=${context.employeeId})))
        and run.period_start<=${cutoff}::date and run.period_end>=${context.event.first_day_worked}::date
      order by run.period_end desc,run.document_id desc limit ${(limit+1)*2}`)).rows;
+  const historicalPeriods=(await db.execute<RoePriorPeriod>(sql`
+    select id,employment_id as "employmentId",subsidiary_id as "subsidiaryId",filing_account_id as "filingAccountId",
+      pay_schedule_id as "payScheduleId",frequency,period_start::text as "periodStart",period_end::text as "periodEnd",pay_date::text as "payDate",
+      earned_from::text as "earnedFrom",earned_to::text as "earnedTo",insurable_earnings::text as "insurableEarnings",insurable_hours::text as "insurableHours",
+      nil_period as "nilPeriod",source_file_id as "sourceFileId",source_version_id as "sourceVersionId",source_sha256 as "sourceSha256",
+      source_reference as "sourceReference",insurance_reference as "insuranceReference",hours_reference as "hoursReference",change_reason as reason,updated_at::text as "updatedAt"
+    from payroll_roe_historical_periods where org_id=${context.orgId} and employee_party_id=${context.employeeId}
+      and employment_id=${context.employmentId} and subsidiary_id=${context.subsidiaryId}
+      and period_start<=${cutoff}::date and period_end>=${context.event.first_day_worked}::date
+    order by period_end desc,id limit ${limit+1}`)).rows;
+  const calendar:RoeCalendarPeriod[]=[...nativeCalendar,...historicalPeriods.map(p=>({periodStart:p.periodStart,periodEnd:p.periodEnd,
+    payDate:p.payDate,documentId:null,runType:'historical' as const,historicalEvidenceId:p.id,explicitlyExcluded:p.nilPeriod}))];
   if(!calendar.length) throw new PayrollError(`${context.name} has no committed scheduled period for the ROE reporting window`);
   const final=calendar.filter(p=>p.periodStart<=cutoff && p.periodEnd>=cutoff);
   if(!final.length) throw new PayrollError(`${context.name} has no committed scheduled period containing ${cutoff}`);
@@ -200,9 +228,24 @@ export async function readRoeReportingWindow(context: RoeWindowContext) {
        and (run.period_end>=${from}::date and run.period_start<=${final[0]!.periodEnd}::date
          or exists(select 1 from pay_stub_lines line where line.org_id=stub.org_id and line.stub_id=stub.id
              and line.kind='earning' and line.earned_from<=${cutoff}::date and line.earned_to>=${from}::date)
+         or exists(select 1 from pay_stub_lines line join payroll_roe_line_evidence qualified
+             on qualified.org_id=line.org_id and qualified.pay_stub_line_id=line.id
+             where line.org_id=stub.org_id and line.stub_id=stub.id and line.kind='earning'
+               and qualified.report_period_start<=${final[0]!.periodEnd}::date and qualified.report_period_end>=${from}::date)
          or (run.period_start>${final[0]!.periodEnd}::date and stub.insurable_earnings<>0))
        and (stub.employment_id=${context.employmentId} or stub.employment_id is null)
      order by run.period_end desc,stub.id limit 5001`)).rows;
   if(stubs.length>5000) throw new PayrollError('ROE reporting source exceeds the bounded retained-stub window');
-  return assembleRoeReportingWindow(context,calendar,stubs);
+    const lineRows=stubs.length?(await db.execute<RoeRetainedLine>(sql`
+    select l.id as "lineId",l.stub_id as "stubId",l.amount::text as amount,l.hours::text as hours,
+      e.id as "evidenceId",(e.line_snapshot=public.payroll_roe_reporting_line_snapshot(l.id,l.org_id)) as "snapshotMatches",
+      e.is_insurable as "isInsurable",e.insurable_hours::text as "insurableHours",
+      e.report_period_start::text as "reportPeriodStart",e.report_period_end::text as "reportPeriodEnd",
+      e.earned_from::text as "earnedFrom",e.earned_to::text as "earnedTo"
+    from pay_stub_lines l left join payroll_roe_line_evidence e on e.org_id=l.org_id and e.pay_stub_line_id=l.id
+    where l.org_id=${context.orgId} and l.stub_id=any(${`{${stubs.map(stub=>stub.id).join(',')}}`}::uuid[])
+      and l.kind='earning' and (l.amount<>0 or l.hours<>0) order by l.stub_id,l.id limit 50001`)).rows:[];
+  if(lineRows.length>50000)throw new PayrollError('ROE line attribution exceeds the bounded retained-source window');
+  const allocated=stubs.flatMap(stub=>roeQualifiedLineAllocations(stub,lineRows.filter(line=>line.stubId===stub.id)));
+  return assembleRoeReportingWindow(context,calendar,allocated,historicalPeriods);
 }

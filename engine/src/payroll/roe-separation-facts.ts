@@ -32,11 +32,11 @@ const COLUMNS = sql`id, employment_id as "employmentId",subsidiary_id as "subsid
  salary_continuance_end_on::text as "salaryContinuanceEndOn", status,
  change_reason as "changeReason", updated_at::text as "updatedAt"`;
 
-type Scope = {
+export type RoeEmployeeScope = {
   orgId: string; actorId: string; employeePartyId: string;
   allowedSubsidiaryIds: PayrollSubsidiaryScope;
 };
-async function authorize(input: Scope, permission: 'payroll.read' | 'payroll.run'): Promise<RoeSeparationEmployee> {
+export async function authorizeRoeReportingEmployee(input: RoeEmployeeScope, permission: 'payroll.read' | 'payroll.run'): Promise<RoeSeparationEmployee> {
   if (![input.orgId, input.actorId, input.employeePartyId].every(isUuid)
     || input.allowedSubsidiaryIds === undefined) throw new PayrollError('Choose a native employee and explicit payroll legal-entity scope');
   await requirePayrollFeature(db, input.orgId);
@@ -61,9 +61,9 @@ async function authorize(input: Scope, permission: 'payroll.read' | 'payroll.run
   return { employmentId: employee[0]!.employment_id, subsidiaryId: employee[0]!.subsidiary_id, employerName: employee[0]!.employer_name };
 }
 
-export async function readRoeSeparationFactsContext(input: Scope): Promise<{ employee: RoeSeparationEmployee; record: RoeSeparationFacts | null }> {
+export async function readRoeSeparationFactsContext(input: RoeEmployeeScope): Promise<{ employee: RoeSeparationEmployee; record: RoeSeparationFacts | null }> {
   return withOrgTransaction(input.orgId, async () => {
-    const employee = await authorize(input, 'payroll.read');
+    const employee = await authorizeRoeReportingEmployee(input, 'payroll.read');
     const record = (await db.execute<StoredFacts>(sql`select ${COLUMNS} from payroll_roe_separation_events
       where org_id=${input.orgId} and employee_party_id=${input.employeePartyId}
       and status in ('draft','confirmed','issued') order by interruption_on desc,id desc limit 1`)).rows[0];
@@ -71,12 +71,12 @@ export async function readRoeSeparationFactsContext(input: Scope): Promise<{ emp
   });
 }
 
-export async function readRoeSeparationFacts(input: Scope): Promise<RoeSeparationFacts | null> {
+export async function readRoeSeparationFacts(input: RoeEmployeeScope): Promise<RoeSeparationFacts | null> {
   return (await readRoeSeparationFactsContext(input)).record;
 }
 
 /** Confirmed dates are employer declarations; payroll payment dates do not supply them. */
-export async function saveRoeSeparationFacts(input: Scope & {
+export async function saveRoeSeparationFacts(input: RoeEmployeeScope & {
   employmentId: string; subsidiaryId: string; firstDayWorked: string | null;
   interruptionOn: string; lastInsurableEarningsOn: string; salaryContinuanceEndOn: string | null;
   sourceReference: string; reason: string; status: 'draft' | 'confirmed';
@@ -104,7 +104,7 @@ export async function saveRoeSeparationFacts(input: Scope & {
     await requirePayrollFeature(db, input.orgId);
     if (!await actorHasPermission(db, input.orgId, input.actorId, 'payroll.run')) throw new PayrollError('Payroll run permission is required to record separation facts');
     await takeEmployeeConfigurationFence(db, input.orgId, input.employeePartyId);
-    const employee = await authorize(input, 'payroll.run');
+    const employee = await authorizeRoeReportingEmployee(input, 'payroll.run');
     if (employee.employmentId !== input.employmentId || employee.subsidiaryId !== input.subsidiaryId) throw new PayrollError('The separation must belong to this employee’s native employment and legal employer');
     const current = (await db.execute<StoredFacts>(sql`select ${COLUMNS} from payroll_roe_separation_events
       where org_id=${input.orgId} and employee_party_id=${input.employeePartyId}
@@ -157,7 +157,7 @@ export async function lockRoeIssueFacts(orgId: string, actorId: string, employee
   if (!await actorHasPermission(db, orgId, actorId, 'payroll.run')) throw new PayrollError('Payroll run permission is required to record an ROE as issued');
   for (const employeePartyId of ids) {
     await takeEmployeeConfigurationFence(db, orgId, employeePartyId);
-    const employee = await authorize({orgId, actorId, employeePartyId, allowedSubsidiaryIds:null}, 'payroll.run');
+    const employee = await authorizeRoeReportingEmployee({orgId, actorId, employeePartyId, allowedSubsidiaryIds:null}, 'payroll.run');
     const facts = (await db.execute<StoredFacts>(sql`select ${COLUMNS} from payroll_roe_separation_events
       where org_id=${orgId} and employee_party_id=${employeePartyId} and status='confirmed' for update`)).rows;
     if (facts.length !== 1 || !facts[0]!.firstDayWorked || !facts[0]!.sourceReference
@@ -180,13 +180,22 @@ export async function recordRoeFactsIssued(orgId: string, actorId: string, emplo
     const before = (await db.execute<StoredFacts>(sql`select ${COLUMNS} from payroll_roe_separation_events
       where org_id=${orgId} and employee_party_id=${employeePartyId} and status='confirmed' for update`)).rows;
     if (before.length !== 1) throw new PayrollError('The locked ROE separation source changed before issuance was recorded');
+    const {roeWindowContext,readRoeReportingWindow}=await import('./roe-reporting-window.ts');
+    const reporting=await readRoeReportingWindow(await roeWindowContext(orgId,employeePartyId));
+    const periodIds=reporting.historicalPeriods.map(period=>period.id);
+    const lineIds=[...new Set(reporting.sourceDocuments.flatMap(stub=>stub.reportingEvidenceIds??[]))];
+    const historicalPeriods=(await db.execute<{source:Record<string,unknown>}>(sql`select to_jsonb(p) as source
+      from payroll_roe_historical_periods p where p.org_id=${orgId} and p.id=any(${`{${periodIds.join(',')}}`}::uuid[]) order by p.id`)).rows;
+    const lineEvidence=(await db.execute<{source:Record<string,unknown>}>(sql`select to_jsonb(e) as source
+      from payroll_roe_line_evidence e where e.org_id=${orgId} and e.id=any(${`{${lineIds.join(',')}}`}::uuid[]) order by e.id`)).rows;
+    if(historicalPeriods.length!==periodIds.length||lineEvidence.length!==lineIds.length)throw new PayrollError('The locked ROE reporting evidence changed before its issued audit could be retained');
     const after = (await db.execute<StoredFacts>(sql`update payroll_roe_separation_events set status='issued',
       updated_by=${actorId},updated_at=greatest(clock_timestamp(),updated_at+interval '1 microsecond')
       where org_id=${orgId} and id=${before[0]!.id} and status='confirmed' returning ${COLUMNS}`)).rows;
     if (after.length !== 1) throw new PayrollError('The ROE source issuance was not recorded');
     const audit = (await db.execute(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id)
       values (${orgId},'payroll_roe_separation_events',${after[0]!.id},'update',
-        ${JSON.stringify({event:'roe_source_issued',submissionId,before:before[0],after:after[0]})}::jsonb,${actorId}) returning id`)).rows;
+        ${JSON.stringify({event:'roe_source_issued',submissionId,before:before[0],after:after[0],reportingEvidence:{historicalPeriods:historicalPeriods.map(row=>row.source),lineEvidence:lineEvidence.map(row=>row.source)}})}::jsonb,${actorId}) returning id`)).rows;
     if (audit.length !== 1) throw new PayrollError('The ROE source issuance audit was not retained');
   }
 }

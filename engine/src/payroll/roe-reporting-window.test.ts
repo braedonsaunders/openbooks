@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { assembleRoeReportingWindow, type RoeWindowContext, type RoeCalendarPeriod, type RoeWindowStub } from './roe-reporting-window.ts';
+import type { RoePriorPeriod } from './roe-history.ts';
 import { at, iso, DAY } from './run-calendar.ts';
 const context=(first:string,last:string):RoeWindowContext=>({orgId:'org',employeeId:'employee',name:'Worker',employmentId:'employment',subsidiaryId:'employer',scheduleId:'schedule',frequency:'weekly',filingAccountId:'filing',event:{id:'event',employment_id:'employment',subsidiary_id:'employer',first_day_worked:first,last_insurable_earnings_on:last,interruption_on:last,salary_continuance_end_on:null,source_reference:'Employer employment-spell record'}});
 function fixture(count:number){
@@ -61,4 +62,38 @@ test('a retained final-pay period occupies one reporting position with or withou
  const finalOnly=assembleRoeReportingWindow(ctx,[termination],[finalStub]);
  assert.equal(finalOnly.periods.length,1);assert.equal(finalOnly.totalInsurableHours,'1.0000');
  assert.throws(()=>assembleRoeReportingWindow(ctx,[termination,{...termination,documentId:'another-final'}],[finalStub]),/same ROE service period/);
+});
+
+
+test('qualified historical and nil periods retain source identities without synthetic payroll documents',()=>{
+ const {calendar,stubs}=fixture(3);const ctx=context(calendar[0]!.periodStart,calendar[2]!.periodEnd);
+ const prior:RoePriorPeriod={id:'prior',employmentId:'employment',subsidiaryId:'employer',filingAccountId:'filing',payScheduleId:'schedule',frequency:'weekly',
+  periodStart:calendar[0]!.periodStart,periodEnd:calendar[0]!.periodEnd,payDate:calendar[0]!.payDate,earnedFrom:calendar[0]!.periodStart,earnedTo:calendar[0]!.periodEnd,
+  insurableEarnings:'80',insurableHours:'4',nilPeriod:false,sourceFileId:'file',sourceVersionId:'version',sourceSha256:'a'.repeat(64),
+  sourceReference:'Original period',insuranceReference:'Original insurance classification',hoursReference:'Original insured hours',reason:'Qualified original source',updatedAt:'retained'};
+ const nil={...prior,id:'nil',periodStart:calendar[1]!.periodStart,periodEnd:calendar[1]!.periodEnd,payDate:null,earnedFrom:null,earnedTo:null,
+  nilPeriod:true,insurableEarnings:'0',insurableHours:'0'};
+ const historical=(p:RoePriorPeriod):RoeCalendarPeriod=>({periodStart:p.periodStart,periodEnd:p.periodEnd,payDate:p.payDate,
+  documentId:null,runType:'historical',historicalEvidenceId:p.id,explicitlyExcluded:p.nilPeriod});
+ const source=[historical(prior),historical(nil),calendar[2]!];
+ const before=JSON.stringify({prior,nil,source,stubs});
+ const result=assembleRoeReportingWindow(ctx,source,[stubs[2]!],[prior,nil]);
+ assert.equal(result.totalInsurableEarnings,'180.0100');assert.equal(result.totalInsurableHours,'11.7500');
+ assert.equal(result.periods[1]!.payDate,null);assert.deepEqual(result.calendarDocuments,['regular-2']);
+ assert.deepEqual(result.sourceDocuments.map(s=>s.id),['stub-2']);assert.deepEqual(result.historicalPeriods.map(p=>p.id),['prior','nil']);
+ assert.throws(()=>assembleRoeReportingWindow(ctx,source,[stubs[2]!],[prior]),/no qualified original period evidence/);
+ assert.throws(()=>assembleRoeReportingWindow(ctx,source,[stubs[2]!],[{...prior,payScheduleId:'other'},nil]),/conflicts/);
+ assert.throws(()=>assembleRoeReportingWindow(ctx,[...source,calendar[0]!],[stubs[2]!],[prior,nil]),/overlaps native payroll/);
+ assert.equal(JSON.stringify({prior,nil,source,stubs}),before);
+});
+
+test('qualified reporting allocations include an earlier-paid immutable source only in its declared reporting period',()=>{
+ const {calendar,stubs}=fixture(2);const ctx=context(calendar[0]!.periodStart,calendar[1]!.periodEnd);
+ const allocated={...stubs[0]!,id:'earlier-payment',documentId:'earlier-payment',periodStart:'2024-12-22',periodEnd:'2024-12-28',payDate:'2024-12-31',
+  reportPeriodStart:calendar[1]!.periodStart,reportPeriodEnd:calendar[1]!.periodEnd,earnedFrom:calendar[1]!.periodStart,earnedTo:calendar[1]!.periodEnd,
+  allocationKey:calendar[1]!.periodStart+':'+calendar[1]!.periodEnd,insurableEarnings:'12.34',insurableHours:'0',reportingEvidenceIds:['line-evidence']};
+ const result=assembleRoeReportingWindow(ctx,calendar,[...stubs,allocated]);
+ assert.equal(result.periods[0]!.insurableEarnings,'112.3500');assert.equal(result.totalInsurableEarnings,'212.3600');
+ assert.equal(result.sourceDocuments.at(-1)!.documentId,'earlier-payment');
+ assert.throws(()=>assembleRoeReportingWindow(ctx,calendar,[...stubs,{...allocated,reportPeriodEnd:'2025-01-17'}]),/spanning multiple/);
 });

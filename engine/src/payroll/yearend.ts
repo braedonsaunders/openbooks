@@ -719,7 +719,7 @@ export async function t4Returns(orgId: string, taxYear: number): Promise<T4Retur
 }
 
 export interface RoePeriod {
-  payDate: string;
+  payDate: string | null;
   periodStart: string;
   periodEnd: string;
   insurableEarnings: string;
@@ -772,6 +772,7 @@ export async function roeSourceScope(orgId: string, employeeIds: readonly string
     const context=await roeWindowContext(orgId,employeeId);
     const window=await readRoeReportingWindow(context);
     sources.push({employeeId,filingAccountId:context.filingAccountId,sourceDocumentId:null,sourceSubsidiaryId:context.subsidiaryId});
+    for(const period of window.historicalPeriods) sources.push({employeeId,filingAccountId:period.filingAccountId,sourceDocumentId:null,sourceSubsidiaryId:period.subsidiaryId});
     for(const stub of window.sourceDocuments) sources.push({employeeId,filingAccountId:stub.filingAccountId,
       sourceDocumentId:stub.documentId,sourceSubsidiaryId:stub.subsidiaryId});
     for(const documentId of window.calendarDocuments) if(!window.sourceDocuments.some(stub=>stub.documentId===documentId))
@@ -969,21 +970,24 @@ export async function roeRecord(orgId: string, employeePartyId: string): Promise
   }>(sql`
     select stub.pay_date::text as "payDate",
            stub.employment_id::text as "employmentId",
-           line.earned_from::text as "earnedFrom", line.earned_to::text as "earnedTo"
+           coalesce(evidence.earned_from,line.earned_from)::text as "earnedFrom", coalesce(evidence.earned_to,line.earned_to)::text as "earnedTo"
       from pay_stubs stub
       join pay_runs run on run.org_id = stub.org_id
         and run.document_id = stub.pay_run_document_id and run.run_status = 'committed'
       join pay_stub_lines line on line.org_id = stub.org_id and line.stub_id = stub.id
         and line.kind = 'earning'
+      left join payroll_roe_line_evidence evidence on evidence.org_id=line.org_id and evidence.pay_stub_line_id=line.id
+        and evidence.line_snapshot=public.payroll_roe_reporting_line_snapshot(line.id,line.org_id)
      where stub.org_id = ${orgId} and stub.employee_party_id = ${employeePartyId}
        and (stub.employment_id = ${event.employment_id} or stub.employment_id is null)
+       and (evidence.is_insurable is null or evidence.is_insurable)
        and (line.amount <> 0 or (line.hours is not null and line.hours <> 0))
        and (
-         line.earned_from > ${earningsCutoff}::date
-         or line.earned_to > ${earningsCutoff}::date
-         or line.earned_from > line.earned_to
+         coalesce(evidence.earned_from,line.earned_from) > ${earningsCutoff}::date
+         or coalesce(evidence.earned_to,line.earned_to) > ${earningsCutoff}::date
+         or coalesce(evidence.earned_from,line.earned_from) > coalesce(evidence.earned_to,line.earned_to)
          or (stub.pay_date > ${earningsCutoff}::date
-             and (stub.employment_id is null or line.earned_from is null or line.earned_to is null))
+             and (stub.employment_id is null or coalesce(evidence.earned_from,line.earned_from) is null or coalesce(evidence.earned_to,line.earned_to) is null))
        )
      order by stub.pay_date desc, stub.id desc, line.id desc
      limit 1
@@ -1003,7 +1007,7 @@ export async function roeRecord(orgId: string, employeePartyId: string): Promise
       + " — review the separation facts and earned-period source before issuing the ROE",
     );
   }
-  if (!worksheet.sourceDocuments.length) {
+  if (!worksheet.sourceDocuments.length && !worksheet.historicalPeriods.some(period=>!period.nilPeriod)) {
     throw new PayrollError(`${row.display_name} has no retained insurable-pay source in the confirmed ROE employment spell — qualify the original payroll periods before filing`);
   }
   const earningComponents = (await db.execute<{
@@ -1028,9 +1032,7 @@ export async function roeRecord(orgId: string, employeePartyId: string): Promise
       ) classification on true
      where line.org_id = ${orgId} and stub.employee_party_id = ${employeePartyId}
        and stub.employment_id = ${event.employment_id}
-       and line.kind = 'earning' and stub.id in (
-         ${sql.join(worksheet.sourceDocuments.map((stub) => sql`${stub.id}::uuid`), sql`, `)}
-       )
+       and line.kind = 'earning' and stub.id=any(${`{${worksheet.sourceDocuments.map(stub=>stub.id).join(',')}}`}::uuid[])
   `)).rows;
   const unmapped = earningComponents.filter((component) => component.block == null);
   if (unmapped.length) {
