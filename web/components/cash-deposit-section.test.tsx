@@ -67,6 +67,7 @@ function scriptFetch(handler: (url: string, init?: RequestInit) => Response | nu
 async function mount(props: {
   bankOptions: { value: string; label: string }[];
   sourceOptions?: { value: string; label: string }[];
+  subsidiaryId?: string;
   mode?: "sale" | "till";
   modes?: ("sale" | "till")[];
 }) {
@@ -84,6 +85,7 @@ async function mount(props: {
           defaultDate="2026-10-05"
           bankOptions={props.bankOptions}
           sourceOptions={props.sourceOptions ?? []}
+          subsidiaryId={props.subsidiaryId}
           {...(props.mode ? { mode: props.mode } : {})}
           {...(props.modes ? { modes: props.modes } : {})}
         />
@@ -271,6 +273,7 @@ test("a posted sale's till drop records against the till window, not the sale's 
     bankOptions: [{ value: BANK_A, label: "1100 · Operating" }],
     sourceOptions: [{ value: "till-1", label: "1000 · Till 1" }],
     mode: "till",
+    subsidiaryId: '00000000-0000-4000-8000-000000000123',
     modes: ["till", "sale"],
   });
   t.after(async () => { await act(async () => { root.unmount(); }); host.remove(); });
@@ -285,5 +288,8 @@ test("a posted sale's till drop records against the till window, not the sale's 
   await tick();
   await tick();
   const post = calls.find((call) => call.url === "/api/cash-sales/till-drops" && typeof call.body.amount === "string");
+  assert.equal(post?.body.subsidiaryId,'00000000-0000-4000-8000-000000000123');
+  assert.ok(calls.some(call => call.url.includes('subsidiaryId=00000000-0000-4000-8000-000000000123')),
+    'preview and recording use the same host-selected entity');
   assert.equal(post?.body?.tillAccountId, "till-1", "a multi-day drop records against the till");
 });

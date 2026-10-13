@@ -14,6 +14,7 @@ export const runtime = 'nodejs'
 const WindowQuery = z.object({
   tillAccountId: z.string().uuid(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'drop date must be YYYY-MM-DD'),
+  subsidiaryId: z.string().uuid().nullable(),
 })
 
 const POSTBodySchema = z.object({
@@ -48,12 +49,15 @@ export const GET = defineRoute({
     const parsed = WindowQuery.safeParse({
       tillAccountId: url.searchParams.get('tillAccountId') ?? '',
       date: url.searchParams.get('date') ?? '',
+      subsidiaryId: url.searchParams.get('subsidiaryId'),
     })
     if (!parsed.success) {
       return NextResponse.json({ error: 'Choose the till and the drop date.', code: 'invalid_query' }, { status: 422 })
     }
     try {
-      return NextResponse.json(await readTillDropWindow(authz.user.orgId, parsed.data.tillAccountId, parsed.data.date))
+      return NextResponse.json(await readTillDropWindow(authz.user.orgId, parsed.data.tillAccountId, parsed.data.date, {
+        subsidiaryId: parsed.data.subsidiaryId, allowedSubsidiaryIds: authz.allowedSubsidiaryIds ?? null,
+      }))
     } catch (error) {
       return apiErrorResponse(error)
     }

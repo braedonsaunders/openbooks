@@ -9,6 +9,7 @@
  * malformed preflight refuses by name instead of reporting clean.
  */
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import pg from "pg";
 import {
@@ -94,6 +95,19 @@ test("a missing guard defers only for its exact no-argument pending creator", ()
   assert.equal(earlierPendingCreatesObject(missing, []), false);
   assert.equal(earlierPendingCreatesObject(new Error('function "public.native_history_guard(uuid)" does not exist'), ["CREATE FUNCTION native_history_guard() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RETURN NEW; END $$;"]), false);
 });
+
+test('a missing FX overload defers only across its exact published creator and strict consumer', () => {
+  const publisher = readFileSync(new URL('../schema/migrations/generated/0594_bound_journal_fx_entry_matching.sql', import.meta.url), 'utf8');
+  const consumer = readFileSync(new URL('../schema/migrations/preflight/0700_typed_currency_adjustment_fx_residual_guards.sql', import.meta.url), 'utf8');
+  const missing = 'function "public.journal_lines_check_fx_residual_entries(uuid[],boolean)" does not exist';
+  assert.equal(earlierPendingCreatesObject(missing, [publisher], consumer), true);
+  assert.equal(earlierPendingCreatesObject(missing, [], consumer), false);
+  assert.equal(earlierPendingCreatesObject(missing, [publisher + '\n'], consumer), false);
+  assert.equal(earlierPendingCreatesObject(missing, [publisher], consumer + '\n'), false);
+  assert.equal(earlierPendingCreatesObject(missing, [publisher]), false);
+  assert.equal(earlierPendingCreatesObject(missing.replace('public.', 'private.'), [publisher], consumer), false);
+  assert.equal(earlierPendingCreatesObject('permission denied', [publisher], consumer), false);
+})
 
 test("a preflight is deferred only when an earlier pending migration creates the object", () => {
   const missingTable = Object.assign(new Error('relation "payroll_remittance_coverage" does not exist'), {

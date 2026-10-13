@@ -3755,6 +3755,7 @@ export function DocumentDrawer({
                   defaultDate={depositDefaultDate || documentDate || ''}
                   bankOptions={depositAccountOptions}
                   sourceOptions={cashSourceOptions}
+                  subsidiaryId={subsidiaryId || null}
                   mode={cashSourceOptions.length > 0 ? 'till' : 'sale'}
                   modes={isPosted ? (cashSourceOptions.length > 0 ? ['till', 'sale'] : ['sale']) : ['till']}
                 />

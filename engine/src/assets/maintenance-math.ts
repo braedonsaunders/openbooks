@@ -1,5 +1,6 @@
 import { add, cmp } from "../money/money.ts";
 import { refuse } from "./asset-refusal.ts";
+import { utcDateFromParts, calendarDaysBetween } from "../platform/civil-date.ts";
 
 /**
  * Pure maintenance scheduling. A schedule recurs every N months, every N
@@ -14,8 +15,8 @@ function parseIsoDate(value: string): { year: number; month: number; day: number
   const match = ISO_DATE.exec(value);
   if (!match) refuse("date_invalid", `${value} is not a calendar date (YYYY-MM-DD)`);
   const [year, month, day] = [Number(match[1]), Number(match[2]), Number(match[3])];
-  const probe = new Date(Date.UTC(year, month - 1, day));
-  if (probe.getUTCFullYear() !== year || probe.getUTCMonth() !== month - 1 || probe.getUTCDate() !== day) {
+  const probe = utcDateFromParts(year, month - 1, day);
+  if (year < 1 || probe.getUTCFullYear() !== year || probe.getUTCMonth() !== month - 1 || probe.getUTCDate() !== day) {
     refuse("date_invalid", `${value} is not a calendar date (YYYY-MM-DD)`);
   }
   return { year, month, day };
@@ -32,7 +33,7 @@ export function addMonthsClamped(date: string, months: number): string {
   const index = year * 12 + (month - 1) + months;
   const targetYear = Math.floor(index / 12);
   const targetMonth = (index % 12) + 1;
-  const lastDay = new Date(Date.UTC(targetYear, targetMonth, 0)).getUTCDate();
+  const lastDay = utcDateFromParts(targetYear, targetMonth, 0).getUTCDate();
   return formatIsoDate(targetYear, targetMonth, Math.min(day, lastDay));
 }
 
@@ -40,7 +41,7 @@ export function addMonthsClamped(date: string, months: number): string {
 export function daysBetween(from: string, to: string): number {
   const a = parseIsoDate(from);
   const b = parseIsoDate(to);
-  return Math.round((Date.UTC(b.year, b.month - 1, b.day) - Date.UTC(a.year, a.month - 1, a.day)) / 86_400_000);
+  return calendarDaysBetween(formatIsoDate(a.year, a.month, a.day), formatIsoDate(b.year, b.month, b.day));
 }
 
 export interface MaintenanceInterval {

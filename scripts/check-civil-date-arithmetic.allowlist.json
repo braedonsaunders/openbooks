@@ -77,13 +77,6 @@
     "reason": "test-only fallback period; year derives from new Date() wall-clock, never below year 100"
   },
   {
-    "path": "engine/src/payments/refund-automation.integration.test.ts",
-    "fn": "ensureOpenPeriod",
-    "test": "",
-    "arg": "year",
-    "reason": "test-only fallback period; year derives from new Date() wall-clock, never below year 100"
-  },
-  {
     "path": "engine/src/payments/psp-settlement-fx.integration.test.ts",
     "fn": "ensureOpenPeriod",
     "test": "",

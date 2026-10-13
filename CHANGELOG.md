@@ -21,6 +21,8 @@ changes; each release documents required operator action.
 - Add processor receipt funding, saved settlement account review and native
   posting-effects recovery for payments. Require complete evidence before
   period-reopen decisions and independent reconciliation sign-off reviews.
+- Keep till sales, reservations and drop cutoffs within the selected legal
+  entity, including when several entities share a cash account.
 - Correct Canadian separate-payment CPP exemptions and separate periodic and
   bonus tax bases. Retain the committed regular-income reference used for
   standalone bonus calculations without altering historical payroll.

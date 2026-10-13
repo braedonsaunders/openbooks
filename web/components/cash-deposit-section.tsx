@@ -43,6 +43,7 @@ export function CashDepositSection({
   defaultDate,
   bankOptions,
   sourceOptions,
+  subsidiaryId,
   mode: initialMode = 'sale',
   modes,
 }: {
@@ -51,6 +52,7 @@ export function CashDepositSection({
   defaultDate: string
   bankOptions: CashDepositAccountOption[]
   sourceOptions: CashDepositAccountOption[]
+  subsidiaryId?: string | null
   mode?: 'sale' | 'till'
   /** Drop scopes the operator may choose between; a single scope shows no choice. */
   modes?: readonly ('sale' | 'till')[]
@@ -77,6 +79,7 @@ export function CashDepositSection({
   const [reload, setReload] = useState(0)
   const [reason, setReason] = useState('')
   const [tillWindow, setTillWindow] = useState<TillWindow | null>(null)
+  const [windowRefusal, setWindowRefusal] = useState<string | null>(null)
   const tillAccountId = mode === 'till'
     ? (sourceOptions.some((o) => o.value === sourceAccountId) ? sourceAccountId : (sourceOptions[0]?.value ?? ''))
     : ''
@@ -84,20 +87,30 @@ export function CashDepositSection({
   // The till's window a drop on this date closes: refreshed when the till,
   // the date or a recorded drop changes.
   useEffect(() => {
+    setTillWindow(null)
+    setWindowRefusal(null)
     if (mode !== 'till' || !tillAccountId || !/^\d{4}-\d{2}-\d{2}$/.test(cutoff)) {
-      setTillWindow(null)
       return
     }
     let live = true
     const query = new URLSearchParams({ tillAccountId, date: cutoff })
+    if (subsidiaryId) query.set('subsidiaryId', subsidiaryId)
     fetch(`/api/cash-sales/till-drops?${query}`, { headers: { accept: 'application/json' } })
-      .then((res) => (res.ok ? res.json() : null))
+      .then(async res => {
+        if (res.ok) return res.json()
+        const body = await res.json().catch(() => null) as { error?: unknown; remedy?: unknown } | null
+        if (live) setWindowRefusal([
+          typeof body?.error === 'string' ? body.error : t('tenders.depositFailed'),
+          typeof body?.remedy === 'string' ? body.remedy : '',
+        ].filter(Boolean).join(' '))
+        return null
+      })
       .then((body) => { if (live) setTillWindow(body as TillWindow | null) })
-      .catch(() => { if (live) setTillWindow(null) })
+      .catch(() => { if (live) setWindowRefusal(t('tenders.depositFailed')) })
     return () => {
       live = false
     }
-  }, [mode, tillAccountId, cutoff, reload])
+  }, [mode, tillAccountId, cutoff, reload, subsidiaryId, t])
 
   // Recorded drops beside the form: the cashier sees what already left the
   // till (a refused POST still records a draft drop), so a double drop
@@ -138,6 +151,7 @@ export function CashDepositSection({
               coversThrough: cutoff,
               bankAccountId: selectedBank,
               slipNumber: slipNumber.trim(),
+              ...(subsidiaryId ? { subsidiaryId } : {}),
               ...(reason.trim() ? { reason: reason.trim() } : {}),
             }),
           })
@@ -257,6 +271,9 @@ export function CashDepositSection({
                 ))}
               </Select>
             </div>
+          ) : null}
+          {windowRefusal && mode === 'till' ? (
+            <p role="alert" className="text-xs text-red-600 dark:text-red-400">{windowRefusal}</p>
           ) : null}
           {refusal ? (
             <p role="alert" className="text-xs text-red-600 dark:text-red-400">{refusal}</p>

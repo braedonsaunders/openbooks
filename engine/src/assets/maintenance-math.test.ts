@@ -15,6 +15,9 @@ test("month intervals clamp to the end of shorter months and cross years", () =>
   refusedWith("date_invalid", () => addMonthsClamped("2026-02-30", 1));
   assert.equal(daysBetween("2026-07-01", "2026-07-15"), 14);
   assert.equal(daysBetween("2026-07-15", "2026-07-01"), -14);
+  assert.equal(addMonthsClamped("0099-12-31", 2), "0100-02-28");
+  assert.equal(daysBetween("0099-12-31", "0100-01-01"), 1);
+  refusedWith("date_invalid", () => addMonthsClamped("0000-01-01", 1));
 });
 
 test("the next due point counts from the last service, or the start date and a zero meter", () => {

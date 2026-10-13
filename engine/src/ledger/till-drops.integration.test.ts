@@ -26,14 +26,14 @@ async function configure(org: ScratchOrg, tillId: string): Promise<void> {
 }
 
 /** A draft cash sale tendering `cash` to the till on `date` — not posted. */
-async function draftSale(org: ScratchOrg, tillId: string, date: string, cash: string): Promise<string> {
+async function draftSale(org: ScratchOrg, tillId: string, date: string, cash: string, subsidiaryId = org.subsidiaryId): Promise<string> {
   const saleId = randomUUID();
   await withBypassContext(async () => {
     await db.execute(sql`
       insert into documents
         (id, org_id, kind, status, document_number, subsidiary_id, party_id,
          document_date, currency, fx_rate, subtotal, tax_total, total, custom)
-      values (${saleId}, ${org.orgId}, 'cash_sale', 'draft', ${`CS-${saleId.slice(0, 8)}`}, ${org.subsidiaryId},
+      values (${saleId}, ${org.orgId}, 'cash_sale', 'draft', ${`CS-${saleId.slice(0, 8)}`}, ${subsidiaryId},
               ${org.customerId}, ${date}, 'CAD', '1', ${cash}, '0', ${cash}, '{}'::jsonb)`);
     await db.execute(sql`
       insert into document_tenders
@@ -55,13 +55,58 @@ async function setup(): Promise<{ org: ScratchOrg; actorId: string; tillId: stri
   return { org, actorId, tillId };
 }
 
+test('shared till accounts retain independent entity windows and refuse hidden or empty reader scope', { skip: !DB }, async () => {
+  const { org, actorId, tillId } = await setup();
+  const branchId = randomUUID();
+  try {
+    await withBypassContext(async () => {
+      await db.execute(sql`insert into subsidiaries(id,org_id,name,parent_id,base_currency,is_active,is_elimination,custom)
+        values(${branchId},${org.orgId},'Second till entity',${org.subsidiaryId},'CAD',true,false,'{}'::jsonb)`);
+      await db.execute(sql`update accounts set subsidiary_id=null where org_id=${org.orgId} and id=${tillId}`);
+      await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features,multiSubsidiary}','true'::jsonb)
+        where id=${org.orgId}`);
+    });
+    const rootSale = await draftSale(org,tillId,'2026-07-10','120.0000');
+    await draftSale(org,tillId,'2026-07-11','900.0000',branchId);
+    const branchDrop = await recordTillDrop(org.orgId,actorId,{
+      tillAccountId:tillId,amount:'900.0000',date:'2026-07-11',bankAccountId:org.accounts.bank,
+      slipNumber:'BRANCH-DROP',subsidiaryId:branchId,
+    },{key:randomUUID(),allowedSubsidiaryIds:new Set([branchId])});
+    assert.equal(branchDrop.window.subsidiaryId,branchId);
+    assert.equal(branchDrop.window.tendered,'900.0000');
+    assert.equal(branchDrop.window.dropped,'900.0000');
+    const scope={subsidiaryId:org.subsidiaryId,allowedSubsidiaryIds:new Set([org.subsidiaryId])};
+    const rootWindow=await readTillDropWindow(org.orgId,tillId,'2026-07-12',scope);
+    assert.equal(rootWindow.after,null,'another entity cannot establish this entity\'s cutoff');
+    assert.equal(rootWindow.salesCount,1);
+    assert.equal(rootWindow.tendered,'120.0000');
+    assert.equal(rootWindow.dropped,'0.0000');
+    for (const denied of [
+      {...scope,subsidiaryId:branchId}, {...scope,allowedSubsidiaryIds:new Set<string>()},
+      {allowedSubsidiaryIds:null},
+    ]) await assert.rejects(readTillDropWindow(org.orgId,tillId,'2026-07-12',denied),
+      (error:unknown)=>error instanceof CashDepositError && error.status===404);
+    await assert.rejects(readTillDropWindow(org.orgId,randomUUID(),'2026-07-12',scope),
+      (error:unknown)=>error instanceof CashDepositError && error.status===404);
+    const rootDrop=await recordTillDrop(org.orgId,actorId,{
+      tillAccountId:tillId,amount:'120.0000',date:'2026-07-12',bankAccountId:org.accounts.bank,
+      slipNumber:'ROOT-DROP',subsidiaryId:org.subsidiaryId,
+    },{key:randomUUID(),allowedSubsidiaryIds:scope.allowedSubsidiaryIds});
+    assert.equal(rootDrop.window.difference,'0.0000');
+    assert.equal((await readSaleTillWindow(org.orgId,rootSale,scope.allowedSubsidiaryIds))?.window.subsidiaryId,org.subsidiaryId);
+    assert.equal((await readTillDropWindow(org.orgId,tillId,'2026-07-11',{
+      subsidiaryId:branchId,allowedSubsidiaryIds:new Set([branchId]),
+    })).dropped,'900.0000','root drop does not alter the other entity\'s retained count');
+  } finally { await dropScratchOrg(org.orgId); }
+});
+
 test("a till drop records by till and date before its sales are posted, and windows reconcile", { skip: !DB }, async () => {
   const { org, actorId, tillId } = await setup();
   try {
     const firstSale = await draftSale(org, tillId, "2026-07-10", "120.0000");
     const secondSale = await draftSale(org, tillId, "2026-07-11", "80.0000");
     assert.equal(await readSaleTillWindow(org.orgId, secondSale), null, "no drop has closed the window yet");
-    const before = await readTillDropWindow(org.orgId, tillId, "2026-07-12");
+    const before = await readTillDropWindow(org.orgId, tillId, "2026-07-12", { allowedSubsidiaryIds: null });
     assert.deepEqual(
       { after: before.after, sales: before.salesCount, tendered: before.tendered, dropped: before.dropped },
       { after: null, sales: 2, tendered: "200.0000", dropped: "0.0000" },
@@ -136,7 +181,7 @@ test("till drops fence the till and the destination", { skip: !DB }, async () =>
     await recordCashDeposit(org.orgId, actorId, {
       saleId, amount: "40.0000", date: "2026-07-12", bankAccountId: org.accounts.bank, slipNumber: "SLIP-S",
     }, { key: randomUUID() });
-    const window = await readTillDropWindow(org.orgId, tillId, "2026-07-12");
+    const window = await readTillDropWindow(org.orgId, tillId, "2026-07-12", { allowedSubsidiaryIds: null });
     assert.equal(window.dropped, "40.0000", "sale-linked drops leave the same till window");
   } finally {
     await withBypassContext(() => dropScratchOrg(org.orgId));
@@ -159,7 +204,7 @@ test("a drop's cash cutoff ends its window, and a late drop behind a later one n
       { through: "2026-07-11", sales: 2, tendered: "200.0000", difference: "0.0000" },
       "the drop day's own sale stays out of the window its cash cutoff closes",
     );
-    const next = await readTillDropWindow(org.orgId, tillId, "2026-07-13");
+    const next = await readTillDropWindow(org.orgId, tillId, "2026-07-13", { allowedSubsidiaryIds: null });
     assert.deepEqual(
       { after: next.after, sales: next.salesCount, tendered: next.tendered, dropped: next.dropped },
       { after: "2026-07-11", sales: 1, tendered: "45.0000", dropped: "0.0000" },

@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { utcDateFromParts } from "../platform/civil-date.ts";
 import { createHash, createHmac, randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
@@ -23,7 +24,7 @@ export async function ensureOpenPeriod(orgId: string, periodId: string): Promise
        starts_on, ends_on, is_adjustment)
     select ${orgId}, fiscal_calendar_id, ${year}, ${month}, ${today.slice(0, 7)},
            ${`${year}-${String(month).padStart(2, "0")}-01`},
-           ${new Date(Date.UTC(year, month, 0)).toISOString().slice(0, 10)}, false
+           ${utcDateFromParts(year, month, 0).toISOString().slice(0, 10)}, false
       from accounting_periods
      where id = ${periodId}
     on conflict (org_id, fiscal_calendar_id, fiscal_year, period_number) do nothing

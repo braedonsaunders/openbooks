@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
+import { utcDateFromParts } from "../platform/civil-date.ts";
 import { buildRbcStd152File, type RbcStd152Settings, type RbcStd152Payment } from "./rail-rbc-std152.ts";
 
 const settings: RbcStd152Settings = {
@@ -55,7 +56,7 @@ test("STD152 supports explicit test and direct transmission without silently cha
 });
 
 function isoOrdinal(value: string): string {
-  const date = new Date(Date.UTC(Number(value.slice(0, 4)), 0, Number(value.slice(4))));
+  const date = utcDateFromParts(Number(value.slice(0, 4)), 0, Number(value.slice(4)));
   return date.toISOString().slice(0, 10);
 }
 
