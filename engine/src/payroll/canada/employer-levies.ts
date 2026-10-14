@@ -122,7 +122,8 @@ const CNT_MAX_2026 = "103000";
 
 /**
  * One levy key's assessable base: the earning lines assessable for it.
- * Applicability rides the lines from the component's `program_exclusions`
+ * Applicability rides the lines from the component's effective-dated
+ * statutory treatment
  * (absent key means assessable, matching the sibling flags' default-true);
  * a non-taxable earning type defaults to excluded through its STORED
  * exclusions, never through a rule here. Accrual-only lines accrue no

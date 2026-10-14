@@ -60,6 +60,43 @@ export async function upsertUnionFringe(
       returning id
     `));
     const componentId = component.rows[0]!.id;
+    const statutoryTreatment = await tx.execute<{ id: string; effective_from: string }>(sql`
+      insert into pay_component_statutory_treatments
+        (org_id, pay_component_id, effective_from, program_exclusions, created_by, updated_by)
+      select ${orgId}, ${componentId}, current_date, '{}'::text[], ${actorId}, ${actorId}
+       where not exists (
+         select 1 from pay_component_statutory_treatments treatment
+          where treatment.org_id = ${orgId} and treatment.pay_component_id = ${componentId}
+            and treatment.worker_comp_group_id is null
+            and treatment.effective_from <= current_date
+            and (treatment.effective_to is null or treatment.effective_to >= current_date)
+       )
+      returning id::text as id, effective_from::text as effective_from
+    `);
+    if (statutoryTreatment.rows[0]) {
+      await tx.execute(sql`
+        insert into audit_log (org_id, table_name, row_id, action, actor_id, changes)
+        values (${orgId}, 'pay_component_statutory_treatments', ${statutoryTreatment.rows[0].id}, 'insert', ${actorId},
+          ${JSON.stringify({
+            before: null,
+            after: { payComponentId: componentId, workerCompGroupId: null, programExclusions: [], effectiveFrom: statutoryTreatment.rows[0].effective_from, effectiveTo: null },
+            reason: 'Initial contribution-program and employer-levy treatment created for the union pay component.',
+          })}::jsonb)
+      `);
+    } else {
+      const existing = await tx.execute<{ exists: boolean }>(sql`
+        select exists (
+          select 1 from pay_component_statutory_treatments treatment
+           where treatment.org_id = ${orgId} and treatment.pay_component_id = ${componentId}
+             and treatment.worker_comp_group_id is null
+             and treatment.effective_from <= current_date
+             and (treatment.effective_to is null or treatment.effective_to >= current_date)
+        ) as exists
+      `);
+      if (existing.rows[0]?.exists !== true) {
+        throw new PayrollError("the union pay component has no effective statutory treatment; add one in Payroll Setup before using this fringe");
+      }
+    }
 
     const fringe = (await tx.execute<{ id: string }>(sql`
       insert into union_fringes (org_id, agreement_id, classification_id, code, name, calc, value,

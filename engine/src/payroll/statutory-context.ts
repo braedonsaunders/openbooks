@@ -39,7 +39,7 @@ export interface StubLine {
    * program's base when its key is present and true. Absent key means
    * assessable, matching the sibling flags' default-true; an absent map
    * means every declared program assesses the line. Stamped from the
-   * component's `program_exclusions` beside `taxable`/`pensionable`/
+   * component's effective-dated statutory treatment beside `taxable`/`pensionable`/
    * `insurable`; lines built without a component row default-assess, exactly
    * like the sibling flags.
    */

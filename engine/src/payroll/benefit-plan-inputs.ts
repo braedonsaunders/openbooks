@@ -13,7 +13,7 @@ import { assignmentCoveredDays } from './assignment-windows.ts';
 import { coveredPayrollLines } from './covered-payroll-lines.ts';
 import { assertFlatBenefitCoverageUnique, benefitCoverageWindow } from './benefit-coverage-window.ts';
 import { PayrollError } from './error.ts';
-import { cappableHourLines, programApplicabilityFromExclusions, type Line } from './run-stub-records.ts';
+import { cappableHourLines, programApplicabilityFromResolvedTreatment, type Line } from './run-stub-records.ts';
 import { benefitCoverageRecoveryAmount, recurringBenefitAmount, type BenefitRecoveryLedgerEntry, type RecurringBenefitRule, type RecurringBenefitTerm, type BenefitContributionTier } from './benefit-plan-math.ts';
 import { resolveEmploymentServiceCredit, meetsServiceYears, lockPayrollServiceConfiguration } from './service-credit.ts';
 
@@ -88,8 +88,14 @@ export async function recurringBenefitSource(tx: Executor, args: {
       'recoveryPlans',coalesce((select jsonb_agg(to_jsonb(ep) || jsonb_build_object('accrual_value',ep.accrual_value::text) order by ep.id) from entitlement_plans ep
         where ep.org_id=p.org_id and ep.id in (select r.arrears_plan_id from hrm_benefit_contribution_rules r where r.org_id=p.org_id and r.plan_id=p.id)),'[]'::jsonb),
       'components',coalesce((select jsonb_agg(to_jsonb(c) || jsonb_build_object('value',c.value::text,'basis_cap_hours_per_period',c.basis_cap_hours_per_period::text,'basis_cap_amount_per_period',c.basis_cap_amount_per_period::text,'basis_cap_amount_per_year',c.basis_cap_amount_per_year::text,'protection_max_percent',c.protection_max_percent::text,'supplemental_wage_category',ec.supplemental_wage_category,
+        'statutory_treatment_id',treatment.id,'program_exclusions',treatment.program_exclusions,
         'statutory_reporting_category',ec.statutory_reporting_category,'statutory_exemption_category',ec.statutory_exemption_category) order by c.id)
         from pay_components c left join pay_component_earning_classifications ec on ec.org_id=c.org_id and ec.pay_component_id=c.id
+        left join lateral (select t.id,t.program_exclusions from pay_component_statutory_treatments t
+          where t.org_id=c.org_id and t.pay_component_id=c.id
+            and t.worker_comp_group_id is null
+            and t.effective_from<=${args.payDate ?? periodEnd}::date
+            and (t.effective_to is null or t.effective_to>=${args.payDate ?? periodEnd}::date)) treatment on true
         where c.org_id=p.org_id and c.id in (select r.pay_component_id from hrm_benefit_contribution_rules r where r.org_id=p.org_id and r.plan_id=p.id)),'[]'::jsonb)
     ) as source from hrm_benefit_enrollments e join hrm_benefit_plans p on p.org_id=e.org_id and p.id=e.plan_id
     join worker_employments w on w.org_id=e.org_id and w.id=e.employment_id
@@ -291,7 +297,10 @@ export async function appendRecurringBenefitLines(tx: Executor, args: {
         earnedFrom: from, earnedTo: to, sequence: Number(component.sequence),
         taxable: component.taxable as boolean, pensionable: component.pensionable as boolean, insurable: component.insurable as boolean,
         vacationable: component.vacationable as boolean, nonPeriodic: component.non_periodic as boolean,
-        taxTreatment: component.tax_treatment as string, programApplicability: programApplicabilityFromExclusions(component.program_exclusions),
+        taxTreatment: component.tax_treatment as string, programApplicability: programApplicabilityFromResolvedTreatment({
+          componentId: component.id, treatmentId: component.statutory_treatment_id,
+          exclusions: component.program_exclusions, payDate: args.payDate ?? args.periodEnd,
+        }),
         supplementalWageCategory: component.supplemental_wage_category as Line['supplementalWageCategory'],
         statutoryReportingCategory: component.statutory_reporting_category as string | null,
         statutoryExemptionCategory: component.statutory_exemption_category as Line['statutoryExemptionCategory'],

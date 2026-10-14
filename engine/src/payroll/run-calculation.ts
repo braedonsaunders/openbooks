@@ -32,6 +32,7 @@ import { payRunCalculationSourceDigest, payRunCalculationSource, type PayRunCalc
 import { calculateStub } from "./run-stub-compute.ts";
 import { employerEmployeeCount } from "./run-calculation-support.ts";
 import { PERIODIC_RUN_TYPES } from "./run-contracts.ts";
+import { resolveComponentStatutoryTreatments } from './component-statutory-treatment.ts';
 import {
   assertPeriodSequence, assertSupplementalSupported, listPeriodSiblings, loadPeriodPriors,
   periodRunIdentity, supplementalTaxMethodForOrg, type PayPeriodPriors,
@@ -398,6 +399,7 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
                -- Aliased, because prof.* below already carries a "country".
                p.subsidiary_id as employee_subsidiary_id,
                emp_sub.country as employee_subsidiary_country,
+               current_worker_comp.worker_comp_group_id::text as current_worker_comp_group_id,
                ${effectiveFilingAccountSql("prof")} as effective_filing_account_id,
                filing_acct.country as filing_account_country,
                filing_acct.account_number as filing_account_number,
@@ -413,6 +415,17 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
             on filing_acct.id = ${effectiveFilingAccountSql("prof")}
            and filing_acct.org_id = prof.org_id
           left join employee_roles er on er.party_id = p.id and er.org_id = p.org_id
+          left join lateral (
+            select role.worker_comp_group_id
+              from employee_roles role
+              join worker_comp_groups worker_group
+                on worker_group.org_id = role.org_id
+               and worker_group.id = role.worker_comp_group_id
+               and worker_group.is_active
+             where role.org_id = p.org_id and role.party_id = p.id and role.is_active
+             order by role.updated_at desc, role.id
+             limit 1
+          ) current_worker_comp on true
          where prof.org_id = ${orgId} and prof.pay_schedule_id = ${run.pay_schedule_id}
            and prof.is_active
            and ${payrollEmploymentOverlapsPeriod(rosterColumns)}
@@ -456,9 +469,20 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
     // wherever the operator has not mapped the slot yet.
     await ensurePackSlotRoleAccounts(tx, orgId, actorId, runContext.country);
 
-    const components = (await tx.execute<Record<string, unknown>>(sql`
+    const componentRows = (await tx.execute<Record<string, unknown>>(sql`
       select * from pay_components where org_id = ${orgId} and is_active order by sequence
-    `));
+    `)).rows;
+    const statutoryTreatments = await resolveComponentStatutoryTreatments(
+      tx, orgId, runContext.payDate, componentRows.map(component => String(component.id)),
+    );
+    const components = { rows: componentRows.map(component => {
+      const treatment = statutoryTreatments.get(String(component.id));
+      return {
+        ...component,
+        statutory_treatment_id: treatment?.id,
+        program_exclusions: treatment?.program_exclusions,
+      };
+    }) };
     // Country-scoped resolution (0189): two packs may each own one
     // `system_key` (CA and JP both declare income_tax), so the run resolves
     // only its own pack's rows plus the shared NULL-country baseline. Without

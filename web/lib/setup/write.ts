@@ -17,6 +17,7 @@ import 'server-only'
  */
 
 export {
+  defaultPayComponentProgramExclusions,
   foldPayComponentSetupCreate,
   resolveEntity as resolveSetupEntity,
   savePayComponentEarningClassification,

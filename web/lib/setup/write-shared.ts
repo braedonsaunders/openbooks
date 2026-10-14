@@ -288,12 +288,8 @@ export function foldRecruitingSetupCreate(
 // HR-18 end
 
 // Create-time defaults for pay components. A deduction that does not state
-// its protected-base membership starts outside it. A non-taxable
-// earning created without an explicit exclusion list defaults to excluded
-// from every employer levy in its scope (a per-diem is not assessable);
-// folded before coercion like the recruiting default above. An explicitly
-// empty list is an operator's choice to assess and is left alone, and edits
-// never rewrite stored exclusions.
+// its protected-base membership starts outside it. Assessability is stored
+// in its own effective-dated row, inserted with the component below.
 export function foldPayComponentSetupCreate(
   entityKey: string,
   rawBody: Record<string, unknown>,
@@ -305,15 +301,24 @@ export function foldPayComponentSetupCreate(
   if (rawBody.kind === 'deduction' && rawBody.includeInDisposableEarnings === undefined) {
     return { ...rawBody, includeInDisposableEarnings: false }
   }
-  if (rawBody.kind !== 'earning') return rawBody
-  if (rawBody.programExclusions !== undefined) return rawBody
-  const exclusions = defaultLevyExclusionsForNewComponent({
+  return rawBody
+}
+
+export function defaultPayComponentProgramExclusions(rawBody: Record<string, unknown>): string[] {
+  const supplied = rawBody.programExclusions
+  if (supplied !== undefined) {
+    if (!Array.isArray(supplied) || !supplied.every((key) => typeof key === 'string')) {
+      throw new SetupWriteRefusal('Program exclusions must be a list of payroll program keys.', 400, 'invalid_program_exclusions', 'Select valid keys in the component statutory treatment fields.')
+    }
+    return [...new Set(supplied)] as string[]
+  }
+  if (rawBody.kind !== 'earning') return []
+  return defaultLevyExclusionsForNewComponent({
     kind: 'earning',
     taxable: rawBody.taxable === undefined ? true : coerceBoolean(rawBody.taxable),
     country: rawBody.country ? String(rawBody.country) : null,
     programExclusions: undefined,
-  })
-  return exclusions ? { ...rawBody, programExclusions: exclusions } : rawBody
+  }) ?? []
 }
 
 /**
