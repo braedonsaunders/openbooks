@@ -27,6 +27,27 @@ test('adding, removing or changing regular-only assignment windows invalidates c
   assert.equal(parsePayRunCalculationSource({ ...legacy, assignmentRunPolicies: null }), null);
 });
 
+test('operator-entered income-tax overrides are retained, validated and independently stale calculation evidence', () => {
+  const legacy = snapshot();
+  const override: NonNullable<PayRunCalculationSourceSnapshot["incomeTaxOverrides"]>[number] = {
+    adjustmentId: "10000000-0000-4000-8000-000000000001",
+    employeePartyId: "10000000-0000-4000-8000-000000000002",
+    componentId: "10000000-0000-4000-8000-000000000003",
+    amount: "2999.7000",
+    reason: "Withholding entered on issued cheque",
+    sourceReference: "PayMate card 47308",
+    requestId: "10000000-0000-4000-8000-000000000004",
+  };
+  const calculated = { ...legacy, incomeTaxOverrides: [override] };
+  assert.equal(payRunCalculationSourceChanges(legacy, calculated).incomeTaxOverrides, true);
+  assert.equal(payRunCalculationSourceChanges(calculated, legacy).incomeTaxOverrides, true);
+  assert.equal(payRunCalculationSourceChanges(calculated, { ...calculated, incomeTaxOverrides: [{ ...override, reason: "Updated reason" }] }).incomeTaxOverrides, true);
+  assert.deepEqual(parsePayRunCalculationSource(calculated), calculated);
+  for (const incomeTaxOverrides of [null, false, "[]", {}, [{ ...override, amount: "-1.00" }], [{ ...override, requestId: "invalid" }]]) {
+    assert.equal(parsePayRunCalculationSource({ ...legacy, incomeTaxOverrides }), null);
+  }
+});
+
 test("approved holiday ownership, source, wage and foreign payment claims invalidate a calculated run", () => {
   const legacy = snapshot();
   assert.equal(payRunCalculationSourceChanges(legacy, { ...legacy, holidayObligations: [] }).holidayObligations, false);
@@ -85,7 +106,7 @@ test("legacy evidence without item routing reads as empty and detects later rout
   assert.deepEqual(parsed.itemAccounts, []);
   const current = snapshot();
   current.itemAccounts.push({ id: "item", payrollExpenseAccountId: "expense", updatedAt: "2026-09-20" });
-  assert.deepEqual(payRunCalculationSourceChanges(parsed, current), { time: false, timeTypes: false, wages: false, items: true, components: false, compensationPackages: false, holidayObligations: false, roster: false, openingBalances: false });
+  assert.deepEqual(payRunCalculationSourceChanges(parsed, current), { time: false, timeTypes: false, wages: false, items: true, components: false, compensationPackages: false, holidayObligations: false, roster: false, openingBalances: false, incomeTaxOverrides: false });
 });
 
 test("canonical evidence ignores object key order but preserves array order and values", () => {

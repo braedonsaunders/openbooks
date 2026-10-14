@@ -513,6 +513,7 @@ export async function commitPayRun(input: {
       changes.timeTypes ? "timeTypes" : null,
       changes.wages ? "wages" : null,
       changes.items ? "items" : null,
+      changes.incomeTaxOverrides ? "adjustments" : null,
       changes.roster ? "roster" : null,
       changes.openingBalances ? "openingBalances" : null,
     ].filter((reason): reason is string => reason !== null);

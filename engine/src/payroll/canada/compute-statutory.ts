@@ -49,6 +49,7 @@ export const CA_COMPUTE_FACTOR_LABELS: Readonly<Record<string, string>> = {
   CA_PE:"Periodic pensionable earnings",CA_IE:"Periodic EI insurable earnings",CA_QPIP_PE:"Periodic QPIP insurable earnings",
   CA_BPE:"Bonus pensionable earnings",CA_BIE:"Bonus EI insurable earnings",CA_BQPIP:"Bonus QPIP insurable earnings",
   CA_T_BASE:"Periodic income tax excluding additional tax",
+  CA_TAX_OVERRIDE: "Operator-entered total income-tax withholding for this cheque",
   B: "Bonus / non-periodic pay this period",
   I: "Periodic income this period",
   PI: "Pensionable earnings this period",
@@ -260,11 +261,41 @@ export async function computeCaStatutory(
   assertRegionSupported(region);
 
   const ytd = await employeeYtd({ tx, orgId, employeePartyId, taxYear, documentId, subsidiaryId:ctx.subsidiaryId });
-  const runAdditionalTax = (await tx.execute<{ amount: string }>(sql`
-    select coalesce(sum(a.amount),0)::text as amount from pay_run_adjustments a
+  const taxAdjustments = (await tx.execute<{ amount: string; replace_component: boolean; note: string | null }>(sql`
+    select a.amount::text as amount, a.replace_component, a.note from pay_run_adjustments a
       join pay_components c on c.org_id=a.org_id and c.id=a.component_id
      where a.org_id=${orgId} and a.pay_run_document_id=${documentId} and a.employee_party_id=${employeePartyId}
-       and a.adjustment_type='line' and c.system_key='income_tax'`)).rows[0]?.amount ?? "0";
+       and a.adjustment_type='line' and c.system_key='income_tax'
+     order by a.created_at, a.id`)).rows;
+  const overrideAdjustments = taxAdjustments.filter((adjustment) => adjustment.replace_component);
+  if (overrideAdjustments.length > 1) {
+    throw new PayrollError("this employee has multiple income-tax overrides on the run — remove the duplicate adjustment before recalculating");
+  }
+  const incomeTaxOverride = overrideAdjustments[0] ?? null;
+  let incomeTaxOverrideReason: string | null = null;
+  let incomeTaxOverrideSourceReference: string | null = null;
+  if (incomeTaxOverride && region === "QC") {
+    throw new PayrollError("a single total cannot override Québec federal and provincial withholding separately — use a supported jurisdiction-specific split input");
+  }
+  if (incomeTaxOverride) {
+    let evidence: unknown;
+    try { evidence = JSON.parse(incomeTaxOverride.note ?? "null"); } catch { evidence = null; }
+    if (cmp(incomeTaxOverride.amount, "0") < 0 || !evidence || typeof evidence !== "object" || Array.isArray(evidence)
+      || (evidence as { kind?: unknown }).kind !== "income_tax_override"
+      || typeof (evidence as { reason?: unknown }).reason !== "string"
+      || !(evidence as { reason: string }).reason.trim()
+      || typeof (evidence as { sourceReference?: unknown }).sourceReference !== "string"
+      || !(evidence as { sourceReference: string }).sourceReference.trim()
+      || typeof (evidence as { requestId?: unknown }).requestId !== "string"
+      || !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test((evidence as { requestId: string }).requestId)) {
+      throw new PayrollError("the saved income-tax override is missing its non-negative amount, reason, source reference or request identity — correct it through the audited override command");
+    }
+    incomeTaxOverrideReason = (evidence as { reason: string }).reason.trim();
+    incomeTaxOverrideSourceReference = (evidence as { sourceReference: string }).sourceReference.trim();
+  }
+  const runAdditionalTax = sum(taxAdjustments
+    .filter((adjustment) => !adjustment.replace_component)
+    .map((adjustment) => adjustment.amount));
   const nonZeroOrUndefined = (value: string): string | undefined => cmp(value, "0") === 0 ? undefined : value;
   const ontarioDependantInputs = region === "ON"
     ? t4127OntarioDependantInputs(ctx.certificateFor("ca_td1_ON"))
@@ -525,7 +556,11 @@ export async function computeCaStatutory(
   const federalTax = referencedBonusTax
     ? add(add(currentFederalTax, neg(currentTax.bonusTax)), referencedBonusTax.bonusTax)
     : currentFederalTax;
-  pushStatutory("income_tax", "deduction", "Income tax", federalTax, 110);
+  pushStatutory("income_tax", "deduction",
+    incomeTaxOverride
+      ? `Income tax override — ${incomeTaxOverrideReason}; source ${incomeTaxOverrideSourceReference}`
+      : "Income tax",
+    incomeTaxOverride?.amount ?? federalTax, 110);
   pushStatutory("cpp", "deduction", region === "QC" ? "QPP" : "CPP", cpp, 120);
   pushStatutory("cpp2", "deduction", region === "QC" ? "QPP2" : "CPP2", cpp2, 130);
   pushStatutory("ei", "deduction", "EI", ei, 140);
@@ -595,6 +630,14 @@ export async function computeCaStatutory(
     C: cpp, C2: cpp2, EI: ei, QPIP: qpip, QPIP_ER: qpipEmployer, EI_ER: eiEmployer,
     F5: f5, F5A: f5a, F5B: f5b,
     ...(hasPriors || foldBonus ? { T: federalTax } : {}),
+    ...(incomeTaxOverride ? {
+      // The Canadian non-Québec pack withholds federal and provincial tax
+      // through one income_tax component, and T4 box 22 aggregates that line.
+      // The operator supplies only the combined amount, so TF and TP remain
+      // computed reference legs; no unsupported jurisdiction split is claimed.
+      T: incomeTaxOverride.amount,
+      CA_TAX_OVERRIDE: incomeTaxOverride.amount,
+    } : {}),
     CA_PE:add(pensionable,neg(ctx.pensionableNonPeriodic??"0")),CA_IE:add(insurable,neg(ctx.insurableNonPeriodic??"0")),
     CA_QPIP_PE:add(qpipInsurable,neg(ctx.programNonPeriodicBases?.qpip??"0")),
     CA_BPE:ctx.pensionableNonPeriodic??"0",CA_BIE:ctx.insurableNonPeriodic??"0",CA_BQPIP:ctx.programNonPeriodicBases?.qpip??"0",

@@ -10,6 +10,7 @@ import { invalidateCalculatedRun } from "./run-lifecycle.ts";
 import { finalPayEmploymentIdentity, namedFinalPayEmployment, namedSupplementalEmployment, supplementalEmploymentIdentity } from "./employment-roster.ts";
 import { assertBankDepositAdjustment } from "./run-bank-input.ts";
 import { lockAndCheckPayrollRunPopulation, payrollSubsidiaryInScope, type PayrollSubsidiaryScope } from "./scope.ts";
+import { lockActorCommandAuthority } from "../organization/actor-command-authority.ts";
 
 /**
  * Refusal when a reused adjustment idempotency key cannot replay: the key
@@ -128,6 +129,16 @@ export type PayRunAdjustmentMutation =
        */
       idempotencyKey?: string;
     }
+  | {
+      action: "override_income_tax";
+      employeePartyId: string;
+      /** Absolute income-tax withholding for this cheque, not a delta. */
+      amount: string;
+      reason: string;
+      sourceReference: string;
+      /** Required request key; retries replay the prior audited input. */
+      idempotencyKey: string;
+    }
   | { action: "delete"; adjustmentId: string }
   | { action: "exclude"; employeePartyId: string }
   | { action: "include"; employeePartyId: string };
@@ -198,6 +209,31 @@ export async function mutatePayRunAdjustment(input: PayRunAdjustmentInput): Prom
   return executePayRunAdjustment(input, false);
 }
 
+type IncomeTaxOverrideEvidence = {
+  kind: "income_tax_override";
+  reason: string;
+  sourceReference: string;
+  requestId: string;
+};
+
+function parseIncomeTaxOverrideEvidence(value: string | null): IncomeTaxOverrideEvidence | null {
+  if (value == null) return null;
+  try {
+    const parsed = JSON.parse(value) as Partial<IncomeTaxOverrideEvidence>;
+    if (parsed.kind !== "income_tax_override" || typeof parsed.reason !== "string"
+      || typeof parsed.sourceReference !== "string" || typeof parsed.requestId !== "string") return null;
+    return parsed as IncomeTaxOverrideEvidence;
+  } catch {
+    return null;
+  }
+}
+
+function incomeTaxOverrideEvidence(reason: string, sourceReference: string, requestId: string): string {
+  return JSON.stringify({ kind: "income_tax_override", reason, sourceReference, requestId } satisfies IncomeTaxOverrideEvidence);
+}
+
+const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 /** Record paid holiday hours through the ordinary audited payroll input lifecycle. */
 export async function recordPayRunHolidayHours(input: {
   orgId: string; documentId: string; actorId: string; employeePartyId: string;
@@ -247,14 +283,23 @@ async function executePayRunAdjustment(input: PayRunAdjustmentInput, validateOnl
     if (run.run_status === "committed" || run.document_status !== "draft") {
       throw new PayrollError("pay run is not editable");
     }
-
-    const target = mutation.action === "delete"
-      ? (await tx.execute<{ employee_party_id: string }>(sql`
-          select employee_party_id from pay_run_adjustments
-           where org_id=${orgId} and pay_run_document_id=${documentId} and id=${mutation.adjustmentId}
-           for update`)).rows[0]?.employee_party_id
-      : mutation.employeePartyId;
+    const deletedAdjustment = mutation.action === "delete"
+      ? (await tx.execute<{
+          employee_party_id: string; replace_component: boolean; system_key: string | null;
+        }>(sql`
+          select a.employee_party_id, a.replace_component, c.system_key
+            from pay_run_adjustments a
+            left join pay_components c on c.org_id=a.org_id and c.id=a.component_id
+           where a.org_id=${orgId} and a.pay_run_document_id=${documentId} and a.id=${mutation.adjustmentId}
+           for update of a`)).rows[0]
+      : undefined;
+    const target = mutation.action === "delete" ? deletedAdjustment?.employee_party_id : mutation.employeePartyId;
     if (mutation.action === "delete" && !target) throw new PayrollError("pay run adjustment not found");
+    const deletesIncomeTaxOverride = deletedAdjustment?.replace_component === true
+      && deletedAdjustment.system_key === "income_tax";
+    if (mutation.action === "override_income_tax" || deletesIncomeTaxOverride) {
+      await lockActorCommandAuthority(tx, orgId, actorId, run.subsidiary_id, "payroll.manage");
+    }
     // A changed adjustment invalidates the complete run snapshot.
     await lockAndCheckPayrollRunPopulation(tx, orgId, documentId, input.allowedSubsidiaryIds, [{ id: target! }]);
 
@@ -321,7 +366,158 @@ async function executePayRunAdjustment(input: PayRunAdjustmentInput, validateOnl
 
     let changed = false;
     const auditChanges: { id: string; before: Record<string, unknown> | null; after: Record<string, unknown> | null }[] = [];
-    if (mutation.action === "add") {
+    if (mutation.action === "override_income_tax") {
+      const exactCurrencyAmount = canonicalDecimal(mutation.amount, 2);
+      if (exactCurrencyAmount === null) {
+        throw new PayrollError("income-tax override must be an exact currency amount of at most 2 decimal places");
+      }
+      const amount = persistAdjustmentMoney(exactCurrencyAmount);
+      if (cmp(amount, "0") < 0) {
+        throw new PayrollError("income-tax override cannot be negative — enter the absolute non-negative amount withheld on this cheque");
+      }
+      const reason = mutation.reason.trim();
+      const sourceReference = mutation.sourceReference.trim();
+      if (reason.length === 0 || reason.length > 500) {
+        throw new PayrollError("income-tax override reason must contain 1 to 500 characters");
+      }
+      if (sourceReference.length === 0 || sourceReference.length > 300) {
+        throw new PayrollError("income-tax override source reference must contain 1 to 300 characters");
+      }
+      if (!UUID_PATTERN.test(mutation.idempotencyKey)) {
+        throw new PayrollError("income-tax override needs a UUID Idempotency-Key; retry with a request key");
+      }
+      const requestId = mutation.idempotencyKey.toLowerCase();
+      const note = incomeTaxOverrideEvidence(reason, sourceReference, requestId);
+
+      const profile = (await tx.execute<{ country: string; province: string }>(sql`
+        select country, province from employee_payroll_profiles
+         where org_id=${orgId} and employee_party_id=${mutation.employeePartyId}
+           and pay_schedule_id=${run.pay_schedule_id} and is_active
+         for share
+      `)).rows[0];
+      if (!profile || profile.country !== "CA") {
+        throw new PayrollError("income-tax override is available only for Canadian payroll profiles with a native Canadian withholding line");
+      }
+      if (profile.province === "QC") {
+        throw new PayrollError("a single total cannot override Québec federal and provincial withholding separately — enter jurisdiction-specific amounts through a supported split input");
+      }
+      const taxComponents = (await tx.execute<{ id: string }>(sql`
+        select id::text from pay_components
+         where org_id=${orgId} and country='CA' and system_key='income_tax'
+           and kind='deduction' and is_active
+         order by id
+      `)).rows;
+      if (taxComponents.length !== 1) {
+        throw new PayrollError("configure exactly one active Canadian income-tax withholding component before overriding this cheque");
+      }
+      const componentId = taxComponents[0]!.id;
+
+      // The key locks duplicate requests before either can claim/update the
+      // operator input. The row itself is unique per employee and run; a later
+      // correction updates it with a before/after audit event.
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${requestId}))`);
+      const keyRow = (await tx.execute<{
+        id: string; org_id: string; pay_run_document_id: string; employee_party_id: string;
+        component_id: string | null; amount: string | null; replace_component: boolean; note: string | null;
+      }>(sql`
+        select id::text, org_id, pay_run_document_id::text, employee_party_id::text,
+               component_id::text, amount::text, replace_component, note
+          from pay_run_adjustments where id=${requestId} for update
+      `)).rows[0];
+      if (keyRow && keyRow.org_id !== orgId) {
+        throw new PayRunAdjustmentIdempotencyConflict("foreign-key");
+      }
+      if (keyRow) {
+        const evidence = parseIncomeTaxOverrideEvidence(keyRow.note);
+        const same = keyRow.pay_run_document_id === documentId
+          && keyRow.employee_party_id === mutation.employeePartyId
+          && keyRow.component_id === componentId
+          && keyRow.replace_component === true
+          && normalizeMoney(keyRow.amount ?? "0") === amount
+          && evidence?.kind === "income_tax_override"
+          && evidence.reason === reason
+          && evidence.sourceReference === sourceReference
+          && evidence.requestId === requestId;
+        if (same) return { changed: false, replayed: true };
+      }
+
+      // A correction updates the one active adjustment row, so its original
+      // request key may no longer be present on that row. The immutable audit
+      // snapshots retain each prior request and keep retries idempotent after
+      // later corrections have been entered.
+      const historicalKeys = (await tx.execute<{ changes: Record<string, unknown> }>(sql`
+        select changes from audit_log
+         where org_id=${orgId} and table_name='pay_run_adjustments'
+           and changes::text like ${`%${requestId}%`}
+         order by at, id
+      `)).rows;
+      let requestKeyFound = false;
+      for (const event of historicalKeys) {
+        const snapshots = [event.changes?.before, event.changes?.after];
+        for (const snapshot of snapshots) {
+          if (!snapshot || typeof snapshot !== "object") continue;
+          const row = snapshot as Record<string, unknown>;
+          const evidence = parseIncomeTaxOverrideEvidence(typeof row.note === "string" ? row.note : null);
+          if (evidence?.requestId !== requestId) continue;
+          requestKeyFound = true;
+          const same = row.pay_run_document_id === documentId
+            && row.employee_party_id === mutation.employeePartyId
+            && row.component_id === componentId
+            && row.replace_component === true
+            && typeof row.amount === "string"
+            && normalizeMoney(row.amount) === amount
+            && evidence.reason === reason
+            && evidence.sourceReference === sourceReference;
+          if (same) return { changed: false, replayed: true };
+        }
+      }
+      if (requestKeyFound || keyRow) throw new PayRunAdjustmentIdempotencyConflict("changed-payload");
+
+      const overrides = (await tx.execute<Record<string, unknown> & { id: string; amount: string; note: string | null }>(sql`
+        select a.* from pay_run_adjustments a
+          join pay_components c on c.org_id=a.org_id and c.id=a.component_id
+         where a.org_id=${orgId} and a.pay_run_document_id=${documentId}
+           and a.employee_party_id=${mutation.employeePartyId} and a.adjustment_type='line'
+           and a.replace_component and c.system_key='income_tax'
+         order by a.id for update of a
+      `)).rows;
+      if (overrides.length > 1) {
+        throw new PayrollError("this employee has multiple income-tax overrides on the run — remove the duplicate adjustment before recalculating");
+      }
+      if (overrides.length === 1) {
+        const prior = overrides[0]!;
+        const priorEvidence = parseIncomeTaxOverrideEvidence(prior.note);
+        if (priorEvidence?.requestId === requestId) {
+          const same = normalizeMoney(prior.amount) === amount
+            && priorEvidence.reason === reason && priorEvidence.sourceReference === sourceReference;
+          if (!same) throw new PayRunAdjustmentIdempotencyConflict("changed-payload");
+          return { changed: false, replayed: true };
+        }
+        const updated = (await tx.execute<Record<string, unknown> & { id: string }>(sql`
+          update pay_run_adjustments
+             set component_id=${componentId}, amount=${amount}, hours=null,
+                 earned_from=null, earned_to=null, replace_component=true,
+                 note=${note}, updated_by=${actorId}, updated_at=now()
+           where org_id=${orgId} and pay_run_document_id=${documentId} and id=${prior.id}
+          returning *
+        `)).rows[0];
+        if (!updated) throw new PayrollError("income-tax override was not updated");
+        auditChanges.push({ id: updated.id, before: prior, after: updated });
+      } else {
+        const inserted = (await tx.execute<Record<string, unknown> & { id: string }>(sql`
+          insert into pay_run_adjustments
+            (id, org_id, pay_run_document_id, employee_party_id, adjustment_type,
+             component_id, amount, replace_component, note, created_by, updated_by)
+          values
+            (${requestId}, ${orgId}, ${documentId}, ${mutation.employeePartyId}, 'line',
+             ${componentId}, ${amount}, true, ${note}, ${actorId}, ${actorId})
+          returning *
+        `)).rows[0];
+        if (!inserted) throw new PayrollError("income-tax override was not saved");
+        auditChanges.push({ id: inserted.id, before: null, after: inserted });
+      }
+      changed = true;
+    } else if (mutation.action === "add") {
       // amount is numeric(19,4) and hours numeric(12,2): the values reach the
       // columns verbatim, so an oversized paste died at storage with a driver
       // error and 4dp hours were silently rounded to the column scale. Fail
@@ -476,7 +672,7 @@ async function executePayRunAdjustment(input: PayRunAdjustmentInput, validateOnl
       // Replays and previews return earlier and leave no duplicate audit event.
       for (const row of auditChanges) {
         await tx.execute(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id)
-          values (${orgId},'pay_run_adjustments',${row.id},${row.after ? 'insert' : 'delete'},
+          values (${orgId},'pay_run_adjustments',${row.id},${row.after ? (row.before ? 'update' : 'insert') : 'delete'},
             ${JSON.stringify({ before: row.before, after: row.after, source: input.source ?? 'payroll',
               reason: input.reason ?? row.after?.note ?? row.before?.note ?? null })}::jsonb,${actorId})`);
       }
