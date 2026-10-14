@@ -43,7 +43,7 @@ import { assignmentOverlapsPeriod } from "./assignment-windows.ts";
 import { settleDeductionProtection, recordProtectionShortfalls } from "./run-protection.ts";
 import { resolveProtectionExemptFloors } from "./protection-classes.ts";
 import { applyEarningPaymentKinds, payableStubTotals } from "./non-cash-earnings.ts";
-import { appendRecurringBenefitLines } from './benefit-plan-inputs.ts';
+import { appendRecurringBenefitLines, recurringBenefitSource } from './benefit-plan-inputs.ts';
 import { appendApprovedHolidaySettlements } from './holiday-settlements.ts';
 export async function calculateStub(
   tx: Pick<typeof db, "execute">,
@@ -129,6 +129,7 @@ export async function calculateStub(
     tx, orgId, employeePartyId, run.period_end!, run.doc_currency ?? null,
   );
   const baseComponent = ctx.need("base_pay", "earning");
+  if(typeof baseComponent.id!=='string')throw new PayrollError('The native base-pay component identity is unavailable — correct Payroll Setup before calculating');
 
   // Recorded withholding answers, read ONCE for the stub rather than once
   // per statutory pass: the deduction-protection fixpoint runs the pass up to
@@ -348,7 +349,12 @@ export async function calculateStub(
     wageExpenseAccountId: ctx.wageExpenseAccountId,
   });
   const regularCashLines = lines.slice();
+  const recurringSource=await recurringBenefitSource(tx,{
+    orgId,employmentId,subsidiaryId:ctx.runContext.subsidiaryId ?? null,
+    periodStart:run.period_start!,periodEnd:run.period_end!,payDate:run.pay_date!,documentId,
+  });
   const recurringBenefitInput: Omit<Parameters<typeof appendRecurringBenefitLines>[1], "stage"> = {
+    source:recurringSource,basePayComponentId:baseComponent.id,
     orgId, actorId, documentId, employmentId, employeePartyId, regularCashLines, replacedComponentIds,
     subsidiaryId: ctx.runContext.subsidiaryId ?? null, currency: run.doc_currency!, country,
     periodStart: run.period_start!, periodEnd: run.period_end!, periodsPerYear: P,

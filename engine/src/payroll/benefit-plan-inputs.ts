@@ -118,15 +118,24 @@ function coveredBaseLines(lines: readonly Line[], from: string, to: string, peri
     from, to, periodStart, periodEnd);
 }
 
+/** Scheduled service hours belong to the native base-pay earning, independent of operator descriptions. */
+export function scheduledSalaryEarning(lines:readonly Line[],basePayComponentId:string,ruleKey:string):Line {
+  const salary=lines.filter(line=>line.componentId===basePayComponentId&&cmp(line.amount,'0')>0);
+  if(salary.length!==1)throw new PayrollError(`Benefit rule ${ruleKey} needs one positive native base-pay salary earning — review the salary inputs or choose actual paid hours`);
+  return salary[0]!;
+}
+
 /** Native lines land before statutory calculation; allocations preserve the exact elected source. */
 export async function appendRecurringBenefitLines(tx: Executor, args: {
   orgId: string; actorId: string; documentId: string; employmentId: string; employeePartyId: string;
   subsidiaryId: string | null; currency: string; country: string; periodStart: string; periodEnd: string;
   stage: "vacationable_earnings" | "remaining"; regularCashLines: readonly Line[];
+  source: RecurringBenefitSource; basePayComponentId:string;
   replacedComponentIds?: ReadonlySet<string>;
   periodsPerYear: number; hourlyWage: string | null; payBasis: string; payDate: string; taxYear: number; runType: string; oneOffRun: boolean; simulate: boolean; lines: Line[]; entitlementMovements: EntitlementMovement[];
 }): Promise<void> {
-  const source = await recurringBenefitSource(tx, args);
+  const source = args.source;
+  if(source.employmentId!==args.employmentId)throw new PayrollError('Recurring benefit source belongs to another employment — resolve its native source for this stub');
   assertFlatBenefitCoverageUnique(source.enrollments.flatMap(enrollment => enrollment.terms.flatMap(term => {
     const rule = enrollment.rules.find(candidate => candidate.id === term.ruleId);
     if (!rule || args.replacedComponentIds?.has(rule.payComponentId) || args.runType !== 'regular' && rule.runApplicability === 'regular_only') return [];
@@ -181,8 +190,7 @@ export async function appendRecurringBenefitLines(tx: Executor, args: {
       if (rule.hoursBasis === 'scheduled_paid' && args.payBasis === 'salary' && !args.oneOffRun) {
         const scheduled = source.workSchedule ? scheduledHoursBetween(source.workSchedule, earningsFrom, earningsTo) : null;
         if (scheduled === null) throw new PayrollError(`Benefit rule ${rule.ruleKey} needs the employee's scheduled paid hours — configure a native work schedule before calculating`);
-        const salaryLine = baseLines.find(l => l.description === 'Salary');
-        if (!salaryLine) throw new PayrollError(`Benefit rule ${rule.ruleKey} has no paid salary earnings — use actual paid hours or correct the salary inputs`);
+        const salaryLine = scheduledSalaryEarning(baseLines,args.basePayComponentId,rule.ruleKey);
         salaryLine.hours = scheduled;
       }
       const regular = (line: Line) => !['overtime','double_time'].includes(line.classification ?? '') && !line.nonPeriodic;
