@@ -86,31 +86,39 @@ export type LaborPostingSourceRow = {
   worked_on: string;
   subsidiary_id: string | null;
   cost_rate_currency: string;
+  /** The regular accounting period covering worked_on in the posting entity's calendar. */
+  period_id: string | null;
 };
 
 export interface LaborPostingGroup {
   subsidiaryId: string | null;
   currency: string;
+  periodId: string;
   postingDate: string;
   timeEntryIds: string[];
   projectCosts: Array<{ projectId: string; amount: string }>;
   total: string;
 }
 
-/** Keep every labor journal inside one legal entity while aggregating projects. */
+/**
+ * Keep every labor journal inside one legal entity, one currency and one
+ * accounting period while aggregating projects. Labor cost belongs to the
+ * period in which the work was performed, so a week or backlog that spans a
+ * period boundary posts one journal per period, each dated on its latest
+ * worked day.
+ */
 export function groupLaborPostings(rows: LaborPostingSourceRow[]): LaborPostingGroup[] {
-  const groups = new Map<string, { subsidiaryId: string | null; currency: string; postingDate: string; timeEntryIds: string[]; byProject: Map<string, string> }>();
+  const groups = new Map<string, { subsidiaryId: string | null; currency: string; periodId: string; postingDate: string; timeEntryIds: string[]; byProject: Map<string, string> }>();
   for (const row of rows) {
     // hours and cost_rate are both money (numeric 19,4), so this is ordinary
-    // money multiplication. It used mulRate — the FX helper, which reads its
-    // second argument as a numeric(19,10) rate and rejects anything <= 0. An
-    // entry with no wage rate therefore threw instead of costing nothing,
-    // making the isZero skip below unreachable for exactly the rows it exists
-    // to skip, and reporting a missing cost rate as an "FX rate" fault.
+    // money multiplication; an entry with no wage rate costs nothing.
     const cost = mul(String(row.hours ?? "0"), String(row.cost_rate ?? "0"));
     if (isZero(cost)) continue;
-    const key = `${row.subsidiary_id ?? "__default__"}|${row.cost_rate_currency}`;
-    const group = groups.get(key) ?? { subsidiaryId: row.subsidiary_id, currency: row.cost_rate_currency, postingDate: "", timeEntryIds: [], byProject: new Map<string, string>() };
+    if (!row.period_id) {
+      throw new LaborPostingPeriodError(row.worked_on);
+    }
+    const key = `${row.subsidiary_id ?? "__default__"}|${row.cost_rate_currency}|${row.period_id}`;
+    const group = groups.get(key) ?? { subsidiaryId: row.subsidiary_id, currency: row.cost_rate_currency, periodId: row.period_id, postingDate: "", timeEntryIds: [], byProject: new Map<string, string>() };
     group.byProject.set(row.project_id, add(group.byProject.get(row.project_id) ?? "0", cost));
     group.timeEntryIds.push(row.id);
     if (row.worked_on > group.postingDate) group.postingDate = row.worked_on;
@@ -121,12 +129,22 @@ export function groupLaborPostings(rows: LaborPostingSourceRow[]): LaborPostingG
     return {
       subsidiaryId: group.subsidiaryId,
       currency: group.currency,
+      periodId: group.periodId,
       postingDate: group.postingDate,
       timeEntryIds: group.timeEntryIds,
       projectCosts,
       total: sum(projectCosts.map((project) => project.amount)),
     };
   });
+}
+
+/** Costed time whose worked date no regular accounting period covers. */
+export class LaborPostingPeriodError extends Error {
+  readonly status = 409;
+  constructor(readonly workedOn: string) {
+    super(`No accounting period covers labor worked on ${workedOn}. Create the accounting period for that date in Close, then approve or post the time again.`);
+    this.name = "LaborPostingPeriodError";
+  }
 }
 
 /**
@@ -163,13 +181,26 @@ export async function postProjectLaborCost(orgId: string, actorId: string, timeE
     if (!accts.laborWip || !accts.laborClearing) return []; // inert until mapped
     const idArr = `{${timeEntryIds.join(",")}}`;
     const rows = (await tx.execute<LaborPostingSourceRow>(sql`
-      select te.id, te.project_id, te.hours, te.cost_rate, te.worked_on,
+      select te.id, te.project_id, te.hours, te.cost_rate, te.worked_on::text as worked_on,
              coalesce(p.subsidiary_id, te.cost_rate_subsidiary_id) as subsidiary_id,
-             coalesce(te.cost_rate_currency, s.base_currency, o.base_currency) as cost_rate_currency
+             coalesce(te.cost_rate_currency, s.base_currency, o.base_currency) as cost_rate_currency,
+             covering.id as period_id
         from time_entries te
         left join projects p on p.id = te.project_id and p.org_id = te.org_id
         left join subsidiaries s on s.id = p.subsidiary_id and s.org_id = p.org_id
         join orgs o on o.id = te.org_id
+        left join lateral (
+          select ap.id
+            from accounting_periods ap
+            join fiscal_calendars fc
+              on fc.id = ap.fiscal_calendar_id and fc.org_id = ap.org_id
+             and fc.is_active
+             and fc.id = public.subsidiary_posting_calendar(te.org_id, coalesce(p.subsidiary_id, te.cost_rate_subsidiary_id), te.worked_on)
+           where ap.org_id = te.org_id and not ap.is_adjustment
+             and ap.starts_on <= te.worked_on and ap.ends_on >= te.worked_on
+           order by ap.starts_on, ap.ends_on, ap.id
+           limit 1
+        ) covering on true
        where te.org_id = ${orgId} and te.id = any(${idArr}::uuid[])
          and te.status = 'approved' and te.project_id is not null
          and te.cost_journal_entry_id is null
