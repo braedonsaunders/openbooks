@@ -11,10 +11,9 @@ import {
 import { THREE_DECIMAL_CURRENCIES, ZERO_DECIMAL_CURRENCIES } from "./minor-units.ts";
 import { createHmac, timingSafeEqual } from "node:crypto";
 
-// Pure delegation: the FetchFn type above requires redirect: "error" on every
-// call site, so the refusal is enforced structurally rather than here.
-// fetch-redirect-audit: allow
-export const defaultFetch: FetchFn = (url, init) => fetch(url, init);
+// Credential-bearing requests refuse redirects at the network boundary as
+// well as in the provider request contract.
+export const defaultFetch: FetchFn = (url, init) => fetch(url, { ...init, redirect: "error" });
 
 export const DEFAULT_ACCEPTANCE_API_BASES = {
   stripe: "https://api.stripe.com",

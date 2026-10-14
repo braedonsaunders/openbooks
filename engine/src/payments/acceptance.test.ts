@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
 import test from "node:test";
+import { defaultFetch } from "./acceptance-provider-utils.ts";
 import {
   ACCEPTANCE_ADAPTERS,
   CLAIMABLE_FROM,
@@ -700,6 +701,23 @@ test("payment provider API bases accept only published HTTPS endpoints", () => {
     }),
     { merchantAccount: "merchant", apiBase: "https://checkout-test.adyen.com/v72" },
   );
+});
+
+test("the provider network boundary refuses redirect following even from an untyped caller", async (t) => {
+  const refusal = new TypeError("Redirect refused");
+  const request = { method: "POST", headers: { Authorization: "Bearer test-provider-token" }, body: "request", redirect: "follow" };
+  const network = t.mock.method(globalThis, "fetch", async (_url: unknown, init?: RequestInit) => {
+    assert.equal(init?.redirect, "error");
+    assert.equal(init?.method, request.method);
+    assert.deepEqual(init?.headers, request.headers);
+    assert.equal(init?.body, request.body);
+    throw refusal;
+  });
+  await assert.rejects(
+    defaultFetch("https://api.stripe.com/v1/checkout/sessions", request as unknown as Parameters<typeof defaultFetch>[1]),
+    error => error === refusal,
+  );
+  assert.equal(network.mock.callCount(), 1);
 });
 
 test("payment provider requests refuse redirects and reject unsafe bases before fetch", async () => {
