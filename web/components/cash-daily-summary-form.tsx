@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { Button, FieldLabel, Input, SearchSelect, Select } from '@openbooks/ui'
 import { CashTendersSection, parseTenderDrafts, type CloseoutDraft, type TenderDraft } from './cash-tenders-section'
+import { normalizeMoney, sum } from '@openbooks/engine/money/money'
 
 export interface DailySummaryOption {
   value: string
@@ -62,16 +63,16 @@ export function CashDailySummaryForm({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  // Exact decimal total of the entered lines. An amount that is not a decimal
+  // leaves the total unknown (empty) rather than reading as zero; the save
+  // refuses that line by name.
   const total = useMemo(() => {
-    let sum = 0
-    let valid = true
-    for (const line of lines) {
-      if (line.amount.trim() === '') continue
-      const n = Number(line.amount)
-      if (!Number.isFinite(n)) { valid = false; break }
-      sum += n
+    const amounts = lines.map((line) => line.amount.trim()).filter((amount) => amount !== '')
+    try {
+      return sum(amounts.map((amount) => normalizeMoney(amount)))
+    } catch {
+      return ''
     }
-    return valid ? sum.toFixed(2) : '0'
   }, [lines])
 
   const updateLine = (index: number, patch: Partial<SummaryLine>) => {
