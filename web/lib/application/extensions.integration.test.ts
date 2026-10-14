@@ -265,6 +265,12 @@ test('library publication and withdrawal preserve package evidence and reject an
     const bundle={...source,manifest:{...source.manifest as Record<string,unknown>,key}}
     const draft=await draftExtension(context,{bundle,reason:'Library lifecycle verification'})
     await activateExtensionDraft(context,draft)
+    // Every organization can install a listing, so a tenant administrator
+    // cannot publish one; a platform administrator does.
+    await assert.rejects(()=>publishApp(org.orgId,context.authz.user.id,key),
+      (error: unknown) => error instanceof AppError && error.status === 403 && /requires a platform administrator/.test(error.message))
+    assert.equal(await isAppPublished(key,org.orgId),false)
+    await db.execute(sql`update users set is_super_admin=true where id=${context.authz.user.id}`)
     const listing=await publishApp(org.orgId,context.authz.user.id,key)
     assert.equal(await isAppPublished(key,org.orgId),true)
     await assert.rejects(()=>unpublishApp(foreign.org.orgId,foreign.context.authz.user.id,key),/owned by this organization/)
@@ -301,6 +307,7 @@ test('concurrent library withdrawals serialize to one withdraw and one 409', { s
     const bundle = { ...source, manifest: { ...source.manifest as Record<string, unknown>, key } }
     const draft = await draftExtension(context, { bundle, reason: 'Concurrent withdrawal serialization' })
     await activateExtensionDraft(context, draft)
+    await db.execute(sql`update users set is_super_admin=true where id=${context.authz.user.id}`)
     const listing = await publishApp(org.orgId, context.authz.user.id, key)
     const attempts = await Promise.allSettled([
       unpublishApp(org.orgId, context.authz.user.id, key),

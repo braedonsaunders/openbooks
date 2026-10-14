@@ -1,7 +1,7 @@
 import { extensionContributionTargetErrors } from './contribution-targets'
 import 'server-only'
 import { sql, type SQL } from 'drizzle-orm'
-import { db, type SqlExecutor } from '@openbooks/engine/platform/db'
+import { db, withBypassContext, type SqlExecutor } from '@openbooks/engine/platform/db'
 import {
   runAppEndpoint,
   type AppHostAdapters,
@@ -119,6 +119,19 @@ export async function getAppByKey(orgId: string, key: string): Promise<AppRow | 
  *  the row-identity provenance (appId/appVersionId), which necessarily
  *  changes across reinstalls because the apps/version rows are new. */
 
+async function assertInstallerHoldsGrant(tx: SqlExecutor, orgId: string, userId: string, granted: readonly string[]): Promise<void> {
+  const missing: string[] = []
+  for (const permission of granted) {
+    if (!(await actorHasPermission(tx, orgId, userId, permission))) missing.push(permission)
+  }
+  if (missing.length > 0) {
+    throw new AppError(
+      `You cannot grant an App permissions you do not hold: ${missing.join(', ')}. Remove them from the grant, or ask an administrator who holds them to install or enable the App.`,
+      403,
+    )
+  }
+}
+
 export async function installApp(orgId: string, userId: string, bundle: UploadBundle, draft?: { id: string; hash: string }): Promise<{ key: string }> {
   const parsed = parseManifest(bundle.manifest)
   if (!parsed.ok || !parsed.manifest) throw new AppError(`invalid manifest: ${parsed.errors.join('; ')}`)
@@ -234,6 +247,9 @@ export async function installApp(orgId: string, userId: string, bundle: UploadBu
         }
       }
     }
+    // An App acts for whoever opens it, so its grant can never exceed the
+    // authority of the administrator installing it.
+    await assertInstallerHoldsGrant(tx, orgId, userId, granted)
     for (const contribution of manifest.contributions ?? []) {
       const permission = EXTENSION_CONTRIBUTION_PERMISSIONS[contribution.kind]
       if (!granted.includes(permission) || !(await actorHasPermission(tx, orgId, userId, permission))) throw new AppError(`${permission} required for ${contribution.kind}`, 403)
@@ -518,8 +534,9 @@ export async function setAppStatus(
       key: string
       name: string
       status: 'installed' | 'disabled'
+      grantedPermissions: string[] | null
     }>(sql`
-      select id, key, name, status
+      select id, key, name, status, granted_permissions as "grantedPermissions"
         from apps
        where org_id = ${orgId} and key = ${key}
        for update`)
@@ -543,6 +560,7 @@ export async function setAppStatus(
       await withdrawExtensionPages(tx, orgId, userId, app.id, 'Disable extension')
       await withdrawSupplementalContributions(tx, { orgId, actorId:userId,extensionId:app.id,extensionKey:key,reason:'Disable extension' })
     } else if (version) {
+      await assertInstallerHoldsGrant(tx, orgId, userId, app.grantedPermissions ?? [])
       for (const contribution of version.manifest.contributions ?? []) if (!(await actorHasPermission(tx, orgId, userId, EXTENSION_CONTRIBUTION_PERMISSIONS[contribution.kind]))) throw new AppError('Permission required to enable these extension contributions', 403)
       for (const contribution of version.manifest.contributions ?? []) if (contribution.kind === 'page') await projectExtensionPage(tx, { orgId,actorId:userId,extensionId:app.id,extensionKey:key,version:version.manifest.version,versionId:version.id,contribution,reason:'Enable extension' })
       await projectSupplementalContributions(tx,{orgId,actorId:userId,extensionId:app.id,extensionKey:key,versionId:version.id,previousVersionId:version.id,contributions:(version.manifest.contributions ?? []).filter(item=>item.kind!=='page'),reason:'Enable extension'})
@@ -1288,6 +1306,18 @@ export async function isAppPublished(key: string, publisherOrgId?: string): Prom
  * app key deployment-wide; only the original publisher org may update it.
  */
 export async function publishApp(orgId: string, userId: string, key: string): Promise<{ id: string }> {
+  // A listing is installable by every organization, and an App acts for
+  // whoever opens it. Publishing is therefore a platform decision, not a
+  // tenant one.
+  // bypass: user-keyed-lookup — a platform administrator's home identity can belong to another organization.
+  const platformAdmin = (await withBypassContext(() => db.execute<{ present: boolean }>(sql`
+    select exists (select 1 from users where id = ${userId} and is_active and is_super_admin) as present`))).rows[0]?.present === true
+  if (!platformAdmin) {
+    throw new AppError(
+      'Publishing to the shared marketplace makes this App installable by every organization, so it requires a platform administrator. Ask a platform administrator to review the App and publish it.',
+      403,
+    )
+  }
   return db.transaction(async tx => {
   await tx.execute(sql`select id from apps where org_id=${orgId} and key=${key} for share`)
   const app = await getAppByKey(orgId, key)
