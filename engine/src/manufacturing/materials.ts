@@ -451,10 +451,10 @@ async function postMaterialIssue(
       const provisional = await tx.execute<{ id: string }>(sql`
         insert into inventory_provisional_costs
           (org_id, subsidiary_id, item_id, stock_location_id, issue_movement_id, original_quantity,
-           remaining_quantity, provisional_unit_cost, cost_basis, created_by, updated_by)
+           remaining_quantity, provisional_unit_cost, cost_basis, offset_account_id, created_by, updated_by)
         values (${orgId}, ${order.subsidiary_id}, ${issue.material.component_item_id}, ${order.issue_location_id},
           ${movementId}, ${shortfall}, ${shortfall}, ${issue.provisionalUnitCost}, ${issue.profile.negativeCostBasis},
-          ${actorId}, ${actorId}) returning id`);
+          ${wip}, ${actorId}, ${actorId}) returning id`);
       rowOrNotFound(provisional.rows);
     }
     if (issue.serialId) {

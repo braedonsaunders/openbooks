@@ -281,9 +281,9 @@ export async function issueInventory(
       await tx.execute(sql`
         insert into inventory_provisional_costs
           (org_id,subsidiary_id,item_id,stock_location_id,issue_movement_id,original_quantity,remaining_quantity,
-           provisional_unit_cost,cost_basis,created_by,updated_by)
+           provisional_unit_cost,cost_basis,offset_account_id,created_by,updated_by)
         values (${orgId},${input.subsidiaryId},${input.itemId},${input.stockLocationId},${movementId},${shortfallQuantity},
-                ${shortfallQuantity},${provisionalUnitCost},${profile.negativeCostBasis},${actorId},${actorId})
+                ${shortfallQuantity},${provisionalUnitCost},${profile.negativeCostBasis},${offset},${actorId},${actorId})
       `);
     }
     if ((profile.tracking === "serial" || profile.tracking === "lot_serial")) {

@@ -266,12 +266,16 @@ export async function receiveInventory(
         id: string;
         remaining_quantity: string;
         provisional_unit_cost: string;
+        offset_account_id: string | null;
+        issued_on: string;
       }>(sql`
-      select id,remaining_quantity,provisional_unit_cost
-        from inventory_provisional_costs
-       where org_id=${orgId} and item_id=${input.itemId} and stock_location_id=${input.stockLocationId}
-         and subsidiary_id=${input.subsidiaryId}
-         and remaining_quantity>0 order by created_at,id for update
+      select deficit.id,deficit.remaining_quantity,deficit.provisional_unit_cost,deficit.offset_account_id,
+             issue.moved_at::text as issued_on
+        from inventory_provisional_costs deficit
+        join inventory_movements issue on issue.org_id=deficit.org_id and issue.id=deficit.issue_movement_id
+       where deficit.org_id=${orgId} and deficit.item_id=${input.itemId} and deficit.stock_location_id=${input.stockLocationId}
+         and deficit.subsidiary_id=${input.subsidiaryId}
+         and deficit.remaining_quantity>0 order by deficit.created_at,deficit.id for update of deficit
     `));
     let receiptUnits = toUnits(input.quantity);
     let provisionalValueUnits = 0n;
@@ -280,6 +284,7 @@ export async function receiveInventory(
       id: string;
       quantity: string;
       provisionalUnitCost: string;
+      offsetAccountId: string;
       correction: string;
     }[] = [];
     for (const deficit of deficits.rows) {
@@ -292,10 +297,20 @@ export async function receiveInventory(
         deficit.provisional_unit_cost,
       );
       const receiptValue = extendCost(quantity, layerUnitCost);
+      // The true-up corrects the account the shortfall was charged to; a
+      // deficit without that record has no truthful destination.
+      if (!deficit.offset_account_id) {
+        const label = (await tx.execute<{ label: string }>(sql`select coalesce(nullif(btrim(code), ''), name) as label
+          from items where org_id = ${orgId} and id = ${input.itemId}`)).rows[0]?.label ?? input.itemId;
+        throw new InventoryError(
+          `item ${label} has negative stock issued on ${deficit.issued_on} without a recorded charge account, so this receipt cannot correct that issue's provisional cost; no receipt can settle that shortfall`,
+        );
+      }
       settlements.push({
         id: deficit.id,
         quantity,
         provisionalUnitCost: deficit.provisional_unit_cost,
+        offsetAccountId: deficit.offset_account_id,
         correction: fromUnits(
           toUnits(receiptValue) - toUnits(provisionalValue),
         ),
@@ -316,6 +331,29 @@ export async function receiveInventory(
       provisionalValueUnits + toUnits(excessLayerValue),
     );
     const correction = fromUnits(toUnits(inventoryValue) - toUnits(assetDelta));
+    // Each settlement's true-up returns to the account its issue charged.
+    // Extending the whole receipt can differ from the per-settlement
+    // extensions by rounding; that remainder joins the oldest settlement's
+    // account so the corrections sum exactly to the receipt's.
+    const correctionByAccount = new Map<string, bigint>();
+    for (const settlement of settlements) {
+      correctionByAccount.set(settlement.offsetAccountId,
+        (correctionByAccount.get(settlement.offsetAccountId) ?? 0n) + toUnits(settlement.correction));
+    }
+    if (!isZero(correction)) {
+      const first = settlements[0];
+      if (!first) throw new InventoryError("a receipt cost true-up has no negative-stock settlement to correct");
+      const allocated = [...correctionByAccount.values()].reduce((total, amount) => total + amount, 0n);
+      correctionByAccount.set(first.offsetAccountId, correctionByAccount.get(first.offsetAccountId)! + toUnits(correction) - allocated);
+    }
+    const correctionLines = [...correctionByAccount]
+      .filter(([, amount]) => amount !== 0n)
+      .map(([accountId, amount]) => ({
+        accountId,
+        amount: fromUnits(amount),
+        ...locDims,
+        memo: "Negative inventory receipt cost true-up",
+      }));
     const lines: JournalLineInput[] = postJournal
       ? [
           {
@@ -324,16 +362,7 @@ export async function receiveInventory(
             ...locDims,
             memo: input.memo,
           },
-          ...(!isZero(correction)
-            ? [
-                {
-                  accountId: profile.cogsAccountId,
-                  amount: correction,
-                  ...locDims,
-                  memo: "Negative inventory receipt cost true-up",
-                },
-              ]
-            : []),
+          ...correctionLines,
           ...(!isZero(variance)
             ? [
                 {
@@ -353,12 +382,7 @@ export async function receiveInventory(
         ]
       : !isZero(correction)
         ? [
-            {
-              accountId: profile.cogsAccountId,
-              amount: correction,
-              ...locDims,
-              memo: "Negative inventory receipt cost true-up",
-            },
+            ...correctionLines,
             {
               accountId: profile.assetAccountId,
               amount: neg(correction),
