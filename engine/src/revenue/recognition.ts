@@ -1,5 +1,5 @@
 /**
- * Revenue recognition (ASC 606 / IFRS 15), source platform ARM-shaped.
+ * Revenue recognition (ASC 606 / IFRS 15).
  *
  * An obligation carries an allocated amount to recognize over a term. A rule
  * (method + date sources + offsets + accounts) spreads that amount into a

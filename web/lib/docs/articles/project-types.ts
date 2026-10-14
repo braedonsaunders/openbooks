@@ -21,7 +21,6 @@ export const projectTypes: DocArticle = {
     'not to exceed',
     'P&L',
     'markup',
-    'source platform',
     'retainage',
     'holdback',
     'opening balance',

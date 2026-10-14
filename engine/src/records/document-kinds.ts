@@ -150,8 +150,8 @@ const DOC_KIND_ENTRIES: Record<string, Omit<DocKindConfig, 'permNamespace'>> = {
     fundingSource: 'bank', isOpenItem: false, showsBalance: false, directPost: true,
     lineDefaults: 'purchase',
   },
-  // Deposit (source platform "Make Deposits"): money IN to a chosen bank account,
-  // crediting one or more source accounts (income, undeposited funds, clearing).
+  // Deposit: money IN to a chosen bank account, crediting one or more source
+  // accounts (income, undeposited funds, clearing).
   // The destination bank is stored on doc.custom.controlAccountId and read by
   // the posting rule's controlOverride; falls back to the org default bank.
   // Checks share the same fundingSource/bag contract for the funding bank.

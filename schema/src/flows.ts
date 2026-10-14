@@ -238,12 +238,12 @@ export const flowGates = pgTable(
 );
 
 /**
- * Out-of-office approval delegation (source platform "approval delegate" parity,
- * date-ranged). While now() is between startsAt/endsAt and the row is not
- * revoked, `toUserId` may see and decide `fromUserId`'s pending flow gates —
- * on behalf of the principal, never with more authority than the principal's
- * gate assignment grants. Decisions record decidedBy = the delegate with an
- * on-behalf-of note on the gate's comment (audit survives revocation).
+ * Out-of-office approval delegation (date-ranged). While now() is between
+ * startsAt/endsAt and the row is not revoked, `toUserId` may see and decide
+ * `fromUserId`'s pending flow gates — on behalf of the principal, never with
+ * more authority than the principal's gate assignment grants. Decisions
+ * record decidedBy = the delegate with an on-behalf-of note on the gate's
+ * comment (audit survives revocation).
  */
 export const approvalDelegations = pgTable(
   "approval_delegations",
@@ -268,13 +268,13 @@ export const approvalDelegations = pgTable(
 );
 
 /**
- * Flow-managed record locks — the `lock_record` action (source platform "Lock
- * Record" with role exemptions). While a row exists the record rejects
+ * Flow-managed record locks — the `lock_record` action (record locks with
+ * role exemptions). While a row exists the record rejects
  * edits/void/delete for everyone except admins and holders of an exemptRole;
  * `unlock_record` removes it. One lock per record (the unique index): a
  * second lock_record replaces the reason/exemptions. Locks deliberately
- * survive status changes (source platform's donotexitworkflow terminal locks — e.g.
- * an approved vendor payment stays locked forever).
+ * survive status changes (e.g. an approved vendor payment stays locked
+ * forever).
  */
 export const flowLocks = pgTable(
   "flow_locks",

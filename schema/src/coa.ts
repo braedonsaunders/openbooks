@@ -47,8 +47,8 @@ export const accounts = pgTable(
     description: text("description"),
     /**
      * Summary accounts group children on statements and REFUSE postings
-     * (enforced by trigger). source platform lets you post to parents, silently
-     * corrupting roll-ups — a top complaint found in the extraction's COA.
+     * (enforced by trigger), so a parent's roll-up is always exactly the sum
+     * of its children.
      */
     isSummary: boolean("is_summary").notNull().default(false),
     isActive: boolean("is_active").notNull().default(true),

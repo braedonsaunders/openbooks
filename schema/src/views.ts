@@ -3,7 +3,7 @@ import { sql } from "drizzle-orm";
 import { auditColumns, id, orgRef } from "./helpers";
 
 /**
- * Views — the source platform Saved Search analogue, under the Knowledge menu. A view
+ * Views — saved queries under the Knowledge menu. A view
  * is a named, shareable query over the same entity catalog as
  * @openbooks/reports (ledger_lines, documents, parties, accounts): detail rows
  * OR a grouped summary, with a nested and/or filter tree, ordered sorts, and a row cap.

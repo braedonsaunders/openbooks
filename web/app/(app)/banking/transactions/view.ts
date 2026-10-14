@@ -37,9 +37,8 @@ import type { DocKindConfig } from '../../../../lib/document-kinds'
  * them.
  */
 
-// The banking transaction kinds that can be created from this page — the
-// source platform "Write Checks / Make Deposits / Transfer Funds / Issue Credit Card"
-// shortcuts, surfaced as one New menu.
+// The banking transaction kinds that can be created from this page (checks,
+// deposits, card charges/refunds, transfers), surfaced as one New menu.
 const NEW_KINDS = ['check', 'deposit', 'card_charge', 'card_refund', 'transfer'] as const
 
 type DocumentDrawerProps = Parameters<typeof DocumentDrawer>[0]

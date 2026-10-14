@@ -16,10 +16,9 @@ import { isUuid } from "../../../../lib/list-params";
 export const runtime = "nodejs";
 
 /**
- * Record-level approval state for the document flyout (source platform-parity
- * approval UX): who the record is pending with, whether THIS viewer can
- * decide, and a chronological approval history — all from the Flows engine
- * (flow_runs + flow_gates).
+ * Record-level approval state for the document flyout: who the record is
+ * pending with, whether THIS viewer can decide, and a chronological approval
+ * history — all from the Flows engine (flow_runs + flow_gates).
  *
  *   GET ?subjectKind=&subjectId= →
  *     {

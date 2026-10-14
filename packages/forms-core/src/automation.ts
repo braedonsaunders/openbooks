@@ -86,10 +86,10 @@ export const triggerDataSchema = z.discriminatedUnion('trigger', [
   // Runs off the 60s scheduler tick in the worker — see
   // `lintWorkerTriggerCompatibility` for what its branch may contain.
   //
-  // `select` turns the schedule into a RECORD FAN-OUT (source platform "scheduled
-  // workflow over a saved search"): each due occurrence loads candidate
-  // records of the flow's subject kind, evaluates `select.rule` against each,
-  // and starts ONE RUN PER MATCHING RECORD (capped by `select.limit`). With a
+  // `select` turns the schedule into a RECORD FAN-OUT: each due occurrence
+  // loads candidate records of the flow's subject kind, evaluates
+  // `select.rule` against each, and starts ONE RUN PER MATCHING RECORD
+  // (capped by `select.limit`). With a
   // record in hand the branch may also `set_field` (e.g. a sent-latch
   // checkbox); without `select` there is no record, so only send_email/notify.
   z.object({
@@ -149,9 +149,8 @@ export const actionDataSchema = z.discriminatedUnion('action', [
   // `subject` and `body` support {{field}} interpolation — see
   // `interpolateTemplate`. Delivery goes through the tenant's email settings.
   // `attachPdf` renders the subject record's PDF (the org's record template)
-  // and attaches it — source platform's "include transaction" email option. When no
-  // PDF renderer is registered in the executing process the email still sends,
-  // with a recorded warning.
+  // and attaches it to the email. When no PDF renderer is registered in the
+  // executing process the email still sends, with a recorded warning.
   z.object({
     action: z.literal('send_email'),
     to: z.array(recipientTargetSchema).min(1).max(20),
@@ -179,10 +178,9 @@ export const actionDataSchema = z.discriminatedUnion('action', [
   // Post the document to the GL (runs the normal posting pipeline).
   z.object({ action: z.literal('post_document') }),
   // Hard-lock the record against edits/void/delete until `unlock_record` runs
-  // (source platform "Lock Record" with role exemptions — e.g. an approved payment
-  // stays permanently locked except for admins + controllers). Admins are
-  // always exempt; `exemptRoles` widens the exemption. Locks persist across
-  // status changes (source platform donotexitworkflow terminal locks).
+  // (e.g. an approved payment stays permanently locked except for admins +
+  // controllers). Admins are always exempt; `exemptRoles` widens the
+  // exemption. Locks persist across status changes.
   z.object({
     action: z.literal('lock_record'),
     reason: z.string().max(500).optional(),
@@ -205,9 +203,9 @@ export const gateDataSchema = z.object({
   mode: z.enum(['any', 'all']),
   signatureRequired: z.boolean().optional(),
   // When true the engine drops the run's submitter from the resolved
-  // assignees (source platform "prevent self-approval"); if that empties the list it
-  // falls back to the submitter's supervisor, and failing that the run fails
-  // loudly rather than letting the submitter sign off their own record.
+  // assignees; if that empties the list it falls back to the submitter's
+  // supervisor, and failing that the run fails loudly rather than letting
+  // the submitter sign off their own record.
   preventSelfApproval: z.boolean().optional(),
   reminderAfterHours: z.number().positive().max(24 * 365).optional(),
   escalateAfterHours: z.number().positive().max(24 * 365).optional(),
@@ -360,7 +358,7 @@ export type TriggerEvent = (
   | { kind: 'on_create' }
   // The edit shape that fired the event; the engine surfaces these as
   // eval-context values so condition nodes can gate on material changes
-  // (source platform's old-vs-new "needs re-approval" pattern):
+  // (e.g. requiring re-approval when an approved record changes):
   //   values.previousTotal / values.totalChanged — the document total delta
   //   values.changedFields     — header fields that materially changed
   //   values.changedLineFields — line-level fields that changed on ANY line
@@ -387,8 +385,8 @@ export type TriggerEvent = (
   | { kind: 'manual'; buttonId?: string }
 ) & {
   // Where the mutation came from — surfaced as `values.event_source` so
-  // conditions can e.g. auto-approve system-generated records (source platform's
-  // execution-context filters). Engine default when absent: 'api'.
+  // conditions can e.g. auto-approve system-generated records. Engine
+  // default when absent: 'api'.
   source?: FlowEventSource
   // Optional durable identity for one logical dispatch. When present, every
   // flow run created for this dispatch carries a derived occurrence key, so a

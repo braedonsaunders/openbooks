@@ -3,8 +3,8 @@ import { normalizeMoney } from '@openbooks/engine/money/money'
 import { TAX_FORM_LAYOUTS, type TaxFormLayout } from './tax-form-facsimile-html'
 
 /**
- * Structured (machine-readable) export of a computed return — the shape source platform
- * ships for India GSTR filing, where the deliverable is data, not a printed form:
+ * Structured (machine-readable) export of a computed return — the shape used
+ * for India GSTR filing, where the deliverable is data, not a printed form:
  * the return is filed by uploading JSON to the portal (via the government offline
  * tool) rather than looking at a facsimile. This emits the computed boxes grouped
  * into the return's sections, so it reconciles line-for-line against the portal.

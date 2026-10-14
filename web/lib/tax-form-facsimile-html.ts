@@ -2,15 +2,14 @@ import type { TaxReturnResult, TaxReturnBox } from '@openbooks/engine/tax-return
 import { formatDecimal } from './money-format'
 
 /**
- * Self-authored, form-faithful facsimiles of government indirect-tax returns —
- * the way source platform, Avalara and source platform all do it. We never redistribute the tax
- * authority's own PDF file; we render our OWN HTML that visually replicates the
- * form (agency masthead, boxed numbered line grid, section headings, signature
- * block, not-for-filing watermark) and drop the computed box values into place,
- * then print it to PDF through the shared Chromium printer. Blank functional
- * forms carry thin-to-no copyright (the "blank forms" doctrine), and this covers
- * every jurisdiction — including the API/portal-only ones that have no official
- * PDF to fill at all.
+ * Self-authored, form-faithful facsimiles of government indirect-tax returns.
+ * We never redistribute the tax authority's own PDF file; we render our OWN
+ * HTML that visually replicates the form (agency masthead, boxed numbered line
+ * grid, section headings, signature block, not-for-filing watermark) and drop
+ * the computed box values into place, then print it to PDF through the shared
+ * Chromium printer. Blank functional forms carry thin-to-no copyright (the
+ * "blank forms" doctrine), and this covers every jurisdiction — including the
+ * API/portal-only ones that have no official PDF to fill at all.
  *
  * A form with a bespoke layout in TAX_FORM_LAYOUTS renders at high fidelity; any
  * other form falls back to the generic government-return layout, so all packs
@@ -204,7 +203,7 @@ export type TaxFormRenderer = (
   branding?: { orgName?: string; primaryColor?: string | null } | null,
 ) => string
 
-/** Amount as the CRA/source platform worksheet prints it: thousands + forced 2 decimals.
+/** Amount as the CRA worksheet prints it: thousands + forced 2 decimals.
  * Unsigned lines have no minus box, so a negative there (net refunds, a
  * negative adjustment) parenthesizes like the generic renderer — it must
  * stay visible, never collapse to its absolute value. */
@@ -228,9 +227,9 @@ function absGrid(value: string | null): string | null {
 }
 
 /**
- * Faithful GST34 worksheet, modelled directly on source platform's clone of the CRA
- * form: a fixed 780px canvas, three-column ruled rows (label · line-number chip ·
- * Courier amount box), reversed white-on-black chips for principal/total lines
+ * Faithful GST34 worksheet, modelled directly on the CRA form: a fixed 780px
+ * canvas, three-column ruled rows (label · line-number chip · Courier amount
+ * box), reversed white-on-black chips for principal/total lines
  * and plain chips for the additive sub-inputs, a sign box on the NET TAX/BALANCE
  * lines, and the CRA section headings and instruction text verbatim.
  */

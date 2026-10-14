@@ -13,9 +13,9 @@ import { notFound } from "@/lib/api/responses";
 
 /**
  * PUT — set or clear the project's percent-complete OVERRIDE (0–100; null =
- * automatic cost-to-cost). Pure data entry, source platform's percent-complete
- * override equivalent: it refreshes the project's revenue contract schedule,
- * and the central recognition run posts the catch-up. Nothing posts here.
+ * automatic cost-to-cost). Pure data entry: it refreshes the project's
+ * revenue contract schedule, and the central recognition run posts the
+ * catch-up. Nothing posts here.
  */
 const percentCompleteBody = z.object({
   action: z.literal('set').default('set'),

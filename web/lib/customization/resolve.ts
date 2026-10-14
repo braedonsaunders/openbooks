@@ -29,7 +29,7 @@ export { AmbiguousListViewDefaultError };
 /**
  * Effective-resolution layer for transaction form layouts + saved list views.
  *
- * Precedence (source platform "Preferred Form" + saved-search model):
+ * Precedence:
  *   form layout: user's preferred form → org default → system default
  *   list view:    ?view=<id> → user preference (null viewId skips personal) → unique personal isDefault → org default → system default
  *

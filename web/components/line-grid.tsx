@@ -2,8 +2,7 @@
 
 /**
  * LineGrid — the transaction line editor used by every document type
- * (vendor bills, invoices, journals, expense reports). source platform-grade grid
- * behavior, openbooks polish:
+ * (vendor bills, invoices, journals, expense reports):
  *
  *  - spreadsheet keyboard model: Enter commits + moves down (appending a row
  *    at the bottom), Alt+↑/↓ moves the row, ⌘/Ctrl+D duplicates it,

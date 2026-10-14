@@ -10,7 +10,7 @@ import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { loadEarnedValue } from "./earned-value.ts";
 
 /**
- * Fixed-price project revenue through the ARM pipeline (source platform-shaped).
+ * Fixed-price project revenue through the revenue recognition pipeline.
  *
  * Each qualifying project — project type recognition policy
  * `percent_complete_cost` with a contract value and a customer — carries ONE

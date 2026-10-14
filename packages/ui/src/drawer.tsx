@@ -205,8 +205,8 @@ export function Drawer({
   const headingId = React.useId()
   const viewSwitchType = drawerViewSwitchType(headingId)
 
-  // Fullscreen toggle: every flyout can expand to the full viewport (source platform
-  // "expand" affordance). Width animates via the max-width transition below;
+  // Fullscreen toggle: every flyout can expand to the full viewport. Width
+  // animates via the max-width transition below;
   // height is already 100%. Resets when the drawer closes so the next open
   // starts at its designed size.
   const [fullscreen, setFullscreen] = React.useState(initialFullscreen)

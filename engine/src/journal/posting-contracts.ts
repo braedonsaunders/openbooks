@@ -105,8 +105,8 @@ export interface PostingDeps {
    * regenerateGlImpactTx for journal, deposit, expense report and check
    * documents; lets their AR/AP legs participate in payment applications —
    * openbooks' model applies ANY crediting document (journal, credit memo,
-   * payment) to open items, the way source platform's own receipt journals
-   * settle invoices.
+   * payment) to open items, so a receipt journal can settle invoices
+   * directly.
    */
   openItemAccountIds?: Set<string>;
   /**

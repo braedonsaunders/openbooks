@@ -3,9 +3,9 @@ import { env } from "../platform/db.ts";
 
 /**
  * One-click signed email approvals — HMAC tokens that let a gate assignee
- * approve/reject straight from the notification email without a session
- * (exceeds source platform's reply-parsing approach: no inbound mail pipeline, no
- * spoofable From headers).
+ * approve/reject straight from the notification email without a session.
+ * No inbound mail pipeline is involved, so a decision never depends on a
+ * spoofable From header.
  *
  * Token format:  base64url(gateId|decision|assigneeUserId|expiryMs) . hmacHex
  * where the HMAC is sha256 over the raw `gateId|decision|assigneeUserId|expiry`

@@ -622,8 +622,8 @@ interface FolderDeleteEvidence {
 
 /**
  * Permanently delete a folder subtree — files, versions, blobs, attachment
- * links, and the folders. Fails if it contains files attached to records
- * (matching source platform). System folders cannot be purged.
+ * links, and the folders. Fails if it contains files attached to records.
+ * System folders cannot be purged.
  */
 export async function purgeFolder(
   orgId: string,

@@ -157,8 +157,8 @@ function RuleRow({
   const ops = column ? operatorsForKind(column.kind) : []
   const opMeta = ops.find((o) => o.key === rule.op) ?? ops[0]
   const needsValue = opMeta?.needsValue ?? 'none'
-  // Enum columns with a known value set get pickers instead of free text —
-  // the source platform "Type is any of Bill, Expense Report…" experience.
+  // Enum columns with a known value set get pickers instead of free text
+  // (e.g. "Type is any of Bill, Expense Report…").
   const options = column?.options
   const enumLabel = (v: string) =>
     tReports.has(`catalog.enumValues.${v}`) ? tReports(`catalog.enumValues.${v}`) : v.replace(/_/g, ' ')

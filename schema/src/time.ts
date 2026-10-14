@@ -197,7 +197,7 @@ export const timeEntries = pgTable(
       .default("actual"),
     invoicedByLineId: uuid("invoiced_by_line_id"),
     payrollBatchRef: text("payroll_batch_ref"),
-    /** Keeps the source platform timebill nsId + source flags for the import bridge. */
+    /** Keeps the import source's record id + source flags for the import bridge. */
     custom: jsonb("custom").notNull().default({}),
     ...auditColumns,
     workOrderId: uuid("work_order_id"),

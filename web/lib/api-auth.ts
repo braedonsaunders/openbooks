@@ -22,9 +22,8 @@ import { notFound } from "@/lib/api/responses";
 /**
  * API-key authentication for the versioned REST API (`/api/v1/*`).
  *
- * source platform binds a token to a single role and inherits the whole role's
- * permission set — the role IS the scope. openbooks does better: each key
- * carries an explicit, non-empty SCOPED subset of permission keys (the same
+ * A key is not a whole-role grant: each key carries an explicit, non-empty
+ * SCOPED subset of permission keys (the same
  * `module.action` catalogue roles use). A request is allowed only when BOTH
  * the key's scopes AND the owner's effective permissions cover the required
  * permission — the intersection means a key never grants more than its owner

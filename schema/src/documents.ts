@@ -140,8 +140,8 @@ export const documents = pgTable(
     subtotal: money("subtotal").notNull().default("0"),
     taxTotal: money("tax_total").notNull().default("0"),
     total: money("total").notNull().default("0"),
-    // Amount remaining to settle (source platform "Amount Remaining") — abs(open-item
-    // line) − applied for posted open-item docs, else NULL. Maintained by the
+    // Amount remaining to settle — abs(open-item line) − applied for posted
+    // open-item docs, else NULL. Maintained by the
     // open-balance triggers in migrations/generated/0001_baseline.sql so lists
     // can show/sort/filter it without a live applications join.
     openBalance: money("open_balance"),
@@ -395,10 +395,9 @@ export const documentLines = pgTable(
 
     /**
      * Line-level subledger entity — the customer/vendor/employee this specific
-     * line belongs to (→ parties), independent of the header party. Faithful to
-     * how every source system models a transaction line: source platform's line "Name"
-     * / source platform's line Entity. AR/AP legs on journals (e.g. opening-balance/month-end
-     * entries) carry their party HERE, not on the header. Polymorphic "line
+     * line belongs to (→ parties), independent of the header party. AR/AP legs
+     * on journals (e.g. opening-balance/month-end entries) carry their party
+     * HERE, not on the header. Polymorphic "line
      * entity" = this party_id OR the projectId below (a job); the import routes
      * the source line entity to whichever it resolves to.
      */
@@ -718,8 +717,7 @@ export const documentTenders = pgTable(
 /**
  * Document relationship chains (SO → fulfillment → invoice, SO → PO,
  * bill → payment run, credit memo → corrected invoice):
- * explicit and queryable, replacing source platform's tangle of createdfrom +
- * link tables + custbody "SO Created From" workarounds. A `corrects` edge is
+ * explicit and queryable as first-class edges. A `corrects` edge is
  * the only record of which invoice a credit memo corrects; `reverses` stays
  * reserved for same-kind posted corrections.
  */
@@ -866,7 +864,7 @@ export const items = pgTable(
     taxCodeId: uuid("tax_code_id"),
     showOnTimesheet: boolean("show_on_timesheet").notNull().default(false),
 
-    // --- Revenue recognition (ASC 606 / ARM item defaults) ------------------
+    // --- Revenue recognition (ASC 606 item defaults) ------------------------
     /** When set, invoicing this item defers revenue and a recognition schedule
      *  is built from this rule instead of crediting income immediately. */
     recognitionRuleId: uuid("recognition_rule_id"),
@@ -900,8 +898,8 @@ export const items = pgTable(
 );
 
 /**
- * Overhead rates — a real job-costing concept here (was a source platform custom
- * record driving hand-built payroll JEs). Drives overhead absorption on jobs:
+ * Overhead rates — a first-class job-costing concept. Drives overhead
+ * absorption on jobs:
  * DR project WIP/COGS, CR overhead applied.
  */
 export const overheadRates = pgTable(
@@ -961,7 +959,7 @@ export const timeTypes = pgTable(
      */
     excludeFromWages: boolean("exclude_from_wages").notNull().default(false),
     isActive: boolean("is_active").notNull().default(true),
-    custom: jsonb("custom").notNull().default({}), // keeps source platform nsId for the time-record import bridge
+    custom: jsonb("custom").notNull().default({}), // import source's record id for the time-record import bridge
     /**
      * `costMultiplier` and `excludeFromWages` are direct inputs to gross earnings
      * in calculatePayRun, so this is money configuration and carries the audit

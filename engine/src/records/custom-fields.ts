@@ -18,7 +18,7 @@ export {
 } from '@openbooks/customization'
 
 /**
- * Custom fields platform — source platform-style header/line/entity extensions.
+ * Custom fields platform — header/line/entity extensions.
  * Definitions live in custom_field_defs (targetTable + optional targetKind);
  * values live in each row's `custom` jsonb, validated here before write.
  * Every module renders its defs dynamically: document drawers (header),

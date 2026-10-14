@@ -135,8 +135,8 @@ export async function resolveRecipientEmails(
       continue;
     }
     // A `field` target whose record value LOOKS like an email address (or a
-    // list of them) is delivered directly — the source platform "email a recipient
-    // from a record field" pattern (e.g. the vendor's EFT notification
+    // list of them) is delivered directly, so a flow can email a recipient
+    // taken from a record field (e.g. the vendor's EFT notification
     // address). Values that don't contain '@' resolve as user ids as usual.
     if (t.type === "field") {
       const v = ctx.values[t.field];

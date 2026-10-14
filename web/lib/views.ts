@@ -13,7 +13,7 @@ import {
 import { executeReport } from './custom-reports'
 
 /**
- * Views (the source platform Saved Search analogue, Knowledge menu). A view stores a
+ * Views (saved, shareable queries in the Knowledge menu). A view stores a
  * ReportCustomQuery plan — the SAME shape + engine as custom report_definitions
  * — plus owner/scope metadata. Execution reuses executeReport (runCustomQuery
  * over the shared pool), so there is one injection-safe query engine for both

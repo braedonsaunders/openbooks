@@ -22,8 +22,8 @@ interface OpenApiPathItem {
 /**
  * Build a tenant-specific OpenAPI 3.0 spec from an already-loaded schema.
  * Pure (no db/server-only) so it is unit-testable; `generateOpenApiSpec`
- * (openapi-server.ts) loads the live schema and calls this. Unlike source platform
- * (one global spec per release), openbooks produces a spec that includes the
+ * (openapi-server.ts) loads the live schema and calls this. The spec is
+ * per-tenant rather than one global spec per release: it includes the
  * org's custom record types and custom fields — the schema is the source of
  * truth, so the docs are never stale.
  */

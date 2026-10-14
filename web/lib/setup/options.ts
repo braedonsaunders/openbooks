@@ -445,7 +445,7 @@ const INFORMATION_RETURN_BOXES = [
   { value: 't4a022', labelKey: 'options.informationReturnBox.t4a022' },
 ]
 
-// Revenue recognition (ASC 606 / IFRS 15) — mirrors source platform ARM rule methods.
+// Revenue recognition (ASC 606 / IFRS 15) rule methods.
 const RECOGNITION_METHODS = [
   { value: 'point_in_time', labelKey: 'options.recognitionMethod.pointInTime' },
   { value: 'straight_line_even', labelKey: 'options.recognitionMethod.straightLineEven' },

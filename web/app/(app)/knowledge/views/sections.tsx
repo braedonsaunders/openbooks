@@ -20,7 +20,7 @@ export function ViewNameCell({
 }) {
   return (
     <>
-      {/* Name RUNS the view (source platform behaviour); editing is the
+      {/* Name RUNS the view; editing is the
           explicit action on the right. */}
       <Link href={href as never} className="font-medium text-teal-700 hover:underline dark:text-teal-300">
         {name}

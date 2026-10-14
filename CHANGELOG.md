@@ -1307,7 +1307,8 @@ three payroll migrations below are additive.
 ### Sync
 
 - Open-item verification compares expense reports alongside invoices, bills
-  and credits, so a clean ledger no longer fails the financial gate; QuickBooks report dates are normalized
+  and credits, so a clean ledger no longer fails the financial gate;
+  QuickBooks report dates are normalized
   at the adapter boundary; realized-FX groups get their own entry numbers;
   master-data upserts type their JSON parameters; tax-rate mirrors touch only
   the open current window.

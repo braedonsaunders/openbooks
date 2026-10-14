@@ -948,7 +948,7 @@ export const NAV_MODULES: NavModule[] = [
     exact: true,
   },
   // Documentation — the in-app help center. No permission gate: available to
-  // every signed-in user (source platform-help style), linked under Administration.
+  // every signed-in user, linked under Administration.
   {
     key: 'docs',
     href: '/docs',

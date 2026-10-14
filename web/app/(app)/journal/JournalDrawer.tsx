@@ -1101,9 +1101,9 @@ function JournalDrawerBody({
         placeholder: t('accountPlaceholder'),
       },
       description: { key: 'description', label: tc('labels.description'), width: 'minmax(160px,1.6fr)', type: 'text' },
-      // Line-level entity: the customer/vendor/employee this leg belongs to
-      // (source platform line "Name" / source platform line Entity). Required on AR/AP legs — the
-      // kernel refuses a party-less open-item line; projects stay a sibling
+      // Line-level entity: the customer/vendor/employee this leg belongs to.
+      // Required on AR/AP legs — the kernel refuses a party-less open-item
+      // line; projects stay a sibling
       // column, exactly like the party/project kernel dimensions.
       party_id: {
         key: 'partyId',

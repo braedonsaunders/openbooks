@@ -1,11 +1,10 @@
 'use client'
 
-// Approval history sublist for the record flyout — the source platform "Workflow
-// History" subtab, compacted into a collapsible "Approvals" section: one line
-// per event (submitted / requested / approved / rejected / escalated /
-// delegated) with an icon, the actor, relative time, and the comment or
-// rejection reason. Renders nothing until the record has any approval
-// history. Data comes from /api/flows/record-state via the shared
+// Approval history sublist for the record flyout — a collapsible
+// "Approvals" section: one line per event (submitted / requested / approved /
+// rejected / escalated / delegated) with an icon, the actor, relative time,
+// and the comment or rejection reason. Renders nothing until the record has
+// any approval history. Data comes from /api/flows/record-state via the shared
 // useRecordApprovalState hook, so a decision made in the header refreshes
 // this list too.
 

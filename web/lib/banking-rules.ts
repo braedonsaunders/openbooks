@@ -32,10 +32,9 @@ import {
  * tests unmatched imported bank lines against a nested and/or condition tree and
  * either excludes them or auto-creates a categorizing journal (DR the bank
  * account, CR one or more offset lines with their own dimensions / party / tax)
- * which is then matched into the account's open reconciliation. This is the open
- * equivalent of source platform's "Reconciliation Rules" / source platform + source platform "Bank Rules",
- * extended with split lines, boolean grouping, a suggest-vs-auto posture, and a
- * dry-run preview that never touches the ledger. Orchestration lives here;
+ * which is then matched into the account's open reconciliation. Rules support
+ * split lines, boolean grouping, a suggest-vs-auto posture, and a dry-run
+ * preview that never touches the ledger. Orchestration lives here;
  * the pure condition + split logic lives in banking-rules-core.ts.
  */
 

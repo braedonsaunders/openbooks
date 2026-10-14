@@ -21,9 +21,9 @@ export interface RecognitionStatus {
 }
 
 /**
- * Read-only revenue recognition status for a fixed-price project — the
- * source platform-shaped surface: the project carries PROGRESS DATA (percent complete,
- * with a manual override), the revenue subledger carries the plan, and posting
+ * Read-only revenue recognition status for a fixed-price project. The
+ * project carries PROGRESS DATA (percent complete, with a manual override),
+ * the revenue subledger carries the plan, and posting
  * happens only in the central recognition run on the Revenue page. No posting
  * from here.
  */

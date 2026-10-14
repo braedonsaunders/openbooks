@@ -378,7 +378,7 @@ export async function projectTimeSummary(orgId: string, projectId: string): Prom
 }
 
 /* ------------------------------------------------------------------ */
-/* Unbilled — "available to bill" (source platform CouldBeInvoiced)           */
+/* Unbilled — "available to bill"                                    */
 /* ------------------------------------------------------------------ */
 
 export interface ProjectUnbilled {

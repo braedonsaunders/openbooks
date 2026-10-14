@@ -59,13 +59,13 @@ export interface HeaderFieldPlacement {
    */
   required?: boolean | null
   /**
-   * Width in a 4-column header grid (1–4). null/undefined = 1. source platform custom
-   * forms control field width/positioning; this reproduces the existing layout.
+   * Width in a 4-column header grid (1–4). null/undefined = 1. Lets a form
+   * layout control each field's width and position.
    */
   colSpan?: number | null
 }
 
-/** An ordered, optionally-labelled group of header fields (source platform "tab"). */
+/** An ordered, optionally-labelled group of header fields. */
 export interface HeaderGroup {
   /** Stable id within this layout. */
   id: string

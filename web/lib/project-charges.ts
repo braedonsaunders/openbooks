@@ -22,8 +22,7 @@ import { isUuid } from './list-params'
 const INVENTORY_ITEM_KINDS = new Set(['inventory', 'assembly', 'kit'])
 
 /**
- * Project charges / resource usage — the native replacement for source platform's
- * SO(price)+PO(cost) workaround. A project_charge allocates a pooled,
+ * Project charges / resource usage. A project_charge allocates a pooled,
  * already-incurred cost (non-inventory materials, equipment, internal services)
  * onto a project at a cost rate, carrying a billable rate for T&M. It posts
  * DR project COGS / CR cost pool (see the project_charge posting rule), and its

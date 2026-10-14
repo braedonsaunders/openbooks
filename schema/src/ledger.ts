@@ -67,8 +67,8 @@ export const journalEntries = pgTable(
     /**
      * Where this entry came from. Documents post through the kernel, so an
      * entry is traceable to its source; manual journals say so explicitly.
-     * `origin` supports payroll/burden tagging
-     * as custbody checkboxes ("Payroll Journal", "Is Labor Burden JE").
+     * `origin` supports payroll/burden tagging (e.g. payroll journals and
+     * labor-burden entries).
      */
     sourceDocumentId: uuid("source_document_id"),
     origin: text("origin", {
@@ -194,7 +194,7 @@ export const journalLines = pgTable(
      */
     postingDate: date("posting_date"),
 
-    /** Statistical quantity (hours, tonnes) — replaces source platform Stat accounts. */
+    /** Statistical quantity (hours, tonnes) carried alongside the monetary amount. */
     quantity: money("quantity"),
     periodId: uuid("period_id"),
     eliminate: boolean("eliminate").notNull().default(false),

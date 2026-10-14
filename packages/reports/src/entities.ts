@@ -50,8 +50,8 @@ export type ReportColumnKind =
  *  boolean comparison, so a stored `eq` rule binds without a cast. */
 const BOOLEAN_OPTIONS = ['true', 'false'] as const
 
-/** Every transaction kind the documents table holds — the source platform
- *  "Transaction Type" filter set. One source of truth for both the
+/** Every transaction kind the documents table holds — the transaction-type
+ *  filter set. One source of truth for both the
  *  transactions and transaction_lines entities. */
 export const TRANSACTION_KINDS = [
   'vendor_bill',
@@ -90,7 +90,7 @@ export type ReportEntityColumn = {
   expr: string
   /**
    * Enum (and boolean) columns: the known value set. Drives option pickers in
-   * the filter UI (source platform "type is any of Bill, Expense Report…").
+   * the filter UI (e.g. "type is any of Bill, Expense Report…").
    * Values are stored raw; display labels resolve through i18n with a
    * humanized fallback.
    */

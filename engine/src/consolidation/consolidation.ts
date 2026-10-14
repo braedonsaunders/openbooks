@@ -25,7 +25,7 @@ import { markEntryReversed, postEntry } from "../journal/post-entry.ts";
 import { loadSubsidiaryContext } from "../organization/subsidiaries.ts";
 
 /**
- * Consolidation machinery (source platform parity):
+ * Consolidation machinery:
  *
  *  - deriveConsolidatedRates: builds the period's consolidated exchange-rate
  *    rows (current / average / historical) from the daily fx_rates table for

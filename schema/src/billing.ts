@@ -12,10 +12,10 @@ import {
 import { auditColumns, id, money, orgRef } from "./helpers";
 
 /**
- * Project billing — the native job-billing
- * flow (a source platform front-end there). A billing_request is a pre-invoice work
- * order that generates a `customer_invoice` DOCUMENT (never a parallel invoice
- * table — invoices are documents, posted through the existing kernel). The
+ * Project billing — the native job-billing flow. A billing_request is a
+ * pre-invoice work order that generates a `customer_invoice` DOCUMENT (never
+ * a parallel invoice table — invoices are documents, posted through the
+ * existing kernel). The
  * generator (web/lib/billing) consumes unbilled billable time_entries + cost
  * lines, stamping their provenance columns so re-billing is idempotent.
  */

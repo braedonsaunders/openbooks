@@ -255,12 +255,12 @@ export async function runRecordFlows(
         rows: subject.rows ?? {},
       };
       // Where the mutation came from — conditions can auto-approve
-      // system-generated records (source platform execution-context filters).
+      // system-generated records.
       evalCtx.values.event_source = event.source ?? "api";
       // on_update carries edit-shape data ON THE EVENT (the caller knows what
       // changed; the adapter only sees the post-edit record). Surface it as
-      // eval-context values so condition nodes / templates can implement the
-      // source platform "needs re-approval on material edit" pattern (see
+      // eval-context values so condition nodes / templates can require
+      // re-approval when a record materially changes (see
       // DOCUMENT_FIELDS in subject-profiles.ts). `changedFields` /
       // `changedLineFields` are arrays — LogicRule `in` over them is
       // ANY-OVERLAP, so {op:'in', field:'changedFields',

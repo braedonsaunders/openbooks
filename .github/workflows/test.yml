@@ -105,6 +105,8 @@ jobs:
         # partial admission can otherwise launch the expensive jobs while
         # unit partitions refuse the same source before selecting any tests.
         run: npm run check:static
+        env:
+          OPENBOOKS_PRIVATE_FINGERPRINTS: ${{ secrets.OPENBOOKS_PRIVATE_FINGERPRINTS }}
       - name: Tenant policy bypass guard
         run: npm run check:rls-bypass-predicate
       - name: Typecheck every workspace

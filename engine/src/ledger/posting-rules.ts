@@ -7,9 +7,9 @@ import { internalBillingKernelLines, InternalBillingPolicyError } from "./intern
 import { type RuleFn, resolvedLineAccount, cardRule, tenderMemo, dims, lineTotal, controlOverride, settlementOf, personalReceivableAmount, purchaseBaseAmount, purchaseTaxLines, salesTaxLines } from "./posting-rule-builders.ts";
 /**
  * An AR/AP journal line participates in the subledger only when it identifies
- * the customer/vendor whose balance it changes. source platform permits direct GL
- * journals to control accounts without an entity; those remain legitimate
- * control-account GL activity, but must not become anonymous aging items.
+ * the customer/vendor whose balance it changes. Direct GL journals to control
+ * accounts without an entity remain legitimate control-account GL activity,
+ * but must not become anonymous aging items.
  */
 export function controlLineIsOpenItem(
   accountId: string,

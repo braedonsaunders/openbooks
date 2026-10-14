@@ -310,7 +310,7 @@ export function ProjectDrawer({
   const { busy, refusal, execute } = useAppAction()
   const requestIdRef = useRef<string | null>(null)
 
-  // source platform-style record: opens READ-ONLY; Edit switches to an explicit-save form.
+  // Opens READ-ONLY; Edit switches to an explicit-save form.
   // Unsaved-create opens editable: there is no persisted record to read yet.
   const [mode, setMode] = useState<'view' | 'edit'>(createMode ? 'edit' : 'view')
   const editable = mode === 'edit' && canManage

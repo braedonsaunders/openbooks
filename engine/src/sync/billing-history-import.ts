@@ -933,7 +933,7 @@ async function importInvoice(ctx: PersistContext, invoice: {
     return false;
   }
   // Opening balances carry only what is still owed: settled history stays
-  // in the source platform, and the cut-over brings open items.
+  // in the source system, and the cut-over brings open items.
   if (ctx.mode === "opening_balances" && invoice.balanceMajor === "0.0000") {
     ctx.counts.skipped += 1;
     return false;

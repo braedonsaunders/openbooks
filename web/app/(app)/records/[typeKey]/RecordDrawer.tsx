@@ -33,8 +33,8 @@ function mapIssues(error: ActionError): Record<string, string> {
 }
 
 /**
- * The custom-record flyout — source platform-style record model: ALWAYS opens
- * READ-ONLY (view mode) — even for drafts — with an Edit button in the header;
+ * The custom-record flyout ALWAYS opens READ-ONLY (view mode) — even for
+ * drafts — with an Edit button in the header;
  * editing is an explicit Edit → Save/Cancel cycle. Records are master data:
  * they stay editable while DRAFT or ACTIVE; only inactive records are
  * read-only until reactivated.

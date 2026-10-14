@@ -42,8 +42,8 @@ function recognitionQuantityUnits(quantity: string): bigint {
 }
 
 /**
- * Fair-value range review (source platform fair-value range policy): compare an
- * obligation's allocated PER-UNIT price against the matched fair value price's
+ * Fair-value range review: compare an obligation's allocated PER-UNIT price
+ * against the matched fair value price's
  * [low, high] bounds. Either bound may be absent (open-ended range). Returns
  * null when in range or when no bound is configured. Cross multiplication
  * avoids division and makes exact boundary decisions.

@@ -69,6 +69,9 @@ jobs:
           fetch-depth: 0
       - name: Reject private-data provenance in reachable history
         run: npm run check:history-hygiene
+        env:
+          OPENBOOKS_PRIVATE_FINGERPRINTS: ${{ secrets.OPENBOOKS_PRIVATE_FINGERPRINTS }}
+          OPENBOOKS_REQUIRE_PRIVATE_FINGERPRINTS: ${{ github.event_name == 'pull_request' && '' || '1' }}
       - name: Scan the pushed commit range for secrets
         uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e # v3.0.0
         env:

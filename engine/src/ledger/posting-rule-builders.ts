@@ -23,8 +23,8 @@ export function resolvedLineAccount(
  * Card charge / refund. A charge DRs its expense lines and CRs the card's
  * liability control account; a refund is the arithmetic reverse and rides the
  * same rule with negative line amounts (its detail is stored already signed).
- * The liability account is the doc's `controlAccountId` override (the per-card
- * employee sub-account source platform used) else the resolved card liability.
+ * The liability account is the doc's `controlAccountId` override (e.g. a
+ * per-card employee sub-account) else the resolved card liability.
  */
 export const cardRule: RuleFn = (doc, lines, deps) => {
   const expense: KernelLine[] = lines.map((l) => ({
@@ -92,7 +92,7 @@ export const lineTotal = (l: DocLine): Money => addMoney(l.amount, l.taxAmount ?
 
 /**
  * The payable/receivable/card-liability/bank control account a document should post
- * to. source platform lets a transaction choose its own AP/AR/financing/funding account on the
+ * to. A transaction may choose its own AP/AR/financing/funding account on the
  * header (usually the org default, but sometimes a financing sub-account like
  * "Ford Credit" or a per-card employee liability). We surface that choice as
  * `doc.custom.controlAccountId`; when present it wins over the org default.

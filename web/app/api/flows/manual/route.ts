@@ -71,8 +71,8 @@ async function availableButtons(
   if (!subject) return NextResponse.json({ error: 'record not found' }, { status: 404 })
   // With Flows off no flow offers a button: the visible record has none.
   if (!flowsEnabled) return []
-  // Viewer-aware showIf (source platform button conditions like "Next Approver =
-  // Current User" / "Requestor = Current User"): inject who is LOOKING before
+  // Viewer-aware showIf (button conditions like "Next Approver = Current
+  // User" / "Requestor = Current User"): inject who is LOOKING before
   // evaluating each button's rule.
   const [pendingGate] = await db
     .select({ id: schema.flowGates.id })

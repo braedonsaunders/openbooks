@@ -23,9 +23,8 @@ import { getMoneyFormatter } from './money-server'
 import { formatDecimal, type MoneyFormatter } from './money-format'
 
 /**
- * Invoice backup PDF package — the native implementation of the
- * getInvoiceBackupPDF (a source platform front-end there). Assembles, in a configurable
- * order, the invoice PDF + a customer labour page + the vendor-bill/receipt
+ * Invoice backup PDF package. Assembles, in a configurable order, the invoice
+ * PDF + a customer labour page + the vendor-bill/receipt
  * attachments of the cost documents the invoice billed, merges them with pdf-lib,
  * and stores the package in the file cabinet attached to the invoice document.
  *

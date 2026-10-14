@@ -697,11 +697,10 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
   }
 
   // -- open-item lines must carry a subledger party (AR/AP faithfulness) ----
-  // Every source system (source platform line "Name", source platform line Entity) puts a
-  // customer/vendor on each AR/AP line, and both enforce AR⇒customer, AP⇒vendor.
-  // An open-item leg with no party can't age or net by entity — the exact defect
-  // that let party-less month-end journals corrupt the subledger↔GL tie-out.
-  // Fail loudly rather than post a party-less receivable/payable.
+  // Every AR/AP line carries its customer/vendor (AR⇒customer, AP⇒vendor).
+  // An open-item leg with no party can't age or net by entity and would break
+  // the subledger↔GL tie-out, so fail loudly rather than post a party-less
+  // receivable/payable.
   const orphanOpenItem = kernelLines.find((l) => l.isOpenItem && !l.partyId);
   if (orphanOpenItem) {
     throw new PostingError(
