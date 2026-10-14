@@ -1,3 +1,5 @@
+import { SQL } from 'drizzle-orm';
+import { PgDialect } from 'drizzle-orm/pg-core';
 /**
  * GB computeStatutory wrapper tests — run with `node --import tsx
  * engine/src/payroll/gb/compute-statutory.test.ts`.
@@ -37,9 +39,16 @@ function refusingTx(): Tx {
   } as unknown as Tx;
 }
 
-function stubTx(rows: Record<string, unknown>): Tx {
+function stubTx(rows: Record<string, unknown>,taxYear=2026): Tx {
   return {
-    execute: async () => ({ rows: [rows] }),
+    execute: async (query:SQL) => {
+      const text=new PgDialect().sqlToQuery(query).sql;
+      if(text.includes("d.kind='pay_run'"))return {rows:[{subsidiaryId:'44444444-4444-4444-8444-444444444444',currency:'GBP',taxYear}]};
+      if(text.includes('select s.id from pay_stubs s'))return {rows:[]};
+      if(text.includes('jsonb_array_elements_text'))return {rows:[]};
+      if(text.includes('history_run_pay_date'))return {rows:[rows]};
+      throw new Error('Unexpected database read outside the declared statutory history fixture');
+    },
   } as unknown as Tx;
 }
 
@@ -93,9 +102,9 @@ function gbContext(overrides: {
   }) as PushStatutoryFn;
   const ctx = {
     tx: overrides.tx ?? refusingTx(),
-    orgId: "org",
-    documentId: "doc",
-    employeePartyId: "emp",
+    orgId: "11111111-1111-4111-8111-111111111111",
+    documentId: "22222222-2222-4222-8222-222222222222",
+    employeePartyId: "33333333-3333-4333-8333-333333333333",
     employeeName: "Test Employee",
     taxYear: overrides.taxYear ?? 2026,
     country: "GB",
@@ -147,7 +156,7 @@ test("a 2025/26 correction prices the 2025 tables end to end", async () => {
   const { ctx, pushed } = gbContext({
     payDate: "2025-04-06",
     taxYear: 2025,
-    tx: stubTx(EMPTY_YTD),
+    tx: stubTx(EMPTY_YTD,2025),
     income: "4000",
     pensionable: "4000",
     codes: NOTICE_1257L,

@@ -1,3 +1,5 @@
+import { isUuid } from '../../platform/uuid.ts';
+import { resolveStatutoryHistoryScope,employerScopedStatutoryStubs,requireStatutoryHistoryFactors } from '../statutory-history-scope.ts';
 /**
  * Ireland payroll country pack — 2026 TRANSCRIBED, `installable: true`.
  *
@@ -431,24 +433,23 @@ export type IeYtdRow = {
 export async function ieEmployeeYtd(
   ctx: Pick<
     PayrollStatutoryComputeContext,
-    "tx" | "orgId" | "employeePartyId" | "taxYear" | "documentId"
+    "tx" | "orgId" | "employeePartyId" | "taxYear" | "documentId" | "subsidiaryId" | "employmentId"
   >,
 ): Promise<IeYtdRow> {
-  const { tx, orgId, employeePartyId, taxYear, documentId } = ctx;
+  const { tx,employeePartyId } = ctx;
+  if(!isUuid(ctx.employmentId))throw new PayrollPackError('IE cumulative payroll needs the exact current RPN employment — qualify the original employment identity before calculating');
+  const employmentId=ctx.employmentId;
+  const scope=await resolveStatutoryHistoryScope(tx,{...ctx,employmentId,country:'IE'});
+  await requireStatutoryHistoryFactors(tx,scope,{employeePartyId,employmentId},['IE_PAYE','IE_USC','IE_TAXBASE']);
   const r = await tx.execute<IeYtdRow>(sql`
     select
       coalesce(sum((s.factors->>'IE_PAYE')::numeric), 0) as tax,
       coalesce(sum((s.factors->>'IE_USC')::numeric), 0) as usc,
       coalesce(sum((s.factors->>'IE_TAXBASE')::numeric), 0) as taxbase,
       coalesce(sum(s.pensionable_earnings), 0) as gross
-    from pay_stubs s
-    join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
-    join documents d on d.id = r.document_id and d.org_id = r.org_id
-    where s.org_id = ${orgId} and s.employee_party_id = ${employeePartyId}
-      and s.tax_year = ${taxYear} and s.pay_run_document_id <> ${documentId}
-      and r.run_status = 'committed'
-      and d.status <> 'voided'
+    from ${employerScopedStatutoryStubs(scope,{employeePartyId,employmentId})} s
   `);
+  if(r.rows.length!==1)throw new PayrollPackError('IE committed statutory history did not return its required prior totals');
   return r.rows[0]!;
 }
 
@@ -534,7 +535,7 @@ export async function computeIeStatutory(
   ctx: PayrollStatutoryComputeContext,
 ): Promise<Record<string, string>> {
   const {
-    tx, orgId, documentId, employeePartyId, taxYear, region, run,
+    taxYear, region, run,
     periodsPerYear: P, income, nonPeriodic, pensionable,
     deduction, pushStatutory, certificateFor, assertRegionSupported,
   } = ctx;
@@ -555,7 +556,7 @@ export async function computeIeStatutory(
   const prsiClass = hasRpn
     ? resolveEmployeeFact("IE", "ie_prsi_class", prsiClassRaw)
     : prsiClassRaw ?? "";
-  const ytd = await ieEmployeeYtd({ tx, orgId, employeePartyId, taxYear, documentId });
+  const ytd = await ieEmployeeYtd(ctx);
 
   // Taxable pay is gross less ordinary employee pension contributions
   // (Revenue: "Taxable pay is the amount of your gross pay less any ordinary

@@ -1,3 +1,5 @@
+import { SQL } from 'drizzle-orm';
+import { PgDialect } from 'drizzle-orm/pg-core';
 /**
  * NL payroll pack tests — declarations plus 2026 wiring, no database.
  *
@@ -195,14 +197,18 @@ function stubContext(
     // price the standard tables, never the anonymous rate.
     tx: {
       execute: (async (query: unknown) => {
-        const chunks = (query as { getSQL?: () => { queryChunks: { value?: unknown }[] } }).getSQL?.().queryChunks ?? [];
-        const text = chunks.map((c) => typeof c.value === "string" ? c.value : Array.isArray(c.value) ? c.value.join("") : "").join("");
-        return text.includes("sin_encrypted") ? { rows: [{ sin_encrypted: sealSecret("123456782", { orgId: "org", purpose: "payroll.employee.sin" }) }] } : { rows: [{ sv: "0" }] };
+        assert.ok(query instanceof SQL);const text=new PgDialect().sqlToQuery(query).sql;
+        if(text.includes("sin_encrypted"))return {rows:[{sin_encrypted:sealSecret("123456782",{orgId:"11111111-1111-4111-8111-111111111111",purpose:"payroll.employee.sin"})}]};
+        if(text.includes("d.kind='pay_run'"))return {rows:[{subsidiaryId:"44444444-4444-4444-8444-444444444444",currency:"EUR",taxYear:2026}]};
+        if(text.includes('select s.id from pay_stubs s'))return {rows:[]};
+        if(text.includes('jsonb_array_elements_text'))return {rows:[]};
+      if(text.includes('history_run_pay_date'))return {rows:[{sv:"0"}]};
+        throw new Error('Unexpected database read outside the declared Dutch statutory history fixture');
       }),
     } as never,
-    orgId: "org",
-    documentId: "doc",
-    employeePartyId: "emp",
+    orgId: "11111111-1111-4111-8111-111111111111",
+    documentId: "22222222-2222-4222-8222-222222222222",
+    employeePartyId: "33333333-3333-4333-8333-333333333333",
     employeeName: "Test Werknemer",
     taxYear: 2026,
     country: "NL",

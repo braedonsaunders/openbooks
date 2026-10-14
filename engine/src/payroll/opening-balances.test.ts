@@ -442,7 +442,7 @@ test(
 
       const us = await usEmployeeYtd({
         tx: db, orgId: fx.orgId, employeePartyId: fx.employeeId,
-        taxYear: 2026, documentId: randomUUID(),
+        taxYear: 2026, documentId: currentDocumentId,
       }, "ON");
       assert.equal(us.fica_tax, "4000.0000");
     } finally {

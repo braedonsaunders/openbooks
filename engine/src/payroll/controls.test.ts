@@ -366,9 +366,8 @@ test(
         });
       };
 
-      // A committed $1,000 period is real YTD. The later calculated $9,000
-      // period is still a draft and may be abandoned, so it must not consume
-      // statutory room in either country engine.
+      // A committed Canadian period is real Canadian YTD. A calculated
+      // period consumes no room; neither period is US statutory history.
       await insertHistory("committed", "2026-06-07", "2026-06-20", "1000.0000");
       await insertHistory("calculated", "2026-06-21", "2026-07-04", "9000.0000");
 
@@ -385,10 +384,10 @@ test(
         "Canada YTD ignores an uncommitted calculated stub");
       assert.equal(cmp(caYtd.cpp, "1000"), 0,
         "Canada statutory factors ignore an uncommitted calculated stub");
-      assert.equal(cmp(usYtd.fica, "1000"), 0,
-        "US YTD ignores an uncommitted calculated stub");
-      assert.equal(cmp(usYtd.fica_tax, "3000"), 0,
-        "US FICA tax YTD ignores an uncommitted calculated stub");
+      assert.equal(cmp(usYtd.fica, "0"), 0,
+        "Canadian committed or calculated history cannot consume a US employer wage base");
+      assert.equal(cmp(usYtd.fica_tax, "0"), 0,
+        "Canadian factors cannot become US FICA history");
     } finally {
       await dropScratchOrgReporting(current.orgId);
     }

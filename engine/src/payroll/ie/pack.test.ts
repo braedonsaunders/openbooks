@@ -1,3 +1,5 @@
+import { SQL } from 'drizzle-orm';
+import { PgDialect } from 'drizzle-orm/pg-core';
 /**
  * The Ireland pack transcribes 2026 (PAYE credits and
  * bands, Class A PRSI, standard USC), computes through compute.ts, and keeps
@@ -13,6 +15,18 @@ import {
 } from "../packs.ts";
 import { undeclaredJurisdictionHolidayConflict } from "../holidays.ts";
 
+
+function ieHistoryFixture(rows:Record<string,unknown>){
+  return {execute:async(query:SQL)=>{
+    const text=new PgDialect().sqlToQuery(query).sql;
+    if(text.includes("d.kind='pay_run'"))return {rows:[{subsidiaryId:'44444444-4444-4444-8444-444444444444',currency:'EUR',taxYear:2026}]};
+    if(text.includes('select id from worker_employments'))return {rows:[{id:'55555555-5555-4555-8555-555555555555'}]};
+    if(text.includes('select s.id from pay_stubs s'))return {rows:[]};
+    if(text.includes('jsonb_array_elements_text'))return {rows:[]};
+      if(text.includes('history_run_pay_date'))return {rows:[rows]};
+    throw new Error('Unexpected database read outside the declared Irish employment history fixture');
+  }};
+}
 describe("IE payroll pack", () => {
   it("exists, is Irish, and is installable for 2026", () => {
     assert.equal(IE_PAYROLL_PACK.country, "IE");
@@ -193,12 +207,10 @@ describe("IE payroll pack", () => {
   it("refuses a run with no pay date, and emergency basis with no RPN", async () => {
     const stub = (overrides: Record<string, unknown>) =>
       ({
-        tx: {
-          execute: async () => ({ rows: [{ tax: "0", usc: "0", taxbase: "0", gross: "0" }] }),
-        },
-        orgId: "org",
-        documentId: "doc",
-        employeePartyId: "emp",
+        tx: ieHistoryFixture({tax:"0",usc:"0",taxbase:"0",gross:"0"}),
+        orgId: "11111111-1111-4111-8111-111111111111",
+        documentId: "22222222-2222-4222-8222-222222222222",
+        employeePartyId: "33333333-3333-4333-8333-333333333333", employmentId:"55555555-5555-4555-8555-555555555555",
         taxYear: 2026,
         region: "IE",
         run: {},
@@ -233,12 +245,10 @@ describe("IE payroll pack", () => {
   it("requires the PRSI class and prices Class M with no PRSI contribution", async () => {
     const stub = (overrides: Record<string, unknown>) =>
       ({
-        tx: {
-          execute: async () => ({ rows: [{ tax: "0", usc: "0", taxbase: "0", gross: "0" }] }),
-        },
-        orgId: "org",
-        documentId: "doc",
-        employeePartyId: "emp",
+        tx: ieHistoryFixture({tax:"0",usc:"0",taxbase:"0",gross:"0"}),
+        orgId: "11111111-1111-4111-8111-111111111111",
+        documentId: "22222222-2222-4222-8222-222222222222",
+        employeePartyId: "33333333-3333-4333-8333-333333333333", employmentId:"55555555-5555-4555-8555-555555555555",
         taxYear: 2026,
         region: "IE",
         run: {},
@@ -290,8 +300,8 @@ describe("IE payroll pack", () => {
     // one week's credits (€76.92) and band (€846.16), earlier pay ignored.
     const pushed: Record<string, string> = {};
     const factors = await IE_PAYROLL_PACK.computeStatutory({
-      tx: { execute: async () => ({ rows: [{ tax: "3.0800", usc: "1.1600", taxbase: "400.0000", gross: "400.0000" }] }) },
-      orgId: "org", documentId: "doc", employeePartyId: "emp", taxYear: 2026, region: "IE",
+      tx: ieHistoryFixture({tax:"3.0800",usc:"1.1600",taxbase:"400.0000",gross:"400.0000"}),
+      orgId: "11111111-1111-4111-8111-111111111111", documentId: "22222222-2222-4222-8222-222222222222", employeePartyId: "33333333-3333-4333-8333-333333333333", employmentId:"55555555-5555-4555-8555-555555555555", taxYear: 2026, region: "IE",
       run: { pay_date: "2026-01-08" }, emp: {}, periodsPerYear: 52,
       income: "850.00", nonPeriodic: "0", pensionable: "850.00", insurable: "850.00",
       deduction: () => "0",

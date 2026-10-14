@@ -403,9 +403,11 @@ test(
       // Year-to-date reads scope stubs to the assigned account's employer,
       // the same scoping the run's own money path passes — otherwise the
       // Texas stub the transfer rule must credit is filtered out of history.
+      const historyProbe=await createPayRun({orgId:fx.orgId,actorId:fx.actorId,payScheduleId:fx.scheduleId,
+        periodStart:PERIOD_START,periodEnd:PERIOD_END,runType:'supplemental',employeePartyIds:[employee]});
       const stateHistory = await usEmployeeYtd({
         tx: db, orgId: fx.orgId, employeePartyId: employee, taxYear: 2026,
-        documentId: randomUUID(),
+        documentId: historyProbe.documentId,
       }, "OR", fx.suiAccountId);
       assert.equal(stateHistory.suiOtherRegions, "TX", "SUI history is state-dimensioned independently of FUTA");
 
@@ -417,7 +419,7 @@ test(
       assert.equal(resolveUsSuiYtdForCoverage("OR", 2026, stateHistory, true), "0");
       const sameStateHistory = await usEmployeeYtd({
         tx: db, orgId: fx.orgId, employeePartyId: employee, taxYear: 2026,
-        documentId: randomUUID(),
+        documentId: historyProbe.documentId,
       }, "TX", fx.suiAccountId);
       assert.equal(resolveUsSuiYtd("TX", 2026, sameStateHistory), PERIOD_WAGES,
         "same-state SUI history remains usable; FUTA retains its independent aggregate");
@@ -506,8 +508,10 @@ test(
       await db.execute(sql`
         update employee_payroll_profiles set filing_account_id = ${einId}
          where org_id = ${fx.orgId} and employee_party_id = ${employee}`);
+      const historyProbe=await createPayRun({orgId:fx.orgId,actorId:fx.actorId,payScheduleId:fx.scheduleId,
+        periodStart:PERIOD_START,periodEnd:PERIOD_END,runType:'supplemental',employeePartyIds:[employee]});
       const ytd = await usEmployeeYtd({
-        tx: db, orgId: fx.orgId, employeePartyId: employee, taxYear: 2026, documentId: randomUUID(),
+        tx: db, orgId: fx.orgId, employeePartyId: employee, taxYear: 2026, documentId: historyProbe.documentId,
       }, "TX", einId);
       assert.equal(ytd.fica, PERIOD_WAGES);
       assert.equal(ytd.futa, PERIOD_WAGES);

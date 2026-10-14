@@ -1,3 +1,4 @@
+import {resolveStatutoryHistoryScope,employerScopedStatutoryStubs} from '../statutory-history-scope.ts';
 import {payRunStaleness} from '../readiness.ts';
 import {calculatePayRun} from '../run-calculation.ts';
 import {commitPayRun} from '../run-commit.ts';
@@ -103,8 +104,21 @@ test('different employers retain independent annual contribution room while same
    assert.equal(cmp(rehired[key],'0'),0,'Same employer rehire and RP changes cannot reset annual room');
    assert.equal(cmp(other[key],original[key]),0,'Another employer retains its independent annual room');
   }
-  const a=await employeeYtd(await run(f,f.subsidiaryId,'draft'));
+  const currentA=await run(f,f.subsidiaryId,'draft');const a=await employeeYtd(currentA);
   const currentB=await run(f,f.other,'draft');const b=await employeeYtd(currentB);
+  const scopeA=await resolveStatutoryHistoryScope(db,{...currentA,country:'CA'});
+  const scopeB=await resolveStatutoryHistoryScope(db,{...currentB,country:'CA'});
+  const history=async(scope:typeof scopeA)=>(await db.execute<{id:string;employmentId:string}>(sql`select s.id,s.employment_id as "employmentId"
+    from ${employerScopedStatutoryStubs(scope,{employeePartyId:f.employeeId})} s order by s.id`)).rows;
+  const retainedA=await history(scopeA),retainedB=await history(scopeB);
+  assert.equal(retainedA.length,2);assert.equal(retainedB.length,1);
+  assert.deepEqual(new Set(retainedA.map(row=>row.employmentId)),new Set([f.employmentId,rehire]),'Employer-wide annual room retains same-payer rehires');
+  assert.equal(retainedB[0]!.employmentId,f.employmentB,'A current party reassignment cannot reinterpret earlier payer history');
+  const employmentOnly=(await db.execute<{employmentId:string}>(sql`select s.employment_id as "employmentId"
+    from ${employerScopedStatutoryStubs(scopeA,{employeePartyId:f.employeeId,employmentId:rehire})} s`)).rows;
+  assert.deepEqual(employmentOnly,[{employmentId:rehire}],'Pack-declared employment priors do not double count a previous spell already certified as prior pay');
+  await assert.rejects(resolveStatutoryHistoryScope(db,{...currentB,country:'CA',subsidiaryId:f.subsidiaryId}),/actual pay-run legal employer/);
+  assert.deepEqual(await history(scopeA),retainedA);assert.deepEqual(await history(scopeB),retainedB);
   const identity=(await db.execute<{createdAt:string;documentNumber:string}>(sql`select r.created_at::text as "createdAt",d.document_number as "documentNumber"
     from pay_runs r join documents d on d.org_id=r.org_id and d.id=r.document_id where r.org_id=${f.orgId} and r.document_id=${currentB.documentId}`)).rows[0]!;
   const siblings=await listPeriodSiblings(db,f.orgId,{documentId:currentB.documentId,...identity,payScheduleId:f.scheduleId,

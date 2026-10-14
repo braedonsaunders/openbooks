@@ -1,3 +1,4 @@
+import { resolveStatutoryHistoryScope,employerScopedStatutoryStubs,requireStatutoryHistoryFactors } from '../statutory-history-scope.ts';
 /**
  * The GB pack's statutory pass: PAYE income tax, Class 1 National Insurance
  * (primary and secondary, category A), and student/postgraduate loan
@@ -73,9 +74,11 @@ export interface GbPriorPeriod {
  */
 export async function gbEmployeePriorPeriod(ctx: Pick<
   PayrollStatutoryComputeContext,
-  "tx" | "orgId" | "employeePartyId" | "taxYear" | "documentId"
+  "tx" | "orgId" | "employeePartyId" | "taxYear" | "documentId" | "subsidiaryId"
 >): Promise<GbPriorPeriod> {
-  const { tx, orgId, employeePartyId, taxYear, documentId } = ctx;
+  const { tx,employeePartyId } = ctx;
+  const scope=await resolveStatutoryHistoryScope(tx,{...ctx,country:'GB'});
+  await requireStatutoryHistoryFactors(tx,scope,{employeePartyId},['GB_TAXABLE','GB_ADDPAY','GB_TAX']);
   const rows = (await tx.execute<{
     taxable: string;
     addpay: string;
@@ -88,18 +91,10 @@ export async function gbEmployeePriorPeriod(ctx: Pick<
       coalesce(sum((s.factors->>'GB_ADDPAY')::numeric), 0) as addpay,
       coalesce(sum((s.factors->>'GB_TAX')::numeric), 0) as tax,
       count(*) as stub_count,
-      min(r.pay_date) as first_pay
-    from pay_stubs s
-    join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
-    join documents d on d.id = r.document_id and d.org_id = r.org_id
-    where s.org_id = ${orgId} and s.employee_party_id = ${employeePartyId}
-      and s.tax_year = ${taxYear} and s.pay_run_document_id <> ${documentId}
-      and r.run_status = 'committed'
-      and d.status <> 'voided'
+      min(s.history_run_pay_date) as first_pay
+    from ${employerScopedStatutoryStubs(scope,{employeePartyId})} s
   `)).rows[0];
-  if (!rows) {
-    return { taxablePay: "0.0000", addedPay: "0.0000", taxPaid: "0.0000", minPayDate: null, hasStubs: false };
-  }
+  if(!rows)throw new PayrollPackError('GB committed statutory history did not return its required prior totals');
   return {
     taxablePay: String(rows.taxable),
     addedPay: String(rows.addpay),
@@ -138,7 +133,7 @@ export async function computeGbStatutory(
   ctx: PayrollStatutoryComputeContext,
 ): Promise<Record<string, string>> {
   const {
-    tx, orgId, documentId, employeePartyId, taxYear, region,
+    taxYear, region,
     run, periodsPerYear: P, income, nonPeriodic, pensionable,
     deduction, pushStatutory, certificateFor, bool, assertRegionSupported,
   } = ctx;
@@ -360,7 +355,7 @@ export async function computeGbStatutory(
     taxablePay: "0.0000", addedPay: "0.0000", taxPaid: "0.0000", minPayDate: null, hasStubs: false,
   };
   if (cumulative) {
-    priors = await gbEmployeePriorPeriod({ tx, orgId, employeePartyId, taxYear, documentId });
+    priors = await gbEmployeePriorPeriod(ctx);
     resolveGbCumulativeBasis({
       payDate,
       starterDeclaration: gbStarterDeclaration({ certificateFor }),

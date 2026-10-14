@@ -1,3 +1,4 @@
+import { resolveStatutoryHistoryScope,employerScopedStatutoryStubs } from '../statutory-history-scope.ts';
 import { sql } from "drizzle-orm";
 import type { db } from "../../platform/db.ts";
 import { PayrollError } from "../error.ts";
@@ -295,14 +296,14 @@ export const US_COMPUTE_FACTOR_LABELS: Readonly<Record<string, string>> = {
  * unpaid figures consume FICA/FUTA/SUI room in a later run.
  */
 export async function usEmployeeYtd(
-  ctx: Pick<PayrollStatutoryComputeContext, "tx" | "orgId" | "employeePartyId" | "taxYear" | "documentId">,
+  ctx: Pick<PayrollStatutoryComputeContext, "tx" | "orgId" | "employeePartyId" | "taxYear" | "documentId" | "subsidiaryId">,
   region: string,
   filingAccountId: string | null = null,
 ): Promise<UsYtdRow> {
   const { tx, orgId, employeePartyId, taxYear, documentId } = ctx;
+  const historyScope=await resolveStatutoryHistoryScope(tx,{...ctx,country:'US'});
   const accounts = await loadUsFilingAccounts(tx, orgId);
-  const employeeSubsidiaryId = (await tx.execute<{ subsidiary_id: string | null }>(sql`
-    select subsidiary_id from parties where org_id = ${orgId} and id = ${employeePartyId}`)).rows[0]?.subsidiary_id ?? null;
+  const employeeSubsidiaryId=historyScope.subsidiaryId;
   const scope = resolveUsEmployerScope(accounts, filingAccountId, employeeSubsidiaryId);
   const suiAccountId = resolveUsStateSuiAccount(accounts, filingAccountId, employeeSubsidiaryId, region);
   // Committed stubs under the same EMPLOYER — every state account of the
@@ -310,6 +311,9 @@ export async function usEmployeeYtd(
   const employerStubs = scope.stubAccountIds === null
     ? sql`s.filing_account_id is null`
     : sql`s.filing_account_id = any(${`{${scope.stubAccountIds.join(",")}}`}::uuid[])`;
+  const otherEmployerStubs = scope.stubAccountIds === null
+    ? sql`s2.filing_account_id is null`
+    : sql`s2.filing_account_id = any(${`{${scope.stubAccountIds.join(",")}}`}::uuid[])`;
   const ficaWithheldColumn = US_OPENING_YTD_FIELDS.find((field) => field.key === "ficaWithheldYtd")!.column;
   // The per-EIN carry-in for the run's employer (see ./opening-ytd.ts); the
   // legacy employee-only column beside it is zero whenever this is set.
@@ -353,13 +357,8 @@ export async function usEmployeeYtd(
         select jsonb_object_agg(prior.province, prior.total)
           from (
             select s2.province as province, sum(s2.insurable_earnings)::text as total
-              from pay_stubs s2
-              join pay_runs r2 on r2.document_id = s2.pay_run_document_id and r2.org_id = s2.org_id
-              join documents d2 on d2.id = r2.document_id and d2.org_id = r2.org_id
-             where s2.org_id = ${orgId} and s2.employee_party_id = ${employeePartyId}
-               and s2.tax_year = ${taxYear} and s2.pay_run_document_id <> ${documentId}
-               and r2.run_status = 'committed'
-               and d2.status <> 'voided'
+              from ${employerScopedStatutoryStubs(historyScope,{employeePartyId})} s2
+             where ${otherEmployerStubs}
                and s2.province <> ${region} and s2.insurable_earnings > 0
              group by s2.province
           ) prior
@@ -429,14 +428,8 @@ export async function usEmployeeYtd(
           group by 1
         ) lst
       ), '{}'::jsonb) as "lstWithheldYtd"
-    from pay_stubs s
-    join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
-    join documents d on d.id = r.document_id and d.org_id = r.org_id
-    where s.org_id = ${orgId} and s.employee_party_id = ${employeePartyId}
-      and s.tax_year = ${taxYear} and s.pay_run_document_id <> ${documentId}
-      and ${employerStubs}
-      and r.run_status = 'committed'
-      and d.status <> 'voided'
+    from ${employerScopedStatutoryStubs(historyScope,{employeePartyId})} s
+    where ${employerStubs}
   `));
   const row = r.rows[0]!;
   return { ...row, suiAccountId, futa: row.futaOpeningUnscoped ? row.futa : row.futaCurrentAccount };
@@ -462,7 +455,7 @@ export async function computeUsStatutory(
   // (the AU salary-sacrifice shape: PAYG moves, superannuation does not).
   const fitWages = reducedBases.income;
   const config = await usPayrollConfig(orgId, taxYear, run.pay_date);
-  const ytd = await usEmployeeYtd({ tx, orgId, employeePartyId, taxYear, documentId }, region, filingAccountId);
+  const ytd = await usEmployeeYtd(ctx, region, filingAccountId);
   const suiExempt = bool(empFact("US", emp, "sui_exempt"));
   // The method is read raw and resolved through the declaration: a missing
   // fact refuses here (Payroll Setup → Employer facts), an unknown value

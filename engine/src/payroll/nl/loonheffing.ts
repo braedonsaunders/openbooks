@@ -1,3 +1,4 @@
+import { resolveStatutoryHistoryScope,employerScopedStatutoryStubs,requireStatutoryHistoryFactors } from '../statutory-history-scope.ts';
 import { canonicalNonNegativeDecimal } from "../../money/exact-decimal.ts";
 import { sql } from "drizzle-orm";
 import { toCents } from "../../money/money.ts";
@@ -630,20 +631,17 @@ export const NL_FACTOR_LABELS: Readonly<Record<string, string>> = {
  */
 async function nlCommittedSvBase(args: Pick<
   PayrollStatutoryComputeContext,
-  "tx" | "orgId" | "employeePartyId" | "taxYear" | "documentId"
+  "tx" | "orgId" | "employeePartyId" | "taxYear" | "documentId" | "subsidiaryId"
 >): Promise<string> {
-  const { tx, orgId, employeePartyId, taxYear, documentId } = args;
+  const { tx,employeePartyId } = args;
+  const scope=await resolveStatutoryHistoryScope(tx,{...args,country:'NL'});
+  await requireStatutoryHistoryFactors(tx,scope,{employeePartyId},['SV_BASE']);
   const rows = await tx.execute<{ sv: string }>(sql`
     select coalesce(sum((s.factors->>'SV_BASE')::numeric), 0)::text as sv
-    from pay_stubs s
-    join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
-    join documents d on d.id = r.document_id and d.org_id = r.org_id
-    where s.org_id = ${orgId} and s.employee_party_id = ${employeePartyId}
-      and s.tax_year = ${taxYear} and s.pay_run_document_id <> ${documentId}
-      and r.run_status = 'committed'
-      and d.status <> 'voided'
+    from ${employerScopedStatutoryStubs(scope,{employeePartyId})} s
   `);
-  return rows.rows[0]?.sv ?? "0";
+  if(rows.rows.length!==1)throw new PayrollError('NL committed statutory history did not return its required SV prior total');
+  return rows.rows[0]!.sv;
 }
 
 /** A real ISO calendar date, or a named refusal — contract facts date the revision rules. */
@@ -759,8 +757,7 @@ export async function computeNlStatutory(
         + "(sv_loon_ytd; an explicit 0 for an employee employed all year by this employer) before running payroll",
       );
     }
-    const { tx, orgId, employeePartyId, documentId } = ctx;
-    const committed = await nlCommittedSvBase({ tx, orgId, employeePartyId, taxYear, documentId });
+    const committed = await nlCommittedSvBase(ctx);
     effectiveYtd = d4(parseCents(opening, "SV opening balance") + parseCents(committed, "committed SV base"));
   }
   // Low-AWf revision policing (Rekenvoorschriften chapter 12): the low
