@@ -9,6 +9,7 @@ import { add, isZero, mulRate, neg, sum } from "../money/money.ts";
 import { loadSubsidiaryContext, SubsidiaryError, validateSubsidiaryRestrictions } from "../organization/subsidiaries.ts";
 import { assertPeriodModulesOpen, CloseError } from "../periods/period-policy.ts";
 import { postEntry } from "../journal/post-entry.ts";
+import { applyBookAccountMaps } from "../journal/book-account-maps.ts";
 import { closingSpotRateWithinAgeLimit } from "../fx/rate-age-policy.ts";
 
 /**
@@ -515,8 +516,8 @@ async function postRevaluationEntry(
   return db.transaction(async (tx) => withTransactionSavepoint(tx, async () => {
     await tx.execute(sql`
       select pg_advisory_xact_lock(hashtextextended(${revaluationLockKey(orgId, bookId, periodId, subsidiaryId)}, 0))`);
-    const book = (await tx.execute<{ id: string; is_primary: boolean; is_active: boolean; posts_gl: boolean }>(sql`
-      select id, is_primary, is_active, posts_gl from accounting_books
+    const book = (await tx.execute<{ id: string; code: string; is_primary: boolean; is_active: boolean; posts_gl: boolean }>(sql`
+      select id, code, is_primary, is_active, posts_gl from accounting_books
        where org_id=${orgId} and id=${bookId} for share`)).rows[0];
     if (!book || !book.is_active || !book.posts_gl) {
       throw new RevaluationError(
@@ -536,9 +537,19 @@ async function postRevaluationEntry(
     // the configured offset. Historical accounts with obsolete monetary policy
     // also need locking when clearing their residual adjustment.
     await tx.execute(sql`select id from accounts where org_id=${orgId} order by id for share`);
-    const gainLossAccount = await unrealizedAccount(orgId);
+    const configuredGainLossAccount = await unrealizedAccount(orgId);
     const period = await loadRevaluationPeriod(orgId, periodId);
     const { ends_on: asOfDate, name: periodName, next_period_id: nextPeriodId, next_starts_on: nextStartsOn, next_name: nextPeriodName } = period;
+    // Exposures are read from this book's own ledger, so they already carry
+    // the book's accounts. Only the configured gain/loss account is a source
+    // account; it takes the book's mapping once, and the entry posts on the
+    // book basis so no line is mapped a second time.
+    const gainLossAccount = book.is_primary
+      ? configuredGainLossAccount
+      : (await applyBookAccountMaps(tx, {
+          orgId, bookId, bookLabel: book.code, postingDate: asOfDate, entryLabel: `FX revaluation ${periodName}`,
+          lines: [{ accountId: configuredGainLossAccount, subsidiaryId }],
+        })).lines[0]!.accountId;
     const scope = financialClosePeriodScope(period);
     const exposures = await loadExposures(orgId, bookId, subsidiaryId, functionalCurrency, asOfDate, scope);
     const positions: RevaluationPosition[] = [];
@@ -638,8 +649,9 @@ async function postRevaluationEntry(
         reversesEntryId,
         actorId,
         currency: functionalCurrency,
-        // Already measured in the book's currency for this subsidiary.
+        // Already measured in the book's currency and accounts for this subsidiary.
         amountBasis: "book",
+        accountBasis: "book",
         closeModules: ["gl"],
         auditAction: "insert",
         requestId: "fx_revaluation",
