@@ -4,6 +4,7 @@ import { generateAccountingPeriods } from "../close/calendar.ts";
 import { isIso4217CurrencyCode } from "../fx/currencies.ts";
 import { BUILT_IN_ROLES } from "../organization/permissions.ts";
 import { UNUSABLE_PASSWORD_HASH } from "../organization/pending-credential.ts";
+import { lockLoginEmail } from "../organization/login-identity.ts";
 import { provisionPayrollPackDefaults } from "../payroll/run-setup.ts";
 import { db, withBypass } from "../platform/db.ts";
 import { upsertBuiltInRolesForOrg } from "./built-in-role-seed.ts";
@@ -365,6 +366,7 @@ export async function createOrganization(input: CreateOrganizationInput): Promis
 
     // A login address resolves to exactly one active home identity across
     // production organizations; a second one would lock both people out.
+    await lockLoginEmail(db, adminEmail);
     const identityTaken = (await db.execute<{ id: string }>(sql`
       select u.id from users u
         join orgs o on o.id = u.org_id and o.env_kind = 'production'

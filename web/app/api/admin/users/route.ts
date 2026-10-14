@@ -2,6 +2,7 @@ import { z } from "zod";
 import { defineRoute } from "@/lib/api/route";
 
 import { NextResponse } from "next/server";
+import { lockLoginEmail, loginEmailSignsInElsewhere } from "@openbooks/engine/organization/login-identity";
 import { sql } from "drizzle-orm";
 import {
   db,
@@ -790,6 +791,15 @@ export const POST = defineRoute({
               gate, await loadSubsidiaryGrantCoverage(db, actor.orgId, actor.id),
               storedRestriction(role.rows[0].subsidiary_restriction), "invite with");
             if (widening) return widening;
+          }
+          // One active home identity per login address across organizations:
+          // a second would refuse its owner's sign-in and password reset.
+          await lockLoginEmail(db, email);
+          if (await loginEmailSignsInElsewhere(email, actor.orgId)) {
+            return NextResponse.json(
+              { error: `${email} already signs in to another organization. Invite a different address, or ask a platform administrator to grant this person access to your organization from Platform → Access.` },
+              { status: 409 },
+            );
           }
           const inserted = await db.execute<{ id: string }>(sql`
             insert into users (org_id, email, name, password_hash, is_active, created_by, updated_by)

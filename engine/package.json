@@ -604,6 +604,7 @@
     "./testing/organization/feature-defaults": "./src/organization/feature-defaults.ts",
     "./organization/feature-registry": "./src/organization/feature-registry.ts",
     "./organization/permissions": "./src/organization/permissions.ts",
+    "./organization/login-identity": "./src/organization/login-identity.ts",
     "./organization/sandbox-guard": "./src/organization/sandbox-guard.ts",
     "./organization/subsidiaries": "./src/organization/subsidiaries.ts",
     "./payables/ap-capture-config": "./src/payables/ap-capture-config.ts",

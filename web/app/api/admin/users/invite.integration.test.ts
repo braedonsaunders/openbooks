@@ -282,6 +282,27 @@ test("a retry for an address owned by a real account still conflicts", async () 
   }
 });
 
+test("an invite cannot claim an address that already signs in to another organization", async () => {
+  // Sign-in resolves an address across organizations; a second active
+  // identity would lock the other organization's member out of password
+  // sign-in and reset, so the invite refuses and names the access grant.
+  const owner = await seed();
+  const f = await seed();
+  try {
+    const taken = "member.elsewhere@scratch.test";
+    await withBypassContext(() => db.execute(sql`insert into users (org_id, email, name, password_hash, is_active)
+      values (${owner.orgId}, ${taken}, 'Existing member', 'scrypt:activated', true)`));
+    const refused = await invite({ action: "invite", email: taken, roleId: f.roleId });
+    assert.equal(refused.status, 409);
+    assert.match(((await refused.json()) as { error: string }).error, /already signs in to another organization.*Platform → Access/);
+    assert.equal(await userRow(f, taken), undefined);
+  } finally {
+    state.authz = null;
+    await dropScratchOrg(f.orgId);
+    await dropScratchOrg(owner.orgId);
+  }
+});
+
 test("concurrent invites for one address create a single user", async () => {
   const f = await seed();
   try {
