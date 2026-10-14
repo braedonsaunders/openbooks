@@ -1,3 +1,4 @@
+import { requireAutomaticBenefitSubmission } from './submission-routing.ts';
 import { awardDeliveryPolicy, readAwardDeliveryPolicy } from './award-delivery-policy.ts';
 import { addCalendarDays } from '../../platform/civil-date.ts';
 import { BENEFIT_AWARD_SUBJECT_KIND } from "@openbooks/schema/src/benefits-programs.ts";
@@ -808,6 +809,36 @@ export async function submitBenefitAward(query: {
 type SubmissionRun = { id: string; status: string; context: Record<string, unknown> };
 async function awardSubmissionRuns(orgId: string, awardId: string): Promise<SubmissionRun[]> {
   return (await db.execute<SubmissionRun>(sql`select id, status, context from flow_runs where org_id = ${orgId} and subject_kind = ${BENEFIT_AWARD_SUBJECT_KIND} and subject_id = ${awardId} and trigger = 'on_submit' order by created_at, id`)).rows;
+}
+
+/** Complete the existing automatically routed submission without creating another decision run. */
+export async function completeBenefitAwardSubmission(query:{orgId:string;actorId:string;awardId:string;runId:string;mode:'gated'|'automatic'}):Promise<{status:string}>{
+  const orgId=requireOrgId(query.orgId),actorId=requireActorId(query.actorId),awardId=requireId(query.awardId,'awardId'),runId=requireId(query.runId,'runId');
+  if(query.mode!=='automatic')throw new BenefitsError('REFUSED','Gated benefit decisions finish through their assigned native approval action');
+  return withOrgTransaction(orgId,async()=>{
+    await requireHrmBenefitsManage(db,orgId,actorId);await assertHrmEnabled(db,orgId);
+    await lockFlowSubjectDecision(orgId,BENEFIT_AWARD_SUBJECT_KIND,awardId);
+    const row=requireOneRow((await db.execute<Record<string,unknown>>(sql`select ${AWARD_COLUMNS} from hrm_benefit_awards
+      where org_id=${orgId} and id=${awardId} for update`)).rows,'Loading the original benefit submission');
+    const before=toAward(row);await requireAwardEntityScope(db,orgId,actorId,before.programId);
+    const run=await requireAutomaticBenefitSubmission(db,{orgId,actorId,subjectKind:BENEFIT_AWARD_SUBJECT_KIND,subjectId:awardId,runId});
+    const policy=row.programSnapshot as Record<string,unknown>;
+    if(before.flowRunId!==runId||!before.submittedBy||!before.submittedAt||run.createdBy!==before.submittedBy||policy.approvalMode!=='flows'
+      ||policy.id!==before.programId||run.context.programId!==before.programId||run.context.programCode!==policy.code
+      ||run.context.legalEntityId!==policy.legalEntityId||run.context.employmentId!==before.employmentId
+      ||run.context.value!==before.value||run.context.currency!==before.currency||run.context.periodFrom!==before.periodFrom||run.context.periodTo!==before.periodTo)
+      throw new BenefitsError('REFUSED','The completed Flow does not match this award’s original submission and frozen issuance — preserve its history and review the existing run');
+    if(['approved','queued','delivered'].includes(before.status)&&before.decisionSnapshot?.mode==='automatic'&&before.decisionSnapshot.runId===runId)
+      return {status:before.status};
+    if(before.status!=='pending'||before.decisionSnapshot!==null)throw new BenefitsError('BAD_STATE','Only this reward’s pending original submission can finish automatically');
+    const runs=await awardSubmissionRuns(orgId,awardId),decision={outcome:'approved',mode:'automatic',runId,runs,gates:[]};
+    const after=toAward(requireOneRow((await db.execute<Record<string,unknown>>(sql`update hrm_benefit_awards
+      set status='approved',approved_at=now(),approved_by=null,decision_snapshot=${JSON.stringify(decision)}::jsonb,updated_by=${actorId},updated_at=now()
+      where org_id=${orgId} and id=${awardId} and status='pending' and flow_run_id=${runId} returning ${AWARD_COLUMNS}`)).rows,'Completing the existing automatic reward submission'));
+    await appendAwardEvent(db,orgId,actorId,awardId,'automatically_approved','Ready for payroll under the completed direct processing policy; no human approval was recorded');
+    await auditAwardWrite(db,orgId,actorId,awardId,'submitted',before,after,'Completed the same automatic submission run');
+    return {status:after.status};
+  });
 }
 
 /** Native gate release runs inside decideGate's transactional savepoint. */

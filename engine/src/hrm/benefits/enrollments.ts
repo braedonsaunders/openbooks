@@ -1,3 +1,5 @@
+import { canonicalJson } from '../../platform/canonical-json.ts';
+import { requireAutomaticBenefitSubmission } from './submission-routing.ts';
 import { recordEnrollmentContributionTerms, validateBenefitPlanActivation, type EnrollmentContributionInput } from './contributions.ts';
 import { sql } from "drizzle-orm";
 import { BENEFIT_ENROLLMENT_SUBJECT_KIND } from "@openbooks/schema/src/hrm-benefits.ts";
@@ -610,6 +612,34 @@ async function submitBenefitEnrollment(orgId: string, actorId: string, enrollmen
     const runs=(await db.execute<{id:string;status:string;context:Record<string,unknown>}>(sql`select id,status,context from flow_runs where org_id=${orgId} and subject_kind=${BENEFIT_ENROLLMENT_SUBJECT_KIND} and subject_id=${enrollmentId} and trigger='on_submit' order by created_at,id`)).rows;
     await activateBenefitEnrollment(orgId,actorId,enrollmentId,{outcome:'approved',mode:'automatic',runId:run.runId,runs,gates:[]});
   }
+}
+
+/** Finish only the submitted elections carried by this completed automatic run. */
+export async function completeBenefitEnrollmentSubmission(query:{orgId:string;actorId:string;enrollmentId:string;runId:string;mode:'gated'|'automatic'}):Promise<{status:string}>{
+  const orgId=requireOrgId(query.orgId),actorId=requireActorId(query.actorId),enrollmentId=requireId(query.enrollmentId,'enrollmentId'),runId=requireId(query.runId,'runId');
+  if(query.mode!=='automatic')throw new BenefitsError('REFUSED','Gated contribution elections finish through their assigned native approval action');
+  return withOrgTransaction(orgId,async()=>{
+    await requireHrmBenefitsManage(db,orgId,actorId);await assertHrmEnabled(db,orgId);
+    await lockFlowSubjectDecision(orgId,BENEFIT_ENROLLMENT_SUBJECT_KIND,enrollmentId);
+    const row=requireOneRow((await db.execute<Record<string,unknown>>(sql`select * from hrm_benefit_enrollments
+      where org_id=${orgId} and id=${enrollmentId} for update`)).rows,'Loading the original contribution submission');
+    const enrollment=await loadEnrollment(db,orgId,enrollmentId);
+    const subject=await requireHrmBenefitsManageOnEmployment(db,orgId,actorId,enrollment.employmentId);
+    const run=await requireAutomaticBenefitSubmission(db,{orgId,actorId,subjectKind:BENEFIT_ENROLLMENT_SUBJECT_KIND,subjectId:enrollmentId,runId});
+    const snapshot=row.submission_snapshot;
+    if(snapshot===null||typeof snapshot!=='object'||Array.isArray(snapshot)||row.flow_run_id!==runId||!row.submitted_at
+      ||row.submitted_by!==run.createdBy||(snapshot as Record<string,unknown>).approvalMode!=='flows'
+      ||Object.entries(snapshot).some(([key,value])=>!(key in run.context)||canonicalJson(value)!==canonicalJson(run.context[key])))
+      throw new BenefitsError('REFUSED','The completed Flow does not match the original contribution elections — preserve the submission and review its existing run');
+    const prior=row.decision_snapshot as Record<string,unknown>|null;
+    if(enrollment.status==='active'&&prior?.mode==='automatic'&&prior.runId===runId)return {status:'active'};
+    if(enrollment.status!=='pending_approval'||prior!==null)throw new BenefitsError('BAD_STATE','Only this election’s pending original submission can finish automatically');
+    await requireActivePlanInScope(db,orgId,subject,enrollment.planId,enrollment.effectiveFrom);
+    const runs=(await db.execute<{id:string;status:string;context:Record<string,unknown>}>(sql`select id,status,context from flow_runs
+      where org_id=${orgId} and subject_kind=${BENEFIT_ENROLLMENT_SUBJECT_KIND} and subject_id=${enrollmentId} and trigger='on_submit' order by created_at,id`)).rows;
+    await activateBenefitEnrollment(orgId,actorId,enrollmentId,{outcome:'approved',mode:'automatic',runId,runs,gates:[]});
+    return {status:(await loadEnrollment(db,orgId,enrollmentId)).status};
+  });
 }
 
 /** Native gate release is the sole human decision path for contribution elections. */
