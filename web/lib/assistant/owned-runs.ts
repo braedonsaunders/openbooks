@@ -83,6 +83,29 @@ function isBoundaryParts(parts: unknown[]): boolean {
   });
 }
 
+const FINISH_RETRY_DELAYS_MS = [250, 1_000, 4_000] as const;
+
+/**
+ * Persist a run's terminal state. A missing row (the conversation was
+ * deleted) needs nothing further; a failed write is retried, and a run that
+ * still cannot be finished is reported rather than left silently "running".
+ */
+async function persistFinish(store: OwnedRunStore, runId: string, outcome: OwnedRunOutcome): Promise<void> {
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      await store.finishRun(runId, outcome);
+      return;
+    } catch (error) {
+      const delay = FINISH_RETRY_DELAYS_MS[attempt];
+      if (delay === undefined) {
+        console.error(`Assistant run ${runId} could not record its ${outcome.status} state`, error);
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, delay));
+    }
+  }
+}
+
 export async function executeOwnedRun(opts: {
   store: OwnedRunStore;
   conversationId: string;
@@ -166,7 +189,7 @@ export async function trackOwnedRun(opts: {
             })
             .catch(() => {
               // A failed progress write must not kill the turn; the final
-              // finish write is retried below and carries the full parts.
+              // finish write carries the full parts and is retried.
             });
         } else {
           broadcast();
@@ -178,26 +201,20 @@ export async function trackOwnedRun(opts: {
     if (outcome.parts.length > 0) latestParts = outcome.parts;
     const terminal: OwnedRunStatus = stopped || controller.signal.aborted ? "stopped" : outcome.status;
     revision += 1;
-    try {
-      await store.finishRun(runId, { ...outcome, parts: latestParts, status: terminal });
-    } catch {
-      // The row may be gone (deleted mid-turn): the turn still completed.
-    }
+    // A deleted conversation is a false return, not an error; a failed write
+    // is retried so the run never stays "running" after its turn ended.
+    await persistFinish(store, runId, { ...outcome, parts: latestParts, status: terminal });
     return snapshot(terminal);
   } catch {
     latestParts = latestParts.length > 0 ? latestParts : [{ type: "text", text: "The assistant could not complete this response. Please try again." }];
     revision += 1;
-    try {
-      await store.finishRun(runId, {
-        status: "failed",
-        parts: latestParts,
-        content: "The assistant could not complete this response. Please try again.",
-        usage: {},
-        finishReason: "error",
-      });
-    } catch {
-      // Row gone: nothing left to persist.
-    }
+    await persistFinish(store, runId, {
+      status: "failed",
+      parts: latestParts,
+      content: "The assistant could not complete this response. Please try again.",
+      usage: {},
+      finishReason: "error",
+    });
     return snapshot("failed");
   } finally {
     clearInterval(watchdog);

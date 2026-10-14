@@ -184,3 +184,26 @@ test("a reattached reader sees the full event log, including pre-attach progress
   const end = await store.readRun(mid.runId);
   assert.deepEqual(end?.parts, [{ type: "text", text: "first second third" }]);
 });
+
+test("a transient failure finishing the run is retried, never left running", async () => {
+  const store = createMemoryOwnedRunStore();
+  const finish = store.finishRun.bind(store);
+  let failures = 1;
+  store.finishRun = async (runId, outcome) => {
+    if (failures > 0) {
+      failures -= 1;
+      throw new Error("connection reset");
+    }
+    return finish(runId, outcome);
+  };
+  const final = await executeOwnedRun({
+    store,
+    conversationId: "conv-retry",
+    userText: "hello",
+    run: scriptedTurn(textFrames(["Done"])),
+    progressIntervalMs: 1,
+  });
+  assert.equal(final.status, "complete");
+  assert.equal((await store.readRun(final.runId))?.status, "complete");
+  assert.equal(await store.activeRun("conv-retry"), null);
+});
