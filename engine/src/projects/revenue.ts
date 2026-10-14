@@ -89,6 +89,45 @@ export function costToCostPercent(budget: string, actual: string): string | null
 }
 
 /**
+ * A project's cost incurred to date and estimated total cost, the cost-to-cost
+ * measure that prices percent complete and identifies a loss contract.
+ *
+ * Cost incurred is the project's posted expense in its own legal entity and
+ * the primary book, plus the configured labor WIP account: project WIP is
+ * the natural mapping for that account, and it is the designated project-cost
+ * accumulator, so other asset postings (capitalized items) stay excluded.
+ * Once the project carries estimates to complete, the estimated total is
+ * cost to date plus every task's latest estimate to complete on or before
+ * the as-of date; otherwise it is the task cost budget.
+ */
+export async function projectCostEstimate(
+  tx: Pick<typeof db, "execute">,
+  orgId: string,
+  input: { projectId: string; subsidiaryId: string; bookId: string; laborWipAccountId: string | null; asOfDate: string; progressOn: boolean },
+): Promise<{ estimatedTotal: string; actual: string }> {
+  const laborWipScope = input.laborWipAccountId ? sql`or l.account_id = ${input.laborWipAccountId}` : sql``;
+  const cc = (await tx.execute<{ budget: string; actual: string }>(sql`
+    select
+      coalesce((select sum(t.estimated_cost) from project_tasks t
+                 where t.project_id = ${input.projectId} and t.org_id = ${orgId}), 0) as budget,
+      coalesce((select sum(l.amount) from journal_lines l
+                join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+                join accounts a on a.id = l.account_id and a.org_id = l.org_id
+               where l.org_id = ${orgId} and l.project_id = ${input.projectId} and e.status in ('posted', 'reversed')
+                 and e.book_id = ${input.bookId}
+                 and ${excludePeriodEndJournals(sql`e.origin`)}
+                 and l.subsidiary_id = ${input.subsidiaryId} and e.posting_date <= ${input.asOfDate}::date
+                 and (a.type in ('expense','cogs','expense_other','expense_deferred') ${laborWipScope})), 0) as actual`));
+  const actual = normalizeMoney(cc.rows[0]?.actual ?? "0");
+  let estimatedTotal = normalizeMoney(cc.rows[0]?.budget ?? "0");
+  if (input.progressOn) {
+    const [earned] = await loadEarnedValue(tx, orgId, { asOf: input.asOfDate, projectIds: [input.projectId], allowedSubsidiaryIds: null });
+    if (earned?.hasForecasts) estimatedTotal = add(actual, earned.totals.estimateToComplete);
+  }
+  return { estimatedTotal, actual };
+}
+
+/**
  * Ensure the org's built-in percent-complete rule for project contracts. The
  * rule stays fully editable under Setup → Recognition Rules (accounts left to
  * the obligation, which carries the org control accounts).
@@ -289,41 +328,10 @@ export async function syncProjectRevenueContractsInTransaction(
         result.problems.push(`${p.code}: cost-to-cost progress requires one authoritative active posting primary accounting book`);
         continue;
       }
-      // Functional amounts belong to the line's entity. An intercompany
-      // entry may originate in another entity without changing cost ownership.
-      // Cost-to-date also counts the configured labor WIP account: it may be
-      // an asset (project WIP is the natural mapping), in which case the type
-      // filter above silently drops every posted labor cost and understates
-      // progress. The account is the designated project-cost accumulator, so
-      // naming it is precise — other asset postings (capitalized items) are
-      // not costs incurred and stay excluded.
-      const laborWipScope = accts.laborWip ? sql`or l.account_id = ${accts.laborWip}` : sql``;
-      const cc = (await tx.execute<{ budget: string; actual: string }>(sql`
-        select
-          coalesce((select sum(t.estimated_cost) from project_tasks t
-                     where t.project_id = ${p.id} and t.org_id = ${orgId}), 0) as budget,
-          coalesce((select sum(l.amount) from journal_lines l
-                    join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
-                    join accounts a on a.id = l.account_id and a.org_id = l.org_id
-                   where l.org_id = ${orgId} and l.project_id = ${p.id} and e.status in ('posted', 'reversed')
-                     and e.book_id = ${primary.id}
-                     and ${excludePeriodEndJournals(sql`e.origin`)}
-                     and l.subsidiary_id = ${owner.id} and e.posting_date <= ${asOfDate}::date
-                     and (a.type in ('expense','cogs','expense_other','expense_deferred') ${laborWipScope})), 0) as actual`));
-      // Estimated total cost (ASC 606 input method): once the project carries
-      // estimates to complete, the denominator is cost to date plus the
-      // estimate to complete of every task (the latest forecast on or before
-      // the as-of date, else the task's remaining budget). A rising estimate
-      // therefore lowers percent complete; the schedule rebuild books the
-      // cumulative catch-up. Without forecasts the task budget stands.
-      let estimatedTotal = cc.rows[0]?.budget ?? "0";
-      if (progressOn) {
-        const [earned] = await loadEarnedValue(tx, orgId, { asOf: asOfDate, projectIds: [p.id], allowedSubsidiaryIds: null });
-        if (earned?.hasForecasts) {
-          estimatedTotal = add(normalizeMoney(cc.rows[0]?.actual ?? "0"), earned.totals.estimateToComplete);
-        }
-      }
-      const measured = costToCostPercent(estimatedTotal, cc.rows[0]?.actual ?? "0");
+      const { estimatedTotal, actual } = await projectCostEstimate(tx, orgId, {
+        projectId: p.id, subsidiaryId: owner.id, bookId: primary.id, laborWipAccountId: accts.laborWip ?? null, asOfDate, progressOn,
+      });
+      const measured = costToCostPercent(estimatedTotal, actual);
       if (measured === null) {
         // Missing estimates leave progress unmeasurable. Refusing here keeps
         // the existing obligation and schedules exactly as they were instead

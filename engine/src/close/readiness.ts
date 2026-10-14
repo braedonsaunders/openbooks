@@ -1,4 +1,5 @@
 import { CloseError, NON_POSTING_DOCUMENT_KINDS } from "../periods/period-policy.ts";
+import { projectLossPolicyMode, unassessedLossContracts } from "../projects/loss-contracts.ts";
 import { incompletePostingEffectsCount } from "../periods/period-locks.ts";
 import { createHash } from "node:crypto";
 import { sql, type SQL } from "drizzle-orm";
@@ -582,7 +583,27 @@ export async function readinessChecks(
     having sum(l.amount)<>0
   ) residuals`)).rows[0]?.count ?? '0';
 
+  // Loss contracts: the effective project loss policy decides whether a
+  // project forecasting a loss without a loss assessment applied in the
+  // period is reported, and whether that finding blocks the close.
+  const isoDay = (value: unknown) => value instanceof Date ? value.toISOString().slice(0, 10) : String(value).slice(0, 10);
+  const lossMode = await projectLossPolicyMode(db, orgId, isoDay(ctx.ends_on));
+  const lossContracts = lossMode === "off" ? [] : await unassessedLossContracts(db, orgId, {
+    periodStartsOn: isoDay(ctx.starts_on), periodEndsOn: isoDay(ctx.ends_on), bookId: ctx.book_id, subsidiaryIds,
+  });
+  const lossChecks: ReadinessCheck[] = lossMode === "off" ? [] : [{
+    code: "project-loss-unassessed",
+    taskKey: "recognition-posted",
+    category: "revenue",
+    severity: lossMode === "require" ? "critical" : "warning",
+    title: "close.diagnostics.project-loss-unassessed.title",
+    message: "close.diagnostics.project-loss-unassessed.message",
+    count: lossContracts.length,
+    details: lossContracts.length > 0 ? { projects: lossContracts } : undefined,
+  }];
+
   return [
+    ...lossChecks,
     {code:'balancing-segment-residual',taskKey:'drafts-cleared',category:'readiness',severity:'critical',
       title:'close.diagnostics.balancing-segment-residual.title',message:'close.diagnostics.balancing-segment-residual.message',count:Number(segmentResiduals)},
     {

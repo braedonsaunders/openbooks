@@ -640,6 +640,7 @@ function closeExceptionActionHref(code: string, run: CloseRunRow): string | null
     "intercompany-unreconciled": "/reports/intercompany-reconciliation",
     "consolidated-rates-missing": "/reports/trial-balance",
     "material-variances": "/reports/pnl",
+    "project-loss-unassessed": "/accounting/provisions",
     "commerce-orders-incomplete": "/channels",
     "commerce-storefront-unreachable": "/channels",
     "commerce-payouts-unposted": "/banking/psp-settlements",

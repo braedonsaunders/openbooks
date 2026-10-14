@@ -185,6 +185,10 @@
       "title": "Wesentliche Schwankungen erfordern eine Erläuterung",
       "message": "{count, plural, one {# Konto überschreitet die konfigurierten Wesentlichkeitsschwellen.} other {# Konten überschreiten die konfigurierten Wesentlichkeitsschwellen.}}"
     },
+    "project-loss-unassessed": {
+      "title": "Verlustaufträge benötigen eine Verlustbewertung",
+      "message": "{count, plural, one {# Projekt erwartet Kosten über dem Auftragswert ohne in dieser Periode angewandte Verlustbewertung. Bewerten Sie den erwarteten Verlust unter Rückstellungen und Eventualverpflichtungen.} other {# Projekte erwarten Kosten über dem Auftragswert ohne in dieser Periode angewandte Verlustbewertung. Bewerten Sie jeden erwarteten Verlust unter Rückstellungen und Eventualverpflichtungen.}}"
+    },
     "posting-effects-incomplete": {
       "title": "Unvollständige Buchungsfolgen",
       "message": "Gebuchte Belege haben unvollständige Bestands- oder Erlösverarbeitung. Fehler beheben, endgültig fehlgeschlagene Verarbeitung am Beleg mit Prüfungsbegründung erneut ausführen und vor dem Hauptbuchabschluss auf den Abschluss warten."

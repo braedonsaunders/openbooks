@@ -3863,7 +3863,8 @@
       "gl-audit-number-policies": {
         "title": "GL Audit Number Policies",
         "description": "GL Audit Number Policies"
-      }
+      },
+      "project-loss-policies": {"title": "Project Loss Policies", "description": "When projects forecasting a loss are flagged at close, and whether the close waits for their loss assessment."}
     },
     "fields": {
       "aggregation": "Aggregation",
@@ -4565,7 +4566,8 @@
       "priority": "Priority",
       "resetRule": "Reset rule",
       "segmentKey": "Segment key",
-      "recordType": "Record type"
+      "recordType": "Record type",
+      "mode": "Policy"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Days between the newest usable rate and the period end beyond which revaluation and consolidation refuse the rate. Closing rates count from the date of the period-end spot rate; average rates from the newest quote averaged. Default when no policy is set: 31 days.",
@@ -5618,7 +5620,8 @@
         "period": "Per period",
         "fiscal_year": "Per fiscal year",
         "never": "Never"
-      }
+      },
+      "projectLossPolicy": {"off": "Off", "warn": "Warn at close", "require": "Require assessment before close"}
     },
     "payroll": {
       "navTitle": "Payroll"

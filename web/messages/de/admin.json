@@ -3950,7 +3950,8 @@
       "subscription-renewal-policies": {
         "title": "Richtlinien für Abonnementverlängerungen",
         "description": "Zeitlich gültige Verlängerungsbedingungen, Verantwortliche und Erinnerungen vor Ablauf."
-      }
+      },
+      "project-loss-policies": {"title": "Richtlinien für Verlustprojekte", "description": "Ob Projekte mit erwartetem Verlust beim Abschluss gemeldet werden und ob der Abschluss auf ihre Verlustbewertung wartet."}
     },
     "fields": {
       "aggregation": "Aggregation",
@@ -4652,7 +4653,8 @@
       "upliftPercent": "Preiserhöhung bei Verlängerung in Prozent",
       "termMonths": "Verlängerungsdauer in Monaten",
       "settlementTaxCodeId": "Steuerschlüssel für die Abrechnung",
-      "recordType": "Datensatztyp"
+      "recordType": "Datensatztyp",
+      "mode": "Richtlinie"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Tage zwischen dem neuesten verwendbaren Kurs und dem Periodenende, ab denen Bewertung und Konsolidierung den Kurs ablehnen. Stichtagskurse zählen ab dem Datum des Kassakurses zum Periodenende, Durchschnittskurse ab der neuesten einbezogenen Notierung. Standard ohne Richtlinie: 31 Tage.",
@@ -5705,7 +5707,8 @@
         "period": "Je Periode",
         "fiscal_year": "Je Geschäftsjahr",
         "never": "Nie"
-      }
+      },
+      "projectLossPolicy": {"off": "Aus", "warn": "Beim Abschluss warnen", "require": "Bewertung vor dem Abschluss verlangen"}
     },
     "bankFeeds": {
       "navTitle": "Bankfeeds"

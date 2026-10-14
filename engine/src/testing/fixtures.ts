@@ -1106,6 +1106,7 @@ const GUARDED_EVIDENCE: { table: string; trigger: string }[] = [
   { table: "journal_reversal_instructions", trigger: "journal_reversal_instruction_guard" },
   { table: "gl_audit_number_assignments", trigger: "gl_audit_number_assignments_immutable" },
   { table: "gl_audit_number_policies", trigger: "gl_audit_number_policies_immutable" },
+  { table: "project_loss_policies", trigger: "project_loss_policies_immutable" },
   { table: "account_translation_policies", trigger: "account_translation_policies_immutable" },
   { table: "subsidiary_accounting_preferences", trigger: "subsidiary_accounting_preferences_immutable" },
   { table: "segment_balancing_policies", trigger: "segment_balancing_policies_immutable" },

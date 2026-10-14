@@ -1,6 +1,7 @@
 import type { SetupEntity } from '../types'
 
 const rateMethods = ['current', 'average', 'historical'].map(value => ({ value, labelKey: `options.accountRateMethod.${value}` }))
+const lossPolicyModes = ['off', 'warn', 'require'].map(value => ({ value, labelKey: `options.projectLossPolicy.${value}` }))
 const version = { actorCols: true, orgScoped: true, hasActive: false, allowUpdate: false, allowDelete: false, groupKey: 'accounting', iconKey: 'book-open', orderBy: 'effective_from desc' } as const
 
 export const FINANCIAL_POLICY_ENTITIES: SetupEntity[] = [
@@ -33,4 +34,10 @@ export const FINANCIAL_POLICY_ENTITIES: SetupEntity[] = [
     fields: [{ key: 'subsidiaryId', kind: 'ref', ref: 'subsidiaries', required: true }, { key: 'effectiveFrom', kind: 'date', required: true },
       { key: 'resetRule', kind: 'select', required: true, options: ['period','fiscal_year','never'].map(value => ({ value, labelKey: `options.auditNumberReset.${value}` })) },
       { key: 'prefix', kind: 'text', required: true, defaultValue: 'GL' }, { key: 'reason', kind: 'textarea', required: true }] },
+  // Loss contracts: whether close flags projects forecasting a loss without a
+  // loss assessment in the period, and whether that finding blocks the close.
+  { ...version, key: 'project-loss-policies', table: 'project_loss_policies', groupKey: 'projects', featureKey: 'projects',
+    columns: [{ key: 'effectiveFrom', kind: 'date' }, { key: 'mode', kind: 'badge', options: lossPolicyModes }],
+    fields: [{ key: 'effectiveFrom', kind: 'date', required: true }, { key: 'mode', kind: 'select', required: true, options: lossPolicyModes },
+      { key: 'reason', kind: 'textarea', required: true }] },
 ]

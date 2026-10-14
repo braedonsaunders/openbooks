@@ -319,7 +319,7 @@ export function generateCopySql(
       exprs.push(`(select p.prefix from gl_audit_number_policies p where p.org_id='${prod}'::uuid and p.id="gl_audit_number_assignments".policy_id) || '-' || replace(${auditScope}, ':', '-') || '-' || lpad("ordinal"::text, greatest(6,length("ordinal"::text)), '0')`);
       continue;
     }
-    if (["fx_rate_types", "account_translation_policies", "subsidiary_accounting_preferences", "segment_balancing_policies", "gl_audit_number_policies"].includes(t.name)
+    if (["fx_rate_types", "account_translation_policies", "subsidiary_accounting_preferences", "segment_balancing_policies", "gl_audit_number_policies", "project_loss_policies"].includes(t.name)
         && c.isUuid && ["created_by", "updated_by"].includes(c.name)) {
       exprs.push(`(case when "${c.name}" is null then null else ob_rebase("${c.name}", '${seed}'::uuid) end)`);
       continue;
@@ -338,7 +338,7 @@ export function generateCopySql(
       exprs.push(`public.production_clone_safe_evidence("${c.name}", '${seed}'::uuid, '${c.name}', '${sbx}'::uuid, ${opts.masked ? 'true' : 'false'})`);
       continue;
     }
-    if (opts.masked && ["fx_rate_types", "account_translation_policies", "subsidiary_accounting_preferences", "segment_balancing_policies", "gl_audit_number_policies", "rebate_agreements", "rebate_cost_attestations", "rebate_claims", "rebate_settlement_reversals", "recognition_control_events", "journal_lines"].includes(t.name)
+    if (opts.masked && ["fx_rate_types", "account_translation_policies", "subsidiary_accounting_preferences", "segment_balancing_policies", "gl_audit_number_policies", "project_loss_policies", "rebate_agreements", "rebate_cost_attestations", "rebate_claims", "rebate_settlement_reversals", "recognition_control_events", "journal_lines"].includes(t.name)
         && ["name", "reason", "memo", "evidence"].includes(c.name)) {
       const redacted = t.name === "rebate_cost_attestations" && c.name === "evidence" ? "REDACTED FINANCIAL EVIDENCE" : "REDACTED";
       exprs.push(`(case when "${c.name}" is null then null else '${redacted}' end)`);

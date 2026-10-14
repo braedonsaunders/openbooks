@@ -8,6 +8,7 @@ import { submitFinancialChange } from '../flows/financial-changes-adapter.ts'
 import { decideGate } from '../flows/gates.ts'
 import { proposeProvisionAssessment, applyProvisionAssessment, type ProvisionProposal } from './assessments.ts'
 import { postEntry } from '../journal/post-entry.ts'
+import { projectLossPolicyMode, unassessedLossContracts } from '../projects/loss-contracts.ts'
 
 test('governed construction forecasts recognize remaining loss once, refuse stale evidence and honor the Projects gate', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const org = await createScratchOrg()
@@ -28,6 +29,8 @@ test('governed construction forecasts recognize remaining loss once, refuse stal
       const projectId = randomUUID()
       await withBypassContext(async () => {
         await db.execute(sql`insert into projects(id,org_id,code,name,subsidiary_id,contract_value) values (${projectId},${org.orgId},'LOSS-CONTRACT','Fixed-price construction',${org.subsidiaryId},'1000000')`)
+        await db.execute(sql`insert into project_tasks(org_id,project_id,name,estimated_cost) values (${org.orgId},${projectId},'Construction','1150000')`)
+        await db.execute(sql`insert into project_loss_policies(org_id,effective_from,mode,reason) values (${org.orgId},'2000-01-01','require','Loss contracts must be assessed before each close')`)
         await db.execute(sql`insert into user_permission_overrides(org_id,user_id,permission,effect) values (${org.orgId},${actors.submitterId},'projects.read','grant')`)
       })
       const input: ProvisionProposal = {
@@ -46,11 +49,21 @@ test('governed construction forecasts recognize remaining loss once, refuse stal
         await decideGate({ gateId: gate.id, userId: actors.approver1Id, decision: 'approved' })
       }
       await assert.rejects(proposeProvisionAssessment(org.orgId,actors.submitterId,{...input,construction:{...input.construction!,relatedAssetsReviewed:false}}),/post required impairments/)
+      // A forecast above contract value with no assessment in the period is
+      // what the loss policy reports at close; applying the assessment clears it.
+      const period = (await db.execute<{ starts_on: string; ends_on: string }>(sql`
+        select starts_on::text, ends_on::text from accounting_periods where org_id=${org.orgId} and id=${org.periodId}`)).rows[0]!
+      const lossScope = { periodStartsOn: period.starts_on, periodEndsOn: period.ends_on, bookId: org.bookId, subsidiaryIds: [] }
+      assert.equal(await projectLossPolicyMode(db, org.orgId, '1999-12-31'), 'off')
+      assert.equal(await projectLossPolicyMode(db, org.orgId, period.ends_on), 'require')
+      assert.deepEqual((await unassessedLossContracts(db, org.orgId, lossScope)).map((row) => [row.code, row.contractValue, row.estimatedTotalCost]),
+        [['LOSS-CONTRACT', '1000000.0000', '1150000.0000']])
       const change = await proposeProvisionAssessment(org.orgId,actors.submitterId,input)
       assert.equal(await proposeProvisionAssessment(org.orgId,actors.submitterId,input),change)
       await approve(change)
       const result = await applyProvisionAssessment(org.orgId,change,actors.submitterId)
       assert.equal(result.liability,'150000.0000'); assert.equal(result.currentPeriodCharge,'150000.0000')
+      assert.deepEqual(await unassessedLossContracts(db, org.orgId, lossScope), [], 'an assessment applied in the period satisfies the policy')
       assert.deepEqual(await applyProvisionAssessment(org.orgId,change,actors.submitterId),result)
       const review = {...input,idempotencyKey:randomUUID(),construction:{...input.construction!,remainingCost:'850000'}}
       const stale = await proposeProvisionAssessment(org.orgId,actors.submitterId,review)

@@ -3950,7 +3950,8 @@
       "subscription-renewal-policies": {
         "title": "サブスクリプション更新方針",
         "description": "有効日付きの更新条件、担当者、および期限前のリマインダー。"
-      }
+      },
+      "project-loss-policies": {"title": "損失プロジェクト方針", "description": "損失が見込まれるプロジェクトを決算時に警告するか、また損失評価まで決算を保留するかを定めます。"}
     },
     "fields": {
       "aggregation": "集計方法",
@@ -4652,7 +4653,8 @@
       "upliftPercent": "更新時の値上げ率",
       "termMonths": "更新期間（月）",
       "settlementTaxCodeId": "決済の税コード",
-      "recordType": "レコードの種類"
+      "recordType": "レコードの種類",
+      "mode": "方針"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "使用可能な最新レートから期末までの日数がこれを超えると、再評価と連結はそのレートを拒否します。期末レートは期末スポットレートの日付から、平均レートは平均に含まれる最新の相場の日付から数えます。ポリシー未設定時の既定値: 31日。",
@@ -5705,7 +5707,8 @@
         "period": "期間ごと",
         "fiscal_year": "会計年度ごと",
         "never": "リセットなし"
-      }
+      },
+      "projectLossPolicy": {"off": "オフ", "warn": "決算時に警告", "require": "決算前に評価を必須"}
     },
     "invoicing": {
       "navTitle": "請求書"

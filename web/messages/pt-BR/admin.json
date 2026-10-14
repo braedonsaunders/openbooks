@@ -3863,7 +3863,8 @@
       "subscription-renewal-policies": {
         "title": "Políticas de renovação de assinaturas",
         "description": "Condições de renovação com vigência, responsável e lembretes antes do vencimento."
-      }
+      },
+      "project-loss-policies": {"title": "Políticas de projetos deficitários", "description": "Se projetos que preveem perda são sinalizados no fechamento e se o fechamento aguarda a avaliação de perda."}
     },
     "fields": {
       "aggregation": "Agregação",
@@ -4565,7 +4566,8 @@
       "upliftPercent": "Percentual de reajuste na renovação",
       "termMonths": "Prazo de renovação em meses",
       "settlementTaxCodeId": "Código tributário da liquidação",
-      "recordType": "Tipo de registro"
+      "recordType": "Tipo de registro",
+      "mode": "Política"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Dias entre a taxa utilizável mais recente e o fim do período a partir dos quais a reavaliação e a consolidação recusam a taxa. Taxas de fechamento contam a partir da data da taxa à vista de fim de período; taxas médias, a partir da cotação mais recente incluída na média. Padrão sem política: 31 dias.",
@@ -5618,7 +5620,8 @@
         "period": "Por período",
         "fiscal_year": "Por exercício",
         "never": "Nunca"
-      }
+      },
+      "projectLossPolicy": {"off": "Desativada", "warn": "Avisar no fechamento", "require": "Exigir avaliação antes do fechamento"}
     },
     "payroll": {
       "navTitle": "Folha de pagamento"

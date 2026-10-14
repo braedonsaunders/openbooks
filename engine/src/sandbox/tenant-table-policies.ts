@@ -7,6 +7,7 @@ export const TENANT_TABLE_POLICIES = {
   "segment_balancing_policies": "clone:catalog-uuid-rebase",
   "gl_audit_number_policies": "clone:catalog-uuid-rebase",
   "gl_audit_number_assignments": "clone:catalog-uuid-rebase",
+  "project_loss_policies": "clone:catalog-uuid-rebase",
   "recognition_control_events": "clone:catalog-uuid-rebase",
   "rebate_agreements": "clone:catalog-uuid-rebase",
   "rebate_cost_attestations": "clone:catalog-uuid-rebase",

@@ -3788,7 +3788,8 @@
       "subscription-renewal-policies": {
         "title": "Políticas de renovación de suscripciones",
         "description": "Condiciones de renovación con fecha de vigencia, responsable y recordatorios antes del vencimiento."
-      }
+      },
+      "project-loss-policies": {"title": "Políticas de proyectos con pérdida", "description": "Si los proyectos que prevén pérdidas se señalan en el cierre y si el cierre espera su evaluación de pérdida."}
     },
     "fields": {
       "aggregation": "Agregación",
@@ -4490,7 +4491,8 @@
       "upliftPercent": "Porcentaje de incremento en la renovación",
       "termMonths": "Plazo de renovación en meses",
       "settlementTaxCodeId": "Código fiscal de la liquidación",
-      "recordType": "Tipo de registro"
+      "recordType": "Tipo de registro",
+      "mode": "Política"
     },
     "fieldHelp": {
       "fxRateMaxAgeDays": "Días entre el tipo utilizable más reciente y el cierre del período a partir de los cuales la revaluación y la consolidación rechazan el tipo. Los tipos de cierre se cuentan desde la fecha del tipo al contado de cierre; los promedio, desde la cotización más reciente promediada. Valor predeterminado sin política: 31 días.",
@@ -5543,7 +5545,8 @@
         "period": "Por período",
         "fiscal_year": "Por ejercicio",
         "never": "Nunca"
-      }
+      },
+      "projectLossPolicy": {"off": "Desactivada", "warn": "Advertir en el cierre", "require": "Exigir evaluación antes del cierre"}
     },
     "laborCosting": {
       "navTitle": "Costeo de mano de obra",

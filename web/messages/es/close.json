@@ -185,6 +185,10 @@
       "title": "Las fluctuaciones materiales requieren explicación",
       "message": "{count, plural, one {# cuenta supera los umbrales de materialidad configurados.} other {# cuentas superan los umbrales de materialidad configurados.}}"
     },
+    "project-loss-unassessed": {
+      "title": "Los contratos con pérdida requieren una evaluación",
+      "message": "{count, plural, one {# proyecto prevé costos superiores al valor del contrato sin una evaluación de pérdida aplicada en este período. Evalúe la pérdida prevista en Provisiones y contingencias.} other {# proyectos prevén costos superiores al valor del contrato sin una evaluación de pérdida aplicada en este período. Evalúe cada pérdida prevista en Provisiones y contingencias.}}"
+    },
     "posting-effects-incomplete": {
       "title": "Efectos de contabilización incompletos",
       "message": "Hay documentos contabilizados con proyecciones de inventario o ingresos incompletas. Resuelva los errores, reintente los fallos definitivos desde el documento con un motivo de revisión y espere a que finalicen antes de cerrar el libro mayor."

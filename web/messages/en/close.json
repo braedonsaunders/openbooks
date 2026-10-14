@@ -185,6 +185,10 @@
       "title": "Material fluctuations require explanation",
       "message": "{count, plural, one {# account exceeds the configured materiality thresholds.} other {# accounts exceed the configured materiality thresholds.}}"
     },
+    "project-loss-unassessed": {
+      "title": "Loss contracts need a loss assessment",
+      "message": "{count, plural, one {# project forecasts costs above its contract value with no loss assessment applied this period. Assess its anticipated loss under Provisions and contingencies.} other {# projects forecast costs above their contract value with no loss assessment applied this period. Assess each anticipated loss under Provisions and contingencies.}}"
+    },
     "posting-effects-incomplete": {
       "title": "Posting effects incomplete",
       "message": "Posted documents have incomplete inventory or revenue projections. Resolve failures, retry terminal failures from the document with a review reason, and wait for completion before closing GL."
