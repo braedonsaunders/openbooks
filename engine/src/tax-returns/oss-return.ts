@@ -203,9 +203,7 @@ export async function computeOssReturn(
   // prices them in the customer's state. A credit correcting an older
   // document attributes to that document's quarter below; every other credit
   // nets in its own period as a negative supply. The corrected document
-  // resolves through the credit's `corrects` relationship; the legacy
-  // custom pointer is honored only while no relationship exists, until its
-  // values are backfilled into relationships.
+  // resolves through the credit's `corrects` relationship.
   const current = (
     await runner.execute<
       AttributedLine & { currency: string }
@@ -230,13 +228,7 @@ export async function computeOssReturn(
          and correction_edge.link_type = 'corrects'
         left join documents corrected
           on corrected.org_id = d.org_id
-         and corrected.id = coalesce(
-           correction_edge.to_document_id,
-           case
-             when d.custom -> 'crossBorder' ->> 'correctsDocument' ~ '^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$'
-             then (d.custom -> 'crossBorder' ->> 'correctsDocument')::uuid
-           end
-         )
+         and corrected.id = correction_edge.to_document_id
        where d.org_id = ${orgId}
          and d.kind in ('customer_invoice', 'customer_credit')
          and d.status = 'posted'

@@ -203,7 +203,7 @@ test("an invoice cannot name a corrected document", { skip: !DB }, async () => {
     );
     assert.ok(!(await db.execute(sql`
       select 1 from documents
-       where id = ${draftId} and custom -> 'crossBorder' ? 'correctsDocument'`)).rows.length);
+       where id = ${draftId} and custom -> 'crossBorder' ? 'correctsDocumentId'`)).rows.length);
   } finally {
     await dropScratchOrg(org.orgId);
   }

@@ -27,16 +27,14 @@ export interface CrossBorderElection {
   /**
    * A credit memo correcting an older supply names the corrected document.
    * The OSS return attributes the correction to that document's quarter; a
-   * credit without it nets in its own period. Stored elections keep the
-   * legacy `correctsDocument` key; operator input arrives as
+   * credit without it nets in its own period. Operator input arrives as
    * `correctsDocumentId` and is recorded as a `corrects` document
-   * relationship, never written back into custom JSON.
+   * relationship, never written into custom JSON.
    */
-  correctsDocument?: string;
   correctsDocumentId?: string | null;
 }
 
-const ELECTION_KEYS = ["supplyKind", "customerKind", "correctsDocument", "correctsDocumentId"];
+const ELECTION_KEYS = ["supplyKind", "customerKind", "correctsDocumentId"];
 
 export function parseCrossBorderElection(raw: unknown): CrossBorderElection | null {
   if (raw === undefined || raw === null) return null;
@@ -55,11 +53,6 @@ export function parseCrossBorderElection(raw: unknown): CrossBorderElection | nu
       "record the cross-border classification as exactly a digital service or goods, for a consumer or a business; other supplies need their explicit tax profile",
     );
   }
-  if (value.correctsDocument !== undefined && typeof value.correctsDocument !== "string") {
-    throw new CrossBorderTaxError(
-      "name the corrected document by its identifier when a credit memo corrects an older supply",
-    );
-  }
   if (
     value.correctsDocumentId !== undefined &&
     value.correctsDocumentId !== null &&
@@ -72,9 +65,6 @@ export function parseCrossBorderElection(raw: unknown): CrossBorderElection | nu
   return {
     supplyKind: value.supplyKind,
     customerKind: value.customerKind,
-    ...(typeof value.correctsDocument === "string" && value.correctsDocument
-      ? { correctsDocument: value.correctsDocument }
-      : {}),
     ...(typeof value.correctsDocumentId === "string" && value.correctsDocumentId
       ? { correctsDocumentId: value.correctsDocumentId }
       : {}),
