@@ -354,6 +354,20 @@
       "last_receipt": "Costo de la última recepción",
       "standard": "Costo estándar",
       "configured": "Costo configurado"
+    },
+    "shortfalls": {
+      "title": "Faltantes pendientes de cuenta de cargo",
+      "description": "Estos faltantes de existencias negativas se emitieron antes de registrar la cuenta a la que se cargaron. Indique esa cuenta para que una recepción pueda corregir su costo provisional.",
+      "location": "Ubicación",
+      "issuedOn": "Emitido",
+      "remaining": "Pendiente",
+      "provisionalCost": "Costo unitario provisional",
+      "account": "Cuenta cargada",
+      "reason": "Motivo",
+      "reasonPlaceholder": "Por qué esta cuenta asumió el costo del faltante",
+      "record": "Registrar cuenta",
+      "recorded": "Cuenta registrada",
+      "failed": "No se pudo registrar la cuenta"
     }
   },
   "fairValue": {

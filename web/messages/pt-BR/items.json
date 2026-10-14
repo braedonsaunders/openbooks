@@ -344,6 +344,20 @@
       "last_receipt": "Custo do último recebimento",
       "standard": "Custo padrão",
       "configured": "Custo configurado"
+    },
+    "shortfalls": {
+      "title": "Faltas aguardando conta debitada",
+      "description": "Essas faltas de estoque negativo foram baixadas antes do registro da conta debitada. Informe essa conta para que um recebimento possa corrigir o custo provisório.",
+      "location": "Local",
+      "issuedOn": "Baixado em",
+      "remaining": "Restante",
+      "provisionalCost": "Custo unitário provisório",
+      "account": "Conta debitada",
+      "reason": "Motivo",
+      "reasonPlaceholder": "Por que esta conta absorveu o custo da falta",
+      "record": "Registrar conta",
+      "recorded": "Conta registrada",
+      "failed": "Não foi possível registrar a conta"
     }
   },
   "fairValue": {

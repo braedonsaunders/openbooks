@@ -357,6 +357,20 @@
       "last_receipt": "Kosten des letzten Eingangs",
       "standard": "Standardkosten",
       "configured": "Konfigurierte Kosten"
+    },
+    "shortfalls": {
+      "title": "Fehlmengen ohne erfasstes Belastungskonto",
+      "description": "Diese Fehlmengen wurden ausgegeben, bevor das belastete Konto erfasst wurde. Geben Sie dieses Konto an, damit ein Zugang ihre vorläufigen Kosten korrigieren kann.",
+      "location": "Lagerort",
+      "issuedOn": "Ausgegeben",
+      "remaining": "Verbleibend",
+      "provisionalCost": "Vorläufige Stückkosten",
+      "account": "Belastetes Konto",
+      "reason": "Begründung",
+      "reasonPlaceholder": "Warum dieses Konto die Kosten der Fehlmenge getragen hat",
+      "record": "Konto erfassen",
+      "recorded": "Konto erfasst",
+      "failed": "Das Konto konnte nicht erfasst werden"
     }
   },
   "fairValue": {

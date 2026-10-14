@@ -303,7 +303,7 @@ export async function receiveInventory(
         const label = (await tx.execute<{ label: string }>(sql`select coalesce(nullif(btrim(code), ''), name) as label
           from items where org_id = ${orgId} and id = ${input.itemId}`)).rows[0]?.label ?? input.itemId;
         throw new InventoryError(
-          `item ${label} has negative stock issued on ${deficit.issued_on} without a recorded charge account, so this receipt cannot correct that issue's provisional cost; no receipt can settle that shortfall`,
+          `item ${label} has negative stock issued on ${deficit.issued_on} without a recorded charge account, so this receipt cannot correct that issue's provisional cost; record the account under the item's Inventory tab (Shortfalls awaiting a charge account), then receive again`,
         );
       }
       settlements.push({

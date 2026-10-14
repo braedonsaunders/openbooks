@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 import { Button, Card, CardContent, Input, Label, SearchSelect, Select } from '@openbooks/ui'
 import { useRecordSaveParticipant } from '@/components/record-save-participants'
 import { readApiErrorMessage } from '@/lib/api-error'
+import { ItemShortfallAccounts } from './ItemShortfallAccounts'
 
 interface AccountOpt {
   id: string
@@ -354,6 +355,7 @@ export function ItemCostingEditor({
       </div>
 
       <Link className="text-sm text-teal-700 hover:underline" href={`/inventory?layerItem=${encodeURIComponent(itemId)}`}>{t("layerInquiry")}</Link>
+      <ItemShortfallAccounts itemId={itemId} accountOptions={accountOptions} canManage={canManage} />
       {editing ? (
         <Card>
           <CardContent className="p-4"><fieldset disabled={busy} className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">

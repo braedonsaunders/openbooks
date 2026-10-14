@@ -344,6 +344,20 @@
       "last_receipt": "最終受入原価",
       "standard": "標準原価",
       "configured": "設定原価"
+    },
+    "shortfalls": {
+      "title": "計上勘定が未記録の不足",
+      "description": "これらのマイナス在庫の不足は、計上先の勘定が記録される前に出庫されました。入庫で暫定原価を修正できるよう、その勘定を指定してください。",
+      "location": "保管場所",
+      "issuedOn": "出庫日",
+      "remaining": "残数",
+      "provisionalCost": "暫定単価",
+      "account": "計上勘定",
+      "reason": "理由",
+      "reasonPlaceholder": "この勘定が不足の原価を負担した理由",
+      "record": "勘定を記録",
+      "recorded": "勘定を記録しました",
+      "failed": "勘定を記録できませんでした"
     }
   },
   "fairValue": {

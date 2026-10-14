@@ -354,6 +354,20 @@
       "last_receipt": "Coût de la dernière réception",
       "standard": "Coût standard",
       "configured": "Coût configuré"
+    },
+    "shortfalls": {
+      "title": "Manquants en attente de compte imputé",
+      "description": "Ces manquants de stock négatif ont été sortis avant l'enregistrement du compte imputé. Indiquez ce compte pour qu'une réception puisse corriger leur coût provisoire.",
+      "location": "Emplacement",
+      "issuedOn": "Sorti le",
+      "remaining": "Restant",
+      "provisionalCost": "Coût unitaire provisoire",
+      "account": "Compte imputé",
+      "reason": "Motif",
+      "reasonPlaceholder": "Pourquoi ce compte a supporté le coût du manquant",
+      "record": "Enregistrer le compte",
+      "recorded": "Compte enregistré",
+      "failed": "Le compte n'a pas pu être enregistré"
     }
   },
   "fairValue": {

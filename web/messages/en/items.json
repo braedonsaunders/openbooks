@@ -342,6 +342,20 @@
       "last_receipt": "Last receipt cost",
       "standard": "Standard cost",
       "configured": "Configured cost"
+    },
+    "shortfalls": {
+      "title": "Shortfalls awaiting a charge account",
+      "description": "These negative-stock shortfalls were issued before the account they charged was recorded. Name that account so a receipt can correct their provisional cost.",
+      "location": "Location",
+      "issuedOn": "Issued",
+      "remaining": "Remaining",
+      "provisionalCost": "Provisional unit cost",
+      "account": "Charged account",
+      "reason": "Reason",
+      "reasonPlaceholder": "Why this account carried the shortfall's cost",
+      "record": "Record account",
+      "recorded": "Account recorded",
+      "failed": "The account could not be recorded"
     }
   },
   "fairValue": {

@@ -4,7 +4,8 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { issueInventory } from "./movement-issue.ts";
 import { receiveInventory } from "./movement-receive.ts";
-import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrg, seedFlowActors } from "../testing/fixtures.ts";
+import { attributeDeficitAccount, listUnattributedDeficits } from "./provisional-attribution.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -52,7 +53,33 @@ test("a receipt refuses to settle a shortfall whose charged account was never re
     await db.execute(sql`update inventory_provisional_costs set offset_account_id=null where org_id=${org.orgId}`);
     await assert.rejects(receiveInventory(org.orgId, null, {
       ...position, quantity: "4", unitCost: "3.00", offsetAccountId: org.accounts.clearing,
-    }), /negative stock issued on .* without a recorded charge account/);
+    }), /negative stock issued on .* without a recorded charge account.*record the account under the item's Inventory tab/);
+
+    // An authorized user records the account the shortfall charged, with a
+    // reason; the receipt then corrects the provisional cost on it. A
+    // recorded account is never replaced.
+    const { adminId } = await seedFlowActors(org.orgId);
+    const [shortfall] = await listUnattributedDeficits(org.orgId, org.items.fifo);
+    assert.ok(shortfall);
+    await assert.rejects(attributeDeficitAccount({ orgId: org.orgId, actorId: adminId, deficitId: shortfall.id,
+      accountId: org.accounts.adjustment, reason: "short" }), /8 to 500 characters/);
+    await attributeDeficitAccount({ orgId: org.orgId, actorId: adminId, deficitId: shortfall.id,
+      accountId: org.accounts.adjustment, reason: "Counted shrinkage written off before the account was retained" });
+    assert.deepEqual(await listUnattributedDeficits(org.orgId, org.items.fifo), []);
+    await assert.rejects(attributeDeficitAccount({ orgId: org.orgId, actorId: adminId, deficitId: shortfall.id,
+      accountId: org.accounts.cogs, reason: "Attempting to replace a recorded account" }), /already records the account/);
+    const audit = (await db.execute<{ changes: { before: unknown; after: unknown; reason: string } }>(sql`
+      select changes from audit_log where org_id=${org.orgId} and table_name='inventory_provisional_costs' and row_id=${shortfall.id}`)).rows;
+    assert.deepEqual(audit.map((row) => [row.changes.before, row.changes.after]),
+      [[{ offset_account_id: null }, { offset_account_id: org.accounts.adjustment }]]);
+
+    const receipt = await receiveInventory(org.orgId, null, {
+      ...position, quantity: "4", unitCost: "3.00", offsetAccountId: org.accounts.clearing,
+    });
+    const trueUp = (await db.execute<{ account_id: string; amount: string }>(sql`
+      select account_id, amount::text from journal_lines
+       where org_id=${org.orgId} and entry_id=${receipt.entryId} and memo='Negative inventory receipt cost true-up'`)).rows;
+    assert.deepEqual(trueUp.map((row) => [row.account_id, row.amount]), [[org.accounts.adjustment, "2.0000"]]);
   } finally {
     await dropScratchOrg(org.orgId);
   }

@@ -73,6 +73,7 @@
     "./provisioning/organizations": "./src/provisioning/public-organizations.ts",
     "./hrm/compensation": "./src/hrm/public-compensation.ts",
     "./inventory/stock-locations": "./src/inventory/stock-locations.ts",
+    "./inventory/provisional-attribution": "./src/inventory/provisional-attribution.ts",
     "./journal/contracts": "./src/journal/posting-contracts.ts",
     "./documents/billing": "./src/ledger/billing-invoice.ts",
     "./projects/billing-pricing": "./src/projects/public-billing-pricing.ts",

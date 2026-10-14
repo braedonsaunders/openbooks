@@ -344,6 +344,20 @@
       "last_receipt": "上次收货成本",
       "standard": "标准成本",
       "configured": "配置成本"
+    },
+    "shortfalls": {
+      "title": "待记录计入科目的短缺",
+      "description": "这些负库存短缺在记录其计入科目之前已发出。请指定该科目，以便收货可以更正其暂估成本。",
+      "location": "库位",
+      "issuedOn": "发出日期",
+      "remaining": "剩余",
+      "provisionalCost": "暂估单位成本",
+      "account": "计入科目",
+      "reason": "原因",
+      "reasonPlaceholder": "该科目承担此短缺成本的原因",
+      "record": "记录科目",
+      "recorded": "科目已记录",
+      "failed": "无法记录科目"
     }
   },
   "fairValue": {
