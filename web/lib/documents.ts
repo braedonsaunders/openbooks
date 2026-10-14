@@ -8,6 +8,7 @@ import { resolveOrgId } from './org-scope'
 import { bankAccountMembership } from './banking-accounts'
 import type { DocKindConfig } from './document-kinds'
 import { taxProfileMap } from '@openbooks/engine/documents/totals'
+import { businessToday } from '@openbooks/engine/platform/business-date'
 import { receiptFundingAccountOptions } from '@openbooks/engine/payments/documents'
 
 export * from '@openbooks/engine/documents/write'
@@ -74,24 +75,32 @@ export async function accountOptions(
   return r.rows
 }
 
-export async function taxCodeOptions(orgId?: string): Promise<Opt[]> {
+/**
+ * Tax code choices priced as of `asOfDate` — an open document's own date, so
+ * a draft dated before a rate change keeps the rate it was priced at; today
+ * in the organization's business time zone otherwise. A code with no rate
+ * effective on that date carries no rate and no components.
+ */
+export async function taxCodeOptions(orgId?: string, asOfDate?: string): Promise<Opt[]> {
   const resolvedOrgId = await resolveOrgId(orgId)
-  const profiles = await taxProfileMap(resolvedOrgId)
+  const date = asOfDate ?? await businessToday(resolvedOrgId)
+  const profiles = await taxProfileMap(resolvedOrgId, date)
   const r = (await db.execute<Opt>(sql`
-    select tc.id, tc.code, tc.name, coalesce(tr.rate_percent, 0) as rate
+    select tc.id, tc.code, tc.name, tr.rate_percent as rate
       from tax_codes tc
       left join lateral (
         select rate_percent from tax_rates
-         where org_id = ${resolvedOrgId} and tax_code_id = tc.id and effective_from <= now()
+         where org_id = ${resolvedOrgId} and tax_code_id = tc.id and effective_from <= ${date}::date
+           and (effective_to is null or effective_to >= ${date}::date)
          order by effective_from desc limit 1) tr on true
      where tc.org_id = ${resolvedOrgId} and tc.is_active order by tc.code
   `))
   return r.rows.map((row) => ({ ...row, tax_components: profiles.codes.get(row.id) ?? [] }))
 }
 
-export async function taxGroupOptions(orgId?: string): Promise<Opt[]> {
+export async function taxGroupOptions(orgId?: string, asOfDate?: string): Promise<Opt[]> {
   const resolvedOrgId = await resolveOrgId(orgId)
-  const profiles = await taxProfileMap(resolvedOrgId)
+  const profiles = await taxProfileMap(resolvedOrgId, asOfDate)
   const result = (await db.execute<Opt>(sql`
     select id, code, name from tax_groups
      where org_id = ${resolvedOrgId} and is_active order by code

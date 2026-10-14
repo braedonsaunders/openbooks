@@ -175,6 +175,10 @@ export async function loadApBills(
   // The create seed carries no lines, so the keep-existing-items clause
   // matches nothing — the same items list a blank draft would see.
   const existingDocId = openDoc ? docId : null
+  // Tax choices price as of the open document's own date, so a draft dated
+  // before a rate change keeps the rate its amounts were entered at.
+  const openDocumentFields = openDoc?.doc as Record<string, unknown> | undefined
+  const openDocumentDate = typeof openDocumentFields?.document_date === 'string' ? openDocumentFields.document_date : undefined
   const [pickers, resolvedForm] = await Promise.all([
     drawerOpen
       ? Promise.all([
@@ -185,8 +189,8 @@ export async function loadApBills(
             (openDoc?.doc as Record<string, unknown> | undefined)?.party_id as string | undefined,
           ),
           accountOptions(DOC_KINDS[drawerKind as 'vendor_bill']!, authz.user.orgId, documentOptionScope),
-          taxCodeOptions(),
-          taxGroupOptions(),
+          taxCodeOptions(undefined, openDocumentDate),
+          taxGroupOptions(undefined, openDocumentDate),
           dimensionOptions(authz.user.orgId, undefined, documentOptionScope),
           db
             .execute(

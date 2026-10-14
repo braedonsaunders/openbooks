@@ -373,7 +373,9 @@ export async function loadRelatedTransactionDrawerData({
   const [parties, accounts, taxCodes, dimensions, items, cards, cardAccounts, banks, subsidiaries, resolvedForm] = await Promise.all([
     config.partyRole ? listScopedPartyOptions(authz.user.orgId, authz.allowedSubsidiaryIds, { role: config.partyRole, activeOnly: true }) : Promise.resolve(undefined),
     scopedAccountOptions(authz.user.orgId, authz.allowedSubsidiaryIds, { types: config.accountTypes ?? undefined, activeOnly: true, postingOnly: true }),
-    config.hasTax ? taxCodeOptions() : Promise.resolve(undefined),
+    config.hasTax
+      ? taxCodeOptions(undefined, typeof (loaded.doc as Record<string, unknown>).document_date === 'string' ? (loaded.doc as Record<string, unknown>).document_date as string : undefined)
+      : Promise.resolve(undefined),
     reportDimensionOptions(authz.user.orgId, undefined, authz.allowedSubsidiaryIds),
     db.execute(sql`
       select id, code, name from items
