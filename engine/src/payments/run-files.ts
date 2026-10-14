@@ -4,6 +4,7 @@ import { createHash } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { db, schema } from "../platform/db.ts";
 import { businessTimeZone, businessToday, formatInZone, formatTimestampInZone } from "../platform/business-date.ts";
+import { civilDateTimeToInstant } from "../platform/time-zone.ts";
 import { toUnits } from "../money/money.ts";
 import { assertNotSandbox } from "../organization/sandbox-guard.ts";
 import { PaymentError } from "../payments-core/payment-errors.ts";
@@ -52,11 +53,17 @@ export interface RunFileOptions {
  */
 async function creationStamp(
   orgId: string,
-  fallback: Date,
+  /** An instant, or a business day stamped at its midday in the organization's zone. */
+  fallback: Date | string,
   fileCreatedAt?: Date,
 ): Promise<{ day: string; stamp: string }> {
   const timeZone = await businessTimeZone(orgId);
-  const instant = fileCreatedAt ?? fallback;
+  // A business-day fallback resolves in the organization's zone, never the
+  // server's, so the stamp cannot fall on a neighbouring day; midday exists
+  // on every calendar day in every zone, and re-downloads reproduce their
+  // bytes.
+  const instant = fileCreatedAt
+    ?? (typeof fallback === "string" ? civilDateTimeToInstant(`${fallback}T12:00:00`, timeZone) : fallback);
   return { day: formatInZone(instant, timeZone), stamp: formatTimestampInZone(instant, timeZone) };
 }
 
@@ -118,7 +125,7 @@ export async function loadCpa005RunFile(
   // the 1–9999 alphabet instead of colliding on a fixed cycle.
   const fileCreationNumber =
     (Number.parseInt(createHash("sha256").update(runId, "utf8").digest("hex").slice(0, 8), 16) % 9999) + 1;
-  const stamp = await creationStamp(orgId, new Date(`${today}T00:00:00`), opts?.fileCreatedAt);
+  const stamp = await creationStamp(orgId, today, opts?.fileCreatedAt);
 
   const content = buildCpa005File({
     settings: eft.settings,
@@ -218,7 +225,7 @@ export async function loadSepaRunFile(
     remittance: e.documentNumber,
   }));
   const today = await businessToday(orgId);
-  const stamp = await creationStamp(orgId, new Date(`${today}T00:00:00`), opts?.fileCreatedAt);
+  const stamp = await creationStamp(orgId, today, opts?.fileCreatedAt);
   const content = buildSepaFile({
     settings: settings.settings,
     messageId: `MSG-${run.runNumber}`,
