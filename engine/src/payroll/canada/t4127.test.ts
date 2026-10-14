@@ -406,6 +406,22 @@ test("annualized withholding uses source CPP and EI YTD when contribution ceilin
   assert.equal(result.totalTax, money("2.87"));
 });
 
+test("Ontario periodic tax includes a taxable non-cash benefit and source CPP2 withholding", () => {
+  const result = calculateT4127({
+    payDate: "2026-07-30", province: "ON", periodsPerYear: 52,
+    income: "2649.11", pensionable: "2649.11", insurable: "2649.11",
+    cppWithheld: "0.00", cpp2Withheld: "103.01", eiWithheld: "0.00",
+    federalClaim: "16452.00", provincialClaim: "12989.00",
+    ytd: { cpp: "4230.45", cpp2: "312.99", ei: "1123.07" },
+  });
+
+  assert.equal(result.factors.A, "132397.2000");
+  assert.equal(result.factors.F5, "103.0100");
+  assert.equal(result.factors.TF, money("404.21"));
+  assert.equal(result.factors.TP, money("225.77"));
+  assert.equal(result.totalTax, money("629.98"));
+});
+
 test("an employer EI multiple outside 1.0000-1.4000 or past 4 places refuses", () => {
   const bad: [string, string][] = [
     ["1.16755", "five places"],
