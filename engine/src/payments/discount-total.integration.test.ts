@@ -54,6 +54,28 @@ test("discount vendor payment pins total-as-cash with gross AP relief", { skip: 
       currency: "CAD",
       fxRate: "1",
     });
+    // A discount that consumes the whole application moves no cash: that is a
+    // vendor credit, not a payment, and is refused before anything is saved.
+    await assert.rejects(updateDraftPayment(
+      payment.id,
+      {
+        partyId: org.vendorId,
+        bankAccountId: org.accounts.bank,
+        allocations: [{
+          openLineId: billLineId,
+          sourceTransactionAmount: "100",
+          targetTransactionAmount: "100",
+          settlementRate: "1",
+          settlementRateSource: "same_currency" as const,
+          settlementRateReference: "same transaction currency",
+        }],
+        discountAmount: "100.0000",
+        discountAccountId: org.accounts.cogs,
+      },
+      actor,
+      org.orgId,
+      { allowedSubsidiaryIds: null },
+    ), /early-payment discount must be less than the amount applied/);
     await updateDraftPayment(
       payment.id,
       {

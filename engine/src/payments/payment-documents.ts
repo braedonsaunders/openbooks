@@ -378,7 +378,11 @@ export async function updateDraftPayment(
       bookId: await paymentBookId(doc.orgId), side: PAYMENT_KIND_SIDE[doc.kind], controlAccountId,
     });
     const grossApplied = sum(allocations.map((a) => a.sourceTransactionAmount));
-    if (cmp(discountAmount, grossApplied) > 0) throw new PaymentError("discount cannot exceed the payment applications");
+    // A discount is a reduction of cash actually paid: it cannot consume the
+    // whole application. Settling a payable without cash is a vendor credit.
+    if (discountUnits > 0n && cmp(discountAmount, grossApplied) >= 0) {
+      throw new PaymentError("an early-payment discount must be less than the amount applied; settle the balance without cash through a vendor credit instead");
+    }
     const withholdingAuthorisation = patch.withholdingAuthorisation !== undefined
       ? (patch.withholdingAuthorisation?.trim() || null)
       : (custom.withholdingAuthorisation ?? null);
