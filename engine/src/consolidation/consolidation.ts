@@ -847,8 +847,8 @@ async function neededPairs(orgId: string, runner: Runner): Promise<{ from: strin
  *   current    — the latest spot rate on/before the period end
  *   average    — the mean of spot rates dated inside the period (refused
  *                when the period has no quotes; never the closing spot)
- *   historical — carried forward from the prior period; the first period
- *                uses its closing spot, recorded as that basis in the audit
+ *   historical — carried forward from the immediately preceding accounting
+ *                period; inception requires an explicit manual rate set
  * Upserts source='derived' rows; rows a controller set to 'manual' are kept.
  */
 export async function deriveConsolidatedRates(
@@ -976,10 +976,15 @@ async function deriveConsolidatedRatesIn(
     // "ends before this period starts" would skip that regular period (and
     // any earlier adjustment period of the same year); those same-end-date
     // predecessors are ordered by period number instead.
-    const hist = (await exec.execute<{ historical: string | null }>(sql`
-      select (select cf.historical_rate from consolidated_fx_rates cf
-           join accounting_periods p on p.id = cf.period_id and p.org_id = cf.org_id
-          where cf.org_id = ${orgId} and cf.from_currency = ${pair.from} and cf.to_currency = ${pair.to}
+    const historicalPredecessor = (await exec.execute<{
+      period_id: string; period_name: string; historical: string | null; source: string | null;
+    }>(sql`
+      select predecessor.id as period_id, predecessor.name as period_name,
+             cf.historical_rate::text as historical, cf.source
+        from (
+          select p.id, p.name
+            from accounting_periods p
+          where p.org_id = ${orgId}
             and p.id <> ${period.id}
             and p.fiscal_calendar_id = ${period.fiscal_calendar_id}
             and (
@@ -990,16 +995,29 @@ async function deriveConsolidatedRatesIn(
                 and p.period_number < ${period.period_number}
               )
             )
-          order by p.ends_on desc, p.period_number desc limit 1) as historical
-    `));
-    const r = hist.rows[0];
+          order by p.ends_on desc, p.period_number desc limit 1
+        ) predecessor
+        left join consolidated_fx_rates cf
+          on cf.org_id = ${orgId} and cf.period_id = predecessor.id
+         and cf.from_currency = ${pair.from} and cf.to_currency = ${pair.to}
+    `)).rows[0];
+    if (!historicalPredecessor?.historical) {
+      const missingBasis = historicalPredecessor
+        ? `the immediately preceding period ${historicalPredecessor.period_name} has no consolidated historical rate`
+        : "there is no preceding accounting period with an explicit historical basis";
+      throw new ConsolidationError(
+        `cannot derive the historical rate for ${pair.from}→${pair.to} in period ${periodId}: ${missingBasis}. A closing spot rate does not establish historical equity translation evidence.`,
+        'rates-missing',
+        { remedy: historicalPredecessor
+          ? "Derive or enter the preceding period's consolidated rates first, or enter this period's rate set manually under Setup → Consolidated FX rates using verified historical evidence."
+          : "Enter this period's rate set manually under Setup → Consolidated FX rates using verified historical evidence." },
+      );
+    }
     const current = persistDerivedFxRate(spotCurrent);
     const average = persistDerivedFxRate(spotAverage);
-    // With no earlier period to carry from, the first derivation sets the
-    // equity historical rate at this period's closing spot. That is a policy
-    // choice, so it is recorded with the rate's audit evidence below.
-    const historicalBasis = r?.historical ? "carried_forward" : "inception_closing_spot";
-    const historical = persistDerivedFxRate(r?.historical ?? spotCurrent);
+    // Preserve the supplied period basis; a missing predecessor must never
+    // select an older available row or manufacture inception from spot.
+    const historical = persistDerivedFxRate(historicalPredecessor.historical);
     const touched = (await exec.execute<ConsolidatedRateSnapshot & { id: string }>(sql`
       insert into consolidated_fx_rates
         (org_id, period_id, from_currency, to_currency, current_rate, average_rate, historical_rate, source)
@@ -1043,7 +1061,8 @@ async function deriveConsolidatedRatesIn(
                 toCurrency: pair.to,
                 before: beforeSnapshot,
                 after,
-                basis: { current: "closing_spot", average: "period_mean_spot", historical: historicalBasis },
+                basis: { current: "closing_spot", average: "period_mean_spot", historical: "carried_forward",
+                  historicalPeriodId: historicalPredecessor.period_id, historicalSource: historicalPredecessor.source },
               })}::jsonb,
               ${actorId}, 'derive_consolidated_rates')
     `);

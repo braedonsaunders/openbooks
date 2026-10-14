@@ -32,7 +32,7 @@ type MixedFixture = {
   control: { ar: string; ap: string; bank: string };
 };
 
-async function seedMixedOrg(): Promise<MixedFixture> {
+async function seedMixedOrg(options: { historicalBasis?: boolean } = {}): Promise<MixedFixture> {
   const org = await createScratchOrg();
   const orgId = org.orgId;
   const actorId = (await seedFlowActors(orgId)).adminId;
@@ -61,6 +61,14 @@ async function seedMixedOrg(): Promise<MixedFixture> {
                                     is_adjustment, fiscal_calendar_id)
     values (${septPeriod}, ${orgId}, 2026, 9, '2026-09', '2026-09-01', '2026-09-30', false, ${calendar})
     on conflict (id) do nothing`);
+  if (options.historicalBasis) {
+    // July is September's preceding configured period; historical evidence is
+    // supplied explicitly, independently of the September spot feed.
+    await db.execute(sql`
+      insert into consolidated_fx_rates
+        (org_id,period_id,from_currency,to_currency,current_rate,average_rate,historical_rate,source)
+      values (${orgId},${org.periodId},'EUR','GBP','0.85','0.85','0.85','manual')`);
+  }
   const liability = randomUUID();
   const number = `2${String(Math.floor(Math.random() * 9000) + 1000)}`;
   await db.execute(sql`
@@ -151,7 +159,7 @@ test("a GBP run and a EUR run never sum to one symbol-labelled figure", { skip: 
 });
 
 test("a mixed scope translates through derived rates — never at a silent 1.0", { skip: !DB }, async () => {
-  const fx = await seedMixedOrg();
+  const fx = await seedMixedOrg({ historicalBasis: true });
   try {
     await addCommittedRun(fx, { subsidiary: fx.rootSub, currency: "GBP", gross: "11083.33", number: "PAY-00002", schedule: randomUUID() });
     await addCommittedRun(fx, { subsidiary: fx.eurSub, currency: "EUR", gross: "12250.00", number: "PAY-00003", schedule: randomUUID() });
@@ -189,7 +197,7 @@ test("a single-currency scope aggregates exactly as before", { skip: !DB }, asyn
 });
 
 test("a homogeneous foreign-currency scope states its native currency, never the org base", { skip: !DB }, async () => {
-  const fx = await seedMixedOrg();
+  const fx = await seedMixedOrg({ historicalBasis: true });
   try {
     await addCommittedRun(fx, { subsidiary: fx.eurSub, currency: "EUR", gross: "12250.00", number: "PAY-00003", schedule: randomUUID() });
     const groups = await payrollRemittanceSummary(fx.orgId, { from: "2026-09-01", to: "2026-09-30" });
@@ -260,7 +268,7 @@ test("a foreign-subsidiary pay run refuses to post with no derived rate", { skip
 });
 
 test("a foreign-subsidiary pay run posts once rates derive, tagged with its currency", { skip: !DB }, async () => {
-  const fx = await seedMixedOrg();
+  const fx = await seedMixedOrg({ historicalBasis: true });
   try {
     await db.execute(sql`
       insert into fx_rates (org_id, from_currency, to_currency, as_of, rate_type, rate)
@@ -300,7 +308,7 @@ test("a root-currency pay run posts with no rates anywhere", { skip: !DB }, asyn
 });
 
 test("translated totals never equal the raw-unit sum", { skip: !DB }, async () => {
-  const fx = await seedMixedOrg();
+  const fx = await seedMixedOrg({ historicalBasis: true });
   try {
     await addCommittedRun(fx, { subsidiary: fx.rootSub, currency: "GBP", gross: "11083.33", number: "PAY-00002", schedule: randomUUID() });
     await addCommittedRun(fx, { subsidiary: fx.eurSub, currency: "EUR", gross: "12250.00", number: "PAY-00003", schedule: randomUUID() });

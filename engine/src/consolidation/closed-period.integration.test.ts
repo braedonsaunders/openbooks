@@ -71,6 +71,17 @@ async function seedClosedPeriodFixture(org: ScratchOrg): Promise<void> {
       insert into fx_rates (org_id,from_currency,to_currency,as_of,rate_type,rate,source)
       values (${org.orgId},'USD','CAD','2026-07-15','spot','1.3500000000','manual')
     `);
+  // The controller supplies historical translation evidence independently of spot.
+  const predecessorId = randomUUID();
+  await db.execute(sql`
+    insert into accounting_periods
+      (id,org_id,fiscal_calendar_id,fiscal_year,period_number,name,starts_on,ends_on,is_adjustment)
+    select ${predecessorId},${org.orgId},fiscal_calendar_id,2026,6,'2026-06','2026-06-01','2026-06-30',false
+      from accounting_periods where org_id=${org.orgId} and id=${org.periodId}`);
+  await db.execute(sql`
+    insert into consolidated_fx_rates
+      (org_id,period_id,from_currency,to_currency,current_rate,average_rate,historical_rate,source)
+    values (${org.orgId},${predecessorId},'USD','CAD','1.35','1.35','1.35','manual')`);
   const interestId = randomUUID();
   await db.execute(sql`
       insert into subsidiary_ownership_interests

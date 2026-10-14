@@ -26,6 +26,23 @@ import {
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
+/** Explicit controller-supplied historical evidence, separate from spot quotes. */
+async function seedHistoricalRateBasis(org: ScratchOrg, pairs: readonly (readonly [string, string, string])[]): Promise<string> {
+  const periodId = randomUUID();
+  await db.execute(sql`
+    insert into accounting_periods
+      (id,org_id,fiscal_calendar_id,fiscal_year,period_number,name,starts_on,ends_on,is_adjustment)
+    select ${periodId},${org.orgId},fiscal_calendar_id,2026,6,'2026-06','2026-06-01','2026-06-30',false
+      from accounting_periods where org_id=${org.orgId} and id=${org.periodId}`);
+  for (const [from, to, historical] of pairs) {
+    await db.execute(sql`
+      insert into consolidated_fx_rates
+        (org_id,period_id,from_currency,to_currency,current_rate,average_rate,historical_rate,source)
+      values (${org.orgId},${periodId},${from},${to},${historical},${historical},${historical},'manual')`);
+  }
+  return periodId;
+}
+
 type TreeUpdateResult = PromiseSettledResult<QueryResult>;
 
 /** Poll until some other backend is waiting on a lock held by `blockerPid`. */
@@ -468,6 +485,7 @@ test("foreign-currency eliminations are exact, balanced, and safely rerunnable",
 test("rate derivation refuses a period with no quotes instead of averaging the closing spot", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
+    await seedHistoricalRateBasis(org, [['USD', 'CAD', '1.3000000000']]);
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     await db.execute(sql`
       insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
@@ -487,7 +505,7 @@ test("rate derivation refuses a period with no quotes instead of averaging the c
       (error: unknown) => error instanceof ConsolidationError && error.code === 'rates-missing'
         && /USD→CAD.*2026-07-01.*30 days old.*7-day limit for average/.test(error.message)
         && error.message.includes('Setup → FX Rate Age Policies'));
-    assert.equal((await db.execute(sql`select id from consolidated_fx_rates where org_id=${org.orgId}`)).rows.length,0);
+    assert.equal((await db.execute(sql`select id from consolidated_fx_rates where org_id=${org.orgId} and period_id=${org.periodId}`)).rows.length,0);
     await db.execute(sql`insert into fx_rate_age_policies (org_id,rate_kind,max_age_days,effective_from)
       values (${org.orgId},'average',45,'2026-07-15')`);
     assert.equal(await deriveConsolidatedRates(org.orgId,org.periodId,actorId),1);
@@ -929,6 +947,7 @@ test("ownership consolidation uses exact period identity and reverses reruns", {
 test("derived consolidated FX refresh is all-or-nothing and respects manual overrides", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
+    await seedHistoricalRateBasis(org, [['USD', 'CAD', '0.7300000000'], ['EUR', 'CAD', '0.6800000000']]);
     const usdSubsidiaryId = randomUUID();
     const eurSubsidiaryId = randomUUID();
     await db.execute(sql`
@@ -951,7 +970,7 @@ test("derived consolidated FX refresh is all-or-nothing and respects manual over
       /no spot rate for EUR→CAD/,
     );
     const partial = (await db.execute<{ n: number }>(sql`
-      select count(*)::int as n from consolidated_fx_rates where org_id = ${org.orgId}`));
+      select count(*)::int as n from consolidated_fx_rates where org_id = ${org.orgId} and period_id = ${org.periodId}`));
     assert.equal(partial.rows[0]!.n, 0);
 
     // With every needed pair covered, the same wrapped call commits the whole
@@ -1033,6 +1052,7 @@ test("derived average rate counts one quote per date when both directions quote 
   // triple-counted (0.64 + 0.68 + 0.68) / 3 = 0.6666666667.
   const org = await createScratchOrg();
   try {
+    await seedHistoricalRateBasis(org, [['EUR', 'CAD', '0.6800000000']]);
     const eurSubsidiaryId = randomUUID();
     await db.execute(sql`
       insert into subsidiaries
@@ -2005,6 +2025,7 @@ test("derived historical rates carry into an adjustment period from the period i
   // and the adjustment period inherited a stale historical rate.
   const org = await createScratchOrg();
   try {
+    const historicalPeriodId = await seedHistoricalRateBasis(org, [['USD', 'CAD', '1.3000000000']]);
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     const usdId = randomUUID();
     await db.execute(sql`
@@ -2038,7 +2059,7 @@ test("derived historical rates carry into an adjustment period from the period i
     const derived = (await db.execute<{ name: string; historical_rate: string; current_rate: string }>(sql`
       select p.name, cf.historical_rate::text as historical_rate, cf.current_rate::text as current_rate
         from consolidated_fx_rates cf join accounting_periods p on p.id = cf.period_id
-       where cf.org_id = ${org.orgId} order by p.period_number`));
+       where cf.org_id = ${org.orgId} and cf.period_id <> ${historicalPeriodId} order by p.period_number`));
     assert.deepEqual(derived.rows, [
       { name: "2026-07", historical_rate: "1.3000000000", current_rate: "1.3000000000" },
       { name: "2026-08", historical_rate: "1.3200000000", current_rate: "1.3500000000" },
@@ -2055,6 +2076,7 @@ test("derived consolidated rates are audited, invalidate close evidence, and are
   // a re-derive silently restated closed consolidated statements.
   const org = await createScratchOrg();
   try {
+    await seedHistoricalRateBasis(org, [['USD', 'CAD', '1.2500000000']]);
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     const usdId = randomUUID();
     await db.execute(sql`
@@ -2066,7 +2088,7 @@ test("derived consolidated rates are audited, invalidate close evidence, and are
       values (${org.orgId}, 'USD', 'CAD', '2026-07-10', 'spot', '1.3000000000')`);
     const auditRows = async () => (await db.execute<{ action: string; actor_id: string | null; changes: Record<string, unknown> }>(sql`
       select action, actor_id, changes from audit_log
-       where org_id = ${org.orgId} and table_name = 'consolidated_fx_rates' order by at, id`)).rows;
+       where org_id = ${org.orgId} and table_name = 'consolidated_fx_rates' and changes->>'periodId' = ${org.periodId} order by at, id`)).rows;
 
     // Open period: the derive writes the row and audits it to the actor.
     assert.equal(await withOrgTransaction(org.orgId, () => deriveConsolidatedRates(org.orgId, org.periodId, actorId)), 1);
@@ -2593,4 +2615,100 @@ test("a later asset-transfer period eliminates the outstanding intercompany bala
   } finally {
     await dropScratchOrg(org.orgId);
   }
+});
+
+
+test("historical inception refuses spot inference and preserves an explicit manual rate set", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    await db.execute(sql`
+      insert into subsidiaries
+        (id,org_id,parent_id,name,base_currency,country,tax_ids,is_elimination,is_active,custom)
+      values (${randomUUID()},${org.orgId},${org.subsidiaryId},'Foreign operation','USD','US','{}'::jsonb,false,true,'{}'::jsonb)`);
+    await db.execute(sql`
+      insert into fx_rates (org_id,from_currency,to_currency,as_of,rate_type,rate)
+      values (${org.orgId},'USD','CAD','2026-07-15','spot','1.4')`);
+    await assert.rejects(deriveConsolidatedRates(org.orgId,org.periodId,actorId),
+      (error: unknown) => error instanceof ConsolidationError && error.code === 'rates-missing'
+        && /no preceding accounting period.*historical basis/.test(error.message)
+        && /Setup → Consolidated FX rates/.test(error.remedy ?? ''));
+    assert.equal((await db.execute(sql`
+      select id from consolidated_fx_rates where org_id=${org.orgId}`)).rows.length,0);
+    assert.equal((await db.execute(sql`
+      select id from audit_log where org_id=${org.orgId} and table_name='consolidated_fx_rates'`)).rows.length,0);
+
+    await db.execute(sql`
+      insert into consolidated_fx_rates
+        (org_id,period_id,from_currency,to_currency,current_rate,average_rate,historical_rate,source)
+      values (${org.orgId},${org.periodId},'USD','CAD','1.4','1.35','1.2345678901','manual')`);
+    await db.execute(sql`delete from fx_rates where org_id=${org.orgId}`);
+    assert.equal(await deriveConsolidatedRates(org.orgId,org.periodId,actorId),0);
+    assert.deepEqual((await db.execute<{ historical: string; source: string }>(sql`
+      select historical_rate::text as historical,source from consolidated_fx_rates
+       where org_id=${org.orgId} and period_id=${org.periodId}`)).rows,
+    [{historical:'1.2345678901',source:'manual'}]);
+  } finally { await dropScratchOrg(org.orgId); }
+});
+
+test("historical derivation cannot skip missing predecessor rates when periods are requested out of order", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    const seedPeriodId = await seedHistoricalRateBasis(org,[['USD','CAD','1.1234567891']]);
+    const augustId = randomUUID();
+    const septemberId = randomUUID();
+    await db.execute(sql`
+      insert into subsidiaries
+        (id,org_id,parent_id,name,base_currency,country,tax_ids,is_elimination,is_active,custom)
+      values (${randomUUID()},${org.orgId},${org.subsidiaryId},'Foreign operation','USD','US','{}'::jsonb,false,true,'{}'::jsonb)`);
+    for (const [id,number,start,end] of [
+      [augustId,8,'2026-08-01','2026-08-31'],[septemberId,9,'2026-09-01','2026-09-30'],
+    ] as const) {
+      await db.execute(sql`
+        insert into accounting_periods
+          (id,org_id,fiscal_calendar_id,fiscal_year,period_number,name,starts_on,ends_on,is_adjustment)
+        select ${id},${org.orgId},fiscal_calendar_id,2026,${number},${start.slice(0,7)},${start},${end},false
+          from accounting_periods where org_id=${org.orgId} and id=${org.periodId}`);
+    }
+    await db.execute(sql`
+      insert into fx_rates (org_id,from_currency,to_currency,as_of,rate_type,rate)
+      values (${org.orgId},'USD','CAD','2026-07-15','spot','1.2'),
+             (${org.orgId},'USD','CAD','2026-08-15','spot','1.3'),
+             (${org.orgId},'USD','CAD','2026-09-15','spot','1.4')`);
+    for (const [id,predecessor] of [[septemberId,'2026-08'],[augustId,'2026-07']] as const) {
+      await assert.rejects(deriveConsolidatedRates(org.orgId,id,actorId),
+        (error: unknown) => error instanceof ConsolidationError && error.code === 'rates-missing'
+          && error.message.includes(`immediately preceding period ${predecessor} has no consolidated historical rate`));
+    }
+    assert.deepEqual((await db.execute<{ id: string }>(sql`
+      select period_id as id from consolidated_fx_rates where org_id=${org.orgId}`)).rows,[{id:seedPeriodId}],
+    'refused out-of-order requests preserve only the supplied seed');
+    for (const id of [org.periodId,augustId,septemberId])
+      assert.equal(await deriveConsolidatedRates(org.orgId,id,actorId),1);
+    assert.deepEqual((await db.execute<{ historical: string; current: string }>(sql`
+      select cf.historical_rate::text as historical,cf.current_rate::text as current
+        from consolidated_fx_rates cf join accounting_periods p on p.org_id=cf.org_id and p.id=cf.period_id
+       where cf.org_id=${org.orgId} and cf.period_id<>${seedPeriodId} order by p.ends_on`)).rows,[
+      {historical:'1.1234567891',current:'1.2000000000'},
+      {historical:'1.1234567891',current:'1.3000000000'},
+      {historical:'1.1234567891',current:'1.4000000000'},
+    ]);
+    const evidence=(await db.execute<{ basis: { historical: string; historicalPeriodId: string; historicalSource: string } }>(sql`
+      select changes->'basis' as basis from audit_log
+       where org_id=${org.orgId} and table_name='consolidated_fx_rates' and changes->>'periodId'=${org.periodId}`)).rows;
+    assert.equal(evidence.length,1);
+    assert.equal(evidence[0]!.basis.historical,'carried_forward');
+    assert.equal(evidence[0]!.basis.historicalPeriodId,seedPeriodId);
+    assert.equal(evidence[0]!.basis.historicalSource,'manual');
+
+    await db.execute(sql`
+      update consolidated_fx_rates set historical_rate='1.25',source='manual'
+       where org_id=${org.orgId} and period_id=${augustId}`);
+    assert.equal(await deriveConsolidatedRates(org.orgId,augustId,actorId),0);
+    assert.equal(await deriveConsolidatedRates(org.orgId,septemberId,actorId),1);
+    assert.equal((await db.execute<{ historical: string }>(sql`
+      select historical_rate::text as historical from consolidated_fx_rates
+       where org_id=${org.orgId} and period_id=${septemberId}`)).rows[0]!.historical,'1.2500000000');
+  } finally { await dropScratchOrg(org.orgId); }
 });

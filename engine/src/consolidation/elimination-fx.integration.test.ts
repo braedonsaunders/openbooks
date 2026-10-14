@@ -16,6 +16,21 @@ import {
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
+/** Historical bases are explicit controller evidence, not inferred spot prices. */
+async function seedHistoricalBases(org: ScratchOrg, pairs: readonly (readonly [string, string, string])[]): Promise<void> {
+  const predecessorId=randomUUID();
+  await db.execute(sql`
+    insert into accounting_periods
+      (id,org_id,fiscal_calendar_id,fiscal_year,period_number,name,starts_on,ends_on,is_adjustment)
+    select ${predecessorId},${org.orgId},fiscal_calendar_id,2026,6,'2026-06','2026-06-01','2026-06-30',false
+      from accounting_periods where org_id=${org.orgId} and id=${org.periodId}`);
+  for (const [from,to,historical] of pairs)
+    await db.execute(sql`
+      insert into consolidated_fx_rates
+        (org_id,period_id,from_currency,to_currency,current_rate,average_rate,historical_rate,source)
+      values (${org.orgId},${predecessorId},${from},${to},${historical},${historical},${historical},'manual')`);
+}
+
 /**
  * neededPairs must cover every source currency into the elimination
  * subsidiary's currency: the ownership and auto-elimination phases translate
@@ -82,6 +97,9 @@ async function seedEliminationCurrencyFixture(org: ScratchOrg): Promise<{
       values (${org.orgId},${from},${to},'2026-07-15','spot',${rate},'manual')
     `);
   }
+  await seedHistoricalBases(org, [
+    ['USD','CAD','1.35'],['EUR','CAD','1.45'],['USD','EUR','0.93'],['CAD','EUR','0.6896551724'],
+  ]);
   const interestId = randomUUID();
   await db.execute(sql`
       insert into subsidiary_ownership_interests
@@ -114,6 +132,7 @@ test("rate derivation resolves a pair stored only as the inverse quote", { skip:
       insert into fx_rates (org_id,from_currency,to_currency,as_of,rate_type,rate,source)
       values (${org.orgId},'CAD','USD','2026-07-15','spot','0.8000000000','manual')
     `);
+    await seedHistoricalBases(org,[['USD','CAD','1.2500000000']]);
     await deriveConsolidatedRates(org.orgId, org.periodId, actorId);
     const row = (await db.execute<{ current_rate: string; average_rate: string }>(sql`
       select current_rate::text as current_rate, average_rate::text as average_rate

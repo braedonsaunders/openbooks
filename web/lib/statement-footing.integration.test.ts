@@ -903,6 +903,15 @@ const consolidatedRows = [
                     (\${org.orgId}, 'USD', 'CAD', '2026-12-15', 'spot', '1.2500000000'),
                     (\${org.orgId}, 'USD', 'CAD', '2026-12-31', 'spot', '1.3000000000')
                 \`);
+                // November supplies an explicit historical basis before the final
+                // regular and adjustment periods derive their moving spot rates.
+                const november = periods.find((p) => p.period_number === 11 && !p.is_adjustment);
+                assert.ok(november);
+                await db.execute(sql\`
+                  insert into consolidated_fx_rates
+                    (org_id,period_id,from_currency,to_currency,current_rate,average_rate,historical_rate,source)
+                  values (\${org.orgId},\${november.id},'USD','CAD','1.3','1.3','1.3','manual')
+                \`);
                 // Both P12 and the adjustment period carry derived rates, exactly as a
                 // period-close controller who consolidates both would leave them.
                 assert.equal(await deriveConsolidatedRates(org.orgId, december.id, actorId), 1);
