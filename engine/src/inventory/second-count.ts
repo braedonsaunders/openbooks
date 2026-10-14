@@ -2,7 +2,7 @@ import { requireExecutionConfirmation } from "./execution-authority.ts";
 import { actorHasPermission } from "../organization/actor-permissions.ts";
 import { ScopeNotFoundError } from "../organization/subsidiary-scope.ts";
 import { sql } from "drizzle-orm";
-import { db } from "../platform/db.ts";
+import { db, withOrgTransaction } from "../platform/db.ts";
 import { lockActorCommandAuthority } from "../organization/actor-command-authority.ts";
 import { cmp } from "../money/money.ts";
 import { InventoryError } from "./contracts.ts";
@@ -33,7 +33,7 @@ export async function recordSecondCount(
   assertCountedNonNegative(quantity);
   if (!actorId)
     throw new InventoryError("Record a second count with a named user");
-  return db.transaction(async (tx) => {
+  return withOrgTransaction(orgId, () => db.transaction(async (tx) => {
     if (!(await actorHasPermission(tx, orgId, actorId, "items.post")))
       throw new ScopeNotFoundError();
     await assertInventoryFeature(tx, orgId);
@@ -104,5 +104,5 @@ export async function recordSecondCount(
     if (!audit.rows.length)
       throw new InventoryError("Second count was not audited");
     return { lineId: input.lineId, secondCountedQuantity: quantity };
-  });
+  }));
 }

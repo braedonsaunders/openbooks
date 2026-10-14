@@ -5,7 +5,7 @@ import { validateChequeBank } from "../payments-core/cheque-bank.ts";
 import { PaymentError } from "../payments-core/payment-errors.ts";
 import { validateNachaSettings, type NachaSettings } from "../payments-core/rail-nacha.ts";
 import { validateRbcStd152Settings, type RbcStd152Settings } from "../payments-core/rail-rbc-std152.ts";
-import { db, schema } from "../platform/db.ts";
+import { db, schema, withOrgTransaction } from "../platform/db.ts";
 import { sealJson, unsealJson } from "../platform/secrets.ts";
 
 export type BuiltInPaymentRail =
@@ -212,7 +212,7 @@ export async function createPaymentBankProfile(
   input: PaymentBankProfileInput,
   scope: ReadonlySet<string> | null = null,
 ): Promise<{ id: string }> {
-  return db.transaction(async (tx) => {
+  return withOrgTransaction(orgId, () => db.transaction(async (tx) => {
     const actorScope = await lockActorCommandAuthority(tx, orgId, userId, input.subsidiaryId ?? null, "admin.setup.manage");
     await validatePaymentBankProfileRefs(orgId, input);
     await requireProfileScope(tx, orgId, input.bankAccountId, input.subsidiaryId, actorScope);
@@ -242,7 +242,7 @@ export async function createPaymentBankProfile(
     await auditProfileChange(tx, orgId, profile.id, "insert",
       { after: profileAuditView(stored.rows[0]!) }, userId);
     return profile;
-  });
+  }));
 }
 
 export async function updatePaymentBankProfile(
@@ -252,7 +252,7 @@ export async function updatePaymentBankProfile(
   input: Partial<PaymentBankProfileInput>,
   scope: ReadonlySet<string> | null = null,
 ): Promise<void> {
-  await db.transaction(async (tx) => {
+  await withOrgTransaction(orgId, () => db.transaction(async (tx) => {
     const existing = (await tx.execute<Record<string, unknown> & {
       bank_account_id: string;
       subsidiary_id: string | null;
@@ -340,5 +340,5 @@ export async function updatePaymentBankProfile(
       after: profileAuditView(updated.rows[0]),
       ...(rotating ? { originatorSecretsRotated: true } : {}),
     }, userId);
-  });
+  }));
 }

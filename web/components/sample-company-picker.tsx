@@ -1,12 +1,13 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Database, Sparkles } from 'lucide-react'
 import { Button, Card, Label, Select } from '@openbooks/ui'
 import { enterOrg } from '../lib/sandbox-session'
 import { readApiErrorMessage } from '../lib/api-error'
+import { readSampleCompanyResponse, type SampleCompanyRefusal } from '../lib/sample-company-response'
 
 interface SampleCompanyProfile {
   industryKey: string
@@ -17,16 +18,8 @@ interface SampleCompanyProfile {
   existingOrgId: string | null
 }
 
-interface SampleCompanyRefusal {
-  code?: string
-  stage?: string
-  message?: string
-}
-
-// The provisioning API reports failures by pipeline stage with a stable
-// code. The picker renders the matching localized copy so the
-// operator reads the failure in their own locale; an unknown code falls
-// back to the server message, then to the generic localized copy.
+// Authored server remedies take precedence. A code-only response uses the
+// localized stage description without inferring any company identity.
 export const SAMPLE_COMPANY_FAILURE_COPY: Record<string, string> = {
   'sample-company-template-failed': 'import.sample.createFailedTemplate',
   'sample-company-clone-failed': 'import.sample.createFailedClone',
@@ -34,30 +27,14 @@ export const SAMPLE_COMPANY_FAILURE_COPY: Record<string, string> = {
   'sample-company-numbering-failed': 'import.sample.createFailedNumbering',
 }
 
-async function readSampleCompanyRefusal(res: Response): Promise<SampleCompanyRefusal> {
-  try {
-    const body: unknown = await res.json()
-    if (body !== null && typeof body === 'object' && !Array.isArray(body)) {
-      const record = body as Record<string, unknown>
-      return {
-        code: typeof record.error === 'string' ? record.error : undefined,
-        stage: typeof record.stage === 'string' ? record.stage : undefined,
-        message: typeof record.message === 'string' ? record.message : undefined,
-      }
-    }
-  } catch {
-    // Non-JSON error body (proxy page, empty 502): fall through to the
-    // generic copy rather than surfacing a SyntaxError.
-  }
-  return {}
-}
-
 export function SampleCompanyPicker() {
   const t = useTranslations('data')
   const [sampleProfiles, setSampleProfiles] = useState<SampleCompanyProfile[]>([])
   const [sampleIndustry, setSampleIndustry] = useState('')
   const [sampleBusy, setSampleBusy] = useState(false)
-  const [sampleError, setSampleError] = useState<SampleCompanyRefusal | null>(null)
+  const [sampleErrors, setSampleErrors] = useState<Record<string, SampleCompanyRefusal>>({})
+  const inFlight = useRef(false)
+  const sampleError = sampleErrors[sampleIndustry] ?? null
   useEffect(() => {
     // The settings widget mounts after the route shell, so resolve its anchor
     // once the picker exists instead of relying on the initial navigation.
@@ -66,9 +43,9 @@ export function SampleCompanyPicker() {
     }
   }, [])
   const sampleErrorText = (refusal: SampleCompanyRefusal): string => {
+    if (refusal.message && refusal.message.trim() !== '') return refusal.message
     const copyKey = refusal.code ? SAMPLE_COMPANY_FAILURE_COPY[refusal.code] : undefined
     if (copyKey) return t(copyKey)
-    if (refusal.message && refusal.message.trim() !== '') return refusal.message
     return t('import.sample.createFailed')
   }
 
@@ -94,51 +71,55 @@ export function SampleCompanyPicker() {
   )
 
   const createOrOpenSample = async () => {
-    if (!selectedSample) return
+    if (!selectedSample || inFlight.current) return
+    inFlight.current = true
     setSampleBusy(true)
-    // A retry starts clean, but the chosen company and profile stay selected
-    // below: a failed attempt either created nothing (template/clone) or left
-    // a resumable company the server continues from, so retry is safe.
-    setSampleError(null)
+    const industry = selectedSample.industryKey
     let orgId = selectedSample.existingOrgId
     try {
+      // After an uncertain attempt, perform only a read. An accessible ready
+      // company may be opened; an absent list entry does not prove no partial
+      // company exists and never authorizes another POST here.
+      if (sampleError && !orgId) {
+        const response = await fetch('/api/data/sample-companies')
+        if (!response.ok) throw new Error(await readApiErrorMessage(response, t('import.sample.error')))
+        const data = await response.json() as { profiles?: SampleCompanyProfile[] }
+        if (!Array.isArray(data.profiles)) throw new Error(t('import.sample.error'))
+        setSampleProfiles(data.profiles)
+        orgId = data.profiles.find((profile) => profile.industryKey === industry)?.existingOrgId ?? null
+        if (!orgId) return
+      }
       if (!orgId) {
         const response = await fetch('/api/data/sample-companies', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ industry: selectedSample.industryKey }),
         })
-        if (!response.ok) {
-          const refusal = await readSampleCompanyRefusal(response)
-          setSampleError(refusal)
-          throw new Error(sampleErrorText(refusal))
+        const result = await readSampleCompanyResponse(response)
+        if (!result.ok) {
+          setSampleErrors((current) => ({ ...current, [industry]: result.refusal }))
+          toast.error(sampleErrorText(result.refusal))
+          return
         }
-        const data = (await response.json()) as { orgId?: unknown; created?: unknown }
-        if (typeof data.orgId !== 'string') {
-          const refusal: SampleCompanyRefusal = {}
-          setSampleError(refusal)
-          throw new Error(sampleErrorText(refusal))
-        }
-        orgId = data.orgId
-        toast.success(data.created ? t('import.sample.created') : t('import.sample.ready'))
+        orgId = result.orgId
+        // Keep the proven identity even when the subsequent workspace switch
+        // refuses. The next action opens this company instead of cloning again.
+        setSampleProfiles((profiles) => profiles.map((profile) =>
+          profile.industryKey === industry ? { ...profile, existingOrgId: result.orgId } : profile))
+        toast.success(result.created ? t('import.sample.created') : t('import.sample.ready'))
       }
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : t('import.sample.error'))
-      setSampleBusy(false)
-      return
-    }
-    if (!orgId) {
-      toast.error(t('import.sample.error'))
-      setSampleBusy(false)
-      return
-    }
-    // Entering resolves access and navigates: a refusal must release the
-    // button instead of leaving it on "Preparing" forever.
-    try {
       await enterOrg(orgId)
+      setSampleErrors((current) => {
+        const next = { ...current }
+        delete next[industry]
+        return next
+      })
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : t('import.sample.error'))
+      const refusal = { message: orgId && error instanceof Error ? error.message : undefined }
+      setSampleErrors((current) => current[industry] ? current : { ...current, [industry]: refusal })
+      toast.error(orgId && error instanceof Error ? error.message : t('import.sample.createFailed'))
     } finally {
+      inFlight.current = false
       setSampleBusy(false)
     }
   }
@@ -175,6 +156,7 @@ export function SampleCompanyPicker() {
               className="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2 text-sm leading-relaxed text-rose-800 dark:border-rose-900 dark:bg-rose-950 dark:text-rose-200"
             >
               {sampleErrorText(sampleError)}
+              {sampleError.requestId && <span className="mt-1 block">{t('import.sample.requestReference', { requestId: sampleError.requestId })}</span>}
             </p>
           )}
         </div>
@@ -189,7 +171,9 @@ export function SampleCompanyPicker() {
             ? t('import.sample.preparing')
             : selectedSample?.existingOrgId
               ? t('import.sample.open')
-              : t('import.sample.create')}
+              : sampleError
+                ? t('import.sample.checkStatus')
+                : t('import.sample.create')}
         </Button>
       </div>
       <p className="px-4 pb-4 text-xs leading-relaxed text-muted-foreground">{t('import.sample.safety')}</p>

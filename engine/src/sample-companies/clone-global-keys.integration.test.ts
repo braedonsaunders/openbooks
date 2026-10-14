@@ -214,9 +214,7 @@ test(
   "a mid-copy clone failure leaves no shell org and the status stays truthful",
   { skip: !DB },
   async () => {
-    // OM-14: "Nothing was created" and existingOrgId=null are only true
-    // when the failed birth's shell is compensated before the refusal is
-    // reported. Inject the failure after a real clone commits its shell, so
+    // Inject the failure after a real clone commits its shell, so
     // only the compensation stands between the test and a stranded org.
     const fixture = await seedFixture();
     try {
@@ -238,7 +236,7 @@ test(
         (error: unknown) => {
           assert.ok(error instanceof Error);
           assert.match(error.message, /copying the template's posted history failed/);
-          assert.match(error.message, /Nothing was created; you can retry/);
+          assert.match(error.message, /Company readiness is unconfirmed/);
           return true;
         },
       );

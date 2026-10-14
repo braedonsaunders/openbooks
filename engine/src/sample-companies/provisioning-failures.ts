@@ -2,7 +2,7 @@ import { guardRefusalMessage } from "../platform/database-refusal.ts";
 export { guardRefusalMessage } from "../platform/database-refusal.ts";
 
 /**
- * Staged sample-company provisioning failures (OM-14).
+ * Staged sample-company provisioning failures.
  *
  * Every unexpected failure inside createSampleCompany is reported by the
  * pipeline STAGE that produced it — template generation, clone/copy of the
@@ -11,9 +11,8 @@ export { guardRefusalMessage } from "../platform/database-refusal.ts";
  * operator-facing message. The message is a fixed per-stage string: it never
  * carries SQL text, constraint names, or other internal detail — except a
  * deterministic guard refusal (Postgres P0001), whose guard-authored message
- * already names its remedy and replaces the stage's retry text, because
- * retrying a deterministic refusal cannot help (OM-13c). The full
- * cause is logged server-side (the house console.error shape) and kept on
+ * already names its remedy and replaces the generic stage guidance. The full
+ * cause is logged server-side and kept on
  * `cause` for operators with log access, but it is never serialized to the
  * API response.
  *
@@ -53,36 +52,12 @@ const SAMPLE_COMPANY_STAGE_PHRASES: Record<
   numbering: "reconciling document numbering failed",
 };
 
-/**
- * What actually exists after each stage fails. Template fails before any
- * company row is committed (a failed template attempt is wiped), and a
- * failed clone's shell is compensated before the refusal is reported
- * (service compensateFailedClone) — so "nothing was created" is the truth
- * for both. When the clone-shell cleanup itself is refused, the error is a
- * precondition refusal naming the shell and its remedy, never this message.
- * Finalize and numbering fail AFTER the clone committed, and the partial
- * company is deliberately left resumable — the refusal must say so, or the
- * operator reads "nothing was created" while a company with their name on
- * it exists and their retry silently adopts it.
- */
-const SAMPLE_COMPANY_STAGE_OUTCOMES: Record<
-  SampleCompanyProvisioningStage,
-  string
-> = {
-  template: "Nothing was created; you can retry.",
-  clone: "Nothing was created; you can retry.",
-  finalize:
-    "The company was created but its setup did not finish; retry resumes it from where it stopped.",
-  numbering:
-    "The company was created but its document numbering was not finished; retry resumes numbering.",
-};
-
 export function sampleCompanyStageMessage(
   stage: SampleCompanyProvisioningStage,
 ): string {
   return (
-    `Sample company could not be created: ${SAMPLE_COMPANY_STAGE_PHRASES[stage]}. ` +
-    SAMPLE_COMPANY_STAGE_OUTCOMES[stage]
+    `Sample company preparation stopped: ${SAMPLE_COMPANY_STAGE_PHRASES[stage]}. ` +
+    "Company readiness is unconfirmed. Check Company Setup for an available sample company; if none is available, contact support before creating another copy."
   );
 }
 
@@ -144,9 +119,7 @@ export async function runProvisioningStage<T>(
   } catch (error) {
     if (error instanceof SampleCompanyProvisioningError) throw error;
     if (error instanceof SampleCompanyPreconditionError) throw error;
-    // OM-13c: a deterministic guard refusal already names its remedy, and
-    // retrying it cannot help — surface the guard's message instead of the
-    // stage's "you can retry" text. The code stays the stable per-stage
+    // A deterministic guard refusal names its remedy. The code stays the stable per-stage
     // code and the full cause stays server-side on `cause`.
     const refusal = guardRefusalMessage(error);
     console.error(`[sample-company] ${stage} stage failed`, error);

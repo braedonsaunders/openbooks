@@ -117,7 +117,10 @@ test('a clone-stage database failure returns the named stage refusal without SQL
     assert.equal(body.error, 'sample-company-clone-failed')
     assert.equal(body.stage, 'clone')
     assert.match(String(body.message), /copying the template's posted history failed/)
-    assert.match(String(body.message), /Nothing was created; you can retry/)
+    assert.match(String(body.message), /Company readiness is unconfirmed/)
+    assert.doesNotMatch(String(body.message), /Nothing was created|you can retry/)
+    assert.match(String(body.requestId), /^[0-9a-f-]{36}$/)
+    assert.equal(response.headers.get('x-request-id'), body.requestId)
     for (const leak of ['duplicate key', 'unique constraint', 'orgs_pkey', 'INSERT', 'STATEMENT', 'VALUES']) {
       assert.doesNotMatch(
         JSON.stringify(body),

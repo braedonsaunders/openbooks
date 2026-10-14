@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm'
-import { db } from '../platform/db.ts'
+import { db, withOrgTransaction } from '../platform/db.ts'
 import { add, cmp, fromUnits, isZero, mulDecimal, mulPercent, normalizeMoney, signedDocumentAmount, sum, toUnits } from '../money/money.ts'
 import { canonicalDecimal } from '../money/exact-decimal.ts'
 import { isUuid } from '../platform/uuid.ts'
@@ -199,7 +199,7 @@ export async function generateInvoiceFromBillingRequest(
   requestId: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null = null,
 ): Promise<GenerateResult> {
-  return db.transaction(async (tx) => {
+  return withOrgTransaction(orgId, () => db.transaction(async (tx) => {
     const actorScope = await lockActorCommandAuthority(tx, orgId, userId, null, 'ar.create')
     // Caller scope may narrow current authority, but cannot confer access.
     const effectiveScope = actorScope === null
@@ -1239,7 +1239,7 @@ export async function generateInvoiceFromBillingRequest(
       backupRequired: req.backup_required === true,
       backupType: typeof req.backup_type === 'string' && req.backup_type ? req.backup_type : 'none',
     }
-  })
+  }))
 }
 
 // The delete/void provenance-release hook lives in engine (billing-provenance.ts)

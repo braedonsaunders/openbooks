@@ -222,10 +222,8 @@ test(
           assert.ok(error instanceof SampleCompanyProvisioningError);
           assert.equal(error.stage, "finalize");
           assert.equal(error.message, sampleCompanyStageMessage("finalize"));
-          // The refusal must describe what actually exists: the company was
-          // created and the retry resumes it — never "nothing was created".
-          assert.match(error.message, /The company was created but its setup did not finish/);
-          assert.match(error.message, /retry resumes it from where it stopped/);
+          // The stage response does not claim an accessible ready company.
+          assert.match(error.message, /Company readiness is unconfirmed/);
           assert.doesNotMatch(error.message, /Nothing was created/);
           return true;
         },
@@ -273,8 +271,7 @@ test(
           assert.ok(error instanceof SampleCompanyProvisioningError);
           assert.equal(error.stage, "numbering");
           assert.equal(error.message, sampleCompanyStageMessage("numbering"));
-          assert.match(error.message, /The company was created but its document numbering was not finished/);
-          assert.match(error.message, /retry resumes numbering/);
+          assert.match(error.message, /Company readiness is unconfirmed/);
           return true;
         },
       );
@@ -342,15 +339,14 @@ test(
           },
         }),
         (error: unknown) => {
-          // Staged with the fixed template message — and the message is
-          // true because the attempt was wiped before it was reported.
+          // Compensation is proved below independently of the stage message.
           assert.ok(error instanceof SampleCompanyProvisioningError);
           assert.equal(
             (error as SampleCompanyProvisioningError).stage,
             "template",
           );
           assert.equal(error.message, sampleCompanyStageMessage("template"));
-          assert.match(error.message, /Nothing was created; you can retry/);
+          assert.match(error.message, /Company readiness is unconfirmed/);
           return true;
         },
       );
@@ -644,7 +640,7 @@ test(
 );
 
 test(
-  "a clone failure leaves no shell org and reports Nothing was created truthfully",
+  "a clone failure compensates its shell before reporting unconfirmed readiness",
   { skip: !DB },
   async () => {
     const fixture = await seedFixture();
@@ -663,9 +659,7 @@ test(
           assert.ok(error instanceof SampleCompanyProvisioningError);
           assert.equal(error.stage, "clone");
           assert.equal(error.message, sampleCompanyStageMessage("clone"));
-          // Truthful only because the shell was compensated first: nothing
-          // with this member's marker may remain.
-          assert.match(error.message, /Nothing was created; you can retry/);
+          assert.match(error.message, /Company readiness is unconfirmed/);
           return true;
         },
       );

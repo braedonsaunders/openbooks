@@ -9,6 +9,7 @@ declare global {
   var __sampleTestRouter: { pushes: string[]; refreshes: number } | undefined
   var __sampleTestToasts: { kind: string; message: string }[] | undefined
   var __sampleTestEnteredOrgs: string[] | undefined
+  var __sampleTestEntryRefusal: string | null | undefined
 }
 
 const { bootJsdomEnvironment } = await import('../../../../testing/jsdom-env')
@@ -34,7 +35,7 @@ registerHooks({
     if (specifier.endsWith('lib/sandbox-session')) {
       return {
         shortCircuit: true,
-        url: 'data:text/javascript,export async function enterOrg(orgId){globalThis.__sampleTestEnteredOrgs.push(String(orgId))}',
+        url: 'data:text/javascript,export async function enterOrg(orgId){globalThis.__sampleTestEnteredOrgs.push(String(orgId));if(globalThis.__sampleTestEntryRefusal)throw new Error(globalThis.__sampleTestEntryRefusal)}',
       }
     }
     return next(specifier, context)
@@ -61,11 +62,15 @@ const PROFILE = {
   templateReady: true,
   existingOrgId: null,
 }
+const NEW_ORG_ID = '8266d59c-2c23-4e6d-834e-54f463319196'
 
 const script = {
   sampleGets: 0,
+  samplePosts: 0,
+  readyOrgId: null as string | null,
+  postTransportFailure: false,
   postStatus: 500,
-  postBody: { error: 'sample-company-clone-failed', stage: 'clone' },
+  postBody: { error: 'sample-company-clone-failed', stage: 'clone' } as Record<string, unknown>,
   resources: [] as { key: string; label: string; group: string; supportsImport?: boolean }[],
   importRequests: [] as { mode?: string }[],
   importFailureMode: null as string | null,
@@ -82,16 +87,18 @@ function stubFetch(): void {
     }
     if (url === '/api/data/sample-companies' && method === 'GET') {
       script.sampleGets += 1
-      return Response.json({ profiles: [PROFILE] })
+      return Response.json({ profiles: [{ ...PROFILE, existingOrgId: script.readyOrgId }] })
     }
     if (url === '/api/data/sample-companies' && method === 'POST') {
+      script.samplePosts += 1
+      if (script.postTransportFailure) throw new Error('connection dropped')
       if (script.postStatus !== 200) {
         return new Response(JSON.stringify(script.postBody), {
           status: script.postStatus,
           headers: { 'Content-Type': 'application/json' },
         })
       }
-      return Response.json({ ok: true, orgId: 'org-new', created: true, templateGenerated: false })
+      return Response.json({ ok: true, orgId: NEW_ORG_ID, created: true, templateGenerated: false })
     }
     if (url === '/api/data/transfers' && method === 'GET') return Response.json({ jobs: [] })
     if (url === '/api/data/transfers' && method === 'POST') {
@@ -130,7 +137,11 @@ async function mountWizard(t: TestContext, sample = false, back?: { backHref: st
   globalThis.__sampleTestRouter = { pushes: [], refreshes: 0 }
   globalThis.__sampleTestToasts = []
   globalThis.__sampleTestEnteredOrgs = []
+  globalThis.__sampleTestEntryRefusal = null
   script.sampleGets = 0
+  script.samplePosts = 0
+  script.readyOrgId = null
+  script.postTransportFailure = false
   script.postStatus = 500
   script.postBody = { error: 'sample-company-clone-failed', stage: 'clone' }
   script.importRequests = []
@@ -170,7 +181,7 @@ function sampleSelect(): HTMLSelectElement {
 
 function createButton(): HTMLButtonElement {
   const button = [...document.querySelectorAll('button')].find((candidate) =>
-    /Create sample company|Opening|Preparing/.test((candidate.textContent ?? '').trim()),
+    /Create sample company|Open sample company|Check company status|Opening|Preparing/.test((candidate.textContent ?? '').trim()),
   ) as HTMLButtonElement | undefined
   assert.ok(button, 'the sample-company create button must render')
   return button
@@ -229,8 +240,11 @@ test('a failed create shows a persistent inline error and keeps the selection', 
   await clickCreate()
   const alert = document.querySelector('[role="alert"]')
   assert.ok(alert, 'the failure must render a persistent inline error, not just a toast')
-  assert.match(alert.textContent ?? '', /copying the template's posted history failed/)
-  assert.match(alert.textContent ?? '', /Nothing was created; you can retry/)
+  assert.match(alert.textContent ?? '', /copying the template[’']s posted history failed/)
+  assert.match(alert.textContent ?? '', /readiness is unconfirmed/)
+  assert.doesNotMatch(alert.textContent ?? '', /Nothing was created|you can retry/)
+  assert.equal(createButton().disabled, false)
+  assert.match(createButton().textContent ?? '', /Check company status/)
   assert.equal(sampleSelect().value, 'sim_atlas', 'the failed attempt must keep the chosen company')
   assert.deepEqual(
     globalThis.__sampleTestEnteredOrgs,
@@ -243,24 +257,73 @@ test('a failed create shows a persistent inline error and keeps the selection', 
   )
 })
 
-test('a subsequent success clears the error and enters the new company', async (t) => {
+test('an uncertain attempt checks readiness without replaying provisioning', async (t) => {
   await mountWizard(t, true)
   await clickCreate()
   assert.ok(document.querySelector('[role="alert"]'), 'the failure must render first')
-  script.postStatus = 200
+  await clickCreate()
+  assert.equal(script.samplePosts, 1, 'an absent ready company is not evidence permitting a second POST')
+  assert.ok(document.querySelector('[role="alert"]'))
+  assert.equal(createButton().disabled, false)
+  script.readyOrgId = NEW_ORG_ID
   await clickCreate()
   assert.equal(
     document.querySelector('[role="alert"]'),
     null,
-    'a retry clears the persistent error on the next attempt',
+    'opening a proven ready company clears the persistent refusal',
   )
-  assert.deepEqual(globalThis.__sampleTestEnteredOrgs, ['org-new'], 'success enters the new company')
-  assert.ok(
-    (globalThis.__sampleTestToasts ?? []).some(
-      (toast) => toast.kind === 'success' && /Sample company is ready/.test(toast.message),
-    ),
-    'success must surface the ready confirmation',
-  )
+  assert.deepEqual(globalThis.__sampleTestEnteredOrgs, [NEW_ORG_ID])
+  assert.equal(script.samplePosts, 1)
+})
+
+test('a named server remedy wins over generic stage copy and keeps its reference', async (t) => {
+  await mountWizard(t, true)
+  script.postBody = { error: 'sample-company-clone-failed', stage: 'clone', message: 'Complete the native upgrade before provisioning.', requestId: '9cfa2170-6d06-4a49-8d8e-d73c33a4a9a9' }
+  await clickCreate()
+  const text = document.querySelector('[role="alert"]')?.textContent ?? ''
+  assert.match(text, /Complete the native upgrade before provisioning/)
+  assert.match(text, /Support reference: 9cfa2170-6d06-4a49-8d8e-d73c33a4a9a9/)
+  assert.doesNotMatch(text, /Nothing was created/)
+})
+
+test('a dropped connection releases loading and preserves unknown provisioning outcome', async (t) => {
+  await mountWizard(t, true)
+  script.postTransportFailure = true
+  await clickCreate()
+  assert.equal(createButton().disabled, false)
+  assert.match(document.querySelector('[role="alert"]')?.textContent ?? '', /readiness is unconfirmed/)
+  await clickCreate()
+  assert.equal(script.samplePosts, 1)
+  assert.deepEqual(globalThis.__sampleTestEnteredOrgs, [])
+})
+
+test('a workspace entry refusal keeps the successful identity and never posts again', async (t) => {
+  await mountWizard(t, true)
+  script.postStatus = 200
+  globalThis.__sampleTestEntryRefusal = 'Workspace access is unavailable.'
+  await clickCreate()
+  assert.equal(script.samplePosts, 1)
+  assert.match(createButton().textContent ?? '', /Open sample company/)
+  assert.equal(createButton().disabled, false)
+  assert.match(document.querySelector('[role="alert"]')?.textContent ?? '', /Workspace access is unavailable/)
+  globalThis.__sampleTestEntryRefusal = null
+  await clickCreate()
+  assert.equal(script.samplePosts, 1)
+  assert.deepEqual(globalThis.__sampleTestEnteredOrgs, [NEW_ORG_ID, NEW_ORG_ID])
+})
+
+test('synchronous repeated clicks share one provisioning attempt', async (t) => {
+  await mountWizard(t, true)
+  script.postStatus = 200
+  await act(async () => {
+    const button = createButton()
+    button.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    button.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    await tick()
+    await tick()
+  })
+  assert.equal(script.samplePosts, 1)
+  assert.deepEqual(globalThis.__sampleTestEnteredOrgs, [NEW_ORG_ID])
 })
 
 test('the durable server job preserves retry identity when session storage is unavailable', async (t) => {

@@ -480,7 +480,7 @@ test("optional industry data installs a separate workspace and offers direct ent
   const prior = globalThis.fetch;
   globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     requests.push({ url: String(input), body: init?.body ? JSON.parse(String(init.body)) : {} });
-    return Response.json(String(input) === '/api/data/sample-companies' ? { ok: true, orgId: '00000000-0000-4000-8000-000000000003' } : { ok: true });
+    return Response.json(String(input) === '/api/data/sample-companies' ? { ok: true, orgId: '00000000-0000-4000-8000-000000000003', created: true } : { ok: true });
   }) as typeof fetch;
   t.after(async () => { globalThis.fetch = prior; await act(async () => { root.unmount(); }); host.remove(); });
   await renderWizard(host, root);
@@ -505,6 +505,52 @@ test("optional industry data installs a separate workspace and offers direct ent
   assert.equal(buttonsNamed(enter.textContent!.trim()).length, 1, 'completion offers one demo entry action');
   assert.ok(buttonsNamed('Create your first invoice')[0], 'the live-company next action remains available');
 });
+
+for (const outcome of ['refused', 'transport'] as const) {
+  test(`optional sample ${outcome} keeps saved setup and blocks a repeated provisioning request`, async (t) => {
+    const { host, root } = mount();
+    const requests: string[] = [];
+    const prior = globalThis.fetch;
+    globalThis.fetch = (async (input: RequestInfo | URL) => {
+      const url = String(input);
+      requests.push(url);
+      if (url === '/api/data/sample-companies') {
+        if (outcome === 'transport') throw new Error('connection dropped');
+        return Response.json({ error: 'sample-company-clone-failed', stage: 'clone', message: 'Copying requires a compatible schema.', requestId: '9cfa2170-6d06-4a49-8d8e-d73c33a4a9a9' }, { status: 500 });
+      }
+      return Response.json({ ok: true });
+    }) as typeof fetch;
+    t.after(async () => { globalThis.fetch = prior; await act(async () => { root.unmount(); }); host.remove(); });
+    await renderWizard(host, root);
+    await cont(); await cont();
+    const industry = [...document.querySelectorAll('button[aria-pressed]')].find((button) => button.textContent?.includes('Manufacturing'))!;
+    await act(async () => { industry.dispatchEvent(new window.MouseEvent('click', { bubbles: true })); });
+    await tick();
+    await cont(); await cont(); await cont();
+    const sample = [...document.querySelectorAll('button[aria-pressed]')].find((button) => button.textContent?.includes('Create an industry sample company'))!;
+    await act(async () => { sample.dispatchEvent(new window.MouseEvent('click', { bubbles: true })); });
+    await tick(); await cont();
+    await act(async () => { buttonsNamed('Set up my books')[0]!.dispatchEvent(new window.MouseEvent('click', { bubbles: true })); });
+    await tick(STEP_WAIT); await tick(STEP_WAIT);
+    assert.equal(requests.filter((url) => url === '/api/admin/setup/wizard').length, 1);
+    assert.equal(requests.filter((url) => url === '/api/data/sample-companies').length, 1);
+    const failure = document.querySelector('[role="alert"]')?.textContent ?? '';
+    assert.match(failure, /Company setup was saved/);
+    if (outcome === 'refused') {
+      assert.match(failure, /Copying requires a compatible schema/);
+      assert.match(failure, /Support reference: 9cfa2170/);
+    } else {
+      assert.match(failure, /readiness is unconfirmed/);
+    }
+    assert.doesNotMatch(failure, /Nothing was created/);
+    const apply = buttonsNamed('Set up my books')[0]!;
+    assert.equal(apply.disabled, false);
+    await act(async () => { apply.dispatchEvent(new window.MouseEvent('click', { bubbles: true })); });
+    await tick(STEP_WAIT);
+    assert.equal(requests.filter((url) => url === '/api/admin/setup/wizard').length, 1, 'failed sample readiness does not redo the already saved setup');
+    assert.equal(requests.filter((url) => url === '/api/data/sample-companies').length, 1, 'same-industry Apply never replays the failed sample request');
+  });
+}
 
 const switchNamed = (label: string) =>
   document.querySelector(`button[role="switch"][aria-label="${label}"]`) as HTMLButtonElement | null;

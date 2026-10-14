@@ -1,7 +1,7 @@
 import { sealJson, unsealJson } from "../platform/secrets.ts";
 import { lockChequeBank, chequeMicrFields, type CanadianChequeBank } from "../payments-core/cheque-bank.ts";
 import { sql } from "drizzle-orm";
-import { db } from "../platform/db.ts";
+import { db, withOrgTransaction } from "../platform/db.ts";
 import { sum, toUnits } from "../money/money.ts";
 import { lockActorCommandAuthority } from "../organization/actor-command-authority.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
@@ -63,7 +63,7 @@ export async function issuePayRunCheques(input: {
   printMicr?: boolean;
 }): Promise<PayRunChequeBatch> {
   const { orgId, documentId, actorId, allowedSubsidiaryIds } = input;
-  return await db.transaction(async (tx) => {
+  return await withOrgTransaction(orgId, () => db.transaction(async (tx) => {
     if (!(await lockAndCheckOrgFeature(tx, orgId, "payroll"))) throw new PayrollError("Payroll is switched off in Company Settings → Features");
     const runRows = (await tx.execute<{ run_status: string; subsidiary_id: string | null; paid_entry_id:string|null }>(sql`
       select r.run_status, d.subsidiary_id, r.paid_entry_id
@@ -176,7 +176,7 @@ export async function issuePayRunCheques(input: {
       });
     }
     return { cheques, total: sum(cheques.map((c) => c.amount)), issued };
-  }).catch((error: unknown) => {
+  })).catch((error: unknown) => {
     if (error instanceof PaymentError) throw new PayrollError(error.message, { cause: error });
     throw error;
   });

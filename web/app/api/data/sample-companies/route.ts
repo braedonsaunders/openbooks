@@ -1,4 +1,5 @@
 import { apiErrorResponse } from '@/lib/api/error-response'
+import { randomUUID } from 'node:crypto'
 import { parseJsonBody } from "@/lib/api/json";
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from 'next/server'
@@ -58,14 +59,18 @@ export const POST = defineRoute({
     // known validation refusals stay 409, unknown failures stay a generic
     // 500 with no internal detail in the body.
     if (error instanceof SampleCompanyProvisioningError) {
-      console.error(`[sample-company] provisioning failed at stage ${error.stage}`, error.cause ?? error)
-      return NextResponse.json(sampleCompanyProvisioningBody(error), { status: 500 })
+      const requestId = randomUUID()
+      console.error('[sample-company] provisioning failed', { requestId, stage: error.stage, error: error.cause ?? error })
+      return NextResponse.json(
+        { ...sampleCompanyProvisioningBody(error), requestId },
+        { status: 500, headers: { 'x-request-id': requestId } },
+      )
     }
     if (error instanceof SampleCompanyError) {
       return apiErrorResponse(error, { safeStatus: 409 })
     }
     console.error('[sample-company] provisioning failed', error)
-    return apiErrorResponse(error)
+    return apiErrorResponse(error, { request: req })
   }
   },
 })

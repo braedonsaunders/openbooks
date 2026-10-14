@@ -3,6 +3,7 @@ import { assertEntityPostingDate } from "../organization/accounting-preferences.
 import { lockLedgerSetupFence } from "../organization/ledger-setup-fence.ts";
 import { createHash } from "node:crypto";
 import { isUuid } from "../platform/uuid.ts";
+import { isIsoCalendarDate } from "../platform/iso-date.ts";
 import { sql } from "drizzle-orm";
 import { canonicalJson } from "../platform/canonical-json.ts";
 import { normalizeDecimal, normalizeMoney } from "../money/money.ts";
@@ -198,9 +199,12 @@ export async function postEntry(
   if (!input.bookId) fail("postEntry requires a book id");
   if (!input.subsidiaryId) fail("postEntry requires an entry subsidiary id");
   if (!input.entryNumber) fail("postEntry requires an entry number");
-  if (!input.postingDate) fail("postEntry requires a posting date");
+  if (!isIsoCalendarDate(input.postingDate)) fail("postEntry requires a valid ISO civil posting date");
   if (!input.periodId) fail("postEntry requires an accounting period id");
   if (!input.origin) fail("postEntry requires a journal origin");
+  for (const [field, value] of [["reversed entry", input.reversesEntryId], ["source document", input.sourceDocumentId]] as const) {
+    if (value != null && !isUuid(value)) fail(`journal entry ${input.entryNumber}: ${field} must be a UUID, not a code or name`);
+  }
   for (const [field, value] of [["organization", input.orgId], ["book", input.bookId], ["subsidiary", input.subsidiaryId], ["period", input.periodId]] as const) {
     if (!isUuid(value)) fail(`journal entry ${input.entryNumber}: ${field} must be a UUID, not a code or name`);
   }

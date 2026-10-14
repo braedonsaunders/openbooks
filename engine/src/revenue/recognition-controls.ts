@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { db } from '../platform/db.ts';
+import { db, withOrgTransaction } from '../platform/db.ts';
 import { lockActorCommandAuthority } from '../organization/actor-command-authority.ts';
 import { defaultPostingSubsidiaryId, loadSubsidiaryContext } from '../organization/subsidiaries.ts';
 import { lockAndCheckOrgFeature } from '../organization/org-feature-lock.ts';
@@ -26,7 +26,7 @@ export async function controlRecognition(orgId: string, actorId: string, obligat
     recognitionDate(input.effectiveOn ?? '', 'delivery date');
     if (!input.evidence || input.evidence.trim().length < 8) throw new RevenueRecognitionError('Delivery requires acceptance or fulfillment evidence');
   }
-  return db.transaction(async tx => {
+  return withOrgTransaction(orgId, () => db.transaction(async tx => {
     await lockObligationContract(tx, orgId, obligationId);
     const fallback=defaultPostingSubsidiaryId(await loadSubsidiaryContext(tx,orgId));
     const row = (await tx.execute<{ id: string; subsidiary_id: string | null; status: string; recognition_held: boolean; control_revision: number; delivered_on: string | null }>(sql`
@@ -61,5 +61,5 @@ export async function controlRecognition(orgId: string, actorId: string, obligat
     `)).rows[0];
     if (!event) throw new RevenueRecognitionError('Recognition evidence could not be recorded');
     return { id: obligationId, revision: row.control_revision + 1 };
-  });
+  }));
 }

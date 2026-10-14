@@ -45,6 +45,7 @@ import { countryOptions } from '@/lib/countries'
 import { currencyOptions } from '@/lib/iso-currencies'
 import { enterOrg } from '@/lib/sandbox-session'
 import { readApiErrorMessage, refusalMessageFromBody } from '@/lib/api-error'
+import { readSampleCompanyResponse, type SampleCompanyRefusal } from '@/lib/sample-company-response'
 import {
   recommendWorkspaceFeatures,
   type ComplexityLevel,
@@ -156,6 +157,7 @@ export function SetupWizard(props: {
   const locale = useLocale()
   const t = useTranslations('admin.setup.wizard')
   const tAdmin = useTranslations('admin')
+  const sampleT = useTranslations('data.import.sample')
   const router = useRouter()
   const pathname = usePathname()
   const reduceMotion = useReducedMotion()
@@ -163,6 +165,8 @@ export function SetupWizard(props: {
   const [busy, setBusy] = useState(false)
   const [transitioning, setTransitioning] = useState(false)
   const stepTransitionLocked = useRef(false)
+  const applyLocked = useRef(false)
+  const sampleAttempts = useRef(new Map<string, SampleCompanyRefusal>())
 
   // Form state
   const [name, setName] = useState(props.initial.name)
@@ -210,6 +214,7 @@ export function SetupWizard(props: {
   const [featureChoices, setFeatureChoices] = useState<Record<string, boolean>>(props.initial.allFeatures)
   const [includeSampleCompany, setIncludeSampleCompany] = useState(false)
   const [sampleOrgId, setSampleOrgId] = useState<string | null>(null)
+  const [sampleFailure, setSampleFailure] = useState<{ industry: string; refusal: SampleCompanyRefusal } | null>(null)
   const installablePacks = props.payrollPacks ?? []
   const [payrollPack, setPayrollPack] = useState<PayrollPack>(initialPayrollPack(installablePacks))
   const countries = useMemo(() => countryOptions(locale), [locale])
@@ -309,9 +314,15 @@ export function SetupWizard(props: {
   }
 
   async function apply() {
-    if (stepTransitionLocked.current) return
+    if (stepTransitionLocked.current || applyLocked.current) return
+    if (includeSampleCompany && industryKey && sampleAttempts.current.has(industryKey)) {
+      toast.error(sampleAttempts.current.get(industryKey)?.message ?? sampleT('createFailed'))
+      return
+    }
+    applyLocked.current = true
     setBusy(true)
     setStepIdx(steps.indexOf('applying'))
+    let attemptedSampleIndustry: string | null = null
     try {
       const res = await fetch('/api/admin/setup/wizard', {
         method: 'PUT',
@@ -353,29 +364,35 @@ export function SetupWizard(props: {
         }
       }
       if (includeSampleCompany && industryKey) {
+        attemptedSampleIndustry = industryKey
+        // Record the attempt before sending. A lost response cannot establish
+        // that no copy exists and must not turn another Apply into a new POST.
+        sampleAttempts.current.set(industryKey, {})
         const sample = await fetch('/api/data/sample-companies', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ industry: industryKey }),
         })
-        if (!sample.ok) {
-          const detail = await sample.clone().json().catch(() => null) as { message?: unknown } | null
-          throw new Error(
-            typeof detail?.message === 'string' && detail.message.trim()
-              ? detail.message
-              : await readApiErrorMessage(sample, t('launch.sample.error')),
-          )
+        const installed = await readSampleCompanyResponse(sample)
+        if (!installed.ok) {
+          sampleAttempts.current.set(industryKey, installed.refusal)
+          throw new Error(installed.refusal.message ?? sampleT('createFailed'))
         }
-        const installed = await sample.json() as { orgId?: unknown }
-        if (typeof installed.orgId !== 'string') throw new Error(t('launch.sample.error'))
         setSampleOrgId(installed.orgId)
       }
       // Keep the next action available until the operator chooses a destination.
       setStepIdx(steps.indexOf('done'))
     } catch (e) {
-      toast.error((e as Error).message)
+      if (attemptedSampleIndustry) {
+        const refusal = sampleAttempts.current.get(attemptedSampleIndustry) ?? {}
+        setSampleFailure({ industry: attemptedSampleIndustry, refusal })
+        toast.error(refusal.message ?? sampleT('createFailed'))
+      } else {
+        toast.error((e as Error).message)
+      }
       setStepIdx(steps.indexOf('review'))
     } finally {
+      applyLocked.current = false
       setBusy(false)
     }
   }
@@ -640,6 +657,14 @@ export function SetupWizard(props: {
             setFeatureChoices((current) => ({ ...current, [key]: value }))
           }}
         />
+      )}
+      {sampleFailure && sampleFailure.industry === industryKey && step !== 'applying' && (
+        <div role="alert" className="mb-4 rounded-lg border border-rose-200 bg-rose-50 p-3 text-sm text-rose-800 dark:border-rose-900 dark:bg-rose-950 dark:text-rose-200">
+          <p>{sampleT('setupSaved')}</p>
+          <p>{sampleFailure.refusal.message ?? sampleT('createFailed')}</p>
+          {sampleFailure.refusal.requestId && <p>{sampleT('requestReference', { requestId: sampleFailure.refusal.requestId })}</p>}
+          <Link href="/admin/setup/company#sample-companies" className="underline">{sampleT('checkStatus')}</Link>
+        </div>
       )}
       {step === 'review' && (
         <ReviewStep
