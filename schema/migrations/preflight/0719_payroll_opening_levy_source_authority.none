@@ -1,0 +1,1 @@
+Creates empty immutable source-authority and exact-decimal allocation tables. No published opening bytes or tenant history are backfilled, reinterpreted or changed.

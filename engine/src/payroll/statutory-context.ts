@@ -39,7 +39,7 @@ export interface StubLine {
    * program's base when its key is present and true. Absent key means
    * assessable, matching the sibling flags' default-true; an absent map
    * means every declared program assesses the line. Stamped from the
-   * component's `program_exclusions` beside `taxable`/`pensionable`/
+   * component's effective-dated statutory treatment beside `taxable`/`pensionable`/
    * `insurable`; lines built without a component row default-assess, exactly
    * like the sibling flags.
    */
@@ -125,8 +125,8 @@ export interface PayrollEmployerLevyContext {
   payDate?: string;
   /** Paying legal employer, for employer-level facts. Absent refuses where a pack needs it. */
   subsidiaryId?: string | null;
-  /** Explicit dated classification; absent retains the current role assignment. */
-  workerCompGroupId?: string;
+  /** Resolved pay-date classification. Null means no group; omitted resolves through the native selector. */
+  workerCompGroupId?: string | null;
 }
 
 /** Verified share of current-period wages sourced to one subregion. */

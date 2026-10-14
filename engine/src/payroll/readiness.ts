@@ -1831,6 +1831,7 @@ export async function payRunStaleness(
   let exactRosterChanged = false;
   let exactOpeningBalancesChanged = false;
   let exactIncomeTaxOverridesChanged = false;
+  let exactBankCashInputsChanged = false;
   const storedSource = parsePayRunCalculationSource(row.calculation_source_snapshot);
   // Legacy calculated rows predate migration 0040. Keep their informational
   // timestamp display intact; commit itself refuses the missing evidence and
@@ -1856,14 +1857,15 @@ export async function payRunStaleness(
       exactRosterChanged = changes.roster;
       exactOpeningBalancesChanged = changes.openingBalances;
       exactIncomeTaxOverridesChanged = changes.incomeTaxOverrides;
+      exactBankCashInputsChanged = changes.bankCashInputs;
       exactCompensationPackagesChanged = changes.compensationPackages;
       exactComponentsChanged = changes.components;
-      selectionChanged = !changes.time && !changes.timeTypes && !changes.wages && !changes.items && !changes.compensationPackages && !changes.components && !changes.roster && !changes.openingBalances && !changes.incomeTaxOverrides;
+      selectionChanged = !changes.time && !changes.timeTypes && !changes.wages && !changes.items && !changes.compensationPackages && !changes.components && !changes.roster && !changes.openingBalances && !changes.incomeTaxOverrides && !changes.bankCashInputs;
     }
   }
   const reasons = [
     selectionChanged ? "selection" : null,
-    row.adjustments_changed || row.assertions_changed || exactIncomeTaxOverridesChanged ? "adjustments" : null,
+    row.adjustments_changed || row.assertions_changed || exactIncomeTaxOverridesChanged || exactBankCashInputsChanged ? "adjustments" : null,
     row.time_changed || exactTimeChanged ? "time" : null,
     row.wages_changed || exactWagesChanged ? "wages" : null,
     row.schedule_changed ? "schedule" : null,

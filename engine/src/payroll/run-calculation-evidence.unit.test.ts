@@ -53,6 +53,53 @@ test('operator-entered income-tax overrides are retained, validated and independ
   }
 });
 
+test('audited bank cash inputs retain their keyed rate, paid hours, source and bank plan as stale evidence', () => {
+  const legacy = snapshot();
+  const input: NonNullable<PayRunCalculationSourceSnapshot['bankCashInputs']>[number] = {
+    adjustmentId: '20000000-0000-4000-8000-000000000001',
+    employeePartyId: '20000000-0000-4000-8000-000000000002',
+    componentId: '20000000-0000-4000-8000-000000000003',
+    amount: '1150.6400',
+    hours: '8.00',
+    bankPlanId: '20000000-0000-4000-8000-000000000004',
+    bankPlanUnit: 'hours',
+    bankPlanDirection: 'accrue',
+    bankPlanAllowsNegativeBalance: false,
+    bankPlanPayoutComponentId: '20000000-0000-4000-8000-000000000003',
+    bankPlanDepositComponentId: null,
+    reason: 'Issued bank payout at the keyed cheque rate',
+    sourceReference: 'card 44707',
+    requestId: '20000000-0000-4000-8000-000000000001',
+    rate: '143.83',
+  };
+  const calculated = { ...legacy, bankCashInputs: [input] };
+  assert.equal(payRunCalculationSourceChanges(legacy, calculated).bankCashInputs, true);
+  assert.equal(payRunCalculationSourceChanges(calculated, legacy).bankCashInputs, true);
+  assert.equal(payRunCalculationSourceChanges(calculated, {
+    ...calculated, bankCashInputs: [{ ...input, bankPlanAllowsNegativeBalance: true }],
+  }).bankCashInputs, true);
+  assert.deepEqual(parsePayRunCalculationSource(calculated), calculated);
+  const deposit = { ...input, hours: '-58.00', amount: '-1624.0000', rate: null,
+    bankPlanPayoutComponentId: null, bankPlanDepositComponentId: input.componentId };
+  assert.deepEqual(parsePayRunCalculationSource({ ...legacy, bankCashInputs: [deposit] }),
+    { ...legacy, bankCashInputs: [deposit] });
+  for (const invalid of [
+    { ...input, requestId: '20000000-0000-4000-8000-000000000099' },
+    { ...input, bankPlanUnit: 'money' },
+    { ...input, bankPlanPayoutComponentId: null },
+    { ...deposit, bankPlanDirection: 'owe' },
+    { ...deposit, bankPlanDepositComponentId: null },
+    { ...input, hours: '0', amount: '0' },
+    { ...input, hours: '-8.00' },
+    { ...deposit, amount: null },
+    { ...deposit, amount: '-1624.0001' },
+  ]) assert.equal(parsePayRunCalculationSource({ ...legacy, bankCashInputs: [invalid] }), null);
+
+  for (const bankCashInputs of [null, false, '[]', {}, [{ ...input, rate: '143.831' }], [{ ...input, amount: '1150.6500' }]]) {
+    assert.equal(parsePayRunCalculationSource({ ...legacy, bankCashInputs }), null);
+  }
+});
+
 test("approved holiday ownership, source, wage and foreign payment claims invalidate a calculated run", () => {
   const legacy = snapshot();
   assert.equal(payRunCalculationSourceChanges(legacy, { ...legacy, holidayObligations: [] }).holidayObligations, false);
@@ -111,7 +158,7 @@ test("legacy evidence without item routing reads as empty and detects later rout
   assert.deepEqual(parsed.itemAccounts, []);
   const current = snapshot();
   current.itemAccounts.push({ id: "item", payrollExpenseAccountId: "expense", updatedAt: "2026-09-20" });
-  assert.deepEqual(payRunCalculationSourceChanges(parsed, current), { time: false, timeTypes: false, wages: false, items: true, components: false, compensationPackages: false, holidayObligations: false, roster: false, openingBalances: false, incomeTaxOverrides: false });
+  assert.deepEqual(payRunCalculationSourceChanges(parsed, current), { time: false, timeTypes: false, wages: false, items: true, components: false, compensationPackages: false, holidayObligations: false, roster: false, openingBalances: false, incomeTaxOverrides: false, bankCashInputs: false });
 });
 
 test("canonical evidence ignores object key order but preserves array order and values", () => {
@@ -211,5 +258,28 @@ test('opening source identity remains auditable and changes invalidate opening e
   for (const malformed of [null, '[]', {}, [null], [{ ...source, sourceSha256: 'unknown' }],
     [{ ...source, sourceFileId: 'missing' }], [{ ...source, taxYear: '2026' }]]) {
     assert.equal(parsePayRunCalculationSource({ ...legacy, openingEmployerAuthorities: malformed }), null);
+  }
+});
+
+test('dated statutory treatment identity, resolved group and policy window are protected calculation evidence', () => {
+  const treatment = {
+    id:'10000000-0000-4000-8000-000000000001',componentId:'10000000-0000-4000-8000-000000000002',
+    workerCompGroupId:null,employeeWorkerCompGroupId:null,
+    effectiveFrom:'2026-01-01',effectiveTo:'2026-12-31',programExclusions:['wcb'],
+  };
+  const original = { ...snapshot(),payComponentStatutoryTreatments:[treatment] };
+  assert.deepEqual(parsePayRunCalculationSource(original),original);
+  for (const change of [
+    { id:'10000000-0000-4000-8000-000000000003' },
+    { employeeWorkerCompGroupId:'10000000-0000-4000-8000-000000000004' },
+    { effectiveTo:'2026-11-30' },{ programExclusions:[] },
+  ]) {
+    const current = { ...snapshot(),payComponentStatutoryTreatments:[{ ...treatment,...change }] };
+    assert.equal(payRunCalculationSourceChanges(original,current).components,true);
+    assert.notEqual(payRunCalculationSourceDigest(original),payRunCalculationSourceDigest(current));
+  }
+  for (const change of [{ id:null },{ id:'unknown' },{ employeeWorkerCompGroupId:undefined },
+    { effectiveFrom:'2026-02-30' },{ effectiveTo:'2025-12-31' },{ programExclusions:[null] }]) {
+    assert.equal(parsePayRunCalculationSource({ ...snapshot(),payComponentStatutoryTreatments:[{ ...treatment,...change }] }),null);
   }
 });

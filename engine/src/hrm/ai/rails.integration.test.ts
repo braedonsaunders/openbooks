@@ -9,11 +9,15 @@ import {
   dropScratchOrg,
   type ScratchOrg,
 } from "../../testing/fixtures.ts";
+import { seedPayrollProfile, seedPayrollSchedule } from "../../testing/fixtures.ts";
+import { payrollAnomalyFinalizeCheck } from "../../payroll/anomaly-finalize-gate.ts";
+import { createPayRun } from "../../payroll/run-lifecycle.ts";
 import { listDecisions, listDecisionsPage, logDecision, syncCapabilities, updateCapability, updateCapabilityForOrg } from "./governance.ts";
 import {
   checkPayrollFinalizeAllowed,
   flagsForEmployment,
   listFlags,
+  computeAnomalyBaselines,
   runAnomalyScan,
   scanAnomalies,
   transitionFlag,
@@ -197,7 +201,9 @@ test("capability sync seeds six rows; autonomy moves down only", { skip: !DB }, 
   }
 });
 
-async function seedTerminatedWithInput(orgId: string, decidedBy: string): Promise<{ employmentId: string }> {
+async function seedTerminatedWithInput(orgId: string, decidedBy: string): Promise<{
+  employmentId: string; documentId: string; employeePartyId: string; subsidiaryId: string;
+}> {
   const workerPartyId = randomUUID();
   await db.execute(sql`
     insert into parties (id, org_id, kind, display_name, is_active, custom)
@@ -239,13 +245,31 @@ async function seedTerminatedWithInput(orgId: string, decidedBy: string): Promis
     select count(*)::text as n from hrm_payroll_inputs
      where org_id = ${orgId} and employment_id = ${employmentId} and status = 'pending'`)).rows[0]?.n;
   assert.equal(seeded, "1", "the fixture must actually leave a pending pay input behind");
-  return { employmentId };
+  const scheduleId = randomUUID();
+  await seedPayrollSchedule(orgId, scheduleId, decidedBy, {
+    name: "Anomaly gate schedule", frequency: "monthly", periodsPerYear: 12,
+    anchorPeriodEnd: "2026-09-30", payDateOffsetDays: 5, subsidiaryId: subsidiary,
+  });
+  await seedPayrollProfile(orgId, workerPartyId, employmentId, scheduleId, decidedBy, {
+    country: "CA", province: "ON", payBasis: "hourly",
+  });
+  const run = await createPayRun({
+    orgId, actorId: decidedBy, payScheduleId: scheduleId,
+    periodStart: "2026-09-01", periodEnd: "2026-09-30", payDate: "2026-10-05",
+  });
+  await db.execute(sql`
+    insert into pay_stubs
+      (org_id, pay_run_document_id, employee_party_id, employment_id, province,
+       periods_per_year, pay_date, tax_year, currency_code, created_by, updated_by)
+    values (${orgId}, ${run.documentId}, ${workerPartyId}, ${employmentId}, 'ON',
+       12, '2026-10-05', 2026, 'CAD', ${decidedBy}, ${decidedBy})`);
+  return { employmentId, documentId: run.documentId, employeePartyId: workerPartyId, subsidiaryId: subsidiary };
 }
 
 test("scan flags terminated-with-pay as block; rescan is idempotent; finalize refuses", { skip: !DB }, async () => {
   const { org, adminId } = await setup();
   try {
-    const { employmentId } = await seedTerminatedWithInput(org.orgId, adminId);
+    const { employmentId, documentId, employeePartyId, subsidiaryId } = await seedTerminatedWithInput(org.orgId, adminId);
     const before = await decisionCount(org.orgId);
     const first = await scanAnomalies(db, {
       orgId: org.orgId, actorId: adminId, periodFrom: "2026-09-01", periodTo: "2026-09-30",
@@ -277,15 +301,85 @@ test("scan flags terminated-with-pay as block; rescan is idempotent; finalize re
 
     // THE finalize hook: open block refuses with the remedy.
     await assert.rejects(
-      checkPayrollFinalizeAllowed(db, { orgId: org.orgId, periodFrom: "2026-09-01", periodTo: "2026-09-30" }),
+      checkPayrollFinalizeAllowed(db, { orgId: org.orgId, documentId }),
       /blocking payroll check\(s\) are open.*\/payroll\/anomalies/,
     );
+
+    await db.execute(sql`update employee_payroll_profiles set is_active = false where org_id = ${org.orgId} and employee_party_id = ${employeePartyId}`);
+    await assert.rejects(checkPayrollFinalizeAllowed(db, { orgId: org.orgId, documentId }), /blocking payroll check/);
+    await db.execute(sql`update employee_payroll_profiles set is_active = true where org_id = ${org.orgId} and employee_party_id = ${employeePartyId}`);
+
+    // A period-wide employment flag has no retained schedule discriminator.
+    // Another run paying this same employment cannot infer an exclusion from
+    // a mutable current profile schedule.
+    const otherScheduleId = randomUUID();
+    await seedPayrollSchedule(org.orgId, otherScheduleId, adminId, {
+      name: "Other anomaly schedule", frequency: "monthly", periodsPerYear: 12,
+      anchorPeriodEnd: "2026-09-30", payDateOffsetDays: 5, subsidiaryId,
+    });
+    const otherRun = await createPayRun({
+      orgId: org.orgId, actorId: adminId, payScheduleId: otherScheduleId,
+      periodStart: "2026-09-01", periodEnd: "2026-09-30", payDate: "2026-10-05",
+    });
+    await db.execute(sql`
+      insert into pay_stubs
+        (org_id, pay_run_document_id, employee_party_id, employment_id, province,
+         periods_per_year, pay_date, tax_year, currency_code, created_by, updated_by)
+      values (${org.orgId}, ${otherRun.documentId}, ${employeePartyId}, ${employmentId}, 'ON',
+         12, '2026-10-05', 2026, 'CAD', ${adminId}, ${adminId})`);
+    await assert.rejects(checkPayrollFinalizeAllowed(db, { orgId: org.orgId, documentId: otherRun.documentId }), /blocking payroll check/);
+    await db.execute(sql`update employee_payroll_profiles set pay_schedule_id=${otherScheduleId}
+      where org_id=${org.orgId} and employee_party_id=${employeePartyId}`);
+    assert.equal((await payrollAnomalyFinalizeCheck(db, { orgId: org.orgId, documentId })).openBlockCount, 1,
+      "changing the current profile schedule does not erase a retained-period blocker");
+
+    const explicitFlagId = randomUUID();
+    await db.execute(sql`insert into payroll_anomaly_flags
+      (id, org_id, run_document_id, pay_period_from, pay_period_to, employment_id, kind, severity, detail, explanation, created_by)
+      values (${explicitFlagId}, ${org.orgId}, ${otherRun.documentId}, '2026-09-01', '2026-09-30', ${employmentId},
+        'duplicate_bank', 'block', '{}'::jsonb, 'Run-specific payment review', ${adminId})`);
+    const explicitBlocks = (await payrollAnomalyFinalizeCheck(db, { orgId: org.orgId, documentId: otherRun.documentId })).openBlocks;
+    assert.equal(explicitBlocks.length, 2);
+    assert.ok(explicitBlocks.some(block => block.id===explicitFlagId && block.kind==='duplicate_bank'),
+      "run-linked flags do not depend on the current profile schedule");
+    const runWideFlagId = randomUUID();
+    await db.execute(sql`insert into payroll_anomaly_flags
+      (id, org_id, run_document_id, pay_period_from, pay_period_to, employment_id, kind, severity, detail, explanation, created_by)
+      values (${runWideFlagId}, ${org.orgId}, ${otherRun.documentId}, '2026-09-01', '2026-09-30', null,
+        'custom', 'block', '{}'::jsonb, 'Run-wide funding review', ${adminId})`);
+    assert.equal((await payrollAnomalyFinalizeCheck(db, { orgId: org.orgId, documentId: otherRun.documentId })).openBlockCount, 3,
+      "an explicit run-wide blocker applies without an employment identity");
+    assert.equal((await payrollAnomalyFinalizeCheck(db, { orgId: org.orgId, documentId })).openBlockCount, 1,
+      "the other run's explicit flags cannot bleed into this run");
+    await transitionFlag(db, { orgId: org.orgId, actorId: adminId, flagId: runWideFlagId, to: "acknowledged", reason: "Run-wide funding reviewed" });
+    await transitionFlag(db, { orgId: org.orgId, actorId: adminId, flagId: explicitFlagId, to: "acknowledged", reason: "Run-specific payment reviewed" });
+    const timeReviewer = await createScratchUser(org.orgId, "Time reviewer", "anomaly_time_reviewer");
+    await grant(org.orgId, timeReviewer, "time.approve");
+    await enableFeatures(org.orgId, ["timeTracking"]);
+    const timeBlockId = randomUUID();
+    await db.execute(sql`insert into payroll_anomaly_flags
+      (id, org_id, run_document_id, pay_period_from, pay_period_to, employment_id, kind, severity, detail, explanation, created_by)
+      values (${timeBlockId}, ${org.orgId}, ${documentId}, '2026-09-01', '2026-09-30', ${employmentId},
+        'missing_rate', 'block', '{"key":"payment-rate-review"}'::jsonb, 'Payment rate review', ${adminId})`);
+    await assert.rejects(transitionFlag(db, { orgId: org.orgId, actorId: timeReviewer, flagId: timeBlockId,
+      to: "acknowledged", reason: "Time approval review" }), /only the payroll manager reviews blocking flags/);
+    assert.ok((await payrollAnomalyFinalizeCheck(db, { orgId: org.orgId, documentId })).openBlocks.some(block => block.id === timeBlockId));
+    await transitionFlag(db, { orgId: org.orgId, actorId: adminId, flagId: timeBlockId,
+      to: "acknowledged", reason: "Payroll manager reviewed payment rate" });
+
+    const foreign = await createScratchOrg();
+    try {
+      await assert.rejects(payrollAnomalyFinalizeCheck(db, { orgId: foreign.orgId, documentId }), /pay run not found/);
+    } finally { await dropScratchOrg(foreign.orgId); }
 
     // Transitions need a reason; false-positive suppresses the next scan.
     await assert.rejects(
       transitionFlag(db, { orgId: org.orgId, actorId: adminId, flagId, to: "resolved", reason: "  " }),
       /a reason is required/,
     );
+    await transitionFlag(db, { orgId: org.orgId, actorId: adminId, flagId, to: "acknowledged", reason: "reviewed and accepted" });
+    const acknowledged = await checkPayrollFinalizeAllowed(db, { orgId: org.orgId, documentId });
+    assert.equal(acknowledged.openBlockCount, 0, "acknowledged blocks have completed the documented review gate");
     await transitionFlag(db, {
       orgId: org.orgId, actorId: adminId, flagId, to: "false_positive",
       reason: "termination backdated by correction; inputs are valid",
@@ -297,16 +391,98 @@ test("scan flags terminated-with-pay as block; rescan is idempotent; finalize re
     assert.equal(third.created, 0);
 
     // No open blocks remain: the hook passes.
-    const check = await checkPayrollFinalizeAllowed(db, {
-      orgId: org.orgId, periodFrom: "2026-09-01", periodTo: "2026-09-30",
-    });
+    const check = await checkPayrollFinalizeAllowed(db, { orgId: org.orgId, documentId });
     assert.equal(check.openBlockCount, 0);
   } finally {
     await dropScratchOrg(org.orgId);
   }
 });
 
-test("concurrent rescans share one flag row without aborting either scan", async () => {
+test("hours baseline compares each pay period once across a worker rehire", { skip: !DB }, async () => {
+  const { org, adminId } = await setup();
+  try {
+    await ensureAiRailsSettingsForOrg(org.orgId, adminId);
+    await db.execute(sql`update ai_rails_settings set cohort_key = 'department' where org_id = ${org.orgId}`);
+
+    const partyId = randomUUID();
+    const oldEmploymentId = randomUUID();
+    const newEmploymentId = randomUUID();
+    await db.execute(sql`
+      insert into parties (id, org_id, kind, display_name, is_active, custom)
+      values (${partyId}, ${org.orgId}, 'person', 'Rehired Baseline Worker', true, '{}'::jsonb)`);
+    await db.execute(sql`
+      insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id)
+      values (${oldEmploymentId}, ${org.orgId}, ${partyId}, ${org.subsidiaryId}),
+             (${newEmploymentId}, ${org.orgId}, ${partyId}, ${org.subsidiaryId})`);
+    await db.execute(sql`
+      insert into worker_employment_versions (org_id, employment_id, version_no, status, effective_from, effective_to)
+      values (${org.orgId}, ${oldEmploymentId}, 1, 'active', '2025-01-01', '2026-01-15'),
+             (${org.orgId}, ${oldEmploymentId}, 2, 'terminated', '2026-01-15', null),
+             (${org.orgId}, ${newEmploymentId}, 1, 'active', '2026-01-15', null)`);
+
+    const scheduleId = randomUUID();
+    await seedPayrollSchedule(org.orgId, scheduleId, adminId, {
+      name: "Rehire baseline weekly", frequency: "weekly", periodsPerYear: 52,
+      anchorPeriodEnd: "2026-01-11", payDateOffsetDays: 3, subsidiaryId: org.subsidiaryId,
+    });
+    const oldRun = await createPayRun({
+      orgId: org.orgId, actorId: adminId, payScheduleId: scheduleId,
+      periodStart: "2026-01-05", periodEnd: "2026-01-11", payDate: "2026-01-14",
+    });
+    const newRun = await createPayRun({
+      orgId: org.orgId, actorId: adminId, payScheduleId: scheduleId,
+      periodStart: "2026-01-12", periodEnd: "2026-01-18", payDate: "2026-01-21",
+    });
+    await db.execute(sql`
+      insert into pay_stubs
+        (org_id, pay_run_document_id, employee_party_id, employment_id, province,
+         periods_per_year, pay_date, tax_year, currency_code, created_by, updated_by)
+      values (${org.orgId}, ${oldRun.documentId}, ${partyId}, ${oldEmploymentId}, 'ON', 52, '2026-01-14', 2026, 'CAD', ${adminId}, ${adminId}),
+             (${org.orgId}, ${newRun.documentId}, ${partyId}, ${newEmploymentId}, 'ON', 52, '2026-01-21', 2026, 'CAD', ${adminId}, ${adminId})`);
+    await db.execute(sql`
+      insert into time_entries (org_id, employee_party_id, worked_on, hours, status)
+      values (${org.orgId}, ${partyId}, '2026-01-07', '8.0000', 'approved'),
+             (${org.orgId}, ${partyId}, '2026-01-16', '4.0000', 'approved')`);
+    const baselineWindow = await computeAnomalyBaselines({ orgId: org.orgId, actorId: adminId, windowPeriods: 2 });
+    assert.deepEqual(baselineWindow.windowPayDates.sort(), ["2026-01-14", "2026-01-21"]);
+    const computedHoursMean = (await db.execute<{ mean: string; stddev: string }>(sql`
+      select mean::text as mean, stddev::text as stddev from anomaly_baselines
+       where org_id = ${org.orgId} and cohort_key = 'unassigned' and metric = 'hours'`)).rows[0];
+    assert.equal(Number(computedHoursMean?.mean), 6);
+    assert.equal(Number(computedHoursMean?.stddev), 2,
+      "the trailing two pay periods contribute one 8-hour and one 4-hour observation despite the rehire");
+    // Give the comparison a zero-spread baseline so both distinct current
+    // period observations must produce a flag below.
+    await db.execute(sql`
+      update anomaly_baselines set mean = 6, stddev = 0
+       where org_id = ${org.orgId} and cohort_key = 'unassigned' and metric = 'hours'`);
+
+    const summary = await scanAnomalies(db, {
+      orgId: org.orgId, actorId: adminId, periodFrom: "2026-01-05", periodTo: "2026-01-18",
+    });
+    assert.ok(summary.created >= 2, "both period observations differ from the six-hour baseline");
+    const flags = await listFlags(db, {
+      orgId: org.orgId, actorId: adminId, periodFrom: "2026-01-05", periodTo: "2026-01-18", kind: "hours_spike",
+    });
+    assert.deepEqual(flags.map((flag) => [flag.employmentId, flag.detail.actual]).sort(), [
+      [newEmploymentId, "4.0000"],
+      [oldEmploymentId, "8.0000"],
+    ].sort());
+    const overlappingEmploymentId = randomUUID();
+    await db.execute(sql`insert into worker_employments(id, org_id, worker_party_id, employer_subsidiary_id)
+      values (${overlappingEmploymentId}, ${org.orgId}, ${partyId}, ${org.subsidiaryId})`);
+    await db.execute(sql`insert into worker_employment_versions(org_id, employment_id, version_no, status, effective_from)
+      values (${org.orgId}, ${overlappingEmploymentId}, 1, 'active', '2026-01-01')`);
+    await assert.rejects(computeAnomalyBaselines({ orgId: org.orgId, actorId: adminId, windowPeriods: 2 }),
+      /exactly one employment covering each worked date/);
+    await assert.rejects(scanAnomalies(db, { orgId: org.orgId, actorId: adminId, periodFrom: "2026-01-05", periodTo: "2026-01-18" }),
+      /exactly one employment covering each worked date/);
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
+test("concurrent rescans share one flag row without aborting either scan", { skip: !DB }, async () => {
   const { org, adminId } = await setup();
   try {
     await seedTerminatedWithInput(org.orgId, adminId);

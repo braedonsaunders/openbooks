@@ -1,7 +1,7 @@
 /** Split from web/lib/file-cabinet.ts; moved without behavior changes. */
 import 'server-only'
-import { type FileViewer } from './types'
-import { resolveReadScope, visibleFolderPredicate, visibleFilePredicate, recordScopeFilePredicate, recordScopeFolderPredicate } from './visibility'
+import { type FileViewer } from '@openbooks/engine/records/file-cabinet-access'
+import { resolveReadScope, visibleFolderPredicate, visibleFilePredicate, recordScopeFilePredicate, recordScopeFolderPredicate } from '@openbooks/engine/records/file-cabinet-access'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/platform/db'
 

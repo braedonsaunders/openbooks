@@ -101,6 +101,8 @@
     "retainedEarningsPrior": "Bénéfices non distribués (exercices antérieurs)",
     "currentYearEarnings": "Résultat de l'exercice",
     "translationAdjustment": "Écart de conversion cumulatif",
+    "historicalEvidenceBlockedTitle": "Les justificatifs des apports historiques sont requis",
+    "historicalEvidenceBlockedAction": "Examiner la source de l’écriture",
     "ratesBlockedTitle": "Taux consolidés non encore calculés",
     "ratesBlockedAction": "Calculer les taux dans la clôture",
     "currencyBasisBlockedTitle": "Cette vue couvre plusieurs devises"

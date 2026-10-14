@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { PayrollError } from "./error.ts";
+import { businessTodayInTx } from "../platform/business-date.ts";
 
 /**
  * Union construction payroll: fringes and dues under a collective agreement.
@@ -60,6 +61,48 @@ export async function upsertUnionFringe(
       returning id
     `));
     const componentId = component.rows[0]!.id;
+    const today = await businessTodayInTx(tx, orgId);
+    // Retain historical and group-only policy choices. An initial default may
+    // fill only an unconfigured component or the gap before its first future default.
+    const statutoryTreatment = await tx.execute<{ id: string; effective_from: string; effective_to: string | null }>(sql`
+      insert into pay_component_statutory_treatments
+        (org_id, pay_component_id, effective_from, effective_to, program_exclusions, created_by, updated_by)
+      select ${orgId}, ${componentId},
+        case when exists (select 1 from pay_component_statutory_treatments treatment
+          where treatment.org_id=${orgId} and treatment.pay_component_id=${componentId})
+          then ${today}::date else DATE '0001-01-01' end,
+        (select min(treatment.effective_from) - 1 from pay_component_statutory_treatments treatment
+          where treatment.org_id=${orgId} and treatment.pay_component_id=${componentId}
+            and treatment.worker_comp_group_id is null and treatment.effective_from > ${today}::date),
+        '{}'::text[], ${actorId}, ${actorId}
+       where not exists (
+         select 1 from pay_component_statutory_treatments treatment
+          where treatment.org_id=${orgId} and treatment.pay_component_id=${componentId}
+            and (treatment.worker_comp_group_id is not null or treatment.effective_from <= ${today}::date)
+       )
+      returning id::text as id, effective_from::text as effective_from, effective_to::text as effective_to
+    `);
+    if (statutoryTreatment.rows[0]) {
+      await tx.execute(sql`
+        insert into audit_log (org_id, table_name, row_id, action, actor_id, changes)
+        values (${orgId}, 'pay_component_statutory_treatments', ${statutoryTreatment.rows[0].id}, 'insert', ${actorId},
+          ${JSON.stringify({
+            before: null,
+            after: { payComponentId: componentId, workerCompGroupId: null, programExclusions: [], effectiveFrom: statutoryTreatment.rows[0].effective_from, effectiveTo: statutoryTreatment.rows[0].effective_to },
+            reason: 'Initial contribution-program and employer-levy treatment created for the union pay component.',
+          })}::jsonb)
+      `);
+    } else {
+      const existing = await tx.execute<{ exists: boolean }>(sql`
+        select exists (
+          select 1 from pay_component_statutory_treatments treatment
+           where treatment.org_id=${orgId} and treatment.pay_component_id=${componentId}
+        ) as exists
+      `);
+      if (existing.rows[0]?.exists !== true) {
+        throw new PayrollError("the union pay component statutory history was not retained; reload Payroll Setup and retry");
+      }
+    }
 
     const fringe = (await tx.execute<{ id: string }>(sql`
       insert into union_fringes (org_id, agreement_id, classification_id, code, name, calc, value,

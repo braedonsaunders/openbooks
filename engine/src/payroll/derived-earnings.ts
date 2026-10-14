@@ -171,7 +171,7 @@ export interface DerivedEmployeeScope {
   partyId?: string | null;
 }
 
-/** The emitting component's statutory treatment, inherited by every line. */
+/** Native component flags and reporting classifications used by derived lines. */
 export interface DerivedComponent {
   id: string;
   name: string;
@@ -203,6 +203,7 @@ export interface DerivedEarningLine {
   pensionable: boolean;
   insurable: boolean;
   vacationable: boolean;
+  programApplicability?: Record<string, boolean>;
   nonPeriodic: boolean;
   supplementalWageCategory?: UsSupplementalWageCategory | null;
   statutoryReportingCategory?: string | null;
@@ -1097,6 +1098,7 @@ export async function resolveDerivedEarnings(
     employeePartyId: string;
     periodStart: string;
     periodEnd: string;
+    payDate?: string;
     rules: DerivedRule[];
     timeEntries: DerivedTimeEntry[];
     gross: string;

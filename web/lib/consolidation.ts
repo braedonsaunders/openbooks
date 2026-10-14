@@ -1,6 +1,7 @@
 import "server-only";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/platform/db";
+import { HistoricalTranslationEvidenceError } from "@openbooks/engine/journal/historical-translation-evidence";
 import { currentUser } from "./auth";
 import type { StatementSubsidiaryContext } from "./statement-matrix";
 import { allowedSubsidiaryIds, subsidiaryOptions, subtreeIds, type SubsidiaryOption } from "./subsidiaries";
@@ -32,6 +33,30 @@ export interface RatesBlockedNotice {
   description: string
   deriveLabel: string
   deriveHref: string
+}
+
+export interface HistoricalTranslationBlockedNotice {
+  code: 'historical-evidence-required'
+  title: string
+  description: string
+  actionLabel: string
+  actionHref: string
+}
+
+export type StatementTranslationBlockedNotice = RatesBlockedNotice | HistoricalTranslationBlockedNotice
+
+export function historicalTranslationBlockedNotice(error: unknown, copy: { title: string; actionLabel: string }): HistoricalTranslationBlockedNotice | null {
+  if (!(error instanceof HistoricalTranslationEvidenceError)) return null
+  const entryId = error.sourceEntryId
+  return { code: 'historical-evidence-required', title: copy.title, description: error.message,
+    actionLabel: copy.actionLabel, actionHref: entryId ? `/journal?journalEntry=${encodeURIComponent(entryId)}` : '/journal' }
+}
+
+export function statementTranslationBlockedAction(notice: StatementTranslationBlockedNotice | null): { href: string; label: string } {
+  if (!notice) return { href: '/close', label: '' }
+  return notice.code === 'historical-evidence-required'
+    ? { href: notice.actionHref, label: notice.actionLabel }
+    : { href: notice.deriveHref, label: notice.deriveLabel }
 }
 
 /**
@@ -336,6 +361,7 @@ export async function resolveSubsidiaryScope(
   return {
     subsidiary: {
       ids: inView.map((s) => s.id),
+      ...(consolidated ? { presentationCurrency: node.baseCurrency } : {}),
       rates,
       weights,
       controlLosses,

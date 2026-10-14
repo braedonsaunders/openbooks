@@ -24,6 +24,8 @@ export const ACCOUNT_MERGE_OPERATION = "account_merge";
 
 export const ADJUDICATED_HOLIDAY_HOURS_OPERATION = "adjudicated_holiday_hours";
 
+export const HISTORICAL_TRANSLATION_CONTRIBUTION_OPERATION = "historical_translation_contribution";
+
 export class FinancialChangeFeatureError extends Error {
   readonly status = 422;
   readonly name = 'FinancialChangeFeatureError';
@@ -87,13 +89,14 @@ export async function loadFinancialChange(
   tx: SqlExecutor,
   orgId: string,
   id: string,
+  options: { lock?: boolean } = {},
 ): Promise<FinancialChange> {
   const row = (
     await tx.execute<FinancialChange>(sql`
     select *, effective_on::text as effective_on,
       public.financial_change_self_decision_authorized(org_id,id,submitted_by) as self_approval_authorized
     from financial_changes
-     where id=${id} and org_id=${orgId} for update
+     where id=${id} and org_id=${orgId} ${options.lock === false ? sql`` : sql`for update`}
   `)
   ).rows[0];
   if (!row) throw new Error("financial change not found");
@@ -256,6 +259,14 @@ export async function loadFinancialChangeSubjectLabel(
     if(operation===MANUFACTURING_LOSS_DISPOSITION_OPERATION)return (await tx.execute<{label:string}>(sql`select number as label from mfg_work_orders where org_id=${orgId} and id=${subjectId}`)).rows[0]?.label??null;
     if(operation===MANUFACTURING_SCRAP_RESTATEMENT_OPERATION)return (await tx.execute<{label:string}>(sql`select work.number || ' — scrap' as label from mfg_scrap_events event join mfg_work_orders work on work.org_id=event.org_id and work.id=event.work_order_id where event.org_id=${orgId} and event.id=${subjectId}`)).rows[0]?.label??null;
     return null;
+  }
+  if (domain === "consolidation" && operation === HISTORICAL_TRANSLATION_CONTRIBUTION_OPERATION) {
+    return (await tx.execute<{ label: string }>(sql`
+      select entry.entry_number || ' — line ' || line.line_number as label
+        from journal_lines line
+        join journal_entries entry on entry.org_id=line.org_id and entry.id=line.entry_id
+       where line.org_id=${orgId} and line.id=${subjectId}
+    `)).rows[0]?.label ?? null;
   }
   const row = (
     await tx.execute<{ label: string }>(sql`

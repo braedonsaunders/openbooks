@@ -196,7 +196,7 @@ const account = async (
 };
 
 /** A CA org with payroll accounts wired and one biweekly schedule. */
-async function payrollOrg(opts: { eht?: { rate: string; annualExemption: string } } = {}): Promise<Fixture> {
+async function payrollOrg(opts: { eht?: { rate: string; annualExemption: string }; declareEhtShare?: boolean } = {}): Promise<Fixture> {
   const org = await createScratchOrg();
   const actorId = (await seedFlowActors(org.orgId)).adminId;
   const accounts = {
@@ -218,7 +218,7 @@ async function payrollOrg(opts: { eht?: { rate: string; annualExemption: string 
         wagesTo: "expense",
       });
   await seedPayrollComponents(org.orgId, actorId, "CA");
-  await seedOntarioEhtFixture(org.orgId, actorId, opts.eht?.annualExemption);
+  await seedOntarioEhtFixture(org.orgId, actorId, opts.eht?.annualExemption, opts.declareEhtShare ?? true);
 
   const scheduleId = randomUUID();
   await seedPayrollSchedule(org.orgId, scheduleId, actorId, {
@@ -573,6 +573,31 @@ test(
       // The exemption is gone by the second: 2,400 × 1.95% = 46.80.
       assert.equal((await stubRows(fx.orgId, runB.documentId))[0]!.factors.EHT, "46.8000");
       await commitPayRun({ orgId: fx.orgId, documentId: runB.documentId, actorId: fx.actorId });
+    } finally {
+      await dropScratchOrgReporting(fx.orgId);
+    }
+  },
+);
+
+test(
+  "Ontario EHT refuses an available exemption without a declared legal-employer allocation",
+  { skip: !DB },
+  async () => {
+    const fx = await payrollOrg({ eht: { rate: "1.95", annualExemption: "1000" }, declareEhtShare: false });
+    try {
+      const ehtPayable = await account(fx.orgId, "2340", "EHT payable", "liability_current");
+      await setPackSlotAccount(fx.orgId, fx.actorId, "CA", "eht", ehtPayable);
+      const employeeId = await employee(fx, "EHT employer with no allocation");
+      for (const day of ["2026-07-06", "2026-07-08", "2026-07-10", "2026-07-14"]) {
+        await hours(fx, employeeId, day, "20");
+      }
+      const run = await createPayRun({
+        orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
+        periodStart: "2026-07-05", periodEnd: "2026-07-18",
+      });
+      const result = await calculatePayRun({ orgId: fx.orgId, documentId: run.documentId, actorId: fx.actorId });
+      assert.match(JSON.stringify(result.errors), /eht_exemption_share_on/);
+      assert.match(JSON.stringify(result.errors), /Employer facts/);
     } finally {
       await dropScratchOrgReporting(fx.orgId);
     }

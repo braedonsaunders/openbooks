@@ -162,7 +162,7 @@ export async function ensureComponents(
     // (no matching arbiter) rather than silently skipping — that is
     // deliberate, per the on-conflict justification rule: silent skips are
     // how one country's component absorbed another's.
-    await executor.execute(sql`
+    const inserted = await executor.execute<{ id: string }>(sql`
       insert into pay_components (org_id, code, name, kind, system_key, country, basis, taxable,
                                   pensionable, insurable, vacationable, non_periodic, sequence,
                                   created_by, updated_by)
@@ -172,7 +172,19 @@ export async function ensureComponents(
               ${c.vacationable ?? true}, ${c.nonPeriodic ?? false}, ${c.sequence}, ${actorId}, ${actorId})
       -- The same country and statutory system key retain their existing component configuration.
       on conflict (org_id, country, system_key, kind) where system_key is not null do nothing
+      returning id::text as id
     `);
+    if (inserted.rows[0]) {
+      const treatment = await executor.execute(sql`
+        insert into pay_component_statutory_treatments
+          (org_id, pay_component_id, effective_from, program_exclusions, created_by, updated_by)
+        values (${orgId}, ${inserted.rows[0]!.id}, DATE '0001-01-01', '{}'::text[], ${actorId}, ${actorId})
+        returning id
+      `);
+      if (treatment.rows.length !== 1) {
+        throw new PayrollError(`statutory treatment for seeded pay component ${c.systemKey ?? c.code} was not created`);
+      }
+    }
   }
 }
 

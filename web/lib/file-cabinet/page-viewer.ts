@@ -1,4 +1,4 @@
-import type { AccessLevel, FileViewer } from './types'
+import type { AccessLevel, FileViewer } from '@openbooks/engine/records/file-cabinet-access'
 
 /**
  * The File Cabinet reader as the Documents page sees it: '*' admins get

@@ -3,7 +3,8 @@ import { PayrollError } from "../error.ts";
 import { PayrollPackError } from "../payroll-error.ts";
 import { resolveStoredEmployerFact } from "../employer-fact-store.ts";
 import { undecidedWorkerCompError } from "../employee-worker-comp.ts";
-import { CA_OPENING_YTD_FIELDS } from "./opening-ytd.ts";
+import { resolveStatutoryHistoryScope, employerScopedStatutoryStubs, requireStatutoryHistoryFactors } from "../statutory-history-scope.ts";
+import { employeeOpeningLevyAmount, readEmployeeOpeningLevySources, requireEmployerOpeningLevySources } from "../opening-levy-source-reader.ts";
 
 /**
  * The pay-run lifecycle states, as `pay_runs.run_status` spells them
@@ -122,7 +123,8 @@ const CNT_MAX_2026 = "103000";
 
 /**
  * One levy key's assessable base: the earning lines assessable for it.
- * Applicability rides the lines from the component's `program_exclusions`
+ * Applicability rides the lines from the component's effective-dated
+ * statutory treatment
  * (absent key means assessable, matching the sibling flags' default-true);
  * a non-taxable earning type defaults to excluded through its STORED
  * exclusions, never through a rule here. Accrual-only lines accrue no
@@ -150,6 +152,9 @@ export async function applyCaEmployerLevies(
   const {
     tx, orgId, documentId, employeePartyId, employeeName, taxYear, region, lines, pushStatutory,
   } = ctx;
+  const historyScope = await resolveStatutoryHistoryScope(tx, {
+    orgId, documentId, taxYear, subsidiaryId: ctx.subsidiaryId ?? null, country: 'CA',
+  });
   const config = await caPayrollConfig(orgId, taxYear, ctx.payDate ?? null);
 
   // Each levy assesses its OWN earnings base (see `levyAssessableBase`
@@ -167,18 +172,17 @@ export async function applyCaEmployerLevies(
 
   // A current inactive employee role does not exempt earnings on an already
   // selected historical or final-payment run from its retained classification.
-  const wcbGroup = (await tx.execute<{ rate_percent: string | null; max_assessable: string | null }>(ctx.workerCompGroupId ? sql`
-    select rate_percent,max_assessable from worker_comp_groups
-     where org_id=${orgId} and id=${ctx.workerCompGroupId} for share
-  ` : sql`
-    select g.rate_percent, g.max_assessable
-      from employee_roles er
-      join worker_comp_groups g on g.id = er.worker_comp_group_id and g.org_id = er.org_id and g.is_active
-     where er.org_id = ${orgId} and er.party_id = ${employeePartyId}
-     limit 1
-  `));
-  const wcb = wcbGroup.rows[0];
-  if (ctx.workerCompGroupId && (!wcb || wcb.rate_percent === null || cmp(wcb.rate_percent, '0') < 0 || wcb.max_assessable !== null && cmp(wcb.max_assessable, '0') < 0)) {
+  const workerCompGroupId = ctx.workerCompGroupId === undefined
+    ? (await tx.execute<{ id: string | null }>(sql`
+        select public.payroll_worker_comp_group_at(${orgId}::uuid, ${employeePartyId}::uuid, coalesce(${ctx.payDate ?? null}::date, current_date))::text as id
+      `)).rows[0]?.id ?? null
+    : ctx.workerCompGroupId;
+  const wcb = workerCompGroupId === null ? undefined
+    : (await tx.execute<{ rate_percent: string | null; max_assessable: string | null }>(sql`
+        select rate_percent, max_assessable from worker_comp_groups
+         where org_id=${orgId} and id=${workerCompGroupId} for share
+      `)).rows[0];
+  if (workerCompGroupId && (!wcb || wcb.rate_percent === null || cmp(wcb.rate_percent, '0') < 0 || wcb.max_assessable !== null && cmp(wcb.max_assessable, '0') < 0)) {
     throw new PayrollError(`${employeeName}: the dated worker-compensation group has no valid configured rate or assessable ceiling — review its rate and ceiling in Company Setup → Worker compensation groups before calculating.`);
   }
   // An undecided coverage with assessable earnings is a refusal, never a
@@ -205,20 +209,15 @@ export async function applyCaEmployerLevies(
     // Pre-adoption assessable earnings ride the opening carry-in, like every
     // other annual ceiling: without it a mid-year adopter re-opens the full
     // group maximum on the first stub.
-    const wcbAssessableColumn = CA_OPENING_YTD_FIELDS.find(
-      (field) => field.key === "wcbAssessableYtd",
-    )!.column;
+    await requireStatutoryHistoryFactors(tx, historyScope, { employeePartyId, region }, ['WCB_EARN']);
+    const openingSources = await readEmployeeOpeningLevySources(tx, {
+      orgId, employeePartyId, taxYear, subsidiaryId: historyScope.subsidiaryId,
+    });
+    const openingAssessable = employeeOpeningLevyAmount(openingSources, { programKey: 'ca_wcb', region });
     const priorAssessable = ((await tx.execute<{ prior: string }>(sql`
-      select coalesce((select ${sql.raw(wcbAssessableColumn)} from payroll_opening_balances
-                         where org_id = ${orgId} and employee_party_id = ${employeePartyId}
-                           and tax_year = ${taxYear}), 0)
-             + coalesce(sum((s.factors->>'WCB_EARN')::numeric), 0) as prior
-        from pay_stubs s
-        join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
-       where s.org_id = ${orgId} and s.employee_party_id = ${employeePartyId}
-         and s.tax_year = ${taxYear}
-         and (r.run_status = 'committed'
-              or s.pay_run_document_id = ${documentId})
+      select ${openingAssessable}::numeric + coalesce(sum((s.factors->>'WCB_EARN')::numeric), 0) as prior
+        from ${employerScopedStatutoryStubs(historyScope, { employeePartyId, region })} s
+       where s.pay_run_document_id <> ${documentId}
     `))).rows[0]!.prior;
     const assessable = assessableFor("wcb");
     const room = wcb.max_assessable
@@ -305,35 +304,37 @@ export async function applyCaEmployerLevies(
       // A voided run consumes nothing twice over: its run_status is
       // 'voided' (never 'committed'), and its document is excluded below.
       //
-      // Pre-adoption remuneration rides the pack-declared opening carry-in
-      // (`ehtRemunerationYtd`), summed across the employer's in-province
-      // carry-ins: the exemption is employer-level, so one employee's
-      // committed stubs cannot reconstruct what the prior provider paid.
-      // Province is the employee's CURRENT payroll province — the best
-      // proxy on file for where pre-adoption pay was earned.
-      const ehtCarryInColumn = CA_OPENING_YTD_FIELDS.find(
-        (field) => field.key === "ehtRemunerationYtd",
-      )!.column;
+      // Pre-adoption remuneration is allocated by its original province and
+      // summed only for this legal employer. The current employee profile is
+      // never used to relabel another province's historical assessments.
+      await requireStatutoryHistoryFactors(tx, historyScope, { region }, ['EHT_EARN']);
+      const ehtOpening = await requireEmployerOpeningLevySources(tx, {
+        orgId, subsidiaryId: historyScope.subsidiaryId, taxYear, programKey: 'ca_eht', region,
+      });
       const priorInProvince = ((await tx.execute<{ prior: string }>(sql`
         select coalesce(sum((s.factors->>'EHT_EARN')::numeric), 0)
-               + coalesce((
-                   select sum(b.${sql.raw(ehtCarryInColumn)})
-                     from payroll_opening_balances b
-                    where b.org_id = ${orgId} and b.tax_year = ${taxYear}
-                      and exists (
-                        select 1 from employee_payroll_profiles prof
-                         where prof.org_id = b.org_id
-                           and prof.employee_party_id = b.employee_party_id
-                           and prof.is_active and prof.province = ${region})
-                 ), 0) as prior
-          from pay_stubs s
-          join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
-          join documents d on d.id = r.document_id and d.org_id = r.org_id
-         where s.org_id = ${orgId} and s.tax_year = ${taxYear} and s.province = ${region}
-           and (s.pay_run_document_id = ${documentId} or r.run_status = 'committed')
-           and d.status <> 'voided'
+               + ${ehtOpening}::numeric as prior
+          from ${employerScopedStatutoryStubs(historyScope, { region, includeCurrentDocument: true })} s
       `))).rows[0]!.prior;
-      const exemption = eht.annualExemption ?? "0";
+      const exemptionFact = `eht_exemption_share_${region.toLowerCase()}`;
+      const declaredExemption = await resolveStoredEmployerFact({
+        tx, orgId, subsidiaryId: historyScope.subsidiaryId, country: 'CA', factKey: exemptionFact,
+        asOf: ctx.payDate ?? `${taxYear}-01-01`,
+      });
+      const availableExemption = eht.annualExemption ?? '0';
+      if (cmp(availableExemption, '0') > 0 && declaredExemption === null) {
+        throw new PayrollError(
+          `CA ${region} employer health tax has no annual exemption allocation for this legal employer — `
+          + `record ${exemptionFact} for ${taxYear} in Payroll Setup → Employer facts before applying the associated-employer exemption.`,
+        );
+      }
+      const exemption = declaredExemption ?? '0';
+      if (cmp(exemption, availableExemption) > 0) {
+        throw new PayrollError(
+          `CA ${region} employer health tax exemption allocation exceeds the configured amount available to the associated-employer group — `
+          + `review ${exemptionFact} in Payroll Setup → Employer facts and the ${region} rate in Payroll Setup → Statutory rates.`,
+        );
+      }
       const exemptionLeft = cmp(exemption, priorInProvince) > 0
         ? add(exemption, neg(priorInProvince))
         : "0";
@@ -402,18 +403,13 @@ export async function applyCaEmployerLevies(
           // no HSF carry-in column yet — a mid-year adopter understates the
           // rate basis, so true up the adoption stub outside the pack until
           // one exists.
-          const ytd = (await tx.execute<{ remuneration: string; booked: string }>(sql`
+        const ytd = (await tx.execute<{ remuneration: string; booked: string }>(sql`
             select coalesce(sum((s.factors->>'HSF_EARN')::numeric), 0) as remuneration,
                    coalesce(sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
                                   join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
                                  where l.org_id = ${orgId} and l.stub_id = s.id
                                    and l.kind = 'employer_contribution' and pc.system_key = 'hsf')), 0) as booked
-              from pay_stubs s
-              join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
-              join documents d on d.id = r.document_id and d.org_id = r.org_id
-             where s.org_id = ${orgId} and s.tax_year = ${taxYear} and s.province = ${region}
-               and (r.run_status = 'committed' or s.pay_run_document_id = ${documentId})
-               and d.status <> 'voided'
+          from ${employerScopedStatutoryStubs(historyScope, { region, includeCurrentDocument: true })} s
           `)).rows[0]!;
           const ytdBase = add(ytd.remuneration, hsfEarnings);
           const rate = quebecHsfRateForPayroll(sector, ytdBase, taxYear);
@@ -433,9 +429,8 @@ export async function applyCaEmployerLevies(
   // Employment income is generally subject, so the stub's assessable earnings.
   // The cap binds committed stubs plus the run being calculated (WCB shape:
   // committed-only counting lets two drafts each claim the full room).
-  // Pre-adoption remuneration has no CNT carry-in column yet: a mid-year
-  // adopter re-opens the full $103,000 room on the first stub (bounded
-  // over-accrual, high earners only) until the column lands.
+  // Pre-adoption remuneration counts only through its source-qualified
+  // original Québec allocation; unqualified legacy wages refuse before this cap.
   let cntAmount: Money = "0" as Money;
   let cntEarnings: Money = "0" as Money;
   if (region === "QC") {
@@ -445,9 +440,7 @@ export async function applyCaEmployerLevies(
         + "(Revenu Québec). This year is not yet supported by the CA-QC pack; contact support.",
       );
     }
-    const runSubsidiary = (await tx.execute<{ subsidiary_id: string | null }>(sql`
-      select subsidiary_id from documents where org_id = ${orgId} and id = ${documentId}
-    `)).rows[0]?.subsidiary_id ?? null;
+    const runSubsidiary = historyScope.subsidiaryId;
     const cntExemption = await resolveStoredEmployerFact({
       tx,
       orgId,
@@ -457,14 +450,14 @@ export async function applyCaEmployerLevies(
       asOf: ctx.payDate ?? `${taxYear}-12-31`,
     });
     if (cntExemption === "none") {
+      await requireStatutoryHistoryFactors(tx, historyScope, { employeePartyId, region: 'QC' }, ['CNT_EARN']);
+      const cntSources = await readEmployeeOpeningLevySources(tx, {
+        orgId, employeePartyId, taxYear, subsidiaryId: historyScope.subsidiaryId,
+      });
+      const cntOpening = employeeOpeningLevyAmount(cntSources, { programKey: 'ca_cnt', region: 'QC' });
       const priorCnt = ((await tx.execute<{ prior: string }>(sql`
-        select coalesce(sum((s.factors->>'CNT_EARN')::numeric), 0) as prior
-          from pay_stubs s
-          join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
-         where s.org_id = ${orgId} and s.employee_party_id = ${employeePartyId}
-           and s.tax_year = ${taxYear}
-           and (r.run_status = 'committed'
-                or s.pay_run_document_id = ${documentId})
+        select ${cntOpening}::numeric + coalesce(sum((s.factors->>'CNT_EARN')::numeric), 0) as prior
+          from ${employerScopedStatutoryStubs(historyScope, { employeePartyId, region: 'QC', includeCurrentDocument: true })} s
       `))).rows[0]!.prior;
       const assessable = assessableFor("cnt");
       const room = cmp(CNT_MAX_2026, priorCnt) > 0 ? add(CNT_MAX_2026, neg(priorCnt)) : "0";

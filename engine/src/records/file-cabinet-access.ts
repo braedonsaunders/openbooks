@@ -1,12 +1,93 @@
-/** Split from web/lib/file-cabinet.ts; moved without behavior changes. */
-import 'server-only'
-import { type FileViewer, type AccessLevel, ACCESS_BY_RANK, maxAccess, grantAppliesTo } from './types'
 import { sql, type SQL } from 'drizzle-orm'
-import { db, type SqlExecutor } from '@openbooks/engine/platform/db'
+import { db, type SqlExecutor } from '../platform/db.ts'
+import { subsidiaryVisibleFilter } from '../organization/subsidiary-scope.ts'
+
+/** AP intake packets follow both the matched vendor and purchase order.
+ * Null references are org-wide; an empty actor scope admits no packet.
+ * Consumers join those records as `vendor` and `po`. */
+export function apCaptureSubsidiaryScope(allowed: ReadonlySet<string> | null): SQL {
+  if (allowed === null) return sql``
+  if (allowed.size === 0) return sql` and false`
+  return sql`${subsidiaryVisibleFilter(sql`po.subsidiary_id`, allowed, { orgWideNull: true })}
+             ${subsidiaryVisibleFilter(sql`vendor.subsidiary_id`, allowed, { orgWideNull: true })}`
+}
+
+/**
+ * The authenticated caller, for access control. Beyond private-folder
+ * visibility (is_private → owner + admins only), access is layered:
+ *   - isAdmin (holds '*') → Manager everywhere.
+ *   - baseline: the org-role tier — 'manager' for documents.manage, 'viewer'
+ *     for documents.read — applied to every folder outside a private subtree
+ *     the caller doesn't own. Omission assumes a permission-gated read surface;
+ *     native command authority always supplies an explicit tier.
+ *   - resource_grants add Viewer/Editor/Manager to specific users/roles on a
+ *     folder (inherited by descendants + contained files) or a single file.
+ */
+export interface FileViewer {
+  userId: string
+  isAdmin: boolean
+  baseline?: AccessLevel
+  /** AP-capture intake is governed by its owning AP capability, not documents.read. */
+  canReadApCapture?: boolean
+  /**
+   * The caller's role-derived subsidiary fence (null = organization-wide).
+   * Record-folder files/folders evidence a single record, so restricted
+   * callers see them only when the folder's record target is inside this
+   * set — the same rule the attachment surfaces enforce. Native command
+   * authority always supplies the actor's resolved scope.
+   */
+  allowedSubsidiaryIds?: ReadonlySet<string> | null
+}
+
+/** Permission required to read an attachment through its owning record. */
+export function attachmentReadPermission(targetTable: string, kind?: string | null): string | null {
+  if (targetTable === 'documents') {
+    const permissions: Record<string, string> = {
+      vendor_bill: 'ap.read', vendor_payment: 'ap.pay', vendor_credit: 'ap.read', purchase_order: 'purchase_orders.read',
+      check: 'ap.read', card_charge: 'ap.read', card_refund: 'ap.read', customer_invoice: 'ar.read',
+      customer_credit: 'ar.read', cash_sale: 'cash_sales.read', cash_refund: 'cash_sales.read',
+      customer_payment: 'ar.pay', sales_order: 'ar.read', quote: 'ar.read',
+      expense_report: 'expenses.read', field_ticket: 'time.read', project_charge: 'projects.read',
+      pay_run: 'payroll.read', journal: 'gl.read', deposit: 'gl.read', transfer: 'gl.read',
+      pick_list: 'orders.fulfill', shipment: 'orders.fulfill',
+    }
+    return kind ? (permissions[kind] ?? null) : null
+  }
+  if (targetTable === 'parties') return 'parties.read'
+  if (targetTable === 'item_rate_versions') return 'admin.setup.manage'
+  if (targetTable === 'fixed_assets') return 'assets.read'
+  if (targetTable === 'compliance_records' || targetTable === 'lien_waivers') return 'compliance.read'
+  return null
+}
+
+/** Access tiers, low → high. 'none' means no access. */
+export type AccessLevel = 'none' | 'viewer' | 'editor' | 'manager'
+
+const ACCESS_RANK: Record<AccessLevel, number> = { none: 0, viewer: 1, editor: 2, manager: 3 }
+export const ACCESS_BY_RANK: AccessLevel[] = ['none', 'viewer', 'editor', 'manager']
+
+export function accessAtLeast(level: AccessLevel, min: AccessLevel): boolean {
+  return ACCESS_RANK[level] >= ACCESS_RANK[min]
+}
+
+export function maxAccess(...levels: AccessLevel[]): AccessLevel {
+  return ACCESS_BY_RANK[Math.max(0, ...levels.map((l) => ACCESS_RANK[l]))]!
+}
+
+/** SQL predicate: a grant row applies to this viewer (direct user grant, or a
+ *  grant to a role the viewer holds via role_assignments). */
+export function grantAppliesTo(orgId: string, viewer: FileViewer): SQL {
+  return sql`(
+    (g.principal_type = 'user' and g.principal_id = ${viewer.userId})
+    or (g.principal_type = 'role' and g.principal_id in (
+      select role_id from role_assignments where org_id = ${orgId} and user_id = ${viewer.userId}
+    ))
+  )`
+}
 
 // --- helpers ----------------------------------------------------------------
 
-export { deriveExtension } from '@openbooks/engine/platform/file-names'
+export { deriveExtension } from '../platform/file-names.ts'
 
 /**
  * Resolve the set of folder ids hidden from this viewer — private folders owned
@@ -32,9 +113,9 @@ export interface ReadScope {
   apCaptureFolderIds: string[]
 }
 
-export async function resolveReadScope(orgId: string, viewer: FileViewer): Promise<ReadScope> {
+export async function resolveReadScope(orgId: string, viewer: FileViewer, executor: SqlExecutor = db): Promise<ReadScope> {
   // Private subtrees owned by others (hidden from the org-role baseline).
-  const hiddenRes = viewer.isAdmin ? { rows: [] as { id: string }[] } : (await db.execute<{ id: string }>(sql`
+  const hiddenRes = viewer.isAdmin ? { rows: [] as { id: string }[] } : (await executor.execute<{ id: string }>(sql`
     with recursive hidden_folders as (
       select id from folders
        where org_id = ${orgId} and is_private and owner_id is distinct from ${viewer.userId}
@@ -50,7 +131,7 @@ export async function resolveReadScope(orgId: string, viewer: FileViewer): Promi
   // Folders granted to the caller (or a role they hold) re-open their whole
   // subtree; subtract them from the hidden set.
   if (hidden.size > 0) {
-    const grantedRes = (await db.execute<{ id: string }>(sql`
+    const grantedRes = (await executor.execute<{ id: string }>(sql`
       with recursive granted as (
         select g.resource_id as id
           from resource_grants g
@@ -70,7 +151,7 @@ export async function resolveReadScope(orgId: string, viewer: FileViewer): Promi
   // separately so the file grant cannot override the capability boundary.
   const apCaptureFolders = viewer.canReadApCapture === true
     ? []
-    : (await db.execute<{ id: string }>(sql`
+    : (await executor.execute<{ id: string }>(sql`
         with recursive capture_folders as (
           select id from folders where org_id = ${orgId} and system_kind = 'ap_capture'
           union all
@@ -82,7 +163,7 @@ export async function resolveReadScope(orgId: string, viewer: FileViewer): Promi
   for (const id of apCaptureFolders) hidden.add(id)
 
   // Files shared directly with the caller.
-  const fileGrants = (await db.execute<{ id: string }>(sql`
+  const fileGrants = (await executor.execute<{ id: string }>(sql`
     select g.resource_id as id from resource_grants g
      where g.org_id = ${orgId} and g.resource_type = 'file' and ${grantAppliesTo(orgId, viewer)}
   `))
@@ -117,7 +198,7 @@ export function visibleFilePredicate(scope: ReadScope, folderIdCol: SQL, fileIdC
 
 /**
  * Per-table subsidiary visibility for a (table, id) record reference, mirroring
- * attachmentTargetInScope (web/app/api/file-cabinet/lib.ts) table by table.
+ * attachmentTargetInScope (file-attachment-target.ts) table by table.
  * Item-rate versions are org-wide setup (no subsidiary dimension). Unknown
  * tables and deleted targets match nothing — fail closed. `fence` is the
  * `{uuid,...}` array literal of the caller's allowed subsidiaries.
@@ -201,12 +282,6 @@ export function attachmentTargetsVisiblePredicate(
 }
 
 /**
- * File-level record fence: the folder-record target AND every attachment
- * target must be visible, unless the file itself was explicitly shared with
- * the caller (a grant re-opens its file exactly like a grant re-opens a
- * private subtree).
- */
-/**
  * File-level legal-entity fence. A resource grant can reopen privacy-hidden
  * content, but it cannot grant access across a subsidiary boundary.
  */
@@ -253,8 +328,8 @@ export function visibleFileRowPredicate(orgId: string, viewer: FileViewer, scope
 }
 
 /** Query fence for consumers that build bounded manifests before loading bytes. */
-export async function fileReadPredicate(orgId: string, viewer: FileViewer): Promise<SQL> {
-  const scope = await resolveReadScope(orgId, viewer)
+export async function fileReadPredicate(orgId: string, viewer: FileViewer, executor: SqlExecutor = db): Promise<SQL> {
+  const scope = await resolveReadScope(orgId, viewer, executor)
   return visibleFileRowPredicate(orgId, viewer, scope)
 }
 
@@ -393,3 +468,16 @@ export async function fileAccessLevel(
   const folderLevel = await folderAccessLevel(orgId, viewer, row.folderId, exec)
   return maxAccess(fileGrant, folderLevel)
 }
+
+/**
+ * Serialize every viewer-authorized cabinet write with grant changes. One
+ * org-scoped transaction lock is intentionally conservative: a grant revoke
+ * either precedes the permission recheck or waits until the authorized write
+ * commits, including inherited folder grants and previously absent rows.
+ */
+export async function lockCabinetAuthorization(exec: SqlExecutor, orgId: string): Promise<void> {
+  await exec.execute(sql`select pg_advisory_xact_lock(hashtextextended(${
+    `file-cabinet-auth:${orgId}`
+  }, 0))`)
+}
+

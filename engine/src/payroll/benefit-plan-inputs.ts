@@ -13,7 +13,7 @@ import { assignmentCoveredDays } from './assignment-windows.ts';
 import { coveredPayrollLines } from './covered-payroll-lines.ts';
 import { assertFlatBenefitCoverageUnique, benefitCoverageWindow } from './benefit-coverage-window.ts';
 import { PayrollError } from './error.ts';
-import { cappableHourLines, programApplicabilityFromExclusions, type Line } from './run-stub-records.ts';
+import { cappableHourLines, type Line } from './run-stub-records.ts';
 import { benefitCoverageRecoveryAmount, recurringBenefitAmount, type BenefitRecoveryLedgerEntry, type RecurringBenefitRule, type RecurringBenefitTerm, type BenefitContributionTier } from './benefit-plan-math.ts';
 import { resolveEmploymentServiceCredit, meetsServiceYears, lockPayrollServiceConfiguration } from './service-credit.ts';
 
@@ -291,7 +291,7 @@ export async function appendRecurringBenefitLines(tx: Executor, args: {
         earnedFrom: from, earnedTo: to, sequence: Number(component.sequence),
         taxable: component.taxable as boolean, pensionable: component.pensionable as boolean, insurable: component.insurable as boolean,
         vacationable: component.vacationable as boolean, nonPeriodic: component.non_periodic as boolean,
-        taxTreatment: component.tax_treatment as string, programApplicability: programApplicabilityFromExclusions(component.program_exclusions),
+        taxTreatment: component.tax_treatment as string,
         supplementalWageCategory: component.supplemental_wage_category as Line['supplementalWageCategory'],
         statutoryReportingCategory: component.statutory_reporting_category as string | null,
         statutoryExemptionCategory: component.statutory_exemption_category as Line['statutoryExemptionCategory'],

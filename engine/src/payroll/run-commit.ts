@@ -23,6 +23,7 @@ import { canonicalJson, payRunCalculationSourceDigest, parsePayRunCalculationSou
 import { lockStatutoryRatesForPayRun } from "./statutory-rates.ts";
 import { PERIODIC_RUN_TYPES } from "./run-contracts.ts";
 import { assertPeriodSequence, periodRunIdentity } from "./period-priors.ts";
+import { lockPayrollAnomalyReview, payrollAnomalyFinalizeCheck } from "./anomaly-finalize-gate.ts";
 /**
  * The commit refusal: names every refused in-scope employee WITH the pack's
  * own words for why, so the operator sees at POST exactly what the exception
@@ -400,6 +401,14 @@ export async function commitPayRun(input: {
       ),
     );
     await lockEmployerAssignmentProfiles(tx, orgId, fencedEmployees.rows.map(e => e.employee_party_id));
+    await lockPayrollAnomalyReview(tx, orgId);
+    const anomalyGate = await payrollAnomalyFinalizeCheck(tx, { orgId, documentId });
+    if (anomalyGate.openBlockCount > 0) {
+      throw new PayrollError(
+        `pay run cannot be committed — ${anomalyGate.openBlockCount} blocking payroll check(s) are open `
+        + `for this run — review Payroll → Anomalies and resolve or acknowledge each flag before committing`,
+      );
+    }
     // Employer-aggregate room is shared across rosters, so the employee
     // fence above cannot serialize it: two runs on disjoint rosters hold no
     // common employee key. Every commit takes each declared per-run levy's
@@ -514,6 +523,7 @@ export async function commitPayRun(input: {
       changes.wages ? "wages" : null,
       changes.items ? "items" : null,
       changes.incomeTaxOverrides ? "adjustments" : null,
+      changes.bankCashInputs ? "adjustments" : null,
       changes.roster ? "roster" : null,
       changes.openingBalances ? "openingBalances" : null,
     ].filter((reason): reason is string => reason !== null);

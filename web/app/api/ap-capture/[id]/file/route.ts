@@ -5,29 +5,16 @@ import 'next/server';
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/platform/db'
 import { withScopeSnapshot } from '@openbooks/engine/organization/scope'
+import { apCaptureSubsidiaryScope } from '@openbooks/engine/records/file-cabinet-access'
 import { can } from '../../../../../lib/authz';
 import { isMaskedFileContentError } from '../../../../../lib/file-storage'
 import { getFileBlob } from '../../../../../lib/file-cabinet'
 import { blobResponse } from '../../../../../lib/blob-response'
 import { isUuid } from '../../../../../lib/list-params'
-import { subsidiaryVisibleFilter } from '../../../../../lib/subsidiaries'
 import { notFound } from "@/lib/api/responses";
 
 
 export const runtime = 'nodejs'
-
-/**
- * Same vendor/PO visibility the inbox list and `?capture=` flyout apply
- * (`web/app/(app)/ap/capture/view.ts`). Capture packets live in the org-wide
- * `ap_capture` folder, so the cabinet fence cannot hide them — this query
- * must. Empty allowed set denies every capture; null vendor/PO stay org-wide.
- */
-function apCaptureSubsidiaryScope(allowed: ReadonlySet<string> | null) {
-  if (allowed === null) return sql``
-  if (allowed.size === 0) return sql` and false`
-  return sql`${subsidiaryVisibleFilter(sql`po.subsidiary_id`, allowed, { orgWideNull: true })}
-             ${subsidiaryVisibleFilter(sql`vendor.subsidiary_id`, allowed, { orgWideNull: true })}`
-}
 
 export const GET = defineRoute({
   permission: 'ap.read',

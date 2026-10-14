@@ -1,6 +1,7 @@
 'use client'
 
 import { amortizationLineColumns } from '@/components/transaction-form/amortization-columns'
+import { HistoricalTranslationPanel, type HistoricalTranslationSourceOption } from './HistoricalTranslationPanel'
 
 import { CLEAR_SEGMENT, INHERIT_SEGMENT, segmentCellValue, segmentAssignmentsFromCells } from '@/lib/segment-assignments'
 
@@ -351,6 +352,7 @@ function JournalDrawerBody({
   sourceDocument = true,
   currentEntryId,
   canPost,
+  historicalTranslationSources,
   closeHref,
 }: {
   journal: JournalPayload
@@ -386,18 +388,20 @@ function JournalDrawerBody({
   /** Historical generations link to the current journal without offering mutations against old evidence. */
   currentEntryId?: string
   /**
-   * Holds gl.post — the single permission every drawer mutation (save,
+   * Holds gl.post — the permission every document mutation (save,
    * post, delete, void) requires server-side. Without it the drawer is
    * read-only: no Edit, Save, Post, Delete or Void is offered, because
    * each would only meet the server's refusal.
    */
   canPost: boolean
+  historicalTranslationSources?: HistoricalTranslationSourceOption[]
   /** List return URL — Cancel/close land here, and a successful Save opens
    *  the created journal over it. */
   closeHref?: string
 }) {
   const { money } = useMoney()
   const t = useTranslations('journal.drawer')
+  const tHistorical = useTranslations('journal.historicalTranslation')
   const tNew = useTranslations('journal.newButton')
   const tAmortization = useTranslations('amortization.billLine')
   const tc = useTranslations('common')
@@ -564,6 +568,7 @@ function JournalDrawerBody({
   // marks the form dirty (same guarantee as the ref-mirrored gate this
   // replaces, without the effect-body setState).
   const [dirty, setDirty] = useState(false)
+  const [historicalTranslationDirty, setHistoricalTranslationDirty] = useState(false)
   const [resetVersion, setResetVersion] = useState(0)
   const [observedResetVersion, setObservedResetVersion] = useState(0)
   const [prevPayload, setPrevPayload] = useState(payload)
@@ -576,7 +581,7 @@ function JournalDrawerBody({
   // A dirty editor never closes silently: the X button (via beforeClose)
   // and Cancel both ask first, so typed work survives a stray click.
   async function confirmDiscard() {
-    if (mode !== 'edit' || !dirty) return true
+    if (!historicalTranslationDirty && (mode !== 'edit' || !dirty)) return true
     return confirmDialog({
       message: tc('feedback.unsavedChanges'),
       confirmLabel: tc('confirm.discardChanges'),
@@ -1209,6 +1214,11 @@ function JournalDrawerBody({
       // persisted row the drawer has not written yet, so mounting them
       // would only probe the API with an empty record id.
       showEvidenceTabs={!createMode && sourceDocument}
+      keepRecordTabsMounted={Boolean(historicalTranslationSources?.length)}
+      detailTabs={historicalTranslationSources?.length ? [{
+        key: 'historical-translation', label: tHistorical('tab'),
+        content: <HistoricalTranslationPanel sources={historicalTranslationSources} onDirtyChange={setHistoricalTranslationDirty} />,
+      }] : undefined}
       canEditAttachments
       // Detach 409s on posted records (evidence is retained), so posted
       // journals hide Remove and name the retention; uploading stays on.

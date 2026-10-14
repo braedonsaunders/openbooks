@@ -131,7 +131,8 @@ export const CA_PAYROLL_PACK: PayrollCountryPack = {
   ],
   // Employer levies assessed on their own earnings bases, never on gross
   // pay: a non-taxable allowance is not assessable, a taxable benefit is,
-  // and each component declares its exclusions in program_exclusions.
+  // and each component resolves its exclusions from the effective-dated
+  // pay_component_statutory_treatments policy at the run's pay date.
   employerLevyPrograms: CA_EMPLOYER_LEVY_PROGRAMS,
   // Capped shares for the payslip explanation (T4127/QPIP annual maximums).
   annualMaximums: (input) => caAnnualMaximums(input),

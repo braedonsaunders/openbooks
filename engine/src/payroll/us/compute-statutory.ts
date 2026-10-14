@@ -1,4 +1,5 @@
 import { resolveStatutoryHistoryScope,employerScopedStatutoryStubs } from '../statutory-history-scope.ts';
+import { employeeOpeningLevyAmount, readEmployeeOpeningLevySources } from '../opening-levy-source-reader.ts';
 import { sql } from "drizzle-orm";
 import type { db } from "../../platform/db.ts";
 import { PayrollError } from "../error.ts";
@@ -15,6 +16,7 @@ import { findStoredEmployerFactValue, resolveStoredEmployerFact } from "../emplo
 import "./employee-facts.ts";
 import {
   certificateSubRegions,
+  certificateCode,
   packCertificates,
 } from "../certificates.ts";
 import { advisoryGaps, blockingGaps, resolveWithholding } from "../withholding-resolution.ts";
@@ -26,7 +28,7 @@ import {
 } from "./withholding.ts";
 import { usPayrollConfig } from "./config.ts";
 import {
-  US_FICA_WAGES_ACCOUNT_BASE, US_FICA_WITHHELD_ACCOUNT_BASE, US_OPENING_YTD_FIELDS, US_SUI_ACCOUNT_BASE,
+  US_FICA_WAGES_ACCOUNT_BASE, US_FICA_WITHHELD_ACCOUNT_BASE, US_OPENING_YTD_FIELDS,
 } from "./opening-ytd.ts";
 import { applySuiTransferCredits, suiTransferRuleFor, type SuiPriorStateWages } from "./sui-transfer.ts";
 import { w2LocalWageTraceKey } from "./local-wage-trace.ts";
@@ -59,7 +61,6 @@ export type UsYtdRow = {
   /** Covered Minnesota Paid Leave base priced on committed stubs this year. */
   mnPaidLeaveWages: string;
   suiAccountId: string | null;
-  futaOpeningUnscoped: boolean;
   supplemental: string;
   regularWageTaxWithheldThisYear: boolean;
   regularWageTaxWithheldKeys: string[];
@@ -306,6 +307,30 @@ export async function usEmployeeYtd(
   const employeeSubsidiaryId=historyScope.subsidiaryId;
   const scope = resolveUsEmployerScope(accounts, filingAccountId, employeeSubsidiaryId);
   const suiAccountId = resolveUsStateSuiAccount(accounts, filingAccountId, employeeSubsidiaryId, region);
+  const openingSources = await readEmployeeOpeningLevySources(tx, {
+    orgId, employeePartyId, taxYear, subsidiaryId: employeeSubsidiaryId,
+  });
+  const openingFuta = employeeOpeningLevyAmount(openingSources, {
+    programKey: 'us_futa', region: 'US', filingAccountId: scope.federalAccountId,
+  });
+  if (openingSources.hasFutaWageHistory && (scope.federalAccountId === null
+    || !openingSources.allocations.some((allocation) => allocation.programKey === 'us_futa'
+      && allocation.filingAccountId === scope.federalAccountId))) {
+    throw new PayrollError('Prior FUTA wages do not have an opening allocation for this legal employer EIN. Qualify the original EIN source in Payroll → Opening balances → Levy source before calculating.');
+  }
+  const openingSui = openingSources.allocations.filter((allocation) =>
+    allocation.programKey === 'us_sui');
+  if (openingSources.hasOpening && openingSources.allocations.filter((allocation) => allocation.programKey === 'us_futa').length > 1
+    && openingSources.allocations.some((allocation) => allocation.programKey === 'us_sui' || allocation.programKey === 'us_pa_lst')) {
+    throw new PayrollError('The original SUI or PA LST opening cannot be attributed to this EIN; preserve its source and resolve the original legal-employer account identity before calculating');
+  }
+  const openingSuiCurrentRegion = employeeOpeningLevyAmount(openingSources, {
+    programKey: 'us_sui', region, filingAccountId: suiAccountId,
+  });
+  const suiOpeningStates = openingSui.reduce<Record<string, string>>((totals, allocation) => ({
+    ...totals,
+    [allocation.region]: add(totals[allocation.region] ?? '0', allocation.amount),
+  }), {});
   // Committed stubs under the same EMPLOYER — every state account of the
   // run's EIN — feed the federal bases; see ./employer-scope.ts.
   const employerStubs = scope.stubAccountIds === null
@@ -323,33 +348,14 @@ export async function usEmployeeYtd(
                  and tax_year = ${taxYear} and program_key = ${programKey}
                  and filing_account_id = ${scope.federalAccountId}::uuid
                  and region is null), 0)`;
-  // The state SUI carry-in: the per-state rows and the per-state-account
-  // bases are one amount entered in either place (the carry-in save refuses
-  // both for one state), so SUI reads their union.
-  const suiCarryIn = sql`(
-    select sw.state, sw.insurable_ytd as amount
-      from payroll_opening_sui_wages sw
-      join payroll_opening_balances b on b.id = sw.opening_balance_id and b.org_id = sw.org_id
-     where b.org_id = ${orgId} and b.employee_party_id = ${employeePartyId} and b.tax_year = ${taxYear}
-    union all
-    select ab.region as state, ab.insurable_ytd as amount
-      from payroll_opening_account_bases ab
-     where ab.org_id = ${orgId} and ab.employee_party_id = ${employeePartyId} and ab.tax_year = ${taxYear}
-       and ab.program_key = ${US_SUI_ACCOUNT_BASE} and ab.region is not null
-  )`;
   const r = (await tx.execute<UsYtdRow>(sql`
     select
       coalesce((select pensionable_ytd from payroll_opening_balances
                  where org_id = ${orgId} and employee_party_id = ${employeePartyId} and tax_year = ${taxYear}), 0)
       + ${einCarryIn(US_FICA_WAGES_ACCOUNT_BASE)}
       + coalesce(sum(s.pensionable_earnings), 0) as fica,
-      coalesce((select insurable_ytd from payroll_opening_balances
-                 where org_id = ${orgId} and employee_party_id = ${employeePartyId} and tax_year = ${taxYear}), 0)
-      + coalesce(sum(s.insurable_earnings), 0) as futa,
-      coalesce((select insurable_ytd from payroll_opening_balances
-                 where org_id = ${orgId} and employee_party_id = ${employeePartyId} and tax_year = ${taxYear}), 0) > 0 as "futaOpeningUnscoped",
-      coalesce((select insurable_ytd from payroll_opening_balances
-                 where org_id = ${orgId} and employee_party_id = ${employeePartyId} and tax_year = ${taxYear}), 0) > 0 as "suiOpeningUnscoped",
+      ${openingFuta}::numeric + coalesce(sum(s.insurable_earnings), 0) as futa,
+      ${openingSources.hasSuiWageHistory && openingSui.length === 0} as "suiOpeningUnscoped",
       coalesce(sum(s.insurable_earnings) filter (where s.province = ${region}), 0)::text as "suiCurrentRegion",
       coalesce(string_agg(distinct s.province, ', ' order by s.province)
         filter (where s.province <> ${region} and s.insurable_earnings > 0), '') as "suiOtherRegions",
@@ -363,15 +369,9 @@ export async function usEmployeeYtd(
              group by s2.province
           ) prior
       ), '{}'::jsonb) as "suiOtherStateWages",
-      coalesce((
-        select jsonb_object_agg(carried.state, carried.total::text)
-          from (select state, sum(amount) as total from ${suiCarryIn} c group by state) carried
-      ), '{}'::jsonb) as "suiOpeningStates",
-      coalesce((
-        select sum(c.amount)::text from ${suiCarryIn} c where c.state = ${region}
-      ), '0') as "suiOpeningCurrentRegion",
-      ${einCarryIn("us_futa")}
-      + coalesce(sum(s.insurable_earnings), 0) as "futaCurrentAccount",
+      '{}'::jsonb as "suiOpeningStates",
+      '0'::text as "suiOpeningCurrentRegion",
+      ${openingFuta}::numeric + coalesce(sum(s.insurable_earnings), 0) as "futaCurrentAccount",
       coalesce((select non_periodic_ytd from payroll_opening_balances
                  where org_id = ${orgId} and employee_party_id = ${employeePartyId} and tax_year = ${taxYear}), 0)
       + coalesce(sum((s.factors->>'B')::numeric), 0) as supplemental,
@@ -407,32 +407,33 @@ export async function usEmployeeYtd(
       + coalesce(sum((s.factors->>'MED')::numeric), 0)
       + coalesce(sum((s.factors->>'MED2')::numeric), 0) as fica_tax,
       coalesce((
-        select jsonb_object_agg(key, total::text)
+        select jsonb_object_agg(lst.key, lst.total::text)
         from (
-          select fact.key as key, sum(coalesce(fact.value::numeric, 0)) as total
-          from pay_stubs history
-          join pay_runs committed_run
-            on committed_run.document_id = history.pay_run_document_id
-           and committed_run.org_id = history.org_id
-          join documents committed_document
-            on committed_document.id = committed_run.document_id
-           and committed_document.org_id = committed_run.org_id
-          cross join lateral jsonb_each_text(history.factors) as fact(key, value)
-          where history.org_id = ${orgId}
-            and history.employee_party_id = ${employeePartyId}
-            and history.tax_year = ${taxYear}
-            and history.pay_run_document_id <> ${documentId}
-            and committed_run.run_status = 'committed'
-            and committed_document.status <> 'voided'
-            and fact.key like 'LIT#_PA-%-LST' escape '#'
-          group by 1
+          select fact.key, sum(coalesce(fact.value::numeric,0)) as total
+            from ${employerScopedStatutoryStubs(historyScope,{employeePartyId,region:'PA'})} history
+            cross join lateral jsonb_each_text(history.factors) as fact(key,value)
+           where fact.key like 'LIT#_PA-%-LST' escape '#'
+           group by fact.key
         ) lst
       ), '{}'::jsonb) as "lstWithheldYtd"
     from ${employerScopedStatutoryStubs(historyScope,{employeePartyId})} s
     where ${employerStubs}
   `));
   const row = r.rows[0]!;
-  return { ...row, suiAccountId, futa: row.futaOpeningUnscoped ? row.futa : row.futaCurrentAccount };
+  const lstWithheldYtd = { ...row.lstWithheldYtd };
+  for (const allocation of openingSources.allocations) {
+    if (allocation.programKey !== 'us_pa_lst') continue;
+    const key = `LIT_PA-${allocation.subRegion}-LST`;
+    lstWithheldYtd[key] = add(lstWithheldYtd[key] ?? '0', allocation.amount);
+  }
+  return {
+    ...row,
+    suiAccountId,
+    futa: row.futaCurrentAccount,
+    suiOpeningCurrentRegion: openingSuiCurrentRegion,
+    suiOpeningStates,
+    lstWithheldYtd,
+  };
 }
 
 /** Phase 9 — US pack statutory pass (Pub 15-T + state/local withholding). */
@@ -456,6 +457,9 @@ export async function computeUsStatutory(
   const fitWages = reducedBases.income;
   const config = await usPayrollConfig(orgId, taxYear, run.pay_date);
   const ytd = await usEmployeeYtd(ctx, region, filingAccountId);
+  const openingLevySources = await readEmployeeOpeningLevySources(tx, {
+    orgId, employeePartyId, taxYear, subsidiaryId: (await resolveStatutoryHistoryScope(tx, { ...ctx, country: 'US' })).subsidiaryId,
+  });
   const suiExempt = bool(empFact("US", emp, "sui_exempt"));
   // The method is read raw and resolved through the declaration: a missing
   // fact refuses here (Payroll Setup → Employer facts), an unknown value
@@ -795,6 +799,13 @@ export async function computeUsStatutory(
     const employerWithholdingWaiver = levy.region === "UT"
       ? await utEmployerWaiverCoversPeriod(ctx)
       : false;
+    if (levy.region === 'PA' && levy.level === 'sub_region') {
+      const clgs = certificateFor('us_pa_clgs32_6');
+      const workPsd = levy.side === 'work' ? levy.subRegion : clgs == null ? null : certificateCode(clgs, 'work_psd_code');
+      if (workPsd && config.subRegionRates('us_pa_lst', 'PA', workPsd)?.annualAmount != null) {
+        employeeOpeningLevyAmount(openingLevySources, { programKey: 'us_pa_lst', region: 'PA', subRegion: workPsd });
+      }
+    }
     const withheld = computeUsWithholding({
       levy,
       payDate: run.pay_date!,

@@ -11,6 +11,7 @@ import { db } from "../platform/db.ts";
 import { cmp, sum } from "../money/money.ts";
 import {
   createRetroPayRun,
+  detectRetroCandidates,
   proposeRetroPay,
   quantifyRetroCandidates,
   retroRunFindings,
@@ -464,6 +465,31 @@ test(
       assert.equal(calculated.gross, "900.0000", "30 h x $30.00");
       await commitPayRun({ orgId: org.orgId, documentId: source.documentId, actorId });
 
+      // Closing an unchanged historical rate after the source period does
+      // not change its earnings and must not nominate a retro period.
+      await db.execute(sql`
+        update labor_cost_rates set effective_to = '2026-06-30', updated_at = now()
+         where org_id = ${org.orgId} and employee_party_id = ${employeeId}
+           and effective_from = '2025-06-01'`);
+      const closeOnlyCandidates = await detectRetroCandidates({
+        orgId: org.orgId, taxYear: 2026, payScheduleId: scheduleId, allowedSubsidiaryIds: null,
+      });
+      assert.equal(closeOnlyCandidates.length, 0, "a later effective_to closure does not create a retro trigger");
+      await db.execute(sql`
+        update labor_cost_rates set effective_to = '2025-06-15', updated_at = now()
+         where org_id = ${org.orgId} and employee_party_id = ${employeeId}
+           and effective_from = '2025-06-01'`);
+      const removedRateCandidates = await detectRetroCandidates({
+        orgId: org.orgId, taxYear: 2026, payScheduleId: scheduleId, allowedSubsidiaryIds: null,
+      });
+      assert.ok(removedRateCandidates.some(candidate => candidate.sourcePayRunDocumentId === source.documentId
+        && candidate.reasons.some(reason => reason.source === "wage_rate")),
+      "removing all source-period coverage still triggers review of the rate recorded in the paid snapshot");
+      await db.execute(sql`
+        update labor_cost_rates set effective_to = null, updated_at = now()
+         where org_id = ${org.orgId} and employee_party_id = ${employeeId}
+           and effective_from = '2025-06-01'`);
+
       // The January raise that nominates the period: $33.00/h effective
       // 1 January, entered the operator's way.
       await db.execute(sql`
@@ -473,6 +499,11 @@ test(
       await seedPayrollWage(org.orgId, employeeId, actorId, {
         currency: 'CAD', rate: '33', basis: 'hour', effectiveFrom: '2026-01-01',
       });
+      const backdatedCandidates = await detectRetroCandidates({
+        orgId: org.orgId, taxYear: 2026, payScheduleId: scheduleId, allowedSubsidiaryIds: null,
+      });
+      assert.equal(backdatedCandidates.length, 1);
+      assert.ok(backdatedCandidates[0]!.reasons.some((reason) => reason.source === "wage_rate"));
       const proposal = await proposeRetroPay({
         orgId: org.orgId, actorId, payScheduleId: scheduleId, payDate: "2026-08-20",
         allowedSubsidiaryIds: null,

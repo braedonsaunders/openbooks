@@ -56,8 +56,15 @@ export function employerScopedStatutoryStubs(scope:StatutoryHistoryScope,input:{
 
 /** A retained statutory factor is evidence; its absence or malformed shape is never a zero prior. */
 export async function requireStatutoryHistoryFactors(tx:Executor,scope:StatutoryHistoryScope,
-  selection:{employeePartyId:string;employmentId?:string},keys:readonly string[]):Promise<void>{
+  selection:{employeePartyId?:string;employmentId?:string;region?:string},keys:readonly string[]):Promise<void>{
   if(!keys.length||keys.some(key=>!key))throw new PayrollError('Declare the statutory history factor identities before reading prior amounts');
+  if(selection.region!==undefined){
+    const unknownRegion=(await tx.execute(sql`select s.id from ${employerScopedStatutoryStubs(scope,{
+      ...(selection.employeePartyId===undefined?{}:{employeePartyId:selection.employeePartyId}),
+      ...(selection.employmentId===undefined?{}:{employmentId:selection.employmentId}),
+    })} s where s.province is null limit 1`)).rows;
+    if(unknownRegion.length)throw new PayrollError('Committed statutory history has no retained original province/board — qualify its original regional source before calculating');
+  }
   const unknown=(await tx.execute(sql`select s.id from ${employerScopedStatutoryStubs(scope,selection)} s
     cross join lateral jsonb_array_elements_text(${JSON.stringify(keys)}::jsonb) required(key)
     where coalesce(jsonb_typeof(s.factors->required.key) not in ('number','string')

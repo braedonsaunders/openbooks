@@ -1,41 +1,119 @@
 import { sql } from "drizzle-orm";
 import type { PayrollCountryPack } from "../pack-types.ts";
 import { CA_EMPLOYER_LEVY_PROGRAMS } from "./levy-programs.ts";
+import { PayrollPackError } from "../payroll-error.ts";
+import { businessTodayInTx } from "../../platform/business-date.ts";
 
 /** Make existing Canadian setup defaults explicit without replacing operator choices. */
 export const provisionCaPayrollDefaults: NonNullable<PayrollCountryPack["provisionDefaults"]> = async ({ tx, orgId, actorId }) => {
   const excludedPrograms = CA_EMPLOYER_LEVY_PROGRAMS.filter(program => program.nonTaxableEarningsExcludedByDefault).map(program => program.key);
-  const keys = sql`array[${sql.join(excludedPrograms.map(key => sql`${key}`), sql`, `)}]::text[]`;
-  // An audit marker makes this a one-time upgrade for each component. Later
-  // edits, including an explicitly empty exclusion list, remain authoritative.
-  await tx.execute(sql`
-    with candidates as (
-      select c.id, c.program_exclusions as before,
-             array(select distinct key from unnest(c.program_exclusions || ${keys}) key order by key) as after
-        from pay_components c
-       where c.org_id = ${orgId} and c.kind = 'earning' and not c.taxable
-         and (c.country is null or c.country = 'CA')
-         and not c.program_exclusions @> ${keys}
-         and not exists (
-           select 1 from audit_log a
-            where a.org_id = c.org_id and a.table_name = 'pay_components' and a.row_id = c.id
-              and a.changes->>'operation' in ('levy_exclusion_backfill_0483', 'canada_levy_exclusion_defaults')
-         )
-       for update of c
-    ), changed as (
-      update pay_components c set program_exclusions = candidates.after,
-             updated_at = now(), updated_by = ${actorId}
-        from candidates where c.org_id = ${orgId} and c.id = candidates.id
-      returning c.id, candidates.before, candidates.after
-    )
-    insert into audit_log (org_id, table_name, row_id, action, actor_id, changes)
-    select ${orgId}, 'pay_components', id, 'update', ${actorId},
-           jsonb_build_object('operation', 'canada_levy_exclusion_defaults',
-             'before', jsonb_build_object('program_exclusions', before),
-             'after', jsonb_build_object('program_exclusions', after),
-             'reason', 'Canadian non-taxable earnings default to excluded from employer levies.')
-      from changed
-  `);
+  const today = await businessTodayInTx(tx, orgId);
+  const keys = new Set(excludedPrograms);
+  const rows = (await tx.execute<{
+    component_id: string;
+    treatment_id: string;
+    effective_from: string;
+    effective_to: string | null;
+    program_exclusions: string[];
+  }>(sql`
+    select c.id::text as component_id, treatment.id::text as treatment_id,
+           treatment.effective_from::text as effective_from,
+           treatment.effective_to::text as effective_to,
+           treatment.program_exclusions
+      from pay_components c
+      join pay_component_statutory_treatments treatment
+        on treatment.org_id = c.org_id and treatment.pay_component_id = c.id
+       and treatment.worker_comp_group_id is null
+       and treatment.effective_from <= ${today}::date
+       and (treatment.effective_to is null or treatment.effective_to >= ${today}::date)
+     where c.org_id = ${orgId} and c.kind = 'earning' and not c.taxable
+       and (c.country is null or c.country = 'CA')
+       and not exists (
+         select 1 from audit_log a
+          where a.org_id = c.org_id and a.table_name = 'pay_components' and a.row_id = c.id
+            and a.changes->>'operation' in ('levy_exclusion_backfill_0483', 'canada_levy_exclusion_defaults')
+       )
+     order by c.id
+     for update of c, treatment
+  `)).rows;
+  for (const row of rows) {
+    if (!row.treatment_id || !Array.isArray(row.program_exclusions)) throw new PayrollPackError(`Pay component ${row.component_id} has invalid statutory treatment effective on ${today}; repair its Payroll Setup history.`);
+    const before = row.program_exclusions;
+    const after = [...new Set([...before, ...keys])].sort();
+    if (after.length === before.length && after.every((key, index) => key === before[index])) continue;
+
+    let treatmentId = row.treatment_id;
+    let splitFrom: { effectiveTo: string } | null = null;
+    if (row.effective_from < today) {
+      const closed = await tx.execute<{ id: string; effective_to: string }>(sql`
+        update pay_component_statutory_treatments
+           set effective_to = ${today}::date - 1, updated_at = now(), updated_by = ${actorId}
+         where org_id = ${orgId} and id = ${row.treatment_id}::uuid
+           and effective_from < ${today}::date
+           and (effective_to is null or effective_to >= ${today}::date)
+         returning id::text as id, effective_to::text as effective_to
+      `);
+      if (closed.rows.length !== 1) throw new PayrollPackError("The statutory treatment changed while Canadian defaults were being provisioned; reload Payroll Setup and retry.");
+      splitFrom = { effectiveTo: closed.rows[0]!.effective_to };
+      const inserted = await tx.execute<{ id: string }>(sql`
+        insert into pay_component_statutory_treatments
+          (org_id, pay_component_id, effective_from, effective_to, program_exclusions, created_by, updated_by)
+        values (${orgId}, ${row.component_id}, ${today}::date, ${row.effective_to}::date, ${after}, ${actorId}, ${actorId})
+        returning id::text as id
+      `);
+      if (inserted.rows.length !== 1) throw new PayrollPackError("The dated Canadian statutory treatment was not created; retry the setup action.");
+      treatmentId = inserted.rows[0]!.id;
+    } else {
+      const updated = await tx.execute(sql`
+        update pay_component_statutory_treatments
+           set program_exclusions = ${after}, updated_at = now(), updated_by = ${actorId}
+         where org_id = ${orgId} and id = ${row.treatment_id}::uuid
+           and effective_from = ${today}::date and program_exclusions = ${before}
+         returning id
+      `);
+      if (updated.rows.length !== 1) throw new PayrollPackError("The statutory treatment changed while Canadian defaults were being provisioned; reload Payroll Setup and retry.");
+    }
+
+    const reason = 'Canadian non-taxable earnings default to excluded from applicable employer levies.';
+    if (splitFrom) {
+      await tx.execute(sql`
+        insert into audit_log (org_id, table_name, row_id, action, actor_id, changes)
+        values (${orgId}, 'pay_component_statutory_treatments', ${row.treatment_id}, 'update', ${actorId},
+          ${JSON.stringify({
+            before: { programExclusions: before, effectiveFrom: row.effective_from, effectiveTo: row.effective_to },
+            after: { programExclusions: before, effectiveFrom: row.effective_from, effectiveTo: splitFrom.effectiveTo },
+            reason,
+          })}::jsonb)
+      `);
+      await tx.execute(sql`
+        insert into audit_log (org_id, table_name, row_id, action, actor_id, changes)
+        values (${orgId}, 'pay_component_statutory_treatments', ${treatmentId}, 'insert', ${actorId},
+          ${JSON.stringify({
+            before: null,
+            after: { payComponentId: row.component_id, workerCompGroupId: null, programExclusions: after, effectiveFrom: today, effectiveTo: row.effective_to },
+            reason,
+          })}::jsonb)
+      `);
+    } else {
+      await tx.execute(sql`
+        insert into audit_log (org_id, table_name, row_id, action, actor_id, changes)
+        values (${orgId}, 'pay_component_statutory_treatments', ${treatmentId}, 'update', ${actorId},
+          ${JSON.stringify({
+            before: { programExclusions: before, effectiveFrom: row.effective_from, effectiveTo: row.effective_to },
+            after: { programExclusions: after, effectiveFrom: today, effectiveTo: row.effective_to },
+            reason,
+          })}::jsonb)
+      `);
+    }
+    await tx.execute(sql`
+      insert into audit_log (org_id, table_name, row_id, action, actor_id, changes)
+      values (${orgId}, 'pay_components', ${row.component_id}, 'update', ${actorId},
+        jsonb_build_object('operation', 'canada_levy_exclusion_defaults',
+          'treatmentId', ${treatmentId}, 'before', jsonb_build_object('program_exclusions', ${before}::text[]),
+          'after', jsonb_build_object('program_exclusions', ${after}::text[]),
+          'reason', 'Canadian non-taxable earnings default to excluded from applicable employer levies.'))
+    `);
+  }
   // Any existing history for the account wins, including an approval with a
   // future start or an expired rate. Seeding must never fill those gaps.
   await tx.execute(sql`

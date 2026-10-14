@@ -9,6 +9,7 @@ import {
   requireUnrestrictedHrmScope,
 } from "../authorization.ts";
 import { withOrgTransaction } from "../../platform/db.ts";
+import { fromUnits, sum, toUnits } from "../../money/money.ts";
 import { classificationAsOf } from "./classifications.ts";
 import { resolveWage } from "./rates.ts";
 import {
@@ -30,7 +31,7 @@ import {
 } from "./shared.ts";
 
 /**
- * Certified payroll (HR-13, migration 0224). generate() freezes one row
+ * Certified payroll generation freezes one row
  * per worker per classification per day (hours from approved time,
  * rates from the resolver, deductions from the posted runs covering the
  * week) and renders it through the PACK's declared file builder — the
@@ -126,6 +127,7 @@ export async function resolveCertifiedEmployment(
   orgId: string,
   partyId: string,
   workedOn: string,
+  employerSubsidiaryId?: string,
 ): Promise<string> {
   const matches = (await exec.execute<{ id: string }>(sql`
     select distinct w.id::text as id
@@ -133,6 +135,7 @@ export async function resolveCertifiedEmployment(
       join worker_employment_versions v
         on v.org_id = w.org_id and v.employment_id = w.id and v.recorded_until is null
      where w.org_id = ${orgId}::uuid and w.worker_party_id = ${partyId}::uuid
+       ${employerSubsidiaryId ? sql`and w.employer_subsidiary_id = ${employerSubsidiaryId}::uuid` : sql``}
        and v.effective_from <= ${workedOn}::date
        and (v.effective_to is null or v.effective_to > ${workedOn}::date)
        and v.status in ('active', 'on_leave')
@@ -161,6 +164,49 @@ interface PayloadBuild {
   orgName: string;
 }
 
+export interface CertifiedPaidTimeBucket {
+  readonly workedOn: string;
+  readonly projectId: string | null;
+  readonly hours: string;
+}
+
+/**
+ * Allocate a run's employee deductions and net to its paid-time buckets in
+ * proportion to each bucket's hours. Shares use ledger
+ * precision; any rounding remainder goes to the largest-hours bucket (ties
+ * follow the caller's stable bucket order), so the run's full amount is
+ * allocated exactly once. A project report then includes only its own
+ * project/day buckets instead of repeating the entire pay-period stub on
+ * each reported day.
+ */
+export function allocateCertifiedPayAmounts<T extends CertifiedPaidTimeBucket>(
+  buckets: readonly T[],
+  totals: { readonly deductions: string; readonly net: string },
+): Array<T & { deductions: string; net: string }> {
+  if (buckets.length === 0) {
+    if (toUnits(totals.deductions) !== 0n || toUnits(totals.net) !== 0n) {
+      throw new HrmConstructionError("Payroll amounts require positive paid hours before certified payroll can be allocated.");
+    }
+    return [];
+  }
+  const hourUnits = buckets.map((bucket) => toUnits(bucket.hours));
+  if (hourUnits.some((hours) => hours <= 0n)) {
+    throw new HrmConstructionError("Paid time must have positive hours before certified payroll amounts can be allocated.");
+  }
+  const totalHours = hourUnits.reduce((total, hours) => total + hours, 0n);
+  const remainderIndex = hourUnits.reduce((best, hours, index) => hours > hourUnits[best]! ? index : best, 0);
+  const allocate = (amount: string): string[] => {
+    const totalUnits = toUnits(amount);
+    const shares = hourUnits.map((hours) => (totalUnits * hours) / totalHours);
+    const remainder = totalUnits - shares.reduce((total, share) => total + share, 0n);
+    shares[remainderIndex] = shares[remainderIndex]! + remainder;
+    return shares.map(fromUnits);
+  };
+  const deductions = allocate(totals.deductions);
+  const net = allocate(totals.net);
+  return buckets.map((bucket, index) => ({ ...bucket, deductions: deductions[index]!, net: net[index]! }));
+}
+
 async function buildPayload(
   exec: SqlExecutor,
   orgId: string,
@@ -169,8 +215,9 @@ async function buildPayload(
   weekEnding: string,
 ): Promise<PayloadBuild> {
   const project = (
-    await exec.execute<{ name: string; custom: Record<string, unknown> }>(sql`
-      select name, custom from projects where org_id = ${orgId}::uuid and id = ${projectId}::uuid
+    await exec.execute<{ name: string; custom: Record<string, unknown>; subsidiaryId: string | null }>(sql`
+      select name, custom, subsidiary_id::text as "subsidiaryId"
+        from projects where org_id = ${orgId}::uuid and id = ${projectId}::uuid
     `)
   ).rows[0];
   if (!project) {
@@ -178,65 +225,204 @@ async function buildPayload(
       `Project ${projectId} does not exist in this organization — generate the report for one of its projects.`,
     );
   }
+  if (!project.subsidiaryId) {
+    throw new HrmConstructionError(
+      `Project ${project.name} needs a legal entity before certified payroll can be generated — assign its legal entity in the project record.`,
+    );
+  }
   const weekStart = weekStartOf(weekEnding);
-  const runs = (
+  const postedRuns = (
     await exec.execute<{ documentId: string }>(sql`
-      select document_id::text as "documentId" from pay_runs
-       where org_id = ${orgId}::uuid and run_status = 'committed'
-         and period_start <= ${weekEnding}::date and period_end >= ${weekStart}::date
-       order by period_start
+      select r.document_id::text as "documentId"
+        from pay_runs r
+        join documents d on d.org_id = r.org_id and d.id = r.document_id
+       where r.org_id = ${orgId}::uuid and r.run_status = 'committed'
+         and d.status = 'posted'
+         and d.subsidiary_id = ${project.subsidiaryId}::uuid
+         and r.period_start <= ${weekEnding}::date and r.period_end >= ${weekStart}::date
+       order by r.period_start, r.document_id
     `)
   ).rows;
-  if (runs.length === 0) {
+  if (postedRuns.length === 0) {
     throw new HrmConstructionError(
       `No posted pay run covers the week ending ${weekEnding} — post the week's pay run before generating the certified report.`,
     );
   }
-  const runDocumentIds = runs.map((run) => run.documentId);
-  const stubs = (
-    await exec.execute<{ partyId: string; deductions: string; net: string }>(sql`
-      select employee_party_id::text as "partyId",
-             sum(gross - net_pay)::text as deductions, sum(net_pay)::text as net
-        from pay_stubs
-       where org_id = ${orgId}::uuid and pay_run_document_id = any(${`{${runDocumentIds.join(",")}}`}::uuid[])
-       group by employee_party_id
-    `)
-  ).rows;
-  const stubByParty = new Map(stubs.map((stub) => [stub.partyId, stub]));
-  // One row per worker per day: the employment fan-out used to live here
-  // (joined every employment by party), doubling hours for rehired workers.
-  // The single covering employment resolves per row below, or refuses.
-  const days = (
-    await exec.execute<{
-      partyId: string;
-      displayName: string;
-      workedOn: string;
-      hours: string;
-    }>(sql`
+  const approvedDays = (
+    await exec.execute<{ partyId: string; displayName: string; workedOn: string; hours: string }>(sql`
       select te.employee_party_id::text as "partyId",
              coalesce(p.display_name, te.employee_party_id::text) as "displayName",
              te.worked_on::text as "workedOn", sum(te.hours)::text as hours
         from time_entries te
         left join parties p on p.org_id = te.org_id and p.id = te.employee_party_id
        where te.org_id = ${orgId}::uuid and te.project_id = ${projectId}::uuid
-         and te.worked_on >= ${weekStart}::date and te.worked_on <= ${weekEnding}::date
+         and te.worked_on between ${weekStart}::date and ${weekEnding}::date
          and te.status = 'approved'
        group by te.employee_party_id, p.display_name, te.worked_on
        order by p.display_name, te.worked_on
     `)
   ).rows;
-  if (days.length === 0) {
+  if (approvedDays.length === 0) {
     throw new HrmConstructionError(
       `Project ${project.name} has no approved time in the week ending ${weekEnding} — approve the timesheet before generating the certified report.`,
     );
   }
+  // A time entry is reportable only after commit claimed it and the run's
+  // document was posted. A same-org run for another worker or legal entity
+  // cannot satisfy this project's attestation.
+  const paidDays = (
+    await exec.execute<{
+      runDocumentId: string; periodStart: string; periodEnd: string;
+      partyId: string; employmentId: string; displayName: string; workedOn: string; projectId: string | null; hours: string;
+    }>(sql`
+      select r.document_id::text as "runDocumentId",
+             r.period_start::text as "periodStart", r.period_end::text as "periodEnd",
+             te.employee_party_id::text as "partyId", s.employment_id::text as "employmentId",
+             coalesce(p.display_name, te.employee_party_id::text) as "displayName",
+             te.worked_on::text as "workedOn", te.project_id::text as "projectId",
+             sum(te.hours)::text as hours
+        from time_entries te
+        join pay_runs r on r.org_id = te.org_id and r.document_id::text = te.payroll_batch_ref
+          and te.worked_on between r.period_start and r.period_end
+        join documents d on d.org_id = r.org_id and d.id = r.document_id and d.status = 'posted'
+        join pay_stubs s on s.org_id = r.org_id and s.pay_run_document_id = r.document_id
+          and s.employee_party_id = te.employee_party_id
+        join worker_employments w on w.org_id = s.org_id and w.id = s.employment_id
+          and w.worker_party_id = s.employee_party_id and w.employer_subsidiary_id = d.subsidiary_id
+        join parties p on p.org_id = te.org_id and p.id = te.employee_party_id
+       where te.org_id = ${orgId}::uuid and te.project_id = ${projectId}::uuid
+         and te.worked_on between ${weekStart}::date and ${weekEnding}::date
+         and te.status = 'approved' and r.run_status = 'committed'
+         and d.subsidiary_id = ${project.subsidiaryId}::uuid
+       group by r.document_id, r.period_start, r.period_end, te.employee_party_id, s.employment_id,
+                p.display_name, te.worked_on, te.project_id
+       order by r.period_start, te.employee_party_id, te.worked_on, te.project_id
+    `)
+  ).rows;
+  const paidHoursByDay = new Map<string, string>();
+  for (const day of paidDays) {
+    const key = `${day.partyId}:${day.workedOn}`;
+    paidHoursByDay.set(key, sum([paidHoursByDay.get(key) ?? "0.0000", day.hours]));
+  }
+  for (const day of approvedDays) {
+    const paid = paidHoursByDay.get(`${day.partyId}:${day.workedOn}`) ?? "0.0000";
+    if (toUnits(paid) < toUnits(day.hours)) {
+      const unpaid = fromUnits(toUnits(day.hours) - toUnits(paid));
+      throw new HrmConstructionError(
+        `${day.displayName} has ${unpaid} approved project hours on ${day.workedOn} not covered by a posted pay stub in this project's legal entity — commit and post the run for those hours before generating certified payroll.`,
+      );
+    }
+  }
+  const runDocumentIds = [...new Set(paidDays.map((day) => day.runDocumentId))];
+  if (runDocumentIds.length === 0) {
+    throw new HrmConstructionError(
+      `No posted pay run covers approved project time for the week ending ${weekEnding} — commit and post the pay run for the project's workers before generating the certified report.`,
+    );
+  }
+  const stubs = (
+    await exec.execute<{ runDocumentId: string; partyId: string; deductions: string; net: string }>(sql`
+      select s.pay_run_document_id::text as "runDocumentId", s.employee_party_id::text as "partyId",
+             (s.gross - s.net_pay)::text as deductions, s.net_pay::text as net
+        from pay_stubs s
+        join pay_runs r on r.org_id = s.org_id and r.document_id = s.pay_run_document_id
+        join documents d on d.org_id = r.org_id and d.id = r.document_id and d.status = 'posted'
+       where s.org_id = ${orgId}::uuid
+         and s.pay_run_document_id = any(${`{${runDocumentIds.join(",")}}`}::uuid[])
+       order by r.period_start, s.employee_party_id
+    `)
+  ).rows;
+  const stubByRunAndParty = new Map(stubs.map((stub) => [`${stub.runDocumentId}:${stub.partyId}`, stub]));
+  const allPaidTime = (
+    await exec.execute<{
+      runDocumentId: string; partyId: string; workedOn: string; projectId: string | null; hours: string;
+    }>(sql`
+      select r.document_id::text as "runDocumentId", te.employee_party_id::text as "partyId",
+             te.worked_on::text as "workedOn", te.project_id::text as "projectId",
+             sum(te.hours)::text as hours
+        from time_entries te
+        join pay_runs r on r.org_id = te.org_id and r.document_id::text = te.payroll_batch_ref
+          and te.worked_on between r.period_start and r.period_end
+        join documents d on d.org_id = r.org_id and d.id = r.document_id and d.status = 'posted'
+        join pay_stubs s on s.org_id = r.org_id and s.pay_run_document_id = r.document_id
+          and s.employee_party_id = te.employee_party_id
+        join worker_employments w on w.org_id = s.org_id and w.id = s.employment_id
+          and w.worker_party_id = s.employee_party_id and w.employer_subsidiary_id = d.subsidiary_id
+       where te.org_id = ${orgId}::uuid
+         and r.document_id = any(${`{${runDocumentIds.join(",")}}`}::uuid[])
+         and te.status = 'approved' and r.run_status = 'committed'
+         and d.subsidiary_id = ${project.subsidiaryId}::uuid
+       group by r.document_id, te.employee_party_id, te.worked_on, te.project_id
+       having sum(te.hours) > 0
+       order by r.document_id, te.employee_party_id, te.worked_on, te.project_id nulls first
+    `)
+  ).rows;
+  const paidTimeByRunAndParty = new Map<string, typeof allPaidTime>();
+  for (const bucket of allPaidTime) {
+    const key = `${bucket.runDocumentId}:${bucket.partyId}`;
+    const existing = paidTimeByRunAndParty.get(key);
+    if (existing) existing.push(bucket);
+    else paidTimeByRunAndParty.set(key, [bucket]);
+  }
+  const allocationByRunAndBucket = new Map<string, { deductions: string; net: string }>();
+  for (const [key, buckets] of paidTimeByRunAndParty) {
+    const stub = stubByRunAndParty.get(key);
+    if (!stub) {
+      throw new HrmConstructionError(
+        `A paid time batch has no posted worker stub — resolve the payroll posting before generating certified payroll.`,
+      );
+    }
+    const allocated = allocateCertifiedPayAmounts(buckets, { deductions: stub.deductions, net: stub.net });
+    for (let index = 0; index < buckets.length; index += 1) {
+      const bucket = buckets[index]!;
+      allocationByRunAndBucket.set(
+        `${bucket.runDocumentId}:${bucket.partyId}:${bucket.workedOn}:${bucket.projectId ?? ""}`,
+        { deductions: allocated[index]!.deductions, net: allocated[index]!.net },
+      );
+    }
+  }
+  const paidDaysByWorkerAndDate = new Map<string, {
+    partyId: string; employmentId: string; displayName: string; workedOn: string; hours: string;
+    deductions: string; net: string;
+  }>();
+  for (const day of paidDays) {
+    const allocation = allocationByRunAndBucket.get(
+      `${day.runDocumentId}:${day.partyId}:${day.workedOn}:${day.projectId ?? ""}`,
+    );
+    if (!allocation) {
+      throw new HrmConstructionError(
+        `${day.displayName}'s paid project time on ${day.workedOn} has no payroll amount allocation — review the claimed time and posted payroll evidence before generating the certified report.`,
+      );
+    }
+    const key = `${day.partyId}:${day.workedOn}`;
+    const existing = paidDaysByWorkerAndDate.get(key);
+    if (existing) {
+      if (existing.employmentId !== day.employmentId) {
+        throw new HrmConstructionError(`${day.displayName}'s paid hours on ${day.workedOn} identify more than one employment — review the posted payroll employment evidence before generating certified payroll.`);
+      }
+      existing.hours = sum([existing.hours, day.hours]);
+      existing.deductions = sum([existing.deductions, allocation.deductions]);
+      existing.net = sum([existing.net, allocation.net]);
+    } else {
+      paidDaysByWorkerAndDate.set(key, {
+        partyId: day.partyId, employmentId: day.employmentId, displayName: day.displayName, workedOn: day.workedOn,
+        hours: day.hours, deductions: allocation.deductions, net: allocation.net,
+      });
+    }
+  }
+  const days = [...paidDaysByWorkerAndDate.values()].sort((left, right) =>
+    left.displayName.localeCompare(right.displayName)
+      || left.workedOn.localeCompare(right.workedOn)
+      || left.partyId.localeCompare(right.partyId));
   const orgName =
     (await exec.execute<{ name: string }>(sql`select name from orgs where id = ${orgId}::uuid`)).rows[0]?.name ??
     "Organization";
   const rows: LaborComplianceReportRow[] = [];
   const scheduleIds = new Set<string>();
   for (const day of days) {
-    const employmentId = await resolveCertifiedEmployment(exec, orgId, day.partyId, day.workedOn);
+    const employmentId = await resolveCertifiedEmployment(exec, orgId, day.partyId, day.workedOn, project.subsidiaryId);
+    if (employmentId !== day.employmentId) {
+      throw new HrmConstructionError(`${day.displayName}'s employment history on ${day.workedOn} does not match the posted payroll employment — review the employment history before generating certified payroll.`);
+    }
     const assignment = await classificationAsOf(exec, orgId, employmentId, day.workedOn);
     if (!assignment) {
       throw new HrmConstructionError(
@@ -267,7 +453,6 @@ async function buildPayload(
       workedOn: day.workedOn,
     });
     scheduleIds.add(wage.scheduleId);
-    const stub = stubByParty.get(day.partyId);
     rows.push({
       employmentId,
       displayName: day.displayName,
@@ -278,8 +463,8 @@ async function buildPayload(
       baseRate: wage.base,
       fringeCash: wage.fringeCash,
       fringeCredit: wage.fringeCredit,
-      deductions: stub?.deductions ?? "0.0000",
-      net: stub?.net ?? "0.0000",
+      deductions: day.deductions,
+      net: day.net,
       rateSource: wage.source,
     });
   }

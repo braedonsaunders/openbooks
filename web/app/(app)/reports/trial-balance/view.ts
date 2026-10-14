@@ -12,7 +12,7 @@ import { orgInfo } from '../../../../lib/data'
 import { fiscalStartMonth } from '../../../../lib/fiscal'
 import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery } from '../../../../lib/report-filters'
-import { MissingRatesError, reportSubsidiaryView, type CurrencyBasisNotice, type RatesBlockedNotice } from '../../../../lib/consolidation'
+import { MissingRatesError, reportSubsidiaryView, historicalTranslationBlockedNotice, statementTranslationBlockedAction, type CurrencyBasisNotice, type StatementTranslationBlockedNotice } from '../../../../lib/consolidation'
 import { ReportCurrencyBasisError } from '../../../../lib/reports/currency-basis'
 import {
   baseCurrencyNotice,
@@ -54,9 +54,9 @@ export interface TrialBalanceData {
   company: string
   currency: string | undefined
   emptyLabel: string
-  /** Set when underived consolidated rates block the statement:
-   * the page renders a typed banner with a derive link instead of numbers. */
-  ratesBlocked: RatesBlockedNotice | null
+  /** Set when translation prerequisites block the statement:
+   * the native banner directs the operator to rates or retained source evidence. */
+  ratesBlocked: StatementTranslationBlockedNotice | null
   /** Set when the viewed set spans more than one functional currency: the
    * page renders the named refusal (whose remedy is the subsidiary picker
    * beside it) instead of numbers or a generic error page. */
@@ -117,7 +117,7 @@ export async function loadTrialBalance(
   }
   let subView: Awaited<ReturnType<typeof reportSubsidiaryView>> | undefined
   let rows: Awaited<ReturnType<typeof trialBalance>> = []
-  let ratesBlocked: RatesBlockedNotice | null = null
+  let ratesBlocked: StatementTranslationBlockedNotice | null = null
   let currencyBasisBlocked: CurrencyBasisNotice | null = null
   try {
     subView = await reportSubsidiaryView(q.subsidiaryId, date, selectedBook.id)
@@ -135,13 +135,20 @@ export async function loadTrialBalance(
         description: e.message,
       }
     } else {
-      if (!(e instanceof MissingRatesError)) throw e
-      ratesBlocked = {
-        code: 'rates-not-derived',
-        title: t('statement.ratesBlockedTitle'),
-        description: (e as Error).message,
-        deriveLabel: t('statement.ratesBlockedAction'),
-        deriveHref: '/close',
+      const historicalNotice = historicalTranslationBlockedNotice(e, {
+        title: t('statement.historicalEvidenceBlockedTitle'),
+        actionLabel: t('statement.historicalEvidenceBlockedAction'),
+      })
+      if (historicalNotice) ratesBlocked = historicalNotice
+      else {
+        if (!(e instanceof MissingRatesError)) throw e
+        ratesBlocked = {
+          code: 'rates-not-derived',
+          title: t('statement.ratesBlockedTitle'),
+          description: (e as Error).message,
+          deriveLabel: t('statement.ratesBlockedAction'),
+          deriveHref: '/close',
+        }
       }
     }
   }
@@ -311,8 +318,8 @@ export function trialBalanceSpec(data: TrialBalanceData): PageSpec {
           description: data.ratesBlocked?.description,
           action: 'link-button',
           actionProps: {
-            href: data.ratesBlocked?.deriveHref ?? '/close',
-            label: data.ratesBlocked?.deriveLabel ?? '',
+            href: statementTranslationBlockedAction(data.ratesBlocked).href,
+            label: statementTranslationBlockedAction(data.ratesBlocked).label,
           },
         }),
         when: f('ratesBlocked'),

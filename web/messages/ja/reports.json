@@ -101,6 +101,8 @@
     "retainedEarningsPrior": "利益剰余金（過年度）",
     "currentYearEarnings": "当期純利益",
     "translationAdjustment": "累積換算調整額",
+    "historicalEvidenceBlockedTitle": "過去の資本拠出の証拠が必要です",
+    "historicalEvidenceBlockedAction": "仕訳の証憑を確認",
     "ratesBlockedTitle": "連結為替レートはまだ導出されていません",
     "ratesBlockedAction": "決算でレートを導出する",
     "currencyBasisBlockedTitle": "このビューには複数の通貨が含まれています"

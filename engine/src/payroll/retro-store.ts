@@ -94,6 +94,193 @@ export interface DetectRetroInput {
 }
 
 /**
+ * Native sources that can add or change employee earnings. Detection and the
+ * operator-facing reason vocabulary are declared together so adding an
+ * earning source cannot silently omit its retro trigger or its explanation.
+ */
+const RETRO_EARNING_SOURCE_REGISTRY = [
+  {
+    column: "wage_detail",
+    source: "wage_rate",
+    detail: (value: string) => value,
+    query: sql`(
+      select string_agg(distinct 'wage ' || w.rate::text || ' per ' || w.basis
+        || ' effective ' || w.effective_from::text, '; ')
+        from labor_cost_rates w
+        left join lateral (
+          select previous.value
+            from jsonb_array_elements(case
+              when jsonb_typeof(r.calculation_source_snapshot->'payRates') = 'array'
+                then r.calculation_source_snapshot->'payRates'
+              else '[]'::jsonb end) previous(value)
+           where previous.value->>'employeePartyId' = s.employee_party_id::text
+             and previous.value->>'rateId' = w.id::text
+           limit 1
+        ) paid_source on true
+       where w.org_id = s.org_id and w.employee_party_id = s.employee_party_id
+         and ((w.effective_from <= r.period_end
+               and (w.effective_to is null or w.effective_to >= r.period_start))
+              or paid_source.value is not null)
+         and greatest(w.created_at, w.updated_at) > s.created_at
+         and (
+           w.created_at > s.created_at
+           or (w.updated_at > s.created_at and (
+             (paid_source.value is not null and (
+               w.rate::text is distinct from paid_source.value->>'rate'
+               or w.basis is distinct from paid_source.value->>'basis'
+               or w.annual_hours::text is distinct from paid_source.value->>'annualHours'
+               or w.currency is distinct from paid_source.value->>'currency'
+               or w.effective_from::text is distinct from paid_source.value->>'effectiveFrom'
+               or w.payroll_rate_scale is distinct from coalesce((paid_source.value->>'payrollRateScale')::integer, 4)
+               or w.payroll_amount_rounding is distinct from coalesce(paid_source.value->>'payrollAmountRounding', 'dimension_group')
+               or not w.is_active
+               or least(coalesce(w.effective_to, r.period_end), r.period_end)
+                    is distinct from least(coalesce((paid_source.value->>'effectiveTo')::date, r.period_end), r.period_end)
+             ))
+             or paid_source.value is null
+           ))
+         )
+    )`,
+  },
+  {
+    column: "component_detail",
+    source: "pay_component",
+    detail: (value: string) => value,
+    query: sql`(
+      select string_agg(distinct c.name || ' effective ' || a.effective_from::text, '; ')
+        from employee_pay_components a
+        join pay_components c on c.id = a.component_id and c.org_id = a.org_id
+       where a.org_id = s.org_id and a.employee_party_id = s.employee_party_id
+         and (c.kind = 'earning' or exists (
+           select 1 from pay_stub_lines l where l.org_id = s.org_id and l.stub_id = s.id
+             and l.component_id = c.id and l.kind = 'earning'
+         ))
+         and (a.employment_id is null or a.employment_id = s.employment_id)
+         and ((a.effective_from <= r.period_end
+               and (a.effective_to is null or a.effective_to >= r.period_start)) or exists (
+           select 1 from pay_stub_lines l
+            where l.org_id = s.org_id and l.stub_id = s.id and l.component_id = c.id
+         ))
+         and greatest(a.created_at, a.updated_at, c.created_at, c.updated_at) > s.created_at
+    )`,
+  },
+  {
+    column: "compensation_package_detail",
+    source: "compensation_package",
+    detail: (value: string) => value,
+    query: sql`(
+      select string_agg(distinct p.code || ' version ' || v.version::text
+        || ' effective ' || greatest(a.effective_from, v.effective_from)::text, '; ')
+        from payroll_compensation_assignments a
+        join payroll_compensation_versions v on v.org_id = a.org_id
+          and v.package_id = a.package_id and v.id = a.version_id
+        join payroll_compensation_packages p on p.org_id = a.org_id and p.id = a.package_id
+       where a.org_id = s.org_id and a.employee_party_id = s.employee_party_id
+         and a.employment_id = s.employment_id
+         and a.subsidiary_id = d.subsidiary_id and p.subsidiary_id = d.subsidiary_id
+         and a.status in ('active', 'ended') and v.status = 'approved'
+         and a.effective_from <= r.period_end
+         and (a.effective_to is null or a.effective_to >= r.period_start)
+         and v.effective_from <= r.period_end
+         and (v.effective_to is null or v.effective_to >= r.period_start)
+         and greatest(a.created_at, a.updated_at, v.created_at, v.updated_at,
+                      p.created_at, p.updated_at) > s.created_at
+    )`,
+  },
+  {
+    column: "union_fringe_detail",
+    source: "union_fringe",
+    detail: (value: string) => value,
+    query: sql`(
+      select string_agg(distinct f.code || ' ' || f.value::text || ' ' || f.calc
+        || ' for classification ' || coalesce(pp.union_classification_id::text, 'all'), '; ')
+        from employee_payroll_profiles pp
+        join union_agreements agreement on agreement.org_id = pp.org_id
+          and agreement.id = pp.union_agreement_id
+        join union_fringes f on f.org_id = pp.org_id
+          and f.agreement_id = pp.union_agreement_id
+          and (f.classification_id is null or f.classification_id = pp.union_classification_id)
+       where pp.org_id = s.org_id and pp.employee_party_id = s.employee_party_id
+         and pp.employment_id = s.employment_id
+         and greatest(pp.created_at, pp.updated_at, agreement.created_at, agreement.updated_at,
+                      f.created_at, f.updated_at) > s.created_at
+         and (f.is_active or exists (
+           select 1 from pay_stub_lines l
+             where l.org_id = s.org_id and l.stub_id = s.id and l.component_id = f.component_id
+         ))
+    )`,
+  },
+  {
+    column: "derived_earning_detail",
+    source: "derived_earning_rule",
+    detail: (value: string) => value,
+    query: sql`(
+      select string_agg(distinct rule.code || ' effective ' || rule.effective_from::text, '; ')
+        from pay_derived_rules rule
+       where rule.org_id = s.org_id
+         and ((rule.effective_from <= r.period_end
+               and (rule.effective_to is null or rule.effective_to >= r.period_end)) or exists (
+           select 1 from pay_stub_lines l where l.org_id = s.org_id and l.stub_id = s.id
+             and l.derived_rule_code = rule.code
+         ))
+         and greatest(rule.created_at, rule.updated_at) > s.created_at
+         and (rule.is_active or exists (
+           select 1 from pay_stub_lines l
+             where l.org_id = s.org_id and l.stub_id = s.id and l.derived_rule_code = rule.code
+         ))
+    )`,
+  },
+  {
+    column: "benefit_election_detail",
+    source: "benefit_election",
+    detail: (value: string) => value,
+    query: sql`(
+      select string_agg(distinct p.code || '/' || rule.rule_key
+        || ' election effective ' || greatest(e.effective_from, term.effective_from)::text, '; ')
+        from hrm_benefit_enrollments e
+        join hrm_benefit_plans p on p.org_id = e.org_id and p.id = e.plan_id
+        join hrm_benefit_enrollment_terms term on term.org_id = e.org_id and term.enrollment_id = e.id
+        join hrm_benefit_contribution_rules rule on rule.org_id = term.org_id and rule.id = term.rule_id
+       where e.org_id = s.org_id and e.employment_id = s.employment_id
+         and e.status in ('active', 'ended')
+         and rule.kind = 'cash_earning'
+         and e.effective_from <= r.period_end
+         and (e.effective_to is null or e.effective_to >= r.period_start)
+         and term.effective_from <= r.period_end
+         and (term.effective_to is null or term.effective_to >= r.period_start)
+         and rule.effective_from <= r.period_end
+         and (rule.effective_to is null or rule.effective_to >= r.period_start)
+         and (rule.is_active or exists (
+           select 1 from pay_run_benefit_allocations allocation
+            where allocation.org_id = s.org_id and allocation.pay_run_document_id = s.pay_run_document_id
+              and allocation.rule_id = rule.id and allocation.employment_id = s.employment_id
+              and allocation.status = 'committed'
+         ))
+         and greatest(e.created_at, e.updated_at, term.created_at, term.updated_at,
+                      rule.created_at, rule.updated_at, p.created_at, p.updated_at) > s.created_at
+    )`,
+  },
+  {
+    column: "unclaimed_hours",
+    source: "unclaimed_time",
+    detail: (value: string) => `${value} approved hours in this period were never paid`,
+    query: sql`(
+      select sum(t.hours)::text
+        from time_entries t
+       where t.org_id = s.org_id and t.employee_party_id = s.employee_party_id
+         and t.status = 'approved' and t.payroll_batch_ref is null
+         and t.worked_on between r.period_start and r.period_end
+    )`,
+  },
+] as const satisfies readonly {
+  column: string;
+  source: RetroReason["source"];
+  detail: (value: string) => string;
+  query: ReturnType<typeof sql>;
+}[];
+type RetroSourceColumn = (typeof RETRO_EARNING_SOURCE_REGISTRY)[number]["column"];
+
+/**
  * Committed periods whose inputs have moved since they were paid.
  *
  * The reference point is `pay_stubs.created_at` — when the stub was last
@@ -122,57 +309,41 @@ export async function detectRetroCandidates(input: DetectRetroInput): Promise<Re
     ? sql`and p.id = any(${`{${[...input.employeePartyIds].join(",")}}`}::uuid[])`
     : sql``;
 
-  const rows = (await executor.execute<{
+  const sourceProjection = sql.join(
+    RETRO_EARNING_SOURCE_REGISTRY.map((source) => sql`${source.query} as ${sql.raw(source.column)}`),
+    sql`, `,
+  );
+  const sourceNullProjection = sql.join(
+    RETRO_EARNING_SOURCE_REGISTRY.map((source) => sql`null::text as ${sql.raw(source.column)}`),
+    sql`, `,
+  );
+  type CandidateSourceRow = {
       employee_party_id: string; employee_name: string;
       source_document_id: string; source_document_number: string;
       pay_schedule_id: string; pay_schedule_name: string;
       period_start: string; period_end: string; pay_date: string; tax_year: number;
-      wage_detail: string | null; component_detail: string | null;
-      unclaimed_hours: string | null;
-    }>(sql`
+    } & Record<RetroSourceColumn, string | null>;
+  const rows = (await executor.execute<CandidateSourceRow>(sql`
     select s.employee_party_id, p.display_name as employee_name,
            r.document_id as source_document_id, d.document_number as source_document_number,
            r.pay_schedule_id, sch.name as pay_schedule_name,
            r.period_start::text as period_start, r.period_end::text as period_end,
            r.pay_date::text as pay_date, r.tax_year,
-           -- A wage row that governs this period and was touched after it was
-           -- paid. labor_cost_rates (employee scope) is the ONE home for a
-           -- wage; payroll and the costing engine resolve the same row.
-           (select string_agg(distinct
-                     'wage ' || w.rate::text || ' per ' || w.basis
-                     || ' effective ' || w.effective_from::text, '; ')
-              from labor_cost_rates w
-             where w.org_id = s.org_id and w.employee_party_id = s.employee_party_id
-               and w.effective_from <= r.period_end
-               and greatest(w.created_at, w.updated_at) > s.created_at) as wage_detail,
-           -- A backdated pay-component assignment (an allowance, a shift
-           -- premium). Only its EARNINGS effect is ever quantified.
-           (select string_agg(distinct
-                     c.name || ' effective ' || a.effective_from::text, '; ')
-              from employee_pay_components a
-              join pay_components c on c.id = a.component_id and c.org_id = a.org_id
-             where a.org_id = s.org_id and a.employee_party_id = s.employee_party_id
-               and a.effective_from <= r.period_end
-               and greatest(a.created_at, a.updated_at) > s.created_at) as component_detail,
-           -- Approved hours inside a period that has been paid, which no run
-           -- ever claimed: a late timesheet is retro pay by any other name.
-           (select sum(t.hours)::text
-              from time_entries t
-             where t.org_id = s.org_id and t.employee_party_id = s.employee_party_id
-               and t.status = 'approved' and t.payroll_batch_ref is null
-               and t.worked_on between r.period_start and r.period_end) as unclaimed_hours
+           ${sourceProjection}
       from pay_stubs s
       join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
       join documents d on d.id = r.document_id and d.org_id = r.org_id
       join pay_schedules sch on sch.id = r.pay_schedule_id and sch.org_id = r.org_id
       join parties p on p.id = s.employee_party_id and p.org_id = s.org_id
+      join worker_employments employment on employment.org_id = s.org_id and employment.id = s.employment_id
+        and employment.worker_party_id = s.employee_party_id and employment.employer_subsidiary_id = d.subsidiary_id
      where s.org_id = ${input.orgId}
        and r.run_status = 'committed'
        and r.run_type <> 'retro'
        and r.tax_year = ${input.taxYear}
        ${scheduleFilter}
        ${employeeFilter}
-       ${payrollSubsidiaryScopeFilter(sql`p.subsidiary_id`, input.allowedSubsidiaryIds)}
+       ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, input.allowedSubsidiaryIds)}
      order by p.display_name, r.period_end
   `));
 
@@ -196,20 +367,17 @@ export async function detectRetroCandidates(input: DetectRetroInput): Promise<Re
   // cell differences to zero (the honest "nothing left" row) while a cell a
   // later correction made underpaid again still surfaces its increment.
   // Nothing is ever marked "done"; the arithmetic simply has nothing to give.
-  const omitted = (await executor.execute<{
-      employee_party_id: string; employee_name: string;
+  const omitted = (await executor.execute<CandidateSourceRow & {
       source_document_id: string; source_document_number: string;
       pay_schedule_id: string; pay_schedule_name: string;
       period_start: string; period_end: string; pay_date: string; tax_year: number;
-      wage_detail: string | null; component_detail: string | null;
-      unclaimed_hours: string | null; omitted_detail: string;
+      omitted_detail: string;
     }>(sql`
     select distinct s2.employee_party_id, s2.employee_name,
            s2.source_document_id, s2.source_document_number,
            s2.pay_schedule_id, s2.pay_schedule_name,
            s2.period_start, s2.period_end, s2.pay_date, s2.tax_year,
-           null::text as wage_detail, null::text as component_detail,
-           null::text as unclaimed_hours,
+           ${sourceNullProjection},
            ('employed during ' || s2.period_start || ' to ' || s2.period_end
             || ' but never paid for it on ' || s2.source_document_number) as omitted_detail
       from (
@@ -225,15 +393,17 @@ export async function detectRetroCandidates(input: DetectRetroInput): Promise<Re
             on prof.org_id = r.org_id and prof.pay_schedule_id = r.pay_schedule_id
            and prof.is_active
           join parties p on p.id = prof.employee_party_id and p.org_id = prof.org_id
+          join worker_employments employment on employment.org_id = prof.org_id and employment.id = prof.employment_id
+            and employment.worker_party_id = prof.employee_party_id and employment.employer_subsidiary_id = d.subsidiary_id
           left join employee_roles er on er.party_id = p.id and er.org_id = p.org_id
          where r.org_id = ${input.orgId}
            and r.run_status = 'committed'
            and r.run_type = 'regular'
            and r.tax_year = ${input.taxYear}
-           and (sch.subsidiary_id is null or p.subsidiary_id = sch.subsidiary_id)
+           and sch.subsidiary_id = d.subsidiary_id
            and ${payrollEmploymentOverlapsPeriod({
          org: sql`prof.org_id`, employee: sql`p.id`, employment: sql`prof.employment_id`,
-         employer: sql`p.subsidiary_id`, hiredOn: sql`er.hired_on`, terminatedOn: sql`er.terminated_on`,
+         employer: sql`d.subsidiary_id`, hiredOn: sql`er.hired_on`, terminatedOn: sql`er.terminated_on`,
          periodStart: sql`r.period_start`, periodEnd: sql`r.period_end`,
        })}
            and not exists (
@@ -254,7 +424,7 @@ export async function detectRetroCandidates(input: DetectRetroInput): Promise<Re
                 and r2.period_start <= r.period_end and r2.period_end >= r.period_start)
            ${scheduleFilter}
            ${omittedEmployeeFilter}
-           ${payrollSubsidiaryScopeFilter(sql`p.subsidiary_id`, input.allowedSubsidiaryIds)}
+           ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, input.allowedSubsidiaryIds)}
       ) s2
   `));
 
@@ -264,17 +434,10 @@ export async function detectRetroCandidates(input: DetectRetroInput): Promise<Re
     if (row.omitted_detail) {
       reasons.push({ source: "omitted_from_run", detail: row.omitted_detail });
     }
-    if (row.wage_detail) {
-      reasons.push({ source: "wage_rate", detail: row.wage_detail });
-    }
-    if (row.component_detail) {
-      reasons.push({ source: "pay_component", detail: row.component_detail });
-    }
-    if (row.unclaimed_hours && cmp(row.unclaimed_hours, "0") > 0) {
-      reasons.push({
-        source: "unclaimed_time",
-        detail: `${row.unclaimed_hours} approved hours in this period were never paid`,
-      });
+    for (const source of RETRO_EARNING_SOURCE_REGISTRY) {
+      const value = row[source.column];
+      if (!value || source.source === "unclaimed_time" && cmp(value, "0") <= 0) continue;
+      reasons.push({ source: source.source, detail: source.detail(value) });
     }
     if (reasons.length === 0) continue;
     candidates.push({

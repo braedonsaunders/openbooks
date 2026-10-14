@@ -63,3 +63,27 @@ test('the paper hides while rates are blocked', () => {
     'the paper shows only when rates are ready — no numbers beside the banner',
   )
 })
+
+test('historical evidence refusal keeps the native banner and directs the operator to its journal source', () => {
+  const data = blockedData()
+  data.ratesBlocked = {
+    code: 'historical-evidence-required',
+    title: 'Historical contribution evidence is required',
+    description: 'The exact source needs retained genuine layers and Accounting event approval before Apply.',
+    actionLabel: 'Review journal source',
+    actionHref: '/journal?journalEntry=10000000-0000-4000-8000-000000000001',
+  }
+  const blocks = blocksOf(cashFlowSpec(data))
+  const banner = blocks.find(block => block.widget === 'empty-state')
+  assert.ok(banner)
+  assert.deepEqual(banner.when, { $: 'ratesBlocked' })
+  const props = banner.props as Record<string, unknown>
+  assert.equal(props.description, data.ratesBlocked.description)
+  const action = props.actionProps as Record<string, unknown>
+  assert.equal(action.href, data.ratesBlocked.actionHref)
+  assert.equal(action.label, 'Review journal source')
+  assert.equal(data.ratesReady, false)
+  const paper = blocks.find(block => block.kind === 'paper' || block.widget === 'paper-view')
+  assert.ok(paper)
+  assert.deepEqual(paper.when, { $: 'ratesReady' })
+})

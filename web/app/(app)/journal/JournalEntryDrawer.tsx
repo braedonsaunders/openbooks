@@ -11,9 +11,11 @@ import { entryTotals } from '../reports/entry-totals'
 import { JournalDrawer } from './JournalDrawer'
 
 type JournalProps = Parameters<typeof JournalDrawer>[0]
-type PostedJournal = EntryData & {
+type PostedJournal = Omit<EntryData, 'lines'> & {
   sourceJournal: JournalProps['journal'] | null
   canPost: boolean
+  canAssessHistoricalTranslation: boolean
+  lines: Array<EntryData['lines'][number] & { source_line_id?: string | null }>
   currentEntryId?: string | null
   headerDefs: JournalProps['headerDefs']
   lineDefs: JournalProps['lineDefs']
@@ -104,5 +106,8 @@ function LoadedJournal({ data, closeHref, onRefresh }: { data: PostedJournal; cl
     subsidiaries={[...new Map(lines.map((line) => [line.subsidiary_id, { id: line.subsidiary_id, name: line.subsidiary, depth: 0 }])).values()]}
     headerDefs={data.headerDefs ?? []} lineDefs={data.lineDefs ?? []} segments={data.segments} layout={data.layout}
     canPost={data.canPost} closeHref={closeHref}
+    historicalTranslationSources={data.canAssessHistoricalTranslation ? lines.flatMap(line => line.source_line_id ? [{
+      id: line.source_line_id, label: `${line.line_number} · ${line.account_number ?? ''} ${line.account_name} · ${line.amount} · ${line.subsidiary}`,
+    }] : []) : undefined}
   />
 }

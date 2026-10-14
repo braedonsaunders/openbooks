@@ -116,6 +116,11 @@ export interface FlowSubjectAdapter {
    */
   selfApprovalPolicy?: "configurable" | "forbidden";
 
+  /** Acquire domain resource fences before subject and run locks. This hook
+   * changes no lifecycle state and confers no decision authority; ordinary
+   * scope, reviewer and release checks remain mandatory. */
+  lockDecisionResources?(orgId: string, subjectId: string): Promise<void>;
+
   /** Load the record's evaluation snapshot; null when the record is gone. */
   loadContext(subjectId: string): Promise<FlowSubjectContext | null>;
   /** Short human label for notifications ("Vendor bill BILL-0042"). */

@@ -25,13 +25,13 @@ import { canonicalAdjustmentHours, mutatePayRunAdjustment, recordPayRunHolidayHo
 import { storedHolidayEligibilityForRun } from '@openbooks/engine/payroll/holiday-attestations'
 import { normalizeMoney } from '@openbooks/engine/money/money'
 import '../../../../../lib/feature-gates';
-import { aiRailsErrorResponse } from '../../../../../lib/ai-rails'
 import { can, guardSubsidiaryScope } from '../../../../../lib/authz'
 import { guardPayrollEmployees } from '../../subsidiary-scope'
 import { isUuid } from '../../../../../lib/list-params'
 import { canonicalDecimal } from '../../../../../lib/exact-decimal'
 import { decimalNullRefusal, suppliedValue } from '../../../../../lib/payroll-decimal-refusal'
 import { notFound } from "@/lib/api/responses";
+import { parseBankCashInputEvidence } from '@openbooks/engine/payroll/run-bank-cash-evidence'
 
 const payrollRunUuid = (field: string, subject: string, remedy: string, malformedRemedy = remedy) => z.string({
   error: (issue) => `${field} must be ${subject} — got "${suppliedValue(issue.input)}"; ${remedy}`,
@@ -60,6 +60,7 @@ const requestBodySchema = z.discriminatedUnion('action', [
   z.strictObject({ ...actionBody('preview-gl') }),
   z.strictObject({ ...actionBody('add-adjustment'), employeePartyId: payrollRunUuid('employeePartyId', 'an employee id', 'pass the employee as an employee id', 'fix the id and try again'), componentId: payrollRunUuid('componentId', 'a pay component id', "choose one from this run's adjustableComponents"), amount: payrollRunMoney, hours: z.string().nullable().optional(), earnedFrom: z.string().nullable().optional(), earnedTo: z.string().nullable().optional(), note: z.json().optional(), replaceComponent: z.json().optional() }),
   z.strictObject({ ...actionBody('override-income-tax'), employeePartyId: payrollRunUuid('employeePartyId', 'an employee id', 'select the employee whose cheque withholding is being recorded'), amount: payrollRunMoney, reason: z.string().trim().min(1).max(500), sourceReference: z.string().trim().min(1).max(300) }),
+  z.strictObject({ ...actionBody('bank-cash-input'), employeePartyId: payrollRunUuid('employeePartyId', 'an employee id', 'select the employee whose bank cash line is being recorded'), componentId: payrollRunUuid('componentId', 'a pay component id', 'choose the configured hours-bank payout or deposit component'), hours: z.string().min(1).max(32), amount: z.string().max(80).optional(), rate: z.string().max(80).optional(), reason: z.string().trim().min(1).max(500), sourceReference: z.string().trim().min(1).max(300) }),
   z.strictObject({ ...actionBody('record-holiday-hours'), employeePartyId: payrollRunUuid('employeePartyId', 'an employee id', 'select the employee whose paid holiday hours are being recorded'), hours: z.string(), earnedOn: z.string().optional(), reason: z.string().trim().min(1).max(500), note: z.string().max(500).optional() }),
   z.strictObject({ ...actionBody('delete-adjustment'), adjustmentId: payrollRunUuid('adjustmentId', 'a pay adjustment id', 'pass the adjustment to delete as an id', 'fix the id and try again') }),
   z.strictObject({ ...actionBody('set-scope'), employeePartyIds: employeeIds('pass the employees to include as a list'), rosterPartyIds: rosterIds }),
@@ -223,15 +224,27 @@ export const GET = defineRoute({
            where a.org_id = ${orgId} and a.pay_run_document_id = ${id}
            order by p.display_name, a.created_at`)
       const adjustableComponents = await tx.execute<Record<string, unknown>>(sql`
-          select id, code, name, kind from pay_components
-           where org_id = ${orgId} and is_active
-             and (system_key is null or system_key in ('base_pay','overtime','allowance','bonus','vacation_payout'))
-           order by sequence, code`)
+          select component.id, component.code, component.name, component.kind,
+                 exists(select 1 from entitlement_plans plan
+                   where plan.org_id=component.org_id and plan.is_active and plan.unit='hours'
+                     and component.kind='earning' and component.payment_kind='cash'
+                     and (plan.payout_component_id=component.id or plan.deposit_component_id=component.id)) as bank_cash_component
+            from pay_components component
+           where component.org_id = ${orgId} and component.is_active
+             and (component.system_key is null or component.system_key in ('base_pay','overtime','allowance','bonus','vacation_payout')
+               or exists(select 1 from entitlement_plans plan
+                 where plan.org_id=component.org_id and plan.is_active and plan.unit='hours'
+                   and component.kind='earning' and component.payment_kind='cash'
+                   and (plan.payout_component_id=component.id or plan.deposit_component_id=component.id)))
+           order by component.sequence, component.code`)
 
       return NextResponse.json({
         run,
         stubs: stubs.rows.map((stub) => ({ ...stub, lines: linesByStub.get(String(stub.id)) ?? [] })),
-        adjustments: adjustments.rows,
+        adjustments: adjustments.rows.map((row) => {
+          const evidence = parseBankCashInputEvidence(typeof row.note === 'string' ? row.note : null)
+          return evidence ? { ...row, note: `${evidence.reason} · ${evidence.sourceReference}${evidence.rate ? ` · ${evidence.rate}/h` : ''}` } : row
+        }),
         adjustableComponents: adjustableComponents.rows,
       })
     })
@@ -477,6 +490,34 @@ export const POST = defineRoute({
               action: 'override_income_tax', employeePartyId: body.employeePartyId,
               amount, reason: body.reason,
               sourceReference: body.sourceReference, idempotencyKey: requestKey,
+            },
+          })
+          return NextResponse.json({ ok: true, ...outcome })
+        } catch (e) {
+          if (e instanceof PayRunAdjustmentIdempotencyConflict) {
+            return NextResponse.json({ error: 'invalid_idempotency_key', message: e.message }, { status: 409 })
+          }
+          throw e
+        }
+      }
+      if (body.action === 'bank-cash-input') {
+        const requestKey = req.headers.get('Idempotency-Key')?.trim() ?? ''
+        if (!isUuid(requestKey)) {
+          return NextResponse.json({ error: 'bank-cash-input requires a UUID Idempotency-Key; retry with a request key' }, { status: 400 })
+        }
+        try {
+          const outcome = await mutatePayRunAdjustment({
+            orgId: gate.user.orgId,
+            documentId: id,
+            actorId: gate.user.id,
+            reason: body.reason,
+            allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+            mutation: {
+              action: 'bank_cash_input', employeePartyId: body.employeePartyId,
+              componentId: body.componentId, hours: body.hours,
+              amount: body.amount ?? null, rate: body.rate ?? null,
+              reason: body.reason, sourceReference: body.sourceReference,
+              idempotencyKey: requestKey,
             },
           })
           return NextResponse.json({ ok: true, ...outcome })
@@ -813,21 +854,8 @@ export const POST = defineRoute({
         // truth, two consumers — render and refuse.)
         await assertPayRunNotStale(gate.user.orgId, id, db, gate.allowedSubsidiaryIds)
         await assertPayRunApprovalReleased(gate.user.orgId, id)
-        // Open block-severity anomaly flags refuse the finalize. Payroll
-        // checks ride Payroll, so the refusal always applies here; the engine
-        // commit below stays the untouched source of truth —
-        // this boundary only refuses before calling it, never re-implements it.
-        const period = (await db.execute<{ periodStart: string; periodEnd: string }>(sql`
-          select period_start::text as "periodStart", period_end::text as "periodEnd"
-            from pay_runs where org_id = ${gate.user.orgId} and document_id = ${id}`)).rows[0]
-        if (period) {
-          const { checkPayrollFinalizeAllowed } = await import('@openbooks/engine/hrm/ai/anomalies')
-          try {
-            await checkPayrollFinalizeAllowed(db, { orgId: gate.user.orgId, periodFrom: period.periodStart, periodTo: period.periodEnd })
-          } catch (e) {
-            return aiRailsErrorResponse(e)
-          }
-        }
+        // The engine's native commit transaction enforces the anomaly gate
+        // against the locked run and its actual schedule/entity roster.
         const result = await commitPayRun({ orgId: gate.user.orgId, documentId: id, actorId: gate.user.id, allowedSubsidiaryIds: gate.allowedSubsidiaryIds })
         return NextResponse.json({ ok: true, ...result })
       }

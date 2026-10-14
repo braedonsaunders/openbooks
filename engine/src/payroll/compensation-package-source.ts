@@ -72,7 +72,8 @@ export async function compensationPackageEmploymentSource(tx: SqlExecutor, args:
 /** Reproduce the calculated native employment population, including newly approved terms for those same employments. */
 export async function compensationPackageRunSource(tx: SqlExecutor, orgId: string, documentId: string,
   allowedSubsidiaryIds?: PayrollSubsidiaryScope, lockComponents = false): Promise<CompensationPackageAssignmentSource[]> {
-  try { return await assignmentSources(tx, orgId, sql`exists (
+  try {
+    return await assignmentSources(tx, orgId, sql`exists (
     select 1 from pay_runs r join documents d on d.org_id=r.org_id and d.id=r.document_id
     join pay_stubs s on s.org_id=r.org_id and s.pay_run_document_id=r.document_id
     where r.org_id=a.org_id and r.document_id=${documentId} and s.employment_id=a.employment_id

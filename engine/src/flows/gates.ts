@@ -497,6 +497,7 @@ async function decideGateCore(args: Parameters<typeof decideGate>[0] & {
   // never both resume (double-post) and the whole decision is atomic (a crash
   // rolls back to a still-pending gate, safely re-decidable). ----------------
   return withOrg(pre.orgId, async () => {
+    await preAdapter?.lockDecisionResources?.(pre.orgId, pre.subjectId);
     await lockFlowSubjectDecision(pre.orgId, pre.subjectKind, pre.subjectId);
     await db.execute(sql`select pg_advisory_xact_lock(hashtext(${pre.runId}))`);
 

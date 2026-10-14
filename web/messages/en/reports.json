@@ -101,6 +101,8 @@
     "retainedEarningsPrior": "Retained earnings (prior years)",
     "currentYearEarnings": "Current year earnings",
     "translationAdjustment": "Cumulative translation adjustment",
+    "historicalEvidenceBlockedTitle": "Historical contribution evidence is required",
+    "historicalEvidenceBlockedAction": "Review journal source",
     "ratesBlockedTitle": "Consolidated rates are not derived yet",
     "ratesBlockedAction": "Derive rates in period close",
     "currencyBasisBlockedTitle": "This view spans multiple currencies"

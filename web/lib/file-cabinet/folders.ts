@@ -1,8 +1,9 @@
 /** Split from web/lib/file-cabinet.ts; moved without behavior changes. */
 import 'server-only'
 import { enqueueCabinetCleanup } from './shared'
-import { type FileViewer, type FolderNode } from './types'
-import { resolveReadScope, visibleFolderPredicate, visibleFileRowPredicate, recordScopeFolderPredicate } from './visibility'
+import type { FolderNode } from './types'
+import type { FileViewer } from '@openbooks/engine/records/file-cabinet-access'
+import { resolveReadScope, visibleFolderPredicate, visibleFileRowPredicate, recordScopeFolderPredicate } from '@openbooks/engine/records/file-cabinet-access'
 import { retainedFileEvidence } from './files'
 import { type FileMutationAudit, viewerFolderGate, lockCabinetAuthorization, runMutation } from './mutation'
 import { sql, type SQL } from 'drizzle-orm'

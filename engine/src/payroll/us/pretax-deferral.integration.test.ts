@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../../platform/db.ts";
@@ -13,6 +13,8 @@ import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEm
 import { seedUsSuiAccount } from "../filing-test-fixtures.ts";
 import { upsertPayrollEmployerFact } from "../employer-fact-store.ts";
 import { saveOpeningBalances } from "../opening-balances.ts";
+import { qualifyOpeningEmployerAuthority, readOpeningEmployerContext } from "../opening-employer-authority.ts";
+import { qualifyOpeningLevySourceAuthority } from "../opening-levy-source-authority.ts";
 import { calculatePub15T } from "./pub15t.ts";
 import { form941Worksheet, w2Slips } from "../yearend.ts";
 import { resolveUsSuiYtd, resolveUsSuiYtdForCoverage, usEmployeeYtd } from "./compute-statutory.ts";
@@ -488,6 +490,40 @@ async function seedEin(fx: Fixture): Promise<string> {
   return id;
 }
 
+async function qualifyUsOpeningLevySource(
+  fx: Fixture,
+  employeePartyId: string,
+  allocations: readonly { programKey: string; region: string; filingAccountId: string | null; amount: string }[],
+): Promise<void> {
+  const context = await readOpeningEmployerContext({
+    orgId: fx.orgId, actorId: fx.actorId, employeePartyId, taxYear: 2026, allowedSubsidiaryIds: null,
+  });
+  if (!context.record) throw new Error('The US opening balance was not retained');
+  const folderId = randomUUID(), fileId = randomUUID(), versionId = randomUUID();
+  const bytes = Buffer.from(JSON.stringify({ employeePartyId, legalEmployerSubsidiaryId: fx.subsidiaryId,
+    taxYear: 2026, allocations }));
+  const sourceSha256 = createHash('sha256').update(bytes).digest('hex');
+  await db.execute(sql`insert into folders(id,org_id,name,is_private,owner_id,created_by,updated_by)
+    values(${folderId},${fx.orgId},'Original US payroll opening',true,${fx.actorId},${fx.actorId},${fx.actorId})`);
+  await db.execute(sql`insert into files(id,org_id,folder_id,name,content_type,size_bytes,created_by,updated_by)
+    values(${fileId},${fx.orgId},${folderId},'original-us-opening.json','application/json',${bytes.length},${fx.actorId},${fx.actorId})`);
+  await db.execute(sql`insert into file_versions(id,file_id,version_number,size_bytes,content_type,content_hash,created_by)
+    values(${versionId},${fileId},1,${bytes.length},'application/json',${sourceSha256},${fx.actorId})`);
+  await db.execute(sql`insert into file_blobs(version_id,bytes) values(${versionId},${bytes})`);
+  await db.execute(sql`update files set current_version_id=${versionId} where org_id=${fx.orgId} and id=${fileId}`);
+  await qualifyOpeningEmployerAuthority({
+    orgId: fx.orgId, actorId: fx.actorId, openingBalanceId: context.record.id, subsidiaryId: fx.subsidiaryId,
+    expectedOpeningSha256: context.record.openingSha256, sourceFileId: fileId, sourceVersionId: versionId,
+    sourceSha256, sourceReference: 'Original US payroll opening by employee and employer',
+    reason: 'Qualify the exact original US opening source', allowedSubsidiaryIds: null,
+  });
+  await qualifyOpeningLevySourceAuthority({
+    orgId: fx.orgId, actorId: fx.actorId, openingBalanceId: context.record.id,
+    expectedOpeningSha256: context.record.openingSha256, allocations,
+    reason: 'Retain the original EIN and state SUI wage bases', allowedSubsidiaryIds: null,
+  });
+}
+
 test(
   "federal wage bases continue across one EIN's accounts, and an EIN profile honours its state account's financing method",
   { skip: !DB },
@@ -604,6 +640,7 @@ test(
     const fx = await usPayrollOrg();
     try {
       const employee = await usEmployee(fx, "Texas adopter");
+      const einId = await seedEin(fx);
       const suiBase = [{ programKey: "us_sui", filingAccountId: fx.suiAccountId, region: "TX", insurableYtd: "6000" }];
       await assert.rejects(
         saveOpeningBalances({ orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026, rows: [{
@@ -614,6 +651,13 @@ test(
       await saveOpeningBalances({ orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026, rows: [{
         employeePartyId: employee, amounts: {}, accountBases: suiBase,
       }] });
+      await qualifyUsOpeningLevySource(fx, employee, [
+        { programKey: 'us_futa', region: 'US', filingAccountId: einId, amount: '0' },
+        { programKey: 'us_sui', region: 'TX', filingAccountId: fx.suiAccountId, amount: '6000' },
+      ]);
+      await assert.rejects(db.execute(sql`update payroll_opening_account_bases set insurable_ytd=0
+        where org_id=${fx.orgId} and employee_party_id=${employee} and program_key='us_sui'`),
+        /Source-qualified statutory opening amounts must be preserved/);
       const run = await createPayRun({
         orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
         periodStart: PERIOD_START, periodEnd: PERIOD_END,

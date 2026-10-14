@@ -896,10 +896,11 @@ const CA_EHT_SLOT: PayrollStatutoryRateSlot = {
         + "remuneration in that province — check the province's own rate table.",
     },
     {
-      key: "annualExemption", label: "Annual exemption", kind: "amount", decimals: 2,
+      key: "annualExemption", label: "Annual exemption available to allocate", kind: "amount", decimals: 2,
       min: "0", max: "100000000", required: false,
-      help: "Remuneration exempt each year in that province. Associated employers share one "
-        + "exemption — enter this employer's share. Leave blank where no exemption applies.",
+      help: "Total exemption amount available to allocate among any associated employers for this province. "
+        + "Record each legal employer's annual share in Payroll Setup → Employer facts; the payroll engine "
+        + "refuses to apply an unallocated exemption.",
     },
   ],
 };

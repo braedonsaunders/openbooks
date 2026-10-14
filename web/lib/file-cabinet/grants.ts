@@ -1,7 +1,7 @@
 /** Split from web/lib/file-cabinet.ts; moved without behavior changes. */
 import 'server-only'
-import { type FileViewer, type AccessLevel } from './types'
-import { attachmentTargetsVisiblePredicate, recordScopeFolderPredicate } from './visibility'
+import { type FileViewer, type AccessLevel } from '@openbooks/engine/records/file-cabinet-access'
+import { attachmentTargetsVisiblePredicate, recordScopeFolderPredicate } from '@openbooks/engine/records/file-cabinet-access'
 import { type FileMutationAudit, viewerFileGate, viewerFolderGate, lockCabinetAuthorization, runMutation } from './mutation'
 import { sql, type SQL } from 'drizzle-orm'
 import { db, inDbTransaction, type SqlExecutor } from '@openbooks/engine/platform/db'

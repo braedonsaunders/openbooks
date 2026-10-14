@@ -15,19 +15,20 @@ import { loadAiRailsSettings } from "./settings.ts";
 import { timeBalanceAsOf } from "../leave-read.ts";
 import { abs, add, cmp, mulDecimal, neg } from "../../money/money.ts";
 import { divideDecimal } from "../../money/exact-decimal.ts";
+import { lockPayrollAnomalyReview, payrollAnomalyFinalizeCheck } from "../../payroll/anomaly-finalize-gate.ts";
 
 /**
- * HRM AI rails (HR-21) anomaly flags: DETERMINISTIC pre-run payroll and
+ * Native workforce anomaly flags: deterministic pre-run payroll and
  * timesheet checks. The scan writes flags idempotently; each flag carries
  * an explanation rendered from a template with the numbers (no LLM in
  * the loop); acknowledge/resolve/false-positive needs a reason; rows
  * ever marked false_positive suppress the same kind+key in later scans
  * (the feedback loop, no ML).
  *
- * GATE: the payroll run's finalize step refuses while any block-severity
- * flag for the period is open. The run is owned by the payroll
- * coordinator — this module owns the flags and the check function
- * `checkPayrollFinalizeAllowed`, which the run service calls by name.
+ * GATE: the native payroll commit checks open block-severity flags through
+ * Payroll's dependency-legal query seam. This module owns the flags and its
+ * `checkPayrollFinalizeAllowed` adapter delegates to that same run-scoped
+ * contract.
  * Warn severity is shown, never blocks.
  */
 
@@ -564,29 +565,68 @@ async function ruleBaselines(
   const cohortSql = cohortKey === "department"
     ? sql`(select av.department_id::text from employment_assignment_versions av where av.org_id = e.org_id and av.employment_id = e.id and av.recorded_until is null and av.is_primary order by av.version_no desc limit 1)`
     : sql`e.employer_subsidiary_id::text`;
-  // Current-period aggregates per employment from calculated stubs.
+  // Current-period aggregates use the same run-period observation grain as
+  // the baseline, rather than blending every overlapping period together.
   const currents = (await exec.execute<{
     employmentId: string; cohort: string | null; net: string; gross: string;
+    periodStart: string; periodEnd: string;
   }>(sql`
     select s.employment_id::text as "employmentId",
            ${cohortSql} as cohort,
-           sum(s.net_pay)::text as net, sum(s.gross)::text as gross
+           sum(s.net_pay)::text as net, sum(s.gross)::text as gross,
+           r.period_start::text as "periodStart", r.period_end::text as "periodEnd"
       from pay_stubs s
       join worker_employments e on e.org_id = s.org_id and e.id = s.employment_id
       join pay_runs r on r.org_id = s.org_id and r.document_id = s.pay_run_document_id
      where s.org_id = ${orgId}::uuid
        and r.period_start <= ${to}::date and r.period_end >= ${from}::date
-     group by s.employment_id, e.employer_subsidiary_id`)).rows;
-  const hoursRows = (await exec.execute<{ employmentId: string; hours: string }>(sql`
-    select e.id::text as "employmentId", coalesce(sum(t.hours), 0)::text as hours
-      from worker_employments e
+     group by s.employment_id, e.org_id, e.id, e.employer_subsidiary_id,
+              r.period_start, r.period_end`)).rows;
+  // Hours use exactly the run periods that produced the current stubs. Each
+  // approved entry is assigned to the one live employment episode covering
+  // its worked date, so a rehire cannot make the same hours appear under both
+  // employment records. The distinct period set and EXISTS avoid multiplying
+  // an entry when the same employment has more than one run in a period.
+  const hoursRows = (await exec.execute<{
+    employmentId: string; periodStart: string; periodEnd: string; hours: string; unresolved: boolean;
+  }>(sql`
+    with current_periods as (
+      select distinct s.employment_id, s.employee_party_id, r.period_start, r.period_end
+        from pay_stubs s
+        join pay_runs r on r.org_id = s.org_id and r.document_id = s.pay_run_document_id
+       where s.org_id = ${orgId}::uuid
+         and r.period_start <= ${to}::date and r.period_end >= ${from}::date
+    )
+    select p.employment_id::text as "employmentId",
+           p.period_start::text as "periodStart", p.period_end::text as "periodEnd",
+           coalesce(sum(case when live_episode.employment_id = p.employment_id then t.hours else 0 end), 0)::text as hours,
+           coalesce(bool_or(t.id is not null and live_episode.episode_count <> 1), false) as unresolved
+      from current_periods p
       left join time_entries t
-        on t.org_id = e.org_id and t.employee_party_id = e.worker_party_id
-       and t.worked_on between ${from}::date and ${to}::date
+        on t.org_id = ${orgId}::uuid and t.employee_party_id = p.employee_party_id
        and t.status = 'approved'
-     where e.org_id = ${orgId}::uuid
-     group by e.id`)).rows;
-  const hoursByEmp = new Map(hoursRows.map((r) => [r.employmentId, r.hours]));
+       and exists (
+         select 1 from current_periods cp
+          where cp.employment_id = p.employment_id
+            and cp.period_start = p.period_start and cp.period_end = p.period_end
+            and t.worked_on between cp.period_start and cp.period_end
+       )
+      left join lateral (
+        select case when count(distinct e.id) = 1 then min(e.id::text)::uuid end as employment_id,
+               count(distinct e.id) as episode_count
+          from worker_employments e
+          join worker_employment_versions v
+            on v.org_id = e.org_id and v.employment_id = e.id
+         where e.org_id = ${orgId}::uuid and e.worker_party_id = t.employee_party_id
+           and v.recorded_until is null and v.status in ('active', 'on_leave')
+           and v.effective_from <= t.worked_on
+           and (v.effective_to is null or t.worked_on < v.effective_to)
+      ) live_episode on true
+     group by p.employment_id, p.period_start, p.period_end`)).rows;
+  if (hoursRows.some(row => row.unresolved)) {
+    throw new AiRailsError("ai_invalid_input", "Payroll hours require exactly one employment covering each worked date — correct the employment history before scanning anomalies");
+  }
+  const hoursByPeriod = new Map(hoursRows.map((r) => [`${r.employmentId}:${r.periodStart}:${r.periodEnd}`, r.hours]));
   const byCohortMetric = new Map(baselines.map((b) => [`${b.cohortKey}::${b.metric}`, b]));
   for (const c of currents) {
     const cohort = c.cohort ?? "unassigned";
@@ -596,7 +636,7 @@ async function ruleBaselines(
     const checks: { metric: "net_pay" | "gross" | "hours"; actual: string; kind: AnomalyKind }[] = [
       { metric: "net_pay", actual: c.net, kind: "net_pay_spike" },
       { metric: "gross", actual: c.gross, kind: "net_pay_spike" },
-      { metric: "hours", actual: hoursByEmp.get(c.employmentId) ?? "0", kind: "hours_spike" },
+      { metric: "hours", actual: hoursByPeriod.get(`${c.employmentId}:${c.periodStart}:${c.periodEnd}`) ?? "0", kind: "hours_spike" },
     ];
     for (const check of checks) {
       const base = byCohortMetric.get(`${cohort}::${check.metric}`);
@@ -619,8 +659,11 @@ async function ruleBaselines(
         flags.push({
           kind: check.kind,
           employmentId: c.employmentId,
-          detailKey: `${check.metric}:${c.employmentId}:${zz}`,
-          detail: { key: `${check.metric}:${c.employmentId}:${zz}`, metric: check.metric, ...vars },
+          detailKey: `${check.metric}:${c.employmentId}:${c.periodStart}:${c.periodEnd}:${zz}`,
+          detail: {
+            key: `${check.metric}:${c.employmentId}:${c.periodStart}:${c.periodEnd}:${zz}`,
+            metric: check.metric, periodFrom: c.periodStart, periodTo: c.periodEnd, ...vars,
+          },
           explanation,
         });
       }
@@ -731,6 +774,7 @@ export async function scanAnomalies(
   const timeOnly = input.options?.timeOnly === true;
   await assertScanScope(exec, orgId, actorId, timeOnly);
   await assertAnomalyFeature(exec, orgId, timeOnly);
+  await lockPayrollAnomalyReview(exec, orgId);
   const settings = await loadAiRailsSettings(exec, orgId);
 
   const skipped: string[] = [];
@@ -821,10 +865,9 @@ export async function listFlags(
   },
 ): Promise<FlagRow[]> {
   const capabilities = await assertFlagReadScope(exec, input.orgId, input.actorId);
-  // Legal-entity lens: a flag is visible only through its employment's
-  // employer subsidiary. Flags with no employment cannot be attributed,
-  // so the predicate fails them closed for restricted callers (a null
-  // subsidiary matches no allowlist) while unrestricted callers see all.
+  // Employment flags follow their legal employer; run-wide flags follow
+  // the identified payroll document. Unattributed flags fail closed for
+  // restricted callers.
   const allowed = await actorAllowedSubsidiaryIds(exec, input.orgId, input.actorId);
   const rows = (await exec.execute<FlagRow>(sql`
     select f.id::text as id, f.kind, f.severity, f.status,
@@ -835,6 +878,7 @@ export async function listFlags(
       from payroll_anomaly_flags f
       left join worker_employments e
         on e.org_id = f.org_id and e.id = f.employment_id
+      left join documents flag_run on flag_run.org_id = f.org_id and flag_run.id = f.run_document_id
      where f.org_id = ${input.orgId}::uuid
        and (${input.periodFrom ?? null}::date is null or f.pay_period_from = ${input.periodFrom ?? null}::date)
        and (${input.periodTo ?? null}::date is null or f.pay_period_to = ${input.periodTo ?? null}::date)
@@ -851,7 +895,7 @@ export async function listFlags(
          (f.kind = any(${sql.param([...TIME_ANOMALY_KINDS])}::text[]) and ${capabilities.time})
          or (f.kind <> all(${sql.param([...TIME_ANOMALY_KINDS])}::text[]) and ${capabilities.payroll})
        )
-       ${subsidiaryVisibleFilter(sql`e.employer_subsidiary_id`, allowed)}
+       ${subsidiaryVisibleFilter(sql`case when f.employment_id is null then flag_run.subsidiary_id else e.employer_subsidiary_id end`, allowed)}
      order by f.severity, f.pay_period_from desc, f.id`)).rows;
   return rows;
 }
@@ -896,20 +940,18 @@ export async function transitionFlag(
     );
   }
   const allowed = await actorAllowedSubsidiaryIds(exec, orgId, actorId);
-  // Locked read: the scope check and the write below are one atomic unit
-  // on the public path (resolveFlag wraps this in a transaction), so a
-  // concurrent rehome of the flag's employment cannot move the flag
-  // between the check and the update.
-  const current = (await exec.execute<{
-    kind: string; severity: string; status: string; employerSubsidiaryId: string | null;
-  }>(sql`
+  // Read identity for authorization before taking the feature and review
+  // locks. The locked reread below rechecks scope and lifecycle before writing.
+  const currentQuery = sql`
     select f.kind, f.severity, f.status,
-           e.employer_subsidiary_id::text as "employerSubsidiaryId"
+           (case when f.employment_id is null then flag_run.subsidiary_id else e.employer_subsidiary_id end)::text as "employerSubsidiaryId"
       from payroll_anomaly_flags f
       left join worker_employments e
         on e.org_id = f.org_id and e.id = f.employment_id
-     where f.org_id = ${orgId}::uuid and f.id = ${flagId}::uuid
-     for update of f`)).rows[0];
+      left join documents flag_run on flag_run.org_id = f.org_id and flag_run.id = f.run_document_id
+     where f.org_id = ${orgId}::uuid and f.id = ${flagId}::uuid`;
+  type CurrentFlag = { kind: string; severity: string; status: string; employerSubsidiaryId: string | null };
+  let current = (await exec.execute<CurrentFlag>(currentQuery)).rows[0];
   // Unknown, cross-org, and out-of-scope flags answer exactly alike: the
   // refusal must never confirm which half failed.
   if (!current || !subsidiaryScopeAllows(allowed, current.employerSubsidiaryId)) {
@@ -927,17 +969,22 @@ export async function transitionFlag(
   if (!authorized || !featureOn) {
     throw new AiRailsError("ai_forbidden", "this anomaly flag is outside your enabled payroll or time authority");
   }
+  await lockPayrollAnomalyReview(exec, orgId);
+  current = (await exec.execute<CurrentFlag>(sql`${currentQuery} for update of f`)).rows[0];
+  if (!current || !subsidiaryScopeAllows(allowed, current.employerSubsidiaryId)) {
+    throw new AiRailsError("ai_flag_missing", "flag is missing or outside your legal entity scope — reload and retry");
+  }
   if (current.status !== "open" && current.status !== "acknowledged") {
     throw new AiRailsError(
       "ai_flag_closed",
       `flag is already ${current.status} — closed flags stay closed; run a fresh scan for the new period`,
     );
   }
-  if (current.severity === "block" && input.to !== "acknowledged"
+  if (current.severity === "block"
     && !(await actorHasPermission(exec, orgId, actorId, "payroll.manage"))) {
     throw new AiRailsError(
       "ai_forbidden",
-      "only the payroll manager resolves or dismisses blocking flags — acknowledge it and escalate instead",
+      "only the payroll manager reviews blocking flags — escalate this flag to the payroll manager",
     );
   }
   const rows = (await exec.execute<FlagRow>(sql`
@@ -974,34 +1021,23 @@ export async function transitionFlag(
 
 export interface FinalizeCheck {
   openBlockCount: number;
-  openBlocks: FlagRow[];
+  openBlocks: readonly { readonly id: string; readonly kind: string }[];
 }
 
 /**
- * THE finalize hook. The payroll run service calls this by name before
- * committing: any open block-severity flag for the period refuses the
- * finalize with the remedy. Warn is reported, never blocks.
+ * HRM adapter for the payroll-owned finalize query. The native commit calls
+ * that query inside its own transaction; this wrapper gives HRM callers the
+ * same scoped result and its anomaly-specific refusal. Warn never blocks.
  */
 export async function checkPayrollFinalizeAllowed(
   exec: SqlExecutor,
-  input: { readonly orgId: string; readonly periodFrom: string; readonly periodTo: string },
+  input: { readonly orgId: string; readonly documentId: string },
 ): Promise<FinalizeCheck> {
-  const rows = (await exec.execute<FlagRow>(sql`
-    select id::text as id, kind, severity, status,
-           employment_id::text as "employmentId",
-           pay_period_from::text as "payPeriodFrom",
-           pay_period_to::text as "payPeriodTo",
-           explanation, detail, reason
-      from payroll_anomaly_flags
-     where org_id = ${input.orgId}::uuid
-       and severity = 'block' and status in ('open', 'acknowledged')
-       and pay_period_from <= ${input.periodTo}::date
-       and pay_period_to >= ${input.periodFrom}::date
-     order by id`)).rows;
-  if (rows.length > 0) {
-    throw finalizeBlockedRefusal(rows.length, input.periodFrom, input.periodTo);
+  const check = await payrollAnomalyFinalizeCheck(exec, input);
+  if (check.openBlockCount > 0) {
+    throw finalizeBlockedRefusal(check.openBlockCount, check.periodFrom, check.periodTo);
   }
-  return { openBlockCount: 0, openBlocks: [] };
+  return { openBlockCount: 0, openBlocks: check.openBlocks };
 }
 
 /**
@@ -1038,38 +1074,65 @@ export async function computeBaselines(
     );
   }
   const earliest = dates[dates.length - 1];
+  const dateList = sql.join(dates.map((date) => sql`${date}::date`), sql`, `);
   const cohortSql = cohortKey === "department"
     ? sql`(select av.department_id::text from employment_assignment_versions av where av.org_id = e.org_id and av.employment_id = e.id and av.recorded_until is null and av.is_primary order by av.version_no desc limit 1)`
     : sql`e.employer_subsidiary_id::text`;
   const stats = (await exec.execute<{
-    cohort: string; metric: string; mean: string; stddev: string;
+    cohort: string; metric: string; mean: string; stddev: string; unresolved: boolean;
   }>(sql`
     with window_stubs as (
-      select s.employment_id, s.net_pay, s.gross, ${cohortSql} as cohort
+      select s.employment_id, s.employee_party_id, r.period_start, r.period_end,
+             sum(s.net_pay) as net_pay, sum(s.gross) as gross, ${cohortSql} as cohort
         from pay_stubs s
         join worker_employments e on e.org_id = s.org_id and e.id = s.employment_id
-       where s.org_id = ${orgId}::uuid and s.pay_date >= ${earliest}::date
+        join pay_runs r on r.org_id = s.org_id and r.document_id = s.pay_run_document_id
+       where s.org_id = ${orgId}::uuid and s.pay_date in (${dateList})
+       group by s.employment_id, s.employee_party_id, r.period_start, r.period_end,
+                e.org_id, e.id, e.employer_subsidiary_id
     )
     select coalesce(cohort, 'unassigned') as cohort, 'net_pay' as metric,
-           avg(net_pay)::text as mean, coalesce(stddev_pop(net_pay), 0)::text as stddev
+           avg(net_pay)::text as mean, coalesce(stddev_pop(net_pay), 0)::text as stddev, false as unresolved
       from window_stubs group by 1
     union all
     select coalesce(cohort, 'unassigned') as cohort, 'gross' as metric,
-           avg(gross)::text as mean, coalesce(stddev_pop(gross), 0)::text as stddev
+           avg(gross)::text as mean, coalesce(stddev_pop(gross), 0)::text as stddev, false as unresolved
       from window_stubs group by 1
     union all
-    select coalesce(cohort, 'unassigned') as cohort, 'hours' as metric,
-           avg(h)::text as mean, coalesce(stddev_pop(h), 0)::text as stddev
+    select coalesce(w.cohort, 'unassigned') as cohort, 'hours' as metric,
+           avg(w.hours)::text as mean, coalesce(stddev_pop(w.hours), 0)::text as stddev, bool_or(w.unresolved) as unresolved
       from (
-        select ${cohortSql} as cohort, coalesce(sum(t.hours), 0) as h
-          from worker_employments e
+        select p.employment_id, p.period_start, p.period_end, p.cohort,
+               coalesce(sum(case when live_episode.employment_id = p.employment_id then t.hours else 0 end), 0) as hours,
+               coalesce(bool_or(t.id is not null and live_episode.episode_count <> 1), false) as unresolved
+          from window_stubs p
           left join time_entries t
-            on t.org_id = e.org_id and t.employee_party_id = e.worker_party_id
-           and t.worked_on >= ${earliest}::date and t.status = 'approved'
-         where e.org_id = ${orgId}::uuid
-         group by e.id, e.org_id
-      ) per_employment
+            on t.org_id = ${orgId}::uuid and t.employee_party_id = p.employee_party_id
+           and t.status = 'approved'
+           and exists (
+             select 1 from pay_stubs s
+             join pay_runs r on r.org_id = s.org_id and r.document_id = s.pay_run_document_id
+            where s.org_id = ${orgId}::uuid and s.employment_id = p.employment_id
+              and r.period_start = p.period_start and r.period_end = p.period_end
+              and t.worked_on between r.period_start and r.period_end
+           )
+          left join lateral (
+            select case when count(distinct e.id) = 1 then min(e.id::text)::uuid end as employment_id,
+                   count(distinct e.id) as episode_count
+              from worker_employments e
+              join worker_employment_versions v
+                on v.org_id = e.org_id and v.employment_id = e.id
+             where e.org_id = ${orgId}::uuid and e.worker_party_id = t.employee_party_id
+               and v.recorded_until is null and v.status in ('active', 'on_leave')
+               and v.effective_from <= t.worked_on
+               and (v.effective_to is null or t.worked_on < v.effective_to)
+          ) live_episode on true
+         group by p.employment_id, p.period_start, p.period_end, p.cohort
+      ) w
      group by 1`)).rows;
+  if (stats.some(row => row.unresolved)) {
+    throw new AiRailsError("ai_invalid_input", "Payroll baseline hours require exactly one employment covering each worked date — correct the employment history before computing baselines");
+  }
   let computed = 0;
   for (const s of stats) {
     const done = (await exec.execute<{ id: string }>(sql`

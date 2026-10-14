@@ -101,6 +101,8 @@
     "retainedEarningsPrior": "Gewinnvortrag (Vorjahre)",
     "currentYearEarnings": "Jahresüberschuss",
     "translationAdjustment": "Kumulierte Währungsumrechnungsdifferenz",
+    "historicalEvidenceBlockedTitle": "Nachweise für historische Kapitaleinlagen sind erforderlich",
+    "historicalEvidenceBlockedAction": "Journalbeleg prüfen",
     "ratesBlockedTitle": "Konsolidierte Wechselkurse sind noch nicht abgeleitet",
     "ratesBlockedAction": "Kurse im Periodenabschluss ableiten",
     "currencyBasisBlockedTitle": "Diese Ansicht umfasst mehrere Währungen"

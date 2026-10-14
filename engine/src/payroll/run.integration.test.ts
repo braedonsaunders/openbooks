@@ -30,6 +30,8 @@ import { assertPayRunNotStale, payRunStaleness } from "./readiness.ts";
 import { unionRemittanceReport, upsertUnionFringe } from "./union.ts";
 import { mutatePayRunAdjustment, PayRunAdjustmentIdempotencyConflict } from "./run-adjustments.ts";
 
+import { transitionFlag } from "../hrm/ai/anomalies.ts";
+
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
 async function seedUsSui(orgId: string, actorId: string, employeeId: string, state: string,
@@ -179,6 +181,34 @@ test(
       assert.equal(stub.vacation_accrued, "96.0000");
       assert.equal(stub.employer_cost,
         sum([expected.cppEmployer, expected.eiEmployer, "96.00"]));
+
+      // The engine commit itself enforces the blocker for the actual run
+      // roster. A reviewed acknowledgement satisfies the documented gate.
+      const anomalyFlagId = randomUUID();
+      await db.execute(sql`
+        insert into payroll_anomaly_flags
+          (id, org_id, run_document_id, pay_period_from, pay_period_to, employment_id,
+           kind, severity, detail, explanation, created_by)
+        values (${anomalyFlagId}, ${org.orgId}, null, '2026-07-05', '2026-07-18',
+          ${employmentId}, 'missing_rate', 'block', '{}'::jsonb, 'Anomaly gate fixture', ${actorId})`);
+      await assert.rejects(
+        commitPayRun({ orgId: org.orgId, documentId: run.documentId, actorId }),
+        /blocking payroll check\(s\) are open.*resolve or acknowledge/,
+      );
+      const afterRefusal = (await db.execute<{ run_status: string; documents_status: string; line_count: string; claimed_count: string }>(sql`
+        select r.run_status, d.status as documents_status,
+               (select count(*)::text from document_lines where org_id = r.org_id and document_id = r.document_id) as line_count,
+               (select count(*)::text from time_entries where org_id = r.org_id and payroll_batch_ref = r.document_id::text) as claimed_count
+          from pay_runs r join documents d on d.org_id = r.org_id and d.id = r.document_id
+         where r.org_id = ${org.orgId} and r.document_id = ${run.documentId}`)).rows[0]!;
+      assert.equal(afterRefusal.run_status, "calculated");
+      assert.equal(afterRefusal.documents_status, "draft");
+      assert.equal(afterRefusal.line_count, "0", "the gate refusal leaves the GL projection untouched");
+      assert.equal(afterRefusal.claimed_count, "0", "the gate refusal leaves time unclaimed");
+      await transitionFlag(db, {
+        orgId: org.orgId, actorId, flagId: anomalyFlagId,
+        to: "acknowledged", reason: "reviewed before releasing this payroll run",
+      });
 
       // Commit: balanced signed document lines, time entries claimed
       await commitPayRun({ orgId: org.orgId, documentId: run.documentId, actorId });

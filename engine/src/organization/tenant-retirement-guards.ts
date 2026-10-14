@@ -1,6 +1,55 @@
 /** Published DELETE contracts; unknown live guards refuse retirement. */
 export const TENANT_RETIREMENT_GUARDS = [
   {
+    "name": "payroll_opening_levy_opening_source_guard",
+    "source": "0719_payroll_opening_levy_source_authority.sql",
+    "sha256": "a1948c959d4df63037fe9f5113d87ed087b551971e7191eab8cb1b30c700a9b4",
+    "newSha256": "a1948c959d4df63037fe9f5113d87ed087b551971e7191eab8cb1b30c700a9b4",
+    "patch": false
+  },
+  {
+    "name": "payroll_opening_levy_source_allocation_guard",
+    "source": "0719_payroll_opening_levy_source_authority.sql",
+    "sha256": "2198ea095797dc636e0ef9aef75a39aec1a827a83dbefbfbdd432c215dd9d144",
+    "newSha256": "2198ea095797dc636e0ef9aef75a39aec1a827a83dbefbfbdd432c215dd9d144",
+    "patch": false
+  },
+  {
+    "name": "payroll_opening_levy_source_authority_guard",
+    "source": "0719_payroll_opening_levy_source_authority.sql",
+    "sha256": "4ccd08c0a829864e2ffc525bf245988f665cab3bed59bb352684ce8088be04dd",
+    "newSha256": "4ccd08c0a829864e2ffc525bf245988f665cab3bed59bb352684ce8088be04dd",
+    "patch": false
+  },
+  {
+    "name": "historical_translation_basis_guard",
+    "source": "0722_historical_translation_contribution_evidence.sql",
+    "sha256": "9ebae1c5c7ad6e66f696fa8ba90a53d80c740d7c41b5f358ad9ce51e0d176560",
+    "newSha256": "9ebae1c5c7ad6e66f696fa8ba90a53d80c740d7c41b5f358ad9ce51e0d176560",
+    "patch": false
+  },
+  {
+    "name": "historical_translation_layer_guard",
+    "source": "0722_historical_translation_contribution_evidence.sql",
+    "sha256": "35877a46a3e2069bb7c79ed45257bf60a9580560c5fa020fc40af02392d10cfa",
+    "newSha256": "35877a46a3e2069bb7c79ed45257bf60a9580560c5fa020fc40af02392d10cfa",
+    "patch": false
+  },
+  {
+    "name": "historical_translation_source_retention",
+    "source": "0722_historical_translation_contribution_evidence.sql",
+    "sha256": "fd6e7437fa4e4bce97e809839cea83e56c165995ccb6a077af85112243b05786",
+    "newSha256": "fd6e7437fa4e4bce97e809839cea83e56c165995ccb6a077af85112243b05786",
+    "patch": false
+  },
+  {
+    "name": "historical_translation_file_retention",
+    "source": "0722_historical_translation_contribution_evidence.sql",
+    "sha256": "ee8035d28335d3c8c27506cbcbbaa8efae0e3151dd32f0b5a00885590ded292b",
+    "newSha256": "ee8035d28335d3c8c27506cbcbbaa8efae0e3151dd32f0b5a00885590ded292b",
+    "patch": false
+  },
+  {
     "name": "account_group_member_scope_guard",
     "source": "0081_account_group_member_dimension_uniqueness.sql",
     "sha256": "b8db48d7a8cdb9c49acae2c77d6e6a704b48048fc65dfaf990de31548ff78c07",
@@ -995,6 +1044,13 @@ export const TENANT_RETIREMENT_GUARDS = [
     "patch": true
   },
   {
+    "name": "pay_component_statutory_treatment_preserve_committed",
+    "source": "0720_pay_component_statutory_treatment.sql",
+    "sha256": "40bd732037695a675d574e2ce48e86331991392bc5565504000f3d3974fb6ed4",
+    "newSha256": "40bd732037695a675d574e2ce48e86331991392bc5565504000f3d3974fb6ed4",
+    "patch": false
+  },
+  {
     "name": "payment_event_immutable",
     "source": "0001_baseline.sql",
     "sha256": "2ffa9522f5e2aea0f0d05d49d371b4f25038fdd8b7efdf0532590f7d27df1170",
@@ -1031,10 +1087,10 @@ export const TENANT_RETIREMENT_GUARDS = [
   },
   {
     "name": "payroll_employee_employer_assignment_guard",
-    "source": "0568_payroll_employee_employer_assignments.sql",
-    "sha256": "7c17a9a116a5c08e97e7baee28a1b17f4f2275deb3747ec627117a12e921ad3a",
-    "newSha256": "7918f607fec3e0c80ff92d2a41e23e2775cb2de98cef017993ad2a7a5b6681ca",
-    "patch": true
+    "source": "0720_pay_component_statutory_treatment.sql",
+    "sha256": "f1474d009dd0e9276be0c52c5e7bf93c7ef633f72e52e250d60facc82d8641f3",
+    "newSha256": "f1474d009dd0e9276be0c52c5e7bf93c7ef633f72e52e250d60facc82d8641f3",
+    "patch": false
   },
   {
     "name": "payroll_holiday_allocation_audit",
@@ -1620,6 +1676,48 @@ export const TENANT_RETIREMENT_GUARDS = [
 ] as const;
 
 export const TENANT_RETIREMENT_GUARD_ATTRIBUTES = [
+  {
+    "name": "payroll_opening_levy_opening_source_guard",
+    "config": [
+      "search_path=public,pg_catalog"
+    ]
+  },
+  {
+    "name": "payroll_opening_levy_source_allocation_guard",
+    "config": [
+      "search_path=public,pg_catalog"
+    ]
+  },
+  {
+    "name": "payroll_opening_levy_source_authority_guard",
+    "config": [
+      "search_path=public,pg_catalog"
+    ]
+  },
+  {
+    "name": "historical_translation_basis_guard",
+    "config": [
+      "search_path=pg_catalog,public"
+    ]
+  },
+  {
+    "name": "historical_translation_layer_guard",
+    "config": [
+      "search_path=pg_catalog,public"
+    ]
+  },
+  {
+    "name": "historical_translation_source_retention",
+    "config": [
+      "search_path=pg_catalog,public"
+    ]
+  },
+  {
+    "name": "historical_translation_file_retention",
+    "config": [
+      "search_path=pg_catalog,public"
+    ]
+  },
   {
     "name": "account_group_member_scope_guard",
     "config": []
@@ -2257,6 +2355,12 @@ export const TENANT_RETIREMENT_GUARD_ATTRIBUTES = [
     "config": []
   },
   {
+    "name": "pay_component_statutory_treatment_preserve_committed",
+    "config": [
+      "search_path=pg_catalog,public"
+    ]
+  },
+  {
     "name": "payment_event_immutable",
     "config": []
   },
@@ -2708,6 +2812,55 @@ export const TENANT_RETIREMENT_GUARD_ATTRIBUTES = [
 
 export const TENANT_RETIREMENT_TRIGGER_CONTRACTS = [
   {
+    "table": "payroll_opening_account_bases",
+    "trigger": "payroll_opening_levy_source_account_bases_guard",
+    "function": "payroll_opening_levy_opening_source_guard"
+  },
+  {
+    "table": "payroll_opening_sui_wages",
+    "trigger": "payroll_opening_levy_source_sui_wages_guard",
+    "function": "payroll_opening_levy_opening_source_guard"
+  },
+  {
+    "table": "payroll_opening_levy_source_allocations",
+    "trigger": "payroll_opening_levy_source_allocation_guard",
+    "function": "payroll_opening_levy_source_allocation_guard"
+  },
+  {
+    "table": "payroll_opening_levy_source_authorities",
+    "trigger": "payroll_opening_levy_source_authority_guard",
+    "function": "payroll_opening_levy_source_authority_guard"
+  },
+  {
+    "table": "journal_lines",
+    "trigger": "historical_translation_line_retention",
+    "function": "historical_translation_source_retention"
+  },
+  {
+    "table": "journal_entries",
+    "trigger": "historical_translation_entry_retention",
+    "function": "historical_translation_source_retention"
+  },
+  {
+    "table": "file_versions",
+    "trigger": "historical_translation_version_retention",
+    "function": "historical_translation_file_retention"
+  },
+  {
+    "table": "file_blobs",
+    "trigger": "historical_translation_blob_retention",
+    "function": "historical_translation_file_retention"
+  },
+  {
+    "table": "historical_translation_contributions",
+    "trigger": "historical_translation_basis_guard",
+    "function": "historical_translation_basis_guard"
+  },
+  {
+    "table": "historical_translation_layers",
+    "trigger": "historical_translation_layer_guard",
+    "function": "historical_translation_layer_guard"
+  },  {
     "table": "account_translation_policies",
     "trigger": "account_translation_policies_immutable",
     "function": "financial_policy_version_immutable"
@@ -3511,6 +3664,11 @@ export const TENANT_RETIREMENT_TRIGGER_CONTRACTS = [
     "table": "pay_component_earning_classifications",
     "trigger": "pay_component_earning_classifications_protect_parent",
     "function": "pay_component_earning_classifications_prevent_orphan_delete"
+  },
+  {
+    "table": "pay_component_statutory_treatments",
+    "trigger": "pay_component_statutory_treatment_preserve_committed",
+    "function": "pay_component_statutory_treatment_preserve_committed"
   },
   {
     "table": "payroll_work_location_allocations",

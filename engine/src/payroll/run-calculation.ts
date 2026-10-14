@@ -398,6 +398,7 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
                -- Aliased, because prof.* below already carries a "country".
                p.subsidiary_id as employee_subsidiary_id,
                emp_sub.country as employee_subsidiary_country,
+               public.payroll_worker_comp_group_at(p.org_id, p.id, ${run.pay_date}::date)::text as resolved_worker_comp_group_id,
                ${effectiveFilingAccountSql("prof")} as effective_filing_account_id,
                filing_acct.country as filing_account_country,
                filing_acct.account_number as filing_account_number,
@@ -456,9 +457,10 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
     // wherever the operator has not mapped the slot yet.
     await ensurePackSlotRoleAccounts(tx, orgId, actorId, runContext.country);
 
-    const components = (await tx.execute<Record<string, unknown>>(sql`
+    const componentRows = (await tx.execute<Record<string, unknown>>(sql`
       select * from pay_components where org_id = ${orgId} and is_active order by sequence
-    `));
+    `)).rows;
+    const components = { rows: componentRows };
     // Country-scoped resolution (0189): two packs may each own one
     // `system_key` (CA and JP both declare income_tax), so the run resolves
     // only its own pack's rows plus the shared NULL-country baseline. Without

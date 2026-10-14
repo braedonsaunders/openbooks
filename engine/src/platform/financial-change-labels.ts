@@ -16,6 +16,7 @@ export const FINANCIAL_CHANGE_OPERATION_LABELS: Record<string, string> = {
   group_valuation: "Group valuation",
   net_investment_oci_reversal: "Net-investment FX correction",
   net_investment_oci: "Net-investment FX assessment",
+  historical_translation_contribution: "Historical translation contribution evidence",
   loss_of_control: "Loss of control",
   reversal: "Reversal",
   bom_revision_activation: "Bill of materials revision approval",

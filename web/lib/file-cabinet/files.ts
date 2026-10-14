@@ -1,9 +1,10 @@
+import type { FileViewer } from '@openbooks/engine/records/file-cabinet-access'
 import { createCabinetFile } from '@openbooks/engine/platform/file-ingestion'
 /** Split from web/lib/file-cabinet.ts; moved without behavior changes. */
 import 'server-only'
 import { enqueueCabinetCleanup, deriveFileType } from './shared'
-import { type FileViewer, type FolderNode, type FileMeta, type FileDetail, type FileVersion, type FileAttachmentLink } from './types'
-import { deriveExtension, resolveReadScope, visibleFolderPredicate, visibleFilePredicate, recordTargetVisiblePredicate, recordScopeFilePredicate, liveFilePredicate, visibleFileRowPredicate, recordScopeFolderPredicate } from './visibility'
+import { type FolderNode, type FileMeta, type FileDetail, type FileVersion, type FileAttachmentLink } from './types'
+import { deriveExtension, resolveReadScope, visibleFolderPredicate, visibleFilePredicate, recordTargetVisiblePredicate, recordScopeFilePredicate, liveFilePredicate, visibleFileRowPredicate, recordScopeFolderPredicate } from '@openbooks/engine/records/file-cabinet-access'
 import { type FileMutationAudit, viewerFileGate, viewerFolderGate, lockCabinetAuthorization, runMutation } from './mutation'
 import { createHash } from 'node:crypto'
 import { sql, type SQL } from 'drizzle-orm'
@@ -637,6 +638,12 @@ export function retainedFileEvidence(orgId: string, fileId: SQL): SQL {
     or exists (
       select 1 from payroll_opening_employer_authorities authority
        where authority.org_id=${orgId} and authority.source_file_id=${fileId}
+    ) or exists (
+      select 1 from payroll_opening_levy_source_authorities levy
+       where levy.org_id=${orgId} and levy.source_file_id=${fileId}
+    ) or exists (
+      select 1 from historical_translation_layers layer
+       where layer.org_id=${orgId} and layer.source_file_id=${fileId}
     ) or exists (
       select 1 from payroll_roe_historical_periods rh
        where rh.source_file_id = ${fileId} and rh.org_id = ${orgId})

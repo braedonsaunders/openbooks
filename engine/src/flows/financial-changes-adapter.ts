@@ -11,6 +11,7 @@ import { canonicalJson } from "../platform/canonical-json.ts";
 import {
   ACCOUNT_MERGE_OPERATION,
   ADJUDICATED_HOLIDAY_HOURS_OPERATION,
+  HISTORICAL_TRANSLATION_CONTRIBUTION_OPERATION,
   MANUFACTURING_SCRAP_RESTATEMENT_OPERATION,
   MANUFACTURING_STANDARD_ROLLUP_OPERATION,
   MANUFACTURING_LOSS_DISPOSITION_OPERATION,
@@ -21,8 +22,12 @@ import {
   financialChangeInboxLabel,
   loadFinancialChange,
   loadFinancialChangeSubjectLabel,
+  type FinancialChange,
 } from "../platform/financial-changes.ts";
 import { ScopeNotFoundError } from "../organization/subsidiary-scope.ts";
+import { isUuid } from "../platform/uuid.ts";
+import { requireNativeFileReadAuthority } from "../records/file-read-authority.ts";
+import { lockCabinetAuthorization } from "../records/file-cabinet-access.ts";
 import { BomPolicyError, applyApprovedBomRevision, assertBomRevisionAuthority, readBomRecipe } from "../inventory/bom-policy.ts";
 import {
   EVENT_SOURCE_OPTIONS,
@@ -36,6 +41,8 @@ async function assertAccountingSubjectFeatures(orgId: string, subjectId: string,
     throw new FinancialChangeFeatureError('Turn on Payroll in Company Settings → Features before submitting or approving unpaid holiday pay')
   if(domain==='consolidation' && operation==='net_investment_oci' && (!await lockAndCheckOrgFeature(db,orgId,'multiSubsidiary') || !await lockAndCheckOrgFeature(db,orgId,'multiCurrency')))
     throw new FinancialChangeFeatureError('Turn on Multi-Subsidiary and Multi-Currency in Company Settings → Features before submitting or approving a net-investment FX assessment')
+  if (domain==='consolidation' && operation===HISTORICAL_TRANSLATION_CONTRIBUTION_OPERATION && !await lockAndCheckOrgFeature(db,orgId,'multiCurrency'))
+    throw new FinancialChangeFeatureError('Turn on Multi-Currency in Company Settings → Features before submitting or approving historical translation evidence')
   if (domain==='sales' && !await lockAndCheckOrgFeature(db,orgId,'dropShipping')) throw new FinancialChangeFeatureError('Turn on Drop Shipping in Company Settings → Features before submitting or approving a control assessment')
   if (domain==='revenue' && operation==='expected_breakage_estimate' && (!await lockAndCheckOrgFeature(db,orgId,'usageBilling') || !await lockAndCheckOrgFeature(db,orgId,'revenueRecognition')))
     throw new FinancialChangeFeatureError('Turn on Usage Billing and Revenue Recognition in Company Settings → Features before submitting or approving a breakage estimate')
@@ -45,6 +52,38 @@ async function assertAccountingSubjectFeatures(orgId: string, subjectId: string,
   const project = (await db.execute<{project_id:string|null}>(sql`select project_id from provision_obligations where org_id=${orgId} and id=${subjectId}`)).rows[0]?.project_id
   if (project && !await lockAndCheckOrgFeature(db,orgId,'projects'))
     throw new FinancialChangeFeatureError('Turn on Projects in Company Settings → Features before submitting or approving this construction forecast')
+}
+
+async function assertHistoricalTranslationDecisionSubject(orgId: string, actorId: string, change: FinancialChange): Promise<void> {
+  const required = change.payload.requiredSubsidiaryIds;
+  if (!Array.isArray(required) || required.length !== 1 || required[0] !== change.subsidiary_id)
+    throw new Error('Historical translation evidence must bind exactly its source legal entity; reject the malformed proposal and submit a new one.');
+  const evidence = change.payload.evidence;
+  const instruction = evidence && typeof evidence==='object' && !Array.isArray(evidence)
+    ? (evidence as Record<string,unknown>).instruction : null;
+  const layers = instruction && typeof instruction==='object' && !Array.isArray(instruction)
+    ? (instruction as Record<string,unknown>).layers : null;
+  if (!Array.isArray(layers) || layers.length===0 || layers.length>200)
+    throw new Error('Historical translation evidence has no complete source layers; reject the malformed proposal and submit a new one.');
+  for (const layer of layers) {
+    const source = layer && typeof layer==='object' && !Array.isArray(layer) ? (layer as Record<string,unknown>).source : null;
+    const fileId = source && typeof source==='object' && !Array.isArray(source) ? (source as Record<string,unknown>).fileId : null;
+    if (!isUuid(fileId)) throw new Error('Historical translation evidence must identify each retained source file; reject the malformed proposal and submit a new one.');
+    await requireNativeFileReadAuthority({orgId,actorId,fileId},db);
+  }
+  await lockActorCommandAuthority(db,orgId,actorId,change.subsidiary_id,'close.run');
+  const source = await db.execute(sql`
+    select line.id
+      from journal_lines line
+      join journal_entries entry on entry.org_id=line.org_id and entry.id=line.entry_id
+      join accounts account on account.org_id=line.org_id and account.id=line.account_id
+     where line.org_id=${orgId} and line.id=${change.subject_id}
+       and line.subsidiary_id=${change.subsidiary_id}
+       and entry.status in ('posted','reversed') and account.type='equity'
+     for share of line,entry,account
+  `);
+  if (source.rows.length !== 1)
+    throw new Error('The historical translation source is not a retained equity posting in this legal entity; reject the proposal and review its source journal.');
 }
 
 export const FINANCIAL_CHANGE_SUBJECT_KIND = "financial_change";
@@ -136,6 +175,12 @@ export const financialChangesFlowAdapter: FlowSubjectAdapter = defineTableSubjec
   },
   profile: financialChangeSubjectProfile,
   selfApprovalPolicy: "configurable",
+  async lockDecisionResources(orgId, id) {
+    const row = (await db.execute<{ domain: string; operation: string }>(sql`
+      select domain,operation from financial_changes where org_id=${orgId} and id=${id}`)).rows[0];
+    if (row?.domain==='consolidation' && row.operation===HISTORICAL_TRANSLATION_CONTRIBUTION_OPERATION)
+      await lockCabinetAuthorization(db,orgId);
+  },
   async loadContext(id) {
     // RLS supplies the org; this adapter never widens the active tenant scope.
     const row = (
@@ -144,7 +189,7 @@ export const financialChangesFlowAdapter: FlowSubjectAdapter = defineTableSubjec
       )
     ).rows[0];
     if (!row) return null;
-    const change = await loadFinancialChange(db, row.org_id, id);
+    const change = await loadFinancialChange(db, row.org_id, id, { lock: false });
     const subjectLabel = await loadFinancialChangeSubjectLabel(
       db,
       row.org_id,
@@ -198,6 +243,8 @@ export const financialChangesFlowAdapter: FlowSubjectAdapter = defineTableSubjec
     if (row.submitted_by === ctx.userId && !row.self_approval_authorized)
       throw new Error("The retained approval policy does not permit deciding your own submission. Review the gate's self-approval setting in Flows.");
     if (outcome === 'approved') await assertAccountingSubjectFeatures(ctx.orgId,row.subject_id,row.domain,row.operation)
+    if (outcome === 'approved' && row.domain==='consolidation' && row.operation===HISTORICAL_TRANSLATION_CONTRIBUTION_OPERATION)
+      await assertHistoricalTranslationDecisionSubject(ctx.orgId,ctx.userId,row);
     if (row.domain === "ledger" && outcome === "approved") {
       if (row.operation !== ACCOUNT_MERGE_OPERATION) throw new Error("This ledger event is unsupported; reject it and submit a supported proposal.");
       if (!await actorHasPermission(db, ctx.orgId, ctx.userId, "gl.manage"))
@@ -296,12 +343,15 @@ export async function submitFinancialChange(
   return withOrg(orgId, () =>
     withTransactionSavepoint(db, async () => {
       const tx = db;
+      await financialChangesFlowAdapter.lockDecisionResources?.(orgId,id);
       const row = await loadFinancialChange(tx, orgId, id);
       if (row.submitted_by !== actorId)
         throw new Error("only the proposer can submit this accounting event");
       if (row.domain === "payroll" && !await actorHasPermission(tx, orgId, actorId, "payroll.run"))
         throw new Error("Payroll run permission is required to submit an unpaid holiday entitlement.");
       await assertAccountingSubjectFeatures(orgId,row.subject_id,row.domain,row.operation)
+      if (row.domain==='consolidation' && row.operation===HISTORICAL_TRANSLATION_CONTRIBUTION_OPERATION)
+        await assertHistoricalTranslationDecisionSubject(orgId,actorId,row);
       if (row.domain === "manufacturing") {
         const manufacturingScope=await lockActorCommandAuthority(tx,orgId,actorId,row.subsidiary_id,"manufacturing.manage");
         if(row.operation===MANUFACTURING_LOSS_DISPOSITION_OPERATION&&!(await tx.execute(sql`select work.id from mfg_work_orders work where work.org_id=${orgId} and work.id=${row.subject_id} ${subsidiaryVisibleFilter(sql`work.subsidiary_id`,manufacturingScope)} ${orderResourcesVisible(manufacturingScope,'work')} for share of work`)).rows.length) throw new Error('Production work was not found in the proposer’s current scope.');

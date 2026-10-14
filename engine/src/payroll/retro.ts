@@ -52,6 +52,14 @@ export type RetroTriggerSource =
   | "wage_rate"
   /** employee_pay_components — a backdated allowance/deduction assignment. */
   | "pay_component"
+  /** Approved effective-dated compensation package terms. */
+  | "compensation_package"
+  /** Union fringe rates applying to the worker's agreement and classification. */
+  | "union_fringe"
+  /** Effective-dated derived earning rules. */
+  | "derived_earning_rule"
+  /** Recurring cash-earning benefit elections and their plan rules. */
+  | "benefit_election"
   /** Approved hours inside a paid period that no pay run ever claimed. */
   | "unclaimed_time"
   /**

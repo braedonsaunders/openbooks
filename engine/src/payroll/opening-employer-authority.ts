@@ -7,6 +7,7 @@ import {requirePayrollFeature} from './feature-gate.ts';
 import {employeeTaxYearFenceKey,takeEmployeeTaxYearFences} from './fences.ts';
 import {payrollSubsidiaryScopeFilter,type PayrollSubsidiaryScope} from './scope.ts';
 import {PayrollError} from './error.ts';
+import {requireNativeFileReadAuthority} from '../records/file-read-authority.ts';
 export type OpeningEmployerAuthorityInput={orgId:string;actorId:string;openingBalanceId:string;subsidiaryId:string;
  expectedOpeningSha256:string;sourceFileId:string;sourceVersionId:string;sourceSha256:string;sourceReference:string;reason:string;allowedSubsidiaryIds:PayrollSubsidiaryScope};
 /** Qualifies retained source ownership without replacing opening amounts or posted history. */
@@ -19,6 +20,7 @@ export async function qualifyOpeningEmployerAuthority(input:OpeningEmployerAutho
  return withOrgTransaction(input.orgId,async()=>{
   await requirePayrollFeature(db,input.orgId);
   if(!await actorHasPermission(db,input.orgId,input.actorId,'payroll.run'))throw new PayrollError('Payroll run permission is required to qualify opening employer authority');
+  await requireNativeFileReadAuthority({orgId:input.orgId,actorId:input.actorId,fileId:input.sourceFileId},db);
   const authority=await lockActorCommandAuthority(db,input.orgId,input.actorId,input.subsidiaryId,'payroll.run');
   const employer=(await db.execute(sql`select id from subsidiaries where org_id=${input.orgId} and id=${input.subsidiaryId}
     ${payrollSubsidiaryScopeFilter(sql`id`,input.allowedSubsidiaryIds)} ${payrollSubsidiaryScopeFilter(sql`id`,authority)} for share`)).rows;
@@ -84,6 +86,7 @@ export async function readOpeningEmployerContext(input:{orgId:string;actorId:str
   if(rows.length>1)throw new PayrollError('The employee/year opening identity is ambiguous');
   const record=rows[0]??null;
   if(record?.subsidiaryId&&!employers.some(employer=>employer.id===record.subsidiaryId))throw new PayrollError('The qualified opening employer is outside your payroll authority');
+  if(input.sourceFileId)await requireNativeFileReadAuthority({orgId:input.orgId,actorId:input.actorId,fileId:input.sourceFileId},db);
   const source=input.sourceFileId?(await db.execute<{id:string;versionId:string;sha256:string;name:string}>(sql`
    select f.id,v.id as "versionId",v.content_hash as sha256,f.name from files f
    join file_versions v on v.file_id=f.id and v.id=f.current_version_id

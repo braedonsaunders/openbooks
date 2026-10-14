@@ -23,7 +23,7 @@ async function available(tx: Reader): Promise<boolean> {
 
 /** Read explicit dated evidence; pre-installation databases cannot contain these assignments. */
 export async function employeeEmployerAssignmentHistory(tx: Reader, input: {
-  orgId: string; payDate: string; employeePartyIds: readonly string[];
+  orgId: string; payDate: string; employeePartyIds: readonly string[]; lockRows?: boolean;
 }): Promise<EmployerAssignmentSource[]> {
   if (!input.employeePartyIds.length || !await available(tx)) return [];
   return (await tx.execute<EmployerAssignmentSource & Record<string, unknown>>(sql`select id::text, employee_party_id::text as "employeePartyId",
@@ -33,21 +33,28 @@ export async function employeeEmployerAssignmentHistory(tx: Reader, input: {
     from payroll_employee_employer_assignments where org_id=${input.orgId}
       and employee_party_id in (select jsonb_array_elements_text(${JSON.stringify(input.employeePartyIds)}::jsonb)::uuid)
       and ${input.payDate}::date between effective_from and effective_to
-    order by employee_party_id,assignment_kind,id`)).rows;
+    order by employee_party_id,assignment_kind,id
+    ${input.lockRows ? sql`for share` : sql``}`)).rows;
 }
 
-/** Caller owns the employee/year fences before locking these profile revision rows. */
+/** Caller owns employee/year fences before locking the current assignment sources. */
 export async function lockEmployerAssignmentProfiles(tx: Reader, orgId: string, employees: readonly string[]): Promise<void> {
   if (!employees.length || !await available(tx)) return;
   await tx.execute(sql`select id from employee_payroll_profiles where org_id=${orgId}
     and employee_party_id in (select jsonb_array_elements_text(${JSON.stringify(employees)}::jsonb)::uuid)
     order by employee_party_id for share`);
+  await tx.execute(sql`select id from employee_roles where org_id=${orgId}
+    and party_id in (select jsonb_array_elements_text(${JSON.stringify(employees)}::jsonb)::uuid)
+      and is_active
+    order by party_id,updated_at desc,id
+    for share`);
 }
 
 /** Apply historical account metadata before the employee jurisdiction is resolved. */
 export async function applyEmployeeEmployerAssignmentHistory(tx: Reader, orgId: string, payDate: string,
   employees: Record<string, string | null>[]): Promise<void> {
-  const rows = await employeeEmployerAssignmentHistory(tx, { orgId, payDate, employeePartyIds: employees.map(e => e.party_id!) });
+  const rows = await employeeEmployerAssignmentHistory(tx, { orgId, payDate,
+    employeePartyIds: employees.map(e => e.party_id!), lockRows: true });
   for (const employee of employees) {
     const assignments = rows.filter(r => r.employeePartyId === employee.party_id);
     const kinds = new Set<string>();
@@ -57,7 +64,8 @@ export async function applyEmployeeEmployerAssignmentHistory(tx: Reader, orgId: 
       }
       kinds.add(assignment.kind);
       if (assignment.kind === 'worker_comp') {
-        employee.historical_worker_comp_group_id = assignment.workerCompGroupId;
+        // Worker classification is resolved by the shared pay-date selector.
+        continue;
       } else {
         const account = (await tx.execute<{ country: string; account_number: string }>(sql`select country,account_number
           from payroll_filing_accounts where org_id=${orgId} and id=${assignment.filingAccountId} for share`)).rows[0];
@@ -73,10 +81,12 @@ export async function applyEmployeeEmployerAssignmentHistory(tx: Reader, orgId: 
 /** Append reviewed historical evidence, never overwrite today's settings or posted payroll. */
 export async function recordHistoricalEmployerAssignment(input: {
   orgId: string; actorId: string; employeePartyId: string; kind: EmployerAssignmentKind;
-  assignmentId: string; expectedCurrentId: string | null; effectiveFrom: string; effectiveTo: string;
+  assignmentId: string | null; expectedCurrentId: string | null; effectiveFrom: string; effectiveTo: string;
   sourceReference: string; reason: string; allowedSubsidiaryIds: PayrollSubsidiaryScope; dryRun: boolean;
 }, executor?: SqlExecutor): Promise<{ changed: boolean; id: string | null }> {
-  if (![input.employeePartyId,input.assignmentId].every(isUuid) || input.expectedCurrentId !== null && !isUuid(input.expectedCurrentId)
+  if (!isUuid(input.employeePartyId) || input.assignmentId !== null && !isUuid(input.assignmentId)
+    || input.kind === 'filing_account' && input.assignmentId === null
+    || input.expectedCurrentId !== null && !isUuid(input.expectedCurrentId)
     || !['filing_account','worker_comp'].includes(input.kind) || input.allowedSubsidiaryIds === undefined || typeof input.dryRun !== 'boolean') {
     throw new PayrollError('Choose native employee and assignment IDs, declare the reviewed current value, and specify your legal-entity scope.');
   }
@@ -102,12 +112,15 @@ export async function recordHistoricalEmployerAssignment(input: {
     if (!profile?.subsidiary_id) throw new PayrollError('Save this employee’s payroll profile and legal employer before recording an assignment.');
     let current=profile.filing_account_id;
     if (input.kind==='worker_comp') {
-      const role=(await tx.execute<{ worker_comp_group_id: string | null }>(sql`select worker_comp_group_id from employee_roles
-        where org_id=${input.orgId} and party_id=${input.employeePartyId} order by is_active desc,id limit 1 for share`)).rows[0];
-      if (!role) throw new PayrollError('Save the native employee role before recording its historical worker-compensation assignment.');
-      current=role.worker_comp_group_id;
+      const role=(await tx.execute<{ id: string }>(sql`select id from employee_roles
+        where org_id=${input.orgId} and party_id=${input.employeePartyId} and is_active
+        order by updated_at desc,id limit 1 for share`)).rows[0];
+      if (!role) throw new PayrollError('Save an active native employee role before recording its historical worker-compensation assignment.');
+      current=(await tx.execute<{ worker_comp_group_id: string | null }>(sql`
+        select public.payroll_worker_comp_group_at(${input.orgId}::uuid, ${input.employeePartyId}::uuid, current_date)::text as worker_comp_group_id
+      `)).rows[0]?.worker_comp_group_id ?? null;
     }
-    const prior=(await tx.execute<{ id: string; effective_from: string; effective_to: string; target: string; source_reference: string; reason: string; expected_current_id: string | null }>(sql`
+    const prior=(await tx.execute<{ id: string; effective_from: string; effective_to: string; target: string | null; source_reference: string; reason: string; expected_current_id: string | null }>(sql`
       select id,effective_from::text,effective_to::text,coalesce(filing_account_id,worker_comp_group_id)::text as target,source_reference,reason,expected_current_id::text
       from payroll_employee_employer_assignments where org_id=${input.orgId} and employee_party_id=${input.employeePartyId}
         and assignment_kind=${input.kind} and effective_from<=${input.effectiveTo}::date and effective_to>=${input.effectiveFrom}::date for share`)).rows;
@@ -117,10 +130,10 @@ export async function recordHistoricalEmployerAssignment(input: {
       throw new PayrollError('Another employer assignment covers these dates — review its evidence; this import does not overwrite overlapping history.');
     }
     if (current!==input.expectedCurrentId) throw new PayrollError('The current employer assignment differs from the reviewed value — export and preview the historical assignment again.');
-    const target = input.kind==='filing_account'
+    const target = input.assignmentId === null ? [] : input.kind==='filing_account'
       ? (await tx.execute(sql`select id from payroll_filing_accounts where org_id=${input.orgId} and id=${input.assignmentId} and country=${profile.country} and (subsidiary_id is null or subsidiary_id=${profile.subsidiary_id}) and is_active for share`)).rows
       : (await tx.execute(sql`select id from worker_comp_groups where org_id=${input.orgId} and id=${input.assignmentId} and is_active for share`)).rows;
-    if (target.length!==1) throw new PayrollError('Choose an active assignment in this organization, the employee’s own legal employer and payroll country.');
+    if (input.assignmentId !== null && target.length!==1) throw new PayrollError('Choose an active assignment in this organization, the employee’s own legal employer and payroll country.');
     if ((await tx.execute(sql`select s.id from pay_stubs s join pay_runs r on r.org_id=s.org_id and r.document_id=s.pay_run_document_id
       join documents d on d.org_id=r.org_id and d.id=r.document_id where s.org_id=${input.orgId} and s.employee_party_id=${input.employeePartyId}
         and r.run_status='committed' and d.status<>'voided' and r.pay_date between ${input.effectiveFrom}::date and ${input.effectiveTo}::date limit 1`)).rows.length) {

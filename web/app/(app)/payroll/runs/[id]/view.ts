@@ -1,6 +1,7 @@
 import 'server-only'
 
 import { PayrollError } from '@openbooks/engine/payroll/error'
+import { payrollAnomalyFinalizeCheck } from '@openbooks/engine/payroll/anomaly-finalize-gate'
 import { parsePayRunCalculationErrors, parsePayRunRefusalAcknowledgement, payRunCalculationRefusals, payRunRefusalDigest, type PayRunCalculationError, type PayRunRefusalAcknowledgement } from "@openbooks/engine/payroll/run-calculation-evidence";
 import {
   lockAndCheckPayrollRunPopulation,
@@ -40,6 +41,7 @@ import { documentKindPermissions, postPermission } from '@openbooks/engine/recor
 import { subsidiaryUiOptions } from '../../../../../lib/subsidiaries'
 import { requireFeatureEnabled } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
+import { parseBankCashInputEvidence } from '@openbooks/engine/payroll/run-bank-cash-evidence'
 import { groupTabs } from '../../../../../components/module-home/group-tabs'
 import type {
   AdjustmentRow,
@@ -391,12 +393,24 @@ export async function loadPayRunWizard(
          where a.org_id = ${orgId} and a.pay_run_document_id = ${id}
          order by p.display_name, a.created_at`),
       db.execute(sql`
-        select id, code, name, kind from pay_components
-         where org_id = ${orgId} and is_active
-           and (system_key is null or system_key in ('base_pay','overtime','allowance','bonus','vacation_payout'))
-         order by sequence, code`),
+        select component.id, component.code, component.name, component.kind,
+               exists(select 1 from entitlement_plans plan
+                 where plan.org_id=component.org_id and plan.is_active and plan.unit='hours'
+                   and component.kind='earning' and component.payment_kind='cash'
+                   and (plan.payout_component_id=component.id or plan.deposit_component_id=component.id)) as bank_cash_component
+          from pay_components component
+         where component.org_id = ${orgId} and component.is_active
+           and (component.system_key is null or component.system_key in ('base_pay','overtime','allowance','bonus','vacation_payout')
+             or exists(select 1 from entitlement_plans plan
+               where plan.org_id=component.org_id and plan.is_active and plan.unit='hours'
+                 and component.kind='earning' and component.payment_kind='cash'
+                 and (plan.payout_component_id=component.id or plan.deposit_component_id=component.id)))
+         order by component.sequence, component.code`),
     ]))
-    const adjustmentRows = adjustmentsRes.rows as unknown as AdjustmentRow[]
+    const adjustmentRows = adjustmentsRes.rows.map((row) => {
+      const evidence = parseBankCashInputEvidence(typeof row.note === 'string' ? row.note : null)
+      return (evidence ? { ...row, note: `${evidence.reason} · ${evidence.sourceReference}${evidence.rate ? ` · ${evidence.rate}/h` : ''}` } : row) as unknown as AdjustmentRow
+    })
     const componentRows = adjustableRes.rows as unknown as ComponentOption[]
 
     // A termination run's Finish step owns the pack-declared SEPARATION
@@ -461,16 +475,9 @@ export async function loadPayRunWizard(
     // a restricted caller cannot select an account the funding panel omitted.
     const bankAccounts = funding.accounts.map(({ id, label }) => ({ id, label }))
 
-    // The review step shows the blocking count with a link to the checks
-    // queue, and the commit button stays off while it is nonzero. Payroll
-    // checks ride Payroll, so they are always on here. The flags table is
-    // read here (count only); the route gate re-checks on commit, so a
-    // flag raised after this render still refuses.
-    const blocks = await db.execute<{ n: string }>(sql`
-      select count(*)::text as n from payroll_anomaly_flags
-       where org_id = ${orgId} and severity = 'block' and status in ('open', 'acknowledged')
-         and pay_period_from <= ${run.period_end}::date and pay_period_to >= ${run.period_start}::date`)
-    const anomalyBlocks = Number(blocks.rows[0]?.n ?? 0)
+    // Match the native commit gate: only open blockers for this run's
+    // employment roster, schedule and legal entity keep the action disabled.
+    const anomalyBlocks = (await payrollAnomalyFinalizeCheck(db, { orgId, documentId: id })).openBlockCount
 
     const moduleTabs = await groupTabs('payroll', '/payroll/runs', { orgId })
 

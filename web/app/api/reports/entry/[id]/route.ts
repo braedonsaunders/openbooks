@@ -10,6 +10,7 @@ import { loadJournalDoc } from '@/lib/journals'
 import { loadFieldDefs } from '@/lib/custom-fields'
 import { customSegmentOptions } from '@/lib/segments'
 import { resolveFormLayout } from '@/lib/customization/resolve'
+import { isFeatureEnabled } from '@/lib/features'
 
 
 export const runtime = 'nodejs'
@@ -72,6 +73,7 @@ export const GET = defineRoute({
     if (!entry) return notFound("record")
     const lines = (await db.execute<Record<string, unknown>>(sql`
         select l.line_number, l.amount, l.memo, l.is_open_item,
+               ${journalDrawer ? sql`case when a.type='equity' and e.status in ('posted','reversed') then l.id end as source_line_id,` : sql``}
                l.subsidiary_id, sub.name as subsidiary,
                -- The entry's book measures the line: a secondary book may carry the subsidiary in its own currency.
                public.accounting_book_currency(l.org_id, e.book_id, l.subsidiary_id) as functional_currency,
@@ -129,7 +131,7 @@ export const GET = defineRoute({
           entryId: _entryId, accountId: _accountId, partyId: _partyUuid, payrollOrigin: _payrollOrigin,
           ...rest
         } = row
-        return rest
+        return journalDrawer && !canSeePayroll && row.payrollOrigin ? { ...rest, source_line_id: null } : rest
       })
     // Only the current journal document offers document actions. Historical
     // generations and subledger postings remain immutable ledger snapshots.
@@ -158,6 +160,7 @@ export const GET = defineRoute({
     return NextResponse.json({
       entry: restrictedPayroll ? { ...entry, custom: {} } : entry, lines: shaped,
       ...(journalDrawer ? { sourceJournal: journalHeader, canPost: Boolean(currentJournal) && can(authz, 'gl.post'),
+        canAssessHistoricalTranslation: can(authz, 'close.run') && await isFeatureEnabled(authz.user.orgId, 'multiCurrency'),
         currentEntryId: !currentJournal ? sourceJournal?.doc.entry_id ?? null : null,
         headerDefs, lineDefs, segments, layout: form?.layout } : {}),
     })

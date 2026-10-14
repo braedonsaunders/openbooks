@@ -1,4 +1,6 @@
-import { consolidateAssetTransfers } from "./asset-transfers.ts";import { sql } from "drizzle-orm";
+import { consolidateAssetTransfers } from "./asset-transfers.ts";import { sql, type SQL } from "drizzle-orm";
+import { historicalTranslationAmounts } from "./historical-translation-reader.ts";
+import { HistoricalTranslationEvidenceError } from "../journal/historical-translation-evidence.ts";
 import { periodLockBlocksPosting, type PeriodClosedDetails } from "../periods/period-policy.ts";
 import { CurrencyError, updateFxRate } from "../fx/currencies.ts";
 import { averageSpotRateWithinAgeLimit, closingSpotRateWithinAgeLimit } from "../fx/rate-age-policy.ts";
@@ -124,6 +126,19 @@ export function isSerializationConflict(error: unknown): boolean {
 
 /** Anything a phase can run against: the pooled `db` or one open transaction. */
 type Runner = Pick<typeof db, "execute">;
+
+function consolidationTranslationMethod(reference: SQL): SQL {
+  return sql`coalesce(public.account_translation_rate_type(e.org_id,a.id,${reference},false),
+    case when a.type in ('income','income_other','cogs','expense','expense_other','expense_deferred') then 'average'
+      when a.type='equity' then 'historical' else 'current' end)`;
+}
+
+function consolidationTranslationAmount(method: SQL, historical: SQL, presentationCurrency: string): SQL {
+  return sql`case when l.amount=0 then 0::numeric when a.type='equity' and (${method})='historical' then ${historical}
+    else l.amount * (case when source_sub.base_currency=${presentationCurrency} then 1::numeric
+      when (${method})='average' then consolidated.average_rate
+      when (${method})='historical' then consolidated.historical_rate else consolidated.current_rate end) end`;
+}
 
 /** Acquisition identity spans periods, so competing generations need predicate
  * conflict detection, not only the per-period advisory locks. Own this boundary:
@@ -481,22 +496,10 @@ export async function runOwnershipConsolidationIn(
     // The policy window is inclusive; acquisition_date is guaranteed to be
     // on or before effective_from by the ownership policy constraint.
     //
-    // Every adjustment posts in the elimination subsidiary's currency, so a
-    // foreign subsidiary's functional-currency activity is translated line by
-    // line through the period's consolidated rates with the SAME policy the
-    // elimination phase and statement translation apply: flow (P&L) accounts
-    // at the period average rate, everything else at the period-end current
-    // rate. A same-currency subsidiary translates at par. A missing rate is
-    // refused outright — summing untranslated amounts would silently allocate
-    // NCI and equity income in the wrong currency.
-    const periodActivity = await tx.execute<{
-      profit: string;
-      distributions: string;
-      missingRate: boolean | null;
-    }>(sql`
-      select coalesce(-sum(round(l.amount * translation.rate, 4)) filter (where a.type in ('income','income_other','cogs','expense','expense_other','expense_deferred')),0)::text as profit,
-             coalesce(sum(round(l.amount * translation.rate, 4)) filter (where l.account_id=${interest.distribution_account_id}),0)::text as distributions,
-             bool_or(translation.rate is null) as "missingRate"
+    // Contributions and distributions retain the source's approved historical
+    // basis; operating activity uses its effective period-rate policy.
+    const activityMethod = consolidationTranslationMethod(sql`e.posting_date`);
+    const activitySource = sql`
        from journal_lines l join journal_entries e on e.id=l.entry_id and e.org_id=l.org_id
         join accounts a on a.id=l.account_id and a.org_id=l.org_id
         join subsidiaries source_sub on source_sub.id=l.subsidiary_id and source_sub.org_id=l.org_id
@@ -505,20 +508,32 @@ export async function runOwnershipConsolidationIn(
          and consolidated.period_id=e.period_id
          and consolidated.from_currency=source_sub.base_currency
          and consolidated.to_currency=${elimination.baseCurrency}
-        cross join lateral (
-          select case
-            when source_sub.base_currency=${elimination.baseCurrency} then 1::numeric
-            when coalesce(public.account_translation_rate_type(e.org_id,a.id,e.posting_date,false),case when a.type in ('income','income_other','cogs','expense','expense_other','expense_deferred') then 'average' else 'current' end)='average' then consolidated.average_rate
-            when public.account_translation_rate_type(e.org_id,a.id,e.posting_date,false)='historical' then consolidated.historical_rate
-            else consolidated.current_rate
-          end as rate
-        ) translation
        where e.org_id=${orgId} and e.book_id=${bookId} and e.status in ('posted','reversed')
          and ${excludePeriodEndJournals(sql`e.origin`)}
          and l.subsidiary_id=${interest.subsidiary_id} and e.period_id=${periodId} and e.posting_date<=${postingDate}
          and e.posting_date between ${interest.effective_from}
              and coalesce(${interest.effective_to}, 'infinity'::date)
+         and (a.type in ('income','income_other','cogs','expense','expense_other','expense_deferred')
+           or l.account_id=${interest.distribution_account_id})`;
+    const historical = await historicalTranslationAmounts(tx, { orgId, presentationCurrency: elimination.baseCurrency,
+      sources: sql`select l.id as "sourceLineId" ${activitySource}
+        and a.type='equity' and l.amount<>0 and (${activityMethod})='historical'` });
+    const activityAmount = consolidationTranslationAmount(activityMethod, historical, elimination.baseCurrency);
+    const periodActivity = await tx.execute<{
+      profit: string; distributions: string; missingRate: boolean | null; missingHistorical: boolean | null;
+    }>(sql`
+      with activity as (
+        select l.account_id,a.type,round(sum(${activityAmount}),4) as total,
+          bool_or((${activityAmount}) is null) as missing,
+          bool_or(a.type='equity' and (${activityMethod})='historical' and l.amount<>0 and (${historical}) is null) as missing_historical
+        ${activitySource} group by l.account_id,a.type
+      )
+      select coalesce(-sum(total) filter (where type in ('income','income_other','cogs','expense','expense_other','expense_deferred')),0)::text as profit,
+        coalesce(sum(total) filter (where account_id=${interest.distribution_account_id}),0)::text as distributions,
+        bool_or(missing) as "missingRate",bool_or(missing_historical) as "missingHistorical" from activity
     `);
+    if (periodActivity.rows[0]!.missingHistorical)
+      throw new HistoricalTranslationEvidenceError("A historical distribution source is unavailable. Reload the consolidation; open the Journal entry → Historical translation tab, obtain Accounting event approval for its retained source and genuine layers, then Apply.");
     if (periodActivity.rows[0]!.missingRate) {
       const source = context.byId.get(interest.subsidiary_id);
       throw new ConsolidationError(
@@ -1299,33 +1314,30 @@ async function runAutoEliminationIn(
               )
             )
        )`;
+  const eliminationMethod = consolidationTranslationMethod(sql`${period.ends_on}::date`);
+  const historical = await historicalTranslationAmounts(tx, { orgId, presentationCurrency: elim.baseCurrency,
+    sources: sql`select l.id as "sourceLineId" ${eliminationSource}
+      and a.type='equity' and l.amount<>0 and (${eliminationMethod})='historical'` });
+  const eliminationAmount = consolidationTranslationAmount(eliminationMethod, historical, elim.baseCurrency);
   const activity = await tx.execute<{
     accountId: string;
     subsidiaryId: string;
     total: string | null;
     missingRate: boolean;
+    missingHistorical: boolean;
   }>(sql`
     select l.account_id as "accountId", l.subsidiary_id as "subsidiaryId",
-           -- One rate per (account, subsidiary) group: the subsidiary's
-           -- currency and the account's type fix it, so the group total is
-           -- translated once rather than rounding line by line.
-           round(sum(l.amount) * max(case
-             when source_sub.base_currency = ${elim.baseCurrency} then 1
-             when coalesce(public.account_translation_rate_type(e.org_id,a.id,${period.ends_on}::date,false),case when a.type in ${flowTypes} then 'average' else 'current' end)='average' then consolidated.average_rate
-             when coalesce(public.account_translation_rate_type(e.org_id,a.id,${period.ends_on}::date,false),'current')='historical' then consolidated.historical_rate
-             else consolidated.current_rate
-           end), 4)::text as total,
-           bool_or(source_sub.base_currency <> ${elim.baseCurrency}
-                   and (case
-                     when coalesce(public.account_translation_rate_type(e.org_id,a.id,${period.ends_on}::date,false),case when a.type in ${flowTypes} then 'average' else 'current' end)='average' then consolidated.average_rate
-                     when coalesce(public.account_translation_rate_type(e.org_id,a.id,${period.ends_on}::date,false),'current')='historical' then consolidated.historical_rate
-                     else consolidated.current_rate
-                   end) is null) as "missingRate"
+           -- Source products remain exact until the account/entity boundary.
+           round(sum(${eliminationAmount}),4)::text as total,
+           bool_or((${eliminationAmount}) is null) as "missingRate",
+           bool_or(a.type='equity' and (${eliminationMethod})='historical' and l.amount<>0 and (${historical}) is null) as "missingHistorical"
       ${eliminationSource}
      group by l.account_id, l.subsidiary_id
-    having sum(l.amount) <> 0
+    having sum(${eliminationAmount}) <> 0 or bool_or((${eliminationAmount}) is null)
         or coalesce(sum(l.amount) filter (where e.period_id = ${periodId} and e.origin <> 'fx_revaluation'), 0) <> 0`);
 
+  if (activity.rows.some(row => row.missingHistorical))
+    throw new HistoricalTranslationEvidenceError("A historical elimination source is unavailable. Reload the consolidation; open the Journal entry → Historical translation tab, obtain Accounting event approval for its retained source and genuine layers, then Apply.");
   const missing = activity.rows.find(
     (row) => row.missingRate || row.total === null,
   );
@@ -1345,12 +1357,7 @@ async function runAutoEliminationIn(
   // consolidated rates.
   const reconciliation = (await tx.execute<{ currency: string; txnAmount: string; translated: string }>(sql`
     select l.currency, sum(l.txn_amount)::text as "txnAmount",
-           round(sum(l.amount) * max(case
-             when source_sub.base_currency = ${elim.baseCurrency} then 1
-             when coalesce(public.account_translation_rate_type(e.org_id,a.id,${period.ends_on}::date,false),case when a.type in ${flowTypes} then 'average' else 'current' end)='average' then consolidated.average_rate
-             when coalesce(public.account_translation_rate_type(e.org_id,a.id,${period.ends_on}::date,false),'current')='historical' then consolidated.historical_rate
-             else consolidated.current_rate
-           end), 4)::text as translated
+           round(sum(${eliminationAmount}),4)::text as translated
       ${eliminationSource}
        and e.period_id = ${periodId} and e.origin <> 'fx_revaluation'
        and not l.is_currency_adjustment

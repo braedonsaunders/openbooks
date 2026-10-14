@@ -1,4 +1,5 @@
-import { translationMultiplier, assertRateCoverage, type StatementSubsidiaryContext } from '../statement-matrix'
+import { translationMultiplier, statementHistoricalAmounts, statementTranslatedAmount, assertRateCoverage, type StatementSubsidiaryContext } from '../statement-matrix'
+import { HistoricalTranslationEvidenceError } from '@openbooks/engine/journal/historical-translation-evidence'
 import "server-only";
 import { sql } from "drizzle-orm";
 import { functionalReportReader } from "./currency-basis";
@@ -124,7 +125,7 @@ export async function cashFlowIndirect(
   subsidiary?: StatementSubsidiaryContext,
 ): Promise<CashFlowIndirectResult> {
   const resolvedOrgId = await resolveOrgId(orgId);
-  const translated = !!(subsidiary?.rates?.length || subsidiary?.weights?.length || subsidiary?.controlLosses?.length)
+  const translated = !!(subsidiary?.presentationCurrency || subsidiary?.rates?.length || subsidiary?.weights?.length || subsidiary?.controlLosses?.length)
   const openingDate = new Date(`${from}T00:00:00Z`)
   openingDate.setUTCDate(openingDate.getUTCDate()-1)
   const openingAsOf = openingDate.toISOString().slice(0,10)
@@ -132,7 +133,13 @@ export async function cashFlowIndirect(
     assertRateCoverage(subsidiary!,[{from,to}], 'flow')
     assertRateCoverage(subsidiary!,[{from:openingAsOf,to:openingAsOf},{from:to,to}], 'balance')
   }
-  const flowAmount = sql`l.amount * ${translationMultiplier('flow',subsidiary,undefined,true)}`
+  const historical = await statementHistoricalAmounts(resolvedOrgId, subsidiary, 'flow', sql`e.posting_date`, sql`
+    e.posting_date between ${from}::date and ${to}::date
+    and e.book_id in ${statementBookIdsExpr(resolvedOrgId, bookId)} and ${dimWhere(dims)}
+    and e.origin<>'translation'
+    and exists(select 1 from journal_lines bank join accounts bank_account on bank_account.org_id=bank.org_id and bank_account.id=bank.account_id
+      where bank.org_id=e.org_id and bank.entry_id=e.id and bank_account.type='asset_bank')`, true)
+  const flowAmount = statementTranslatedAmount('flow', subsidiary, historical, undefined, true)
   const openingAmount = sql`l.amount * ${translationMultiplier('balance',subsidiary,openingAsOf,true)}`
   const closingAmount = sql`l.amount * ${translationMultiplier('balance',subsidiary,to,true)}`
   const reportDb = functionalReportReader(resolvedOrgId, sql`e.posting_date <= ${to} and e.book_id in ${statementBookIdsExpr(resolvedOrgId, bookId)} and ${dimWhere(dims)}`,translated);
@@ -286,7 +293,7 @@ export async function cashFlowIndirect(
   // investing section presents gross proceeds (NBV movement + gain), matching
   // the disposal add-back in operating. Translation entries are excluded —
   // their non-bank legs are CTA re-measurement, not flows.
-  const contra = (await reportDb.execute<{ account_id: string; number: string | null; name: string; type: string; origin: string; cash_effect: string }>(sql`
+  const contra = (await reportDb.execute<{ account_id: string; number: string | null; name: string; type: string; origin: string; cash_effect: string; missingHistorical: boolean }>(sql`
     with cash_entries as (
       -- Bank-touching entries by account id: joining accounts per line made
       -- the planner drive from accounts and probe the entry pk per line.
@@ -302,6 +309,7 @@ export async function cashFlowIndirect(
          and ${excludePeriodEndJournals(sql`e.origin`)}
     )
     select ${reportDb.censusColumn}, l.account_id, a.number, a.name, a.type, e.origin, -round(sum(${flowAmount}),4) as cash_effect
+      ,bool_or((${flowAmount}) is null) as "missingHistorical"
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
@@ -318,6 +326,8 @@ export async function cashFlowIndirect(
        ) and ${dimWhere(dims)}
      group by l.account_id, a.number, a.name, a.type, e.origin
   `));
+  if (contra.rows.some(row => row.missingHistorical))
+    throw new HistoricalTranslationEvidenceError("A cash-flow translation source is unavailable. Reload the statement; for historical equity, open the Journal entry → Historical translation tab, obtain Accounting event approval for its retained source and genuine layers, then Apply. For period rates, derive the missing consolidated rate set from Period Close.");
   const investing: CfAccountLine[] = [];
   const financing: CfAccountLine[] = [];
   let disposalGainOnCash = ZERO;

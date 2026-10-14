@@ -16,7 +16,7 @@ export const PAYROLL_HISTORICAL_EMPLOYER_ASSIGNMENTS_DESCRIPTOR: ResourceDescrip
 const FIELDS: ResourceField[] = [
   { key: 'employee', label: 'Employee ID', kind: 'text', required: true },
   { key: 'kind', label: 'Assignment kind (filing_account or worker_comp)', kind: 'text', required: true },
-  { key: 'assignment', label: 'Historical account or group ID', kind: 'text', required: true },
+  { key: 'assignment', label: 'Historical account or group ID (or none for worker_comp)', kind: 'text', required: true },
   { key: 'expectedCurrent', label: 'Reviewed current ID (or none)', kind: 'text', required: true },
   { key: 'effectiveFrom', label: 'Effective from', kind: 'date', required: true },
   { key: 'effectiveTo', label: 'Effective through', kind: 'date', required: true },
@@ -36,15 +36,13 @@ export function payrollHistoricalEmployerAssignmentsResource(orgId: string): Dat
       if (!installed) throw new Error('Historical employer assignments are not installed — run the authorized database bootstrap before exporting')
       const result = (await readExportWindow<Record<string, CellValue>>(db, sql`
         select a.employee_party_id::text as employee, a.assignment_kind as kind,
-          coalesce(a.filing_account_id,a.worker_comp_group_id)::text as assignment,
-          coalesce(case when a.assignment_kind='filing_account' then prof.filing_account_id else er.worker_comp_group_id end::text,'none') as "expectedCurrent",
+          coalesce(coalesce(a.filing_account_id,a.worker_comp_group_id)::text,'none') as assignment,
+          coalesce(case when a.assignment_kind='filing_account' then prof.filing_account_id else public.payroll_worker_comp_group_at(a.org_id, a.employee_party_id, current_date) end::text,'none') as "expectedCurrent",
           a.effective_from::text as "effectiveFrom", a.effective_to::text as "effectiveTo",
           a.source_reference as "sourceReference", a.reason${transferId(ctx, sql`a.id`)}
         from payroll_employee_employer_assignments a
         join employee_payroll_profiles prof on prof.org_id=a.org_id and prof.employee_party_id=a.employee_party_id
         join parties p on p.org_id=a.org_id and p.id=a.employee_party_id
-        left join lateral (select worker_comp_group_id from employee_roles where org_id=a.org_id and party_id=a.employee_party_id
-          order by is_active desc,id limit 1) er on true
         where a.org_id=${orgId} ${subsidiaryReadFilter(sql`p.subsidiary_id`, ctx.allowedSubsidiaryIds)}
           ${transferWhere(ctx, sql`a.id`)} order by a.id limit ${transferLimit(ctx)}`, ctx)).rows
       finishExportPage(result, PAYROLL_HISTORICAL_EMPLOYER_ASSIGNMENTS_DESCRIPTOR.label, ctx)
@@ -63,10 +61,13 @@ export function payrollHistoricalEmployerAssignmentsResource(orgId: string): Dat
           const row = rows[index]!
           const reviewed = String(row.expectedCurrent ?? '').trim()
           if (!reviewed) throw new Error('Declare the reviewed current account or group ID; enter none only when no current assignment exists')
+          const kind = String(row.kind ?? '').trim() as EmployerAssignmentKind
+          const assignment = String(row.assignment ?? '').trim()
           const result = await recordHistoricalEmployerAssignment({
             orgId, actorId: ctx.actorId, employeePartyId: String(row.employee ?? '').trim(),
-            kind: String(row.kind ?? '').trim() as EmployerAssignmentKind,
-            assignmentId: String(row.assignment ?? '').trim(), expectedCurrentId: reviewed === 'none' ? null : reviewed,
+            kind,
+            assignmentId: kind === 'worker_comp' && assignment === 'none' ? null : assignment,
+            expectedCurrentId: reviewed === 'none' ? null : reviewed,
             effectiveFrom: String(row.effectiveFrom ?? '').trim(), effectiveTo: String(row.effectiveTo ?? '').trim(),
             sourceReference: String(row.sourceReference ?? '').trim(), reason: String(row.reason ?? '').trim(),
             allowedSubsidiaryIds: ctx.allowedSubsidiaryIds, dryRun: ctx.dryRun === true,

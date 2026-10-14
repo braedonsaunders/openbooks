@@ -1,8 +1,9 @@
 /** Split from web/lib/file-cabinet.ts; moved without behavior changes. */
 import 'server-only'
-import { type FileViewer, type AccessLevel, accessAtLeast } from './types'
-import { folderAccessLevel, fileAccessLevel } from './visibility'
-import { sql } from 'drizzle-orm'
+import { type FileViewer, type AccessLevel, accessAtLeast } from '@openbooks/engine/records/file-cabinet-access'
+import { folderAccessLevel, fileAccessLevel } from '@openbooks/engine/records/file-cabinet-access'
+import { lockCabinetAuthorization } from '@openbooks/engine/records/file-cabinet-access'
+export { lockCabinetAuthorization } from '@openbooks/engine/records/file-cabinet-access'
 import { inDbTransaction, type SqlExecutor } from '@openbooks/engine/platform/db'
 
 /**
@@ -63,18 +64,6 @@ export async function viewerFolderGate(
   if (!audit?.viewer) return true
   await lockCabinetAuthorization(exec, orgId)
   return accessAtLeast(await folderAccessLevel(orgId, audit.viewer, folderId, exec, options), min)
-}
-
-/**
- * Serialize every viewer-authorized cabinet write with grant changes. One
- * org-scoped transaction lock is intentionally conservative: a grant revoke
- * either precedes the permission recheck or waits until the authorized write
- * commits, including inherited folder grants and previously absent rows.
- */
-export async function lockCabinetAuthorization(exec: SqlExecutor, orgId: string): Promise<void> {
-  await exec.execute(sql`select pg_advisory_xact_lock(hashtextextended(${
-    `file-cabinet-auth:${orgId}`
-  }, 0))`)
 }
 
 export async function runMutation<T>(

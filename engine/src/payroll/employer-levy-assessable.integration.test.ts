@@ -90,12 +90,16 @@ test(
         await db.execute(sql`
           insert into pay_components (id, org_id, code, name, kind, country, basis, value, taxable,
                                       pensionable, insurable, vacationable, payment_kind,
-                                      non_cash_account_id, program_exclusions, sequence,
+                                      non_cash_account_id, sequence,
                                       created_by, updated_by)
           values (${id}, ${org.orgId}, ${code}, ${code}, 'earning', 'CA', 'fixed_amount', ${value},
                   ${taxable}, true, true, false, ${paymentKind},
                   ${paymentKind === "non_cash" ? benefitClearing : null},
-                  ${exclusionList}, 50, ${actorId}, ${actorId})`);
+                  50, ${actorId}, ${actorId})`);
+        await db.execute(sql`
+          insert into pay_component_statutory_treatments
+            (org_id, pay_component_id, effective_from, program_exclusions, created_by, updated_by)
+          values (${org.orgId}, ${id}, '2026-01-01', ${exclusionList}, ${actorId}, ${actorId})`);
         return id;
       };
       const mealId = await component("MEAL", "70", false, ["wcb", "eht", "hsf", "cnt"]);

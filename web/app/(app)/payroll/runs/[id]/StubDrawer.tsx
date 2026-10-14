@@ -72,6 +72,9 @@ export function StubDrawer({
   const [adjComponent, setAdjComponent] = useState('')
   const [adjAmount, setAdjAmount] = useState('')
   const [adjNote, setAdjNote] = useState('')
+  const [bankHours, setBankHours] = useState('')
+  const [bankRate, setBankRate] = useState('')
+  const [bankSourceReference, setBankSourceReference] = useState('')
   const [adjEarnedFrom, setAdjEarnedFrom] = useState('')
   const [adjEarnedTo, setAdjEarnedTo] = useState('')
   const [adjReplace, setAdjReplace] = useState(false)
@@ -80,13 +83,14 @@ export function StubDrawer({
   // every SUCCESSFUL add only — a failed attempt keeps its key, so the retry
   // replays instead of duplicating.
   const [requestKey, setRequestKey] = useState(() => crypto.randomUUID())
+  const bankCashComponent = components.find(component => component.id === adjComponent)?.bank_cash_component === true
   // A half-typed Add-adjustment draft never closes silently: Escape, the
   // backdrop, the X and Close all funnel through the shared guard, which
   // also refuses to dismiss while the parent mutation is in flight. A clean
   // drawer still closes without prompting; the successful-exclude path below
   // keeps the direct onClose (its work already landed).
   const adjustGuard = useDirtyClose({
-    dirty: adjComponent !== '' || adjAmount !== '' || adjNote !== '' || adjEarnedFrom !== '' || adjEarnedTo !== '' || adjReplace,
+    dirty: adjComponent !== '' || adjAmount !== '' || adjNote !== '' || bankHours !== '' || bankRate !== '' || bankSourceReference !== '' || adjEarnedFrom !== '' || adjEarnedTo !== '' || adjReplace,
     busy,
     onClose,
     message: tCommon('feedback.unsavedChanges'),
@@ -289,11 +293,16 @@ export function StubDrawer({
                   <Select
                     aria-label={t('wizard.adjust.component')}
                     value={adjComponent}
-                    onChange={(e) => { setAdjComponent(e.target.value); setAdjEarnedFrom(''); setAdjEarnedTo('') }}
+                    onChange={(e) => { setAdjComponent(e.target.value); setAdjEarnedFrom(''); setAdjEarnedTo(''); setBankHours(''); setBankRate(''); setBankSourceReference(''); setAdjReplace(false) }}
                   >
                     <option value="">{t('wizard.adjust.component')}</option>
                     <optgroup label={t('wizard.adjust.earnings')}>
-                      {components.filter((c) => c.kind === 'earning').map((c) => (
+                      {components.filter((c) => c.kind === 'earning' && !c.bank_cash_component).map((c) => (
+                        <option key={c.id} value={c.id}>{c.name}</option>
+                      ))}
+                    </optgroup>
+                    <optgroup label={t('wizard.adjust.bankComponents')}>
+                      {components.filter((c) => c.bank_cash_component).map((c) => (
                         <option key={c.id} value={c.id}>{c.name}</option>
                       ))}
                     </optgroup>
@@ -309,20 +318,40 @@ export function StubDrawer({
                     onChange={setAdjAmount}
                     field={t('wizard.adjust.amount')}
                     noun="a money amount"
-                    maxScale={4}
-                    required
+                    maxScale={bankCashComponent ? 2 : 4}
+                    required={!bankCashComponent || !bankRate}
                     placeholder={t('wizard.adjust.amount')}
                     className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-right text-sm tabular-nums dark:border-slate-700 dark:bg-slate-900"
                   />
                 </div>
+                {bankCashComponent && (
+                  <>
+                    <p className="text-xs text-slate-500">{t('wizard.adjust.bankInputHelp')}</p>
+                    <div className="grid grid-cols-2 gap-2">
+                      <label className="text-sm text-slate-700 dark:text-slate-200">{t('wizard.adjust.bankHours')}
+                        <MoneyInput value={bankHours} onChange={setBankHours} field={t('wizard.adjust.bankHours')} noun="signed bank hours" maxScale={2} required className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 dark:border-slate-700 dark:bg-slate-900" />
+                      </label>
+                      <label className="text-sm text-slate-700 dark:text-slate-200">{t('wizard.adjust.bankRate')}
+                        <MoneyInput value={bankRate} onChange={setBankRate} field={t('wizard.adjust.bankRate')} noun="an hourly rate" maxScale={2} className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 dark:border-slate-700 dark:bg-slate-900" />
+                      </label>
+                    </div>
+                    <input
+                      aria-label={t('wizard.adjust.bankSourceReference')}
+                      value={bankSourceReference}
+                      onChange={(e) => setBankSourceReference(e.target.value)}
+                      placeholder={t('wizard.adjust.bankSourceReference')}
+                      className="w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900"
+                    />
+                  </>
+                )}
                 <input
                   aria-label={t('wizard.adjust.note')}
                   value={adjNote}
                   onChange={(e) => setAdjNote(e.target.value)}
-                  placeholder={t('wizard.adjust.note')}
+                  placeholder={bankCashComponent ? t('wizard.adjust.bankReason') : t('wizard.adjust.note')}
                   className="w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900"
                 />
-                {components.find(component => component.id === adjComponent)?.kind === 'earning' && (
+                {!bankCashComponent && components.find(component => component.id === adjComponent)?.kind === 'earning' && (
                   <details className="text-sm text-slate-700 dark:text-slate-200">
                     <summary className="cursor-pointer">{t('wizard.adjust.earnedDates')}</summary>
                     <p className="mt-2 text-xs text-slate-500">{t('wizard.adjust.earnedDatesHelp')}</p>
@@ -336,25 +365,39 @@ export function StubDrawer({
                     </div>
                   </details>
                 )}
-                <span className="flex items-center gap-1.5">
+                {!bankCashComponent && <span className="flex items-center gap-1.5">
                   <label className="flex items-center gap-2 text-sm text-slate-700 dark:text-slate-200">
                     <input type="checkbox" checked={adjReplace} onChange={(e) => setAdjReplace(e.target.checked)} />
                     {t('wizard.adjust.replace')}
                   </label>
                   <FieldHelp help={t('wizard.adjust.replaceHelp')} />
-                </span>
+                </span>}
                 <div className="flex justify-end">
                   <Button
                     size="sm"
                     disabled={
                       !adjComponent
-                      || moneyFieldError(t('wizard.adjust.amount'), 'a money amount', adjAmount, 4, { required: true }) !== null
+                      || moneyFieldError(t('wizard.adjust.amount'), 'a money amount', adjAmount, bankCashComponent ? 2 : 4, { required: !bankCashComponent || !bankRate }) !== null
+                      || (bankCashComponent && (moneyFieldError(t('wizard.adjust.bankHours'), 'signed bank hours', bankHours, 2, { required: true }) !== null
+                        || moneyFieldError(t('wizard.adjust.bankRate'), 'an hourly rate', bankRate, 2) !== null))
+                      || (bankCashComponent && (!bankHours.trim() || !(adjAmount.trim() || bankRate.trim()) || !adjNote.trim() || !bankSourceReference.trim()))
                       || ((adjEarnedFrom === '') !== (adjEarnedTo === ''))
                       || (adjEarnedFrom !== '' && adjEarnedFrom > adjEarnedTo)
                       || busy
                     }
                     onClick={() => {
                       void onAdjust({
+                        ...(bankCashComponent ? {
+                          action: 'bank-cash-input',
+                          employeePartyId: stub.employee_party_id,
+                          componentId: adjComponent,
+                          hours: bankHours,
+                          ...(adjAmount.trim() ? { amount: adjAmount } : {}),
+                          ...(bankRate.trim() ? { rate: bankRate } : {}),
+                          reason: adjNote,
+                          sourceReference: bankSourceReference,
+                          idempotencyKey: requestKey,
+                        } : {
                         action: 'add-adjustment',
                         employeePartyId: stub.employee_party_id,
                         componentId: adjComponent,
@@ -364,9 +407,10 @@ export function StubDrawer({
                         earnedTo: adjEarnedTo || undefined,
                         replaceComponent: adjReplace,
                         idempotencyKey: requestKey,
+                        })
                       }).then((added) => {
                         if (!added) return
-                        setAdjComponent(''); setAdjAmount(''); setAdjNote(''); setAdjEarnedFrom(''); setAdjEarnedTo(''); setAdjReplace(false)
+                        setAdjComponent(''); setAdjAmount(''); setAdjNote(''); setBankHours(''); setBankRate(''); setBankSourceReference(''); setAdjEarnedFrom(''); setAdjEarnedTo(''); setAdjReplace(false)
                         setRequestKey(crypto.randomUUID())
                       })
                     }}

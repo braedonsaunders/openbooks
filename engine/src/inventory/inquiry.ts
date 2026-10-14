@@ -89,7 +89,8 @@ export async function inventoryInquiry(
       source = sql`select subject.id,subject.item_id,subject.subsidiary_id,sl.code as location,subject.received_at::date::text as date,
         subject.original_quantity::text as received,subject.remaining_quantity::text as remaining,subject.unit_cost::text as unit_cost,
         round(subject.remaining_quantity*subject.unit_cost,4)::text as value,source.kind as source_kind,source.id as source_movement_id,
-        source.memo as source_memo,source.journal_entry_id,doc.id as document_id,doc.kind as document_kind,doc.document_number as document,
+        source.memo as source_memo,source.journal_entry_id,dl.id as source_document_line_id,
+        doc.id as document_id,doc.kind as document_kind,doc.document_number as document,
         lot.lot_number as lot,serial.serial_number as serial
         from cost_layers subject join inventory_movements source on source.org_id=subject.org_id and source.id=subject.source_movement_id
         join stock_locations sl on sl.org_id=subject.org_id and sl.id=subject.stock_location_id

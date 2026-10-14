@@ -23,8 +23,10 @@ export interface AdoptionFixture {
   employmentId: string;
 }
 
-/** Seed an explicit ON EHT rate for shared, low-payroll Canadian fixtures. */
-export async function seedOntarioEhtFixture(orgId: string, actorId: string, annualExemption = "1000000"): Promise<void> {
+/** Seed explicit ON EHT pricing and its declared single-employer exemption allocation for fixtures. */
+export async function seedOntarioEhtFixture(
+  orgId: string, actorId: string, annualExemption = "1000000", declareExemptionAllocation = true,
+): Promise<void> {
   await db.execute(sql`
     insert into payroll_statutory_rates (org_id, country, rate_key, region, tax_year,
                                          rate_values, created_by, updated_by)
@@ -32,6 +34,15 @@ export async function seedOntarioEhtFixture(orgId: string, actorId: string, annu
             ${JSON.stringify({ rate: "1.95", annualExemption })}::jsonb,
             ${actorId}, ${actorId})
   `);
+  if (declareExemptionAllocation) {
+    const employer = (await db.execute<{ id: string }>(sql`
+      select id from subsidiaries where org_id=${orgId} and country='CA' and parent_id is null order by id limit 1
+    `)).rows[0];
+    if (!employer) throw new Error('The Ontario EHT fixture requires a native Canadian legal employer');
+    await upsertPayrollEmployerFact({ orgId, actorId, subsidiaryId: employer.id, country: 'CA',
+      factKey: 'eht_exemption_share_on', effectiveFrom: '2026-01-01', value: annualExemption,
+      changeReason: 'Declare the test legal employer share of the Ontario annual exemption' });
+  }
 }
 
 /**

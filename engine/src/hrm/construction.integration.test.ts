@@ -8,6 +8,12 @@ import {
   createScratchOrg,
   createScratchUser,
   dropScratchOrg,
+  seedPayrollAccountingConfiguration,
+  seedPayrollEmployeeRole,
+  seedPayrollProfile,
+  seedPayrollTime,
+  seedPayrollWage,
+  seedPostingAccount,
 } from "../testing/fixtures.ts";
 import {
   DB,
@@ -26,6 +32,20 @@ import {
   snapshotLaborCostRates,
 } from "../projects/labor-costing.ts";
 import { prevailingWageForTimeEntry } from "./construction/labor-hook.ts";
+import { createPayRun } from "../payroll/run-lifecycle.ts";
+import { calculatePayRun } from "../payroll/run-calculation.ts";
+import { commitPayRun } from "../payroll/run-commit.ts";
+import { seedPayrollComponents } from "../payroll/run-setup.ts";
+import { seedUsSuiAccount } from "../payroll/filing-test-fixtures.ts";
+import { setPackSlotAccount } from "../payroll/packs.ts";
+import { US_PACK_RATES } from "../payroll/us/rates.ts";
+import { upsertStatutoryRate } from "../payroll/statutory-rates.ts";
+import { recordPayRunPayment } from "../payroll/payment.ts";
+import { submitAndReleaseIfUngated } from "../flows/submit.ts";
+import { postDocument } from "../ledger/posting-document.ts";
+import { fromUnits, sum, toUnits } from "../money/money.ts";
+import type { LaborComplianceReportRow } from "../payroll/labor-compliance.ts";
+import { seedPayrollSchedule } from "../testing/fixtures.ts";
 import {
   acknowledgeFinding,
   approveEntry,
@@ -42,9 +62,11 @@ import {
   createSchedule,
   addScheduleLine,
   dailySplit,
+  downloadRun,
   generate,
   listFindings,
   listFormats,
+  listRuns,
   markSeamConsumed,
   recordFinding,
   resolveCertifiedEmployment,
@@ -422,6 +444,7 @@ test("certified payroll offers the US pack's declared files and refuses an empty
   await withHarness(() => setupHarness(CONSTRUCTION_SPEC), async (h) => {
     const { org, adminId } = h;
     const projectId = await seedProject(org.orgId, "Certified Job");
+    await db.execute(sql`update projects set subsidiary_id = ${org.subsidiaryId} where org_id = ${org.orgId} and id = ${projectId}`);
     const listed = await listFormats(db, org.orgId, adminId);
     assert.equal(listed.packName, "United States");
     // HR-13: the US pack declares its own files (federal weekly + one
@@ -445,6 +468,221 @@ test("certified payroll offers the US pack's declared files and refuses an empty
       /pack declares no labor-compliance files/,
     );
     await db.execute(sql`update orgs set country = 'US' where id = ${org.orgId}`);
+  });
+});
+
+test("certified payroll refuses a project without an authoritative legal entity", { skip: !DB }, async () => {
+  await withHarness(() => setupHarness(CONSTRUCTION_SPEC), async (h) => {
+    const projectId = await seedProject(h.org.orgId, "Unassigned certified project");
+    await assertConstructionRefusal(
+      () => generate(db, { orgId: h.org.orgId, actorId: h.adminId, projectId, weekEnding: "2026-09-13", formatKey: "federal-weekly" }),
+      /needs a legal entity before certified payroll/,
+    );
+    assert.equal((await db.execute<{ count: string }>(sql`select count(*)::text as count from hrm_certified_payroll_runs where org_id = ${h.org.orgId}`)).rows[0]?.count, "0");
+  });
+});
+
+test("certified payroll refuses approved project time on a committed but unposted run", { skip: !DB }, async () => {
+  await withHarness(() => setupHarness(CONSTRUCTION_SPEC), async (h) => {
+    const { org, adminId } = h;
+    const projectId = await seedProject(org.orgId, "Unposted certified job");
+    await db.execute(sql`update projects set subsidiary_id = ${org.subsidiaryId} where org_id = ${org.orgId} and id = ${projectId}`);
+    const { partyId } = await seedNamedWorker(org.orgId, org.subsidiaryId, "Unpaid certified worker");
+    await seedTime(org.orgId, partyId, projectId, "2026-09-08", "8.0000");
+    const scheduleId = randomUUID();
+    await seedPayrollSchedule(org.orgId, scheduleId, adminId, {
+      name: "Certified weekly", frequency: "weekly", periodsPerYear: 52,
+      anchorPeriodEnd: "2026-09-13", payDateOffsetDays: 3, subsidiaryId: org.subsidiaryId,
+    });
+    const run = await createPayRun({
+      orgId: org.orgId, actorId: adminId, payScheduleId: scheduleId,
+      periodStart: "2026-09-07", periodEnd: "2026-09-13", payDate: "2026-09-16",
+    });
+    await db.execute(sql`update pay_runs set run_status = 'committed'
+      where org_id = ${org.orgId} and document_id = ${run.documentId}`);
+    await assertConstructionRefusal(
+      () => generate(db, { orgId: org.orgId, actorId: adminId, projectId, weekEnding: "2026-09-13", formatKey: "federal-weekly" }),
+      /No posted pay run covers the week ending 2026-09-13/,
+    );
+  });
+});
+
+test("certified payroll freezes posted native wages by dated classification without repeating nonproject pay", { skip: !DB }, async () => {
+  await withHarness(() => setupHarness(CONSTRUCTION_SPEC), async ({ org, adminId, outsiderId }) => {
+    const scope = { orgId: org.orgId, actorId: adminId };
+    const weekEnding = "2026-07-19";
+    // The shared currency registry may already contain USD; that conflict changes no tenant evidence.
+    await db.execute(sql`
+      insert into currencies (code, name, minor_units) values ('USD', 'US Dollar', 2)
+      on conflict (code) do nothing`);
+    assert.equal((await db.execute<{ minorUnits: number }>(sql`
+      select minor_units as "minorUnits" from currencies where code = 'USD'`)).rows[0]?.minorUnits, 2);
+    assert.equal((await db.execute(sql`update orgs set base_currency = 'USD'
+      where id = ${org.orgId} returning id`)).rows.length, 1);
+    assert.equal((await db.execute(sql`update subsidiaries set base_currency = 'USD', country = 'US'
+      where org_id = ${org.orgId} and id = ${org.subsidiaryId} returning id`)).rows.length, 1);
+    const wageExpense = await seedPostingAccount(org.orgId, "6000", "Construction wages", "expense");
+    const burdenExpense = await seedPostingAccount(org.orgId, "6010", "Payroll burden", "expense");
+    const netPayable = await seedPostingAccount(org.orgId, "2300", "Wages payable", "liability_current");
+    const taxPayable = await seedPostingAccount(org.orgId, "2330", "Payroll taxes payable", "liability_current");
+    await seedPayrollAccountingConfiguration(org.orgId, {
+      wageExpenseAccountId: wageExpense, burdenExpenseAccountId: burdenExpense,
+      netPayAccountId: netPayable, wagesTo: "expense", countries: ["US"],
+    });
+    await seedPayrollComponents(org.orgId, adminId, "US");
+    for (const slot of ["fit", "fica", "futa", "suta"]) {
+      await setPackSlotAccount(org.orgId, adminId, "US", slot, taxPayable);
+    }
+    const filingAccountId = await seedUsSuiAccount(org.orgId, adminId, "TX");
+    await upsertStatutoryRate({ ...scope, rates: US_PACK_RATES, rateKey: "us_sui", region: "TX",
+      filingAccountId, taxYear: 2026, values: { rate: "0.03", wageBase: "7000" },
+      sourceCitation: "Employer unemployment rate notice", reason: "Declare the employer contribution rate" });
+    await upsertStatutoryRate({ ...scope, rates: US_PACK_RATES, rateKey: "us_futa", region: "TX",
+      filingAccountId: null, taxYear: 2026, values: { rate: "0.006" },
+      sourceCitation: "Employer federal unemployment credit determination", reason: "Declare the effective FUTA rate" });
+    const scheduleId = randomUUID();
+    await seedPayrollSchedule(org.orgId, scheduleId, adminId, {
+      name: "Construction weekly", frequency: "weekly", periodsPerYear: 52,
+      anchorPeriodEnd: weekEnding, payDateOffsetDays: 3, subsidiaryId: org.subsidiaryId,
+    });
+    const projectId = await seedProject(org.orgId, "Native certified job");
+    assert.equal((await db.execute(sql`update projects set subsidiary_id = ${org.subsidiaryId}
+      where org_id = ${org.orgId} and id = ${projectId} returning id`)).rows.length, 1);
+    const { partyId, employmentId } = await seedNamedWorker(org.orgId, org.subsidiaryId, "Native certified worker");
+    assert.equal((await db.execute(sql`update parties set subsidiary_id = ${org.subsidiaryId}
+      where org_id = ${org.orgId} and id = ${partyId} returning id`)).rows.length, 1);
+    await seedPayrollEmployeeRole(org.orgId, partyId, { hiredOn: "2026-01-01", isActive: true });
+    await seedPayrollWage(org.orgId, partyId, adminId, {
+      currency: "USD", rate: "30.01", basis: "hour", effectiveFrom: "2026-01-01",
+    });
+    await seedPayrollProfile(org.orgId, partyId, employmentId, scheduleId, adminId, {
+      country: "US", province: "TX", filingStatus: "single", payBasis: "hourly", filingAccountId,
+    });
+    const firstClass = await createClassification(db, { ...scope,
+      code: "CARP", name: "Carpenter", trade: "Carpentry" });
+    const secondClass = await createClassification(db, { ...scope,
+      code: "FORM", name: "Formworker", trade: "Carpentry" });
+    const rateSchedule = await createSchedule(db, { ...scope, kind: "prevailing_wage",
+      name: "Project wage determination", sourceRef: "WAGE-DETERMINATION",
+      appliesTo: { project_ids: [projectId] }, reciprocity: "jobsite_local", effectiveFrom: "2026-01-01" });
+    for (const classification of [firstClass, secondClass]) {
+      await addScheduleLine(db, { ...scope, scheduleId: rateSchedule.id, classificationId: classification.id,
+        baseRate: "30.0100", fringeRate: "0.0000", currency: "USD", effectiveFrom: "2026-01-01" });
+    }
+    await assignClassification(db, { ...scope, employmentId, classificationId: firstClass.id, effectiveFrom: "2026-01-01" });
+    await assignClassification(db, { ...scope, employmentId, classificationId: secondClass.id, effectiveFrom: "2026-07-14" });
+    // Another active employment for the same person must not fan out this employer's paid time.
+    const otherSubsidiaryId = randomUUID();
+    assert.equal((await db.execute(sql`insert into subsidiaries
+      (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
+      values (${otherSubsidiaryId}, ${org.orgId}, ${org.subsidiaryId}, 'Other employer', 'USD', 'US',
+        '{}'::jsonb, false, true, '{}'::jsonb) returning id`)).rows.length, 1);
+    const otherEmploymentId = randomUUID();
+    assert.equal((await db.execute(sql`insert into worker_employments
+      (id, org_id, worker_party_id, employer_subsidiary_id, revision)
+      values (${otherEmploymentId}, ${org.orgId}, ${partyId}, ${otherSubsidiaryId}, 1) returning id`)).rows.length, 1);
+    assert.equal((await db.execute(sql`insert into worker_employment_versions
+      (org_id, employment_id, version_no, status, effective_from, recorded_at)
+      values (${org.orgId}, ${otherEmploymentId}, 1, 'active', '2026-01-01', now()) returning id`)).rows.length, 1);
+    for (const [workedOn, timeProjectId] of [["2026-07-13", projectId], ["2026-07-14", projectId], ["2026-07-15", null]] as const) {
+      await seedPayrollTime(org.orgId, partyId, adminId, { workedOn, projectId: timeProjectId,
+        hours: "1.0000", status: "approved", costingBasis: "actual", billingStatus: "unbilled", isBillable: false });
+    }
+    const run = await createPayRun({ ...scope, payScheduleId: scheduleId,
+      periodStart: "2026-07-13", periodEnd: weekEnding, payDate: "2026-07-22" });
+    const runInput = { ...scope, documentId: run.documentId };
+    assert.deepEqual((await calculatePayRun(runInput)).errors, []);
+    assert.ok((await commitPayRun(runInput)).lines > 0);
+    assert.equal((await submitAndReleaseIfUngated("pay_run", run.documentId, adminId)).autoApproved, true);
+    await postDocument(run.documentId, { control: { ar: org.accounts.ar, ap: org.accounts.ap, bank: org.accounts.bank } });
+    const payment = await recordPayRunPayment({ ...runInput, bankAccountId: org.accounts.bank,
+      allowedSubsidiaryIds: new Set([org.subsidiaryId]) });
+    const posted = (await db.execute<{ status: string; runStatus: string; payDate: string; subsidiaryId: string; paidEntryId: string; postedEntryId: string }>(sql`
+      select d.status, r.run_status as "runStatus", r.pay_date::text as "payDate",
+        d.subsidiary_id::text as "subsidiaryId", r.paid_entry_id::text as "paidEntryId",
+        d.posted_entry_id::text as "postedEntryId"
+      from pay_runs r join documents d on d.org_id = r.org_id and d.id = r.document_id
+      where r.org_id = ${org.orgId} and r.document_id = ${run.documentId}`)).rows[0]!;
+    assert.equal(posted.status, "posted");
+    assert.equal(posted.runStatus, "committed");
+    assert.equal(posted.subsidiaryId, org.subsidiaryId);
+    assert.equal(posted.payDate, "2026-07-22", "the wage filing follows worked days rather than the cash settlement week");
+    assert.equal(posted.paidEntryId, payment.entryId);
+    assert.ok(posted.postedEntryId);
+    const stubs = (await db.execute<{ employmentId: string; gross: string; deductions: string; net: string }>(sql`
+      select employment_id::text as "employmentId", gross::text as gross,
+        (gross - net_pay)::text as deductions, net_pay::text as net from pay_stubs
+      where org_id = ${org.orgId} and pay_run_document_id = ${run.documentId} and employee_party_id = ${partyId}`)).rows;
+    assert.equal(stubs.length, 1);
+    const stub = stubs[0]!;
+    assert.equal(stub.employmentId, employmentId);
+    assert.equal(stub.gross, "90.0300");
+    assert.ok(toUnits(stub.deductions) > 0n);
+    assert.equal(toUnits(payment.total), toUnits(stub.net));
+    const claimed = (await db.execute<{ projectId: string | null; batch: string; hours: string }>(sql`
+      select project_id::text as "projectId", payroll_batch_ref as batch, hours::text as hours
+      from time_entries where org_id = ${org.orgId} and employee_party_id = ${partyId} order by worked_on`)).rows;
+    assert.equal(claimed.length, 3);
+    assert.ok(claimed.every((entry) => entry.batch === run.documentId));
+    assert.equal(sum(claimed.map((entry) => entry.hours)), "3.0000");
+    assert.equal(claimed[2]!.projectId, null);
+    const input = { ...scope, projectId, weekEnding, formatKey: "federal-weekly" };
+    const certified = await generate(db, input);
+    assert.equal(certified.status, "generated");
+    assert.ok((await listRuns(db, org.orgId, adminId, projectId)).some((row) => row.id === certified.id));
+    const stored = (await db.execute<{ fileId: string; payload: { rows: LaborComplianceReportRow[]; runDocumentIds: string[]; weekStart: string } }>(sql`
+      select file_id::text as "fileId", payload from hrm_certified_payroll_runs
+      where org_id = ${org.orgId} and id = ${certified.id}`)).rows[0]!;
+    assert.deepEqual(stored.payload.runDocumentIds, [run.documentId]);
+    assert.equal(stored.payload.weekStart, "2026-07-13");
+    const rows = stored.payload.rows;
+    assert.equal(rows.length, 2);
+    assert.deepEqual(rows.map((row) => [row.employmentId, row.classificationCode, row.day, row.hours, row.baseRate]), [
+      [employmentId, "CARP", "2026-07-13", "1.0000", "30.0100"],
+      [employmentId, "FORM", "2026-07-14", "1.0000", "30.0100"],
+    ]);
+    // Three equal paid buckets allocate the residual to the earliest bucket. The third belongs outside this project.
+    for (const key of ["deductions", "net"] as const) {
+      const total = toUnits(stub[key]);
+      assert.notEqual(total % 3n, 0n, "the posted amount exercises a real allocation remainder");
+      const ordinary = total / 3n;
+      const first = total - ordinary * 2n;
+      assert.equal(rows[0]![key], fromUnits(first));
+      assert.equal(rows[1]![key], fromUnits(ordinary));
+      assert.equal(sum([...rows.map((row) => row[key]), fromUnits(ordinary)]), stub[key]);
+      assert.ok(toUnits(sum(rows.map((row) => row[key]))) < total, "nonproject pay remains outside the project filing");
+    }
+    const downloaded = await downloadRun(db, org.orgId, adminId, certified.id);
+    assert.equal(downloaded.contentType, "text/plain");
+    assert.equal(downloaded.filename, `certified-payroll-native-certified-job-${weekEnding}.txt`);
+    assert.match(downloaded.body, /FEDERAL WEEKLY CERTIFIED PAYROLL/);
+    assert.match(downloaded.body, /CARP Carpenter\|2026-07-13\|1\.0000\|30\.0100/);
+    assert.match(downloaded.body, /FORM Formworker\|2026-07-14\|1\.0000\|30\.0100/);
+    assert.doesNotMatch(downloaded.body, /2026-07-15/);
+    const filed = (await db.execute<{ body: string }>(sql`select convert_from(b.bytes, 'UTF8') as body
+      from files f join file_blobs b on b.version_id = f.current_version_id
+      where f.org_id = ${org.orgId} and f.id = ${stored.fileId}`)).rows[0];
+    assert.equal(filed?.body, downloaded.body);
+    await assert.rejects(() => downloadRun(db, org.orgId, outsiderId, certified.id), HrmAuthorizationError);
+    await assertConstructionRefusal(() => generate(db, input), /already exists/);
+    const unpaidProjectId = await seedProject(org.orgId, "Unpaid certified job");
+    assert.equal((await db.execute(sql`update projects set subsidiary_id = ${org.subsidiaryId}
+      where org_id = ${org.orgId} and id = ${unpaidProjectId} returning id`)).rows.length, 1);
+    await seedTime(org.orgId, partyId, unpaidProjectId, "2026-07-16", "0.2500");
+    await assertConstructionRefusal(() => generate(db, { ...input, projectId: unpaidProjectId }), /not covered by a posted pay stub/);
+    assert.equal((await db.execute<{ count: number }>(sql`select count(*)::int as count
+      from hrm_certified_payroll_runs where org_id = ${org.orgId}`)).rows[0]?.count, 1);
+    assert.deepEqual(await downloadRun(db, org.orgId, adminId, certified.id), downloaded,
+      "new approved time and refused generation cannot reinterpret the frozen file");
+    const otherProjectId = await seedProject(org.orgId, "Other employer job");
+    assert.equal((await db.execute(sql`update projects set subsidiary_id = ${otherSubsidiaryId}
+      where org_id = ${org.orgId} and id = ${otherProjectId} returning id`)).rows.length, 1);
+    await seedTime(org.orgId, partyId, otherProjectId, "2026-07-13", "1.0000");
+    await assertConstructionRefusal(() => generate(db, { ...input, projectId: otherProjectId }), /No posted pay run covers/);
+    assert.deepEqual(await listRuns(db, org.orgId, adminId, otherProjectId), []);
+    assert.equal((await db.execute<{ count: number }>(sql`select count(*)::int as count
+      from files where org_id = ${org.orgId} and source_system = 'hrm-construction'`)).rows[0]?.count, 1,
+      "duplicate and unpaid generation roll back their cabinet writes");
   });
 });
 

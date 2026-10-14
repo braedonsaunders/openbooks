@@ -627,9 +627,10 @@
       ]
     },
     "records": {
-      "description": "Document primitives shared by every subledger: numbering, revisions, mutation-ref fences, entry numbers, transaction audit evidence, reversal lines, control accounts, account groups, open-item kinds, expense settlement validation.",
+      "description": "Document primitives shared by every subledger: numbering, revisions, mutation-ref fences, entry numbers, transaction audit evidence, reversal lines, control accounts, account groups, open-item kinds, expense settlement validation and Cabinet source-file authority.",
       "dependsOn": [
         "money",
+        "organization",
         "platform"
       ]
     },

@@ -15,7 +15,7 @@ import {
 } from "drizzle-orm/pg-core";
 import { accounts } from "./coa";
 import { departments } from "./core";
-import { parties } from "./parties";
+import { parties, workerCompGroups } from "./parties";
 import { auditColumns, currencyCode, id, money, orgRef } from "./helpers";
 
 /**
@@ -121,13 +121,6 @@ export const payComponents = pgTable(
     taxable: boolean("taxable").notNull().default(true),
     pensionable: boolean("pensionable").notNull().default(true),
     insurable: boolean("insurable").notNull().default(true),
-    /**
-     * Contribution program keys this component's earnings do NOT feed
-     * (0342, C-13). Empty contributes to every declared program, matching
-     * the sibling flags' default-true; a key no pack declares is inert on
-     * runs, like an undeclared tax treatment.
-     */
-    programExclusions: text("program_exclusions").array().notNull().default([]),
     /** Earnings: counts toward vacationable earnings. */
     vacationable: boolean("vacationable").notNull().default(true),
     /** Earnings: taxed with the T4127 bonus (non-periodic) method. */
@@ -252,6 +245,35 @@ export const payComponents = pgTable(
     check("pay_components_basis_cap_order",
       sql`${t.basisCapAmountPerPeriod} is null or ${t.basisCapAmountPerYear} is null
           or ${t.basisCapAmountPerPeriod} <= ${t.basisCapAmountPerYear}`),
+  ],
+);
+
+/** Effective-dated contribution-program and employer-levy treatment per component. */
+export const payComponentStatutoryTreatments = pgTable(
+  "pay_component_statutory_treatments",
+  {
+    id: id(),
+    orgId: orgRef(),
+    payComponentId: uuid("pay_component_id").notNull(),
+    workerCompGroupId: uuid("worker_comp_group_id"),
+    effectiveFrom: date("effective_from").notNull(),
+    effectiveTo: date("effective_to"),
+    programExclusions: text("program_exclusions").array().notNull().default([]),
+    ...auditColumns,
+  },
+  (t) => [
+    uniqueIndex("pay_component_statutory_treatments_org_id_id_unique").on(t.orgId, t.id),
+    foreignKey({ name: "pay_component_statutory_treatments_component_fkey",
+      columns: [t.orgId, t.payComponentId], foreignColumns: [payComponents.orgId, payComponents.id],
+    }).onDelete("cascade"),
+    foreignKey({ name: "pay_component_statutory_treatments_worker_comp_group_fkey",
+      columns: [t.orgId, t.workerCompGroupId], foreignColumns: [workerCompGroups.orgId, workerCompGroups.id],
+    }).onDelete("restrict"),
+    check("pay_component_statutory_treatments_effective_pair",
+      sql`${t.effectiveTo} is null or ${t.effectiveFrom} <= ${t.effectiveTo}`),
+    check("pay_component_statutory_treatments_keys",
+      sql`array_position(${t.programExclusions}, null) is null`),
+    index("pay_component_statutory_treatments_component").on(t.orgId, t.payComponentId, t.workerCompGroupId),
   ],
 );
 

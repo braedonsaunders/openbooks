@@ -17,6 +17,10 @@ export const TENANT_TABLE_POLICIES = {
   // Approved source instructions must not execute again in another environment.
   // Renewal policies themselves generate reminders, even without copied occurrences.
   "journal_reversal_instructions": "skip:no-copy",
+  "historical_translation_contributions": "skip:no-copy",
+  "historical_translation_layers": "skip:no-copy",
+  "payroll_opening_levy_source_authorities": "skip:no-copy",
+  "payroll_opening_levy_source_allocations": "skip:no-copy",
   "subscription_renewal_policies": "skip:no-copy",
   "subscription_renewal_occurrences": "skip:no-copy",
   "warehouse_execution_tasks":"skip:no-copy",
@@ -576,6 +580,7 @@ export const TENANT_TABLE_POLICIES = {
   "pay_application_lines": "clone:catalog-uuid-rebase",
   "pay_applications": "clone:catalog-uuid-rebase",
   "pay_component_earning_classifications": "clone:catalog-uuid-rebase",
+  "pay_component_statutory_treatments": "clone:catalog-uuid-rebase",
   "pay_component_department_expenses": "clone:catalog-uuid-rebase",
   "pay_components": "clone:catalog-uuid-rebase",
   "pay_derived_rules": "clone:catalog-uuid-rebase",

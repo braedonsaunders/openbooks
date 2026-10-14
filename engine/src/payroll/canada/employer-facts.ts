@@ -1,6 +1,23 @@
 import type { PayrollEmployerFact } from "../employer-facts.ts";
 
 export const CA_EMPLOYER_FACTS: readonly PayrollEmployerFact[] = [
+  ...([
+    ['on', 'Ontario'], ['bc', 'British Columbia'], ['mb', 'Manitoba'], ['nl', 'Newfoundland and Labrador'],
+  ] as const).map(([suffix, province]) => ({
+    key: `eht_exemption_share_${suffix}`,
+    kind: 'decimal' as const,
+    scale: 2,
+    min: '0',
+    max: '100000000',
+    label: `${province} employer health tax annual exemption allocation`,
+    refusalReason:
+      `associated employers share one ${province} employer health tax exemption, so the paying legal employer's `
+      + 'declared annual allocation is required before its exemption can reduce taxable remuneration',
+    legalBasis:
+      `${province} employer health tax legislation and the employer's annual exemption allocation`,
+    required: false,
+    effectivePeriod: 'calendar_year' as const,
+  })),
   {
     key: "ei_employer_multiplier",
     kind: "decimal",

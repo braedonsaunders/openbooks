@@ -1,3 +1,4 @@
+import { businessTodayInTx } from '../../platform/business-date.ts';
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
@@ -10,6 +11,7 @@ test("installed Canada defaults are audited, isolated and preserve configured ra
   skip: !process.env.OPENBOOKS_DB_URL,
 }, async () => {
   const org = await createScratchOrg();
+  const today = await businessTodayInTx(db, org.orgId);
   const other = await createScratchOrg();
   const actorId = (await seedFlowActors(org.orgId)).adminId;
   try {
@@ -19,6 +21,9 @@ test("installed Canada defaults are audited, isolated and preserve configured ra
       const id = randomUUID();
       await db.execute(sql`insert into pay_components (id, org_id, code, name, kind, taxable, country)
         values (${id}, ${orgId}, ${id}, 'Non-taxable allowance', 'earning', false, ${country})`);
+      await db.execute(sql`insert into pay_component_statutory_treatments
+        (org_id, pay_component_id, effective_from, program_exclusions)
+        values (${orgId}, ${id}, '2026-01-01', '{}'::text[])`);
       return id;
     };
     const shared = await component(org.orgId, null);
@@ -42,7 +47,9 @@ test("installed Canada defaults are audited, isolated and preserve configured ra
     ]);
     await provisionPayrollPackDefaults(other.orgId);
     const exclusions = async (id: string) => (await db.execute<{ program_exclusions: string[] }>(
-      sql`select program_exclusions from pay_components where id = ${id}`,
+      sql`select program_exclusions from pay_component_statutory_treatments
+        where pay_component_id = ${id} and effective_from <= ${today}::date
+          and (effective_to is null or effective_to >= ${today}::date)`,
     )).rows[0]!.program_exclusions;
     assert.deepEqual(await exclusions(shared), ["cnt", "eht", "hsf", "wcb"]);
     assert.deepEqual(await exclusions(foreign), []);
@@ -64,7 +71,12 @@ test("installed Canada defaults are audited, isolated and preserve configured ra
     `)).rows;
     assert.equal(audits.length, 2);
     assert.ok(audits.every(row => row.actor_id === actorId && row.changes.before !== undefined && row.changes.after !== undefined && row.changes.reason));
-    await db.execute(sql`update pay_components set program_exclusions = '{}' where org_id = ${org.orgId} and id = ${shared}`);
+    assert.equal((await db.execute(sql`select count(*)::int as count from audit_log
+      where org_id = ${org.orgId} and table_name = 'pay_component_statutory_treatments'
+        and changes->>'reason' = 'Canadian non-taxable earnings default to excluded from applicable employer levies.'`)).rows[0]!.count, 2);
+    await db.execute(sql`update pay_component_statutory_treatments
+      set program_exclusions = '{}' where org_id = ${org.orgId} and pay_component_id = ${shared}
+        and effective_from <= ${today}::date and (effective_to is null or effective_to >= ${today}::date)`);
     await provisionPayrollPackDefaults(org.orgId, actorId);
     assert.deepEqual(await exclusions(shared), [], "a later explicit assessability choice remains authoritative");
     assert.equal((await db.execute<{ count: number }>(sql`select count(*)::int as count from payroll_employer_facts where org_id = ${org.orgId}`)).rows[0]!.count, 2);
@@ -72,4 +84,44 @@ test("installed Canada defaults are audited, isolated and preserve configured ra
     await dropScratchOrgReporting(other.orgId);
     await dropScratchOrgReporting(org.orgId);
   }
+});
+
+test('Canadian defaults retain bounded policy windows and leave historical and group-only gaps intact', {
+  skip: !process.env.OPENBOOKS_DB_URL,
+}, async () => {
+  const org = await createScratchOrg();
+  const today = await businessTodayInTx(db, org.orgId);
+  const actorId = (await seedFlowActors(org.orgId)).adminId;
+  try {
+    await db.execute(sql`update orgs set settings=jsonb_set(settings,'{payroll}','{"countries":["CA"]}') where id=${org.orgId}`);
+    const groupId = randomUUID();
+    await db.execute(sql`insert into worker_comp_groups(id,org_id,code,name,rate_percent)
+      values(${groupId},${org.orgId},'GENERAL','General classification','1')`);
+    const bounded = randomUUID(), expired = randomUUID(), scoped = randomUUID();
+    for (const id of [bounded, expired, scoped]) await db.execute(sql`insert into pay_components(id,org_id,code,name,kind,taxable,country)
+      values(${id},${org.orgId},${id},'Non-taxable allowance','earning',false,'CA')`);
+    await db.execute(sql`insert into pay_component_statutory_treatments(org_id,pay_component_id,effective_from,effective_to,program_exclusions)
+      values(${org.orgId},${bounded},${today}::date-1,${today}::date+10,'{}'),
+        (${org.orgId},${bounded},${today}::date+11,null,array['eht']),
+        (${org.orgId},${expired},${today}::date-10,${today}::date-5,array['wcb'])`);
+    await db.execute(sql`insert into pay_component_statutory_treatments(org_id,pay_component_id,worker_comp_group_id,effective_from,program_exclusions)
+      values(${org.orgId},${scoped},${groupId},${today}::date-1,array['wcb'])`);
+    const read = async () => (await db.execute<{ component: string; scope: string | null; from: string; to: string | null; exclusions: string[] }>(sql`
+      select pay_component_id::text as component,worker_comp_group_id::text as scope,
+        effective_from::text as "from",effective_to::text as "to",program_exclusions as exclusions
+      from pay_component_statutory_treatments where org_id=${org.orgId}
+        and pay_component_id in (${bounded},${expired},${scoped}) order by pay_component_id,effective_from`)).rows;
+    const before = await read();
+    await provisionPayrollPackDefaults(org.orgId, actorId);
+    const after = await read();
+    assert.deepEqual(after.filter(row => row.component!==bounded), before.filter(row => row.component!==bounded));
+    const oldWindow = before.find(row => row.component===bounded && row.exclusions.length===0)!;
+    const newWindow = after.find(row => row.component===bounded && row.exclusions.length===4)!;
+    assert.equal(newWindow.to, oldWindow.to);
+    assert.deepEqual(after.find(row => row.component===bounded && row.exclusions.length===1),
+      before.find(row => row.component===bounded && row.exclusions.length===1));
+    assert.equal(after.filter(row => row.component===bounded).length, 3);
+    await provisionPayrollPackDefaults(org.orgId, actorId);
+    assert.deepEqual(await read(), after);
+  } finally { await dropScratchOrgReporting(org.orgId); }
 });

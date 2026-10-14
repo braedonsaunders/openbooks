@@ -7,7 +7,7 @@ import { PayrollError } from './error.ts';
 export type CompensationPackageComponentSource = Pick<typeof payComponents.$inferSelect,
   'id' | 'orgId' | 'code' | 'name' | 'kind' | 'country' | 'systemKey' | 'basis' | 'value' |
   'paymentKind' | 'nonCashAccountId' | 'taxable' | 'pensionable' | 'insurable' | 'vacationable' |
-  'programExclusions' | 'nonPeriodic' | 'taxTreatment' | 'protectionBase' | 'protectionMaxPercent' |
+  'nonPeriodic' | 'taxTreatment' | 'protectionBase' | 'protectionMaxPercent' |
   'protectionPriority' | 'protectionClass' | 'includeInDisposableEarnings' | 'basisCapHoursPerPeriod' |
   'basisCapAmountPerPeriod' | 'basisCapAmountPerYear' | 'expenseAccountId' | 'liabilityAccountId' |
   'remittancePartyId' | 'sequence' | 'isActive'> & {
@@ -21,7 +21,7 @@ export const COMPENSATION_PACKAGE_COMPONENT_SOURCE = sql`jsonb_build_object(
   'systemKey',c.system_key,'basis',c.basis,'value',c.value::text,
   'paymentKind',c.payment_kind,'nonCashAccountId',c.non_cash_account_id,
   'taxable',c.taxable,'pensionable',c.pensionable,'insurable',c.insurable,'vacationable',c.vacationable,
-  'programExclusions',c.program_exclusions,'nonPeriodic',c.non_periodic,'taxTreatment',c.tax_treatment,
+  'nonPeriodic',c.non_periodic,'taxTreatment',c.tax_treatment,
   'protectionBase',c.protection_base,'protectionMaxPercent',c.protection_max_percent::text,
   'protectionPriority',c.protection_priority,'protectionClass',c.protection_class,
   'includeInDisposableEarnings',c.include_in_disposable_earnings,
@@ -37,9 +37,10 @@ export const COMPENSATION_PACKAGE_COMPONENT_SOURCE = sql`jsonb_build_object(
 /** Exact native metadata shared by authoring, preview and calculation. */
 export async function compensationPackageComponentSources(tx: SqlExecutor, orgId: string, ids: readonly string[]): Promise<CompensationPackageComponentSource[]> {
   if (!ids.length) return [];
-  return (await tx.execute<{ source: CompensationPackageComponentSource }>(sql`select ${COMPENSATION_PACKAGE_COMPONENT_SOURCE} as source
+  const sources = (await tx.execute<{ source: CompensationPackageComponentSource }>(sql`select ${COMPENSATION_PACKAGE_COMPONENT_SOURCE} as source
     from pay_components c left join pay_component_earning_classifications ec on ec.org_id=c.org_id and ec.pay_component_id=c.id
     where c.org_id=${orgId} and c.id in (${sql.join(ids.map(id => sql`${id}::uuid`), sql`, `)}) order by c.id for share of c`)).rows.map(row => row.source);
+  return sources;
 }
 
 /** Lock parents before classification rows, including the parent FK fence for a newly inserted classification. */

@@ -132,6 +132,7 @@ export * from './rebates';
 export * from './renewals';
 export * from "./financial-policies";
 export * from "./journal-instructions";
+export * from "./historical-translation";
 
 export * from "./payroll-roe-separation";
 
@@ -139,3 +140,4 @@ export * from "./payroll-roe-history";
 export * from "./payroll-roe-subsequent-service";
 
 export * from "./payroll-opening-employer-authority";
+export * from "./payroll-opening-levy-source-authority";

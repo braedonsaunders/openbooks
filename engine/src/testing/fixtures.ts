@@ -1266,13 +1266,35 @@ async function genericDeletePasses(
   return { remaining, errors };
 }
 
-const RETAINED_PAYROLL_FILE_SOURCES = [
+const RETAINED_CABINET_FILE_SOURCES = [
   "payroll_roe_issued_event_sources",
   "payroll_roe_subsequent_service_sources",
   "payroll_roe_line_evidence",
   "payroll_roe_historical_periods",
   "payroll_opening_employer_authorities",
 ] as const;
+
+/** Remove approved contribution bindings before their pinned Cabinet versions.
+ * Only the caller's revalidated disposable organization is eligible. The
+ * exact guard is disabled and restored inside that transaction, so ordinary
+ * command and history tests always run with its protection enabled. */
+async function deleteQualifiedCabinetFixtureSources(
+  tx: TeardownTx, orgId: string, present: ReadonlySet<string>,
+): Promise<void> {
+  for (const [table, trigger] of [
+    ["historical_translation_layers", "historical_translation_layer_guard"],
+    ["historical_translation_contributions", "historical_translation_basis_guard"],
+    ["payroll_opening_levy_source_allocations", "payroll_opening_levy_source_allocation_guard"],
+    ["payroll_opening_levy_source_authorities", "payroll_opening_levy_source_authority_guard"],
+  ] as const) {
+    if (!present.has(table)) continue;
+    const rows = await tx.execute(sql`select 1 from ${qualified(table)} where org_id=${orgId} limit 1`);
+    if (!rows.rows.length) continue;
+    await tx.execute(sql.raw(`alter table public."${table}" disable trigger ${trigger}`));
+    await tx.execute(sql`delete from ${qualified(table)} where org_id=${orgId}`);
+    await tx.execute(sql.raw(`alter table public."${table}" enable trigger ${trigger}`));
+  }
+}
 
 /**
  * Remove ALL scratch-org data and verify nothing is left. Refuses any org not
@@ -1403,7 +1425,8 @@ async function dropDisposableOrgEscaped(orgId: string, kind: DisposableOrgKind):
     }
     // Retained reporting and opening certificates pin Cabinet versions. The
     // guarded disposable-org transaction removes bindings before their sources.
-    for (const table of RETAINED_PAYROLL_FILE_SOURCES) {
+    await deleteQualifiedCabinetFixtureSources(tx, orgId, present);
+    for (const table of RETAINED_CABINET_FILE_SOURCES) {
       if (present.has(table)) await tx.execute(sql`delete from ${qualified(table)} where org_id=${orgId}`);
     }
     await tx.execute(sql`delete from file_blobs where version_id in
@@ -2063,7 +2086,8 @@ async function resetScratchOrgEscaped(org: ScratchOrg, tables: readonly string[]
           }
           await tx.execute(sql`delete from ap_capture_items where org_id = ${org.orgId}`);
         }
-        for (const table of RETAINED_PAYROLL_FILE_SOURCES) {
+        await deleteQualifiedCabinetFixtureSources(tx, org.orgId, new Set(tables));
+        for (const table of RETAINED_CABINET_FILE_SOURCES) {
           if (tables.includes(table)) await tx.execute(sql`delete from ${qualified(table)} where org_id=${org.orgId}`);
         }
         await tx.execute(sql`delete from file_blobs where version_id in

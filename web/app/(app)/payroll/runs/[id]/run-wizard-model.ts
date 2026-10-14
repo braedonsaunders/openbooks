@@ -187,6 +187,7 @@ export interface ComponentOption {
   code: string
   name: string
   kind: string
+  bank_cash_component?: boolean
 }
 
 /**

@@ -149,6 +149,10 @@ const EXCLUDED_CATEGORIES: Category[] = [
 ];
 
 const EXCLUDED_TABLES: Record<string, string> = {
+  historical_translation_contributions: "approved financial source assessments contain protected Cabinet provenance; native authorized source readers own access.",
+  historical_translation_layers: "immutable contribution layers retain protected Cabinet source references; translation reporting consumes approved native evidence rather than generic row access.",
+  payroll_opening_levy_source_authorities: "qualified statutory opening evidence retains protected Cabinet provenance; native payroll source readers enforce access.",
+  payroll_opening_levy_source_allocations: "employee opening levy allocations are compensation-confidential source evidence; native payroll calculations own scoped consumption.",
   number_sequences: "sequence counters for document numbering.",
   connector_replay_authorizations: "operational authorization evidence for closed-period replay; not a reporting entity.",
   einvoice_documents: "issued e-invoice files retained as legal originals; invoice facts report through documents.",

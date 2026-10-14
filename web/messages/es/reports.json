@@ -101,6 +101,8 @@
     "retainedEarningsPrior": "Utilidades retenidas (años anteriores)",
     "currentYearEarnings": "Resultado del ejercicio",
     "translationAdjustment": "Ajuste de conversión acumulado",
+    "historicalEvidenceBlockedTitle": "Se requiere evidencia de las aportaciones históricas",
+    "historicalEvidenceBlockedAction": "Revisar el origen del asiento",
     "ratesBlockedTitle": "Tipos consolidados aún no calculados",
     "ratesBlockedAction": "Calcular los tipos en el cierre",
     "currencyBasisBlockedTitle": "Esta vista abarca varias monedas"

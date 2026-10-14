@@ -11,7 +11,7 @@ import { dimensionOptions } from '../../../../lib/reports'
 import { orgInfo } from '../../../../lib/data'
 import { resolveOrgId } from '../../../../lib/org-scope'
 import { reportBookSelection } from '../../../../lib/report-books'
-import { MissingRatesError, reportSubsidiaryView, type RatesBlockedNotice } from '../../../../lib/consolidation'
+import { MissingRatesError, reportSubsidiaryView, historicalTranslationBlockedNotice, statementTranslationBlockedAction, type StatementTranslationBlockedNotice } from '../../../../lib/consolidation'
 import { profitAndLossView } from '../../../../lib/statement-matrix'
 import { resolvePeriod, type ResolvedPeriod } from '../../../../lib/periods'
 import { IncompleteReportPeriodError, parseReportQuery, scaleFactor } from '../../../../lib/report-filters'
@@ -52,9 +52,9 @@ export interface PnlData {
   wide: boolean
   truncated: boolean
   truncatedLabel: string
-  /** Set when underived consolidated rates block the statement:
-   * the page renders a typed banner with a derive link instead of numbers. */
-  ratesBlocked: RatesBlockedNotice | null
+  /** Set when translation prerequisites block the statement:
+   * the native banner directs the operator to rates or retained source evidence. */
+  ratesBlocked: StatementTranslationBlockedNotice | null
   /** Set when the custom period has no valid From/To: the page names the
    * remedy in the filter bar instead of widening to another window. */
   periodRefusal: string | null
@@ -111,7 +111,7 @@ export async function loadPnl(sp: Record<string, string | undefined>): Promise<P
   const { books, selectedBook } = await reportBookSelection(orgId, sp.book)
   let subView: Awaited<ReturnType<typeof reportSubsidiaryView>> | undefined
   let view: StatementView | null = null
-  let ratesBlocked: RatesBlockedNotice | null = null
+  let ratesBlocked: StatementTranslationBlockedNotice | null = null
   let accountingContext: ReportAccountingContext | null = null
   let contextBlocked: PnlData['contextBlocked'] = null
   if (period) {
@@ -137,13 +137,20 @@ export async function loadPnl(sp: Record<string, string | undefined>): Promise<P
       // Underived consolidated rates must not throw out of SSR:
       // the page renders a typed banner with a derive link instead of any
       // numbers. Anything else is a real defect and still throws.
-      if (!(e instanceof MissingRatesError)) throw e
-      ratesBlocked = {
-        code: 'rates-not-derived',
-        title: t('statement.ratesBlockedTitle'),
-        description: (e as Error).message,
-        deriveLabel: t('statement.ratesBlockedAction'),
-        deriveHref: '/close',
+      const historicalNotice = historicalTranslationBlockedNotice(e, {
+        title: t('statement.historicalEvidenceBlockedTitle'),
+        actionLabel: t('statement.historicalEvidenceBlockedAction'),
+      })
+      if (historicalNotice) ratesBlocked = historicalNotice
+      else {
+        if (!(e instanceof MissingRatesError)) throw e
+        ratesBlocked = {
+          code: 'rates-not-derived',
+          title: t('statement.ratesBlockedTitle'),
+          description: (e as Error).message,
+          deriveLabel: t('statement.ratesBlockedAction'),
+          deriveHref: '/close',
+        }
       }
     }
   }
@@ -254,8 +261,8 @@ export function pnlSpec(data: PnlData): PageSpec {
           description: data.ratesBlocked?.description,
           action: 'link-button',
           actionProps: {
-            href: data.ratesBlocked?.deriveHref ?? '/close',
-            label: data.ratesBlocked?.deriveLabel ?? '',
+            href: statementTranslationBlockedAction(data.ratesBlocked).href,
+            label: statementTranslationBlockedAction(data.ratesBlocked).label,
           },
         }),
         when: f('ratesBlocked'),

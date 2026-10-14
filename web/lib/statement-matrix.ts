@@ -1,6 +1,8 @@
 import 'server-only'
 import { sql, type SQL } from 'drizzle-orm'
 import { db } from '@openbooks/engine/platform/db'
+import { historicalTranslationAmounts } from '@openbooks/engine/consolidation/historical-translation-reader'
+import { HistoricalTranslationEvidenceError } from '@openbooks/engine/journal/historical-translation-evidence'
 import { addCalendarDays, addMonthsClamped, calendarDaysBetween } from '@openbooks/engine/platform/business-date/module'
 import { declaredPeriodColumns, declaredPeriodsCover, declaredQuarterColumns, fiscalMonthsBetween, fiscalQuartersBetween } from '@openbooks/reports'
 import { resolveOrgId } from './org-scope'
@@ -87,13 +89,15 @@ export type StatementSubsidiaryRateSet = {
  * for consolidated). `rates` carry one windowed rate set PER ACCOUNTING PERIOD
  * per foreign-currency entity and translate in-query: flow columns at each
  * line-period's average rate, balance columns at the current rate as of the
- * column's end date, equity at that period's historical rate — the CTA plug
+ * column's end date, historical equity from immutable source certificates — the CTA plug
  * that keeps a translated balance sheet in balance is added by
  * balanceSheetView. Absent context = every subsidiary, untranslated
  * (single-subsidiary orgs, unchanged behavior).
  */
 export type StatementSubsidiaryContext = {
   ids: string[];
+  /** Explicit consolidated target, including entities currently at identity. */
+  presentationCurrency?: string;
   rates?: StatementSubsidiaryRateSet[];
   /** Exact ownership multiplier. Equity-method entities are excluded upstream;
    * proportionately consolidated entities carry a factor below one. */
@@ -295,15 +299,19 @@ async function assertNoUntranslatedHistory(
   orgId: string,
   bookId: string | null | undefined,
   subsidiary: StatementSubsidiaryContext,
+  types: string[],
 ): Promise<void> {
   const ids = [...rateSetsBySubsidiary(subsidiary.rates!).keys()];
   const earliest = [...subsidiary.rates!].reduce((a, b) => (b.periodFrom < a.periodFrom ? b : a)).periodFrom;
   const oldest = (await db.execute<{ d: string | null }>(sql`
     select min(e.posting_date)::text as d
       from journal_lines l join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+      join accounts a on a.org_id=l.org_id and a.id=l.account_id
      where l.org_id = ${orgId} and e.status in ('posted', 'reversed')
        and l.subsidiary_id = any(${`{${ids.join(',')}}`}::uuid[])
        and e.book_id in ${statementBookIdsExpr(orgId, bookId)}
+       and a.type in ${types}
+       and not (a.type='equity' and (${statementTranslationMethod('flow', sql`e.posting_date`)})='historical')
        and e.posting_date < ${earliest}`));
   const date = oldest.rows[0]?.d;
   if (date) {
@@ -319,7 +327,7 @@ async function assertNoUntranslatedHistory(
  * sets in play, each line is multiplied by the rate of THE PERIOD ITS ACTIVITY
  * FALLS IN — flow columns pick each posting date's average rate; balance
  * columns translate at the current rate as of the column's end date (`asOf`) —
- * except equity accounts, which use that period's historical rate.
+ * Historical equity is resolved separately from its physical source certificate.
  * Subsidiaries not listed in `rates` (functional currency already equals the
  * target) multiply by 1. Shared by every basis.
  */
@@ -328,6 +336,7 @@ export function translationMultiplier(
   subsidiary?: StatementSubsidiaryContext,
   asOf?: string,
   cashFlow = false,
+  ownershipOnly = false,
 ): SQL {
   const rates = subsidiary?.rates;
   const weights = subsidiary?.weights;
@@ -337,9 +346,9 @@ export function translationMultiplier(
     // flows, the column's as-of date for balances.
     const reference =
       mode === "flow" ? sql`e.posting_date` : sql`${asOf!}::date`;
-    const fallback = mode === "flow" ? sql`'average'` : sql`case when a.type='equity' then 'historical' else 'current' end`;
-    const method = sql`coalesce(public.account_translation_rate_type(e.org_id,a.id,${reference},${cashFlow}),${fallback})`;
-    const pick = sql`case ${method} when 'average' then w.average_rate when 'historical' then w.historical_rate else w.current_rate end`;
+    const method = statementTranslationMethod(mode, statementPolicyReference(mode, reference, subsidiary), cashFlow);
+    const pick = sql`case when a.type='equity' and (${method})='historical' then null::numeric else
+      case ${method} when 'average' then w.average_rate when 'historical' then w.historical_rate else w.current_rate end end`;
     rateExpr = sql`case l.subsidiary_id`;
     for (const [subsidiaryId, sets] of rateSetsBySubsidiary(rates)) {
       const loss = subsidiary?.controlLosses?.find(
@@ -385,7 +394,53 @@ export function translationMultiplier(
   }
   // CASE is outside multiplication: excluded activity must not demand a
   // post-disposal rate (NULL * 0 remains NULL in SQL).
-  return sql`case when (${controlExpr})=0 then 0::numeric else (${rateExpr}) * (${weightExpr}) end`;
+  return sql`case when (${controlExpr})=0 then 0::numeric else (${ownershipOnly ? sql`1::numeric` : rateExpr}) * (${weightExpr}) end`;
+}
+
+function statementTranslationMethod(mode: StatementMode, reference: SQL, cashFlow = false): SQL {
+  const fallback = mode === 'flow' ? sql`'average'` : sql`case when a.type='equity' then 'historical' else 'current' end`;
+  return sql`coalesce(public.account_translation_rate_type(a.org_id,a.id,${reference},${cashFlow}),${fallback})`;
+}
+
+function statementPolicyReference(mode: StatementMode, reference: SQL, subsidiary?: StatementSubsidiaryContext): SQL {
+  if (mode !== 'balance' || !subsidiary?.controlLosses?.length) return reference;
+  let result = sql`case`;
+  for (const loss of subsidiary.controlLosses)
+    result = sql`${result} when l.subsidiary_id=${loss.subsidiaryId}::uuid and (${reference})>=${loss.through}::date then ${loss.through}::date`;
+  return sql`${result} else ${reference} end`;
+}
+
+/** Every historical-policy equity source is inspected, including sources in
+ * entities whose current currency happens to match the presentation target. */
+export async function statementHistoricalAmounts(orgId: string, subsidiary: StatementSubsidiaryContext | undefined,
+  mode: StatementMode, reference: SQL, predicate: SQL, cashFlow = false,
+  sourceCtes: SQL = sql``, sourceJoins: SQL = sql``): Promise<SQL> {
+  if (!subsidiary || !(subsidiary.presentationCurrency || subsidiary.rates?.length)) return sql`null::numeric`;
+  const method = statementTranslationMethod(mode, statementPolicyReference(mode, reference, subsidiary), cashFlow);
+  return historicalTranslationAmounts(db, { orgId, presentationCurrency: subsidiary.presentationCurrency, sources: sql`
+    with historical_scope as (select 1) ${sourceCtes}
+    select l.id as "sourceLineId" from journal_lines l
+    join journal_entries e on e.org_id=l.org_id and e.id=l.entry_id
+    join accounts a on a.org_id=l.org_id and a.id=l.account_id
+    ${sourceJoins}
+    where l.org_id=${orgId} and e.status in ('posted','reversed') and a.type='equity'
+      and l.amount<>0 and (${method})='historical'
+      and l.subsidiary_id=any(${`{${subsidiary.ids.join(',')}}`}::uuid[])
+      and ${excludePeriodEndJournals(sql`e.origin`)} and (${predicate})
+      and (${translationMultiplier(mode, subsidiary, undefined, cashFlow, true)})<>0
+  ` });
+}
+
+export function statementTranslatedAmount(mode: StatementMode, subsidiary: StatementSubsidiaryContext | undefined,
+  historicalAmount: SQL, asOf?: string, cashFlow = false, cashShare: SQL = sql`1::numeric`): SQL {
+  const ordinary = sql`l.amount * (${cashShare}) * (${translationMultiplier(mode, subsidiary, asOf, cashFlow)})`;
+  if (!subsidiary || !(subsidiary.presentationCurrency || subsidiary.rates?.length)) return ordinary;
+  const reference = mode === 'flow' ? sql`e.posting_date` : sql`${asOf!}::date`;
+  const method = statementTranslationMethod(mode, statementPolicyReference(mode, reference, subsidiary), cashFlow);
+  return sql`case when l.amount=0 then 0::numeric when a.type='equity' and (${method})='historical' then
+    case when (${translationMultiplier(mode, subsidiary, asOf, cashFlow, true)})=0 or (${cashShare})=0 then 0::numeric
+      else (${historicalAmount}) * (${cashShare}) * (${translationMultiplier(mode, subsidiary, asOf, cashFlow, true)}) end
+    else ${ordinary} end`;
 }
 
 /** One column's FILTER predicate: its date window + optional dimension slice. */
@@ -868,6 +923,7 @@ export async function statementMatrix(opts: {
   const summaryEligible =
     basis === "accrual" &&
     glSummaryEligibleDims(opts.dims) &&
+    !opts.subsidiary?.presentationCurrency &&
     !opts.subsidiary?.rates?.length &&
     !opts.subsidiary?.weights?.length &&
     !opts.subsidiary?.controlLosses?.length &&
@@ -921,7 +977,7 @@ export async function statementMatrix(opts: {
     `);
   } else {
     // Windowed translation: prove every column's window is covered by a
-    // derived rate set BEFORE reading rows — a missing historical rate must
+    // derived rate set BEFORE reading rows — a missing period rate must
     // fail loudly and side-effect-free, never fall back to another period's
     // rates. Cumulative balance-mode flow buckets additionally refuse activity
     // predating the earliest derived set.
@@ -943,6 +999,7 @@ export async function statementMatrix(opts: {
             orgId,
             opts.bookId,
             opts.subsidiary,
+            opts.types,
           );
       } else {
         assertRateCoverage(
@@ -957,26 +1014,29 @@ export async function statementMatrix(opts: {
     // rewrites the line VALUE instead of filtering lines — bank-backed entries
     // and settlement FX entries count in full, a settled document counts at
     // its settled share (capped at whole), everything else contributes zero.
-    const cashLineValue =
+    const cashShare =
       basis === "cash"
         ? sql`(case
-                when bn.entry_id is not null or sf.entry_id is not null then l.amount
-                else l.amount * least(coalesce(cs.share, 0::numeric), 1::numeric)
+                when bn.entry_id is not null or sf.entry_id is not null then 1::numeric
+                else least(coalesce(cs.share, 0::numeric), 1::numeric)
               end)`
-        : sql`l.amount`;
+        : sql`1::numeric`;
     const amountByAsOf = new Map<string, SQL>();
+    for (const col of cols) {
+      const key = translationKind === 'balance' ? col.to : '*';
+      if (amountByAsOf.has(key)) continue;
+      const selectedColumns = translationKind === 'balance' ? cols.filter(value => value.to === col.to) : cols;
+      const predicates = sql.join(selectedColumns.map(value => sql`(${columnPredicate(value, opts.mode)})`), sql` or `);
+      const historical = await statementHistoricalAmounts(orgId, opts.subsidiary, translationKind,
+        translationKind === 'flow' ? sql`e.posting_date` : sql`${col.to}::date`,
+        sql`${baseDate} ${baseBook} and ${dimFilterSql(opts.dims, opts.subsidiary)} and (${predicates})
+          and a.type in ${opts.types} and (${cashShare})<>0`, false, cashCtes, cashJoins);
+      amountByAsOf.set(key, statementTranslatedAmount(translationKind, opts.subsidiary, historical,
+        translationKind === 'balance' ? col.to : undefined, false, cashShare));
+    }
     const amountFor = (col: AmountColumn): SQL => {
       const key = translationKind === "balance" ? col.to : "*";
-      let amount = amountByAsOf.get(key);
-      if (!amount) {
-        amount = sql`${cashLineValue} * ${translationMultiplier(
-          translationKind,
-          opts.subsidiary,
-          translationKind === "balance" ? col.to : undefined,
-        )}`;
-        amountByAsOf.set(key, amount);
-      }
-      return amount;
+      return amountByAsOf.get(key)!;
     };
     // Column sums are rounded to ledger scale (4dp) once, in SQL: the
     // translated (rate × amount) and cash-basis (amount × settled share)
@@ -986,7 +1046,8 @@ export async function statementMatrix(opts: {
     const filterCols = sql.join(
       cols.map(
         (c, i) =>
-          sql`coalesce(round(sum(${amountFor(c)}) filter (where ${columnPredicate(c, opts.mode)}), 4), 0) as ${sql.raw(`c${i}`)}`,
+          sql`coalesce(round(sum(${amountFor(c)}) filter (where ${columnPredicate(c, opts.mode)}), 4), 0) as ${sql.raw(`c${i}`)},
+            coalesce(bool_or(l.id is not null and (${amountFor(c)}) is null) filter (where ${columnPredicate(c, opts.mode)}),false) as ${sql.raw(`missing_c${i}`)}`,
       ),
       sql`, `,
     );
@@ -997,7 +1058,7 @@ export async function statementMatrix(opts: {
     // in the tenant on every statement render.
     res = await db.execute<Record<string, unknown>>(sql`
       with e as materialized (
-        select id, posting_date from journal_entries e
+        select id, org_id, posting_date from journal_entries e
          where e.org_id = ${orgId} and e.status in ('posted', 'reversed') and ${baseDate} ${baseBook}
            and ${excludePeriodEndJournals(sql`e.origin`)}
       )${cashCtes}
@@ -1010,6 +1071,8 @@ export async function statementMatrix(opts: {
        group by a.id
        order by a.number nulls last, a.name
     `);
+    if (res.rows.some(row => opts.types.includes(row.type as string) && cols.some((_, i) => row[`missing_c${i}`] === true)))
+      throw new HistoricalTranslationEvidenceError("A required statement translation source is unavailable. Reload the report; for historical equity, open the Journal entry → Historical translation tab, obtain Accounting event approval for its retained source and genuine layers, then Apply. For period rates, derive the missing consolidated rate set from Period Close.");
   }
 
   const parsed = res.rows.map((r) => ({
@@ -1306,7 +1369,7 @@ export async function balanceSheetView(
   // historical, earnings at average — the rate differences leave a residual,
   // which IS the cumulative translation adjustment. Plugging it into equity
   // (the standard CTA treatment) rebalances the sheet by construction.
-  const translated = (opts.subsidiary?.rates?.length ?? 0) > 0
+  const translated = Boolean(opts.subsidiary?.presentationCurrency || opts.subsidiary?.rates?.length)
   const cta = translated
     ? combineTotals(matrix, [assets, liabilities, equityPosted, prior, current], [1, -1, -1, -1, -1])
     : undefined

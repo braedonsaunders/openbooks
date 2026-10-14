@@ -12,7 +12,7 @@ import {
 import { getMoneyFormatter } from '@/lib/money-server'
 import { cashFlow, dimensionOptions, type CashFlowSection } from '../../../../lib/reports'
 import { orgInfo } from '../../../../lib/data'
-import { MissingRatesError, reportSubsidiaryView, type CurrencyBasisNotice, type RatesBlockedNotice } from '../../../../lib/consolidation'
+import { MissingRatesError, reportSubsidiaryView, historicalTranslationBlockedNotice, statementTranslationBlockedAction, type CurrencyBasisNotice, type StatementTranslationBlockedNotice } from '../../../../lib/consolidation'
 import { ReportCurrencyBasisError } from '../../../../lib/reports/currency-basis'
 import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery } from '../../../../lib/report-filters'
@@ -52,9 +52,9 @@ export interface CashFlowData {
   reconciliationLabel: string
   reconciliationStatus: string
   reconciled: boolean
-  /** Set when underived consolidated rates block the statement:
-   * the page renders a typed banner with a derive link instead of numbers. */
-  ratesBlocked: RatesBlockedNotice | null
+  /** Set when translation prerequisites block the statement:
+   * the native banner directs the operator to rates or retained source evidence. */
+  ratesBlocked: StatementTranslationBlockedNotice | null
   /** Set when the viewed set spans more than one functional currency: the
    * page renders the named refusal (whose remedy is the subsidiary picker
    * beside it) instead of numbers or a generic error page. */
@@ -83,12 +83,11 @@ export async function loadCashFlow(sp: Record<string, string | undefined>): Prom
   // Legal-entity scope is enforced here, not by the picker: a restricted
   // reader's view resolves to the subsidiaries they may see (empty = no rows)
   // and every query below carries it — the same contract as the export path.
-  // Underived consolidated rates must not throw out of SSR:
-  // the page renders a typed banner with a derive link instead of any
-  // numbers. Anything else is a real defect and still throws.
+  // Translation prerequisites render a supported remedy in the native banner;
+  // the statement remains hidden until its exact basis is available.
   let subView: Awaited<ReturnType<typeof reportSubsidiaryView>> | undefined
   let cf: Awaited<ReturnType<typeof cashFlow>> | null = null
-  let ratesBlocked: RatesBlockedNotice | null = null
+  let ratesBlocked: StatementTranslationBlockedNotice | null = null
   let currencyBasisBlocked: CurrencyBasisNotice | null = null
   try {
     subView = await reportSubsidiaryView(q.subsidiaryId, period.to, selectedBook.id)
@@ -104,13 +103,20 @@ export async function loadCashFlow(sp: Record<string, string | undefined>): Prom
         description: e.message,
       }
     } else {
-      if (!(e instanceof MissingRatesError)) throw e
-      ratesBlocked = {
-        code: 'rates-not-derived',
-        title: tr('statement.ratesBlockedTitle'),
-        description: (e as Error).message,
-        deriveLabel: tr('statement.ratesBlockedAction'),
-        deriveHref: '/close',
+      const historicalNotice = historicalTranslationBlockedNotice(e, {
+        title: tr('statement.historicalEvidenceBlockedTitle'),
+        actionLabel: tr('statement.historicalEvidenceBlockedAction'),
+      })
+      if (historicalNotice) ratesBlocked = historicalNotice
+      else {
+        if (!(e instanceof MissingRatesError)) throw e
+        ratesBlocked = {
+          code: 'rates-not-derived',
+          title: tr('statement.ratesBlockedTitle'),
+          description: (e as Error).message,
+          deriveLabel: tr('statement.ratesBlockedAction'),
+          deriveHref: '/close',
+        }
       }
     }
   }
@@ -335,8 +341,8 @@ export function cashFlowSpec(data: CashFlowData): PageSpec {
           description: data.ratesBlocked?.description,
           action: 'link-button',
           actionProps: {
-            href: data.ratesBlocked?.deriveHref ?? '/close',
-            label: data.ratesBlocked?.deriveLabel ?? '',
+            href: statementTranslationBlockedAction(data.ratesBlocked).href,
+            label: statementTranslationBlockedAction(data.ratesBlocked).label,
           },
         }),
         when: f('ratesBlocked'),
