@@ -10,6 +10,7 @@ import { takeEmployeeConfigurationFence } from './fences.ts';
 import { assertRoeLegacySourcesBound } from './canada/roe-event-source.ts';
 import { PayrollError } from './error.ts';
 import { retainedPayPeriodProblem } from './retained-period-calendar.ts';
+import { prepareRoeSeparationReportingBasis, validateRoeSeparationCategory } from './canada/roe-separation-reporting.ts';
 
 export type RoeReportingSource = {
   sourceFileId:string; sourceVersionId:string; sourceSha256:string;
@@ -24,7 +25,9 @@ export type RoePriorPeriodInput = RoeReportingSource & {
 };
 export type RoeLineEvidenceInput = RoeReportingSource & {
   payStubLineId:string; reportPeriodStart:string; reportPeriodEnd:string;
-  earnedFrom:string; earnedTo:string; isInsurable:boolean; insurableHours:unknown;
+  earnedFrom:string|null; earnedTo:string|null; isInsurable:boolean; insurableHours:unknown;
+  reportingBasis?:'service'|'separation_payment';separationEventId?:string|null;separationPaymentId?:string|null;
+  separationBlock?:'17A'|'17C'|null;separationCategoryCode?:string|null;
   expectedId:string|null; expectedUpdatedAt:string|null;
 };
 export type RoePriorPeriod = {
@@ -36,7 +39,10 @@ export type RoePriorPeriod = {
 };
 export type RoeLineEvidence = {
   id:string;payStubLineId:string;lineSnapshot:Record<string,unknown>;reportPeriodStart:string;reportPeriodEnd:string;
-  earnedFrom:string;earnedTo:string;isInsurable:boolean;insurableHours:string;
+  earnedFrom:string|null;earnedTo:string|null;isInsurable:boolean;insurableHours:string;
+  reportingBasis:'service'|'separation_payment';separationEventId:string|null;separationPaymentId:string|null;
+  separationBasisSnapshot:Record<string,unknown>|null;
+  separationBlock:'17A'|'17C'|null;separationCategoryCode:string|null;
   sourceFileId:string;sourceVersionId:string;sourceSha256:string;sourceReference:string;insuranceReference:string;hoursReference:string;
   reason:string;updatedAt:string;
 };
@@ -49,6 +55,8 @@ const PERIOD_COLUMNS=sql`id,employment_id as "employmentId",subsidiary_id as "su
  nil_period as "nilPeriod",${SOURCE_COLUMNS}`;
 const LINE_COLUMNS=sql`id,pay_stub_line_id as "payStubLineId",line_snapshot as "lineSnapshot",
  report_period_start::text as "reportPeriodStart",report_period_end::text as "reportPeriodEnd",earned_from::text as "earnedFrom",earned_to::text as "earnedTo",
+ reporting_basis as "reportingBasis",separation_event_id as "separationEventId",separation_payment_id as "separationPaymentId",separation_basis_snapshot as "separationBasisSnapshot",
+ separation_basis_snapshot->'classification'->>'block' as "separationBlock",separation_basis_snapshot->'classification'->>'categoryCode' as "separationCategoryCode",
  is_insurable as "isInsurable",insurable_hours::text as "insurableHours",${SOURCE_COLUMNS}`;
 
 function amount(value:unknown,label:string):string {
@@ -87,10 +95,23 @@ export function validateRoePriorPeriod(input:RoePriorPeriodInput):Omit<RoePriorP
   return {...input,...qualified,insurableEarnings,insurableHours};
 }
 export function validateRoeLineEvidence(input:RoeLineEvidenceInput):Omit<RoeLineEvidenceInput,'insurableHours'> & {insurableHours:string} {
-  const qualified=source(input);expected(input);dates(input.reportPeriodStart,input.reportPeriodEnd,'The statutory reporting allocation');dates(input.earnedFrom,input.earnedTo,'The original earned span');
+  const qualified=source(input);expected(input);dates(input.reportPeriodStart,input.reportPeriodEnd,'The statutory reporting allocation');
+  const reportingBasis=input.reportingBasis??'service',separationEventId=input.separationEventId??null,separationPaymentId=input.separationPaymentId??null;
+  const separationBlock=input.separationBlock??null,separationCategoryCode=input.separationCategoryCode??null;
+  if(reportingBasis==='service'){
+    if(input.earnedFrom===null||input.earnedTo===null)throw new PayrollError('Service reporting needs its original earned dates');
+    dates(input.earnedFrom,input.earnedTo,'The original earned span');
+    if(separationEventId!==null||separationPaymentId!==null||separationBlock!==null||separationCategoryCode!==null)throw new PayrollError('Service reporting cannot use a separation payment declaration');
+  }else if(reportingBasis==='separation_payment'){
+    if(!isUuid(separationEventId)||separationPaymentId!==null&&!isUuid(separationPaymentId))throw new PayrollError('Choose the exact separation event and any existing paid declaration');
+    if((input.earnedFrom===null)!==(input.earnedTo===null))throw new PayrollError('Retain both original earned dates or their original absence for separation cash');
+    if(input.earnedFrom!==null&&input.earnedTo!==null)dates(input.earnedFrom,input.earnedTo,'The retained original earned span');
+    validateRoeSeparationCategory(separationBlock,separationCategoryCode);
+  }else throw new PayrollError('Choose service reporting or an explicit source-qualified separation payment');
   const insurableHours=amount(input.insurableHours,'Insurable hours');
   if(!isUuid(input.payStubLineId)||typeof input.isInsurable!=='boolean'||!input.isInsurable&&toUnits(insurableHours)!==0n)throw new PayrollError('Choose the retained earning line and explicit insurance treatment; uninsured lines cannot contribute insured hours');
-  return {...input,...qualified,insurableHours};
+  if(reportingBasis==='separation_payment'&&(!input.isInsurable||toUnits(insurableHours)!==0n))throw new PayrollError('Separation cash reporting must be insurable without inventing service hours');
+  return {...input,...qualified,insurableHours,reportingBasis,separationEventId,separationPaymentId,separationBlock:separationBlock as '17A'|'17C'|null,separationCategoryCode};
 }
 async function authorize(input:RoeHistorySubject,write:boolean){
   if(!isUuid(input.employmentId)||!isUuid(input.subsidiaryId))throw new PayrollError('Choose the reporting evidence employment and legal employer');
@@ -103,7 +124,7 @@ async function retainSource(input:RoeHistorySubject,ref:RoeReportingSource){
   // file belonging to another operator is never opened through payroll.
   const rows=(await db.execute(sql`select v.id from file_versions v join files f on f.id=v.file_id
     where f.org_id=${input.orgId} and f.id=${ref.sourceFileId} and v.id=${ref.sourceVersionId}
-      and v.content_hash=${ref.sourceSha256} and v.created_by=${input.actorId} for share of f,v`)).rows;
+      and v.content_hash=${ref.sourceSha256} and v.created_by=${input.actorId} and not f.is_inactive for share of f,v`)).rows;
   if(rows.length!==1)throw new PayrollError('Upload the original source to File Cabinet as the importing operator, then select its exact retained version and hash');
 }
 async function unissued(input:RoeHistorySubject){
@@ -111,7 +132,7 @@ async function unissued(input:RoeHistorySubject){
 }
 async function audit(input:RoeHistorySubject,table:string,id:string,before:unknown,after:unknown,reason:string){
   const rows=(await db.execute(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id)
-    values(${input.orgId},${table},${id},${before?'update':'insert'},${JSON.stringify({before,after,reason})}::jsonb,${input.actorId}) returning id`)).rows;
+    values(${input.orgId},${table},${id},${after===null?'delete':before?'update':'insert'},${JSON.stringify({before,after,reason})}::jsonb,${input.actorId}) returning id`)).rows;
   if(rows.length!==1)throw new PayrollError('The reporting evidence import audit was not retained');
 }
 function freshness(current:{id:string;updatedAt:string}|undefined,input:{expectedId:string|null;expectedUpdatedAt:string|null}){
@@ -167,24 +188,42 @@ export async function qualifyRoeLine(subject:RoeHistorySubject,raw:RoeLineEviden
     if(lines.length!==1||!lines[0]!.snapshot)throw new PayrollError('Choose one committed Canadian earning line in this employee’s native employment');
     const snapshot=lines[0]!.snapshot;
     if(input.isInsurable&&snapshot.hours!==null&&snapshot.hours!==undefined&&toUnits(String(snapshot.hours))!==toUnits(input.insurableHours))throw new PayrollError('Qualified insurable hours must preserve the retained paid-hour source');
-    if(typeof snapshot.earnedFrom==='string'&&input.earnedFrom<snapshot.earnedFrom||typeof snapshot.earnedTo==='string'&&input.earnedTo>snapshot.earnedTo)throw new PayrollError('Qualified earned evidence cannot expand the retained payroll span — correct its native source first');
+    if(input.reportingBasis==='separation_payment'){
+      if(input.earnedFrom!==(snapshot.earnedFrom??null)||input.earnedTo!==(snapshot.earnedTo??null))throw new PayrollError('Separation reporting must preserve the true retained earned dates, including their original absence');
+    }else if(typeof snapshot.earnedFrom==='string'&&input.earnedFrom!==null&&input.earnedFrom<snapshot.earnedFrom
+      ||typeof snapshot.earnedTo==='string'&&input.earnedTo!==null&&input.earnedTo>snapshot.earnedTo)throw new PayrollError('Qualified earned evidence cannot expand the retained payroll span — correct its native source first');
     const current=(await db.execute<RoeLineEvidence>(sql`select ${LINE_COLUMNS} from payroll_roe_line_evidence
       where org_id=${subject.orgId} and pay_stub_line_id=${input.payStubLineId} for update`)).rows[0];
+    if(current?.reportingBasis==='separation_payment'&&(input.reportingBasis!=='separation_payment'
+      ||input.separationEventId!==current.separationEventId||input.separationPaymentId!=null&&input.separationPaymentId!==current.separationPaymentId))
+      throw new PayrollError('Withdraw the unissued separation attribution before changing its payment or event identity');
+    const basis=input.reportingBasis==='separation_payment'?await prepareRoeSeparationReportingBasis(subject,{
+      separationEventId:input.separationEventId!,separationPaymentId:input.separationPaymentId??null,
+      reportPeriodStart:input.reportPeriodStart,reportPeriodEnd:input.reportPeriodEnd,payStubLineId:input.payStubLineId,reason:input.reason,
+      separationBlock:input.separationBlock!,separationCategoryCode:input.separationCategoryCode!,
+    },snapshot,current?.separationPaymentId??null):null;
     const values={payStubLineId:input.payStubLineId,reportPeriodStart:input.reportPeriodStart,reportPeriodEnd:input.reportPeriodEnd,earnedFrom:input.earnedFrom,earnedTo:input.earnedTo,
+      reportingBasis:input.reportingBasis??'service',separationEventId:input.separationEventId??null,separationPaymentId:basis?.paymentId??null,
+      separationBlock:input.separationBlock??null,separationCategoryCode:input.separationCategoryCode??null,
       isInsurable:input.isInsurable,insurableHours:input.insurableHours,sourceFileId:input.sourceFileId,sourceVersionId:input.sourceVersionId,sourceSha256:input.sourceSha256,
       sourceReference:input.sourceReference,insuranceReference:input.insuranceReference,hoursReference:input.hoursReference,reason:input.reason};
-    if(current&&same(current,values)&&JSON.stringify(current.lineSnapshot)===JSON.stringify(snapshot))return current;
+    if(current&&same(current,values)&&JSON.stringify(current.lineSnapshot)===JSON.stringify(snapshot)
+      &&JSON.stringify(current.separationBasisSnapshot)===JSON.stringify(basis?.snapshot??null))return current;
     freshness(current,input);await unissued(subject);
     const rows=current?(await db.execute<RoeLineEvidence>(sql`update payroll_roe_line_evidence set line_snapshot=${JSON.stringify(snapshot)}::jsonb,
+      reporting_basis=${input.reportingBasis??'service'},separation_event_id=${input.separationEventId??null},separation_payment_id=${basis?.paymentId??null},
+      separation_basis_snapshot=${basis?JSON.stringify(basis.snapshot):null}::jsonb,
       report_period_start=${input.reportPeriodStart},report_period_end=${input.reportPeriodEnd},earned_from=${input.earnedFrom},earned_to=${input.earnedTo},is_insurable=${input.isInsurable},
       insurable_hours=${input.insurableHours},source_file_id=${input.sourceFileId},source_version_id=${input.sourceVersionId},source_sha256=${input.sourceSha256},
       source_reference=${input.sourceReference},insurance_reference=${input.insuranceReference},hours_reference=${input.hoursReference},change_reason=${input.reason},
       updated_by=${subject.actorId},updated_at=greatest(clock_timestamp(),updated_at+interval '1 microsecond')
       where org_id=${subject.orgId} and id=${current.id} and updated_at::text=${input.expectedUpdatedAt} returning ${LINE_COLUMNS}`)).rows:
       (await db.execute<RoeLineEvidence>(sql`insert into payroll_roe_line_evidence(org_id,employee_party_id,employment_id,subsidiary_id,pay_stub_line_id,line_snapshot,
+      reporting_basis,separation_event_id,separation_payment_id,separation_basis_snapshot,
       report_period_start,report_period_end,earned_from,earned_to,is_insurable,insurable_hours,source_file_id,source_version_id,source_sha256,
       source_reference,insurance_reference,hours_reference,change_reason,created_by,updated_by)
       values(${subject.orgId},${subject.employeePartyId},${subject.employmentId},${subject.subsidiaryId},${input.payStubLineId},${JSON.stringify(snapshot)}::jsonb,
+      ${input.reportingBasis??'service'},${input.separationEventId??null},${basis?.paymentId??null},${basis?JSON.stringify(basis.snapshot):null}::jsonb,
       ${input.reportPeriodStart},${input.reportPeriodEnd},${input.earnedFrom},${input.earnedTo},${input.isInsurable},${input.insurableHours},${input.sourceFileId},${input.sourceVersionId},${input.sourceSha256},
       ${input.sourceReference},${input.insuranceReference},${input.hoursReference},${input.reason},${subject.actorId},${subject.actorId}) returning ${LINE_COLUMNS}`)).rows;
     if(rows.length!==1)throw new PayrollError('The payroll-line reporting evidence was not retained');
@@ -206,6 +245,36 @@ export async function readRoeHistoricalEvidence(subject:RoeHistorySubject,range?
       order by report_period_end desc,id limit 5001`)).rows;
     if(periods.length>106||lines.length>5000)throw new PayrollError('Reporting evidence exceeds the supported per-employee review window — select a bounded reporting period');
     return {periods,lines};
+  });
+}
+
+/** Withdraw only unissued reporting attribution; committed cash and its original source remain unchanged. */
+export async function withdrawRoeLineEvidence(subject:RoeHistorySubject,input:{expectedId:string;expectedUpdatedAt:string;reason:string}):Promise<void>{
+  expected(input);
+  if(typeof input.reason!=='string'||!input.reason.trim()||input.reason.trim().length>2000)throw new PayrollError('Record why the unissued attribution is being withdrawn');
+  return withOrgTransaction(subject.orgId,async()=>{
+    await authorize(subject,true);await unissued(subject);
+    const rows=(await db.execute<RoeLineEvidence>(sql`select ${LINE_COLUMNS} from payroll_roe_line_evidence
+      where org_id=${subject.orgId} and id=${input.expectedId} and employee_party_id=${subject.employeePartyId}
+        and employment_id=${subject.employmentId} and subsidiary_id=${subject.subsidiaryId} for update`)).rows;
+    if(rows.length!==1)throw new PayrollError('The selected unissued line attribution no longer exists — reload its reporting evidence');
+    const current=rows[0]!;freshness(current,input);
+    const removed=(await db.execute(sql`delete from payroll_roe_line_evidence where org_id=${subject.orgId} and id=${current.id}
+      and updated_at::text=${input.expectedUpdatedAt} returning id`)).rows;
+    if(removed.length!==1)throw new PayrollError('The selected attribution changed before withdrawal');
+    await audit(subject,'payroll_roe_line_evidence',current.id,current,null,input.reason.trim());
+    if(current.separationPaymentId!==null){
+      const payments=(await db.execute<{snapshot:Record<string,unknown>;generated:boolean}>(sql`select to_jsonb(p) as snapshot,generated_from_line as generated
+        from payroll_roe_separation_payments p where org_id=${subject.orgId} and id=${current.separationPaymentId}
+          and source_line_id=${current.payStubLineId} and separation_event_id=${current.separationEventId} for update`)).rows;
+      if(payments.length!==1)throw new PayrollError('The selected separation declaration no longer matches the withdrawn line');
+      if(payments[0]!.generated){
+        const deleted=(await db.execute(sql`delete from payroll_roe_separation_payments where org_id=${subject.orgId}
+          and id=${current.separationPaymentId} and generated_from_line and source_line_id=${current.payStubLineId} returning id`)).rows;
+        if(deleted.length!==1)throw new PayrollError('The source-generated reporting declaration changed before withdrawal');
+        await audit(subject,'payroll_roe_separation_payments',current.separationPaymentId,payments[0]!.snapshot,null,input.reason.trim());
+      }
+    }
   });
 }
 

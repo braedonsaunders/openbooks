@@ -39,6 +39,7 @@ export type RoeWindowStub = {
   insurableEarnings: string; insurableHours: string;
   earnedFrom: string | null; earnedTo: string | null; earnedDatesComplete: boolean;
   allocationKey?:string;reportPeriodStart?:string;reportPeriodEnd?:string;reportingEvidenceIds?:string[];
+  separationEventId?:string;
 };
 
 /** The employer's confirmed employment spell is the boundary for every ROE read. */
@@ -116,17 +117,23 @@ export function assembleRoeReportingWindow(
     seenStubs.add(allocationId);
     const earnedFrom=stub.earnedDatesComplete ? stub.earnedFrom : stub.periodStart;
     const earnedTo=stub.earnedDatesComplete ? stub.earnedTo : stub.periodEnd;
-    if(!earnedFrom || !earnedTo || !isIsoCalendarDate(earnedFrom) || !isIsoCalendarDate(earnedTo) || earnedFrom>earnedTo) throw new PayrollError('ROE earning-source dates are incomplete or invalid');
-    if((stub.reportPeriodEnd??earnedTo)<first) continue;
-    if(stub.earnedDatesComplete && earnedFrom<context.event.first_day_worked) throw new PayrollError(`${context.name} has retained earnings before the confirmed first day worked — reconcile the employment-spell source before filing`);
-    if(earnedTo>cutoff && earnedFrom<=finalEnd) throw new PayrollError(`${context.name} has earning evidence after the confirmed insurable or continuance cutoff — qualify the original service allocation before filing`);
-    if(earnedFrom>finalEnd) throw new PayrollError(`${context.name} has a later payment without qualified ROE service-period or separation-payment allocation`);
+    if(stub.separationEventId!==undefined){
+      if(stub.separationEventId!==context.event.id||stub.reportPeriodStart!==buckets[0]!.periodStart||stub.reportPeriodEnd!==buckets[0]!.periodEnd
+        ||cmp(stub.insurableHours,'0')!==0||cmp(stub.insurableEarnings,'0')<=0||!stub.reportingEvidenceIds?.length)
+        throw new PayrollError('Separation cash needs its exact selected event and source-qualified final reporting allocation');
+    }else{
+      if(!earnedFrom || !earnedTo || !isIsoCalendarDate(earnedFrom) || !isIsoCalendarDate(earnedTo) || earnedFrom>earnedTo) throw new PayrollError('ROE earning-source dates are incomplete or invalid');
+      if((stub.reportPeriodEnd??earnedTo)<first) continue;
+      if(stub.earnedDatesComplete && earnedFrom<context.event.first_day_worked) throw new PayrollError(`${context.name} has retained earnings before the confirmed first day worked — reconcile the employment-spell source before filing`);
+      if(earnedTo>cutoff && earnedFrom<=finalEnd) throw new PayrollError(`${context.name} has earning evidence after the confirmed insurable or continuance cutoff — qualify the original service allocation before filing`);
+      if(earnedFrom>finalEnd) throw new PayrollError(`${context.name} has a later payment without qualified ROE service-period or separation-payment allocation`);
+    }
     if(stub.employmentId!==context.employmentId || stub.subsidiaryId!==context.subsidiaryId) throw new PayrollError(`${context.name} has unknown or conflicting retained payroll employment or legal-employer attribution`);
     assertRoeReportingCurrency(stub.currency,context.name);
     if(!stub.hoursBasisQualified) throw new PayrollError(`${context.name} needs retained insurable-hour attribution for mixed, undated salary or correcting earnings before filing the ROE`);
     const matching=buckets.filter(p=>stub.reportPeriodStart!==undefined
       ? p.periodStart===stub.reportPeriodStart&&p.periodEnd===stub.reportPeriodEnd
-      : earnedFrom>=p.periodStart && earnedTo<=p.periodEnd);
+      : earnedFrom!==null&&earnedTo!==null&&earnedFrom>=p.periodStart && earnedTo<=p.periodEnd);
     if(matching.length!==1) throw new PayrollError(`${context.name} has an earning run spanning multiple ROE service periods — qualify its insurable allocation before filing`);
     const bucket=matching[0]!;
     bucket.insurableEarnings=add(bucket.insurableEarnings,stub.insurableEarnings);
@@ -228,6 +235,8 @@ export async function readRoeReportingWindow(context: RoeWindowContext) {
       e.id as "evidenceId",(e.line_snapshot=public.payroll_roe_reporting_line_snapshot(l.id,l.org_id)) as "snapshotMatches",
       e.is_insurable as "isInsurable",e.insurable_hours::text as "insurableHours",
       e.report_period_start::text as "reportPeriodStart",e.report_period_end::text as "reportPeriodEnd",
+      e.reporting_basis as "reportingBasis",e.separation_event_id as "separationEventId",
+      (e.separation_basis_snapshot=public.payroll_roe_separation_reporting_basis(e.org_id,e.separation_event_id,l.id,e.separation_payment_id,e.report_period_start,e.report_period_end)) as "separationBasisMatches",
       e.earned_from::text as "earnedFrom",e.earned_to::text as "earnedTo"
     from pay_stub_lines l left join payroll_roe_line_evidence e on e.org_id=l.org_id and e.pay_stub_line_id=l.id
     where l.org_id=${context.orgId} and l.stub_id=any(${`{${stubs.map(stub=>stub.id).join(',')}}`}::uuid[])

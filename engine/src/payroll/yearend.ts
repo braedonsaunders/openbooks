@@ -970,6 +970,9 @@ export async function roeRecord(orgId: string, employeePartyId: string, eventId?
        and (stub.employment_id = ${event.employment_id} or stub.employment_id is null)
        and not ${roeLaterSpellStubSql(orgId,employeePartyId,event.employment_id,event.id,earningsCutoff)}
        and (evidence.is_insurable is null or evidence.is_insurable)
+       and not coalesce(evidence.reporting_basis='separation_payment' and evidence.separation_event_id=${event.id}::uuid
+         and evidence.separation_basis_snapshot=public.payroll_roe_separation_reporting_basis(evidence.org_id,evidence.separation_event_id,
+           line.id,evidence.separation_payment_id,evidence.report_period_start,evidence.report_period_end),false)
        and (line.amount <> 0 or (line.hours is not null and line.hours <> 0))
        and (
          coalesce(evidence.earned_from,line.earned_from) > ${earningsCutoff}::date
@@ -1003,13 +1006,18 @@ export async function roeRecord(orgId: string, employeePartyId: string, eventId?
     component_id: string; component_name: string; pay_date: string; block: "none" | "17A" | "17C" | null;
   }>(sql`
     select distinct component.id as component_id, component.name as component_name,
-           stub.pay_date::text as pay_date, classification.block
+           stub.pay_date::text as pay_date, coalesce(paid.reporting_block,classification.block) as block
       from pay_stub_lines line
       join pay_stubs stub on stub.org_id = line.org_id and stub.id = line.stub_id
       join pay_runs run on run.org_id = stub.org_id
         and run.document_id = stub.pay_run_document_id and run.run_status = 'committed'
       join pay_components component
         on component.org_id = line.org_id and component.id = line.component_id
+      left join payroll_roe_line_evidence attributed on attributed.org_id=line.org_id and attributed.pay_stub_line_id=line.id
+        and attributed.reporting_basis='separation_payment' and attributed.separation_event_id=${event.id}::uuid
+        and attributed.separation_basis_snapshot=public.payroll_roe_separation_reporting_basis(attributed.org_id,attributed.separation_event_id,
+          line.id,attributed.separation_payment_id,attributed.report_period_start,attributed.report_period_end)
+      left join payroll_roe_separation_payments paid on paid.org_id=attributed.org_id and paid.id=attributed.separation_payment_id
       left join lateral (
         select block
           from payroll_roe_component_classifications
@@ -1038,7 +1046,8 @@ export async function roeRecord(orgId: string, employeePartyId: string, eventId?
     select payment.pay_component_id as component_id, component.name as component_name,
            payment.amount::text as amount, payment.payment_status,
            payment.expected_payment_on::text as expected_payment_on,
-           classification.block, classification.category_code
+           case when payment.source_line_id is not null then payment.reporting_block else classification.block end as block,
+           case when payment.source_line_id is not null then payment.reporting_category_code else classification.category_code end as category_code
       from payroll_roe_separation_payments payment
       join pay_components component
         on component.org_id = payment.org_id and component.id = payment.pay_component_id

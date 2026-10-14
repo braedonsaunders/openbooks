@@ -38,11 +38,19 @@ export const payrollRoeHistoricalPeriods=pgTable('payroll_roe_historical_periods
 export const payrollRoeLineEvidence=pgTable('payroll_roe_line_evidence',{
   ...subject(), payStubLineId:uuid('pay_stub_line_id').notNull(), lineSnapshot:jsonb('line_snapshot').notNull(),
   reportPeriodStart:date('report_period_start').notNull(), reportPeriodEnd:date('report_period_end').notNull(),
-  earnedFrom:date('earned_from').notNull(), earnedTo:date('earned_to').notNull(),
+  earnedFrom:date('earned_from'), earnedTo:date('earned_to'),
+  reportingBasis:text('reporting_basis',{enum:['service','separation_payment']}).notNull().default('service'),
+  separationEventId:uuid('separation_event_id'),separationPaymentId:uuid('separation_payment_id'),
+  separationBasisSnapshot:jsonb('separation_basis_snapshot'),
   isInsurable:boolean('is_insurable').notNull(), insurableHours:money('insurable_hours').notNull(), ...source(),
 },t=>[
   uniqueIndex('payroll_roe_line_evidence_org_id_unique').on(t.orgId,t.id),
   uniqueIndex('payroll_roe_line_evidence_unique').on(t.orgId,t.payStubLineId),
+  uniqueIndex('payroll_roe_line_evidence_separation_payment_unique').on(t.orgId,t.separationPaymentId).where(sql`${t.separationPaymentId} is not null`),
+  check('payroll_roe_line_evidence_reporting_basis',sql`(${t.reportingBasis}='service' and ${t.separationEventId} is null and ${t.separationPaymentId} is null
+    and ${t.separationBasisSnapshot} is null and ${t.earnedFrom} is not null and ${t.earnedTo} is not null)
+    or (${t.reportingBasis}='separation_payment' and ${t.separationEventId} is not null and ${t.separationPaymentId} is not null
+    and ${t.separationBasisSnapshot} is not null and jsonb_typeof(${t.separationBasisSnapshot})='object' and ${t.isInsurable} and ${t.insurableHours}=0)`),
   index('payroll_roe_line_evidence_employee_date').on(t.orgId,t.employeePartyId,t.reportPeriodEnd),
   check('payroll_roe_line_evidence_dates',sql`${t.reportPeriodStart}<=${t.reportPeriodEnd} and ${t.earnedFrom}<=${t.earnedTo}`),
   check('payroll_roe_line_evidence_hours',sql`${t.insurableHours}>=0 and ${t.insurableHours}<>'NaN'::numeric and (${t.isInsurable} or ${t.insurableHours}=0)`),

@@ -51,10 +51,15 @@ const PERIOD_FIELDS:ResourceField[]=[
 const LINE_FIELDS:ResourceField[]=[
   ...SUBJECT_FIELDS,
   {key:'payStubLineId',label:'Committed earning-line ID',kind:'text',required:true},
+  {key:'reportingBasis',label:'Reporting basis',kind:'select',options:[{value:'service',label:'Service earnings'},{value:'separation_payment',label:'Source-qualified separation cash'}]},
+  {key:'separationEventId',label:'Selected separation event ID (separation cash only)',kind:'text'},
+  {key:'separationPaymentId',label:'Existing paid declaration ID (blank creates one from the exact committed line)',kind:'text'},
+  {key:'separationBlock',label:'Original separation payment block',kind:'select',options:[{value:'17A',label:'17A — vacation paid on separation'},{value:'17C',label:'17C — other separation money'}]},
+  {key:'separationCategoryCode',label:'Original separation category (2 for vacation paid on separation)',kind:'text'},
   {key:'reportPeriodStart',label:'Source-qualified reporting period start',kind:'date',required:true},
   {key:'reportPeriodEnd',label:'Source-qualified reporting period end',kind:'date',required:true},
-  {key:'earnedFrom',label:'Original earned span start',kind:'date',required:true},
-  {key:'earnedTo',label:'Original earned span end',kind:'date',required:true},
+  {key:'earnedFrom',label:'Original earned span start (retain original absence for separation cash)',kind:'date'},
+  {key:'earnedTo',label:'Original earned span end (retain original absence for separation cash)',kind:'date'},
   {key:'isInsurable',label:'Original earning is insurable',kind:'boolean',required:true},
   {key:'insurableHours',label:'Source-qualified insurable hours',kind:'currency',required:true},
   ...SOURCE_FIELDS,
@@ -89,7 +94,10 @@ function evidence(row:Record<string,unknown>,kind:'period'|'line'):RoeReportingI
     insurableEarnings:row.insurableEarnings,insurableHours:row.insurableHours,nilPeriod:boolean(row,'nilPeriod'),
   }}:{kind,evidence:{
     ...source,payStubLineId:text(row,'payStubLineId'),reportPeriodStart:text(row,'reportPeriodStart'),reportPeriodEnd:text(row,'reportPeriodEnd'),
-    earnedFrom:text(row,'earnedFrom'),earnedTo:text(row,'earnedTo'),isInsurable:boolean(row,'isInsurable'),insurableHours:row.insurableHours,
+    earnedFrom:nullableText(row,'earnedFrom'),earnedTo:nullableText(row,'earnedTo'),isInsurable:boolean(row,'isInsurable'),insurableHours:row.insurableHours,
+    reportingBasis:(nullableText(row,'reportingBasis')??'service') as 'service'|'separation_payment',
+    separationEventId:nullableText(row,'separationEventId'),separationPaymentId:nullableText(row,'separationPaymentId'),
+    separationBlock:nullableText(row,'separationBlock') as '17A'|'17C'|null,separationCategoryCode:nullableText(row,'separationCategoryCode'),
   }}
   return input.kind==='period'?{kind:'period',evidence:validateRoePriorPeriod(input.evidence)}:{kind:'line',evidence:validateRoeLineEvidence(input.evidence)}
 }
@@ -111,6 +119,8 @@ export function payrollRoeReportingResource(orgId:string,kind:'period'|'line'):D
           e.earned_from::text as "earnedFrom",e.earned_to::text as "earnedTo",
           e.insurable_earnings::text as "insurableEarnings",e.nil_period as "nilPeriod",`:sql`
           e.pay_stub_line_id::text as "payStubLineId",e.report_period_start::text as "reportPeriodStart",e.report_period_end::text as "reportPeriodEnd",
+          e.reporting_basis as "reportingBasis",e.separation_event_id::text as "separationEventId",e.separation_payment_id::text as "separationPaymentId",
+          e.separation_basis_snapshot->'classification'->>'block' as "separationBlock",e.separation_basis_snapshot->'classification'->>'categoryCode' as "separationCategoryCode",
           e.earned_from::text as "earnedFrom",e.earned_to::text as "earnedTo",e.is_insurable as "isInsurable",`
         const rows=(await readExportWindow<Record<string,CellValue>>(db,sql`
           select e.employee_party_id::text as "employeePartyId",p.display_name as "employeeName",e.employment_id::text as "employmentId",
