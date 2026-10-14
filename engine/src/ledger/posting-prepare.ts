@@ -5,6 +5,7 @@ import { assertWithholdingRemittanceCurrent, ContractorWithholdingError } from "
 import { PlaceOfSupplyError } from '../tax/place-of-supply.ts';
 import { assertCanadianGoodsTaxEvidence } from '../tax/goods-selection.ts'
 import { assertCrossBorderSupplyEvidence } from '../tax/cross-border-posting.ts';
+import { documentTaxDate, staleTaxRateLine } from '../tax/document-tax-date.ts';
 import { CrossBorderTaxError } from '../tax/cross-border-place-of-supply.ts';
 import { resolveAgencyPosting,AgencyError } from '../inventory/drop-ship-agency.ts';
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
@@ -108,6 +109,18 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
   }
   try {await assertCanadianGoodsTaxEvidence(db,doc.orgId,doc.id)} catch(error) {if(error instanceof PlaceOfSupplyError)throw new PostingError(error.message);throw error}
   try {await assertCrossBorderSupplyEvidence(db,doc.orgId,doc.id)} catch(error) {if(error instanceof CrossBorderTaxError)throw new PostingError(error.message);throw error}
+  // A credit correcting an earlier supply is taxed at that supply's rates. Its
+  // correction can be recorded after its lines were priced, so posting holds
+  // the calculated tax to the corrected document's date.
+  const taxDate = await documentTaxDate(db, doc.orgId, doc.id, doc.documentDate);
+  if (taxDate !== doc.documentDate) {
+    const stale = await staleTaxRateLine(db, doc.orgId, doc.id, taxDate);
+    if (stale) {
+      throw new PostingError(
+        `line ${stale.line_number} carries ${stale.code} at ${stale.stored}%, but ${stale.effective === null ? "no rate is" : `${stale.effective}% is`} in effect on ${taxDate}, the date of the document this credit corrects — save the credit's lines so their tax is recalculated at that date`,
+      );
+    }
+  }
   assertCreditMemoDirection(doc, deps.migration);
   if (
     (doc.kind === "journal" ||

@@ -1,4 +1,5 @@
 import { commercialDocumentKindConfig, type CommercialDocumentKind } from '../records/commercial-document-kind.ts';
+import { documentTaxDate, staleTaxRateLine } from "../tax/document-tax-date.ts";
 import { amortizationLineRefusal } from "../amortization/source-fields.ts";
 import { WithholdingMaterialsCostError } from "../allocations/withholding-cost.ts";
 import { assertWithholdingDepositEdit } from "../contractor-withholding/deposits.ts";
@@ -1326,25 +1327,14 @@ export async function applyDocumentEdit(
   // change keeps the stored line tax, so it is refused whenever a calculated
   // line's rate differs on the new date — otherwise the draft would post the
   // old period's tax. Saving the lines with the date recalculates them.
+  // A credit correcting an earlier supply keeps that supply's tax date, so
+  // its own date change leaves the tax date where it was.
   if (body.lines === undefined && body.documentDate !== undefined && body.documentDate !== current.documentDate) {
-    const stale = (await runner.execute<{ line_number: number; code: string; stored: string; effective: string | null }>(sql`
-      select dl.line_number, tc.code, c.rate_percent::text as stored, tr.rate_percent::text as effective
-        from document_lines dl
-        join document_line_tax_components c on c.document_line_id = dl.id and c.org_id = dl.org_id
-        join tax_codes tc on tc.id = c.tax_code_id and tc.org_id = c.org_id
-        left join lateral (
-          select rate_percent from tax_rates
-           where org_id = dl.org_id and tax_code_id = c.tax_code_id and effective_from <= ${body.documentDate}
-             and (effective_to is null or effective_to >= ${body.documentDate})
-           order by effective_from desc limit 1) tr on true
-       where dl.org_id = ${orgId} and dl.document_id = ${id}
-         and not dl.tax_overridden and not c.overridden
-         and tr.rate_percent is distinct from c.rate_percent
-       order by dl.line_number, c.sequence
-       limit 1`)).rows[0]
+    const taxDate = await documentTaxDate(runner, orgId, id, body.documentDate)
+    const stale = await staleTaxRateLine(runner, orgId, id, taxDate)
     if (stale) {
       throw new DocumentEditError(422,
-        `Line ${stale.line_number} carries ${stale.code} at ${stale.stored}%, but ${stale.effective === null ? 'no rate is' : `${stale.effective}% is`} in effect on ${body.documentDate} — ` +
+        `Line ${stale.line_number} carries ${stale.code} at ${stale.stored}%, but ${stale.effective === null ? 'no rate is' : `${stale.effective}% is`} in effect on ${taxDate} — ` +
         'save the lines together with the new date so their tax is recalculated at the rates in effect on that date')
     }
   }
@@ -1889,15 +1879,18 @@ export async function applyDocumentEdit(
       computed = ctx.precomputedTotals
     } else {
       try {
+        // Tax prices on the tax date: the corrected supply's date for a
+        // correcting credit, otherwise the document's own date.
+        const taxDate = await documentTaxDate(runner, orgId, id, body.documentDate ?? current.documentDate)
         computed = await computeBillTotalsWithProvider(
           validateEditableDocumentLines(linesForTotals),
-          await taxProfileMap(orgId, body.documentDate ?? current.documentDate),
+          await taxProfileMap(orgId, taxDate),
           {
             orgId,
             kind: current.kind,
             currency: currency ?? (await runner.execute<{ currency: string }>(sql`
               select currency from documents where id = ${id} and org_id = ${orgId}`)).rows[0]?.currency ?? await orgBaseCurrency(orgId),
-            documentDate: body.documentDate ?? current.documentDate,
+            documentDate: taxDate,
             partyId: body.partyId !== undefined ? body.partyId : current.partyId,
             subsidiaryId: body.subsidiaryId !== undefined ? body.subsidiaryId : current.subsidiaryId,
             taxProviderAddresses: documentTaxProviderAddresses(headerCustom ?? current.custom),
