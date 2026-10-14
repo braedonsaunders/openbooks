@@ -244,7 +244,8 @@
     "balancing-segment-residual": {
       "title": "Restbeträge ausgleichspflichtiger Segmente",
       "message": "{count} Segmentwerte weisen einen Restbetrag auf. Prüfen Sie Zuordnungen und Verrechnungsrichtlinien vor dem Abschluss."
-    }
+    },
+    "project-loss-owner-unresolved": {"title": "Auftragsprojekte ohne zuständige Gesellschaft", "message": "{count, plural, one {# Auftragsprojekt hat keine Tochtergesellschaft, daher kann sein Verlust weder gemessen noch bewertet werden. Weisen Sie die Tochtergesellschaft im Projekt zu.} other {# Auftragsprojekte haben keine Tochtergesellschaft, daher können ihre Verluste weder gemessen noch bewertet werden. Weisen Sie jedem Projekt seine Tochtergesellschaft zu.}}"}
   },
   "severity": {
     "info": "Info",

@@ -244,7 +244,8 @@
     "balancing-segment-residual": {
       "title": "Balancing segment residuals",
       "message": "{count} balancing segment values retain a ledger residual. Review the segment assignment and effective clearing policy before closing."
-    }
+    },
+    "project-loss-owner-unresolved": {"title": "Contract projects have no owning entity", "message": "{count, plural, one {# contract project has no subsidiary, so its loss cannot be measured or assessed. Assign the project's subsidiary on the project.} other {# contract projects have no subsidiary, so their losses cannot be measured or assessed. Assign each project's subsidiary on the project.}}"}
   },
   "severity": {
     "info": "Info",

@@ -244,7 +244,8 @@
     "balancing-segment-residual": {
       "title": "平衡分段残额",
       "message": "{count} 个分段值存在总账残额。关闭期间前请检查分段分配和有效清算政策。"
-    }
+    },
+    "project-loss-owner-unresolved": {"title": "合同项目缺少所属主体", "message": "{count, plural, other {#个合同项目未设置子公司，因此无法计量或评估其亏损。请在项目中分配子公司。}}"}
   },
   "severity": {
     "info": "信息",

@@ -244,7 +244,8 @@
     "balancing-segment-residual": {
       "title": "Soldes résiduels des segments équilibrés",
       "message": "{count} valeurs de segments équilibrés conservent un solde résiduel. Vérifiez les affectations et la politique de compensation avant la clôture."
-    }
+    },
+    "project-loss-owner-unresolved": {"title": "Projets sous contrat sans entité propriétaire", "message": "{count, plural, one {# projet sous contrat n'a pas de filiale ; sa perte ne peut être ni mesurée ni évaluée. Attribuez la filiale dans le projet.} other {# projets sous contrat n'ont pas de filiale ; leurs pertes ne peuvent être ni mesurées ni évaluées. Attribuez la filiale dans chaque projet.}}"}
   },
   "severity": {
     "info": "Information",

@@ -8,7 +8,7 @@ import { submitFinancialChange } from '../flows/financial-changes-adapter.ts'
 import { decideGate } from '../flows/gates.ts'
 import { proposeProvisionAssessment, applyProvisionAssessment, type ProvisionProposal } from './assessments.ts'
 import { postEntry } from '../journal/post-entry.ts'
-import { projectLossPolicyMode, unassessedLossContracts } from '../projects/loss-contracts.ts'
+import { projectLossPolicyMode, unassessedLossContracts, unownedContractProjects } from '../projects/loss-contracts.ts'
 
 test('governed construction forecasts recognize remaining loss once, refuse stale evidence and honor the Projects gate', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const org = await createScratchOrg()
@@ -135,6 +135,14 @@ test('loss-contract detection follows the project owner and the closing book', {
         'another book\'s assessment does not satisfy the primary close')
       await assess(org.bookId)
       assert.deepEqual(await unassessedLossContracts(db, org.orgId, lossScope), [])
+      assert.deepEqual(await unownedContractProjects(db, org.orgId), [])
+
+      // A second root leaves the unassigned project with no owner: it cannot be
+      // measured or assessed anywhere, so it is reported rather than skipped.
+      await withBypassContext(() => db.execute(sql`insert into subsidiaries (id, org_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
+        values (${randomUUID()}, ${org.orgId}, 'Second root', 'CAD', 'CA', '{}'::jsonb, false, true, '{}'::jsonb)`))
+      assert.deepEqual(await unassessedLossContracts(db, org.orgId, lossScope), [])
+      assert.deepEqual((await unownedContractProjects(db, org.orgId)).map((row) => row.code), ['ROOT-LOSS'])
     })
   } finally { await dropScratchOrg(org.orgId) }
 })

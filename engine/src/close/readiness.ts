@@ -1,5 +1,5 @@
 import { CloseError, NON_POSTING_DOCUMENT_KINDS } from "../periods/period-policy.ts";
-import { projectLossPolicyMode, unassessedLossContracts } from "../projects/loss-contracts.ts";
+import { projectLossPolicyMode, unassessedLossContracts, unownedContractProjects } from "../projects/loss-contracts.ts";
 import { incompletePostingEffectsCount } from "../periods/period-locks.ts";
 import { createHash } from "node:crypto";
 import { sql, type SQL } from "drizzle-orm";
@@ -591,7 +591,20 @@ export async function readinessChecks(
   const lossContracts = lossMode === "off" ? [] : await unassessedLossContracts(db, orgId, {
     periodStartsOn: isoDay(ctx.starts_on), periodEndsOn: isoDay(ctx.ends_on), bookId: ctx.book_id, subsidiaryIds,
   });
+  // A project with no resolvable owner cannot be measured in any entity, so
+  // no close scope can show it is out of reach: every close counts it, and
+  // only an organization-wide close names the projects.
+  const unownedProjects = lossMode === "off" ? [] : await unownedContractProjects(db, orgId);
   const lossChecks: ReadinessCheck[] = lossMode === "off" ? [] : [{
+    code: "project-loss-owner-unresolved",
+    taskKey: "recognition-posted",
+    category: "revenue",
+    severity: lossMode === "require" ? "critical" : "warning",
+    title: "close.diagnostics.project-loss-owner-unresolved.title",
+    message: "close.diagnostics.project-loss-owner-unresolved.message",
+    count: unownedProjects.length,
+    details: unownedProjects.length > 0 && subsidiaryIds.length === 0 ? { projects: unownedProjects } : undefined,
+  }, {
     code: "project-loss-unassessed",
     taskKey: "recognition-posted",
     category: "revenue",

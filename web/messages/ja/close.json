@@ -244,7 +244,8 @@
     "balancing-segment-residual": {
       "title": "貸借均衡セグメントの残額",
       "message": "{count} 件のセグメント値に元帳残額があります。締め処理の前に割り当てと有効な相殺方針を確認してください。"
-    }
+    },
+    "project-loss-owner-unresolved": {"title": "所属会社のない契約プロジェクト", "message": "{count, plural, other {#件の契約プロジェクトに子会社が設定されていないため、損失を測定・評価できません。プロジェクトで子会社を割り当ててください。}}"}
   },
   "severity": {
     "info": "情報",

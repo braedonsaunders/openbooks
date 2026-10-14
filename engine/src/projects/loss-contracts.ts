@@ -97,3 +97,22 @@ export async function unassessedLossContracts(
   }
   return found;
 }
+
+/**
+ * Contract projects with no resolvable owning entity: no subsidiary while the
+ * organization has several root entities. Their cost cannot be measured or
+ * assessed in any entity, so a loss policy cannot certify them; the remedy
+ * is assigning the project's subsidiary.
+ */
+export async function unownedContractProjects(
+  runner: Pick<SqlExecutor, "execute">,
+  orgId: string,
+): Promise<{ projectId: string; code: string; name: string }[]> {
+  if (!(await orgFeatureEnabled(orgId, "projects", runner as SqlExecutor))) return [];
+  return (await runner.execute<{ projectId: string; code: string; name: string }>(sql`
+    select p.id as "projectId", p.code, p.name
+      from projects p
+     where p.org_id = ${orgId} and p.is_active and p.contract_value > 0
+       and ${recordOwnerSubsidiary(orgId, sql`p.subsidiary_id`)} is null
+     order by p.code, p.id`)).rows;
+}

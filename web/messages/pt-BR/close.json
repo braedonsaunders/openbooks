@@ -244,7 +244,8 @@
     "balancing-segment-residual": {
       "title": "Saldos residuais de segmentos",
       "message": "{count} valores de segmentos mantêm saldo residual. Revise as atribuições e a política de compensação antes do fechamento."
-    }
+    },
+    "project-loss-owner-unresolved": {"title": "Projetos de contrato sem entidade proprietária", "message": "{count, plural, one {# projeto de contrato não tem subsidiária, por isso sua perda não pode ser medida nem avaliada. Atribua a subsidiária no projeto.} other {# projetos de contrato não têm subsidiária, por isso suas perdas não podem ser medidas nem avaliadas. Atribua a subsidiária em cada projeto.}}"}
   },
   "severity": {
     "info": "Informação",

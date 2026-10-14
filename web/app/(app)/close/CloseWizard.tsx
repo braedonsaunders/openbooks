@@ -641,6 +641,7 @@ function closeExceptionActionHref(code: string, run: CloseRunRow): string | null
     "consolidated-rates-missing": "/reports/trial-balance",
     "material-variances": "/reports/pnl",
     "project-loss-unassessed": "/accounting/provisions",
+    "project-loss-owner-unresolved": "/projects",
     "commerce-orders-incomplete": "/channels",
     "commerce-storefront-unreachable": "/channels",
     "commerce-payouts-unposted": "/banking/psp-settlements",
