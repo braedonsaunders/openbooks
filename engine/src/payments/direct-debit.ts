@@ -87,7 +87,8 @@ export async function createDirectDebitRun(opts: {
     if (opts.invoiceDocumentIds.some((id) => !found.has(id))) throw new PaymentError("some invoices are closed, outside the profile scope, or have no active debit mandate");
     const groups = new Map<string, typeof result.rows>();
     for (const row of result.rows) {
-      const key = `${row.party_id}:${row.subsidiary_id ?? ""}:${row.control_account_id}:${row.fx_rate}:${row.mandate_id}`;
+      // The receipt converts at its own posting date's rate; each invoice keeps its carrying amount.
+      const key = `${row.party_id}:${row.subsidiary_id ?? ""}:${row.control_account_id}:${row.mandate_id}`;
       groups.set(key, [...(groups.get(key) ?? []), row]);
     }
     const runNumber = await nextNumber(opts.orgId, "payment_run", "COLL-");
@@ -121,7 +122,7 @@ export async function createDirectDebitRun(opts: {
       const total = sum(allocations.map((a) => a.sourceTransactionAmount));
       // Scheduled collection run: system provenance, unrestricted by
       // construction; the receipt carries the invoiced subsidiary explicitly.
-      const receipt = await createPaymentDocument({ orgId: opts.orgId, kind: "customer_payment", createdBy: opts.createdBy, allowedSubsidiaryIds: null, partyId: first.party_id, bankAccountId: profile.bank_account_id, subsidiaryId: first.subsidiary_id, currency: profile.currency, fxRate: first.fx_rate, memo: `Collection run ${runNumber}` });
+      const receipt = await createPaymentDocument({ orgId: opts.orgId, kind: "customer_payment", createdBy: opts.createdBy, allowedSubsidiaryIds: null, partyId: first.party_id, bankAccountId: profile.bank_account_id, subsidiaryId: first.subsidiary_id, currency: profile.currency, memo: `Collection run ${runNumber}` });
       createdReceiptIds.push(receipt.id);
       // Mandate collection on its own receipt: no actor entity set is resolved
       // here, so explicit null names the unrestricted grant outright.

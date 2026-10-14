@@ -336,7 +336,10 @@ async function createPaymentRunWithinTransaction(
 
   const byVendor = new Map<string, typeof payable>();
   for (const b of payable) {
-    const groupKey = `${b.party_id}:${b.subsidiary_id ?? ""}:${b.control_account_id}:${b.fx_rate}`;
+    // One payment per payee, entity and control account. Bills keep their
+    // own carrying amounts; the payment converts at its own posting date's
+    // rate, so realized FX is measured per application at posting.
+    const groupKey = `${b.party_id}:${b.subsidiary_id ?? ""}:${b.control_account_id}`;
     const list = byVendor.get(groupKey) ?? [];
     list.push(b);
     byVendor.set(groupKey, list);
@@ -573,7 +576,6 @@ async function createPaymentRunWithinTransaction(
       subsidiaryId: first.subsidiary_id ?? undefined,
       currency: profile.currency,
       documentDate: paymentDate,
-      fxRate: first.fx_rate,
       memo: `Payment run ${runNumber}`,
     });
     await updateDraftPayment(
@@ -673,13 +675,15 @@ async function createPaymentRunWithinTransaction(
         sourceDocumentId: used.sourceDocumentId,
         sourceOpenLineId,
         kind: "credit" as const,
-        grossAmount: divRate(fromUnits(used.amount), first.fx_rate),
+        // Credits apply only between functional-currency open items, so
+        // their transaction amount is their carrying amount.
+        grossAmount: fromUnits(used.amount),
         discountAmount: "0",
-        creditAmount: divRate(fromUnits(used.amount), first.fx_rate),
+        creditAmount: fromUnits(used.amount),
         creditTargetAllocations: used.targets,
         paymentAmount: "0",
         currency: profile.currency,
-        fxRate: first.fx_rate,
+        fxRate: "1",
         status: "selected" as const,
         createdBy: opts.createdBy,
       })));
