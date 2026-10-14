@@ -155,6 +155,17 @@ test("a full credit settles an invoice with no cash and posts no journal entry",
     );
     assert.equal(await openBalance(org.orgId, invoiceLine), "210.0000", "out-of-scope apply records no settlement");
 
+    // A settlement cannot predate the credit and invoice it settles.
+    const dayBefore = new Date(Date.parse(`${org.date}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
+    await assert.rejects(
+      () => withBypass(() => applyStandaloneCredits(org.orgId, userId, {
+        idempotencyKey: randomUUID(), partyId: org.customerId, side: "ar", appliedOn: dayBefore,
+        credits: [{ fromLineId: creditLine, toLineId: invoiceLine, amount: "210", sourceDocumentId: creditId }],
+      })),
+      new RegExp(`posted on ${org.date}; apply this credit on or after that date`),
+    );
+    assert.equal(await openBalance(org.orgId, invoiceLine), "210.0000", "a backdated apply records no settlement");
+
     const entriesBefore = await entryCount(org.orgId);
     const result = await withBypass(() =>
       applyStandaloneCredits(org.orgId, userId, {

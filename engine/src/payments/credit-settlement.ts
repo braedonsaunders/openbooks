@@ -142,6 +142,8 @@ interface EndpointRow extends Record<string, unknown> {
   subsidiary_id: string;
   book_id: string;
   document_subsidiary_id: string | null;
+  posting_date: string;
+  entry_number: string;
 }
 
 /**
@@ -185,7 +187,9 @@ export async function applyStandaloneCredits(
     const endpointIds = [...new Set(input.credits.flatMap((credit) => [credit.fromLineId, credit.toLineId]))];
     const endpoints = (await db.execute<EndpointRow>(sql`
       select jl.id, jl.account_id, jl.subsidiary_id, je.book_id,
-             endpoint_document.subsidiary_id as document_subsidiary_id
+             endpoint_document.subsidiary_id as document_subsidiary_id,
+             je.posting_date::text as posting_date,
+             coalesce(endpoint_document.document_number, je.entry_number) as entry_number
         from journal_lines jl
         join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
         left join documents endpoint_document on endpoint_document.id = je.source_document_id and endpoint_document.org_id = je.org_id
@@ -256,6 +260,15 @@ export async function applyStandaloneCredits(
         throw new CreditApplicationConflictError("changed-payload");
       }
       return prior.result as CreditSettlementResult;
+    }
+    // A settlement cannot predate the balances it settles: applying a credit
+    // before it or its open item was posted would age and report a
+    // settlement that did not yet exist.
+    const latest = endpoints.reduce((later, row) => (row.posting_date > later.posting_date ? row : later));
+    if (input.appliedOn < latest.posting_date) {
+      throw new PaymentError(
+        `${latest.entry_number} was posted on ${latest.posting_date}; apply this credit on or after that date`,
+      );
     }
     const bookId = await paymentBookId(orgId);
     // Derive the control account from the endpoints instead of defaulting to
