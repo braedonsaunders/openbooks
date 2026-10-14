@@ -480,6 +480,9 @@ test("period tax rounds the federal leg directly and the provincial leg via ledg
     ["9503.0979", "5001.0623", "182.75", "96.17"],
     ["15363.7207", "7854.9254", "295.46", "151.06"],
     ["15438.4414", "7903.7374", "296.89", "152.00"],
+    // Weekly withholding keeps the provincial annual liability to four
+    // places before cents, rather than rounding the per-period leg directly.
+    ["15438.4414", "7903.7379", "296.89", "152.00"],
     ["37660.7389", "23314.2428", "724.24", "448.35"],
   ] as const) {
     const legs = periodTaxLegs(U(t1), U(t2), 52);

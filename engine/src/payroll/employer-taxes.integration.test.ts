@@ -523,6 +523,7 @@ test(
           [130, "cpp2", "deduction"],
           [140, "ei", "deduction"],
           [210, "cpp", "employer_contribution"],
+          [215, "cpp2", "employer_contribution"],
           [220, "ei", "employer_contribution"],
           [260, "wcb", "employer_contribution"],
         ],
@@ -535,6 +536,11 @@ test(
       assert.ok(cpp2 && cmp(cpp2.amount, "0") > 0, "second-tier CPP posts a positive line");
       assert.equal(cpp2!.amount, expected.cpp2);
       assert.equal(cpp2!.description, "CPP2");
+      const cpp2Employer = lines.rows.find((row) => row.sequence === 215);
+      assert.ok(cpp2Employer && cmp(cpp2Employer.amount, "0") > 0, "employer second-tier CPP posts as its own line");
+      assert.equal(cpp2Employer!.system_key, "cpp2");
+      assert.equal(cpp2Employer!.amount, expected.cpp2);
+      assert.equal(cpp2Employer!.description, "CPP2 (employer)");
     } finally {
       await dropScratchOrgReporting(org.orgId);
     }

@@ -434,7 +434,6 @@ export async function computeCaStatutory(
   // so the next run's priors telescope to the period total exactly.
   const cpp = nonNegative(add(statutory.cpp, neg(priorFactor("C"))));
   const cpp2 = nonNegative(add(statutory.cpp2, neg(priorFactor("C2"))));
-  const cppEmployer = add(cpp, cpp2);
   const ei = paymentPremiums?.ei ?? statutory.ei;
   const eiEmployer = paymentPremiums?.eiEmployer ?? statutory.eiEmployer;
   const qpip = nonNegative(add(statutory.qpip, neg(priorFactor("QPIP"))));
@@ -531,7 +530,9 @@ export async function computeCaStatutory(
   pushStatutory("ei", "deduction", "EI", ei, 140);
   pushStatutory("qpip", "deduction", "QPIP", qpip, 150);
   pushStatutory("cpp", "employer_contribution",
-    region === "QC" ? "QPP (employer)" : "CPP (employer)", cppEmployer, 210);
+    region === "QC" ? "QPP (employer)" : "CPP (employer)", cpp, 210);
+  pushStatutory("cpp2", "employer_contribution",
+    region === "QC" ? "QPP2 (employer)" : "CPP2 (employer)", cpp2, 215);
   pushStatutory("ei", "employer_contribution", "EI (employer)", eiEmployer, 220);
   pushStatutory("qpip", "employer_contribution", "QPIP (employer)", qpipEmployer, 230);
 
