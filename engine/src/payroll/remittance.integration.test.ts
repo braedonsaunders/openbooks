@@ -10,7 +10,7 @@ import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import { add, cmp, sum } from "../money/money.ts";
+import { add, cmp, neg, sum } from "../money/money.ts";
 import { postDocument } from "../ledger/posting-document.ts";
 import { recordPayRunPayment } from "./payment.ts";
 import { requestDocumentVoid } from "../ledger/document-void.ts";
@@ -23,6 +23,7 @@ import {
 } from "./remittance.ts";
 import { PayrollError } from "./error.ts";
 import { upsertPayrollEmployerFact } from "./employer-fact-store.ts";
+import { saveOpeningBalances } from "./opening-balances.ts";
 import { attributePayRunEntity } from "./run-lifecycle.ts";
 import { calculatePayRun } from "./run-calculation.ts";
 import { commitPayRun } from "./run-commit.ts";
@@ -587,6 +588,13 @@ test(
         wcbExempt: true, wcbExemptReason: 'remittance fixture: workers-compensation coverage out of scope',
       }, { percentFloor: '4', method: 'accrue' });
 
+      // Cross the first CPP ceiling in this payment so the employee and
+      // employer CPP2 rows are both exercised by GL and CRA remittance paths.
+      await saveOpeningBalances({
+        orgId: org.orgId, actorId, taxYear: 2026,
+        rows: [{ employeePartyId: employeeId, amounts: { pensionableYtd: "74000.00" } }],
+      });
+
 
       const run = await createPayRun({
         orgId: org.orgId, actorId, payScheduleId: scheduleId,
@@ -609,12 +617,31 @@ test(
       const expectedTotal = sum([
         add(stub.factors.T!, stub.factors.TB ?? "0"),     // income tax
         stub.factors.C!,                                   // employee CPP
+        stub.factors.C2 ?? "0",                           // employee CPP2
         stub.factors.EI!,                                  // employee EI
         add(stub.factors.C!, stub.factors.C2 ?? "0"),      // employer CPP match
         stub.factors.EI_ER!,                               // employer EI
       ]);
       assert.equal(cmp(cra.total, expectedTotal), 0);
       assert.equal(cra.employeeCount, 1);
+      const cpp2EmployerComponent = cra.components.find((component) =>
+        component.systemKey === "cpp2" && component.kind === "employer_contribution");
+      assert.ok(cpp2EmployerComponent, "CPP2 employer contribution is included in the CRA remittance");
+      assert.equal(cpp2EmployerComponent!.amount, stub.factors.C2);
+      const [t4Slip] = await t4Slips(org.orgId, 2026);
+      assert.ok(t4Slip, "the committed payment produces its T4 slip");
+      assert.equal(t4Slip!.box16aCpp2, stub.factors.C2);
+      assert.equal(t4Slip!.employerCpp2, stub.factors.C2);
+
+      const cpp2Posting = (await db.execute<{ account_id: string; amount: string }>(sql`
+        select account_id, amount from document_lines
+         where org_id = ${org.orgId} and document_id = ${run.documentId}
+           and description = 'CPP2 (employer)'
+      `)).rows;
+      assert.ok(cpp2Posting.some((line) =>
+        line.account_id === cpp2EmployerComponent!.liabilityAccountId
+        && cmp(line.amount, neg(stub.factors.C2!)) === 0),
+      "CPP2 employer credit posts to the liability account the remittance will clear");
 
       // Bill: draft vendor_bill debiting the liability account, marked for the period.
       const bill = await createRemittanceBill(org.orgId, actorId, {

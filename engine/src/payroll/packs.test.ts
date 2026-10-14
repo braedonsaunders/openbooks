@@ -90,13 +90,13 @@ test("the income taxes are the only income-assessed lines in either pack", () =>
     "NL/LH", "ES/IRPF", "JP/GENSEN", "PL/PIT", "BR/IRRF"]);
 });
 
-test("employee CPP, CPP2, EI and QPIP are earnings-assessed, like the employer share", () => {
+test("CPP, CPP2, EI and QPIP employee and employer lines are earnings-assessed", () => {
   // T4127 computes C and C2 from pensionable income and EI/QPIP from insurable
   // earnings; no factor-F / F2 / U1 deduction enters those formulas, so a
   // capped pre-tax support order cannot move them.
   for (const [systemKey, kind] of [
     ["cpp", "deduction"], ["cpp2", "deduction"], ["ei", "deduction"], ["qpip", "deduction"],
-    ["cpp", "employer_contribution"], ["ei", "employer_contribution"],
+    ["cpp", "employer_contribution"], ["cpp2", "employer_contribution"], ["ei", "employer_contribution"],
     ["qpip", "employer_contribution"], ["wcb", "employer_contribution"],
     ["eht", "employer_contribution"], ["hsf", "employer_contribution"],
   ] as const) {

@@ -685,11 +685,11 @@ test(
       );
 
       // A pack with no dependents uninstalls cleanly: CA was never used here.
-      // 14 statutory components: TAX, QCTAX, CPP, CPP2, CPP-ER, EI, EI-ER,
-      // QPIP, QPIP-ER, VAC, WCB, EHT, HSF, CNT.
+      // 15 statutory components: TAX, QCTAX, CPP, CPP2, CPP-ER, CPP2-ER,
+      // EI, EI-ER, QPIP, QPIP-ER, VAC, WCB, EHT, HSF, CNT.
       await seedCanadianPayrollComponentsForTest(org.orgId, actorId);
       const removed = await uninstallPayrollPack(org.orgId, actorId, "CA");
-      assert.equal(removed.componentsRemoved, 14);
+      assert.equal(removed.componentsRemoved, 15);
       const caLeft = (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from pay_components
          where org_id = ${org.orgId} and country = 'CA'`));
