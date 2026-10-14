@@ -59,6 +59,7 @@ const requestBodySchema = z.discriminatedUnion('action', [
   z.strictObject({ ...actionBody('bulk-adjustment'), componentId: payrollRunUuid('componentId', 'a pay component id', "choose one from this run's adjustableComponents"), amount: payrollRunMoney, employeePartyIds: employeeIds('pass the employees to adjust as a list'), note: z.json().optional(), replaceComponent: z.json().optional() }),
   z.strictObject({ ...actionBody('preview-gl') }),
   z.strictObject({ ...actionBody('add-adjustment'), employeePartyId: payrollRunUuid('employeePartyId', 'an employee id', 'pass the employee as an employee id', 'fix the id and try again'), componentId: payrollRunUuid('componentId', 'a pay component id', "choose one from this run's adjustableComponents"), amount: payrollRunMoney, hours: z.string().nullable().optional(), earnedFrom: z.string().nullable().optional(), earnedTo: z.string().nullable().optional(), note: z.json().optional(), replaceComponent: z.json().optional() }),
+  z.strictObject({ ...actionBody('override-income-tax'), employeePartyId: payrollRunUuid('employeePartyId', 'an employee id', 'select the employee whose cheque withholding is being recorded'), amount: payrollRunMoney, reason: z.string().trim().min(1).max(500), sourceReference: z.string().trim().min(1).max(300) }),
   z.strictObject({ ...actionBody('record-holiday-hours'), employeePartyId: payrollRunUuid('employeePartyId', 'an employee id', 'select the employee whose paid holiday hours are being recorded'), hours: z.string(), earnedOn: z.string().optional(), reason: z.string().trim().min(1).max(500), note: z.string().max(500).optional() }),
   z.strictObject({ ...actionBody('delete-adjustment'), adjustmentId: payrollRunUuid('adjustmentId', 'a pay adjustment id', 'pass the adjustment to delete as an id', 'fix the id and try again') }),
   z.strictObject({ ...actionBody('set-scope'), employeePartyIds: employeeIds('pass the employees to include as a list'), rosterPartyIds: rosterIds }),
@@ -453,6 +454,36 @@ export const POST = defineRoute({
           return NextResponse.json({ ok: true, ...result })
         } catch (e) {
           if (e instanceof PayRunAdjustmentIdempotencyConflict) return NextResponse.json({ error: 'invalid_idempotency_key' }, { status: 409 })
+          throw e
+        }
+      }
+      if (body.action === 'override-income-tax') {
+        const amount = canonicalDecimal(body.amount, 2)
+        if (amount === null) {
+          return NextResponse.json({ error: decimalNullRefusal('amount', 'a non-negative absolute withholding amount in cents', body.amount, 2) }, { status: 422 })
+        }
+        const requestKey = req.headers.get('Idempotency-Key')?.trim() ?? ''
+        if (!isUuid(requestKey)) {
+          return NextResponse.json({ error: 'override-income-tax requires a UUID Idempotency-Key; retry with a request key' }, { status: 400 })
+        }
+        try {
+          const outcome = await mutatePayRunAdjustment({
+            orgId: gate.user.orgId,
+            documentId: id,
+            actorId: gate.user.id,
+            reason: body.reason,
+            allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+            mutation: {
+              action: 'override_income_tax', employeePartyId: body.employeePartyId,
+              amount, reason: body.reason,
+              sourceReference: body.sourceReference, idempotencyKey: requestKey,
+            },
+          })
+          return NextResponse.json({ ok: true, ...outcome })
+        } catch (e) {
+          if (e instanceof PayRunAdjustmentIdempotencyConflict) {
+            return NextResponse.json({ error: 'invalid_idempotency_key', message: e.message }, { status: 409 })
+          }
           throw e
         }
       }

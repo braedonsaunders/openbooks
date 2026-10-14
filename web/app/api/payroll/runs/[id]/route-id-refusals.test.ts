@@ -170,11 +170,11 @@ function validAdd(overrides: Record<string, unknown> = {}): Record<string, unkno
   }
 }
 
-function post(body: unknown) {
+function post(body: unknown, headers: Record<string, string> = {}) {
   return POST(
     new Request(`http://openbooks.test/api/payroll/runs/${RUN_ID}`, {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: { 'content-type': 'application/json', ...headers },
       body: JSON.stringify(body),
     }),
     { params: Promise.resolve({ id: RUN_ID }) },
@@ -197,6 +197,46 @@ test('single adjustment preserves native rebased employee and component identiti
   const call = routeState.adjustmentCalls[0] as { mutation: { employeePartyId: string; componentId: string } }
   assert.equal(call.mutation.employeePartyId, employeePartyId)
   assert.equal(call.mutation.componentId, componentId)
+})
+
+test('income-tax override requires an idempotency key and crosses the native command with explicit evidence', async () => {
+  reset()
+  const body = {
+    action: 'override-income-tax',
+    employeePartyId: uuid(1),
+    amount: '120.15',
+    reason: 'Operator-entered cheque withholding',
+    sourceReference: 'payroll-card:fixture-1',
+  }
+  const missingKey = await post(body)
+  assert.equal(missingKey.status, 400)
+  assert.match((await missingKey.json()).error, /UUID Idempotency-Key/)
+  assert.equal(routeState.adjustmentCalls.length, 0)
+
+  const tooPrecise = await post({ ...body, amount: '120.155' }, { 'Idempotency-Key': uuid(24) })
+  assert.equal(tooPrecise.status, 422)
+  assert.match((await tooPrecise.json()).error, /amount/)
+  assert.equal(routeState.adjustmentCalls.length, 0)
+
+  const requestKey = uuid(25)
+  const response = await post(body, { 'Idempotency-Key': requestKey })
+  assert.equal(response.status, 200)
+  assert.equal(routeState.adjustmentCalls.length, 1)
+  const call = routeState.adjustmentCalls[0] as {
+    mutation: Record<string, unknown>;
+    reason: string;
+  }
+  assert.deepEqual(call.mutation, {
+    action: 'override_income_tax', employeePartyId: uuid(1), amount: '120.15',
+    reason: body.reason, sourceReference: body.sourceReference, idempotencyKey: requestKey,
+  })
+  assert.equal(call.reason, body.reason)
+  assert.equal(canonicalDecimal(call.mutation.amount, 2), '120.15', 'the native cents guard accepts the adapter amount')
+
+  reset()
+  const zero = await post({ ...body, amount: '0' }, { 'Idempotency-Key': uuid(26) })
+  assert.equal(zero.status, 200)
+  assert.equal((routeState.adjustmentCalls[0] as { mutation: { amount: string } }).mutation.amount, '0')
 })
 
 // ---------------------------------------------------------------------------

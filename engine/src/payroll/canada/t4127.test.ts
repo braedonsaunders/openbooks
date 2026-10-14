@@ -371,6 +371,41 @@ test("a reduced employer EI multiple prices the employee premium times the multi
   assert.equal(standard.eiEmployer, money("46.48"));
 });
 
+test("2026 Ontario periodic withholding retains the low-income health-premium amount", () => {
+  const result = calculateT4127({
+    payDate: "2026-02-12", province: "ON", periodsPerYear: 52,
+    income: "390.00", pensionable: "390.00", insurable: "390.00",
+    cppWithheld: "19.20", eiWithheld: "6.36", eiEmployerMultiple: "1.167",
+    federalClaim: "31452.00", provincialClaim: "24018.00",
+  });
+
+  assert.equal(result.factors.A, "20112.2017");
+  assert.equal(result.factors.V2, "6.7321");
+  assert.equal(result.factors.T2, "6.7321");
+  assert.equal(result.factors.TP, "0.1300");
+  assert.equal(result.factors.T, "0.1300");
+  assert.equal(result.cpp, money("19.20"));
+  assert.equal(result.ei, money("6.36"));
+  assert.equal(result.eiEmployer, money("7.42"));
+  assert.equal(result.totalTax, money("0.13"));
+});
+
+test("annualized withholding uses source CPP and EI YTD when contribution ceilings differ", () => {
+  const result = calculateT4127({
+    payDate: "2026-07-29", province: "ON", periodsPerYear: 52,
+    income: "390.04", pensionable: "390.04", insurable: "390.04",
+    cppWithheld: "19.20", eiWithheld: "6.36",
+    federalClaim: "16452.00", provincialClaim: "12989.00",
+    ytd: { cpp: "3841.09", ei: "1081.39" },
+  });
+
+  assert.equal(result.cpp, money("19.20"));
+  assert.equal(result.ei, money("6.36"));
+  assert.equal(result.factors.TF, money("2.69"));
+  assert.equal(result.factors.TP, money("0.18"));
+  assert.equal(result.totalTax, money("2.87"));
+});
+
 test("an employer EI multiple outside 1.0000-1.4000 or past 4 places refuses", () => {
   const bad: [string, string][] = [
     ["1.16755", "five places"],
@@ -432,10 +467,17 @@ test("Canada withholding uses effective TD1ON dependants and TP-1015 fund purcha
     const resolved = resolveCertificate({ certificate, stored: row ? [row] : [],
       profile: { federal_claim_code: "1", provincial_claim_code: "1" }, asOf: "2026-02-13" });
     const taxes: Record<string, string> = {};
-    await computeCaStatutory({ tx: { execute: async () => ({ rows: [{
-      pensionable: "0", insurable: "0", cpp: "0", cpp2: "0", ei: "0", qpip: "0",
-      qpip_employer: "0", non_periodic: "0", f5b: "0", qc_csb: "0",
-    }] }) } as never, orgId: "org", documentId: "run", employeePartyId: "employee",
+    let reads = 0;
+    await computeCaStatutory({ tx: { execute: async () => {
+      reads += 1;
+      if (reads === 1) return { rows: [{ id: "legal-employer", currency: "CAD" }] };
+      if (reads === 2 || reads === 3 || reads === 5) return { rows: [] };
+      if (reads === 4) return { rows: [{
+        pensionable: "0", insurable: "0", cpp: "0", cpp2: "0", ei: "0", qpip: "0",
+        qpip_employer: "0", non_periodic: "0", pension_deductions_bonus: "0", f5b: "0", qc_csb: "0",
+      }] };
+      throw new Error(`unexpected Canadian statutory source read ${reads}`);
+    } } as never, orgId: "org", documentId: "run", employeePartyId: "employee",
     employeeName: "Test Employee", taxYear: 2026, country: "CA", region,
     run: { pay_date: "2026-02-13" }, emp: { federal_claim_code: "1", provincial_claim_code: "1" },
     filingAccountId: null, periodsPerYear: 26, income: "1100.0000", nonPeriodic: "0.0000",

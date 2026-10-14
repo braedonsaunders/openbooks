@@ -9,11 +9,33 @@ import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { isUuid } from "../platform/uuid.ts";
+import { canonicalDecimal } from "../money/exact-decimal.ts";
 
 export type OpeningEmployerAuthoritySource = {
   id: string; openingBalanceId: string; employeePartyId: string; taxYear: number; subsidiaryId: string;
   sourceFileId: string; sourceVersionId: string; sourceSha256: string; openingSha256: string;
 };
+
+export type IncomeTaxOverrideSource = {
+  adjustmentId: string;
+  employeePartyId: string;
+  componentId: string;
+  amount: string;
+  reason: string;
+  sourceReference: string;
+  requestId: string;
+};
+
+function isIncomeTaxOverrideSource(value: unknown): value is IncomeTaxOverrideSource {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const row = value as Record<string, unknown>;
+  return ["adjustmentId", "employeePartyId", "componentId", "requestId"]
+    .every(key => typeof row[key] === "string" && isUuid(row[key] as string))
+    && typeof row.amount === "string" && /^(?:0|[1-9]\d*)(?:\.\d{1,4})?$/.test(row.amount)
+    && canonicalDecimal(canonicalDecimal(row.amount, 4), 2) !== null
+    && typeof row.reason === "string" && row.reason.trim().length > 0 && row.reason.length <= 500
+    && typeof row.sourceReference === "string" && row.sourceReference.trim().length > 0 && row.sourceReference.length <= 300;
+}
 
 function isOpeningEmployerAuthoritySource(value: unknown): value is OpeningEmployerAuthoritySource {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
@@ -93,6 +115,8 @@ export interface PayRunCalculationSourceSnapshot {
   bonusIncomeReferences?: CaBonusIncomeReferenceSource[];
   /** Exact retained employer and original-report identity of consumed opening history. */
   openingEmployerAuthorities?: OpeningEmployerAuthoritySource[];
+  /** Audited operator-entered absolute withholding amounts consumed by Canadian tax calculation. */
+  incomeTaxOverrides?: IncomeTaxOverrideSource[];
   claimEntryIds: string[];
 }
 
@@ -138,6 +162,8 @@ export function parsePayRunCalculationSource(
       || (Object.hasOwn(snapshot, 'employerAssignments') && !Array.isArray(snapshot.employerAssignments))
       || (Object.hasOwn(snapshot, 'holidayObligations') && !Array.isArray(snapshot.holidayObligations))
       || (Object.hasOwn(snapshot, 'bonusIncomeReferences') && !Array.isArray(snapshot.bonusIncomeReferences))
+      || (Object.hasOwn(snapshot, 'incomeTaxOverrides') && (!Array.isArray(snapshot.incomeTaxOverrides)
+        || snapshot.incomeTaxOverrides.some(row => !isIncomeTaxOverrideSource(row))))
       || (Object.hasOwn(snapshot, 'openingEmployerAuthorities') && (!Array.isArray(snapshot.openingEmployerAuthorities)
         || snapshot.openingEmployerAuthorities.some(row => !isOpeningEmployerAuthoritySource(row))))) return null;
   // Snapshots stored before item routing existed carry no itemAccounts; they
@@ -372,6 +398,43 @@ export async function payRunCalculationSource(
   `));
   const row = result.rows[0];
   if (!row?.run_exists) return null;
+  const incomeTaxOverrideRows = (await executor.execute<{
+    adjustmentId: string;
+    employeePartyId: string;
+    componentId: string;
+    amount: string;
+    note: string | null;
+  }>(sql`
+    select a.id::text as "adjustmentId", a.employee_party_id::text as "employeePartyId",
+           a.component_id::text as "componentId", a.amount::text as amount, a.note
+      from pay_run_adjustments a
+      join pay_components c on c.org_id=a.org_id and c.id=a.component_id
+     where a.org_id=${orgId} and a.pay_run_document_id=${documentId}
+       and a.adjustment_type='line' and a.replace_component and c.system_key='income_tax'
+       and a.employee_party_id in (select jsonb_array_elements_text(${JSON.stringify(row.employee_party_ids ?? [])}::jsonb)::uuid)
+     order by a.employee_party_id, a.id
+     ${lockSources ? sql`for share of a, c` : sql``}
+  `)).rows;
+  const incomeTaxOverrides: IncomeTaxOverrideSource[] = incomeTaxOverrideRows.map((override) => {
+    let note: unknown;
+    try { note = JSON.parse(override.note ?? "null"); } catch { note = null; }
+    const evidence = note && typeof note === "object" && !Array.isArray(note)
+      ? note as Record<string, unknown>
+      : null;
+    const source: IncomeTaxOverrideSource = {
+      adjustmentId: override.adjustmentId,
+      employeePartyId: override.employeePartyId,
+      componentId: override.componentId,
+      amount: override.amount,
+      reason: typeof evidence?.reason === "string" ? evidence.reason : "",
+      sourceReference: typeof evidence?.sourceReference === "string" ? evidence.sourceReference : "",
+      requestId: typeof evidence?.requestId === "string" ? evidence.requestId : "",
+    };
+    if (evidence?.kind !== "income_tax_override" || !isIncomeTaxOverrideSource(source)) {
+      throw new PayrollError("The saved income-tax override lacks valid audited amount, reason or source-reference evidence — correct it through the audited override command before calculating or committing");
+    }
+    return source;
+  });
   const assignmentRunPolicies = (await executor.execute<NonNullable<PayRunCalculationSourceSnapshot['assignmentRunPolicies']>[number]>(sql`
     select a.id::text, a.employee_party_id::text as "employeePartyId", a.employment_id::text as "employmentId",
       a.component_id::text as "componentId", a.run_applicability as policy,
@@ -455,6 +518,7 @@ export async function payRunCalculationSource(
     ...(holidayObligations.length ? { holidayObligations } : {}),
     ...(bonusIncomeReferences.length ? { bonusIncomeReferences } : {}),
     ...(openingEmployerAuthorities.length ? { openingEmployerAuthorities } : {}),
+    ...(incomeTaxOverrides.length ? { incomeTaxOverrides } : {}),
     claimEntryIds: row.claim_entry_ids ?? [],
   };
 }
@@ -462,9 +526,10 @@ export async function payRunCalculationSource(
 export function payRunCalculationSourceChanges(
   stored: PayRunCalculationSourceSnapshot,
   current: PayRunCalculationSourceSnapshot,
-): { time: boolean; timeTypes: boolean; wages: boolean; items: boolean; components: boolean; compensationPackages: boolean; holidayObligations: boolean; roster: boolean; openingBalances: boolean } {
+): { time: boolean; timeTypes: boolean; wages: boolean; items: boolean; components: boolean; compensationPackages: boolean; holidayObligations: boolean; roster: boolean; openingBalances: boolean; incomeTaxOverrides: boolean } {
   return {
     openingBalances: canonicalJson(stored.openingEmployerAuthorities ?? []) !== canonicalJson(current.openingEmployerAuthorities ?? []),
+    incomeTaxOverrides: canonicalJson(stored.incomeTaxOverrides ?? []) !== canonicalJson(current.incomeTaxOverrides ?? []),
     time: canonicalJson(stored.timeEntries) !== canonicalJson(current.timeEntries)
       || canonicalJson(stored.claimEntryIds) !== canonicalJson(current.claimEntryIds),
     timeTypes: canonicalJson(stored.timeTypes) !== canonicalJson(current.timeTypes),

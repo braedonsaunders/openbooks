@@ -3,7 +3,7 @@ import { seedEnabledPayrollConfiguration } from '../testing/fixtures.ts';
 import { seedPayrollSettings } from '../testing/fixtures.ts';
 import {
   seedPayrollSchedule, seedPayrollPerson, seedPayrollTime, seedPostingAccount, seedPayrollProfile, seedPayrollWage,
-  createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment,
+  createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment, grantScratchPermissions,
 } from "../testing/fixtures.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -28,6 +28,7 @@ import { seedVacationTerms, seedCanadianPayrollComponentsForTest, seedUsSuiAccou
 import { t4Slips, w2Slips, form941Worksheet } from "./yearend.ts";
 import { assertPayRunNotStale, payRunStaleness } from "./readiness.ts";
 import { unionRemittanceReport, upsertUnionFringe } from "./union.ts";
+import { mutatePayRunAdjustment, PayRunAdjustmentIdempotencyConflict } from "./run-adjustments.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -967,6 +968,277 @@ test(
         select count(*)::int as n from pay_stubs where pay_run_document_id = ${run.documentId}
       `))).rows[0]!;
       assert.equal(stubCount.n, 0);
+    } finally {
+      await dropScratchOrgReporting(org.orgId);
+    }
+  },
+);
+
+test(
+  "income-tax overrides are authorized, absolute, audited, replayable, and refuse unsupported withholding",
+  { skip: !DB },
+  async () => {
+    const org = await createScratchOrg();
+    const actors = await seedFlowActors(org.orgId);
+    const actorId = actors.adminId;
+    await grantScratchPermissions(org.orgId, actorId, ["payroll.manage"]);
+    try {
+      await withOrgContext(org.orgId, async () => {
+        await seedCanadianPostingAccounts(org.orgId);
+        await seedCanadianPayrollComponentsForTest(org.orgId, actorId);
+        await seedPayrollSettings(org.orgId, { features: { payroll: true } });
+        const employeeId = randomUUID();
+        await seedPayrollPerson(org.orgId, employeeId, "Tax Override Avery");
+        await seedPayrollWage(org.orgId, employeeId, actorId, {
+          currency: "CAD", rate: "78000", basis: "year", annualHours: "2080", effectiveFrom: "2026-01-01",
+        });
+        const scheduleId = randomUUID();
+        await seedPayrollSchedule(org.orgId, scheduleId, actorId, {
+          name: "Biweekly", frequency: "biweekly", periodsPerYear: 26, anchorPeriodEnd: "2026-07-18",
+          payDateOffsetDays: 3,
+        });
+        const employmentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
+        await seedPayrollProfile(org.orgId, employeeId, employmentId, scheduleId, actorId, {
+          country: "CA", province: "ON", payBasis: "salary", federalClaimCode: 1, provincialClaimCode: 1,
+        }, { percentFloor: null, method: "accrue" });
+        const run = await createPayRun({
+          orgId: org.orgId, actorId, payScheduleId: scheduleId,
+          periodStart: "2026-07-05", periodEnd: "2026-07-18",
+        });
+        await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
+
+        const baseMutation = {
+          orgId: org.orgId, documentId: run.documentId, actorId,
+          allowedSubsidiaryIds: null,
+        };
+        const incomeTaxComponent = (await db.execute<{ id: string }>(sql`
+          select id::text from pay_components
+           where org_id=${org.orgId} and country='CA' and system_key='income_tax' and is_active
+        `)).rows[0]!;
+        await db.execute(sql`update pay_components set is_active=false where org_id=${org.orgId} and id=${incomeTaxComponent.id}`);
+        await assert.rejects(
+          mutatePayRunAdjustment({
+            ...baseMutation,
+            mutation: {
+              action: "override_income_tax", employeePartyId: employeeId, amount: "120.15",
+              reason: "Record the operator-entered cheque withholding", sourceReference: "payroll-card:fixture-0",
+              idempotencyKey: randomUUID(),
+            },
+            reason: "Record the operator-entered cheque withholding",
+          }),
+          /exactly one active Canadian income-tax withholding component/,
+        );
+        await db.execute(sql`update pay_components set is_active=true where org_id=${org.orgId} and id=${incomeTaxComponent.id}`);
+        const first = {
+          action: "override_income_tax" as const, employeePartyId: employeeId,
+          amount: "120.15", reason: "Record the operator-entered cheque withholding",
+          sourceReference: "payroll-card:fixture-1", idempotencyKey: randomUUID(),
+        };
+        await seedPayrollSettings(org.orgId, { features: { payroll: false } });
+        await assert.rejects(mutatePayRunAdjustment({ ...baseMutation, mutation: first }), /Payroll feature is disabled/);
+        await seedPayrollSettings(org.orgId, { features: { payroll: true } });
+        const saved = await mutatePayRunAdjustment({ ...baseMutation, mutation: first, reason: first.reason });
+        assert.deepEqual(saved, { changed: true, replayed: false });
+        const invalidated = (await db.execute<{ n: number }>(sql`
+          select count(*)::int as n from pay_stubs where pay_run_document_id = ${run.documentId}
+        `)).rows[0]!;
+        assert.equal(invalidated.n, 0, "saving an override invalidates the prior calculated snapshot");
+
+        const replay = await mutatePayRunAdjustment({ ...baseMutation, mutation: first, reason: first.reason });
+        assert.deepEqual(replay, { changed: false, replayed: true });
+        await assert.rejects(
+          mutatePayRunAdjustment({ ...baseMutation, mutation: { ...first, amount: "120.16" }, reason: first.reason }),
+          (error: unknown) => error instanceof PayRunAdjustmentIdempotencyConflict,
+        );
+        await assert.rejects(
+          mutatePayRunAdjustment({
+            ...baseMutation,
+            mutation: { ...first, amount: "-0.01", idempotencyKey: randomUUID() },
+            reason: first.reason,
+          }),
+          /cannot be negative/,
+        );
+        await assert.rejects(
+          mutatePayRunAdjustment({
+            ...baseMutation,
+            mutation: { ...first, amount: "120.155", idempotencyKey: randomUUID() },
+            reason: first.reason,
+          }),
+          /at most 2 decimal places/,
+        );
+        await assert.rejects(
+          mutatePayRunAdjustment({
+            ...baseMutation, actorId: actors.outsiderId,
+            mutation: { ...first, idempotencyKey: randomUUID() }, reason: first.reason,
+          }),
+        );
+
+        await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
+        const firstEvidence = (await db.execute<{
+          amount: string; description: string; factors: Record<string, string>;
+        }>(sql`
+          select l.amount::text as amount, l.description, s.factors
+            from pay_stub_lines l
+            join pay_stubs s on s.org_id=l.org_id and s.id=l.stub_id
+            join pay_components c on c.org_id=l.org_id and c.id=l.component_id
+           where s.pay_run_document_id=${run.documentId} and c.system_key='income_tax'
+        `)).rows[0]!;
+        assert.equal(firstEvidence.amount, "120.1500");
+        assert.equal(firstEvidence.description,
+          "Income tax override — Record the operator-entered cheque withholding; source payroll-card:fixture-1");
+        assert.equal(firstEvidence.factors.CA_TAX_OVERRIDE, "120.1500");
+        assert.equal(firstEvidence.factors.T, "120.1500");
+        assert.equal(typeof firstEvidence.factors.TF, "string", "the stub keeps its native federal reference leg");
+        assert.equal(typeof firstEvidence.factors.TP, "string", "the stub keeps its native provincial reference leg");
+        const calculatedSource = (await db.execute<{ calculation_source_snapshot: unknown }>(sql`
+          select calculation_source_snapshot from pay_runs
+           where org_id=${org.orgId} and document_id=${run.documentId}
+        `)).rows[0]!.calculation_source_snapshot;
+        const sourceSnapshot = (typeof calculatedSource === "string" ? JSON.parse(calculatedSource) : calculatedSource) as {
+          incomeTaxOverrides?: unknown[];
+        };
+        assert.deepEqual(sourceSnapshot.incomeTaxOverrides, [{
+          adjustmentId: first.idempotencyKey,
+          employeePartyId: employeeId,
+          componentId: incomeTaxComponent.id,
+          amount: "120.1500",
+          reason: first.reason,
+          sourceReference: first.sourceReference,
+          requestId: first.idempotencyKey,
+        }]);
+
+        const second = { ...first, amount: "180.25", reason: "Correct to the revised operator entry", idempotencyKey: randomUUID() };
+        await mutatePayRunAdjustment({ ...baseMutation, mutation: second, reason: second.reason });
+        const correctionInvalidated = (await db.execute<{ n: number }>(sql`
+          select count(*)::int as n from pay_stubs where pay_run_document_id = ${run.documentId}
+        `)).rows[0]!;
+        assert.equal(correctionInvalidated.n, 0, "correcting an override invalidates the previous snapshot");
+        assert.deepEqual(
+          await mutatePayRunAdjustment({ ...baseMutation, mutation: second, reason: second.reason }),
+          { changed: false, replayed: true },
+        );
+        const readCurrentOverrideState = async () => (await db.execute<{ state: unknown }>(sql`
+          select jsonb_build_object(
+            'runStatus', r.run_status, 'calculationSnapshot', r.calculation_source_snapshot,
+            'calculationDigest', r.calculation_source_digest,
+            'adjustments', (select jsonb_agg(to_jsonb(a) order by a.id) from pay_run_adjustments a
+              where a.org_id=r.org_id and a.pay_run_document_id=r.document_id),
+            'stubs', (select jsonb_agg(to_jsonb(s) order by s.id) from pay_stubs s
+              where s.org_id=r.org_id and s.pay_run_document_id=r.document_id),
+            'lines', (select jsonb_agg(to_jsonb(line) order by line.id) from pay_stub_lines line
+              join pay_stubs s on s.org_id=line.org_id and s.id=line.stub_id
+              where s.org_id=r.org_id and s.pay_run_document_id=r.document_id),
+            'auditCount', (select count(*) from audit_log audit
+              where audit.org_id=r.org_id and audit.table_name='pay_run_adjustments'
+                and audit.row_id=${first.idempotencyKey})
+          ) as state from pay_runs r where r.org_id=${org.orgId} and r.document_id=${run.documentId}
+        `)).rows[0]!.state;
+        const correctedInputState = await readCurrentOverrideState();
+        await assert.rejects(
+          mutatePayRunAdjustment({ ...baseMutation, mutation: first, reason: first.reason }),
+          (error: unknown) => error instanceof PayRunAdjustmentIdempotencyConflict
+            && /corrected or removed.*Review.*fresh request key/.test(error.message),
+        );
+        assert.deepEqual(await readCurrentOverrideState(), correctedInputState,
+          "refusing an overwritten request preserves the corrected native input and audit history");
+        const audit = (await db.execute<{
+          action: string; before_amount: string | null; after_amount: string | null;
+        }>(sql`
+          select action, changes->'before'->>'amount' as before_amount,
+                 changes->'after'->>'amount' as after_amount
+            from audit_log
+           where org_id=${org.orgId} and table_name='pay_run_adjustments'
+             and row_id=${first.idempotencyKey}
+           order by at, id
+        `)).rows;
+        assert.equal(audit.length, 2);
+        assert.deepEqual(audit.map(({ action, before_amount, after_amount }) => ({ action, before_amount, after_amount })), [
+          { action: "insert", before_amount: null, after_amount: "120.1500" },
+          { action: "update", before_amount: "120.1500", after_amount: "180.2500" },
+        ]);
+        await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
+        const correctedLine = (await db.execute<{ amount: string }>(sql`
+          select l.amount::text as amount from pay_stub_lines l
+            join pay_stubs s on s.org_id=l.org_id and s.id=l.stub_id
+            join pay_components c on c.org_id=l.org_id and c.id=l.component_id
+           where s.pay_run_document_id=${run.documentId} and c.system_key='income_tax'
+        `)).rows[0]!;
+        assert.equal(correctedLine.amount, "180.2500");
+        const calculatedCorrectionState = await readCurrentOverrideState();
+        await assert.rejects(mutatePayRunAdjustment({ ...baseMutation, mutation: first, reason: first.reason }),
+          (error: unknown) => error instanceof PayRunAdjustmentIdempotencyConflict);
+        assert.deepEqual(await readCurrentOverrideState(), calculatedCorrectionState,
+          "an overwritten request cannot replace or invalidate the current calculated cheque snapshot");
+        assert.deepEqual(await mutatePayRunAdjustment({ ...baseMutation, mutation: second, reason: second.reason }),
+          { changed: false, replayed: true });
+        assert.deepEqual(await readCurrentOverrideState(), calculatedCorrectionState,
+          "a replay of the current request preserves its native input, calculated snapshot and audit history");
+
+        const zero = { ...second, amount: "0", idempotencyKey: randomUUID() };
+        await mutatePayRunAdjustment({ ...baseMutation, mutation: zero });
+        await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
+        const zeroStub = (await db.execute<{ factors: Record<string, string>; tax: string }>(sql`
+          select s.factors, coalesce((select sum(l.amount) from pay_stub_lines l
+            join pay_components c on c.org_id=l.org_id and c.id=l.component_id
+            where l.org_id=s.org_id and l.stub_id=s.id and c.system_key='income_tax'),0)::text as tax
+          from pay_stubs s where s.org_id=${org.orgId} and s.pay_run_document_id=${run.documentId}
+            and s.employee_party_id=${employeeId}
+        `)).rows[0]!;
+        assert.equal(zeroStub.factors.CA_TAX_OVERRIDE, "0.0000");
+        assert.equal(zeroStub.factors.T, "0.0000");
+        assert.equal(cmp(zeroStub.tax, "0"), 0, "explicit zero replaces computed withholding");
+        const revised = { ...second, idempotencyKey: randomUUID() };
+        await mutatePayRunAdjustment({ ...baseMutation, mutation: revised });
+
+        await db.execute(sql`
+          update employee_payroll_profiles set province='QC'
+           where org_id=${org.orgId} and employee_party_id=${employeeId} and pay_schedule_id=${scheduleId}
+        `);
+        await assert.rejects(
+          mutatePayRunAdjustment({
+            ...baseMutation,
+            mutation: { ...second, idempotencyKey: randomUUID() }, reason: second.reason,
+          }),
+          /single total cannot override Québec federal and provincial withholding separately/,
+        );
+        const savedOverride = (await db.execute<{ id: string }>(sql`
+          select id::text as id from pay_run_adjustments
+           where org_id=${org.orgId} and pay_run_document_id=${run.documentId}
+             and employee_party_id=${employeeId} and replace_component
+        `)).rows[0]!;
+        await assert.rejects(
+          mutatePayRunAdjustment({
+            ...baseMutation, actorId: actors.outsiderId,
+            mutation: { action: "delete", adjustmentId: savedOverride.id },
+          }),
+        );
+        const unsupported = await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
+        assert.equal(unsupported.employees, 0);
+        assert.ok(unsupported.errors.some(error => /single total cannot override Québec federal and provincial withholding separately/.test(error.message)));
+        await db.execute(sql`
+          update employee_payroll_profiles set country='US'
+           where org_id=${org.orgId} and employee_party_id=${employeeId} and pay_schedule_id=${scheduleId}
+        `);
+        await assert.rejects(
+          mutatePayRunAdjustment({
+            ...baseMutation,
+            mutation: { ...second, idempotencyKey: randomUUID() }, reason: second.reason,
+          }),
+          /available only for Canadian payroll profiles/,
+        );
+        await db.execute(sql`
+          update employee_payroll_profiles set country='CA', province='ON'
+           where org_id=${org.orgId} and employee_party_id=${employeeId} and pay_schedule_id=${scheduleId}
+        `);
+        await calculatePayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
+        await commitPayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
+        const yearEndSlip = (await t4Slips(org.orgId, 2026)).find(slip => slip.employeePartyId === employeeId);
+        assert.equal(yearEndSlip?.box22IncomeTax, "180.2500", "T4 box 22 aggregates the single overridden income-tax stub line");
+        await assert.rejects(mutatePayRunAdjustment({ ...baseMutation,
+          mutation: { ...second, idempotencyKey: randomUUID() } }), /pay run is not editable/);
+        await assert.rejects(mutatePayRunAdjustment({ ...baseMutation,
+          mutation: { action: "delete", adjustmentId: savedOverride.id } }), /pay run is not editable/);
+      });
     } finally {
       await dropScratchOrgReporting(org.orgId);
     }
