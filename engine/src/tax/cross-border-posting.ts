@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import type { SqlExecutor } from "../platform/db.ts";
+import { isZeroDecimal } from "../money/exact-decimal.ts";
 import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 import {
   determineCrossBorderSupply,
@@ -198,6 +199,41 @@ export async function assertCrossBorderSupplyEvidence(
     if (offending !== "0") {
       throw new CrossBorderTaxError(
         `reverse charge applies (${outcome.note}); mark every line with the reverse-charge tax treatment before posting`,
+      );
+    }
+  }
+
+  if (outcome.outcome !== "reverse_charge") {
+    // The verdict names where the supply is taxed, and the OSS and domestic
+    // returns read the line taxes under it. A line taxed under another
+    // country's code, or reverse charged without a reverse-charge verdict,
+    // would report the same supply in two places or none.
+    const lines = (
+      await tx.execute<{ calculationType: string; country: string | null; ratePercent: string }>(sql`
+        select component.calculation_type as "calculationType", code.country,
+               component.rate_percent::text as "ratePercent"
+          from document_line_tax_components component
+          join document_lines line on line.org_id = component.org_id and line.id = component.document_line_id
+          join tax_codes code on code.org_id = component.org_id and code.id = component.tax_code_id
+         where component.org_id = ${orgId} and line.document_id = ${documentId}
+           and component.calculation_type <> 'withholding'`)
+    ).rows;
+    if (lines.some((line) => line.calculationType === "reverse_charge")) {
+      throw new CrossBorderTaxError(
+        `reverse charge does not apply (${outcome.note}); remove the reverse-charge tax treatment from every line before posting`,
+      );
+    }
+    if (outcome.outcome === "export") {
+      if (lines.some((line) => !isZeroDecimal(line.ratePercent))) {
+        throw new CrossBorderTaxError(
+          `this supply is an export (${outcome.note}); tax every line at a zero rate before posting`,
+        );
+      }
+    } else if (lines.some((line) => line.country !== outcome.country)) {
+      throw new CrossBorderTaxError(
+        outcome.outcome === "customer_country"
+          ? `this supply is taxed in ${outcome.country} (${outcome.note}); code every taxed line with a ${outcome.country} tax code before posting, or, below the distance-sales threshold, remove the cross-border classification to tax it domestically`
+          : `this supply is taxed in ${outcome.country} (${outcome.note}); code every taxed line with a ${outcome.country} tax code before posting`,
       );
     }
   }
