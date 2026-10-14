@@ -171,7 +171,7 @@ export interface DerivedEmployeeScope {
   partyId?: string | null;
 }
 
-/** The emitting component's statutory treatment, inherited by every line. */
+/** Native component flags and reporting classifications used by derived lines. */
 export interface DerivedComponent {
   id: string;
   name: string;
@@ -180,7 +180,6 @@ export interface DerivedComponent {
   pensionable: boolean;
   insurable: boolean;
   vacationable: boolean;
-  programApplicability?: Record<string, boolean>;
   nonPeriodic: boolean;
   supplementalWageCategory?: UsSupplementalWageCategory | null;
   statutoryReportingCategory?: string | null;
@@ -836,7 +835,6 @@ export function applyDerivedRule(
       pensionable: component.pensionable,
       insurable: component.insurable,
       vacationable: component.vacationable,
-      ...(component.programApplicability ? { programApplicability: component.programApplicability } : {}),
       nonPeriodic: component.nonPeriodic,
       supplementalWageCategory: component.supplementalWageCategory ?? null,
       statutoryReportingCategory: component.statutoryReportingCategory ?? null,
@@ -904,7 +902,7 @@ export async function loadActiveDerivedRules(
 }
 
 async function loadComponents(
-  tx: Pick<typeof db, "execute">, orgId: string, componentIds: string[], policyDate: string,
+  tx: Pick<typeof db, "execute">, orgId: string, componentIds: string[],
 ): Promise<Map<string, DerivedComponent>> {
   if (componentIds.length === 0) return new Map();
   const r = (await tx.execute<{
@@ -913,28 +911,16 @@ async function loadComponents(
       vacationable: boolean; non_periodic: boolean; supplemental_wage_category: string | null;
       statutory_reporting_category: string | null;
       statutory_exemption_category: string | null;
-      statutory_treatment_id: string | null;
-      program_exclusions: string[] | null;
     }>(sql`
     select c.id, c.name, c.value, c.kind, c.taxable, c.pensionable, c.insurable, c.vacationable, c.non_periodic,
-           ec.supplemental_wage_category, ec.statutory_reporting_category, ec.statutory_exemption_category,
-           treatment.id as statutory_treatment_id, treatment.program_exclusions
+           ec.supplemental_wage_category, ec.statutory_reporting_category, ec.statutory_exemption_category
       from pay_components c
-      left join lateral (
-        select t.id, t.program_exclusions from pay_component_statutory_treatments t
-         where t.org_id=c.org_id and t.pay_component_id=c.id
-           and t.worker_comp_group_id is null
-           and t.effective_from<=${policyDate}::date and (t.effective_to is null or t.effective_to>=${policyDate}::date)
-      ) treatment on true
       join pay_component_earning_classifications ec
         on ec.org_id = c.org_id and ec.pay_component_id = c.id
      where c.org_id = ${orgId} and c.id = any(${`{${componentIds.join(",")}}`}::uuid[])
   `));
   const map = new Map<string, DerivedComponent>();
   for (const row of r.rows) {
-    if (row.statutory_treatment_id == null || !Array.isArray(row.program_exclusions)) {
-      throw new DerivedEarningsError(`pay component ${row.name} has no effective statutory treatment on ${policyDate} — add a dated treatment in Payroll Setup before calculating`);
-    }
     if (row.kind !== "earning") {
       throw new DerivedEarningsError(
         `pay component ${row.name} is not an earning — a derived rule can only emit earnings`,
@@ -944,9 +930,6 @@ async function loadComponents(
       id: row.id, name: row.name, value: row.value,
       taxable: row.taxable === true, pensionable: row.pensionable === true,
       insurable: row.insurable === true, vacationable: row.vacationable === true,
-      ...(row.program_exclusions.length
-        ? { programApplicability: Object.fromEntries(row.program_exclusions.map(key => [key, false])) }
-        : {}),
       nonPeriodic: row.non_periodic === true,
       supplementalWageCategory: row.supplemental_wage_category as UsSupplementalWageCategory | null,
       statutoryReportingCategory: row.statutory_reporting_category,
@@ -1145,7 +1128,7 @@ export async function resolveDerivedEarnings(
 
   // Sequential loads: the stub calculation runs on its transaction client,
   // which is one pg connection — fanning out queues concurrent queries on it.
-  const components = await loadComponents(tx, orgId, [...new Set(applicable.map((rule) => rule.componentId))], params.payDate ?? periodEnd);
+  const components = await loadComponents(tx, orgId, [...new Set(applicable.map((rule) => rule.componentId))]);
   const rateOverrides = await loadRateOverrides(tx, orgId, employeePartyId, periodEnd);
   const charges: DerivedEquipmentCharge[] = chargeWindow
     ? await loadEquipmentCharges(tx, orgId, chargeWindow.start, chargeWindow.end)
@@ -1261,7 +1244,7 @@ export async function previewDerivedRule(
   const chargeWindow = derivedChargeWindow([rule], periodStart, periodEnd);
   const [entriesByEmployee, components, charges] = await Promise.all([
     loadEntries(db, orgId, people.map((person) => person.party_id), window.from, window.to),
-    loadComponents(db, orgId, [rule.componentId], periodEnd),
+    loadComponents(db, orgId, [rule.componentId]),
     chargeWindow
       ? loadEquipmentCharges(db, orgId, chargeWindow.start, chargeWindow.end)
       : Promise.resolve([] as DerivedEquipmentCharge[]),

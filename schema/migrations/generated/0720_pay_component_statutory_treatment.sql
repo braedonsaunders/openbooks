@@ -58,10 +58,14 @@ CREATE INDEX pay_component_statutory_treatments_component
 ALTER TABLE ONLY public.pay_component_statutory_treatments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE ONLY public.pay_component_statutory_treatments FORCE ROW LEVEL SECURITY;
 CREATE POLICY tenant_isolation ON public.pay_component_statutory_treatments
-  USING (current_setting('app.bypass_rls', true) = 'on'
+  USING (public.app_bypass_rls_active()
       OR org_id::text = current_setting('app.current_org', true))
-  WITH CHECK (current_setting('app.bypass_rls', true) = 'on'
+  WITH CHECK (public.app_bypass_rls_active()
       OR org_id::text = current_setting('app.current_org', true));
+
+CREATE TRIGGER tenant_retirement_fence
+  BEFORE INSERT OR UPDATE OR DELETE ON public.pay_component_statutory_treatments
+  FOR EACH ROW EXECUTE FUNCTION tenant_retirement.openbooks_tenant_retirement_fence();
 
 -- Published calculations bind the version that fed their statutory lines.
 -- A policy row used by a committed run may be closed after its last committed
@@ -73,7 +77,35 @@ SET search_path = pg_catalog, public
 AS $function$
 DECLARE
   last_committed_pay_date date;
+  parent_component record;
 BEGIN
+  IF TG_OP = 'DELETE' AND (
+    tenant_retirement.openbooks_tenant_retirement_delete_allowed(TG_TABLE_NAME, to_jsonb(OLD))
+    OR public.openbooks_sandbox_wipe_allowed(OLD.org_id)
+  ) THEN
+    RETURN OLD;
+  END IF;
+
+  -- Serialize treatment changes with payroll calculations that share-lock
+  -- the parent component before resolving this policy.
+  FOR parent_component IN
+    SELECT DISTINCT changed.org_id, changed.pay_component_id
+      FROM (VALUES
+        (CASE WHEN TG_OP <> 'INSERT' THEN OLD.org_id END,
+         CASE WHEN TG_OP <> 'INSERT' THEN OLD.pay_component_id END),
+        (CASE WHEN TG_OP <> 'DELETE' THEN NEW.org_id END,
+         CASE WHEN TG_OP <> 'DELETE' THEN NEW.pay_component_id END)
+      ) AS changed(org_id, pay_component_id)
+     WHERE changed.org_id IS NOT NULL AND changed.pay_component_id IS NOT NULL
+     ORDER BY changed.org_id, changed.pay_component_id
+  LOOP
+    PERFORM component.id
+      FROM public.pay_components component
+     WHERE component.org_id = parent_component.org_id
+       AND component.id = parent_component.pay_component_id
+     FOR UPDATE;
+  END LOOP;
+
   IF TG_OP = 'INSERT' THEN
     SELECT max(r.pay_date)
       INTO last_committed_pay_date
@@ -202,10 +234,6 @@ BEGIN
 END
 $function$;
 
-CREATE TRIGGER pay_component_statutory_treatment_preserve_committed
-  BEFORE INSERT OR UPDATE OR DELETE ON public.pay_component_statutory_treatments
-  FOR EACH ROW EXECUTE FUNCTION public.pay_component_statutory_treatment_preserve_committed();
-
 -- Move the legacy open-ended choice intact. Newly seeded components then use
 -- this table as their sole assessability source.
 INSERT INTO public.pay_component_statutory_treatments
@@ -214,6 +242,12 @@ INSERT INTO public.pay_component_statutory_treatments
 SELECT org_id, id, NULL, DATE '0001-01-01', NULL, program_exclusions,
        created_at, created_by, updated_at, updated_by
   FROM public.pay_components;
+
+-- Install the history guard only after the pre-existing static choices have
+-- been copied into their version rows.
+CREATE TRIGGER pay_component_statutory_treatment_preserve_committed
+  BEFORE INSERT OR UPDATE OR DELETE ON public.pay_component_statutory_treatments
+  FOR EACH ROW EXECUTE FUNCTION public.pay_component_statutory_treatment_preserve_committed();
 
 ALTER TABLE public.pay_components DROP COLUMN program_exclusions;
 
@@ -226,4 +260,6 @@ COMMENT ON CONSTRAINT pay_component_statutory_treatments_group_range_exclusion
   ON public.pay_component_statutory_treatments IS
   'One statutory treatment per organization, component and workers-compensation group may cover each date; inclusive windows may not overlap.';
 
+INSERT INTO public.openbooks_query_catalog_relations(relation, added_in)
+  VALUES ('pay_component_statutory_treatments', '0720_pay_component_statutory_treatment');
 SELECT public.openbooks_refresh_query_catalog();

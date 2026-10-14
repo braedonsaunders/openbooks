@@ -66,6 +66,8 @@ const TRIGGER_INSERT_TABLE_PARENTS: Readonly<Record<string, readonly string[]>> 
   employment_changes: ["employment_assignments"],
   // The component INSERT creates the empty classification that copy replaces.
   pay_component_earning_classifications: ["pay_components"],
+  // Treatment insertion reads and fences its owning component before the FK is checked.
+  pay_component_statutory_treatments: ["pay_components", "worker_comp_groups"],
   // Field Ticket ownership and provenance guards read these rows immediately.
   // Deferred FKs cannot admit child-first writes inside the cyclic tail.
   field_tickets: ["documents", "parties", "users"],

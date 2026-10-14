@@ -48,19 +48,6 @@ export function programApplicabilityFromExclusions(
   return Object.keys(out).length > 0 ? out : undefined;
 }
 
-export function programApplicabilityFromResolvedTreatment(input: {
-  componentId: unknown;
-  treatmentId: unknown;
-  exclusions: unknown;
-  payDate: string;
-}): Record<string, boolean> | undefined {
-  if (typeof input.componentId !== 'string' || typeof input.treatmentId !== 'string'
-      || !Array.isArray(input.exclusions)) {
-    throw new PayrollError(`No effective statutory treatment covers earning component ${String(input.componentId)} on ${input.payDate}; add a dated treatment in Payroll Setup before calculating.`);
-  }
-  return programApplicabilityFromExclusions(input.exclusions);
-}
-
 /** Stamp each component-backed earning with its pay-date treatment at the worker's compensation scope. */
 export async function stampEarningLineStatutoryTreatments(tx: Pick<typeof db, "execute">, input: {
   orgId: string;
@@ -128,11 +115,9 @@ export interface Line {
    * program's own base when its key is present and true. Absent key means
    * included, matching the sibling flags' default-true; an absent map means
    * every declared program includes the line. Never derived from another
-   * program's base. Stamped from the component's effective-dated statutory
-   * treatment
-   * (beside `taxable`/`pensionable`/`insurable` in run-earning-lines.ts);
-   * lines built without a component row in hand (holiday pay is wages)
-   * carry no map and default-include, exactly like the sibling flags.
+   * program's base. The shared final stamp resolves each component-backed
+   * earning after all sources have been appended; component-less holiday pay
+   * carries no map and defaults to included, like the sibling flags.
    */
   programApplicability?: Record<string, boolean>;
   vacationable?: boolean; nonPeriodic?: boolean; taxTreatment?: string;

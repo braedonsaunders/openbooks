@@ -154,7 +154,9 @@ export async function calculateStub(
     );
   }
   emp = historicalWithholdingProfile({ country, profile: emp, stored: storedCertificates, payDate: run.pay_date! });
-  const workerCompGroupId = emp.historical_worker_comp_group_id ?? emp.current_worker_comp_group_id ?? null;
+  const workerCompGroupId = emp.historical_worker_comp_group_resolved === 'true'
+    ? emp.historical_worker_comp_group_id ?? null
+    : emp.current_worker_comp_group_id ?? null;
   const certificateFor = createStubCertificateResolver({
     country, storedCertificates, emp, payDate: run.pay_date,
   });
@@ -233,18 +235,9 @@ export async function calculateStub(
   const rosterEmploymentId = emp.employment_id ?? null;
   const assigned = (await tx.execute<Record<string, unknown>>(sql`
     select a.value as override, a.effective_from, a.effective_to, a.run_applicability, c.*,
-           treatment.id as statutory_treatment_id, treatment.program_exclusions,
            ec.supplemental_wage_category, ec.statutory_reporting_category, ec.statutory_exemption_category
       from employee_pay_components a
       join pay_components c on c.id = a.component_id and c.org_id = a.org_id
-      left join lateral (
-        select t.id, t.program_exclusions
-          from pay_component_statutory_treatments t
-         where t.org_id=c.org_id and t.pay_component_id=c.id
-           and t.worker_comp_group_id is null
-           and t.effective_from<=${run.pay_date!}::date
-           and (t.effective_to is null or t.effective_to>=${run.pay_date!}::date)
-      ) treatment on true
       join pay_component_earning_classifications ec
         on ec.org_id = c.org_id and ec.pay_component_id = c.id
      where a.org_id = ${orgId} and a.employee_party_id = ${employeePartyId}

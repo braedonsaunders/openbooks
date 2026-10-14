@@ -11,8 +11,6 @@ export type CompensationPackageComponentSource = Pick<typeof payComponents.$infe
   'protectionPriority' | 'protectionClass' | 'includeInDisposableEarnings' | 'basisCapHoursPerPeriod' |
   'basisCapAmountPerPeriod' | 'basisCapAmountPerYear' | 'expenseAccountId' | 'liabilityAccountId' |
   'remittancePartyId' | 'sequence' | 'isActive'> & {
-    programExclusions: string[];
-    statutoryTreatmentId: string;
     supplementalWageCategory: string | null;
     statutoryReportingCategory: string | null;
     statutoryExemptionCategory: string | null;
@@ -23,7 +21,7 @@ export const COMPENSATION_PACKAGE_COMPONENT_SOURCE = sql`jsonb_build_object(
   'systemKey',c.system_key,'basis',c.basis,'value',c.value::text,
   'paymentKind',c.payment_kind,'nonCashAccountId',c.non_cash_account_id,
   'taxable',c.taxable,'pensionable',c.pensionable,'insurable',c.insurable,'vacationable',c.vacationable,
-  'programExclusions',treatment.program_exclusions,'statutoryTreatmentId',treatment.id,'nonPeriodic',c.non_periodic,'taxTreatment',c.tax_treatment,
+  'nonPeriodic',c.non_periodic,'taxTreatment',c.tax_treatment,
   'protectionBase',c.protection_base,'protectionMaxPercent',c.protection_max_percent::text,
   'protectionPriority',c.protection_priority,'protectionClass',c.protection_class,
   'includeInDisposableEarnings',c.include_in_disposable_earnings,
@@ -37,18 +35,11 @@ export const COMPENSATION_PACKAGE_COMPONENT_SOURCE = sql`jsonb_build_object(
   'statutoryExemptionCategory',ec.statutory_exemption_category)`;
 
 /** Exact native metadata shared by authoring, preview and calculation. */
-export async function compensationPackageComponentSources(tx: SqlExecutor, orgId: string, ids: readonly string[], policyDate?: string): Promise<CompensationPackageComponentSource[]> {
+export async function compensationPackageComponentSources(tx: SqlExecutor, orgId: string, ids: readonly string[]): Promise<CompensationPackageComponentSource[]> {
   if (!ids.length) return [];
   const sources = (await tx.execute<{ source: CompensationPackageComponentSource }>(sql`select ${COMPENSATION_PACKAGE_COMPONENT_SOURCE} as source
     from pay_components c left join pay_component_earning_classifications ec on ec.org_id=c.org_id and ec.pay_component_id=c.id
-    left join lateral (select t.id,t.program_exclusions from pay_component_statutory_treatments t
-      where t.org_id=c.org_id and t.pay_component_id=c.id
-        and t.worker_comp_group_id is null
-        and t.effective_from<=coalesce(${policyDate ?? null}::date,current_date)
-        and (t.effective_to is null or t.effective_to>=coalesce(${policyDate ?? null}::date,current_date))) treatment on true
     where c.org_id=${orgId} and c.id in (${sql.join(ids.map(id => sql`${id}::uuid`), sql`, `)}) order by c.id for share of c`)).rows.map(row => row.source);
-  const missing = sources.find(source => typeof source.statutoryTreatmentId !== 'string' || !Array.isArray(source.programExclusions));
-  if (missing) throw new PayrollError(`pay component ${missing.code} has no effective statutory treatment on ${policyDate ?? 'today'} — add a dated treatment in Payroll Setup before calculating`);
   return sources;
 }
 

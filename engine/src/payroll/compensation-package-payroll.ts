@@ -18,7 +18,7 @@ import { applicableDerivedRules, loadActiveDerivedRules } from './derived-earnin
 import { fringesForEmployee } from './union.ts';
 import { componentYearToDate } from './opening-balances.ts';
 import { coveredPayrollLines } from './covered-payroll-lines.ts';
-import { cappableHourLines, earningsBase, programApplicabilityFromResolvedTreatment, type Line } from './run-stub-records.ts';
+import { cappableHourLines, earningsBase, type Line } from './run-stub-records.ts';
 import type { PayrollSubsidiaryScope } from './scope.ts';
 
 type ComponentWindow = { componentId: string; from: string; to: string; basis: string };
@@ -189,10 +189,7 @@ export async function appendCompensationPackageStage(tx: SqlExecutor, prepared: 
       const line: Line = { componentId: component.id, kind: component.kind, description: component.name, amount: parseMoney(evaluated.amount),
         earnedFrom: from, earnedTo: to, sequence: component.sequence, taxable: component.taxable, pensionable: component.pensionable,
         insurable: component.insurable, vacationable: component.vacationable, nonPeriodic: component.nonPeriodic,
-        taxTreatment: component.taxTreatment, programApplicability: programApplicabilityFromResolvedTreatment({
-          componentId: component.id, treatmentId: component.statutoryTreatmentId,
-          exclusions: component.programExclusions, payDate: context.payDate,
-        }),
+        taxTreatment: component.taxTreatment,
         paymentKind: component.paymentKind, nonCashAccountId: component.nonCashAccountId,
         protectionBase: component.protectionBase, protectionMaxPercent: component.protectionMaxPercent,
         protectionPriority: component.protectionPriority, protectionClass: component.protectionClass,

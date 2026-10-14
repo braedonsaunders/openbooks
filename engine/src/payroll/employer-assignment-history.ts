@@ -23,7 +23,7 @@ async function available(tx: Reader): Promise<boolean> {
 
 /** Read explicit dated evidence; pre-installation databases cannot contain these assignments. */
 export async function employeeEmployerAssignmentHistory(tx: Reader, input: {
-  orgId: string; payDate: string; employeePartyIds: readonly string[];
+  orgId: string; payDate: string; employeePartyIds: readonly string[]; lockRows?: boolean;
 }): Promise<EmployerAssignmentSource[]> {
   if (!input.employeePartyIds.length || !await available(tx)) return [];
   return (await tx.execute<EmployerAssignmentSource & Record<string, unknown>>(sql`select id::text, employee_party_id::text as "employeePartyId",
@@ -33,21 +33,28 @@ export async function employeeEmployerAssignmentHistory(tx: Reader, input: {
     from payroll_employee_employer_assignments where org_id=${input.orgId}
       and employee_party_id in (select jsonb_array_elements_text(${JSON.stringify(input.employeePartyIds)}::jsonb)::uuid)
       and ${input.payDate}::date between effective_from and effective_to
-    order by employee_party_id,assignment_kind,id`)).rows;
+    order by employee_party_id,assignment_kind,id
+    ${input.lockRows ? sql`for share` : sql``}`)).rows;
 }
 
-/** Caller owns the employee/year fences before locking these profile revision rows. */
+/** Caller owns employee/year fences before locking the current assignment sources. */
 export async function lockEmployerAssignmentProfiles(tx: Reader, orgId: string, employees: readonly string[]): Promise<void> {
   if (!employees.length || !await available(tx)) return;
   await tx.execute(sql`select id from employee_payroll_profiles where org_id=${orgId}
     and employee_party_id in (select jsonb_array_elements_text(${JSON.stringify(employees)}::jsonb)::uuid)
     order by employee_party_id for share`);
+  await tx.execute(sql`select id from employee_roles where org_id=${orgId}
+    and party_id in (select jsonb_array_elements_text(${JSON.stringify(employees)}::jsonb)::uuid)
+      and is_active
+    order by party_id,updated_at desc,id
+    for share`);
 }
 
 /** Apply historical account metadata before the employee jurisdiction is resolved. */
 export async function applyEmployeeEmployerAssignmentHistory(tx: Reader, orgId: string, payDate: string,
   employees: Record<string, string | null>[]): Promise<void> {
-  const rows = await employeeEmployerAssignmentHistory(tx, { orgId, payDate, employeePartyIds: employees.map(e => e.party_id!) });
+  const rows = await employeeEmployerAssignmentHistory(tx, { orgId, payDate,
+    employeePartyIds: employees.map(e => e.party_id!), lockRows: true });
   for (const employee of employees) {
     const assignments = rows.filter(r => r.employeePartyId === employee.party_id);
     const kinds = new Set<string>();
@@ -58,6 +65,7 @@ export async function applyEmployeeEmployerAssignmentHistory(tx: Reader, orgId: 
       kinds.add(assignment.kind);
       if (assignment.kind === 'worker_comp') {
         employee.historical_worker_comp_group_id = assignment.workerCompGroupId;
+        employee.historical_worker_comp_group_resolved = 'true';
       } else {
         const account = (await tx.execute<{ country: string; account_number: string }>(sql`select country,account_number
           from payroll_filing_accounts where org_id=${orgId} and id=${assignment.filingAccountId} for share`)).rows[0];

@@ -32,7 +32,6 @@ import { payRunCalculationSourceDigest, payRunCalculationSource, type PayRunCalc
 import { calculateStub } from "./run-stub-compute.ts";
 import { employerEmployeeCount } from "./run-calculation-support.ts";
 import { PERIODIC_RUN_TYPES } from "./run-contracts.ts";
-import { resolveComponentStatutoryTreatments } from './component-statutory-treatment.ts';
 import {
   assertPeriodSequence, assertSupplementalSupported, listPeriodSiblings, loadPeriodPriors,
   periodRunIdentity, supplementalTaxMethodForOrg, type PayPeriodPriors,
@@ -472,17 +471,7 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
     const componentRows = (await tx.execute<Record<string, unknown>>(sql`
       select * from pay_components where org_id = ${orgId} and is_active order by sequence
     `)).rows;
-    const statutoryTreatments = await resolveComponentStatutoryTreatments(
-      tx, orgId, runContext.payDate, componentRows.map(component => String(component.id)),
-    );
-    const components = { rows: componentRows.map(component => {
-      const treatment = statutoryTreatments.get(String(component.id));
-      return {
-        ...component,
-        statutory_treatment_id: treatment?.id,
-        program_exclusions: treatment?.program_exclusions,
-      };
-    }) };
+    const components = { rows: componentRows };
     // Country-scoped resolution (0189): two packs may each own one
     // `system_key` (CA and JP both declare income_tax), so the run resolves
     // only its own pack's rows plus the shared NULL-country baseline. Without

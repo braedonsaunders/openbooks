@@ -988,6 +988,13 @@ export const TENANT_RETIREMENT_GUARDS = [
     "patch": true
   },
   {
+    "name": "pay_component_statutory_treatment_preserve_committed",
+    "source": "0720_pay_component_statutory_treatment.sql",
+    "sha256": "e8c6325cc3513c1bc200856d87d97d29518bc0cca04b186774d0d2a5151b288a",
+    "newSha256": "e8c6325cc3513c1bc200856d87d97d29518bc0cca04b186774d0d2a5151b288a",
+    "patch": false
+  },
+  {
     "name": "payment_event_immutable",
     "source": "0001_baseline.sql",
     "sha256": "2ffa9522f5e2aea0f0d05d49d371b4f25038fdd8b7efdf0532590f7d27df1170",
@@ -2244,6 +2251,12 @@ export const TENANT_RETIREMENT_GUARD_ATTRIBUTES = [
     "config": []
   },
   {
+    "name": "pay_component_statutory_treatment_preserve_committed",
+    "config": [
+      "search_path=pg_catalog,public"
+    ]
+  },
+  {
     "name": "payment_event_immutable",
     "config": []
   },
@@ -3468,6 +3481,11 @@ export const TENANT_RETIREMENT_TRIGGER_CONTRACTS = [
     "table": "pay_component_earning_classifications",
     "trigger": "pay_component_earning_classifications_protect_parent",
     "function": "pay_component_earning_classifications_prevent_orphan_delete"
+  },
+  {
+    "table": "pay_component_statutory_treatments",
+    "trigger": "pay_component_statutory_treatment_preserve_committed",
+    "function": "pay_component_statutory_treatment_preserve_committed"
   },
   {
     "table": "payroll_work_location_allocations",

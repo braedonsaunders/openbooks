@@ -13,7 +13,7 @@ import { loadActiveDerivedRules, resolveDerivedEarnings } from "./derived-earnin
 import { applyBasisCaps } from "./limits.ts";
 import { priceDatedWageEntries } from "./wage-rounding.ts";
 import { loadWageTimeEntries } from "./wage-hours.ts";
-import { type Line, programApplicabilityFromResolvedTreatment, statutoryHolidayLinesForStub, earningsBase, totalHours, cappableHourLines, resolveEarningExpenseAccount } from "./run-stub-records.ts";
+import { type Line, statutoryHolidayLinesForStub, earningsBase, totalHours, cappableHourLines, resolveEarningExpenseAccount } from "./run-stub-records.ts";
 import { resolvePayRate } from "./run-calculation-support.ts";
 import { payrollHourlyWage, salaryPeriodPay } from "./rate.ts";
 import { assignmentCoveredDays, assignmentCoversPeriod } from "./assignment-windows.ts";
@@ -56,8 +56,6 @@ export async function appendPeriodicEarnings(
       // A salary is earned across the whole pay period: dating it lets later
       // lookbacks (holiday averages) place it exactly instead of prorating.
       earnedFrom: run.period_start, earnedTo: run.period_end,
-      programApplicability: programApplicabilityFromResolvedTreatment({ componentId: baseComponent.id,
-        treatmentId: baseComponent.statutory_treatment_id, exclusions: baseComponent.program_exclusions, payDate: run.pay_date! }),
     });
   } else {
     // Exact annual amount ÷ annual hours (see payrollHourlyWage): the
@@ -119,8 +117,6 @@ export async function appendPeriodicEarnings(
         expenseAccountEvidence: stamp?.evidence ?? null,
         sequence: sequence++,
         classification: group.row.classification,
-        programApplicability: programApplicabilityFromResolvedTreatment({ componentId: componentRow.id,
-          treatmentId: componentRow.statutory_treatment_id, exclusions: componentRow.program_exclusions, payDate: run.pay_date! }),
       });
     }
   }
@@ -294,19 +290,10 @@ async function runLineAdjustmentRows(
 ): Promise<readonly Record<string, unknown>[]> {
   return (await tx.execute<Record<string, unknown>>(sql`
     select a.id as adjustment_id, a.amount as adj_amount, a.hours as adj_hours, a.earned_from::text as adj_earned_from, a.earned_to::text as adj_earned_to, a.replace_component, a.note, c.*,
-           treatment.id as statutory_treatment_id, treatment.program_exclusions,
-           r.pay_date::text as treatment_pay_date,
            ec.supplemental_wage_category, ec.statutory_reporting_category, ec.statutory_exemption_category
       from pay_run_adjustments a
       join pay_runs r on r.org_id=a.org_id and r.document_id=a.pay_run_document_id
       join pay_components c on c.id = a.component_id and c.org_id = a.org_id
-      left join lateral (
-        select t.id, t.program_exclusions
-          from pay_component_statutory_treatments t
-         where t.org_id=c.org_id and t.pay_component_id=c.id
-           and t.worker_comp_group_id is null
-           and t.effective_from<=r.pay_date and (t.effective_to is null or t.effective_to>=r.pay_date)
-      ) treatment on true
       join pay_component_earning_classifications ec
         on ec.org_id = c.org_id and ec.pay_component_id = c.id
      where a.org_id = ${orgId} and a.pay_run_document_id = ${documentId}
@@ -552,8 +539,6 @@ export async function applyAssignedComponentLines(
       sourceEffectiveTo: [periodEnd, c.effective_to == null ? periodEnd : String(c.effective_to)].sort()[0]!,
       taxable: c.taxable as boolean, pensionable: c.pensionable as boolean,
       insurable: c.insurable as boolean, vacationable: c.vacationable as boolean,
-      programApplicability: programApplicabilityFromResolvedTreatment({ componentId: c.id,
-        treatmentId: c.statutory_treatment_id, exclusions: c.program_exclusions, payDate }),
       nonPeriodic: c.non_periodic as boolean, taxTreatment: c.tax_treatment as string,
       supplementalWageCategory: c.supplemental_wage_category as Line["supplementalWageCategory"],
       statutoryReportingCategory: c.statutory_reporting_category as string | null,
@@ -643,8 +628,6 @@ export async function applyRunLineAdjustments(
       amount, sequence: Number(adj.sequence),
       taxable: adj.taxable as boolean, pensionable: adj.pensionable as boolean,
       insurable: adj.insurable as boolean, vacationable: adj.vacationable as boolean,
-      programApplicability: programApplicabilityFromResolvedTreatment({ componentId: adj.id,
-        treatmentId: adj.statutory_treatment_id, exclusions: adj.program_exclusions, payDate: String(adj.treatment_pay_date) }),
       // On a bonus run every earning is non-periodic by definition: the
       // employee is not receiving this amount every period, so annualizing it
       // would over-withhold badly. On a RETRO run the same is true of a manual
