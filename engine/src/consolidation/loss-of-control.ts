@@ -5,13 +5,12 @@ import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { withTransactionSavepoint, type SqlExecutor } from "../platform/db.ts";
 import { isIsoCalendarDate } from "../platform/business-date.ts";
-import { canonicalDecimal } from "../money/exact-decimal.ts";
+import { canonicalDecimal, compareDecimal, divideDecimal, multiplyDecimal } from "../money/exact-decimal.ts";
 import {
   add,
   cmp,
   isZero,
   mulRate,
-  divRate,
   neg,
   sum,
   toUnits,
@@ -44,6 +43,15 @@ import {
   measureLossOfControl,
   type LossOfControlBalance,
 } from "./loss-of-control-measurement.ts";
+
+/** Ownership interests carry up to 10 percent decimals (numeric(19,10)), so
+ * a group factor (product of ownership shares down the chain) is held at 18
+ * places and applied to money once, at ledger precision. Equity-method and
+ * excluded entities carry a factor of exactly zero. */
+const OWNERSHIP_FACTOR_SCALE = 18;
+function applyOwnershipFactor(amount: string, factor: string): string {
+  return multiplyDecimal(amount, factor, 4);
+}
 
 export interface LossOfControlInput {
   effectiveOn: string;
@@ -328,26 +336,24 @@ function validate(input: LossOfControlInput) {
     "retainedFairValue",
     "retainedPercent",
   ] as const) {
-    const v = canonicalDecimal(input[name], 4);
-    if (v === null || toUnits(v) < 0n)
+    // Percentages carry the ownership interest's own precision; money carries ledger precision.
+    const v = canonicalDecimal(input[name], name === "retainedPercent" ? 10 : 4);
+    if (v === null || compareDecimal(v, "0") < 0)
       throw new LossOfControlProposalError(422, `${name} must be an exact non-negative decimal`);
   }
-  if (cmp(input.retainedPercent, "100") >= 0)
+  if (compareDecimal(input.retainedPercent, "100") >= 0)
     throw new LossOfControlProposalError(422,
       "retained interest must be below 100 percent and the assessment must demonstrate that control has ceased",
     );
   if (
     input.retainedMethod === "none" &&
-    [
-      input.retainedPercent,
-      input.retainedFairValue,
-      input.parentRetainedCarrying,
-    ].some((v) => !isZero(v))
+    (compareDecimal(input.retainedPercent, "0") !== 0 ||
+      [input.retainedFairValue, input.parentRetainedCarrying].some((v) => !isZero(v)))
   )
     throw new LossOfControlProposalError(422,
       "no retained interest requires zero percentage and zero carrying/fair values",
     );
-  if (input.retainedMethod !== "none" && isZero(input.retainedPercent))
+  if (input.retainedMethod !== "none" && compareDecimal(input.retainedPercent, "0") === 0)
     throw new LossOfControlProposalError(422, "record the percentage of the retained interest");
   for (const rate of [
     input.parentToGroupRate,
@@ -393,7 +399,7 @@ async function scope(
     throw new LossOfControlProposalError(422,
       "the control-loss date must lie in the existing ownership window",
     );
-  if (cmp(input.retainedPercent, interest.ownership_percent) > 0)
+  if (compareDecimal(input.retainedPercent, interest.ownership_percent) > 0)
     throw new LossOfControlProposalError(422,
       "retained ownership cannot exceed the disposed controlling interest",
     );
@@ -499,14 +505,15 @@ async function scope(
           (!p.effective_to || p.effective_to >= input.effectiveOn),
       )
       .at(-1);
-    factors[id] = mulRate(
-      factors[entity.parentId!] ?? "0",
-      policy?.method === "equity"
-        ? "0"
-        : policy?.method === "proportionate"
-          ? divRate(policy.ownership_percent, "100")
+    factors[id] = policy?.method === "equity"
+      ? "0"
+      : multiplyDecimal(
+        factors[entity.parentId!] ?? "0",
+        policy?.method === "proportionate"
+          ? divideDecimal(policy.ownership_percent, "100", OWNERSHIP_FACTOR_SCALE)
           : "1",
-    );
+        OWNERSHIP_FACTOR_SCALE,
+      );
   }
   const ownershipInterestIds = policies
     .filter((p) => !p.effective_to || p.effective_to >= period[0]!.starts_on)
@@ -612,7 +619,7 @@ async function measure(
   const netAssetBalances: LossOfControlBalance[] = balances.map((l) => ({
     accountId: l.account_id,
     amount: mulRate(
-      mulRate(l.amount, s.factors[l.subsidiary_id] ?? "0"),
+      applyOwnershipFactor(l.amount, s.factors[l.subsidiary_id] ?? "0"),
       input.rates.find((r) => r.subsidiaryId === l.subsidiary_id)!.rate,
     ),
     description: l.name,
@@ -630,7 +637,7 @@ async function measure(
     )
   ).rows.map((l) => ({
     ...l,
-    amount: mulRate(
+    amount: applyOwnershipFactor(
       l.amount,
       l.parent_subsidiary_id && l.parent_subsidiary_id !== s.parent.id
         ? (s.factors[l.parent_subsidiary_id] ?? "0")
@@ -752,7 +759,7 @@ async function measure(
       attributable = add(
         attributable,
         mulRate(
-          mulRate(row.amount, s.factors[row.subsidiary_id] ?? "0"),
+          applyOwnershipFactor(row.amount, s.factors[row.subsidiary_id] ?? "0"),
           input.rates.find((r) => r.subsidiaryId === row.subsidiary_id)!.rate,
         ),
       );

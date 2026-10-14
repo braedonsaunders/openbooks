@@ -19,6 +19,7 @@ import {
   sum,
   toUnits,
 } from "../money/money.ts";
+import { compareDecimal, subtractDecimal } from "../money/exact-decimal.ts";
 import { assertFinalKernelBalance } from "../journal/posting-invariants.ts";
 import { markEntryReversed, postEntry } from "../journal/post-entry.ts";
 import { loadSubsidiaryContext } from "../organization/subsidiaries.ts";
@@ -152,6 +153,12 @@ export async function withOwnershipSourceTransaction<T>(
     }
     throw error;
   }
+}
+
+/** The non-controlling share, exact at the ownership interest's own precision
+ * (numeric(19,10)); mulPercent applies it to money at ledger precision. */
+function nonControllingPercent(ownershipPercent: string): string {
+  return subtractDecimal("100", ownershipPercent);
 }
 
 function persistDerivedFxRate(value: unknown): string {
@@ -358,7 +365,7 @@ export async function runOwnershipConsolidationIn(
   // need no NCI accounts.
   for (const interest of interests.rows) {
     if (interest.method !== "full") continue;
-    if (toUnits(interest.ownership_percent) >= toUnits("100")) continue;
+    if (compareDecimal(interest.ownership_percent, "100") >= 0) continue;
     const label =
       context.byId.get(interest.subsidiary_id)?.name ?? interest.subsidiary_id;
     const missing = [
@@ -674,9 +681,7 @@ export async function runOwnershipConsolidationIn(
             },
           ]);
         } else {
-          const nciPercent = fromUnits(
-            toUnits("100") - toUnits(interest.ownership_percent),
-          );
+          const nciPercent = nonControllingPercent(interest.ownership_percent);
           const nci =
             interest.nci_measurement === "fair_value"
               ? interest.nci_fair_value!
@@ -723,9 +728,7 @@ export async function runOwnershipConsolidationIn(
         }
       }
       if (interest.method === "full") {
-        const nciPercent = fromUnits(
-          toUnits("100") - toUnits(interest.ownership_percent),
-        );
+        const nciPercent = nonControllingPercent(interest.ownership_percent);
         const nciIncome = mulPercent(profit, nciPercent);
         if (interest.nci_income_account_id && interest.nci_equity_account_id) {
           await post(interest.id, "nci_income", [
@@ -1216,40 +1219,14 @@ async function runAutoEliminationIn(
   // 140 CAD at 1.40). Flow accounts are still eliminated as this period's
   // activity at the period average, as statements translate flows.
   //
-  // `periodActivity` is this period's activity alone, the reconciliation
-  // test: intercompany postings must agree between counterparties. Period-end
-  // FX revaluation is excluded from it — remeasuring a foreign-currency
-  // intercompany balance is translation, not a mismatch.
+  // The reconciliation test reads this period's activity alone: intercompany
+  // postings must agree between counterparties. Period-end FX revaluation is
+  // excluded from it — remeasuring a foreign-currency intercompany balance is
+  // translation, not a mismatch.
   const flowTypes = sql`('income','income_other','cogs','expense','expense_other','expense_deferred')`;
-  const activity = await tx.execute<{
-    accountId: string;
-    subsidiaryId: string;
-    total: string | null;
-    periodActivity: string | null;
-    missingRate: boolean;
-  }>(sql`
-    select l.account_id as "accountId", l.subsidiary_id as "subsidiaryId",
-           -- One rate per (account, subsidiary) group: the subsidiary's
-           -- currency and the account's type fix it, so the group total is
-           -- translated once rather than rounding line by line.
-           round(sum(l.amount) * max(case
-             when source_sub.base_currency = ${elim.baseCurrency} then 1
-             when coalesce(public.account_translation_rate_type(e.org_id,a.id,${period.ends_on}::date,false),case when a.type in ${flowTypes} then 'average' else 'current' end)='average' then consolidated.average_rate
-             when coalesce(public.account_translation_rate_type(e.org_id,a.id,${period.ends_on}::date,false),'current')='historical' then consolidated.historical_rate
-             else consolidated.current_rate
-           end), 4)::text as total,
-           round(coalesce(sum(l.amount) filter (where e.period_id = ${periodId} and e.origin <> 'fx_revaluation'), 0) * max(case
-             when source_sub.base_currency = ${elim.baseCurrency} then 1
-             when coalesce(public.account_translation_rate_type(e.org_id,a.id,${period.ends_on}::date,false),case when a.type in ${flowTypes} then 'average' else 'current' end)='average' then consolidated.average_rate
-             when coalesce(public.account_translation_rate_type(e.org_id,a.id,${period.ends_on}::date,false),'current')='historical' then consolidated.historical_rate
-             else consolidated.current_rate
-           end), 4)::text as "periodActivity",
-           bool_or(source_sub.base_currency <> ${elim.baseCurrency}
-                   and (case
-                     when coalesce(public.account_translation_rate_type(e.org_id,a.id,${period.ends_on}::date,false),case when a.type in ${flowTypes} then 'average' else 'current' end)='average' then consolidated.average_rate
-                     when coalesce(public.account_translation_rate_type(e.org_id,a.id,${period.ends_on}::date,false),'current')='historical' then consolidated.historical_rate
-                     else consolidated.current_rate
-                   end) is null) as "missingRate"
+  // One source scope for elimination and its reconciliation: primary-book
+  // intercompany lines outside the elimination subsidiary and any lost control.
+  const eliminationSource = sql`
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
       join accounting_periods source_period on source_period.id = e.period_id and source_period.org_id = e.org_id
@@ -1290,7 +1267,30 @@ async function runAutoEliminationIn(
                    )
               )
             )
-       )
+       )`;
+  const activity = await tx.execute<{
+    accountId: string;
+    subsidiaryId: string;
+    total: string | null;
+    missingRate: boolean;
+  }>(sql`
+    select l.account_id as "accountId", l.subsidiary_id as "subsidiaryId",
+           -- One rate per (account, subsidiary) group: the subsidiary's
+           -- currency and the account's type fix it, so the group total is
+           -- translated once rather than rounding line by line.
+           round(sum(l.amount) * max(case
+             when source_sub.base_currency = ${elim.baseCurrency} then 1
+             when coalesce(public.account_translation_rate_type(e.org_id,a.id,${period.ends_on}::date,false),case when a.type in ${flowTypes} then 'average' else 'current' end)='average' then consolidated.average_rate
+             when coalesce(public.account_translation_rate_type(e.org_id,a.id,${period.ends_on}::date,false),'current')='historical' then consolidated.historical_rate
+             else consolidated.current_rate
+           end), 4)::text as total,
+           bool_or(source_sub.base_currency <> ${elim.baseCurrency}
+                   and (case
+                     when coalesce(public.account_translation_rate_type(e.org_id,a.id,${period.ends_on}::date,false),case when a.type in ${flowTypes} then 'average' else 'current' end)='average' then consolidated.average_rate
+                     when coalesce(public.account_translation_rate_type(e.org_id,a.id,${period.ends_on}::date,false),'current')='historical' then consolidated.historical_rate
+                     else consolidated.current_rate
+                   end) is null) as "missingRate"
+      ${eliminationSource}
      group by l.account_id, l.subsidiary_id
     having sum(l.amount) <> 0
         or coalesce(sum(l.amount) filter (where e.period_id = ${periodId} and e.origin <> 'fx_revaluation'), 0) <> 0`);
@@ -1305,10 +1305,33 @@ async function runAutoEliminationIn(
       "rates-not-derived",
     );
   }
-  const periodResidual = sum(activity.rows.map((row) => row.periodActivity ?? "0"));
-  if (!isZero(periodResidual)) {
+  // Counterparties agree when their intercompany postings net to zero in a
+  // shared transaction currency: a EUR balance booked at 1.10 by one side and
+  // translated at 1.12 from the other is rate movement, not a mismatch, and
+  // its translation difference is carried to the translation adjustment
+  // below. Activity booked by each side in its own currency has no shared
+  // transaction amount, so it must agree once translated at this period's
+  // consolidated rates.
+  const reconciliation = (await tx.execute<{ currency: string; txnAmount: string; translated: string }>(sql`
+    select l.currency, sum(l.txn_amount)::text as "txnAmount",
+           round(sum(l.amount) * max(case
+             when source_sub.base_currency = ${elim.baseCurrency} then 1
+             when coalesce(public.account_translation_rate_type(e.org_id,a.id,${period.ends_on}::date,false),case when a.type in ${flowTypes} then 'average' else 'current' end)='average' then consolidated.average_rate
+             when coalesce(public.account_translation_rate_type(e.org_id,a.id,${period.ends_on}::date,false),'current')='historical' then consolidated.historical_rate
+             else consolidated.current_rate
+           end), 4)::text as translated
+      ${eliminationSource}
+       and e.period_id = ${periodId} and e.origin <> 'fx_revaluation'
+       and not l.is_currency_adjustment
+     group by l.currency, l.account_id, l.subsidiary_id`)).rows;
+  const txnResidual = new Map<string, string>();
+  for (const row of reconciliation) txnResidual.set(row.currency, add(txnResidual.get(row.currency) ?? "0", row.txnAmount));
+  const unshared = reconciliation.filter((row) => !isZero(txnResidual.get(row.currency)!));
+  const translatedResidual = sum(unshared.map((row) => row.translated));
+  if (!isZero(translatedResidual)) {
+    const currencies = [...new Set(unshared.map((row) => row.currency))].sort();
     throw new ConsolidationError(
-      `intercompany activity does not net to zero for the period (residual ${periodResidual}) — reconcile due-to/due-from before eliminating`,
+      `intercompany activity does not net to zero for the period (translated residual ${translatedResidual} ${elim.baseCurrency} across ${currencies.join(", ")} activity) — reconcile due-to/due-from before eliminating`,
       "out-of-balance",
     );
   }
@@ -1391,10 +1414,12 @@ async function runAutoEliminationIn(
     return finishElimination(null, 0);
   }
 
-  // The period's activity reconciled above, so whatever the translated
-  // balances still leave is translation: the movement of the current rate on
-  // balances eliminated earlier at other rates. It belongs in the cumulative
-  // translation adjustment, never left as an un-eliminated balance.
+  // The period's activity reconciled above in transaction currency, so
+  // whatever the translated amounts still leave is translation: counterparties
+  // booking at different rates, flows translated at the period average, and
+  // the movement of the current rate on balances eliminated earlier at other
+  // rates. It belongs in the cumulative translation adjustment, never left as
+  // an un-eliminated balance.
   const translationDifference = sum(translatedActivity.map((r) => r.total));
   const postingLines = translatedActivity.map((row) => ({
     accountId: row.accountId,

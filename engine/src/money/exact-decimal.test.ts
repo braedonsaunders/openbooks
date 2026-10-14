@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  subtractDecimal,
   canonicalDecimal,
   canonicalNonNegativeDecimal,
   compareDecimal,
@@ -157,4 +158,11 @@ test("divideDecimal divides exactly with halves away from zero", () => {
   assert.equal(divideDecimal("4", "2", 4), "2.0000");
   assert.throws(() => divideDecimal("1", "0", 10), /cannot divide/);
   assert.throws(() => divideDecimal("abc", "1", 10), /not exact decimals/);
+});
+
+test("exact subtraction keeps the larger operand's scale without rounding", () => {
+  assert.equal(subtractDecimal("100", "33.3333333333"), "66.6666666667");
+  assert.equal(subtractDecimal("100", "12.345"), "87.655");
+  assert.equal(subtractDecimal("1.5", "2.25"), "-0.75");
+  assert.equal(subtractDecimal("100", "100.0000000000"), "0.0000000000");
 });

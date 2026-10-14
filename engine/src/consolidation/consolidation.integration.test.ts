@@ -559,6 +559,66 @@ test("intercompany balances stay eliminated when the rate moves between periods"
   }
 });
 
+test("intercompany activity agreeing in its shared transaction currency eliminates when rates move", { skip: !DB }, async () => {
+  // The CAD parent books a 100 USD due-from at 1.30; US Co books the 100 USD
+  // due-to in its own currency. July's consolidated current rate is 1.35, so
+  // the translated sides differ by 5 CAD. They agree exactly in USD, so the
+  // difference is translation for the translation adjustment account; a
+  // genuine shortfall in the shared currency still refuses.
+  const org = await createScratchOrg();
+  try {
+    const actorId = (await seedFlowActors(org.orgId)).adminId;
+    const usd = randomUUID();
+    const elimination = randomUUID();
+    await db.execute(sql`
+      insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids, is_elimination, is_active, custom)
+      values (${usd}, ${org.orgId}, ${org.subsidiaryId}, 'US Co', 'USD', 'US', '{}'::jsonb, false, true, '{}'::jsonb),
+             (${elimination}, ${org.orgId}, ${org.subsidiaryId}, 'Eliminations', 'CAD', 'CA', '{}'::jsonb, true, true, '{}'::jsonb)`);
+    await db.execute(sql`update accounts set eliminate = true where id in (${org.accounts.ar}, ${org.accounts.ap})`);
+    await db.execute(sql`
+      insert into consolidated_fx_rates (org_id, period_id, from_currency, to_currency, current_rate, average_rate, historical_rate, source)
+      values (${org.orgId}, ${org.periodId}, 'USD', 'CAD', '1.3500000000', '1.3200000000', '1.3000000000', 'manual')`);
+    const cta = await seedPostingAccount(org.orgId, "3900", "Translation adjustment", "equity");
+    await db.execute(sql`
+      update orgs set settings = jsonb_set(settings, '{controlAccounts,translationAdjustment}', to_jsonb(${cta}::text), true)
+       where id = ${org.orgId}`);
+    const post = async (usdDueTo: string) => {
+      const [cadEntry, usdEntry] = [randomUUID(), randomUUID()];
+      await db.execute(sql`
+        insert into journal_entries (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin)
+        values (${cadEntry}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, ${`IC-CAD-${cadEntry.slice(0, 8)}`}, ${org.date}, ${org.periodId}, 'Due from US Co', 'draft', 'manual'),
+               (${usdEntry}, ${org.orgId}, ${org.bookId}, ${usd}, ${`IC-USD-${usdEntry.slice(0, 8)}`}, ${org.date}, ${org.periodId}, 'Due to parent', 'draft', 'manual')`);
+      await db.execute(sql`
+        insert into journal_lines (org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate)
+        values (${org.orgId}, ${cadEntry}, 1, ${org.accounts.ar}, ${org.subsidiaryId}, '130.0000', 'USD', '100.0000', '1.3'),
+               (${org.orgId}, ${cadEntry}, 2, ${org.accounts.bank}, ${org.subsidiaryId}, '-130.0000', 'USD', '-100.0000', '1.3'),
+               (${org.orgId}, ${usdEntry}, 1, ${org.accounts.ap}, ${usd}, ${`-${usdDueTo}`}, 'USD', ${`-${usdDueTo}`}, '1'),
+               (${org.orgId}, ${usdEntry}, 2, ${org.accounts.bank}, ${usd}, ${usdDueTo}, 'USD', ${usdDueTo}, '1')`);
+      await db.execute(sql`update journal_entries set status = 'posted', posted_at = now() where id in (${cadEntry}, ${usdEntry})`);
+    };
+
+    await post("100.0000");
+    const run = await runAutoElimination(org.orgId, org.periodId, actorId);
+    assert.equal(run.status, "eliminated");
+    const lines = new Map((await db.execute<{ account_id: string; amount: string }>(sql`
+      select l.account_id, sum(l.amount)::text as amount
+        from journal_lines l join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+       where e.org_id = ${org.orgId} and e.id = ${run.entryId}
+       group by l.account_id`)).rows.map((row) => [row.account_id, row.amount]));
+    assert.deepEqual(lines, new Map([
+      [org.accounts.ar, "-130.0000"], [org.accounts.ap, "135.0000"], [cta, "-5.0000"],
+    ]));
+
+    // A second pair short by 10 USD is a real disagreement, whatever the rates.
+    await post("90.0000");
+    await assert.rejects(runAutoElimination(org.orgId, org.periodId, actorId),
+      (error: unknown) => error instanceof ConsolidationError && error.code === "out-of-balance"
+        && /does not net to zero for the period/.test(error.message) && error.message.includes("USD"));
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test("an elimination rerun with emptied activity reports a reversal, never an elimination entry", { skip: !DB }, async () => {
   // Regression: once every activity group nets to zero the rerun must reverse
   // the prior elimination and return lineCount 0 — never a replacement entry,

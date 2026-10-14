@@ -100,3 +100,12 @@ export function multiplyDecimal(left: string, right: string, scale: number): str
   if (!a || !b) throw new Error(`not exact decimal factors: ${JSON.stringify(left)}, ${JSON.stringify(right)}`);
   return divideDecimal((a.unscaled*b.unscaled).toString(),(10n ** BigInt(a.scale+b.scale)).toString(),scale);
 }
+
+/** Exact decimal subtraction at the larger operand scale; nothing is rounded. */
+export function subtractDecimal(left: string, right: string): string {
+  const a = toScaled(left), b = toScaled(right);
+  if (!a || !b) throw new Error(`not exact decimals: ${JSON.stringify(left)} - ${JSON.stringify(right)}`);
+  const scale = Math.max(a.scale, b.scale);
+  const difference = a.unscaled * 10n ** BigInt(scale - a.scale) - b.unscaled * 10n ** BigInt(scale - b.scale);
+  return divideDecimal(difference.toString(), (10n ** BigInt(scale)).toString(), scale);
+}
