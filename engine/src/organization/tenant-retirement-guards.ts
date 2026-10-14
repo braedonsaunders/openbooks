@@ -393,6 +393,13 @@ export const TENANT_RETIREMENT_GUARDS = [
     "patch": false
   },
   {
+    "name": "financial_policy_version_immutable",
+    "source": "0691_financial_rate_preferences_versions.sql",
+    "sha256": "f1817fdfc45950978c79b5f91e43a65fcc897189ddb6c5a4a6d25d484d08690a",
+    "newSha256": "f1817fdfc45950978c79b5f91e43a65fcc897189ddb6c5a4a6d25d484d08690a",
+    "patch": false
+  },
+  {
     "name": "fulfillment_documents_guard",
     "source": "0421_pick_lists_and_shipments.sql",
     "sha256": "bdd0fdf860992d29a965a51eb6f381ea3647677885168296e1e16f330626c22c",
@@ -1876,6 +1883,12 @@ export const TENANT_RETIREMENT_GUARD_ATTRIBUTES = [
     "config": []
   },
   {
+    "name": "financial_policy_version_immutable",
+    "config": [
+      "search_path=public,pg_catalog"
+    ]
+  },
+  {
     "name": "fulfillment_documents_guard",
     "config": [
       "search_path=public,pg_catalog"
@@ -2695,6 +2708,11 @@ export const TENANT_RETIREMENT_GUARD_ATTRIBUTES = [
 
 export const TENANT_RETIREMENT_TRIGGER_CONTRACTS = [
   {
+    "table": "account_translation_policies",
+    "trigger": "account_translation_policies_immutable",
+    "function": "financial_policy_version_immutable"
+  },
+  {
     "table": "accounting_book_account_maps",
     "trigger": "accounting_book_account_map_guard",
     "function": "accounting_book_account_map_guard"
@@ -2808,6 +2826,31 @@ export const TENANT_RETIREMENT_TRIGGER_CONTRACTS = [
     "table": "close_signoffs",
     "trigger": "close_signoffs_append_only",
     "function": "close_append_only_guard"
+  },
+  {
+    "table": "gl_audit_number_assignments",
+    "trigger": "gl_audit_number_assignments_immutable",
+    "function": "financial_policy_version_immutable"
+  },
+  {
+    "table": "gl_audit_number_policies",
+    "trigger": "gl_audit_number_policies_immutable",
+    "function": "financial_policy_version_immutable"
+  },
+  {
+    "table": "project_loss_policies",
+    "trigger": "project_loss_policies_immutable",
+    "function": "financial_policy_version_immutable"
+  },
+  {
+    "table": "segment_balancing_policies",
+    "trigger": "segment_balancing_policies_immutable",
+    "function": "financial_policy_version_immutable"
+  },
+  {
+    "table": "subsidiary_accounting_preferences",
+    "trigger": "subsidiary_accounting_preferences_immutable",
+    "function": "financial_policy_version_immutable"
   },
   {
     "table": "tax_country_pack_installations",
