@@ -1652,20 +1652,37 @@ export async function payRunStaleness(
               where dr.org_id = r.org_id and dr.updated_at > r.calculated_at)
              as derived_rules_changed,
            -- Entitlement plans, their limits and their service tiers: all
-           -- three move accrual and payout amounts on the stub.
+           -- three move accrual and payout amounts on the stub. Plans, tiers
+           -- and group-scoped limits apply to anyone they match, so any change
+           -- stales the run; vacation terms, service credits and a limit set
+           -- for one employee move only that employee's stub, so they stale
+           -- the run only for an employee on it.
            (exists (select 1 from entitlement_plans ep
                      where ep.org_id = r.org_id and ep.updated_at > r.calculated_at)
             or exists (select 1 from entitlement_plan_limits el
-                        where el.org_id = r.org_id and el.updated_at > r.calculated_at)
+                        where el.org_id = r.org_id and el.updated_at > r.calculated_at
+                          and (el.employee_party_id is null or ${employeeOnRun(sql`el.employee_party_id::text`)}))
             or exists (select 1 from entitlement_service_tiers et
                         where et.org_id = r.org_id and et.updated_at > r.calculated_at)
             or exists (select 1 from payroll_vacation_terms vt
-                        where vt.org_id = r.org_id and vt.updated_at > r.calculated_at)
+                         join worker_employments vte on vte.org_id = vt.org_id and vte.id = vt.employment_id
+                        where vt.org_id = r.org_id and vt.updated_at > r.calculated_at
+                          and ${employeeOnRun(sql`vte.worker_party_id::text`)})
             or exists (select 1 from payroll_service_credits sc
-                        where sc.org_id = r.org_id and sc.updated_at > r.calculated_at)
+                         join worker_employments sce on sce.org_id = sc.org_id and sce.id = sc.employment_id
+                        where sc.org_id = r.org_id and sc.updated_at > r.calculated_at
+                          and ${employeeOnRun(sql`sce.worker_party_id::text`)})
             or exists (select 1 from audit_log al
-                        where al.org_id = r.org_id and al.table_name in ('payroll_service_credits','payroll_vacation_terms','entitlement_service_tiers')
-                          and al.at > r.calculated_at))
+                        where al.org_id = r.org_id and al.table_name = 'entitlement_service_tiers'
+                          and al.at > r.calculated_at)
+            -- Audited inserts, edits and deletions of an employee's terms or
+            -- credits, scoped by the employment the audited row names.
+            or exists (select 1 from audit_log al
+                         join worker_employments ale on ale.org_id = al.org_id
+                          and ale.id::text = coalesce(al.changes->'after'->>'employment_id', al.changes->'before'->>'employment_id')
+                        where al.org_id = r.org_id and al.table_name in ('payroll_service_credits','payroll_vacation_terms')
+                          and al.at > r.calculated_at
+                          and ${employeeOnRun(sql`ale.worker_party_id::text`)}))
              as entitlements_changed,
            -- Pack-declared class rates and assessable maximums. calculatePayRun
            -- multiplies assessable earnings by worker_comp_groups.rate_percent

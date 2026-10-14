@@ -1,7 +1,7 @@
 import { seedPayrollDocument, seedPayrollStub } from '../testing/fixtures.ts';
 import {
   seedPayrollSchedule, seedPayrollEmployeeRole, seedPayrollPerson, seedPayrollProfile, seedPayrollWage,
-  createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment,
+  createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment, seedVacationTerms,
 } from "../testing/fixtures.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -404,6 +404,35 @@ test("a run that cannot be found is stale, not fresh", { skip: !DB }, async () =
   const staleness = await payRunStaleness(randomUUID(), randomUUID());
   assert.equal(staleness.stale, true);
   assert.deepEqual(staleness.reasons, ["missing"]);
+});
+
+test("an employee's pay bank terms stale only the runs that pay that employee", { skip: !DB }, async () => {
+  // Vacation terms and service credits belong to one employment. Another
+  // employee's edit leaves this run's figures untouched, so it must not
+  // withdraw them; a change to an employee on the run still does.
+  const run = await seedPayRun();
+  try {
+    assert.deepEqual((await payRunStaleness(run.orgId, run.documentId)).reasons, []);
+    const outsiderId = randomUUID();
+    await seedPayrollPerson(run.orgId, outsiderId, 'Outside Worker', { subsidiaryId: run.subsidiaryId });
+    const outsiderEmployment = await seedWorkerEmployment(run.orgId, outsiderId, run.subsidiaryId);
+    await seedVacationTerms(run.orgId, outsiderEmployment, run.actorId, '6');
+    assert.ok(
+      !(await payRunStaleness(run.orgId, run.documentId)).reasons.includes("entitlements"),
+      "another employee's vacation terms do not change this run",
+    );
+
+    const edited = await db.execute(sql`
+      update payroll_vacation_terms set percent_floor = '6', updated_by = ${run.actorId}, updated_at = now()
+       where org_id = ${run.orgId} and employment_id = ${run.employmentId} returning id`);
+    assert.equal(edited.rows.length, 1);
+    assert.ok(
+      (await payRunStaleness(run.orgId, run.documentId)).reasons.includes("entitlements"),
+      "the run's own employee's vacation terms move their accrual",
+    );
+  } finally {
+    await dropScratchOrgReporting(run.orgId);
+  }
 });
 
 test(
