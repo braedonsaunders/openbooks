@@ -222,3 +222,31 @@ test("zero-net layer audit failure rolls back the entire native costing profile 
     await dropScratchOrg(org.orgId);
   }
 });
+
+test("standard costing without a standard cost is refused at setup and on every movement", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const { adminId: actorId, submitterId: receiptActorId } = await seedFlowActors(org.orgId);
+    state.gate = { user: { orgId: org.orgId, id: actorId }, allowedSubsidiaryIds: null };
+    const request = await profileRequest(org, org.accounts.adjustment);
+    const body = JSON.parse(await request.text()) as Record<string, unknown>;
+    delete body.standardCost;
+    const refused = await PUT(new Request(request.url, { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify(body) }),
+      { params: Promise.resolve({ id: org.items.fifo }) });
+    assert.equal(refused.status, 422);
+    assert.match(((await refused.json()) as { error: string }).error, /Standard costing requires a standard cost/);
+
+    // A profile already holding the method without a standard cannot price
+    // stock at actual under a policy that promises standard and variance.
+    await db.execute(sql`update item_inventory_profiles set costing_method='standard', standard_cost=null,
+      variance_account_id=${org.accounts.adjustment} where org_id=${org.orgId} and item_id=${org.items.fifo}`);
+    const position = { itemId: org.items.fifo, stockLocationId: org.stockLocationId, subsidiaryId: org.subsidiaryId, date: org.date };
+    await assert.rejects(receiveInventory(org.orgId, receiptActorId, {
+      ...position, quantity: "1", unitCost: "5", offsetAccountId: org.accounts.clearing,
+    }), /uses standard costing but has no standard cost; set its standard cost in the item's Costing settings/);
+    assert.equal(normalizeMoney((await getOnHand(org.orgId, org.items.fifo, org.stockLocationId)).quantity), "0.0000");
+  } finally {
+    state.gate = null;
+    await dropScratchOrg(org.orgId);
+  }
+});

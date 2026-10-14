@@ -18,7 +18,7 @@ import { assertItemsActive } from "./item-active.ts";
 import { assertNotKitItem } from "./kits.ts";
 import { stockLocationDim, postInventoryEntry, inventoryOffsetAccountProblem, type JournalLineInput } from "./journal.ts";
 import { primaryBookId, periodForDate, subsidiaryCurrency, getOnHandWith, lockInventoryPosition, persistReceiptMoney } from "./position.ts";
-import { addLayerAtCost } from "./cost-layers.ts";
+import { addLayerAtCost, requireStandardCost } from "./cost-layers.ts";
 // ---------------------------------------------------------------------------
 // Receive
 // ---------------------------------------------------------------------------
@@ -174,9 +174,9 @@ export async function receiveInventory(
       )!;
     } else if (input.unitCost !== undefined) {
       layerUnitCost = input.unitCost;
-    } else if (profile.costingMethod === "standard" && profile.standardCost != null) {
+    } else if (profile.costingMethod === "standard") {
       // A standard-cost item carries every unit at its configured standard.
-      layerUnitCost = profile.standardCost;
+      layerUnitCost = await requireStandardCost(tx, orgId, input.itemId, profile);
     } else {
       const onHand = await getOnHandWith(tx, orgId, input.itemId, input.stockLocationId, { subsidiaryId: input.subsidiaryId });
       // With nothing valued on hand there is no average: a zero-cost receipt
@@ -195,7 +195,7 @@ export async function receiveInventory(
       if (profile.costingMethod === "standard") {
         // Inventory carries at standard; the document's extended amount
         // less the standard value is the purchase price variance.
-        const std = profile.standardCost ?? layerUnitCost;
+        const std = await requireStandardCost(tx, orgId, input.itemId, profile);
         inventoryValue = extendCost(input.quantity, std);
         variance = fromUnits(
           toUnits(authoritativeTotal) - toUnits(inventoryValue),
@@ -207,7 +207,7 @@ export async function receiveInventory(
     } else {
       inventoryValue = extendCost(input.quantity, layerUnitCost);
       if (profile.costingMethod === "standard") {
-        const std = profile.standardCost ?? layerUnitCost;
+        const std = await requireStandardCost(tx, orgId, input.itemId, profile);
         const rs = receiveStandard(input.quantity, layerUnitCost, std);
         inventoryValue = rs.inventoryValue;
         variance = rs.variance;

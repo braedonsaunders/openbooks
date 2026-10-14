@@ -5,6 +5,25 @@ import { add, cmp, fromUnits, isZero, neg, roundDiv, sum, toUnits } from "../mon
 import { consumeFifo, extendCost, exactCostFragments, issueStandard, unitCostPerQuantity, type CostLayer } from "./costing.ts";
 import { InventoryError, type InventoryProfile, type Runner } from "./contracts.ts";
 
+/**
+ * The configured standard of a standard-cost item. A standard-cost item with
+ * no standard has no valuation policy: pricing it at actual would book no
+ * variance under a policy that promises one, so movements refuse instead.
+ */
+export async function requireStandardCost(
+  tx: Runner,
+  orgId: string,
+  itemId: string,
+  profile: InventoryProfile,
+): Promise<string> {
+  if (profile.standardCost != null) return profile.standardCost;
+  const label = (await tx.execute<{ label: string }>(sql`select coalesce(nullif(btrim(code), ''), name) as label
+    from items where org_id = ${orgId} and id = ${itemId}`)).rows[0]?.label ?? itemId;
+  throw new InventoryError(
+    `item ${label} uses standard costing but has no standard cost; set its standard cost in the item's Costing settings, then retry`,
+  );
+}
+
 export async function resolveProvisionalUnitCost(
   tx: Runner,
   orgId: string,
@@ -143,7 +162,7 @@ export async function consumeLayers(
     consumptions = planQuantityConsumption(layers, fromUnits(coveredUnits));
     cost = add(
       sum(consumptions.map((consumption) => consumption.cost)),
-      issueStandard(shortfallQuantity, profile.standardCost ?? onHand.unitCost),
+      issueStandard(shortfallQuantity, await requireStandardCost(tx, orgId, itemId, profile)),
     );
   } else {
     const costingLayers = layers.map((l) => ({

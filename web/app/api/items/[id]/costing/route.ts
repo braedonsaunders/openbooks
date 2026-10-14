@@ -208,6 +208,9 @@ export const PUT = defineRoute({
   if (allowNegativeInventory && negativeCostBasis === 'configured' && provisionalUnitCost == null) {
     return NextResponse.json({ error: 'A configured provisional cost is required for negative inventory' }, { status: 400 })
   }
+  if (costingMethod === 'standard' && standardCost == null) {
+    return NextResponse.json({ error: 'Standard costing requires a standard cost. Enter the standard cost, or choose another costing method.' }, { status: 422 })
+  }
   if (allowNegativeInventory && negativeCostBasis === 'standard' && standardCost == null) {
     return NextResponse.json({ error: 'A standard cost is required for standard provisional costing' }, { status: 400 })
   }
@@ -262,7 +265,6 @@ export const PUT = defineRoute({
         !switchingToStandard &&
         before?.costing_method === 'standard' &&
         costingMethod === 'standard' &&
-        before.standard_cost != null &&
         standardCost != null &&
         before.standard_cost !== standardCost
       const revaluationEntryId =
