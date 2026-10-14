@@ -6,6 +6,7 @@ import { lockActorCommandAuthority } from '../organization/actor-command-authori
 import { featureEnabled } from '../organization/feature-registry.ts'
 import { lockAndCheckOrgFeature } from '../organization/org-feature-lock.ts'
 import { ScopeNotFoundError } from '../organization/subsidiary-scope.ts'
+import { recordOwnerSubsidiary } from '../organization/record-owner.ts'
 import { add, cmp, neg, normalizeMoney, sum } from '../money/money.ts'
 import { ProvisionError, provisionMoney, type ProvisionAssessment } from './measurement.ts'
 import type { ProvisionIdentity } from './assessments.ts'
@@ -28,7 +29,7 @@ export async function constructionSubject(tx: SqlExecutor, orgId: string, actorI
     throw reading ? new ScopeNotFoundError() : new ProvisionError('Turn on Projects in Company Settings → Features before assessing a construction contract')
   const project = (await tx.execute<{id:string;name:string;contract_value:string|null;status:string}>(sql`
     select id,name,contract_value::text,status from projects where org_id=${orgId} and id=${identity.projectId}
-      and subsidiary_id=${identity.subsidiaryId} ${reading ? sql`for share` : sql`for update`}`)).rows[0]
+      and ${recordOwnerSubsidiary(orgId, sql`subsidiary_id`)}=${identity.subsidiaryId} ${reading ? sql`for share` : sql`for update`}`)).rows[0]
   if (!project) throw new ScopeNotFoundError()
   return project
 }

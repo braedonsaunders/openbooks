@@ -5,6 +5,7 @@ import { constructionBasis, constructionSubject, measureConstructionLoss, type C
 import { actorHasPermission } from '../organization/actor-permissions.ts'
 import { lockAndCheckOrgFeature } from '../organization/org-feature-lock.ts'
 import { ScopeNotFoundError } from '../organization/subsidiary-scope.ts'
+import { recordOwnerSubsidiary } from '../organization/record-owner.ts'
 import { isIsoCalendarDate } from '../platform/business-date.ts'
 import { orgReportingFramework, type ReportingFramework } from '../platform/reporting-framework.ts'
 import { existingFinancialChange, proposeFinancialChange, loadFinancialChange, assertFinancialChangeApproved, completeFinancialChange } from '../platform/financial-changes.ts'
@@ -59,8 +60,10 @@ export async function provisionEditorOptions(orgId: string, actorId: string) {
         order by number,name,id
     `)).rows
     const projects = await actorHasPermission(db,orgId,actorId,'projects.read') && await lockAndCheckOrgFeature(db,orgId,'projects')
-      ? (await db.execute<{id:string;name:string;subsidiaryId:string}>(sql`select id,concat_ws(' — ',code,name) as name,subsidiary_id as "subsidiaryId" from projects
-        where org_id=${orgId} and is_active and contract_value is not null ${visibleEntity(sql`subsidiary_id`,allowed)} order by code,id`)).rows : []
+      ? (await db.execute<{id:string;name:string;subsidiaryId:string}>(sql`select id,name,owner_id as "subsidiaryId" from (
+          select id,code,concat_ws(' — ',code,name) as name,${recordOwnerSubsidiary(orgId, sql`subsidiary_id`)} as owner_id from projects
+           where org_id=${orgId} and is_active and contract_value is not null) owned
+        where owner_id is not null ${visibleEntity(sql`owner_id`,allowed)} order by code,id`)).rows : []
     return { subsidiaries, books, accounts, projects, reportingFramework: await framework(db, orgId) }
   })
 }

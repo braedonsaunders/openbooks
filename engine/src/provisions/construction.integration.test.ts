@@ -84,3 +84,57 @@ test('governed construction forecasts recognize remaining loss once, refuse stal
     })
   } finally { await dropScratchOrg(org.orgId) }
 })
+
+test('loss-contract detection follows the project owner and the closing book', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  // Projects created without subsidiaries belong to the unique root entity,
+  // so they are detected and can be assessed there. An assessment applied in
+  // another book does not satisfy this book's close.
+  const org = await createScratchOrg()
+  try {
+    const actors = await withBypassContext(() => seedFlowActors(org.orgId))
+    const expense = randomUUID(), liability = randomUUID(), projectId = randomUUID(), taxBook = randomUUID()
+    await withBypassContext(async () => {
+      await db.execute(sql`insert into accounts(id,org_id,number,name,type) values
+        (${expense},${org.orgId},'PROV-EXP','Provision expense','expense'),
+        (${liability},${org.orgId},'PROV-LIAB','Provision liability','liability_current_other')`)
+      await db.execute(sql`insert into accounting_books(id,org_id,code,name,is_primary,is_active,posts_gl) values (${taxBook},${org.orgId},'TAX','Tax book',false,true,true)`)
+      await db.execute(sql`insert into user_permission_overrides(org_id,user_id,permission,effect) values
+        (${org.orgId},${actors.submitterId},'gl.manage','grant'),(${org.orgId},${actors.submitterId},'gl.post','grant'),
+        (${org.orgId},${actors.submitterId},'projects.read','grant')`)
+      await seedApprovalFlow(org.orgId, { subjectKind: 'financial_change', assignees: [{ type: 'user', userId: actors.approver1Id }], mode: 'any', preventSelfApproval: true })
+      await db.execute(sql`insert into projects(id,org_id,code,name,contract_value) values (${projectId},${org.orgId},'ROOT-LOSS','Unassigned fixed-price contract','1000000')`)
+      await db.execute(sql`insert into project_tasks(org_id,project_id,name,estimated_cost) values (${org.orgId},${projectId},'Construction','1150000')`)
+    })
+    await withOrgContext(org.orgId, async () => {
+      const period = (await db.execute<{ starts_on: string; ends_on: string }>(sql`
+        select starts_on::text, ends_on::text from accounting_periods where org_id=${org.orgId} and id=${org.periodId}`)).rows[0]!
+      const lossScope = { periodStartsOn: period.starts_on, periodEndsOn: period.ends_on, bookId: org.bookId, subsidiaryIds: [] }
+      assert.deepEqual((await unassessedLossContracts(db, org.orgId, lossScope)).map((row) => row.code), ['ROOT-LOSS'])
+      assert.deepEqual((await unassessedLossContracts(db, org.orgId, { ...lossScope, subsidiaryIds: [org.subsidiaryId] })).map((row) => row.code), ['ROOT-LOSS'],
+        'the root-scoped close owns the unassigned project')
+
+      const approve = async (id: string) => {
+        await submitFinancialChange(org.orgId, id, actors.submitterId)
+        const gate = (await db.execute<{ id: string }>(sql`select id from flow_gates where org_id=${org.orgId} and subject_id=${id} and status='pending'`)).rows[0]!
+        await decideGate({ gateId: gate.id, userId: actors.approver1Id, decision: 'approved' })
+      }
+      const assess = async (bookId: string) => {
+        const change = await proposeProvisionAssessment(org.orgId, actors.submitterId, {
+          obligation: { id: randomUUID(), subsidiaryId: org.subsidiaryId, bookId, name: 'Unassigned contract loss', currency: 'CAD', expenseAccountId: expense, liabilityAccountId: liability, projectId },
+          effectiveOn: org.date, reason: 'Provide the forecast contract loss for this period', idempotencyKey: randomUUID(),
+          assessment: { presentObligation: true, outflow: 'probable', reliablyEstimable: true, evidence: 'Approved fixed-price contract with a supported forecast of direct and allocated costs.',
+            discounting: 'immaterial', discountEvidence: 'Work completes shortly and time value is immaterial.', estimate: null },
+          construction: { remainingCost: '1150000', terminationAvailable: false, terminationCost: null, relatedAssetsReviewed: true,
+            impairmentEvidence: 'The controller reviewed related contract assets and no additional impairment is required.' },
+        })
+        await approve(change)
+        await applyProvisionAssessment(org.orgId, change, actors.submitterId)
+      }
+      await assess(taxBook)
+      assert.deepEqual((await unassessedLossContracts(db, org.orgId, lossScope)).map((row) => row.code), ['ROOT-LOSS'],
+        'another book\'s assessment does not satisfy the primary close')
+      await assess(org.bookId)
+      assert.deepEqual(await unassessedLossContracts(db, org.orgId, lossScope), [])
+    })
+  } finally { await dropScratchOrg(org.orgId) }
+})
