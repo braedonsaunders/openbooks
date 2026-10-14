@@ -92,6 +92,13 @@ const restrictionStep = (): ScriptStep => ({
   rows: [],
 });
 
+/** The entity's posting rate type: the entity read and its preference
+ * versions (none here, so the spot rate type applies). */
+const postingPreferenceSteps = (subsidiaryId: string): ScriptStep[] => [
+  { sql: /from subsidiaries/, rows: [{ id: subsidiaryId }] },
+  { sql: /from subsidiary_accounting_preferences/, rows: [] },
+];
+
 const currencyStep = (rows: unknown[] = []): ScriptStep => ({
   sql: /currency_restriction as restriction/,
   rows,
@@ -229,6 +236,7 @@ test("a default header rate is unset, so one spot read prices every line", async
   const spot = "1.0842000000";
   const s = scripted([
     subsidiariesStep([root], "org-1"),
+    ...postingPreferenceSteps(root.id),
     {
       sql: /from fx_rates/,
       // The shared spot lookup reads an evidence row (stored/derived rates
@@ -275,10 +283,108 @@ test("a default header rate is unset, so one spot read prices every line", async
   s.assertDrained();
 });
 
+const recordedRate = (over: Record<string, unknown> = {}) => ({
+  version: 1, rate: "1.35", source: "Bank confirmation", reason: "Contracted conversion for this shipment",
+  fromCurrency: "USD", toCurrency: "CAD", rateDate: "2026-09-15", subsidiaryId: "", ...over,
+});
+
+// Internally composed documents may omit the evidence, like journal metadata.
+const evidenceIsOptional: undefined extends Doc["documentFxRateEvidence"] ? true : never = true;
+
+test("absent or null rate evidence is no explicit election: the header rate still prices the origin", async () => {
+  assert.equal(evidenceIsOptional, true);
+  const root = subRow({ baseCurrency: "CAD" });
+  for (const evidence of [{}, { documentFxRateEvidence: null }]) {
+    const s = scripted([subsidiariesStep([root], "org-1"), restrictionStep(), currencyStep()]);
+    const out = await applySubsidiaries(
+      s.runner,
+      docOf({ kind: "vendor_bill", currency: "USD", fxRate: "1.3600000000", ...evidence }),
+      [
+        { accountId: randomUUID(), amount: "100.0000" as KernelLine["amount"] },
+        { accountId: randomUUID(), amount: "-100.0000" as KernelLine["amount"] },
+      ],
+      { bookId: null, regeneration: false },
+    );
+    assert.equal(out.originFxRate, "1.3600000000");
+    s.assertDrained();
+  }
+});
+
+test("recorded rate evidence prices the origin legs without a rate read, even at exactly 1", async () => {
+  // A pegged conversion recorded at 1 is evidence, not the unset default:
+  // the document is measured at it rather than at a looked-up rate.
+  const root = subRow({ baseCurrency: "CAD" });
+  const s = scripted([subsidiariesStep([root], "org-1"), restrictionStep(), currencyStep()]);
+  const out = await applySubsidiaries(
+    s.runner,
+    docOf({ kind: "vendor_bill", subsidiaryId: root.id, currency: "USD", fxRate: "1.0000000000",
+      documentFxRateEvidence: recordedRate({ rate: "1", subsidiaryId: root.id }) }),
+    [
+      { accountId: randomUUID(), amount: "100.0000" as KernelLine["amount"] },
+      { accountId: randomUUID(), amount: "-100.0000" as KernelLine["amount"] },
+    ],
+    { bookId: null, regeneration: false },
+  );
+  assert.equal(out.originFxRate, "1");
+  for (const stamped of out.lines) assert.equal(stamped.fxRate, "1");
+  assert.ok(!s.calls.some((sql) => sql.includes("fx_rates")), "recorded evidence reads no rates");
+  s.assertDrained();
+});
+
+test("recorded rate evidence never prices another entity on the same functional currency", async () => {
+  const root = subRow({ name: "Root", baseCurrency: "CAD" });
+  const child = subRow({ name: "Child", baseCurrency: "CAD" });
+  (child as { parentId: string | null }).parentId = root.id;
+  const spot = "1.3000000000";
+  const s = scripted([
+    subsidiariesStep([root, child], "org-1"),
+    ...postingPreferenceSteps(child.id),
+    {
+      sql: /from fx_rates/,
+      rows: [{
+        id: "00000000-0000-4000-8000-000000000002", as_of: "2026-09-15", source: "unit",
+        stored_rate: spot, updated_at: "2026-09-15T00:00:00.000000Z", priority: 0, derived_rate: spot,
+      }],
+    },
+    { sql: /from intercompany_pairs/, rows: [{ fromId: root.id, toId: child.id, dueFrom: randomUUID(), dueTo: randomUUID() }] },
+    restrictionStep(),
+    currencyStep(),
+  ]);
+  const out = await applySubsidiaries(
+    s.runner,
+    docOf({ kind: "vendor_bill", subsidiaryId: root.id, currency: "USD", fxRate: "1.3500000000",
+      documentFxRateEvidence: recordedRate({ subsidiaryId: root.id }) }),
+    [
+      { accountId: randomUUID(), amount: "100.0000" as KernelLine["amount"] },
+      { accountId: randomUUID(), amount: "-100.0000" as KernelLine["amount"], subsidiaryId: child.id },
+    ],
+    { bookId: null, regeneration: false },
+  );
+  assert.equal(out.originFxRate, "1.35");
+  assert.equal(out.lines[0]?.fxRate, "1.35", "the owning entity is measured at the recorded rate");
+  assert.equal(out.lines[1]?.fxRate, spot, "the other entity is measured at the exchange rates");
+  s.assertDrained();
+});
+
+test("recorded rate evidence for another posting date refuses before any rate is read", async () => {
+  const root = subRow({ baseCurrency: "CAD" });
+  const s = scripted([subsidiariesStep([root], "org-1")]);
+  await assert.rejects(
+    () => applySubsidiaries(s.runner,
+      docOf({ kind: "vendor_bill", subsidiaryId: root.id, currency: "USD", fxRate: "1.3500000000",
+        documentFxRateEvidence: recordedRate({ subsidiaryId: root.id, rateDate: "2026-09-14" }) }),
+      [{ accountId: randomUUID(), amount: "100.0000" as KernelLine["amount"] }],
+      { bookId: null, regeneration: false }),
+    (e: unknown) => e instanceof PostingError && /no longer matches this document's posting date/.test(e.message),
+  );
+  s.assertDrained();
+});
+
 test("a missing spot rate names the pair and the date as a posting refusal", async () => {
   const root = subRow({ baseCurrency: "USD" });
   const s = scripted([
     subsidiariesStep([root], "org-1"),
+    ...postingPreferenceSteps(root.id),
     { sql: /from fx_rates/, rows: [] },
   ]);
   await assert.rejects(

@@ -273,5 +273,30 @@
   "rename": {
     "fileTitle": "Renombrar archivo",
     "folderTitle": "Renombrar carpeta"
+  },
+  "explicitFx": {
+    "label": "Tipo de cambio",
+    "conversion": "1 {from} = {rate} {to} el {date}",
+    "unsaved": "Sin guardar",
+    "sourceLine": "Fuente: {source}",
+    "clearedUnsaved": "Tipos de cambio de la organización (sin guardar)",
+    "marketRates": "Tipos de cambio de la organización al contabilizar ({from} a {to})",
+    "staleStored": "Este tipo se registró para otra fecha de contabilización u otra entidad legal. Registre un tipo para el {date}, o use los tipos de cambio de la organización, antes de guardar.",
+    "stalePending": "Este tipo corresponde a otra fecha de contabilización u otra entidad legal distinta de la que tiene ahora el documento. Regístrelo de nuevo para el {date}.",
+    "record": "Registrar tipo",
+    "change": "Cambiar tipo",
+    "useMarketRates": "Usar tipos de cambio",
+    "keepRecorded": "Conservar el tipo registrado",
+    "entityChanged": "Guarde el cambio de entidad legal antes de registrar un tipo para ella.",
+    "editorTitle": "Tipo de cambio explícito",
+    "editorDescription": "Convierte {from} a {to}, la moneda funcional de la entidad legal del documento, para el {date}.",
+    "rate": "Tipo (1 {from} en {to})",
+    "source": "Fuente",
+    "sourcePlaceholder": "Por ejemplo, la confirmación del banco",
+    "reason": "Motivo",
+    "reasonPlaceholder": "Por qué este documento usa este tipo",
+    "appliedOnSave": "El tipo se registra al guardar el documento.",
+    "cancel": "Cancelar",
+    "apply": "Aplicar"
   }
 }

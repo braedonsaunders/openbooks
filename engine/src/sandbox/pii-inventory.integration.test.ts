@@ -40,6 +40,7 @@ const SENSITIVE_TYPES: ReadonlySet<string> = new Set([
 const CONSTRUCTION_COVERED: ReadonlySet<string> = new Set([
   // Financial clone projections redact authored prose and rebase retained evidence.
   "account_translation_policies.reason",
+  "documents.document_fx_rate_evidence",
   "fx_rate_types.name",
   "gl_audit_number_policies.reason",
   "project_loss_policies.reason",

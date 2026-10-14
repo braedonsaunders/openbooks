@@ -273,5 +273,30 @@
   "rename": {
     "fileTitle": "ファイル名を変更",
     "folderTitle": "フォルダー名を変更"
+  },
+  "explicitFx": {
+    "label": "為替レート",
+    "conversion": "{date} 時点 1 {from} = {rate} {to}",
+    "unsaved": "未保存",
+    "sourceLine": "出典: {source}",
+    "clearedUnsaved": "組織の為替レート (未保存)",
+    "marketRates": "計上時の組織の為替レート ({from} から {to})",
+    "staleStored": "このレートは別の計上日または別の法人に対して記録されています。保存する前に {date} のレートを記録するか、組織の為替レートを使用してください。",
+    "stalePending": "このレートは、現在の伝票とは異なる計上日または法人に対するものです。{date} のレートとして記録し直してください。",
+    "record": "レートを記録",
+    "change": "レートを変更",
+    "useMarketRates": "為替レートを使用",
+    "keepRecorded": "記録済みのレートを維持",
+    "entityChanged": "法人の変更を保存してから、その法人のレートを記録してください。",
+    "editorTitle": "明示的な為替レート",
+    "editorDescription": "{date} 時点で {from} を伝票の法人の機能通貨である {to} に換算します。",
+    "rate": "レート (1 {from} あたりの {to})",
+    "source": "出典",
+    "sourcePlaceholder": "例: 銀行の確認書",
+    "reason": "理由",
+    "reasonPlaceholder": "この伝票でこのレートを使用する理由",
+    "appliedOnSave": "レートは伝票を保存したときに記録されます。",
+    "cancel": "キャンセル",
+    "apply": "適用"
   }
 }

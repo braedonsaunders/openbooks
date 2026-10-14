@@ -5,7 +5,7 @@ import { InventoryError } from "./contracts.ts";
 import { inventoryOffsetAccountProblem } from "./journal.ts";
 
 /** A negative-stock shortfall with no recorded charge account. */
-export interface UnattributedDeficit {
+export type UnattributedDeficit = {
   id: string;
   itemId: string;
   stockLocationId: string;
@@ -15,7 +15,7 @@ export interface UnattributedDeficit {
   issueMovementId: string;
   remainingQuantity: string;
   provisionalUnitCost: string;
-}
+};
 
 /**
  * Shortfalls of an item still awaiting their charge account. A receipt

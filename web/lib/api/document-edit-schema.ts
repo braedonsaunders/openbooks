@@ -40,6 +40,10 @@ export const documentEditBodySchema = z.object({
   workCompletedOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
   paymentHoldReason: z.string().nullable().optional(), internalNotes: z.string().nullable().optional(),
   billingMethod: z.string().nullable().optional(), isFinalInvoice: z.boolean().optional(), currency: z.string().optional(),
+  explicitFx: z.object({
+    rate: z.string(), source: z.string(), reason: z.string(),
+    fromCurrency: z.string(), toCurrency: z.string(), rateDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  }).strict().nullable().optional(),
   custom: jsonObjectSchema.optional(), unsplitDistributionGroups: z.array(z.string().uuid()).optional(),
 });
 

@@ -10,6 +10,7 @@ import { CustomFieldInputs } from './custom-field-inputs'
 import { HeaderFields } from './transaction-form/header-fields'
 import { BillMatchDialog } from './bill-match-dialog'
 import { ApprovalHistory } from './approval-history'
+import { DocumentFxRateField } from './document-drawer-fx-rate'
 import { lineText, type LineRow } from './document-drawer-types'
 import { emptyLine } from './document-drawer-lines'
 import type { DocumentDrawerHeaderScope } from './document-drawer-header'
@@ -104,6 +105,10 @@ export function renderDocumentDrawerBody(scope: DocumentDrawerHeaderScope) {
     applyDialogRule,
     applyDialogChildren,
     afterContent,
+    explicitFx,
+    setExplicitFx,
+    subsidiaryId,
+    postingDate,
   } = scope
 
   const field = 'space-y-1.5'
@@ -309,6 +314,18 @@ export function renderDocumentDrawerBody(scope: DocumentDrawerHeaderScope) {
           <CustomFieldInputs defs={headerDefs} values={customValues} onChange={setCustomValues} readOnly={!editable} />
         </>
       )}
+
+      <DocumentFxRateField
+        kind={config.kind}
+        doc={doc}
+        editable={editable}
+        isCreate={isCreate}
+        subsidiaryId={subsidiaryId}
+        documentDate={documentDate}
+        postingDate={postingDate}
+        pending={explicitFx}
+        onChange={setExplicitFx}
+      />
 
       {controlSide && controlChoices ? (
         <div className="grid gap-4 sm:grid-cols-2">

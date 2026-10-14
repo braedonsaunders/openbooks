@@ -23,12 +23,12 @@ export async function documentTaxDate(
   return corrected?.document_date ?? documentDate;
 }
 
-export interface StaleTaxRateLine {
+export type StaleTaxRateLine = {
   line_number: number;
   code: string;
   stored: string;
   effective: string | null;
-}
+};
 
 /**
  * The first calculated tax component whose stored rate differs from the rate

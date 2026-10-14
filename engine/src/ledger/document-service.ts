@@ -36,6 +36,8 @@ export async function loadDocument(id: string, orgId: string) {
   requireOrganization(orgId)
   const doc = (await db.execute<Record<string, unknown> & { documentRevision: string }>(sql`
     select d.*, p.display_name as party_name, e.id as entry_id,
+           (select s.base_currency from subsidiaries s
+             where s.org_id = d.org_id and s.id = d.subsidiary_id) as functional_currency,
            pe.status as posting_effect_status, pe.attempt_count as posting_effect_attempts,
            pe.error as posting_effect_error, pe.next_attempt_at::text as posting_effect_next_attempt_at,
            ${documentRevisionCounterSql(sql.raw('d.revision_seq'))} as "documentRevision",

@@ -74,6 +74,8 @@ export function useDocumentDrawerPayload(scope: DocumentDrawerPickersScope) {
     carriesWorkDates,
     workCompletedOn,
     setWorkCompletedOn,
+    explicitFx,
+    setExplicitFx,
     paymentHoldReason,
     setPaymentHoldReason,
     internalNotes,
@@ -152,6 +154,8 @@ export function useDocumentDrawerPayload(scope: DocumentDrawerPickersScope) {
       subsidiaryId: multiSub ? subsidiaryId || null : undefined,
       expectedPayDate: expectedPayDate || null,
       ...(carriesWorkDates ? { workCompletedOn: workCompletedOn || null } : {}),
+      // Only an unsaved rate change rides; absent keeps the stored rate.
+      ...(explicitFx !== undefined ? { explicitFx } : {}),
       paymentHoldReason: paymentHoldReason || null,
       internalNotes: internalNotes || null,
       billingMethod: billingMethod || null,
@@ -229,7 +233,7 @@ export function useDocumentDrawerPayload(scope: DocumentDrawerPickersScope) {
               })),
           }),
     }
-  }, [generatedAuthority, isTransfer, transfer, partyId, paymentCardId, documentDate, dueDate, dueOverridden, isCreate, referenceNumber, memo, postingDate, departmentId, projectIdHeader, locationId, classId, subsidiaryId, multiSub, expectedPayDate, carriesWorkDates, workCompletedOn, paymentHoldReason, internalNotes, billingMethod, isFinalInvoice, customValues, extraDims, rows, lineDefs, segments, config, taxByProfile, returnSourceColumn, returnSources, marketplaceColumn])
+  }, [generatedAuthority, isTransfer, transfer, partyId, paymentCardId, documentDate, dueDate, dueOverridden, isCreate, referenceNumber, memo, postingDate, departmentId, projectIdHeader, locationId, classId, subsidiaryId, multiSub, expectedPayDate, carriesWorkDates, workCompletedOn, explicitFx, paymentHoldReason, internalNotes, billingMethod, isFinalInvoice, customValues, extraDims, rows, lineDefs, segments, config, taxByProfile, returnSourceColumn, returnSources, marketplaceColumn])
 
   const [dirty, setDirty] = useState(false)
   useEffect(() => {
@@ -304,6 +308,7 @@ export function useDocumentDrawerPayload(scope: DocumentDrawerPickersScope) {
     setSubsidiaryId(sourceDoc.subsidiary_id ?? '')
     setExpectedPayDate(sourceDoc.expected_pay_date ?? '')
     setWorkCompletedOn(sourceDoc.work_completed_on ?? '')
+    setExplicitFx(undefined)
     setPaymentHoldReason(sourceDoc.payment_hold_reason ?? '')
     setInternalNotes(sourceDoc.internal_notes ?? '')
     setBillingMethod(sourceDoc.billing_method ?? '')

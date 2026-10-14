@@ -273,5 +273,30 @@
   "rename": {
     "fileTitle": "Renommer le fichier",
     "folderTitle": "Renommer le dossier"
+  },
+  "explicitFx": {
+    "label": "Taux de change",
+    "conversion": "1 {from} = {rate} {to} le {date}",
+    "unsaved": "Non enregistré",
+    "sourceLine": "Source : {source}",
+    "clearedUnsaved": "Taux de change de l'organisation (non enregistré)",
+    "marketRates": "Taux de change de l'organisation à la comptabilisation ({from} vers {to})",
+    "staleStored": "Ce taux a été enregistré pour une autre date de comptabilisation ou une autre entité juridique. Enregistrez un taux pour le {date}, ou utilisez les taux de change de l'organisation, avant d'enregistrer.",
+    "stalePending": "Ce taux concerne une autre date de comptabilisation ou une autre entité juridique que celles du document. Saisissez-le de nouveau pour le {date}.",
+    "record": "Saisir un taux",
+    "change": "Modifier le taux",
+    "useMarketRates": "Utiliser les taux de change",
+    "keepRecorded": "Conserver le taux saisi",
+    "entityChanged": "Enregistrez le changement d'entité juridique avant de saisir un taux pour celle-ci.",
+    "editorTitle": "Taux de change explicite",
+    "editorDescription": "Convertit {from} en {to}, la monnaie fonctionnelle de l'entité juridique du document, pour le {date}.",
+    "rate": "Taux (1 {from} en {to})",
+    "source": "Source",
+    "sourcePlaceholder": "Par exemple, la confirmation de la banque",
+    "reason": "Motif",
+    "reasonPlaceholder": "Pourquoi ce document utilise ce taux",
+    "appliedOnSave": "Le taux est enregistré lorsque vous enregistrez le document.",
+    "cancel": "Annuler",
+    "apply": "Appliquer"
   }
 }

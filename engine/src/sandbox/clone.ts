@@ -329,6 +329,18 @@ export function generateCopySql(
       exprs.push(`public.document_payment_terms_snapshot_for_clone("payment_terms_snapshot", '${prod}'::uuid, "party_id", '${seed}'::uuid)`);
       continue;
     }
+    // Recorded exchange rate evidence is copied through the same native
+    // projection the insert guard and source matching compare against: exact
+    // rate, currencies and date, the rebased legal entity, and in a masked
+    // copy a redacted source and reason.
+    if (t.name === "documents" && c.name === "document_fx_rate_evidence") {
+      if (tableMask?.has(c.name)) throw new Error("Recorded exchange rate evidence requires native identity rebasing; remove its whole-column masking policy.");
+      if (!rebaseSet.has("subsidiaries")) {
+        throw new Error("sandbox clone: recorded exchange rate evidence requires subsidiaries in the copy plan; include subsidiaries before retrying");
+      }
+      exprs.push(`public.document_fx_rate_evidence_for_clone("document_fx_rate_evidence", '${seed}'::uuid, ${opts.masked ? "true" : "false"})`);
+      continue;
+    }
     if ((t.name === "performance_obligations" && c.name === "allocation_basis")
         || (t.name === "recognition_control_events" && ["before_state", "after_state"].includes(c.name))
         || (t.name === "rebate_cost_attestations" && c.name === "line_basis")

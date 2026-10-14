@@ -80,6 +80,8 @@ import {
 } from '../records/document-edit-policy.ts'
 import type { DocumentLineInput, DocumentEditInput, DocumentEditCurrent } from '../ledger/document-input.ts'
 import { consolidationSourceRefusal } from '../records/consolidation-source-policy.ts'
+import { DocumentFxError, EXPLICIT_FX_DOCUMENT_KINDS, documentFxState, planDocumentFxEdit, subsidiaryFunctionalCurrency, type DocumentFxEditPlan } from './document-fx.ts'
+import { effectivePostingDate } from '../journal/posting-contracts.ts'
 
 /** False when this kind belongs to a Features switch that is off. */
 export async function isDocKindEnabled(orgId: string, kind: string): Promise<boolean> {
@@ -1261,6 +1263,14 @@ export async function applyDocumentEdit(
     if (!found.rows[0]) throw new DocumentEditError(422, 'invalid currency')
     currency = code
   }
+  // Recording an explicit rate is a multi-currency capability; clearing one
+  // stays available so recorded evidence never strands a draft.
+  if (body.explicitFx !== undefined && body.explicitFx !== null) {
+    if (!(await isFeatureEnabled(orgId, 'multiCurrency'))) throw new DocumentEditError(404, 'not found')
+    if (!EXPLICIT_FX_DOCUMENT_KINDS.has(current.kind)) {
+      throw new DocumentEditError(422, 'an explicit exchange rate can be recorded only on customer invoices and vendor bills')
+    }
+  }
 
   // The external (source, ref) pair is all or nothing: a lone half would
   // slip the dedupe index, so refuse it here with the remedy instead of
@@ -2427,6 +2437,35 @@ export async function applyDocumentEdit(
         }
       }
 
+      // The explicit rate is decided against the identity the edited draft
+      // posts with — its currency, legal entity and functional currency, and
+      // effective posting date — under this transaction's row lock.
+      let fxPlan: DocumentFxEditPlan
+      try {
+        const fx = await documentFxState(tx, orgId, id)
+        const fxSubsidiaryId = targetSubsidiaryId ?? null
+        const functionalCurrency = fxSubsidiaryId && (fx.evidence || body.explicitFx)
+          ? await subsidiaryFunctionalCurrency(tx, orgId, fxSubsidiaryId)
+          : null
+        fxPlan = planDocumentFxEdit({
+          kind: current.kind,
+          input: body.explicitFx,
+          stored: fx.evidence,
+          identity: fxSubsidiaryId && functionalCurrency ? {
+            currency: currency ?? fx.currency,
+            functionalCurrency,
+            rateDate: effectivePostingDate({
+              postingDate: body.postingDate !== undefined ? body.postingDate : fx.postingDate,
+              documentDate: body.documentDate ?? fx.documentDate,
+            }),
+            subsidiaryId: fxSubsidiaryId,
+          } : null,
+        })
+      } catch (error) {
+        if (error instanceof DocumentFxError) throw new DocumentEditError(422, error.message)
+        throw error
+      }
+
       const auditBefore = await captureTransactionAuditSnapshot(tx, id, ctx.orgId)
       for (const line of generatedWithholdingUpdates) {
         const updated = await tx.execute(sql`update document_lines
@@ -2680,6 +2719,8 @@ export async function applyDocumentEdit(
           billing_method = ${body.billingMethod !== undefined ? body.billingMethod : sql`billing_method`},
           is_final_invoice = ${body.isFinalInvoice !== undefined ? body.isFinalInvoice : sql`is_final_invoice`},
           currency = ${currency !== undefined ? currency : sql`currency`},
+          fx_rate = ${fxPlan.action === 'set' ? fxPlan.evidence.rate : fxPlan.action === 'clear' ? '1' : sql`fx_rate`},
+          document_fx_rate_evidence = ${fxPlan.action === 'set' ? JSON.stringify(fxPlan.evidence) : fxPlan.action === 'clear' ? null : sql`document_fx_rate_evidence`}::jsonb,
           custom = coalesce(${headerCustom ? JSON.stringify(headerCustom) : null}::jsonb, custom),
           subtotal = coalesce(${totals?.subtotal ?? null}, subtotal),
           tax_total = coalesce(${totals?.taxTotal ?? null}, tax_total),

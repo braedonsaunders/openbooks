@@ -1,5 +1,6 @@
 /** Transport-neutral edit contracts; monetary values remain exact decimal strings. */
 import type { TaxQuoteRequest, TaxQuoteResult } from '../tax/rate-providers.ts'
+import type { ExplicitFxInput } from './document-fx.ts'
 
 export interface BillLineInput {
   accountId: string
@@ -139,6 +140,14 @@ export interface DocumentEditInput {
   billingMethod?: string | null
   isFinalInvoice?: boolean
   currency?: string
+  /**
+   * Explicit transaction-to-functional exchange rate (customer invoices and
+   * vendor bills, drafts only). Absent keeps recorded evidence while the
+   * currency, legal entity and posting date are unchanged; null clears it
+   * and returns the document to the organization's exchange rates; an
+   * object records it for the identity the edited document posts with.
+   */
+  explicitFx?: ExplicitFxInput | null
   custom?: Record<string, unknown>
   lines?: DocumentLineInput[]
   /** Stored distribution groups collapsing back to one line each. */

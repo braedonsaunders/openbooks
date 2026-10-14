@@ -273,5 +273,30 @@
   "rename": {
     "fileTitle": "Datei umbenennen",
     "folderTitle": "Ordner umbenennen"
+  },
+  "explicitFx": {
+    "label": "Wechselkurs",
+    "conversion": "1 {from} = {rate} {to} am {date}",
+    "unsaved": "Nicht gespeichert",
+    "sourceLine": "Quelle: {source}",
+    "clearedUnsaved": "Wechselkurse der Organisation (nicht gespeichert)",
+    "marketRates": "Wechselkurse der Organisation bei der Buchung ({from} zu {to})",
+    "staleStored": "Dieser Kurs wurde für ein anderes Buchungsdatum oder eine andere juristische Einheit erfasst. Erfassen Sie vor dem Speichern einen Kurs für den {date} oder verwenden Sie die Wechselkurse der Organisation.",
+    "stalePending": "Dieser Kurs gilt für ein anderes Buchungsdatum oder eine andere juristische Einheit als der Beleg jetzt. Erfassen Sie ihn erneut für den {date}.",
+    "record": "Kurs erfassen",
+    "change": "Kurs ändern",
+    "useMarketRates": "Wechselkurse verwenden",
+    "keepRecorded": "Erfassten Kurs behalten",
+    "entityChanged": "Speichern Sie die Änderung der juristischen Einheit, bevor Sie einen Kurs dafür erfassen.",
+    "editorTitle": "Expliziter Wechselkurs",
+    "editorDescription": "Rechnet {from} in {to} um, die funktionale Währung der juristischen Einheit des Belegs, für den {date}.",
+    "rate": "Kurs (1 {from} in {to})",
+    "source": "Quelle",
+    "sourcePlaceholder": "Zum Beispiel die Bestätigung der Bank",
+    "reason": "Begründung",
+    "reasonPlaceholder": "Warum dieser Beleg diesen Kurs verwendet",
+    "appliedOnSave": "Der Kurs wird beim Speichern des Belegs erfasst.",
+    "cancel": "Abbrechen",
+    "apply": "Übernehmen"
   }
 }

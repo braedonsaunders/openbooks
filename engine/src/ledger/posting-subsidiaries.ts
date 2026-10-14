@@ -13,6 +13,7 @@ import { applyWithholdingCarrying, stampPaymentWithholdingCurrency } from "../co
 import { ContractorWithholdingError } from "../contractor-withholding/scheme.ts";
 import { loadBookProfile, resolveBookBases, resolveBookRates } from "../journal/book-basis.ts";
 import { BookTranslationError, isIdentityBasis, rateKey, type BookSubsidiaryBasis } from "../journal/book-translation.ts";
+import { DocumentFxError, documentFxPostingRefusal, readDocumentFxRateEvidence } from "./document-fx.ts";
 /**
  * Application-layer proof for the storage trigger `jl_check_account`:
  * every final line inserts in its line currency, so a target
@@ -86,6 +87,16 @@ export async function applySubsidiaries(
     if (!origin)
       throw new SubsidiaryError(`subsidiary ${docSubId} does not exist`);
     const postingDate = effectivePostingDate(doc);
+    // Recorded rate evidence measures this document only while it still
+    // describes the posting: its currency, owning entity and that entity's
+    // functional currency, effective posting date and stored rate.
+    const fxEvidence = readDocumentFxRateEvidence(doc.documentFxRateEvidence);
+    if (fxEvidence) {
+      const refusal = documentFxPostingRefusal(doc.kind, fxEvidence, {
+        currency: doc.currency, functionalCurrency: origin.baseCurrency, rateDate: postingDate, subsidiaryId: docSubId,
+      }, doc.fxRate);
+      if (refusal) throw new PostingError(refusal);
+    }
     const rateCache = new Map<string, string>();
     // A posting into a non-primary book measures each subsidiary in the
     // book's currency for it (its functional currency unless the book is
@@ -117,6 +128,12 @@ export async function applySubsidiaries(
     const functionalRate = async (targetCurrency: string, transactionCurrency = doc.currency, statedRate?: string, subsidiaryId = docSubId): Promise<string> => {
       if (transactionCurrency === targetCurrency) return "1";
       if (statedRate) return statedRate;
+      // An explicit rate converts the document currency into its owning
+      // entity's functional currency and nothing else: another entity on the
+      // same currency, or any other conversion, uses the exchange rates.
+      if (fxEvidence && transactionCurrency === doc.currency && targetCurrency === origin.baseCurrency && subsidiaryId === docSubId) {
+        return fxEvidence.rate;
+      }
       // Honour a user-supplied header rate. The schema default is '1', which
       // on a foreign-currency document is "unset", not a 1:1 peg — look the
       // spot up so dunning, payment runs and the stamp are not all 1. The
@@ -125,7 +142,7 @@ export async function applySubsidiaries(
       // rather than by string inequality, so every default-rate document
       // resolves its spot rate.
       if (
-        transactionCurrency === doc.currency && targetCurrency === origin.baseCurrency &&
+        !fxEvidence && transactionCurrency === doc.currency && targetCurrency === origin.baseCurrency &&
         doc.fxRate &&
         (doc.journalFxRateExplicit || normalizeDecimal(doc.fxRate, 10) !== "1.0000000000" || !!(doc.custom as {withholdingDeposit?:unknown;withholdingRemittance?:unknown} | null)?.withholdingDeposit || !!(doc.custom as {withholdingRemittance?:unknown}|null)?.withholdingRemittance)
       ) {
@@ -267,6 +284,7 @@ export async function applySubsidiaries(
   } catch (err) {
     if (err instanceof SubsidiaryError) throw new PostingError(err.message);
     if (err instanceof BookTranslationError) throw new PostingError(err.message);
+    if (err instanceof DocumentFxError) throw new PostingError(err.message);
     if (err instanceof ContractorWithholdingError) throw new PostingError(err.remedy ? `${err.message} ${err.remedy}` : err.message);
     throw err;
   }

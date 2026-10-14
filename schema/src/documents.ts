@@ -55,6 +55,26 @@ export interface DocumentPaymentTermsSnapshot {
 }
 
 /**
+ * An operator-recorded transaction-to-functional exchange rate for one
+ * invoice or bill, with its source and reason. It is bound to the posting
+ * identity it was recorded for: the document currency, the owning legal
+ * entity and that entity's functional currency, and the effective posting
+ * date. Posting applies it only to that entity's functional measurement and
+ * refuses when the identity no longer matches.
+ */
+export interface DocumentFxRateEvidence {
+  version: 1;
+  /** Exact positive rate: one unit of fromCurrency in toCurrency. */
+  rate: string;
+  source: string;
+  reason: string;
+  fromCurrency: string;
+  toCurrency: string;
+  rateDate: string;
+  subsidiaryId: string;
+}
+
+/**
  * Business documents — the mutable layer users touch. One supertype table +
  * lines; `kind` drives behavior via posting rules, not via 20 near-identical
  * tables. Posting produces exactly one journal entry (ledger.ts). Posted
@@ -109,6 +129,9 @@ export const documents = pgTable(
     paymentTermsSnapshot: jsonb("payment_terms_snapshot").$type<DocumentPaymentTermsSnapshot>(),
     currency: currencyCode("currency").notNull(),
     fxRate: fxRate("fx_rate").notNull().default("1"),
+    /** Explicit rate evidence (customer invoices and vendor bills); null means
+     *  the rate is resolved from the organization's exchange rates. */
+    documentFxRateEvidence: jsonb("document_fx_rate_evidence").$type<DocumentFxRateEvidence>(),
 
     /**
      * Frozen sale destination (0265): the jurisdiction the document was taxed

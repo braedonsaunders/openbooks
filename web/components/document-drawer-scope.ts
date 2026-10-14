@@ -18,6 +18,7 @@ import {
   type LineRow,
 } from './document-drawer-types'
 import { applyQtyPriceToRows, emptyLine, toRow } from './document-drawer-lines'
+import type { ExplicitFxDraft } from './document-drawer-fx-rate'
 import { persistedDocumentRevision, type PersistedDocumentSnapshot } from './document-drawer-save'
 import type { DocumentDrawerProps } from './document-drawer-props'
 
@@ -120,6 +121,8 @@ export function useDocumentDrawerScope(props: DocumentDrawerProps) {
   // each line's work period; generated invoices arrive with them stamped.
   const carriesWorkDates = config.kind === 'customer_invoice' || config.kind === 'customer_credit'
   const [workCompletedOn, setWorkCompletedOn] = useState<string>(doc.work_completed_on ?? '')
+  // Unsaved explicit exchange rate change: undefined keeps the stored rate.
+  const [explicitFx, setExplicitFx] = useState<ExplicitFxDraft | null | undefined>(undefined)
   const [paymentHoldReason, setPaymentHoldReason] = useState<string>(doc.payment_hold_reason ?? '')
   const [internalNotes, setInternalNotes] = useState<string>(doc.internal_notes ?? '')
   const [billingMethod, setBillingMethod] = useState<string>(doc.billing_method ?? '')
@@ -375,6 +378,8 @@ export function useDocumentDrawerScope(props: DocumentDrawerProps) {
     carriesWorkDates,
     workCompletedOn,
     setWorkCompletedOn,
+    explicitFx,
+    setExplicitFx,
     paymentHoldReason,
     setPaymentHoldReason,
     internalNotes,

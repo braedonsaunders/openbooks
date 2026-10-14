@@ -273,5 +273,30 @@
   "rename": {
     "fileTitle": "Renomear arquivo",
     "folderTitle": "Renomear pasta"
+  },
+  "explicitFx": {
+    "label": "Taxa de câmbio",
+    "conversion": "1 {from} = {rate} {to} em {date}",
+    "unsaved": "Não salvo",
+    "sourceLine": "Fonte: {source}",
+    "clearedUnsaved": "Taxas de câmbio da organização (não salvo)",
+    "marketRates": "Taxas de câmbio da organização no lançamento ({from} para {to})",
+    "staleStored": "Esta taxa foi registrada para outra data de lançamento ou outra entidade legal. Registre uma taxa para {date}, ou use as taxas de câmbio da organização, antes de salvar.",
+    "stalePending": "Esta taxa é para outra data de lançamento ou entidade legal diferente da que o documento tem agora. Registre-a novamente para {date}.",
+    "record": "Registrar taxa",
+    "change": "Alterar taxa",
+    "useMarketRates": "Usar taxas de câmbio",
+    "keepRecorded": "Manter a taxa registrada",
+    "entityChanged": "Salve a alteração da entidade legal antes de registrar uma taxa para ela.",
+    "editorTitle": "Taxa de câmbio explícita",
+    "editorDescription": "Converte {from} para {to}, a moeda funcional da entidade legal do documento, em {date}.",
+    "rate": "Taxa (1 {from} em {to})",
+    "source": "Fonte",
+    "sourcePlaceholder": "Por exemplo, a confirmação do banco",
+    "reason": "Motivo",
+    "reasonPlaceholder": "Por que este documento usa esta taxa",
+    "appliedOnSave": "A taxa é registrada quando você salva o documento.",
+    "cancel": "Cancelar",
+    "apply": "Aplicar"
   }
 }

@@ -273,5 +273,30 @@
   "rename": {
     "fileTitle": "Rename file",
     "folderTitle": "Rename folder"
+  },
+  "explicitFx": {
+    "label": "Exchange rate",
+    "conversion": "1 {from} = {rate} {to} on {date}",
+    "unsaved": "Unsaved",
+    "sourceLine": "Source: {source}",
+    "clearedUnsaved": "Organization exchange rates (unsaved)",
+    "marketRates": "Organization exchange rates at posting ({from} to {to})",
+    "staleStored": "This rate was recorded for another posting date or legal entity. Record a rate for {date}, or use the organization's exchange rates, before saving.",
+    "stalePending": "This rate is for another posting date or legal entity than the document now has. Record it again for {date}.",
+    "record": "Record rate",
+    "change": "Change rate",
+    "useMarketRates": "Use exchange rates",
+    "keepRecorded": "Keep recorded rate",
+    "entityChanged": "Save the legal entity change before recording a rate for it.",
+    "editorTitle": "Explicit exchange rate",
+    "editorDescription": "Converts {from} to {to}, the functional currency of the document's legal entity, for {date}.",
+    "rate": "Rate (1 {from} in {to})",
+    "source": "Source",
+    "sourcePlaceholder": "For example, the bank's confirmation",
+    "reason": "Reason",
+    "reasonPlaceholder": "Why this document uses this rate",
+    "appliedOnSave": "The rate is recorded when you save the document.",
+    "cancel": "Cancel",
+    "apply": "Apply"
   }
 }

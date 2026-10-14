@@ -24,7 +24,11 @@ export interface CustomGlLineRunEvidence {
 
 export type PostingDocument = typeof schema.documents.$inferSelect;
 export type PostingDocumentLine = typeof schema.documentLines.$inferSelect;
-export type Doc = Omit<PostingDocument, "journalMode" | "journalReverseOn" | "journalFxRateExplicit"> & Partial<Pick<PostingDocument, "journalMode" | "journalReverseOn" | "journalFxRateExplicit">>;
+/** Posting input. Journal instructions and explicit rate evidence are optional
+ * so internally composed documents need not state them; the native loaders
+ * select every stored column, and absent or null evidence records no explicit
+ * rate. */
+export type Doc = Omit<PostingDocument, "journalMode" | "journalReverseOn" | "journalFxRateExplicit" | "documentFxRateEvidence"> & Partial<Pick<PostingDocument, "journalMode" | "journalReverseOn" | "journalFxRateExplicit" | "documentFxRateEvidence">>;
 export type DocLine = Omit<PostingDocumentLine, "journalCurrency" | "journalFxRate" | "journalEliminate"> & Partial<Pick<PostingDocumentLine, "journalCurrency" | "journalFxRate" | "journalEliminate">>;
 
 /**
