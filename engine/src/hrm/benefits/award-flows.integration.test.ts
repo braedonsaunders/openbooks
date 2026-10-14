@@ -1,3 +1,4 @@
+import { retryFlowRun, runRecordFlows } from '../../flows/run.ts';
 import { seedPayrollBenefitProgram, seedBenefitRoleActors } from "../../testing/benefit-fixtures.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
@@ -6,6 +7,7 @@ import { sql, type SQL } from "drizzle-orm";
 import { db, withOrgTransaction, withBypass } from "../../platform/db.ts";
 import {
   createScratchOrg,
+  grantScratchPermissions,
   dropScratchOrg,
   type ScratchOrg,
 } from "../../testing/fixtures.ts";
@@ -186,6 +188,37 @@ test(
         and table_name='hrm_benefit_awards' and row_id=${draft.id} order by id`)).rows,history);
       assert.equal((await db.execute<{n:number}>(sql`select count(*)::int as n from flow_runs where org_id=${org.orgId}
         and flow_id=${policyId} and subject_id=${draft.id}`)).rows[0]!.n,1,'refusals do not create another run');
+    });
+
+    await t.test("same failed reward submission completes automatically once under the current direct policy",async()=>{
+      await grantScratchPermissions(org.orgId,author,['flows.manage']);await enableHrm(org.orgId,'flows');
+      const failedPolicy=await singleGate(randomUUID());const draft=await award('123.4500');
+      // Retain the original pending submission boundary under the real guards,
+      // with a genuinely failed dispatch and no manufactured approval or gate.
+      assert.equal((await db.execute(sql`update hrm_benefit_awards set submitted_by=${author},submitted_at=now(),updated_by=${author}
+        where org_id=${org.orgId} and id=${draft.id} and status='draft' returning id`)).rows.length,1);
+      const dispatched=await runRecordFlows({kind:'on_submit',source:'script'},'hrm_benefit_award',draft.id,{orgId:org.orgId,userId:author});
+      assert.equal(dispatched.failed,true);assert.equal(dispatched.runs.length,1);assert.equal(dispatched.gatesCreated,0);
+      const runId=dispatched.runs[0]!.runId;assert.equal(dispatched.runs[0]!.status,'failed');
+      assert.equal((await db.execute(sql`update hrm_benefit_awards set status='pending',flow_run_id=${runId},updated_by=${author}
+        where org_id=${org.orgId} and id=${draft.id} and status='draft' returning id`)).rows.length,1);
+      const original=(await db.execute(sql`select program_snapshot,source_snapshot,evidence,value,currency,period_from,period_to,
+        submitted_by,submitted_at,flow_run_id from hrm_benefit_awards where org_id=${org.orgId} and id=${draft.id}`)).rows;
+      const currentGraph={schemaVersion:1,ungatedOutcome:'apply',nodes:[trigger],edges:[]};
+      assert.equal((await db.execute(sql`update flows set graph=${JSON.stringify(currentGraph)}::jsonb where org_id=${org.orgId}
+        and id=${failedPolicy} returning id`)).rows.length,1);
+      const result=await retryFlowRun(runId,{orgId:org.orgId,userId:author});assert.equal(result.status,'completed');
+      const ready=await read(draft.id);assert.equal(ready.status,'approved');assert.equal(ready.approvedBy,null);
+      assert.equal(ready.flowRunId,runId);assert.equal(ready.decisionSnapshot?.mode,'automatic');
+      assert.deepEqual((await db.execute(sql`select program_snapshot,source_snapshot,evidence,value,currency,period_from,period_to,
+        submitted_by,submitted_at,flow_run_id from hrm_benefit_awards where org_id=${org.orgId} and id=${draft.id}`)).rows,original);
+      const counts=async()=>({events:(await db.execute(sql`select id from hrm_benefit_award_events where org_id=${org.orgId}
+        and award_id=${draft.id} and kind='automatically_approved'`)).rows,
+        runs:(await db.execute(sql`select id from flow_runs where org_id=${org.orgId} and subject_id=${draft.id}`)).rows});
+      const once=await counts();assert.equal(once.events.length,1);assert.deepEqual(once.runs,[{id:runId}]);
+      assert.deepEqual(await completeBenefitAwardSubmission({orgId:org.orgId,actorId:author,awardId:draft.id,runId,mode:'automatic'}),{status:'approved'});
+      assert.deepEqual(await counts(),once);
+      await assert.rejects(retryFlowRun(runId,{orgId:org.orgId,userId:author}),/failed/);assert.deepEqual(await counts(),once);
     });
 
     function submit(awardId: string, actorId = author) {
