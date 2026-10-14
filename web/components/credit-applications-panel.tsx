@@ -139,7 +139,8 @@ export function CreditApplicationsPanel({
       {
         fallbackMessage: t("applyFailed"),
         onOk: (data) => {
-          setOpenItems(data.items ?? []);
+          // A credit settles only open items in its own transaction currency.
+          setOpenItems((data.items ?? []).filter((item) => item.currency === state!.currency));
           setAmounts({});
         },
         onRefused: (actionError) => setError(actionError.displayMessage(t("applyFailed"))),

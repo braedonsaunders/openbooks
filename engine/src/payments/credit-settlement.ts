@@ -38,13 +38,13 @@ import { ScopeNotFoundError, subsidiaryScopeAllows, subsidiaryVisibleFilter } fr
  * on over-application in both currency frames.
  */
 
-/** One credit memo line settling one invoice/bill line, in base currency. */
+/** One credit memo line settling one invoice/bill line, in their shared transaction currency. */
 export type CreditSettlementInput = CreditAllocationInput;
 
 export interface CreditSettlementState {
   /** The credit's open-item line, or null when the credit is not posted. */
   lineId: string | null;
-  /** Absolute original amount of the credit's control line. */
+  /** Absolute original amount of the credit's control line, in its transaction currency. */
   amount: string;
   /** Sum of live settlements consuming it. */
   applied: string;
@@ -78,14 +78,14 @@ export async function creditSettlementState(
   const line = (await db.execute<{
     id: string; amount: string; currency: string; applied: string;
   }>(sql`
-    select jl.id, abs(jl.amount)::text as amount, jl.currency,
+    select jl.id, abs(jl.txn_amount)::text as amount, jl.currency,
            coalesce(ap.applied, 0)::numeric(19,4)::text as applied
       from journal_lines jl
       -- Live entries only: a voided credit has nothing left to apply.
       join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status = 'posted'
       join documents source_document on source_document.id = je.source_document_id and source_document.org_id = je.org_id
       left join lateral (
-        select sum(a.source_amount) as applied
+        select sum(a.source_transaction_amount) as applied
           from applications a
          where a.from_line_id = jl.id and a.org_id = jl.org_id and a.unapplied_at is null
       ) ap on true
@@ -101,7 +101,7 @@ export async function creditSettlementState(
     select a.id as application_id, settled.id as document_id,
            settled.document_number, settled.kind as document_kind,
            settled.document_date::text as document_date,
-           a.amount::text as amount, a.applied_on::text as applied_on
+           a.source_transaction_amount::text as amount, a.applied_on::text as applied_on
       from applications a
       join journal_lines target on target.id = a.to_line_id and target.org_id = a.org_id
       join journal_entries target_entry
@@ -134,7 +134,7 @@ export async function creditSettlementState(
 export interface CreditSettlementResult {
   /** Ids of the `applications` rows written, in input order. */
   applicationIds: string[];
-  /** Total settled, base currency. */
+  /** Total settled, in the credits' transaction currency. */
   amount: string;
 }
 
