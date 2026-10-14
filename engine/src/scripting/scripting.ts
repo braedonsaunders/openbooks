@@ -1,3 +1,4 @@
+import { canonicalJson } from "../platform/canonical-json.ts";
 import { randomUUID } from "node:crypto";
 import { createGuestLogSink, GUEST_LOG_MAX_BYTES, GUEST_LOG_MAX_ENTRIES, newAsyncContext } from "../platform/quickjs.ts";
 import { and, asc, eq, isNull, or, sql } from "drizzle-orm";
@@ -15,7 +16,7 @@ import { CronExpressionParser } from "cron-parser";
 import { listSchema, runUserSql } from "../platform/sqlapi.ts";
 import type { ScriptJournalResult } from "../journal/script-journal-contract.ts";
 import { installedScriptJournalWriter } from "./journal-writer.ts";
-import { actorHasPermission, actorIdentity } from "../organization/actor-permissions.ts";
+import { actorHasPermission, actorIdentity, actorPrincipal } from "../organization/actor-permissions.ts";
 import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
 import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 import { PAYMENT_SYSTEM_CUSTOM_FIELD_SET } from "../platform/payment-system-fields.ts";
@@ -141,6 +142,11 @@ const BEFORE_POST_PROTECTED_CUSTOM_FIELDS = new Set([
   "feeAmount",
   "feeIncomeAccountId",
   "taxProviderAddresses",
+  "closeout",
+  "storeCreditProgramId",
+  "marketplace",
+  "marketplaceClearingAccountId",
+  "marketplaceTax",
   "withholdingRemittance",
   "withholdingDeposit",
   "withholdings",
@@ -183,6 +189,20 @@ export function beforePostCustomMutationError(value: unknown): string | null {
   return protectedKey
     ? `script tried to set protected posting custom field "custom.${protectedKey}"`
     : null;
+}
+
+/** Verify that automation leaves the already-resolved posting controls
+ * unchanged, including removal or addition of a protected key. */
+export function beforePostCustomControlsChanged(previous: unknown, next: unknown): string | null {
+  const before = isRecord(previous) ? previous : {};
+  const after = isRecord(next) ? next : {};
+  for (const key of BEFORE_POST_PROTECTED_CUSTOM_FIELDS) {
+    if (Object.hasOwn(before, key) !== Object.hasOwn(after, key)
+      || (Object.hasOwn(before, key) && canonicalJson(before[key]) !== canonicalJson(after[key]))) {
+      return `before-post automation changed protected posting custom field "custom.${key}"; configure that financial control before approval`;
+    }
+  }
+  return null;
 }
 
 /**
@@ -474,7 +494,10 @@ const SEARCH_IDENTIFIER_RE = /^[a-z_][a-z0-9_]*$/i;
  * close the literal and rewrite the statement. */
 export function searchFilterLiteral(value: unknown): string {
   if (value === null || value === undefined) return "NULL";
-  if (typeof value === "number") return String(value);
+  if (typeof value === "number") {
+    if (!Number.isFinite(value)) throw new Error("Search values must be finite numbers");
+    return String(value);
+  }
   if (typeof value === "boolean") return value ? "TRUE" : "FALSE";
   return "'" + String(value).replace(/'/g, "''") + "'";
 }
@@ -512,7 +535,7 @@ export function buildGovernedSearchSql(
         `unknown search column "${key}" on ${table} — filters must name governed columns of that view; fix the filter key and try again`,
       );
     }
-    return `"${key}" = ${searchFilterLiteral(value)}`;
+    return value == null ? `"${key}" IS NULL` : `"${key}" = ${searchFilterLiteral(value)}`;
   });
   const where = clauses.length > 0 ? ` where ${clauses.join(" and ")}` : "";
   return `select * from openbooks_query."${table}"${where} limit 1000`;
@@ -858,7 +881,7 @@ export async function runScript(
           const refusal = await queryRefusal;
           if (refusal) return { kind: "refused" as const, refusal };
           searchSchema ??= new Map(
-            (await listSchema(ctx.org.id)).map((t) => [t.name, t.columns.map((c) => c.name)]),
+            (await listSchema(ctx.org.id, { payrollRead: await (payrollRead ??= scriptPayrollRead(ctx, opts.runAsUserId)) })).map((t) => [t.name, t.columns.map((c) => c.name)]),
           );
           const columns = searchSchema.get(table);
           if (!columns) return { kind: "refused" as const, refusal: unknownSearchTableRefusal(table) };
@@ -997,20 +1020,24 @@ export async function runScript(
 
     const program = `
       ${opts.strict ? '"use strict";' : ""}
-      ${source}
       ;(() => {
-        const ctx = ${JSON.stringify(ctx)};
-        const deepFreeze = (o) => { if (o && typeof o === "object") { Object.values(o).forEach(deepFreeze); Object.freeze(o); } return o; };
+        const encode = JSON.stringify.bind(JSON);
+        const decode = JSON.parse.bind(JSON);
+        const freeze = Object.freeze;
+        const values = Object.values;
+        const finite = Number.isFinite;
+        const ctx = decode(${JSON.stringify(JSON.stringify(ctx))});
+        const deepFreeze = (o) => { if (o && typeof o === "object") { values(o).forEach(deepFreeze); freeze(o); } return o; };
         deepFreeze(ctx);
 
-        ob.runtime = Object.freeze({
+        ob.runtime = freeze({
           org: ctx.org,
           trigger: ctx.trigger,
           user: ctx.user || null,
         });
 
         ob.query = function(sqlText) {
-          return JSON.parse(ob.__query(sqlText));
+          return decode(ob.__query(sqlText));
         };
 
         // Table and filter keys are validated host-side against the governed
@@ -1019,22 +1046,33 @@ export async function runScript(
         ob.record = {
           load: function(table, id) {
             if (id === undefined || id === null) return null;
-            var rows = JSON.parse(ob.__search(table, JSON.stringify({ id: id })));
+            var rows = decode(ob.__search(table, encode({ id: id })));
             return rows[0] || null;
           }
         };
 
         ob.search = function(table, filters) {
-          return JSON.parse(ob.__search(table, JSON.stringify(filters || {})));
+          for (const value of values(filters || {})) {
+            if (typeof value === "number" && !finite(value)) throw new Error("Search values must be finite numbers");
+          }
+          return decode(ob.__search(table, encode(filters || {})));
         };
 
         ob.journal = {
-          create: function(input, opts) { return JSON.parse(ob.__journal_create(JSON.stringify(input || {}), !!(opts && opts.post))); }
+          create: function(input, opts) { return decode(ob.__journal_create(encode(input || {}), !!(opts && opts.post))); }
         };
 
-        if (typeof main !== "function") throw new Error("script must define function main(ctx)");
-        const out = main(ctx);
-        return JSON.stringify(out ?? null);
+        // Install the host surface and protect context before any tenant
+        // top-level code runs. The factory keeps tenant declarations separate
+        // from the trusted serialization and freezing intrinsics.
+        const entry = (() => {
+          ${opts.strict ? '"use strict";' : ""}
+          ${source}
+          ;return typeof main === "function" ? main : null;
+        })();
+        if (typeof entry !== "function") throw new Error("script must define function main(ctx)");
+        const out = entry(ctx);
+        return encode(out ?? null);
       })()
     `;
 
@@ -1467,49 +1505,17 @@ export interface ScriptRunOptions {
   occurrenceRunId?: string;
 }
 
-/**
- * Resolve an attributed human actor for one script run. The actor is
- * re-resolved against the users table at this deepest shared boundary so
- * every entry path (HTTP route, inline fallback, queue payload) stamps the
- * same thing: a real, currently-active user of the owning org — with their
- * name and role keys for ob.runtime — or nothing at all. Same join contract
- * as web/lib/auth.ts session roles.
- */
-/**
- * Resolve the acting user for a script context.
- *
- * An EXPLICIT script run claims an actor, so an actor that is not an active
- * user of the organization is a refusal -- the run would otherwise execute
- * under an identity nobody can account for.
- *
- * A LEDGER trigger is different. Posting and voiding carry whatever actor the
- * audit trail recorded, which legitimately includes system and service actors
- * and users who have since been deactivated, and those documents posted fine
- * before triggers took a user context at all. Refusing there does not harden
- * the script -- it blocks the POSTING, for every caller whose actor is not a
- * users row. Those call sites pass `required: false` and run the trigger with
- * no user, which is strictly less authority than a resolved one: the script
- * sees no roles, so anything gated on them fails closed.
- */
+/** A supplied human identity must resolve live in the target tenant. Only an
+ * explicitly absent actor can use the script's recorded unattended identity. */
 export async function resolveScriptUser(
   orgId: string,
   actorId: string | null,
-  options: { required?: boolean } = {},
+  _options: { required?: boolean } = {},
 ): Promise<NonNullable<ScriptContext["user"]> | null> {
   if (!actorId) return null;
-  const [u] = await db
-    .select({ id: schema.users.id, name: schema.users.name })
-    .from(schema.users)
-    .where(
-      and(
-        eq(schema.users.id, actorId),
-        eq(schema.users.orgId, orgId),
-        eq(schema.users.isActive, true),
-      ),
-    );
-  if (!u) {
-    if (options.required === false) return null;
-    throw new ScriptActorError(`run actor ${actorId} is not an active user of organization ${orgId}`);
+  const u = await actorPrincipal(db, orgId, actorId);
+  if (!u?.isActive) {
+    throw new ScriptActorError(`run actor ${actorId} is not an active authorized user of organization ${orgId}`);
   }
   const roles = await db
     .select({ key: schema.appRoles.key })

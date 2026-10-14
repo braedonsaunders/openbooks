@@ -286,9 +286,9 @@ describe('period_preset compile contract', () => {
 
   it('keeps the calendar this_year operator compiling for studio-authored plans', () => {
     const params = new SqlParams()
-    const sql = compileRule(entity, { column: 'posting_date', op: 'this_year' }, params)
+    const sql = compileRule(entity, { column: 'posting_date', op: 'this_year' }, params, { asOf: '2026-08-21' })
     assert.ok(sql?.includes("date_trunc('year'"))
-    assert.equal(params.values.length, 0)
+    assert.deepEqual(params.values, ['2026-08-21'])
   })
 })
 

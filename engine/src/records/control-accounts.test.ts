@@ -10,6 +10,8 @@ import {
   type ControlAccountRecord,
   ControlAccountsIncompleteError,
   loadRequiredControlAccounts,
+  loadControlAccountsForRoles,
+  loadCompanyReceivedNotBilledAccount,
 } from "./control-accounts.ts";
 import { db, withBypass, withOrgContext } from "../platform/db.ts";
 import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
@@ -177,4 +179,16 @@ test("received-not-billed control mapping only accepts payable-family accounts",
       error.role === "receivedNotBilled" &&
       error.reason === "type",
   );
+});
+
+
+test("selected control-account readers refuse malformed values without a UUID database error", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    for (const invalid of ["not-a-uuid", 42, { id: org.accounts.ap }]) {
+      await withOrgContext(org.orgId, () => db.execute(sql`update orgs set settings=jsonb_set(settings,'{controlAccounts,receivedNotBilled}',${JSON.stringify(invalid)}::jsonb,true) where id=${org.orgId}`));
+      await assert.rejects(withOrgContext(org.orgId, () => loadControlAccountsForRoles(db, org.orgId, ["receivedNotBilled"])), ControlAccountsIncompleteError);
+      assert.equal(await withOrgContext(org.orgId, () => loadCompanyReceivedNotBilledAccount(db, org.orgId)), null);
+    }
+  } finally { await dropScratchOrg(org.orgId); }
 });

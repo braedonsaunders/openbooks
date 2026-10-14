@@ -1,3 +1,4 @@
+import { lockActorIdentity } from "../organization/actor-permissions.ts";
 import { bomQuantityPolicy, type BomQuantityPolicy } from "./bom-scrap.ts";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
@@ -74,7 +75,7 @@ function normalize(input: BomPolicyInput): BomPolicyLine[] {
 
 /** Recipe revisions require setup management, manufacturing revisions manufacturing management too. */
 export async function assertBomRevisionAuthority(tx: SqlExecutor, orgId: string, actorId: string, manufacturing: boolean) {
-  if (!(await tx.execute(sql`select id from users where id=${actorId} and is_active and (org_id=${orgId} or is_super_admin) for share`)).rows.length) throw new ScopeNotFoundError();
+  if (!await lockActorIdentity(tx,orgId,actorId)) throw new ScopeNotFoundError();
   if (await lockActorCommandAuthority(tx, orgId, actorId, null, "admin.setup.manage") !== null) throw new ScopeNotFoundError();
   if (manufacturing && await lockActorCommandAuthority(tx, orgId, actorId, null, "manufacturing.manage") !== null) throw new ScopeNotFoundError();
 }

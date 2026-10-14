@@ -119,16 +119,17 @@ async function payRunGlLegs(
          ${payrollSubsidiaryScopeFilter(sql`p.subsidiary_id`, allowedSubsidiaryIds)}
        order by s.employee_party_id, l.sequence
     `));
+    const stubs=(await tx.execute<{has_value:boolean;has_lines:boolean}>(sql`select
+      (s.gross<>0 or s.net_pay<>0 or s.employer_cost<>0 or s.pensionable_earnings<>0 or s.insurable_earnings<>0 or s.vacation_accrued<>0) as has_value,
+      exists(select 1 from pay_stub_lines line where line.org_id=s.org_id and line.stub_id=s.id) as has_lines
+      from pay_stubs s left join parties p on p.org_id=s.org_id and p.id=s.employee_party_id
+      where s.org_id=${orgId} and s.pay_run_document_id=${documentId}
+        ${payrollSubsidiaryScopeFilter(sql`p.subsidiary_id`,allowedSubsidiaryIds)}`)).rows;
+    if (!stubs.length) throw new PayrollError('Pay run has no calculated stubs — calculate its selected employees before committing');
+    if (stubs.some(stub=>stub.has_value && !stub.has_lines)) throw new PayrollError('A calculated pay stub has financial totals but no native lines — recalculate the pay run before committing');
     if (stubLines.rows.length === 0) {
-      const stubs=(await tx.execute<{has_value:boolean}>(sql`select
-        (s.gross<>0 or s.net_pay<>0 or s.employer_cost<>0 or s.pensionable_earnings<>0 or s.insurable_earnings<>0 or s.vacation_accrued<>0) as has_value
-        from pay_stubs s left join parties p on p.org_id=s.org_id and p.id=s.employee_party_id
-        where s.org_id=${orgId} and s.pay_run_document_id=${documentId}
-          ${payrollSubsidiaryScopeFilter(sql`p.subsidiary_id`,allowedSubsidiaryIds)}`)).rows;
-      if (!stubs.length) throw new PayrollError('Pay run has no calculated stubs — calculate its selected employees before committing');
-      if (stubs.some(s=>s.has_value)) throw new PayrollError('A calculated pay stub has financial totals but no native lines — recalculate the pay run before committing');
-      // Unpaid coverage still records native owe-bank movements and immutable allocations.
-      // Its zero-money payroll projection commits without inventing financial entries.
+      // Unpaid coverage retains native bank movements and allocations without
+      // inventing financial entries for an entirely zero-money projection.
       return {legs:[],debitTotal:'0.0000',lineLiabilities:[],lineDestinations:[]};
     }
 

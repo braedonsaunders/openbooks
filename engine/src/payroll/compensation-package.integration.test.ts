@@ -11,7 +11,7 @@ import { installEngineSeams } from "../composition/install.ts";
 import { decideGate } from "../flows/gates.ts";
 import { createCompensationPackage, getCompensationPackage, saveCompensationPackageVersion, transitionCompensationPackageVersion,
   saveCompensationPackageAssignment, transitionCompensationPackageAssignment, updateCompensationPackage,
-  type CompensationPackageAssignment } from "./compensation-package-store.ts";
+  completeCompensationPackageSubmission, type CompensationPackageAssignment } from "./compensation-package-store.ts";
 import type { CompensationPackageDefinition } from "./compensation-package.ts";
 import { compensationPackageDefinitionHash } from "./compensation-package.ts";
 import { createSandbox, deleteSandbox } from "../sandbox/lifecycle.ts";
@@ -680,5 +680,29 @@ test('native package inputs retain dated work and fixed configuration coverage w
       assert.equal(lines.at(-1)!.amount, '926.4500', 'native gross and worked hours cannot be calendar-prorated a second time');
       assert.equal(lines.at(-1)!.hours, undefined, 'package money cannot duplicate native worked hours');
     });
+  });
+});
+
+
+test('automatic compensation completion preserves the human gate and submitted revision without routing proof', { skip: !DB }, async () => {
+  await withHarness(() => setup(), async (f) => {
+    const submitted = await transitionCompensationPackageVersion({ orgId: f.org.orgId, actorId: f.authorId,
+      packageId: f.pack.id, versionId: f.version.id, expectedRevision: f.version.revision,
+      action: 'submit', reason: 'Submit the exact employer package for review' });
+    const run = (await db.execute<{ id: string }>(sql`select id from flow_runs where org_id=${f.org.orgId}
+      and subject_kind=${COMPENSATION_VERSION_SUBJECT_KIND} and subject_id=${submitted.id}
+      and trigger='on_submit'`)).rows;
+    assert.equal(run.length, 1);
+    const complete = (actorId: string) => completeCompensationPackageSubmission({ ctx: { orgId: f.org.orgId, userId: actorId },
+      subjectKind: COMPENSATION_VERSION_SUBJECT_KIND, subjectId: submitted.id, runId: run[0]!.id, mode: 'automatic' });
+    await assert.rejects(complete(f.authorId), /routing evidence/);
+    await assert.rejects(complete(f.approverId), /routing evidence/);
+    assert.deepEqual(await versionOf(f, submitted.id), submitted);
+    assert.equal((await pendingGates(f, submitted.id, f.approverId)).length, 1);
+    await decide(f, submitted.id, f.approverId);
+    const approved = await versionOf(f, submitted.id);
+    assert.equal(approved.status, 'approved');
+    assert.equal(approved.decidedBy, f.approverId);
+    assert.equal(approved.submissionPolicy?.kind, 'flow');
   });
 });

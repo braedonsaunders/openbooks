@@ -347,3 +347,24 @@ test("runUserSql refuses a result that exceeds the caller byte budget", async ()
   assert.equal(allowed.rowCount, 1);
   assert.equal(typeof allowed.rows[0]?.payload, "string");
 });
+
+
+test("SQL comments and trailing delimiters never swallow the enclosing query", async () => {
+  assert.equal(validateUserSql("select ';--literal' as value; -- trailing"), "select ';--literal' as value");
+  assert.equal(validateUserSql('select 1 as "semi;column" /* nested /* comment */ closed */;'), 'select 1 as "semi;column"');
+  assert.equal(validateUserSql("select $$;--literal$$ as value; -- trailing"), "select $$;--literal$$ as value");
+  assert.equal(validateUserSql(String.raw`select E'escaped\';literal' as value; -- trailing`), String.raw`select E'escaped\';literal' as value`);
+  assert.throws(() => validateUserSql("select 1; -- comment\nselect 2"), /one statement/);
+  harness.reset();
+  await runUserSql("select 42 as answer -- trailing", { orgId: "00000000-0000-4000-8000-000000000001" });
+  assert.ok(harness.queries.some(query => /from \(\nselect 42 as answer\n\)/.test(query.text)));
+});
+
+test("shared raw ledger and labor relations refuse before execution without payroll authority", async () => {
+  for (const relation of ["journal_entries", "journal_lines", "documents", "document_lines", "time_entries", "labor_cost_rates", "field_ticket_labor_lines", "hrm_benefit_program_revisions"]) {
+    harness.reset();
+    harness.planRelations = [relation];
+    await assert.rejects(runUserSql("select count(*) from a where wage > 0", { orgId: "00000000-0000-4000-8000-000000000001" }), /payroll.read/);
+    assert.equal(harness.queries.some(query => query.text.includes("__ob_row_bytes") && !query.text.startsWith("explain")), false);
+  }
+});

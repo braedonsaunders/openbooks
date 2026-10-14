@@ -161,20 +161,20 @@ test("concurrent different financial requests sharing a key admit only one posti
   } finally { await dropScratchOrg(org.orgId); }
 });
 
-test("historical keyed entries with no request stamp or an older fingerprint compare stored financial content", { skip: !DB }, async () => {
+test("keyed entries without protected request identity refuse without changing their history", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
-    for (const legacy of [{}, { idempotencyFingerprint: "sha256:" + "0".repeat(64) }]) {
-      const key = `legacy-${randomUUID()}`;
-      const request = { orgId: org.orgId, bookId: org.bookId, subsidiaryId: org.subsidiaryId,
-        entryNumber: `HISTORICAL-${randomUUID().slice(0, 8)}`, postingDate: org.date, periodId: org.periodId, origin: "manual", currency: "CAD",
-        lines: [{ accountId: org.accounts.bank, amount: "-10" }, { accountId: org.accounts.cogs, amount: "10" }] };
-      const first = await withOrgContext(org.orgId, () => postEntry(db, { ...request, custom: { ...legacy, idempotencyKey: key } }));
-      assert.equal((await withOrgContext(org.orgId, () => postEntry(db, { ...request, entryNumber: "RETRY", idempotencyKey: key }))).entryId, first.entryId);
-      await assert.rejects(() => withOrgContext(org.orgId, () => postEntry(db, { ...request, memo: "Different purpose", idempotencyKey: key })), /different posting content/);
-      await assert.rejects(() => withOrgContext(org.orgId, () => postEntry(db, { ...request, idempotencyKey: key,
-        lines: [{ accountId: org.accounts.bank, amount: "-25" }, { accountId: org.accounts.cogs, amount: "25" }] })), /different posting content/);
-    }
+    const key = `missing-evidence-${randomUUID()}`;
+    const request = { orgId: org.orgId, bookId: org.bookId, subsidiaryId: org.subsidiaryId,
+      entryNumber: `EVIDENCE-${randomUUID().slice(0, 8)}`, postingDate: org.date, periodId: org.periodId, origin: "manual", currency: "CAD",
+      lines: [{ accountId: org.accounts.bank, amount: "-10" }, { accountId: org.accounts.cogs, amount: "10" }] };
+    const first = await withOrgContext(org.orgId, () => postEntry(db, { ...request, custom: { idempotencyKey: key } }));
+    const before = (await withOrgContext(org.orgId, () => db.execute<{ raw: string }>(sql`
+      select to_jsonb(e)::text as raw from journal_entries e where org_id=${org.orgId} and id=${first.entryId}`))).rows;
+    await assert.rejects(() => withOrgContext(org.orgId, () => postEntry(db, { ...request, idempotencyKey: key })), /no protected request identity/);
+    const after = (await withOrgContext(org.orgId, () => db.execute<{ raw: string }>(sql`
+      select to_jsonb(e)::text as raw from journal_entries e where org_id=${org.orgId} and id=${first.entryId}`))).rows;
+    assert.deepEqual(after, before);
   } finally { await dropScratchOrg(org.orgId); }
 });
 

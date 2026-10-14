@@ -259,7 +259,7 @@ test("a failed run can be retried once its gate resolves", { skip: !DB }, async 
         ${JSON.stringify([{ type: "user", userId: actors.approver1Id }])}::jsonb)
        where org_id = ${org.orgId} and subject_kind = 'vendor_bill'`);
 
-    const retried = await retryFlowRun(failedRun.id, { orgId: org.orgId, userId: actors.submitterId });
+    const retried = await retryFlowRun(failedRun.id, { orgId: org.orgId, userId: actors.adminId });
     assert.equal(retried.runId, failedRun.id, "a retry re-drives the same run row");
     assert.equal(retried.status, "waiting", "the retried run must park at the now-satisfiable gate");
     assert.equal(retried.gatesCreated, 1);
@@ -291,7 +291,7 @@ test("retrying a non-failed run is refused", { skip: !DB }, async () => {
     `)).rows[0];
     assert.ok(waitingRun, "a waiting run must exist");
     await assert.rejects(
-      retryFlowRun(waitingRun.id, { orgId: org.orgId, userId: actors.submitterId }),
+      retryFlowRun(waitingRun.id, { orgId: org.orgId, userId: actors.adminId }),
       /only a failed run can be retried/,
     );
   });

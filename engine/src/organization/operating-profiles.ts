@@ -1,3 +1,4 @@
+import { lockActorIdentity } from "./actor-permissions.ts";
 import { randomUUID } from 'node:crypto'
 import { sql } from 'drizzle-orm'
 import type { SqlExecutor } from '../platform/db.ts'
@@ -18,7 +19,7 @@ export interface OperatingProfileChoice {
   isDefault?: boolean
 }
 async function lockAuthority(tx: SqlExecutor, orgId: string, actorId: string, permission: string, subsidiaryId: string | null, unrestricted = false) {
-  if (!(await tx.execute(sql`select id from users where id=${actorId} and is_active and (org_id=${orgId} or is_super_admin) for share`)).rows[0]) throw new OperatingProfileError('Work not found.', 404)
+  if (!await lockActorIdentity(tx, orgId, actorId)) throw new OperatingProfileError('Work not found.', 404)
   const allowed = await lockActorCommandAuthority(tx, orgId, actorId, subsidiaryId, permission)
   if (unrestricted && allowed !== null) throw new OperatingProfileError('Organization-wide setup requires unrestricted legal-entity authority.', 404)
   return allowed

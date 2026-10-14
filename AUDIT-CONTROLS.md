@@ -45,9 +45,13 @@ The controls an auditor most cares about — balance, period cutoff, tenant
 ownership, and audit-trail immutability — are enforced at the **database**
 layer.
 
-As of this revision the schema carries **182 triggers**, **151 PL/pgSQL guard
-functions**, **387 row-level-security policies**, and row-level security
-enabled on **378 tables**.
+Control counts depend on the deployed migration ledger, not a fixed total in
+this document. Obtain the exact public-schema catalog with
+`scripts/schema-catalog-snapshot.ts` against the reviewed database: count
+`triggers`, PL/pgSQL entries in `functions`, `policies`, and table `relations`
+whose `row_level_security` and `force_row_level_security` flags are set. Retain
+the catalog with the source revision and migration ledger being audited.
+Internal PostgreSQL triggers and non-PL/pgSQL functions are separate counts.
 
 ---
 
@@ -146,7 +150,7 @@ enabled on **378 tables**.
 
 | # | Control | Layer | Evidence |
 | --- | --- | --- | --- |
-| R1 | **Tenant isolation is enforced by the database.** Row-level security is enabled on 378 tables with 387 policies; the application connects as a role that is neither superuser nor `BYPASSRLS`. | Database | `engine/src/platform/db-rls.integration.test.ts`, verified at bootstrap |
+| R1 | **Tenant isolation is enforced by the database.** Tenant tables enforce row-level security and FORCE RLS, verified against the deployed catalog; the application connects as a role that is neither superuser nor `BYPASSRLS`. | Database | `engine/src/platform/db-rls.integration.test.ts`, verified at bootstrap |
 | R2 | Payment applications cannot exceed the document amount; over-application is refused. | Database + Service | `application_open_balance`, `engine/src/payments/payments.integration.test.ts` |
 | R3 | Applications are idempotent under retry, so a repeated request cannot settle the same open item twice. | Database | `application_idempotency_guard` |
 | R4 | Vendor payment release can be gated on compliance evidence — insurance certificates and lien waivers — so an obligation is not discharged before conditions are met. | Service | `engine/src/projects/subcontracts.ts` |

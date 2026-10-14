@@ -33,6 +33,7 @@ import {
 } from "./change-requests.ts";
 import { decideGate, GateError, ReleaseError } from "../flows/gates.ts";
 import { installEngineSeams } from "../composition/install.ts";
+import { completeHrmChangeRequestSubmission } from "./change-requests-lifecycle.ts";
 
 // Gate releases and post_document run through the installed engine
 // seams; without this the gates strand on a not-registered
@@ -974,5 +975,32 @@ test('four sequential approval layers keep the employee unchanged until the fina
     }
     assert.equal(await requestStatus(draft.id), 'applied');
     assert.equal((await changeRows(employmentId)).length, 1);
+  });
+});
+
+
+test('automatic completion cannot replace a pending human decision or invent submission evidence', { skip: !DB }, async () => {
+  await withHarness(() => setupHarness(CHANGE_REQUESTS_SPEC), async (h) => {
+    await seedFlow(h.org.orgId, h.approver1Id);
+    const { employmentId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId, { withVersion: false });
+    const draft = await createChangeRequestDraft({ orgId: h.org.orgId, actorId: h.submitterId, employmentId,
+      payload: { kind: 'hire', status: 'active', effectiveFrom: '2026-09-01' } });
+    const pending = await submitChangeRequest({ orgId: h.org.orgId, actorId: h.submitterId,
+      requestId: draft.id, reason: 'Hire under the declared approval policy' });
+    assert.ok(pending.flowRunId);
+    const before = await getChangeRequest({ orgId: h.org.orgId, actorId: h.submitterId, requestId: draft.id });
+    const complete = (actorId: string, mode: 'gated' | 'automatic' = 'automatic') => completeHrmChangeRequestSubmission({
+      ctx: { orgId: h.org.orgId, userId: actorId }, subjectKind: 'hrm_employment_change_request',
+      subjectId: draft.id, runId: pending.flowRunId!, mode,
+    });
+    await assert.rejects(complete(h.submitterId), /routing evidence/);
+    await assert.rejects(complete(h.approver1Id), /routing evidence/);
+    await assert.rejects(complete(h.submitterId, 'gated'), /automatic employment submission/);
+    assert.deepEqual(await getChangeRequest({ orgId: h.org.orgId, actorId: h.submitterId, requestId: draft.id }), before);
+    assert.equal((await changeRows(employmentId)).length, 0);
+    const gates = (await db.execute<{ status: string }>(sql`select status from flow_gates
+      where org_id=${h.org.orgId} and run_id=${pending.flowRunId}`)).rows;
+    assert.ok(gates.length > 0);
+    assert.ok(gates.every(gate => gate.status === 'pending'));
   });
 });

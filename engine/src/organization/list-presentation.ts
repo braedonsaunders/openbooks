@@ -1,3 +1,4 @@
+import { lockActorIdentity } from "./actor-permissions.ts";
 import {sql} from 'drizzle-orm';
 import type {SqlExecutor} from '../platform/db.ts';
 import {lockActorCommandAuthority} from './actor-command-authority.ts';
@@ -8,7 +9,7 @@ export type WorkListContext='project'|'manufacturing_work_order';
 export type WorkListPresentation='list'|'board';
 async function authorize(tx:SqlExecutor,orgId:string,actorId:string,context:WorkListContext) {
   if(!isUuid(actorId)||!['project','manufacturing_work_order'].includes(context))throw new ScopeNotFoundError();
-  if(!(await tx.execute(sql`select id from users where id=${actorId} and is_active and (org_id=${orgId} or is_super_admin) for share`)).rows.length)throw new ScopeNotFoundError();
+  if(!await lockActorIdentity(tx,orgId,actorId))throw new ScopeNotFoundError();
   const project=context==='project';
   if(!await lockAndCheckOrgFeature(tx,orgId,project?'projects':'manufacturing'))throw new ScopeNotFoundError();
   await lockActorCommandAuthority(tx,orgId,actorId,null,project?'projects.read':'manufacturing.read');

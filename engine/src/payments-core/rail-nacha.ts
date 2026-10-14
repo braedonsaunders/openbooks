@@ -36,6 +36,11 @@ export function validateNachaSettings(raw: Partial<NachaSettings> | null): { ok:
     return typeof v !== "string" || v.trim() === "" || v.includes("FILL-ME");
   });
   if (missing.length) return { ok: false, missing };
+  for (const key of ["immediateDestination", "immediateOrigin"] as const) {
+    if (!/^[\x20-\x7e]{1,10}$/.test(s[key]!)) {
+      return { ok: false, missing: [`${key} (1-10 printable ASCII characters)`] };
+    }
+  }
   if (!/^\d{9}$/.test(s.odfiRouting!)) return { ok: false, missing: ["odfiRouting (9 digits)"] };
   // A well-formed but mis-addressed routing writes a valid file to the WRONG
   // originating institution — refuse it here so profile save, readiness and
@@ -186,7 +191,9 @@ export function buildNachaFile(opts: {
   fileIdModifier?: string;
   entries: NachaEntry[];
 }): string {
-  const s = opts.settings;
+  const validated = validateNachaSettings(opts.settings);
+  if (!validated.ok) throw new PaymentError(`NACHA originator settings are invalid: ${validated.missing.join(", ")}`);
+  const s = validated.settings;
   if (opts.entries.length === 0) throw new PaymentError("run has no payments to export");
   // The modifier is the bank's same-day duplicate-file key: a silent default
   // would hand every file the same identity. Every caller allocates one

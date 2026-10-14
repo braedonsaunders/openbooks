@@ -324,8 +324,9 @@ function parseStoredControlAccounts(value: unknown): OrgControlAccounts {
  */
 export async function loadControlAccounts(
   orgId: string,
+  executor: SqlExecutor = db,
 ): Promise<OrgControlAccounts> {
-  const configured = await db.execute<{ control: unknown }>(sql`
+  const configured = await executor.execute<{ control: unknown }>(sql`
     select settings->'controlAccounts' as control
       from orgs
      where id = ${orgId}`);
@@ -333,7 +334,7 @@ export async function loadControlAccounts(
   const ids = [...new Set(Object.values(mappings))];
   if (ids.length === 0) return mappings;
 
-  const records = await db.execute<ControlAccountRecord>(sql`
+  const records = await executor.execute<ControlAccountRecord>(sql`
     select id, type, is_active as "isActive", is_summary as "isSummary"
       from accounts
      where org_id = ${orgId}
@@ -404,7 +405,9 @@ export async function loadControlAccountsForRoles(
   const mappings: OrgControlAccounts = {};
   for (const role of roles) {
     const accountId = raw[role];
-    if (typeof accountId !== "string" || accountId === "") continue;
+    if (accountId === undefined || accountId === null || accountId === "") continue;
+    if (!isUuid(accountId)) throw new ControlAccountsIncompleteError(
+      `${CONTROL_ACCOUNT_ROLE_LABELS[role]} control account id is invalid`, { role, reason: "missing" });
     mappings[role] = accountId;
   }
   const ids = [...new Set(Object.values(mappings))];

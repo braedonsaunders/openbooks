@@ -1,3 +1,4 @@
+import { lockActorIdentity } from "../organization/actor-permissions.ts";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
 import { isIsoCalendarDate } from "../platform/business-date.ts";
@@ -436,10 +437,7 @@ export async function postUnpostedLaborCost(
   return withOrgTransaction(orgId, async () => {
     // Serialize with feature disables, then pin the actor's authority.
     await acquireOrgFeatureGateLock(db, orgId);
-    const actor = (await db.execute(sql`
-      select id from users
-       where id = ${actorId} and is_active and (org_id = ${orgId} or is_super_admin)
-       for share`)).rows[0];
+    const actor = await lockActorIdentity(db, orgId, actorId);
     if (!actor) throw new ScopeNotFoundError();
     const allowedSubsidiaries = await lockActorCommandAuthority(db, orgId, actorId, null, "gl.post");
     if (allowedSubsidiaries !== null) {

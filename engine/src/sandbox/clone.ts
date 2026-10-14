@@ -324,6 +324,11 @@ export function generateCopySql(
       exprs.push(`(case when "${c.name}" is null then null else ob_rebase("${c.name}", '${seed}'::uuid) end)`);
       continue;
     }
+    if (t.name === "documents" && c.name === "payment_terms_snapshot") {
+      if (tableMask?.has(c.name)) throw new Error("Retained payment terms require native identity rebasing; remove their whole-column masking policy.");
+      exprs.push(`public.document_payment_terms_snapshot_for_clone("payment_terms_snapshot", '${prod}'::uuid, "party_id", '${seed}'::uuid)`);
+      continue;
+    }
     if ((t.name === "performance_obligations" && c.name === "allocation_basis")
         || (t.name === "recognition_control_events" && ["before_state", "after_state"].includes(c.name))
         || (t.name === "rebate_cost_attestations" && c.name === "line_basis")

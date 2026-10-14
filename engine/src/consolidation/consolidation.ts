@@ -134,11 +134,13 @@ export async function withOwnershipSourceTransaction<T>(
   orgId: string,
   work: (tx: Runner) => Promise<T>,
 ): Promise<T> {
-  if (orgContext.getStore()?.txDb) {
-    throw new ConsolidationError(
-      "ownership consolidation must own its source-snapshot transaction",
-      "invalid",
-    );
+  const active = orgContext.getStore();
+  if (active?.txDb) {
+    if (!active.bypass && active.orgId !== orgId) throw new ConsolidationError("consolidation organization differs from the active transaction", "invalid");
+    const isolation = (await db.execute<{level:string}>(sql`select current_setting('transaction_isolation') as level`)).rows[0]?.level;
+    if (isolation !== "serializable") throw new ConsolidationError(
+      "Consolidation requires a serializable source snapshot. Start the complete command outside the current transaction, or begin its owning transaction at serializable isolation.", "invalid");
+    return work(db);
   }
   try {
     return await withOrgContext(orgId, () =>
@@ -802,10 +804,12 @@ export async function runOwnershipConsolidation(
       (tx) => runOwnershipConsolidationIn(orgId, periodId, userId, tx));
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
-    await db.execute(sql`
+    await withOrgContext(orgId, () => db.execute(sql`
       insert into ownership_consolidation_runs (org_id,period_id,status,error,finished_at,created_by,updated_by)
       values (${orgId},${periodId},'failed',${message.slice(0,1000)},now(),${userId ?? null},${userId ?? null})
-    `).catch(() => undefined);
+    `)).catch(recordError => {
+      console.error("Could not retain the failed consolidation run", recordError);
+    });
     throw error;
   }
 }
@@ -1079,10 +1083,18 @@ export async function runAutoElimination(
   // the run's transaction: a source posting that commits mid-run is excluded
   // wholesale from this generation and absorbed by the replacement on the
   // next run (invalidate-and-retry), never half-torn into the totals.
-  return db.transaction(
+  const active = orgContext.getStore();
+  if (active?.txDb) {
+    if (!active.bypass && active.orgId !== orgId) throw new ConsolidationError("consolidation organization differs from the active transaction", "invalid");
+    const isolation = (await db.execute<{level:string}>(sql`select current_setting('transaction_isolation') as level`)).rows[0]?.level;
+    if (isolation !== "repeatable read" && isolation !== "serializable") throw new ConsolidationError(
+      "Elimination requires a repeatable-read source snapshot. Start the complete command outside the current transaction, or begin its owning transaction at repeatable read or serializable isolation.", "invalid");
+    return runAutoEliminationIn(orgId, periodId, userId, db);
+  }
+  return withOrgContext(orgId, () => db.transaction(
     (tx) => runAutoEliminationIn(orgId, periodId, userId, tx),
     { isolationLevel: "repeatable read" },
-  );
+  ));
 }
 
 /**
@@ -1429,7 +1441,7 @@ async function runAutoEliminationIn(
       : `Eliminates ${ctx.byId.get(row.subsidiaryId)?.name ?? row.subsidiaryId}`,
   }));
   if (!isZero(translationDifference)) {
-    const ctaAccountId = (await loadControlAccounts(orgId)).translationAdjustment;
+    const ctaAccountId = (await loadControlAccounts(orgId, tx)).translationAdjustment;
     if (!ctaAccountId) {
       throw new ConsolidationError(
         `intercompany balances translated at this period's current rate leave a translation difference of ${translationDifference} ${elim.baseCurrency} — choose the Translation adjustment account under Company Settings → Control accounts, then run elimination again`,

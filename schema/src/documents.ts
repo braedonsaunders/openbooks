@@ -35,6 +35,25 @@ import { equipmentUnits } from "./assets";
 import { timeEntries } from "./time";
 import { fieldTickets } from "./field-tickets";
 
+/** Payment policy retained at posting; subsequent setup edits cannot reprice a bill. */
+export interface DocumentPaymentTermsSnapshot {
+  version: 1;
+  mode: "discount" | "no_discount" | "not_applicable";
+  source: "vendor" | "company" | "none" | "not_applicable";
+  documentKind: "vendor_bill" | "expense_report";
+  partyId: string | null;
+  documentDate: string;
+  terms: {
+    id: string;
+    name: string;
+    netDays: number;
+    discountDays: number | null;
+    discountPercent: string | null;
+    /** SHA-256 of the exact native economic row; terms have no revision counter. */
+    revisionHash: string;
+  } | null;
+}
+
 /**
  * Business documents — the mutable layer users touch. One supertype table +
  * lines; `kind` drives behavior via posting rules, not via 20 near-identical
@@ -87,6 +106,7 @@ export const documents = pgTable(
      * (late postings and adjustment periods are ordinary ERP behavior). */
     postingPeriodId: uuid("posting_period_id"),
     dueDate: date("due_date"),
+    paymentTermsSnapshot: jsonb("payment_terms_snapshot").$type<DocumentPaymentTermsSnapshot>(),
     currency: currencyCode("currency").notNull(),
     fxRate: fxRate("fx_rate").notNull().default("1"),
 
@@ -276,6 +296,10 @@ export const documents = pgTable(
     check(
       "documents_posted_period_required",
       sql`${t.status} <> 'posted' or (${t.postedEntryId} is not null and ${t.postingPeriodId} is not null)`,
+    ),
+    check(
+      "documents_payment_terms_snapshot_shape",
+      sql`public.document_payment_terms_snapshot_valid(${t.paymentTermsSnapshot}) is true`,
     ),
     // Product-owned Field Ticket state is relational. Reserve its old JSON key
     // so no importer or API can create a parallel source of truth.

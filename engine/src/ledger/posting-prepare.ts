@@ -19,7 +19,7 @@ import { assertPayrollRemittanceBillCurrent } from "../payroll/remittance.ts";
 import { isZero, toUnits } from "../money/money.ts";
 import { parseMoney, sumMoney } from "../money/brands.ts";
 import { isIso4217CurrencyCode } from "../fx/currencies.ts";
-import { CustomGlLinesError, mergeBeforePostCustomMutation, resolveScriptUser, runCustomGlLineScripts, runTriggerScripts, type ScriptContext } from "../scripting/scripting.ts";
+import { CustomGlLinesError, beforePostCustomControlsChanged, mergeBeforePostCustomMutation, resolveScriptUser, runCustomGlLineScripts, runTriggerScripts, type ScriptContext } from "../scripting/scripting.ts";
 import type { ContributedLine } from "../allocations/types.ts";
 import { assertContributorBalance, collectPostContributions, PostAllocationError, type PostContributionResult } from "../allocations/post.ts";
 import { postDriverResolver } from "../allocations/report-runner.ts";
@@ -500,6 +500,9 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
       .where(and(eq(schema.documents.id, doc.id), eq(schema.documents.orgId, doc.orgId)));
     if (refreshed) effectiveDoc = refreshed;
   }
+
+  const changedPostingControl = beforePostCustomControlsChanged(doc.custom, effectiveDoc.custom);
+  if (changedPostingControl) throw new PostingError(changedPostingControl);
 
   // Revalidate the effective header after scripts/flows, including legacy
   // approved reports that never passed the current submission boundary.

@@ -1,3 +1,4 @@
+import { lockActorIdentity } from "../organization/actor-permissions.ts";
 import { sql } from "drizzle-orm";
 import type { SqlExecutor } from "../platform/db.ts";
 import { isUuid } from "../platform/uuid.ts";
@@ -18,7 +19,7 @@ async function feature(tx:SqlExecutor,orgId:string) {
   if (!await lockAndCheckOrgFeature(tx,orgId,"manufacturing")) throw new ScopeNotFoundError();
 }
 async function authority(tx:SqlExecutor,orgId:string,actorId:string,subsidiaryId:string|null,permissions:readonly string[]) {
-  if (!(await tx.execute(sql`select id from users where id=${actorId} and is_active and (org_id=${orgId} or is_super_admin) for share`)).rows.length) throw new InventoryNotFoundError("Inspection not found.");
+  if (!await lockActorIdentity(tx,orgId,actorId)) throw new InventoryNotFoundError("Inspection not found.");
   let scope:ReadonlySet<string>|null=null;
   for (const permission of permissions) {
     const allowed=await lockActorCommandAuthority(tx,orgId,actorId,subsidiaryId,permission);

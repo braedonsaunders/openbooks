@@ -142,3 +142,37 @@ test("a receipt still settles its own subsidiary's deficit", { skip: !DB }, asyn
     await dropScratchOrg(org.orgId);
   }
 });
+
+for (const method of ["fifo", "movingAvg"] as const) {
+  for (const example of [
+    { deficit: "3.0000", quantity: "3.0000", value: "31.0000", remaining: "0.0000" },
+    { deficit: "2.9999", quantity: "3.0000", value: "0.0002", remaining: "0.0001" },
+    { deficit: "1.0000", quantity: "3.0000", value: "31.0000", remaining: "2.0000" },
+  ]) {
+    test(`authoritative ${method} receipt ${example.value} settles ${example.deficit} without stranded value`, { skip: !DB }, async () => {
+      const org = await createScratchOrg();
+      try {
+        const itemId = org.items[method];
+        await db.execute(sql`update item_inventory_profiles set allow_negative_inventory=true,
+          negative_cost_basis='configured',provisional_unit_cost='10'
+          where org_id=${org.orgId} and item_id=${itemId}`);
+        await issueInventory(org.orgId, null, { itemId,stockLocationId:org.stockLocationId,
+          quantity:example.deficit,subsidiaryId:org.subsidiaryId,date:org.date });
+        const input = { itemId,stockLocationId:org.stockLocationId,quantity:example.quantity,
+          totalValue:example.value,subsidiaryId:org.subsidiaryId,offsetAccountId:org.accounts.clearing,date:org.date,
+          idempotencyKey:randomUUID() };
+        const received = await receiveInventory(org.orgId, null, input);
+        assert.deepEqual(await receiveInventory(org.orgId, null, input), received);
+        const layers = (await db.execute<{q:string;v:string}>(sql`
+          select remaining_quantity::text q,unit_cost::text v from cost_layers
+          where org_id=${org.orgId} and item_id=${itemId}`)).rows;
+        const { extendCost } = await import('./costing.ts');
+        assert.equal(layers.reduce((n,l)=>n+toUnits(l.q),0n),toUnits(example.remaining));
+        const layerValue=layers.reduce((n,l)=>n+toUnits(extendCost(l.q,l.v)),0n);
+        assert.equal(await glBalanceBySubsidiary(org.orgId,org.accounts.invAsset,org.subsidiaryId),layerValue);
+        assert.equal(await glBalanceBySubsidiary(org.orgId,org.accounts.cogs,org.subsidiaryId)+layerValue,toUnits(example.value));
+        if(example.remaining==='0.0000') assert.equal(layerValue,0n);
+      } finally { await dropScratchOrg(org.orgId); }
+    });
+  }
+}

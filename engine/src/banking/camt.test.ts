@@ -64,3 +64,11 @@ test("camt.053 retains entry-level bank references for recurring customer refere
   assert.deepEqual(withoutBankReference.lines.map(line => line.bankTransactionId), [null, null]);
   assert.equal(filterDuplicateStatementLines(withoutBankReference.lines, new Set()).lines.length, 2);
 });
+
+test("camt.053 derives account currency from entry and balance attributes without consuming FX currency",()=>{
+  const entry='<Ntry><Amt Ccy="CAD">10</Amt><CdtDbtInd>CRDT</CdtDbtInd><BookgDt><Dt>2026-08-10</Dt></BookgDt><TxDtls><Ccy>USD</Ccy></TxDtls></Ntry>';
+  const balance='<Bal><Tp><CdOrPrtry><Cd>CLBD</Cd></CdOrPrtry></Tp><Amt Ccy="CAD">25</Amt><CdtDbtInd>CRDT</CdtDbtInd><Dt><Dt>2026-08-10</Dt></Dt></Bal>';
+  assert.equal(parseCamt053(`<Stmt>${entry}${balance}</Stmt>`).currency,'CAD');
+  assert.throws(()=>parseCamt053(`<Stmt>${entry}${balance.replace('Ccy="CAD"','Ccy="EUR"')}</Stmt>`),/currency differs/);
+  assert.throws(()=>parseCamt053(`<Stmt><Acct><Id><IBAN>ACCOUNT</IBAN></Id><Ccy>EUR</Ccy></Acct>${entry}</Stmt>`),/currency differs/);
+});

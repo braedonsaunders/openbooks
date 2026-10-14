@@ -1233,9 +1233,15 @@ async function assertAttachmentReadable(
       "the identity behind this action is not established in this organization — attachment evidence needs an active user",
     );
   }
+  const canReadApCapture = await actorHasPermission(exec, orgId, actorId, "ap.read");
   const readable = (
     await exec.execute<{ readable: boolean }>(sql`
-    with recursive hidden_folders as (
+    with recursive capture_folders as (
+      select id from folders where org_id = ${orgId} and system_kind = 'ap_capture'
+      union
+      select f.id from folders f join capture_folders c on f.parent_folder_id = c.id
+       where f.org_id = ${orgId}
+    ), hidden_folders as (
       select id, parent_folder_id from folders
        where org_id = ${orgId} and is_private and owner_id is distinct from ${actorId}
       union
@@ -1257,6 +1263,7 @@ async function assertAttachmentReadable(
     select exists(
       select 1 from files f
        where f.org_id = ${orgId} and f.id = ${attachmentId} and not f.is_inactive
+         and (${canReadApCapture} or not exists(select 1 from capture_folders c where c.id = f.folder_id))
          and (${identity.isSuperAdmin}
               or f.folder_id not in (
                     select id from hidden_folders

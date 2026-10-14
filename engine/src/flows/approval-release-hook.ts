@@ -63,3 +63,31 @@ export async function releaseFlowApproval(
   }
   await handler(args);
 }
+
+
+/** Resume a subject's own submission command after its same flow run has
+ * completed routing. This is distinct from a human gate decision. */
+export interface FlowSubmissionResumeArgs {
+  subjectKind: string;
+  subjectId: string;
+  runId: string;
+  mode: "gated" | "automatic";
+  ctx: FlowExecCtx;
+}
+export type FlowSubmissionResumeHandler = (args: FlowSubmissionResumeArgs) => Promise<{ status: string }>;
+const submissionRuntime = globalThis as typeof globalThis & {
+  __openbooksFlowSubmissionResumeHandlers?: Map<string, FlowSubmissionResumeHandler>;
+};
+const submissionHandlers = submissionRuntime.__openbooksFlowSubmissionResumeHandlers ??= new Map();
+
+export function registerFlowSubmissionResumeHandler(subjectKind: string, handler: FlowSubmissionResumeHandler): void {
+  submissionHandlers.set(subjectKind, handler);
+}
+export function hasFlowSubmissionResumeHandler(subjectKind: string): boolean {
+  return submissionHandlers.has(subjectKind);
+}
+export async function resumeFlowSubmission(args: FlowSubmissionResumeArgs): Promise<{ status: string }> {
+  const handler = submissionHandlers.get(args.subjectKind);
+  if (!handler) throw new Error(`Submission resume handler for "${args.subjectKind}" is not registered; install the owning native subject's engine seam before retrying`);
+  return handler(args);
+}

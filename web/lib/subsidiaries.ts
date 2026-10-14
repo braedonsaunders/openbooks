@@ -1,6 +1,6 @@
 import "server-only";
 import { sql } from "drizzle-orm";
-import { ambientTenantOrgId, db, withBypassContext } from "@openbooks/engine/platform/db";
+import { ambientTenantOrgId, db, type SqlExecutor } from "@openbooks/engine/platform/db";
 import { actorAllowedSubsidiaryIds } from "@openbooks/engine/organization/actor-subsidiaries";
 import { subsidiaryFeatureEnabled } from "./features";
 
@@ -125,7 +125,6 @@ export { subsidiaryVisibleFilter, UNRESTRICTED_SCOPE_REQUIRED } from "@openbooks
  * A user without a role receives an empty set. Feed the result to list/report WHERE clauses:
  * `and subsidiary_id = any(...)` only when non-null.
  */
-export async function allowedSubsidiaryIds(userId: string, orgId: string): Promise<Set<string> | null> {
-  // bypass: user-keyed-lookup — the actor's identity row can live in another organization (super admins, granted members).
-  return withBypassContext(() => actorAllowedSubsidiaryIds(db, orgId, userId));
+export async function allowedSubsidiaryIds(userId: string, orgId: string, runner: SqlExecutor = db): Promise<Set<string> | null> {
+  return actorAllowedSubsidiaryIds(runner, orgId, userId);
 }

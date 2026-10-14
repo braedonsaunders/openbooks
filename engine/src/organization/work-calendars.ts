@@ -1,3 +1,4 @@
+import { lockActorIdentity } from "./actor-permissions.ts";
 import { sql } from 'drizzle-orm';
 import type { SqlExecutor } from '../platform/db.ts';
 import { isUuid } from '../platform/uuid.ts';
@@ -19,7 +20,7 @@ type Calendar = { id: string; name: string; description: string | null; workingD
 const columns = sql`id,name,description,working_days as "workingDays",holidays,is_default as "isDefault",xmin::text as revision`;
 
 async function authority(tx: SqlExecutor, orgId: string, actorId: string) {
-  if (!isUuid(actorId) || !(await tx.execute(sql`select id from users where id=${actorId} and is_active and (org_id=${orgId} or is_super_admin) for share`)).rows.length)
+  if (!isUuid(actorId) || !await lockActorIdentity(tx,orgId,actorId))
     throw new WorkCalendarError('Work calendar not found.', 404, 'not_found');
   if (await lockActorCommandAuthority(tx, orgId, actorId, null, 'admin.setup.manage') !== null)
     throw new WorkCalendarError('Company calendars require access to every legal entity.', 404, 'not_found');

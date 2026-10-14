@@ -401,8 +401,8 @@ export function validateCustomQuery(
         if (rawValue === '') {
           throw new ReportQueryValidationError(`Filter rule for '${String(field)}' (${op}) requires a number of days`)
         }
-        if (rawValue !== null && rawValue !== undefined && !Number.isFinite(Number(rawValue))) {
-          throw new ReportQueryValidationError(`Filter rule for '${String(field)}' (${op}) requires a number of days`)
+        if (rawValue !== null && rawValue !== undefined && (!['number', 'string'].includes(typeof rawValue) || !Number.isSafeInteger(Number(rawValue)) || Number(rawValue) < 0 || Number(rawValue) > 3652058)) {
+          throw new ReportQueryValidationError(`Filter rule for '${String(field)}' (${op}) requires a non-negative whole number of days within the supported civil calendar`)
         }
       } else if (op === 'period_preset') {
         if (typeof rawValue !== 'string' || !rawValue) {

@@ -654,3 +654,11 @@ test("same-currency allocation carries equal amounts and a rate of one", () => {
   assert.equal(withBase.targetBaseAmount, "10.0000");
   assert.equal(withBase.sourceTransactionAmount, withBase.targetTransactionAmount);
 });
+
+test("NACHA builder revalidates originator identity and refuses overlong or non-ASCII routing fields",()=>{
+  for(const patch of [{immediateDestination:'12345678901'},{immediateOrigin:'bad\norigin'},{immediateOrigin:'é'},{odfiRouting:'021000022'}]){
+    assert.throws(()=>buildNachaFile({settings:{...NACHA,...patch},effectiveDate:'2026-03-05',creationDateTime:'2026-03-03T00:00:00',fileIdModifier:'A',entries:[]}),/NACHA originator settings are invalid/);
+  }
+  const text=nachaFile('998877');
+  assert.ok(text.split(/\r?\n/).filter(Boolean).every(line=>line.length===94));
+});

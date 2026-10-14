@@ -6,6 +6,7 @@
 // parameters collected by SqlParams.
 
 import { columnRef, type ReportEntity } from './entities'
+import { addDays, utcCivilDate } from './fiscal-calendar'
 import type { ReportCustomQuery, ReportRule, ReportRuleGroup } from './types'
 
 const MAX_TREE_DEPTH = 5
@@ -28,12 +29,21 @@ function isRuleGroup(r: ReportRule | ReportRuleGroup): r is ReportRuleGroup {
   return typeof r === 'object' && r !== null && Array.isArray((r as ReportRuleGroup).rules)
 }
 
-/** `col >= date_trunc(unit, now()) AND col < date_trunc(unit, now()) + 1 unit` —
- *  the half-open current period for the "is today / this week / …" operators.
- *  Pure SQL (no bound params) so the clause re-anchors to the DB clock. `unit`
- *  is a compile-time literal, never user input. */
-function currentPeriodClause(col: string, unit: 'day' | 'week' | 'month' | 'year'): string {
-  return `(${col} >= date_trunc('${unit}', now()) AND ${col} < date_trunc('${unit}', now()) + interval '1 ${unit}')`
+export interface FilterDateContext { asOf?: string }
+
+function civilAnchor(opts: FilterDateContext): string {
+  const value = opts.asOf
+  const match = value?.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (!match || Number(match[1]) < 1 || utcCivilDate(Number(match[1]), Number(match[2]) - 1, Number(match[3])).toISOString().slice(0, 10) !== value) {
+    throw new Error('Relative report filters require a valid organization civil asOf date')
+  }
+  return value!
+}
+
+/** Half-open calendar period anchored to the caller's organization date. */
+function currentPeriodClause(col: string, unit: 'day' | 'week' | 'month' | 'year', params: SqlParams, opts: FilterDateContext): string {
+  const day = params.add(civilAnchor(opts))
+  return `(${col} >= date_trunc('${unit}', ${day}::date) AND ${col} < date_trunc('${unit}', ${day}::date) + interval '1 ${unit}')`
 }
 
 /** Compile one leaf clause. Returns null when the clause is invalid or a
@@ -45,6 +55,7 @@ export function compileRule(
   entity: ReportEntity,
   rule: { column: string; op: string; value?: unknown },
   params: SqlParams,
+  opts: FilterDateContext = {},
 ): string | null {
   const col = columnRef(entity, rule.column)
   if (!col) return null
@@ -83,37 +94,26 @@ export function compileRule(
       return `${col} IS FALSE`
     case 'contains':
       if (v === null || typeof v === 'undefined' || v === '') return null
-      return `${col}::text ILIKE ${params.add('%' + String(v) + '%')}`
-    case 'between_days_ago': {
-      const days = Number(v ?? 30)
-      if (!Number.isFinite(days)) return null
-      // ISO string, not a Date — pg encodes strings predictably for both
-      // date and timestamptz columns.
-      const fromDate = new Date(Date.now() - days * 24 * 3600 * 1000)
-      return `${col} >= ${params.add(fromDate.toISOString())}`
-    }
-    // Forward window: due on/before now + N days — INCLUDES already-overdue
-    // rows (col < now). Drives "coming due / expiring" reports.
+      return `${col}::text ILIKE ${params.add('%' + String(v).replace(/[\\%_]/g, (character) => `\\${character}`) + '%')}`
+    case 'between_days_ago':
     case 'due_within_days': {
       const days = Number(v ?? 30)
-      if (!Number.isFinite(days)) return null
-      const toDate = new Date(Date.now() + days * 24 * 3600 * 1000)
-      return `${col} <= ${params.add(toDate.toISOString())}`
+      if (!Number.isSafeInteger(days) || days < 0 || days > 3652058) return null
+      const anchor = civilAnchor(opts)
+      const date = addDays(anchor, rule.op === 'between_days_ago' ? -days : days)
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || date.startsWith('0000')) return null
+      return `${col} ${rule.op === 'between_days_ago' ? '>=' : '<='} ${params.add(date)}::date`
     }
-    // Relative-date ops compile to pure SQL (no bound param) so they re-anchor
-    // to the DB clock on every run. Each op is bounded on BOTH sides — "is this
-    // month" means within the current month, not "any time from the start of
-    // this month onwards" (which would sweep in future-dated due values).
     case 'since_today':
-      return currentPeriodClause(col, 'day')
+      return currentPeriodClause(col, 'day', params, opts)
     case 'this_week':
-      return currentPeriodClause(col, 'week')
+      return currentPeriodClause(col, 'week', params, opts)
     case 'this_month':
-      return currentPeriodClause(col, 'month')
+      return currentPeriodClause(col, 'month', params, opts)
     case 'this_year':
-      return currentPeriodClause(col, 'year')
+      return currentPeriodClause(col, 'year', params, opts)
     case 'before_now':
-      return `${col} < now()`
+      return `${col} < ${params.add(civilAnchor(opts))}::date`
     default:
       return null
   }
@@ -132,6 +132,7 @@ export function compileRuleGroup(
   entity: ReportEntity,
   group: ReportRuleGroup,
   params: SqlParams,
+  opts: FilterDateContext = {},
 ): string | null {
   let ruleCount = 0
 
@@ -149,7 +150,7 @@ export function compileRuleGroup(
         parts.push(compiled)
         continue
       }
-      const compiled = compileRule(entity, { column: r.field, op: r.op, value: r.value }, params)
+      const compiled = compileRule(entity, { column: r.field, op: r.op, value: r.value }, params, opts)
       if (compiled === null) {
         throw new Error(`Filter rule for '${r.field}' (${r.op}) cannot be compiled — refusing to run unfiltered`)
       }
@@ -168,9 +169,10 @@ export function compileCustomFilters(
   entity: ReportEntity,
   plan: Pick<ReportCustomQuery, 'filters'>,
   params: SqlParams,
+  opts: FilterDateContext = {},
 ): string | null {
   if (plan.filters && Array.isArray(plan.filters.rules) && plan.filters.rules.length) {
-    return compileRuleGroup(entity, plan.filters, params)
+    return compileRuleGroup(entity, plan.filters, params, opts)
   }
   return null
 }

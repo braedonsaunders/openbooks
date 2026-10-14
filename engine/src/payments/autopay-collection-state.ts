@@ -1,3 +1,4 @@
+import { lockActorIdentity } from "../organization/actor-permissions.ts";
 import { sql } from "drizzle-orm";
 import { db, orgContext, pool, withOrg } from "../platform/db.ts";
 import { cmp } from "../money/money.ts";
@@ -290,9 +291,7 @@ export async function lockCollectionRetryAuthority(
   if (!actorId || !subsidiaryId || requestedScope === undefined || !subsidiaryScopeAllows(requestedScope, subsidiaryId)) {
     throw new ScopeNotFoundError();
   }
-  const actor = (await db.execute(sql`
-    select id from users where id = ${actorId} and is_active and (org_id = ${orgId} or is_super_admin) for share
-  `)).rows[0];
+  const actor = await lockActorIdentity(db,orgId,actorId);
   if (!actor) throw new ScopeNotFoundError();
   const derived = await lockActorCommandAuthority(db, orgId, actorId, subsidiaryId, "autopay.manage");
   if (!subsidiaryScopeAllows(derived, subsidiaryId)) throw new ScopeNotFoundError();

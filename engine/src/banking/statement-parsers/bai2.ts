@@ -75,9 +75,11 @@ export function parseBai2(source: StatementSourceContent): ParsedStatement {
         );
       }
       if (f[2]) currency = f[2];
-      // status/summary type codes follow in groups of (code, amount, ...)
-      for (let i = 3; i + 1 < f.length; i += 1) {
-        if (f[i] === "015" && f[i + 1]) closingBalance = baiAmount(f[i + 1]!); // 015 = closing ledger
+      // Each summary has code, amount, item count and a variable-width
+      // funds distribution. Amounts and item counts are never type codes.
+      for (let i = 3; i + 1 < f.length;) {
+        if (f[i] === "015" && f[i + 1]) closingBalance = baiAmount(f[i + 1]!);
+        i = afterFundsType(f, i + 3);
       }
     } else if (f[0] === "16") {
       const typeCode = Number(f[1]);
@@ -87,9 +89,10 @@ export function parseBai2(source: StatementSourceContent): ParsedStatement {
       }
       const magnitude = baiAmount(cents);
       const signed = typeCode >= 400 ? "-" + magnitude.replace(/^-/, "") : magnitude;
-      const bankRef = f[4] || null;
-      const custRef = f[5] || null;
-      const textDesc = f.slice(6).join(",").trim() || null;
+      const referenceAt = afterFundsType(f, 3);
+      const bankRef = f[referenceAt] || null;
+      const custRef = f[referenceAt + 1] || null;
+      const textDesc = f.slice(referenceAt + 2).join(",").trim() || null;
       if (!statementDate) {
         throw new BankingError("BAI2: type-16 transaction before a type-02 header date");
       }
@@ -118,4 +121,33 @@ function baiAmount(cents: string): string {
   const units = sign * BigInt(match[2]!) * 100n;
   assertLedgerRange(units, `BAI2: amount "${cents}" is out of range for the ledger`);
   return fromUnits(units);
+}
+
+/** Return the field after the complete BAI funds-availability structure. */
+function afterFundsType(fields: string[], at: number): number {
+  const type = fields[at] ?? "";
+  let extra = 0;
+  if (type === "V") extra = 2;
+  else if (type === "S") extra = 3;
+  else if (type === "D") {
+    const count = fields[at + 1];
+    if (!count || !/^\d+$/.test(count) || !Number.isSafeInteger(Number(count))) {
+      throw new BankingError("BAI2: invalid funds availability distribution count");
+    }
+    extra = 1 + 2 * Number(count);
+  } else if (!["", "Z", "0", "1", "2"].includes(type)) {
+    throw new BankingError(`BAI2: unknown funds type "${type}"`);
+  }
+  if (extra && at + extra >= fields.length) {
+    throw new BankingError("BAI2: incomplete funds availability fields");
+  }
+  if (type === "S") {
+    for (const amount of fields.slice(at + 1, at + 4)) if (amount) baiAmount(amount);
+  } else if (type === "D") {
+    for (let i = at + 2; i <= at + extra; i += 2) {
+      if (!/^\d+$/.test(fields[i]!)) throw new BankingError("BAI2: invalid availability day count");
+      baiAmount(fields[i + 1]!);
+    }
+  }
+  return at + 1 + extra;
 }

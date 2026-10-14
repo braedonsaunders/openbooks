@@ -29,10 +29,18 @@ export function parseCamt053(source: StatementSourceContent): ParsedStatement {
     throw new BankingError("CAMT.053 contains multiple statements. Export and import each statement separately so every account, date window and closing balance is preserved.");
   }
   const stmt = statements[0] ?? text;
-  const currency = xmlTag(stmt, "Ccy");
+  // Account currency is scoped to Acct; nested FX currencies are unrelated.
+  let currency = xmlTag(xmlTag(stmt, "Acct") ?? "", "Ccy");
+  const acceptCurrency = (block: string) => {
+    const tag = block.match(/<Amt\b([^>]*)>/i);
+    const value = tag?.[1]?.match(/\bCcy\s*=\s*["']([A-Za-z]{3})["']/i)?.[1]?.toUpperCase();
+    if (value && currency && value !== currency) throw new BankingError("CAMT.053: entry or balance currency differs from the statement account");
+    if (value) currency = value;
+  };
   const lines: ParsedStatementLine[] = [];
   let lineNo = 0;
   for (const ntry of xmlTags(stmt, "Ntry")) {
+    acceptCurrency(ntry);
     const amtRaw = xmlTag(ntry, "Amt");
     if (!amtRaw) continue;
     const ind = (xmlTag(ntry, "CdtDbtInd") ?? "CRDT").toUpperCase();
@@ -87,6 +95,7 @@ export function parseCamt053(source: StatementSourceContent): ParsedStatement {
   let closingBalance: string | undefined;
   let statementDate: string | undefined;
   for (const bal of xmlTags(stmt, "Bal")) {
+    acceptCurrency(bal);
     const cd = xmlTag(bal, "Cd");
     if (cd?.toUpperCase() === "CLBD") {
       const amt = xmlTag(bal, "Amt");

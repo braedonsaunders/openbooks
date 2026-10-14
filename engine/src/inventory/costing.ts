@@ -380,7 +380,7 @@ export function issueMovingAverage(state: MovingAverageState, quantity: string):
 export interface StandardReceipt {
   /** value booked to inventory (at standard). */
   inventoryValue: string;
-  /** purchase price variance = (actual − standard) × qty (DR = unfavorable). */
+  /** Rounded actual receipt total less inventory value (DR = unfavorable). */
   variance: string;
 }
 
@@ -390,7 +390,7 @@ export function receiveStandard(quantity: string, actualUnitCost: string, standa
   const std = toUnits(standardCost);
   const act = toUnits(actualUnitCost);
   const inventoryValue = mulUnits(q, std);
-  const variance = mulUnits(q, act - std);
+  const variance = mulUnits(q, act) - inventoryValue;
   return { inventoryValue: fromUnits(inventoryValue), variance: fromUnits(variance) };
 }
 

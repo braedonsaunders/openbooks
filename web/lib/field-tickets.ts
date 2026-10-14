@@ -279,7 +279,7 @@ export async function updateTicketHeader(
   expectedRevision: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null = null,
 ): Promise<void> {
-  await runDocumentVersionedTransaction<
+  await withOrg(orgId, () => runDocumentVersionedTransaction<
     TicketTransaction,
     { status: string; updatedAt: string },
     void
@@ -324,8 +324,14 @@ export async function updateTicketHeader(
         if (!patch.projectId) throw new FieldTicketError('A ticket needs a project')
         const proj = (await db.execute<{ id: string; customer_id: string | null; subsidiary_id: string | null; po: string | null }>(sql`
           select p.id, p.customer_id, p.subsidiary_id, p.custom->>'poNumber' as po
-            from projects p where p.id = ${patch.projectId} and p.org_id = ${orgId}`))
+            from projects p where p.id = ${patch.projectId} and p.org_id = ${orgId} and p.is_active for share`))
         if (!proj.rows[0]) throw new FieldTicketError('Project not found')
+        const linkedTime = (await tx.execute<{ status: string }>(sql`
+          select status from time_entries where org_id = ${orgId} and field_ticket_id = ${ticketId}
+          order by id for update`)).rows
+        if (linkedTime.some(entry => entry.status !== 'draft')) {
+          throw new FieldTicketError('This ticket has submitted or approved time. Resolve that time through its review workflow before changing the project.')
+        }
         projChange = proj.rows[0]
         if (!subsidiaryScopeAllows(allowedSubsidiaryIds, projChange.subsidiary_id)) {
           throw new FieldTicketNotFoundError('Ticket not found')
@@ -381,11 +387,11 @@ export async function updateTicketHeader(
       `)
       // Re-home any existing draft hours/lines onto the new project.
       if (projChange) {
-        await tx.execute(sql`update time_entries set project_id = ${projChange.id}, project_task_id = null where field_ticket_id = ${ticketId} and org_id = ${orgId} and status = 'draft'`)
+        await tx.execute(sql`update time_entries set project_id = ${projChange.id}, project_task_id = null, updated_at = now() where field_ticket_id = ${ticketId} and org_id = ${orgId} and status = 'draft'`)
         await tx.execute(sql`update document_lines set project_id = ${projChange.id} where document_id = ${ticketId} and org_id = ${orgId}`)
       }
     },
-  })
+  }))
 }
 
 export interface CrewRowInput {
@@ -445,7 +451,7 @@ export async function saveCrewGrid(
   expectedRevision: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null = null,
 ): Promise<void> {
-  await runDocumentVersionedTransaction<
+  await withOrg(orgId, () => runDocumentVersionedTransaction<
     TicketTransaction,
     { status: string; updatedAt: string },
     void
@@ -617,7 +623,7 @@ export async function saveCrewGrid(
           updated_by = ${userId}
          where id = ${ticketId} and org_id = ${orgId}`)
     },
-  })
+  }))
 }
 
 const INVENTORY_ITEM_KINDS = new Set(['inventory', 'assembly', 'kit'])
@@ -1122,7 +1128,7 @@ export async function discardEmptyTicketDraft(
   expectedRevision: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null = null,
 ): Promise<void> {
-  await runDocumentVersionedTransaction<
+  await withOrg(orgId, () => runDocumentVersionedTransaction<
     TicketTransaction,
     { status: string; updatedAt: string },
     void
@@ -1197,7 +1203,7 @@ export async function discardEmptyTicketDraft(
                 ${JSON.stringify({ event: 'draft_discarded', documentNumber: doc.document_number })}::jsonb, ${userId})
       `)
     },
-  })
+  }))
 }
 
 /** Pin live lifecycle authority and the exact ticket version inside the caller's transaction. */
@@ -1386,12 +1392,9 @@ export async function releaseFieldTicketApproval(
     // pool, so without the kind's postPermission the charge stays a draft for
     // a gl.post holder to post — the same rule as POST /api/project-charges.
     // The draft id still links from the ticket (charge_document_id below).
-    const releaser = await resolveAuthzByUserId(orgId, userId)
-    const mayPostCharge = releaser !== null && can(releaser, postPermission('project_charge'))
-    // An unknown releaser (departed approver) acts under the approval grant
-    // Flows already recorded: unrestricted by explicit sentinel, so the
-    // charge still stamps the locked project's subsidiary. The in-transaction
-    // lock rechecks the project itself, never the pre-read.
+    const releaser = await resolveAuthzByUserId(orgId, userId, db)
+    if (!releaser) throw new FieldTicketError('The approval operator is no longer active or authorized. Resume approval with an authorized operator.')
+    const mayPostCharge = can(releaser, postPermission('project_charge'))
     const charge = await createProjectCharge(
       orgId,
       userId,
@@ -1432,7 +1435,7 @@ export async function releaseFieldTicketApproval(
           }
         }),
       },
-      { post: mayPostCharge, allowedSubsidiaryIds: releaser?.allowedSubsidiaryIds ?? null },
+      { post: mayPostCharge, allowedSubsidiaryIds: releaser.allowedSubsidiaryIds },
     )
     await db.execute(sql`
       insert into document_links (org_id, from_document_id, to_document_id, link_type, created_by, updated_by)

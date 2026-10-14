@@ -704,3 +704,11 @@ test("exact scan conversion retains eight-place quantities and the same configur
   assert.notEqual(toExactBaseQuantity("1.00000001","ea",{},"ea"),toExactBaseQuantity("1.00000002","ea",{},"ea"));
   assert.throws(()=>toExactBaseQuantity("1","crate",{},"ea"),/no conversion/);
 });
+
+test("standard receipt variance reconciles rounded totals for favorable and unfavorable half units", () => {
+  for (const [actual,standard] of [["10.0002","10.0001"],["10.0001","10.0002"],["0.0001","0.0000"]]) {
+    const result=receiveStandard("1.5000",actual!,standard!);
+    assert.equal(toUnits(result.inventoryValue)+toUnits(result.variance),toUnits(extendCost("1.5000",actual!)));
+  }
+  assert.deepEqual(receiveStandard("1.5000","10.0002","10.0001"),{inventoryValue:"15.0002",variance:"0.0001"});
+});

@@ -1,3 +1,4 @@
+import { lockActorIdentity } from "../organization/actor-permissions.ts";
 import { actorHasPermission } from "../organization/actor-permissions.ts";
 import { ScopeNotFoundError } from "../organization/subsidiary-scope.ts";
 import { sql } from "drizzle-orm";
@@ -25,7 +26,7 @@ export async function setStockHold(
       "Enter a hold or release reason of 5–500 characters",
     );
   return withOrgTransaction(orgId, async () => {
-    if (!(await db.execute(sql`select id from users where id=${actorId} and is_active and (org_id=${orgId} or is_super_admin) for share`)).rows.length) throw new ScopeNotFoundError();
+    if (!await lockActorIdentity(db,orgId,actorId)) throw new ScopeNotFoundError();
     if (!(await actorHasPermission(db, orgId, actorId, "items.manage")))
       throw new ScopeNotFoundError();
     const table = input.kind === "lot" ? sql`lots` : sql`serials`;

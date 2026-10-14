@@ -1,3 +1,4 @@
+import { lockActorCommandAuthority } from "../organization/actor-command-authority.ts";
 import { sql } from "drizzle-orm";
 import { canonicalDecimal, compareDecimal } from "../money/exact-decimal.ts";
 import { moneyRefusal } from "../money/decimal-refusal.ts";
@@ -1915,12 +1916,19 @@ export async function prorateFirstInvoice(
     // A route may commit the subscription before requesting first proration.
     // Recheck its customer under the shared party lock in this transaction so
     // a rehome in that gap cannot authorize an invoice in another subsidiary.
-    await lockSubscriptionCustomerForScope(
-      db,
-      orgId,
-      subscriptionId,
-      actor?.allowedSubsidiaryIds ?? null,
-    );
+    // Omitted actor is the documented system path. A supplied human must
+    // have live command authority. An optional caller scope only narrows
+    // that actual authority; omission cannot supply unrestricted access.
+    if (actor && actor.actorId === undefined) throw new ScopeNotFoundError();
+    let scope: ReadonlySet<string> | null = null;
+    if (actorId !== null) {
+      const liveScope = await lockActorCommandAuthority(db, orgId, actorId, null, "ar.create");
+      const callerScope = actor?.allowedSubsidiaryIds;
+      scope = callerScope === undefined || callerScope === null ? liveScope
+        : liveScope === null ? callerScope
+        : new Set([...liveScope].filter(id => callerScope.has(id)));
+    }
+    await lockSubscriptionCustomerForScope(db, orgId, subscriptionId, scope);
     await db.execute(sql`select id from subscriptions where id = ${subscriptionId} and org_id = ${orgId} for update`);
     const row = await loadSubRow(subscriptionId, orgId);
     // loadSubRow reads under the row lock, so this status is current — a

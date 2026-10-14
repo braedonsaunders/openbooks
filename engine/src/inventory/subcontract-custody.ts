@@ -1,3 +1,4 @@
+import { lockActorIdentity } from "../organization/actor-permissions.ts";
 import { sql } from "drizzle-orm";
 import type { SqlExecutor } from "../platform/db.ts";
 import { isUuid } from "../platform/uuid.ts";
@@ -71,7 +72,7 @@ export async function validateSubcontractLocationConfiguration(
   const parent=parentId?(await tx.execute<{kind:string;vendorId:string|null}>(sql`select kind,custodian_party_id as "vendorId"
     from stock_locations where org_id=${orgId} and id=${String(parentId)} for share`)).rows[0]:undefined;
   if (kind!=="subcontract" && previous?.kind!=="subcontract" && custodian==null && parent?.kind!=="subcontract") return;
-  const actor=(await tx.execute(sql`select id from users where id=${actorId} and is_active and (org_id=${orgId} or is_super_admin) for share`)).rows[0];
+  const actor=await lockActorIdentity(tx, orgId, actorId);
   if (!actor) throw new InventoryNotFoundError("not_found");
   for (const permission of ["admin.setup.manage","manufacturing.manage"]) {
     const scope=await lockActorCommandAuthority(tx,orgId,actorId,null,permission);

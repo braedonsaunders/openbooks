@@ -1,60 +1,40 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { postEntry, type PostEntryInput } from "./post-entry.ts";
+import { postEntry, postingRequestHash, type PostEntryInput } from "./post-entry.ts";
 import type { SqlExecutor } from "../platform/db.ts";
 
+const id = (number: number) => `00000000-0000-4000-8000-${String(number).padStart(12, "0")}`;
 const original: PostEntryInput = {
-  orgId: "org", bookId: "book", subsidiaryId: "entity", entryNumber: "ORIGINAL",
-  postingDate: "2026-07-01", periodId: "period", origin: "manual", currency: "CAD", idempotencyKey: "same-operation",
-  lines: [{ accountId: "bank", amount: "10", partyId: "customer" }, { accountId: "income", amount: "-10" }],
+  orgId: id(1), bookId: id(2), subsidiaryId: id(3), entryNumber: "ORIGINAL",
+  postingDate: "2026-07-01", periodId: id(4), origin: "manual", currency: "CAD", idempotencyKey: "same-operation",
+  lines: [{ accountId: id(5), currency: "CAD", amount: "10", partyId: id(7) }, { accountId: id(6), currency: "CAD", amount: "-10" }],
 };
 
-function legacyExecutor(requestBasis?: { amountBasis: "functional" | "book"; accountBasis: "source" | "book" }) {
+test("request identity normalizes decimals and excludes numbers and attribution", () => {
+  assert.equal(postingRequestHash(original, original.lines), postingRequestHash({ ...original, entryNumber: "RETRY", actorId: id(8) },
+    [{ ...original.lines[0]!, amount: "10.0000" }, { ...original.lines[1]!, amount: "-10.00" }]));
+});
+
+test("request identity retains every financial header and line distinction", () => {
+  const hash = postingRequestHash(original, original.lines);
+  for (const patch of [{ bookId: id(8) }, { subsidiaryId: id(9) }, { periodId: id(10) }, { postingDate: "2026-07-02" }, { origin: "inventory" }, { sourceDocumentId: id(11) }]) {
+    assert.notEqual(postingRequestHash({ ...original, ...patch }, original.lines), hash);
+  }
+  for (const patch of [{ amount: "20" }, { accountId: id(12) }, { currency: "USD" }, { txnAmount: "20" }, { fxRate: "2" }, { departmentId: id(13) }, { partyId: id(14) }, { quantity: "1" }, { isOpenItem: true }, { custom: { obligation: "other" } }, { extraDims: { fund: "restricted" } }]) {
+    assert.notEqual(postingRequestHash(original, [{ ...original.lines[0]!, ...patch }, original.lines[1]!]), hash);
+  }
+});
+
+test("reserved posting evidence and malformed UUIDs refuse before database work", async () => {
   let calls = 0;
-  const executor = { async execute() {
-    calls += 1;
-    return { rows: original.lines.map((line, index) => ({
-      entry_id: "existing-entry", id: `line-${index + 1}`, line_number: index + 1, request_hash: null, header: original,
-      request_basis: requestBasis,
-      line: { ...line, subsidiaryId: original.subsidiaryId, currency: "CAD", txnAmount: line.amount, fxRate: "1.0000000000", lineNumber: index + 1 },
-    })) };
-  } } as unknown as SqlExecutor;
-  return { executor, calls: () => calls };
-}
-
-test("legacy keyed replay compares stored financial content without changing history", async () => {
-  const { executor, calls } = legacyExecutor();
-  const result = await postEntry(executor, { ...original, entryNumber: "NEW-NUMBER", actorId: "new-actor", lines: [{ ...original.lines[0]!, amount: "10.0000" }, { ...original.lines[1]!, amount: "-10.00" }] });
-  assert.equal(result.entryId, "existing-entry");
-  assert.equal(result.lines.length, 2);
-  assert.equal(calls(), 1, "identical replay must only read the existing entry");
-});
-
-test("legacy keyed replay refuses changed book, entity, period, date, origin and source", async () => {
-  for (const patch of [{ bookId: "other-book" }, { subsidiaryId: "other-entity" }, { periodId: "other-period" }, { postingDate: "2026-07-02" }, { origin: "inventory" }, { sourceDocumentId: "other-source" }]) {
-    const { executor } = legacyExecutor();
-    await assert.rejects(() => postEntry(executor, { ...original, ...patch }), /same-operation.*existing-entry.*different posting content.*review that journal entry/);
+  const executor = { execute: async () => { calls++; throw new Error("unexpected SQL"); } } as unknown as SqlExecutor;
+  for (const custom of [{ postingRequestHash: "spoofed" }, { postingRequestBasis: "spoofed" }]) {
+    await assert.rejects(() => postEntry(executor, { ...original, custom }), /reserved posting evidence/);
   }
-});
-
-test("legacy keyed replay refuses changed amounts, accounts, currency, dimensions and open-item evidence", async () => {
-  for (const patch of [{ amount: "20" }, { accountId: "other-bank" }, { currency: "USD" }, { txnAmount: "20" }, { fxRate: "2" }, { departmentId: "other-department" }, { partyId: "other-customer" }, { quantity: "1" }, { isOpenItem: true }, { custom: { obligation: "other" } }, { extraDims: { fund: "restricted" } }]) {
-    const { executor } = legacyExecutor();
-    await assert.rejects(() => postEntry(executor, { ...original, lines: [{ ...original.lines[0]!, ...patch }, original.lines[1]!] }), /different posting content.*correct this request/);
-  }
-});
-
-test("posting evidence cannot be supplied through caller custom metadata", async () => {
-  const { executor } = legacyExecutor();
-  await assert.rejects(() => postEntry(executor, { ...original, custom: { postingRequestHash: "spoofed" } }), /reserved posting evidence/);
-  await assert.rejects(() => postEntry(executor, { ...original, custom: { postingRequestBasis: "spoofed" } }), /reserved posting evidence/);
-});
-
-test("keyed replay refuses a different amount or account measurement basis", async () => {
-  for (const patch of [{ amountBasis: "book" as const }, { accountBasis: "book" as const }]) {
-    const { executor } = legacyExecutor({ amountBasis: "functional", accountBasis: "source" });
-    await assert.rejects(() => postEntry(executor, { ...original, ...patch }), /different posting content/);
-  }
-  const { executor } = legacyExecutor({ amountBasis: "functional", accountBasis: "source" });
-  assert.equal((await postEntry(executor, { ...original, amountBasis: "functional", accountBasis: "source" })).entryId, "existing-entry");
+  for (const input of [
+    { ...original, bookId: "Primary" }, { ...original, subsidiaryId: "Company" }, { ...original, periodId: "2026-07" },
+    { ...original, lines: [{ ...original.lines[0]!, accountId: "1000" }, original.lines[1]!] },
+    { ...original, lines: [{ ...original.lines[0]!, subsidiaryId: "Company" }, original.lines[1]!] },
+  ]) await assert.rejects(() => postEntry(executor, input), /must be a UUID/);
+  assert.equal(calls, 0);
 });

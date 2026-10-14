@@ -16,7 +16,7 @@ import { db, withBypass, withOrgContext, withOrgTransaction } from "../platform/
 import { toUnits } from "../money/money.ts";
 import { submitAndReleaseIfUngated } from "../flows/submit.ts";
 import { postDocument } from "../ledger/posting-document.ts";
-import { runScript } from "./scripting.ts";
+import { beforePostCustomControlsChanged, beforePostCustomMutationError, runScript } from "./scripting.ts";
 import {
   createScratchOrg,
   createScratchUser,
@@ -887,4 +887,30 @@ test("a refused attempt keeps its error evidence and a fixed retry posts once wi
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId));
   }
+});
+
+
+test("script top-level APIs are installed before source, and source cannot disable context freezing", async () => {
+  const context = { trigger: "custom_gl_lines", document: { kind: "journal", memo: "original" }, org: { id: "org", name: "Example", baseCurrency: "CAD" } };
+  const read = await runScript(`const currency = ob.runtime.org.baseCurrency;
+    function main(ctx) { return { currency, memo: ctx.document.memo }; }`, context, 2000, { strict: true });
+  assert.equal(read.status, "ok");
+  assert.deepEqual(read.returned, { currency: "CAD", memo: "original" });
+  const mutation = await runScript(`Object.freeze = value => value; Object.values = () => [];
+    function main(ctx) { ctx.document.memo = "changed"; return ctx.document.memo; }`, context, 2000, { strict: true });
+  assert.equal(mutation.status, "error");
+  assert.match(mutation.abortReason ?? "", /read[- ]only|cannot assign/i);
+  assert.equal(context.document.memo, "original");
+});
+
+
+test("posting controls cannot be replaced or added through before-post automation", () => {
+  for (const key of ["closeout", "storeCreditProgramId", "marketplace", "marketplaceClearingAccountId", "marketplaceTax"]) {
+    assert.match(beforePostCustomMutationError({ [key]: {} })!, /protected posting/);
+    assert.match(beforePostCustomControlsChanged({}, { [key]: {} })!, /protected posting/);
+    assert.match(beforePostCustomControlsChanged({ [key]: {} }, {})!, /protected posting/);
+    assert.match(beforePostCustomControlsChanged({ [key]: { amount: "1" } }, { [key]: { amount: "2" } })!, /protected posting/);
+    assert.equal(beforePostCustomControlsChanged({ [key]: { a: 1, b: 2 } }, { [key]: { b: 2, a: 1 } }), null);
+  }
+  assert.equal(beforePostCustomControlsChanged({ operationalNote: "before" }, { operationalNote: "after" }), null);
 });

@@ -102,6 +102,14 @@ const consolidatedRows = [
                 select count(*)::int as n from time_entries
                  where org_id = ${org.orgId} and field_ticket_id = ${created.id}`)).rows[0]!.n
               assert.equal(remaining, 1)
+              const nextProject = randomUUID()
+              await db.execute(sql`insert into projects (id, org_id, subsidiary_id, code, name, customer_id, status, is_active, custom)
+                values (${nextProject}, ${org.orgId}, ${org.subsidiaryId}, 'OTHER-CREW', 'Other crew job', ${org.customerId}, 'active', true, '{}'::jsonb)`)
+              const beforeRehome = await loadFieldTicket(org.orgId, created.id)
+              await assert.rejects(updateTicketHeader(org.orgId, actor, created.id, { projectId: nextProject }, beforeRehome.revision, null),
+                (e) => e instanceof FieldTicketError && /submitted or approved time/.test(e.message))
+              assert.equal((await loadFieldTicket(org.orgId, created.id)).project_id, beforeRehome.project_id)
+              assert.equal((await db.execute<{ project_id: string }>(sql`select project_id from time_entries where org_id=${org.orgId} and field_ticket_id=${created.id}`)).rows[0]!.project_id, beforeRehome.project_id)
             } finally {
               await dropScratchOrg(org.orgId)
             }

@@ -18,7 +18,7 @@ import { releaseChecklistStepApproval } from "../hrm/processes.ts";
 import { BENEFIT_ENROLLMENT_SUBJECT_KIND } from "@openbooks/schema/src/hrm-benefits.ts";
 import { createScriptJournal } from "../ledger/journal-writes.ts";
 import { registerScriptJournalWriter } from "../scripting/journal-writer.ts";
-import { registerFlowApprovalReleaseHandler } from "../flows/approval-release-hook.ts";
+import { registerFlowApprovalReleaseHandler, registerFlowSubmissionResumeHandler } from "../flows/approval-release-hook.ts";
 import { registerFlowDocumentEffects } from "../flows/document-effects-hook.ts";
 import { postPaymentWithApplications } from "../payments/payment-posting.ts";
 import { postDocument } from "../ledger/posting-document.ts";
@@ -32,9 +32,12 @@ import { FUND_RELEASE_SUBJECT_KIND } from "../flows/fund-releases-adapter.ts";
 import { CLOSE_RUN_SUBJECT_KIND } from "../flows/close-runs-adapter.ts";
 import { HRM_COMP_CYCLE_SUBJECT_KIND } from "@openbooks/schema/src/hrm-compensation.ts";
 import { COMPENSATION_VERSION_SUBJECT_KIND, COMPENSATION_ASSIGNMENT_SUBJECT_KIND } from "@openbooks/schema/src/payroll-compensation.ts";
-import { releaseCompensationPackageFlowApproval } from "../payroll/compensation-package-flow-release.ts";
+import { releaseCompensationPackageFlowApproval, resumeCompensationPackageSubmission } from "../payroll/compensation-package-flow-release.ts";
 import { BENEFIT_AWARD_SUBJECT_KIND } from "@openbooks/schema/src/benefits-programs.ts";
+import { completeBenefitAwardSubmission } from "../hrm/benefits/awards.ts";
+import { completeBenefitEnrollmentSubmission } from "../hrm/benefits/enrollments.ts";
 import { HRM_CHANGE_REQUEST_SUBJECT_KIND } from "@openbooks/schema/src/hrm-change-requests.ts";
+import { completeHrmChangeRequestSubmission } from "../hrm/change-requests-lifecycle.ts";
 import { HRM_LEAVE_REQUEST_SUBJECT_KIND } from "@openbooks/schema/src/hrm-leave.ts";
 import { RESOURCING_REQUEST_SUBJECT_KIND } from "@openbooks/schema/src/resourcing.ts";
 import { WORK_ORDER_SUBJECT_KIND } from "../flows/manufacturing-adapter.ts";
@@ -155,6 +158,19 @@ export function installEngineSeams(): void {
   registerFlowApprovalReleaseHandler(COMPENSATION_VERSION_SUBJECT_KIND, releaseCompensationPackageFlowApproval);
   registerFlowApprovalReleaseHandler(COMPENSATION_ASSIGNMENT_SUBJECT_KIND, releaseCompensationPackageFlowApproval);
   registerFlowApprovalReleaseHandler(HRM_CHANGE_REQUEST_SUBJECT_KIND, releaseHrmChangeRequestApproval);
+  registerFlowSubmissionResumeHandler(BENEFIT_AWARD_SUBJECT_KIND, (args) => {
+    if (!args.ctx.userId) throw new Error('Benefit submission completion requires its original acting user.');
+    return completeBenefitAwardSubmission({ orgId: args.ctx.orgId, actorId: args.ctx.userId,
+      awardId: args.subjectId, runId: args.runId, mode: args.mode });
+  });
+  registerFlowSubmissionResumeHandler(BENEFIT_ENROLLMENT_SUBJECT_KIND, (args) => {
+    if (!args.ctx.userId) throw new Error('Benefit submission completion requires its original acting user.');
+    return completeBenefitEnrollmentSubmission({ orgId: args.ctx.orgId, actorId: args.ctx.userId,
+      enrollmentId: args.subjectId, runId: args.runId, mode: args.mode });
+  });
+  registerFlowSubmissionResumeHandler(HRM_CHANGE_REQUEST_SUBJECT_KIND, completeHrmChangeRequestSubmission);
+  registerFlowSubmissionResumeHandler(COMPENSATION_VERSION_SUBJECT_KIND, resumeCompensationPackageSubmission);
+  registerFlowSubmissionResumeHandler(COMPENSATION_ASSIGNMENT_SUBJECT_KIND, resumeCompensationPackageSubmission);
   registerFlowApprovalReleaseHandler(HRM_LEAVE_REQUEST_SUBJECT_KIND, releaseLeaveRequestApproval);
   registerFlowApprovalReleaseHandler(RESOURCING_REQUEST_SUBJECT_KIND, releaseResourcingRequestApproval);
   registerFlowApprovalReleaseHandler(WORK_ORDER_SUBJECT_KIND, releaseWorkOrderApproval);

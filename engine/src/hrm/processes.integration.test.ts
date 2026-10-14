@@ -421,3 +421,21 @@ processTest("deleting a template that opened processes is refused with the remed
     assert.equal(cancelled.status, "cancelled");
     assert.equal(cancelled.cancel_reason, "hire withdrawn");
   });
+
+processTest("AP capture attachment permission cannot be reopened by direct file or folder grants", async (h) => {
+  await seedTemplate(h.org.orgId,h.managerId,"onboarding",{steps:[{position:0,title:"Attach evidence",ownerKind:"hr",evidenceKind:"attachment"}]});
+  const opened=await openChecklist(h);const step=(await stepRows(opened.id))[0]!.id;
+  const folder=await mkFolder(h.org.orgId,"AP capture",null,false);
+  await db.execute(sql`update folders set system_kind='ap_capture' where id=${folder} and org_id=${h.org.orgId}`);
+  const child=await mkFolder(h.org.orgId,"Intake child",null,false);
+  await db.execute(sql`update folders set parent_folder_id=${folder} where id=${child} and org_id=${h.org.orgId}`);
+  const file=await mkFile(h.org.orgId,child,"intake.pdf");
+  for(const [type,id] of [["file",file],["folder",folder]]) await db.execute(sql`
+    insert into resource_grants(org_id,resource_type,resource_id,principal_type,principal_id,access,created_by)
+    values(${h.org.orgId},${type},${id},'user',${h.managerId},'viewer',${h.managerId})`);
+  await assert.rejects(completeProcessStep({orgId:h.org.orgId,actorId:h.managerId,stepId:step,attachmentId:file}),checklistRefusal("UNREADABLE_ATTACHMENT"));
+  assert.equal((await checklistRow<{attachment_id:string|null}>(sql`select attachment_id from hrm_process_steps where id=${step}`))!.attachment_id,null);
+  await grant(h.org.orgId,h.managerId,'ap.read');
+  await completeProcessStep({orgId:h.org.orgId,actorId:h.managerId,stepId:step,attachmentId:file});
+  assert.equal((await checklistRow<{attachment_id:string}>(sql`select attachment_id from hrm_process_steps where id=${step}`))!.attachment_id,file);
+});

@@ -2,6 +2,7 @@ import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
 import { assertEntityPostingDate } from "../organization/accounting-preferences.ts";
 import { lockLedgerSetupFence } from "../organization/ledger-setup-fence.ts";
 import { createHash } from "node:crypto";
+import { isUuid } from "../platform/uuid.ts";
 import { sql } from "drizzle-orm";
 import { canonicalJson } from "../platform/canonical-json.ts";
 import { normalizeDecimal, normalizeMoney } from "../money/money.ts";
@@ -152,7 +153,7 @@ type PreparedLine = PostEntryLineInput & {
 type PostingHeader = Pick<PostEntryInput, "orgId" | "bookId" | "subsidiaryId" | "postingDate" | "periodId" | "memo" | "origin" | "reversesEntryId" | "sourceDocumentId">;
 
 /** Financial identity excludes allocated numbers, actors and replay context. */
-function postingRequestHash(header: PostingHeader, lines: readonly PostEntryLineInput[]): string {
+export function postingRequestHash(header: PostingHeader, lines: readonly PostEntryLineInput[]): string {
   const identity = {
     version: 1,
     orgId: header.orgId, bookId: header.bookId, subsidiaryId: header.subsidiaryId,
@@ -200,6 +201,9 @@ export async function postEntry(
   if (!input.postingDate) fail("postEntry requires a posting date");
   if (!input.periodId) fail("postEntry requires an accounting period id");
   if (!input.origin) fail("postEntry requires a journal origin");
+  for (const [field, value] of [["organization", input.orgId], ["book", input.bookId], ["subsidiary", input.subsidiaryId], ["period", input.periodId]] as const) {
+    if (!isUuid(value)) fail(`journal entry ${input.entryNumber}: ${field} must be a UUID, not a code or name`);
+  }
   if (!input.lines || input.lines.length === 0)
     fail(`journal entry ${input.entryNumber} carries no lines — a posting needs at least one balanced line`);
 
@@ -208,6 +212,8 @@ export async function postEntry(
     const position = index + 1;
     if (!line.accountId)
       fail(`journal entry ${input.entryNumber} line ${position}: an account id is required`);
+    if (!isUuid(line.accountId)) fail(`journal entry ${input.entryNumber} line ${position}: account must be a UUID, not an account code`);
+    if (line.subsidiaryId != null && !isUuid(line.subsidiaryId)) fail(`journal entry ${input.entryNumber} line ${position}: subsidiary must be a UUID, not a code or name`);
     if (typeof line.amount !== "string" || !AMOUNT_RE.test(line.amount))
       fail(
         `journal entry ${input.entryNumber} line ${position}: amount must be a decimal string with at most 4 places`,
@@ -256,10 +262,9 @@ async function writeEntry(
   // and every other guard here reads shared state — so unrelated posts stay
   // parallel instead of serializing onto one row (which deadlocked
   // concurrent multi-post flows with 40P01).
-  // Capture the caller's financial request before providers append balancing legs.
-  // New keyed entries retain this identity; legacy entries are compared against
-  // their persisted header and lines without rewriting immutable history.
-  const requestHash = input.idempotencyKey ? postingRequestHash(input, lines) : null;
+  // One request identity uses the native resolved financial period and the
+  // caller lines before providers append or translate ledger legs.
+  let requestHash: string | null = null;
   const requestBasis = {
     amountBasis: input.amountBasis ?? (input.reversesEntryId ? "book" : "functional"),
     accountBasis: input.accountBasis ?? (input.reversesEntryId ? "book" : "source"),
@@ -273,24 +278,13 @@ async function writeEntry(
   const readKeyedEntry = async (idempotencyKey: string): Promise<PostEntryResult | null> => {
     const rows = (await executor.execute<{
       entry_id: string; id: string | null; line_number: number | null;
-      request_hash: string | null; header: PostingHeader; line: PostEntryLineInput | null;
+      request_hash: string | null; status: string;
       request_basis?: { amountBasis: BookAmountBasis; accountBasis: BookAccountBasis } | null;
     }>(sql`
       select je.id as entry_id, jl.id as id, jl.line_number as line_number,
              je.custom->>'postingRequestHash' as request_hash,
              je.custom->'postingRequestBasis' as request_basis,
-             jsonb_build_object('orgId', je.org_id, 'bookId', je.book_id, 'subsidiaryId', je.subsidiary_id,
-               'postingDate', je.posting_date::text, 'periodId', je.period_id, 'memo', je.memo,
-               'origin', je.origin, 'reversesEntryId', je.reverses_entry_id, 'sourceDocumentId', je.source_document_id) as header,
-             case when jl.id is null then null else jsonb_build_object(
-               'lineNumber', jl.line_number, 'accountId', jl.account_id, 'subsidiaryId', jl.subsidiary_id,
-               'amount', jl.amount::text, 'currency', jl.currency, 'txnAmount', jl.txn_amount::text,
-               'fxRate', jl.fx_rate::text, 'memo', jl.memo, 'partyId', jl.party_id,
-               'departmentId', jl.department_id, 'projectId', jl.project_id, 'locationId', jl.location_id,
-               'classId', jl.class_id, 'equipmentUnitId', jl.equipment_unit_id, 'paymentCardId', jl.payment_card_id,
-               'taxCodeId', jl.tax_code_id, 'extraDims', jl.extra_dims, 'quantity', jl.quantity::text,
-               'unit', jl.unit, 'dueDate', jl.due_date::text, 'isOpenItem', jl.is_open_item,
-               'custom', jl.custom, 'eliminate', jl.eliminate, 'isCurrencyAdjustment', jl.is_currency_adjustment, 'contributorKind', jl.contributor_kind, 'contributorRef', jl.contributor_ref) end as line
+             je.status
         from journal_entries je
         left join journal_lines jl
           on jl.org_id = je.org_id and jl.entry_id = je.id
@@ -305,20 +299,19 @@ async function writeEntry(
       fail(
         `journal entry ${input.entryNumber}: idempotency key ${idempotencyKey} resolves to entry ${entryId}, which has no lines — a keyed posting commits its header and lines together, so this entry is damaged ledger data, not a replay; retrying resolves to the same entry, so have entry ${entryId} investigated before posting again`,
       );
-    const storedHash = rows[0]!.request_hash ?? postingRequestHash(rows[0]!.header, rows.flatMap((row) => row.line ? [row.line] : []));
+    if (rows[0]!.status !== "posted") {
+      fail(`journal entry ${input.entryNumber}: keyed entry ${entryId} is not posted — resolve its lifecycle before retrying`);
+    }
+    const storedHash = rows[0]!.request_hash;
+    if (!storedHash) {
+      fail(`journal entry ${input.entryNumber}: keyed entry ${entryId} has no protected request identity — reconcile its posting evidence through the governed ledger before retrying`);
+    }
     const storedBasis = rows[0]!.request_basis;
-    if (storedHash !== requestHash || (storedBasis && (storedBasis.amountBasis !== requestBasis.amountBasis || storedBasis.accountBasis !== requestBasis.accountBasis))) {
+    if (storedHash !== requestHash || !storedBasis || storedBasis.amountBasis !== requestBasis.amountBasis || storedBasis.accountBasis !== requestBasis.accountBasis) {
       fail(`journal entry ${input.entryNumber}: idempotency key ${idempotencyKey} already identifies entry ${entryId} with different posting content — review that journal entry and correct this request; use a new key only for a separate intended posting`);
     }
     return { entryId, lines: replayed };
   };
-  if (input.idempotencyKey) {
-    const prior = await readKeyedEntry(input.idempotencyKey);
-    if (prior) {
-      return prior;
-    }
-  }
-
   await lockLedgerSetupFence(executor,orgId,"shared");
 
   // Book guard: the book belongs to this org and is an active posting book.
@@ -377,15 +370,33 @@ async function writeEntry(
     input={...input,periodId:entityPeriod.id,auditChanges:{...input.auditChanges,entityCalendarResolution:{requestedPeriodId:input.periodId,periodId:entityPeriod.id}}};
   }
 
+  const resolvedWindow = (await executor.execute<{ window_start: string; window_end: string }>(sql`
+    select window_start::text as window_start, window_end::text as window_end
+      from accounting_period_posting_window(${orgId}, ${input.periodId})`)).rows[0];
+  if (!resolvedWindow || input.postingDate < resolvedWindow.window_start || input.postingDate > resolvedWindow.window_end) {
+    fail(`journal entry ${input.entryNumber}: posting date must fall within its accounting period — choose the period covering ${input.postingDate}`);
+  }
+
+  // Hash the resolved financial header before any provider transforms lines.
+  if (input.idempotencyKey) {
+    requestHash = postingRequestHash(input, lines);
+    const prior = await readKeyedEntry(input.idempotencyKey);
+    if (prior) return prior;
+  }
+
   if (input.reversesEntryId) {
     const target = (await executor.execute<{ id: string; status: string; book_id: string }>(sql`
       select id, status, book_id from journal_entries
        where org_id = ${orgId} and id = ${input.reversesEntryId}
-       limit 1`)).rows[0];
+       for update`)).rows[0];
     if (!target)
       fail(`journal entry ${input.entryNumber}: reversed entry ${input.reversesEntryId} does not exist in this organization`);
-    if (target!.status === "draft")
-      fail(`journal entry ${input.entryNumber}: a draft entry cannot be reversed`);
+    if (target!.status !== "posted")
+      fail(`journal entry ${input.entryNumber}: only a posted entry can be reversed; preserve existing reversal history`);
+    const existingReversal = (await executor.execute<{ id: string }>(sql`
+      select id from journal_entries where org_id=${orgId} and reverses_entry_id=${input.reversesEntryId}
+        and status in ('posted','reversed') limit 1`)).rows[0];
+    if (existingReversal) fail(`journal entry ${input.entryNumber}: this target already has a retained reversal; correct through the existing reversal chain instead of reversing it again`);
     if (target!.book_id !== input.bookId)
       fail(`journal entry ${input.entryNumber}: a reversal must remain in the original accounting book`);
   }
@@ -557,7 +568,7 @@ async function writeEntry(
   // the replaying sync run, and a controller-recorded authorization row for
   // that run's connector must cover the posting period.
   let replayEvidence: { authorizationId: string; connectionId: string } | null = null;
-  if (!replayAuthorized && !input.reversesEntryId) for (const subsidiaryId of subsidiaryIds) await assertEntityPostingDate(executor,orgId,subsidiaryId,input.postingDate);
+  if (!replayAuthorized) for (const subsidiaryId of subsidiaryIds) await assertEntityPostingDate(executor,orgId,subsidiaryId,input.postingDate);
   if (!replayAuthorized) {
     try {
       await assertPeriodModulesOpen(executor, {

@@ -6,7 +6,7 @@ import { assertOwnedLocation } from "./stock-eligibility.ts";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../platform/db.ts";
-import { add, cmp, fromUnits, isZero, neg, toUnits } from "../money/money.ts";
+import { add, apportion, cmp, fromUnits, isZero, neg, toUnits } from "../money/money.ts";
 import { extendCost, receiveStandard, unitCostPerQuantity } from "./costing.ts";
 import { loadSubsidiaryContext, validateSubsidiaryRestrictions } from "../organization/subsidiaries.ts";
 import { InventoryCostBasisError, InventoryError, type Runner } from "./contracts.ts";
@@ -320,9 +320,20 @@ export async function receiveInventory(
       receiptUnits -= take;
     }
     const excessQuantity = fromUnits(receiptUnits);
-    // The excess layer carries the exact residual: with an authoritative
-    // total that is the total less what the settlements already priced, so
-    // no rounding penny lands in COGS or goes missing from the layer.
+    // Allocate authoritative value by exact quantities, not a rounded unit
+    // price. Zero remaining stock receives no value, and settlements cannot
+    // consume more value than the receipt contains.
+    if (authoritativeTotal !== null && profile.costingMethod !== "standard") {
+      const allocated = apportion(toUnits(authoritativeTotal), [
+        ...settlements.map((settlement) => toUnits(settlement.quantity)), receiptUnits,
+      ]);
+      settledReceiptValueUnits = 0n;
+      settlements.forEach((settlement, index) => {
+        const value = allocated[index]!;
+        settlement.correction = fromUnits(value - toUnits(extendCost(settlement.quantity, settlement.provisionalUnitCost)));
+        settledReceiptValueUnits += value;
+      });
+    }
     const excessLayerValue =
       authoritativeTotal !== null && profile.costingMethod !== "standard"
         ? fromUnits(toUnits(authoritativeTotal) - settledReceiptValueUnits)

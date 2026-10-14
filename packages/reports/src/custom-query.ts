@@ -588,7 +588,7 @@ function implicitWhere(entity: ReportEntity, orgId: string, params: SqlParams, o
   const book = compileBookScope(entity, opts.allowedBookIds, (value) => params.add(value))
   if (book) parts.push(book)
   if (entity.baseFilter) {
-    const base = compileRuleGroup(entity, entity.baseFilter, params)
+    const base = compileRuleGroup(entity, entity.baseFilter, params, opts)
     if (base) parts.push(base)
   }
   return parts
@@ -611,7 +611,7 @@ function compileRows(
   const whereParts = implicitWhere(entity, orgId, params, opts)
   const from = bindReportFromAsOf(entity.from, opts.asOf, (value) => params.add(value))
   const countFrom = from.replace(/\r?\n/g, ' ')
-  const filters = compileCustomFilters(entity, q, params)
+  const filters = compileCustomFilters(entity, q, params, opts)
   if (filters) whereParts.push(`(${filters})`)
 
   // The section-grouping column must be selected so run.ts can bucket rows.
@@ -855,10 +855,10 @@ function compileSummarize(
   const params = new SqlParams()
   const whereParts = implicitWhere(entity, orgId, params, opts)
   const from = bindReportFromAsOf(entity.from, opts.asOf, (value) => params.add(value))
-  const filters = compileCustomFilters(entity, q, params)
+  const filters = compileCustomFilters(entity, q, params, opts)
   if (filters) whereParts.push(`(${filters})`)
   const measureFilters = measures.map((measure) =>
-    measure.filter ? compileRuleGroup(entity, measure.filter, params) : null,
+    measure.filter ? compileRuleGroup(entity, measure.filter, params, opts) : null,
   )
   const hasSemiAdditive = measures.some((measure) => measure.fn === 'opening' || measure.fn === 'closing')
   const dimSelect = breakouts.map((b, i) => {

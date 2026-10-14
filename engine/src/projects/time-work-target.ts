@@ -1,3 +1,4 @@
+import { lockActorIdentity } from "../organization/actor-permissions.ts";
 import { sql } from 'drizzle-orm'
 import type { SqlExecutor } from '../platform/db.ts'
 import { lockActorCommandAuthority } from '../organization/actor-command-authority.ts'
@@ -18,7 +19,7 @@ export async function lockTimeWorkOrderTarget(tx: SqlExecutor, orgId: string, ac
   if(!isUuid(input.workOrderId)||(input.operationId!=null&&!isUuid(input.operationId))) throw new ScopeNotFoundError()
   await acquireOrgFeatureGateLock(tx, orgId)
   if (!await lockAndCheckOrgFeature(tx, orgId, 'manufacturing')) throw new TimeWorkTargetError('Production time is unavailable while Manufacturing is turned off.', 404)
-  const actor = (await tx.execute(sql`select id from users where id=${actorId} and is_active and (org_id=${orgId} or is_super_admin) for share`)).rows[0]
+  const actor = await lockActorIdentity(tx, orgId, actorId)
   if (!actor) throw new ScopeNotFoundError()
   const order = (await tx.execute<{ subsidiaryId: string | null; status: string; issueLocationId: string | null; receiptLocationId: string | null }>(sql`
     select subsidiary_id as "subsidiaryId",status,issue_location_id as "issueLocationId",receipt_location_id as "receiptLocationId"
@@ -95,7 +96,7 @@ export async function lockSharedTimeAuthority(tx: SqlExecutor, orgId: string, ac
   const productionOn = await lockAndCheckOrgFeature(tx, orgId, 'manufacturing')
   if (input.workFamily === 'production' ? !productionOn : input.workFamily === 'project' ? !projectOn : !projectOn && !productionOn)
     throw new TimeWorkTargetError('This time workspace is turned off. Enable its feature in Company Settings → Features.', 404)
-  const actor = (await tx.execute(sql`select id from users where id=${actorId} and is_active and (org_id=${orgId} or is_super_admin) for share`)).rows[0]
+  const actor = await lockActorIdentity(tx, orgId, actorId)
   if (!actor) throw new ScopeNotFoundError()
   // Saves and lifecycle commands serialize discovery before locking targets. A peer cannot add an unseen target between the authority read and the week write.
   if(input.permission!=='time.read') await tx.execute(sql`select pg_advisory_xact_lock(hashtext('shared.employee.time'),hashtext(${orgId+input.employeeId}))`)

@@ -43,11 +43,20 @@ export interface UserSqlOptions {
  * held to payroll.read exactly like the payroll pages and report entities.
  * This is a naming rule over the base tables PostgreSQL reports the query
  * reads (views expanded), so a new payroll table is covered when it lands and
- * no alias, CTE or join can hide one: pay_* (except construction pay
- * applications), payroll_* and employee_pay*.
+ * no alias, CTE or join can hide one. Shared raw ledger and labor relations
+ * can disclose individual payroll even without a payroll-prefixed join, so
+ * they require the same permission. Readers without it use governed financial
+ * reports, whose payroll totals are masked before filtering and aggregation.
  */
+const PAYROLL_SHARED_RELATIONS = new Set([
+  "journal_entries", "journal_lines", "documents", "document_lines",
+  "time_entries", "labor_cost_rates", "field_ticket_labor_lines",
+  "hrm_benefit_program_revisions", "hrm_benefit_awards", "hrm_benefit_award_lines",
+]);
+
 export function isPayrollRelation(table: string): boolean {
-  return /^(?:payroll_|employee_pay|pay_(?!application))/.test(table);
+  return /^(?:payroll_|employee_pay|pay_(?!application))/.test(table)
+    || PAYROLL_SHARED_RELATIONS.has(table);
 }
 
 /** Every base relation a plan reads, from EXPLAIN (FORMAT JSON). */
@@ -137,7 +146,13 @@ function atUnicodeQuoted(input: string, i: number): boolean {
 function parseQuoted(input: string, start: number, quote: "'" | '"'): { raw: string; next: number } {
   let i = start + 1;
   let raw = "";
+  const escapedString = quote === "'" && /[eE]/.test(input[start - 1] ?? "") && !isIdentChar(input[start - 2]);
   while (i < input.length) {
+    if (escapedString && input[i] === "\\") {
+      raw += input.slice(i, i + 2);
+      i += 2;
+      continue;
+    }
     if (input[i] === quote && input[i + 1] === quote) {
       raw += quote;
       i += 2;
@@ -266,21 +281,63 @@ function stripSqlNoise(input: string): string {
   return out;
 }
 
+/** Remove comment tokens and statement delimiters without changing quoted
+ * values or identifiers. A token after the terminator refuses another statement. */
+function executableSql(input: string): string {
+  let out = "";
+  let i = 0;
+  let terminated = false;
+  while (i < input.length) {
+    if (input.startsWith("--", i)) {
+      const end = input.indexOf("\n", i + 2);
+      i = end === -1 ? input.length : end;
+      out += "\n";
+    } else if (input.startsWith("/*", i)) {
+      let depth = 1;
+      i += 2;
+      while (i < input.length && depth) {
+        if (input.startsWith("/*", i)) { depth++; i += 2; }
+        else if (input.startsWith("*/", i)) { depth--; i += 2; }
+        else i++;
+      }
+      if (depth) throw new UserSqlRefusal(UNCLOSED_SQL, 400);
+      out += " ";
+    } else if (terminated && !/\s/.test(input[i]!)) {
+      throw new UserSqlRefusal("one statement per query", 400);
+    } else if (input[i] === "$" && input.slice(i).match(DOLLAR_TAG)) {
+      const delimiter = input.slice(i).match(DOLLAR_TAG)![0];
+      const end = input.indexOf(delimiter, i + delimiter.length);
+      if (end === -1) throw new UserSqlRefusal(UNCLOSED_SQL, 400);
+      out += input.slice(i, end + delimiter.length);
+      i = end + delimiter.length;
+    } else if (input[i] === "'" || input[i] === '\"') {
+      const next = parseQuoted(input, i, input[i] as "'" | '\"').next;
+      out += input.slice(i, next);
+      i = next;
+    } else {
+      if (input[i] === ";") terminated = true;
+      else out += input[i];
+      i++;
+    }
+  }
+  return out.trim();
+}
+
 export function validateUserSql(sqlText: string): string {
   // Pure pre-validation: every message is a fixed literal (the one
   // interpolation echoes back a keyword from the fixed forbidden-word list,
   // never relation or column names), so the refusal is safe to show. It is
   // typed 400 at this origin: routes carry it through the shared mapping.
-  const stripped = stripSqlNoise(sqlText).trim();
+  const executable = executableSql(sqlText);
+  const stripped = stripSqlNoise(executable).trim();
   if (!stripped) throw new UserSqlRefusal("empty query", 400);
-  if (stripped.replace(/;\s*$/, "").includes(";")) throw new UserSqlRefusal("one statement per query", 400);
   if (FORBIDDEN_PREFIX.test(stripped)) throw new UserSqlRefusal("read-only: queries must be SELECT (or WITH … SELECT)", 400);
   const forbidden = FORBIDDEN_BODY.exec(stripped);
   if (forbidden) {
     throw new UserSqlRefusal(`read-only: ${forbidden[1]!.toLowerCase()}() is not allowed in user SQL`, 400);
   }
   if (!/^\s*(select|with)\b/i.test(stripped)) throw new UserSqlRefusal("queries must start with SELECT or WITH", 400);
-  return sqlText.trim().replace(/;\s*$/, "");
+  return executable;
 }
 
 function resultByteRefusal(maxBytes: number): Error {
@@ -462,7 +519,7 @@ export async function runUserSql(sqlText: string, opts: UserSqlOptions): Promise
     + "select __q, "
     + "octet_length(pg_catalog.row_to_json(__q)::pg_catalog.text)::pg_catalog.int8 as __bytes, "
     + "row_number() over () as __rn "
-    + `from (${body}) __q limit $1::pg_catalog.int4`
+    + `from (\n${body}\n) __q limit $1::pg_catalog.int4`
     + ") __numbered"
     + ") __sized";
 
@@ -486,7 +543,7 @@ export async function runUserSql(sqlText: string, opts: UserSqlOptions): Promise
       if (payroll.length > 0) {
         throw new UserSqlRefusal(
           `payroll data requires the payroll.read permission: this query reads ${payroll.join(", ")}. `
-            + "Ask an administrator for payroll.read, or query relations outside payroll.",
+            + "Use financial reports for masked totals, or ask an administrator for payroll.read to query raw payroll-bearing relations.",
         );
       }
     }
@@ -551,7 +608,7 @@ export interface SchemaTable {
  * inside a READ ONLY transaction, so it lists exactly what a user could
  * actually query — nothing they lack privileges on leaks through.
  */
-export async function listSchema(orgId: string): Promise<SchemaTable[]> {
+export async function listSchema(orgId: string, options: { payrollRead?: boolean } = {}): Promise<SchemaTable[]> {
   const client = await connectGovernedReadClient();
   try {
     await prepareQueryContext(client, orgId);
@@ -602,6 +659,7 @@ export async function listSchema(orgId: string): Promise<SchemaTable[]> {
 
     const byTable = new Map<string, SchemaTable>();
     for (const row of res.rows) {
+      if (options.payrollRead !== true && isPayrollRelation(row.table_name)) continue;
       let table = byTable.get(row.table_name);
       if (!table) {
         table = {

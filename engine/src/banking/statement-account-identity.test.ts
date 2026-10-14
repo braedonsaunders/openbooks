@@ -58,7 +58,7 @@ test("OFX without an ACCTID carries no identity", () => {
 
 test("BAI2 carries its single 03 account number", () => {
   const parsed = parseBai2(
-    ["02,ORG,1,1,260821,0000,CAD,2/", "03,987654321,CAD,015,100000/", "16,165,+150000,S,REF,,deposit/"].join("\n"),
+    ["02,ORG,1,1,260821,0000,CAD,2/", "03,987654321,CAD,015,100000/", "16,165,+150000,Z,REF,,deposit/"].join("\n"),
   );
   assert.equal(parsed.externalAccountId, "987654321");
 });

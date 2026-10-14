@@ -1,3 +1,4 @@
+import { lockActorIdentity } from "../organization/actor-permissions.ts";
 import { sql } from "drizzle-orm";
 import type { SqlExecutor } from "../platform/db.ts";
 import { lockActorCommandAuthority } from "../organization/actor-command-authority.ts";
@@ -20,11 +21,7 @@ export async function lockManufacturingExecutionAuthority(
   requestedScope: ReadonlySet<string> | null,
 ): Promise<ReadonlySet<string> | null> {
   if (!subsidiaryId || !isUuid(actorId) || !isUuid(subsidiaryId)) throw new ManufacturingNotFoundError();
-  const actor = (
-    await tx.execute(
-      sql`select id from users where id=${actorId} and is_active and (org_id=${orgId} or is_super_admin) for share`,
-    )
-  ).rows[0];
+  const actor = await lockActorIdentity(tx, orgId, actorId);
   if (!actor) throw new ManufacturingNotFoundError();
   let derived: ReadonlySet<string> | null;
   try {
@@ -62,7 +59,7 @@ export async function lockManufacturingExecutionAuthority(
 /** Draft management has no inventory posting authority; each eventual posting checks its own grant. */
 export async function lockManufacturingManageAuthority(tx: SqlExecutor, orgId: string, actorId: string, subsidiaryId: string | null, requestedScope: ReadonlySet<string> | null = null) {
   if(!isUuid(actorId)||(subsidiaryId!==null&&!isUuid(subsidiaryId))) throw new ManufacturingNotFoundError();
-  const actor = (await tx.execute(sql`select id from users where id=${actorId} and is_active and (org_id=${orgId} or is_super_admin) for share`)).rows[0];
+  const actor = await lockActorIdentity(tx, orgId, actorId);
   if (!actor) throw new ManufacturingNotFoundError();
   const derived = await lockActorCommandAuthority(tx,orgId,actorId,subsidiaryId,'manufacturing.manage');
   const scope = derived === null ? requestedScope : requestedScope === null ? derived : new Set([...derived].filter(id=>requestedScope.has(id)));
@@ -150,7 +147,7 @@ export async function lockManufacturingReadAuthority(
   permissions: readonly string[] = ["manufacturing.read"],
 ): Promise<ReadonlySet<string> | null> {
   if(!isUuid(actorId)) throw new ManufacturingNotFoundError();
-  const actor = (await tx.execute(sql`select id from users where id=${actorId} and is_active and (org_id=${orgId} or is_super_admin) for share`)).rows[0];
+  const actor = await lockActorIdentity(tx, orgId, actorId);
   if (!actor) throw new ManufacturingNotFoundError();
   let scope = requestedScope;
   for (const permission of permissions) {

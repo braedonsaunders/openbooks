@@ -1,3 +1,11 @@
+import { createHash } from "node:crypto";
+import { canonicalJson } from "../platform/canonical-json.ts";
+import { resumeFlowSubmission } from "./approval-release-hook.ts";
+import { lockFlowSubjectDecision } from "./decision-lock.ts";
+import { lockSubjectScope } from "./subject-scope.ts";
+import { lockActorCommandAuthority } from "../organization/actor-command-authority.ts";
+import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
+import { isUuid } from "../platform/uuid.ts";
 import { and, eq, sql } from "drizzle-orm";
 import {
   automationGraphSchema,
@@ -6,7 +14,7 @@ import {
   type AutomationPlan,
   type TriggerEvent,
 } from "@openbooks/forms-core";
-import { db, schema } from "../platform/db.ts";
+import { db, schema, withOrgTransaction, withTransactionSavepoint } from "../platform/db.ts";
 import type { FlowExecCtx } from "./types.ts";
 import { getFlowAdapter } from "./registry.ts";
 import { executeFlowPlan } from "./execute.ts";
@@ -232,7 +240,7 @@ export async function runRecordFlows(
             error: reason,
             finishedAt: new Date(),
             // jsonb snapshot: strip non-serializable values (Dates → ISO).
-            context: JSON.parse(JSON.stringify(subject.values)) as Record<string, unknown>,
+            context: JSON.parse(JSON.stringify({ ...subject.values, event_source: event.source ?? "api" })) as Record<string, unknown>,
             createdBy: ctx.userId ?? null,
           })
           .returning({ id: schema.flowRuns.id });
@@ -282,7 +290,7 @@ export async function runRecordFlows(
       }
       const automaticSubmission = event.kind === 'on_submit' && plan.ungatedOutcome === 'apply' && adapter.profile.supportsUngatedSubmission === true;
       if (planIsEmpty(plan) && !automaticSubmission) continue;
-      const dispatchValues = { ...subject.values, ...((adapter.profile.supportsUngatedSubmission || adapter.profile.pinsSubmissionPolicy) ? { submissionPolicy: { ungatedOutcome: graph.ungatedOutcome ?? 'require_approval', graph, flowId: flow.id } } : {}) };
+      const dispatchValues = { ...subject.values, event_source: event.source ?? "api", ...((adapter.profile.supportsUngatedSubmission || adapter.profile.pinsSubmissionPolicy) ? { submissionPolicy: { ungatedOutcome: graph.ungatedOutcome ?? 'require_approval', graph, flowId: flow.id } } : {}) };
 
       // Deterministic dispatch identity: when the caller supplies an
       // occurrenceKey (close automations use their execution id), every flow
@@ -445,11 +453,22 @@ function retryEvent(trigger: string): TriggerEvent {
  * silently completing a run that did nothing.
  */
 export async function retryFlowRun(runId: string, ctx: FlowExecCtx): Promise<RetryFlowRunResult> {
+  if (!isUuid(runId) || !isUuid(ctx.orgId) || !isUuid(ctx.userId)) throw new FlowRetryError("Retry requires the native run and its acting workflow manager.");
+  return withOrgTransaction(ctx.orgId, () => retryFlowRunLocked(runId, ctx));
+}
+
+async function retryFlowRunLocked(runId: string, ctx: FlowExecCtx): Promise<RetryFlowRunResult> {
+  // Read only the fence identity first. Decisions always take the subject
+  // fence before row locks, including when submission resumes its writer.
+  const [identity] = await db.select({ subjectKind: schema.flowRuns.subjectKind, subjectId: schema.flowRuns.subjectId })
+    .from(schema.flowRuns).where(and(eq(schema.flowRuns.id, runId), eq(schema.flowRuns.orgId, ctx.orgId)));
+  if (!identity) throw new FlowRetryError("flow run not found");
+  await lockFlowSubjectDecision(ctx.orgId, identity.subjectKind, identity.subjectId);
   const [run] = await db
     .select()
     .from(schema.flowRuns)
-    .where(and(eq(schema.flowRuns.id, runId), eq(schema.flowRuns.orgId, ctx.orgId)));
-  if (!run) throw new FlowRetryError("flow run not found");
+    .where(and(eq(schema.flowRuns.id, runId), eq(schema.flowRuns.orgId, ctx.orgId))).for("update");
+  if (!run || run.subjectKind !== identity.subjectKind || run.subjectId !== identity.subjectId) throw new FlowRetryError("The flow run identity changed; reload the record before retrying.");
   if (run.status !== "failed") throw new FlowRetryError("only a failed run can be retried");
 
   // Timestamps round-trip at millisecond precision while storage keeps
@@ -468,10 +487,17 @@ export async function retryFlowRun(runId: string, ctx: FlowExecCtx): Promise<Ret
 
   const adapter = getFlowAdapter(run.subjectKind);
   if (!adapter) throw new FlowRetryError(`no flow adapter for subject kind "${run.subjectKind}"`);
+  const liveScope = await lockActorCommandAuthority(db, ctx.orgId, ctx.userId!, null, "flows.manage");
+  const callerScope = ctx.allowedSubsidiaryIds;
+  const allowed = callerScope === undefined || callerScope === null ? liveScope
+    : liveScope === null ? callerScope : new Set([...callerScope].filter(id => liveScope.has(id)));
+  await lockSubjectScope(ctx.orgId, run.subjectKind, adapter.scope, run.subjectId, allowed);
+  if (!await lockAndCheckOrgFeature(db, ctx.orgId, "flows")) throw new FlowRetryError("Flows is disabled; enable it in Company Settings before retrying.");
+  ctx = { ...ctx, allowedSubsidiaryIds: allowed };
   const [flow] = await db
     .select()
     .from(schema.flows)
-    .where(and(eq(schema.flows.id, run.flowId), eq(schema.flows.orgId, ctx.orgId)));
+    .where(and(eq(schema.flows.id, run.flowId), eq(schema.flows.orgId, ctx.orgId))).for("share");
   if (!flow) throw new FlowRetryError("the flow for this run no longer exists");
   if (!flow.enabled) throw new FlowRetryError("the flow for this run is disabled");
   const graph = parseFlowGraph(flow.id, flow.graph);
@@ -480,19 +506,22 @@ export async function retryFlowRun(runId: string, ctx: FlowExecCtx): Promise<Ret
   if (!subject) throw new FlowRetryError("the run's subject no longer exists");
 
   const event = retryEvent(run.trigger);
-  const evalCtx = { values: { ...subject.values }, rows: subject.rows ?? {} };
+  const source = run.context?.event_source;
+  if (typeof source !== "string" || source.length === 0) throw new FlowRetryError("The run has no retained event source; re-fire it through the record action rather than inferring its original authority.");
+  const evalCtx = { values: { ...subject.values, event_source: source }, rows: subject.rows ?? {} };
   let plan = planAutomation(graph, event, evalCtx);
   if (RECORD_LIFECYCLE_KINDS.has(event.kind)) {
     plan = mergePlans(plan, planAutomation(graph, { kind: "on_field_value" }, evalCtx));
   }
-  if (planIsEmpty(plan)) {
+  const automaticSubmission = event.kind === "on_submit" && plan.ungatedOutcome === "apply" && adapter.profile.supportsUngatedSubmission === true;
+  if (planIsEmpty(plan) && !automaticSubmission) {
     throw new FlowRetryError("the run's trigger no longer matches its flow; re-fire it from the record");
   }
 
-  await db
-    .update(schema.flowRuns)
-    .set({ status: "running", error: null, finishedAt: null })
-    .where(and(eq(schema.flowRuns.id, runId), eq(schema.flowRuns.orgId, ctx.orgId)));
+  const started = await db.update(schema.flowRuns).set({ status: "running", error: null, finishedAt: null })
+    .where(and(eq(schema.flowRuns.id, runId), eq(schema.flowRuns.orgId, ctx.orgId), eq(schema.flowRuns.status, "failed")))
+    .returning({ id: schema.flowRuns.id });
+  if (started.length !== 1) throw new FlowRetryError("The failed run changed before retry; reload the workflow.");
 
   let status: RetryFlowRunResult["status"];
   let gatesCreated = 0;
@@ -519,15 +548,42 @@ export async function retryFlowRun(runId: string, ctx: FlowExecCtx): Promise<Ret
         failures.push(`awaiting approval (${e instanceof Error ? e.message : String(e)})`);
       }
     }
+    if (failures.length === 0 && gatesCreated === 0 && automaticSubmission) {
+      try {
+        await withTransactionSavepoint(db, async () => {
+        const routingProof = { version: 1, runId, flowId: flow.id, subjectKind: run.subjectKind, subjectId: run.subjectId,
+          eventSource: source, outcome: "apply", gatesCreated: 0, failures: [],
+          graphDigest: createHash("sha256").update(canonicalJson(graph)).digest("hex"), actorId: ctx.userId ?? null };
+        // Preserve the original proposal identity. Fresh values drive routing,
+        // but cannot replace the frozen evidence the owning writer checks.
+        const dispatchValues = { ...run.context, event_source: source,
+          submissionPolicy: { ungatedOutcome: "apply", graph, flowId: flow.id }, submissionRouting: routingProof };
+        const updated = await db.update(schema.flowRuns).set({ context: dispatchValues, status: "completed", error: null, finishedAt: new Date() })
+          .where(and(eq(schema.flowRuns.id, runId), eq(schema.flowRuns.orgId, ctx.orgId))).returning({ id: schema.flowRuns.id });
+        if (updated.length !== 1) throw new FlowRetryError("flow run changed during automatic submission");
+        await db.execute(sql`insert into audit_log(org_id,table_name,row_id,action,actor_id,changes)
+          values(${ctx.orgId},'flow_runs',${runId},'update',${ctx.userId ?? null},
+            ${JSON.stringify({ reason: "Retry submission under the current flow policy", before: { context: run.context }, after: { context: dispatchValues } })}::jsonb)`);
+        // The owner validates live actor/scope and the exact successful run,
+        // then completes its native submission policy without inventing a
+        // human approval decision or dispatching another flow run.
+        const resumed = await resumeFlowSubmission({ subjectKind: run.subjectKind, subjectId: run.subjectId, runId, mode: "automatic", ctx });
+        if (await adapter.getStatus(run.subjectId) !== resumed.status) throw new FlowRetryError("The submission outcome is not visible through its native record reader");
+        });
+      } catch (error) {
+        failures.push(`automatic submission (${error instanceof Error ? error.message : String(error)})`);
+      }
+    }
     status = failures.length > 0 ? "failed" : res.gatesCreated > 0 ? "waiting" : "completed";
-    await db
+    const finished = await db
       .update(schema.flowRuns)
       .set({
         status,
         error: failures.length > 0 ? failures.join("; ") : null,
         finishedAt: status === "waiting" ? null : new Date(),
       })
-      .where(and(eq(schema.flowRuns.id, runId), eq(schema.flowRuns.orgId, ctx.orgId)));
+      .where(and(eq(schema.flowRuns.id, runId), eq(schema.flowRuns.orgId, ctx.orgId))).returning({ id: schema.flowRuns.id });
+    if (finished.length !== 1) throw new FlowRetryError("The retry result was not retained; no completed submission may be reported.");
     if (failures.length > 0) {
       console.error(`[flows] retried run ${runId} (flow "${flow.name}") failed again:`, failures.join("; "));
     }
@@ -535,11 +591,13 @@ export async function retryFlowRun(runId: string, ctx: FlowExecCtx): Promise<Ret
     status = "failed";
     const reason = e instanceof Error ? e.message : String(e);
     console.error(`[flows] retried run ${runId} (flow "${flow.name}") crashed:`, e);
-    await db
-      .update(schema.flowRuns)
-      .set({ status: "failed", error: reason, finishedAt: new Date() })
-      .where(and(eq(schema.flowRuns.id, runId), eq(schema.flowRuns.orgId, ctx.orgId)))
-      .catch(() => {});
+    try {
+      const failed = await db.update(schema.flowRuns).set({ status: "failed", error: reason, finishedAt: new Date() })
+        .where(and(eq(schema.flowRuns.id, runId), eq(schema.flowRuns.orgId, ctx.orgId))).returning({ id: schema.flowRuns.id });
+      if (failed.length !== 1) throw new Error("The retry failure did not match its run.");
+    } catch (retentionError) {
+      throw new AggregateError([e, retentionError], "The retry failed and its outcome could not be retained; the transaction must roll back.");
+    }
   }
   return { runId, status, gatesCreated };
 }

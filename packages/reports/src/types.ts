@@ -24,8 +24,8 @@ export const REPORT_FILTER_OPERATORS = [
   // Forward window: col on/before now + N days (includes overdue) — drives
   // "coming due / expiring soon" reports.
   'due_within_days',
-  // Relative-date operators (no value) — compiled to pure SQL anchored to the
-  // DB clock, so "this month" reports stay correct without a parameter.
+  // Relative-date operators (no value) bind the executing organization's
+  // declared civil date, independently of database host timezone or clock.
   'since_today',
   'this_week',
   'this_month',

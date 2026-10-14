@@ -1,7 +1,7 @@
 import { strict as assert } from 'node:assert'
 import { test } from 'node:test'
 import { REPORT_ENTITY_MAP } from './entities'
-import { compileRuleGroup, SqlParams } from './filters'
+import { compileRule, compileRuleGroup, SqlParams } from './filters'
 import { validateCustomQuery } from './validate'
 
 const documents = REPORT_ENTITY_MAP.documents!
@@ -105,4 +105,37 @@ test('value-less operators and real values still validate and compile', () => {
   const compiled = compileRuleGroup(documents, query.filters!, new SqlParams())
   assert.match(compiled!, /IS NOT NULL/)
   assert.match(compiled!, /=/)
+})
+
+
+test('contains treats wildcard and escape characters as literal text', () => {
+  const params = new SqlParams()
+  const result = compileRule(documents, { column: 'document_number', op: 'contains', value: 'A%_\\B' }, params)
+  assert.match(result!, /ILIKE \$1/)
+  assert.deepEqual(params.values, ['%A\\%\\_\\\\B%'])
+})
+
+test('relative report dates bind the declared organization civil date in nested filters', () => {
+  const params = new SqlParams()
+  const result = compileRuleGroup(documents, { combinator: 'and', rules: [
+    { field: 'document_date', op: 'this_month' },
+    { combinator: 'or', rules: [
+      { field: 'document_date', op: 'between_days_ago', value: 1 },
+      { field: 'document_date', op: 'due_within_days', value: 2 },
+    ] },
+  ] }, params, { asOf: '2024-03-01' })
+  assert.ok(result)
+  assert.doesNotMatch(result!, /now\(|current_date/)
+  assert.deepEqual(params.values, ['2024-03-01', '2024-02-29', '2024-03-03'])
+})
+
+test('relative filters refuse missing civil dates and unrepresentable offsets', () => {
+  assert.throws(() => compileRule(documents, { column: 'document_date', op: 'this_year' }, new SqlParams()), /civil asOf date/)
+  for (const value of [1e308, Number.MAX_SAFE_INTEGER, -1, 0.5]) {
+    assert.equal(compileRule(documents, { column: 'document_date', op: 'due_within_days', value }, new SqlParams(), { asOf: '2026-01-01' }), null)
+    assert.throws(() => validateCustomQuery(plan({ combinator: 'and', rules: [
+      { field: 'document_date', op: 'due_within_days', value },
+    ] })))
+  }
+  assert.equal(compileRule(documents, { column: 'document_date', op: 'between_days_ago', value: 1 }, new SqlParams(), { asOf: '0001-01-01' }), null)
 })

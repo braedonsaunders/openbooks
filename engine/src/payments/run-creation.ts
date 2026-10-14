@@ -1,6 +1,8 @@
 import { eq, sql } from "drizzle-orm";
 import { db, orgContext, schema, withOrgTransaction } from "../platform/db.ts";
 import { businessToday } from "../platform/business-date.ts";
+import { addCalendarDays } from "../platform/civil-date.ts";
+import { readDocumentPaymentTermsSnapshot, PaymentTermsEvidenceError } from "../ledger/payment-terms-snapshot.ts";
 import { roundCurrencyMoney } from "../fx/currencies.ts";
 import { add, cmp, divRate, fromUnits, isZero, sum, toUnits } from "../money/money.ts";
 import { evaluateBillsForRelease, recordReleaseCheck, type BillReleaseDecision } from "../compliance/compliance.ts";
@@ -226,16 +228,14 @@ async function createPaymentRunWithinTransaction(
   if (!org) throw new PaymentError("org not found");
 
   // Selected bills → their open AP lines with current open balances.
-  const bills = (await db.execute<{ document_id: string; document_number: string; document_kind: string; document_date: string; party_id: string; vendor: string; project_id: string | null; currency: string; fx_rate: string; subsidiary_id: string | null; control_account_id: string; open_line_id: string; open_base: string; open: string; discount_days: number | null; discount_percent: string | null }>(sql`
+  const bills = (await db.execute<{ document_id: string; document_number: string; document_kind: string; document_date: string; party_id: string; vendor: string; project_id: string | null; currency: string; fx_rate: string; subsidiary_id: string | null; control_account_id: string; open_line_id: string; open_base: string; open: string; payment_terms_snapshot: unknown }>(sql`
     select d.id as document_id, d.document_number, d.kind as document_kind, d.document_date, d.party_id, p.display_name as vendor,
            d.project_id, d.currency, d.fx_rate, d.subsidiary_id, jl.account_id as control_account_id,
            jl.id as open_line_id, abs(jl.amount) - coalesce(ap.applied, 0) as open_base,
            abs(jl.txn_amount) - coalesce(ap.transaction_applied, 0) as open,
-           pt.discount_days, pt.discount_percent
+           d.payment_terms_snapshot
       from documents d
       join parties p on p.id = d.party_id and p.org_id = d.org_id
-      left join vendor_roles vr on vr.party_id = d.party_id and vr.org_id = d.org_id
-      left join payment_terms pt on pt.id = vr.payment_terms_id and pt.org_id = d.org_id and pt.is_active
       -- Live entries only: a voided bill is never paid.
       join journal_entries je on je.id = d.posted_entry_id and je.org_id = d.org_id and je.status = 'posted'
       join journal_lines jl on jl.entry_id = je.id and jl.org_id = je.org_id and jl.is_open_item and jl.amount < 0
@@ -437,6 +437,17 @@ async function createPaymentRunWithinTransaction(
 
   const criteria = opts.selectionCriteria ?? {};
   const captureDiscounts = criteria.captureDiscounts !== false;
+  const retainedTerms = new Map<string, ReturnType<typeof readDocumentPaymentTermsSnapshot> | null>(bills.rows.map((bill) => {
+    if (!captureDiscounts) return [bill.document_id, null] as const;
+    try {
+      return [bill.document_id, readDocumentPaymentTermsSnapshot(bill.payment_terms_snapshot, {
+        kind: bill.document_kind, partyId: bill.party_id, documentDate: bill.document_date,
+      })] as const;
+    } catch (error) {
+      if (error instanceof PaymentTermsEvidenceError) throw new PaymentError(`${bill.document_number}: ${error.message}`, { cause: error });
+      throw error;
+    }
+  }));
   const applyCredits = criteria.applyCredits !== false;
   const discountAccountId = typeof profile.settings?.discountAccountId === "string"
     ? profile.settings.discountAccountId
@@ -531,11 +542,11 @@ async function createPaymentRunWithinTransaction(
       }
       const remainingTxn = fromUnits(remainingTransaction);
       let discountTxn = "0";
-      if (captureDiscounts && bill.discount_days != null && bill.discount_percent && cmp(bill.discount_percent, "0") > 0) {
-        const deadline = new Date(`${bill.document_date}T00:00:00Z`);
-        deadline.setUTCDate(deadline.getUTCDate() + bill.discount_days);
-        if (paymentDate <= deadline.toISOString().slice(0, 10)) {
-          const numerator = toUnits(remainingTxn) * toUnits(bill.discount_percent);
+      const policy = retainedTerms.get(bill.document_id);
+      if (policy?.mode === "discount") {
+        const deadline = addCalendarDays(bill.document_date, policy.terms!.discountDays!);
+        if (paymentDate <= deadline) {
+          const numerator = toUnits(remainingTxn) * toUnits(policy.terms!.discountPercent!);
           const rawDiscount = (numerator + 500_000n) / 1_000_000n;
           discountTxn = roundCurrencyMoney(fromUnits(rawDiscount), await minorUnitsFor(bill.currency));
           if (!isZero(discountTxn) && !discountAccountId) {

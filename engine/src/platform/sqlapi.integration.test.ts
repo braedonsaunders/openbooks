@@ -102,7 +102,7 @@ test('governed SQL catalog enforces tenant RLS and denies credential surfaces', 
     assert.deepEqual(firstTaxMembers.rows, [{ id: firstTaxMemberId }])
     assert.deepEqual(secondTaxMembers.rows, [{ id: secondTaxMemberId }])
 
-    const catalog = await listSchema(first.orgId)
+    const catalog = await listSchema(first.orgId, { payrollRead: true })
     const byName = new Map(catalog.map((relation) => [relation.name, relation]))
     for (const forbidden of [
       'users',
@@ -344,4 +344,23 @@ test('governed SQL redacts private CRM bodies and time-entry memos after migrati
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId))
   }
+})
+
+
+test('shared payroll-bearing relations and their schema need actual payroll authority', { skip: !DB }, async () => {
+  const org = await withBypass(() => createScratchOrg())
+  try {
+    for (const relation of ['journal_entries', 'journal_lines', 'documents', 'document_lines', 'time_entries', 'labor_cost_rates', 'field_ticket_labor_lines', 'hrm_benefit_program_revisions']) {
+      const reader = `with private_rows as (select * from ${relation}) select count(*) as n from private_rows`
+      await assert.rejects(runUserSql(reader, { orgId: org.orgId }), /payroll.read/, relation)
+      assert.equal((await runUserSql(reader, { orgId: org.orgId, payrollRead: true })).rowCount, 1)
+    }
+    const publicCatalog = new Set((await listSchema(org.orgId)).map(table => table.name))
+    const authorizedCatalog = new Set((await listSchema(org.orgId, { payrollRead: true })).map(table => table.name))
+    assert.ok(publicCatalog.has('accounts'))
+    assert.equal(publicCatalog.has('pay_stubs'), false)
+    assert.equal(publicCatalog.has('journal_lines'), false)
+    assert.ok(authorizedCatalog.has('journal_lines'))
+    assert.equal((await runUserSql('select 42 as answer; -- trailing', { orgId: org.orgId })).rows[0]?.answer, 42)
+  } finally { await withBypass(() => dropScratchOrg(org.orgId)) }
 })

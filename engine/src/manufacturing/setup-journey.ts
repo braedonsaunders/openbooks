@@ -1,3 +1,4 @@
+import { lockActorIdentity } from "../organization/actor-permissions.ts";
 import {resolveMachineRate} from "./conversion.ts";
 import {resolveProfile} from "../inventory/profile-policy.ts";
 import {cmp,add} from "../money/money.ts";
@@ -25,7 +26,7 @@ export interface SetupFinding { key: string; status: "ready" | "missing" | "choo
 /** Readiness is a current diagnostic, never a persisted flag or an authorization to transact. */
 export async function readOperatingSetupJourney(tx: SqlExecutor, orgId: string, actorId: string,
   input: {family: WorkFamily; selection: string; departmentId?: string; itemId?: string; subsidiaryId?: string;quantity?:string}) {
-  if (!(await tx.execute(sql`select id from users where id=${actorId} and is_active and (org_id=${orgId} or is_super_admin) for share`)).rows[0]) throw new ManufacturingNotFoundError();
+  if (!await lockActorIdentity(tx, orgId, actorId)) throw new ManufacturingNotFoundError();
   if (await lockActorCommandAuthority(tx,orgId,actorId,null,"admin.setup.manage") !== null) throw new ManufacturingNotFoundError();
   const choice=(await listOperatingProfileChoices(tx,orgId,actorId,input.family,input.departmentId??null)).find(c=>c.value===input.selection);
   if (!choice) throw new ManufacturingNotFoundError();

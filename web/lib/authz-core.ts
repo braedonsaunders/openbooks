@@ -1,3 +1,4 @@
+import { actorPrincipal } from "@openbooks/engine/organization/actor-permissions";
 import "server-only";
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "@openbooks/engine/platform/database";
@@ -33,7 +34,7 @@ export async function resolveUserAuthz(user: SessionUser, runner: SqlExecutor = 
       select permission, effect
         from user_permission_overrides
        where user_id = ${user.id} and org_id = ${user.orgId}`)
-  const allowedSubs = await allowedSubsidiaryIds(user.id, user.orgId)
+  const allowedSubs = await allowedSubsidiaryIds(user.id, user.orgId, runner)
   const permissions = resolveEffectivePermissions({
     additionalKnownPermissions: modulePermissions.active,
     rolePermissionSets: assignments.rows.map((r) =>
@@ -51,17 +52,9 @@ export async function resolveUserAuthz(user: SessionUser, runner: SqlExecutor = 
  * Deactivation or revocation fails closed — null means "no authority", and
  * callers must treat null as holding no permission.
  */
-export async function resolveAuthzByUserId(orgId: string, userId: string): Promise<Authz | null> {
-  const row = (await db.execute<{
-    id: string; email: string; name: string; org_id: string; is_super_admin: boolean
-  }>(sql`
-    select u.id, u.email, u.name, u.org_id, u.is_super_admin from users u
-     where u.id = ${userId} and u.is_active
-       and (u.org_id = ${orgId} or u.is_super_admin or exists (
-         select 1 from role_assignments a where a.user_id = u.id and a.org_id = ${orgId}
-       ))
-  `)).rows[0];
-  if (!row) return null;
+export async function resolveAuthzByUserId(orgId: string, userId: string, runner: SqlExecutor = db): Promise<Authz | null> {
+  const row=await actorPrincipal(runner,orgId,userId);
+  if (!row?.isActive) return null;
   return resolveUserAuthz({
     id: row.id,
     email: row.email,
@@ -71,9 +64,9 @@ export async function resolveAuthzByUserId(orgId: string, userId: string): Promi
     envKind: "production",
     productionOrgId: orgId,
     homeUserId: row.id,
-    homeOrgId: row.org_id,
-    isSuperAdmin: row.is_super_admin,
-  });
+    homeOrgId: row.orgId,
+    isSuperAdmin: row.isSuperAdmin,
+  }, runner);
 }
 
 /** Wildcard-aware permission check (`ap.*` covers `ap.post`, `*` covers all). */

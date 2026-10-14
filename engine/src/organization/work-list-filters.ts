@@ -1,3 +1,4 @@
+import { lockActorIdentity } from "./actor-permissions.ts";
 import {sql,type SQL} from 'drizzle-orm';
 import type {SqlExecutor} from '../platform/db.ts';
 import {isUuid} from '../platform/uuid.ts';
@@ -23,7 +24,7 @@ export function workDepartmentFilter(department:SQL,selection:string|undefined):
 /** Queue filters are retained metadata, independent of which optional capture tools are enabled today. */
 export async function readWorkListFilters(tx:SqlExecutor,orgId:string,actorId:string,family:WorkFamily) {
   if(!isUuid(actorId)||!['project','production'].includes(family))throw new ScopeNotFoundError();
-  if(!(await tx.execute(sql`select id from users where id=${actorId} and is_active and (org_id=${orgId} or is_super_admin) for share`)).rows.length)throw new ScopeNotFoundError();
+  if(!await lockActorIdentity(tx,orgId,actorId))throw new ScopeNotFoundError();
   if(!await lockAndCheckOrgFeature(tx,orgId,family==='project'?'projects':'manufacturing'))throw new ScopeNotFoundError();
   const scope=await lockActorCommandAuthority(tx,orgId,actorId,null,family==='project'?'projects.read':'manufacturing.read');
   const profiles=(await tx.execute<{value:string;label:string}>(sql`select profile.id as value,profile.name as label from operating_profiles profile

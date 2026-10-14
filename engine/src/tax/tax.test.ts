@@ -461,3 +461,27 @@ test("oversize quote amounts refuse before any write", async () => {
     (error: unknown) => error instanceof TaxRateProviderError && /must fit the ledger/.test(error.message),
   );
 });
+
+
+test("manual overrides retain configured recovery after tiny original tax rounding", () => {
+  const result = computeLineTaxes("0.0030", [code({ ratePercent: "10", recoverablePercent: "50" })], { overridden: true, taxAmount: "300" });
+  assert.equal(result.components[0]!.recoverableAmount, "150.0000");
+  assert.equal(result.components[0]!.nonrecoverableAmount, "150.0000");
+  const credit = computeLineTaxes("-0.0030", [code({ ratePercent: "10", recoverablePercent: "50" })], { overridden: true, taxAmount: "-300" });
+  assert.equal(credit.components[0]!.recoverableAmount, "-150.0000");
+});
+
+test("inclusive manual tax preserves entered gross and recomputes its actual net basis", () => {
+  const configs = [code({ ratePercent: "10", recoverablePercent: "50", priceIncludesTax: true })];
+  const result = computeLineTaxes("110", configs, { overridden: true, taxAmount: "8" });
+  assert.equal(result.inputAmount, "110.0000");
+  assert.equal(result.netAmount, "102.0000");
+  assert.equal(result.taxTotal, "8.0000");
+  assert.equal(result.total, "110.0000");
+  assert.equal(result.components[0]!.taxableAmount, "102.0000");
+  assert.equal(result.components[0]!.recoverableAmount, "4.0000");
+  const credit = computeLineTaxes("-110", configs, { overridden: true, taxAmount: "-8" });
+  assert.equal(credit.netAmount, "-102.0000");
+  assert.equal(credit.total, "-110.0000");
+  assert.throws(() => computeLineTaxes("110", configs, { overridden: true, taxAmount: "111" }), /cannot reconcile/);
+});

@@ -134,18 +134,24 @@ function validateConfig(
 function calculateFromNet(
   netAmount: string,
   configs: TaxComponentConfig[],
+  override?: { amount: string; includedOnly?: boolean },
 ): ComputedTaxComponent[] {
+  const eligible = (config: TaxComponentConfig) => (config.calculationType ?? "standard") === "standard"
+    && (!override?.includedOnly || config.priceIncludesTax);
+  const adjustable = override ? [...configs].reverse().find(eligible) : undefined;
+  if (override && !adjustable) throw new TaxCalculationError("a manual tax override requires a standard tax component");
+  let priorEligibleTax = "0";
   const computed: ComputedTaxComponent[] = [];
   let priorTax = "0";
   for (const config of configs) {
     const taxableAmount = config.compoundOnPrevious
       ? add(netAmount, priorTax)
       : netAmount;
-    const taxAmount = mulPercent(
-      taxableAmount,
-      config.ratePercent,
-      config.roundingScale ?? 2,
-    );
+    const taxAmount = config === adjustable
+      ? fromUnits(toUnits(normalizeMoney(override!.amount)) - toUnits(priorEligibleTax))
+      : mulPercent(taxableAmount, config.ratePercent, config.roundingScale ?? 2);
+    if (toUnits(taxAmount) < 0n) throw new TaxCalculationError("manual tax override cannot make a component negative");
+    if (eligible(config)) priorEligibleTax = add(priorEligibleTax, taxAmount);
     const recoverableAmount = mulPercent(
       taxAmount,
       config.recoverablePercent ?? "100",
@@ -172,7 +178,7 @@ function calculateFromNet(
       collectedAccountId: config.collectedAccountId ?? null,
       paidAccountId: config.paidAccountId ?? null,
       withholdingAccountId: config.withholdingAccountId ?? null,
-      overridden: false,
+      overridden: config === adjustable,
     });
     // Compound basis follows statutory tax components, including a prior
     // reverse-charge component; withholding is a settlement deduction rather
@@ -198,7 +204,18 @@ function includedStandardTax(components: ComputedTaxComponent[]): string {
 function extractInclusiveNet(
   inputAmount: string,
   configs: TaxComponentConfig[],
+  overrideAmount?: string,
 ): string {
+  const componentsAt = (net: string): ComputedTaxComponent[] | null => {
+    if (overrideAmount === undefined) return calculateFromNet(net, configs);
+    // Fixed earlier standard amounts bound the last standard's override.
+    const original = calculateFromNet(net, configs);
+    const adjustable = [...original].reverse().find(component => component.calculationType === "standard");
+    if (!adjustable) throw new TaxCalculationError("a manual tax override requires a standard tax component");
+    const fixed = sum(original.filter(component => component.calculationType === "standard" && component !== adjustable).map(component => component.taxAmount));
+    if (toUnits(fixed) > toUnits(overrideAmount)) return null;
+    return calculateFromNet(net, configs, { amount: overrideAmount });
+  };
   const target = toUnits(inputAmount);
   if (target < 0n)
     throw new TaxCalculationError("tax input amount cannot be negative");
@@ -207,7 +224,8 @@ function extractInclusiveNet(
   while (low <= high) {
     const mid = (low + high) / 2n;
     const net = fromUnits(mid);
-    const components = calculateFromNet(net, configs);
+    const components = componentsAt(net);
+    if (!components) { high = mid - 1n; continue; }
     const gross = mid + toUnits(includedStandardTax(components));
     if (gross === target) return net;
     if (gross < target) low = mid + 1n;
@@ -220,7 +238,8 @@ function extractInclusiveNet(
   let best = candidates[0] ?? 0n;
   let bestDistance: bigint | null = null;
   for (const candidate of candidates) {
-    const components = calculateFromNet(fromUnits(candidate), configs);
+    const components = componentsAt(fromUnits(candidate));
+    if (!components) continue;
     const gross = candidate + toUnits(includedStandardTax(components));
     const distance = gross >= target ? gross - target : target - gross;
     if (
@@ -232,56 +251,10 @@ function extractInclusiveNet(
       bestDistance = distance;
     }
   }
+  if (overrideAmount !== undefined && bestDistance !== 0n) {
+    throw new TaxCalculationError("manual tax override cannot reconcile to the tax-inclusive amount; review the included tax components and override");
+  }
   return fromUnits(best);
-}
-
-function applyAggregateOverride(
-  components: ComputedTaxComponent[],
-  overrideAmount: string,
-): ComputedTaxComponent[] {
-  const adjustable = [...components]
-    .reverse()
-    .find((c) => c.calculationType === "standard");
-  if (!adjustable)
-    throw new TaxCalculationError(
-      "a manual tax override requires a standard tax component",
-    );
-  const current = sum(
-    components
-      .filter((c) => c.calculationType === "standard")
-      .map((c) => c.taxAmount),
-  );
-  const delta = toUnits(normalizeMoney(overrideAmount)) - toUnits(current);
-  return components.map((component) => {
-    if (component !== adjustable) return component;
-    const taxAmount = fromUnits(toUnits(component.taxAmount) + delta);
-    if (toUnits(taxAmount) < 0n)
-      throw new TaxCalculationError(
-        "manual tax override cannot make a component negative",
-      );
-    // Preserve the configured recovery ratio exactly by deriving it from the
-    // original component when possible. The explicit ratio survives the
-    // zero-tax case, where the old equality heuristic guessed 100% recovery.
-    const originalTax = toUnits(component.taxAmount);
-    const configuredRecovery = component.recoverablePercent ??
-      (component.recoverableAmount === component.taxAmount ? "100" : "0");
-    const recovered =
-      originalTax === 0n
-        ? mulPercent(taxAmount, configuredRecovery, 4)
-        : fromUnits(
-            (toUnits(taxAmount) * toUnits(component.recoverableAmount) +
-              originalTax / 2n) /
-              originalTax,
-          );
-    return {
-      ...component,
-      taxAmount,
-      recoverablePercent: configuredRecovery,
-      recoverableAmount: recovered,
-      nonrecoverableAmount: fromUnits(toUnits(taxAmount) - toUnits(recovered)),
-      overridden: true,
-    };
-  });
 }
 
 export function computeLineTaxes(
@@ -337,6 +310,7 @@ export function computeLineTaxes(
   }
   const configs = validateConfig(rawConfigs);
   if (configs.length === 0) {
+    if (opts?.overridden) throw new TaxCalculationError("a manual tax override requires a standard tax component");
     return {
       inputAmount: canonicalInput,
       netAmount: canonicalInput,
@@ -347,15 +321,19 @@ export function computeLineTaxes(
     };
   }
   const inclusive = configs.some((c) => c.priceIncludesTax);
+  if (opts?.overridden && (opts.taxAmount == null || opts.taxAmount === "")) {
+    throw new TaxCalculationError("manual tax override is missing its amount");
+  }
+  const manualOverride = opts?.overridden ? normalizeMoney(opts.taxAmount!) : undefined;
   const netAmount = inclusive
-    ? extractInclusiveNet(canonicalInput, configs)
+    ? extractInclusiveNet(canonicalInput, configs, manualOverride)
     : canonicalInput;
-  let components = calculateFromNet(netAmount, configs);
+  let components = calculateFromNet(netAmount, configs, manualOverride === undefined ? undefined : { amount: manualOverride });
 
   // Make an inclusive line cross-foot exactly after statutory component
   // rounding. Any unavoidable sub-cent inversion residue belongs on the final
   // included component and is explicitly marked as an override/evidence fact.
-  if (inclusive) {
+  if (inclusive && manualOverride === undefined) {
     const included = components.filter(
       (c) => c.calculationType === "standard" && c.priceIncludesTax,
     );
@@ -364,16 +342,8 @@ export function computeLineTaxes(
     );
     const computedIncludedTax = sum(included.map((c) => c.taxAmount));
     if (cmp(expectedIncludedTax, computedIncludedTax) !== 0) {
-      components = applyAggregateOverride(components, expectedIncludedTax);
+      components = calculateFromNet(netAmount, configs, { amount: expectedIncludedTax, includedOnly: true });
     }
-  }
-  if (opts?.overridden) {
-    if (opts.taxAmount == null || opts.taxAmount === "") {
-      throw new TaxCalculationError(
-        "manual tax override is missing its amount",
-      );
-    }
-    components = applyAggregateOverride(components, opts.taxAmount);
   }
 
   const standard = sum(

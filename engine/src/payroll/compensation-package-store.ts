@@ -1,6 +1,9 @@
 import { sql } from "drizzle-orm";
 import { COMPENSATION_VERSION_SUBJECT_KIND, COMPENSATION_ASSIGNMENT_SUBJECT_KIND } from "@openbooks/schema/src/payroll-compensation.ts";
 import { completedGateDecisionPolicy } from "../flows/approval-decision-policy.ts";
+import { lockFlowSubjectDecision } from "../flows/decision-lock.ts";
+import { requireCompletedSubmissionRouting } from "../flows/submission-routing-proof.ts";
+import type { FlowSubmissionResumeArgs } from "../flows/approval-release-hook.ts";
 import { db, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
 import { canonicalJson } from "../platform/canonical-json.ts";
 import { isUuid } from "../platform/uuid.ts";
@@ -247,6 +250,7 @@ export async function saveCompensationPackageVersion(query: CompensationPackageA
   effectiveFrom: string; effectiveTo: string | null; definition: CompensationPackageDefinition; reason: string; idempotencyKey?: string }): Promise<CompensationPackageVersion> {
   actor(query); const window = dates(query.effectiveFrom, query.effectiveTo), reason = text(query.reason, "Reason", 2000);
   return packageTransaction(query.orgId, async () => {
+    if (query.versionId) await lockFlowSubjectDecision(query.orgId, COMPENSATION_VERSION_SUBJECT_KIND, identifier(query.versionId, "compensation subject"));
     const pack = await packageRecord(query, query.packageId, "payroll.manage", true);
     const hash = await checkedDefinition(query.orgId, pack, query.definition);
     const definition = canonicalJson(canonicalCompensationPackageDefinition(query.definition));
@@ -307,8 +311,8 @@ async function assertCompensationAssignmentAvailable(orgId: string, row: Compens
 
 /** Only the successful native submission dispatcher can finalize an ungated proposal. */
 async function finalizeUngatedCompensationSubmission(query: CompensationPackageActor, subjectKind: string,
-  row: CompensationPackageVersion | CompensationPackageAssignment, reason: string): Promise<void> {
-  if (row.status !== "submitted" || row.submittedBy !== query.actorId || row.submissionPolicy?.kind !== "flow"
+  row: CompensationPackageVersion | CompensationPackageAssignment, reason: string, submittedActorId = query.actorId): Promise<void> {
+  if (row.status !== "submitted" || row.submittedBy !== submittedActorId || row.submissionPolicy?.kind !== "flow"
     || row.submissionPolicy.submittedRevision !== row.revision) throw new PayrollError("The compensation submission changed during routing; reload its current state before retrying.");
   const assignment = subjectKind === COMPENSATION_ASSIGNMENT_SUBJECT_KIND;
   if (!assignment && subjectKind !== COMPENSATION_VERSION_SUBJECT_KIND) throw new PayrollError("Choose a native compensation submission subject.");
@@ -322,6 +326,68 @@ async function finalizeUngatedCompensationSubmission(query: CompensationPackageA
     reason=${reason},updated_by=${query.actorId},updated_at=now()
     where org_id=${query.orgId} and id=${row.id} and status='submitted' and revision=${row.revision} returning id`)).rows;
   if (saved.length !== 1) throw new PayrollError("The ungated compensation submission was not saved; nothing applied.");
+}
+
+/** Resume the frozen original proposal using the ordinary ungated finalizer. */
+export async function completeCompensationPackageSubmission(args: FlowSubmissionResumeArgs): Promise<{ status: string }> {
+  const query = { orgId: args.ctx.orgId, actorId: args.ctx.userId ?? '' };
+  actor(query);
+  identifier(args.subjectId, 'compensation subject');
+  const assignment = args.subjectKind === COMPENSATION_ASSIGNMENT_SUBJECT_KIND;
+  if (args.mode !== 'automatic' || (!assignment && args.subjectKind !== COMPENSATION_VERSION_SUBJECT_KIND)) {
+    throw new PayrollError('Choose the native automatic compensation submission.');
+  }
+  return packageTransaction(query.orgId, async () => {
+    await lockFlowSubjectDecision(query.orgId, args.subjectKind, args.subjectId);
+    const routing = await requireCompletedSubmissionRouting({ ...query, subjectKind: args.subjectKind,
+      subjectId: args.subjectId, runId: args.runId });
+    const context = routing.context;
+    if (!isUuid(context.packageId)) throw new PayrollError('The original compensation package reference is missing; review the submitted workflow.');
+    const pack = await packageRecord(query, context.packageId, 'payroll.manage', true);
+    const row: CompensationPackageAssignment | CompensationPackageVersion = assignment
+      ? one((await db.execute<CompensationPackageAssignment>(sql`select ${ASSIGNMENT_COLUMNS}
+          from payroll_compensation_assignments where org_id=${query.orgId} and package_id=${pack.id}
+          and id=${args.subjectId} for update`)).rows)
+      : await versionRecord(query.orgId, pack.id, args.subjectId);
+    const policy = row.submissionPolicy;
+    if (!policy || policy.version !== 1 || !row.submittedBy || routing.createdBy !== row.submittedBy
+      || context.id !== row.id || context.packageId !== row.packageId || context.status !== 'submitted'
+      || context.submittedBy !== row.submittedBy || context.revision !== policy.submittedRevision
+      || context.subsidiaryId !== pack.subsidiaryId || context.effectiveFrom !== row.effectiveFrom
+      || context.effectiveTo !== row.effectiveTo) {
+      throw new PayrollError('The compensation proposal differs from its original submission; review its current revision and workflow.');
+    }
+    if (assignment && (context.employmentId !== (row as CompensationPackageAssignment).employmentId
+      || context.employeePartyId !== (row as CompensationPackageAssignment).employeePartyId)) {
+      throw new PayrollError('The submitted compensation employment changed; review its native assignment.');
+    }
+    const completedStatus = assignment ? 'active' : 'approved';
+    if (row.status === completedStatus && policy.kind === 'ungated'
+      && row.decidedBy === query.actorId && row.revision === policy.submittedRevision + 1) return { status: completedStatus };
+    if (pack.status !== 'active' || row.status !== 'submitted' || policy.kind !== 'flow'
+      || row.revision !== policy.submittedRevision) throw new PayrollError('Only the original active-package submitted revision can resume.');
+    const version = assignment
+      ? await versionRecord(query.orgId, pack.id, (row as CompensationPackageAssignment).versionId)
+      : row as CompensationPackageVersion;
+    if ((assignment && version.status !== 'approved')
+      || await checkedDefinition(query.orgId, pack, version.definition) !== version.definitionHash) {
+      throw new PayrollError('The approved compensation definition changed; review its retained package evidence.');
+    }
+    if (assignment) {
+      const assigned = row as CompensationPackageAssignment;
+      compensationPackageAssignmentInputs(version.definition, assigned.inputs);
+      await checkAssignmentSubject(query.orgId, pack, version, assigned.employmentId, assigned.employeePartyId,
+        { effectiveFrom: assigned.effectiveFrom, effectiveTo: assigned.effectiveTo });
+    }
+    const table = assignment ? 'payroll_compensation_assignments' : 'payroll_compensation_versions';
+    const original = one((await db.execute<{ reason: string }>(sql`select reason from ${sql.identifier(table)}
+      where org_id=${query.orgId} and id=${row.id} and revision=${row.revision}`)).rows);
+    await finalizeUngatedCompensationSubmission(query, args.subjectKind, row, text(original.reason, 'Submission reason', 2000), row.submittedBy!);
+    const saved = one((await db.execute<{ status: string }>(sql`select status from ${sql.identifier(table)}
+      where org_id=${query.orgId} and id=${args.subjectId}`)).rows);
+    if (saved.status !== completedStatus) throw new PayrollError('The compensation workflow did not complete; no automatic decision was saved.');
+    return saved;
+  });
 }
 
 async function compensationDecisionPolicy(query: CompensationPackageActor & { approvalRunId?: string }, subjectKind: string, subjectId: string,
@@ -342,6 +408,7 @@ export async function transitionCompensationPackageVersion(query: CompensationPa
   actor(query); const reason = text(query.reason, "Reason", 2000);
   if (!["submit", "approve", "reject"].includes(query.action)) throw new PayrollError("Choose submit, approve or reject for this version.");
   return packageTransaction(query.orgId, async () => {
+    await lockFlowSubjectDecision(query.orgId, COMPENSATION_VERSION_SUBJECT_KIND, identifier(query.versionId, "compensation subject"));
     const pack = await packageRecord(query, query.packageId, query.action === "submit" ? "payroll.manage" : "hrm.compensation.approve", true);
     const version = await versionRecord(query.orgId, pack.id, query.versionId); revision(version, query.expectedRevision);
     if (pack.status !== "active" || version.status !== (query.action === "submit" ? "draft" : "submitted")) throw new PayrollError("This package version cannot make that transition — reload its current state and act on an active package draft or submitted proposal.");
@@ -366,6 +433,7 @@ export async function saveCompensationPackageAssignment(query: CompensationPacka
   assignmentId?: string; expectedRevision?: number; effectiveFrom: string; effectiveTo: string | null; inputs: Readonly<Record<string, unknown>>; reason: string; idempotencyKey?: string }): Promise<CompensationPackageAssignment> {
   actor(query); identifier(query.employmentId, "employment"); const window = dates(query.effectiveFrom, query.effectiveTo), reason = text(query.reason, "Reason", 2000);
   return packageTransaction(query.orgId, async () => {
+    if (query.assignmentId) await lockFlowSubjectDecision(query.orgId, COMPENSATION_ASSIGNMENT_SUBJECT_KIND, identifier(query.assignmentId, "compensation subject"));
     const pack = await packageRecord(query, query.packageId, "payroll.manage", true);
     const version = await versionRecord(query.orgId, pack.id, query.versionId);
     if (version.status !== "approved") throw new PayrollError("Choose an approved package version before assigning its employee terms.");
@@ -407,6 +475,7 @@ export async function transitionCompensationPackageAssignment(query: Compensatio
   actor(query); const reason = text(query.reason, "Reason", 2000);
   if (!["submit", "approve", "reject", "cancel", "end"].includes(query.action)) throw new PayrollError("Choose a supported compensation assignment action.");
   return packageTransaction(query.orgId, async () => {
+    await lockFlowSubjectDecision(query.orgId, COMPENSATION_ASSIGNMENT_SUBJECT_KIND, identifier(query.assignmentId, "compensation subject"));
     const decide = query.action === "approve" || query.action === "reject";
     const pack = await packageRecord(query, query.packageId, decide ? "hrm.compensation.approve" : "payroll.manage", true);
     const row = one((await db.execute<CompensationPackageAssignment>(sql`select ${ASSIGNMENT_COLUMNS} from payroll_compensation_assignments where org_id=${query.orgId} and package_id=${pack.id} and id=${identifier(query.assignmentId, "assignment")} for update`)).rows);

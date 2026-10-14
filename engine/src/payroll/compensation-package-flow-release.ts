@@ -1,9 +1,9 @@
 import { sql } from "drizzle-orm";
 import { COMPENSATION_VERSION_SUBJECT_KIND, COMPENSATION_ASSIGNMENT_SUBJECT_KIND } from "@openbooks/schema/src/payroll-compensation.ts";
 import { db } from "../platform/db.ts";
-import type { FlowApprovalReleaseArgs } from "../flows/approval-release-hook.ts";
+import type { FlowApprovalReleaseArgs, FlowSubmissionResumeArgs } from "../flows/approval-release-hook.ts";
 import { PayrollError } from "./error.ts";
-import { transitionCompensationPackageVersion, transitionCompensationPackageAssignment } from "./compensation-package-store.ts";
+import { transitionCompensationPackageVersion, transitionCompensationPackageAssignment, completeCompensationPackageSubmission } from "./compensation-package-store.ts";
 
 /** The native decision command rechecks authority and the exact submitted revision. */
 export async function releaseCompensationPackageFlowApproval(args: FlowApprovalReleaseArgs): Promise<void> {
@@ -21,4 +21,9 @@ export async function releaseCompensationPackageFlowApproval(args: FlowApprovalR
     reason: args.comment?.trim() || `Compensation ${args.outcome} through the submitted tenant Flow` };
   if (version) await transitionCompensationPackageVersion({ ...query, versionId: args.subjectId });
   else await transitionCompensationPackageAssignment({ ...query, assignmentId: args.subjectId });
+}
+
+/** Automatic routing uses the native submission finalizer, never a human decision. */
+export async function resumeCompensationPackageSubmission(args: FlowSubmissionResumeArgs): Promise<{ status: string }> {
+  return completeCompensationPackageSubmission(args);
 }

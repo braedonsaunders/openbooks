@@ -1,3 +1,6 @@
+import { isUuid } from "../platform/uuid.ts";
+import { addCalendarDays } from "../platform/civil-date.ts";
+import { captureDocumentPaymentTerms, PaymentTermsEvidenceError } from "./payment-terms-snapshot.ts";
 import { assertEntityPostingDate } from "../organization/accounting-preferences.ts";
 import { validateJournalInstructions } from "./journal-instructions.ts";
 import { assertWithholdingRemittanceCurrent, ContractorWithholdingError } from "../contractor-withholding/service.ts";
@@ -7,7 +10,7 @@ import { assertCanadianGoodsTaxEvidence } from '../tax/goods-selection.ts';
 import { assertCrossBorderSupplyEvidence } from '../tax/cross-border-posting.ts';
 import { CrossBorderTaxError } from '../tax/cross-border-place-of-supply.ts';
 import { and, eq, sql } from "drizzle-orm";
-import { db, inDbTransaction, schema, withTransactionSavepoint } from "../platform/db.ts";
+import { db, inDbTransaction, schema, withTransactionSavepoint, withOrgContext } from "../platform/db.ts";
 
 import { assertGeneratedBillingPostable, BillingSourceIntegrityError } from "../projects/billing-source-integrity.ts";
 
@@ -114,6 +117,19 @@ export async function commitDocumentPosting(prepared: Awaited<ReturnType<typeof 
     }
     if (deps.migration)
       await tx.execute(sql`set local openbooks.migration = on`);
+    // A replay cannot manufacture historical terms from current setup. Native
+    // posts retain their source under locks in the same unit as the journal.
+    let paymentTermsSnapshot: Awaited<ReturnType<typeof captureDocumentPaymentTerms>>;
+    try {
+      paymentTermsSnapshot = deps.migration ? null : await captureDocumentPaymentTerms(tx, doc.orgId, effectiveDoc);
+    } catch (error) {
+      if (error instanceof PaymentTermsEvidenceError) throw Object.assign(new PostingError(error.message), { cause: error });
+      throw error;
+    }
+    if (paymentTermsSnapshot?.documentKind === "vendor_bill" && dueDateFromTerms
+      && dueDateFromTerms.dueDate !== addCalendarDays(effectiveDoc.documentDate, paymentTermsSnapshot.terms?.netDays ?? 0)) {
+      throw new PostingError("The vendor's payment terms changed during posting. Reload the bill and post again so its due date and retained terms agree.");
+    }
     const auditBefore = options.audit
       ? await captureTransactionAuditSnapshot(tx, documentId, doc.orgId)
       : null;
@@ -188,10 +204,10 @@ export async function commitDocumentPosting(prepared: Awaited<ReturnType<typeof 
         // collision is either this document's own earlier posting or a
         // DIFFERENT document that already claimed the number. Diagnose which,
         // because "already posted" is false for a valid approved document
-        // that has no journal yet. The violated index aborted this
-        // transaction, so the read runs on the pool against the committed
-        // claimant row before this unit rolls back.
-        const claimant = await db.execute<{
+        // that has no journal yet. The savepoint restored this transaction,
+        // but its repeatable-read snapshot can still predate the winner.
+        // A separate tenant-scoped read diagnoses the committed claimant.
+        const claimant = await withOrgContext(doc.orgId, () => db.execute<{
           kind: string;
           document_number: string;
           source_document_id: string | null;
@@ -201,7 +217,7 @@ export async function commitDocumentPosting(prepared: Awaited<ReturnType<typeof 
             left join documents d on d.id = e.source_document_id and d.org_id = e.org_id
            where e.org_id = ${doc.orgId}
              and e.entry_number = ${entryNumber}
-           limit 1`);
+           limit 1`));
         const other = claimant.rows[0];
         if (other && other.source_document_id !== doc.id) {
           throw new PostingError(
@@ -279,10 +295,10 @@ export async function commitDocumentPosting(prepared: Awaited<ReturnType<typeof 
     ])
       .returning({ id: schema.journalLines.id });
 
-    await tx
-      .update(schema.journalEntries)
-      .set({ status: "posted", postedAt: new Date() })
-      .where(and(eq(schema.journalEntries.id, entry.id), eq(schema.journalEntries.orgId, doc.orgId)));
+    const postedEntry = await tx.update(schema.journalEntries).set({ status: "posted", postedAt: new Date() })
+      .where(and(eq(schema.journalEntries.id, entry.id), eq(schema.journalEntries.orgId, doc.orgId), eq(schema.journalEntries.status, "draft")))
+      .returning({ id: schema.journalEntries.id });
+    if (postedEntry.length !== 1) throw new PostingError("The journal did not make its required draft-to-posted transition; nothing may be reported posted.");
 
     // Exactly-once posting: the conditional flip only lands while the document
     // is still unposted. Postgres row-locks the
@@ -318,6 +334,7 @@ export async function commitDocumentPosting(prepared: Awaited<ReturnType<typeof 
         postedEntryId: entry.id,
         postingDate,
         postingPeriodId: period.id,
+        ...(paymentTermsSnapshot ? { paymentTermsSnapshot } : {}),
         // The due date the party's terms imply, stamped with the status flip
         // so the open item and the document header agree from the posting on.
         ...(dueDateFromTerms ? { dueDate: dueDateFromTerms.dueDate } : {}),
@@ -351,6 +368,19 @@ export async function commitDocumentPosting(prepared: Awaited<ReturnType<typeof 
       throw new PostingError(
         `document ${doc.documentNumber} was already posted or voided`,
       );
+    }
+    if (paymentTermsSnapshot && !options.audit) {
+      const audit = await tx.execute(sql`
+        insert into audit_log (org_id, table_name, row_id, action, changes, actor_id, request_id)
+        values (${doc.orgId}, 'documents', ${doc.id}, 'update',
+          ${JSON.stringify({
+            source: "document_posting",
+            reason: "Retain payment terms with the original posting",
+            before: { payment_terms_snapshot: null },
+            after: { payment_terms_snapshot: paymentTermsSnapshot },
+          })}::jsonb, null, 'document_posting') returning id
+      `);
+      if (audit.rows.length !== 1) throw new PostingError("The posted payment terms audit was not retained.");
     }
 
     // A cash sale's stored-value tenders redeem inside the posting commit:
@@ -464,6 +494,9 @@ export async function commitDocumentPosting(prepared: Awaited<ReturnType<typeof 
       list.push(line);
       secondaryByBook.set(line.bookId, list);
     }
+    if ([...secondaryByBook.keys()].some((bookId) => !isUuid(bookId))) {
+      throw new PostingError("allocation target book must be a UUID, not a code or name");
+    }
     if (secondaryByBook.size > 0) {
       // Revalidate under the setup fence: a book deactivated after contribution
       // planning refuses instead of posting into a dead book.
@@ -551,10 +584,10 @@ export async function commitDocumentPosting(prepared: Awaited<ReturnType<typeof 
             })),
           )
           .returning({ id: schema.journalLines.id });
-        await tx
-          .update(schema.journalEntries)
-          .set({ status: "posted", postedAt: new Date() })
-          .where(and(eq(schema.journalEntries.id, secEntry.id), eq(schema.journalEntries.orgId, doc.orgId)));
+        const postedSecondary = await tx.update(schema.journalEntries).set({ status: "posted", postedAt: new Date() })
+          .where(and(eq(schema.journalEntries.id, secEntry.id), eq(schema.journalEntries.orgId, doc.orgId), eq(schema.journalEntries.status, "draft")))
+          .returning({ id: schema.journalEntries.id });
+        if (postedSecondary.length !== 1) throw new PostingError("The secondary-book journal did not make its required draft-to-posted transition.");
         bookLines.forEach((line, j) => {
           const journalLineId = secInserted[j]?.id;
           if (!journalLineId) throw new PostingError("allocation contribution line was not inserted");

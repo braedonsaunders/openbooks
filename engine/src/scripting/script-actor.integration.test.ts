@@ -2,9 +2,9 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, withBypass } from "../platform/db.ts";
+import { db, withBypass, withOrg } from "../platform/db.ts";
 import { claimDueScriptOccurrence } from "../scheduling/scheduler.ts";
-import { ScriptActorError, runBulkScript, runScheduledScript } from "./scripting.ts";
+import { ScriptActorError, resolveScriptUser, runBulkScript, runScheduledScript } from "./scripting.ts";
 import { processScriptJobData } from "../worker/scripts-worker.ts";
 import { installEngineSeams } from "../composition/install.ts";
 
@@ -387,4 +387,21 @@ test("a forced posting failure rolls back atomically and the failed run stays at
   } finally {
     await dropScratchOrg(org.orgId);
   }
+});
+
+
+test("script human identity supports platform actors and never downgrades unknown humans to run-as", { skip: !DB }, async () => {
+  const home = await withBypass(() => createScratchOrg());
+  const target = await withBypass(() => createScratchOrg());
+  try {
+    const platform = await withBypass(() => createScratchUser(home.orgId, "Platform script actor", "admin"));
+    await withBypass(() => db.execute(sql`update users set is_super_admin=true where id=${platform}`));
+    await withOrg(target.orgId, async () => {
+      assert.equal((await resolveScriptUser(target.orgId, platform))?.id, platform);
+      await assert.rejects(resolveScriptUser(target.orgId, randomUUID(), { required: false }), ScriptActorError);
+      assert.equal(await resolveScriptUser(target.orgId, null, { required: false }), null);
+    });
+    await withBypass(() => db.execute(sql`update users set is_super_admin=false where id=${platform}`));
+    await withOrg(target.orgId, () => assert.rejects(resolveScriptUser(target.orgId, platform, { required: false }), ScriptActorError));
+  } finally { await withBypass(() => dropScratchOrg(target.orgId)); await withBypass(() => dropScratchOrg(home.orgId)); }
 });

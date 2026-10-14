@@ -33,7 +33,7 @@ test("CSV refuses incomplete quoted fields before returning any transaction rows
 
 test("BAI2 rejects amount fields containing anything beyond an optional sign and digits", () => {
   for (const amount of ["12X34", "12-34", "12.34", ""]) {
-    const source = [baiHeader, `16,165,${amount},S,REF,,deposit/`].join("\n");
+    const source = [baiHeader, `16,165,${amount},Z,REF,,deposit/`].join("\n");
     assert.throws(
       () => parseBai2(source),
       (error: unknown) =>
@@ -47,8 +47,8 @@ test("BAI2 preserves the sign on exact integer-cent amounts", () => {
   const parsed = parseBai2(
     [
       baiHeader,
-      "16,165,+150000,S,REF,,deposit/",
-      "16,495,-500,S,REF2,,withdrawal/",
+      "16,165,+150000,Z,REF,,deposit/",
+      "16,495,-500,Z,REF2,,withdrawal/",
     ].join("\n"),
   );
   assert.deepEqual(
@@ -250,12 +250,12 @@ test("statement amounts wider than numeric(19,4) fail closed at parse time", () 
     (error: unknown) => error instanceof BankingError && /out of range/.test(error.message),
   );
   assert.throws(
-    () => parseBai2([baiHeader, "16,165,9999999999999999999999,S,REF,,deposit/"].join("\n")),
+    () => parseBai2([baiHeader, "16,165,9999999999999999999999,Z,REF,,deposit/"].join("\n")),
     (error: unknown) => error instanceof BankingError && /out of range/.test(error.message),
   );
   // The column maximum itself still parses in both spellings.
   const csv = parseCsv("date,amount,description\n2026-07-01,999999999999999.9999,salary\n", { date: 0, amount: 1, description: 2 });
   assert.equal(csv.lines[0]!.amount, "999999999999999.9999");
-  const bai = parseBai2([baiHeader, "16,165,99999999999999999,S,REF,,deposit/"].join("\n"));
+  const bai = parseBai2([baiHeader, "16,165,99999999999999999,Z,REF,,deposit/"].join("\n"));
   assert.equal(bai.lines[0]!.amount, "999999999999999.9900");
 });

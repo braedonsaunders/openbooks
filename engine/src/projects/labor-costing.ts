@@ -1,3 +1,4 @@
+import { lockActorIdentity } from "../organization/actor-permissions.ts";
 import { lockActorCommandAuthority } from '../organization/actor-command-authority.ts'
 import { sql, type SQL } from "drizzle-orm";
 import { db, inDbTransaction, type SqlExecutor } from "../platform/db.ts";
@@ -1087,7 +1088,7 @@ export async function postPayrollVariance(opts: {
   // reverse the prior generation and repost (journal_entries_org_number).
   const entryNumberBase = `PVAR-${periodEnd}-${subsidiaryId.slice(0, 8)}`;
   return inDbTransaction(async (tx) => {
-    if (!(await tx.execute(sql`select id from users where id=${actorId} and is_active and (org_id=${orgId} or is_super_admin) for share`)).rows[0]) throw Object.assign(new Error('Record not found.'), { status: 404 })
+    if (!await lockActorIdentity(tx, orgId, actorId)) throw Object.assign(new Error('Record not found.'), { status: 404 })
     await lockActorCommandAuthority(tx,orgId,actorId,subsidiaryId,'gl.post')
     // The shared setup fence protects both account mappings for the complete
     // reverse/recompute/repost unit without serializing unrelated posting.

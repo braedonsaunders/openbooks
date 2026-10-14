@@ -1,3 +1,4 @@
+import { lockActorIdentity } from "../organization/actor-permissions.ts";
 import { sql } from "drizzle-orm";
 import { allocateDocumentNumber } from "../records/numbering.ts";
 import { loadRequiredControlAccounts } from "../records/control-accounts.ts";
@@ -474,9 +475,7 @@ async function lockConsolidationCommandAuthority(orgId: string, opts: Consolidat
   if (!isUuid(opts.actorId)) {
     throw new ConsolidatedBillingError("Consolidated billing is unavailable for this operator.", 404);
   }
-  const actor = (await db.execute(sql`
-    select id from users where id=${opts.actorId} and is_active and (org_id=${orgId} or is_super_admin) for share
-  `)).rows[0];
+  const actor = await lockActorIdentity(db,orgId,opts.actorId);
   if (!actor) throw new ConsolidatedBillingError("Consolidated billing is unavailable for this operator.", 404);
   try {
     const scope = await lockActorCommandAuthority(db, orgId, opts.actorId, null, "documents.manage");

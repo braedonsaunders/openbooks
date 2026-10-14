@@ -1,3 +1,4 @@
+import { lockActorIdentity } from "../organization/actor-permissions.ts";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { isUuid } from "../platform/uuid.ts";
@@ -29,7 +30,7 @@ export async function inventoryTrackingOptions(
   if (query.q !== undefined && (typeof query.q !== "string" || query.q.length > 200))
     throw new InventoryError("Identifier search must contain at most 200 characters");
   return withScopeSnapshot(orgId, async () => {
-    if (!(await db.execute(sql`select id from users where id=${actorId} and is_active and (org_id=${orgId} or is_super_admin) for share`)).rows.length) throw new ScopeNotFoundError();
+    if (!await lockActorIdentity(db,orgId,actorId)) throw new ScopeNotFoundError();
     const allowed = await lockActorCommandAuthority(db, orgId, actorId, null, "items.read");
     if (!(await lockAndCheckOrgFeature(db, orgId, "inventory"))) throw new ScopeNotFoundError();
     const profile = (await db.execute<{ tracking: InventoryProfile["tracking"] | null }>(sql`
