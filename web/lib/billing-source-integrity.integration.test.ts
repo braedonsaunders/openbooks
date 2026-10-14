@@ -1380,6 +1380,23 @@ const billingRateAndTaxCases = [
               /receiving entity.*no tax address/,
             )
             assert.equal(calls, 2, 'the refused draft must not call the provider')
+
+            // A tax-inclusive profile would send a gross as the taxable amount;
+            // the draft refuses before quoting instead of becoming unpostable.
+            await db.execute(sql`update tax_codes set price_includes_tax = true where org_id = ${org.orgId} and id = ${codeId}`)
+            await assert.rejects(
+              computeBillTotalsWithProvider(lines, await taxProfileMap(org.orgId, org.date), {
+                orgId: org.orgId,
+                kind: 'vendor_bill',
+                currency: 'CAD',
+                documentDate: org.date,
+                partyId: org.vendorId,
+                subsidiaryId: org.subsidiaryId,
+                allowPrivateEndpoints: true,
+              }),
+              /external tax provider quotes net prices/,
+            )
+            assert.equal(calls, 2, 'an inclusive line is never sent to the provider')
           } finally {
             if (provider) await close(provider)
             await dropScratchOrg(org.orgId)

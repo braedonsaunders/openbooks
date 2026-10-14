@@ -278,6 +278,12 @@ export async function computeBillTotalsWithProvider(
         ? profiles.codes.get(line.taxCodeId)
         : []
     if (!config?.length) throw new Error('selected tax profile is inactive or has no effective rate')
+    // A provider quotes tax on a net taxable amount. Sending a tax-inclusive
+    // gross would tax the tax, and the posting check would then refuse the
+    // document on every recalculation.
+    if (config.some((component) => component.priceIncludesTax)) {
+      throw new Error('the external tax provider quotes net prices; enter this line net of tax, or choose a tax code or group that does not include tax in the price')
+    }
     const request: TaxQuoteRequest = {
       taxableAmount: line.taxInputAmount,
       currency: options.currency,
