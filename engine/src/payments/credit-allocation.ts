@@ -115,7 +115,9 @@ export async function validateCreditAllocations(
         throw new PaymentError("credit application endpoints have the wrong payment side or sign");
       }
       if (row.currency !== row.base_currency || cmp(row.amount, row.txn_amount) !== 0) {
-        throw new PaymentError("foreign-currency credit applications require explicit transaction amounts");
+        // Applying a foreign-currency credit without cash would realize FX
+        // between the two carrying amounts, which this path does not post.
+        throw new PaymentError("credits and open items in a foreign transaction currency cannot be applied without cash; only functional-currency balances settle through a credit application");
       }
     }
     const units = toUnits(credit.amount);
