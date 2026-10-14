@@ -19,6 +19,9 @@ test("installed Canada defaults are audited, isolated and preserve configured ra
       const id = randomUUID();
       await db.execute(sql`insert into pay_components (id, org_id, code, name, kind, taxable, country)
         values (${id}, ${orgId}, ${id}, 'Non-taxable allowance', 'earning', false, ${country})`);
+      await db.execute(sql`insert into pay_component_statutory_treatments
+        (org_id, pay_component_id, effective_from, program_exclusions)
+        values (${orgId}, ${id}, '2026-01-01', '{}'::text[])`);
       return id;
     };
     const shared = await component(org.orgId, null);
@@ -42,7 +45,9 @@ test("installed Canada defaults are audited, isolated and preserve configured ra
     ]);
     await provisionPayrollPackDefaults(other.orgId);
     const exclusions = async (id: string) => (await db.execute<{ program_exclusions: string[] }>(
-      sql`select program_exclusions from pay_components where id = ${id}`,
+      sql`select program_exclusions from pay_component_statutory_treatments
+        where pay_component_id = ${id} and effective_from <= current_date
+          and (effective_to is null or effective_to >= current_date)`,
     )).rows[0]!.program_exclusions;
     assert.deepEqual(await exclusions(shared), ["cnt", "eht", "hsf", "wcb"]);
     assert.deepEqual(await exclusions(foreign), []);
@@ -64,7 +69,12 @@ test("installed Canada defaults are audited, isolated and preserve configured ra
     `)).rows;
     assert.equal(audits.length, 2);
     assert.ok(audits.every(row => row.actor_id === actorId && row.changes.before !== undefined && row.changes.after !== undefined && row.changes.reason));
-    await db.execute(sql`update pay_components set program_exclusions = '{}' where org_id = ${org.orgId} and id = ${shared}`);
+    assert.equal((await db.execute(sql`select count(*)::int as count from audit_log
+      where org_id = ${org.orgId} and table_name = 'pay_component_statutory_treatments'
+        and changes->>'reason' = 'Canadian non-taxable earnings default to excluded from applicable employer levies.'`)).rows[0]!.count, 1);
+    await db.execute(sql`update pay_component_statutory_treatments
+      set program_exclusions = '{}' where org_id = ${org.orgId} and pay_component_id = ${shared}
+        and effective_from <= current_date and (effective_to is null or effective_to >= current_date)`);
     await provisionPayrollPackDefaults(org.orgId, actorId);
     assert.deepEqual(await exclusions(shared), [], "a later explicit assessability choice remains authoritative");
     assert.equal((await db.execute<{ count: number }>(sql`select count(*)::int as count from payroll_employer_facts where org_id = ${org.orgId}`)).rows[0]!.count, 2);

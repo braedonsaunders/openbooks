@@ -34,7 +34,7 @@ import { reduceTaxBases } from "./treatment-bases.ts";
 import { assertVacationPlanResolved } from "./run-setup.ts";
 import { type StubComputation, storedTaxCertificates, resolvePayRate, resolveStubStatutoryHours } from "./run-calculation-support.ts";
 import { assertPackStatutoryRatesConfigured, createStubCertificateResolver } from "./run-stub-preflight.ts";
-import { type Line, installablePackOrThrow, insertPayStubRow, insertPayStubLineRows, persistEntitlementMovements, earningsAssessedSnapshot, resolveEmployeeJurisdiction, stampDepartmentExpenseAccounts, employeeHomeDepartment } from "./run-stub-records.ts";
+import { type Line, installablePackOrThrow, insertPayStubRow, insertPayStubLineRows, persistEntitlementMovements, earningsAssessedSnapshot, resolveEmployeeJurisdiction, stampDepartmentExpenseAccounts, employeeHomeDepartment, stampEarningLineStatutoryTreatments } from "./run-stub-records.ts";
 import { appendPeriodicEarnings, appendRetroSettlementLines, appendDerivedEarningLines, appendStatutoryHolidayEarningLines, applyAssignedComponentLines, applyRunLineAdjustments } from "./run-earning-lines.ts";
 import { appendUnionFringeLines, applyEntitlementPlanMovements } from "./run-plan-earning-lines.ts";
 import { applyBankDrawdown } from "./run-bank-drawdown.ts";
@@ -154,6 +154,7 @@ export async function calculateStub(
     );
   }
   emp = historicalWithholdingProfile({ country, profile: emp, stored: storedCertificates, payDate: run.pay_date! });
+  const workerCompGroupId = emp.historical_worker_comp_group_id ?? emp.current_worker_comp_group_id ?? null;
   const certificateFor = createStubCertificateResolver({
     country, storedCertificates, emp, payDate: run.pay_date,
   });
@@ -232,9 +233,18 @@ export async function calculateStub(
   const rosterEmploymentId = emp.employment_id ?? null;
   const assigned = (await tx.execute<Record<string, unknown>>(sql`
     select a.value as override, a.effective_from, a.effective_to, a.run_applicability, c.*,
+           treatment.id as statutory_treatment_id, treatment.program_exclusions,
            ec.supplemental_wage_category, ec.statutory_reporting_category, ec.statutory_exemption_category
       from employee_pay_components a
       join pay_components c on c.id = a.component_id and c.org_id = a.org_id
+      left join lateral (
+        select t.id, t.program_exclusions
+          from pay_component_statutory_treatments t
+         where t.org_id=c.org_id and t.pay_component_id=c.id
+           and t.worker_comp_group_id is null
+           and t.effective_from<=${run.pay_date!}::date
+           and (t.effective_to is null or t.effective_to>=${run.pay_date!}::date)
+      ) treatment on true
       join pay_component_earning_classifications ec
         on ec.org_id = c.org_id and ec.pay_component_id = c.id
      where a.org_id = ${orgId} and a.employee_party_id = ${employeePartyId}
@@ -294,7 +304,7 @@ export async function calculateStub(
   const compensationPackages = await prepareCompensationPackages(tx, {
     orgId, actorId, documentId, employeePartyId, employmentId,
     subsidiaryId: ctx.runContext.subsidiaryId ?? null, country, currency: run.doc_currency!,
-    periodStart: run.period_start!, periodEnd: run.period_end!, taxYear,
+    periodStart: run.period_start!, periodEnd: run.period_end!, payDate: run.pay_date!, taxYear,
     hourlyWage: payRate ? payrollHourlyWage(payRate) : null,
     payScheduleId: run.pay_schedule_id!, runType, oneOffRun, terminationRun: runType === "termination", simulate: !!ctx.simulate,
     assignedRows: assigned.rows, allowedSubsidiaryIds: ctx.allowedSubsidiaryIds,
@@ -305,7 +315,7 @@ export async function calculateStub(
   await applyAssignedComponentLines(tx, {
     orgId, employeePartyId, employmentId, taxYear, documentId,
     assignedRows: assigned.rows, runType, oneOffRun, lines,
-    periodStart: run.period_start!, periodEnd: run.period_end!,
+    periodStart: run.period_start!, periodEnd: run.period_end!, payDate: run.pay_date!,
   });
 
   // Run-level 'line' adjustments — one-off inputs for THIS employee in THIS
@@ -453,6 +463,13 @@ export async function calculateStub(
     components: ctx.components, lines, wageExpenseAccountId: ctx.wageExpenseAccountId,
   });
 
+  await stampEarningLineStatutoryTreatments(tx, {
+    orgId,
+    payDate: run.pay_date!,
+    workerCompGroupId,
+    lines,
+  });
+
   await assertComponentServiceEligibility(tx, { orgId, employmentId, policyDate: entitlementPolicyDate,
     componentIds: lines.filter((line) => cmp(line.amount, "0") !== 0).map((line) => line.componentId).filter((id): id is string => id !== null) });
 
@@ -493,7 +510,7 @@ export async function calculateStub(
     employeeName: emp.display_name ?? employeePartyId,
     taxYear, region: province, lines, pushStatutory, payDate: run.pay_date!,
     subsidiaryId: ctx.runContext.subsidiaryId ?? null,
-    ...(emp.historical_worker_comp_group_id ? { workerCompGroupId: emp.historical_worker_comp_group_id } : {}),
+    ...(workerCompGroupId ? { workerCompGroupId } : {}),
   }) ?? EMPTY_EMPLOYER_LEVY_FACTORS;
 
   // Statutory inputs from the line set. The pack's contributoryBases declaration

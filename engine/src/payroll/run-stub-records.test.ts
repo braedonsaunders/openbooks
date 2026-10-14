@@ -1,6 +1,6 @@
 /**
  * Per-program line applicability, stamped from the component's
- * `program_exclusions` (0342, C-13).
+ * effective-dated statutory treatment (migration 0720).
  *
  * The contract: an earning type feeds every declared contribution program
  * EXCEPT the excluded keys, so EI-excluded-but-QPIP-insurable earnings (or

@@ -9,6 +9,7 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { requireDerivedQuantityEvidence } from "./derived-quantity.ts";
 import { PayrollError } from "./error.ts";
+import { resolveComponentStatutoryTreatments, requireComponentStatutoryTreatment } from "./component-statutory-treatment.ts";
 import { sum } from "../money/money.ts";
 import { addMoney, sumMoney, type Money } from "../money/brands.ts";
 import { jurisdictionKey, labourJurisdictionProblem, PayrollJurisdictionError, payrollJurisdictionDeclared, payrollPack, resolvePayrollStatutoryReportingCode, type PayrollAssessedOn } from "./packs.ts";
@@ -28,8 +29,8 @@ import type { UsStatutoryExemptionCategory } from "./statutory-exemptions.ts";
 export type ExpenseAccountSource = "item" | "component" | "department" | "org_default";
 
 /**
- * Per-program applicability stamped from a component row's
- * `program_exclusions` (0342, C-13): the earning type feeds every declared
+ * Per-program applicability stamped from a component's effective-dated
+ * statutory treatment (migration 0720): the earning type feeds every declared
  * program EXCEPT the excluded keys. Empty or absent exclusions stamp
  * nothing, so the accumulation's default-true includes the line. Keys no
  * pack declares are inert — no declared program ever looks them up, exactly
@@ -45,6 +46,38 @@ export function programApplicabilityFromExclusions(
     if (typeof key === "string" && key !== "") out[key] = false;
   }
   return Object.keys(out).length > 0 ? out : undefined;
+}
+
+export function programApplicabilityFromResolvedTreatment(input: {
+  componentId: unknown;
+  treatmentId: unknown;
+  exclusions: unknown;
+  payDate: string;
+}): Record<string, boolean> | undefined {
+  if (typeof input.componentId !== 'string' || typeof input.treatmentId !== 'string'
+      || !Array.isArray(input.exclusions)) {
+    throw new PayrollError(`No effective statutory treatment covers earning component ${String(input.componentId)} on ${input.payDate}; add a dated treatment in Payroll Setup before calculating.`);
+  }
+  return programApplicabilityFromExclusions(input.exclusions);
+}
+
+/** Stamp each component-backed earning with its pay-date treatment at the worker's compensation scope. */
+export async function stampEarningLineStatutoryTreatments(tx: Pick<typeof db, "execute">, input: {
+  orgId: string;
+  payDate: string;
+  workerCompGroupId: string | null;
+  lines: Line[];
+}): Promise<void> {
+  const componentIds = input.lines.filter(line => line.kind === "earning" && line.componentId !== null)
+    .map(line => line.componentId!);
+  const treatments = await resolveComponentStatutoryTreatments(
+    tx, input.orgId, input.payDate, componentIds, input.workerCompGroupId,
+  );
+  for (const line of input.lines) {
+    if (line.kind !== "earning" || line.componentId === null) continue;
+    const treatment = requireComponentStatutoryTreatment(line.componentId, treatments, input.payDate);
+    line.programApplicability = programApplicabilityFromExclusions(treatment.program_exclusions);
+  }
 }
 
 export interface Line {
@@ -95,7 +128,8 @@ export interface Line {
    * program's own base when its key is present and true. Absent key means
    * included, matching the sibling flags' default-true; an absent map means
    * every declared program includes the line. Never derived from another
-   * program's base. Stamped from the component's `program_exclusions`
+   * program's base. Stamped from the component's effective-dated statutory
+   * treatment
    * (beside `taxable`/`pensionable`/`insurable` in run-earning-lines.ts);
    * lines built without a component row in hand (holiday pay is wages)
    * carry no map and default-include, exactly like the sibling flags.

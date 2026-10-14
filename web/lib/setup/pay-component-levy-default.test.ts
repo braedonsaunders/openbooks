@@ -3,13 +3,15 @@ import test from 'node:test'
 
 // The fold is pure over the request body (no storage); only the module
 // import is stubbed by server-only, exactly like the treatment-refusal test.
-const { foldPayComponentSetupCreate } = await import('./write.ts')
+const { defaultPayComponentProgramExclusions, foldPayComponentSetupCreate } = await import('./write.ts')
 
-test('a non-taxable earning without exclusions defaults to the CA levy keys', () => {
+test('a non-taxable earning gets the CA levy exclusions in its initial policy version', () => {
   assert.deepEqual(
-    foldPayComponentSetupCreate('pay-components', { kind: 'earning', taxable: false, country: 'CA' }),
-    { kind: 'earning', taxable: false, country: 'CA', programExclusions: ['cnt', 'eht', 'hsf', 'wcb'] },
+    defaultPayComponentProgramExclusions({ kind: 'earning', taxable: false, country: 'CA' }),
+    ['cnt', 'eht', 'hsf', 'wcb'],
   )
+  assert.deepEqual(foldPayComponentSetupCreate('pay-components', { kind: 'earning', taxable: false, country: 'CA' }),
+    { kind: 'earning', taxable: false, country: 'CA' })
 })
 
 test('a taxable earning is left alone', () => {
@@ -22,11 +24,13 @@ test('an earning with no stated taxability is left alone', () => {
   assert.equal(foldPayComponentSetupCreate('pay-components', body), body)
 })
 
-test('an explicit exclusion list is never rewritten', () => {
+test('legacy exclusion payloads become the initial effective-dated policy', () => {
   const body = { kind: 'earning', taxable: false, country: 'CA', programExclusions: ['qpip'] }
   assert.equal(foldPayComponentSetupCreate('pay-components', body), body)
+  assert.deepEqual(defaultPayComponentProgramExclusions(body), ['qpip'])
   const empty = { kind: 'earning', taxable: false, country: 'CA', programExclusions: [] as string[] }
   assert.equal(foldPayComponentSetupCreate('pay-components', empty), empty)
+  assert.deepEqual(defaultPayComponentProgramExclusions(empty), [])
 })
 
 test('other entities and employer contributions pass through untouched', () => {

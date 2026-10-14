@@ -5,7 +5,7 @@ import { parseMoney } from "../money/brands.ts";
 import { PayrollError } from "./error.ts";
 import { holidayObligationRunSource } from "./holiday-obligation-source.ts";
 import { priceAdjudicatedHolidayPayment } from "./holiday-payment-contract.ts";
-import { programApplicabilityFromExclusions, type Line } from "./run-stub-records.ts";
+import { programApplicabilityFromResolvedTreatment, type Line } from "./run-stub-records.ts";
 import type { PayrollSubsidiaryScope } from "./scope.ts";
 
 /** Approved entitlement hours are paid units, not newly claimed worked time.
@@ -53,7 +53,10 @@ export async function appendApprovedHolidaySettlements(tx: SqlExecutor, input: {
       componentId: String(component.id), kind: "earning", description: "Approved unpaid holiday entitlement",
       hours: priced.hours, rate: priced.rate, amount: parseMoney(priced.amount), sequence: Number(component.sequence),
       taxable: component.taxable === true, pensionable: component.pensionable === true, insurable: component.insurable === true,
-      vacationable: component.vacationable === true, programApplicability: programApplicabilityFromExclusions(component.program_exclusions),
+      vacationable: component.vacationable === true, programApplicability: programApplicabilityFromResolvedTreatment({
+        componentId: component.id, treatmentId: component.statutory_treatment_id,
+        exclusions: component.program_exclusions, payDate: input.payDate,
+      }),
       nonPeriodic: component.non_periodic === true, taxTreatment: component.tax_treatment as string,
       supplementalWageCategory: component.supplemental_wage_category as Line["supplementalWageCategory"],
       statutoryExemptionCategory: component.statutory_exemption_category as Line["statutoryExemptionCategory"],

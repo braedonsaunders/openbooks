@@ -1,0 +1,77 @@
+import { sql } from 'drizzle-orm';
+import type { SqlExecutor } from '../platform/db.ts';
+import { PayrollError } from './error.ts';
+
+export type ResolvedComponentStatutoryTreatment = {
+  id: string;
+  pay_component_id: string;
+  worker_comp_group_id: string | null;
+  effective_from: string;
+  effective_to: string | null;
+  program_exclusions: string[];
+};
+
+export function selectComponentStatutoryTreatments(
+  rows: readonly ResolvedComponentStatutoryTreatment[],
+  workerCompGroupId: string | null,
+  payDate: string,
+): Map<string, ResolvedComponentStatutoryTreatment> {
+  const resolved = new Map<string, ResolvedComponentStatutoryTreatment>();
+  for (const row of rows) {
+    if (row.effective_from > payDate || row.effective_to !== null && row.effective_to < payDate) continue;
+    if (row.worker_comp_group_id !== null && row.worker_comp_group_id !== workerCompGroupId) continue;
+    const existing = resolved.get(row.pay_component_id);
+    if (!existing) {
+      resolved.set(row.pay_component_id, row);
+      continue;
+    }
+    if (existing.worker_comp_group_id === row.worker_comp_group_id) {
+      throw new PayrollError('More than one statutory treatment covers a pay component at the same scope on this pay date; resolve the overlapping Payroll Setup history before calculating.');
+    }
+    if (row.worker_comp_group_id !== null) resolved.set(row.pay_component_id, row);
+  }
+  return resolved;
+}
+
+/** Resolve the only assessability policy source at payroll pay date. */
+export async function resolveComponentStatutoryTreatments(
+  tx: SqlExecutor,
+  orgId: string,
+  payDate: string,
+  componentIds: readonly string[],
+  workerCompGroupId: string | null = null,
+): Promise<Map<string, ResolvedComponentStatutoryTreatment>> {
+  const ids = [...new Set(componentIds)].sort();
+  if (!ids.length) return new Map();
+  const rows = (await tx.execute<ResolvedComponentStatutoryTreatment>(sql`
+    select treatment.id::text,
+           treatment.pay_component_id::text,
+           treatment.worker_comp_group_id::text,
+           treatment.effective_from::text,
+           treatment.effective_to::text,
+           treatment.program_exclusions
+      from pay_component_statutory_treatments treatment
+     where treatment.org_id = ${orgId}
+       and treatment.pay_component_id in (${sql.join(ids.map(id => sql`${id}::uuid`), sql`, `)})
+       and (treatment.worker_comp_group_id is null
+         or treatment.worker_comp_group_id is not distinct from ${workerCompGroupId}::uuid)
+       and treatment.effective_from <= ${payDate}::date
+       and (treatment.effective_to is null or treatment.effective_to >= ${payDate}::date)
+     order by treatment.pay_component_id,
+       (treatment.worker_comp_group_id is not null) desc,
+       treatment.effective_from desc, treatment.id
+  `)).rows;
+  return selectComponentStatutoryTreatments(rows, workerCompGroupId, payDate);
+}
+
+export function requireComponentStatutoryTreatment(
+  componentId: string,
+  treatments: ReadonlyMap<string, ResolvedComponentStatutoryTreatment>,
+  payDate: string,
+): ResolvedComponentStatutoryTreatment {
+  const treatment = treatments.get(componentId);
+  if (!treatment) {
+    throw new PayrollError(`No effective statutory treatment covers component ${componentId} on ${payDate}; add a dated treatment in Payroll Setup before calculating.`);
+  }
+  return treatment;
+}

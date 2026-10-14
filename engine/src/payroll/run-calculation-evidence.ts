@@ -88,6 +88,8 @@ export interface PayRunCalculationSourceSnapshot {
   compensationPackages?: CompensationPackageAssignmentSource[];
   employerAssignments?: EmployerAssignmentSource[];
   assignmentRunPolicies?: { id: string; employeePartyId: string; employmentId: string | null; componentId: string; policy: string; from: string; to: string | null }[];
+  /** Exact component assessability versions consumed by earning lines at pay date. */
+  payComponentStatutoryTreatments?: { id: string; componentId: string; workerCompGroupId: string | null; employeeWorkerCompGroupId: string | null; effectiveFrom: string; effectiveTo: string | null; programExclusions: string[] }[];
   historicalEmploymentRoster?: HistoricalEmploymentRosterSource[];
   holidayObligations?: HolidayObligationSource[];
   bonusIncomeReferences?: CaBonusIncomeReferenceSource[];
@@ -134,6 +136,7 @@ export function parsePayRunCalculationSource(
       || !Array.isArray(snapshot.claimEntryIds)
       || (Object.hasOwn(snapshot, 'compensationPackages') && !Array.isArray(snapshot.compensationPackages))
       || (Object.hasOwn(snapshot, 'assignmentRunPolicies') && !Array.isArray(snapshot.assignmentRunPolicies))
+      || (Object.hasOwn(snapshot, 'payComponentStatutoryTreatments') && !Array.isArray(snapshot.payComponentStatutoryTreatments))
       || (Object.hasOwn(snapshot, 'historicalEmploymentRoster') && !Array.isArray(snapshot.historicalEmploymentRoster))
       || (Object.hasOwn(snapshot, 'employerAssignments') && !Array.isArray(snapshot.employerAssignments))
       || (Object.hasOwn(snapshot, 'holidayObligations') && !Array.isArray(snapshot.holidayObligations))
@@ -382,6 +385,93 @@ export async function payRunCalculationSource(
       and a.effective_from <= r.period_end and (a.effective_to is null or a.effective_to >= r.period_start)
     order by a.id
   `)).rows;
+  const payComponentStatutoryTreatments = (await executor.execute<NonNullable<PayRunCalculationSourceSnapshot['payComponentStatutoryTreatments']>[number]>(sql`
+    select treatment.id::text as id,
+      treatment.pay_component_id::text as "componentId",
+      treatment.worker_comp_group_id::text as "workerCompGroupId",
+      (case when dated_group.id is not null then dated_group.worker_comp_group_id else current_group.worker_comp_group_id end)::text as "employeeWorkerCompGroupId",
+      treatment.effective_from::text as "effectiveFrom",
+      treatment.effective_to::text as "effectiveTo",
+      treatment.program_exclusions as "programExclusions"
+    from pay_runs r
+    join pay_stubs stub on stub.org_id=r.org_id and stub.pay_run_document_id=r.document_id
+    join pay_stub_lines line on line.org_id=stub.org_id and line.stub_id=stub.id
+    left join lateral (
+      select role.worker_comp_group_id
+        from employee_roles role
+        join worker_comp_groups worker_group
+          on worker_group.org_id=role.org_id and worker_group.id=role.worker_comp_group_id and worker_group.is_active
+       where role.org_id=stub.org_id and role.party_id=stub.employee_party_id and role.is_active
+       order by role.updated_at desc, role.id
+       limit 1
+    ) current_group on true
+    left join lateral (
+      select assignment.id, assignment.worker_comp_group_id
+        from payroll_employee_employer_assignments assignment
+       where assignment.org_id=stub.org_id and assignment.employee_party_id=stub.employee_party_id
+         and assignment.assignment_kind='worker_comp'
+         and r.pay_date between assignment.effective_from and assignment.effective_to
+       order by assignment.effective_from desc, assignment.id
+       limit 1
+    ) dated_group on true
+    join lateral (
+      select treatment.*
+        from pay_component_statutory_treatments treatment
+       where treatment.org_id=line.org_id and treatment.pay_component_id=line.component_id
+         and treatment.effective_from<=r.pay_date
+         and (treatment.effective_to is null or treatment.effective_to>=r.pay_date)
+         and (treatment.worker_comp_group_id is null
+           or treatment.worker_comp_group_id is not distinct from
+             case when dated_group.id is not null then dated_group.worker_comp_group_id else current_group.worker_comp_group_id end)
+       order by (treatment.worker_comp_group_id is not null) desc
+       limit 1
+    ) treatment on true
+    where r.org_id=${orgId} and r.document_id=${documentId}
+      and line.kind='earning' and line.component_id is not null
+    group by treatment.id::text, treatment.pay_component_id::text, treatment.worker_comp_group_id::text,
+      (case when dated_group.id is not null then dated_group.worker_comp_group_id else current_group.worker_comp_group_id end)::text,
+      treatment.effective_from::text, treatment.effective_to::text, treatment.program_exclusions
+     order by treatment.pay_component_id, treatment.worker_comp_group_id nulls first, treatment.effective_from, treatment.id
+  `)).rows;
+  const uncoveredEarningComponents = (await executor.execute<{ component_id: string }>(sql`
+    select distinct line.component_id::text as component_id
+    from pay_runs r
+      join pay_stubs stub on stub.org_id=r.org_id and stub.pay_run_document_id=r.document_id
+      join pay_stub_lines line on line.org_id=stub.org_id and line.stub_id=stub.id
+      left join lateral (
+        select role.worker_comp_group_id
+          from employee_roles role
+          join worker_comp_groups worker_group
+            on worker_group.org_id=role.org_id and worker_group.id=role.worker_comp_group_id and worker_group.is_active
+         where role.org_id=stub.org_id and role.party_id=stub.employee_party_id and role.is_active
+         order by role.updated_at desc, role.id
+         limit 1
+      ) current_group on true
+      left join lateral (
+        select assignment.id, assignment.worker_comp_group_id
+          from payroll_employee_employer_assignments assignment
+         where assignment.org_id=stub.org_id and assignment.employee_party_id=stub.employee_party_id
+           and assignment.assignment_kind='worker_comp'
+           and r.pay_date between assignment.effective_from and assignment.effective_to
+         order by assignment.effective_from desc, assignment.id
+         limit 1
+      ) dated_group on true
+     where r.org_id=${orgId} and r.document_id=${documentId}
+       and line.kind='earning' and line.component_id is not null
+       and not exists (
+         select 1 from pay_component_statutory_treatments treatment
+          where treatment.org_id=line.org_id and treatment.pay_component_id=line.component_id
+            and treatment.effective_from<=r.pay_date
+            and (treatment.effective_to is null or treatment.effective_to>=r.pay_date)
+            and (treatment.worker_comp_group_id is null
+              or treatment.worker_comp_group_id is not distinct from
+                case when dated_group.id is not null then dated_group.worker_comp_group_id else current_group.worker_comp_group_id end)
+       )
+     order by line.component_id
+  `)).rows;
+  if (uncoveredEarningComponents.length) {
+    throw new PayrollError(`No effective statutory treatment covers earning component ${uncoveredEarningComponents[0]!.component_id} on this pay date; add a dated treatment in Payroll Setup before calculating.`);
+  }
   const openingRows = (await executor.execute<OpeningEmployerAuthoritySource & { matches: boolean }>(sql`
     select a.id::text,a.opening_balance_id::text as "openingBalanceId",a.employee_party_id::text as "employeePartyId",
       a.tax_year as "taxYear",a.subsidiary_id::text as "subsidiaryId",a.source_file_id::text as "sourceFileId",
@@ -451,6 +541,7 @@ export async function payRunCalculationSource(
     ...(compensationPackages.length ? { compensationPackages } : {}),
     ...(employerAssignments.length ? { employerAssignments } : {}),
     ...(assignmentRunPolicies.length ? { assignmentRunPolicies } : {}),
+    payComponentStatutoryTreatments,
     ...(historicalEmploymentRoster.length ? { historicalEmploymentRoster } : {}),
     ...(holidayObligations.length ? { holidayObligations } : {}),
     ...(bonusIncomeReferences.length ? { bonusIncomeReferences } : {}),
@@ -471,7 +562,8 @@ export function payRunCalculationSourceChanges(
     wages: canonicalJson(stored.payRates) !== canonicalJson(current.payRates)
       || canonicalJson(stored.bonusIncomeReferences ?? []) !== canonicalJson(current.bonusIncomeReferences ?? []),
     compensationPackages: canonicalJson(stored.compensationPackages ?? []) !== canonicalJson(current.compensationPackages ?? []),
-    components: canonicalJson(stored.assignmentRunPolicies ?? []) !== canonicalJson(current.assignmentRunPolicies ?? []),
+    components: canonicalJson(stored.assignmentRunPolicies ?? []) !== canonicalJson(current.assignmentRunPolicies ?? [])
+      || canonicalJson(stored.payComponentStatutoryTreatments ?? []) !== canonicalJson(current.payComponentStatutoryTreatments ?? []),
     holidayObligations: canonicalJson(stored.holidayObligations ?? []) !== canonicalJson(current.holidayObligations ?? []),
     roster: canonicalJson(stored.employerAssignments ?? []) !== canonicalJson(current.employerAssignments ?? [])
       || canonicalJson(stored.historicalEmploymentRoster ?? []) !== canonicalJson(current.historicalEmploymentRoster ?? []),

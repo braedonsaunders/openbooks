@@ -18,13 +18,13 @@ import { applicableDerivedRules, loadActiveDerivedRules } from './derived-earnin
 import { fringesForEmployee } from './union.ts';
 import { componentYearToDate } from './opening-balances.ts';
 import { coveredPayrollLines } from './covered-payroll-lines.ts';
-import { cappableHourLines, earningsBase, programApplicabilityFromExclusions, type Line } from './run-stub-records.ts';
+import { cappableHourLines, earningsBase, programApplicabilityFromResolvedTreatment, type Line } from './run-stub-records.ts';
 import type { PayrollSubsidiaryScope } from './scope.ts';
 
 type ComponentWindow = { componentId: string; from: string; to: string; basis: string };
 export interface CompensationPackagePayrollContext {
   orgId: string; actorId: string; documentId: string; employeePartyId: string; employmentId: string;
-  subsidiaryId: string | null; country: string; currency: string; periodStart: string; periodEnd: string;
+  subsidiaryId: string | null; country: string; currency: string; periodStart: string; periodEnd: string; payDate: string;
   taxYear: number; hourlyWage: string | null; payScheduleId: string; runType: PayRunType; oneOffRun: boolean; terminationRun: boolean; simulate: boolean;
   assignedRows: Record<string, unknown>[]; unionAgreementId: string | null; unionClassificationId: string | null;
   allowedSubsidiaryIds?: PayrollSubsidiaryScope;
@@ -189,7 +189,10 @@ export async function appendCompensationPackageStage(tx: SqlExecutor, prepared: 
       const line: Line = { componentId: component.id, kind: component.kind, description: component.name, amount: parseMoney(evaluated.amount),
         earnedFrom: from, earnedTo: to, sequence: component.sequence, taxable: component.taxable, pensionable: component.pensionable,
         insurable: component.insurable, vacationable: component.vacationable, nonPeriodic: component.nonPeriodic,
-        taxTreatment: component.taxTreatment, programApplicability: programApplicabilityFromExclusions(component.programExclusions),
+        taxTreatment: component.taxTreatment, programApplicability: programApplicabilityFromResolvedTreatment({
+          componentId: component.id, treatmentId: component.statutoryTreatmentId,
+          exclusions: component.programExclusions, payDate: context.payDate,
+        }),
         paymentKind: component.paymentKind, nonCashAccountId: component.nonCashAccountId,
         protectionBase: component.protectionBase, protectionMaxPercent: component.protectionMaxPercent,
         protectionPriority: component.protectionPriority, protectionClass: component.protectionClass,

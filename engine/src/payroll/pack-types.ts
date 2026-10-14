@@ -536,7 +536,7 @@ export interface PayrollAnnualMaximum {
  *
  * The base accumulates from the same per-earning-type applicability the
  * contribution programs use: each earning line carries the levy key when the
- * type is assessable for it, and the component's `program_exclusions`
+ * type is assessable for it, and the component's effective-dated statutory treatment
  * lists the keys it does NOT feed. Absent means assessable, matching the
  * sibling flags' default-true.
  *

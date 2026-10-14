@@ -26,7 +26,7 @@ import { EntitlementError, createSaasFeature, type SaasFeatureType } from '@open
 import { auditSetupChange as audit, loadSetupAuditRow } from './audit'
 import { isFeatureEnabled, subsidiaryFeatureEnabled } from '../features'
 import { numberSequenceStoredCols } from './number-sequence-position'
-import { bindSetupValue, entityForValidation, entityPermissionRefusal, foldPayComponentSetupCreate, foldRecruitingSetupCreate, integrityDatabaseRefusal, persistFxRateCols, resolveEntity, savePayComponentEarningClassification, setupDomainRefusal, setupEntityEnabled, setupRefusalResult, setupScopeRefusal, SetupWriteRefusal, syncMembers, writableSetupEntity, type SetupActor, type SetupWriteResult } from './write-shared'
+import { bindSetupValue, defaultPayComponentProgramExclusions, entityForValidation, entityPermissionRefusal, foldPayComponentSetupCreate, foldRecruitingSetupCreate, integrityDatabaseRefusal, persistFxRateCols, resolveEntity, savePayComponentEarningClassification, setupDomainRefusal, setupEntityEnabled, setupRefusalResult, setupScopeRefusal, SetupWriteRefusal, syncMembers, writableSetupEntity, type SetupActor, type SetupWriteResult } from './write-shared'
 import { validateEntityIntegrity } from './write-integrity'
 import { setupWriteTransaction } from './write-transaction'
 import { bomCommandOnly, commandOwnedOnly } from './write-preflight'
@@ -457,6 +457,23 @@ export async function createSetupRecord(
         await savePayComponentEarningClassification(tx, orgId, id, {
           supplementalWageCategory, statutoryReportingCategory, statutoryExemptionCategory,
         })
+      }
+      if (entity.key === 'pay-components') {
+        const treatment = (await tx.execute(sql`
+          insert into pay_component_statutory_treatments
+            (org_id, pay_component_id, effective_from, program_exclusions, created_by, updated_by)
+          values (${orgId}, ${id}, current_date, ${defaultPayComponentProgramExclusions(body)}, ${actorId}, ${actorId})
+          returning *`)).rows[0]
+        if (!treatment) throw new Error('The component statutory treatment was not created')
+        await audit({
+          orgId,
+          table: 'pay_component_statutory_treatments',
+          rowId: String(treatment.id),
+          action: 'insert',
+          changes: { after: treatment, reason: 'Initial statutory treatment created with the pay component.' },
+          actorId,
+          requestId,
+        }, tx)
       }
       if (members && Array.isArray(body[members.key])) {
         await syncMembers(orgId, id, (body[members.key] as unknown[]).map(String), tx)
