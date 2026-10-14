@@ -26,6 +26,8 @@ import {
   type OverheadSystemRuleEvidence,
 } from '@openbooks/engine/allocations/overhead-sync'
 import { db } from '@openbooks/engine/platform/db'
+import { cmp } from '@openbooks/engine/money/money'
+import { formatOverheadPublishRate } from '@openbooks/engine/projects/overhead-rates'
 import { sql } from 'drizzle-orm'
 import type { OverheadPolicy, OverheadStep } from './view'
 
@@ -205,6 +207,7 @@ export async function OverheadLifecycleTabSlot({ departments }: { departments?: 
     fromDate.setUTCFullYear(fromDate.getUTCFullYear() - 1)
     const from = fromDate.toISOString().slice(0, 10)
     return (await trueCostData(orgId, { from, to: today, label: 'TTM' }, authz.allowedSubsidiaryIds, undefined, { includePriorComparison: false })).departments
+      .map((d): DeptRate => ({ id: d.id, name: d.name, composite: d.compositeValue }))
   }
   const [live, lifecycleRes, publishedRates] = await Promise.all([
     liveDepartments(),
@@ -218,8 +221,9 @@ export async function OverheadLifecycleTabSlot({ departments }: { departments?: 
     cadence: (lifecycleCfg.cadence === 'quarterly' ? 'quarterly' : 'monthly') as 'monthly' | 'quarterly',
   }
   const drift: DriftRow[] = live
-    .filter((d) => (d.composite ?? 0) > 0 || publishedRates.has(d.id))
-    .map((d) => ({ id: d.id, name: d.name, live: d.composite == null ? null : Math.round(d.composite * 100) / 100, published: publishedRates.get(d.id) ?? null }))
+    .filter((d) => (d.composite !== null && cmp(d.composite, '0') > 0) || publishedRates.has(d.id))
+    // Live rates compare at the precision a published card carries.
+    .map((d) => ({ id: d.id, name: d.name, live: d.composite === null ? null : formatOverheadPublishRate(d.composite), published: publishedRates.get(d.id) ?? null }))
   return <OverheadLifecycle mode={lifecycle.mode} cadence={lifecycle.cadence} drift={drift} />
 }
 

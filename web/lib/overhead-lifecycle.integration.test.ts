@@ -95,7 +95,7 @@ test('overhead lifecycle shares one native model read while published rates, fea
           assert.equal(state.modelReads, 1)
           assert.equal(data.onLifecycle, true)
           assert.equal(data.actions.departments.length, 1)
-          assert.equal(data.actions.departments[0]?.composite, 25)
+          assert.equal(data.actions.departments[0]?.composite, '25.0000')
           assert.ok(data.trueCost)
           assert.ok(state.model)
           assert.equal(state.model.labor.employees.length, 1)
@@ -122,7 +122,8 @@ test('overhead lifecycle shares one native model read while published rates, fea
           assert.equal(state.modelReads, 1)
           assert.equal(drift.length, 1)
           assert.equal(drift[0]?.id, department)
-          assert.equal(drift[0]?.live, 25)
+          // The live rate stays an exact decimal at published precision.
+          assert.equal(drift[0]?.live, '25.00')
           assert.equal(typeof drift[0]?.published, 'string')
           assert.equal(toUnits(drift[0]!.published!), toUnits('25.57'))
           const refusedComposite = await OverheadLifecycleTabSlot({ departments: [{ id: department, name: 'Operations', composite: null }] })
@@ -137,7 +138,7 @@ test('overhead lifecycle shares one native model read while published rates, fea
           assert.equal(state.modelReads, 2)
         })
         await withAuthzContext({ ...authz, allowedSubsidiaryIds: new Set([randomUUID()]) }, async () => {
-          await assert.rejects(OverheadLifecycleTabSlot({ departments: [{ id: department, name: 'Operations', composite: 25 }] }),
+          await assert.rejects(OverheadLifecycleTabSlot({ departments: [{ id: department, name: 'Operations', composite: '25.0000' }] }),
             (error: unknown) => (error as { digest?: string }).digest === 'NEXT_HTTP_ERROR_FALLBACK;404')
           assert.equal(state.modelReads, 2)
         })

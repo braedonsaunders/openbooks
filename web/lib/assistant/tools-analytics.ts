@@ -438,7 +438,7 @@ const trueCostTool: AssistantToolDef = {
             name: d.name,
             billedHours: numberValue(d.billedHours),
             totalHours: numberValue(d.totalHours),
-            composite: d.composite,
+            composite: d.compositeValue,
           })),
           50,
         ),

@@ -46,7 +46,7 @@ async function mount(autoOpen: boolean, respond: (payload: Record<string, unknow
     root.render(<NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
       <ConfirmRoot />
       <MoneyProvider currency="CAD"><BusinessDateProvider today="2026-10-08">
-        <OverheadActions departments={[{ id: 'department', name: 'Field', composite: 12.5 }]}
+        <OverheadActions departments={[{ id: 'department', name: 'Field', composite: '12.5049' }]}
           projectTypes={[{ id: 'type', name: 'Installation' }]} autoOpen={autoOpen} />
       </BusinessDateProvider></MoneyProvider>
     </NextIntlClientProvider>)
@@ -164,4 +164,17 @@ test('cancelling the zero-over-standard confirmation writes nothing and keeps th
     assert.equal(rate.value, '0')
     assert.ok(mounted.host.querySelector('[role="dialog"]'), 'the publish drawer stays open for correction')
   } finally { await mounted.close() }
+})
+
+test('publication seeds each live rate exactly at published precision', async () => {
+  const mounted = await mount(false, async () => Response.json({ published: 1 }))
+  try {
+    await click(mounted.host, copy.publish)
+    const dialog = mounted.host.querySelector('[role="dialog"]')!
+    const rate = dialog.querySelector<HTMLInputElement>('input[type="number"]')!
+    // 12.5049 rounds half away from zero to the 2dp card value, exactly.
+    assert.equal(rate.value, '12.50')
+  } finally {
+    await mounted.close()
+  }
 })

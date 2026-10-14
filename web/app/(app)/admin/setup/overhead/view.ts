@@ -68,7 +68,7 @@ export interface OverheadData {
   laborHref: string
   laborLabel: string
   actions: {
-    departments: { id: string; name: string; composite: number | null }[]
+    departments: { id: string; name: string; composite: string | null }[]
     projectTypes: { id: string; name: string }[]
     autoOpen: boolean
   }
@@ -177,7 +177,7 @@ export async function loadOverhead(
     // OverheadActions owns client state (modals, useMoney, useBusinessToday),
     // so it arrives whole: the loader resolves only its inputs.
     actions: {
-      departments: (data?.departments ?? []).map((d) => ({ id: d.id, name: d.name, composite: d.composite })),
+      departments: (data?.departments ?? []).map((d) => ({ id: d.id, name: d.name, composite: d.compositeValue })),
       projectTypes: typesRes.rows.map((r) => ({ id: r.id, name: r.name })),
       autoOpen:
         data !== null &&

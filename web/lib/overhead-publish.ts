@@ -9,6 +9,7 @@ import {
 } from '@openbooks/engine/projects/overhead-rates'
 import { businessToday } from '@openbooks/engine/platform/business-date/module'
 import { lockScopeRows } from '@openbooks/engine/organization/scope'
+import { compareDecimal } from '@openbooks/engine/money/decimal'
 import { syncOverheadSystemRule } from '@openbooks/engine/allocations/overhead-sync'
 import { trueCostData } from './analytics/true-cost-data'
 
@@ -75,7 +76,7 @@ export async function computeLiveOverheadRates(orgId: string): Promise<Published
     throw new OverheadPublishError(`overhead auto-publish blocked: ${blockers.map((b) => b.reason).join('; ')}`)
   }
   return tc.departments
-    .filter((d) => (d.composite ?? 0) > 0)
+    .filter((d) => d.compositeValue !== null && compareDecimal(d.compositeValue, '0') > 0)
     .map((d) => {
       if (!d.compositeExact) throw new OverheadPublishError(`overhead auto-publish has no exact rate for department ${d.id}`)
       return { departmentId: d.id, ratePerHour: d.compositeExact }

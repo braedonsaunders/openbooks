@@ -31,7 +31,7 @@ export async function trueCostExportData(orgId: string, period: { from: string; 
         money: [false, ...data.departments.map(() => true), true] },
       { kind: 'results', title: t('panels.rateByDepartment'),
         columns: [t('selling.departmentFilter'), t('summary.billedHours'), t('summary.compositeRate')],
-        rows: data.departments.map((row) => [row.name, row.billedHours, row.composite ?? '—']), money: [false, false, true] },
+        rows: data.departments.map((row) => [row.name, row.billedHours, row.compositeValue ?? '—']), money: [false, false, true] },
       { kind: 'results', title: t('panels.compositeTrend'),
         columns: [t('cards.period'), t('summary.periodBurden'), t('summary.billedHours'), t('summary.compositeRate')],
         rows: data.monthly.map((row) => [row.label, row.burden, row.billedHours, row.rate]), money: [false, true, false, true] },

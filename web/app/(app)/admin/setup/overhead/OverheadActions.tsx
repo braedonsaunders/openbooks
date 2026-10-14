@@ -10,13 +10,18 @@ import { useBusinessToday } from '@/components/business-date-provider'
 import { useMoney } from '@/components/money-provider'
 import { ApiResponseError, throwApiErrorIfNotOk } from '@/lib/api-error'
 import { confirmDialog } from '@/lib/confirm'
+import { cmp } from '@openbooks/engine/money/money'
+import { formatOverheadPublishRate } from '@openbooks/engine/projects/overhead-rates'
 
 export interface DeptRate {
   id: string
   name: string
-  /** Live department composite; null while the composite refuses. */
-  composite: number | null
+  /** Exact live department composite (ledger precision); null while the composite refuses. */
+  composite: string | null
 }
+
+/** A positive live composite, compared exactly. */
+const hasLiveRate = (d: DeptRate) => d.composite !== null && cmp(d.composite, '0') > 0
 export interface TypeOpt {
   id: string
   name: string
@@ -75,7 +80,9 @@ export function OverheadActions({ departments, projectTypes, autoOpen }: { depar
   // Publish state — pre-seeded from the live engine, editable.
   const [effectiveFrom, setEffectiveFrom] = useState(today)
   const [rates, setRates] = useState<Record<string, string>>(() =>
-    Object.fromEntries(departments.filter((d) => (d.composite ?? 0) > 0).map((d) => [d.id, (d.composite ?? 0).toFixed(2)])))
+    // Seeded at the published precision through the same exact formatter
+    // publication uses, so an unedited seed publishes the live rate.
+    Object.fromEntries(departments.filter(hasLiveRate).map((d) => [d.id, formatOverheadPublishRate(d.composite!)])))
 
   // Wizard state.
   const [step, setStep] = useState(0)
@@ -175,7 +182,7 @@ export function OverheadActions({ departments, projectTypes, autoOpen }: { depar
   const rateTable = (
     <div className="space-y-2">
       <div className="grid grid-cols-2 gap-2">
-        {departments.filter((d) => rates[d.id] !== undefined || (d.composite ?? 0) > 0).map((d) => (
+        {departments.filter((d) => rates[d.id] !== undefined || hasLiveRate(d)).map((d) => (
           <div key={d.id} className="space-y-1">
             <Label>{d.name}</Label>
             <div className="flex items-center gap-1.5">

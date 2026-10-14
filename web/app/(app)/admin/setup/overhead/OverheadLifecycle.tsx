@@ -20,8 +20,8 @@ import {
 export interface DriftRow {
   id: string
   name: string
-  /** Live composite; null while the composite refuses. */
-  live: number | null
+  /** Exact live composite at published precision; null while the composite refuses. */
+  live: string | null
   /** Exact published $/hr decimal string (PostgreSQL numeric text) — never a double. */
   published: string | null
 }
@@ -79,7 +79,7 @@ export function OverheadLifecycle(props: {
   // the shared bigint decimal helpers, never through a double.
   const driftPct = (r: DriftRow): string | null => {
     if (r.live == null || r.published == null || cmpMoney(r.published, '0') <= 0) return null
-    return mulMoney(divMoney(addMoney(String(r.live), negMoney(r.published)), r.published), '100')
+    return mulMoney(divMoney(addMoney(r.live, negMoney(r.published)), r.published), '100')
   }
 
   // One decimal place for display, exact (halves away from zero).

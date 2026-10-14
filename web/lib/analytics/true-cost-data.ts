@@ -93,8 +93,14 @@ export interface Dept {
   totalHours: number;
   /** Non-billable hours with no cost rate (display twin of the exact map). */
   unratedHours: number;
-  /** Dept burden ÷ dept billed hours; null when this scope's blend refuses. */
-  composite: number | null; // dept burden ÷ dept billed hours
+  /**
+   * Exact department composite (dept burden ÷ dept billed hours) at ledger
+   * precision; null when this scope's blend refuses. Every decision and
+   * display of the rate reads this value.
+   */
+  compositeValue: string | null;
+  /** Chart projection of `compositeValue`; never used for a decision. */
+  composite: number | null;
   /**
    * Exact 2dp department rate from the shared engine contract — the value
    * publication persists. Empty when the publish gate blocks (see
@@ -1554,7 +1560,7 @@ export async function trueCostData(
         compositeMethod: profile.compositeMethod, baseLaborRate: overallLaborRateExact ?? undefined,
         categories: compositeInputOf((id) => exactRatesByCat.get(id)?.overall ?? null, overallExpenseOf),
       });
-      compositeRate = Number(compositeRateExact);
+      compositeRate = toChartNumber(compositeRateExact);
       // The blend only succeeds when every included category shares one rate
       // format (mixedUnits refuses otherwise), so the first included format
       // is the composite family's display format.
@@ -1585,7 +1591,7 @@ export async function trueCostData(
   );
   const exactSupported = publishBlockers.length === 0;
   const departments: Dept[] = departmentsBase.map((d) => {
-    let composite: number | null = null;
+    let compositeValue: string | null = null;
     let compositeExact = "";
     const blocked = categories.find((c) => c.includeInComposite && (exactRatesByCat.get(c.id)?.rates[d.id] ?? null) === null);
     if (blocked) {
@@ -1608,7 +1614,7 @@ export async function trueCostData(
         compositeExact = exactSupported
           ? formatOverheadPublishRate(composite4)
           : "";
-        composite = Number(exactSupported ? compositeExact : composite4);
+        compositeValue = composite4;
       } catch (error) {
         if (error instanceof OverheadCalculationError && error.code) {
           const refusal = blendRefusal(error, d.name);
@@ -1617,8 +1623,9 @@ export async function trueCostData(
         } else throw error;
       }
     }
+    const composite = compositeValue === null ? null : toChartNumber(compositeValue);
     totalsByDept[d.id] = composite;
-    return { id: d.id, name: d.name, billedHours: d.hours.billed, totalHours: d.hours.total, unratedHours: toChartNumber(unratedHoursByDept.get(d.id) ?? "0.0000"), composite, compositeExact };
+    return { id: d.id, name: d.name, billedHours: d.hours.billed, totalHours: d.hours.total, unratedHours: toChartNumber(unratedHoursByDept.get(d.id) ?? "0.0000"), compositeValue, composite, compositeExact };
   });
   // The Overall headline refusal wins the single slot; otherwise the first
   // department-scope refusal in department order.
