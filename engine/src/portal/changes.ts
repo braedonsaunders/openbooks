@@ -1,3 +1,4 @@
+import { isUuid } from "../platform/uuid.ts";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "../platform/db.ts";
@@ -508,13 +509,32 @@ export async function validatePortalReturn(
       throw portalRefusal("Choose 1–50 return lines", "invalid_input", 422, "Select the items you are returning");
     }
     const lines = input.lines.map((line, index) => {
-      if (typeof line.sourceIssueMovementId !== "string" || !line.sourceIssueMovementId.trim()) {
+      if (typeof line.sourceIssueMovementId !== "string" || !isUuid(line.sourceIssueMovementId)) {
         throw portalRefusal(`Return line ${index + 1} names no shipment`, "invalid_input", 422, "Choose a shipped item for every return line");
       }
       return {
-        sourceIssueMovementId: line.sourceIssueMovementId,
+        sourceIssueMovementId: line.sourceIssueMovementId.toLowerCase(),
         quantity: parsePortalDecimal(line.quantity, `Return line ${index + 1} quantity`, "Enter how many you are returning"),
       };
+    });
+    // The return window was measured on the chosen document, so every
+    // returned shipment must come from that document.
+    const shipped = new Map((await db.execute<{ movementId: string; documentId: string }>(sql`
+      select movement.id as "movementId", source_line.document_id as "documentId"
+        from inventory_movements movement
+        join document_lines source_line on source_line.org_id = movement.org_id and source_line.id = movement.document_line_id
+       where movement.org_id = ${orgId}
+         and movement.id = any(${`{${lines.map((line) => line.sourceIssueMovementId).join(",")}}`}::uuid[])
+    `)).rows.map((row) => [row.movementId, row.documentId]));
+    lines.forEach((line, index) => {
+      if (shipped.get(line.sourceIssueMovementId) !== input.sourceDocumentId.toLowerCase()) {
+        throw portalRefusal(
+          `Return line ${index + 1} is not a shipment on ${source.documentNumber}`,
+          "invalid_input",
+          422,
+          `Choose items shipped on ${source.documentNumber}, or start a separate return from the document they shipped on`,
+        );
+      }
     });
     return {
       sourceDocumentId: input.sourceDocumentId,

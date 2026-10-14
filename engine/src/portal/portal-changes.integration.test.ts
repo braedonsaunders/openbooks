@@ -9,6 +9,8 @@ import { createPromotion, setPromotionStatus } from '../sales/promotions.ts'
 import { PortalRefusal } from './errors.ts'
 import { consumePortalLink, requestPortalLink } from './tokens.ts'
 import { savePortalSettings } from './settings.ts'
+import { issueInventory } from '../inventory/movement-issue.ts'
+import { receiveInventory } from '../inventory/movement-receive.ts'
 import { portalHome } from './workspace.ts'
 import {
   acceptSaveOffer,
@@ -193,6 +195,18 @@ async function seedSourceInvoice(org: ScratchOrg, documentDate: string, number: 
   return id
 }
 
+async function seedShipment(org: ScratchOrg, documentId: string): Promise<string> {
+  return withBypassContext(async () => {
+    const lineId = randomUUID()
+    await db.execute(sql`
+      insert into document_lines (id, org_id, document_id, line_number, item_id, account_id, quantity, unit_price, amount, tax_amount)
+      values (${lineId}, ${org.orgId}, ${documentId}, 1, ${org.items.fifo}, ${org.accounts.revenue}, '1', '100', '100', '0')`)
+    const position = { itemId: org.items.fifo, stockLocationId: org.stockLocationId, subsidiaryId: org.subsidiaryId, date: org.date }
+    await receiveInventory(org.orgId, null, { ...position, quantity: '1', unitCost: '10', offsetAccountId: org.accounts.clearing })
+    return (await issueInventory(org.orgId, null, { ...position, quantity: '1', documentLineId: lineId })).movementId
+  })
+}
+
 test('portal returns validate the window, reasons and outcomes by name', { skip: !DB }, async () => {
   const org = await withBypassContext(() => createScratchOrg())
   try {
@@ -231,9 +245,20 @@ test('portal returns validate the window, reasons and outcomes by name', { skip:
       }),
       (error: unknown) => error instanceof PortalRefusal && error.code === 'return_resolution_not_allowed',
     )
+    // The window is measured on the chosen document, so a shipment from an
+    // out-of-window invoice cannot ride a recent one.
+    const oldShipment = await seedShipment(org, oldId)
+    const freshShipment = await seedShipment(org, freshId)
+    await assert.rejects(
+      validatePortalReturn(org.orgId, org.customerId, {
+        sourceDocumentId: freshId, reasonCode: 'damaged', resolution: 'store_credit',
+        lines: [{ sourceIssueMovementId: oldShipment, quantity: '1' }],
+      }),
+      (error: unknown) => error instanceof PortalRefusal && /is not a shipment on INV-NEW-001/.test(error.message),
+    )
     const validated = await validatePortalReturn(org.orgId, org.customerId, {
       sourceDocumentId: freshId, reasonCode: 'damaged', resolution: 'store_credit',
-      lines: [{ sourceIssueMovementId: randomUUID(), quantity: '2' }],
+      lines: [{ sourceIssueMovementId: freshShipment, quantity: '2' }],
     })
     assert.equal(validated.sourceDocumentId, freshId)
     assert.equal(validated.reasonCode, 'damaged')
