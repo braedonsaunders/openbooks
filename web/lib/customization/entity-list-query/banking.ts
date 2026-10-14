@@ -3,6 +3,7 @@ import { sql, type SQL } from "drizzle-orm";
 import type { ListViewConfig, FilterClause } from "@openbooks/customization";
 import type { EntityAdhoc } from "./adhoc";
 import { dateOrFalse, pushCustomFieldFilter, uuidOrFalse } from "../list-query";
+import { subsidiaryVisibleFilter } from "@openbooks/engine/organization/scope";
 
 /* ------------------------------------------------------------------ */
 /* Bank reconciliations                                                */
@@ -98,11 +99,11 @@ export function bankReconciliationWhere(
   orgId: string,
   allowedSubsidiaryIds?: Set<string> | null,
 ): SQL {
-  const parts: SQL[] = [sql`r.org_id = ${orgId}`]
-  if (allowedSubsidiaryIds) {
-    const ids = [...allowedSubsidiaryIds]
-    parts.push(ids.length ? sql`and (bank_account.subsidiary_id is null or bank_account.subsidiary_id = any(${`{${ids.join(',')}}`}::uuid[]))` : sql`and false`)
-  }
+  // The same boundary as the account's workspace: a restricted reader sees
+  // only sessions of bank accounts owned by an entity in scope. A shared
+  // account (no subsidiary) carries every entity's cash, so it is
+  // unrestricted-only here exactly as on its detail page.
+  const parts: SQL[] = [sql`r.org_id = ${orgId}`, subsidiaryVisibleFilter(sql`bank_account.subsidiary_id`, allowedSubsidiaryIds ?? null)]
   for (const filter of view.filters) {
     if (pushCustomFieldFilter(parts, filter, null)) continue
     const predicate = bankReconciliationFilterPredicate(filter)
@@ -195,11 +196,8 @@ export function bankStatementWhere(
   orgId: string,
   allowedSubsidiaryIds?: Set<string> | null,
 ): SQL {
-  const parts: SQL[] = [sql`bs.org_id = ${orgId}`]
-  if (allowedSubsidiaryIds) {
-    const ids = [...allowedSubsidiaryIds]
-    parts.push(ids.length ? sql`and (statement_account.subsidiary_id is null or statement_account.subsidiary_id = any(${`{${ids.join(',')}}`}::uuid[]))` : sql`and false`)
-  }
+  // Imported statements follow the same account boundary as reconciliations.
+  const parts: SQL[] = [sql`bs.org_id = ${orgId}`, subsidiaryVisibleFilter(sql`statement_account.subsidiary_id`, allowedSubsidiaryIds ?? null)]
   for (const filter of view.filters) {
     if (pushCustomFieldFilter(parts, filter, null)) continue
     const predicate = bankStatementFilterPredicate(filter)
