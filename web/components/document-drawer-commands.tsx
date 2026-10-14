@@ -1,0 +1,627 @@
+import Link from 'next/link'
+import { toast } from 'sonner'
+import { ActionError } from '@braedonsaunders/appkit-errors'
+import { fetchAppAction } from '../lib/api-error'
+import { confirmDialog } from '../lib/confirm'
+import { previewPostedCorrection } from '../lib/posted-correction-preview'
+import { promptDialog } from '../lib/prompt'
+import { promptVoidReversalPeriod } from '../lib/void-reversal-period'
+import { runClientScripts } from '../lib/client-scripts'
+import { parseTenderDrafts } from './cash-tenders-section'
+import type { DocPayload } from './document-drawer-types'
+import { findMissingAccountLine, positiveAmount } from './document-drawer-lines'
+import {
+  buildDocumentCreateRequest,
+  buildDocumentSaveRequest,
+  buildReturnCreateRequest,
+  createdDocumentId,
+  editedDocumentAcknowledged,
+  reconcilePersistedDocumentSnapshot,
+  revisionFromSuccessfulDocumentSave,
+  type DocumentSaveRequest,
+} from './document-drawer-save'
+import type { DocumentDrawerPayloadScope } from './document-drawer-payload'
+
+/**
+ * The drawer's write paths: save (create, edit, posted correction), cancel
+ * and discard, lifecycle actions, retries, delete, void, and the preferred
+ * form. Every write runs on the shared action path from the scope.
+ */
+export function buildDocumentDrawerCommands(scope: DocumentDrawerPayloadScope) {
+  const {
+    isCreate,
+    config,
+    partyId,
+    documentDate,
+    effectiveTotals,
+    referenceNumber,
+    t,
+    tCommon,
+    tPostingEffects,
+    hrefForDocument,
+    isPosted,
+    isCashKind,
+    doc,
+    payload,
+    payload_,
+    persistedBaseline,
+    persistedPropRevision,
+    seenPersistedRevisions,
+    documentRevision,
+    setDocumentRevision,
+    setSaveState,
+    refuse,
+    execute,
+    runExclusive,
+    blockCurrencyMismatch,
+    rows,
+    idempotencyKey,
+    router,
+    basePath,
+    searchParams,
+    resetForm,
+    mode,
+    setMode,
+    dirty,
+    setDirty,
+    customValues,
+    money,
+    tenderAccountOptions,
+    setPostWarnings,
+    setMatchRefused,
+    recordType,
+  } = scope
+
+  // Confirm-before-save duplicate warning for new invoices and bills: a
+  // non-voided same-kind document for the same party, date and total (plus
+  // the vendor reference for bills) is usually a double entry. A warning,
+  // never a refusal — confirming saves anyway. An unreadable probe fails
+  // open: the save itself stays server-validated, so a down lookup must not
+  // block persistence.
+  async function confirmNoDuplicate(): Promise<boolean> {
+    if (!isCreate || (config.kind !== 'customer_invoice' && config.kind !== 'vendor_bill')) return true
+    if (!partyId || !documentDate || !positiveAmount(effectiveTotals.total)) return true
+    const query = new URLSearchParams({
+      kind: config.kind,
+      partyId,
+      documentDate,
+      total: effectiveTotals.total,
+    })
+    if (config.kind === 'vendor_bill' && referenceNumber.trim()) {
+      query.set('referenceNumber', referenceNumber.trim())
+    }
+    let duplicates: { id: string; documentNumber: string }[] = []
+    try {
+      const response = await fetch(`/api/documents/duplicates?${query.toString()}`)
+      if (!response.ok) return true
+      duplicates = ((await response.json()) as { duplicates?: { id: string; documentNumber: string }[] }).duplicates ?? []
+    } catch {
+      return true
+    }
+    if (duplicates.length === 0) return true
+    const [first, ...rest] = duplicates
+    return confirmDialog({
+      title: t('drawer.duplicateTitle'),
+      message: (
+        <>
+          <p>{t('drawer.duplicateBody', { numbers: duplicates.map((match) => match.documentNumber).join(', ') })}</p>
+          {first ? (
+            <p className="mt-2">
+              <Link className="text-teal-700 hover:underline dark:text-teal-300" href={hrefForDocument(first.id)}>
+                {t('drawer.duplicateOpen', { number: first.documentNumber })}
+              </Link>
+              {rest.length > 0 ? ` · +${rest.length}` : null}
+            </p>
+          ) : null}
+        </>
+      ),
+      confirmLabel: t('drawer.duplicateConfirm'),
+    })
+  }
+
+  // Re-entry runs through the shared guard: save awaits the client-script
+  // gate (up to 2 s) before execute sets busy, so a double-click used to
+  // send two saves with the same revision — the second 409ing after the
+  // first succeeded and pinning its error over the success. The guard flips
+  // synchronously at click time and covers the whole preamble.
+  // The save preamble — posted-edit dialogs, client-script and form gates,
+  // the duplicate probe, and both request builders — runs outside the fenced
+  // execute below. A throw in any of them used to escape as an unhandled
+  // rejection: no record, no message, and the form wedged on Saving. The
+  // preamble returns the fenced request to write, or 'aborted' for an
+  // operator cancellation (which stays silent, exactly as today).
+  async function prepareSaveRequest(): Promise<
+    | { outcome: 'create'; request: { path: string; method: 'POST'; headers: Record<string, string>; body: Record<string, unknown> } }
+    | { outcome: 'save'; request: DocumentSaveRequest }
+    | { outcome: 'aborted' }
+  > {
+    let amendmentReason: string | undefined
+    if (isPosted) {
+      const reason = await promptDialog({
+        title: tCommon('amendment.title'),
+        label: tCommon('amendment.reason'),
+        placeholder: tCommon('amendment.placeholder'),
+        confirmLabel: tCommon('actions.save'),
+      })
+      if (!reason) return { outcome: 'aborted' as const }
+      amendmentReason = reason
+      // A posted edit states its consequence before anything writes, using
+      // the same engine classification the correct route enforces. A void
+      // and reissue needs an explicit confirm; metadata and reclass confirm
+      // the lighter touch in the same step.
+      const consequence = previewPostedCorrection({
+        doc,
+        storedLines: persistedBaseline.current.payload.lines ?? [],
+        payload: payload_ as Record<string, unknown>,
+      })
+      const confirmed = await confirmDialog({
+        title: tCommon('amendment.consequenceTitle'),
+        message:
+          consequence === 'void-and-reissue'
+            ? tCommon('amendment.consequenceVoid')
+            : consequence === 'reclass'
+              ? tCommon('amendment.consequenceReclass')
+              : tCommon('amendment.consequenceMetadata'),
+        confirmLabel: tCommon('actions.save'),
+        ...(consequence === 'void-and-reissue' ? { tone: 'danger' as const } : {}),
+      })
+      if (!confirmed) return { outcome: 'aborted' as const }
+    }
+    setSaveState('saving')
+    // Client scripts (sandboxed, opaque-origin evaluator) gate the save: an
+    // explicit { abort } blocks; { warnings } toast and proceed; fail-open.
+    const gate = await runClientScripts(config.kind, payload_)
+    if (!gate.ok) {
+      refuse(gate.reason, t('toasts.actionFailed'))
+      setSaveState('error')
+      return { outcome: 'aborted' as const }
+    }
+    for (const w of gate.warnings) toast.warning(w)
+    // A currency-mismatched form can never post (the ledger refuses it), so
+    // refuse the save up front with the account named.
+    if (blockCurrencyMismatch()) {
+      setSaveState('error')
+      return { outcome: 'aborted' as const }
+    }
+    // A contentful row without an account can never book either: the
+    // server names the line and refuses. Refuse up front with the grid
+    // line named and keep every entered row in place — dropping the row
+    // here used to book a total the operator never reviewed.
+    const missingAccount = findMissingAccountLine(rows)
+    if (missingAccount) {
+      refuse(t('drawer.lineMissingAccount', { line: missingAccount.lineNumber }), t('toasts.actionFailed'))
+      setSaveState('error')
+      return { outcome: 'aborted' as const }
+    }
+    // Unsaved create: the single collection write. Same client-script and
+    // currency gates as an edit above; the server runs the shared writer, so
+    // validation, refusals, and audit match an edit exactly.
+    if (isCreate) {
+      // A possible duplicate warns before the write, never instead of it:
+      // declining leaves the form exactly as typed for review.
+      if (!(await confirmNoDuplicate())) {
+        setSaveState('dirty')
+        return { outcome: 'aborted' as const }
+      }
+      if (config.kind === 'rma') {
+        return { outcome: 'create' as const, request: buildReturnCreateRequest(payload_ as Record<string, unknown>, idempotencyKey) }
+      }
+      return { outcome: 'create' as const, request: buildDocumentCreateRequest(config.kind, payload_ as Record<string, unknown>, idempotencyKey) }
+    }
+    return {
+      outcome: 'save' as const,
+      request: buildDocumentSaveRequest(
+        String(doc.id),
+        documentRevision,
+        payload_,
+        isPosted,
+        amendmentReason,
+      ),
+    }
+  }
+
+  const save = runExclusive(async () => {
+    // Copy for a save the server failed to answer; a reason the server named
+    // still pins verbatim, and only this exact copy marks the footer state.
+    const unavailableCopy = t('drawer.saveState.unavailableDetail')
+    let prepared: Awaited<ReturnType<typeof prepareSaveRequest>>
+    try {
+      prepared = await prepareSaveRequest()
+    } catch (error) {
+      // Preamble bugs surface exactly like a refused save — pinned beside
+      // the record and toasted — never a wedged Saving state with no
+      // message. The operator reads the localized fallback (a client
+      // exception is never usable copy); the console keeps the bug text.
+      console.error('[document-drawer] save preamble failed', error)
+      refuse(null, t('toasts.actionFailed'))
+      setSaveState('error')
+      return
+    }
+    if (prepared.outcome === 'aborted') return
+    if (prepared.outcome === 'create') {
+      const create = prepared.request
+      await execute(
+        async () => {
+          const result = await fetchAppAction(create.path, {
+            method: create.method,
+            headers: create.headers,
+            body: JSON.stringify(create.body),
+          }, {
+            fallback: t('toasts.actionFailed'),
+            unavailable: unavailableCopy,
+            codeMessage: (code) => (code === 'document_create_conflict' ? t('drawer.createConflict') : undefined),
+          })
+          // A success that names no record is not a saved document: refuse it
+          // here so the drawer neither toasts nor navigates on it. The key is
+          // kept, so a retry replays the same record instead of duplicating it.
+          if (!result.ok || createdDocumentId(result.data) !== null) return result
+          return { ok: false, error: new ActionError({ kind: 'refused', serverMessage: t('drawer.createUnconfirmed') }) }
+        },
+        {
+          fallbackMessage: t('toasts.actionFailed'),
+          onOk: (payload) => {
+            const saved = (payload as DocPayload).doc
+            toast.success(t('toasts.saved', { documentNumber: String(saved.document_number ?? '') }))
+            // Land on the persisted record in view mode: the changed drawer
+            // id remounts clean, so Submit/Post is available at once instead
+            // of needing a second save to leave the editing caption behind.
+            router.push(`${basePath}?doc=${String(saved.id)}`)
+            router.refresh()
+          },
+          onRefused: (error) => {
+            setSaveState(error.serverMessage === unavailableCopy ? 'unavailable' : 'error')
+          },
+        },
+      )
+      return
+    }
+    const request = prepared.request
+    await execute(
+      async () => {
+        const result = await fetchAppAction(request.path, {
+          method: request.method,
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(request.body),
+        }, { fallback: t('toasts.actionFailed'), unavailable: unavailableCopy })
+        // An edit that does not name its record and revision cannot be adopted:
+        // refuse it here instead of failing silently inside onOk.
+        if (!result.ok || editedDocumentAcknowledged(result.data)) return result
+        return { ok: false, error: new ActionError({ kind: 'refused', serverMessage: t('drawer.saveUnconfirmed') }) }
+      },
+      {
+        // A fresh attempt clears the previous refusal: the alert pins until
+        // the next action, not past a successful save.
+        fallbackMessage: t('toasts.actionFailed'),
+        onOk: (payload) => {
+          const data = payload as DocPayload & {
+            correctionId?: string
+            voidStatus?: 'voided' | 'pending_approval' | 'corrected' | 'reclassified'
+          }
+          if (isPosted && data.correctionId) {
+            // In-place corrections keep the source document: toast the
+            // lighter touch and refresh where the operator stands instead
+            // of navigating to a replacement draft that does not exist.
+            if (data.voidStatus === 'corrected' || data.voidStatus === 'reclassified') {
+              toast.success(tCommon('amendment.correctionApplied'))
+              router.refresh()
+              return
+            }
+            toast.success(
+              data.voidStatus === 'pending_approval'
+                ? t('toasts.submitted')
+                : tCommon('amendment.correctionCreated'),
+            )
+            router.push(hrefForDocument(data.correctionId))
+            router.refresh()
+            return
+          }
+          const savedRevision = revisionFromSuccessfulDocumentSave(data)
+          persistedBaseline.current = {
+            documentId: String(data.doc.id),
+            revision: savedRevision,
+            payload: data,
+          }
+          seenPersistedRevisions.current.add(savedRevision)
+          resetForm(data)
+          setDocumentRevision(savedRevision)
+          setSaveState('saved')
+          setDirty(false)
+          setMode('view')
+          toast.success(t('toasts.saved', { documentNumber: String(data.doc.document_number ?? '') }))
+          // The save consumes the explicit edit request: landing on the
+          // mode-less record URL keeps a later reload in view mode instead
+          // of resurrecting the editing caption with nothing to save.
+          router.push(hrefForDocument(String(data.doc.id), searchParams.get('form') ?? undefined))
+          router.refresh()
+        },
+        onRefused: (error) => {
+          // A save refusal stays on the record, not only in a toast:
+          // the typed reason pins as an alert until the next action or edit.
+          // A server or connection failure with no named reason keeps the
+          // entered values and says so, so the footer must not call it a refusal.
+          setSaveState(error.serverMessage === unavailableCopy ? 'unavailable' : 'error')
+        },
+      },
+    )
+  })
+
+  // A dirty editor never closes silently: the X button (via beforeClose) and
+  // Cancel both ask first, so typed work survives a stray click.
+  async function confirmDiscard() {
+    if (mode !== 'edit' || !dirty) return true
+    return confirmDialog({
+      message: tCommon('feedback.unsavedChanges'),
+      confirmLabel: tCommon('confirm.discardChanges'),
+      tone: 'danger',
+    })
+  }
+
+  async function cancelWithConfirm() {
+    if (!(await confirmDiscard())) return
+    cancel()
+  }
+
+  function cancel() {
+    // Unsaved create holds no persisted state to restore: closing navigates
+    // away and writes nothing — zero writes by construction (the only write
+    // this drawer can make is the Save POST above, which Cancel never runs).
+    if (isCreate) {
+      router.push(basePath)
+      router.refresh()
+      return
+    }
+    const incoming = {
+      documentId: String(doc.id),
+      revision: persistedPropRevision,
+      payload,
+    }
+    const previousDocumentId = persistedBaseline.current.documentId
+    const previouslySeen = new Set(seenPersistedRevisions.current)
+    const decision = reconcilePersistedDocumentSnapshot(
+      persistedBaseline.current,
+      incoming,
+      false,
+      previouslySeen,
+    )
+    if (previousDocumentId !== incoming.documentId) {
+      seenPersistedRevisions.current = new Set([persistedPropRevision])
+    } else if (decision.rehydrate) {
+      seenPersistedRevisions.current.add(persistedPropRevision)
+    }
+    persistedBaseline.current = decision.snapshot
+    resetForm(decision.snapshot.payload)
+    setDocumentRevision(decision.snapshot.revision)
+    setDirty(false)
+    setSaveState('saved')
+    setMode('view')
+  }
+
+  async function act(action: 'submit' | 'post') {
+    // Same up-front refusal as save: posting a currency-mismatched record
+    // is a certain 422, so name the account before the round trip.
+    if (blockCurrencyMismatch()) {
+      return
+    }
+    // Consequence before commit for till money: state in plain words what
+    // posting settles — per tender account — before the kernel runs. The
+    // section above already cross-foots tendered against the total; this
+    // restates it at the commit point so a mis-tendered tap cannot slip
+    // through on muscle memory.
+    if (action === 'post' && isCashKind) {
+      const drafts = parseTenderDrafts(customValues.tenders)
+      const tenderLines = drafts.map((draft) => {
+        const label = draft.methodLabel || draft.kind
+        const reference = draft.reference ? ` ${draft.reference}` : ''
+        if (draft.kind === 'stored_value') {
+          const card = draft.svLast4 ? `…${draft.svLast4}` : t('tenders.unresolvedCard')
+          return `· ${money(draft.amount || '0', { currency: doc.currency })} ${label}${reference} → ${card}`
+        }
+        const account = tenderAccountOptions.find((option) => option.value === draft.accountId)?.label ?? draft.accountId
+        return `· ${money(draft.amount || '0', { currency: doc.currency })} ${label}${reference} → ${account}`
+      })
+      const confirmed = await confirmDialog({
+        title: t('tenders.postTitle'),
+        message: t('tenders.postBody', {
+          number: doc.document_number ?? '',
+          total: money(effectiveTotals.total, { currency: doc.currency }),
+          tenders: tenderLines.join('\n'),
+        }),
+        confirmLabel: tCommon('actions.post'),
+      })
+      if (!confirmed) return
+    }
+    setPostWarnings([])
+    setMatchRefused(false)
+    await execute(
+      () =>
+        fetchAppAction('/api/documents/actions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ action, documentId: doc.id }),
+        }, { fallback: t('toasts.actionFailed') }),
+      {
+        fallbackMessage: t('toasts.actionFailed'),
+        onOk: (data) => {
+          const result = data as {
+            pendingApproval?: unknown
+            warnings?: { code: string; accounts?: { accountNumber: string | null; accountName: string }[] }[]
+          } | null
+          const pendingApproval = result?.pendingApproval === true
+          if (pendingApproval) toast.success(t('toasts.submitted'))
+          else toast.success(action === 'submit' ? t('toasts.submitted') : t('toasts.posted'))
+          const partyless = (result?.warnings ?? []).find((warning) => warning.code === 'partyless_control_lines')
+          if (partyless?.accounts?.length) {
+            setPostWarnings([
+              t('drawer.partylessControlWarning', {
+                accounts: partyless.accounts
+                  .map((account) => `${account.accountNumber ?? ''} ${account.accountName}`.trim())
+                  .join(', '),
+              }),
+            ])
+          }
+          router.refresh()
+        },
+        onRefused: (error) => {
+          // Lifecycle refusals (period locks, missing control accounts,
+          // kernel guards) must stay visible in the drawer: a transient
+          // toast alone is too easy to miss, so the message also pins as an
+          // inline banner until the next action or edit. A rejected transport
+          // pins without refreshing — there is nothing new to show.
+          // A bill refused until its lines are matched offers the match
+          // dialog beside the pinned refusal, keyed on the refusal code —
+          // never on message text.
+          if (error.code === 'BILL_LINES_UNMATCHED') setMatchRefused(true)
+          if (error.kind !== 'transport') router.refresh()
+        },
+      },
+    )
+  }
+
+  async function retryPostingEffects() {
+    const reason = await promptDialog({
+      title: tPostingEffects('retry'), label: tPostingEffects('reason'),
+      placeholder: tPostingEffects('reasonHelp'),
+    })
+    if (reason === null) return
+    if (reason.trim().length < 10 || reason.trim().length > 1000) {
+      refuse(tPostingEffects('reasonHelp'), t('toasts.actionFailed'))
+      return
+    }
+    await execute(() => fetchAppAction('/api/documents/actions', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'retry-effects', documentId: doc.id, reason }),
+    }, { fallback: t('toasts.actionFailed') }), { fallbackMessage: t('toasts.actionFailed'),
+      successMessage: tPostingEffects('queued'), onOk: () => router.refresh() })
+  }
+
+  async function returnToDraft() {
+    // A mis-approved document corrects through edit and re-approval, never
+    // through a void on a record that never touched the GL. The server owns
+    // the approved-only gate, the approve-level permission, and every refusal
+    // remedy; refusals pin beside the record through the shared handler.
+    const reason = await promptDialog({
+      title: tCommon('actions.returnToDraft'),
+      label: tCommon('amendment.reason'),
+      placeholder: tCommon('amendment.returnToDraftPlaceholder'),
+      confirmLabel: tCommon('actions.returnToDraft'),
+    })
+    if (reason === null) return
+    if (reason.trim().length < 5 || reason.trim().length > 500) {
+      refuse(tCommon('amendment.returnToDraftPlaceholder'), t('toasts.actionFailed'))
+      return
+    }
+    await execute(() => fetchAppAction('/api/documents/actions', {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'return_to_draft', documentId: doc.id, reason, expectedUpdatedAt: documentRevision }),
+    }, { fallback: t('toasts.actionFailed') }), { fallbackMessage: t('toasts.actionFailed'),
+      successMessage: tCommon('status.draft'), onOk: () => router.refresh() })
+  }
+
+  async function remove() {
+    if (
+      !(await confirmDialog({
+        title: t('drawer.deleteTitle'),
+        message: t('drawer.deleteDraftBody'),
+        confirmLabel: tCommon('actions.delete'),
+        tone: 'danger',
+      }))
+    )
+      return
+    await execute(
+      () =>
+        fetchAppAction(`/api/documents/${doc.id}`, {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ expectedUpdatedAt: documentRevision }),
+        }, { fallback: t('toasts.deleteFailed') }),
+      {
+        fallbackMessage: t('toasts.deleteFailed'),
+        successMessage: t('toasts.deleted'),
+        onOk: () => {
+          router.push(basePath)
+          router.refresh()
+        },
+      },
+    )
+  }
+
+  async function voidDocument() {
+    const reason = await promptDialog({
+      title: tCommon('amendment.voidTitle'),
+      label: tCommon('amendment.reason'),
+      placeholder: tCommon('amendment.voidPlaceholder'),
+      confirmLabel: tCommon('actions.void'),
+    })
+    if (!reason) return
+    const reversal = await promptVoidReversalPeriod(doc.id, {
+      title: tCommon('amendment.voidReversalPeriodTitle'),
+      dateLabel: tCommon('amendment.voidReversalDateLabel'),
+      summaryOriginal: tCommon('amendment.voidReversalSummaryOriginal'),
+      summaryReversal: tCommon('amendment.voidReversalSummaryReversal'),
+      fiscalYear: tCommon('amendment.voidReversalFiscalYear'),
+      fallbackNotice: tCommon('amendment.voidReversalFallbackNotice'),
+      closedNotice: tCommon('amendment.voidReversalClosedNotice'),
+      label: tCommon('amendment.voidReversalPeriodLabel'),
+      regularOption: tCommon('amendment.voidReversalPeriodRegular'),
+      confirm: tCommon('actions.void'),
+      cancel: tCommon('confirm.cancel'),
+    })
+    if (reversal.cancelled) return
+    await execute(
+      () =>
+        // The enriched read keeps the server's remedy and code on the
+        // refusal: a void the periods or approvals refuse pins its reason
+        // and next step, never a bare fallback.
+        fetchAppAction(`/api/documents/${doc.id}/void`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            reason,
+            expectedUpdatedAt: documentRevision,
+            ...(reversal.reversalDate ? { reversalDate: reversal.reversalDate } : {}),
+            ...(reversal.reversalPeriodId ? { reversalPeriodId: reversal.reversalPeriodId } : {}),
+          }),
+        }, { fallback: t('toasts.actionFailed') }),
+      {
+        fallbackMessage: t('toasts.actionFailed'),
+        onOk: (data) => {
+          const status = (data as { status?: unknown } | null)?.status
+          if (status === 'pending_approval') toast.success(t('toasts.submitted'))
+          else toast.success(tCommon('status.voided'))
+        },
+      },
+    )
+    router.refresh()
+  }
+
+  // Per-record "Custom Form" picker (view mode) — switch the form layout for
+  // this record, optionally set it as the user's preferred form.
+  async function setPreferredForm(layoutId: string | null) {
+    if (!recordType) return
+    await execute(
+      () =>
+        fetchAppAction('/api/customization/form-preferences', {
+          method: 'PUT', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ recordType, layoutId }),
+        }, { fallback: t('drawer.formPreferredFailed') }),
+      {
+        fallbackMessage: t('drawer.formPreferredFailed'),
+        successMessage: layoutId ? t('drawer.formSetPreferredDone') : t('drawer.formPreferredCleared'),
+      },
+    )
+  }
+
+  return {
+    save,
+    confirmDiscard,
+    cancelWithConfirm,
+    act,
+    retryPostingEffects,
+    returnToDraft,
+    remove,
+    voidDocument,
+    setPreferredForm,
+  }
+}
+
+export type DocumentDrawerCommandsScope = DocumentDrawerPayloadScope & ReturnType<typeof buildDocumentDrawerCommands>

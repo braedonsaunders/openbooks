@@ -1,6 +1,18 @@
 import { strict as assert } from "node:assert";
 import { test } from "node:test";
-import { db, orgContext, withBypassContext, withOrgContext, withOrgTransaction } from "./db.ts";
+import {
+  db,
+  inDbTransaction,
+  inExecutorTransaction,
+  onTransactionRollback,
+  orgContext,
+  pinnedTransactionExecutor,
+  pool,
+  registerRequestOrgResolver,
+  withBypassContext,
+  withOrgContext,
+  withOrgTransaction,
+} from "./db.ts";
 
 /**
  * Regression guard for the worst failure mode this database layer has:
@@ -134,4 +146,129 @@ test("a nested db.transaction verifies the enclosing isolation and access mode i
   );
   assert.equal(await nested(ambient("serializable", "on"), { isolationLevel: "repeatable read", accessMode: "read only" }), "joined");
   assert.equal(await nested(ambient("read committed", "off"), undefined), "joined");
+});
+
+/**
+ * A stand-in pooled client for transaction tests: it records each checkout
+ * and answers the begin/commit/rollback statements a database transaction
+ * issues, so pinning behaviour is observable without a database.
+ */
+async function withFakePoolClient<T>(
+  fn: (stats: { connects: number; queries: string[] }) => Promise<T>,
+): Promise<T> {
+  const stats = { connects: 0, queries: [] as string[] };
+  const fakeClient = {
+    query: async (input: unknown) => {
+      const text = typeof input === "string"
+        ? input
+        : (input as { text?: string } | null)?.text ?? "";
+      stats.queries.push(text);
+      return { rows: [], fields: [], command: "", rowCount: 0, oid: 0 };
+    },
+    release: () => undefined,
+  };
+  const originalConnect = pool.connect;
+  (pool as unknown as { connect: unknown }).connect = async () => {
+    stats.connects += 1;
+    return fakeClient;
+  };
+  try {
+    return await fn(stats);
+  } finally {
+    (pool as unknown as { connect: unknown }).connect = originalConnect;
+  }
+}
+
+test("db.transaction without an org boundary pins txDb and nested units join it", async () => {
+  await withFakePoolClient(async (stats) => {
+    await withOrgContext("33333333-3333-3333-3333-333333333333", async () => {
+      assert.equal(pinnedTransactionExecutor(), undefined);
+      await db.transaction(async (tx) => {
+        assert.equal(
+          orgContext.getStore()?.txDb as unknown,
+          tx as unknown,
+          "the opened transaction is not pinned — nested db work would leave it",
+        );
+        assert.equal(orgContext.getStore()?.orgId, "33333333-3333-3333-3333-333333333333");
+        assert.equal(orgContext.getStore()?.bypass, false);
+        assert.equal(pinnedTransactionExecutor() as unknown, tx as unknown);
+
+        await db.transaction(async (nestedTx) => {
+          assert.equal(nestedTx as unknown, tx as unknown, "nested db.transaction opened a second unit");
+        });
+        await inDbTransaction(async (joinedTx) => {
+          assert.equal(joinedTx as unknown, tx as unknown, "inDbTransaction opened a second unit");
+        });
+        await inExecutorTransaction(db, async (joinedTx) => {
+          assert.equal(joinedTx as unknown, db as unknown);
+        });
+      });
+      assert.equal(pinnedTransactionExecutor(), undefined, "the pin outlived the transaction");
+    });
+    assert.equal(stats.connects, 1, "nested units must share the one checked-out connection");
+  });
+});
+
+test("db.transaction under a request org resolver pins txDb with the resolved scope", async () => {
+  await withFakePoolClient(async (stats) => {
+    registerRequestOrgResolver(() => ({
+      orgId: "44444444-4444-4444-4444-444444444444",
+      bypass: false,
+    }));
+    try {
+      assert.equal(orgContext.getStore(), undefined);
+      await db.transaction(async (tx) => {
+        assert.equal(orgContext.getStore()?.txDb as unknown, tx as unknown);
+        assert.equal(orgContext.getStore()?.orgId, "44444444-4444-4444-4444-444444444444");
+        await inDbTransaction(async (joinedTx) => {
+          assert.equal(joinedTx as unknown, tx as unknown);
+        });
+      });
+      assert.equal(orgContext.getStore(), undefined);
+    } finally {
+      registerRequestOrgResolver(() => undefined);
+    }
+    assert.equal(stats.connects, 1);
+  });
+});
+
+test("inExecutorTransaction on the pooled db pins the opened transaction", async () => {
+  await withFakePoolClient(async (stats) => {
+    await withOrgContext("55555555-5555-5555-5555-555555555555", async () => {
+      await inExecutorTransaction(db, async (tx) => {
+        assert.equal(pinnedTransactionExecutor() as unknown, tx as unknown);
+        await inDbTransaction(async (joinedTx) => {
+          assert.equal(joinedTx as unknown, tx as unknown);
+        });
+      });
+      assert.equal(pinnedTransactionExecutor(), undefined);
+    });
+    assert.equal(stats.connects, 1);
+  });
+});
+
+test("rollback effects run when db.transaction rejects and not when it resolves", async () => {
+  await withFakePoolClient(async () => {
+    const compensated: string[] = [];
+    await withOrgContext("66666666-6666-6666-6666-666666666666", async () => {
+      await db.transaction(async () => {
+        onTransactionRollback(async () => {
+          compensated.push("committed-unit");
+        });
+      });
+      assert.deepEqual(compensated, [], "a resolved transaction must not compensate");
+
+      await assert.rejects(
+        db.transaction(async () => {
+          onTransactionRollback(async () => {
+            compensated.push("rolled-back-unit");
+          });
+          throw new Error("unit failed");
+        }),
+        /unit failed/,
+      );
+      assert.deepEqual(compensated, ["rolled-back-unit"]);
+      assert.equal(pinnedTransactionExecutor(), undefined, "the pin outlived the failed transaction");
+    });
+  });
 });

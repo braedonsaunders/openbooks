@@ -40,7 +40,7 @@ const files = readdirSync(new URL(".", import.meta.url))
  * only; the cycle and facade-backimport checks apply to them in full from now on,
  * which is the half that was never enforced at all.
  */
-const OVERSIZED_LEGACY_MODULES = new Set(["acceptance.ts", "operations.ts", "psp-settlement.ts"]);
+const OVERSIZED_LEGACY_MODULES = new Set<string>();
 
 const source = (name: string) => readFileSync(new URL(name, import.meta.url), "utf8");
 const lineCount = (name: string) => source(name).split("\n").length;

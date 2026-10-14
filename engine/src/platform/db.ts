@@ -101,6 +101,8 @@ const bypassPool = bypassDatabaseUrl ? new pg.Pool({
   connectionTimeoutMillis: 30_000,
   query_timeout: 120_000,
   statement_timeout: 120_000,
+  // An idle auxiliary connection must not hold a short-lived process open.
+  allowExitOnIdle: true,
 }) : null;
 const bypassLongPool = bypassDatabaseUrl ? new pg.Pool({
   connectionString: bypassDatabaseUrl,
@@ -114,6 +116,7 @@ const bypassLongPool = bypassDatabaseUrl ? new pg.Pool({
   connectionTimeoutMillis: 30_000,
   query_timeout: 0,
   statement_timeout: 0,
+  allowExitOnIdle: true,
 }) : null;
 // A transient network interruption can make
 // an idle pool client emit 'error'; with no listener, Node crashes the whole
@@ -166,6 +169,7 @@ const longPool = new pg.Pool({
   connectionTimeoutMillis: 30_000,
   query_timeout: 0,
   statement_timeout: 0,
+  allowExitOnIdle: true,
 });
 longPool.on("error", (err) => {
   console.error("[pg longPool] transient client error (ignored, will reconnect):", (err as Error).message);
@@ -888,6 +892,41 @@ async function runInOrgContext<T>(ctx: OrgCtx, fn: () => Promise<T>): Promise<T>
 }
 
 /**
+ * Open a transaction on a pooled database handle and pin it into the ambient
+ * tenant context for the whole callback. Without the pin, a nested helper
+ * that reaches for the app-wide `db` handle would see no transaction and run
+ * on a second pooled connection outside this atomic unit. Rollback
+ * compensation effects registered inside the callback run when the
+ * transaction fails, matching the org-boundary transaction helpers.
+ */
+async function runPoolTransaction<T>(
+  targetDb: typeof poolDb,
+  fn: (tx: DbTransaction) => Promise<T>,
+  config?: NestedTransactionConfig,
+): Promise<T> {
+  const ctx = activeOrgCtx();
+  const rollbackEffects: (() => Promise<void>)[] = [];
+  try {
+    return await targetDb.transaction(
+      async (tx) =>
+        runInOrgContext(
+          {
+            orgId: ctx?.orgId ?? null,
+            bypass: ctx?.bypass === true,
+            txDb: tx as unknown as NodePgDatabase,
+            rollbackEffects,
+          },
+          () => fn(tx),
+        ),
+      config as Parameters<typeof poolDb.transaction>[1],
+    );
+  } catch (error) {
+    await compensateRollback(rollbackEffects);
+    throw error;
+  }
+}
+
+/**
  * The app-wide database handle. Inside a scoped transaction it routes to the
  * pinned connection; otherwise to the runtime pool or the separate BYPASSRLS
  * pool selected by an explicit bypass context.
@@ -908,6 +947,13 @@ export const db = new Proxy(poolDb, {
         await assertAmbientTransactionSatisfies(current, config);
         return fn(current);
       };
+    }
+    // With no pinned transaction, opening one on the pool must still pin it:
+    // otherwise nested `db` work inside the callback would check out a
+    // second connection outside the new transaction.
+    if (prop === "transaction") {
+      return (fn: (tx: DbTransaction) => Promise<unknown>, config?: NestedTransactionConfig) =>
+        runPoolTransaction(target, fn, config);
     }
     const active = current ?? target;
     const value = Reflect.get(active as object, prop, receiver);
@@ -979,6 +1025,11 @@ async function assertAmbientTransactionSatisfies(
  */
 export type SqlExecutor = { execute: typeof poolDb.execute };
 
+/** The transaction executor pinned by the ambient scope, when one is active. */
+export function pinnedTransactionExecutor(): SqlExecutor | undefined {
+  return orgContext.getStore()?.txDb;
+}
+
 /**
  * Isolate a unit whose caller intentionally catches failures inside an already
  * open transaction. Ordinary nested transaction participation remains unchanged.
@@ -1031,7 +1082,13 @@ export async function inExecutorTransaction<T>(
   fn: (tx: SqlExecutor) => Promise<T>,
 ): Promise<T> {
   if ((executor as { $client?: unknown }).$client instanceof pg.Pool) {
-    return (executor as typeof poolDb).transaction((tx) => fn(tx));
+    // Route the app handles through the proxy so the opened transaction is
+    // pinned into the ambient context; other pool-backed handles pin theirs
+    // the same way. Either keeps nested `db` work on this one connection.
+    if (executor === db || executor === (poolDb as SqlExecutor)) {
+      return db.transaction((tx) => fn(tx));
+    }
+    return runPoolTransaction(executor as typeof poolDb, (tx) => fn(tx));
   }
   return fn(executor);
 }
