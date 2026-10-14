@@ -65,6 +65,8 @@ async function postDoc(
   kind: "customer_invoice" | "customer_credit",
   documentNumber: string,
   amount: string,
+  currency = "CAD",
+  fxRate = "1",
 ): Promise<string> {
   const id = randomUUID();
   await withBypass(async () => {
@@ -73,7 +75,7 @@ async function postDoc(
         (id, org_id, kind, status, document_number, subsidiary_id, party_id,
          document_date, currency, fx_rate, subtotal, tax_total, total, created_by)
       values (${id}, ${org.orgId}, ${kind}, 'draft', ${documentNumber},
-              ${org.subsidiaryId}, ${org.customerId}, ${org.date}, 'CAD', '1',
+              ${org.subsidiaryId}, ${org.customerId}, ${org.date}, ${currency}, ${fxRate},
               ${amount}, '0', ${amount}, ${userId})`);
     await db.execute(sql`
       insert into document_lines
@@ -819,3 +821,46 @@ test("a posted vendor credit settles an open vendor bill of the same vendor with
     assert.equal(await sourceOpenBalance(org.orgId, creditLine), "0.0000");
   }),
 );
+
+test("a foreign-currency credit settles its currency's invoice at carrying amounts and realizes the FX", { skip: !DB }, () =>
+  withCreditOrg("Foreign credit settler", async (org, userId) => {
+    // USD 100 invoiced at 1.30 carries CAD 130; the USD 100 credit at 1.40
+    // carries CAD 140. Applying one to the other closes both in USD and
+    // relieves each at its own carrying amount, so the CAD 10 left on the
+    // receivable control is realized FX, and releasing the settlement
+    // reverses exactly that entry.
+    await withBypass(() => db.execute(sql`
+      update orgs set settings = jsonb_set(settings, '{controlAccounts,fxRealizedGainLoss}', to_jsonb(${org.accounts.fxGainLoss}::text), true)
+       where id = ${org.orgId}`));
+    const invoiceId = await postDoc(org, userId, "customer_invoice", "INV-USD-1", "100", "USD", "1.30");
+    const creditId = await postDoc(org, userId, "customer_credit", "CM-USD-1", "100", "USD", "1.40");
+    const invoiceLine = await openLineId(org.orgId, invoiceId);
+    const creditLine = await openLineId(org.orgId, creditId);
+
+    const result = await withBypass(() => applyStandaloneCredits(org.orgId, userId, {
+      idempotencyKey: randomUUID(), partyId: org.customerId, side: "ar", appliedOn: org.date,
+      credits: [{ fromLineId: creditLine, toLineId: invoiceLine, amount: "100", sourceDocumentId: creditId }],
+    }));
+    const application = (await withBypass(async () => (await db.execute<{
+      amount: string; source_amount: string; target_transaction_amount: string; fx_gain_loss_entry_id: string | null;
+    }>(sql`select amount::text, source_amount::text, target_transaction_amount::text, fx_gain_loss_entry_id
+             from applications where org_id = ${org.orgId} and id = ${result.applicationIds[0]!}`)).rows[0]))!;
+    assert.deepEqual([application.amount, application.source_amount, application.target_transaction_amount],
+      ["130.0000", "140.0000", "100.0000"]);
+    assert.ok(application.fx_gain_loss_entry_id, "the carrying difference is realized");
+    const fxLines = new Map((await withBypass(async () => (await db.execute<{ account_id: string; amount: string }>(sql`
+      select account_id, amount::text from journal_lines
+       where org_id = ${org.orgId} and entry_id = ${application.fx_gain_loss_entry_id}`)).rows)).map((row) => [row.account_id, row.amount]));
+    assert.deepEqual(fxLines, new Map([[org.accounts.ar, "10.0000"], [org.accounts.fxGainLoss, "-10.0000"]]));
+    const arBalance = async () => (await withBypass(async () => (await db.execute<{ total: string }>(sql`
+      select coalesce(sum(l.amount), 0)::text as total from journal_lines l
+        join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+       where l.org_id = ${org.orgId} and l.account_id = ${org.accounts.ar} and e.status in ('posted', 'reversed')`)).rows[0]))!.total;
+    assert.equal(await arBalance(), "0.0000", "both items closed leaves nothing on the receivable control");
+
+    await withBypass(() => unapplyCreditSettlement(org.orgId, userId, result.applicationIds[0]!));
+    const fxStatus = (await withBypass(async () => (await db.execute<{ status: string }>(sql`
+      select status from journal_entries where org_id = ${org.orgId} and id = ${application.fx_gain_loss_entry_id}`)).rows[0]))!.status;
+    assert.equal(fxStatus, "reversed");
+    assert.equal(await arBalance(), "-10.0000", "the released items carry their original amounts again");
+  }));

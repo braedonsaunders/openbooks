@@ -2,11 +2,13 @@ import { sql } from "drizzle-orm";
 import { randomUUID } from "node:crypto";
 import { db, withBypassContext, withOrgTransaction } from "../platform/db.ts";
 import { canonicalJson } from "../platform/canonical-json.ts";
-import { fromUnits, sum, toUnits } from "../money/money.ts";
+import { cmp, fromUnits, isZero, neg, sum, toUnits } from "../money/money.ts";
+import { postEntry, markEntryReversed } from "../journal/post-entry.ts";
+import { carryingAmountForSettlement, realizedFxControlAdjustment } from "./settlement-policy.ts";
 import { assertPeriodModulesOpen } from "../periods/period-policy.ts";
 import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
 import { CreditApplicationConflictError, PaymentError } from "../payments-core/payment-errors.ts";
-import { paymentBookId } from "./payment-accounts.ts";
+import { paymentBookId, paymentControlDeps } from "./payment-accounts.ts";
 import { validateCreditAllocations } from "./credit-allocation.ts";
 import { assertNoForeignRunReservation } from "./payment-queries.ts";
 import { type CreditAllocationInput, type OpenItemSide } from "./payment-contracts.ts";
@@ -304,6 +306,7 @@ export async function applyStandaloneCredits(
       bookId,
       side: input.side,
       controlAccountId,
+      foreignCurrency: true,
     });
     // A credit or open item a payment run has reserved is that run's to
     // settle; applying it here would let the run pay the same item again.
@@ -331,26 +334,78 @@ export async function applyStandaloneCredits(
       modules: [input.side],
     });
 
-const applicationIds: string[] = [];
+    // Each side is relieved at its carrying amount for the transaction amount
+    // applied. In the functional currency the two are equal; a foreign-
+    // currency credit and open item booked at different rates realize the
+    // difference, posted per application so a release reverses exactly it.
+    const balances = new Map((await db.execute<{
+      id: string; amount: string; currency: string; base_currency: string; open_base: string; open_txn: string;
+    }>(sql`
+      select jl.id, jl.amount::text as amount, jl.currency, s.base_currency,
+             (abs(jl.amount) - coalesce(sum(a.source_amount) filter (where a.from_line_id = jl.id), 0)
+                             - coalesce(sum(a.amount) filter (where a.to_line_id = jl.id), 0))::text as open_base,
+             (abs(jl.txn_amount) - coalesce(sum(a.source_transaction_amount) filter (where a.from_line_id = jl.id), 0)
+                                 - coalesce(sum(a.target_transaction_amount) filter (where a.to_line_id = jl.id), 0))::text as open_txn
+        from journal_lines jl
+        join subsidiaries s on s.id = jl.subsidiary_id and s.org_id = jl.org_id
+        left join applications a
+          on a.org_id = jl.org_id and a.unapplied_at is null and (a.from_line_id = jl.id or a.to_line_id = jl.id)
+       where jl.org_id = ${orgId} and jl.id in ${endpointIds}
+       group by jl.id, s.base_currency
+    `)).rows.map((row) => [row.id, { ...row }]));
+    let gainLossAccountId: string | null | undefined;
+
+    const applicationIds: string[] = [];
     for (const [index, credit] of input.credits.entries()) {
       // The first application row's id IS the idempotency key — the
       // claimSetupCreate convention — so a retry resolves to this settlement.
       const applicationId = index === 0 ? input.idempotencyKey : randomUUID();
-      // Same-currency by construction: validateCreditAllocations refuses any
-      // endpoint whose transaction currency differs from its base currency, so
-      // both frames carry the same amount at rate 1 and no realized FX arises.
+      const source = balances.get(credit.fromLineId)!;
+      const target = balances.get(credit.toLineId)!;
+      const sourceBase = carryingAmountForSettlement(source.open_base, source.open_txn, credit.amount);
+      const targetBase = carryingAmountForSettlement(target.open_base, target.open_txn, credit.amount);
+      source.open_base = fromUnits(toUnits(source.open_base) - toUnits(sourceBase));
+      source.open_txn = fromUnits(toUnits(source.open_txn) - toUnits(credit.amount));
+      target.open_base = fromUnits(toUnits(target.open_base) - toUnits(targetBase));
+      target.open_txn = fromUnits(toUnits(target.open_txn) - toUnits(credit.amount));
+      const adjustment = realizedFxControlAdjustment(
+        cmp(source.amount, "0") > 0 ? sourceBase : neg(sourceBase),
+        cmp(target.amount, "0") > 0 ? targetBase : neg(targetBase),
+      );
+      let fxEntryId: string | null = null;
+      if (!isZero(adjustment)) {
+        gainLossAccountId ??= (await paymentControlDeps(orgId)).control.fxRealizedGainLoss ?? null;
+        if (!gainLossAccountId) {
+          throw new PaymentError(
+            "applying this foreign-currency credit realizes an FX gain or loss; choose the Realized FX gain/loss account under Company Settings → Control accounts, then apply it again",
+          );
+        }
+        const memo = "Realized FX on a credit applied without cash";
+        fxEntryId = (await postEntry(db, {
+          orgId, bookId, subsidiaryId,
+          entryNumber: `CREDIT-FX-${applicationId}`,
+          postingDate: input.appliedOn, periodId: period.id, memo,
+          sourceDocumentId: credit.sourceDocumentId,
+          origin: "fx_settlement", actorId: userId, currency: source.base_currency,
+          idempotencyKey: `credit-application-fx:${applicationId}`,
+          lines: [
+            { accountId: controlAccountId, amount: adjustment, partyId: input.partyId, memo },
+            { accountId: gainLossAccountId, amount: neg(adjustment), memo },
+          ],
+        })).entryId;
+      }
       const inserted = (await db.execute<{ id: string }>(sql`
         insert into applications
           (id, org_id, from_line_id, to_line_id, amount, source_amount,
            source_transaction_amount, source_transaction_currency,
            target_transaction_amount, target_transaction_currency,
            settlement_rate, settlement_rate_source, settlement_rate_reference,
-           applied_on, created_by, updated_by)
-        select ${applicationId}, ${orgId}, ${credit.fromLineId}, ${credit.toLineId}, ${credit.amount},
-               ${credit.amount}, ${credit.amount}, jl.currency,
+           applied_on, fx_gain_loss_entry_id, created_by, updated_by)
+        select ${applicationId}, ${orgId}, ${credit.fromLineId}, ${credit.toLineId}, ${targetBase},
+               ${sourceBase}, ${credit.amount}, jl.currency,
                ${credit.amount}, jl.currency,
                '1', 'same_currency', 'credit applied without cash',
-               ${input.appliedOn}, ${userId}, ${userId}
+               ${input.appliedOn}, ${fxEntryId}, ${userId}, ${userId}
           from journal_lines jl
          where jl.id = ${credit.fromLineId} and jl.org_id = ${orgId}
          returning id
@@ -377,6 +432,9 @@ const applicationIds: string[] = [];
                     toLineId: credit.toLineId,
                     sourceDocumentId: credit.sourceDocumentId,
                     amount: credit.amount,
+                    sourceCarryingAmount: sourceBase,
+                    targetCarryingAmount: targetBase,
+                    realizedFxEntryId: fxEntryId,
                     appliedOn: input.appliedOn,
                     side: input.side,
                   },
@@ -417,6 +475,7 @@ const applicationIds: string[] = [];
 interface LiveApplicationRow extends Record<string, unknown> {
   id: string;
   amount: string;
+  fx_gain_loss_entry_id: string | null;
   applied_on: string;
   from_line_id: string;
   to_line_id: string;
@@ -450,7 +509,7 @@ export async function unapplyCreditSettlement(
 ): Promise<{ amount: string }> {
   return withOrgTransaction(orgId, async () => {
     const application = (await db.execute<LiveApplicationRow>(sql`
-      select a.id, a.amount, a.applied_on::text as applied_on,
+      select a.id, a.amount, a.applied_on::text as applied_on, a.fx_gain_loss_entry_id,
              a.from_line_id, a.to_line_id,
              from_document.kind as from_document_kind,
              from_document.document_number as from_document_number,
@@ -545,6 +604,40 @@ export async function unapplyCreditSettlement(
       throw new PaymentError(
         "this settlement was released by another action before this one completed",
       );
+    }
+    // A foreign-currency credit realized FX for exactly this application;
+    // releasing it reverses that entry on the settlement's own date, the
+    // period the gate above held open.
+    if (application.fx_gain_loss_entry_id) {
+      const fx = (await db.execute<{ entry_number: string; status: string; book_id: string; subsidiary_id: string; currency: string; source_document_id: string | null }>(sql`
+        select entry_number, status, book_id, subsidiary_id, currency, source_document_id
+          from journal_entries
+         where org_id = ${orgId} and id = ${application.fx_gain_loss_entry_id}
+         for update`)).rows[0];
+      if (!fx || fx.status !== "posted") {
+        throw new PaymentError("this settlement's realized FX entry is no longer posted; it cannot be released");
+      }
+      const lines = (await db.execute<{ account_id: string; amount: string; party_id: string | null; memo: string | null }>(sql`
+        select account_id, amount::text as amount, party_id, memo
+          from journal_lines
+         where org_id = ${orgId} and entry_id = ${application.fx_gain_loss_entry_id}
+         order by line_number`)).rows;
+      await postEntry(db, {
+        orgId, bookId: fx.book_id, subsidiaryId: fx.subsidiary_id,
+        entryNumber: `${fx.entry_number}-R`,
+        postingDate: application.applied_on, periodId: period.id,
+        memo: "Reversal of realized FX on a released credit application",
+        sourceDocumentId: fx.source_document_id,
+        origin: "fx_settlement", reversesEntryId: application.fx_gain_loss_entry_id,
+        actorId: userId, currency: fx.currency,
+        lines: lines.map((line) => ({
+          accountId: line.account_id,
+          amount: neg(line.amount),
+          ...(line.party_id ? { partyId: line.party_id } : {}),
+          memo: line.memo ?? undefined,
+        })),
+      });
+      await markEntryReversed(db, { orgId, entryId: application.fx_gain_loss_entry_id, actorId: userId });
     }
     await db.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id, request_id)

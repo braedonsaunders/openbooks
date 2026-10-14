@@ -43,7 +43,16 @@ export async function assertCreditSourcesExist(orgId: string, credits: CreditAll
  * other. Endpoint locks serialize cash and credit capacity checks together. */
 export async function validateCreditAllocations(
   credits: CreditAllocationInput[], allocations: AllocationInput[],
-  scope: { orgId: string; partyId: string | null; subsidiaryId: string | null; bookId: string; side: OpenItemSide; controlAccountId: string | null },
+  scope: {
+    orgId: string; partyId: string | null; subsidiaryId: string | null; bookId: string; side: OpenItemSide; controlAccountId: string | null;
+    /**
+     * Admit credits and open items in a foreign transaction currency. Only a
+     * caller that measures each side's carrying amount and posts the realized
+     * FX between them may set it; amounts are then transaction-currency
+     * amounts and both endpoints must share that currency.
+     */
+    foreignCurrency?: boolean;
+  },
 ): Promise<void> {
   if (!credits.length) return;
   if (!scope.partyId || !scope.subsidiaryId) throw new PaymentError("credit applications require a payment party and subsidiary");
@@ -114,11 +123,14 @@ export async function validateCreditAllocations(
       if ((positive ? cmp(row.amount, "0") <= 0 : cmp(row.amount, "0") >= 0)) {
         throw new PaymentError("credit application endpoints have the wrong payment side or sign");
       }
-      if (row.currency !== row.base_currency || cmp(row.amount, row.txn_amount) !== 0) {
-        // Applying a foreign-currency credit without cash would realize FX
-        // between the two carrying amounts, which this path does not post.
-        throw new PaymentError("credits and open items in a foreign transaction currency cannot be applied without cash; only functional-currency balances settle through a credit application");
+      if (row.currency !== row.base_currency ? !scope.foreignCurrency : cmp(row.amount, row.txn_amount) !== 0) {
+        // Applying a foreign-currency credit realizes FX between the two
+        // carrying amounts; only the standalone credit application posts it.
+        throw new PaymentError("credits and open items in a foreign transaction currency apply through a standalone credit application, not with a payment");
       }
+    }
+    if (byId.get(credit.fromLineId)!.currency !== byId.get(credit.toLineId)!.currency) {
+      throw new PaymentError("a credit applies only to open items in its own transaction currency");
     }
     const units = toUnits(credit.amount);
     sourceAmounts.set(credit.fromLineId, (sourceAmounts.get(credit.fromLineId) ?? 0n) + units);
@@ -130,7 +142,11 @@ export async function validateCreditAllocations(
       // Cash-only foreign targets already undergo dual-currency validation.
       if (!row || (!source && !credits.some(a => a.toLineId === id))) continue;
       const abs = (v: string) => { const n = toUnits(v); return n < 0n ? -n : n; };
-      if (amount > abs(row.amount) - toUnits(source ? row.source_used : row.target_used) ||
+      // Credit amounts are transaction-currency amounts. A functional-currency
+      // endpoint's two frames are equal; a foreign one is bounded by its
+      // transaction-currency balance, its carrying amount following pro rata.
+      const foreign = row.currency !== row.base_currency;
+      if ((!foreign && amount > abs(row.amount) - toUnits(source ? row.source_used : row.target_used)) ||
           amount > abs(row.txn_amount) - toUnits(source ? row.source_txn_used : row.target_txn_used)) {
         throw new PaymentError("credit and cash applications exceed an endpoint's open balance");
       }
