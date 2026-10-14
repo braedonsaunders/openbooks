@@ -29,6 +29,11 @@ export const GET = defineRoute({
         'apps',
       )
     if (gate instanceof NextResponse) return gate
+    // The host mints one handshake proof per document load; the SDK spends it
+    // to bind this document's private bridge channel.
+    const handshakeProof = query.get('bridge')
+    if (!handshakeProof || !isUuid(handshakeProof))
+      return NextResponse.json({ error: 'Open this App from its page in OpenBooks.' }, { status: 400 })
     try {
         const { key } = await params
         let bundle: {
@@ -94,7 +99,7 @@ export const GET = defineRoute({
         const document = inlineDocument(
           bundle.entryHtml,
           bundle.replacements,
-          `<script>${bridgeClientSource(context)}</script>`,
+          `<script>${bridgeClientSource(context, handshakeProof)}</script>`,
           bundle.entry,
         )
         return new Response(document, {

@@ -10,6 +10,7 @@ import {
   isBridgeMethod,
   inlineDocument,
   bridgeClientSource,
+  isBridgeHandshake,
   APP_CSP,
   BRIDGE_MARKER,
 } from './bridge.ts'
@@ -61,16 +62,17 @@ test('inlineDocument substitutes asset refs and injects head', () => {
   assert.match(out, /href="data:text\/css;base64,AAAA"/)
   assert.match(out, /src="data:image\/png;base64,BBBB"/) // ./logo.png normalized
   assert.match(out, /src="data:text\/javascript;base64,CCCC"/)
-  assert.match(out, /<head><meta name="injected">/) // injected right after <head>
+  assert.ok(out.startsWith('<meta name="injected"><html>'), 'the injection precedes everything the App wrote')
 })
 
-test('inlineDocument handles documents without a <head>', () => {
-  const out = inlineDocument('<html><body>hi</body></html>', {}, '<meta name="x">')
-  assert.match(out, /<head><meta name="x"><\/head>/)
+test('inlineDocument injects ahead of App scripts placed before <head>, after only a doctype', () => {
+  const out = inlineDocument('<!DOCTYPE html><script>early()</script><html><head></head><body>hi</body></html>', {}, '<script>sdk()</script>')
+  assert.ok(out.startsWith('<!DOCTYPE html><script>sdk()</script><script>early()</script>'), out)
+  assert.ok(inlineDocument('<html><body>hi</body></html>', {}, '<meta name="x">').startsWith('<meta name="x"><html>'))
 })
 
 test('bridgeClientSource embeds context and defines the SDK surface', () => {
-  const src = bridgeClientSource({ app: { id: 'a1', key: 'demo', name: 'Demo' }, user: { id: 'u1', name: 'Ada', roles: ['admin'] } })
+  const src = bridgeClientSource({ app: { id: 'a1', key: 'demo', name: 'Demo' }, user: { id: 'u1', name: 'Ada', roles: ['admin'] } }, '6f1c2d3e-4a5b-4c6d-8e7f-90a1b2c3d4e5')
   assert.match(src, /window\.openbooks/)
   assert.match(src, /callBackend/)
   assert.match(src, /records/)
@@ -78,6 +80,20 @@ test('bridgeClientSource embeds context and defines the SDK surface', () => {
   assert.match(src, /delete: function/)
   assert.match(src, /"key":"demo"/)
   assert.match(src, /type: 'ready'/)
+  // Calls ride the private channel handed over with the single-use proof,
+  // never the shared window message bus.
+  assert.match(src, /new MessageChannel\(\)/)
+  assert.match(src, /proof: "6f1c2d3e-4a5b-4c6d-8e7f-90a1b2c3d4e5" \}, '\*', \[channel\.port2\]/)
+  assert.match(src, /port\.postMessage\(/)
+  assert.doesNotMatch(src, /window\.parent\.postMessage\(\{ '__ob': true, type: 'call'/)
+})
+
+test('isBridgeHandshake accepts only the current proof on a ready envelope', () => {
+  const proof = '6f1c2d3e-4a5b-4c6d-8e7f-90a1b2c3d4e5'
+  assert.equal(isBridgeHandshake({ __ob: true, type: 'ready', proof }, proof), true)
+  assert.equal(isBridgeHandshake({ __ob: true, type: 'ready', proof }, null), false)
+  assert.equal(isBridgeHandshake({ __ob: true, type: 'ready', proof: 'other' }, proof), false)
+  assert.equal(isBridgeHandshake({ __ob: true, type: 'call', proof }, proof), false)
 })
 
 test('APP_CSP locks down default-src and blocks app network', () => {
@@ -100,7 +116,7 @@ test('relative frontend references prefer their own directory over same-named ro
 
  test('bridge context explicitly distinguishes draft samples from installed data', () => {
   for (const preview of [true, false]) {
-    const source = bridgeClientSource({ preview, app: { id: 'a1', key: 'demo', name: 'Demo' }, user: null })
+    const source = bridgeClientSource({ preview, app: { id: 'a1', key: 'demo', name: 'Demo' }, user: null }, '6f1c2d3e-4a5b-4c6d-8e7f-90a1b2c3d4e5')
     assert.ok(source.includes(`"preview":${preview}`))
   }
 })

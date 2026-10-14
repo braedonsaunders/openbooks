@@ -46,29 +46,67 @@ async function renderFrame(options: { locale: string; messages: AbstractIntlMess
   assert.ok(iframe, "the frame must render");
   assert.ok(iframe.contentWindow, "the frame window must exist");
   const posted: Posted[] = [];
-  (iframe.contentWindow as unknown as Record<string, unknown>).postMessage = (msg: unknown) => {
-    posted.push(msg as Posted);
-  };
+  const channels: MessageChannel[] = [];
+  const proofOf = () => new URL(iframe.src, "http://localhost:4800").searchParams.get("bridge");
+  async function settle() {
+    await new Promise((resolve) => setTimeout(resolve, 25));
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  // The SDK's side of the handshake: present a proof with one end of a
+  // private channel, then talk over that channel only.
+  async function handshake(proof: string | null) {
+    const channel = new MessageChannel();
+    channels.push(channel);
+    channel.port1.onmessage = (event: MessageEvent) => { posted.push(event.data as Posted); };
+    await act(async () => {
+      window.dispatchEvent(
+        Object.assign(new window.Event("message"), {
+          source: iframe!.contentWindow,
+          data: { __ob: true, type: "ready", proof },
+          ports: [channel.port2],
+        }),
+      );
+      await settle();
+    });
+    return channel;
+  }
   return {
     host,
     root,
+    iframe,
     posted,
-    async call(method: string) {
+    proofOf,
+    handshake,
+    async call(method: string, channel?: MessageChannel) {
+      const bound = channel ?? await handshake(proofOf());
+      await act(async () => {
+        bound.port1.postMessage({ __ob: true, type: "call", id: "r1", method, payload: {} });
+        await settle();
+      });
+    },
+    async windowCall(method: string) {
       await act(async () => {
         window.dispatchEvent(
           Object.assign(new window.Event("message"), {
-            source: iframe.contentWindow,
+            source: iframe!.contentWindow,
             data: { __ob: true, type: "call", id: "r1", method, payload: {} },
+            ports: [],
           }),
         );
-        await new Promise((resolve) => setTimeout(resolve, 25));
-        await new Promise((resolve) => setTimeout(resolve, 25));
+        await settle();
+      });
+    },
+    async navigate() {
+      await act(async () => {
+        iframe!.dispatchEvent(new window.Event("load"));
+        await settle();
       });
     },
     async unmount() {
       await act(async () => {
         root.unmount();
       });
+      for (const channel of channels) { channel.port1.close(); channel.port2.close(); }
       host.remove();
     },
   };
@@ -128,6 +166,61 @@ test("F4T-10: draft preview refusal renders in the operator locale", async () =>
       "Draft preview does not execute backend actions or access live data",
       "the refusal must not be the hardcoded English sentence",
     );
+  } finally {
+    await frame.unmount();
+  }
+});
+
+test("bridge calls travel only over the channel bound by the document's single-use handshake", async () => {
+  let fetches = 0;
+  globalThis.fetch = (async () => {
+    fetches += 1;
+    return Response.json({ ok: true, result: { rows: [] } });
+  }) as typeof fetch;
+  const frame = await renderFrame({ locale: "en", messages: messagesEn });
+  try {
+    // A bare window message is not a bridge call, whoever sends it.
+    await frame.windowCall("records.list");
+    assert.equal(fetches, 0);
+    // A handshake must present this load's proof.
+    const forged = await frame.handshake("00000000-0000-4000-8000-000000000000");
+    await frame.call("records.list", forged);
+    assert.equal(fetches, 0);
+    assert.equal(frame.posted.length, 0);
+
+    const proof = frame.proofOf();
+    const bound = await frame.handshake(proof);
+    await frame.call("records.list", bound);
+    assert.equal(fetches, 1);
+    assert.deepEqual(frame.posted.map((result) => result.ok), [true]);
+
+    // The proof is spent: a later document presenting it binds nothing.
+    const replay = await frame.handshake(proof);
+    await frame.call("records.list", replay);
+    assert.equal(fetches, 1);
+  } finally {
+    await frame.unmount();
+  }
+});
+
+test("a navigation away from the App revokes its channel and reloads it under a new proof", async () => {
+  let fetches = 0;
+  globalThis.fetch = (async () => {
+    fetches += 1;
+    return Response.json({ ok: true, result: null });
+  }) as typeof fetch;
+  const frame = await renderFrame({ locale: "en", messages: messagesEn });
+  try {
+    await frame.navigate(); // the App document's own load
+    const first = frame.proofOf();
+    const bound = await frame.handshake(first);
+    await frame.navigate(); // an unrequested load: the frame left the App
+    await frame.call("records.list", bound);
+    assert.equal(fetches, 0, "the revoked channel relays nothing");
+    const next = frame.proofOf();
+    assert.ok(next && next !== first, "the App reloads under a fresh proof");
+    await frame.call("records.list", await frame.handshake(next));
+    assert.equal(fetches, 1);
   } finally {
     await frame.unmount();
   }

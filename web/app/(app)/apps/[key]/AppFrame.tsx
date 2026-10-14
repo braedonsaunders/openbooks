@@ -6,9 +6,13 @@ import { readApiErrorMessage, refusalMessageFromBody } from '@/lib/api-error'
 import {
   makeBridgeResult,
   parseBridgeRequest,
+  isBridgeHandshake,
   isBridgeMethod,
   type BridgeContext,
 } from '@/lib/apps/bridge'
+
+/** Reloads after an unexpected navigation before the App is left unloaded. */
+const MAX_BRIDGE_REHYDRATIONS = 3
 
 /**
  * AppFrame — the host side of an installed App's separately served document.
@@ -18,6 +22,12 @@ import {
  * The App therefore runs with no cookies, no parent-DOM access, and no network
  * of its own — its only capability is bridge calls, which this component relays
  * to the permission-checked /api/apps/<key>/bridge route on the user's behalf.
+ *
+ * Each document load carries a fresh single-use handshake proof. The first
+ * handshake presenting it binds a private MessageChannel to that document, and
+ * calls are accepted only on that channel. Any later load means the frame
+ * navigated away from the App, so the channel is revoked and the App document
+ * is loaded again under a new proof.
  */
 
 export function AppFrame({
@@ -31,15 +41,29 @@ export function AppFrame({
 }) {
   const iframeRef = useRef<HTMLIFrameElement>(null)
   const t = useTranslations('apps')
-  // Relay bridge calls from THIS iframe to the server, post results back.
   useEffect(() => {
-    async function onMessage(e: MessageEvent) {
-      const iframe = iframeRef.current
-      if (!iframe || e.source !== iframe.contentWindow) return // only our sandbox
-      const req = parseBridgeRequest(e.data)
+    const iframe = iframeRef.current
+    if (!iframe) return
+    let proof: string | null = null
+    let port: MessagePort | null = null
+    let expectingLoad = false
+    let rehydrations = 0
+    let disposed = false
+
+    const revoke = () => {
+      proof = null
+      port?.close()
+      port = null
+    }
+
+    // Relay one call from the bound channel to the server and answer on the
+    // same channel, unless it was revoked while the call was in flight.
+    async function relay(channel: MessagePort, data: unknown) {
+      const req = parseBridgeRequest(data)
       if (!req) return
-      const post = (ok: boolean, payload: unknown) =>
-        iframe.contentWindow?.postMessage(makeBridgeResult(req.id, ok, payload), '*')
+      const post = (ok: boolean, payload: unknown) => {
+        if (port === channel) channel.postMessage(makeBridgeResult(req.id, ok, payload))
+      }
 
       if (previewDraftId) { post(false, t('bridge.previewDraftRefusal')); return }
       if (!isBridgeMethod(req.method)) {
@@ -85,11 +109,50 @@ export function AppFrame({
         post(false, t('bridge.callFailed'))
       }
     }
+
+    function onMessage(e: MessageEvent) {
+      if (e.source !== iframe!.contentWindow) return // only our sandbox
+      if (!isBridgeHandshake(e.data, proof) || !e.ports[0]) return
+      proof = null // single use: no later document can present it
+      port?.close()
+      const channel = e.ports[0]
+      port = channel
+      channel.onmessage = (message) => { void relay(channel, message.data) }
+    }
+
+    // Start (or restart) the App document under a fresh handshake proof.
+    const load = () => {
+      revoke()
+      proof = crypto.randomUUID()
+      expectingLoad = true
+      const query = new URLSearchParams({ bridge: proof })
+      if (previewDraftId) query.set('draft', previewDraftId)
+      else if (context.app.versionId) query.set('versionId', context.app.versionId)
+      iframe!.src = `/api/apps/${encodeURIComponent(appKey)}/sandbox?${query}`
+    }
+
+    function onLoad() {
+      if (disposed) return
+      if (expectingLoad) { expectingLoad = false; return }
+      // A load nobody requested is the frame leaving the App document.
+      revoke()
+      if (rehydrations < MAX_BRIDGE_REHYDRATIONS) {
+        rehydrations += 1
+        load()
+      }
+    }
+
     window.addEventListener('message', onMessage)
+    iframe.addEventListener('load', onLoad)
     // Start the document only after the bridge listener exists. Warm responses
-    // may otherwise execute before React hydrates and lose the first request.
-    if (iframeRef.current) iframeRef.current.src = `/api/apps/${encodeURIComponent(appKey)}/sandbox${previewDraftId ? `?draft=${encodeURIComponent(previewDraftId)}` : context.app.versionId ? `?versionId=${encodeURIComponent(context.app.versionId)}` : ''}`
-    return () => window.removeEventListener('message', onMessage)
+    // may otherwise execute before React hydrates and lose the handshake.
+    load()
+    return () => {
+      disposed = true
+      window.removeEventListener('message', onMessage)
+      iframe.removeEventListener('load', onLoad)
+      revoke()
+    }
     // The translator is read inside the relay on purpose: re-subscribing (and
     // re-setting the document) when its identity changes would reload the App.
     // eslint-disable-next-line react-hooks/exhaustive-deps

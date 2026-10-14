@@ -10,6 +10,14 @@
  * relays to permission-checked server routes. The parent validates that every
  * inbound message came from its own iframe (event.source identity) before
  * relaying; the child validates that results came from window.parent.
+ *
+ * Capability binding: each document load carries a single-use handshake proof
+ * minted by the host. The injected SDK runs before any App script, consumes
+ * that proof by handing the host one end of a private MessageChannel, and
+ * every call and result then travels over that channel only. A document the
+ * frame navigates to later receives no channel: the proof is already spent,
+ * the channel end stays in the original document's SDK closure and dies with
+ * it, and the host revokes its end and reloads the App on any further load.
  */
 
 export const BRIDGE_MARKER = '__ob' as const
@@ -75,6 +83,13 @@ export function parseBridgeRequest(data: unknown): BridgeRequest | null {
   }
 }
 
+/** Whether a window message is the SDK's handshake for the given single-use proof. */
+export function isBridgeHandshake(data: unknown, proof: string | null): boolean {
+  if (!proof || !data || typeof data !== 'object') return false
+  const d = data as Record<string, unknown>
+  return d[BRIDGE_MARKER] === true && d.type === 'ready' && d.proof === proof
+}
+
 export function makeBridgeResult(id: string, ok: boolean, resultOrError: unknown): BridgeResult {
   return ok
     ? { [BRIDGE_MARKER]: true, type: 'result', id, ok: true, result: resultOrError }
@@ -107,20 +122,23 @@ export const APP_CSP =
  * Written as a plain string (not a bundled module) so it needs no build step
  * and runs in the sandbox's fresh realm.
  */
-export function bridgeClientSource(context: BridgeContext): string {
+export function bridgeClientSource(context: BridgeContext, handshakeProof: string): string {
   return `(function(){
+  var script = document.currentScript;
+  if (script && script.parentNode) script.parentNode.removeChild(script);
   var CTX = ${JSON.stringify(context).replace(/</g, '\\u003c')};
+  var channel = new MessageChannel();
+  var port = channel.port1;
   var pending = {};
   var seq = 0;
-  window.addEventListener('message', function(e){
-    if (e.source !== window.parent) return;
+  port.onmessage = function(e){
     var d = e.data;
     if (!d || d['${BRIDGE_MARKER}'] !== true || d.type !== 'result') return;
     var p = pending[d.id];
     if (!p) return;
     delete pending[d.id];
     if (d.ok) p.resolve(d.result); else p.reject(new Error(d.error || 'bridge error'));
-  });
+  };
   function uuid(){
     return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c){
       var r = Math.random() * 16 | 0;
@@ -131,7 +149,7 @@ export function bridgeClientSource(context: BridgeContext): string {
     return new Promise(function(resolve, reject){
       var id = 'c' + (++seq);
       pending[id] = { resolve: resolve, reject: reject };
-      window.parent.postMessage({ '${BRIDGE_MARKER}': true, type: 'call', id: id, method: method, payload: payload, invocationKey: invocationKey || uuid() }, '*');
+      port.postMessage({ '${BRIDGE_MARKER}': true, type: 'call', id: id, method: method, payload: payload, invocationKey: invocationKey || uuid() });
     });
   }
   // Mutating calls accept an explicit invocation key so the action can be
@@ -156,15 +174,15 @@ export function bridgeClientSource(context: BridgeContext): string {
       delete: function(typeKey, id, opts){ return call('platform.delete', { typeKey: typeKey, id: id }, actionKey(opts)); }
     }
   };
-  window.parent.postMessage({ '${BRIDGE_MARKER}': true, type: 'ready' }, '*');
+  window.parent.postMessage({ '${BRIDGE_MARKER}': true, type: 'ready', proof: ${JSON.stringify(handshakeProof)} }, '*', [channel.port2]);
 })();`
 }
 
 /**
  * Assemble the final single-document HTML served into the sandboxed iframe.
  * Pure string transform (testable): substitute each bundle asset reference with
- * its precomputed data: URL, then inject `headHtml` (CSP meta + SDK script) into
- * <head>. Inlining as data: URLs — not parent-minted blob: URLs — is deliberate:
+ * its precomputed data: URL, then inject `headHtml` (the SDK script) at the
+ * start of the document. Inlining as data: URLs — not parent-minted blob: URLs — is deliberate:
  * a null-origin sandboxed iframe cannot fetch the parent origin's blob URLs, but
  * data: URLs are self-contained and origin-agnostic.
  */
@@ -186,12 +204,11 @@ export function inlineDocument(
     const resolved = replacements[parts.join('/')] ?? replacements[path.replace(/^\.?\//, '')]
     return resolved ? `${name}=${quote}${resolved}${quote}` : attribute
   })
-  if (/<head[^>]*>/i.test(html)) {
-    html = html.replace(/<head[^>]*>/i, (m) => m + headHtml)
-  } else if (/<html[^>]*>/i.test(html)) {
-    html = html.replace(/<html[^>]*>/i, (m) => m + '<head>' + headHtml + '</head>')
-  } else {
-    html = headHtml + html
-  }
-  return html
+  // The injected head runs before anything the App wrote, including scripts
+  // placed ahead of its own <head>, so the SDK completes its handshake before
+  // App code executes. Only a leading doctype stays in front of it.
+  const doctype = /^\s*<!doctype[^>]*>/i.exec(html)
+  return doctype
+    ? doctype[0] + headHtml + html.slice(doctype[0].length)
+    : headHtml + html
 }

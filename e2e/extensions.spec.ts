@@ -144,7 +144,7 @@ test('app management authors files, preserves drafts, exports, imports, versions
     await expect(frame.locator('p')).toHaveText('Uploaded JavaScript runs')
     const appFrame = page.frames().find(value => value.url().includes('/sandbox'))!
     expect(await appFrame.evaluate(() => { try { void window.parent.document; return false } catch { return true } })).toBe(true)
-    const sandbox = await page.request.get(`/api/apps/${key}/sandbox`)
+    const sandbox = await page.request.get(`/api/apps/${key}/sandbox?bridge=${crypto.randomUUID()}`)
     expect(sandbox.headers()['content-security-policy']).toContain('sandbox allow-scripts')
     expect(sandbox.headers()['content-security-policy']).not.toContain('allow-same-origin')
     expect(sandbox.headers()['content-security-policy']).toContain("connect-src 'none'")
