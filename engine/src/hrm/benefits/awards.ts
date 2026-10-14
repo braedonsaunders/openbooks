@@ -1,3 +1,5 @@
+import { awardDeliveryPolicy, readAwardDeliveryPolicy } from './award-delivery-policy.ts';
+import { addCalendarDays } from '../../platform/civil-date.ts';
 import { BENEFIT_AWARD_SUBJECT_KIND } from "@openbooks/schema/src/benefits-programs.ts";
 import { sql } from "drizzle-orm";
 import { awardPayrollProcessedSql } from "./payroll-delivery-evidence.ts";
@@ -607,7 +609,7 @@ async function recordAward(
         );
       }
     }
-    const programSnapshot = originalPolicy ? { ...originalPolicy, approvalMode: originalPolicy.approvalMode ?? program.approvalMode } : {
+    const programSnapshot = originalPolicy ? { ...originalPolicy } : {
       id: program.id,
       code: program.code,
       name: program.name,
@@ -937,8 +939,7 @@ export async function queueBenefitAward(query: {
         "benefit award not found in this organization — reload the award list and retry",
       );
     }
-    await requireAwardEntityScope(db, orgId, actorId, before.programId);
-    const program = await getBenefitProgram(db, orgId, actorId, before.programId);
+    const program = await readAwardDeliveryPolicy(db, orgId, actorId, awardId);
     if (normalizeMoney(before.value) === "0.0000") {
       throw new BenefitsError("REFUSED", before.adjustsAwardId === null
         ? "a zero-value reward cannot enter payroll — void this reward and create a reward with a positive value"
@@ -1083,13 +1084,14 @@ async function requireAwardAdjustment(
   if (!run) {
     throw new BenefitsError("NOT_FOUND", "pay run not found in this organization — finalize the run before recording delivery");
   }
-  const programPolicy = (await exec.execute<{ legal_entity_id: string; payable_date: string; delivery_method: string }>(sql`
-    select legal_entity_id, delivery_method, (${award.periodTo ?? award.periodFrom}::date + payment_delay_days)::text as payable_date
-      from hrm_benefit_programs where org_id = ${orgId} and id = ${award.programId}
-  `)).rows[0];
-  const programEntity = programPolicy?.legal_entity_id;
-  if (!programPolicy || run.pay_date < programPolicy.payable_date) {
-    throw new BenefitsError("REFUSED", `this run pays before the award is payable on ${programPolicy?.payable_date ?? "an unresolved date"} — select a run on or after the payable date`);
+  const retained=(await exec.execute<{program:unknown;source:unknown}>(sql`select program_snapshot as program,source_snapshot as source
+    from hrm_benefit_awards where org_id=${orgId} and id=${award.id}`)).rows;
+  if(retained.length!==1)throw new BenefitsError("NOT_FOUND","The award's issuance source is unavailable");
+  const programPolicy=awardDeliveryPolicy(retained[0]!.program,retained[0]!.source);
+  const programEntity=programPolicy.legalEntityId;
+  const payableDate=addCalendarDays(award.periodTo ?? award.periodFrom,programPolicy.paymentDelayDays);
+  if(run.pay_date<payableDate){
+    throw new BenefitsError("REFUSED",`this run pays before the award is payable on ${payableDate} — select a run on or after the payable date`);
   }
   if (run.subsidiary_id !== programEntity || run.currency !== award.currency) {
     throw new BenefitsError("REFUSED", "the pay run has a different legal entity or currency than this award — select a run in the program's entity and award currency");
@@ -1109,7 +1111,7 @@ async function requireAwardAdjustment(
       `pay run is ${run.run_status} — delivery records only after the run is committed; a pending run proves no payout`,
     );
   }
-  const expectedPaymentKind = programPolicy.delivery_method === "external" ? "non_cash" : "cash";
+  const expectedPaymentKind = programPolicy.deliveryMethod === "external" ? "non_cash" : "cash";
   if (!committed) {
     const component = (await exec.execute<{ payment_kind: string; kind: string; is_active: boolean }>(sql`
       select payment_kind, kind, is_active from pay_components where org_id = ${orgId} and id = ${payComponentId}
@@ -1210,7 +1212,7 @@ export async function recordPayrollDelivery(query: {
         "delivery names a different pay run than the queued linkage — replay the queued adjustment instead of relinking",
       );
     }
-    await requireAwardEntityScope(db, orgId, actorId, before.programId);
+    await readAwardDeliveryPolicy(db, orgId, actorId, awardId);
     const employment = (
       await db.execute<{ employer_subsidiary_id: string | null; worker_party_id: string }>(sql`
         select employer_subsidiary_id, worker_party_id from worker_employments
@@ -1223,7 +1225,7 @@ export async function recordPayrollDelivery(query: {
         "benefit award not found in this organization — reload the award list and retry",
       );
     }
-    const program = await getBenefitProgram(db, orgId, actorId, before.programId);
+    const program = await readAwardDeliveryPolicy(db, orgId, actorId, awardId);
     if (program.deliveryMethod !== "payroll") {
       throw new BenefitsError(
         "REFUSED",
@@ -1320,7 +1322,7 @@ export async function recordExternalDelivery(query: {
     }
     const before = toAward(locked);
     if (before.status === "delivered") {
-      await requireAwardEntityScope(db, orgId, actorId, before.programId);
+      await readAwardDeliveryPolicy(db, orgId, actorId, awardId);
       if (before.externalRef === externalRef) return before;
       throw new BenefitsError("REFUSED", "this provider fulfillment already has a different reference — preserve its recorded evidence and issue an adjusting award for a correction");
     }
@@ -1330,8 +1332,7 @@ export async function recordExternalDelivery(query: {
         `award is ${before.status} — only queued awards record external delivery; reload and retry`,
       );
     }
-    await requireAwardEntityScope(db, orgId, actorId, before.programId);
-    const program = await getBenefitProgram(db, orgId, actorId, before.programId);
+    const program = await readAwardDeliveryPolicy(db, orgId, actorId, awardId);
     if (program.deliveryMethod !== "external") {
       throw new BenefitsError(
         "REFUSED",
@@ -1415,7 +1416,7 @@ export async function voidBenefitAward(query: {
     if (before.status === "voided") {
       throw new BenefitsError("BAD_STATE", "award is voided history — issue a new award with a new source reference instead of changing it");
     }
-    await requireAwardEntityScope(db, orgId, actorId, before.programId);
+    await readAwardDeliveryPolicy(db, orgId, actorId, awardId);
     const linkedAdjustment = before.status === "queued" ? before.payRunAdjustmentId : null;
     const linkedRun = before.status === "queued" ? before.payRunDocumentId : null;
     if (linkedAdjustment !== null) {

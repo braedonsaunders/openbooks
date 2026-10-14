@@ -1,3 +1,4 @@
+import { readAwardDeliveryPolicy } from './award-delivery-policy.ts';
 import { measureTransactionSettlement, type TransactionSettlementSnapshot } from "./transaction-settlement.ts";
 import { measureProjectMarginSettlement, type ProjectMarginSnapshot } from "./project-margin-settlement.ts";
 import { createHash } from "node:crypto";
@@ -39,7 +40,7 @@ import {
   type HoursSourceSnapshot,
   type MoneySourceSnapshot,
 } from "./incentives.ts";
-import { getBenefitProgram, listProgramMemberships, programPolicyInForce } from "./programs.ts";
+import { listProgramMemberships, programPolicyInForce } from "./programs.ts";
 import type { BenefitTransactionPolicy } from "./transaction-policy.ts";
 import {
   assertHrmEnabled,
@@ -1193,7 +1194,7 @@ export async function queueAwardForPayRun(
         `award is ${award.status} — only approved awards queue for payout; approve it first`,
       );
     }
-    const program = await getBenefitProgram(db, orgId, actorId, award.programId);
+    const program = await readAwardDeliveryPolicy(db, orgId, actorId, awardId);
     if (program.payComponentId === null) {
       throw new BenefitsError(
         "REFUSED",

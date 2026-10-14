@@ -734,3 +734,24 @@ settlementTest("context-only recipient fallback preserves legacy snapshots and a
  assert.deepEqual((await settleIncentivePeriod(august)).awards.map(award=>award.id),current.awards.map(award=>award.id));
  assert.deepEqual(await retained(),after);
 });
+
+settlementTest('approved award queues and replays its original component, note and payable date after a dated policy revision',async(h)=>{
+  const {program,worker,query}=await seedSettlement(h,'Retained payout policy');
+  const settled=await settleIncentivePeriod(query);const award=settled.awards[0]!;
+  await approveSettlementAward(h,award.id);
+  const source=(await db.execute<{program:unknown;source:unknown}>(sql`select program_snapshot as program,source_snapshot as source
+    from hrm_benefit_awards where org_id=${h.org.orgId} and id=${award.id}`)).rows;
+  const replacement=await seedComponent(h.org.orgId,{kind:'earning',code:'NEXT_REWARD'});
+  await updateBenefitProgram({orgId:h.org.orgId,actorId:h.settlerId,programId:program.id,
+    payComponentId:replacement,paymentDelayDays:60,changeEffectiveFrom:'2026-08-01',reason:'Future award delivery policy'});
+  const runDocumentId=await seedRun(h,worker.employmentId,worker.workerPartyId,'2026-08-05');
+  const queued=await queueAwardForPayRun({orgId:h.org.orgId,actorId:h.financeId,awardId:award.id,runDocumentId});
+  const inputs=(await db.execute<{component:string;note:string;amount:string}>(sql`select component_id::text as component,note,amount::text as amount
+    from pay_run_adjustments where org_id=${h.org.orgId} and id=${queued.adjustmentId}`)).rows;
+  assert.equal(inputs.length,1);assert.equal(inputs[0]!.component,program.payComponentId);
+  assert.equal(inputs[0]!.note,`Benefit award ${award.id} (${program.code} ${award.periodFrom}..${award.periodTo ?? 'open'})`);
+  assert.equal(inputs[0]!.amount,award.value);
+  assert.equal((await queueAwardForPayRun({orgId:h.org.orgId,actorId:h.financeId,awardId:award.id,runDocumentId})).adjustmentId,queued.adjustmentId);
+  assert.deepEqual((await db.execute<{program:unknown;source:unknown}>(sql`select program_snapshot as program,source_snapshot as source
+    from hrm_benefit_awards where org_id=${h.org.orgId} and id=${award.id}`)).rows,source);
+});

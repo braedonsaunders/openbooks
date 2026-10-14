@@ -10,10 +10,10 @@ export const awardPayrollProcessedSql = sql`exists (
     and s.employment_id = a.employment_id and s.currency_code = a.currency
     and s.employee_party_id = adjustment.employee_party_id
     and adjustment.pay_run_document_id = a.pay_run_document_id
-    and adjustment.component_id = p.pay_component_id and adjustment.amount = a.value
-    and d.subsidiary_id = p.legal_entity_id and d.currency = a.currency
+    and adjustment.component_id::text = a.source_snapshot->>'payComponentId' and adjustment.amount = a.value
+    and d.subsidiary_id::text = a.program_snapshot->>'legalEntityId' and d.currency = a.currency
     and l.component_id = adjustment.component_id and l.amount = a.value and l.description = adjustment.note
-    and l.kind = 'earning' and l.payment_kind = case when p.delivery_method = 'external' then 'non_cash' else 'cash' end
+    and l.kind = 'earning' and l.payment_kind = case a.program_snapshot->>'deliveryMethod' when 'external' then 'non_cash' when 'payroll' then 'cash' end
     and (l.payment_kind = 'cash' or l.non_cash_account_id is not null)
     and r.run_status = 'committed' and d.status <> 'voided'
 )`;
