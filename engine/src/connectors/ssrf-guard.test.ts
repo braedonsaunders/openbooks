@@ -275,3 +275,24 @@ for (const [pinned, family] of [["93.184.216.34", 4], ["2606:4700:4700::1111", 6
     });
   }
 }
+
+for (const [label, headers, chunks] of [
+  ["a declared length", { "content-length": "11" }, [Buffer.from("0123456789A")]],
+  ["a streamed body", {}, [Buffer.from("01234"), Buffer.from("56789"), Buffer.from("A")]],
+] as const) {
+  test(`guardedFetch refuses ${label} beyond the response limit instead of buffering it`, async () => {
+    const response = Readable.from([...chunks]) as IncomingMessage;
+    Object.assign(response, { statusCode: 200, statusMessage: "OK", headers });
+    await assert.rejects(guardedFetch("https://connector.example/large", {}, {
+      maxResponseBytes: 10,
+      lookup: async () => ["93.184.216.34"],
+      request: (_url, _options, onResponse) => {
+        queueMicrotask(() => onResponse(response));
+        return Object.assign(new EventEmitter(), {
+          write: () => true,
+          end: () => undefined as unknown as ClientRequest,
+        }) as unknown as Pick<ClientRequest, "on" | "write" | "end">;
+      },
+    }), /limited to 10 bytes|larger than 10 bytes/);
+  });
+}

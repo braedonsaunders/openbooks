@@ -331,11 +331,17 @@ function sanitizeStatusText(value: string | undefined): string {
  * (input, init) shape as fetch so clients can default to it; `opts.lookup`
  * exists so tests can prove the refusal without owning public DNS.
  */
+/** Largest response body an operator-configured endpoint may return. The
+ * body is buffered before the caller sees it, so an endpoint that streams
+ * without end would otherwise hold memory for the full request timeout. */
+export const GUARDED_FETCH_MAX_RESPONSE_BYTES = 64 * 1024 * 1024;
+
 export async function guardedFetch(
   input: string | URL | Request,
   init: RequestInit = {},
-  opts: { lookup?: AddressLookup; request?: ConnectorRequest } = {},
+  opts: { lookup?: AddressLookup; request?: ConnectorRequest; maxResponseBytes?: number } = {},
 ): Promise<Response> {
+  const maxResponseBytes = opts.maxResponseBytes ?? GUARDED_FETCH_MAX_RESPONSE_BYTES;
   const normalizedInit: RequestInit & { duplex?: string } = { ...init };
   if (
     typeof ReadableStream !== "undefined" &&
@@ -382,9 +388,23 @@ export async function guardedFetch(
       `Refused ${status} redirect from ${target.origin}: credentialed requests never follow redirects`,
     );
   }
+  const declaredLength = Number(incoming.headers["content-length"]);
+  if (Number.isFinite(declaredLength) && declaredLength > maxResponseBytes) {
+    incoming.destroy();
+    throw new Error(`Refused a ${declaredLength}-byte response from ${target.origin}: responses are limited to ${maxResponseBytes} bytes`);
+  }
   const chunks: Buffer[] = [];
+  let received = 0;
   await new Promise<void>((resolve, reject) => {
-    incoming.on("data", (chunk: Buffer) => chunks.push(chunk));
+    incoming.on("data", (chunk: Buffer) => {
+      received += chunk.byteLength;
+      if (received > maxResponseBytes) {
+        incoming.destroy();
+        reject(new Error(`Refused a response from ${target.origin} larger than ${maxResponseBytes} bytes`));
+        return;
+      }
+      chunks.push(chunk);
+    });
     incoming.on("end", () => resolve());
     incoming.on("error", reject);
   });
