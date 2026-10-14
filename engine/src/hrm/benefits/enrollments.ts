@@ -628,6 +628,7 @@ export async function completeBenefitEnrollmentSubmission(query:{orgId:string;ac
     const run=await requireCompletedSubmissionRouting({orgId,actorId,subjectKind:BENEFIT_ENROLLMENT_SUBJECT_KIND,subjectId:enrollmentId,runId});
     const snapshot=row.submission_snapshot;
     if(snapshot===null||typeof snapshot!=='object'||Array.isArray(snapshot)||row.flow_run_id!==runId||!row.submitted_at
+      ||!row.submitted_by||!run.createdBy
       ||row.submitted_by!==run.createdBy||(snapshot as Record<string,unknown>).approvalMode!=='flows'
       ||Object.entries(snapshot).some(([key,value])=>!(key in run.context)||canonicalJson(value)!==canonicalJson(run.context[key])))
       throw new BenefitsError('REFUSED','The completed Flow does not match the original contribution elections — preserve the submission and review its existing run');
