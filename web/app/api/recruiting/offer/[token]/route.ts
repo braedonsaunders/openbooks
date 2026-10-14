@@ -54,7 +54,6 @@ export const POST = defineRoute({
           signerName: body.signerName,
           ipHash,
           documentHash: body.documentHash,
-          renderedFileId: body.renderedFileId,
         });
         return NextResponse.json({ signed });
       } catch (e) {

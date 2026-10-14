@@ -821,7 +821,6 @@ export async function signOffer(query: {
   ipHash: unknown;
   /** Required hash of the displayed version — the service seals the latest rendered version only when it agrees. */
   documentHash?: unknown;
-  renderedFileId?: unknown;
 }): Promise<{ offerId: string; signedAt: string }> {
   const { orgId, offerId } = await offerScopeForToken(query.signingToken);
   if (typeof query.signerName !== "string" || query.signerName.trim().length === 0) {
@@ -832,7 +831,6 @@ export async function signOffer(query: {
   const signerName: string = query.signerName;
   const tokenHash = hashRecruitingToken(query.signingToken);
   const documentHash: unknown = query.documentHash;
-  const renderedFileId = query.renderedFileId == null ? null : requireId(query.renderedFileId, "renderedFileId");
   return withOrgTransaction(orgId, async () => {
     await requireDepthFeature(db, orgId);
     const current = (await db.execute<{
@@ -908,7 +906,6 @@ export async function signOffer(query: {
       update hrm_offers
          set signature_status = 'signed', signing_token_hash = null, signed_at = ${signedAt},
              signed_evidence = ${JSON.stringify({ ...evidence, seal })}::jsonb,
-             rendered_file_id = coalesce(${renderedFileId}, rendered_file_id),
              updated_at = now()
        where org_id = ${orgId} and id = ${offerId}
          and version = ${current.version} and signing_token_hash = ${tokenHash}

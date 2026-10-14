@@ -9,7 +9,6 @@ export const signOfferBody = z.discriminatedUnion("action", [
     // latest render and refuses when the two disagree — or when the
     // client never saw terms at all.
     documentHash: z.string().trim().min(1).max(128),
-    renderedFileId: z.string().trim().min(1).max(80).nullable().optional(),
   }),
   z.object({
     action: z.literal("decline"),
