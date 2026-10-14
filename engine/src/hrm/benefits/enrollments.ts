@@ -1,5 +1,5 @@
 import { canonicalJson } from '../../platform/canonical-json.ts';
-import { requireAutomaticBenefitSubmission } from './submission-routing.ts';
+import { requireCompletedSubmissionRouting } from '../../flows/submission-routing-proof.ts';
 import { recordEnrollmentContributionTerms, validateBenefitPlanActivation, type EnrollmentContributionInput } from './contributions.ts';
 import { sql } from "drizzle-orm";
 import { BENEFIT_ENROLLMENT_SUBJECT_KIND } from "@openbooks/schema/src/hrm-benefits.ts";
@@ -625,7 +625,7 @@ export async function completeBenefitEnrollmentSubmission(query:{orgId:string;ac
       where org_id=${orgId} and id=${enrollmentId} for update`)).rows,'Loading the original contribution submission');
     const enrollment=await loadEnrollment(db,orgId,enrollmentId);
     const subject=await requireHrmBenefitsManageOnEmployment(db,orgId,actorId,enrollment.employmentId);
-    const run=await requireAutomaticBenefitSubmission(db,{orgId,actorId,subjectKind:BENEFIT_ENROLLMENT_SUBJECT_KIND,subjectId:enrollmentId,runId});
+    const run=await requireCompletedSubmissionRouting({orgId,actorId,subjectKind:BENEFIT_ENROLLMENT_SUBJECT_KIND,subjectId:enrollmentId,runId});
     const snapshot=row.submission_snapshot;
     if(snapshot===null||typeof snapshot!=='object'||Array.isArray(snapshot)||row.flow_run_id!==runId||!row.submitted_at
       ||row.submitted_by!==run.createdBy||(snapshot as Record<string,unknown>).approvalMode!=='flows'

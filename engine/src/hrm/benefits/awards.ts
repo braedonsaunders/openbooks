@@ -1,4 +1,4 @@
-import { requireAutomaticBenefitSubmission } from './submission-routing.ts';
+import { requireCompletedSubmissionRouting } from '../../flows/submission-routing-proof.ts';
 import { awardDeliveryPolicy, readAwardDeliveryPolicy } from './award-delivery-policy.ts';
 import { addCalendarDays } from '../../platform/civil-date.ts';
 import { BENEFIT_AWARD_SUBJECT_KIND } from "@openbooks/schema/src/benefits-programs.ts";
@@ -821,7 +821,7 @@ export async function completeBenefitAwardSubmission(query:{orgId:string;actorId
     const row=requireOneRow((await db.execute<Record<string,unknown>>(sql`select ${AWARD_COLUMNS} from hrm_benefit_awards
       where org_id=${orgId} and id=${awardId} for update`)).rows,'Loading the original benefit submission');
     const before=toAward(row);await requireAwardEntityScope(db,orgId,actorId,before.programId);
-    const run=await requireAutomaticBenefitSubmission(db,{orgId,actorId,subjectKind:BENEFIT_AWARD_SUBJECT_KIND,subjectId:awardId,runId});
+    const run=await requireCompletedSubmissionRouting({orgId,actorId,subjectKind:BENEFIT_AWARD_SUBJECT_KIND,subjectId:awardId,runId});
     const policy=row.programSnapshot as Record<string,unknown>;
     if(before.flowRunId!==runId||!before.submittedBy||!before.submittedAt||run.createdBy!==before.submittedBy||policy.approvalMode!=='flows'
       ||policy.id!==before.programId||run.context.programId!==before.programId||run.context.programCode!==policy.code

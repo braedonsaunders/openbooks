@@ -29,6 +29,7 @@ import {
   getBenefitAward,
   voidBenefitAward,
   releaseBenefitAwardApproval,
+  completeBenefitAwardSubmission,
 } from "./awards.ts";
 import { listBenefitApprovalPolicies } from "./approval-policies.ts";
 
@@ -169,6 +170,23 @@ test(
         decision: "approved",
       });
     }
+
+    await t.test("automatic completion cannot invent an original submission or replace a gated decision",async()=>{
+      const policyId=await singleGate();
+      const draft=await award();const pending=await submit(draft.id);assert.ok(pending.flowRunId);
+      const before=await read(draft.id),priorGates=await gates(draft.id);
+      const history=(await db.execute(sql`select to_jsonb(a) as snapshot from audit_log a where org_id=${org.orgId}
+        and table_name='hrm_benefit_awards' and row_id=${draft.id} order by id`)).rows;
+      const complete=(runId:string,actorId=author)=>completeBenefitAwardSubmission({orgId:org.orgId,actorId,awardId:draft.id,runId,mode:'automatic'});
+      await assert.rejects(complete(randomUUID()),/routing evidence/);
+      await assert.rejects(complete(pending.flowRunId),/routing evidence/);
+      await assert.rejects(complete(pending.flowRunId,randomUUID()),/permission|user|actor|scope|manage|authorized/i);
+      assert.deepEqual(await read(draft.id),before);assert.deepEqual(await gates(draft.id),priorGates);
+      assert.deepEqual((await db.execute(sql`select to_jsonb(a) as snapshot from audit_log a where org_id=${org.orgId}
+        and table_name='hrm_benefit_awards' and row_id=${draft.id} order by id`)).rows,history);
+      assert.equal((await db.execute<{n:number}>(sql`select count(*)::int as n from flow_runs where org_id=${org.orgId}
+        and flow_id=${policyId} and subject_id=${draft.id}`)).rows[0]!.n,1,'refusals do not create another run');
+    });
 
     function submit(awardId: string, actorId = author) {
       return submitBenefitAward({ orgId: org.orgId, actorId, awardId });
