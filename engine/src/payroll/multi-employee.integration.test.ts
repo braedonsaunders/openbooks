@@ -984,7 +984,7 @@ test("a final pay clears the bank against the vacation liability while vacation 
     const vacationExpense = projected.filter((line) => line.custom.legKind === "expense"
       && line.custom.payComponentId === cash.component_id);
     assert.deepEqual(vacationExpense.map((line) => [line.account_id, line.amount, line.custom.payrollExpense]),
-      [[cash.expense_account_id, "9.6000", true]], "the cash vacation is expensed with the final earnings");
+      [[fx.accounts.wageExpense, "9.6000", true]], "the cash vacation is expensed with the final earnings");
   } finally {
     await dropScratchOrgReporting(fx.orgId);
   }

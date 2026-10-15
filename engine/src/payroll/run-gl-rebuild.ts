@@ -549,13 +549,16 @@ export async function rebuildPayRunGlProjection(input: {
         party_id: leg.partyId, project_id: leg.projectId, department_id: leg.departmentId, custom });
       lineNumber++;
     }
+    // The locked document passed OCC before any line changed. Its own line
+    // triggers advance the revision during the rebuild; retain their final
+    // value rather than comparing it with the pre-write revision again.
     const revised = (await tx.execute<{ revision: string }>(sql`
       update documents set updated_by = ${actorId}, updated_at = now()
-       where org_id = ${orgId} and id = ${documentId} and revision_seq::text = ${input.expectedRevision}
+       where org_id = ${orgId} and id = ${documentId} and status = 'draft' and posted_entry_id is null
       returning revision_seq::text as revision
     `)).rows;
     if (revised.length !== 1) {
-      throw new PayrollError(`pay run ${number} changed after you opened it — reload and review the latest revision`);
+      throw new PayrollError(`pay run ${number}'s rebuilt projection revision could not be saved — reload and review the run`);
     }
     const projectionHash = payRunGlProjectionHash(after as ProjectionLine[]);
     const audited = (await tx.execute<{ id: string }>(sql`

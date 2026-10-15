@@ -47,13 +47,13 @@ async function designate(orgId: string, actorId: string, windows: NetPayClearing
 test("net pay settles to the clearing account designated for the payment date, with the ordinary applications and paid state", { skip: !DB }, async () => {
   const { fx, input, account, clearing, payDate } = await postedRun();
   try {
-    const window: NetPayClearingWindow = { id: randomUUID(), accountId: clearing, effectiveFrom: payDate, effectiveTo: null, reason: "Bonus cheques are paid from the clearing account" };
+    const window: NetPayClearingWindow = { id: randomUUID(), accountId: clearing, effectiveFrom: '2026-01-01', effectiveTo: null, reason: "Bonus cheques are paid from the clearing account" };
     await assert.rejects(recordPayRunPayment({ ...input, settlementClearingAccountId: clearing }), /no net-pay settlement clearing designation names this account/);
     await assert.rejects(recordPayRunPayment({ ...input, bankAccountId: account("asset_bank"), settlementClearingAccountId: clearing }), /choose either/);
     await assert.rejects(designate(fx.orgId, fx.actorId, [{ ...window, accountId: account("asset_bank") }]), /a bank account is not a clearing account/);
     await designate(fx.orgId, fx.actorId, [window]);
     const dayBefore = new Date(Date.parse(`${payDate}T00:00:00Z`) - 86_400_000).toISOString().slice(0, 10);
-    await assert.rejects(recordPayRunPayment({ ...input, settlementClearingAccountId: clearing, paidOn: dayBefore }), /no net-pay settlement clearing designation/);
+    await assert.rejects(recordPayRunPayment({ ...input, settlementClearingAccountId: clearing, paidOn: '2025-12-31' }), /no net-pay settlement clearing designation/);
 
     const payment = await recordPayRunPayment({ ...input, settlementClearingAccountId: clearing, paidOn: payDate });
     const lines = (await db.execute<{ account_id: string; amount: string; applied: boolean }>(sql`
