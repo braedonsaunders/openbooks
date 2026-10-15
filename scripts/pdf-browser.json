@@ -1,13 +1,13 @@
 {
-  "version": "155.0.8059.39",
+  "version": "155.0.8059.79",
   "archives": {
     "amd64": {
       "platform": "linux64",
-      "sha256": "55672d1f392fd3e7b7a08621b6e804e6bcb39d40cf155504abb74b3a021ea8ea"
+      "sha256": "bcd9a79130d7e44d70f93be87042e9bcee7fe0f0b3898e06b8c9bed5fb619dcd"
     },
     "arm64": {
       "platform": "linux-arm64",
-      "sha256": "b9d44e5d183260ca941a4c4d8d21c8a437d81ef778a489047ef98968b0475dc5"
+      "sha256": "6ba365c60cb1cff5e742caaa1e8b6f2c019f93f7a644fa42ea0bcfcf029d7e67"
     }
   }
 }
