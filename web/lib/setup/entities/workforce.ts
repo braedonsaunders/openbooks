@@ -407,7 +407,7 @@ export const WORKFORCE_ENTITIES: SetupEntity[] = [
       { key: 'taxable', kind: 'boolean', defaultValue: true },
       { key: 'pensionable', kind: 'boolean', defaultValue: true },
       { key: 'insurable', kind: 'boolean', defaultValue: true },
-      { key: 'vacationable', kind: 'boolean', defaultValue: true },
+      { key: 'vacationable', kind: 'boolean', defaultValue: true, lockedOnEdit: true, labelKey: 'fields.initialVacationable', helpTextKey: 'fieldHelp.initialVacationable' },
       { key: 'nonPeriodic', kind: 'boolean' },
       {
         key: 'supplementalWageCategory', kind: 'select',
@@ -510,13 +510,16 @@ export const WORKFORCE_ENTITIES: SetupEntity[] = [
       { key: 'effectiveFrom', kind: 'date' },
       { key: 'effectiveTo', kind: 'date' },
       { key: 'programExclusions', kind: 'text' },
+      { key: 'vacationable', kind: 'boolean' },
     ],
     fields: [
       { key: 'payComponentId', kind: 'ref', ref: 'pay-components', required: true },
       { key: 'workerCompGroupId', kind: 'ref', ref: 'worker-comp-groups' },
-      { key: 'effectiveFrom', kind: 'date', required: true },
+      { key: 'effectiveFrom', kind: 'date', required: true, helpTextKey: 'fieldHelp.componentTreatmentPayDate' },
       { key: 'effectiveTo', kind: 'date' },
       { key: 'programExclusions', kind: 'stringArray', arrayStorage: 'text', optionsSource: 'payroll-contribution-programs' },
+      { key: 'vacationable', kind: 'boolean', required: true, helpTextKey: 'fieldHelp.componentTreatmentVacationable' },
+      { key: 'reason', kind: 'textarea', required: true, inputOnly: true, resetOnEdit: true, fullWidth: true, labelKey: 'fields.componentTreatmentReason', helpTextKey: 'fieldHelp.componentTreatmentReason' },
     ],
   },
   {

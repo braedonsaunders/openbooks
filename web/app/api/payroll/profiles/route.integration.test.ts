@@ -768,3 +768,40 @@ test('profile POST refuses a reasonless WCB exemption', async () => {
 })
 
 test.after(async () => { await pool.end() })
+
+test('profile deactivation retains an explicit audit reason without altering exemption evidence', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const { org, scheduleId } = await fixture()
+  try {
+    const { seedHiredEmployee } = await import('@openbooks/engine/testing/payroll/filing-test-fixtures')
+    const employee = await withBypassContext(() => seedHiredEmployee(org.orgId, state.actorId, {
+      scheduleId, subsidiaryId: org.subsidiaryId, partySubsidiaryId: org.subsidiaryId,
+      name: 'Profile recipient', country: 'CA', province: 'ON', payBasis: 'hourly', currency: 'CAD', rate: '30', rateBasis: 'hour',
+      wcbExempt: true, wcbExemptReason: 'Original employment coverage exclusion',
+    }))
+    const body = { employeePartyId: employee.employeeId, payScheduleId: scheduleId, country: 'CA', province: 'ON', payBasis: 'hourly',
+      isActive: false, wcbExempt: true, wcbExemptReason: 'Original employment coverage exclusion',
+      auditReason: '  Retire the unused payroll profile  ' }
+    for (const auditReason of [null, 12, {}, '', '  ', 'x'.repeat(2001)]) {
+      const refused = await post({ ...body, auditReason })
+      assert.equal(refused.status, 400)
+    }
+    const saved = await post(body)
+    assert.equal(saved.status, 200, await saved.clone().text())
+    const stored = (await withBypassContext(() => db.execute<{ id: string; is_active: boolean; wcb_exempt_reason: string }>(sql`
+      select id,is_active,wcb_exempt_reason from employee_payroll_profiles where org_id=${org.orgId} and employee_party_id=${employee.employeeId}
+    `))).rows[0]!
+    assert.equal(stored.is_active, false)
+    assert.equal(stored.wcb_exempt_reason, body.wcbExemptReason)
+    const audit = (await withBypassContext(() => db.execute<{ actor_id: string; changes: { reason: string; before: { is_active: boolean }; after: { is_active: boolean; wcb_exempt_reason: string } } }>(sql`
+      select actor_id,changes from audit_log where org_id=${org.orgId} and table_name='employee_payroll_profiles'
+        and row_id=${stored.id} and changes->>'reason'=${body.auditReason.trim()}
+    `))).rows
+    assert.equal(audit.length, 1)
+    assert.equal(audit[0]!.actor_id, state.actorId)
+    assert.equal(audit[0]!.changes.before.is_active, true)
+    assert.equal(audit[0]!.changes.after.is_active, false)
+    assert.equal(audit[0]!.changes.after.wcb_exempt_reason, body.wcbExemptReason)
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId))
+  }
+})

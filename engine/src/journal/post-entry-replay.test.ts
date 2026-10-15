@@ -11,7 +11,8 @@ const original: PostEntryInput = {
 };
 
 test("request identity normalizes decimals and excludes numbers and attribution", () => {
-  assert.equal(postingRequestHash(original, original.lines), postingRequestHash({ ...original, entryNumber: "RETRY", actorId: id(8) },
+  const changedAttribution = { ...original, entryNumber: "RETRY", actorId: id(8) };
+  assert.equal(postingRequestHash(original, original.lines), postingRequestHash(changedAttribution,
     [{ ...original.lines[0]!, amount: "10.0000" }, { ...original.lines[1]!, amount: "-10.00" }]));
 });
 

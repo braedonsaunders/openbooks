@@ -1,3 +1,4 @@
+import { vacationBaseIncluded } from './component-statutory-treatment.ts';
 import type { CaBonusIncomeReferenceSource } from './canada/bonus-income-reference.ts';
 import type { PayRunType } from './run-contracts.ts';
 import { historicalWithholdingProfile } from './historical-withholding.ts';
@@ -37,6 +38,7 @@ import { assertPackStatutoryRatesConfigured, createStubCertificateResolver } fro
 import { type Line, installablePackOrThrow, insertPayStubRow, insertPayStubLineRows, persistEntitlementMovements, earningsAssessedSnapshot, resolveEmployeeJurisdiction, stampDepartmentExpenseAccounts, employeeHomeDepartment, stampEarningLineStatutoryTreatments } from "./run-stub-records.ts";
 import { appendPeriodicEarnings, appendRetroSettlementLines, appendDerivedEarningLines, appendStatutoryHolidayEarningLines, applyAssignedComponentLines, applyRunLineAdjustments } from "./run-earning-lines.ts";
 import { appendUnionFringeLines, applyEntitlementPlanMovements } from "./run-plan-earning-lines.ts";
+import type { DeclaredVacationAccrualInput } from "./run-vacation-accrual-input.ts";
 import { applyBankDrawdown } from "./run-bank-drawdown.ts";
 import { settleTerminationBankPayouts, appendCashVacationPay } from "./run-final-payouts.ts";
 import { assignmentOverlapsPeriod } from "./assignment-windows.ts";
@@ -195,8 +197,8 @@ export async function calculateStub(
   //
   // Landing HERE, before the recurring components and the entitlement phases,
   // is what puts retro earnings in gross: vacation and every other entitlement
-  // plan then accrues on them exactly as the plan and the component's own
-  // `vacationable` flag say, with no retro-specific rule anywhere.
+  // plan then accrues on them under the component treatment resolved at this
+  // pay date, with no retro-specific rule.
   //
   // The pack decides the tax treatment. Dynamic import, like the union fringe
   // phase above, so the retro module can depend on this one.
@@ -313,9 +315,10 @@ export async function calculateStub(
   // run. replaceComponent swaps out the component's derived lines (time,
   // salary, or recurring) before the one-off amount lands; either way the
   // statutory math below sees the adjusted inputs, never edited outputs.
+  const declaredVacationAccruals = new Map<string, DeclaredVacationAccrualInput>();
   const replacedComponentIds = await applyRunLineAdjustments(tx, {
     orgId, documentId, employeePartyId, bonusRun, retroRun, country, lines,
-    terminationRun: runType === "termination",
+    terminationRun: runType === "termination", declaredVacationAccruals,
   });
 
 
@@ -356,7 +359,7 @@ export async function calculateStub(
   });
   const recurringBenefitInput: Omit<Parameters<typeof appendRecurringBenefitLines>[1], "stage"> = {
     source:recurringSource,basePayComponentId:baseComponent.id,
-    orgId, actorId, documentId, employmentId, employeePartyId, regularCashLines, replacedComponentIds,
+    orgId, actorId, documentId, employmentId, employeePartyId, workerCompGroupId, regularCashLines, replacedComponentIds,
     subsidiaryId: ctx.runContext.subsidiaryId ?? null, currency: run.doc_currency!, country,
     periodStart: run.period_start!, periodEnd: run.period_end!, periodsPerYear: P,
     hourlyWage: payRate ? payrollHourlyWage(payRate) : null,
@@ -365,9 +368,11 @@ export async function calculateStub(
   };
   await appendRecurringBenefitLines(tx, { ...recurringBenefitInput, stage: "vacationable_earnings" });
 
+  await stampEarningLineStatutoryTreatments(tx, { orgId, payDate: run.pay_date!, workerCompGroupId, lines });
+
   const vacationElection = emp.employment_id ? await resolveVacationTerms(tx, orgId, emp.employment_id, entitlementPolicyDate) : null;
   const vacationableEarnings = lines.some(line => line.kind === 'earning' && !line.accrualOnly &&
-    (line.vacationable ?? true) && line.componentId !== vacationPlan?.payoutComponentId && cmp(line.amount, '0') !== 0);
+    vacationBaseIncluded(line) && line.componentId !== vacationPlan?.payoutComponentId && cmp(line.amount, '0') !== 0);
   // No method or rate is needed to accrue zero on earnings explicitly excluded
   // from vacation. Any eligible earning, including a non-cash benefit, or a
   // final settlement still requires documented terms before calculation.
@@ -395,8 +400,10 @@ export async function calculateStub(
     terminationRun, plans, lines, entitlementMovements,
   });
 
+  await stampEarningLineStatutoryTreatments(tx, { orgId, payDate: run.pay_date!, workerCompGroupId, lines });
+
   const payVacationInCash = vacationMethod === "pay_each_period" || terminationRun;
-  await appendCashVacationPay({ vacationPercent, payVacationInCash, need: ctx.need, lines, replacedComponentIds });
+  await appendCashVacationPay({ vacationPercent, payVacationInCash, need: ctx.need, lines, replacedComponentIds, vacationPayoutComponentId: vacationPlan?.payoutComponentId });
 
   // Work-triggered alternate-day grants: a statutory day off
   // banked as hours, never cash on this stub. Under the same gate as the
@@ -424,11 +431,13 @@ export async function calculateStub(
     if (grant) entitlementMovements.push(grant);
   }
 
+  await stampEarningLineStatutoryTreatments(tx, { orgId, payDate: run.pay_date!, workerCompGroupId, lines });
+
   vacationAccrued = await applyEntitlementPlanMovements(tx, {
     orgId, documentId, employeePartyId, payDate: run.pay_date!,
     employeeName: emp.display_name ?? employeePartyId,
     employmentId: emp.employment_id ?? undefined, policyDate: entitlementPolicyDate, vacationPercent, payVacationInCash, excludeVacationAccrual: paidLeave || vacationElection === null, vacationPlan, plans,
-    lines, entitlementMovements, entitlementWarnings,
+    lines, entitlementMovements, entitlementWarnings, declaredVacationAccruals,
   });
 
   // Bank drawdown runs after accrual by construction: the accrual basis above

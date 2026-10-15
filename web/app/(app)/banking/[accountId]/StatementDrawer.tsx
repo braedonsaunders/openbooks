@@ -40,6 +40,7 @@ export async function StatementDrawer({
   statement: {
     id: string
     source: string
+    currency: string
     statement_date: string
     opening_balance: string | null
     closing_balance: string | null
@@ -63,7 +64,7 @@ export async function StatementDrawer({
   sort: string
   dir: 'asc' | 'desc'
 }) {
-  const { money } = await getMoneyFormatter()
+  const { money } = await getMoneyFormatter(undefined, statement.currency)
   const t = await getTranslations('banking')
   const tCommon = await getTranslations('common')
   const closeHref = mergeHref(basePath, currentParams, {

@@ -2,6 +2,8 @@ import 'server-only'
 import { isUuid } from '../list-params'
 import { sql } from 'drizzle-orm'
 import type { SqlExecutor } from '@openbooks/engine/platform/db'
+import { validateUsFilingAccountLineage, type UsFilingAccountLineageInput } from '@openbooks/engine/payroll/us-filing-account-lineage'
+import { PayrollError } from '@openbooks/engine/payroll/error'
 import { filingAccountProblem } from '@openbooks/engine/payroll/filing-registry'
 import { payPeriodsPerYearProblem, semiMonthlyAnchorProblem } from '@openbooks/engine/payroll/run-calendar'
 import { payScheduleSubsidiaryProblem } from '@openbooks/engine/payroll/run-lifecycle'
@@ -20,6 +22,23 @@ export async function validatePayrollIntegrity(
   rowId: string | undefined,
   executor: SqlExecutor,
 ): Promise<SetupIntegrityVerdict> {
+  if (entity.key === 'pay-component-statutory-treatments' && !rowId
+    && (body.vacationable === undefined || body.vacationable === null || body.vacationable === '')) {
+    return 'Choose vacation-base inclusion explicitly for this dated component treatment; payroll cannot infer it from the component creation default'
+  }
+  if (entity.key === 'payroll-us-filing-account-employer-lineage') {
+    const current = rowId ? (await executor.execute<UsFilingAccountLineageInput>(sql`
+      select filing_account_id as "filingAccountId", federal_account_id as "federalAccountId",
+        subsidiary_id as "subsidiaryId", effective_from::text as "effectiveFrom", effective_to::text as "effectiveTo",
+        source_reference as "sourceReference", change_reason as "changeReason"
+      from payroll_us_filing_account_employer_lineage where org_id = ${orgId} and id = ${rowId}
+    `)).rows[0] : undefined
+    if (rowId && !current) return 'not found'
+    const input = { ...current, ...body, effectiveTo: body.effectiveTo === undefined
+      ? current?.effectiveTo ?? null : body.effectiveTo || null } as UsFilingAccountLineageInput
+    try { await validateUsFilingAccountLineage(executor, orgId, input) }
+    catch (error) { if (error instanceof PayrollError) return error.message; throw error }
+  }
   if (entity.key === 'payroll-filing-accounts') {
     // The pack's declared filing program types are the constraint that used
     // to be the payroll_filing_accounts_country/_program/_program_country/

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import test from "node:test";
-import { preflightNeedsRecordedGuardTransition, type PreflightTransitionEvidence } from "./migration-preflight-transitions.ts";
+import { preflightNeedsPendingPrerequisite, preflightNeedsRecordedGuardTransition, type PreflightTransitionEvidence } from "./migration-preflight-transitions.ts";
 
 const current = "generated/0692_journal_instruction_modes.sql";
 const next = "generated/0699_financial_history_native_clone_guards.sql";
@@ -19,6 +19,58 @@ const evidence: PreflightTransitionEvidence = {
   published, recorded: new Map([[current, hash(published.get(current)!)]]) ,
   pendingBeforeConsumer: new Set([next]), currentBody,
 };
+
+test("reporting prerequisites defer only to their exact earlier pending publishers", () => {
+  const migration = "generated/0726_payroll_ca_opening_reporting_source.sql";
+  const publishers = ["generated/0710_payroll_opening_legal_employer_authority.sql", "generated/0719_payroll_opening_levy_source_authority.sql", "generated/0725_payroll_opening_levy_source_successors.sql"];
+  const input = {
+    migration, consumerSql: read("preflight/0726_payroll_ca_opening_reporting_source.sql"),
+    published: new Map([migration, ...publishers].map(file => [file, read(file)])),
+    pendingBeforeConsumer: new Set(publishers),
+    findings: [
+      { code: "0726.current_levy_source_missing", subject: "public.payroll_opening_levy_source_authorities.supersedes_authority_id" },
+      { code: "0726.current_levy_source_missing", subject: "public.payroll_opening_source_children(uuid,uuid,uuid,integer)" },
+      { code: "0726.native_source_missing", subject: "public.payroll_opening_employer_authorities" },
+    ].map(row => ({ ...row, migration, severity: "refuse" as const, detail: "Required native contract is absent", remedy: "Apply its published prerequisite" })),
+  };
+  assert.equal(preflightNeedsPendingPrerequisite(input), true);
+  for (const filename of [migration, ...publishers]) {
+    const changed = new Map(input.published); changed.set(filename, changed.get(filename)! + "\n");
+    assert.equal(preflightNeedsPendingPrerequisite({ ...input, published: changed }), false);
+  }
+  for (const changed of [
+    { consumerSql: input.consumerSql + "\n" },
+    { pendingBeforeConsumer: new Set<string>() },
+    { findings: [] },
+    { findings: [...input.findings, { ...input.findings[0]!, code: "0726.reporting_relation_exists" }] },
+    { findings: [...input.findings, { ...input.findings[0]!, code: "0726.native_source_missing", subject: "public.files" }] },
+    { findings: [{ ...input.findings[1]!, subject: "public.payroll_opening_source_children(uuid)" }] },
+  ]) assert.equal(preflightNeedsPendingPrerequisite({ ...input, ...changed }), false);
+});
+
+test("settlement prerequisite absence defers while a missing baseline or unrecorded object still refuses", () => {
+  const migration = "generated/0728_scoped_close_and_settlement_fx_evidence.sql";
+  const publisher = "generated/0727_document_explicit_fx_rate_evidence.sql";
+  const input = {
+    migration, consumerSql: read("preflight/0728_scoped_close_and_settlement_fx_evidence.sql"),
+    published: new Map([migration, publisher].map(file => [file, read(file)])),
+    pendingBeforeConsumer: new Set([publisher]),
+    findings: ["public.documents.document_fx_rate_evidence", "public.documents.documents_fx_rate_evidence_bound"].map(subject => ({
+      migration, code: "0728.document_evidence_prerequisite_missing", subject, severity: "refuse" as const,
+      detail: "Required native contract is absent", remedy: "Apply its published prerequisite",
+    })),
+  };
+  assert.equal(preflightNeedsPendingPrerequisite(input), true);
+  for (const filename of [migration, publisher]) {
+    const changed = new Map(input.published); changed.set(filename, changed.get(filename)! + "\n");
+    assert.equal(preflightNeedsPendingPrerequisite({ ...input, published: changed }), false);
+  }
+  assert.equal(preflightNeedsPendingPrerequisite({ ...input, pendingBeforeConsumer: new Set() }), false);
+  assert.equal(preflightNeedsPendingPrerequisite({ ...input, findings: [{ ...input.findings[0]!, subject: "public.documents" }] }), false);
+  assert.equal(preflightNeedsPendingPrerequisite({ ...input, findings: [...input.findings, {
+    ...input.findings[0]!, code: "0728.evidence_table_exists", subject: "unrecorded table",
+  }] }), false);
+});
 
 test("only an exact recorded instruction publisher may defer to the exact earlier pending publisher", () => {
   assert.equal(preflightNeedsRecordedGuardTransition(evidence), true);

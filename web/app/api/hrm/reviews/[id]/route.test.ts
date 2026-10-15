@@ -199,7 +199,7 @@ test("an unknown id never reaches the service", async () => {
   test("action routes refuse hostile payloads at the real boundary", async () => {
     reset();
     for (const body of ["{not json", "null"]) {
-      const refused = await itemRoute!.PATCH(
+      const refused: Response = await itemRoute!.PATCH(
         new Request(`http://openbooks.test/api/hrm/reviews/${REVIEW_ID}`, {
           method: "PATCH",
           headers: { "content-type": "application/json" },

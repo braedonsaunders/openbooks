@@ -35,7 +35,7 @@ import { calculatePayRun } from "./run-calculation.ts";
 import { commitPayRun } from "./run-commit.ts";
 import { createPayRun } from "./run-lifecycle.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
-import { seedOntarioEhtFixture, seedUsSuiAccount } from "./filing-test-fixtures.ts";
+import { seedOntarioEhtFixture, seedUsSuiAccount, seedUsEinAccount } from "./filing-test-fixtures.ts";
 import { sealJson } from "../platform/secrets.ts";
 import { requestDocumentVoid } from "../ledger/document-void.ts";
 
@@ -675,7 +675,11 @@ async function payrollOrg(
         orgId: org.orgId, actorId, rates: US_PACK_RATES, rateKey, region, filingAccountId, taxYear: 2026, values,
         sourceCitation: "Test rate notice", reason: "test fixture rate",
       });
-    suiFilingAccountId = await seedUsSuiAccount(org.orgId, actorId, region);
+    const einAccountId = await seedUsEinAccount(org.orgId, actorId, org.subsidiaryId, "12-3456789");
+    suiFilingAccountId = await seedUsSuiAccount(org.orgId, actorId, region, {
+      federalAccountId: einAccountId, subsidiaryId: org.subsidiaryId, effectiveFrom: "2026-01-01", effectiveTo: null,
+      sourceReference: "TX original employer registration",
+    });
     await saveRate("us_sui", suiFilingAccountId, { rate: "0.03", wageBase: "7000" });
     await saveRate("us_futa", null, { rate: "0.006" });
     for (const slot of ["fit", "fica", "futa", "suta", "state_income_tax", "local_income_tax"]) {

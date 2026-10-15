@@ -1,13 +1,13 @@
 import { seedCanadianPostingAccounts } from "../testing/payroll-posting-fixture.ts";
 import {
   seedPayrollSchedule, seedPayrollEmployeeRole, seedPayrollPerson, seedPayrollProfile,
-  seedPayrollWage, createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment,
+  seedPayrollWage, seedPayrollDocument, seedPayrollStub, seedPayrollLine, seedPayrollComponent, createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment,
 } from "../testing/fixtures.ts";
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, env } from "../platform/db.ts";
+import { db, env, withBypassContext, withOrgContext } from "../platform/db.ts";
 import pg from "pg";
 import { rl1Slips } from "./canada/quebec/rl1.ts";
 import { PAYROLL_COUNTRY_PACKS, setPackSlotAccount } from "./packs.ts";
@@ -16,6 +16,8 @@ import { commitPayRun } from "./run-commit.ts";
 import { createPayRun } from "./run-lifecycle.ts";
 import { seedCanadianPayrollComponentsForTest as seedPayrollComponents } from "./filing-test-fixtures.ts";
 import { t4Slips, w2Slips, form941Worksheet } from "./yearend.ts";
+import { seedAdoption as seedRetainedHistory, seedUsEinAccount } from "./filing-test-fixtures.ts";
+import { validateUsFilingAccountLineage } from "./us/filing-account-lineage.ts";
 import { upsertPayrollEmployerFact } from "./employer-fact-store.ts";
 interface AdoptionFixture {
   orgId: string;
@@ -138,7 +140,7 @@ test("historical report classification is fixed while snapshotted calculation in
           where org_id = ${fx.orgId} and system_key = 'base_pay'`), historicalPolicyError);
       }
       await db.execute(sql`update pay_components set name = 'Renamed earning', value = '50',
-        is_active = false, pensionable = false, insurable = false, vacationable = false, non_periodic = true
+        is_active = false, pensionable = false, insurable = false, non_periodic = true
         where org_id = ${fx.orgId} and system_key = 'base_pay'`);
       assert.deepEqual(await t4Slips(fx.orgId, 2026), before);
       // A new identity can carry changed treatment for future assignments.
@@ -357,15 +359,155 @@ test("regional Canadian year-end slips survive a later country change",
     } finally {await dropScratchOrgReporting(fx.orgId);}
   });
 
-test("a raw prospective vacation flag edit invalidates an already calculated run",
+test("a dated vacation-base policy edit invalidates an already calculated run",
   { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
     const fx = await seedAdoption();
     try {
       const {input} = await calculatedRun(fx);
-      await db.execute(sql`update pay_components set vacationable=false
-        where org_id=${fx.orgId} and system_key='base_pay'`);
+      await db.execute(sql`update pay_component_statutory_treatments treatment set vacationable=false
+        from pay_components component where treatment.org_id=${fx.orgId} and treatment.pay_component_id=component.id
+          and component.org_id=treatment.org_id and component.system_key='base_pay'`);
       await assert.rejects(commitPayRun(input), /recalculate|changed|stale/i);
       assert.equal((await db.execute(sql`select run_status from pay_runs
         where org_id=${fx.orgId} and document_id=${input.documentId}`)).rows[0]?.run_status, 'calculated');
     } finally { await dropScratchOrgReporting(fx.orgId); }
+  });
+
+
+test("W-2 and Form 941 retain original employer and date across a real party transfer and dated state-registration succession",
+  { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+    const f = await withBypassContext(() => seedRetainedHistory());
+    try { await withOrgContext(f.orgId, async () => {
+      assert.equal((await db.execute(sql`update subsidiaries set country='US',base_currency='USD'
+        where org_id=${f.orgId} and id=${f.subsidiaryId} returning id`)).rows.length, 1);
+      const employerB = randomUUID(), state = randomUUID();
+      assert.equal((await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country)
+        values(${employerB},${f.orgId},${f.subsidiaryId},'Successor US legal employer','USD','US') returning id`)).rows.length, 1);
+      const employmentB = await seedWorkerEmployment(f.orgId, f.employeeId, employerB);
+      const einA = await seedUsEinAccount(f.orgId, f.actorId, f.subsidiaryId, '12-3456789');
+      const einB = await seedUsEinAccount(f.orgId, f.actorId, employerB, '98-7654321');
+      // The organization-owned registration has two attested, nonoverlapping employer periods.
+      assert.equal((await db.execute(sql`insert into payroll_filing_accounts
+        (id,org_id,country,program_type,account_number,name,subsidiary_id,state_code,is_active,created_by,updated_by)
+        values(${state},${f.orgId},'US','us_state_sui','NJ-ORIGINAL','Retained state registration',null,'NJ',true,${f.actorId},${f.actorId}) returning id`)).rows.length, 1);
+      for (const interval of [
+        { subsidiaryId: f.subsidiaryId, federalAccountId: einA, effectiveFrom: '2026-01-01', effectiveTo: '2026-06-14' },
+        { subsidiaryId: employerB, federalAccountId: einB, effectiveFrom: '2026-06-15', effectiveTo: null },
+      ]) {
+        const input = { filingAccountId: state, ...interval,
+          sourceReference: 'Original registration transfer effective on 15 June 2026',
+          changeReason: 'Retain the source-confirmed payer for each inclusive payroll date' };
+        await db.transaction(async tx => {
+          await validateUsFilingAccountLineage(tx, f.orgId, input);
+          assert.equal((await tx.execute(sql`insert into payroll_us_filing_account_employer_lineage
+            (org_id,filing_account_id,federal_account_id,subsidiary_id,effective_from,effective_to,source_reference,change_reason,created_by,updated_by)
+            values(${f.orgId},${state},${input.federalAccountId},${input.subsidiaryId},${input.effectiveFrom},${input.effectiveTo},
+              ${input.sourceReference},${input.changeReason},${f.actorId},${f.actorId}) returning id`)).rows.length, 1);
+        });
+      }
+      const components = new Map<string, string>();
+      for (const component of [
+        { code: 'RETAINED_WAGE', systemKey: null, name: 'Retained taxable wage', kind: 'earning' as const, taxable: true },
+        ...['fit','ss','medicare','state_income_tax','local_income_tax'].map(systemKey =>
+          ({ code: `RETAINED_${systemKey.toUpperCase()}`, systemKey, name: systemKey, kind: 'deduction' as const, taxable: false })),
+        { code: 'RETAINED_SS_EMPLOYER', systemKey: 'ss', name: 'Retained employer Social Security', kind: 'employer_contribution' as const, taxable: false },
+        { code: 'RETAINED_MED_EMPLOYER', systemKey: 'medicare', name: 'Retained employer Medicare', kind: 'employer_contribution' as const, taxable: false },
+        { code: 'RETAINED_PLAN', systemKey: null, name: 'Retained pension deferral', kind: 'deduction' as const, taxable: false },
+      ]) {
+        const id = randomUUID();
+        await seedPayrollComponent(f.orgId, id, { ...component, country: 'US',
+          taxTreatment: component.code === 'RETAINED_PLAN' ? 'pension_f' : 'none',
+          pensionable: component.kind === 'earning', insurable: component.kind === 'earning',
+          vacationable: false, createdBy: f.actorId, updatedBy: f.actorId });
+        components.set(component.kind === 'employer_contribution' ? component.code : component.systemKey ?? component.code, id);
+      }
+      const sources = [
+        { subsidiaryId: f.subsidiaryId, employmentId: f.employmentId, date: '2026-06-10',
+          wage: '1000', deferral: '50', fit: '100', ss: '62', med: '14.50', stateTax: '35', local: '10', net: '728.50' },
+        { subsidiaryId: employerB, employmentId: employmentB, date: '2026-06-20',
+          wage: '2000', deferral: '100', fit: '200', ss: '124', med: '29', stateTax: '70', local: '20', net: '1457' },
+      ];
+      const retained: { stubId: string; documentId: string }[] = [];
+      for (const source of sources) {
+        assert.equal((await db.execute(sql`update parties set subsidiary_id=${source.subsidiaryId}
+          where org_id=${f.orgId} and id=${f.employeeId} returning id`)).rows.length, 1);
+        assert.equal((await db.execute(sql`update employee_payroll_profiles set country='US',province='NJ',
+          employment_id=${source.employmentId},filing_account_id=${state}
+          where org_id=${f.orgId} and employee_party_id=${f.employeeId} returning employee_party_id`)).rows.length, 1);
+        const documentId = randomUUID(), stubId = randomUUID();
+        await seedPayrollDocument(f.orgId, documentId, { kind: 'pay_run',
+          documentNumber: `PAY-RETAINED-${source.date}`, subsidiaryId: source.subsidiaryId,
+          documentDate: source.date, currency: 'USD', status: 'draft', createdBy: f.actorId, updatedBy: f.actorId });
+        assert.equal((await db.execute(sql`insert into pay_runs
+          (document_id,org_id,pay_schedule_id,period_start,period_end,pay_date,tax_year,run_status,created_by,updated_by)
+          values(${documentId},${f.orgId},${f.scheduleId},${source.date},${source.date},${source.date},2026,'committed',${f.actorId},${f.actorId})
+          returning document_id`)).rows.length, 1);
+        await seedPayrollStub(f.orgId, documentId, f.employeeId, source.employmentId, { id: stubId,
+          country: 'US', countrySource: 'calculation', province: 'NJ', filingAccountId: state, filingAccountSource: 'insertion',
+          periodsPerYear: 26, payDate: source.date, taxYear: 2026, currency: 'USD', gross: source.wage, netPay: source.net,
+          pensionableEarnings: source.wage, insurableEarnings: source.wage,
+          factors: { SS_TAXABLE: source.wage, MED2_TAXABLE: '0', W2_LOCAL_WAGES_60: source.wage },
+          createdBy: f.actorId, updatedBy: f.actorId });
+        const lines = [
+          { component: 'RETAINED_WAGE', kind: 'earning' as const, amount: source.wage, sequence: 10 },
+          { component: 'fit', kind: 'deduction' as const, amount: source.fit, sequence: 20 },
+          { component: 'ss', kind: 'deduction' as const, amount: source.ss, sequence: 30 },
+          { component: 'RETAINED_SS_EMPLOYER', kind: 'employer_contribution' as const, amount: source.ss, sequence: 31 },
+          { component: 'medicare', kind: 'deduction' as const, amount: source.med, sequence: 40 },
+          { component: 'RETAINED_MED_EMPLOYER', kind: 'employer_contribution' as const, amount: source.med, sequence: 41 },
+          { component: 'state_income_tax', kind: 'deduction' as const, amount: source.stateTax, sequence: 50 },
+          { component: 'local_income_tax', kind: 'deduction' as const, amount: source.local, sequence: 60 },
+          { component: 'RETAINED_PLAN', kind: 'deduction' as const, amount: source.deferral, sequence: 70 },
+        ];
+        for (const line of lines) {
+          const componentId = components.get(line.component); assert.ok(componentId);
+          await seedPayrollLine(f.orgId, stubId, componentId, { kind: line.kind, amount: line.amount,
+            description: line.component === 'local_income_tax' ? 'Original municipal income tax' : line.component,
+            sequence: line.sequence, ...(line.component === 'RETAINED_PLAN' ?
+              { statutoryReportingCode: { formCode: 'US_W2', boxCode: '12', code: 'D', label: '401(k) elective deferrals' } } : {}) });
+        }
+        retained.push({ stubId, documentId });
+      }
+      const beforeW2 = await w2Slips(f.orgId, 2026), before941 = await form941Worksheet(f.orgId, 2026);
+      assert.equal(beforeW2.length, 2); assert.equal(before941.length, 2);
+      for (const [ein, wages, fit, ssWages, ssTax, medTax, stateTax, localTax, deferral] of [
+        [einA,'950.0000','100.0000','1000.0000','62.0000','14.5000','35.0000','10.0000','50.0000'],
+        [einB,'1900.0000','200.0000','2000.0000','124.0000','29.0000','70.0000','20.0000','100.0000'],
+      ]) {
+        const slip = beforeW2.find(row => row.filingAccountId === ein); assert.ok(slip);
+        assert.equal(slip.box1Wages, wages); assert.equal(slip.box2FederalIncomeTax, fit);
+        assert.equal(slip.box3SsWages, ssWages); assert.equal(slip.box4SsTax, ssTax);
+        assert.equal(slip.box5MedicareWages, ssWages); assert.equal(slip.box6MedicareTax, medTax);
+        assert.deepEqual(slip.box12Lines, [{ boxCode: '12', code: 'D', label: '401(k) elective deferrals', value: deferral }]);
+        assert.equal(slip.stateLines.length, 1);
+        assert.equal(slip.stateLines[0]!.employerStateId, 'NJ-ORIGINAL');
+        assert.equal(slip.stateLines[0]!.box16StateWages, wages);
+        assert.equal(slip.stateLines[0]!.box17StateIncomeTax, stateTax);
+        assert.deepEqual(slip.stateLines[0]!.localLines, [{ locality: 'Original municipal income tax',
+          box18LocalWages: ssWages, box19LocalIncomeTax: localTax }]);
+        const quarter = before941.find(row => row.filingAccountId === ein); assert.ok(quarter);
+        assert.equal(quarter.quarter, 2); assert.equal(quarter.wages, slip.box1Wages);
+        assert.equal(quarter.federalIncomeTax, slip.box2FederalIncomeTax);
+        assert.equal(quarter.ssWages, slip.box3SsWages); assert.equal(quarter.medicareWages, slip.box5MedicareWages);
+        assert.equal(quarter.ssTax, ein === einA ? '124.0000' : '248.0000');
+        assert.equal(quarter.medicareTax, ein === einA ? '29.0000' : '58.0000');
+      }
+      assert.equal((await db.execute(sql`update payroll_filing_accounts set is_active=false
+        where org_id=${f.orgId} and id=${einA} returning id`)).rows.length, 1);
+      // Move the actual party again after both original sources exist; neither reader may use today's map.
+      assert.equal((await db.execute(sql`update parties set subsidiary_id=${f.subsidiaryId}
+        where org_id=${f.orgId} and id=${f.employeeId} returning id`)).rows.length, 1);
+      assert.equal((await db.execute(sql`update employee_payroll_profiles set country='CA',province='ON',
+        employment_id=${f.employmentId},filing_account_id=null
+        where org_id=${f.orgId} and employee_party_id=${f.employeeId} returning employee_party_id`)).rows.length, 1);
+      assert.deepEqual(await w2Slips(f.orgId, 2026), beforeW2);
+      assert.deepEqual(await form941Worksheet(f.orgId, 2026), before941);
+      assert.deepEqual(await t4Slips(f.orgId, 2026), []);
+      const retainedSources = (await db.execute<{ id: string; employer: string; date: string }>(sql`
+        select s.id,d.subsidiary_id as employer,s.pay_date::text as date from pay_stubs s
+        join documents d on d.org_id=s.org_id and d.id=s.pay_run_document_id
+        where s.org_id=${f.orgId} order by s.pay_date`)).rows;
+      assert.deepEqual(retainedSources, retained.map((row, index) => ({ id: row.stubId,
+        employer: sources[index]!.subsidiaryId, date: sources[index]!.date })));
+    }); } finally { await withBypassContext(() => dropScratchOrgReporting(f.orgId)); }
   });

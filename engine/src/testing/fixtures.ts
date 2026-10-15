@@ -1281,9 +1281,16 @@ const RETAINED_CABINET_FILE_SOURCES = [
 async function deleteQualifiedCabinetFixtureSources(
   tx: TeardownTx, orgId: string, present: ReadonlySet<string>,
 ): Promise<void> {
+  // Identity certificates retain exact Cabinet versions and must leave before
+  // their files under the already-qualified disposable-tenant wipe authority.
+  if (present.has("field_ticket_source_certifications")) {
+    await tx.execute(sql`delete from field_ticket_source_certifications where org_id=${orgId}`);
+  }
   for (const [table, trigger] of [
     ["historical_translation_layers", "historical_translation_layer_guard"],
     ["historical_translation_contributions", "historical_translation_basis_guard"],
+    ["payroll_ca_opening_reporting_allocations", "payroll_ca_opening_reporting_allocation_guard"],
+    ["payroll_ca_opening_reporting_authorities", "payroll_ca_opening_reporting_authority_guard"],
     ["payroll_opening_levy_source_allocations", "payroll_opening_levy_source_allocation_guard"],
     ["payroll_opening_levy_source_authorities", "payroll_opening_levy_source_authority_guard"],
   ] as const) {

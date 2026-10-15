@@ -68,7 +68,7 @@ test('audited bank cash inputs retain their keyed rate, paid hours, source and b
     bankPlanPayoutComponentId: '20000000-0000-4000-8000-000000000003',
     bankPlanDepositComponentId: null,
     reason: 'Issued bank payout at the keyed cheque rate',
-    sourceReference: 'card 44707',
+    sourceReference: 'Payroll source document 2',
     requestId: '20000000-0000-4000-8000-000000000001',
     rate: '143.83',
   };
@@ -79,13 +79,16 @@ test('audited bank cash inputs retain their keyed rate, paid hours, source and b
     ...calculated, bankCashInputs: [{ ...input, bankPlanAllowsNegativeBalance: true }],
   }).bankCashInputs, true);
   assert.deepEqual(parsePayRunCalculationSource(calculated), calculated);
+  const moneyBank = { ...calculated, bankCashInputs: [{ ...input, bankPlanUnit: 'money' }] };
+  assert.deepEqual(parsePayRunCalculationSource(moneyBank), moneyBank);
+  assert.equal(payRunCalculationSourceChanges(calculated, moneyBank).bankCashInputs, true);
   const deposit = { ...input, hours: '-58.00', amount: '-1624.0000', rate: null,
     bankPlanPayoutComponentId: null, bankPlanDepositComponentId: input.componentId };
   assert.deepEqual(parsePayRunCalculationSource({ ...legacy, bankCashInputs: [deposit] }),
     { ...legacy, bankCashInputs: [deposit] });
   for (const invalid of [
     { ...input, requestId: '20000000-0000-4000-8000-000000000099' },
-    { ...input, bankPlanUnit: 'money' },
+    { ...input, bankPlanUnit: 'quantity' },
     { ...input, bankPlanPayoutComponentId: null },
     { ...deposit, bankPlanDirection: 'owe' },
     { ...deposit, bankPlanDepositComponentId: null },
@@ -97,6 +100,111 @@ test('audited bank cash inputs retain their keyed rate, paid hours, source and b
 
   for (const bankCashInputs of [null, false, '[]', {}, [{ ...input, rate: '143.831' }], [{ ...input, amount: '1150.6500' }]]) {
     assert.equal(parsePayRunCalculationSource({ ...legacy, bankCashInputs }), null);
+  }
+});
+
+test('a split bank cash input retains its outside portion and frozen pay-date valuation as stale evidence', () => {
+  const legacy = snapshot();
+  const splitInput: NonNullable<PayRunCalculationSourceSnapshot['bankCashInputs']>[number] = {
+    adjustmentId: '20000000-0000-4000-8000-000000000001',
+    employeePartyId: '20000000-0000-4000-8000-000000000002',
+    componentId: '20000000-0000-4000-8000-000000000003',
+    amount: '1150.6400',
+    hours: '8.00',
+    bankPlanId: '20000000-0000-4000-8000-000000000004',
+    bankPlanUnit: 'money',
+    bankPlanDirection: 'accrue',
+    bankPlanAllowsNegativeBalance: false,
+    bankPlanPayoutComponentId: '20000000-0000-4000-8000-000000000003',
+    bankPlanDepositComponentId: null,
+    reason: 'Issued bank payout with independently paid cash',
+    sourceReference: 'Payroll source document 7',
+    requestId: '20000000-0000-4000-8000-000000000001',
+    rate: '143.83',
+    outsideBankAmount: '782.64',
+    bankValuation: {
+      rateId: '20000000-0000-4000-8000-000000000005', scope: 'employee',
+      hourlyWage: '46.0000', currency: 'CAD', basis: 'hour', rate: '46.0000',
+      effectiveFrom: '2026-06-01', effectiveTo: null,
+      annualHoursUsed: null, annualHoursSource: null,
+      updatedAt: '2026-06-01T00:00:00.000000Z',
+    },
+  };
+  const calculated = { ...legacy, bankCashInputs: [splitInput] };
+  assert.deepEqual(parsePayRunCalculationSource(calculated), calculated);
+  assert.equal(payRunCalculationSourceChanges(legacy, calculated).bankCashInputs, true);
+  // A pay-date-only wage version change is a different frozen valuation and
+  // therefore stale evidence, even when every period-end field is identical.
+  for (const bankValuation of [
+    { ...splitInput.bankValuation!, hourlyWage: '47.0000', rate: '47.0000' },
+    { ...splitInput.bankValuation!, rateId: '20000000-0000-4000-8000-000000000006', effectiveFrom: '2026-06-15' },
+    { ...splitInput.bankValuation!, updatedAt: '2026-06-15T00:00:00.000000Z' },
+  ]) {
+    const current = { ...legacy, bankCashInputs: [{ ...splitInput, bankValuation }] };
+    assert.equal(payRunCalculationSourceChanges(calculated, current).bankCashInputs, true);
+    assert.notEqual(payRunCalculationSourceDigest(calculated), payRunCalculationSourceDigest(current));
+  }
+  assert.equal(payRunCalculationSourceChanges(calculated, {
+    ...calculated, bankCashInputs: [{ ...splitInput, outsideBankAmount: '782.63' }],
+  }).bankCashInputs, true);
+  // Period-end-only evidence cannot certify a pay-date valuation: a split
+  // without its frozen valuation, or a valuation without its split, fails closed.
+  const { bankValuation: _omitted, ...splitWithoutValuation } = splitInput;
+  const { outsideBankAmount: _outside, ...valuationWithoutSplit } = splitInput;
+  for (const invalid of [
+    splitWithoutValuation,
+    valuationWithoutSplit,
+    { ...splitInput, outsideBankAmount: '1150.64' },
+    { ...splitInput, outsideBankAmount: '0.00' },
+    { ...splitInput, outsideBankAmount: '-1.00' },
+    { ...splitInput, hours: '-8.00', amount: '-1150.6400' },
+    { ...splitInput, bankValuation: { ...splitInput.bankValuation!, hourlyWage: '46.0100' } },
+    { ...splitInput, bankValuation: { ...splitInput.bankValuation!, basis: 'year', rate: '95680.0000', annualHoursUsed: '2000', annualHoursSource: 'rate' as const } },
+    { ...splitInput, bankValuation: { ...splitInput.bankValuation!, effectiveFrom: '2026-02-30' } },
+    { ...splitInput, bankValuation: { ...splitInput.bankValuation!, rateId: 'not-a-wage' } },
+  ]) assert.equal(parsePayRunCalculationSource({ ...legacy, bankCashInputs: [invalid] }), null);
+  // The same frozen shape certifies a time-based wage converted through its
+  // retained annual-hours divisor: 95,680 a year over 2,080 hours is 46 an hour.
+  // An explicitly unresolved pay-date valuation is retained as null so a
+  // wage that later appears changes the evidence instead of certifying one.
+  assert.deepEqual(parsePayRunCalculationSource({ ...legacy, bankCashInputs: [{ ...splitInput, bankValuation: null }] }),
+    { ...legacy, bankCashInputs: [{ ...splitInput, bankValuation: null }] });
+  // An observed foreign-currency valuation is retained, not hidden: a later
+  // currency correction is a changed valuation and reads stale.
+  const foreignValued = { ...splitInput, bankValuation: { ...splitInput.bankValuation!, currency: 'USD' } };
+  assert.deepEqual(parsePayRunCalculationSource({ ...legacy, bankCashInputs: [foreignValued] }),
+    { ...legacy, bankCashInputs: [foreignValued] });
+  assert.equal(payRunCalculationSourceChanges(calculated, { ...legacy, bankCashInputs: [foreignValued] }).bankCashInputs, true);
+  const salaryValued = { ...splitInput, bankValuation: { ...splitInput.bankValuation!,
+    basis: 'year', rate: '95680.0000', hourlyWage: '46.0000', annualHoursUsed: '2080', annualHoursSource: 'rate' as const } };
+  assert.deepEqual(parsePayRunCalculationSource({ ...legacy, bankCashInputs: [salaryValued] }),
+    { ...legacy, bankCashInputs: [salaryValued] });
+});
+
+test('declared vacation accruals retain the exact per-cheque amount and source as stale evidence', () => {
+  const legacy = snapshot();
+  const accrual: NonNullable<PayRunCalculationSourceSnapshot["declaredVacationAccruals"]>[number] = {
+    adjustmentId: "30000000-0000-4000-8000-000000000001",
+    employeePartyId: "30000000-0000-4000-8000-000000000002",
+    componentId: "30000000-0000-4000-8000-000000000003",
+    planId: "30000000-0000-4000-8000-000000000004",
+    amount: "2500.8100",
+    reason: "Vacation liability declared on the issued cheque",
+    sourceReference: "Issued cheque 7, leave request 9",
+    requestId: "30000000-0000-4000-8000-000000000001",
+  };
+  const calculated = { ...legacy, declaredVacationAccruals: [accrual] };
+  assert.equal(payRunCalculationSourceChanges(legacy, calculated).declaredVacationAccruals, true);
+  assert.equal(payRunCalculationSourceChanges(calculated, legacy).declaredVacationAccruals, true);
+  assert.equal(payRunCalculationSourceChanges(calculated, {
+    ...calculated,
+    declaredVacationAccruals: [{ ...accrual, amount: "2500.8200" }],
+  }).declaredVacationAccruals, true);
+  assert.deepEqual(parsePayRunCalculationSource(calculated), calculated);
+  for (const declaredVacationAccruals of [null, false, "[]", {},
+    [{ ...accrual, amount: "0.0000" }], [{ ...accrual, amount: "2500.8101" }],
+    [{ ...accrual, requestId: "invalid" }]]) {
+    assert.equal(parsePayRunCalculationSource({ ...legacy, declaredVacationAccruals }), null);
   }
 });
 
@@ -158,7 +266,7 @@ test("legacy evidence without item routing reads as empty and detects later rout
   assert.deepEqual(parsed.itemAccounts, []);
   const current = snapshot();
   current.itemAccounts.push({ id: "item", payrollExpenseAccountId: "expense", updatedAt: "2026-09-20" });
-  assert.deepEqual(payRunCalculationSourceChanges(parsed, current), { time: false, timeTypes: false, wages: false, items: true, components: false, compensationPackages: false, holidayObligations: false, roster: false, openingBalances: false, incomeTaxOverrides: false, bankCashInputs: false });
+  assert.deepEqual(payRunCalculationSourceChanges(parsed, current), { time: false, timeTypes: false, wages: false, items: true, components: false, compensationPackages: false, holidayObligations: false, roster: false, openingBalances: false, incomeTaxOverrides: false, bankCashInputs: false, declaredVacationAccruals: false, employerLevyAdjustments: false });
 });
 
 test("canonical evidence ignores object key order but preserves array order and values", () => {
@@ -265,21 +373,61 @@ test('dated statutory treatment identity, resolved group and policy window are p
   const treatment = {
     id:'10000000-0000-4000-8000-000000000001',componentId:'10000000-0000-4000-8000-000000000002',
     workerCompGroupId:null,employeeWorkerCompGroupId:null,
-    effectiveFrom:'2026-01-01',effectiveTo:'2026-12-31',programExclusions:['wcb'],
+    effectiveFrom:'2026-01-01',effectiveTo:'2026-12-31',programExclusions:['wcb'],vacationable:false,
   };
   const original = { ...snapshot(),payComponentStatutoryTreatments:[treatment] };
   assert.deepEqual(parsePayRunCalculationSource(original),original);
   for (const change of [
     { id:'10000000-0000-4000-8000-000000000003' },
     { employeeWorkerCompGroupId:'10000000-0000-4000-8000-000000000004' },
-    { effectiveTo:'2026-11-30' },{ programExclusions:[] },
+    { effectiveTo:'2026-11-30' },{ programExclusions:[] },{ vacationable:true },
   ]) {
     const current = { ...snapshot(),payComponentStatutoryTreatments:[{ ...treatment,...change }] };
     assert.equal(payRunCalculationSourceChanges(original,current).components,true);
     assert.notEqual(payRunCalculationSourceDigest(original),payRunCalculationSourceDigest(current));
   }
   for (const change of [{ id:null },{ id:'unknown' },{ employeeWorkerCompGroupId:undefined },
-    { effectiveFrom:'2026-02-30' },{ effectiveTo:'2025-12-31' },{ programExclusions:[null] }]) {
+    { effectiveFrom:'2026-02-30' },{ effectiveTo:'2025-12-31' },{ programExclusions:[null] },{ vacationable:undefined },{ vacationable:'false' }]) {
     assert.equal(parsePayRunCalculationSource({ ...snapshot(),payComponentStatutoryTreatments:[{ ...treatment,...change }] }),null);
   }
 });
+
+
+test('selected holiday employment status history is validated and makes its calculated entitlement stale',()=>{
+  const row:NonNullable<PayRunCalculationSourceSnapshot['holidayEmployments']>[number]={
+    orgId:'10000000-0000-4000-8000-000000000001',employeePartyId:'10000000-0000-4000-8000-000000000002',
+    employmentId:'10000000-0000-4000-8000-000000000003',subsidiaryId:'10000000-0000-4000-8000-000000000004',
+    employmentRevision:1,versionId:'10000000-0000-4000-8000-000000000005',versionNo:1,status:'active',
+    effectiveFrom:'2026-04-05',effectiveTo:null,recordedAt:'2026-04-05T00:00:00.000000Z',
+  };
+  const calculated={...snapshot(),holidayEmployments:[row]};
+  assert.deepEqual(parsePayRunCalculationSource(calculated),calculated);
+  for(const changed of [{effectiveFrom:'2026-04-04'},{status:'ended'},{employmentRevision:2},
+    {employmentId:'10000000-0000-4000-8000-000000000006'}]) {
+    assert.equal(payRunCalculationSourceChanges(calculated,{...calculated,holidayEmployments:[{...row,...changed}]}).holidayObligations,true);
+  }
+  for(const changed of [{employmentRevision:0},{employmentId:'unknown'},{effectiveFrom:'2026-02-30'},{recordedAt:'unknown'}]) {
+    assert.equal(parsePayRunCalculationSource({...calculated,holidayEmployments:[{...row,...changed}]}),null);
+  }
+  assert.equal(payRunCalculationSourceChanges(calculated,snapshot()).holidayObligations,true);
+});
+
+
+test('issued employer premiums retain positive cents, source ownership and their original request identity', () => {
+  const baseline = snapshot();
+  const input = { adjustmentId: '70000000-0000-4000-8000-000000000001',
+    employeePartyId: '70000000-0000-4000-8000-000000000002',
+    componentId: '70000000-0000-4000-8000-000000000003', amount: '26.3200', programKey: 'ca_eht',
+    workerCompGroupId: null, sourceKey: 'export:levy:001', reason: 'Retain issued employer premium',
+    sourceReference: 'Reviewed export row 1', requestId: '70000000-0000-4000-8000-000000000001' };
+  const current = { ...baseline, employerLevyAdjustments: [input] };
+  assert.deepEqual(parsePayRunCalculationSource(current), current);
+  assert.equal(payRunCalculationSourceChanges(baseline, current).employerLevyAdjustments, true);
+  assert.equal(payRunCalculationSourceChanges(current, baseline).employerLevyAdjustments, true);
+  for (const changes of [{ amount: '-26.32' }, { amount: '0.00' }, { amount: '26.321' },
+    { requestId: '70000000-0000-4000-8000-000000000004' }, { programKey: 'cpp' }, { sourceKey: '' }]) {
+    assert.equal(parsePayRunCalculationSource({ ...current, employerLevyAdjustments: [{ ...input, ...changes }] }), null);
+  }
+  assert.notEqual(payRunCalculationSourceDigest(current),
+    payRunCalculationSourceDigest({ ...current, employerLevyAdjustments: [{ ...input, sourceKey: 'export:levy:002' }] }));
+})

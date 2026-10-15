@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { selectComponentStatutoryTreatments } from './component-statutory-treatment.ts';
+import { requireComponentStatutoryTreatment, selectComponentStatutoryTreatments, vacationBaseIncluded } from './component-statutory-treatment.ts';
 
 const policy = (id: string, group: string | null, exclusions: string[]) => ({
   id,
@@ -9,6 +9,7 @@ const policy = (id: string, group: string | null, exclusions: string[]) => ({
   effective_from: '2026-01-01',
   effective_to: null,
   program_exclusions: exclusions,
+  vacationable: true,
 });
 
 test('a workers compensation group treatment overrides the component-wide treatment', () => {
@@ -61,4 +62,30 @@ test('overlapping rows at one scope refuse instead of selecting an arbitrary ver
     policy('first', '238220', ['wcb']),
     policy('second', '238220', []),
   ], '238220', '2026-01-01'), /same scope/);
+});
+
+
+test('vacation-base inclusion follows inclusive pay-date policy boundaries and the entire group override', () => {
+  const versions = [
+    { ...policy('excluded', null, ['eht']), effective_to: '2026-02-28', vacationable: false },
+    { ...policy('included', null, ['eht']), effective_from: '2026-03-01', vacationable: true },
+    { ...policy('group-excluded', 'group-1', ['wcb']), vacationable: false },
+  ];
+  for (const [payDate, group, included, exclusions] of [
+    ['2026-02-28', null, false, ['eht']],
+    ['2026-03-01', null, true, ['eht']],
+    ['2026-03-07', null, true, ['eht']],
+    ['2026-03-07', 'group-1', false, ['wcb']],
+  ] as const) {
+    const selected = requireComponentStatutoryTreatment('component-1', selectComponentStatutoryTreatments(versions, group, payDate), payDate);
+    assert.equal(selected.vacationable, included);
+    assert.deepEqual(selected.program_exclusions, exclusions);
+  }
+});
+
+test('vacation-base policy gaps and unknown earning identities refuse instead of implying inclusion', () => {
+  assert.throws(() => requireComponentStatutoryTreatment('component-1', new Map(), '2026-03-07'), /dated treatment.*Payroll Setup/);
+  assert.throws(() => vacationBaseIncluded({ componentId: 'component-1' }), /resolved dated.*Payroll Setup/);
+  assert.throws(() => vacationBaseIncluded({ componentId: null, vacationable: true }), /resolved dated/);
+  assert.equal(vacationBaseIncluded({ componentId: 'component-1', vacationable: false }), false);
 });

@@ -983,8 +983,6 @@ export interface RetroStubEarningLine {
    */
   sourcePeriodStart: string;
   sourcePeriodEnd: string;
-  /** The component's OWN flag — never a retro-specific hardcode. */
-  vacationable: boolean;
   /** The PACK's declared retroactive treatment, resolved by the caller. */
   nonPeriodic: boolean;
   supplementalWageCategory: UsSupplementalWageCategory | null;
@@ -1006,7 +1004,7 @@ export interface RetroStubEarningLine {
  *
  *  - the lines must sum to EXACTLY the settled deltas for this employee;
  *  - every line must still have a live pay component, so the earning has a
- *    classification (taxable, pensionable, vacationable) and an expense
+ *    classification (taxable, pensionable) and an expense
  *    account. A retired component would silently default all three.
  */
 export async function retroEarningLinesForStub(
@@ -1024,7 +1022,7 @@ export async function retroEarningLinesForStub(
       settlement_id: string;
       component_id: string | null; description: string;
       project_id: string | null; department_id: string | null; amount: string;
-      vacationable: boolean | null; is_active: boolean | null; component_name: string | null;
+      is_active: boolean | null; component_name: string | null;
       supplemental_wage_category: string | null;
       statutory_reporting_category: string | null;
       statutory_exemption_category: string | null;
@@ -1032,7 +1030,7 @@ export async function retroEarningLinesForStub(
     }>(sql`
     select st.id as settlement_id,
            a.component_id, a.description, a.project_id, a.department_id, a.amount,
-           c.vacationable, c.is_active, c.name as component_name, ec.supplemental_wage_category,
+           c.is_active, c.name as component_name, ec.supplemental_wage_category,
            ec.statutory_reporting_category, ec.statutory_exemption_category,
            st.source_period_start::text as source_period_start,
            st.source_period_end::text as source_period_end,
@@ -1073,7 +1071,6 @@ export async function retroEarningLinesForStub(
       amount: row.amount,
       sourcePeriodStart: row.source_period_start,
       sourcePeriodEnd: row.source_period_end,
-      vacationable: row.vacationable === true,
       nonPeriodic: input.nonPeriodic,
       supplementalWageCategory: row.supplemental_wage_category as UsSupplementalWageCategory | null,
       statutoryReportingCategory: row.statutory_reporting_category,

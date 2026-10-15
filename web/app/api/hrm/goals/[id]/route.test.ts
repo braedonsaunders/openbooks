@@ -175,7 +175,7 @@ test("miss and cancel require their note at the real boundary", async () => {
 test("action routes refuse hostile payloads at the real boundary", async () => {
   reset();
   for (const body of ["{not json", "null"]) {
-    const refused = await itemRoute!.PATCH(
+    const refused: Response = await itemRoute!.PATCH(
       new Request(`http://openbooks.test/api/hrm/goals/${GOAL_ID}`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },

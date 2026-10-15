@@ -8,7 +8,7 @@ import { payrollPeriodOpeningPriors } from './period-opening-source.ts';
 import { mergePeriodOpeningPriors } from './period-opening-contract.ts';
 import { EMPTY_PERIOD_PRIORS } from './period-priors.ts';
 import { reresolveRunToSubsidiary } from "./run-lifecycle.ts";
-import { statutoryHolidayPayEnabled, ensureStatutoryHolidayComponents, ensureComponents, statutoryComponents } from "./run-setup.ts";
+import { payrollCalculationPolicyForPayRun, payrollConfigurationInScope, assertPayRunCalculationComponents, ensureStatutoryHolidayComponents, ensureComponents, statutoryComponents } from "./run-setup.ts";
 /**
  * Pay-run calculation driver: capture, dry-run/simulation, and the calculating transaction.
  *
@@ -30,6 +30,7 @@ import { effectiveFilingAccountSql } from "./filing.ts";
 import { payrollPaymentMethodSettings } from "./payment-method.ts";
 import { payRunCalculationSourceDigest, payRunCalculationSource, type PayRunCalculationError, type PayRunRefusalAcknowledgement, payRunCalculationRefusals, payRunRefusalDigest, parsePayRunCalculationErrors, parsePayRunRefusalAcknowledgement } from "./run-calculation-evidence.ts";
 import { calculateStub } from "./run-stub-compute.ts";
+import { capturePayRunCalculationEvidence, recordPayRunCalculationEvent } from "./run-calculation-audit.ts";
 import { employerEmployeeCount } from "./run-calculation-support.ts";
 import { PERIODIC_RUN_TYPES } from "./run-contracts.ts";
 import {
@@ -432,13 +433,14 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
     await lockAndCheckPayrollRunPopulation(tx, orgId, documentId, input.allowedSubsidiaryIds,
       employees.rows.map((employee) => ({ id: employee.party_id!, subsidiaryId: employee.employee_subsidiary_id ?? null })));
 
-    // Statutory holiday pay: read the gate once for the run, and provision the
-    // STAT/STATPREM pair for orgs that predate them BEFORE the component map
-    // is loaded — ctx.need is an assertion, never a discovery mechanism.
-    const statHolidayPay = await statutoryHolidayPayEnabled(
-      orgId, tx, input.allowedSubsidiaryIds,
+    // Run ownership authorizes consumption of the applicable policy. Shared
+    // configuration maintenance additionally requires the organization root.
+    const calculationPolicy = await payrollCalculationPolicyForPayRun(
+      orgId, documentId, input.allowedSubsidiaryIds, tx,
     );
-    if (statHolidayPay) {
+    const statHolidayPay = calculationPolicy.statutoryHolidayPay;
+    const canMaintainConfiguration = await payrollConfigurationInScope(tx, orgId, input.allowedSubsidiaryIds);
+    if (canMaintainConfiguration && statHolidayPay) {
       await ensureStatutoryHolidayComponents(
         tx, orgId, actorId, input.allowedSubsidiaryIds,
       );
@@ -451,15 +453,18 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
     // must not fail every existing tenant's next payroll with "seed payroll
     // components first". Generic: it provisions whatever the run's own pack
     // declares and branches on nothing.
-    await ensureComponents(tx, orgId, actorId, statutoryComponents(runContext.country));
-    // Same role wiring as install: a pack adopted before its slots declared
-    // roles (or a role mapped after install) still lands on the chart account
-    // wherever the operator has not mapped the slot yet.
-    await ensurePackSlotRoleAccounts(tx, orgId, actorId, runContext.country);
+    if (canMaintainConfiguration) {
+      await ensureComponents(tx, orgId, actorId, statutoryComponents(runContext.country));
+      // Same role wiring as install: explicit account mappings retain priority.
+      await ensurePackSlotRoleAccounts(tx, orgId, actorId, runContext.country);
+    }
 
     const componentRows = (await tx.execute<Record<string, unknown>>(sql`
       select * from pay_components where org_id = ${orgId} and is_active order by sequence
     `)).rows;
+    if (!canMaintainConfiguration) {
+      assertPayRunCalculationComponents(runContext.country, statHolidayPay, componentRows);
+    }
     const components = { rows: componentRows };
     // Country-scoped resolution (0189): two packs may each own one
     // `system_key` (CA and JP both declare income_tax), so the run resolves
@@ -474,7 +479,7 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
     }
     const need = (systemKey: string, kind: string) => {
       const c = byKey.get(`${systemKey}:${kind}`);
-      if (!c) throw new PayrollError(`missing system pay component ${systemKey}/${kind} — seed payroll components first`);
+      if (!c) throw new PayrollError(`missing system pay component ${systemKey}/${kind} — ask an organization payroll administrator to complete Payroll setup → Accounts & posting`);
       return c;
     };
 
@@ -502,6 +507,18 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
       employees.rows.map((e) => employeeTaxYearFenceKey(orgId, e.party_id, runContext.taxYear)),
     );
     await lockEmployerAssignmentProfiles(tx, orgId, employees.rows.map(e => e.party_id!));
+
+    // Preserve the result this calculation is about to replace, after the
+    // run, roster, population and employee-year fences above have settled
+    // the live scope and before the first destructive write below deletes
+    // any part of it. Dry runs and simulations roll their work back, so
+    // they capture nothing to retain.
+    const beforeCalculation = input.simulate || input.dryRun
+      ? null
+      : await capturePayRunCalculationEvidence(tx, orgId, documentId);
+    if (!input.simulate && !input.dryRun && !beforeCalculation) {
+      throw new PayrollError("pay run not found");
+    }
 
     if (input.simulate) await tx.execute(sql`set constraints pay_run_benefit_allocations_line_tenant_fkey deferred`);
     if (!input.simulate) await tx.execute(sql`delete from pay_run_benefit_allocations where org_id = ${orgId} and pay_run_document_id = ${documentId}`);
@@ -561,9 +578,7 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
     // transaction: it is the last rung of time-driven earning line expense
     // resolution, and reading it per stub would let a concurrent settings
     // edit cost two employees on the same run to different defaults.
-    const runWageExpenseAccountId = ((await tx.execute<{ v: string | null }>(sql`
-      select settings->'payroll'->>'wageExpenseAccountId' as v from orgs where id = ${orgId}
-    `)).rows[0]?.v ?? null);
+    const runWageExpenseAccountId = calculationPolicy.settings.wageExpenseAccountId;
     const errors: PayRunCalculationError[] = [];
     // One statutory-rate resolution per (country, year) for the whole run,
     // passed down — never a query per employee. Only called for packs that
@@ -688,6 +703,30 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
       }
     }
 
+    if (!canMaintainConfiguration) {
+      const liabilities = (await tx.execute<{ system_key: string; country: string | null; liability_account_id: string | null }>(sql`
+        select distinct c.system_key, c.country, c.liability_account_id
+          from pay_stub_lines l
+          join pay_stubs s on s.org_id = l.org_id and s.id = l.stub_id
+          join pay_components c on c.org_id = l.org_id and c.id = l.component_id
+         where s.org_id = ${orgId} and s.pay_run_document_id = ${documentId}
+           and l.kind in ('deduction', 'employer_contribution') and l.amount <> 0
+           and c.system_key is not null
+      `)).rows;
+      for (const liability of liabilities) {
+        const slot = calcPack.statutorySlots.find((candidate) => candidate.components.some(
+          (component) => component.systemKey === liability.system_key,
+        ));
+        if (slot && !liability.liability_account_id
+          && !calculationPolicy.statutoryLiabilityAccount(liability.system_key, liability.country)) {
+          throw new PayrollError(
+            `payroll setup incomplete: ${runContext.country} ${slot.key} liability account is not configured — `
+            + "ask an organization payroll administrator to map it in Payroll setup → Accounts & posting",
+          );
+        }
+      }
+    }
+
     const result: PayRunCalculation = {
       employees: count, errors,
       gross: grossTotal, net: netTotal, employerCost: employerTotal,
@@ -741,7 +780,7 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
     // what they see is what this calculate saw: the first calculate's
     // exceptions survive the response that carried them instead of living in
     // the caller's memory alone.
-    await tx.execute(sql`
+    const storedCalculation = (await tx.execute<{ document_id: string }>(sql`
       update pay_runs set run_status = 'calculated', calculated_at = now(),
              gross_total = ${grossTotal}, net_total = ${netTotal},
              employer_cost_total = ${employerTotal}, employee_count = ${count},
@@ -751,7 +790,13 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
              calculation_errors = ${JSON.stringify(errors)}::jsonb,
              updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and document_id = ${documentId}
-    `);
+       returning document_id
+    `)).rows;
+    if (storedCalculation.length !== 1) {
+      throw new PayrollError(
+        "the calculated pay run could not be stored — the calculation has been rolled back; retry the calculation",
+      );
+    }
     // Nothing refused, nothing to acknowledge: a stale acknowledgement from an
     // older refusal set must not linger on a run that is now clean, or the
     // gate would read as a permanent tax on every future commit.
@@ -778,6 +823,16 @@ async function calculateInTransaction(input: CalculatePayRunInput): Promise<PayR
       result.refusalsAcknowledged = result.refusalAcknowledgement != null
         && result.refusalAcknowledgement.errorsDigest === payRunRefusalDigest(refusalsNow);
     }
+    // Exactly one retained event for this persisted attempt, written after
+    // the stored result and its acknowledgement state have been read back
+    // and inside the same transaction: a failed write rolls the result
+    // back with it, and a rolled-back preview never reaches this point.
+    if (!beforeCalculation) throw new PayrollError("pay run not found");
+    const afterCalculation = await capturePayRunCalculationEvidence(tx, orgId, documentId);
+    if (!afterCalculation) throw new PayrollError("pay run not found");
+    await recordPayRunCalculationEvent(tx, {
+      orgId, documentId, actorId, before: beforeCalculation, after: afterCalculation,
+    });
     return result;
   }), { isolationLevel: "repeatable read" });
 }

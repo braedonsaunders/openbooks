@@ -3,27 +3,47 @@ import { measureTransactionSettlement, type TransactionSettlementSnapshot } from
 import { measureProjectMarginSettlement, type ProjectMarginSnapshot } from "./project-margin-settlement.ts";
 import { createHash } from "node:crypto";
 import { canonicalDecimal } from "../../money/exact-decimal.ts";
-import { normalizeMoney } from "../../money/money.ts";
+import { fromUnits, normalizeMoney, toUnits } from "../../money/money.ts";
 import { businessTodayInTx } from "../../platform/business-date.ts";
+import { awardPayrollProcessedSql } from "./payroll-delivery-evidence.ts";
 import { sql } from "drizzle-orm";
 import { lockAndCheckOrgFeature } from "../../organization/org-feature-lock.ts";
 import { actorHasPermission } from "../../organization/actor-permissions.ts";
+import { lockActorCommandAuthority } from "../../organization/actor-command-authority.ts";
+import { ScopeNotFoundError } from "../../organization/subsidiary-scope.ts";
 import { PayrollError } from "../../payroll/error.ts";
 import { mutatePayRunAdjustment, PayRunAdjustmentIdempotencyConflict } from "../../payroll/run-adjustments.ts";
 import { addCalendarDays, isIsoCalendarDate } from "../../platform/civil-date.ts";
+import { getS3Blob, refuseMaskedStorageKind } from "../../platform/file-storage.ts";
+import { requireNativeFileReadAuthority } from "../../records/file-read-authority.ts";
+import { pinnedTransactionExecutor } from "../../platform/db.ts";
 import type {
   BenefitAward,
   BenefitProgram,
   BenefitProgramMember,
 } from "./program-types.ts";
 import {
+  buildBenefitAwardProgramSnapshot,
   getBenefitAward,
   queueBenefitAward,
   recordPayrollDelivery,
   recordSettledAward,
+  recordSourceBoundAdjustingAward,
+  recordSourceEvidencedFirstAward,
 } from "./awards.ts";
+import { mintSourceEvidenceAdmission } from "./source-evidence-capability.ts";
+import {
+  parseRetainedSourceArtifact,
+  combineRetainedSourceClaims,
+  sourceEvidenceNativePreviewDigest,
+  type RetainedSourceArtifactSelection,
+  type VerifiedRetainedSourceArtifact,
+} from "./retained-source.ts";
+export { canonicalRetainedJson, parseRetainedSourceRow, parseRetainedSourceArtifact, combineRetainedSourceClaims, resolveRetainedJsonPointer, sourceEvidenceNativePreviewDigest } from "./retained-source.ts";
+export type { RetainedSourceArtifactSelection, VerifiedRetainedSourceArtifact } from "./retained-source.ts";
 import { requireAggregateBenefitsManage, requireAggregateBenefitsRead } from "../authorization.ts";
 import { BenefitsError } from "./errors.ts";
+import { isUuid } from "../../platform/uuid.ts";
 import {
   computeIncentiveAwards,
   eligibleMembers,
@@ -125,6 +145,82 @@ export interface SettledPeriod {
   readonly preview: IncentivePreview;
 }
 
+export interface IncentivePeriodReconciliation {
+  readonly preview: IncentivePreview | null;
+  /** Exact native source measure when a loss correctly has no payable computation. */
+  readonly nativeMeasureOnly: {
+    readonly programRevision: number;
+    readonly periodFrom: string;
+    readonly periodTo: string;
+    readonly periodBasis: IncentivePeriodBasis;
+    readonly fiscalCalendarId: string | null;
+    readonly payableAfter: string;
+    readonly currency: string;
+    readonly minorUnits: number;
+    readonly measured: IncentivePreview["measured"];
+    readonly summaryLines: readonly string[];
+    readonly isEstimate: boolean;
+    /** Manager-facing frozen native facts, parallel to preview.sourceSnapshot. */
+    readonly sourceSnapshot: Record<string, unknown>;
+  } | null;
+  /** Awards processed on committed, non-voided payroll runs for this exact program period. */
+  readonly processedPayrollTotal: string;
+  /** Positive means payroll history exceeds today's native measurement. */
+  readonly payrollMinusCurrentMeasurement: string;
+  /** Original native-measured settlement awards for this exact period; linked corrections do not rewrite this measure history. */
+  readonly nativeMeasuredHistoryTotal: string;
+  /** Original source-evidenced first obligations for this exact period; linked corrections remain separate award rows. */
+  readonly sourceEvidencedFirstTotal: string;
+  /** Native and source-evidenced obligation history combined, less today's native measurement. */
+  readonly obligationHistoryMinusCurrentMeasurement: string;
+}
+
+export type { VerifiedRetainedSourceArtifact as VerifiedSourceArtifact } from "./retained-source.ts";
+
+export interface SourceEvidenceMappingAttestation {
+  readonly employmentId: string;
+  readonly basis: string;
+  readonly reason: string;
+  readonly confirmed: true;
+}
+
+export interface GoverningDecisionAttestation {
+  readonly basis: string;
+  readonly reason: string;
+  readonly confirmed: true;
+}
+
+interface RecordSourceEvidencedFirstIncentiveBase extends PreviewIncentiveSettlementQuery {
+  readonly asOf: string;
+  readonly expectedProgramRevision: number;
+  readonly requestKey: string;
+  readonly employmentId: string;
+  readonly value: string;
+  readonly currency: string;
+  readonly sourceIssueDate: string;
+  readonly sourceRowRef: string;
+  readonly sourceArtifacts: readonly RetainedSourceArtifactSelection[];
+  /** Explicit review of a single-currency native payroll context, never a document currency claim. */
+  readonly nativeCurrencyBasis?: { readonly confirmed: true; readonly reason: string };
+  /** Digest of the exact locked preview the operator confirmed. */
+  readonly expectedNativePreviewDigest: string;
+  readonly mappingAttestation: SourceEvidenceMappingAttestation;
+  readonly reason: string;
+}
+
+export type RecordSourceEvidencedFirstIncentiveQuery =
+  | (RecordSourceEvidencedFirstIncentiveBase & {
+      readonly sourceEvidenceClass: "missing-source-identity";
+      readonly sourcePaidDate?: never;
+      readonly governingDecisionAttestation?: never;
+    })
+  | (RecordSourceEvidencedFirstIncentiveBase & {
+      readonly sourceEvidenceClass: "source-paid-above-native-measure";
+      /** Exact paid date claimed by the retained source row; source evidence only, never a native payment claim. */
+      readonly sourcePaidDate: string;
+      readonly governingDecisionAttestation: GoverningDecisionAttestation;
+    });
+
 /** Deterministic UUID from award + run: one award queues once per run. */
 function adjustmentKey(awardId: string, runDocumentId: string): string {
   const hash = createHash("sha1")
@@ -173,6 +269,10 @@ async function currencyMinorUnits(orgId: string, currency: string): Promise<numb
 
 interface SettlementContext {
   program: BenefitProgram;
+  /** The exact account source set used to measure this period. */
+  sources: ReadonlyArray<{ accountId: string; weightBps: number | null }>;
+  /** Null means the period is governed by current program rules. */
+  policyRevisionId: string | null;
   /** Transaction rules from a governing revision; undefined reads the current rules. */
   transactionPolicy: BenefitTransactionPolicy | null | undefined;
   scope: Set<string> | null;
@@ -397,7 +497,8 @@ async function loadSettlementContext(
     : named;
   const minorUnits = await currencyMinorUnits(orgId, program.currency);
   return {
-    program, transactionPolicy: inForce.transactionPolicy, scope, basis, fiscalCalendarId, departmentIds, projectIds,
+    program, sources, policyRevisionId: inForce.revisionId,
+    transactionPolicy: inForce.transactionPolicy, scope, basis, fiscalCalendarId, departmentIds, projectIds,
     revenueAccountIds, expenseAccountIds, incentiveExpenseAccountId, minorUnits, members, projectCompletion,
   };
 }
@@ -441,6 +542,41 @@ async function employerWideMembers(
   }));
 }
 
+interface MeasuredIncentiveSources {
+  measured: IncentiveMeasured;
+  excluded: string[];
+  moneySnapshot: MoneySourceSnapshot | null;
+  hoursSnapshot: HoursSourceSnapshot | null;
+  transactionSnapshot?: TransactionSettlementSnapshot;
+  projectMarginSnapshot?: ProjectMarginSnapshot;
+}
+
+interface ComputedIncentiveSources extends MeasuredIncentiveSources {
+  computation: IncentiveComputation;
+}
+
+interface NonpayableLossIncentiveSources extends MeasuredIncentiveSources {
+  computation: null;
+  nonpayableReason: string;
+}
+
+function measureAndCompute(
+  orgId: string,
+  actorId: string,
+  ctx: SettlementContext,
+  periodFrom: string,
+  periodTo: string,
+  asOf?: string,
+): Promise<ComputedIncentiveSources>;
+function measureAndCompute(
+  orgId: string,
+  actorId: string,
+  ctx: SettlementContext,
+  periodFrom: string,
+  periodTo: string,
+  asOf: string | undefined,
+  options: { readonly allowNativeLossWithoutAward: true },
+): Promise<ComputedIncentiveSources | NonpayableLossIncentiveSources>;
 async function measureAndCompute(
   orgId: string,
   actorId: string,
@@ -448,15 +584,8 @@ async function measureAndCompute(
   periodFrom: string,
   periodTo: string,
   asOf?: string,
-): Promise<{
-  measured: IncentiveMeasured;
-  computation: IncentiveComputation;
-  excluded: string[];
-  moneySnapshot: MoneySourceSnapshot | null;
-  hoursSnapshot: HoursSourceSnapshot | null;
-  transactionSnapshot?: TransactionSettlementSnapshot;
-  projectMarginSnapshot?: ProjectMarginSnapshot;
-}> {
+  options?: { readonly allowNativeLossWithoutAward: true },
+): Promise<ComputedIncentiveSources | NonpayableLossIncentiveSources> {
   const { program } = ctx;
   const metric = program.metric!;
   if (metric === "transactions") {
@@ -465,8 +594,17 @@ async function measureAndCompute(
   }
   if (metric === "project_margin") {
     const result = await measureProjectMarginSettlement({ orgId, program, members: ctx.members, minorUnits: ctx.minorUnits, basis: ctx.basis, periodFrom, periodTo,
-      revenueAccountIds: ctx.revenueAccountIds, expenseAccountIds: ctx.expenseAccountIds, asOf: asOf ?? await businessTodayInTx(db, orgId) });
-    return { ...result, moneySnapshot: null, hoursSnapshot: null };
+      revenueAccountIds: ctx.revenueAccountIds, expenseAccountIds: ctx.expenseAccountIds, asOf: asOf ?? await businessTodayInTx(db, orgId),
+      allowNativeLossWithoutAward: options?.allowNativeLossWithoutAward === true });
+    if (result.computation === null) {
+      return {
+        measured: result.measured, excluded: result.excluded, moneySnapshot: null, hoursSnapshot: null,
+        projectMarginSnapshot: result.projectMarginSnapshot,
+        computation: null,
+        nonpayableReason: result.nonpayableReason ?? "Every recipient nets a project-margin loss this period, so no native award can carry the losses forward.",
+      };
+    }
+    return { measured: result.measured, computation: result.computation, excluded: result.excluded, moneySnapshot: null, hoursSnapshot: null, projectMarginSnapshot: result.projectMarginSnapshot };
   }
   const eligible = eligibleMembers(ctx.members, periodFrom, periodTo);
   const memberEmploymentIds = new Set<string>();
@@ -589,13 +727,28 @@ async function measureAndCompute(
     }
     moneySnapshot = snapshot;
   }
-  const computation = computeIncentiveAwards({
-    program,
-    measured,
-    shares,
-    periodBasis: ctx.basis,
-    minorUnits: ctx.minorUnits,
-  });
+  let computation: IncentiveComputation;
+  try {
+    computation = computeIncentiveAwards({
+      program,
+      measured,
+      shares,
+      periodBasis: ctx.basis,
+      minorUnits: ctx.minorUnits,
+    });
+  } catch (error) {
+    if (
+      options?.allowNativeLossWithoutAward === true && error instanceof BenefitsError &&
+      error.code === "REFUSED" && error.message.startsWith("the measured ") && error.message.includes(" is a loss (")
+    ) {
+      return {
+        measured, excluded, moneySnapshot, hoursSnapshot,
+        computation: null,
+        nonpayableReason: error.message,
+      };
+    }
+    throw error;
+  }
   excluded.push(...computation.excludedZero);
   return { measured, computation, excluded, moneySnapshot, hoursSnapshot };
 }
@@ -618,6 +771,96 @@ export async function previewIncentiveSettlement(
     const ctx = await loadSettlementContext(orgId, actorId, programId, scope, false, query.periodFrom, query.periodTo);
     const result = await measureAndCompute(orgId, actorId, ctx, query.periodFrom, query.periodTo, query.asOf === undefined ? undefined : requireCivilDate(query.asOf, "asOf"));
     return buildPreviewResult(orgId, scope, ctx, query, result);
+  });
+}
+
+/** Compare today's native measure with the award history still present in payroll. */
+export async function reconcileIncentivePeriod(
+  query: PreviewIncentiveSettlementQuery,
+): Promise<IncentivePeriodReconciliation> {
+  const orgId = requireOrgId(query.orgId);
+  const actorId = requireActorId(query.actorId);
+  const programId = requireId(query.programId, "programId");
+  const periodFrom = requireCivilDate(query.periodFrom, "periodFrom");
+  const periodTo = requireCivilDate(query.periodTo, "periodTo");
+  const asOf = query.asOf === undefined ? undefined : requireCivilDate(query.asOf, "asOf");
+  return withOrgTransaction(orgId, async () => {
+    const scope = await requireAggregateBenefitsRead(db, orgId, actorId);
+    await assertHrmEnabled(db, orgId);
+    const ctx = await loadSettlementContext(orgId, actorId, programId, scope, false, periodFrom, periodTo);
+    const result = await measureAndCompute(orgId, actorId, ctx, periodFrom, periodTo, asOf, { allowNativeLossWithoutAward: true });
+    const preview = result.computation
+      ? await buildPreviewResult(orgId, scope, ctx, { ...query, periodFrom, periodTo }, result)
+      : null;
+    let nativeMeasureOnly: IncentivePeriodReconciliation["nativeMeasureOnly"] = null;
+    if (result.computation === null) {
+      const measured = result.moneySnapshot ?? result.projectMarginSnapshot ?? result.transactionSnapshot ?? result.hoursSnapshot;
+      if (!measured) throw new BenefitsError("REFUSED", "native loss reconciliation has no retained source measure");
+      const today = await businessTodayInTx(db, orgId);
+      const isEstimate = periodTo >= today || ctx.projectCompletion.some((project) => project.status !== "closed");
+      nativeMeasureOnly = {
+        programRevision: ctx.program.revision,
+        periodFrom,
+        periodTo,
+        periodBasis: ctx.basis,
+        fiscalCalendarId: ctx.fiscalCalendarId,
+        payableAfter: addCalendarDays(periodTo, ctx.program.paymentDelayDays),
+        currency: ctx.program.currency,
+        minorUnits: ctx.minorUnits,
+        measured,
+        summaryLines: [
+          `${ctx.program.code} — ${ctx.program.name}: the native measure is ${result.measured.value} ${result.measured.currency ?? "hours"}`,
+          result.nonpayableReason,
+          "No native payable award was computed or recorded for this period.",
+        ],
+        isEstimate,
+        sourceSnapshot: buildNonpayableNativeMeasureSnapshot(
+          ctx,
+          { ...query, periodFrom, periodTo, ...(asOf === undefined ? {} : { asOf }) },
+          result,
+          result.nonpayableReason,
+        ),
+      };
+    }
+    const scopeFilter = scope === null ? sql`` : sql`and exists (
+      select 1 from hrm_benefit_programs scoped_program
+       where scoped_program.org_id = a.org_id and scoped_program.id = a.program_id
+         and scoped_program.legal_entity_id = any(${`{${[...scope].join(",")}}`}::uuid[])
+    )`;
+    const processed = (await db.execute<{ total: string }>(sql`
+      select coalesce(sum(a.value), 0)::text as total
+        from hrm_benefit_awards a
+       where a.org_id = ${orgId} and a.program_id = ${programId}
+         and a.period_from = ${periodFrom}::date and a.period_to = ${periodTo}::date
+         and a.status = 'delivered' and ${awardPayrollProcessedSql}
+         ${scopeFilter}
+    `)).rows[0];
+    const obligationHistory = (await db.execute<{ nativeTotal: string; sourceEvidenceTotal: string }>(sql`
+      select coalesce(sum(a.value) filter (where a.source_key like 'settle:%'), 0)::text as "nativeTotal",
+             coalesce(sum(a.value) filter (where a.source_key like 'source-first:%'), 0)::text as "sourceEvidenceTotal"
+        from hrm_benefit_awards a
+       where a.org_id = ${orgId} and a.program_id = ${programId}
+         and a.adjusts_award_id is null and a.status <> 'voided'
+         and a.period_from = ${periodFrom}::date and a.period_to = ${periodTo}::date
+         ${scopeFilter}
+    `)).rows[0];
+    const native = fromUnits(preview?.visibleRecipients.reduce((sum, recipient) => sum + toUnits(recipient.value), 0n) ?? 0n);
+    const processedPayrollTotal = normalizeMoney(processed?.total ?? "0");
+    const payrollMinusCurrentMeasurement = fromUnits(toUnits(processedPayrollTotal) - toUnits(native));
+    const nativeMeasuredHistoryTotal = normalizeMoney(obligationHistory?.nativeTotal ?? "0");
+    const sourceEvidencedFirstTotal = normalizeMoney(obligationHistory?.sourceEvidenceTotal ?? "0");
+    const obligationHistoryMinusCurrentMeasurement = fromUnits(
+      toUnits(nativeMeasuredHistoryTotal) + toUnits(sourceEvidencedFirstTotal) - toUnits(native),
+    );
+    return {
+      preview,
+      nativeMeasureOnly,
+      processedPayrollTotal,
+      payrollMinusCurrentMeasurement,
+      nativeMeasuredHistoryTotal,
+      sourceEvidencedFirstTotal,
+      obligationHistoryMinusCurrentMeasurement,
+    };
   });
 }
 
@@ -717,6 +960,564 @@ async function buildPreview(
 ): Promise<IncentivePreview> {
   const scope = await requireAggregateBenefitsRead(db, orgId, actorId);
   return buildPreviewResult(orgId, scope, ctx, query, result);
+}
+
+function canonicalUuid(value: unknown, field: string): string {
+  if (!isUuid(value)) throw new BenefitsError("INVALID_INPUT", `${field} must be a UUID`);
+  return value.toLowerCase();
+}
+
+function sha256(value: Buffer | string): string {
+  return createHash("sha256").update(value).digest("hex");
+}
+
+/**
+ * Replay equality ignores only the server-stamped governing-decision time:
+ * a retry necessarily stamps a new clock value, while class, paid date,
+ * governing actor, basis, and reason must still match exactly.
+ */
+function sourceSnapshotForReplay(snapshot: Record<string, unknown>): Record<string, unknown> {
+  const evidence = snapshot.sourceEvidence as Record<string, unknown> | undefined;
+  const governing = evidence?.governingDecision as Record<string, unknown> | undefined;
+  if (!evidence || !governing || !Object.hasOwn(governing, "attestedAt")) return snapshot;
+  const rest = { ...governing };
+  delete rest.attestedAt;
+  return { ...snapshot, sourceEvidence: { ...evidence, governingDecision: rest } };
+}
+
+/**
+ * Record one source-evidenced first obligation when a locked native
+ * remeasurement has no payable recipient for this employment. The separate
+ * source-first origin preserves native measurement and all ordinary
+ * eligibility, caps, approval, queue, and delivery controls.
+ */
+export async function recordSourceEvidencedFirstIncentiveAward(
+  query: RecordSourceEvidencedFirstIncentiveQuery,
+): Promise<BenefitAward> {
+  const orgId = canonicalUuid(query.orgId, "orgId");
+  const actorId = canonicalUuid(query.actorId, "actorId");
+  const programId = canonicalUuid(query.programId, "programId");
+  const employmentId = canonicalUuid(query.employmentId, "employmentId");
+  const requestKey = canonicalUuid(query.requestKey, "requestKey");
+  const periodFrom = requireCivilDate(query.periodFrom, "periodFrom");
+  const periodTo = requireCivilDate(query.periodTo, "periodTo");
+  const asOf = requireCivilDate(query.asOf, "asOf");
+  const sourceIssueDate = requireCivilDate(query.sourceIssueDate, "sourceIssueDate");
+  const sourceSystem = "cabinet-retained";
+  const requestedSourceRowRef = String(query.sourceRowRef ?? "").trim();
+  const requestedSourceRowRefCanonical = isUuid(requestedSourceRowRef) ? requestedSourceRowRef.toLowerCase() : requestedSourceRowRef;
+  const reason = String(query.reason ?? "").trim();
+  if (!Number.isInteger(query.expectedProgramRevision) || query.expectedProgramRevision < 1) {
+    throw new BenefitsError("INVALID_INPUT", "expectedProgramRevision is the reviewed positive program revision");
+  }
+  if (requestedSourceRowRefCanonical.length === 0 || requestedSourceRowRefCanonical.length > 300) {
+    throw new BenefitsError("INVALID_INPUT", "a stable retained source-row reference is required");
+  }
+  if (reason.length < 8 || reason.length > 2000) {
+    throw new BenefitsError("INVALID_INPUT", "source-evidence reason explains the first obligation in 8–2000 characters");
+  }
+  const isAboveNativeMeasure = query.sourceEvidenceClass === "source-paid-above-native-measure";
+  if (!isAboveNativeMeasure && query.sourceEvidenceClass !== "missing-source-identity") {
+    throw new BenefitsError("REFUSED", "source-evidenced first obligations cover missing native source identity or a source payment above a negative native project-margin measure only; other measurement exceptions require separate policy review");
+  }
+  const sourcePaidDate = query.sourceEvidenceClass === "source-paid-above-native-measure"
+    ? requireCivilDate(query.sourcePaidDate, "sourcePaidDate")
+    : null;
+  const governingAttestation = query.sourceEvidenceClass === "source-paid-above-native-measure"
+    ? query.governingDecisionAttestation
+    : undefined;
+  const governingBasis = String(governingAttestation?.basis ?? "").trim();
+  const governingReason = String(governingAttestation?.reason ?? "").trim();
+  if (isAboveNativeMeasure && (
+    governingAttestation?.confirmed !== true ||
+    typeof governingAttestation?.basis !== "string" ||
+    typeof governingAttestation?.reason !== "string" ||
+    governingBasis.length < 8 || governingBasis.length > 2000 ||
+    governingReason.length < 8 || governingReason.length > 2000
+  )) {
+    throw new BenefitsError("REFUSED", "review the retained row and the negative native measure, then attest the governing decision for paying above it with its basis and reason");
+  }
+  if (periodTo < periodFrom) throw new BenefitsError("INVALID_INPUT", "periodTo ends on or after periodFrom");
+  const attestation = query.mappingAttestation;
+  const mappingEmploymentId = attestation?.employmentId === undefined
+    ? ""
+    : canonicalUuid(attestation.employmentId, "mappingAttestation.employmentId");
+  const mappingBasis = String(attestation?.basis ?? "").trim();
+  const mappingReason = String(attestation?.reason ?? "").trim();
+  if (
+    attestation?.confirmed !== true ||
+    mappingEmploymentId !== employmentId ||
+    mappingBasis.length < 8 || mappingBasis.length > 2000 ||
+    mappingReason.length < 8 || mappingReason.length > 2000
+  ) {
+    throw new BenefitsError("REFUSED", "review the retained row, then attest the source-row to native employment and payer mapping with its basis and reason");
+  }
+  if (!Array.isArray(query.sourceArtifacts) || query.sourceArtifacts.length < 1 || query.sourceArtifacts.length > 5) {
+    throw new BenefitsError("INVALID_INPUT", "one retained source file and up to four corroborating files are required");
+  }
+
+  const sourceSelections = query.sourceArtifacts.map((artifact, index) => {
+    const fileId = canonicalUuid(artifact.fileId, `sourceArtifacts[${index}].fileId`);
+    const versionId = canonicalUuid(artifact.versionId, `sourceArtifacts[${index}].versionId`);
+    const rowPointer = String(artifact.rowPointer ?? "");
+    if (rowPointer !== "" && (!rowPointer.startsWith("/") || rowPointer.length > 1024)) {
+      throw new BenefitsError("INVALID_INPUT", "retained source rows use a bounded JSON Pointer selection");
+    }
+    const sourceFields = artifact.sourceFields === undefined ? undefined : Object.freeze({ ...artifact.sourceFields });
+    const pdfSelection = artifact.pdfSelection === undefined ? undefined : structuredClone(artifact.pdfSelection);
+    return { fileId, versionId, rowPointer, ...(sourceFields ? { sourceFields } : {}), ...(pdfSelection ? { pdfSelection } : {}) };
+  });
+  if (isAboveNativeMeasure && !sourceSelections.some(selection => selection.sourceFields?.sourcePaidDatePointer !== undefined || selection.pdfSelection?.fields.sourcePaidDate !== undefined)) {
+    throw new BenefitsError("INVALID_INPUT", "the selected retained source row must identify its source paid date field for a source-paid-above-native-measure obligation");
+  }
+  const inputValue = canonicalDecimal(query.value, 4);
+  const currency = String(query.currency ?? "").trim().toUpperCase();
+  const nativeCurrencyReview = query.nativeCurrencyBasis === undefined ? undefined : {
+    confirmed: query.nativeCurrencyBasis.confirmed, reason: String(query.nativeCurrencyBasis.reason ?? "").trim(),
+  };
+  if (nativeCurrencyReview && (nativeCurrencyReview.confirmed !== true || nativeCurrencyReview.reason.length < 8 || nativeCurrencyReview.reason.length > 2000)) {
+    throw new BenefitsError("INVALID_INPUT", "review and explain the native program and payroll currency basis");
+  }
+  if (inputValue === null || !/^[A-Z]{3}$/.test(currency)) {
+    throw new BenefitsError("INVALID_INPUT", "source amount and currency use exact supported values");
+  }
+  const expectedNativePreviewDigest = String(query.expectedNativePreviewDigest ?? "").trim().toLowerCase();
+  if (!/^[0-9a-f]{64}$/.test(expectedNativePreviewDigest)) {
+    throw new BenefitsError("INVALID_INPUT", "confirm the exact native preview digest before recording the source obligation");
+  }
+  return withOrgTransaction(orgId, async () => {
+    try {
+      await lockActorCommandAuthority(db, orgId, actorId, null, "hrm.benefits.manage");
+    } catch (error) {
+      if (!(error instanceof ScopeNotFoundError)) throw error;
+      const refusal = new BenefitsError("NOT_FOUND", "The benefit actor is unavailable in this organization's current authority; reload the program and retry.");
+      refusal.cause = error;
+      throw refusal;
+    }
+    const scope = await requireAggregateBenefitsManage(db, orgId, actorId);
+    await assertHrmEnabled(db, orgId);
+    const lockedProgram = requireOneRow((await db.execute<{ revision: number }>(sql`
+      select revision from hrm_benefit_programs
+       where org_id = ${orgId} and id = ${programId}
+       for update
+    `)).rows, "locking the benefit program");
+    const currentProgramRevision = Number(lockedProgram.revision);
+    await db.execute(sql`
+      select pg_advisory_xact_lock(hashtext(${"benefit_settle:" + programId + ":" + periodFrom + ":" + periodTo}))
+    `);
+    const sourceArtifacts: VerifiedRetainedSourceArtifact[] = [];
+    const parsedArtifacts: Awaited<ReturnType<typeof parseRetainedSourceArtifact>>[] = [];
+    let combinedSourceSize = 0;
+    for (const selection of sourceSelections) {
+      await requireNativeFileReadAuthority({ orgId, actorId, fileId: selection.fileId }, db);
+      const retained = (await db.execute<{
+        filename: string; contentType: string; contentHash: string | null; sizeBytes: number;
+        storageKind: string; bytes: Buffer | null; isInactive: boolean;
+      }>(sql`
+        select fi.name as filename, fv.content_type as "contentType",
+               fv.content_hash as "contentHash", fv.size_bytes as "sizeBytes",
+               fv.storage_kind as "storageKind", blob.bytes, fi.is_inactive as "isInactive"
+          from files fi
+          join file_versions fv on fv.file_id = fi.id
+          left join file_blobs blob on blob.version_id = fv.id
+         where fi.org_id = ${orgId} and fi.id = ${selection.fileId} and fv.id = ${selection.versionId}
+         for share of fi, fv
+      `)).rows[0];
+      if (!retained || retained.isInactive) {
+        throw new BenefitsError("REFUSED", "the retained Cabinet source file is unavailable or inactive");
+      }
+      refuseMaskedStorageKind(retained.storageKind);
+      const bytes = retained.storageKind === "s3"
+        ? await getS3Blob(selection.versionId)
+        : retained.storageKind === "db" ? retained.bytes : null;
+      if (!bytes) throw new BenefitsError("REFUSED", "the pinned Cabinet source version has no readable native bytes");
+      const contentHash = retained.contentHash?.toLowerCase() ?? "";
+      if (!/^[0-9a-f]{64}$/.test(contentHash) || sha256(bytes) !== contentHash || bytes.length !== Number(retained.sizeBytes)) {
+        throw new BenefitsError("REFUSED", "native Cabinet bytes do not match the pinned version hash and size");
+      }
+      combinedSourceSize += bytes.length;
+      if (bytes.length > 10_000_000 || combinedSourceSize > 10_000_000) {
+        throw new BenefitsError("REFUSED", "retained evidence files exceed the supported source snapshot size");
+      }
+      const parsed = await parseRetainedSourceArtifact(bytes, retained.contentType, selection);
+      parsedArtifacts.push(parsed);
+      sourceArtifacts.push({
+        ...selection,
+        filename: retained.filename,
+        contentType: String(retained.contentType).trim().toLowerCase(),
+        sha256: contentHash,
+        sizeBytes: bytes.length,
+        bytesBase64: bytes.toString("base64"),
+        rowSha256: parsed.rowSha256,
+        row: parsed.row,
+      });
+    }
+    const primary = sourceArtifacts[0]!;
+    const ctx = await loadSettlementContext(orgId, actorId, programId, scope, true, periodFrom, periodTo);
+    let currencyEvidence: Record<string, unknown> | undefined;
+    if (nativeCurrencyReview) {
+      const basis = (await db.execute<{ payerCurrency: string; profileId: string; scheduleId: string }>(sql`
+        select s.base_currency as "payerCurrency", p.id::text as "profileId", cal.id::text as "scheduleId"
+          from worker_employments w
+          join subsidiaries s on s.org_id=w.org_id and s.id=w.employer_subsidiary_id
+          join employee_payroll_profiles p on p.org_id=w.org_id and p.employment_id=w.id and p.employee_party_id=w.worker_party_id
+          join pay_schedules cal on cal.org_id=p.org_id and cal.id=p.pay_schedule_id
+         where w.org_id=${orgId} and w.id=${employmentId} and w.employer_subsidiary_id=${ctx.program.legalEntityId}
+           and p.is_active and cal.is_active and s.is_active and not s.is_elimination
+           and (cal.subsidiary_id is null or cal.subsidiary_id=s.id)
+         for share of w,s,p,cal
+      `)).rows;
+      if (basis.length !== 1 || basis[0]!.payerCurrency !== ctx.program.currency || currency !== ctx.program.currency || ctx.program.deliveryMethod !== "payroll") {
+        throw new BenefitsError("REFUSED", "native currency evidence requires one active payroll profile and matching program and legal-payer currency; review the actual configuration");
+      }
+      currencyEvidence = { kind: "reviewed-native-program-payroll-currency", actorId,
+        programId, reviewedProgramRevision: query.expectedProgramRevision, legalPayerId: ctx.program.legalEntityId,
+        employmentId, currency, profileId: basis[0]!.profileId, scheduleId: basis[0]!.scheduleId,
+        reason: nativeCurrencyReview.reason, documentCurrencyClaim: "denomination-retained-per-source-document" };
+    }
+    const claims = combineRetainedSourceClaims(parsedArtifacts, currencyEvidence ? currency : undefined);
+    const sourceRowRef = isUuid(claims.sourceRowRef) ? claims.sourceRowRef.toLowerCase() : claims.sourceRowRef;
+    const sourceValue = canonicalDecimal(claims.value, 4);
+    const retainedCurrency = claims.currency.toUpperCase();
+    const retainedFrom = requireCivilDate(claims.periodFrom, "retainedSource.periodFrom");
+    const retainedTo = requireCivilDate(claims.periodTo, "retainedSource.periodTo");
+    const retainedIssueDate = requireCivilDate(claims.sourceIssueDate, "retainedSource.sourceIssueDate");
+    const retainedPaidDate = claims.sourcePaidDate === undefined
+      ? null
+      : requireCivilDate(claims.sourcePaidDate, "retainedSource.sourcePaidDate");
+    const normalizedSourceRowRef = isUuid(query.sourceRowRef) ? query.sourceRowRef.toLowerCase() : String(query.sourceRowRef).trim();
+    if (sourceRowRef.length === 0 || sourceRowRef.length > 300 || sourceRowRef !== normalizedSourceRowRef ||
+        sourceValue === null || normalizeMoney(sourceValue) !== normalizeMoney(inputValue) || retainedCurrency !== currency ||
+        retainedFrom !== periodFrom || retainedTo !== periodTo || retainedIssueDate !== sourceIssueDate ||
+        (isAboveNativeMeasure && retainedPaidDate !== sourcePaidDate)) {
+      throw new BenefitsError("REFUSED", "source amount, currency, earning period, issue date, paid date, or row reference differs from the selected retained row");
+    }
+    const sourceKey = `source-first:${sha256(`${orgId}\n${programId}\n${sourceSystem}\n${sourceRowRef}`)}`;
+    // The candidate snapshot is built before every changed-state refusal so
+    // an exact retry can return its stored row ahead of revision, preview
+    // digest, overlap, and budget checks that moved after it was recorded.
+    const result = await measureAndCompute(orgId, actorId, ctx, periodFrom, periodTo, asOf, { allowNativeLossWithoutAward: true });
+    const previewQuery = { orgId, actorId, programId, periodFrom, periodTo, asOf };
+    const previewSnapshot = result.computation
+      ? buildSourceSnapshot(ctx, previewQuery, result, result.computation, result.excluded)
+      : buildNonpayableNativeMeasureSnapshot(ctx, previewQuery, result, result.nonpayableReason);
+    const previewDigest = sourceEvidenceNativePreviewDigest({ periodFrom, periodTo, asOf, nativeSnapshot: previewSnapshot });
+    const targetNativeRecipient = result.computation?.recipients.find((recipient) => recipient.employmentId === employmentId) ?? null;
+    const pmSnapshot = result.projectMarginSnapshot ?? null;
+    const pmAffectedProjects = pmSnapshot === null
+      ? []
+      : pmSnapshot.projects.filter((project) => project.shares.some((share) => share.employmentId === employmentId));
+    const pmTargetShareTotal = pmAffectedProjects.reduce(
+      (sum, project) => sum + project.shares
+        .filter((share) => share.employmentId === employmentId)
+        .reduce((projectSum, share) => projectSum + toUnits(share.value), 0n),
+      0n,
+    );
+    const pmTargetCarry = pmSnapshot?.carryForward?.[employmentId] ?? null;
+    const governingDecision = isAboveNativeMeasure
+      ? {
+          actorId,
+          attestedAt: requireOneRow((await db.execute<{ attestedAt: string }>(sql`
+            select now()::text as "attestedAt"
+          `)).rows, "stamping the governing decision").attestedAt,
+          basis: governingBasis,
+          reason: governingReason,
+        }
+      : null;
+    const nativeMeasureAnchor = {
+      classification: query.sourceEvidenceClass,
+      employmentId,
+      nativeRecipientState: targetNativeRecipient === null
+        ? "no-native-recipient-row"
+        : toUnits(targetNativeRecipient.value) > 0n
+          ? "native-recipient-payable"
+          : "native-recipient-computed-zero",
+      measuredValue: result.measured.value,
+      targetShareTotal: fromUnits(pmTargetShareTotal),
+      targetCarryForward: pmTargetCarry,
+      affectedProjectIds: pmAffectedProjects.map((project) => project.projectId),
+      explanation: result.computation === null
+        ? result.nonpayableReason
+        : "The locked native project-margin computation leaves this employment with a negative carry-forward and no payable native award.",
+    };
+    const missingAnchor = {
+      classification: query.sourceEvidenceClass,
+      employmentId,
+      nativeRecipientState: targetNativeRecipient === null
+        ? "no-native-recipient-row"
+        : toUnits(targetNativeRecipient.value) > 0n
+          ? "native-recipient-payable"
+          : "native-recipient-computed-zero",
+      explanation: result.computation === null
+        ? result.nonpayableReason
+        : targetNativeRecipient === null
+          ? "The locked native incentive computation contains no recipient row for this employment."
+          : `The locked native incentive computation produced ${targetNativeRecipient.value} ${currency} for this employment, which is not payable.`,
+    };
+    const sourceEvidence = {
+      kind: "source-evidenced-first-incentive-v1",
+      recordedBy: actorId,
+      requestKey,
+      expectedProgramRevision: query.expectedProgramRevision,
+      currentProgramRevision,
+      effectivePolicyRevision: ctx.program.revision,
+      effectivePolicyRevisionId: ctx.policyRevisionId,
+      effectivePolicy: {
+        program: buildBenefitAwardProgramSnapshot(ctx.program),
+        policyRevisionId: ctx.policyRevisionId,
+        sourceAccounts: ctx.sources.map((source) => ({ accountId: source.accountId, weightBps: source.weightBps })),
+        transactionPolicy: ctx.transactionPolicy === undefined ? { origin: "current-program-rules" } : ctx.transactionPolicy,
+      },
+      sourceSystem,
+      sourceRowRef,
+      sourceRow: primary.row,
+      sourceArtifacts,
+      ...(currencyEvidence ? { currencyEvidence } : {}),
+      ...(sourceSelections.some(selection => selection.pdfSelection?.fields.periodFrom || selection.pdfSelection?.fields.periodTo)
+        ? { sourceCoverageInterpretation: { kind: "retained-report-settlement-coverage", underlyingEarningDatesCertified: false } }
+        : {}),
+      sourceIssueDate,
+      periodFrom,
+      periodTo,
+      value: normalizeMoney(sourceValue),
+      currency,
+      sourceEvidenceClass: query.sourceEvidenceClass,
+      ...(isAboveNativeMeasure
+        ? {
+            sourcePaidDate,
+            nativeMeasureAnchor,
+            governingDecision,
+            nativePaymentClaim: "none-established-by-this-source-recording",
+          }
+        : { missingAnchor }),
+      mappingAttestation: {
+        actorId,
+        employmentId,
+        legalPayerId: ctx.program.legalEntityId,
+        basis: mappingBasis,
+        reason: mappingReason,
+      },
+      reason,
+      sourcePolicyEvidence: { status: "not-established-by-this-source-recording", sourceIssueDate },
+      nativeIdentity: { projectId: null, customerId: null, ticketId: null, timeEntryIds: null, correspondence: "unknown" },
+      nativePreview: {
+        periodFrom,
+        periodTo,
+        asOf,
+        currentProgramRevision,
+        effectivePolicyRevision: ctx.program.revision,
+        effectivePolicyRevisionId: ctx.policyRevisionId,
+        effectivePolicy: {
+          program: buildBenefitAwardProgramSnapshot(ctx.program),
+          policyRevisionId: ctx.policyRevisionId,
+          sourceAccounts: ctx.sources.map((source) => ({ accountId: source.accountId, weightBps: source.weightBps })),
+          transactionPolicy: ctx.transactionPolicy === undefined ? { origin: "current-program-rules" } : ctx.transactionPolicy,
+        },
+        digest: previewDigest,
+        snapshot: previewSnapshot,
+      },
+    };
+    const sourceSnapshot = {
+      kind: "source-evidenced-first-incentive-v1",
+      reason,
+      // Payroll delivery evidence validates the configured earning component
+      // from the authoritative award source snapshot. Keep the component
+      // selected by the effective program in this retained source record.
+      payComponentId: ctx.program.payComponentId,
+      sourceEvidence,
+    };
+    const ownRecipientEvidence = {
+      kind: "source-evidenced-first-obligation",
+      sourceIssueDate,
+      sourceEvidenceClass: query.sourceEvidenceClass,
+    };
+
+    // Exact retry precedes every changed-state refusal below — program
+    // revision, preview digest, duplicate, overlap, and budget alike. The
+    // source row identity, actor, request key, source bytes, native preview,
+    // and all award facts must remain identical; the stored row alone is
+    // returned.
+    const existing = (await db.execute<Record<string, unknown>>(sql`
+      select id, employment_id as "employmentId", period_from::text as "periodFrom",
+             period_to::text as "periodTo", value::text as value, currency,
+             program_snapshot as "programSnapshot", source_snapshot as "sourceSnapshot",
+             evidence, created_by as "createdBy"
+        from hrm_benefit_awards
+       where org_id = ${orgId} and program_id = ${programId} and source_key = ${sourceKey}
+       for update
+    `)).rows[0];
+    if (existing) {
+      const storedSnapshot = existing.sourceSnapshot as Record<string, unknown> | null;
+      const storedEvidence = (storedSnapshot?.sourceEvidence ?? {}) as Record<string, unknown>;
+      const storedProgramSnapshot = existing.programSnapshot as Record<string, unknown> | null;
+      const expectedProgramSnapshot = buildBenefitAwardProgramSnapshot(ctx.program);
+      const same = String(existing.createdBy).toLowerCase() === actorId &&
+        String(existing.employmentId).toLowerCase() === employmentId && String(existing.periodFrom).slice(0, 10) === periodFrom &&
+        String(existing.periodTo).slice(0, 10) === periodTo && normalizeMoney(String(existing.value)) === normalizeMoney(sourceValue) &&
+        String(existing.currency).trim() === currency && storedEvidence.requestKey === requestKey &&
+        snapshotsMatch(storedProgramSnapshot ?? {}, expectedProgramSnapshot) &&
+        snapshotsMatch(sourceSnapshotForReplay(storedSnapshot ?? {}), sourceSnapshotForReplay(sourceSnapshot)) &&
+        existing.evidence !== null && snapshotsMatch(existing.evidence as Record<string, unknown>, ownRecipientEvidence);
+      if (!same) throw new BenefitsError("REFUSED", "this retained source row already has a different first obligation; preserve it and use the linked adjusting-award lifecycle for a correction");
+      return getBenefitAward(db, orgId, actorId, String(existing.id));
+    }
+    if (currentProgramRevision !== query.expectedProgramRevision) {
+      throw new BenefitsError("REFUSED", `program revision changed from ${query.expectedProgramRevision} to ${currentProgramRevision} — refresh the native preview and review the retained source rows again`);
+    }
+    if (previewDigest !== expectedNativePreviewDigest) {
+      throw new BenefitsError("REFUSED", "native sources changed after review — refresh the preview at the same measurement cutoff and confirm again");
+    }
+    if (ctx.program.metric === "transactions") {
+      throw new BenefitsError("REFUSED", "transaction programs must use native transaction settlement and its group ceilings; source-evidenced first obligations do not bypass that measurement");
+    }
+    if (isAboveNativeMeasure && ctx.program.metric !== "project_margin") {
+      throw new BenefitsError("REFUSED", "source-paid-above-native-measure currently covers project-margin programs only — preserve the retained source evidence and route other negative-measure exceptions through governed review");
+    }
+    if (ctx.program.legalEntityId === null) {
+      throw new BenefitsError("REFUSED", "source-evidenced incentives require a native program legal payer");
+    }
+    const today = await businessTodayInTx(db, orgId);
+    if (periodTo >= today) throw new BenefitsError("REFUSED", "source-evidenced first obligations are recorded only for closed program periods");
+    const targetMembership = eligibleMembers(ctx.members, periodFrom, periodTo)
+      .find((member) => member.employmentId === employmentId);
+    if (!targetMembership) {
+      throw new BenefitsError("REFUSED", "the selected employment is not an eligible member of this program for the source period");
+    }
+    if (ctx.program.allocation !== "hours" && !partitionMembers(ctx.members, periodFrom, periodTo).covered
+      .some((member) => member.employmentId === employmentId)) {
+      throw new BenefitsError("REFUSED", "the selected employment does not cover the full source period under this program's membership policy");
+    }
+    const targetEmployment = (await db.execute<{
+      employerSubsidiaryId: string | null; serviceStart: string | null;
+    }>(sql`
+      select employer_subsidiary_id::text as "employerSubsidiaryId", service_start::text as "serviceStart"
+        from worker_employments
+       where org_id = ${orgId} and id = ${employmentId}
+       for share
+    `)).rows[0];
+    if (!targetEmployment || targetEmployment.employerSubsidiaryId !== ctx.program.legalEntityId) {
+      throw new BenefitsError("REFUSED", "the selected employment is not in this program's legal payer");
+    }
+    if (targetEmployment.serviceStart && String(targetEmployment.serviceStart).slice(0, 10) > periodTo) {
+      throw new BenefitsError("REFUSED", "the selected employment begins after the source period");
+    }
+    const activeCoverage = (await db.execute<{ covered: boolean }>(sql`
+      select coalesce(
+        daterange(${periodFrom}::date, ${periodTo}::date + 1, '[)') &&
+          range_agg(daterange(effective_from, effective_to, '[)')),
+        false
+      ) as covered
+        from worker_employment_versions
+       where org_id = ${orgId} and employment_id = ${employmentId}
+         and status = 'active' and recorded_until is null
+    `)).rows[0]?.covered === true;
+    if (!activeCoverage) {
+      throw new BenefitsError("REFUSED", "the selected employment has no active service during the source period");
+    }
+    if (currency !== ctx.program.currency || toUnits(sourceValue) <= 0n) {
+      throw new BenefitsError("REFUSED", "the issued source amount must be positive and use the program currency");
+    }
+    const sourceFraction = normalizeMoney(sourceValue).split(".")[1] ?? "";
+    if (/[^0]/.test(sourceFraction.slice(ctx.minorUnits))) {
+      throw new BenefitsError("REFUSED", `the issued source amount exceeds ${currency}'s configured payable precision`);
+    }
+    if (ctx.program.effectiveFrom > periodFrom || (ctx.program.effectiveTo !== null && ctx.program.effectiveTo < periodTo)) {
+      throw new BenefitsError("REFUSED", "the source period falls outside the program's effective window");
+    }
+    if (ctx.program.capAmount !== null && toUnits(sourceValue) > toUnits(ctx.program.capAmount)) {
+      throw new BenefitsError("REFUSED", "the source amount exceeds this program's per-award cap");
+    }
+    const reusedRequest = (await db.execute<{ id: string }>(sql`
+      select id from hrm_benefit_awards
+       where org_id = ${orgId} and program_id = ${programId}
+         and source_snapshot #>> '{sourceEvidence,requestKey}' = ${requestKey}
+       limit 1
+    `)).rows[0];
+    if (reusedRequest) throw new BenefitsError("REFUSED", "requestKey is already bound to another retained source row; review the source selection and use a new request key");
+
+    const overlap = (await db.execute<{ id: string }>(sql`
+      select id from hrm_benefit_awards
+       where org_id = ${orgId} and program_id = ${programId}
+         and status <> 'voided' and adjusts_award_id is null
+         and (${ctx.program.frequency === "project_complete"}
+           or (employment_id = ${employmentId}
+             and period_from <= ${periodTo}::date
+             and (period_to is null or period_to >= ${periodFrom}::date)))
+       limit 1
+    `)).rows[0];
+    if (overlap) {
+      throw new BenefitsError("REFUSED", ctx.program.frequency === "project_complete"
+        ? "this project completion already has a nonvoid original award — correct its history through a linked adjusting award"
+        : "this employment already has a nonvoid original award overlapping the source period — correct its history through the linked adjusting-award lifecycle");
+    }
+    if (ctx.program.budgetAmount !== null) {
+      const spent = (await db.execute<{ total: string | null }>(sql`
+        select sum(value)::text as total from hrm_benefit_awards
+         where org_id = ${orgId} and program_id = ${programId} and status <> 'voided'
+      `)).rows[0]?.total ?? null;
+      if ((spent === null ? 0n : toUnits(spent)) + toUnits(sourceValue) > toUnits(ctx.program.budgetAmount)) {
+        throw new BenefitsError("REFUSED", "the source amount would exceed the program's remaining budget");
+      }
+    }
+    // An exact source-key retry is handled above before this admission test:
+    // a changed native preview must refuse as changed history, while an exact
+    // retry returns its stored row even if an unrelated later calculation
+    // now makes this employment payable natively.
+    if (result.computation?.recipients.some((recipient) => recipient.employmentId === employmentId && toUnits(recipient.value) > 0n)) {
+      throw new BenefitsError("REFUSED", "native measurement already has a payable recipient for this employment — settle the native award instead of recording a source-evidenced first obligation");
+    }
+    if (isAboveNativeMeasure) {
+      if (pmSnapshot === null) {
+        throw new BenefitsError("REFUSED", "source-paid-above-native-measure requires the locked native project-margin measure for this period — refresh the native preview and review the retained source row again");
+      }
+      if (pmTargetCarry === null || toUnits(pmTargetCarry) >= 0n) {
+        throw new BenefitsError("REFUSED", "source-paid-above-native-measure requires a negative project-margin carry-forward for this employment in the locked native measure; a zero result, a threshold miss, or an absent carry is not a negative native measurement");
+      }
+      if (!pmAffectedProjects.length || pmTargetShareTotal >= 0n) {
+        throw new BenefitsError("REFUSED", "source-paid-above-native-measure requires this period's native project-margin measure to value this employment's project shares below zero — a carry inherited from an earlier period alone does not establish a negative measure for this period");
+      }
+      const sharedProject = pmAffectedProjects.find((project) => project.shares.length > 1);
+      if (sharedProject) {
+        throw new BenefitsError("REFUSED", `source-paid-above-native-measure cannot partially consume project ${sharedProject.projectId}, whose native shares belong to several recipients — the whole-project paid set cannot consume only this employment's share; preserve the retained source evidence and route this shared-project exception through governed review so every recipient's share is decided together`);
+      }
+    } else if (result.computation === null || toUnits(result.computation.totalAwarded) <= 0n) {
+      throw new BenefitsError("REFUSED", "missing-source-identity requires a positive native incentive pool for other recipients and no payable result for this employment; a loss or threshold miss is not a missing identity");
+    }
+    const admission = mintSourceEvidenceAdmission({
+      executor: pinnedTransactionExecutor() ?? db,
+      facts: {
+        orgId,
+        actorId,
+        programId,
+        programRevision: currentProgramRevision,
+        employmentId,
+        legalPayerId: ctx.program.legalEntityId,
+        periodFrom,
+        periodTo,
+        currency,
+        value: normalizeMoney(sourceValue),
+        sourceKey,
+        requestKey,
+        sourceEvidenceClass: query.sourceEvidenceClass,
+        sourcePaidDate,
+      },
+      snapshot: sourceSnapshot,
+    });
+    return recordSourceEvidencedFirstAward({
+      orgId,
+      actorId,
+      programId,
+      employmentId,
+      periodFrom,
+      periodTo,
+      value: normalizeMoney(sourceValue),
+      currency,
+      evidence: ownRecipientEvidence,
+      sourceKey,
+      sourceEvidenceSnapshot: admission.snapshot,
+      sourceEvidenceAdmission: admission.token,
+    });
+  });
 }
 
 /**
@@ -937,6 +1738,38 @@ export function buildSourceSnapshot(
   };
 }
 
+function buildNonpayableNativeMeasureSnapshot(
+  ctx: SettlementContext,
+  query: PreviewIncentiveSettlementQuery,
+  result: NonpayableLossIncentiveSources,
+  reason: string,
+): Record<string, unknown> {
+  return {
+    kind: "incentive-native-measure-without-award",
+    programRevision: ctx.program.revision,
+    programCode: ctx.program.code,
+    periodFrom: query.periodFrom,
+    periodTo: query.periodTo,
+    asOf: query.asOf ?? null,
+    periodBasis: ctx.basis,
+    fiscalCalendarId: ctx.fiscalCalendarId,
+    metric: result.measured.metric,
+    measured: result.measured,
+    measuredSource: result.projectMarginSnapshot ?? result.transactionSnapshot ?? result.moneySnapshot ?? result.hoursSnapshot,
+    legalEntityId: ctx.program.legalEntityId,
+    memberships: ctx.members.map((member) => ({
+      employmentId: member.employmentId,
+      effectiveFrom: member.effectiveFrom,
+      effectiveTo: member.effectiveTo,
+      weight: member.weight,
+      role: member.role,
+      excluded: member.excluded,
+    })).sort((left, right) => left.employmentId < right.employmentId ? -1 : 1),
+    exclusions: [...result.excluded].sort(),
+    nonpayableReason: reason,
+  };
+}
+
 /**
  * Frozen-facts equality: the canonical fields that reproduce the measure.
  * Object key order is ignored; every frozen fact, including attribution
@@ -1052,6 +1885,11 @@ export async function createAdjustingAward(query: {
   readonly correctionId: string;
   readonly value: string;
   readonly reason: string;
+  /** Native source row for a settled reissue or correction. */
+  readonly sourceReference?: string;
+  /** Override the original period only when a source row carries a different paid period. */
+  readonly periodFrom?: string;
+  readonly periodTo?: string;
 }): Promise<BenefitAward> {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
@@ -1060,6 +1898,25 @@ export async function createAdjustingAward(query: {
   const reason = typeof query.reason === "string" && query.reason.trim().length > 0 ? query.reason.trim() : null;
   if (!reason) {
     throw new BenefitsError("INVALID_INPUT", "an adjusting award names its reason — the reason is the correction's evidence");
+  }
+  const sourceReference = query.sourceReference === undefined
+    ? undefined
+    : typeof query.sourceReference === "string" && query.sourceReference.trim().length > 0 && query.sourceReference.trim().length <= 500
+      ? query.sourceReference.trim()
+      : null;
+  if (sourceReference === null) {
+    throw new BenefitsError("INVALID_INPUT", "an adjustment source reference is empty or longer than 500 characters — use the issuing system's paid-row reference");
+  }
+  const periodFrom = query.periodFrom === undefined ? undefined : requireCivilDate(query.periodFrom, "periodFrom");
+  const periodTo = query.periodTo === undefined ? undefined : requireCivilDate(query.periodTo, "periodTo");
+  if ((periodFrom === undefined) !== (periodTo === undefined)) {
+    throw new BenefitsError("INVALID_INPUT", "an adjustment period override supplies both start and end dates");
+  }
+  if (periodFrom !== undefined && periodTo !== undefined && periodTo < periodFrom) {
+    throw new BenefitsError("INVALID_INPUT", "an adjustment period ends before it starts — correct the source row's paid period");
+  }
+  if (periodFrom !== undefined && sourceReference === undefined) {
+    throw new BenefitsError("INVALID_INPUT", "a period override needs its source row reference — bind the dated correction to its original paid row");
   }
   return withOrgTransaction(orgId, async () => {
     await requireAggregateBenefitsManage(db, orgId, actorId);
@@ -1105,38 +1962,44 @@ export async function createAdjustingAward(query: {
     `)).rows[0];
     if (prior) {
       const recorded = await getBenefitAward(db, orgId, actorId, String(prior.id));
-      if (recorded.value !== delta || recorded.adjustsAwardId !== original.id || recorded.evidence?.reason !== reason) {
+      if (recorded.value !== delta || recorded.adjustsAwardId !== original.id || recorded.evidence?.reason !== reason ||
+        recorded.evidence?.sourceReference !== sourceReference || recorded.periodFrom !== (periodFrom ?? original.periodFrom) ||
+        recorded.periodTo !== (periodTo ?? original.periodTo)) {
         throw new BenefitsError("REFUSED", "this correction request was already recorded with different details — retain its original evidence and use a new correction request for a separate change");
       }
       return recorded;
     }
-    return recordSettledAward({
+    const adjustment = {
       orgId,
       actorId,
       programId: original.programId,
       employmentId: original.employmentId,
-      periodFrom: original.periodFrom,
-      periodTo: original.periodTo,
+      periodFrom: periodFrom ?? original.periodFrom,
+      periodTo: periodTo ?? original.periodTo,
       value: delta,
       currency: original.currency,
       evidence: {
         kind: "incentive-adjustment",
-        direction: delta.startsWith("-") ? "recovery" : "topup",
+        direction: delta.startsWith("-") ? "recovery" : sourceReference ? "reissue" : "topup",
         supersedes: original.id,
         supersededValue: original.value,
+        ...(sourceReference ? { sourceReference } : {}),
         computation: {
           share: "adjustment",
           grossValue: delta,
           value: delta,
           capped: false,
-          explanation: `${delta.startsWith("-") ? "overpayment recovery" : "underpayment top-up"} of ${delta} against award ${original.id}: ${reason}`,
+          explanation: `${delta.startsWith("-") ? "overpayment recovery" : sourceReference ? "source-bound reissue" : "underpayment top-up"} of ${delta} against award ${original.id}: ${reason}`,
         },
         reason,
       },
       sourceKey,
       adjustsAwardId: original.id,
       settlementMeasurement: null,
-    });
+    };
+    return periodFrom !== undefined && periodTo !== undefined
+      ? recordSourceBoundAdjustingAward(adjustment, { sourceReference: sourceReference!, periodFrom, periodTo })
+      : recordSettledAward(adjustment);
   });
 }
 

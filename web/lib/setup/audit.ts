@@ -67,8 +67,9 @@ export async function auditSetupChange(
   },
   runner: Pick<typeof db, 'execute'> = db,
 ): Promise<void> {
-  await runner.execute(sql`
+  const written = await runner.execute(sql`
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id, request_id)
     values (${args.orgId}, ${args.table}, ${args.rowId}, ${args.action},
-            ${JSON.stringify(args.changes)}, ${args.actorId}, ${args.requestId ?? null})`)
+            ${JSON.stringify(args.changes)}, ${args.actorId}, ${args.requestId ?? null}) returning id`)
+  if (written.rows.length !== 1) throw new Error('The configuration audit event was not recorded')
 }

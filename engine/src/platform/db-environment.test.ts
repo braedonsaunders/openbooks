@@ -73,3 +73,13 @@ test('only an explicit development runtime reads the local file', () => {
   assert.equal(reads, 1)
   assert.equal(resolved.OPENBOOKS_DB_URL, 'dev-db')
 })
+
+test('local dotenv parsing preserves quoted URLs and literal secret punctuation without leaking to tests', () => {
+  const source = 'export OPENBOOKS_DB_URL="postgres://user:test@127.0.0.1:55447/openbooks"\n'
+    + "OPENBOOKS_DATA_KEY='literal#value=with spaces'\nORG_COUNTRY=CA # installation comment\n";
+  const resolved = resolveDatabaseEnvironment({ NODE_ENV: 'development' }, () => source);
+  assert.equal(resolved.OPENBOOKS_DB_URL, 'postgres://user:test@127.0.0.1:55447/openbooks');
+  assert.equal(resolved.OPENBOOKS_DATA_KEY, 'literal#value=with spaces');
+  assert.equal(resolved.ORG_COUNTRY, 'CA');
+  assert.equal(resolveDatabaseEnvironment({ NODE_ENV: 'development', OPENBOOKS_DB_URL: '' }, () => source).OPENBOOKS_DB_URL, '');
+});

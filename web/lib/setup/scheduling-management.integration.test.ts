@@ -46,7 +46,11 @@ test('module board deletion archives the native board, retains source evidence a
     const before = await withOrgTransaction(org.orgId, () => db.execute(sql`select * from schedule_source_records where id=${created.id}`))
     const refused = await withOrgTransaction(other.orgId, () => deleteSetupRecord({ ...actor, orgId: other.orgId }, 'schedule-boards', boardId))
     assert.equal(refused.status, 404)
-    const result = await withOrgTransaction(org.orgId, () => deleteSetupRecord(actor, 'schedule-boards', boardId))
+    for (const auditReason of [null, 12, {}, '', '  ', 'x'.repeat(2001)]) {
+      const refusedReason = await withOrgTransaction(org.orgId, () => deleteSetupRecord(actor, 'schedule-boards', boardId, { auditReason: auditReason as never }))
+      assert.equal(refusedReason.status, 400)
+    }
+    const result = await withOrgTransaction(org.orgId, () => deleteSetupRecord(actor, 'schedule-boards', boardId, { auditReason: '  Retire the superseded board  ' }))
     assert.equal(result.status, 200, JSON.stringify(result.body))
     const readback = await withOrgTransaction(org.orgId, async () => ({
       board: (await db.execute<{ is_active: boolean }>(sql`select is_active from schedule_boards where id=${boardId}`)).rows[0],
@@ -59,6 +63,7 @@ test('module board deletion archives the native board, retains source evidence a
     assert.equal(readback.audits[0]!.actor_id, actorId)
     assert.equal(readback.audits[0]!.changes.before.is_active, true)
     assert.equal(readback.audits[0]!.changes.after.is_active, false)
+    assert.equal((readback.audits[0]!.changes as { reason?: string }).reason, 'Retire the superseded board')
     assert.equal((await listBoards(nativeActor)).some(row => row.id === boardId), false)
     assert.equal((await listBoards(nativeActor, { includeArchived: true })).some(row => row.id === boardId), true)
     assert.equal((await withOrgTransaction(org.orgId, () => deleteSetupRecord(actor, 'schedule-boards', boardId))).status, 200)

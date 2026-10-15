@@ -2,6 +2,7 @@ import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db, type SqlExecutor } from '@openbooks/engine/platform/db'
 import { subsidiaryVisibleFilter } from './subsidiaries'
+import { isNaturalPersonPartyKind, EmployeePartyKindError } from '@openbooks/engine/organization/party-kinds'
 
 /**
  * Party kinds that name a role row. The party lists, the drawer tabs, and
@@ -41,6 +42,12 @@ export async function ensurePartyRoleRow(
 ): Promise<void> {
   const role = partyRoleKindOf(args.kind)
   if (!role) return
+  if (role === 'employee') {
+    const party = (await executor.execute<{ kind: string }>(sql`
+      select kind from parties where org_id = ${args.orgId} and id = ${args.partyId} for share
+    `)).rows[0]
+    if (!party || !isNaturalPersonPartyKind(party.kind)) throw new EmployeePartyKindError()
+  }
   const table = PARTY_ROLE_TABLES[role]
   const active = args.isActive !== false
   await executor.execute(sql`

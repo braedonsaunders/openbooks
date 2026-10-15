@@ -40,13 +40,14 @@ export interface FlowBuilderData {
   users: BuilderProps['users']
   roles: BuilderProps['roles']
   permissions: BuilderProps['permissions']
+  subsidiaries: BuilderProps['subsidiaries']
 }
 
 export async function loadFlowBuilder(id: string): Promise<FlowBuilderData> {
   const authz = await requirePermission('flows.manage')
   if (!isUuid(id)) notFound()
 
-  const [flowRes, runsRes, usersRes, rolesRes] = await Promise.all([
+  const [flowRes, runsRes, usersRes, rolesRes, subsidiariesRes] = await Promise.all([
     db.execute(sql`
       select id, name, enabled, subject_kind, graph, ${documentRevisionSql(sql`updated_at`)} as updated_at
         from flows where id = ${id} and org_id = ${authz.user.orgId}`),
@@ -61,6 +62,10 @@ export async function loadFlowBuilder(id: string): Promise<FlowBuilderData> {
     db.execute(sql`
       select key, name from app_roles
        where org_id = ${authz.user.orgId}
+       order by name`),
+    db.execute(sql`
+      select id, name from subsidiaries
+       where org_id = ${authz.user.orgId} and is_active and not is_elimination
        order by name`),
   ])
   const flow = flowRes.rows[0]
@@ -89,6 +94,10 @@ export async function loadFlowBuilder(id: string): Promise<FlowBuilderData> {
       name: String(role.name),
     })),
     permissions: [...PERMISSION_CATALOGUE],
+    subsidiaries: subsidiariesRes.rows.map((subsidiary) => ({
+      id: String(subsidiary.id),
+      name: String(subsidiary.name),
+    })),
   }
 }
 
@@ -107,6 +116,7 @@ export function flowBuilderSpec(data: FlowBuilderData): PageSpec {
           users: data.users,
           roles: data.roles,
           permissions: data.permissions,
+          subsidiaries: data.subsidiaries,
         }),
       ]),
     ],

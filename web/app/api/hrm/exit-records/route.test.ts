@@ -168,7 +168,7 @@ test("recording validates the body through the real parser before the service ru
 test("record routes refuse hostile payloads at the real boundary", async () => {
   reset();
   for (const body of ["{not json", "null"]) {
-    const refused = await collectionRoute!.POST(
+    const refused: Response = await collectionRoute!.POST(
       new Request("http://openbooks.test/api/hrm/exit-records", {
         method: "POST",
         headers: { "content-type": "application/json" },

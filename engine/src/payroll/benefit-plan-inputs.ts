@@ -1,3 +1,4 @@
+import { requireComponentStatutoryTreatment, resolveComponentStatutoryTreatments } from './component-statutory-treatment.ts';
 import { applyBasisCaps } from './limits.ts';
 import { componentYearToDate } from './opening-balances.ts';
 import { resolveWorkSchedule, scheduledHoursBetween } from './work-schedules.ts';
@@ -130,7 +131,7 @@ export async function appendRecurringBenefitLines(tx: Executor, args: {
   orgId: string; actorId: string; documentId: string; employmentId: string; employeePartyId: string;
   subsidiaryId: string | null; currency: string; country: string; periodStart: string; periodEnd: string;
   stage: "vacationable_earnings" | "remaining"; regularCashLines: readonly Line[];
-  source: RecurringBenefitSource; basePayComponentId:string;
+  source: RecurringBenefitSource; basePayComponentId:string; workerCompGroupId: string | null;
   replacedComponentIds?: ReadonlySet<string>;
   periodsPerYear: number; hourlyWage: string | null; payBasis: string; payDate: string; taxYear: number; runType: string; oneOffRun: boolean; simulate: boolean; lines: Line[]; entitlementMovements: EntitlementMovement[];
 }): Promise<void> {
@@ -141,6 +142,15 @@ export async function appendRecurringBenefitLines(tx: Executor, args: {
     if (!rule || args.replacedComponentIds?.has(rule.payComponentId) || args.runType !== 'regular' && rule.runApplicability === 'regular_only') return [];
     return [{ planId: enrollment.planId, rule, enrollment, term }];
   })), args.periodStart, args.periodEnd);
+  const earningComponentIds = source.enrollments.flatMap(enrollment => enrollment.terms.flatMap(term => {
+    const rule = enrollment.rules.find(candidate => candidate.id === term.ruleId);
+    if (!rule || !['taxable_non_cash', 'cash_earning'].includes(rule.kind)
+      || args.replacedComponentIds?.has(rule.payComponentId)
+      || args.runType !== 'regular' && rule.runApplicability === 'regular_only'
+      || benefitCoverageWindow({ rule, enrollment, term, periodStart: args.periodStart, periodEnd: args.periodEnd }) === null) return [];
+    return [rule.payComponentId];
+  }));
+  const treatments = await resolveComponentStatutoryTreatments(tx, args.orgId, args.payDate, earningComponentIds, args.workerCompGroupId);
   const originalLines = args.lines.slice();
   const nativePlans = source.enrollments.some(e => e.rules.some(r => r.arrearsPlanId !== null)) ? await entitlementPlans(args.orgId, tx) : [];
   const recoveryOwners=new Set<string>();
@@ -173,7 +183,8 @@ export async function appendRecurringBenefitLines(tx: Executor, args: {
           rule.kind === 'cash_earning' && component.payment_kind !== 'cash') {
         throw new PayrollError(`Benefit rule ${rule.ruleKey} requires an active ${requiredKind}${rule.kind === 'taxable_non_cash' ? ' with taxable non-cash treatment' : rule.kind === 'cash_earning' ? ' with cash treatment' : ''} component for ${args.country} — correct the linked payroll component`);
       }
-      const vacationableEarning = requiredKind === 'earning' && component.vacationable === true;
+      const treatment = requiredKind === 'earning' ? requireComponentStatutoryTreatment(rule.payComponentId, treatments, args.payDate) : null;
+      const vacationableEarning = treatment?.vacationable === true;
       if (vacationableEarning && rule.basis === 'percent_of_eligible_pay' && rule.payBasis === 'all_cash_earnings') {
         throw new PayrollError(`Benefit rule ${rule.ruleKey} creates a circular vacation-pay basis — choose regular cash earnings, which excludes derived vacation pay, or use an independent hourly or fixed-period premium`);
       }
@@ -290,7 +301,7 @@ export async function appendRecurringBenefitLines(tx: Executor, args: {
         hours: rule.basis === 'per_hour' && rule.kind !== 'cash_earning' ? basis.hours : undefined,
         earnedFrom: from, earnedTo: to, sequence: Number(component.sequence),
         taxable: component.taxable as boolean, pensionable: component.pensionable as boolean, insurable: component.insurable as boolean,
-        vacationable: component.vacationable as boolean, nonPeriodic: component.non_periodic as boolean,
+        vacationable: treatment?.vacationable, nonPeriodic: component.non_periodic as boolean,
         taxTreatment: component.tax_treatment as string,
         supplementalWageCategory: component.supplemental_wage_category as Line['supplementalWageCategory'],
         statutoryReportingCategory: component.statutory_reporting_category as string | null,
@@ -303,7 +314,7 @@ export async function appendRecurringBenefitLines(tx: Executor, args: {
         const inserted = (await tx.execute<{ id: string }>(sql`insert into pay_run_benefit_allocations
           (org_id,pay_run_document_id,employment_id,employee_party_id,enrollment_id,rule_id,term_id,period_from,period_to,amount,currency,source_snapshot,created_by,updated_by)
           values (${args.orgId},${args.documentId},${args.employmentId},${args.employeePartyId},${enrollment.id},${rule.id},${term.id},${from}::date,${to}::date,
-          ${result.amount},${args.currency},${JSON.stringify({ rule, term, coverage, basis, result, coverageAmount, insuredCoverageAmount, insuredPremiums, component, service: source.service?.sourceSnapshot ?? null })}::jsonb,${args.actorId},${args.actorId}) returning id`)).rows;
+          ${result.amount},${args.currency},${JSON.stringify({ rule, term, coverage, basis, result, coverageAmount, insuredCoverageAmount, insuredPremiums, component, statutoryTreatment: treatment, service: source.service?.sourceSnapshot ?? null })}::jsonb,${args.actorId},${args.actorId}) returning id`)).rows;
         if (inserted.length !== 1) throw new PayrollError(`Benefit rule ${rule.ruleKey} was not recorded — retry calculation; a payable contribution must carry its allocation evidence`);
         if (benefitLine) benefitLine.benefitAllocationId = inserted[0]!.id;
       }

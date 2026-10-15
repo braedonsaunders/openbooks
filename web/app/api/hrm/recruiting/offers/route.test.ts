@@ -184,7 +184,7 @@ test("an unauthenticated caller never reaches the service", async () => {
   reset();
   routeState.gate = { status: 401 };
   const url = "http://openbooks.test/api/hrm/recruiting/offers";
-  const response = await collectionRoute!.POST(jsonRequest(url, "POST", {}));
+  const response: Response = await collectionRoute!.POST(jsonRequest(url, "POST", {}));
   assert.equal(response.status, 401);
   assert.deepEqual(routeState.calls, []);
 });
@@ -196,7 +196,7 @@ test("draft validates the terms through the real parser before the service runs"
   assert.equal((await collectionRoute!.POST(jsonRequest(url, "POST", { ...validTerms, compensationBasis: "equity" }))).status, 400);
   assert.equal((await collectionRoute!.POST(jsonRequest(url, "POST", { ...validTerms, compensationCurrency: "US" }))).status, 400);
   assert.deepEqual(routeState.calls, []);
-  const response = await collectionRoute!.POST(jsonRequest(url, "POST", validTerms));
+  const response: Response = await collectionRoute!.POST(jsonRequest(url, "POST", validTerms));
   assert.equal(response.status, 201);
   assert.deepEqual(await response.json(), { offer: { id: "offer-1" } });
 });
@@ -218,7 +218,7 @@ test("item routes validate ids and the action union through the real parser", as
     [{ action: "withdraw", reason: "terms revised" }, "withdraw"],
   ] as const) {
     routeState.calls = [] as RouteState["calls"];
-    const response = await itemRoute!.PATCH(jsonRequest("http://openbooks.test/x", "PATCH", body), params);
+    const response: Response = await itemRoute!.PATCH(jsonRequest("http://openbooks.test/x", "PATCH", body), params);
     assert.equal(response.status, 200);
     assert.equal(routeState.calls[0]!.fn, fn);
   }
@@ -226,7 +226,7 @@ test("item routes validate ids and the action union through the real parser", as
 
 test("accepting is the hire: the route forwards to the hire transaction", async () => {
   reset();
-  const response = await itemRoute!.PATCH(
+  const response: Response = await itemRoute!.PATCH(
     jsonRequest("http://openbooks.test/x", "PATCH", { action: "accept" }),
     { params: Promise.resolve({ id: OFFER_ID }) },
   );
@@ -239,7 +239,7 @@ test("a service refusal delegates to the shared mapping with the error intact", 
   reset();
   const refusal = new Error("a live offer already stands on this application");
   routeState.serviceThrow = refusal;
-  const response = await collectionRoute!.POST(
+  const response: Response = await collectionRoute!.POST(
     jsonRequest("http://openbooks.test/api/hrm/recruiting/offers", "POST", validTerms),
   );
   assert.equal(response.status, 409);

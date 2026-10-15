@@ -20,8 +20,8 @@ export interface StubEarningLine {
   componentId: string | null;
   amount: string;
   hours?: string | null;
-  /** Earnings excluded from bankable pay (a vacation payout is not vacationable). */
-  bankable?: boolean;
+  /** Vacation-base inclusion resolved from the earning's dated component treatment. */
+  bankable: boolean;
 }
 
 export interface StubMovementPlan {
@@ -58,11 +58,16 @@ export async function planMovementsForStub(
     plans?: readonly EntitlementPlan[];
     /** planId → resolved effective employee rate for the plan. */
     employeeAccrualValues?: ReadonlyMap<string, string>;
+    /** Audited exact currency accruals supplied on a cheque for a vacation plan. */
+    declaredAccrualValues?: ReadonlyMap<string, { amount: string; note: string }>;
   },
 ): Promise<StubMovementPlan> {
   const { orgId, employeePartyId, movementDate, payRunDocumentId } = input;
   const plans = input.plans ?? (await entitlementPlans(orgId, executor));
   if (plans.length === 0) return { movements: [], warnings: [] };
+  if (input.earnings.some(line => line.componentId === null || typeof line.bankable !== 'boolean')) {
+    throw new PayrollError('Entitlement earnings need resolved dated vacation-base inclusion; configure component statutory treatments in Payroll Setup and recalculate the editable run.');
+  }
 
   const tiers = await resolveServiceTier(executor, orgId, employeePartyId, input.policyDate ?? movementDate, input.employmentId);
   // One scope lookup serves every plan's limit resolution for this employee.
@@ -74,7 +79,7 @@ export async function planMovementsForStub(
     // different bank retain their declared eligibility for this plan.
     const eligible = input.earnings.filter((line) =>
       plan.payoutComponentId === null || line.componentId !== plan.payoutComponentId);
-    const earnings = sum(eligible.filter((line) => line.bankable !== false).map((line) => line.amount));
+    const earnings = sum(eligible.filter((line) => line.bankable === true).map((line) => line.amount));
     const hours = sum(eligible.filter((line) => line.hours != null).map((line) => String(line.hours)));
     const openingBalance = await planBalanceExcludingRun(
       executor, orgId, plan.id, employeePartyId, movementDate, payRunDocumentId,
@@ -92,6 +97,8 @@ export async function planMovementsForStub(
       limit,
       serviceAccrualValue: tiers.planAccrualValues.get(plan.id) ?? null,
       employeeAccrualValue: input.employeeAccrualValues?.get(plan.id) ?? null,
+      declaredAccrualAmount: input.declaredAccrualValues?.get(plan.id)?.amount ?? null,
+      declaredAccrualNote: input.declaredAccrualValues?.get(plan.id)?.note ?? null,
     });
     movements.push(...result.movements);
     warnings.push(...result.warnings);

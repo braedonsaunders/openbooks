@@ -1,3 +1,4 @@
+import { payScheduleOwnerSql } from './schedule-owner.ts';
 import { clearCalculatedHolidayAllocations } from "./holiday-obligation-source.ts";
 /**
  * Pay-run period lifecycle: create, discard, and subsidiary re-scoping.
@@ -7,7 +8,8 @@ import { clearCalculatedHolidayAllocations } from "./holiday-obligation-source.t
  */
 import { payrollSubsidiaryInScope, type PayrollSubsidiaryScope } from "./scope.ts";
 import { sql } from "drizzle-orm";
-import { db } from "../platform/db.ts";
+import { db, withOrgTransaction } from "../platform/db.ts";
+import { lockActorCommandAuthority } from "../organization/actor-command-authority.ts";
 import { PayrollError } from "./error.ts";
 import {
   captureTransactionAuditSnapshot,
@@ -109,15 +111,9 @@ export async function createPayRun(input: {
     // wrong for any jurisdiction whose statutory year is not the calendar one,
     // and silently so: every YTD accumulator and every year-end slip keys on
     // `tax_year`.
-    const sub = (await tx.execute<{ id: string; name: string; country: string | null; currency_code: string | null }>(schedule.subsidiary_id
-      ? sql`
-        select s.id, s.name, s.country, s.base_currency as currency_code from subsidiaries s
-         where s.org_id = ${orgId} and s.id = ${schedule.subsidiary_id} and s.is_active`
-      : sql`
-        select s.id, s.name, s.country, s.base_currency as currency_code from subsidiaries s
-         where s.org_id = ${orgId} and s.parent_id is null and s.is_active
-         order by s.created_at limit 1
-    `));
+    const sub = await tx.execute<{ id: string; name: string; country: string | null; currency_code: string | null }>(
+      payScheduleOwnerSql(orgId, sql`${schedule.subsidiary_id}`),
+    );
     const subsidiary = sub.rows[0];
     if (!subsidiary) {
       throw new PayrollError(schedule.subsidiary_id
@@ -443,11 +439,14 @@ export async function attributePayRunEntity(input: {
 
 export async function discardPayRun(input: {
   orgId: string; documentId: string; actorId: string;
+  reason?: string;
   /** Caller role scope; null/undefined is unrestricted. */
   allowedSubsidiaryIds?: PayrollSubsidiaryScope;
 }): Promise<{ documentNumber: string }> {
   const { orgId, documentId, actorId } = input;
-  return await db.transaction(async (tx) => {
+  const reason = input.reason === undefined ? undefined : typeof input.reason === "string" ? input.reason.trim() : "";
+  if (reason !== undefined && (!reason || reason.length > 2000)) throw new PayrollError("Provide a discard reason of 1–2000 characters for the audit trail");
+  return await withOrgTransaction(orgId, () => db.transaction(async (tx) => {
     if (!(await lockAndCheckOrgFeature(tx, orgId, "payroll"))) throw new PayrollError("Payroll feature is disabled");
     const runRows = (await tx.execute<{
       run_status: string; paid_at: string | null; paid_entry_id: string | null;
@@ -468,6 +467,13 @@ export async function discardPayRun(input: {
     `));
     const run = runRows.rows[0];
     if (!run) throw new PayrollError("pay run not found");
+    try {
+      const liveScope = await lockActorCommandAuthority(tx, orgId, actorId, run.doc_subsidiary_id, "payroll.run");
+      if (!payrollSubsidiaryInScope(liveScope, run.doc_subsidiary_id)) throw new ScopeNotFoundError();
+    } catch (error) {
+      if (error instanceof ScopeNotFoundError) throw new PayrollError("pay run not found");
+      throw error;
+    }
     if (!payrollSubsidiaryInScope(input.allowedSubsidiaryIds, run.doc_subsidiary_id)) {
       throw new PayrollError("pay run not found");
     }
@@ -508,14 +514,16 @@ export async function discardPayRun(input: {
       delete from entitlement_ledger where org_id = ${orgId} and pay_run_document_id = ${documentId}`);
     await tx.execute(sql`
       delete from pay_run_bank_files where org_id = ${orgId} and pay_run_document_id = ${documentId}`);
-    await tx.execute(sql`delete from documents where org_id = ${orgId} and id = ${documentId}`);
-    await tx.execute(sql`
+    const deleted = await tx.execute(sql`delete from documents where org_id = ${orgId} and id = ${documentId} returning id`);
+    if (deleted.rows.length !== 1) throw new PayrollError("The draft pay run was not discarded; reload it before retrying");
+    const audited = await tx.execute(sql`
       insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
       values (${orgId}, 'documents', ${documentId}, 'delete',
-              ${JSON.stringify({ operation: "discard_pay_run", documentNumber: number })}::jsonb,
-              ${actorId})`);
+              ${JSON.stringify({ operation: "discard_pay_run", documentNumber: number, ...(reason === undefined ? {} : { reason }) })}::jsonb,
+              ${actorId}) returning id`);
+    if (audited.rows.length !== 1) throw new PayrollError("The draft pay run discard audit was not recorded");
     return { documentNumber: number };
-  });
+  }));
 }
 
 /**

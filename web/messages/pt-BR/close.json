@@ -1076,5 +1076,30 @@
     },
     "by": "{name} em {at}",
     "system": "Sistema"
+  },
+  "revaluationEvidence": {
+      "title": "Taxas de fechamento registradas",
+      "reload": "Recarregar",
+      "loading": "Carregando…",
+      "loadFailed": "Não foi possível carregar as posições em moeda estrangeira.",
+      "empty": "Nenhuma posição aberta em moeda estrangeira para esta seleção.",
+      "position": "{foreign} · Valor contábil {carrying} · Data da taxa {date}",
+      "recordedRate": "Registrada: {rate} (versão {version})",
+      "organizationRate": "Taxa da organização: {rate}",
+      "rateMissing": "Sem taxa",
+      "recordRate": "Registrar taxa",
+      "recordSuccessor": "Registrar taxa sucessora",
+      "drawerTitle": "Registrar taxa de fechamento",
+      "cancel": "Cancelar",
+      "legalEntity": "Entidade legal",
+      "account": "Conta",
+      "conversion": "Conversão",
+      "rateDate": "Data da taxa",
+      "currentQuote": "Taxa atual: {rate} (versão {version}) — Fonte: {source}. Uma taxa sucessora a substitui sem alterá-la.",
+      "rate": "Taxa de câmbio",
+      "source": "Fonte",
+      "reason": "Motivo",
+      "recorded": "Taxa de fechamento registrada.",
+      "recordFailed": "Não foi possível registrar a taxa de fechamento."
   }
 }

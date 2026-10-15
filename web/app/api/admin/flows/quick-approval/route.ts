@@ -8,6 +8,7 @@ import {
   lintFlowGraphForSubject,
   listFlowSubjectProfiles,
   quickApprovalAmountField,
+  validateFlowSubjectScopeRefs,
 } from '@openbooks/engine/flows/module'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 import { activeUserIds, insertQuickApprovalFlow, readQuickApprovalSetup } from '../../../../../lib/flows/quick-approval-store'
@@ -39,6 +40,8 @@ const requestBodySchema = z.object({
   threshold: z.number().finite().min(0).max(1_000_000_000_000).optional(),
   approver: approverSchema,
   preventSelfApproval: z.boolean().optional(),
+  /** Legal entities the approval applies to; omitted applies organization-wide. */
+  subsidiaryIds: z.array(z.string().uuid()).min(1).max(100).optional(),
 });
 
 async function legacyGET(req: Request) {
@@ -54,6 +57,10 @@ async function legacyGET(req: Request) {
   }
   const setup = await readQuickApprovalSetup(gate.user.orgId, subjectKind)
   const flow = setup.flow
+  const flowGraph = (flow?.graph ?? null) as { subjectScope?: { subsidiaryIds?: unknown } } | null
+  const flowSubsidiaryIds = Array.isArray(flowGraph?.subjectScope?.subsidiaryIds)
+    ? flowGraph.subjectScope.subsidiaryIds.map(String)
+    : []
   return NextResponse.json({
     flow: flow
       ? {
@@ -61,8 +68,13 @@ async function legacyGET(req: Request) {
           name: String(flow.name),
           enabled: Boolean(flow.enabled),
           updatedAt: String(flow.updated_at),
+          subsidiaryIds: flowSubsidiaryIds,
         }
       : null,
+    subsidiaries: setup.subsidiaries.map((subsidiary) => ({
+      id: String(subsidiary.id),
+      name: String(subsidiary.name),
+    })),
     users: setup.users.map((user) => ({
       id: String(user.id),
       name: String(user.name),
@@ -103,11 +115,20 @@ export const POST = defineRoute({
         approver: body.approver,
         ...(body.threshold !== undefined ? { threshold: body.threshold } : {}),
         ...(body.preventSelfApproval !== undefined ? { preventSelfApproval: body.preventSelfApproval } : {}),
+        ...(body.subsidiaryIds !== undefined ? { subsidiaryIds: body.subsidiaryIds } : {}),
       },
       approverIds,
     )
     if (!built.ok) {
       return NextResponse.json({ error: built.message, code: built.code }, { status: 400 })
+    }
+    // Selected legal entities are native references, not free text: each
+    // must belong to this organization and sit inside the writer's own
+    // subsidiary ceiling (this route already requires unrestricted scope,
+    // and the check stays explicit for every managed write).
+    const scopeRefusal = await validateFlowSubjectScopeRefs(user.orgId, built.graph, gate.allowedSubsidiaryIds)
+    if (scopeRefusal) {
+      return NextResponse.json({ error: scopeRefusal, code: 'bad-subject-scope' }, { status: 400 })
     }
     // The setup promises an enabled flow: prove the generated graph passes
     // the same lint the designer save path enforces before writing anything.

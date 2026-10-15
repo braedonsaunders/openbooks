@@ -139,6 +139,14 @@ export {
 } from "./payment-runs-adapter.ts";
 export { lintFlowGraphForSubject } from "./lint.ts";
 export {
+  canonicalSubsidiaryIds,
+  flowGraphAdmitsSubjectSql,
+  lockFlowSubjectAdmission,
+  resolveFlowSubjectAdmission,
+  validateFlowSubjectScopeRefs,
+  type FlowSubjectAdmissionResult,
+} from "./subject-admission.ts";
+export {
   QUICK_APPROVAL_FLOW_DESCRIPTION,
   buildQuickApprovalGraph,
   quickApprovalAmountField,

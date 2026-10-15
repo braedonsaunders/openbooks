@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
@@ -7,13 +8,25 @@ import { recordPayRunPayment } from "./payment.ts";
 import { commitPayRun } from "./run-commit.ts";
 import { postDocument } from "../ledger/posting-document.ts";
 import { dropScratchOrgReporting } from "../testing/fixtures.ts";
+import { payrollSettings } from "./run-setup.ts";
 
+for (const caller of ["unrestricted", "scoped entity"] as const) {
 for (const policy of ["changed", "cleared"] as const) {
-  test(`payroll settlement retains posted net-pay account after settings ${policy}`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  test(`${caller} payroll settlement retains posted net-pay account after settings ${policy}`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
     const fx = await seedAdoption();
     try {
       const { input } = await calculatedRun(fx);
       await commitPayRun(input);
+      const childId = caller === "scoped entity" ? randomUUID() : null;
+      if (childId) {
+        assert.equal((await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country)
+          values(${childId},${fx.orgId},${fx.subsidiaryId},'Payroll entity','CAD','CA') returning id`)).rows.length, 1);
+        // Establish entity ownership on the editable projection before posting freezes it.
+        assert.equal((await db.execute(sql`update documents set subsidiary_id=${childId}
+          where org_id=${fx.orgId} and id=${input.documentId} returning id`)).rows.length, 1);
+        assert.equal((await db.execute(sql`update parties set subsidiary_id=${childId}
+          where org_id=${fx.orgId} and id=${fx.employeeId} returning id`)).rows.length, 1);
+      }
       const accounts = (await db.execute<{ id: string; type: string }>(sql`
         select id,type from accounts where org_id=${fx.orgId}`)).rows;
       const account = (type: string) => {
@@ -37,7 +50,17 @@ for (const policy of ["changed", "cleared"] as const) {
       await db.execute(sql`update orgs set settings=jsonb_set(settings,'{payroll,netPayAccountId}',
         ${JSON.stringify(replacement)}::jsonb) where id=${fx.orgId}`);
 
-      const payment = await recordPayRunPayment({ ...input, bankAccountId });
+      const allowed = childId ? new Set([childId]) : null;
+      if (allowed) {
+        await assert.rejects(() => payrollSettings(fx.orgId, allowed), /payroll settings not found/);
+        // A later employee transfer cannot change ownership of the posted liability.
+        assert.equal((await db.execute(sql`update parties set subsidiary_id=${fx.subsidiaryId}
+          where org_id=${fx.orgId} and id=${fx.employeeId} returning id`)).rows.length, 1);
+        for (const scope of [new Set<string>(), new Set([fx.subsidiaryId])]) {
+          await assert.rejects(() => recordPayRunPayment({ ...input, bankAccountId, allowedSubsidiaryIds: scope }), /pay run not found/);
+        }
+      }
+      const payment = await recordPayRunPayment({ ...input, bankAccountId, allowedSubsidiaryIds: allowed });
       const settlement = (await db.execute<{ account_id: string; target_id: string; amount: string }>(sql`
         select jl.account_id,a.to_line_id as target_id,a.amount from journal_lines jl
         join applications a on a.from_line_id=jl.id and a.org_id=jl.org_id
@@ -55,6 +78,7 @@ for (const policy of ["changed", "cleared"] as const) {
       await dropScratchOrgReporting(fx.orgId);
     }
   });
+}
 }
 
 for (const evidence of ["absent", "ambiguous"] as const) {

@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import type { SqlExecutor } from "../platform/db.ts";
+import { isUuid } from "../platform/uuid.ts";
 import { PayrollError } from "./error.ts";
 import { payrollSubsidiaryScopeFilter, type PayrollSubsidiaryScope } from "./scope.ts";
 import { readAdjudicatedHolidayPayment } from "./holiday-payment-contract.ts";
@@ -36,7 +37,7 @@ export async function holidayObligationsAvailable(tx: SqlExecutor): Promise<bool
 }
 
 export async function approvedHolidayOccurrenceDates(tx: SqlExecutor, input: {
-  orgId: string; employeePartyId: string; subsidiaryId: string | null | undefined; from: string; to: string;
+  orgId: string; employeePartyId: string; employmentId: string; subsidiaryId: string | null | undefined; from: string; to: string;
   /**
    * The calculation's once-resolved schema availability. The catalog probe
    * is identical for every stub, so the driver resolves it once per run and
@@ -46,14 +47,24 @@ export async function approvedHolidayOccurrenceDates(tx: SqlExecutor, input: {
   obligationsAvailable?: boolean | null;
 }): Promise<ReadonlySet<string>> {
   if (!(input.obligationsAvailable ?? await holidayObligationsAvailable(tx))) return new Set();
-  if (!input.subsidiaryId) throw new PayrollError("Resolve the employee's legal employer before selecting approved holiday entitlements.");
-  const dates = (await tx.execute<{ date: string }>(sql`select occurrence.holiday_date::text as date
+  if (!isUuid(input.employmentId) || !isUuid(input.subsidiaryId)) throw new PayrollError("Resolve the selected native employment and legal employer before selecting approved holiday entitlements.");
+  const dates = (await tx.execute<{ date: string; evidence: SourceBoundHolidayPayment }>(sql`select occurrence.holiday_date::text as date, o.evidence
     from payroll_holiday_occurrences occurrence
     join payroll_holiday_obligations o on o.org_id=occurrence.org_id and o.id=occurrence.obligation_id
+      and o.employee_party_id=occurrence.employee_party_id and o.subsidiary_id=occurrence.subsidiary_id
+    join worker_employments e on e.org_id=o.org_id and e.id=o.employment_id
+      and e.worker_party_id=o.employee_party_id and e.employer_subsidiary_id=o.subsidiary_id
     join financial_changes f on f.org_id=o.org_id and f.id=o.change_id and f.status='applied'
     where occurrence.org_id=${input.orgId} and occurrence.employee_party_id=${input.employeePartyId}
+      and o.employment_id=${input.employmentId}
       and occurrence.subsidiary_id=${input.subsidiaryId} and occurrence.holiday_date between ${input.from}::date and ${input.to}::date
     order by occurrence.holiday_date`)).rows;
+  for (const row of dates) {
+    const instruction = readAdjudicatedHolidayPayment(row.evidence?.instruction);
+    if (instruction.employeePartyId !== input.employeePartyId.toLowerCase() || !instruction.holidayDates.includes(row.date)) {
+      throw new PayrollError("The approved holiday occurrence does not match its retained employee and holiday-date evidence; review the entitlement before calculating payroll.");
+    }
+  }
   return new Set(dates.map(row => row.date));
 }
 

@@ -129,18 +129,23 @@ interface LooseOptions {
   handler: LooseHandler;
 }
 
+type NativeRouteHandler = {
+  (request?: Request, context?: { params?: Promise<unknown> }): Promise<Response>;
+  (request: Request, context: { params: Promise<unknown> }): Promise<Response>;
+};
+
 export function defineRoute<
   P extends z.ZodType | undefined = undefined,
   B extends z.ZodType | undefined = undefined,
 >(
   options: TokenRouteOptions<P, B>,
-): (request?: Request, context?: { params?: Promise<unknown> }) => Promise<Response>;
+): NativeRouteHandler;
 export function defineRoute<
   P extends z.ZodType | undefined = undefined,
   B extends z.ZodType | undefined = undefined,
 >(
   options: SessionRouteOptions<P, B> | PermissionRouteOptions<P, B> | AuthorizedRouteOptions<P, B>,
-): (request?: Request, context?: { params?: Promise<unknown> }) => Promise<Response>;
+): NativeRouteHandler;
 export function defineRoute(options: LooseOptions) {
   return async (
     request: Request = new Request("http://localhost"),

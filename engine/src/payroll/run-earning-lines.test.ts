@@ -35,7 +35,7 @@ test("paid-hour adjustments retain their basis without adding cash earnings", as
   assert.equal(totalHours(lines), "32.5000");
   assert.equal(sum(lines.map(line => line.amount)), "1888.0000");
   assert.equal(lines[1]!.insurable, true);
-  assert.equal(lines[1]!.vacationable, false);
+  assert.equal(lines[1]!.vacationable, undefined, 'Producer leaves vacation inclusion to the pay-date statutory treatment resolver');
   assert.equal(lines[1]!.runAdjustmentId, row().adjustment_id);
 });
 

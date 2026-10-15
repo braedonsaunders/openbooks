@@ -357,6 +357,30 @@ test('the dialog requires its account visibly, defaulted from the page', async (
   assert.ok(previewed.body.includes('"accountId":"acc-2"'), `the preview must target the picked account, got ${previewed.body}`)
 })
 
+test('an EUR statement preview displays its retained currency in a CAD organization', async (t) => {
+  const priorAccounts = dialogScript.accounts
+  const priorPreview = dialogScript.previewImpl
+  t.after(() => { dialogScript.accounts = priorAccounts; dialogScript.previewImpl = priorPreview })
+  dialogScript.accounts = [{ id: 'acc-1', label: '1000 EUR Cash', currency: 'EUR', type: 'asset_bank' }]
+  dialogScript.previewImpl = () => ({
+    lines: [{ postedOn: '2026-11-02', amount: '525.00', description: 'EUR receipt' }],
+    imported: 1, duplicates: 0, possibleDuplicates: 0, skipped: [], balanceCandidates: [],
+    statementDate: '2026-11-30', closingBalance: null, currency: 'EUR',
+  })
+  const { host, root } = await mountDialog()
+  dialogCleanup(t, host, root)
+  await openDialog()
+  await pasteText('OFXHEADER:100\nDATA:OFXSGML')
+  await act(async () => {
+    clickButton('Preview').click()
+    await tick()
+    await tick()
+  })
+  const text = document.body.textContent ?? ''
+  assert.ok(text.includes('€525.00'), 'the real import preview honors the source currency')
+  assert.ok(!text.includes('$525.00'), 'the organization currency cannot relabel an EUR receipt')
+})
+
 test('a statement currency mismatch warns before the engine refuses', async (t) => {
   const { host, root } = await mountDialog()
   dialogCleanup(t, host, root)

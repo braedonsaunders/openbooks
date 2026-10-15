@@ -14,6 +14,7 @@ import {
 import { inputGuards } from "./input-guards.ts";
 import { businessTodayInTx } from "../platform/business-date.ts";
 import { takeEmployeeConfigurationFence } from "../payroll/fences.ts";
+import { assertEmploymentHireWorker } from "./employment-worker.ts";
 import {
   HrmChangeRequestError,
   type StatusChangePayload,
@@ -284,6 +285,7 @@ export async function assertKindPreconditions(
   payload: ChangeRequestPayload,
 ): Promise<void> {
   if (payload.kind === "hire") {
+    await assertEmploymentHireWorker(exec, orgId, employmentId);
     const count = await employmentVersionCount(exec, orgId, employmentId);
     if (count > 0) {
       throw new HrmChangeRequestError(

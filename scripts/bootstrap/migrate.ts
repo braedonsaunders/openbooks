@@ -16,7 +16,7 @@ import { assertBaselineHistory, historicalMigrationPlan, migrationIdentityIsAppl
 import { publishedMigrationSessionPrelude } from "../migration-session-headers.mjs"
 import { ensureRetirementAuthorityOwnership } from "./retirement-ownership.ts"
 import { migrationExecutionCompatibility } from "../migration-execution-compatibility.ts"
-import { preflightNeedsRecordedGuardTransition, RECORDED_INSTRUCTION_GUARD_SIGNATURE } from "../migration-preflight-transitions.ts"
+import { preflightNeedsPendingPrerequisite, preflightNeedsRecordedGuardTransition, RECORDED_INSTRUCTION_GUARD_SIGNATURE } from "../migration-preflight-transitions.ts"
 import { baselineTransitionCandidate, verifyBaselineTransitionCatalog } from "../migration-baseline-transitions.ts"
 import { migrationBusinessOwnerRole } from "../migration-owner-authority.ts"
 
@@ -337,6 +337,13 @@ async function evaluatePendingMigrations(
           const filename = `generated/${file}`;
           return [filename, readFileSync(join(migrationsDir, filename), "utf8")] as const;
         }));
+        if (preflightNeedsPendingPrerequisite({ migration: item.filename, consumerSql: sqlText,
+          findings: evaluation.findings, published,
+          pendingBeforeConsumer: new Set(pending.slice(0,index).map(row => row.filename)) })) {
+          report.deferred.push({ file: item.file, filename: item.filename, ordinal: item.ordinal, sql: sqlText });
+          console.log(`[bootstrap] migration preflight ${item.filename} is deferred until its exact earlier pending prerequisite publishers are recorded; its strict query runs again at apply time`);
+          continue;
+        }
         if (baselineTransitionCandidate({ migration: item.filename, consumerSql: sqlText,
           findings: evaluation.findings, published,
           pendingBeforeConsumer: new Set(pending.slice(0,index).map(row => row.filename)) })) {
@@ -504,9 +511,9 @@ export async function runUpgradeCheckMain(json: boolean, historicalMigrations = 
   const plan = historicalMigrations
     ? historicalMigrationPlan(migrationsDir, generated)
     : activePlan;
-  await assertReleaseBaselineReady(plan.baseline, ledgerPreexisted);
+  const freshInstall = await assertReleaseBaselineReady(plan.baseline, ledgerPreexisted);
   const result = {
-    freshInstall: !ledgerPreexisted,
+    freshInstall,
     pending: [] as string[],
     noPreflight: [] as { migration: string; reason: string }[],
     missingDecisions: [] as string[],
@@ -542,10 +549,10 @@ export async function runUpgradeCheckMain(json: boolean, historicalMigrations = 
       );
     }
   };
-  if (!ledgerPreexisted) {
+  if (freshInstall) {
     emit();
     if (!json) {
-      console.log("[bootstrap] upgrade check: no _applied_migrations table (fresh install): nothing to preflight");
+      console.log("[bootstrap] upgrade check: empty installation history and schema; nothing to preflight");
     }
     return 0;
   }
@@ -599,7 +606,7 @@ export async function migrate(historicalMigrations = false): Promise<void> {
   const plan = historical ?? activePlan;
   // A legacy database must prove adoption before role refresh, preflights or
   // schema writes can reinterpret its installation history.
-  await assertReleaseBaselineReady(plan.baseline, ledgerPreexisted);
+  const freshInstall = await assertReleaseBaselineReady(plan.baseline, ledgerPreexisted);
   await db.execute(sql`
     create table if not exists public._applied_migrations (
       filename text primary key,
@@ -613,8 +620,8 @@ export async function migrate(historicalMigrations = false): Promise<void> {
   const pending = pendingMigrationItems(plan.filenames, applied);
   await ensureRetirementAuthorityOwnership();
   let deferred: DeferredPreflight[] = [];
-  if (!ledgerPreexisted) {
-    console.log("[bootstrap] fresh install: no _applied_migrations table, nothing to preflight");
+  if (freshInstall) {
+    console.log("[bootstrap] fresh install: empty installation history and schema; nothing to preflight");
   } else {
     deferred = await runPreflightGate(pending, readUnappliedContents(plan.filenames, applied));
   }
@@ -644,16 +651,23 @@ export async function migrate(historicalMigrations = false): Promise<void> {
   await ensureRetirementAuthorityOwnership();
 }
 
-async function assertReleaseBaselineReady(baseline: ReturnType<typeof releaseMigrationPlan>["baseline"], ledgerExists: boolean): Promise<void> {
-  if (!baseline) return;
+async function assertReleaseBaselineReady(baseline: ReturnType<typeof releaseMigrationPlan>["baseline"], ledgerExists: boolean): Promise<boolean> {
   const recorded = ledgerExists
     ? (await pool.query("select filename, sha256 from public._applied_migrations")).rows
     : [];
-  const tables = await pool.query<{ present: boolean }>(`select exists (
+  const objects = await pool.query<{ present: boolean }>(`select exists (
     select 1 from pg_class c join pg_namespace n on n.oid=c.relnamespace
-    where n.nspname='public' and c.relkind in ('r','p')
-      and c.relname <> '_applied_migrations') as present`);
-  assertBaselineHistory(baseline, recorded, tables.rows[0]!.present);
+    where n.nspname='public' and c.relkind in ('r','p','v','m','S','f')
+      and c.relname <> '_applied_migrations'
+      and not exists (select 1 from pg_depend d where d.classid='pg_class'::regclass and d.objid=c.oid and d.deptype='e')
+    union all
+    select 1 from pg_proc p join pg_namespace n on n.oid=p.pronamespace
+    where n.nspname='public'
+      and not exists (select 1 from pg_depend d where d.classid='pg_proc'::regclass and d.objid=p.oid and d.deptype='e')
+    ) as present`);
+  const schemaHasObjects = objects.rows[0]!.present;
+  if (baseline) assertBaselineHistory(baseline, recorded, schemaHasObjects);
+  return recorded.length === 0 && !schemaHasObjects;
 }
 
 /**

@@ -13,7 +13,7 @@ export default async function AnalyticsPage({
   searchParams,
 }: {
   searchParams?: Promise<Record<string, string | undefined>>
-} = {}) {
+}) {
   const sp = (await searchParams) ?? {}
   const data = await loadAnalytics()
   return <ModuleView spec={analyticsSpec(data)} data={data} searchParams={sp} trusted />

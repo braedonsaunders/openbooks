@@ -4,7 +4,7 @@ import test from 'node:test'
 import {sql} from 'drizzle-orm'
 import {db,withBypassContext,withOrgContext,withOrgTransaction} from '../../platform/db.ts'
 import {dropScratchOrgReporting,seedWorkerEmployment,grantScratchPermissions} from '../../testing/fixtures.ts'
-import {seedAdoption,type AdoptionFixture} from '../filing-test-fixtures.ts'
+import {seedAdoption,seedUsEinAccount,type AdoptionFixture} from '../filing-test-fixtures.ts'
 import {readOpeningEmployerContext,qualifyOpeningEmployerAuthority} from '../opening-employer-authority.ts'
 import {createPayRun} from '../run-lifecycle.ts'
 import {calculatePayRun} from '../run-calculation.ts'
@@ -12,10 +12,20 @@ import {commitPayRun} from '../run-commit.ts'
 import {prepareWithholdingRecordWrite} from '../withholding-record-write.ts'
 import {saveOpeningBalances} from '../opening-balances.ts'
 import {mutatePayRunAdjustment} from '../run-adjustments.ts'
+import {readOpeningLevySourceContext,qualifyOpeningLevySourceAuthority,type OpeningLevySourceAllocationInput} from '../opening-levy-source-authority.ts'
+import type {OpeningLevySourceFacts} from '../opening-levy-source-facts.ts'
 
-async function qualifyImportedOpening(f:AdoptionFixture,employerId=f.subsidiaryId){
+const canadianAllocations:OpeningLevySourceAllocationInput[]=[
+  ...['AB','BC','MB','NB','NL','NS','NT','NU','ON','PE','QC','SK','YT'].map(region=>({programKey:'ca_wcb',region,federalAccountId:null,amount:'0'})),
+  ...['BC','MB','NL','ON'].map(region=>({programKey:'ca_eht',region,federalAccountId:null,amount:'0'})),
+  {programKey:'ca_cnt',region:'QC',federalAccountId:null,amount:'0'},
+]
+async function qualifyImportedOpening(f:AdoptionFixture,employerId=f.subsidiaryId,
+  facts:OpeningLevySourceFacts={originalCountry:'CA',originalCurrency:'CAD',coverageStart:'2026-01-01',coverageEnd:'2026-09-29',coverageComplete:true},
+  allocations:readonly OpeningLevySourceAllocationInput[]=canadianAllocations){
   const original=(await db.execute<{report:string}>(sql`select jsonb_build_object(
-    'legalEmployerId',${employerId}::text,'originalOpening',to_jsonb(b))::text as report
+    'legalEmployerId',${employerId}::text,'originalOpening',to_jsonb(b),
+    'originalSourceFacts',${JSON.stringify(facts)}::jsonb,'allocations',${JSON.stringify(allocations)}::jsonb)::text as report
     from payroll_opening_balances b where b.org_id=${f.orgId} and b.employee_party_id=${f.employeeId} and b.tax_year=2026`)).rows
   assert.equal(original.length,1)
   const bytes=Buffer.from(original[0]!.report),sha=createHash('sha256').update(bytes).digest('hex')
@@ -29,11 +39,18 @@ async function qualifyImportedOpening(f:AdoptionFixture,employerId=f.subsidiaryI
     values(${version},${file},1,${bytes.length},'application/json',${sha},${f.actorId})`)
   await db.execute(sql`insert into file_blobs(version_id,bytes) values(${version},${bytes})`)
   await db.execute(sql`update files set current_version_id=${version} where org_id=${f.orgId} and id=${file}`)
-  const context=await readOpeningEmployerContext({orgId:f.orgId,actorId:f.actorId,employeePartyId:f.employeeId,taxYear:2026,allowedSubsidiaryIds:null})
-  assert.ok(context.record)
+  const contextInput={orgId:f.orgId,actorId:f.actorId,employeePartyId:f.employeeId,taxYear:2026,sourceFileId:file,allowedSubsidiaryIds:null}
+  const context=await readOpeningEmployerContext(contextInput)
+  const sourceContext=await readOpeningLevySourceContext(contextInput)
+  assert.ok(context.record);assert.ok(sourceContext.record)
+  assert.equal(context.record.id,sourceContext.record.openingBalanceId)
   await qualifyOpeningEmployerAuthority({orgId:f.orgId,actorId:f.actorId,openingBalanceId:context.record.id,
     subsidiaryId:employerId,expectedOpeningSha256:context.record.openingSha256,sourceFileId:file,
     sourceVersionId:version,sourceSha256:sha,sourceReference:'Original employer income and withholding report',
+    reason:'Qualify imported employer averaging history',allowedSubsidiaryIds:null})
+  await qualifyOpeningLevySourceAuthority({...facts,allocations,orgId:f.orgId,actorId:f.actorId,openingBalanceId:context.record.id,
+    expectedOpeningSha256:context.record.openingSha256,expectedOpeningChildrenSha256:sourceContext.record.openingChildrenSha256,
+    sourceFileId:file,sourceVersionId:version,sourceSha256:sha,sourceReference:'Original employer income and withholding report',
     reason:'Qualify imported employer averaging history',allowedSubsidiaryIds:null})
 }
 
@@ -109,7 +126,7 @@ test('elected cumulative withholding consumes committed history and scheduled pe
       await mutatePayRunAdjustment({...command,mutation:{action:'add',employeePartyId:imported.employeeId,componentId:component.id,amount:'500'}})
       const missingSource=await calculatePayRun(command)
       assert.equal(missingSource.errors.length,1)
-      assert.match(missingSource.errors[0]!.message,/no qualified original opening for this legal employer/)
+      assert.match(missingSource.errors[0]!.message,/original opening|source-qualified/)
       await qualifyImportedOpening(imported)
       assert.deepEqual((await calculatePayRun(command)).errors,[])
       const factors=(await db.execute<{factors:Record<string,string>}>(sql`select factors from pay_stubs where org_id=${imported.orgId} and pay_run_document_id=${created.documentId}`)).rows[0]!.factors
@@ -157,3 +174,45 @@ test('another legal employer’s qualified imported averaging history cannot red
     })
   }finally{await withBypassContext(()=>dropScratchOrgReporting(f.orgId))}
 })
+
+
+for(const sourceCase of ['foreign-country','coverage-mismatch'] as const){
+  test(`explicit imported Canadian averaging refuses a ${sourceCase} original source`,{skip:!process.env.OPENBOOKS_DB_URL},async()=>{
+    const f=await withBypassContext(()=>seedAdoption())
+    try{await withOrgContext(f.orgId,async()=>{
+      await grantScratchPermissions(f.orgId,f.actorId,['payroll.read','payroll.run'])
+      const saved=await saveOpeningBalances({orgId:f.orgId,actorId:f.actorId,taxYear:2026,rows:[{employeePartyId:f.employeeId,
+        amounts:{taxableYtd:'20000',taxYtd:'1390',caAvgIncome:'20000',caAvgTaxM:'1390'}}]})
+      assert.deepEqual(saved.errors,[]);assert.equal(saved.created,1)
+      let allocations=canadianAllocations
+      if(sourceCase==='foreign-country'){
+        assert.equal((await db.execute(sql`update subsidiaries set country='US',base_currency='USD'
+          where org_id=${f.orgId} and id=${f.subsidiaryId} returning id`)).rows.length,1)
+        const ein=await seedUsEinAccount(f.orgId,f.actorId,f.subsidiaryId,'12-3456789')
+        allocations=[{programKey:'us_futa',region:'US',filingAccountId:ein,federalAccountId:ein,amount:'0'}]
+      }
+      await qualifyImportedOpening(f,f.subsidiaryId,{originalCountry:sourceCase==='foreign-country'?'US':'CA',
+        originalCurrency:sourceCase==='foreign-country'?'USD':'CAD',coverageStart:'2026-01-01',
+        coverageEnd:sourceCase==='coverage-mismatch'?'2026-09-28':'2026-09-29',coverageComplete:true},allocations)
+      assert.equal((await db.execute(sql`update subsidiaries set country='CA',base_currency='CAD'
+        where org_id=${f.orgId} and id=${f.subsidiaryId} returning id`)).rows.length,1)
+      assert.equal((await db.execute(sql`update employee_payroll_profiles set cpp_exempt=true,ei_exempt=true
+        where org_id=${f.orgId} and employee_party_id=${f.employeeId} returning employee_party_id`)).rows.length,1)
+      assert.equal((await db.execute(sql`insert into employee_tax_certificates(org_id,employee_party_id,country,certificate_key,answers,effective_from,created_by,updated_by)
+        values(${f.orgId},${f.employeeId},'CA','ca_t4127_method',
+          '{"method":"option2","reason":"Employer elected cumulative withholding for uneven pay","window_start":"2026-01-01","opening_history_through":"2026-09-29","opening_history_complete":"true"}'::jsonb,
+          '2026-10-01',${f.actorId},${f.actorId}) returning id`)).rows.length,1)
+      const created=await createPayRun({orgId:f.orgId,actorId:f.actorId,payScheduleId:f.scheduleId,
+        periodStart:'2026-09-27',periodEnd:'2026-10-10',payDate:'2026-10-13'})
+      const command={orgId:f.orgId,actorId:f.actorId,documentId:created.documentId}
+      const components=(await db.execute<{id:string}>(sql`select id from pay_components where org_id=${f.orgId} and system_key='base_pay'`)).rows
+      assert.equal(components.length,1)
+      await mutatePayRunAdjustment({...command,mutation:{action:'add',employeePartyId:f.employeeId,componentId:components[0]!.id,amount:'500'}})
+      const refused=await calculatePayRun(command)
+      assert.equal(refused.errors.length,1)
+      assert.match(refused.errors[0]!.message,sourceCase==='foreign-country'?/certified original Canadian-dollar source/:/must equal.*certified coverage end/)
+      await assert.rejects(commitPayRun(command),/refus|calculat/i)
+      assert.equal((await db.execute<{n:number}>(sql`select count(*)::int as n from pay_runs where org_id=${f.orgId} and run_status='committed'`)).rows[0]!.n,0)
+    })}finally{await withBypassContext(()=>dropScratchOrgReporting(f.orgId))}
+  })
+}

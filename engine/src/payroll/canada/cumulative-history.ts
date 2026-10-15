@@ -7,6 +7,8 @@ import {at,DAY,iso,nextPeriodAfter,type ScheduleRow} from '../run-calendar.ts'
 import type {PayrollStatutoryComputeContext} from '../statutory-context.ts'
 import type {T4127Averaging,T4127Ytd} from './t4127.ts'
 import {CA_OPENING_YTD_FIELDS} from './opening-ytd.ts'
+import {readEmployeeOpeningLevySources} from '../opening-levy-source-reader.ts'
+import {canonicalDecimal} from '../../money/exact-decimal.ts'
 
 const HISTORY_FIELDS=[
   {key:"income",openingKey:"caAvgIncome",factor:"I"},
@@ -36,8 +38,8 @@ export async function cumulativeHistory(ctx:PayrollStatutoryComputeContext):Prom
   if(problem)throw new PayrollError(`${problem} — correct the employer withholding method record in the employee’s Payroll profile`)
   if(record.answers.method==='option1')return null
   if(record.missing.length||record.answers.method!=='option2'||!record.effectiveFrom)throw new PayrollError('Complete and date the employer withholding method election in the employee’s Payroll profile before calculating cumulative averaging')
-  const owners=(await ctx.tx.execute<{subsidiaryId:string;currency:string}>(sql`
-    select d.subsidiary_id as "subsidiaryId",d.currency from documents d
+  const owners=(await ctx.tx.execute<{subsidiaryId:string;currency:string;payDate:string|null}>(sql`
+    select d.subsidiary_id as "subsidiaryId",d.currency,r.pay_date::text as "payDate" from documents d
       join pay_runs r on r.org_id=d.org_id and r.document_id=d.id
      where d.org_id=${ctx.orgId} and d.id=${ctx.documentId} and d.kind='pay_run'`)).rows
   if(owners.length!==1||!owners[0]!.subsidiaryId
@@ -45,14 +47,16 @@ export async function cumulativeHistory(ctx:PayrollStatutoryComputeContext):Prom
     throw new PayrollError('Canadian averaging history requires the actual pay-run legal employer')
   if(owners[0]!.currency!=='CAD')throw new PayrollError('Canadian averaging history requires a qualified Canadian-dollar pay-run basis')
   const subsidiaryId=owners[0]!.subsidiaryId
+  const payDate=owners[0]!.payDate
+  if(!payDate)throw new PayrollError("Canadian averaging history requires the actual pay-run pay date")
   const yearStart=`${ctx.taxYear}-01-01`
   const declaredStart=record.answers.window_start||record.effectiveFrom
-  if(!isIsoCalendarDate(declaredStart)||declaredStart>ctx.run.pay_date!)throw new PayrollError('Set an averaging window start in YYYY-MM-DD on or before this pay date in the employee’s Payroll withholding method record')
+  if(!isIsoCalendarDate(declaredStart)||declaredStart>payDate)throw new PayrollError('Set an averaging window start in YYYY-MM-DD on or before this pay date in the employee’s Payroll withholding method record')
   const start=declaredStart<yearStart?yearStart:declaredStart
   const recordedThrough=record.answers.opening_history_through
   if(recordedThrough&&!isIsoCalendarDate(recordedThrough))throw new PayrollError("Set the imported averaging history-through date in YYYY-MM-DD in the employee’s withholding method record")
   const through=recordedThrough&&recordedThrough>=yearStart?recordedThrough:null
-  if(through&&(!isIsoCalendarDate(through)||through<start||through>=ctx.run.pay_date!))throw new PayrollError('Imported averaging history must end within this averaging window and before the current pay date — correct its history-through date in the Payroll profile')
+  if(through&&(!isIsoCalendarDate(through)||through<start||through>=payDate))throw new PayrollError('Imported averaging history must end within this averaging window and before the current pay date — correct its history-through date in the Payroll profile')
   if(through&&record.answers.opening_history_complete!=='true')throw new PayrollError('Verify every averaging opening field against the prior provider’s report in Payroll → Opening Balances, then confirm complete imported history in the employee’s withholding method record')
   if(start<record.effectiveFrom&&!through)throw new PayrollError('An averaging window before this method election requires complete imported history — supply its history-through date and opening balances, or reset the window to the election date')
   const schedule=(await ctx.tx.execute<ScheduleRow>(sql`select id,frequency,periods_per_year,anchor_period_end::text,pay_date_offset_days from pay_schedules where org_id=${ctx.orgId} and id=${ctx.run.pay_schedule_id}`)).rows[0]
@@ -62,7 +66,7 @@ export async function cumulativeHistory(ctx:PayrollStatutoryComputeContext):Prom
   for(let n=0;n<370;n++){
     const period=nextPeriodAfter(schedule,cursor)
     const payday=iso(new Date(at(period.periodEnd).getTime()+DAY*schedule.pay_date_offset_days))
-    if(payday>ctx.run.pay_date!)break
+    if(payday>payDate)break
     if(payday>=start)elapsed++
     cursor=period.periodEnd
   }
@@ -89,16 +93,31 @@ export async function cumulativeHistory(ctx:PayrollStatutoryComputeContext):Prom
       and r.pay_date>=${start}::date
       and d.subsidiary_id=${subsidiaryId} and s.country='CA' and s.currency_code='CAD'
     order by r.pay_date,s.id`)).rows
-  if(history.some(row=>row.pay_date>ctx.run.pay_date!))throw new PayrollError('A later pay run is already committed in this averaging window — correct payroll through the controlled void and replacement workflow before recalculating an earlier pay date')
+  if(history.some(row=>row.pay_date>payDate))throw new PayrollError('A later pay run is already committed in this averaging window — correct payroll through the controlled void and replacement workflow before recalculating an earlier pay date')
   if(history.some(row=>row.schedule_id!==schedule.id))throw new PayrollError('The averaging window spans different pay schedules — reset the employer withholding method window on the new schedule’s effective date')
   if(through&&history.some(row=>row.pay_date<=through))throw new PayrollError('Imported averaging history overlaps committed payroll — correct its history-through date and opening balances before calculating')
-  const opening=through?(await ctx.tx.execute<Record<string,string>>(sql`
-    select b.* from payroll_opening_balances b
-      join payroll_opening_employer_authorities a on a.org_id=b.org_id and a.opening_balance_id=b.id
-     where b.org_id=${ctx.orgId} and b.employee_party_id=${ctx.employeePartyId} and b.tax_year=${ctx.taxYear}
-       and a.subsidiary_id=${subsidiaryId} and a.opening_snapshot=to_jsonb(b)
-       and a.opening_sha256=encode(public.digest(to_jsonb(b)::text,'sha256'),'hex')`)).rows[0]:undefined
-  if(through&&!opening)throw new PayrollError('Imported averaging history has no qualified original opening for this legal employer — qualify its exact retained opening report and employer in Payroll → Opening Balances before calculating')
+  let opening:Record<string,string>|undefined
+  if(through){
+    const source=await readEmployeeOpeningLevySources(ctx.tx,{
+      orgId:ctx.orgId,employeePartyId:ctx.employeePartyId,taxYear:ctx.taxYear,
+      subsidiaryId,beforeDate:payDate,
+    })
+    if(!source.hasOpening||!source.facts||!source.authority||!source.openingSnapshot||!source.openingChildren)
+      throw new PayrollError('Imported averaging history has no qualified original opening for this legal employer — qualify its exact retained opening report, country and employer in Payroll → Opening balances → Levy source before calculating')
+    if(source.facts.originalCountry!=='CA'||source.facts.originalCurrency!=='CAD')
+      throw new PayrollError('Imported Canadian averaging history requires a certified original Canadian-dollar source — qualify the original Canadian report in Payroll → Opening balances → Levy source or correct the imported-history declaration before calculating')
+    if(source.facts.coverageEnd!==through)
+      throw new PayrollError('Imported averaging history-through must equal the original report’s certified coverage end — correct the withholding method declaration to match its qualified source before calculating')
+    opening={}
+    const columns=[...HISTORY_FIELDS.map(field=>CA_OPENING_YTD_FIELDS.find(row=>row.key===field.openingKey)!.column),
+      'taxable_ytd','pensionable_ytd','insurable_ytd','tax_ytd']
+    for(const column of columns){
+      const amount=canonicalDecimal(source.openingSnapshot[column],4)
+      if(amount===null||cmp(amount,'0')<0)
+        throw new PayrollError(`The original ${column} averaging opening is not an exact non-negative decimal — qualify its original source before calculating`)
+      opening[column]=amount
+    }
+  }
   if(opening){
     const excess=(parts:string[],whole:string)=>cmp(sum(parts.map(key=>opening[key]!)),opening[whole]!)>0
     if(excess(['ca_avg_income','ca_avg_bonus'],'taxable_ytd')||excess(['ca_avg_pe','ca_avg_bonus_pe'],'pensionable_ytd')||excess(['ca_avg_ie','ca_avg_bonus_ie'],'insurable_ytd')||excess(['ca_avg_tax_m','ca_avg_tax_m1'],'tax_ytd'))

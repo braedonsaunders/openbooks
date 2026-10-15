@@ -248,11 +248,21 @@ test(
            and t.payroll_batch_ref = st.source_pay_run_document_id::text`);
       assert.deepEqual(await retroRunFindings(org.orgId, retro.documentId), []);
 
-      // Vacation accrual follows the COMPONENT's own vacationable flag, not a
-      // retro-specific rule. Turned off, the retro accrues nothing.
-      await db.execute(sql`
-        update pay_components set vacationable = false
-         where org_id = ${org.orgId} and system_key = 'base_pay'`);
+      // The settling pay date owns vacation-base policy, independently of the
+      // source-period wage classification and its committed treatment.
+      await db.execute(sql`with closed as (
+        update pay_component_statutory_treatments treatment
+          set effective_to=run.pay_date-1
+          from pay_components component,pay_runs run
+          where treatment.org_id=${org.orgId} and component.org_id=treatment.org_id
+            and treatment.pay_component_id=component.id and component.system_key='base_pay'
+            and treatment.worker_comp_group_id is null and treatment.effective_from<run.pay_date
+            and (treatment.effective_to is null or treatment.effective_to>=run.pay_date)
+            and run.org_id=treatment.org_id and run.document_id=${retro.documentId}
+          returning treatment.org_id,treatment.pay_component_id,treatment.program_exclusions,run.pay_date
+      ) insert into pay_component_statutory_treatments
+        (org_id,pay_component_id,effective_from,program_exclusions,vacationable,created_by,updated_by)
+        select org_id,pay_component_id,pay_date,program_exclusions,false,${actorId},${actorId} from closed`);
       await calculatePayRun({ orgId: org.orgId, documentId: retro.documentId, actorId });
       const noVacation = (await db.execute<{ vacation_accrued: string }>(sql`
         select vacation_accrued from pay_stubs
@@ -260,8 +270,12 @@ test(
       `));
       assert.equal(noVacation.rows[0]!.vacation_accrued, "0.0000");
       await db.execute(sql`
-        update pay_components set vacationable = true
-         where org_id = ${org.orgId} and system_key = 'base_pay'`);
+        update pay_component_statutory_treatments treatment set vacationable = true
+         from pay_components component,pay_runs run
+         where treatment.org_id = ${org.orgId} and component.org_id=treatment.org_id
+           and component.id=treatment.pay_component_id and component.system_key = 'base_pay'
+           and run.org_id=treatment.org_id and run.document_id=${retro.documentId}
+           and treatment.effective_from=run.pay_date and treatment.worker_comp_group_id is null`);
 
       const calculated = await calculatePayRun({
         orgId: org.orgId, documentId: retro.documentId, actorId,

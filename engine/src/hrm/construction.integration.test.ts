@@ -36,7 +36,7 @@ import { createPayRun } from "../payroll/run-lifecycle.ts";
 import { calculatePayRun } from "../payroll/run-calculation.ts";
 import { commitPayRun } from "../payroll/run-commit.ts";
 import { seedPayrollComponents } from "../payroll/run-setup.ts";
-import { seedUsSuiAccount } from "../payroll/filing-test-fixtures.ts";
+import { seedUsSuiAccount, seedUsEinAccount } from "../payroll/filing-test-fixtures.ts";
 import { setPackSlotAccount } from "../payroll/packs.ts";
 import { US_PACK_RATES } from "../payroll/us/rates.ts";
 import { upsertStatutoryRate } from "../payroll/statutory-rates.ts";
@@ -533,7 +533,11 @@ test("certified payroll freezes posted native wages by dated classification with
     for (const slot of ["fit", "fica", "futa", "suta"]) {
       await setPackSlotAccount(org.orgId, adminId, "US", slot, taxPayable);
     }
-    const filingAccountId = await seedUsSuiAccount(org.orgId, adminId, "TX");
+    const einAccountId = await seedUsEinAccount(org.orgId, adminId, org.subsidiaryId, "12-3456789");
+    const filingAccountId = await seedUsSuiAccount(org.orgId, adminId, "TX", {
+      federalAccountId: einAccountId, subsidiaryId: org.subsidiaryId, effectiveFrom: "2026-01-01", effectiveTo: null,
+      sourceReference: "TX original employer registration",
+    });
     await upsertStatutoryRate({ ...scope, rates: US_PACK_RATES, rateKey: "us_sui", region: "TX",
       filingAccountId, taxYear: 2026, values: { rate: "0.03", wageBase: "7000" },
       sourceCitation: "Employer unemployment rate notice", reason: "Declare the employer contribution rate" });

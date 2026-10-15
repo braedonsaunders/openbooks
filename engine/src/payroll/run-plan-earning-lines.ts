@@ -1,3 +1,4 @@
+import { vacationBaseIncluded } from './component-statutory-treatment.ts';
 import { db } from "../platform/db.ts";
 import { PayrollError } from "./error.ts";
 import { cmp, mulDecimal, mulPercent, roundMoney } from "../money/money.ts";
@@ -6,6 +7,7 @@ import { payrollPack } from "./packs.ts";
 import { entitlementMoneyValue, planMovementsForStub, type EntitlementPlan, type EntitlementWarning } from "./entitlements.ts";
 import { allocateProportionally } from "./run-allocation.ts";
 import { type Line, earningsBase, totalHours, earningJobBuckets } from "./run-stub-records.ts";
+import type { DeclaredVacationAccrualInput } from "./run-vacation-accrual-input.ts";
 
 /** Earning lines driven by union fringe agreements and entitlement plan movements, appended to each stub during calculation. */
 
@@ -133,6 +135,7 @@ export async function applyEntitlementPlanMovements(
     lines: Line[];
     entitlementMovements: Awaited<ReturnType<typeof planMovementsForStub>>["movements"];
     entitlementWarnings: EntitlementWarning[];
+    declaredVacationAccruals?: ReadonlyMap<string, DeclaredVacationAccrualInput>;
   },
 ): Promise<string> {
   const {
@@ -141,11 +144,29 @@ export async function applyEntitlementPlanMovements(
     lines, entitlementMovements, entitlementWarnings,
   } = args;
   let vacationAccrued = "0";
+  if ((args.declaredVacationAccruals?.size ?? 0) > 0 && plans.length === 0) {
+    throw new PayrollError("A declared vacation accrual requires an active vacation entitlement plan; configure the plan before calculating.");
+  }
   // Everything that banks: one call, honouring scoped caps and service tiers.
   if (plans.length > 0) {
+    const declaredAccrualValues = new Map<string, { amount: string; note: string }>();
+    for (const input of args.declaredVacationAccruals?.values() ?? []) {
+      const plan = plans.find((candidate) => candidate.accrualComponentId === input.componentId);
+      if (!plan || plan.systemKey !== "vacation" || plan.unit !== "money" || plan.direction !== "accrue") {
+        throw new PayrollError("The declared vacation accrual no longer matches one active money vacation plan; correct the audited input and recalculate.");
+      }
+      declaredAccrualValues.set(plan.id, {
+        amount: input.amount,
+        note: JSON.stringify({ kind: "declared_vacation_accrual", reason: input.reason,
+          sourceReference: input.sourceReference, requestId: input.requestId }),
+      });
+    }
     const bankablePlans = (payVacationInCash || args.excludeVacationAccrual) && vacationPlan
       ? plans.filter((p) => p.id !== vacationPlan.id)
       : plans;
+    if ([...declaredAccrualValues.keys()].some((planId) => !bankablePlans.some((plan) => plan.id === planId))) {
+      throw new PayrollError("A declared vacation accrual requires the vacation bank to accrue on this cheque; review the employee's effective vacation method and recalculate.");
+    }
     // Each plan excludes its own settlement inside planMovementsForStub.
     // Other bank payouts remain earnings under their declared eligibility;
     // deferred wages can earn vacation when the wage component allows it.
@@ -158,7 +179,7 @@ export async function applyEntitlementPlanMovements(
         .filter((l) => l.kind === "earning" && !l.accrualOnly)
         .map((l) => ({
           componentId: l.componentId, amount: l.amount,
-          hours: l.hours ?? null, bankable: l.vacationable ?? true,
+          hours: l.hours ?? null, bankable: vacationBaseIncluded(l),
         })),
       plans: bankablePlans,
       // The caller supplies the effective employee election and service
@@ -167,6 +188,7 @@ export async function applyEntitlementPlanMovements(
       employeeAccrualValues: vacationPlan
         ? new Map([[vacationPlan.id, String(vacationPercent ?? "0")]])
         : undefined,
+      declaredAccrualValues,
     });
     entitlementWarnings.push(...warnings);
     // One wage lookup serves every plan's hours valuation for this stub, the
@@ -197,7 +219,7 @@ export async function applyEntitlementPlanMovements(
         lines.push({
           componentId: movement.componentId, kind: "earning",
           description: `${plan.name} payout`, amount: negMoney(money),
-          sequence: 46, vacationable: false,
+          sequence: 46,
         });
       } else if (movement.kind === "repayment") {
         // 'owe' plans recoup through a deduction — the employee repays what

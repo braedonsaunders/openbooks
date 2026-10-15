@@ -1,3 +1,4 @@
+import { usOpeningAccountBaseForEin, usOpeningFieldForEin } from './opening-ytd-source.ts';
 import { resolveStatutoryHistoryScope,employerScopedStatutoryStubs } from '../statutory-history-scope.ts';
 import { employeeOpeningLevyAmount, readEmployeeOpeningLevySources } from '../opening-levy-source-reader.ts';
 import { sql } from "drizzle-orm";
@@ -28,11 +29,11 @@ import {
 } from "./withholding.ts";
 import { usPayrollConfig } from "./config.ts";
 import {
-  US_FICA_WAGES_ACCOUNT_BASE, US_FICA_WITHHELD_ACCOUNT_BASE, US_OPENING_YTD_FIELDS,
+  US_FICA_WAGES_ACCOUNT_BASE, US_FICA_WITHHELD_ACCOUNT_BASE,
 } from "./opening-ytd.ts";
 import { applySuiTransferCredits, suiTransferRuleFor, type SuiPriorStateWages } from "./sui-transfer.ts";
 import { w2LocalWageTraceKey } from "./local-wage-trace.ts";
-import { loadUsFilingAccounts, resolveUsEmployerScope, resolveUsStateSuiAccount } from "./employer-scope.ts";
+import { loadUsFilingAccounts, resolveUsEmployerScope, resolveUsStateSuiAccount, resolveUsFederalFilingAccount } from "./employer-scope.ts";
 import { resolveUsResidentWithholdingFacts } from "./states/types.ts";
 import { requireUsFederalAlienStatus } from "./employee-facts.ts";
 import { paUcEmployeeWithholding } from "./states/pa.ts";
@@ -46,6 +47,7 @@ import { dcOpflWithholding } from "./states/dc.ts";
 import { ctPaidLeaveWithholding } from "./states/ct.ts";
 
 export type UsYtdRow = {
+  federalAccountId: string | null;
   fica: string;
   futa: string;
   futaCurrentAccount: string;
@@ -122,17 +124,14 @@ export async function usWaivedSuiRateSlots(
   tx: Pick<typeof db, "execute">,
   input: {
     orgId: string; filingAccountId: string | null; region: string | null; payDate: string;
-    employeePartyId?: string;
+    employeePartyId?: string; subsidiaryId?: string | null;
   },
 ): Promise<readonly string[]> {
-  const { orgId, filingAccountId, region, payDate, employeePartyId } = input;
+  const { orgId, filingAccountId, region, payDate } = input;
   if (!filingAccountId || !region) return [];
-  const employeeSubsidiaryId = employeePartyId
-    ? (await tx.execute<{ subsidiary_id: string | null }>(sql`
-        select subsidiary_id from parties where org_id = ${orgId} and id = ${employeePartyId}`)).rows[0]?.subsidiary_id ?? null
-    : null;
+  const employeeSubsidiaryId = input.subsidiaryId ?? null;
   const suiAccountId = resolveUsStateSuiAccount(
-    await loadUsFilingAccounts(tx, orgId), filingAccountId, employeeSubsidiaryId, region,
+    await loadUsFilingAccounts(tx, orgId), filingAccountId, employeeSubsidiaryId, region, payDate,
   );
   if (!suiAccountId) return [];
   const recorded = await findStoredEmployerFactValue({
@@ -303,59 +302,63 @@ export async function usEmployeeYtd(
 ): Promise<UsYtdRow> {
   const { tx, orgId, employeePartyId, taxYear, documentId } = ctx;
   const historyScope=await resolveStatutoryHistoryScope(tx,{...ctx,country:'US'});
+  if (historyScope.currency !== 'USD') {
+    throw new PayrollError('US annual statutory history requires the actual pay-run USD currency basis');
+  }
   const accounts = await loadUsFilingAccounts(tx, orgId);
   const employeeSubsidiaryId=historyScope.subsidiaryId;
-  const scope = resolveUsEmployerScope(accounts, filingAccountId, employeeSubsidiaryId);
-  const suiAccountId = resolveUsStateSuiAccount(accounts, filingAccountId, employeeSubsidiaryId, region);
+  const source = (await tx.execute<{ pay_date: string }>(sql`select pay_date::text from pay_runs
+    where org_id=${orgId} and document_id=${documentId}`)).rows;
+  if (source.length !== 1) throw new PayrollError('US year-to-date inputs require the actual native pay-run source date.');
+  const sourceDate = source[0]!.pay_date;
+  const scope = resolveUsEmployerScope(accounts, filingAccountId, employeeSubsidiaryId, sourceDate);
+  const suiAccountId = resolveUsStateSuiAccount(accounts, filingAccountId, employeeSubsidiaryId, region, sourceDate);
   const openingSources = await readEmployeeOpeningLevySources(tx, {
-    orgId, employeePartyId, taxYear, subsidiaryId: employeeSubsidiaryId,
+    orgId, employeePartyId, taxYear, subsidiaryId: employeeSubsidiaryId, beforeDate: sourceDate,
   });
   const openingFuta = employeeOpeningLevyAmount(openingSources, {
     programKey: 'us_futa', region: 'US', filingAccountId: scope.federalAccountId,
   });
-  if (openingSources.hasFutaWageHistory && (scope.federalAccountId === null
+  if (openingSources.facts?.originalCountry === 'US' && openingSources.hasFutaWageHistory && (scope.federalAccountId === null
     || !openingSources.allocations.some((allocation) => allocation.programKey === 'us_futa'
       && allocation.filingAccountId === scope.federalAccountId))) {
     throw new PayrollError('Prior FUTA wages do not have an opening allocation for this legal employer EIN. Qualify the original EIN source in Payroll → Opening balances → Levy source before calculating.');
   }
   const openingSui = openingSources.allocations.filter((allocation) =>
-    allocation.programKey === 'us_sui');
-  if (openingSources.hasOpening && openingSources.allocations.filter((allocation) => allocation.programKey === 'us_futa').length > 1
-    && openingSources.allocations.some((allocation) => allocation.programKey === 'us_sui' || allocation.programKey === 'us_pa_lst')) {
-    throw new PayrollError('The original SUI or PA LST opening cannot be attributed to this EIN; preserve its source and resolve the original legal-employer account identity before calculating');
-  }
+    allocation.programKey === 'us_sui' && allocation.federalAccountId === scope.federalAccountId);
   const openingSuiCurrentRegion = employeeOpeningLevyAmount(openingSources, {
-    programKey: 'us_sui', region, filingAccountId: suiAccountId,
+    programKey: 'us_sui', region, filingAccountId: suiAccountId, federalAccountId: scope.federalAccountId,
   });
   const suiOpeningStates = openingSui.reduce<Record<string, string>>((totals, allocation) => ({
     ...totals,
     [allocation.region]: add(totals[allocation.region] ?? '0', allocation.amount),
   }), {});
-  // Committed stubs under the same EMPLOYER — every state account of the
-  // run's EIN — feed the federal bases; see ./employer-scope.ts.
-  const employerStubs = scope.stubAccountIds === null
-    ? sql`s.filing_account_id is null`
-    : sql`s.filing_account_id = any(${`{${scope.stubAccountIds.join(",")}}`}::uuid[])`;
-  const otherEmployerStubs = scope.stubAccountIds === null
-    ? sql`s2.filing_account_id is null`
-    : sql`s2.filing_account_id = any(${`{${scope.stubAccountIds.join(",")}}`}::uuid[])`;
-  const ficaWithheldColumn = US_OPENING_YTD_FIELDS.find((field) => field.key === "ficaWithheldYtd")!.column;
-  // The per-EIN carry-in for the run's employer (see ./opening-ytd.ts); the
-  // legacy employee-only column beside it is zero whenever this is set.
-  const einCarryIn = (programKey: string) => sql`
-    coalesce((select insurable_ytd from payroll_opening_account_bases
-               where org_id = ${orgId} and employee_party_id = ${employeePartyId}
-                 and tax_year = ${taxYear} and program_key = ${programKey}
-                 and filing_account_id = ${scope.federalAccountId}::uuid
-                 and region is null), 0)`;
+  // Resolve every retained stub at its own pay date. A state registration
+  // can change affiliation without moving prior wages into the new EIN.
+  const priorStubs = (await tx.execute<{ id: string; filing_account_id: string | null; source_date: string }>(sql`
+    select s.id, s.filing_account_id, s.history_run_pay_date::text as source_date
+      from ${employerScopedStatutoryStubs(historyScope,{employeePartyId})} s
+  `)).rows;
+  const ids = priorStubs.filter(stub => resolveUsFederalFilingAccount(
+    accounts, stub.filing_account_id, employeeSubsidiaryId, stub.source_date,
+  ) === scope.federalAccountId).map(stub => stub.id);
+  const sameEinStubs = (alias: string) => ids.length
+    ? sql`${sql.raw(alias + '.id')} in (${sql.join(ids.map(id => sql`${id}::uuid`), sql`, `)})`
+    : sql`false`;
+  const employerStubs = sameEinStubs('s');
+  const otherEmployerStubs = sameEinStubs('s2');
+  const openingFica = usOpeningFieldForEin(openingSources, scope.federalAccountId, 'pensionable_ytd');
+  const openingSupplemental = usOpeningFieldForEin(openingSources, scope.federalAccountId, 'non_periodic_ytd');
+  const openingFicaWithheld = usOpeningFieldForEin(openingSources, scope.federalAccountId, 'fica_withheld_ytd');
+  const einCarryIn = (programKey: typeof US_FICA_WAGES_ACCOUNT_BASE | typeof US_FICA_WITHHELD_ACCOUNT_BASE) =>
+    sql`${usOpeningAccountBaseForEin(openingSources, scope.federalAccountId, programKey)}::numeric`;
   const r = (await tx.execute<UsYtdRow>(sql`
     select
-      coalesce((select pensionable_ytd from payroll_opening_balances
-                 where org_id = ${orgId} and employee_party_id = ${employeePartyId} and tax_year = ${taxYear}), 0)
+      ${openingFica}::numeric
       + ${einCarryIn(US_FICA_WAGES_ACCOUNT_BASE)}
       + coalesce(sum(s.pensionable_earnings), 0) as fica,
       ${openingFuta}::numeric + coalesce(sum(s.insurable_earnings), 0) as futa,
-      ${openingSources.hasSuiWageHistory && openingSui.length === 0} as "suiOpeningUnscoped",
+      ${openingSources.facts?.originalCountry === 'US' && openingSources.hasSuiWageHistory && openingSui.length === 0}::boolean as "suiOpeningUnscoped",
       coalesce(sum(s.insurable_earnings) filter (where s.province = ${region}), 0)::text as "suiCurrentRegion",
       coalesce(string_agg(distinct s.province, ', ' order by s.province)
         filter (where s.province <> ${region} and s.insurable_earnings > 0), '') as "suiOtherRegions",
@@ -372,8 +375,7 @@ export async function usEmployeeYtd(
       '{}'::jsonb as "suiOpeningStates",
       '0'::text as "suiOpeningCurrentRegion",
       ${openingFuta}::numeric + coalesce(sum(s.insurable_earnings), 0) as "futaCurrentAccount",
-      coalesce((select non_periodic_ytd from payroll_opening_balances
-                 where org_id = ${orgId} and employee_party_id = ${employeePartyId} and tax_year = ${taxYear}), 0)
+      ${openingSupplemental}::numeric
       + coalesce(sum((s.factors->>'B')::numeric), 0) as supplemental,
       coalesce(sum((s.factors->>'mn_paid_leave_BASE')::numeric), 0) as "mnPaidLeaveWages",
       coalesce(bool_or(
@@ -396,12 +398,12 @@ export async function usEmployeeYtd(
           and history.pay_run_document_id <> ${documentId}
           and committed_run.run_status = 'committed'
           and committed_document.status <> 'voided'
+          and ${sameEinStubs('history')}
           and coalesce((history.factors->>'B')::numeric, 0) = 0
           and (fact.key like 'SIT_%' or fact.key like 'LIT_%')
           and coalesce(fact.value::numeric, 0) > 0
       ), ARRAY[]::text[]) as "regularWageTaxWithheldKeys",
-      coalesce((select ${sql.raw(ficaWithheldColumn)} from payroll_opening_balances
-                 where org_id = ${orgId} and employee_party_id = ${employeePartyId} and tax_year = ${taxYear}), 0)
+      ${openingFicaWithheld}::numeric
       + ${einCarryIn(US_FICA_WITHHELD_ACCOUNT_BASE)}
       + coalesce(sum((s.factors->>'SS')::numeric), 0)
       + coalesce(sum((s.factors->>'MED')::numeric), 0)
@@ -412,7 +414,7 @@ export async function usEmployeeYtd(
           select fact.key, sum(coalesce(fact.value::numeric,0)) as total
             from ${employerScopedStatutoryStubs(historyScope,{employeePartyId,region:'PA'})} history
             cross join lateral jsonb_each_text(history.factors) as fact(key,value)
-           where fact.key like 'LIT#_PA-%-LST' escape '#'
+           where ${sameEinStubs('history')} and fact.key like 'LIT#_PA-%-LST' escape '#'
            group by fact.key
         ) lst
       ), '{}'::jsonb) as "lstWithheldYtd"
@@ -422,7 +424,7 @@ export async function usEmployeeYtd(
   const row = r.rows[0]!;
   const lstWithheldYtd = { ...row.lstWithheldYtd };
   for (const allocation of openingSources.allocations) {
-    if (allocation.programKey !== 'us_pa_lst') continue;
+    if (allocation.programKey !== 'us_pa_lst' || allocation.federalAccountId !== scope.federalAccountId) continue;
     const key = `LIT_PA-${allocation.subRegion}-LST`;
     lstWithheldYtd[key] = add(lstWithheldYtd[key] ?? '0', allocation.amount);
   }
@@ -430,6 +432,7 @@ export async function usEmployeeYtd(
     ...row,
     suiAccountId,
     futa: row.futaCurrentAccount,
+    federalAccountId: scope.federalAccountId,
     suiOpeningCurrentRegion: openingSuiCurrentRegion,
     suiOpeningStates,
     lstWithheldYtd,
@@ -458,7 +461,7 @@ export async function computeUsStatutory(
   const config = await usPayrollConfig(orgId, taxYear, run.pay_date);
   const ytd = await usEmployeeYtd(ctx, region, filingAccountId);
   const openingLevySources = await readEmployeeOpeningLevySources(tx, {
-    orgId, employeePartyId, taxYear, subsidiaryId: (await resolveStatutoryHistoryScope(tx, { ...ctx, country: 'US' })).subsidiaryId,
+    orgId, employeePartyId, taxYear, subsidiaryId: (await resolveStatutoryHistoryScope(tx, { ...ctx, country: 'US' })).subsidiaryId, beforeDate: run.pay_date!,
   });
   const suiExempt = bool(empFact("US", emp, "sui_exempt"));
   // The method is read raw and resolved through the declaration: a missing
@@ -803,7 +806,7 @@ export async function computeUsStatutory(
       const clgs = certificateFor('us_pa_clgs32_6');
       const workPsd = levy.side === 'work' ? levy.subRegion : clgs == null ? null : certificateCode(clgs, 'work_psd_code');
       if (workPsd && config.subRegionRates('us_pa_lst', 'PA', workPsd)?.annualAmount != null) {
-        employeeOpeningLevyAmount(openingLevySources, { programKey: 'us_pa_lst', region: 'PA', subRegion: workPsd });
+        employeeOpeningLevyAmount(openingLevySources, { programKey: 'us_pa_lst', region: 'PA', subRegion: workPsd, federalAccountId: ytd.federalAccountId });
       }
     }
     const withheld = computeUsWithholding({

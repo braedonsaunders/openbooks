@@ -2780,6 +2780,16 @@
         "weekly": "Semanal (lun.)"
       }
     },
+    "usFilingLineage": {
+          "stateAccount": "Cuenta de declaración estatal",
+          "employer": "Empleador legal original",
+          "federalAccount": "EIN federal original",
+          "federalHelp": "Los EIN retirados siguen disponibles para acreditar fuentes históricas.",
+          "datesHelp": "Fechas inclusivas de la inscripción original. El cierre debe respetar la última nómina contabilizada.",
+          "sourceReference": "Referencia de la evidencia de inscripción original",
+          "sourceHelp": "Identifique la carta de inscripción o el documento conservado que acredita este EIN y el período.",
+          "reason": "Motivo del cambio"
+    },
     "entities": {
       "usage-meters": {
         "title": "Medidores de uso",
@@ -2891,6 +2901,11 @@
       "worker-comp-groups": {
         "title": "Grupos de compensación laboral",
         "description": "Grupos de tasas de compensación laboral para el costeo de mano de obra."
+      },
+      "pay-component-statutory-treatments": {
+        "title": "Tratamientos legales",
+        "singularTitle": "Tratamiento legal",
+        "description": "Exclusiones de programas e inclusión en la base de vacaciones fechadas para este componente, según la fecha de pago. El grupo de compensación sustituye todo el tratamiento."
       },
       "pay-component-department-expenses": {
         "title": "Cuentas de gasto por departamento",
@@ -3220,6 +3235,11 @@
         "title": "Asignaciones",
         "description": "Distribuya costos comunes a destinos mediante un inductor: divisiones al registrar, aportes al contabilizar y barridos del período.",
         "singular": "regla de distribución"
+      },
+      "payroll-us-filing-account-employer-lineage": {
+              "title": "Historial del EIN del empleador",
+              "singularTitle": "Afiliación al EIN del empleador",
+              "description": "Titularidad original de la cuenta estatal, con fechas inclusivas y evidencia conservada."
       },
       "payroll-filing-accounts": {
         "title": "Cuentas de declaración",
@@ -4104,6 +4124,8 @@
       "trigger": "Activado por",
       "unionName": "Sindicato",
       "unit": "Unidad",
+      "initialVacationable": "Inclusión inicial en la base de vacaciones",
+      "componentTreatmentReason": "Motivo del cambio",
       "vacationable": "Cuenta para pago de vacaciones",
       "value": "Valor",
       "allocatedThrough": "Asignado hasta",
@@ -4495,6 +4517,10 @@
       "mode": "Política"
     },
     "fieldHelp": {
+      "initialVacationable": "Solo se usa para crear el primer tratamiento fechado. Para un componente existente, cambie su historial de tratamientos legales.",
+      "componentTreatmentPayDate": "Las fechas inclusivas se aplican a la fecha de pago, incluidos pagos retroactivos y finales. El grupo de compensación sustituye todo el tratamiento.",
+      "componentTreatmentVacationable": "Incluir este ingreso en las bases de vacaciones y de ingresos acumulables en las fechas de pago cubiertas.",
+      "componentTreatmentReason": "Explique el cambio del tratamiento legal o de la base de vacaciones e identifique la documentación de respaldo. En cada guardado se registra un nuevo motivo de 1 a 2000 caracteres en el historial de auditoría.",
       "fxRateMaxAgeDays": "Días entre el tipo utilizable más reciente y el cierre del período a partir de los cuales la revaluación y la consolidación rechazan el tipo. Los tipos de cierre se cuentan desde la fecha del tipo al contado de cierre; los promedio, desde la cotización más reciente promediada. Valor predeterminado sin política: 31 días.",
       "storedValueLiabilityAccount": "La cuenta del balance que se acredita al emitir valor y se debita al canjear.",
       "storedValueBreakageIncomeAccount": "La cuenta de ingresos que se acredita cuando se reconoce breakage o vencimiento.",
@@ -7293,7 +7319,7 @@
       "responsibilities": "Asignaciones con fechas",
       "responsibilitiesHint": "Asigne cada grupo y puesto a una relación laboral con fechas explícitas. Cada origen requiere todas las participaciones.",
       "limits": "Límites por grupo",
-      "limitsHint": "Indique un límite monetario o sin límite por grupo. Las adjudicaciones anteriores del programa consumen el límite.",
+      "limitsHint": "Configure límites fijos opcionales por grupo. Los premios anteriores consumen esos límites. Con un porcentaje del presupuesto del proyecto, un importe sustituye el límite predeterminado de su grupo; cero establece un límite de cero.",
       "reason": "Motivo de auditoría",
       "reasonHint": "Explique el cambio. Todas las secciones se guardan juntas; los cambios de un programa activo aplican desde la fecha que elija.",
       "changeEffectiveFromHint": "Las reglas revisadas aplican desde esta fecha; los periodos anteriores conservan las reglas vigentes.",
@@ -7339,7 +7365,7 @@
         "amount": "Límite monetario"
       },
       "workDate": "Fecha de trabajo",
-      "capPercentHint": "Opcional. Limita cada proyecto a este porcentaje de los artículos del programa en su presupuesto adjudicado, menos la tasa del programa sobre todas las fuentes anteriores.",
+      "capPercentHint": "Predeterminado opcional. Limita cada proyecto aplicable a este porcentaje de los artículos del programa en su presupuesto adjudicado, menos la tasa del programa sobre las fuentes anteriores. Un límite fijo de grupo sustituye este valor predeterminado para su grupo.",
       "sources": {
         "assignment": "Asignaciones fechadas",
         "field_ticket_foreman": "Capataz del parte de obra",

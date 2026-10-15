@@ -165,7 +165,7 @@ test('native source authority preserves privacy, grants, entity fences and ownin
 
 test('native source authority refuses unbound caller executors before consulting their answers', async () => {
   let queries = 0
-  const supplied = { execute: (() => { queries++; return { rows: [{ allowed: true }] } }) as SqlExecutor['execute'] }
+  const supplied = { execute: (() => { queries++; return { rows: [{ allowed: true }] } }) as unknown as SqlExecutor['execute'] }
   const orgId = randomUUID()
   await withOrgContext(orgId, async () => {
     await assert.rejects(requireNativeFileReadAuthority({ orgId, actorId: randomUUID(), fileId: randomUUID() }, supplied), /pinned transaction executor/)

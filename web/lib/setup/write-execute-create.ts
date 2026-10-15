@@ -8,7 +8,7 @@ import { sql } from 'drizzle-orm'
 import { CurrencyError } from '@openbooks/engine/fx/currencies'
 import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
 import { toSnake } from './registry'
-import { buildRow, coerceBoolean, describeDbError, idColumn, multirefField, pgErrorCode, scaleShapeCheckRefusal, carrierCheckRefusal, shippingCheckRefusal } from './coerce'
+import { buildRow, coerceBoolean, describeDbError, idColumn, multirefField, pgErrorCode, scaleShapeCheckRefusal, carrierCheckRefusal, shippingCheckRefusal, setupAuditReason } from './coerce'
 import { normalizeHrmProcessTemplateInput } from './hrm-process-template'
 import { normalizeHrmPipelineStageInput } from './hrm-pipeline'
 import { HrmReviewTemplateScaleError, normalizeHrmReviewTemplateInput } from './hrm-review-template'
@@ -24,6 +24,7 @@ import { createUsageRatingPlan, retireUsageRatingPlan } from '@openbooks/engine/
 import { UsageBillingError } from '@openbooks/engine/billing/usage/errors'
 import { EntitlementError, createSaasFeature, type SaasFeatureType } from '@openbooks/engine/billing'
 import { auditSetupChange as audit, loadSetupAuditRow } from './audit'
+import { createInitialComponentTreatment } from './initial-component-treatment'
 import { isFeatureEnabled, subsidiaryFeatureEnabled } from '../features'
 import { numberSequenceStoredCols } from './number-sequence-position'
 import { bindSetupValue, defaultPayComponentProgramExclusions, entityForValidation, entityPermissionRefusal, foldPayComponentSetupCreate, foldRecruitingSetupCreate, integrityDatabaseRefusal, persistFxRateCols, resolveEntity, savePayComponentEarningClassification, setupDomainRefusal, setupEntityEnabled, setupRefusalResult, setupScopeRefusal, SetupWriteRefusal, syncMembers, writableSetupEntity, type SetupActor, type SetupWriteResult } from './write-shared'
@@ -99,6 +100,8 @@ export async function createSetupRecord(
     throw error
   }
   const body = normalizeHrmDocumentTemplateInput(entity.key, normalizeHrmBenefitPlanInput(entity.key, normalizeHrmPipelineStageInput(entity.key, normalizeHrmLeavePolicyInput(entity.key, reviewFolded))))
+  const auditReason = setupAuditReason(entity, body)
+  if ('error' in auditReason) return { status: 400, body: { error: auditReason.error, code: 'invalid' } }
   const multiCurrency = await isFeatureEnabled(orgId, 'multiCurrency')
   const writableEntity = writableSetupEntity(entity, {
     multiSubsidiary: await subsidiaryFeatureEnabled(orgId),
@@ -408,6 +411,7 @@ export async function createSetupRecord(
       ? [...new Set((body[members.key] as unknown[]).map(String).filter((v) => isUuid(v)))]
       : undefined
     const match = setupCreateMatch({
+      ...(auditReason.reason === undefined ? {} : { auditReason: auditReason.reason }),
       ...(memberIds === undefined ? {} : { members: memberIds }),
       ...(entity.key === 'pay-components'
         ? { earningClassification: {
@@ -441,7 +445,7 @@ export async function createSetupRecord(
         insert into ${sql.raw(entity.table)} (${colSql}) values (${valSql})
         -- A concurrent create claim is verified against its audited payload below before replaying.
         on conflict (id) do nothing
-        returning ${sql.raw(idColumn(entity))} as id`)))
+        returning ${sql.raw(idColumn(entity))} as id${entity.key === 'pay-components' ? sql`, vacationable` : sql``}`)))
       const insertedRow = inserted.rows[0]
       if (!insertedRow) {
         // Lost the same-key insert race: re-resolve the claim in this same
@@ -459,21 +463,10 @@ export async function createSetupRecord(
         })
       }
       if (entity.key === 'pay-components') {
-        const treatment = (await tx.execute(sql`
-          insert into pay_component_statutory_treatments
-            (org_id, pay_component_id, effective_from, program_exclusions, created_by, updated_by)
-          values (${orgId}, ${id}, current_date, ${defaultPayComponentProgramExclusions(body)}, ${actorId}, ${actorId})
-          returning *`)).rows[0]
-        if (!treatment) throw new Error('The component statutory treatment was not created')
-        await audit({
-          orgId,
-          table: 'pay_component_statutory_treatments',
-          rowId: String(treatment.id),
-          action: 'insert',
-          changes: { after: treatment, reason: 'Initial statutory treatment created with the pay component.' },
-          actorId,
-          requestId,
-        }, tx)
+        await createInitialComponentTreatment(tx, {
+          orgId, actorId, componentId: id, vacationable: insertedRow.vacationable,
+          programExclusions: defaultPayComponentProgramExclusions(body), requestId,
+        })
       }
       if (members && Array.isArray(body[members.key])) {
         await syncMembers(orgId, id, (body[members.key] as unknown[]).map(String), tx)
@@ -486,9 +479,7 @@ export async function createSetupRecord(
         changes: {
           after: await loadSetupAuditRow(entity, orgId, id, tx),
           match,
-          ...(entity.key === 'leave-policies' && typeof body.reason === 'string'
-            ? { reason: body.reason.trim() }
-            : {}),
+          ...auditReason,
         },
         actorId,
         requestId,

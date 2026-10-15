@@ -85,6 +85,19 @@ test('a load → save round trip is stable and never grows nodes', () => {
   assert.deepEqual(persisted.nodes.map((n) => n.id), ['t', 'c'])
 })
 
+test('the legal-entity limit round-trips through save, canonicalized and deduped', () => {
+  const entity = '11111111-1111-4111-8111-111111111111'
+  const first = toFlow(storedGraph(), LABELS)
+  const saved = fromFlow(first.nodes, first.edges, undefined, [entity.toUpperCase(), entity])
+  assert.deepEqual(saved.subjectScope, { subsidiaryIds: [entity] })
+  // No entities selected is the organization-wide spelling: the scope is
+  // omitted entirely, never persisted as an empty list.
+  const unscoped = fromFlow(first.nodes, first.edges, undefined, [])
+  assert.equal(unscoped.subjectScope, undefined)
+  const defaulted = fromFlow(first.nodes, first.edges)
+  assert.equal(defaulted.subjectScope, undefined)
+})
+
 test('a second trigger cannot be added while one exists', () => {
   assert.equal(canAddTrigger([]), true)
   assert.equal(canAddTrigger([conditionNode('c', 120)]), true)

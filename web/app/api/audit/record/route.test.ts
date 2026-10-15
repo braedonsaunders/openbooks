@@ -11,6 +11,7 @@ interface AuditState {
   hiddenEmployer: boolean
   reads: number
   documentKind?: string
+  changesText?: string
 }
 
 const stateKey = Symbol.for('openbooks.audit-record-route-test')
@@ -33,8 +34,10 @@ stubModules({
       export * from ${JSON.stringify(import.meta.resolve('@openbooks/engine/platform/db'))}
       const state = globalThis[Symbol.for('openbooks.audit-record-route-test')]
       export const db = {
+        async transaction(work) { return work(this) },
         async execute(query) {
           state.reads++; const text = new PgDialect().sqlToQuery(query).sql
+          if (text.includes('from pay_runs r join documents d')) return state.recordExists ? {rows:[{subsidiaryId:'employer-1'}]} : {rows:[]}
           if (['payroll_compensation_packages','payroll_compensation_versions','payroll_compensation_assignments'].some(table=>text.includes('from '+table))) return state.recordExists ? {rows:[{kind:'compensation',created_at:new Date(),created_by:null,subsidiaryId:'employer-1'}]} : {rows:[]}
           if (['hrm_training_courses','hrm_training_sessions','hrm_training_participants'].some(table=>text.includes('from "'+table+'"'))) return state.recordExists ? {rows:[{kind:'training',created_at:new Date(),created_by:null,subsidiaryId:'employer-1'}]} : {rows:[]}
           if (text.includes('from documents')) {
@@ -46,6 +49,7 @@ stubModules({
           if (['hrm_benefit_programs','hrm_benefit_plans','entitlement_plans'].some(table=>text.includes('from '+table))) return state.recordExists ? { rows:[{kind:'benefit_program',created_at:new Date(),created_by:null,subsidiaryId:'employer-1'}] } : {rows:[]}
           if (text.includes('from hrm_benefit_enrollments')) return state.recordExists ? { rows: [{ kind: 'benefit_enrollment', created_at: new Date(), created_by: null, subsidiaryId: 'employer-1' }] } : { rows: [] }
           if (text.includes('count(*)')) return { rows: [{ n: 0 }] }
+          if (text.includes('select e.id') && state.changesText !== undefined) return { rows: [{id:'event-1',action:'update',changes:state.changesText,at:new Date(),request_id:null,actor_name:null}] }
           return { rows: [] }
         },
       }
@@ -160,5 +164,40 @@ test('training audit hides existence before permission and feature checks and fe
     const response = await get(table, EXISTING_ID)
     assert.equal(response.status, 200, await response.clone().text())
     assert.ok(Array.isArray((await response.json()).rows), table)
+  }
+})
+
+test('payroll document history requires payroll read rather than payable or ledger read', async () => {
+  try {
+    for (const permissions of [['ap.read'], ['gl.read'], ['ar.read'], []]) {
+      Object.assign(auditState, { permissions, documentKind: 'pay_run', recordExists: true, featureOn: true, hiddenEmployer: false, reads: 0 })
+      const response = await get('documents', EXISTING_ID)
+      assert.equal(response.status, 404)
+      assert.deepEqual(await response.json(), { error: 'not_found' })
+      assert.ok(auditState.reads <= 1, 'a wrong-kind reader must not load payroll history')
+    }
+    // Successful payroll history uses real actor/population authority in the
+    // native integration fixture, rather than fabricating those domain gates.
+    Object.assign(auditState, { permissions: ['payroll.read'], reads: 0, featureOn: false })
+    assert.equal((await get('documents', EXISTING_ID)).status, 404)
+    auditState.featureOn = true
+    auditState.hiddenEmployer = true
+    assert.equal((await get('documents', EXISTING_ID)).status, 404)
+  } finally {
+    Object.assign(auditState, { documentKind: undefined, featureOn: true, hiddenEmployer: false })
+  }
+})
+
+test('record history preserves retained decimal and integer tokens across the JSON response', async () => {
+  Object.assign(auditState, { permissions: ['ap.read'], documentKind: 'vendor_bill', recordExists: true, featureOn: true, hiddenEmployer: false,
+    changesText: '{"before":{"total":999999999999998.99},"after":{"total":999999999999999.00,"revision":9007199254740993},"approved":true,"reason":null}' })
+  try {
+    const response = await get('documents', EXISTING_ID)
+    assert.equal(response.status, 200)
+    assert.deepEqual((await response.json()).rows[0].changes, {
+      before: { total: '999999999999998.99' }, after: { total: '999999999999999.00', revision: '9007199254740993' }, approved: true, reason: null,
+    })
+  } finally {
+    Object.assign(auditState, { documentKind: undefined, changesText: undefined })
   }
 })

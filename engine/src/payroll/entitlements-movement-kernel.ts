@@ -1,4 +1,5 @@
 import { add, cmp, mulDecimal, mulPercent, neg, roundMoney } from "../money/money.ts";
+import { canonicalDecimal } from "../money/exact-decimal.ts";
 import type { Money } from "../money/brands.ts";
 import { PayrollError } from "./error.ts";
 import {
@@ -74,6 +75,10 @@ export interface PlanMovementInput {
   unpaidCoverageValue?: string | null;
   /** Repayment amount authorized by the effective recurring Benefits recovery policy. */
   scheduledRepaymentValue?: string | null;
+  /** Audited exact currency amount declared for a money-denominated vacation accrual. */
+  declaredAccrualAmount?: string | null;
+  /** Audited operator evidence persisted with the resulting accrual movement. */
+  declaredAccrualNote?: string | null;
 }
 
 /**
@@ -105,9 +110,25 @@ export function computePlanMovement(input: PlanMovementInput): PlanMovementResul
   const accrualValue = personalVacationRate ? input.employeeAccrualValue : input.serviceAccrualValue
     ?? input.employeeAccrualValue
     ?? plan.accrualValue;
-  const earned = input.scheduledRepaymentValue != null
+  const declaredAmount = input.declaredAccrualAmount == null ? null : canonicalDecimal(input.declaredAccrualAmount, 2);
+  if (input.declaredAccrualAmount != null && (declaredAmount === null || plan.systemKey !== "vacation"
+    || plan.unit !== "money" || plan.direction !== "accrue"
+    || cmp(declaredAmount!, "0") <= 0)) {
+    throw new PayrollError("A declared vacation accrual requires a positive amount and an active money-denominated vacation plan.");
+  }
+  const policyEarned = input.scheduledRepaymentValue != null && declaredAmount == null
+    ? "0" : accrualValue == null ? "0" : earnedAmount(plan, accrualValue, input);
+  if (declaredAmount != null && cmp(declaredAmount, policyEarned) < 0) {
+    throw new PayrollError(
+      `The declared vacation accrual ${declaredAmount} is below the effective policy accrual ${policyEarned} — `
+      + "review the retained source and enter an amount that preserves the employee's effective vacation entitlement.",
+    );
+  }
+  const earned = input.declaredAccrualAmount != null
+    ? roundMoney(declaredAmount!, 2)
+    : input.scheduledRepaymentValue != null
     ? roundMoney(input.scheduledRepaymentValue, 2)
-    : accrualValue == null ? "0" : earnedAmount(plan, accrualValue, input);
+    : policyEarned;
 
   if (plan.direction === "owe") {
     if (input.unpaidCoverageValue != null && cmp(input.unpaidCoverageValue, '0') > 0) {
@@ -148,7 +169,7 @@ export function computePlanMovement(input: PlanMovementInput): PlanMovementResul
       }
       if (plan.capBehavior === "auto_payout") {
         const excess = add(projected, neg(max));
-        movements.push(accrualMovement(plan, employeePartyId, movementDate, earned, input.hours));
+        movements.push(accrualMovement(plan, employeePartyId, movementDate, earned, input.hours, input.declaredAccrualNote ?? null));
         movements.push({
           planId: plan.id,
           employeePartyId,
@@ -172,7 +193,7 @@ export function computePlanMovement(input: PlanMovementInput): PlanMovementResul
         threshold: max,
       });
     }
-    movements.push(accrualMovement(plan, employeePartyId, movementDate, earned, input.hours));
+    movements.push(accrualMovement(plan, employeePartyId, movementDate, earned, input.hours, input.declaredAccrualNote ?? null));
     balance = projected;
   }
 
@@ -228,6 +249,7 @@ function accrualMovement(
   movementDate: string,
   amount: string,
   hours: string,
+  note: string | null = null,
 ): EntitlementMovement {
   return {
     planId: plan.id,
@@ -237,7 +259,7 @@ function accrualMovement(
     hours: plan.accrualMethod === "per_hour_worked" ? roundMoney(hours, 2) : null,
     kind: "accrual",
     componentId: plan.accrualComponentId,
-    note: null,
+    note,
   };
 }
 

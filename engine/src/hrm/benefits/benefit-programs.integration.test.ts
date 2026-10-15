@@ -611,3 +611,52 @@ test("Benefits programs and payout controls", { skip: !process.env.OPENBOOKS_DB_
   });
 
 });
+
+test("program creation retains supplied reasons through the native writer", { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const org = await createScratchOrg();
+  try {
+    await enableHrm(org.orgId);
+    const actorId = await mkHr(org.orgId, "Benefits administrator", "benefits_reason", null, ["hrm.benefits.manage", "hrm.benefits.read"]);
+    const payComponentId = await seedComponent(org.orgId, { code: "REASON", kind: "earning" });
+    const input = {
+      orgId: org.orgId, actorId, code: "REASON", name: "Reviewed benefit program",
+      legalEntityId: org.subsidiaryId,
+      family: "reward" as const, currency: "CAD", effectiveFrom: "2026-01-01",
+      deliveryMethod: "payroll" as const, payComponentId, fixedAmount: "100.00",
+      reason: "  Approved compensation policy  ",
+    };
+    const program = await createBenefitProgram(input);
+    const audit = (await db.execute<{ actor_id: string; changes: { event: string; reason: string; before: unknown; after: { id: string } } }>(sql`
+      select actor_id, changes from audit_log where org_id=${org.orgId}
+        and table_name='hrm_benefit_programs' and row_id=${program.id} and changes->>'event'='created'
+    `)).rows;
+    assert.equal(audit.length, 1);
+    assert.equal(audit[0]!.actor_id, actorId);
+    assert.equal(audit[0]!.changes.reason, input.reason.trim());
+    assert.equal(audit[0]!.changes.before, null);
+    assert.equal(audit[0]!.changes.after.id, program.id);
+    for (const reason of [null, 12, {}, "", "  ", "x".repeat(2001)]) {
+      await assert.rejects(() => createBenefitProgram({ ...input, code: "REFUSED", reason: reason as never }), /program audit reason/);
+    }
+    assert.equal((await db.execute(sql`select id from hrm_benefit_programs where org_id=${org.orgId} and code='REFUSED'`)).rows.length, 0);
+    const person = await seedPerson(org.orgId, org.subsidiaryId, "Benefit recipient");
+    const member = await addProgramMembership({ orgId: org.orgId, actorId, programId: program.id,
+      employmentId: person.employmentId, effectiveFrom: "2026-01-01", reason: "  Approved eligible employment  " });
+    await activateBenefitProgram({ orgId: org.orgId, actorId, programId: program.id, reason: "  Approved programme activation  " });
+    const moves = (await db.execute<{ changes: { event: string; reason: string; after: { id: string } } }>(sql`
+      select changes from audit_log where org_id=${org.orgId} and table_name='hrm_benefit_programs'
+        and row_id=${program.id} and changes->>'event' in ('member_added','activated')
+    `)).rows;
+    assert.equal(moves.length, 2);
+    assert.equal(moves.find(row => row.changes.event === "member_added")!.changes.reason, "Approved eligible employment");
+    assert.equal(moves.find(row => row.changes.event === "member_added")!.changes.after.id, member.id);
+    assert.equal(moves.find(row => row.changes.event === "activated")!.changes.reason, "Approved programme activation");
+    for (const reason of [null, 12, {}, "", "  ", "x".repeat(2001)]) {
+      await assert.rejects(() => addProgramMembership({ orgId: org.orgId, actorId, programId: program.id,
+        employmentId: person.employmentId, effectiveFrom: "2027-01-01", reason: reason as never }), /program audit reason/);
+      await assert.rejects(() => activateBenefitProgram({ orgId: org.orgId, actorId, programId: program.id, reason: reason as never }), /program audit reason/);
+    }
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});

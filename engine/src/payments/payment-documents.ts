@@ -18,6 +18,15 @@ import { lockActorCommandAuthority } from "../organization/actor-command-authori
 import { loadSubsidiaryContext, validateSubsidiaryRestrictions, SubsidiaryError } from "../organization/subsidiaries.ts";
 import { resolveReceiptFunding } from "../payments-core/receipt-funding.ts";
 import { resolvePaymentCurrencyBasis } from "./payment-currency.ts";
+import { subsidiaryFunctionalCurrency } from "../ledger/document-fx.ts";
+import {
+  paymentFxIdentity,
+  paymentFxRateForSave,
+  planPaymentFxEdit,
+  storedPaymentFxEvidence,
+  type DocumentFxEditPlan,
+  type ExplicitFxInput,
+} from "./payment-fx-evidence.ts";
 import { loadStoredValueTenderAccount, resolveStoredValueTender, storedValueLiabilityControlAccount } from "../stored-value/accounts.ts";
 import {
   computePaymentWithholdings,
@@ -150,6 +159,14 @@ export async function updateDraftPayment(
      * shown once at issue and is gone by design) and re-verify the same way.
      */
     storedValueTenders?: Array<{ code: string; amount: string } | { accountId: string; amount: string }>;
+    /**
+     * Explicit settlement rate into the owning legal entity's functional
+     * currency (see payment-fx-evidence.ts). Undefined preserves recorded
+     * evidence while the payment's currency, entity and posting date are
+     * unchanged; null clears it. Recorded evidence stamps both `fx_rate`
+     * and `document_fx_rate_evidence` in this save's transaction.
+     */
+    explicitFx?: ExplicitFxInput | null;
     /** Authority-issued deduction authorisation for a contractor withholding
      *  scheme that requires one per payment (vendor payments only). */
     withholdingAuthorisation?: string | null;
@@ -198,6 +215,34 @@ export async function updateDraftPayment(
       withholdingAuthorisation?: string | null;
       withholdingAuthorisedAmount?: string | null;
     };
+    // The settlement rate is decided against the identity this draft posts
+    // with — its own currency, its legal entity's live functional currency
+    // and its effective posting date — under the document lock taken above.
+    // Recording one is a multi-currency capability; clearing one stays
+    // available so recorded evidence never strands a draft.
+    const storedFxEvidence = storedPaymentFxEvidence(doc.documentFxRateEvidence);
+    let fxPlan: DocumentFxEditPlan = { action: "keep" };
+    if (patch.explicitFx !== undefined || storedFxEvidence) {
+      if (patch.explicitFx != null && !(await lockAndCheckOrgFeature(db, doc.orgId, "multiCurrency"))) {
+        throw new PaymentError("explicit exchange rates are unavailable while Multi-currency is off; turn on Multi-currency in Company Settings \u2192 Features before recording a rate");
+      }
+      const functionalCurrency = doc.subsidiaryId
+        ? await subsidiaryFunctionalCurrency(db, doc.orgId, doc.subsidiaryId)
+        : null;
+      fxPlan = planPaymentFxEdit({
+        kind: doc.kind,
+        input: patch.explicitFx,
+        stored: doc.documentFxRateEvidence,
+        identity: paymentFxIdentity({
+          currency: doc.currency,
+          functionalCurrency,
+          documentDate: patch.documentDate ?? doc.documentDate,
+          postingDate: doc.postingDate,
+          subsidiaryId: doc.subsidiaryId,
+        }),
+      });
+    }
+    const standingFxEvidence = fxPlan.action === "set" ? fxPlan.evidence : fxPlan.action === "clear" ? null : storedFxEvidence;
     const partyId = patch.partyId !== undefined ? patch.partyId : doc.partyId;
     const bankAccountId =
       patch.bankAccountId !== undefined ? patch.bankAccountId : (custom.bankAccountId ?? null);
@@ -322,8 +367,23 @@ export async function updateDraftPayment(
       }
     }
     const currencyEntityId = processorFunding?.subsidiaryId ?? doc.subsidiaryId;
-    const currencyBasis = (processorFunding || custom.paymentCurrencyEvidence) && currencyEntityId
+    // Recorded manual evidence replaces the ordinary organization
+    // exchange-rate lookup outright: the lookup is skipped, so a payment
+    // with a valid manual election never needs a global rate row, and a
+    // global rate is never presented as a provider quote. Only an actual
+    // independent provider/processor contractual quote could conflict
+    // (assertPaymentFxQuoteAgrees); processor receipt funding carries
+    // account, entity, currency and dates — no rate — so no such quote is
+    // presented in this save. With no recorded rate the basis keeps its
+    // existing behaviour and invents no evidence.
+    const currencyBasis = !standingFxEvidence && (processorFunding || custom.paymentCurrencyEvidence) && currencyEntityId
       ? await resolvePaymentCurrencyBasis(doc.orgId, currencyEntityId, doc.currency, patch.documentDate ?? doc.documentDate) : null;
+    const savedFxRate = paymentFxRateForSave({
+      plan: fxPlan,
+      stored: storedFxEvidence,
+      basisRate: currencyBasis?.fxRate ?? null,
+      currentRate: doc.fxRate,
+    });
     if (discountAccountId || controlAccountId || feeIncomeAccountId) {
       const refs = [discountAccountId, controlAccountId, feeIncomeAccountId].filter(Boolean) as string[];
       const uniqueRefs = [...new Set(refs)];
@@ -506,19 +566,27 @@ export async function updateDraftPayment(
           document_date = coalesce(${patch.documentDate ?? null}, document_date),
           reference_number = ${patch.referenceNumber !== undefined ? patch.referenceNumber : sql`reference_number`},
           memo = ${patch.memo !== undefined ? patch.memo : sql`memo`},
-          fx_rate = ${currencyBasis?.fxRate ?? doc.fxRate},
-          custom = ${JSON.stringify({ ...custom, bankAccountId, processorFunding, ...(currencyBasis ? { paymentCurrencyEvidence: currencyBasis.evidence } : {}), allocations, creditAllocations, discountAmount, discountAccountId, controlAccountId, feeAmount, feeIncomeAccountId, onAccountAmount, storedValueTenders, withholdings, withholdingAmount, withholdingAuthorisation, withholdingAuthorisedAmount })}::jsonb,
+          fx_rate = ${savedFxRate},
+          document_fx_rate_evidence = ${fxPlan.action === 'set' ? JSON.stringify(fxPlan.evidence) : fxPlan.action === 'clear' ? null : sql`document_fx_rate_evidence`}::jsonb,
+          custom = ${JSON.stringify({ ...custom, bankAccountId, processorFunding, ...(standingFxEvidence ? { paymentCurrencyEvidence: null } : currencyBasis ? { paymentCurrencyEvidence: currencyBasis.evidence } : {}), allocations, creditAllocations, discountAmount, discountAccountId, controlAccountId, feeAmount, feeIncomeAccountId, onAccountAmount, storedValueTenders, withholdings, withholdingAmount, withholdingAuthorisation, withholdingAuthorisedAmount })}::jsonb,
           subtotal = ${total}, tax_total = '0', total = ${total},
           updated_at = greatest(clock_timestamp(), updated_at + interval '1 microsecond'), updated_by = ${userId}
         where id = ${id} and org_id = ${orgId}
       `);
       if (written.rowCount !== 1) throw new PaymentError("Payment draft could not be saved.");
+      if (fxPlan.action !== "keep") {
+        await tx.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+          values (${orgId}, 'documents', ${id}, 'update',
+            ${JSON.stringify({ mode: "payment_explicit_fx",
+              before: { fxRate: doc.fxRate, documentFxRateEvidence: storedFxEvidence },
+              after: { fxRate: savedFxRate, documentFxRateEvidence: standingFxEvidence } })}::jsonb, ${userId})`);
+      }
       if (processorFunding || (doc.custom as { processorFunding?: unknown } | null)?.processorFunding) {
         await tx.execute(sql`insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
           values (${orgId}, 'documents', ${id}, 'update',
             ${JSON.stringify({ mode: "processor_receipt_funding", reason: "Receipt funding selected during native draft save",
               before: { bankAccountId: custom.bankAccountId ?? null, processorFunding: (doc.custom as { processorFunding?: unknown } | null)?.processorFunding ?? null, fxRate: doc.fxRate },
-              after: { bankAccountId, processorFunding, total, fxRate: currencyBasis?.fxRate ?? doc.fxRate, currencyEvidence: currencyBasis?.evidence ?? null, documentDate: patch.documentDate ?? doc.documentDate } })}::jsonb, ${userId})`);
+              after: { bankAccountId, processorFunding, total, fxRate: savedFxRate, currencyEvidence: currencyBasis?.evidence ?? null, documentDate: patch.documentDate ?? doc.documentDate } })}::jsonb, ${userId})`);
       }
     });
     return loadPaymentDocument(id, doc.kind, orgId);

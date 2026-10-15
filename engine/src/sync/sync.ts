@@ -4,6 +4,7 @@ import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { db, schema, withOrg } from "../platform/db.ts";
 import { lockLedgerSetupFence } from "../organization/ledger-setup-fence.ts";
 import { isUuid } from "../platform/uuid.ts";
+import { guardRefusalMessage } from "../platform/database-refusal.ts";
 import { toUnits, fromUnits, normalizeDecimal, normalizeMoney } from "../money/money.ts";
 import { postDocument } from "../ledger/posting-document.ts";
 import { regenerateGlImpactTx } from "../ledger/posting-replay.ts";
@@ -770,6 +771,8 @@ export function canonicalNativeDocumentKey(d: NativeDocument): string {
       l.partyId ?? null,
       l.departmentId,
       l.projectId,
+      l.fieldTicketSourceSystem?.trim() || null,
+      l.fieldTicketSourceRef?.trim() || null,
       effectiveLineSubsidiary(l.subsidiaryId, d.subsidiaryId),
       l.extraDims ?? {},
       l.description,
@@ -870,6 +873,8 @@ type StoredLineKeyRow = {
   party_id: string | null;
   department_id: string | null;
   project_id: string | null;
+  field_ticket_source_system: string | null;
+  field_ticket_source_ref: string | null;
   subsidiary_id: string | null;
   extra_dims: Record<string, string | null>;
   description: string | null;
@@ -915,6 +920,8 @@ function storedCanonicalKey(
       l.party_id ?? null,
       l.department_id,
       l.project_id,
+      l.field_ticket_source_system ?? null,
+      l.field_ticket_source_ref ?? null,
       effectiveLineSubsidiary(l.subsidiary_id, d.subsidiary_id),
       l.extra_dims ?? {},
       l.description,
@@ -944,12 +951,16 @@ async function storedKey(docId: string, orgId: string): Promise<string> {
   ).rows;
   const lines = (
     (await db.execute<StoredLineKeyRow>(sql`
-      select line_number, custom->>'sourceLineRef' as source_line_ref, (select jsonb_object_agg(k,custom->k) from jsonb_object_keys(coalesce(custom->'connectorMappedValues','{}'::jsonb)) k) as mapped_custom,
-             account_id, item_id, quantity, unit, unit_price,
-             amount, tax_amount, tax_overridden, tax_code_id,
-             party_id, department_id, project_id, subsidiary_id, extra_dims, description,
-             is_billable, markup_percent, bill_amount
-        from document_lines where document_id = ${docId} and org_id = ${orgId} order by line_number`))
+      select line.line_number, line.custom->>'sourceLineRef' as source_line_ref, (select jsonb_object_agg(k,line.custom->k) from jsonb_object_keys(coalesce(line.custom->'connectorMappedValues','{}'::jsonb)) k) as mapped_custom,
+             line.account_id, line.item_id, line.quantity, line.unit, line.unit_price,
+             line.amount, line.tax_amount, line.tax_overridden, line.tax_code_id,
+             line.party_id, line.department_id, line.project_id, line.subsidiary_id, line.extra_dims, line.description,
+             line.is_billable, line.markup_percent, line.bill_amount,
+             ticket.custom->'source'->>'system' as field_ticket_source_system,
+             ticket.custom->'source'->>'externalId' as field_ticket_source_ref
+        from document_lines line
+        left join documents ticket on ticket.org_id = line.org_id and ticket.id = line.field_ticket_id
+       where line.document_id = ${docId} and line.org_id = ${orgId} order by line.line_number`))
   ).rows;
   return storedCanonicalKey(d!, lines);
 }
@@ -977,9 +988,12 @@ async function loadStoredKeys(
            dl.amount, dl.tax_amount, dl.tax_overridden,
            dl.tax_code_id, dl.party_id, dl.department_id, dl.project_id, dl.subsidiary_id,
            dl.extra_dims, dl.description,
-           dl.is_billable, dl.markup_percent, dl.bill_amount
+           dl.is_billable, dl.markup_percent, dl.bill_amount,
+           ticket.custom->'source'->>'system' as field_ticket_source_system,
+           ticket.custom->'source'->>'externalId' as field_ticket_source_ref
       from document_lines dl
       join documents d on d.id = dl.document_id and d.org_id = dl.org_id
+      left join documents ticket on ticket.org_id = dl.org_id and ticket.id = dl.field_ticket_id
      where dl.org_id = ${orgId} and d.org_id = ${orgId} and d.custom->>${refKey} is not null
      order by dl.document_id, dl.line_number`));
   const linesByDocument = new Map<string, StoredLineKeyRow[]>();
@@ -1428,6 +1442,57 @@ async function insertImportedLines(
   evidence: Map<number, ComputedTaxComponent[]>,
   preservedCustom = new Map<string, Record<string, unknown>>(),
 ): Promise<void> {
+  const fieldTicketByLine = new Map<number, string>();
+  for (const line of lines) {
+    const sourceSystem = line.fieldTicketSourceSystem?.trim() ?? "";
+    const sourceRef = line.fieldTicketSourceRef?.trim() ?? "";
+    if (!sourceSystem && !sourceRef) continue;
+    if (!sourceSystem || !sourceRef) {
+      throw new Error(
+        `field ticket link on line ${line.lineNumber} needs both source system and source reference`,
+      );
+    }
+    if (!line.projectId) {
+      throw new Error(
+        `field ticket source ${sourceSystem}:${sourceRef} on line ${line.lineNumber} has no project identity to validate`,
+      );
+    }
+    const matches = await tx.execute<{
+      document_id: string;
+      project_id: string | null;
+      subsidiary_id: string | null;
+      parent_subsidiary_id: string | null;
+    }>(sql`
+      select ticket.id::text as document_id, ticket.project_id::text as project_id,
+             ticket.subsidiary_id::text as subsidiary_id, parent.subsidiary_id::text as parent_subsidiary_id
+        from field_tickets ft
+        join documents ticket on ticket.org_id = ft.org_id and ticket.id = ft.document_id
+        join documents parent on parent.org_id = ft.org_id and parent.id = ${documentId}
+       where ft.org_id = ${orgId}
+         and ticket.kind = 'field_ticket'
+         and ticket.custom->'source'->>'system' = ${sourceSystem}
+         and ticket.custom->'source'->>'externalId' = ${sourceRef}
+       limit 2 for share of ticket, ft
+    `);
+    if (matches.rows.length !== 1) {
+      throw new Error(
+        matches.rows.length === 0
+          ? `field ticket source ${sourceSystem}:${sourceRef} on line ${line.lineNumber} is not imported in this organization`
+          : `field ticket source ${sourceSystem}:${sourceRef} resolves to multiple native tickets; reconcile the source identities before import`,
+      );
+    }
+    const ticket = matches.rows[0]!;
+    if (ticket.project_id !== line.projectId) {
+      throw new Error(
+        `field ticket source ${sourceSystem}:${sourceRef} on line ${line.lineNumber} belongs to a different project`,
+      );
+    }
+    const lineEntity = effectiveLineSubsidiary(line.subsidiaryId, ticket.parent_subsidiary_id);
+    if (!ticket.subsidiary_id || ticket.subsidiary_id !== lineEntity) {
+      throw new Error(`field ticket source ${sourceSystem}:${sourceRef} on line ${line.lineNumber} belongs to a different or unknown legal entity`);
+    }
+    fieldTicketByLine.set(line.lineNumber, ticket.document_id);
+  }
   const inserted = await tx
     .insert(schema.documentLines)
     .values(
@@ -1447,6 +1512,7 @@ async function insertImportedLines(
         partyId: line.partyId ?? null,
         departmentId: line.departmentId,
         projectId: line.projectId,
+        fieldTicketId: fieldTicketByLine.get(line.lineNumber) ?? null,
         subsidiaryId: line.subsidiaryId,
         extraDims: line.extraDims ?? {},
         description: line.description,
@@ -2643,6 +2709,8 @@ export async function runSync(
   } catch (e) {
     const verificationResult =
       e instanceof SyncVerificationError ? e.result : null;
+    const failureMessage = (guardRefusalMessage(e, { includeRaisedCheckViolations: true })
+      ?? (e instanceof Error ? e.message : String(e))).slice(0, 2000);
     if (connectionId) {
       // A failed run is connection health, not just run history: record the
       // named refusal on the connection (house status model active / error /
@@ -2651,7 +2719,6 @@ export async function runSync(
       // run's health alone, exactly like the success path above; the next
       // successful full run clears both fields back to healthy. The message is
       // bounded so a verbose verification dump cannot bloat the connections row.
-      const failureMessage = (e instanceof Error ? e.message : String(e)).slice(0, 2000);
       if (!targetedRefs) {
         await db.execute(sql`
           update connections
@@ -2669,7 +2736,7 @@ export async function runSync(
         status: "failed",
         finishedAt: new Date(),
         stats: { ...(verificationResult ?? {}), ...supplemental } as Record<string, unknown>,
-        errorMessage: (e as Error).message,
+        errorMessage: failureMessage,
       })
       .where(sql`${schema.syncRuns.id} = ${run!.id} and ${schema.syncRuns.orgId} = ${org.id}`);
     throw e;

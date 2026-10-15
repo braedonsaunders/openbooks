@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { toUnits } from "../../money/money.ts";
-import { computeTransactionIncentive, type IncentiveTransactionFact, type TransactionIncentivePolicy, type TransactionIncentiveGroup } from "./transaction-incentive-math.ts";
+import { applyTransactionGroupLimitOverrides, computeTransactionIncentive, type IncentiveTransactionFact, type TransactionIncentivePolicy, type TransactionIncentiveGroup } from "./transaction-incentive-math.ts";
 
 const policy: TransactionIncentivePolicy = { currency: "CAD", minorUnits: 2, periodFrom: "2026-01-01", periodTo: "2026-01-31", valuation: "percent_of_amount", rate: "7.5", recipientShares: [{ key: "lead", weight: "3" }, { key: "support", weight: "1" }] };
 const fact = (sourceId: string, amount: string, lead = "employee-a"): IncentiveTransactionFact => ({ sourceId, groupId: "project-a", occurredOn: "2026-01-15", currency: "CAD", amount, quantity: "2", recipients: [{ shareKey: "lead", employmentId: lead }, { shareKey: "support", employmentId: "employee-b" }] });
@@ -26,6 +26,29 @@ test("cumulative limits use recorded consumption and floor percentage ceilings t
   assert.equal(result.groups[0]!.availableLimit, "0.2500");
   assert.equal(computeTransactionIncentive(policy, [fact("line-a", "100")], [{ ...limit, limit: { ...limit.limit, previouslyAwarded: "1" } }]).totalAwarded, "0.0000");
   assert.equal(computeTransactionIncentive(policy, [fact("line-a", "100")], [{ groupId: "project-a", limit: { kind: "amount", amount: "2", previouslyAwarded: "1.25" } }]).totalAwarded, "0.7500");
+});
+
+test("fixed group ceilings replace the project-budget default and can cap a group at zero", () => {
+  const defaults: TransactionIncentiveGroup[] = [
+    { groupId: "project-a", limit: { kind: "percent_of_base", base: "1000", rate: "10", previouslyAwarded: "0", consumption: "measured" } },
+    { groupId: "project-b", limit: { kind: "none" } },
+  ];
+  const configured = applyTransactionGroupLimitOverrides(defaults, [
+    { groupId: "project-a", kind: "amount", amount: "0" },
+    { groupId: "project-b", kind: "amount", amount: "50" },
+  ], new Map([["project-a", toUnits("12")], ["project-b", toUnits("12")]]));
+  assert.deepEqual(configured, [
+    { groupId: "project-a", limit: { kind: "amount", amount: "0", previouslyAwarded: "12.0000" } },
+    { groupId: "project-b", limit: { kind: "amount", amount: "50", previouslyAwarded: "12.0000" } },
+  ]);
+  const result = computeTransactionIncentive(policy, [fact("line-a", "100")], [configured[0]!]);
+  assert.equal(result.groups[0]!.potentialAward, "7.5000");
+  assert.equal(result.groups[0]!.availableLimit, "0.0000");
+  assert.equal(result.totalAwarded, "0.0000");
+  const uncapped = applyTransactionGroupLimitOverrides(defaults, [
+    { groupId: "project-a", kind: "none", amount: null },
+  ], new Map());
+  assert.deepEqual(uncapped[0], { groupId: "project-a", limit: { kind: "none" } });
 });
 
 test("quantity valuation and recipient positions are independent of item names and employer titles", () => {
@@ -84,4 +107,11 @@ test("a measured ceiling counts every earlier source at the program rate, paid o
   const capped = computeTransactionIncentive(halves, facts, [{ groupId: "job", limit: { kind: "percent_of_base", base: "1000", rate: "10", previouslyAwarded: "65.5550", consumption: "measured" } }]);
   assert.equal(capped.groups[0]!.availableLimit, "34.4450");
   assert.deepEqual(capped.recipients, [{ employmentId: "fore", value: "17.2200" }, { employmentId: "sup", value: "17.2200" }]);
+});
+
+test("omitting group overrides retains measured budget consumption exactly", () => {
+  const defaults: TransactionIncentiveGroup[] = [{groupId: "project-a", limit: {kind: "percent_of_base", base: "1000", rate: "10", previouslyAwarded: "65.5550", consumption: "measured"}}];
+  const unchanged = applyTransactionGroupLimitOverrides(defaults, [], new Map([["project-a", toUnits("1")]]));
+  assert.deepEqual(unchanged, defaults);
+  assert.deepEqual(computeTransactionIncentive(policy, [fact("line-a", "1000")], unchanged), computeTransactionIncentive(policy, [fact("line-a", "1000")], defaults));
 });

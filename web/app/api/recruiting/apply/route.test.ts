@@ -24,7 +24,8 @@ if (!isVitest) {
   });
 }
 const applyRouteUrl = "./route.ts?hrm-recruiting-apply";
-const { POST, __resetApplyRateLimitForTests } = (await import(applyRouteUrl)) as typeof import("./route.ts");
+const { __resetApplyRateLimitForTests } = await import("./rate-limit.ts");
+const { POST } = (await import(applyRouteUrl)) as typeof import("./route.ts");
 hooks?.deregister();
 
 function applyRequest(postingId: string, displayName: string): Request {

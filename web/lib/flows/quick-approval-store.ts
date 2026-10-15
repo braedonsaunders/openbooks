@@ -6,9 +6,9 @@ import { QUICK_APPROVAL_FLOW_DESCRIPTION } from '@openbooks/engine/flows/module'
 
 /** The quick-approval setup state for one subject kind: its flow (if any) and the approver choices. */
 export async function readQuickApprovalSetup(orgId: string, subjectKind: string) {
-  const [flowRes, usersRes, rolesRes] = await Promise.all([
+  const [flowRes, usersRes, rolesRes, subsidiariesRes] = await Promise.all([
     db.execute<Record<string, unknown>>(sql`
-      select id, name, enabled, ${documentRevisionSql(sql`updated_at`)} as updated_at
+      select id, name, enabled, graph, ${documentRevisionSql(sql`updated_at`)} as updated_at
         from flows
        where org_id = ${orgId} and subject_kind = ${subjectKind}
          and description = ${QUICK_APPROVAL_FLOW_DESCRIPTION}
@@ -21,8 +21,17 @@ export async function readQuickApprovalSetup(orgId: string, subjectKind: string)
       select key, name from app_roles
        where org_id = ${orgId}
        order by name`),
+    db.execute<Record<string, unknown>>(sql`
+      select id, name from subsidiaries
+       where org_id = ${orgId} and is_active and not is_elimination
+       order by name`),
   ])
-  return { flow: flowRes.rows[0] ?? null, users: usersRes.rows, roles: rolesRes.rows }
+  return {
+    flow: flowRes.rows[0] ?? null,
+    users: usersRes.rows,
+    roles: rolesRes.rows,
+    subsidiaries: subsidiariesRes.rows,
+  }
 }
 
 /** Active user ids in the organization — the approvers a quick flow may name. */

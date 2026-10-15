@@ -11,6 +11,8 @@ import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withOrgContext } from "../platform/db.ts";
 import { qualifyOpeningEmployerAuthority, readOpeningEmployerContext } from "./opening-employer-authority.ts";
+import { qualifyOpeningLevySourceAuthority, readOpeningLevySourceContext, type OpeningLevySourceAllocationInput } from "./opening-levy-source-authority.ts";
+import { errorChainMatches } from "../testing/error-chain.ts";
 import { add, cmp, mulPercent } from "../money/money.ts";
 import { calculateT4127 } from "./canada/t4127.ts";
 import { employeeYtd } from "./canada/compute-statutory.ts";
@@ -263,11 +265,26 @@ async function seedAdoption(options: { hiredOn?: string } = {}): Promise<Adoptio
   };
 }
 
-/** Retain the fixture's original employer report before exercising Canadian carry-ins. */
-async function qualifyOriginalOpening(fx: AdoptionFixture): Promise<void> {
+/** Retain the fixture's complete original report through native Cabinet qualification. */
+async function qualifyOriginalOpening(fx: AdoptionFixture, options: {
+  completeSource?: boolean; originalCountry?: 'CA' | 'GB'; coverageEnd?: string;
+  allocations?: OpeningLevySourceAllocationInput[];
+} = {}): Promise<void> {
+  const originalCountry = options.originalCountry ?? 'CA';
+  const facts = { originalCountry, originalCurrency: originalCountry === 'GB' ? 'GBP' : 'CAD',
+    coverageStart: originalCountry === 'GB' ? '2026-04-06' : '2026-01-01',
+    coverageEnd: options.coverageEnd ?? '2026-07-04', coverageComplete: true as const };
+  const allocations: OpeningLevySourceAllocationInput[] = options.allocations ?? (originalCountry === 'GB' ? [] : [
+    ...['AB','BC','MB','NB','NL','NS','NT','NU','ON','PE','QC','SK','YT'].map(region =>
+      ({ programKey: 'ca_wcb', region, federalAccountId: null, amount: '0' })),
+    ...['BC','MB','NL','ON'].map(region => ({ programKey: 'ca_eht', region, federalAccountId: null, amount: '0' })),
+    { programKey: 'ca_cnt', region: 'QC', federalAccountId: null, amount: '0' },
+  ]);
   const original = (await db.execute<{ report: string }>(sql`
     select jsonb_build_object('legalEmployerId', ${fx.subsidiaryId}::text,
-                             'originalOpening', to_jsonb(b))::text as report
+      'originalOpening', to_jsonb(b),
+      'openingChildren', public.payroll_opening_source_children(b.org_id,b.id,b.employee_party_id,b.tax_year),
+      'facts', ${JSON.stringify(facts)}::jsonb, 'allocations', ${JSON.stringify(allocations)}::jsonb)::text as report
       from payroll_opening_balances b
      where b.org_id = ${fx.orgId} and b.employee_party_id = ${fx.employeeId}
        and b.tax_year = 2026
@@ -294,7 +311,24 @@ async function qualifyOriginalOpening(fx: AdoptionFixture): Promise<void> {
       expectedOpeningSha256:context.record.openingSha256,
       sourceFileId:fileId,sourceVersionId:versionId,sourceSha256:sha,
       sourceReference:'Original legal employer employee YTD report',
-      reason:'Retain original employer authority before Canadian calculation',allowedSubsidiaryIds:null});
+      reason:'Retain original employer authority for payroll carry-ins',allowedSubsidiaryIds:null});
+    if (options.completeSource) {
+      await assert.rejects(componentYearToDate(db, {
+        orgId: fx.orgId, employeePartyId: fx.employeeId, taxYear: 2026, componentId: randomUUID(),
+      }), /no complete statutory levy source allocation/);
+      const source = await readOpeningLevySourceContext({ orgId: fx.orgId, actorId: fx.actorId,
+        employeePartyId: fx.employeeId, taxYear: 2026, sourceFileId: fileId, allowedSubsidiaryIds: null });
+      assert.ok(source.record); assert.ok(source.source);
+      assert.equal(source.record.openingBalanceId, context.record.id);
+      assert.equal(source.source.versionId, versionId); assert.equal(source.source.sha256, sha);
+      await qualifyOpeningLevySourceAuthority({ orgId: fx.orgId, actorId: fx.actorId,
+        openingBalanceId: context.record.id, expectedOpeningSha256: context.record.openingSha256,
+        expectedOpeningChildrenSha256: source.record.openingChildrenSha256,
+        sourceFileId: fileId, sourceVersionId: versionId, sourceSha256: sha,
+        sourceReference: 'Complete original employer component and statutory year-to-date report',
+        reason: 'Certify original country, coverage and component carry-ins', allowedSubsidiaryIds: null,
+        ...facts, allocations });
+    }
   });
 }
 
@@ -355,7 +389,7 @@ test(
         }],
       });
 
-      await qualifyOriginalOpening(fx);
+      await qualifyOriginalOpening(fx, { completeSource: true });
 
       for (const workedOn of ["2026-07-06", "2026-07-08", "2026-07-10", "2026-07-14"]) {
         await seedPayrollTime(fx.orgId, fx.employeeId, fx.actorId, {
@@ -426,7 +460,7 @@ test(
         }],
       });
 
-      await qualifyOriginalOpening(fx);
+      await qualifyOriginalOpening(fx, { completeSource: true, coverageEnd: '2026-06-06' });
 
       const currentDocumentId = await seedRun(fx, {runStatus: "draft", calculated: false,
         periodStart: "2026-06-07", periodEnd: "2026-06-20", payDate: "2026-06-23"});
@@ -440,11 +474,10 @@ test(
       // not the contents of a neighbouring YTD column.
       assert.equal(ca.qpip_employer, "0.0000");
 
-      const us = await usEmployeeYtd({
+      await assert.rejects(usEmployeeYtd({
         tx: db, orgId: fx.orgId, employeePartyId: fx.employeeId,
         taxYear: 2026, documentId: currentDocumentId,
-      }, "ON");
-      assert.equal(us.fica_tax, "4000.0000");
+      }, "ON"), /US.*(currency|dollar)|USD/);
     } finally {
       await dropScratchOrgReporting(fx.orgId);
     }
@@ -490,7 +523,12 @@ test(
         }],
       });
 
-      await qualifyOriginalOpening(fx);
+      await qualifyOriginalOpening(fx, { completeSource: true, coverageEnd: '2026-06-06', allocations: [
+        ...['AB','BC','MB','NB','NL','NS','NT','NU','ON','PE','QC','SK','YT'].map(region =>
+          ({ programKey: 'ca_wcb', region, federalAccountId: null, amount: region === 'QC' ? '1000' : '0' })),
+        ...['BC','MB','NL','ON'].map(region => ({ programKey: 'ca_eht', region, federalAccountId: null, amount: '0' })),
+        { programKey: 'ca_cnt', region: 'QC', federalAccountId: null, amount: '0' },
+      ] });
 
       const currentDocumentId = await seedRun(fx, {runStatus: "draft", calculated: false,
         periodStart: "2026-06-07", periodEnd: "2026-06-20", payDate: "2026-06-23"});
@@ -520,9 +558,8 @@ test(
       `));
       const factors = stub.rows[0]!.factors;
       assert.equal(factors.QPIP_ER, "0.0000");
-      // A zero assessable base emits no WCB evidence at all: absence IS the
-      // capped outcome, and a zero-valued factor key would misread as room.
-      assert.ok(!("WCB_EARN" in factors), "no assessable-earnings factor at the cap");
+      // A reached ceiling retains a known zero basis for later history reads.
+      assert.equal(cmp(factors.WCB_EARN!, "0"), 0, "the capped assessable base is explicitly zero");
       assert.ok(!("WCB" in factors), "no premium factor at the cap");
     } finally {
       await dropScratchOrgReporting(fx.orgId);
@@ -577,6 +614,11 @@ test(
         }],
       });
 
+      await assert.rejects(componentYearToDate(db, {
+        orgId: fx.orgId, employeePartyId: fx.employeeId, taxYear: 2026, componentId,
+      }), /opening payer is not source-qualified/);
+      await qualifyOriginalOpening(fx, { completeSource: true });
+
       const ytd = await componentYearToDate(db, {
         orgId: fx.orgId, employeePartyId: fx.employeeId, taxYear: 2026, componentId,
       });
@@ -612,13 +654,13 @@ test(
         gross: '2400', netPay: '1900', factors: {}, createdBy: fx.actorId, updatedBy: fx.actorId,
       });
       await seedPayrollLine(fx.orgId, stubId, componentId, {
-        kind: 'deduction', description: 'RRSP', amount: '120', createdBy: fx.actorId, updatedBy: fx.actorId,
+        kind: 'deduction', description: 'RRSP', amount: '120.0001', createdBy: fx.actorId, updatedBy: fx.actorId,
       });
       assert.equal(
         await componentYearToDate(db, {
           orgId: fx.orgId, employeePartyId: fx.employeeId, taxYear: 2026, componentId,
         }),
-        "23120.0000",
+        "23120.0001",
       );
       // A run must not count its own lines, or recalculating ratchets the cap
       // down on every pass.
@@ -629,11 +671,67 @@ test(
         }),
         "23000.0000",
       );
+      assert.equal((await db.execute(sql`update documents set status='voided'
+        where org_id=${fx.orgId} and id=${documentId} returning id`)).rows.length, 1);
+      assert.equal(await componentYearToDate(db, {
+        orgId: fx.orgId, employeePartyId: fx.employeeId, taxYear: 2026, componentId,
+      }), "23000.0000", "voided documents do not consume annual room");
     } finally {
       await dropScratchOrgReporting(fx.orgId);
     }
   },
 );
+
+test("a sealed GB component-only original remains in the employee-year cap after a legal-employer and country move", { skip: !DB }, async () => {
+  const fx = await seedAdoption();
+  try {
+    const componentId = await seedCappedComponent(fx);
+    const otherComponentId = await seedCappedComponent(fx, { code: 'OTHER', assign: false });
+    assert.deepEqual((await saveOpeningBalances({ orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026,
+      rows: [{ employeePartyId: fx.employeeId, amounts: {}, components: { RRSP: '12345.6789' } }] })).errors, []);
+    const read = (componentId: string) => componentYearToDate(db, {
+      orgId: fx.orgId, employeePartyId: fx.employeeId, taxYear: 2026, componentId,
+    });
+    await assert.rejects(read(componentId), /opening payer is not source-qualified/);
+    await assert.rejects(read(otherComponentId), /opening payer is not source-qualified/);
+    assert.equal((await db.execute(sql`update subsidiaries set country='GB',base_currency='GBP'
+      where org_id=${fx.orgId} and id=${fx.subsidiaryId} returning id`)).rows.length, 1);
+    await qualifyOriginalOpening(fx, { completeSource: true, originalCountry: 'GB' });
+    assert.equal(await read(componentId), '12345.6789');
+    assert.equal(await read(otherComponentId), '0.0000', 'carry-in belongs to the exact configured component');
+    const successor = randomUUID();
+    assert.equal((await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country)
+      values(${successor},${fx.orgId},${fx.subsidiaryId},'Successor legal employer','CAD','CA') returning id`)).rows.length, 1);
+    await seedWorkerEmployment(fx.orgId, fx.employeeId, successor);
+    assert.equal((await db.execute(sql`update parties set subsidiary_id=${successor}
+      where org_id=${fx.orgId} and id=${fx.employeeId} returning id`)).rows.length, 1);
+    assert.equal((await db.execute(sql`delete from employee_payroll_profiles
+      where org_id=${fx.orgId} and employee_party_id=${fx.employeeId} returning employee_party_id`)).rows.length, 1);
+    assert.equal(await read(componentId), '12345.6789');
+    assert.equal(await read(otherComponentId), '0.0000');
+  } finally {
+    await dropScratchOrgReporting(fx.orgId);
+  }
+});
+
+test("an unsigned retained all-zero opening and component child consume no annual room", { skip: !DB }, async () => {
+  const fx = await seedAdoption();
+  try {
+    const componentId = await seedCappedComponent(fx);
+    const opening = (await db.execute<{ id: string }>(sql`insert into payroll_opening_balances
+      (org_id,employee_party_id,tax_year,created_by,updated_by)
+      values(${fx.orgId},${fx.employeeId},2026,${fx.actorId},${fx.actorId}) returning id`)).rows;
+    assert.equal(opening.length, 1);
+    assert.equal((await db.execute(sql`insert into payroll_opening_balance_components
+      (org_id,opening_balance_id,component_id,ytd_amount,created_by,updated_by)
+      values(${fx.orgId},${opening[0]!.id},${componentId},'0',${fx.actorId},${fx.actorId}) returning component_id`)).rows.length, 1);
+    assert.equal(await componentYearToDate(db, {
+      orgId: fx.orgId, employeePartyId: fx.employeeId, taxYear: 2026, componentId,
+    }), '0.0000');
+  } finally {
+    await dropScratchOrgReporting(fx.orgId);
+  }
+});
 
 test(
   "a carry-in whose only content is a component year-to-date survives, and clearing takes both",
@@ -1264,7 +1362,7 @@ test(
         }],
       });
 
-      await qualifyOriginalOpening(fx);
+      await qualifyOriginalOpening(fx, { completeSource: true });
 
       for (const workedOn of ["2026-07-06", "2026-07-08", "2026-07-10", "2026-07-14"]) {
         await seedPayrollTime(fx.orgId, fx.employeeId, fx.actorId, {
@@ -1293,25 +1391,25 @@ test(
       // 5% of $2,400 is $120; only $100 of annual room remains.
       assert.equal(await deduction(run.documentId), "100.0000");
 
-      // And it must BITE: the identical run with the carry-in removed takes the
-      // uncapped $120, which over the rest of the year is the second limit.
-      await db.execute(sql`
+      // Certified carry-ins cannot be removed to restart the annual ceiling.
+      await assert.rejects(db.execute(sql`
         delete from payroll_opening_balance_components oc
           using payroll_opening_balances b
          where b.id = oc.opening_balance_id and oc.org_id = ${fx.orgId}
-           and b.employee_party_id = ${fx.employeeId}`);
+           and b.employee_party_id = ${fx.employeeId}`),
+        error => errorChainMatches(error, /immutable|sealed|certified|qualified/));
       assert.equal(
         await componentYearToDate(db, {
           orgId: fx.orgId, employeePartyId: fx.employeeId, taxYear: 2026, componentId,
         }),
-        "0.0000",
+        "23400.0000",
       );
       assert.deepEqual(
         (await calculatePayRun({ orgId: fx.orgId, documentId: run.documentId, actorId: fx.actorId }))
           .errors,
         [],
       );
-      assert.equal(await deduction(run.documentId), "120.0000");
+      assert.equal(await deduction(run.documentId), "100.0000");
     } finally {
       await dropScratchOrgReporting(fx.orgId);
     }
@@ -1440,6 +1538,8 @@ test(
         rows: [{ employeePartyId: fxA.employeeId, amounts: {}, components: { RRSP: "3000" } }],
       });
       assert.deepEqual(resaved.errors, []);
+      await qualifyOriginalOpening(fxA, { completeSource: true });
+      await qualifyOriginalOpening(fxB, { completeSource: true });
       assert.equal(
         await componentYearToDate(db, { orgId: fxA.orgId, employeePartyId: fxA.employeeId, taxYear: 2026, componentId: componentA }),
         "3000.0000",

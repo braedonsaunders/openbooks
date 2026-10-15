@@ -8,7 +8,9 @@ import assert from 'node:assert/strict'
 import {
   automationGraphSchema,
   flowReadiness,
+  flowSubjectAdmission,
   gateDataSchema,
+  graphSubjectAdmission,
   interpolateTemplate,
   lintAutomationGraph,
   lintWorkerTriggerCompatibility,
@@ -172,6 +174,88 @@ describe('graph schema', () => {
 })
 
 // --- {{field}} interpolation ---------------------------------------------------
+
+describe('graph subject scope (legal-entity admission)', () => {
+  const ENTITY_A = '11111111-1111-4111-8111-111111111111'
+  const ENTITY_B = '22222222-2222-4222-8222-222222222222'
+  const scopedGraph = (subsidiaryIds: string[]): AutomationGraph => ({
+    schemaVersion: 1,
+    subjectScope: { subsidiaryIds },
+    nodes: [
+      { id: 't', position: { x: 0, y: 0 }, data: { kind: 'trigger', trigger: { trigger: 'on_submit' } } },
+      {
+        id: 'g', position: { x: 100, y: 0 },
+        data: { kind: 'gate', gate: { title: 'Approval', assignees: [{ type: 'role', role: 'admin' }], mode: 'any' } },
+      },
+    ],
+    edges: [{ id: 'e1', source: 't', target: 'g', sourceHandle: 'next' }],
+  })
+
+  test('schema round-trips the scope and canonicalizes uuid case', () => {
+    const parsed = automationGraphSchema.parse(scopedGraph([ENTITY_A.toUpperCase()]))
+    assert.deepEqual(parsed.subjectScope, { subsidiaryIds: [ENTITY_A] })
+    // Absent scope stays absent: organization-wide is the only unscoped spelling.
+    const unscoped = automationGraphSchema.parse({ schemaVersion: 1, nodes: [], edges: [] })
+    assert.equal(unscoped.subjectScope, undefined)
+  })
+
+  test('schema refuses empty, repeated, case-variant and non-uuid scopes', () => {
+    assert.throws(() => automationGraphSchema.parse(scopedGraph([])))
+    assert.throws(() => automationGraphSchema.parse(scopedGraph([ENTITY_A, ENTITY_A])))
+    assert.throws(() => automationGraphSchema.parse(scopedGraph([ENTITY_A, ENTITY_A.toUpperCase()])))
+    assert.throws(() => automationGraphSchema.parse(scopedGraph(['not-a-uuid'])))
+    assert.throws(() => automationGraphSchema.parse(scopedGraph(Array.from({ length: 101 }, (_, i) =>
+      `11111111-1111-4111-8111-${String(i).padStart(12, '0')}`))))
+  })
+
+  test('absent scope admits every subject, including an ownerless one', () => {
+    assert.equal(flowSubjectAdmission(undefined, ENTITY_A), 'admitted')
+    assert.equal(flowSubjectAdmission(null, null), 'admitted')
+    assert.equal(graphSubjectAdmission({ schemaVersion: 1, nodes: [], edges: [] }, undefined), 'admitted')
+  })
+
+  test('scoped admission admits only the listed entities', () => {
+    const scope = { subsidiaryIds: [ENTITY_A, ENTITY_B] }
+    assert.equal(flowSubjectAdmission(scope, ENTITY_A), 'admitted')
+    assert.equal(flowSubjectAdmission(scope, ENTITY_B.toUpperCase()), 'admitted')
+    assert.equal(flowSubjectAdmission(scope, '33333333-3333-4333-8333-333333333333'), 'out-of-scope')
+  })
+
+  test('missing, empty or unknown identity is unresolved, never admitted or out-of-scope', () => {
+    const scope = { subsidiaryIds: [ENTITY_A] }
+    for (const identity of [null, undefined, '', '   ', 0, false, {}, []]) {
+      assert.equal(flowSubjectAdmission(scope, identity), 'unresolved', JSON.stringify(identity))
+    }
+  })
+
+  test('lint refuses a scoped scheduled trigger without record selection', () => {
+    const graph = schedGraphWith({ kind: 'action', action: notify('Hi') })
+    graph.subjectScope = { subsidiaryIds: [ENTITY_A] }
+    const errors = lintAutomationGraph(graph, new Set())
+    assert.ok(errors.some((e) => /legal-entity-limited flow cannot run on a schedule without selecting records/.test(e)), errors.join('; '))
+    const withSelect: AutomationGraph = {
+      schemaVersion: 1,
+      subjectScope: { subsidiaryIds: [ENTITY_A] },
+      nodes: [
+        {
+          id: 'trigger', position: { x: 0, y: 0 },
+          data: { kind: 'trigger', trigger: { trigger: 'scheduled', cron: '* * * * *', select: { limit: 10 } } },
+        },
+        { id: 'node', position: { x: 100, y: 0 }, data: { kind: 'action', action: notify('Hi') } },
+      ],
+      edges: [{ id: 'edge', source: 'trigger', target: 'node', sourceHandle: 'next' }],
+    }
+    assert.ok(!lintAutomationGraph(withSelect, new Set()).some((e) => /legal-entity/.test(e)))
+  })
+
+  test('lint refuses empty and duplicated scopes on unparsed graphs', () => {
+    const empty = scopedGraph([ENTITY_A])
+    empty.subjectScope = { subsidiaryIds: [] }
+    assert.ok(lintAutomationGraph(empty, new Set()).some((e) => /names none/.test(e)))
+    const duplicated = scopedGraph([ENTITY_A, ENTITY_A])
+    assert.ok(lintAutomationGraph(duplicated, new Set()).some((e) => /more than once/.test(e)))
+  })
+})
 
 describe('interpolateTemplate', () => {
   test('substitutes header values and blanks unknown fields', () => {

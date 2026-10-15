@@ -338,6 +338,7 @@ async function approvedHire(h: Awaited<ReturnType<typeof setupProcessesHarness>>
     await db.execute(sql`
       insert into parties (id, org_id, kind, display_name, is_active, custom)
       values (${workerPartyId}, ${h.org.orgId}, 'person', 'Hired Worker', true, '{}'::jsonb)`);
+    await db.execute(sql`insert into employee_roles (org_id, party_id) values (${h.org.orgId}, ${workerPartyId})`);
     const employmentId = randomUUID();
     await db.execute(sql`
       insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision)

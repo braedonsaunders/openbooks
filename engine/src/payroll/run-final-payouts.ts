@@ -1,3 +1,4 @@
+import { vacationBaseIncluded } from './component-statutory-treatment.ts';
 /**
  * Final-payout earning phases: termination bank settlement and cash-out
  * vacation pay.
@@ -61,7 +62,7 @@ export async function settleTerminationBankPayouts(
       lines.push({
         componentId: balance.plan.payoutComponentId, kind: "earning",
         description: `${balance.plan.name} payout (accrued balance)`,
-        amount: payoutMoney, sequence: 44, vacationable: false,
+        amount: payoutMoney, sequence: 44,
       });
       entitlementMovements.push({
         planId: balance.plan.id, employeePartyId, movementDate: payDate,
@@ -79,6 +80,7 @@ export async function settleTerminationBankPayouts(
  */
 export function appendCashVacationPay(args: {
   vacationPercent: string | null;
+  vacationPayoutComponentId?: string | null;
   payVacationInCash: boolean;
   need: (systemKey: string, kind: string) => Record<string, unknown>;
   lines: Line[];
@@ -90,7 +92,7 @@ export function appendCashVacationPay(args: {
   // not accrued, so no ledger movement is produced.
   if (payVacationInCash && vacationPercent && cmp(vacationPercent, "0") > 0) {
     const base = sum(lines
-      .filter((l) => l.kind === "earning" && (l.vacationable ?? true) && !l.accrualOnly)
+      .filter((l) => l.kind === "earning" && vacationBaseIncluded(l) && !l.accrualOnly && l.componentId !== args.vacationPayoutComponentId)
       .map((l) => l.amount));
     const vacation = mulPercent(base, vacationPercent, 2) as Money;
     if (cmp(vacation, "0") > 0) {
@@ -98,7 +100,7 @@ export function appendCashVacationPay(args: {
       if (args.replacedComponentIds?.has(c.id as string)) return;
       lines.push({
         componentId: c.id as string, kind: "earning", description: "Vacation pay",
-        amount: vacation, sequence: 45, vacationable: false, fundedByEntitlementBank: false,
+        amount: vacation, sequence: 45, fundedByEntitlementBank: false,
       });
     }
   }

@@ -24,7 +24,7 @@ import { commitPayRun } from "./run-commit.ts";
 import { createPayRun } from "./run-lifecycle.ts";
 import { resolveServiceTier, resolvePlanLimit, milestonesReachedInPeriod, validateEntitlementServiceTierConfiguration } from "./entitlements.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
-import { seedVacationTerms, seedCanadianPayrollComponentsForTest, seedUsSuiAccount } from "./filing-test-fixtures.ts";
+import { seedVacationTerms, seedCanadianPayrollComponentsForTest, seedUsSuiAccount, seedUsEinAccount, type UsSuiFixtureSource } from "./filing-test-fixtures.ts";
 import { t4Slips, w2Slips, form941Worksheet } from "./yearend.ts";
 import { assertPayRunNotStale, payRunStaleness } from "./readiness.ts";
 import { unionRemittanceReport, upsertUnionFringe } from "./union.ts";
@@ -35,8 +35,8 @@ import { transitionFlag } from "../hrm/ai/anomalies.ts";
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
 async function seedUsSui(orgId: string, actorId: string, employeeId: string, state: string,
-  rate: string, wageBase: string): Promise<string> {
-  const filingAccountId = await seedUsSuiAccount(orgId, actorId, state);
+  rate: string, wageBase: string, source: UsSuiFixtureSource): Promise<string> {
+  const filingAccountId = await seedUsSuiAccount(orgId, actorId, state, source);
   await upsertStatutoryRate({ orgId, actorId, rates: US_PACK_RATES, rateKey: "us_sui",
     sourceCitation: "Test rate notice", reason: "test fixture rate",
     region: state, filingAccountId, taxYear: 2026, values: { rate, wageBase } });
@@ -623,8 +623,15 @@ test(
         costingBasis: 'actual',
       });
 
-      await seedUsSui(org.orgId, actorId, employeeId, "TX", "0.027", "9000");
-      await seedUsSui(org.orgId, actorId, caStateEmployee, "CA", "0.034", "7000");
+      const usEin = await seedUsEinAccount(org.orgId, actorId, usSubId, "12-3456789");
+      await seedUsSui(org.orgId, actorId, employeeId, "TX", "0.027", "9000", {
+        federalAccountId: usEin, subsidiaryId: usSubId, effectiveFrom: "2026-01-01", effectiveTo: null,
+        sourceReference: "TX original employer registration",
+      });
+      await seedUsSui(org.orgId, actorId, caStateEmployee, "CA", "0.034", "7000", {
+        federalAccountId: usEin, subsidiaryId: usSubId, effectiveFrom: "2026-01-01", effectiveTo: null,
+        sourceReference: "CA original employer registration",
+      });
 
       const run = await createPayRun({
         orgId: org.orgId, actorId, payScheduleId: scheduleId,
@@ -732,9 +739,6 @@ test(
       // W-2 and Form 941 are filed by the legal employer's EIN: both
       // employees' state SUI accounts belong to the US entity, so its EIN
       // carries both slips and every 941 quarter.
-      const usEin = randomUUID();
-      await db.execute(sql`insert into payroll_filing_accounts(id,org_id,country,program_type,account_number,name,subsidiary_id)
-        values(${usEin},${org.orgId},'US','us_ein','12-3456789','US Entity EIN',${usSubId})`);
       const historicalW2 = await w2Slips(org.orgId, 2026);
       const historical941 = await form941Worksheet(org.orgId, 2026);
       assert.equal(historicalW2.length, 2);
@@ -746,9 +750,12 @@ test(
       assert.deepEqual([...new Set(historical941.map((quarter) => quarter.filingAccountId))], [usEin]);
       // A later assignment to another legal employer's EIN does not move the
       // committed history off the employer that paid it.
-      const nextFilingAccountId = randomUUID();
-      await db.execute(sql`insert into payroll_filing_accounts(id,org_id,country,program_type,account_number,name,subsidiary_id)
-        values(${nextFilingAccountId},${org.orgId},'US','us_ein','98-7654321','Next employer',${org.subsidiaryId})`);
+      const nextEmployerId = randomUUID();
+      assert.equal((await db.execute(sql`insert into subsidiaries
+        (id,org_id,parent_id,name,base_currency,country,tax_ids,is_elimination,is_active,custom)
+        values(${nextEmployerId},${org.orgId},${org.subsidiaryId},'Next US employer','USD','US','{}'::jsonb,false,true,'{}'::jsonb)
+        returning id`)).rows.length, 1);
+      const nextFilingAccountId = await seedUsEinAccount(org.orgId, actorId, nextEmployerId, "98-7654321");
       await db.execute(sql`update employee_payroll_profiles set filing_account_id=${nextFilingAccountId}
         where org_id=${org.orgId}`);
       assert.deepEqual(await w2Slips(org.orgId,2026),historicalW2);
@@ -888,7 +895,11 @@ test(
         update employee_payroll_profiles
            set country = 'US', province = 'TX', filing_status = 'single'
          where org_id = ${org.orgId} and employee_party_id = ${usEmployee}`);
-      await seedUsSui(org.orgId, actorId, usEmployee, "TX", "0.027", "9000");
+      const usEin = await seedUsEinAccount(org.orgId, actorId, usSubId, "12-3456789");
+      await seedUsSui(org.orgId, actorId, usEmployee, "TX", "0.027", "9000", {
+        federalAccountId: usEin, subsidiaryId: usSubId, effectiveFrom: "2026-01-01", effectiveTo: null,
+        sourceReference: "TX original employer registration",
+      });
       await seedPayrollSettings(org.orgId, {
           // The fixture supplies the ordinary 0.6% FUTA method.
           payroll: { us: { futaRate: "0.006" } },

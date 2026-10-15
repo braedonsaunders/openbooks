@@ -32,6 +32,7 @@ import { canonicalDecimal } from '../../../../../lib/exact-decimal'
 import { decimalNullRefusal, suppliedValue } from '../../../../../lib/payroll-decimal-refusal'
 import { notFound } from "@/lib/api/responses";
 import { parseBankCashInputEvidence } from '@openbooks/engine/payroll/run-bank-cash-evidence'
+import { parseDeclaredVacationAccrualEvidence } from '@openbooks/engine/payroll/run-vacation-accrual-input'
 
 const payrollRunUuid = (field: string, subject: string, remedy: string, malformedRemedy = remedy) => z.string({
   error: (issue) => `${field} must be ${subject} — got "${suppliedValue(issue.input)}"; ${remedy}`,
@@ -60,7 +61,9 @@ const requestBodySchema = z.discriminatedUnion('action', [
   z.strictObject({ ...actionBody('preview-gl') }),
   z.strictObject({ ...actionBody('add-adjustment'), employeePartyId: payrollRunUuid('employeePartyId', 'an employee id', 'pass the employee as an employee id', 'fix the id and try again'), componentId: payrollRunUuid('componentId', 'a pay component id', "choose one from this run's adjustableComponents"), amount: payrollRunMoney, hours: z.string().nullable().optional(), earnedFrom: z.string().nullable().optional(), earnedTo: z.string().nullable().optional(), note: z.json().optional(), replaceComponent: z.json().optional() }),
   z.strictObject({ ...actionBody('override-income-tax'), employeePartyId: payrollRunUuid('employeePartyId', 'an employee id', 'select the employee whose cheque withholding is being recorded'), amount: payrollRunMoney, reason: z.string().trim().min(1).max(500), sourceReference: z.string().trim().min(1).max(300) }),
-  z.strictObject({ ...actionBody('bank-cash-input'), employeePartyId: payrollRunUuid('employeePartyId', 'an employee id', 'select the employee whose bank cash line is being recorded'), componentId: payrollRunUuid('componentId', 'a pay component id', 'choose the configured hours-bank payout or deposit component'), hours: z.string().min(1).max(32), amount: z.string().max(80).optional(), rate: z.string().max(80).optional(), reason: z.string().trim().min(1).max(500), sourceReference: z.string().trim().min(1).max(300) }),
+  z.strictObject({ ...actionBody('bank-cash-input'), employeePartyId: payrollRunUuid('employeePartyId', 'an employee id', 'select the employee whose bank cash line is being recorded'), componentId: payrollRunUuid('componentId', 'a pay component id', 'choose the configured bank payout or deposit component'), hours: z.string().min(1).max(32), amount: z.string().max(80).optional(), rate: z.string().max(80).optional(), outsideBankAmount: z.string().max(80).optional(), reason: z.string().trim().min(1).max(500), sourceReference: z.string().trim().min(1).max(300) }),
+  z.strictObject({ ...actionBody('employer-levy-adjustment'), employeePartyId: payrollRunUuid('employeePartyId', 'an employee id', 'select the employee whose issued employer levy is being recorded'), programKey: z.enum(['ca_eht', 'ca_wcb']), workerCompGroupId: payrollRunUuid('workerCompGroupId', 'a worker compensation group id', 'select the dated worker compensation group').nullable().optional(), amount: payrollRunMoney, sourceKey: z.string().trim().min(1).max(200), reason: z.string().trim().min(1).max(500), sourceReference: z.string().trim().min(1).max(300) }),
+  z.strictObject({ ...actionBody('declared-vacation-accrual'), employeePartyId: payrollRunUuid('employeePartyId', 'an employee id', 'select the employee whose vacation accrual is being recorded'), amount: payrollRunMoney, reason: z.string().trim().min(1).max(500), sourceReference: z.string().trim().min(1).max(300) }),
   z.strictObject({ ...actionBody('record-holiday-hours'), employeePartyId: payrollRunUuid('employeePartyId', 'an employee id', 'select the employee whose paid holiday hours are being recorded'), hours: z.string(), earnedOn: z.string().optional(), reason: z.string().trim().min(1).max(500), note: z.string().max(500).optional() }),
   z.strictObject({ ...actionBody('delete-adjustment'), adjustmentId: payrollRunUuid('adjustmentId', 'a pay adjustment id', 'pass the adjustment to delete as an id', 'fix the id and try again') }),
   z.strictObject({ ...actionBody('set-scope'), employeePartyIds: employeeIds('pass the employees to include as a list'), rosterPartyIds: rosterIds }),
@@ -225,15 +228,22 @@ export const GET = defineRoute({
            order by p.display_name, a.created_at`)
       const adjustableComponents = await tx.execute<Record<string, unknown>>(sql`
           select component.id, component.code, component.name, component.kind,
+                 exists(select 1 from entitlement_plans vacation_plan
+                   join pay_components accrual_component
+                     on accrual_component.org_id=vacation_plan.org_id
+                    and accrual_component.id=vacation_plan.accrual_component_id
+                    and accrual_component.is_active and accrual_component.kind='employer_contribution'
+                  where vacation_plan.org_id=component.org_id and vacation_plan.system_key='vacation'
+                    and vacation_plan.is_active and vacation_plan.unit='money' and vacation_plan.direction='accrue') as declared_vacation_accrual_enabled,
                  exists(select 1 from entitlement_plans plan
-                   where plan.org_id=component.org_id and plan.is_active and plan.unit='hours'
+                   where plan.org_id=component.org_id and plan.is_active and plan.unit in ('hours','money')
                      and component.kind='earning' and component.payment_kind='cash'
                      and (plan.payout_component_id=component.id or plan.deposit_component_id=component.id)) as bank_cash_component
             from pay_components component
            where component.org_id = ${orgId} and component.is_active
              and (component.system_key is null or component.system_key in ('base_pay','overtime','allowance','bonus','vacation_payout')
                or exists(select 1 from entitlement_plans plan
-                 where plan.org_id=component.org_id and plan.is_active and plan.unit='hours'
+                 where plan.org_id=component.org_id and plan.is_active and plan.unit in ('hours','money')
                    and component.kind='earning' and component.payment_kind='cash'
                    and (plan.payout_component_id=component.id or plan.deposit_component_id=component.id)))
            order by component.sequence, component.code`)
@@ -243,7 +253,10 @@ export const GET = defineRoute({
         stubs: stubs.rows.map((stub) => ({ ...stub, lines: linesByStub.get(String(stub.id)) ?? [] })),
         adjustments: adjustments.rows.map((row) => {
           const evidence = parseBankCashInputEvidence(typeof row.note === 'string' ? row.note : null)
-          return evidence ? { ...row, note: `${evidence.reason} · ${evidence.sourceReference}${evidence.rate ? ` · ${evidence.rate}/h` : ''}` } : row
+          const declaredVacation = parseDeclaredVacationAccrualEvidence(typeof row.note === 'string' ? row.note : null)
+          return evidence
+            ? { ...row, note: `${evidence.reason} · ${evidence.sourceReference}${evidence.rate ? ` · ${evidence.rate}/h` : ''}${evidence.outsideBankAmount ? ` · ${evidence.outsideBankAmount} paid outside bank` : ''}` }
+            : declaredVacation ? { ...row, note: `${declaredVacation.reason} · ${declaredVacation.sourceReference}` } : row
         }),
         adjustableComponents: adjustableComponents.rows,
       })
@@ -516,8 +529,70 @@ export const POST = defineRoute({
               action: 'bank_cash_input', employeePartyId: body.employeePartyId,
               componentId: body.componentId, hours: body.hours,
               amount: body.amount ?? null, rate: body.rate ?? null,
+              outsideBankAmount: body.outsideBankAmount ?? null,
               reason: body.reason, sourceReference: body.sourceReference,
               idempotencyKey: requestKey,
+            },
+          })
+          return NextResponse.json({ ok: true, ...outcome })
+        } catch (e) {
+          if (e instanceof PayRunAdjustmentIdempotencyConflict) {
+            return NextResponse.json({ error: 'invalid_idempotency_key', message: e.message }, { status: 409 })
+          }
+          throw e
+        }
+      }
+      if (body.action === 'declared-vacation-accrual') {
+        const amount = canonicalDecimal(body.amount, 2)
+        if (amount === null || amount.startsWith('-')) {
+          return NextResponse.json({ error: decimalNullRefusal('amount', 'a positive declared vacation accrual in cents', body.amount, 2) }, { status: 422 })
+        }
+        const requestKey = req.headers.get('Idempotency-Key')?.trim() ?? ''
+        if (!isUuid(requestKey)) {
+          return NextResponse.json({ error: 'declared-vacation-accrual requires a UUID Idempotency-Key; retry with a request key' }, { status: 400 })
+        }
+        try {
+          const outcome = await mutatePayRunAdjustment({
+            orgId: gate.user.orgId,
+            documentId: id,
+            actorId: gate.user.id,
+            reason: body.reason,
+            allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+            mutation: {
+              action: 'declared_vacation_accrual', employeePartyId: body.employeePartyId,
+              amount, reason: body.reason, sourceReference: body.sourceReference,
+              idempotencyKey: requestKey,
+            },
+          })
+          return NextResponse.json({ ok: true, ...outcome })
+        } catch (e) {
+          if (e instanceof PayRunAdjustmentIdempotencyConflict) {
+            return NextResponse.json({ error: 'invalid_idempotency_key', message: e.message }, { status: 409 })
+          }
+          throw e
+        }
+      }
+      if (body.action === 'employer-levy-adjustment') {
+        const amount = canonicalDecimal(body.amount, 2)
+        if (amount === null) {
+          return NextResponse.json({ error: decimalNullRefusal('amount', 'the issued levy premium amount in cents', body.amount, 2) }, { status: 422 })
+        }
+        const requestKey = req.headers.get('Idempotency-Key')?.trim() ?? ''
+        if (!isUuid(requestKey)) {
+          return NextResponse.json({ error: 'employer-levy-adjustment requires a UUID Idempotency-Key; retry with a request key' }, { status: 400 })
+        }
+        try {
+          const outcome = await mutatePayRunAdjustment({
+            orgId: gate.user.orgId,
+            documentId: id,
+            actorId: gate.user.id,
+            reason: body.reason,
+            allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
+            mutation: {
+              action: 'employer_levy_adjustment', employeePartyId: body.employeePartyId,
+              programKey: body.programKey, workerCompGroupId: body.workerCompGroupId ?? null,
+              amount, sourceKey: body.sourceKey, reason: body.reason,
+              sourceReference: body.sourceReference, idempotencyKey: requestKey,
             },
           })
           return NextResponse.json({ ok: true, ...outcome })
@@ -880,7 +955,8 @@ export const DELETE = defineRoute({
   permission: 'payroll.run',
   feature: 'payroll',
   params: z.object({ "id": z.string() }),
-  handler: async ({ request: _req, authz: gate, params: routeParams }) => {
+  body: z.strictObject({ reason: z.string().trim().min(1).max(2000).optional() }).optional(),
+  handler: async ({ authz: gate, params: routeParams, body }) => {
     const params = Promise.resolve(routeParams);
     const { id } = await params
     if (!isUuid(id)) return notFound("record")
@@ -895,6 +971,7 @@ export const DELETE = defineRoute({
     try {
       const result = await discardPayRun({
         orgId: gate.user.orgId, documentId: id, actorId: gate.user.id,
+        reason: body?.reason,
         allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
       })
       return NextResponse.json({ ok: true, ...result })

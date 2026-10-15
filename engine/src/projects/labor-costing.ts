@@ -265,6 +265,26 @@ export interface ResolvedWage {
 }
 
 /**
+ * The resolved wage plus the exact dated source it was resolved from: the
+ * winning row's identity, stored rate and effective window, and the annual-
+ * hours divisor a time-based conversion actually used (the row's own value,
+ * or the caller's labor-costing default when the row carries none). An
+ * hourly row converts through no divisor, so both annual-hours fields stay
+ * null. Callers that must fence a valuation to the source they consumed
+ * retain this shape instead of re-resolving from a current profile.
+ */
+export interface ResolvedWageValuation extends ResolvedWage {
+  effectiveFrom: string;
+  effectiveTo: string | null;
+  basis: PayRateBasis;
+  /** The winning row's stored rate, in its own basis. */
+  rate: string;
+  annualHoursUsed: string | null;
+  annualHoursSource: "rate" | "labor_costing_settings" | null;
+  updatedAt: string | null;
+}
+
+/**
  * Resolve the standard hourly wage for an employee on a date. Most-specific
  * scope wins (employee > job title > trade > department > subsidiary > org);
  * within a scope the latest effective_from ≤ workedOn wins. Returns null when
@@ -289,6 +309,35 @@ export async function resolveWage(
     annualHoursDefault: number;
   },
 ): Promise<ResolvedWage | null> {
+  const valuation = await resolveWageValuationInTx(db, orgId, employeePartyId, workedOn, opts);
+  return valuation
+    ? { wage: valuation.wage, currency: valuation.currency, scope: valuation.scope, rateId: valuation.rateId }
+    : null;
+}
+
+/**
+ * Transaction-bound form of `resolveWage`: the same scope priority, the
+ * same latest-effective selection and the same hourly conversion, read on
+ * the caller's executor so the resolution joins the caller's transaction
+ * and snapshot. With `lock`, the scope rows and the winning wage row are
+ * held FOR SHARE, so a concurrent edit cannot move the valuation until the
+ * caller commits. Returns the full dated source (see
+ * `ResolvedWageValuation`), never a reconstructed or averaged wage.
+ */
+export async function resolveWageValuationInTx(
+  executor: SqlExecutor,
+  orgId: string,
+  employeePartyId: string,
+  workedOn: string,
+  opts: {
+    jobTitle?: string | null;
+    tradeId?: string | null;
+    departmentId?: string | null;
+    subsidiaryId?: string | null;
+    annualHoursDefault: number | string;
+    lock?: boolean;
+  },
+): Promise<ResolvedWageValuation | null> {
   let jobTitle = opts?.jobTitle;
   let tradeId = opts?.tradeId;
   let departmentId = opts?.departmentId;
@@ -299,7 +348,7 @@ export async function resolveWage(
     departmentId === undefined ||
     subsidiaryId === undefined
   ) {
-    const t = (await db.execute<{
+    const t = (await executor.execute<{
         job_title: string | null;
         trade_id: string | null;
         department_id: string | null;
@@ -308,7 +357,8 @@ export async function resolveWage(
       select er.job_title, er.trade_id, er.department_id, p.subsidiary_id
         from employee_roles er
         join parties p on p.id = er.party_id and p.org_id = er.org_id
-       where er.org_id = ${orgId} and er.party_id = ${employeePartyId}`));
+       where er.org_id = ${orgId} and er.party_id = ${employeePartyId}
+       ${opts.lock ? sql`for share of er, p` : sql``}`));
     const employee = t.rows[0];
     jobTitle =
       jobTitle === undefined ? (employee?.job_title ?? null) : jobTitle;
@@ -322,15 +372,21 @@ export async function resolveWage(
         ? (employee?.subsidiary_id ?? null)
         : subsidiaryId;
   }
-  const r = (await db.execute<{
+  const r = (await executor.execute<{
       id: string;
       rate: string;
       basis: string;
       annual_hours: string;
       currency: string;
+      effective_from: string;
+      effective_to: string | null;
+      updated_at: string | null;
       scope: ResolvedWage["scope"];
     }>(sql`
-    select id, rate, basis, annual_hours, currency,
+    select id, rate::text as rate, basis, annual_hours::text as annual_hours, currency,
+           effective_from::text as effective_from, effective_to::text as effective_to,
+           case when updated_at is null then null else
+             to_char(updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') end as updated_at,
            case when employee_party_id is not null then 'employee'
                 when job_title is not null then 'job_title'
                 when trade_id is not null then 'trade'
@@ -353,21 +409,26 @@ export async function resolveWage(
                    when department_id is not null then 3
                    when subsidiary_id is not null then 4 else 5 end,
               effective_from desc
-     limit 1`));
+     limit 1
+     ${opts.lock ? sql`for share` : sql``}`));
   const row = r.rows[0];
   if (!row) return null;
   const basis = requirePayRateBasis(row.basis);
+  const rowAnnualHours = basis !== "hour" && cmp(String(row.annual_hours), "0") > 0 ? String(row.annual_hours) : null;
+  const annualHoursUsed = basis === "hour" ? null : rowAnnualHours ?? String(opts.annualHoursDefault);
   const wage =
     basis === "hour"
       ? String(row.rate)
-      : hourlyPayRate(
-          String(row.rate),
-          basis,
-          cmp(String(row.annual_hours), "0") > 0
-            ? String(row.annual_hours)
-            : String(opts.annualHoursDefault),
-        );
-  return { wage, currency: row.currency, scope: row.scope, rateId: row.id };
+      : hourlyPayRate(String(row.rate), basis, annualHoursUsed!);
+  return {
+    wage, currency: row.currency, scope: row.scope, rateId: row.id,
+    effectiveFrom: String(row.effective_from).slice(0, 10),
+    effectiveTo: row.effective_to === null ? null : String(row.effective_to).slice(0, 10),
+    basis, rate: String(row.rate),
+    annualHoursUsed,
+    annualHoursSource: basis === "hour" ? null : rowAnnualHours !== null ? "rate" : "labor_costing_settings",
+    updatedAt: row.updated_at,
+  };
 }
 
 /**

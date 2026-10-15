@@ -20,6 +20,8 @@ async function earningComponent(fx: Fixture, code: string, kind = 'earning'): Pr
   await db.execute(sql`insert into pay_components(id,org_id,code,name,kind,country,taxable,pensionable,insurable,vacationable,
     tax_treatment,payment_kind,expense_account_id,liability_account_id)
     values(${id},${fx.orgId},${code},${code},${kind},'CA',true,true,true,true,'none','cash',${fx.accounts.burdenExpense},${fx.accounts.otherPayable})`);
+  await db.execute(sql`insert into pay_component_statutory_treatments(org_id,pay_component_id,effective_from,program_exclusions,vacationable)
+    values(${fx.orgId},${id},'2026-01-01','{}',true)`);
   return id;
 }
 
@@ -94,8 +96,10 @@ test('selected-components hours count signed earning hours and ignore quantity u
     const amounts = new Map(rows.map(l => [l.code, l.amount]));
     assert.equal(amounts.get('PENSION_ER'), '58.5200', '38 counted hours at 1.54');
     assert.equal(amounts.get('PENSION_EE'), '418.0000', '38 counted hours at 11.00');
-    const incentive = (await db.execute<{ amount: string; hours: string | null; vacationable: boolean }>(sql`select l.amount::text,l.hours::text,c.vacationable from pay_stub_lines l join pay_stubs s on s.org_id=l.org_id and s.id=l.stub_id
-      join pay_components c on c.org_id=l.org_id and c.id=l.component_id
+    const incentive = (await db.execute<{ amount: string; hours: string | null; vacationable: boolean }>(sql`select l.amount::text,l.hours::text,treatment.vacationable from pay_stub_lines l join pay_stubs s on s.org_id=l.org_id and s.id=l.stub_id
+      join pay_component_statutory_treatments treatment on treatment.org_id=l.org_id and treatment.pay_component_id=l.component_id
+        and treatment.worker_comp_group_id is null and treatment.effective_from<='2026-07-21'
+        and (treatment.effective_to is null or treatment.effective_to>='2026-07-21')
       where s.org_id=${fx.orgId} and s.pay_run_document_id=${run.documentId} and l.component_id=${cashComponentId}`)).rows;
     assert.deepEqual(incentive, [{ amount: '50.0000', hours: null, vacationable: true }], 'Ten original overtime hours are valued once without duplicating worked hours');
     const allocation = (await db.execute<{ amount: string; source_snapshot: { basis: { hours: string; currencyMinorUnits: number }; rule: { kind: string } } }>(sql`select amount::text,source_snapshot from pay_run_benefit_allocations

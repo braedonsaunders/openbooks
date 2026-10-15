@@ -21,6 +21,7 @@ export function PreparedPagedTable({
   empty,
   leading,
   footer,
+  paginationNote,
   toolbarAfter,
   searchable = true,
   contained = false,
@@ -32,6 +33,7 @@ export function PreparedPagedTable({
   empty: ReactNode
   leading?: ReactNode
   footer?: ReactNode
+  paginationNote?: ReactNode
   toolbarAfter?: ReactNode
   searchable?: boolean
   contained?: boolean
@@ -56,6 +58,7 @@ export function PreparedPagedTable({
       toolbarAfter={toolbarAfter}
       leading={leading}
       footer={footer}
+      paginationNote={paginationNote}
     />
   )
 }

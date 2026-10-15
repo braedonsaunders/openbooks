@@ -218,7 +218,9 @@ export function parseReportQuery(
     },
     customerId: uuidParam(sp, REPORT_PARAM_KEYS.customer),
     projectScope: oneOf(read(sp, REPORT_PARAM_KEYS.projectScope), ['active', 'all'], 'active'),
-    subsidiaryId: read(sp, REPORT_PARAM_KEYS.sub) || undefined,
+    // Preserve explicit selections for the scoped resolver; even an empty
+    // or malformed value must not become an omitted filter and select a default.
+    subsidiaryId: read(sp, REPORT_PARAM_KEYS.sub),
     showZero: read(sp, REPORT_PARAM_KEYS.zero) === '1',
     scale: oneOf(read(sp, REPORT_PARAM_KEYS.scale), SCALES, 'actual'),
   }

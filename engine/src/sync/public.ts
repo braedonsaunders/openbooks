@@ -27,7 +27,7 @@ export {
   type SourceFieldSpec,
   type SourceTypeManifest,
 } from "./connection.ts";
-export { sourceSupportsRunMode } from "./run-modes.ts";
+export { sourceSupportsRunMode, validateTargetedRepairSourceRefs } from "./run-modes.ts";
 export { syncConnectionRunLockKey } from "./sync.ts";
 export { nextMirrorAt } from "./mirror-schedule.ts";
 export { terminateConnectionSessions } from "../qbd/bridge.ts";

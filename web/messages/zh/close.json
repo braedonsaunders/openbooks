@@ -1076,5 +1076,30 @@
     },
     "by": "{name}（{at}）",
     "system": "系统"
+  },
+  "revaluationEvidence": {
+      "title": "已记录的结账汇率",
+      "reload": "重新加载",
+      "loading": "加载中…",
+      "loadFailed": "无法加载外币头寸。",
+      "empty": "此选择没有未结清的外币头寸。",
+      "position": "{foreign} · 账面价值 {carrying} · 汇率日期 {date}",
+      "recordedRate": "已记录:{rate}(版本 {version})",
+      "organizationRate": "组织汇率:{rate}",
+      "rateMissing": "无汇率",
+      "recordRate": "记录汇率",
+      "recordSuccessor": "记录后续汇率",
+      "drawerTitle": "记录结账汇率",
+      "cancel": "取消",
+      "legalEntity": "法律实体",
+      "account": "科目",
+      "conversion": "换算",
+      "rateDate": "汇率日期",
+      "currentQuote": "当前汇率:{rate}(版本 {version})— 来源:{source}。后续汇率将替代它而不修改它。",
+      "rate": "汇率",
+      "source": "来源",
+      "reason": "原因",
+      "recorded": "结账汇率已记录。",
+      "recordFailed": "无法记录结账汇率。"
   }
 }

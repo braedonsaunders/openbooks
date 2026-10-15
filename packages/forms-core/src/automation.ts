@@ -249,11 +249,36 @@ export type AutomationEdge = z.infer<typeof automationEdgeSchema>
 
 export const MAX_FLOW_NODES = 200
 export const MAX_FLOW_EDGES = 400
+/** A flow can name at most 100 legal entities in its subject scope. */
+export const MAX_FLOW_SUBJECT_SCOPE_ENTITIES = 100
+
+/**
+ * Legal-entity admission for the whole graph. When present, the flow only
+ * applies to subjects whose resolved legal entity (subsidiary) is listed:
+ * admission is decided from this metadata BEFORE the graph is planned or
+ * any run, gate or audit row is created for the subject. When absent, the
+ * flow keeps its ordinary organization-wide semantics. An empty list is
+ * invalid rather than a second spelling of organization-wide, so a scoped
+ * flow can never widen by losing its entities.
+ */
+export const flowGraphSubjectScopeSchema = z.object({
+  subsidiaryIds: z
+    // Canonicalize case at parse: subsidiary ids compare against database
+    // uuid output (lowercase), and case-variant spellings of one entity
+    // must collapse before the uniqueness check sees them.
+    .array(z.string().uuid().transform((id) => id.toLowerCase()))
+    .min(1)
+    .max(MAX_FLOW_SUBJECT_SCOPE_ENTITIES)
+    .refine((ids) => new Set(ids).size === ids.length, 'Choose each legal entity once.'),
+})
+export type FlowGraphSubjectScope = z.infer<typeof flowGraphSubjectScopeSchema>
 
 export const automationGraphSchema = z.object({
   schemaVersion: z.literal(1),
   /** Explicit tenant policy for a matched submission path that reaches no approval gate. */
   ungatedOutcome: z.literal('apply').optional(),
+  /** Legal entities this flow applies to; absent means organization-wide. */
+  subjectScope: flowGraphSubjectScopeSchema.optional(),
   nodes: z.array(automationNodeSchema).max(MAX_FLOW_NODES),
   edges: z.array(automationEdgeSchema).max(MAX_FLOW_EDGES),
 })
@@ -261,6 +286,35 @@ export type AutomationGraph = z.infer<typeof automationGraphSchema>
 
 export function emptyAutomationGraph(): AutomationGraph {
   return { schemaVersion: 1, nodes: [], edges: [] }
+}
+
+/**
+ * Admission verdict for one subject against a graph's subject scope:
+ * `admitted` (the flow may be planned for this subject), `out-of-scope`
+ * (the subject's legal entity is resolved and not listed — the flow does
+ * not apply at all), or `unresolved` (the flow is scoped but the subject's
+ * legal entity is missing, empty or unknown, so admission cannot be
+ * proven and callers must fail closed). Unscoped graphs admit every
+ * subject, preserving organization-wide semantics.
+ */
+export type FlowSubjectAdmission = 'admitted' | 'out-of-scope' | 'unresolved'
+
+export function flowSubjectAdmission(
+  scope: FlowGraphSubjectScope | null | undefined,
+  subsidiaryId: unknown,
+): FlowSubjectAdmission {
+  if (!scope) return 'admitted'
+  if (typeof subsidiaryId !== 'string' || subsidiaryId.trim() === '') return 'unresolved'
+  const resolved = subsidiaryId.trim().toLowerCase()
+  return scope.subsidiaryIds.some((id) => id.toLowerCase() === resolved) ? 'admitted' : 'out-of-scope'
+}
+
+/** Admission verdict for one subject against a whole graph. */
+export function graphSubjectAdmission(
+  graph: Pick<AutomationGraph, 'subjectScope'>,
+  subsidiaryId: unknown,
+): FlowSubjectAdmission {
+  return flowSubjectAdmission(graph.subjectScope, subsidiaryId)
 }
 
 /**
@@ -537,6 +591,21 @@ export function lintAutomationGraph(
   profile?: FlowSubjectProfile,
 ): string[] {
   const errors: string[] = []
+  if (graph.subjectScope) {
+    if (graph.subjectScope.subsidiaryIds.length === 0) {
+      errors.push('Flow is limited by legal entity but names none — choose at least one legal entity or remove the limit.')
+    }
+    if (new Set(graph.subjectScope.subsidiaryIds).size !== graph.subjectScope.subsidiaryIds.length) {
+      errors.push('Flow legal-entity limit names the same legal entity more than once — choose each legal entity once.')
+    }
+    // A record-free scheduled firing has no subject whose legal entity
+    // could prove admission, so a scoped flow can never fire it.
+    for (const n of graph.nodes) {
+      if (n.data.kind === 'trigger' && n.data.trigger.trigger === 'scheduled' && !n.data.trigger.select) {
+        errors.push(`Trigger ${n.id}: a legal-entity-limited flow cannot run on a schedule without selecting records — add a record selection or remove the legal-entity limit.`)
+      }
+    }
+  }
   if (graph.ungatedOutcome && profile && !profile.supportsUngatedSubmission) errors.push(`${profile.label} does not support automatic submission release.`)
   const ids = new Set(graph.nodes.map((n) => n.id))
 

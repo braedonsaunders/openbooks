@@ -148,6 +148,10 @@ export function statementEvidence(value: unknown): Record<string, unknown> | nul
   const input = value as Record<string, unknown>;
   const safe: Record<string, unknown> = {};
   if (typeof input.kind === "string") safe.kind = input.kind;
+  if (input.kind === "source-evidenced-first-obligation"
+    && (input.sourceEvidenceClass === "missing-source-identity" || input.sourceEvidenceClass === "source-paid-above-native-measure")) {
+    safe.sourceEvidenceClass = input.sourceEvidenceClass;
+  }
   if (typeof input.programRevision === "number") safe.programRevision = input.programRevision;
   if (typeof input.payableAfter === "string") {
     try { safe.payableAfter = parseCivilDate(input.payableAfter); } catch {

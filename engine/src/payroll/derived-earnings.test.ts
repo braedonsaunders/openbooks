@@ -49,7 +49,7 @@ const DEPT_FIELD = "ccccccc1-0000-0000-0000-00000000000f";
 function component(id: string, name: string, value: string | null = null): DerivedComponent {
   return {
     id, name, value,
-    taxable: true, pensionable: true, insurable: true, vacationable: true, nonPeriodic: false,
+    taxable: true, pensionable: true, insurable: true, nonPeriodic: false,
   };
 }
 

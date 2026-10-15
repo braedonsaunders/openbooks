@@ -19,7 +19,7 @@ export default async function InformationReturnsPage({
   searchParams,
 }: {
   searchParams?: Promise<Record<string, string | undefined>>
-} = {}) {
+}) {
   const sp = (await searchParams) ?? {}
   const data = await loadInformationReturns()
   return <ModuleView spec={informationReturnsSpec(data)} data={data} searchParams={sp} trusted />

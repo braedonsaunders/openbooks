@@ -57,7 +57,18 @@ test("unknown and missing actions fail closed", () => {
 test("correction requests require a stable id, exact string amount, and reason", () => {
   const body = { action: "adjust", correctionId: UUID, value: "-10.00", reason: "Corrected hours" };
   assert.equal(benefitAwardPatchBody.safeParse(body).success, true);
+  assert.equal(benefitAwardPatchBody.safeParse({ ...body, sourceReference: "payroll-provider:paid-row:1144", periodFrom: "2026-07-01", periodTo: "2026-07-31" }).success, true);
+  assert.equal(benefitAwardPatchBody.safeParse({ ...body, periodFrom: "2026-07-01" }).success, false);
+  assert.equal(benefitAwardPatchBody.safeParse({ ...body, sourceReference: "", periodFrom: "2026-07-01", periodTo: "2026-07-31" }).success, false);
   assert.equal(benefitAwardPatchBody.safeParse({ ...body, correctionId: undefined }).success, false);
   assert.equal(benefitAwardPatchBody.safeParse({ ...body, value: -10 }).success, false);
   assert.equal(benefitAwardPatchBody.safeParse({ ...body, reason: "" }).success, false);
+});
+
+test("source period overrides require exact valid dates and a bounded reference", () => {
+  const body = {action: "adjust", correctionId: UUID, value: "10.00", reason: "Provider reissued payment", sourceReference: "provider:paid-row:1144", periodFrom: "2026-08-01", periodTo: "2026-08-31"};
+  assert.equal(benefitAwardPatchBody.safeParse(body).success, true);
+  for (const invalid of [{...body, sourceReference: undefined}, {...body, sourceReference: "x".repeat(501)}, {...body, periodFrom: "2026-02-30"}, {...body, periodTo: "2026-07-31"}, {...body, periodFrom: undefined}]) {
+    assert.equal(benefitAwardPatchBody.safeParse(invalid).success, false);
+  }
 });

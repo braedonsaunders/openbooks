@@ -319,7 +319,7 @@ export function generateCopySql(
       exprs.push(`(select p.prefix from gl_audit_number_policies p where p.org_id='${prod}'::uuid and p.id="gl_audit_number_assignments".policy_id) || '-' || replace(${auditScope}, ':', '-') || '-' || lpad("ordinal"::text, greatest(6,length("ordinal"::text)), '0')`);
       continue;
     }
-    if (["fx_rate_types", "account_translation_policies", "subsidiary_accounting_preferences", "segment_balancing_policies", "gl_audit_number_policies", "project_loss_policies"].includes(t.name)
+    if (["fx_rate_types", "account_translation_policies", "subsidiary_accounting_preferences", "segment_balancing_policies", "gl_audit_number_policies", "project_loss_policies", "payroll_us_filing_account_employer_lineage"].includes(t.name)
         && c.isUuid && ["created_by", "updated_by"].includes(c.name)) {
       exprs.push(`(case when "${c.name}" is null then null else ob_rebase("${c.name}", '${seed}'::uuid) end)`);
       continue;
@@ -348,6 +348,36 @@ export function generateCopySql(
         || (t.name === "rebate_claims" && ["basis", "settlement_basis"].includes(c.name))) {
       if (tableMask?.has(c.name)) throw new Error(`Retained financial evidence ${t.name}.${c.name} requires native identity rebasing; remove its whole-column masking policy.`);
       exprs.push(`public.production_clone_safe_evidence("${c.name}", '${seed}'::uuid, '${c.name}', '${sbx}'::uuid, ${opts.masked ? 'true' : 'false'})`);
+      continue;
+    }
+    if (opts.masked && t.name === "payroll_us_filing_account_employer_lineage"
+      && ["source_reference", "change_reason"].includes(c.name)) {
+      exprs.push("'REDACTED'::text");
+      continue;
+    }
+    // Closing rate quotes copy so the copied ledger keeps its pricing
+    // evidence; a masked copy redacts the authored source and reason while
+    // the clone guard admits only the source row's exact projection.
+    if (opts.masked && t.name === "fx_revaluation_rate_evidence"
+      && ["source", "reason"].includes(c.name)) {
+      exprs.push("'REDACTED'::text");
+      continue;
+    }
+    // Field Ticket source certifications copy so the copied ticket keeps
+    // its governed source binding; their retained evidence rebases native
+    // identities through the native projection (source identities and
+    // hashes stay original), and a masked copy redacts the operator's
+    // attestation and reason while the clone guard admits only the exact
+    // projection.
+    if (t.name === "field_ticket_source_certifications"
+      && ["source_row_snapshot", "reference_map", "native_point_in_time"].includes(c.name)) {
+      if (tableMask?.has(c.name)) throw new Error("Field Ticket source certification evidence requires native identity rebasing; remove its whole-column masking policy.");
+      exprs.push(`public.field_ticket_source_certification_clone_evidence("${c.name}", '${seed}'::uuid, '${c.name}', '${sbx}'::uuid, ${opts.masked ? "true" : "false"})`);
+      continue;
+    }
+    if (opts.masked && t.name === "field_ticket_source_certifications"
+      && ["attestation", "reason"].includes(c.name)) {
+      exprs.push("'REDACTED'::text");
       continue;
     }
     if (opts.masked && ["fx_rate_types", "account_translation_policies", "subsidiary_accounting_preferences", "segment_balancing_policies", "gl_audit_number_policies", "project_loss_policies", "rebate_agreements", "rebate_cost_attestations", "rebate_claims", "rebate_settlement_reversals", "recognition_control_events", "journal_lines"].includes(t.name)
@@ -539,6 +569,7 @@ export function generateCopySql(
   // Immediate ownership and reversal guards require ancestors to exist already.
   // Heap/index order and UUID chronology cannot determine retained lineage.
   const parentColumn = t.name === "subsidiaries" ? "parent_id"
+    : t.name === "fx_revaluation_rate_evidence" ? "supersedes_id"
     : ["project_financial_adjustments", "project_overhead_adjustments"].includes(t.name)
       ? "reverses_adjustment_id" : null;
   const tree = parentColumn ? `with recursive source_tree as (

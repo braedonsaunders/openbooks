@@ -60,9 +60,9 @@ registerHooks({
   },
 });
 
-const { POST, MAX_DRAFT_BODY_BYTES } = (await import("./route.ts")) as typeof import("./route.ts");
+const { POST } = (await import("./route.ts")) as typeof import("./route.ts");
 
-assert.equal(MAX_DRAFT_BODY_BYTES, 11 * 1024 * 1024);
+
 
 function draftRequest(bundleBytes: number): Request {
   const body = JSON.stringify({

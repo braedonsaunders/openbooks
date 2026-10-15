@@ -203,7 +203,7 @@ test("open, close and management updates reach the service with the record id", 
 test("action routes refuse hostile payloads at the real boundary", async () => {
   reset();
   for (const body of ["{not json", "null"]) {
-    const refused = await itemRoute!.PATCH(
+    const refused: Response = await itemRoute!.PATCH(
       new Request(`http://openbooks.test/api/hrm/review-cycles/${CYCLE_ID}`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },

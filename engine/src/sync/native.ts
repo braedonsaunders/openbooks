@@ -35,6 +35,11 @@ export interface NativeDocLine {
   taxCodeId: string | null;
   departmentId: string | null;
   projectId: string | null;
+  /** Exact source ticket identity for the work on this line. Both values are
+   * required together; the mirror resolves them to the tenant's native ticket
+   * and checks that the ticket and line belong to the same project. */
+  fieldTicketSourceSystem?: string | null;
+  fieldTicketSourceRef?: string | null;
   /** Resolved custom segment value ids keyed by segment definition key. */
   extraDims?: Record<string, string | null>;
   /** Optional legal-entity override (advanced intercompany journals). */

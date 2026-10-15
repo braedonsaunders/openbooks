@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "@openbooks/engine/platform/db";
-import { loadCatalog } from "@openbooks/engine/testing/sandbox/catalog";
+import { deletionOrder, loadCatalog } from "@openbooks/engine/testing/sandbox/catalog";
 import { TENANT_TABLE_POLICIES } from "@openbooks/engine/testing/sandbox/tenant-table-policies";
 
 type Category = { prefixes: string[]; reason: string };
@@ -17,6 +17,7 @@ const EXCLUDED_CATEGORIES: Category[] = [
   {
     prefixes: [
       "payroll_filing_",
+      "payroll_us_filing_account_employer_lineage",
       "payroll_parallel_",
       "payroll_prior_",
       "payroll_retro_",
@@ -149,10 +150,14 @@ const EXCLUDED_CATEGORIES: Category[] = [
 ];
 
 const EXCLUDED_TABLES: Record<string, string> = {
+  fx_revaluation_rate_evidence: "recorded closing rates bind exact close positions with operator source and reason; native close readers own access.",
+  field_ticket_source_certifications: "human-reviewed source identity bindings retain operator attestation and retained-file provenance; native certification readers own access.",
   historical_translation_contributions: "approved financial source assessments contain protected Cabinet provenance; native authorized source readers own access.",
   historical_translation_layers: "immutable contribution layers retain protected Cabinet source references; translation reporting consumes approved native evidence rather than generic row access.",
   payroll_opening_levy_source_authorities: "qualified statutory opening evidence retains protected Cabinet provenance; native payroll source readers enforce access.",
   payroll_opening_levy_source_allocations: "employee opening levy allocations are compensation-confidential source evidence; native payroll calculations own scoped consumption.",
+  payroll_ca_opening_reporting_authorities: "original Canadian reporting certificates retain protected Cabinet provenance and employee compensation snapshots; native payroll reporting readers enforce scoped access.",
+  payroll_ca_opening_reporting_allocations: "original RP and province reporting slices retain compensation-confidential annual and child history; native payroll reporting owns their scoped consumption.",
   number_sequences: "sequence counters for document numbering.",
   connector_replay_authorizations: "operational authorization evidence for closed-period replay; not a reporting entity.",
   einvoice_documents: "issued e-invoice files retained as legal originals; invoice facts report through documents.",
@@ -213,7 +218,14 @@ async function uncoveredTables(): Promise<string[]> {
 
 test("every org_id table is governed or reviewed", async () => {
   const uncovered = await uncoveredTables();
-  const cloneable = (await loadCatalog()).rebaseSet.has("pay_component_earning_classifications");
+  const catalog = await loadCatalog();
+  const cloneable = catalog.rebaseSet.has("pay_component_earning_classifications");
+  const teardownOrder = deletionOrder({ ...catalog, tables: catalog.tenantTables });
+  const allocationIndex = teardownOrder.indexOf("payroll_ca_opening_reporting_allocations");
+  const reportingIndex = teardownOrder.indexOf("payroll_ca_opening_reporting_authorities");
+  const levyIndex = teardownOrder.indexOf("payroll_opening_levy_source_authorities");
+  assert.ok(allocationIndex >= 0 && reportingIndex > allocationIndex && levyIndex > reportingIndex,
+    "native tenant teardown must remove Canadian reporting slices before their reporting certificate and levy parent");
   assert.deepEqual(
     [uncovered, cloneable, TENANT_TABLE_POLICIES.pay_component_earning_classifications],
     [[], true, "clone:catalog-uuid-rebase"],

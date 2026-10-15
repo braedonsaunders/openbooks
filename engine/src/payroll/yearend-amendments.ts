@@ -1,6 +1,5 @@
 import { sql } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/node-postgres";
-import { db, orgContext, pool } from "../platform/db.ts";
+import { db } from "../platform/db.ts";
 import { KeyedFingerprintError, parseKeyedFingerprint } from "../platform/secrets.ts";
 import { PayrollError } from "./error.ts";
 import {
@@ -17,6 +16,7 @@ import {
   type PayrollYearEndFiling,
 } from "./filing-registry.ts";
 import type { PayrollSubsidiaryScope } from "./scope.ts";
+import { withOpeningReportingSnapshot } from "./opening-reporting-snapshot.ts";
 
 /**
  * The payroll filing LIFECYCLE — original → amended → cancelled.
@@ -734,38 +734,8 @@ export interface RecordFilingIssueResult {
  * an amendment must not combine values from before and after a concurrent
  * ledger/profile commit.
  */
-async function withRepeatableRead<T>(orgId: string, fn: () => Promise<T>): Promise<T> {
-  const active = orgContext.getStore();
-  if (active?.txDb && !active.bypass) {
-    if (orgId !== active.orgId) {
-      throw new Error("cannot change organization inside an active tenant transaction");
-    }
-    // A caller-owned transaction already supplies the snapshot and must remain
-    // the authority for any uncommitted writes it is issuing alongside the file.
-    return fn();
-  }
-
-  const client = await pool.connect();
-  try {
-    await client.query("begin isolation level repeatable read");
-    await client.query(
-      "select set_config('app.current_org', $1, true), set_config('app.bypass_rls', 'off', true)",
-      [orgId],
-    );
-    const txDb = drizzle({ client });
-    const result = await orgContext.run({ orgId, bypass: false, txDb }, fn);
-    await client.query("commit");
-    return result;
-  } catch (error) {
-    try {
-      await client.query("rollback");
-    } catch {
-      // A broken connection is discarded when released.
-    }
-    throw error;
-  } finally {
-    client.release();
-  }
+async function withRepeatableRead<T>(orgId: string, taxYear: number, fn: () => Promise<T>): Promise<T> {
+  return withOpeningReportingSnapshot(orgId,taxYear,fn,true);
 }
 
 /**
@@ -795,12 +765,12 @@ export async function recordFilingIssue(
     : input;
 
   if (revision === "original") {
-    return await withRepeatableRead(orgId, async () => {
+    return await withRepeatableRead(orgId, taxYear, async () => {
       const submissions = await filingSubmissions(orgId, country, filingKey, taxYear);
       return await issueOriginal(normalizedInput, filing, submissions);
     });
   }
-  return await withRepeatableRead(orgId, async () => {
+  return await withRepeatableRead(orgId, taxYear, async () => {
     const submissions = await filingSubmissions(orgId, country, filingKey, taxYear);
     return await issueCorrection(normalizedInput, filing, submissions, revision);
   });

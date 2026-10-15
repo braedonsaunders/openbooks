@@ -4,12 +4,12 @@
  * Extracted verbatim from engine/src/payroll/run.ts; bodies preserve exact
  * math, transaction/lock sequencing, and refusal identity.
  */
-import { payrollSubsidiaryInScope, type PayrollSubsidiaryScope } from "./scope.ts";
+import { payrollRunPopulationScopeFilter, payrollSubsidiaryInScope, payrollSubsidiaryScopeFilter, type PayrollSubsidiaryScope } from "./scope.ts";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { PayrollError } from "./error.ts";
 import { cmp, roundMoney } from "../money/money.ts";
-import { assertContributoryBasesDeclared, ensurePackSlotRoleAccounts, packStatutoryComponents, payrollPack } from "./packs.ts";
+import { assertContributoryBasesDeclared, ensurePackSlotRoleAccounts, legacyStatutoryLiabilityAccount, packStatutoryComponents, payrollPack } from "./packs.ts";
 import { type EntitlementPlan } from "./entitlements.ts";
 export interface PayrollSettings {
   /** DR for wages when a component has no expense account of its own. */
@@ -61,10 +61,97 @@ export async function payrollSettings(
       throw new PayrollError("payroll settings not found");
     }
   }
-  const r = (await db.execute<{ p: Record<string, unknown> | null; c: Record<string, unknown> | null }>(
-    sql`select settings->'payroll' as p, settings->'controlAccounts' as c from orgs where id = ${orgId}`,
-  ));
-  const p = (r.rows[0]?.p ?? {}) as Record<string, string | null>;
+  const row = (await db.execute<{ p: Record<string, unknown> | null }>(
+    sql`select settings->'payroll' as p from orgs where id = ${orgId}`,
+  )).rows[0];
+  if (!row) throw new PayrollError("payroll settings not found");
+  return resolvePayrollSettings(row.p);
+}
+
+/** Applicable organization policy is readable through ownership of the complete run. */
+export async function payrollCalculationPolicyForPayRun(
+  orgId: string,
+  documentId: string,
+  allowedSubsidiaryIds?: PayrollSubsidiaryScope,
+  executor: Pick<typeof db, "execute"> = db,
+) {
+  const policy = await payrollPolicyForPayRun(orgId, documentId, allowedSubsidiaryIds, executor);
+  return {
+    settings: resolvePayrollSettings(policy),
+    statutoryHolidayPay: policy?.statutoryHolidayPay === true || policy?.statutoryHolidayPay === "true",
+    statutoryLiabilityAccount: (systemKey: string, country: string | null) =>
+      legacyStatutoryLiabilityAccount(systemKey, policy ?? {}, country),
+  };
+}
+
+/** Configuration writes retain the organization root's visibility requirement. */
+export async function payrollConfigurationInScope(
+  executor: Pick<typeof db, "execute">,
+  orgId: string,
+  allowedSubsidiaryIds?: PayrollSubsidiaryScope,
+): Promise<boolean> {
+  if (allowedSubsidiaryIds == null) return true;
+  const root = (await executor.execute<{ id: string }>(sql`
+    select id from subsidiaries
+     where org_id = ${orgId} and parent_id is null and is_active
+     order by created_at limit 1
+  `)).rows[0]?.id ?? null;
+  return payrollSubsidiaryInScope(allowedSubsidiaryIds, root);
+}
+
+/** Scoped calculation consumes installed configuration without provisioning organization-wide rows. */
+export function assertPayRunCalculationComponents(
+  country: string,
+  statutoryHolidayPay: boolean,
+  components: readonly Record<string, unknown>[],
+): void {
+  const required = [
+    ...BASELINE_COMPONENTS.filter((component) => component.systemKey === "base_pay"),
+    ...statutoryComponents(country),
+    ...(statutoryHolidayPay ? STAT_HOLIDAY_COMPONENTS : []),
+  ];
+  for (const component of required) {
+    if (!components.some((row) => row.country === (component.country ?? null)
+      && row.system_key === component.systemKey && row.kind === component.kind)) {
+      throw new PayrollError(
+        `missing system pay component ${component.systemKey}/${component.kind} — `
+        + `ask an organization payroll administrator to install the ${country} payroll pack in Payroll setup → Accounts & posting`,
+      );
+    }
+  }
+}
+
+/** Resolve posting policy only for a run and population owned by the caller. */
+export async function payrollSettingsForPayRun(
+  orgId: string,
+  documentId: string,
+  allowedSubsidiaryIds?: PayrollSubsidiaryScope,
+  executor: Pick<typeof db, "execute"> = db,
+): Promise<PayrollSettings> {
+  return resolvePayrollSettings(await payrollPolicyForPayRun(orgId, documentId, allowedSubsidiaryIds, executor));
+}
+
+async function payrollPolicyForPayRun(
+  orgId: string,
+  documentId: string,
+  allowedSubsidiaryIds: PayrollSubsidiaryScope,
+  executor: Pick<typeof db, "execute">,
+): Promise<Record<string, unknown> | null> {
+  const row = (await executor.execute<{ p: Record<string, unknown> | null }>(sql`
+    select o.settings->'payroll' as p
+      from pay_runs r
+      join documents d on d.org_id = r.org_id and d.id = r.document_id
+      join orgs o on o.id = r.org_id
+     where r.org_id = ${orgId} and r.document_id = ${documentId}
+       ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds)}
+       ${payrollRunPopulationScopeFilter(orgId, sql`r.document_id`, allowedSubsidiaryIds)}
+  `)).rows[0];
+  if (!row) throw new PayrollError("pay run not found");
+  return row.p;
+}
+
+function resolvePayrollSettings(blob: Record<string, unknown> | null): PayrollSettings {
+  const p = (blob ?? {}) as Record<string, string | null>;
   return {
     wageExpenseAccountId: p.wageExpenseAccountId ?? null,
     burdenExpenseAccountId: p.burdenExpenseAccountId ?? null,
@@ -177,8 +264,8 @@ export async function ensureComponents(
     if (inserted.rows[0]) {
       const treatment = await executor.execute(sql`
         insert into pay_component_statutory_treatments
-          (org_id, pay_component_id, effective_from, program_exclusions, created_by, updated_by)
-        values (${orgId}, ${inserted.rows[0]!.id}, DATE '0001-01-01', '{}'::text[], ${actorId}, ${actorId})
+          (org_id, pay_component_id, effective_from, program_exclusions, vacationable, created_by, updated_by)
+        values (${orgId}, ${inserted.rows[0]!.id}, DATE '0001-01-01', '{}'::text[], ${c.vacationable ?? true}, ${actorId}, ${actorId})
         returning id
       `);
       if (treatment.rows.length !== 1) {

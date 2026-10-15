@@ -15,11 +15,12 @@ export const provisionCaPayrollDefaults: NonNullable<PayrollCountryPack["provisi
     effective_from: string;
     effective_to: string | null;
     program_exclusions: string[];
+    vacationable: boolean;
   }>(sql`
     select c.id::text as component_id, treatment.id::text as treatment_id,
            treatment.effective_from::text as effective_from,
            treatment.effective_to::text as effective_to,
-           treatment.program_exclusions
+           treatment.program_exclusions, treatment.vacationable
       from pay_components c
       join pay_component_statutory_treatments treatment
         on treatment.org_id = c.org_id and treatment.pay_component_id = c.id
@@ -57,8 +58,8 @@ export const provisionCaPayrollDefaults: NonNullable<PayrollCountryPack["provisi
       splitFrom = { effectiveTo: closed.rows[0]!.effective_to };
       const inserted = await tx.execute<{ id: string }>(sql`
         insert into pay_component_statutory_treatments
-          (org_id, pay_component_id, effective_from, effective_to, program_exclusions, created_by, updated_by)
-        values (${orgId}, ${row.component_id}, ${today}::date, ${row.effective_to}::date, ${after}, ${actorId}, ${actorId})
+          (org_id, pay_component_id, effective_from, effective_to, program_exclusions, vacationable, created_by, updated_by)
+        values (${orgId}, ${row.component_id}, ${today}::date, ${row.effective_to}::date, ${after}, ${row.vacationable}, ${actorId}, ${actorId})
         returning id::text as id
       `);
       if (inserted.rows.length !== 1) throw new PayrollPackError("The dated Canadian statutory treatment was not created; retry the setup action.");
@@ -80,8 +81,8 @@ export const provisionCaPayrollDefaults: NonNullable<PayrollCountryPack["provisi
         insert into audit_log (org_id, table_name, row_id, action, actor_id, changes)
         values (${orgId}, 'pay_component_statutory_treatments', ${row.treatment_id}, 'update', ${actorId},
           ${JSON.stringify({
-            before: { programExclusions: before, effectiveFrom: row.effective_from, effectiveTo: row.effective_to },
-            after: { programExclusions: before, effectiveFrom: row.effective_from, effectiveTo: splitFrom.effectiveTo },
+            before: { programExclusions: before, vacationable: row.vacationable, effectiveFrom: row.effective_from, effectiveTo: row.effective_to },
+            after: { programExclusions: before, vacationable: row.vacationable, effectiveFrom: row.effective_from, effectiveTo: splitFrom.effectiveTo },
             reason,
           })}::jsonb)
       `);
@@ -90,7 +91,7 @@ export const provisionCaPayrollDefaults: NonNullable<PayrollCountryPack["provisi
         values (${orgId}, 'pay_component_statutory_treatments', ${treatmentId}, 'insert', ${actorId},
           ${JSON.stringify({
             before: null,
-            after: { payComponentId: row.component_id, workerCompGroupId: null, programExclusions: after, effectiveFrom: today, effectiveTo: row.effective_to },
+            after: { payComponentId: row.component_id, workerCompGroupId: null, programExclusions: after, vacationable: row.vacationable, effectiveFrom: today, effectiveTo: row.effective_to },
             reason,
           })}::jsonb)
       `);
@@ -99,8 +100,8 @@ export const provisionCaPayrollDefaults: NonNullable<PayrollCountryPack["provisi
         insert into audit_log (org_id, table_name, row_id, action, actor_id, changes)
         values (${orgId}, 'pay_component_statutory_treatments', ${treatmentId}, 'update', ${actorId},
           ${JSON.stringify({
-            before: { programExclusions: before, effectiveFrom: row.effective_from, effectiveTo: row.effective_to },
-            after: { programExclusions: after, effectiveFrom: today, effectiveTo: row.effective_to },
+            before: { programExclusions: before, vacationable: row.vacationable, effectiveFrom: row.effective_from, effectiveTo: row.effective_to },
+            after: { programExclusions: after, vacationable: row.vacationable, effectiveFrom: today, effectiveTo: row.effective_to },
             reason,
           })}::jsonb)
       `);

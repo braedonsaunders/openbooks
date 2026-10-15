@@ -5,11 +5,15 @@ import { isUuid } from '../platform/uuid.ts';
 import { actorHasPermission } from '../organization/actor-permissions.ts';
 import { lockActorCommandAuthority } from '../organization/actor-command-authority.ts';
 import { requirePayrollFeature } from './feature-gate.ts';
-import { employeeTaxYearFenceKey, takeEmployeeTaxYearFences } from './fences.ts';
+import { employeeTaxYearFenceKey, employerLevyFenceKey, takeEmployeeTaxYearFences, takeEmployerLevyFences } from './fences.ts';
 import { payrollSubsidiaryScopeFilter, type PayrollSubsidiaryScope } from './scope.ts';
 import { PayrollError } from './error.ts';
 import { requireNativeFileReadAuthority } from '../records/file-read-authority.ts';
+import { PAYROLL_COUNTRY_PACKS } from './pack-registry.ts';
+import { validateOpeningLevySourceFacts, type OpeningLevySourceFacts } from './opening-levy-source-facts.ts';
 import { canonicalNonNegativeDecimal } from '../money/exact-decimal.ts';
+import { takeOpeningSourceYearFence } from '../organization/payroll-source-fence.ts';
+import { currentOpeningLevySourceSql, openingLevySourceCorrectionRequestSha256, requireUnconsumedOpeningLevySource, type OpeningLevySourceCorrection } from './opening-levy-source-correction-authority.ts';
 
 export type OpeningLevyProgram = 'ca_wcb' | 'ca_eht' | 'ca_cnt' | 'us_futa' | 'us_sui' | 'us_pa_lst';
 export type OpeningLevySourceAllocation = {
@@ -17,6 +21,7 @@ export type OpeningLevySourceAllocation = {
   region: string;
   subRegion: string;
   filingAccountId: string | null;
+  federalAccountId: string | null;
   amount: string;
 };
 
@@ -25,6 +30,7 @@ export type OpeningLevySourceAllocationInput = {
   region: string;
   subRegion?: string;
   filingAccountId?: string | null;
+  federalAccountId: string | null;
   amount: string;
 };
 
@@ -52,19 +58,25 @@ type StoredEmployerAuthority = {
 };
 
 function canonicalAllocations(input: readonly OpeningLevySourceAllocationInput[]): OpeningLevySourceAllocation[] {
-  if (!Array.isArray(input) || input.length === 0) throw new PayrollError('Record the complete statutory levy opening allocation, including explicit zeros');
+  if (!Array.isArray(input)) throw new PayrollError('Record the complete statutory levy opening allocation, including explicit zeros');
   const seen = new Set<string>();
   return input.map((raw) => {
     if (!raw || typeof raw !== 'object' || !['ca_wcb','ca_eht','ca_cnt','us_futa','us_sui','us_pa_lst'].includes(raw.programKey)
       || typeof raw.region !== 'string' || typeof raw.amount !== 'string'
       || raw.subRegion !== undefined && typeof raw.subRegion !== 'string'
-      || raw.filingAccountId !== undefined && raw.filingAccountId !== null && typeof raw.filingAccountId !== 'string') {
+      || raw.filingAccountId !== undefined && raw.filingAccountId !== null && typeof raw.filingAccountId !== 'string'
+      || raw.federalAccountId !== null && (typeof raw.federalAccountId !== 'string' || !isUuid(raw.federalAccountId))) {
       throw new PayrollError('Choose a declared statutory programme, original jurisdiction and exact-decimal opening amount');
     }
     const programKey = raw.programKey as OpeningLevyProgram;
     const region = raw.region.trim().toUpperCase();
     const subRegion = (raw.subRegion ?? '').trim();
     const filingAccountId = raw.filingAccountId ?? null;
+    const federalAccountId = raw.federalAccountId;
+    if (CA_PROGRAMS.has(programKey) ? federalAccountId !== null : !federalAccountId
+      || programKey === 'us_futa' && federalAccountId !== filingAccountId) {
+      throw new PayrollError('Record the original federal EIN for each US allocation; Canadian allocations have no EIN');
+    }
     if (filingAccountId !== null && !isUuid(filingAccountId)) throw new PayrollError('Choose a native EIN account for the US wage-base opening');
     const scopeValid = programKey === 'ca_wcb'
       ? (CA_PROVINCES as readonly string[]).includes(region) && !subRegion && filingAccountId === null
@@ -83,12 +95,12 @@ function canonicalAllocations(input: readonly OpeningLevySourceAllocationInput[]
     try { amount = normalizeMoney(raw.amount); }
     catch (error) { throw new PayrollError(`Opening allocation ${programKey}/${region} is not an exact non-negative amount: ${error instanceof Error ? error.message : String(error)}`); }
     if (cmp(amount, '0') < 0) throw new PayrollError('Statutory levy opening allocations cannot be negative');
-    const key = [programKey, region, subRegion, filingAccountId ?? ''].join('|');
+    const key = [programKey, region, subRegion, filingAccountId ?? '', federalAccountId ?? ''].join('|');
     if (seen.has(key)) throw new PayrollError(`Duplicate statutory levy opening allocation ${programKey}/${region}/${subRegion}`);
     seen.add(key);
-    return { programKey, region, subRegion, filingAccountId, amount };
-  }).sort((a, b) => [a.programKey, a.region, a.subRegion, a.filingAccountId ?? ''].join('|')
-    .localeCompare([b.programKey, b.region, b.subRegion, b.filingAccountId ?? ''].join('|')));
+    return { programKey, region, subRegion, filingAccountId, federalAccountId, amount };
+  }).sort((a, b) => [a.programKey, a.region, a.subRegion, a.filingAccountId ?? '', a.federalAccountId ?? ''].join('|')
+    .localeCompare([b.programKey, b.region, b.subRegion, b.filingAccountId ?? '', b.federalAccountId ?? ''].join('|')));
 }
 
 function requiredAllocations(country: string, rows: readonly OpeningLevySourceAllocation[]) {
@@ -107,7 +119,10 @@ function requiredAllocations(country: string, rows: readonly OpeningLevySourceAl
     }
     return;
   }
-  if (country !== 'US') throw new PayrollError(`Statutory levy opening source authority does not support ${country}`);
+  if (country !== 'US') {
+    if (rows.length) throw new PayrollError('This original country has no declared opening levy allocation programmes; retain its generic opening amounts with an empty allocation set');
+    return;
+  }
   if (rows.some((row) => !US_PROGRAMS.has(row.programKey))) throw new PayrollError('A US opening cannot contain Canadian levy allocations');
   if (!byProgram.get('us_futa')?.length) throw new PayrollError('Declare FUTA opening wages for each original EIN, including zero when the source confirms none');
 }
@@ -115,47 +130,89 @@ function requiredAllocations(country: string, rows: readonly OpeningLevySourceAl
 async function loadOpening(input: { orgId: string; openingBalanceId: string }, lock = false) {
   return (await db.execute<{
     id: string; employeePartyId: string; taxYear: number; wcbAssessableYtd: string; ehtRemunerationYtd: string;
-    insurableYtd: string; country: string | null;
+    insurableYtd: string;
   }>(sql`
     select b.id, b.employee_party_id as "employeePartyId", b.tax_year as "taxYear",
       b.wcb_assessable_ytd::text as "wcbAssessableYtd", b.eht_remuneration_ytd::text as "ehtRemunerationYtd",
-      b.insurable_ytd::text as "insurableYtd", s.country
+      b.insurable_ytd::text as "insurableYtd"
       from payroll_opening_balances b
       left join payroll_opening_employer_authorities a on a.org_id=b.org_id and a.opening_balance_id=b.id
-      left join subsidiaries s on s.org_id=a.org_id and s.id=a.subsidiary_id
      where b.org_id=${input.orgId} and b.id=${input.openingBalanceId}
      ${lock ? sql`for update of b` : sql``}
   `)).rows[0] ?? null;
 }
 
-export async function qualifyOpeningLevySourceAuthority(input: {
-  orgId: string; actorId: string; openingBalanceId: string; expectedOpeningSha256: string;
+export type OpeningLevySourceAuthorityInput = {
+  orgId: string; actorId: string; openingBalanceId: string; expectedOpeningSha256: string; expectedOpeningChildrenSha256: string;
+  sourceFileId: string; sourceVersionId: string; sourceSha256: string; sourceReference: string;
+  originalCountry: OpeningLevySourceFacts['originalCountry']; originalCurrency: OpeningLevySourceFacts['originalCurrency'];
+  coverageStart: string; coverageEnd: string; coverageComplete: true;
   allocations: readonly OpeningLevySourceAllocationInput[]; reason: string;
   allowedSubsidiaryIds: PayrollSubsidiaryScope;
-}): Promise<{ id: string; openingBalanceId: string; subsidiaryId: string; allocationSha256: string }> {
-  if (![input.orgId, input.actorId, input.openingBalanceId].every(isUuid)
-    || input.allowedSubsidiaryIds === undefined || !/^[a-f0-9]{64}$/.test(input.expectedOpeningSha256)) {
+};
+export type OpeningLevySourceAuthorityResult = { id: string; openingBalanceId: string; subsidiaryId: string; allocationSha256: string };
+
+export async function qualifyOpeningLevySourceAuthority(input: OpeningLevySourceAuthorityInput): Promise<OpeningLevySourceAuthorityResult> {
+  return saveOpeningLevySourceAuthority(input, null);
+}
+
+/** Requalification appends evidence while preserving the original legal payer and every opening amount. */
+export async function replaceOpeningLevySourceAuthority(input: OpeningLevySourceAuthorityInput, correction: OpeningLevySourceCorrection): Promise<OpeningLevySourceAuthorityResult> {
+  return saveOpeningLevySourceAuthority(input, correction);
+}
+
+async function saveOpeningLevySourceAuthority(input: OpeningLevySourceAuthorityInput, correction: OpeningLevySourceCorrection | null): Promise<OpeningLevySourceAuthorityResult> {
+  if (![input.orgId, input.actorId, input.openingBalanceId, input.sourceFileId, input.sourceVersionId].every(isUuid)
+    || !/^[a-f0-9]{64}$/.test(input.expectedOpeningChildrenSha256) || input.allowedSubsidiaryIds === undefined || !/^[a-f0-9]{64}$/.test(input.sourceSha256) || !/^[a-f0-9]{64}$/.test(input.expectedOpeningSha256)) {
     throw new PayrollError('Choose a native opening balance and its exact retained legal-employer qualification');
   }
   if (typeof input.reason !== 'string' || !input.reason.trim() || input.reason.trim().length > 2000) {
     throw new PayrollError('Record why the original statutory levy opening allocations are being qualified');
   }
   const reason = input.reason.trim();
+  if (typeof input.sourceReference !== 'string' || !input.sourceReference.trim() || input.sourceReference.trim().length > 2000) {
+    throw new PayrollError('Record the country, currency, coverage and allocation reference in the original Cabinet source');
+  }
+  const sourceReference = input.sourceReference.trim();
   const allocations = canonicalAllocations(input.allocations);
+  const requestSha256 = correction ? openingLevySourceCorrectionRequestSha256(correction, {
+    orgId: input.orgId, actorId: input.actorId, openingBalanceId: input.openingBalanceId,
+    expectedOpeningSha256: input.expectedOpeningSha256, expectedOpeningChildrenSha256: input.expectedOpeningChildrenSha256,
+    sourceFileId: input.sourceFileId, sourceVersionId: input.sourceVersionId, sourceSha256: input.sourceSha256,
+    sourceReference, originalCountry: input.originalCountry, originalCurrency: input.originalCurrency,
+    coverageStart: input.coverageStart, coverageEnd: input.coverageEnd, coverageComplete: input.coverageComplete,
+    allocations, reason,
+  }) : null;
   return withOrgTransaction(input.orgId, async () => {
     await requirePayrollFeature(db, input.orgId);
-    if (!await actorHasPermission(db, input.orgId, input.actorId, 'payroll.run')) {
-      throw new PayrollError('Payroll run permission is required to qualify statutory levy opening history');
+    const permission = correction ? 'payroll.manage' : 'payroll.run';
+    if (!await actorHasPermission(db, input.orgId, input.actorId, permission)) {
+      throw new PayrollError(correction ? 'Payroll manage permission is required to correct an opening source certificate' : 'Payroll run permission is required to qualify statutory levy opening history');
     }
-    const commandAuthority = await lockActorCommandAuthority(db, input.orgId, input.actorId, null, 'payroll.run');
     let opening = await loadOpening(input);
     if (!opening) throw new PayrollError('The native payroll opening record is unavailable');
+    await takeOpeningSourceYearFence(db, input.orgId, opening.taxYear);
+    const commandAuthority = await lockActorCommandAuthority(db, input.orgId, input.actorId, null, permission);
     await takeEmployeeTaxYearFences(db, [employeeTaxYearFenceKey(input.orgId, opening.employeePartyId, opening.taxYear)]);
+    {
+      const levyFenceKeys: string[] = [];
+      for (const [country, pack] of Object.entries(PAYROLL_COUNTRY_PACKS)) {
+        let levies: readonly { key: string; timing: string }[];
+        try { levies = pack.employerAggregateLevies?.(opening.taxYear) ?? []; }
+        catch { continue; }
+        for (const levy of levies) if (levy.timing === 'per_run') levyFenceKeys.push(employerLevyFenceKey(input.orgId, opening.taxYear, country, levy.key));
+      }
+      await takeEmployerLevyFences(db, levyFenceKeys);
+    }
     const retainedIdentity = { employeePartyId: opening.employeePartyId, taxYear: opening.taxYear };
     opening = await loadOpening(input, true);
     if (!opening || opening.employeePartyId !== retainedIdentity.employeePartyId || opening.taxYear !== retainedIdentity.taxYear) {
       throw new PayrollError('The native opening identity changed; reload before qualifying its statutory source');
     }
+    const childrenMatch = (await db.execute<{ matches: boolean }>(sql`
+      select encode(public.digest(public.payroll_opening_source_children(${input.orgId},${input.openingBalanceId},${opening.employeePartyId},${opening.taxYear})::text,'sha256'),'hex')=${input.expectedOpeningChildrenSha256} as matches
+    `)).rows[0]?.matches;
+    if (!childrenMatch) throw new PayrollError('The original opening component, programme or account amounts changed; reload their exact source before qualification');
     const employerAuthority = (await db.execute<StoredEmployerAuthority & { matches: boolean }>(sql`
       select a.id, a.opening_balance_id as "openingBalanceId", a.employee_party_id as "employeePartyId",
         a.tax_year as "taxYear", a.subsidiary_id as "subsidiaryId", a.source_file_id as "sourceFileId",
@@ -172,26 +229,57 @@ export async function qualifyOpeningLevySourceAuthority(input: {
     if (!employerAuthority) throw new PayrollError('Qualify the original opening legal employer and exact source file before allocating statutory history');
     await requireNativeFileReadAuthority({ orgId: input.orgId, actorId: input.actorId, fileId: employerAuthority.sourceFileId }, db);
     if (!employerAuthority.matches) throw new PayrollError('The source-qualified opening changed; reload its retained amounts before allocating statutory history');
-    const employer = (await db.execute<{ country: string; id: string }>(sql`
-      select id,country from subsidiaries where org_id=${input.orgId} and id=${employerAuthority.subsidiaryId}
+    const employer = (await db.execute<{ id: string }>(sql`
+      select id from subsidiaries where org_id=${input.orgId} and id=${employerAuthority.subsidiaryId}
         ${payrollSubsidiaryScopeFilter(sql`id`, input.allowedSubsidiaryIds)}
         ${payrollSubsidiaryScopeFilter(sql`id`, commandAuthority)} for share
     `)).rows[0];
     if (!employer) throw new PayrollError('The original opening legal employer is outside your payroll authority');
-    requiredAllocations(employer.country, allocations);
+    validateOpeningLevySourceFacts(input, opening.taxYear, PAYROLL_COUNTRY_PACKS[input.originalCountry]);
+    requiredAllocations(input.originalCountry, allocations);
+    await requireNativeFileReadAuthority({ orgId: input.orgId, actorId: input.actorId, fileId: input.sourceFileId }, db);
+
+    const retainedFile = (await db.execute(sql`select v.id from files f join file_versions v on v.file_id=f.id
+      where f.org_id=${input.orgId} and f.id=${input.sourceFileId} and not f.is_inactive
+        and v.id=${input.sourceVersionId} and v.content_hash=${input.sourceSha256} and v.created_by=${input.actorId}
+      for share of f,v`)).rows;
+    if (retainedFile.length !== 1) throw new PayrollError('Select the active original Cabinet file and its exact retained version and hash');
+
+    if (correction) {
+      const replay = (await db.execute<{ id: string; allocationSha256: string; matches: boolean }>(sql`
+        select h.id,h.allocation_sha256 as "allocationSha256",
+          (h.request_sha256=${requestSha256} and h.created_by=${input.actorId}
+            and h.opening_balance_id=${input.openingBalanceId} and h.subsidiary_id=${employerAuthority.subsidiaryId}
+            and h.sealed) as matches
+          from payroll_opening_levy_source_authorities h
+         where h.org_id=${input.orgId} and h.request_id=${correction.requestId}
+      `)).rows;
+      if (replay.length) {
+        if (replay.length !== 1 || !replay[0]!.matches) throw new PayrollError('This source correction request already preserves different evidence; reload and review its retained result');
+        return { id: replay[0]!.id, openingBalanceId: input.openingBalanceId,
+          subsidiaryId: employerAuthority.subsidiaryId, allocationSha256: replay[0]!.allocationSha256 };
+      }
+    }
 
     const prior = (await db.execute<{ id: string; sealed: boolean; allocationSha256: string; matches: boolean }>(sql`
       select h.id,h.sealed,h.allocation_sha256 as "allocationSha256",
         (h.employer_authority_id=${employerAuthority.id} and h.change_reason=${reason}
-          and h.opening_sha256=${input.expectedOpeningSha256}) as matches
+          and h.opening_sha256=${input.expectedOpeningSha256}
+          and h.source_file_id=${input.sourceFileId} and h.source_version_id=${input.sourceVersionId}
+          and h.source_sha256=${input.sourceSha256} and h.source_reference=${sourceReference}
+          and h.original_country=${input.originalCountry} and h.original_currency=${input.originalCurrency}
+          and h.coverage_start=${input.coverageStart}::date and h.coverage_end=${input.coverageEnd}::date
+          and h.coverage_complete=${input.coverageComplete}) as matches
         from payroll_opening_levy_source_authorities h
        where h.org_id=${input.orgId} and h.opening_balance_id=${input.openingBalanceId}
+         and ${currentOpeningLevySourceSql('h')}
+       for update of h
     `)).rows;
-    if (prior.length) {
-      const storedRows = (await db.execute<{ programKey: string; region: string; subRegion: string; filingAccountId: string | null; amount: string }>(sql`
-        select program_key as "programKey",region,sub_region as "subRegion",filing_account_id as "filingAccountId",amount::text
+    if (!correction && prior.length) {
+      const storedRows = (await db.execute<{ programKey: string; region: string; subRegion: string; filingAccountId: string | null; federalAccountId: string | null; amount: string }>(sql`
+        select program_key as "programKey",region,sub_region as "subRegion",filing_account_id as "filingAccountId",federal_account_id as "federalAccountId",amount::text
           from payroll_opening_levy_source_allocations where org_id=${input.orgId} and authority_id=${prior[0]!.id}
-         order by program_key,region,sub_region,filing_account_id nulls first
+         order by program_key,region,sub_region,filing_account_id nulls first,federal_account_id nulls first
       `)).rows;
       const same = prior.length === 1 && prior[0]!.sealed
         && JSON.stringify(storedRows) === JSON.stringify(allocations)
@@ -201,7 +289,17 @@ export async function qualifyOpeningLevySourceAuthority(input: {
         subsidiaryId: employerAuthority.subsidiaryId, allocationSha256: prior[0]!.allocationSha256 };
     }
 
-    if (employer.country === 'CA') {
+    if (correction) {
+      if (prior.length !== 1 || !prior[0]!.sealed || prior[0]!.id !== correction.expectedAuthorityId
+        || prior[0]!.allocationSha256 !== correction.expectedAllocationSha256) {
+        throw new PayrollError('The sealed opening certificate changed; reload its current source and allocation digest before correcting it');
+      }
+      await requireUnconsumedOpeningLevySource(db, { orgId: input.orgId, taxYear: opening.taxYear,
+        subsidiaryId: employerAuthority.subsidiaryId, employeePartyId: opening.employeePartyId,
+        openingBalanceId: input.openingBalanceId, authorityId: correction.expectedAuthorityId });
+    }
+
+    if (input.originalCountry === 'CA') {
       const wcb = sum(allocations.filter((row) => row.programKey === 'ca_wcb').map((row) => row.amount));
       const eht = sum(allocations.filter((row) => row.programKey === 'ca_eht').map((row) => row.amount));
       if (cmp(wcb, opening.wcbAssessableYtd) !== 0) {
@@ -210,18 +308,19 @@ export async function qualifyOpeningLevySourceAuthority(input: {
       if (cmp(eht, opening.ehtRemunerationYtd) !== 0) {
         throw new PayrollError('The province allocations must equal the original EHT remuneration opening amount');
       }
-    } else {
+    } else if (input.originalCountry === 'US') {
       const einRows = (await db.execute<{ id: string; isActive: boolean }>(sql`
         select id,is_active as "isActive" from payroll_filing_accounts
          where org_id=${input.orgId} and country='US' and program_type='us_ein'
            and (subsidiary_id=${employerAuthority.subsidiaryId} or subsidiary_id is null)
-         order by id
+         order by id for share
       `)).rows;
-      const retainedEins = einRows;
-      if (!retainedEins.length) throw new PayrollError('Add or restore the original US EIN in Payroll Setup → Filing accounts before qualifying FUTA/SUI openings');
       const futa = allocations.filter((row) => row.programKey === 'us_futa');
-      if (retainedEins.some((ein) => !futa.some((row) => row.filingAccountId === ein.id))) {
-        throw new PayrollError('Declare a FUTA opening for every retained EIN in the original employer account set, including explicit zeros');
+      if (allocations.some((row) => !einRows.some((ein) => ein.id === row.federalAccountId))) {
+        throw new PayrollError('Add or restore each original US EIN in Payroll Setup → Filing accounts, then bind every US opening allocation to its source-confirmed EIN');
+      }
+      if (allocations.some((row) => !futa.some((base) => base.filingAccountId === row.federalAccountId))) {
+        throw new PayrollError('Declare a FUTA opening for every original EIN named by a SUI or LST allocation, including explicit zeros');
       }
       const accountBaseRows = (await db.execute<{ programKey: string; region: string | null; filingAccountId: string; amount: string }>(sql`
         select program_key as "programKey",region,filing_account_id as "filingAccountId",insurable_ytd::text as amount
@@ -233,46 +332,38 @@ export async function qualifyOpeningLevySourceAuthority(input: {
         if (cmp(opening.insurableYtd, '0') !== 0) {
           throw new PayrollError('The employee-only insurable opening must be zero when EIN-specific FUTA openings are recorded');
         }
-        if (futa.length !== futaAccountBases.length || futaAccountBases.some((stored) =>
-          !futa.some((row) => row.filingAccountId === stored.filingAccountId && cmp(row.amount, stored.amount) === 0))) {
+        if (futaAccountBases.some((stored) =>
+          !futa.some((row) => row.filingAccountId === stored.filingAccountId && cmp(row.amount, stored.amount) === 0))
+          || futa.some((row) => !futaAccountBases.some((stored) => stored.filingAccountId === row.filingAccountId)
+            && cmp(row.amount, '0') !== 0)) {
           throw new PayrollError('FUTA source allocations must preserve every exact EIN-specific opening wage base already recorded');
         }
       } else if (cmp(sum(futa.map((row) => row.amount)), opening.insurableYtd) !== 0) {
         throw new PayrollError('The EIN-specific FUTA allocations must equal the original employee-only insurable wage opening');
       }
       const stateRows = (await db.execute<{ region: string; amount: string }>(sql`
-        select state as region,insurable_ytd::text as amount from payroll_opening_sui_wages sw
+        select sw.state as region,sw.insurable_ytd::text as amount from payroll_opening_sui_wages sw
           join payroll_opening_balances b on b.org_id=sw.org_id and b.id=sw.opening_balance_id
          where b.org_id=${input.orgId} and b.employee_party_id=${opening.employeePartyId} and b.tax_year=${opening.taxYear}
       `)).rows;
       const suiAccountBases = accountBaseRows.filter((row) => row.programKey === 'us_sui');
       const sui = allocations.filter((row) => row.programKey === 'us_sui');
-      if (futa.length > 1 && allocations.some((row) => row.programKey === 'us_sui' || row.programKey === 'us_pa_lst')) {
-        throw new PayrollError('Opening SUI and PA LST cannot be attributed across multiple EINs under one legal employer; retain each EIN under its original native legal employer before qualifying its jurisdiction allocations');
-      }
       const suiAccounts = (await db.execute<{ id: string; stateCode: string; isActive: boolean }>(sql`
         select id,state_code as "stateCode",is_active as "isActive" from payroll_filing_accounts
          where org_id=${input.orgId} and country='US' and program_type='us_state_sui'
            and state_code is not null and (subsidiary_id=${employerAuthority.subsidiaryId} or subsidiary_id is null)
-         order by id
+         order by id for share
       `)).rows;
-      const retainedSuiAccounts = suiAccounts;
-      if (retainedSuiAccounts.some((account) => !sui.some((row) =>
-        row.filingAccountId === account.id && row.region === account.stateCode))) {
-        throw new PayrollError('Declare the original SUI opening for every retained state account, including explicit zeros');
-      }
       for (const row of sui) {
         if (row.filingAccountId !== null && !suiAccounts.some((account) =>
           account.id === row.filingAccountId && account.stateCode === row.region)) {
           throw new PayrollError('SUI source allocations must retain a state account for the same original state and legal employer');
         }
-        if (row.filingAccountId === null && suiAccounts.some((account) => account.stateCode === row.region)) {
-          throw new PayrollError(`Map the original ${row.region} SUI opening to its native state account in Payroll → Filing accounts`);
-        }
       }
       for (const stored of suiAccountBases) {
-        if (!sui.some((row) => row.filingAccountId === stored.filingAccountId
-          && row.region === stored.region && cmp(row.amount, stored.amount) === 0)) {
+        if (!sui.some((row) => row.filingAccountId === stored.filingAccountId && row.region === stored.region)
+          || cmp(sum(sui.filter((row) => row.filingAccountId === stored.filingAccountId
+            && row.region === stored.region).map((row) => row.amount)), stored.amount) !== 0) {
           throw new PayrollError(`SUI source allocations must preserve the original ${stored.region ?? 'state'} filing-account wage opening`);
         }
       }
@@ -297,18 +388,23 @@ export async function qualifyOpeningLevySourceAuthority(input: {
       insert into payroll_opening_levy_source_authorities
         (id,org_id,opening_balance_id,employer_authority_id,employee_party_id,tax_year,subsidiary_id,
          source_file_id,source_version_id,source_sha256,source_reference,change_reason,opening_sha256,
-         allocation_sha256,allocation_snapshot,sealed,created_by)
+         original_country,original_currency,coverage_start,coverage_end,coverage_complete,
+         opening_children_snapshot,opening_children_sha256,
+         allocation_sha256,allocation_snapshot,sealed,created_by,supersedes_authority_id,request_id,request_sha256)
       values (${id},${input.orgId},${input.openingBalanceId},${employerAuthority.id},${opening.employeePartyId},${opening.taxYear},
-        ${employerAuthority.subsidiaryId},${employerAuthority.sourceFileId},${employerAuthority.sourceVersionId},
-        ${employerAuthority.sourceSha256},${employerAuthority.sourceReference},${reason},${employerAuthority.openingSha256},
-        repeat('0',64),'[]'::jsonb,false,${input.actorId}) returning id
+        ${employerAuthority.subsidiaryId},${input.sourceFileId},${input.sourceVersionId},
+        ${input.sourceSha256},${sourceReference},${reason},${employerAuthority.openingSha256},
+        ${input.originalCountry},${input.originalCurrency},${input.coverageStart}::date,${input.coverageEnd}::date,${input.coverageComplete},
+        public.payroll_opening_source_children(${input.orgId},${input.openingBalanceId},${opening.employeePartyId},${opening.taxYear}),
+        encode(public.digest(public.payroll_opening_source_children(${input.orgId},${input.openingBalanceId},${opening.employeePartyId},${opening.taxYear})::text,'sha256'),'hex'),
+        repeat('0',64),'[]'::jsonb,false,${input.actorId},${correction?.expectedAuthorityId ?? null},${correction?.requestId ?? null},${requestSha256}) returning id
     `);
     if (inserted.rows.length !== 1) throw new PayrollError('The opening levy source authority was not saved');
     for (const row of allocations) {
       const saved = await db.execute(sql`
         insert into payroll_opening_levy_source_allocations
-          (org_id,authority_id,program_key,region,sub_region,filing_account_id,amount,created_by)
-        values (${input.orgId},${id},${row.programKey},${row.region},${row.subRegion},${row.filingAccountId},${row.amount},${input.actorId})
+          (org_id,authority_id,program_key,region,sub_region,filing_account_id,federal_account_id,amount,created_by)
+        values (${input.orgId},${id},${row.programKey},${row.region},${row.subRegion},${row.filingAccountId},${row.federalAccountId},${row.amount},${input.actorId})
         returning id
       `);
       if (saved.rows.length !== 1) throw new PayrollError(`The ${row.programKey} ${row.region} opening allocation was not saved`);
@@ -317,13 +413,13 @@ export async function qualifyOpeningLevySourceAuthority(input: {
       update payroll_opening_levy_source_authorities h
          set allocation_snapshot=(select coalesce(jsonb_agg(jsonb_build_object(
            'programKey',a.program_key,'region',a.region,'subRegion',a.sub_region,
-           'filingAccountId',a.filing_account_id,'amount',a.amount::text
-         ) order by a.program_key,a.region,a.sub_region,a.filing_account_id nulls first),'[]'::jsonb)
+           'filingAccountId',a.filing_account_id,'federalAccountId',a.federal_account_id,'amount',a.amount::text
+         ) order by a.program_key,a.region,a.sub_region,a.filing_account_id nulls first,a.federal_account_id nulls first),'[]'::jsonb)
            from payroll_opening_levy_source_allocations a where a.org_id=h.org_id and a.authority_id=h.id),
              allocation_sha256=encode(public.digest((select coalesce(jsonb_agg(jsonb_build_object(
                'programKey',a.program_key,'region',a.region,'subRegion',a.sub_region,
-               'filingAccountId',a.filing_account_id,'amount',a.amount::text
-             ) order by a.program_key,a.region,a.sub_region,a.filing_account_id nulls first),'[]'::jsonb)::text
+               'filingAccountId',a.filing_account_id,'federalAccountId',a.federal_account_id,'amount',a.amount::text
+             ) order by a.program_key,a.region,a.sub_region,a.filing_account_id nulls first,a.federal_account_id nulls first),'[]'::jsonb)::text
                from payroll_opening_levy_source_allocations a where a.org_id=h.org_id and a.authority_id=h.id),'sha256'),'hex'),
              sealed=true
        where h.org_id=${input.orgId} and h.id=${id} and not h.sealed
@@ -333,20 +429,30 @@ export async function qualifyOpeningLevySourceAuthority(input: {
     const audit = await db.execute(sql`
       insert into audit_log(org_id,table_name,row_id,action,changes,actor_id)
       select h.org_id,'payroll_opening_levy_source_authorities',h.id,'insert',
-        jsonb_build_object('after',to_jsonb(h),'allocations',h.allocation_snapshot,'reason',${reason}::text),${input.actorId}
+        jsonb_build_object('before',(select to_jsonb(previous) from payroll_opening_levy_source_authorities previous
+          where previous.org_id=h.org_id and previous.id=h.supersedes_authority_id),
+          'after',to_jsonb(h),'allocations',h.allocation_snapshot,'reason',${reason}::text,
+          'requestId',h.request_id,'requestSha256',h.request_sha256),${input.actorId}
         from payroll_opening_levy_source_authorities h where h.org_id=${input.orgId} and h.id=${id} returning id
     `);
     if (audit.rows.length !== 1) throw new PayrollError('The statutory levy opening allocation audit was not retained');
+    const observable = (await db.execute<{ id: string; allocationSha256: string }>(sql`
+      select h.id,h.allocation_sha256 as "allocationSha256" from payroll_opening_levy_source_authorities h
+       where h.org_id=${input.orgId} and h.id=${id} and h.sealed and ${currentOpeningLevySourceSql('h')}
+    `)).rows;
+    if (observable.length !== 1 || observable[0]!.allocationSha256 !== sealed.rows[0]!.allocationSha256) {
+      throw new PayrollError('The sealed statutory opening certificate is unavailable through its current source resolution');
+    }
     return { id, openingBalanceId: input.openingBalanceId, subsidiaryId: employerAuthority.subsidiaryId,
       allocationSha256: sealed.rows[0]!.allocationSha256 };
   });
 }
 
 export async function readOpeningLevySourceContext(input: {
-  orgId: string; actorId: string; employeePartyId: string; taxYear: number; allowedSubsidiaryIds: PayrollSubsidiaryScope;
+  orgId: string; actorId: string; employeePartyId: string; taxYear: number; sourceFileId?: string; allowedSubsidiaryIds: PayrollSubsidiaryScope;
 }) {
   if (![input.orgId, input.actorId, input.employeePartyId].every(isUuid) || input.allowedSubsidiaryIds === undefined
-    || !Number.isInteger(input.taxYear)) throw new PayrollError('Choose a native employee opening and year');
+    || input.sourceFileId !== undefined && !isUuid(input.sourceFileId) || !Number.isInteger(input.taxYear)) throw new PayrollError('Choose a native employee opening and year');
   const { assertTaxYear } = await import('./opening-balances.ts');
   assertTaxYear(input.taxYear);
   return withOrgTransaction(input.orgId, async () => {
@@ -362,33 +468,38 @@ export async function readOpeningLevySourceContext(input: {
     if (!employers.length) throw new PayrollError('The employee opening has no native employer in your payroll authority');
     const rows = (await db.execute<{
       openingBalanceId: string; employeePartyId: string; taxYear: number; openingSha256: string;
-      employerAuthorityId: string | null; subsidiaryId: string | null; country: string | null;
+      employerAuthorityId: string | null; subsidiaryId: string | null; originalCountry: string | null; originalCurrency: string | null;
+      coverageStart: string | null; coverageEnd: string | null; coverageComplete: boolean | null;
       sourceFileId: string | null; sourceVersionId: string | null; sourceSha256: string | null; sourceReference: string | null;
-      levyAuthorityId: string | null; levyReason: string | null; allocationSha256: string | null; sealed: boolean | null;
+      levyAuthorityId: string | null; levyReason: string | null; allocationSha256: string | null; openingChildrenSha256: string; sealed: boolean | null;
       levyMatches: boolean | null;
     }>(sql`
       select b.id as "openingBalanceId",b.employee_party_id as "employeePartyId",b.tax_year as "taxYear",
         encode(public.digest(to_jsonb(b)::text,'sha256'),'hex') as "openingSha256",
-        e.id as "employerAuthorityId",e.subsidiary_id as "subsidiaryId",s.country,
-        e.source_file_id as "sourceFileId",e.source_version_id as "sourceVersionId",e.source_sha256 as "sourceSha256",
-        e.source_reference as "sourceReference",h.id as "levyAuthorityId",h.change_reason as "levyReason",
-        h.allocation_sha256 as "allocationSha256",h.sealed,
+        e.id as "employerAuthorityId",e.subsidiary_id as "subsidiaryId",
+        h.original_country as "originalCountry",h.original_currency as "originalCurrency",
+        h.coverage_start::text as "coverageStart",h.coverage_end::text as "coverageEnd",h.coverage_complete as "coverageComplete",
+        h.source_file_id as "sourceFileId",h.source_version_id as "sourceVersionId",h.source_sha256 as "sourceSha256",
+        h.source_reference as "sourceReference",h.id as "levyAuthorityId",h.change_reason as "levyReason",
+        h.allocation_sha256 as "allocationSha256",encode(public.digest(public.payroll_opening_source_children(b.org_id,b.id,b.employee_party_id,b.tax_year)::text,'sha256'),'hex') as "openingChildrenSha256",h.sealed,
         (h.sealed and h.employer_authority_id=e.id and h.opening_sha256=e.opening_sha256
           and h.opening_sha256=encode(public.digest(to_jsonb(b)::text,'sha256'),'hex')
           and e.opening_snapshot=to_jsonb(b) and e.opening_sha256=encode(public.digest(to_jsonb(b)::text,'sha256'),'hex')
-          and h.subsidiary_id=e.subsidiary_id and h.source_file_id=e.source_file_id
-          and h.source_version_id=e.source_version_id and h.source_sha256=e.source_sha256
-          and h.source_reference=e.source_reference
+          and h.subsidiary_id=e.subsidiary_id
           and h.allocation_snapshot=(select coalesce(jsonb_agg(jsonb_build_object(
             'programKey',x.program_key,'region',x.region,'subRegion',x.sub_region,
-            'filingAccountId',x.filing_account_id,'amount',x.amount::text
-          ) order by x.program_key,x.region,x.sub_region,x.filing_account_id nulls first),'[]'::jsonb)
+            'filingAccountId',x.filing_account_id,'federalAccountId',x.federal_account_id,'amount',x.amount::text
+          ) order by x.program_key,x.region,x.sub_region,x.filing_account_id nulls first,x.federal_account_id nulls first),'[]'::jsonb)
             from payroll_opening_levy_source_allocations x where x.org_id=h.org_id and x.authority_id=h.id)
+          and exists (select 1 from files f join file_versions v on v.file_id=f.id
+            where f.org_id=h.org_id and f.id=h.source_file_id and v.id=h.source_version_id and v.content_hash=h.source_sha256)
+          and h.opening_children_snapshot=public.payroll_opening_source_children(h.org_id,h.opening_balance_id,h.employee_party_id,h.tax_year)
+          and h.opening_children_sha256=encode(public.digest(h.opening_children_snapshot::text,'sha256'),'hex')
           and h.allocation_sha256=encode(public.digest(h.allocation_snapshot::text,'sha256'),'hex')) as "levyMatches"
        from payroll_opening_balances b
        left join payroll_opening_employer_authorities e on e.org_id=b.org_id and e.opening_balance_id=b.id
-       left join subsidiaries s on s.org_id=e.org_id and s.id=e.subsidiary_id
        left join payroll_opening_levy_source_authorities h on h.org_id=b.org_id and h.opening_balance_id=b.id
+         and ${currentOpeningLevySourceSql('h')}
       where b.org_id=${input.orgId} and b.employee_party_id=${input.employeePartyId} and b.tax_year=${input.taxYear}
     `)).rows;
     if (rows.length > 1) throw new PayrollError('The employee/year opening identity is ambiguous');
@@ -396,6 +507,10 @@ export async function readOpeningLevySourceContext(input: {
     if (record?.sourceFileId) await requireNativeFileReadAuthority({ orgId: input.orgId, actorId: input.actorId, fileId: record.sourceFileId }, db);
     if (record?.levyAuthorityId && !record.levyMatches) {
       throw new PayrollError('The statutory levy opening source no longer matches its immutable legal-employer evidence');
+    }
+    if (record?.levyAuthorityId) {
+      validateOpeningLevySourceFacts({ originalCountry: record.originalCountry!, originalCurrency: record.originalCurrency!,
+        coverageStart: record.coverageStart!, coverageEnd: record.coverageEnd!, coverageComplete: record.coverageComplete as true }, record.taxYear, PAYROLL_COUNTRY_PACKS[record.originalCountry!]);
     }
     if (record?.subsidiaryId) {
       if (!employers.some((employer) => employer.id === record.subsidiaryId)) {
@@ -407,10 +522,10 @@ export async function readOpeningLevySourceContext(input: {
       if (employer.length !== 1) throw new PayrollError('The original opening legal employer is outside your payroll authority');
     }
     const allocations = record?.levyAuthorityId ? (await db.execute<OpeningLevySourceAllocation>(sql`
-      select program_key as "programKey",region,sub_region as "subRegion",filing_account_id as "filingAccountId",amount::text
+      select program_key as "programKey",region,sub_region as "subRegion",filing_account_id as "filingAccountId",federal_account_id as "federalAccountId",amount::text
         from payroll_opening_levy_source_allocations
        where org_id=${input.orgId} and authority_id=${record.levyAuthorityId}
-       order by program_key,region,sub_region,filing_account_id nulls first
+       order by program_key,region,sub_region,filing_account_id nulls first,federal_account_id nulls first
     `)).rows : [];
     const eins = record?.subsidiaryId ? (await db.execute<{ id: string; name: string; isActive: boolean }>(sql`
       select id,name,is_active as "isActive" from payroll_filing_accounts
@@ -435,6 +550,27 @@ export async function readOpeningLevySourceContext(input: {
        where org_id=${input.orgId} and employee_party_id=${input.employeePartyId} and tax_year=${input.taxYear}
          and program_key='us_sui'
     `)).rows.map((row) => row.id) : [];
-    return { record, allocations, eins, suiAccounts, openingSuiStates, openingSuiAccountIds };
+    if (input.sourceFileId) await requireNativeFileReadAuthority({ orgId: input.orgId, actorId: input.actorId, fileId: input.sourceFileId }, db);
+    const source = input.sourceFileId ? (await db.execute<{ id: string; versionId: string; sha256: string; name: string }>(sql`
+      select f.id,v.id as "versionId",v.content_hash as sha256,f.name from files f
+        join file_versions v on v.file_id=f.id and v.id=f.current_version_id
+       where f.org_id=${input.orgId} and f.id=${input.sourceFileId} and not f.is_inactive and v.created_by=${input.actorId}
+    `)).rows[0] ?? null : null;
+    if (input.sourceFileId && (!source || !/^[a-f0-9]{64}$/.test(source.sha256))) {
+      throw new PayrollError('Select the exact original file uploaded to Cabinet by the qualifying operator');
+    }
+    let correctionRefusal: string | null = null;
+    if (record?.levyAuthorityId && record.subsidiaryId) {
+      try {
+        await requireUnconsumedOpeningLevySource(db, { orgId: input.orgId, taxYear: record.taxYear,
+          subsidiaryId: record.subsidiaryId, employeePartyId: record.employeePartyId,
+          openingBalanceId: record.openingBalanceId, authorityId: record.levyAuthorityId });
+      } catch (error) {
+        if (!(error instanceof PayrollError)) throw error;
+        correctionRefusal = error.message;
+      }
+    }
+    return { record, allocations, eins, suiAccounts, openingSuiStates, openingSuiAccountIds, source, correctionRefusal,
+      countries: Object.values(PAYROLL_COUNTRY_PACKS).map(pack => ({ country: pack.country, currency: pack.statutoryCurrency })) };
   });
 }

@@ -93,6 +93,10 @@ export interface PayrollEmployerLevyFactors {
   wcbAssessable: Money;
   ehtAmount: Money;
   ehtEarnings: Money;
+  /** Issued operator-entered WCB amount on the stub line, retained separately from the assessed wcbAmount. */
+  wcbAdjustmentAmount?: Money;
+  /** Issued operator-entered EHT amount on the stub line, retained separately from the assessed ehtAmount. */
+  ehtAdjustmentAmount?: Money;
   hsfAmount: Money;
   hsfEarnings: Money;
   cntAmount: Money;

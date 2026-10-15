@@ -367,6 +367,9 @@ export function SetupDrawer({
     const timer = setTimeout(() => controller.abort(), SAVE_TIMEOUT_MS)
     try {
       let body: Record<string, unknown> = { ...form, ...fixedValues }
+      // The initial vacation choice is creation metadata; existing component
+      // financial policy is edited through its dated statutory treatments.
+      if (!creating && entity.key === 'pay-components') delete body.vacationable
       // Money fields arrive as operator majors and post as storage minors, so
       // the conversion runs before the domain payload: the shared coerce
       // grammar reads whole minor units and would refuse a majors figure.

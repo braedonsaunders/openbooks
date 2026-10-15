@@ -8,6 +8,10 @@ export const TENANT_TABLE_POLICIES = {
   "gl_audit_number_policies": "clone:catalog-uuid-rebase",
   "gl_audit_number_assignments": "clone:catalog-uuid-rebase",
   "project_loss_policies": "clone:catalog-uuid-rebase",
+  "payroll_us_filing_account_employer_lineage": "clone:catalog-uuid-rebase",
+  // Closing rate quotes price the copied ledger, so they copy with rebased
+  // identities (masked copies redact the authored source and reason).
+  "fx_revaluation_rate_evidence": "clone:catalog-uuid-rebase",
   "recognition_control_events": "clone:catalog-uuid-rebase",
   "rebate_agreements": "clone:catalog-uuid-rebase",
   "rebate_cost_attestations": "clone:catalog-uuid-rebase",
@@ -21,6 +25,8 @@ export const TENANT_TABLE_POLICIES = {
   "historical_translation_layers": "skip:no-copy",
   "payroll_opening_levy_source_authorities": "skip:no-copy",
   "payroll_opening_levy_source_allocations": "skip:no-copy",
+  "payroll_ca_opening_reporting_authorities": "skip:no-copy",
+  "payroll_ca_opening_reporting_allocations": "skip:no-copy",
   "subscription_renewal_policies": "skip:no-copy",
   "subscription_renewal_occurrences": "skip:no-copy",
   "warehouse_execution_tasks":"skip:no-copy",
@@ -292,6 +298,7 @@ export const TENANT_TABLE_POLICIES = {
   "equipment_units": "clone:catalog-uuid-rebase",
   "extension_drafts": "clone:catalog-uuid-rebase",
   "fair_value_prices": "clone:catalog-uuid-rebase",
+  "field_ticket_source_certifications": "clone:catalog-uuid-rebase",
   "field_ticket_labor_lines": "clone:catalog-uuid-rebase",
   "field_ticket_labor_snapshots": "clone:catalog-uuid-rebase",
   "field_ticket_policies": "clone:catalog-uuid-rebase",

@@ -1105,7 +1105,9 @@ export interface PayrollCountryPack {
       region: string | null;
       filingAccountId: string | null;
       payDate: string;
-      /** The employee being run, when known: resolves an org-wide account's legal employer. */
+      /** Actual pay-run owner, or the explicitly scoped prospective payroll employer. */
+      subsidiaryId: string | null;
+      /** The employee being run, when known. */
       employeePartyId?: string;
     },
   ) => Promise<readonly string[]>;

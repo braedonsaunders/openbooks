@@ -698,7 +698,7 @@ async function auditProgramWrite(
   after: unknown,
   reason: string | null,
 ): Promise<void> {
-  await exec.execute(sql`
+  const written = await exec.execute(sql`
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
     values (${orgId}, 'hrm_benefit_programs', ${programId}, 'update', ${JSON.stringify({
       event,
@@ -706,8 +706,9 @@ async function auditProgramWrite(
       before,
       after,
       reason,
-    })}::jsonb, ${actorId})
+    })}::jsonb, ${actorId}) returning id
   `);
+  requireOneRow(written.rows, "recording the benefit program audit event");
 }
 
 /**
@@ -902,6 +903,7 @@ async function writeProgramScopes(
 export interface CreateBenefitProgramQuery {
   readonly orgId: string;
   readonly actorId: string;
+  readonly reason?: string;
   readonly code: string;
   readonly name: string;
   readonly family: BenefitProgramFamily;
@@ -946,9 +948,19 @@ function cleanCode(value: unknown, field: string): string {
   return text;
 }
 
+function optionalProgramReason(value: unknown): string | null {
+  if (value === undefined) return null;
+  const reason = typeof value === "string" ? value.trim() : "";
+  if (!reason || reason.length > 2000) {
+    throw new BenefitsError("INVALID_INPUT", "Provide a program audit reason of 1–2000 characters");
+  }
+  return reason;
+}
+
 export async function createBenefitProgram(query: CreateBenefitProgramQuery): Promise<BenefitProgram> {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
+  const reason = optionalProgramReason(query.reason);
   const code = cleanCode(query.code, "code");
   const name = cleanCode(query.name, "name");
   const family = asFamily(query.family, "family");
@@ -1075,7 +1087,7 @@ export async function createBenefitProgram(query: CreateBenefitProgramQuery): Pr
       requireOneRow(stored, "recording the program funding source");
     }
     await auditProgramWrite(db, orgId, actorId, program.id, "created", null,
-      { ...program, sourceAccountIds: [...sources].sort() }, null);
+      { ...program, sourceAccountIds: [...sources].sort() }, reason);
     return program;
   });
 }
@@ -1461,11 +1473,12 @@ export async function activateBenefitProgram(query: {
   readonly orgId: string;
   readonly actorId: string;
   readonly programId: string;
+  readonly reason?: string;
 }): Promise<BenefitProgram> {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
   const programId = requireId(query.programId, "programId");
-  return setProgramStatus(orgId, actorId, programId, "draft", "active", "activated", "activation");
+  return setProgramStatus(orgId, actorId, programId, "draft", "active", "activated", optionalProgramReason(query.reason) ?? "activation");
 }
 
 /** Active → closed. Closing preserves history; data and audit trail stay. */
@@ -1537,6 +1550,7 @@ export async function addProgramMembership(query: {
   readonly programId: string;
   readonly employmentId: string;
   readonly effectiveFrom: string;
+  readonly reason?: string;
   readonly effectiveTo?: string | null;
   readonly weight?: string | number | null;
   readonly role?: string | null;
@@ -1547,6 +1561,7 @@ export async function addProgramMembership(query: {
   const actorId = requireActorId(query.actorId);
   const programId = requireId(query.programId, "programId");
   const employmentId = requireId(query.employmentId, "employmentId");
+  const reason = optionalProgramReason(query.reason);
   const effectiveFrom = requireCivilDate(query.effectiveFrom, "effectiveFrom");
   const effectiveTo =
     query.effectiveTo === undefined || query.effectiveTo === null
@@ -1646,12 +1661,14 @@ export async function addProgramMembership(query: {
       ).rows,
       "recording program membership",
     );
-    await db.execute(sql`
+    const revisionWrite = await db.execute(sql`
       update hrm_benefit_programs
          set revision = revision + 1, updated_by = ${actorId}, updated_at = now()
        where org_id = ${orgId} and id = ${programId}
+       returning id
     `);
-    await auditProgramWrite(db, orgId, actorId, programId, "member_added", null, inserted, null);
+    requireOneRow(revisionWrite.rows, "advancing the benefit program membership revision");
+    await auditProgramWrite(db, orgId, actorId, programId, "member_added", null, inserted, reason);
     return toMember(inserted);
   });
 }

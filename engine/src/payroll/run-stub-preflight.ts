@@ -47,7 +47,7 @@ if (packRefuses) {
   const waived = pack.waivedRateSlots
     ? await pack.waivedRateSlots(tx, {
       orgId, region: province, filingAccountId: jurisdiction.filingAccountId, payDate: run.pay_date!,
-      employeePartyId,
+      employeePartyId, subsidiaryId: run.doc_subsidiary_id ?? null,
     })
     : [];
   assertConfiguredStatutoryRates(

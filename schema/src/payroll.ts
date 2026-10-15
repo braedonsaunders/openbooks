@@ -121,7 +121,7 @@ export const payComponents = pgTable(
     taxable: boolean("taxable").notNull().default(true),
     pensionable: boolean("pensionable").notNull().default(true),
     insurable: boolean("insurable").notNull().default(true),
-    /** Earnings: counts toward vacationable earnings. */
+    /** Initial dated-treatment default on component creation; never used to price payroll. */
     vacationable: boolean("vacationable").notNull().default(true),
     /** Earnings: taxed with the T4127 bonus (non-periodic) method. */
     nonPeriodic: boolean("non_periodic").notNull().default(false),
@@ -248,7 +248,7 @@ export const payComponents = pgTable(
   ],
 );
 
-/** Effective-dated contribution-program and employer-levy treatment per component. */
+/** Pay-date contribution-program, employer-levy and vacation-base treatment per component. */
 export const payComponentStatutoryTreatments = pgTable(
   "pay_component_statutory_treatments",
   {
@@ -259,6 +259,7 @@ export const payComponentStatutoryTreatments = pgTable(
     effectiveFrom: date("effective_from").notNull(),
     effectiveTo: date("effective_to"),
     programExclusions: text("program_exclusions").array().notNull().default([]),
+    vacationable: boolean("vacationable").notNull(),
     ...auditColumns,
   },
   (t) => [

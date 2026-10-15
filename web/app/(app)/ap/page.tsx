@@ -20,7 +20,7 @@ export default async function AP({
   searchParams = Promise.resolve({}),
 }: {
   searchParams?: Promise<Record<string, string | string[] | undefined>>
-} = {}) {
+}) {
   const sp = await searchParams
   const data = await loadApCockpit()
   return <ModuleView spec={apCockpitSpec(data)} data={data} searchParams={sp} trusted />

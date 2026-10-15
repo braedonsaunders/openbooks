@@ -1,24 +1,27 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  bankCashFundingSplit,
   bankCashInputEvidence,
+  bankCashSplitMatchesValuation,
   canonicalBankCashInputValues,
   isBankCashInputEvidenceCandidate,
   parseBankCashInputEvidence,
+  type BankCashPayDateValuation,
 } from "./run-bank-cash-evidence.ts";
 
 test("bank cash input evidence retains the keyed rate and source identity", () => {
   const encoded = bankCashInputEvidence(
     "Issued bank withdrawal at the cheque's keyed rate",
-    "card 44707",
-    "44707000-0000-4000-8000-000000000001",
+    "Payroll source document 7",
+    "30000000-0000-4000-8000-000000000001",
     "143.83",
   );
   assert.deepEqual(parseBankCashInputEvidence(encoded), {
     kind: "bank_cash_input",
     reason: "Issued bank withdrawal at the cheque's keyed rate",
-    sourceReference: "card 44707",
-    requestId: "44707000-0000-4000-8000-000000000001",
+    sourceReference: "Payroll source document 7",
+    requestId: "30000000-0000-4000-8000-000000000001",
     rate: "143.83",
   });
   assert.equal(isBankCashInputEvidenceCandidate(encoded), true);
@@ -28,9 +31,46 @@ test("bank cash input evidence refuses malformed requests and rates", () => {
   assert.equal(parseBankCashInputEvidence('{"kind":"bank_cash_input","reason":"x","sourceReference":"card","requestId":"bad","rate":null}'), null);
   assert.equal(isBankCashInputEvidenceCandidate('{"kind" : "bank_cash_input"'), true);
   assert.equal(parseBankCashInputEvidence(bankCashInputEvidence(
-    "Issued bank withdrawal", "card 44707", "44707000-0000-4000-8000-000000000001", "0.001",
+    "Issued bank withdrawal", "Payroll source document 7", "30000000-0000-4000-8000-000000000001", "0.001",
   )), null);
   assert.equal(isBankCashInputEvidenceCandidate('{"kind" : "bank_cash_input"}'), true);
+});
+
+test("bank cash input retains a valid outside-bank portion and refuses invalid splits", () => {
+  const encoded = bankCashInputEvidence(
+    "Issued bank payout with independently paid cash",
+    "Payroll source document 7",
+    "30000000-0000-4000-8000-000000000002",
+    "143.83",
+    "782.64",
+  );
+  assert.equal(parseBankCashInputEvidence(encoded)?.outsideBankAmount, "782.64");
+  assert.deepEqual(bankCashFundingSplit("1150.6400", "782.64"), {
+    totalAmount: "1150.6400", bankFundedAmount: "368.0000", outsideBankAmount: "782.64",
+  });
+  for (const [total, outside] of [
+    ["1150.64", "1150.64"], ["1150.64", "1150.65"], ["1150.64", "0"],
+    ["1150.64", "-1.00"], ["1150.641", "782.64"], ["-1150.64", "782.64"],
+    ["0", "0.01"], ["1150.64", "782.641"],
+  ] as const) assert.equal(bankCashFundingSplit(total, outside), null, `${total}/${outside}`);
+  assert.equal(parseBankCashInputEvidence(bankCashInputEvidence(
+    "Issued bank payout", "Payroll source document 7", "30000000-0000-4000-8000-000000000002", "143.83", "782.641",
+  )), null);
+});
+
+test("a funding split matches only its exact hours at the retained pay-date wage", () => {
+  const valuation: BankCashPayDateValuation = {
+    rateId: "30000000-0000-4000-8000-000000000001", scope: "employee",
+    hourlyWage: "46.0000", currency: "CAD", basis: "hour", rate: "46.0000",
+    effectiveFrom: "2026-06-01", effectiveTo: null,
+    annualHoursUsed: null, annualHoursSource: null, updatedAt: "2026-06-01T00:00:00.000000Z",
+  };
+  const split = bankCashFundingSplit("1150.64", "782.64")!;
+  assert.equal(bankCashSplitMatchesValuation(split, "8.00", valuation), true);
+  assert.equal(bankCashSplitMatchesValuation(split, "8.00", { ...valuation, hourlyWage: "46.0100" }), false);
+  assert.equal(bankCashSplitMatchesValuation(split, "7.00", valuation), false);
+  assert.equal(bankCashSplitMatchesValuation(split, "-8.00", valuation), false);
+  assert.equal(bankCashSplitMatchesValuation({ ...split, bankFundedAmount: "368.01" }, "8.00", valuation), false);
 });
 
 test("issued cash inputs preserve signed hours and exact cents without binary arithmetic", () => {

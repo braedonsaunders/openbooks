@@ -31,14 +31,14 @@ test('union component defaults cover initial historical pay dates, bound future 
       await db.execute(sql`insert into pay_components(id,org_id,code,name,kind,basis)
         values(${componentId},${org.orgId},${`UNION-${mode}`},'Union contribution','deduction','fixed_amount')`);
       await db.execute(sql`insert into pay_component_statutory_treatments
-        (org_id,pay_component_id,worker_comp_group_id,effective_from,effective_to,program_exclusions)
+        (org_id,pay_component_id,worker_comp_group_id,effective_from,effective_to,program_exclusions,vacationable)
         values(${org.orgId},${componentId},${mode==='SCOPED'?groupId:null},
           case when ${mode}='FUTURE' then ${today}::date+10 else ${today}::date-10 end,
-          case when ${mode}='EXPIRED' then ${today}::date-5 else null end,array['wcb'])`);
-      const before = (await db.execute(sql`select id,effective_from,effective_to,program_exclusions from pay_component_statutory_treatments
+          case when ${mode}='EXPIRED' then ${today}::date-5 else null end,array['wcb'],false)`);
+      const before = (await db.execute(sql`select id,effective_from,effective_to,program_exclusions,vacationable from pay_component_statutory_treatments
         where org_id=${org.orgId} and pay_component_id=${componentId} order by effective_from`)).rows;
       await fringe(mode);
-      const after = (await db.execute(sql`select id,effective_from,effective_to,program_exclusions from pay_component_statutory_treatments
+      const after = (await db.execute(sql`select id,effective_from,effective_to,program_exclusions,vacationable from pay_component_statutory_treatments
         where org_id=${org.orgId} and pay_component_id=${componentId} order by effective_from`)).rows;
       if (mode==='FUTURE') {
         assert.equal(after.length,2);

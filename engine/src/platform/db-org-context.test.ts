@@ -256,7 +256,7 @@ test("rollback effects run when db.transaction rejects and not when it resolves"
           compensated.push("committed-unit");
         });
       });
-      assert.deepEqual(compensated, [], "a resolved transaction must not compensate");
+      assert.equal(compensated.length, 0, "a resolved transaction must not compensate");
 
       await assert.rejects(
         db.transaction(async () => {

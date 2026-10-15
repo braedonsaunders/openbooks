@@ -143,7 +143,6 @@ export async function validateTransactionPolicy(exec: SqlExecutor, orgId: string
   if (capPercent!==null) {
     const percent=amount(capPercent,"Budget ceiling percentage",false);
     if (toUnits(percent)>1_000_000n) throw new BenefitsError("INVALID_INPUT","The budget ceiling is a percentage from 0 to 100.");
-    if (policy.limits.length) throw new BenefitsError("INVALID_INPUT","A budget ceiling replaces per-group ceilings — clear the group ceilings or the budget ceiling.");
     if (capProjectTypeId!==null) {
       requireId(capProjectTypeId,"capProjectTypeId");
       if (!(await exec.execute(sql`select 1 from project_types where org_id=${orgId} and id=${capProjectTypeId} for share`)).rows.length) throw new BenefitsError("NOT_FOUND","The ceiling's project type belongs to another organization — reselect the project type.");
@@ -193,7 +192,7 @@ export async function validateTransactionPolicy(exec: SqlExecutor, orgId: string
   const spans=new Map<string,BenefitTransactionPolicy["responsibilities"][number][]>();
   for (const r of policy.responsibilities) {
     requireId(r.employmentId,"employmentId"); requireCivilDate(r.effectiveFrom,"effectiveFrom"); if (r.effectiveTo!==null) requireCivilDate(r.effectiveTo,"effectiveTo");
-    if (!keys.has(r.positionKey) || (r.effectiveTo!==null && r.effectiveTo<r.effectiveFrom) || !limitGroups.has(r.groupId)) throw new BenefitsError("INVALID_INPUT","Each dated responsibility needs a configured position, valid dates and an explicit group ceiling decision.");
+    if (!keys.has(r.positionKey) || (r.effectiveTo!==null && r.effectiveTo<r.effectiveFrom) || (capPercent===null && !limitGroups.has(r.groupId))) throw new BenefitsError("INVALID_INPUT","Each dated responsibility needs a configured position, valid dates and an explicit group ceiling decision unless the project budget ceiling applies.");
     const key=`${r.groupId}:${r.positionKey}`, prior=spans.get(key)??[];
     if (prior.some(p=>p.effectiveFrom<=(r.effectiveTo??"9999-12-31") && r.effectiveFrom<=(p.effectiveTo??"9999-12-31"))) throw new BenefitsError("REFUSED",`Recipient position ${r.positionKey} has overlapping assignments in group ${r.groupId} — end the earlier assignment before starting its replacement.`);
     prior.push(r);spans.set(key,prior);

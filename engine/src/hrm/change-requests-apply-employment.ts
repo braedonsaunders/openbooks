@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { type SqlExecutor } from "../platform/db.ts";
 import { recordPositionAssignmentEvent } from "./positions.ts";
+import { assertEmploymentHireWorker } from "./employment-worker.ts";
 import {
   makeEffectiveInterval,
   parseCivilDate,
@@ -53,6 +54,7 @@ export async function applyHire(
   },
 ): Promise<void> {
   const { orgId, actorId, request, payload, newRevision, recordedAt, recordedAtIso } = args;
+  await assertEmploymentHireWorker(exec, orgId, request.employment_id);
   const count = await employmentVersionCount(exec, orgId, request.employment_id);
   if (count > 0) {
     throw new HrmChangeRequestError(

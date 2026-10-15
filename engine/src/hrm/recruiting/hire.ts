@@ -11,6 +11,7 @@ import { isRetentionErasedCandidate, loadCandidate, linkCandidateParty } from ".
 import { hiredStage, loadPipelineTemplate } from "./pipeline.ts";
 import { expireOfferIfPastDue, loadOffer } from "./offers.ts";
 import { bumpFillForHire } from "./requisitions.ts";
+import { isNaturalPersonPartyKind } from "../../organization/party-kinds.ts";
 
 /**
  * The recruiting hire (HR-6, 0195): accepting an offer opens ONE transaction
@@ -158,6 +159,35 @@ export async function acceptOfferAsHire(query: AcceptOfferAsHireQuery): Promise<
         throw new RecruitingError("REFUSED", "the employee party was not stored — no row was written; retry the hire");
       }
       await linkCandidateParty(db, { orgId, actorId, candidateId: candidate.id, partyId: workerPartyId });
+    }
+
+    const worker = (await db.execute<{ kind: string; isActive: boolean }>(sql`
+      select kind, is_active as "isActive" from parties
+       where org_id = ${orgId} and id = ${workerPartyId} for update
+    `)).rows[0];
+    if (!worker || !worker.isActive || !isNaturalPersonPartyKind(worker.kind)) {
+      throw new RecruitingError("REFUSED", "The candidate must name an active natural person with kind person or employee before hiring.");
+    }
+    const employeeRole = (await db.execute<{ id: string; isActive: boolean }>(sql`
+      select id, is_active as "isActive" from employee_roles
+       where org_id = ${orgId} and party_id = ${workerPartyId} for update
+    `)).rows[0];
+    if (employeeRole && !employeeRole.isActive) {
+      throw new RecruitingError("REFUSED", "The candidate's employee role is inactive. Reactivate it on the employee record before hiring.");
+    }
+    if (!employeeRole) {
+      const createdRole = (await db.execute<{ id: string }>(sql`
+        insert into employee_roles (org_id, party_id, created_by, updated_by)
+        values (${orgId}, ${workerPartyId}, ${actorId}, ${actorId}) returning id
+      `)).rows[0];
+      if (!createdRole) throw new RecruitingError("REFUSED", "The employee role was not stored. Retry the hire.");
+      const audit = (await db.execute(sql`
+        insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
+        values (${orgId}, 'employee_roles', ${createdRole.id}, 'insert',
+          ${JSON.stringify({ before: null, after: { partyId: workerPartyId, isActive: true }, reason: `Hire for requisition ${requisition.requisitionNumber}: ${offer.jobTitle}` })}::jsonb,
+          ${actorId}) returning id
+      `)).rows;
+      if (audit.length !== 1) throw new RecruitingError("REFUSED", "The employee role could not be audited. Nothing was stored; retry the hire.");
     }
 
     // The reserved employment identity the hire change requires

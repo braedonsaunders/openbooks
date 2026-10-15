@@ -12,7 +12,7 @@ import {
   listBenefitPrograms,
   listProgramMemberships,
   listProgramSources,
-  previewIncentiveSettlement,
+  reconcileIncentivePeriod,
   type BenefitAward,
   type BenefitAwardStatus,
   type BenefitProgram,
@@ -97,11 +97,13 @@ export interface ProgramSimulationRecipient {
 }
 
 export interface ProgramSimulation {
+  programRevision: number
   periodFrom: string
   periodTo: string
   currency: string
   payableAfter: string
   isEstimate: boolean
+  canSettle: boolean
   summaryLines: string[]
   measuredLines: { label: string; value: string }[]
   recipients: ProgramSimulationRecipient[]
@@ -109,6 +111,13 @@ export interface ProgramSimulation {
   totalAwarded: string
   undistributed: string
   thresholdMet: boolean
+  reconciliation: {
+    processedPayrollTotal: string
+    payrollMinusCurrentMeasurement: string
+    nativeMeasuredHistoryTotal: string
+    sourceEvidencedFirstTotal: string
+    obligationHistoryMinusCurrentMeasurement: string
+  }
 }
 
 export interface ProgramDetailDrawer {
@@ -124,6 +133,7 @@ export interface ProgramDetailDrawer {
   simulation: ProgramSimulation | null
   simulationRefusal: { title: string; message: string } | null
   program: PortfolioProgramRow
+  legalEntityLabel: string | null
   activity: PortfolioAwardRow[]
   activityRefusal: { title: string; message: string } | null
   activityTruncated: boolean
@@ -534,19 +544,23 @@ export async function loadBenefitsPortfolio(
       const simulatePeriodTo = typeof sp.periodTo === 'string' ? sp.periodTo : ''
       if (found.family === 'incentive' && sp.simulate === '1' && simulatePeriodFrom !== '' && simulatePeriodTo !== '') {
         try {
-          const preview = await previewIncentiveSettlement({
+          const reconciled = await reconcileIncentivePeriod({
             orgId,
             actorId,
             programId: found.id,
             periodFrom: simulatePeriodFrom,
             periodTo: simulatePeriodTo,
           })
+          const preview = reconciled.preview
+          const nativeMeasureOnly = reconciled.nativeMeasureOnly
+          if (!preview && !nativeMeasureOnly) throw new Error('The native reconciliation returned no measurement')
+          const current = preview ?? nativeMeasureOnly!
           const recipientLabels = await loadQueueLabels(
             orgId,
-            [...new Set(preview.visibleRecipients.map((r) => r.employmentId))],
+            [...new Set((preview?.visibleRecipients ?? []).map((r) => r.employmentId))],
             [],
           )
-          const measured = preview.measured
+          const measured = current.measured
           const measuredLines =
             measured.metric === 'approved_hours'
               ? [
@@ -558,7 +572,7 @@ export async function loadBenefitsPortfolio(
                   { label: t('portfolio.simulate.entries'), value: String(measured.entryCount) },
                 ] : measured.metric === 'project_margin' ? measured.projects.map(project => ({
                   label: `${t('portfolio.metrics.project_margin')} — ${projects.rows.find(option => option.id === project.projectId)?.name ?? project.projectId}`,
-                  value: amountLabel(project.margin, preview.computation.currency),
+                  value: amountLabel(project.margin, current.currency),
                 })) : [
                   { label: t('portfolio.simulate.revenue'), value: amountLabel(measured.revenueTotal, measured.currency) },
                   { label: t('portfolio.simulate.expenses'), value: amountLabel(measured.expenseTotal, measured.currency) },
@@ -566,27 +580,36 @@ export async function loadBenefitsPortfolio(
                   { label: t('portfolio.simulate.entries'), value: String(measured.entryCount) },
                 ]
           simulation = {
-            periodFrom: preview.periodFrom,
-            periodTo: preview.periodTo,
-            currency: preview.currency,
-            payableAfter: preview.payableAfter,
-            isEstimate: preview.isEstimate,
-            summaryLines: [...preview.computation.summaryLines],
+            programRevision: current.programRevision,
+            periodFrom: current.periodFrom,
+            periodTo: current.periodTo,
+            currency: current.currency,
+            payableAfter: current.payableAfter,
+            isEstimate: current.isEstimate,
+            canSettle: preview !== null && preview.computation.totalAwarded !== '0.0000',
+            summaryLines: preview ? [...preview.computation.summaryLines] : [...nativeMeasureOnly!.summaryLines],
             measuredLines,
-            recipients: preview.visibleRecipients.map((recipient) => ({
+            recipients: (preview?.visibleRecipients ?? []).map((recipient) => ({
               employmentId: recipient.employmentId,
               employeeLabel:
                 recipientLabels.workerByEmployment.get(recipient.employmentId)?.name ?? recipient.employmentId,
               share: recipient.share,
-              grossValue: amountLabel(recipient.grossValue, preview.currency),
-              netValue: amountLabel(recipient.value, preview.currency),
+              grossValue: amountLabel(recipient.grossValue, current.currency),
+              netValue: amountLabel(recipient.value, current.currency),
               capped: recipient.capped,
               explanation: recipient.explanation,
             })),
-            excluded: [...preview.excluded],
-            totalAwarded: amountLabel(preview.computation.totalAwarded, preview.currency),
-            undistributed: amountLabel(preview.computation.undistributed, preview.currency),
-            thresholdMet: preview.computation.thresholdMet,
+            excluded: preview ? [...preview.excluded] : [],
+            totalAwarded: amountLabel(preview?.computation.totalAwarded ?? '0', current.currency),
+            undistributed: amountLabel(preview?.computation.undistributed ?? '0', current.currency),
+            thresholdMet: preview?.computation.thresholdMet ?? false,
+            reconciliation: {
+              processedPayrollTotal: amountLabel(reconciled.processedPayrollTotal, current.currency),
+              payrollMinusCurrentMeasurement: amountLabel(reconciled.payrollMinusCurrentMeasurement, current.currency),
+              nativeMeasuredHistoryTotal: amountLabel(reconciled.nativeMeasuredHistoryTotal, current.currency),
+              sourceEvidencedFirstTotal: amountLabel(reconciled.sourceEvidencedFirstTotal, current.currency),
+              obligationHistoryMinusCurrentMeasurement: amountLabel(reconciled.obligationHistoryMinusCurrentMeasurement, current.currency),
+            },
           }
         } catch (error) {
           simulationRefusal = {
@@ -645,6 +668,7 @@ export async function loadBenefitsPortfolio(
         simulation,
         simulationRefusal,
         program: found,
+        legalEntityLabel: subsidiaries.rows.find((entity) => entity.id === found.legalEntityId)?.name ?? null,
         activity: awardRows.filter(award => award.programId === found.id),
         activityRefusal: awardsRefusal,
         activityTruncated: awardsTruncated,

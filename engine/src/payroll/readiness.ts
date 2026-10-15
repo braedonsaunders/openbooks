@@ -117,11 +117,12 @@ export interface PayRunReadiness {
 /** The columns the statutory-rate scope check reads off a payroll population. */
 type RateScopeRow = Pick<
   ScopeRow,
-  "employee_party_id" | "name" | "country" | "province" | "residence_region" | "filing_account_id"
+  "employee_party_id" | "name" | "country" | "province" | "residence_region" | "filing_account_id" | "subsidiary_id"
 >;
 
 type ScopeRow = {
   employee_party_id: string;
+  subsidiary_id: string | null;
   name: string;
   pay_basis: string;
   country: string;
@@ -250,6 +251,7 @@ async function scope(
   };
   const rows = (await db.execute<Omit<ScopeRow, "approved_hours">>(sql`
     select p.id as employee_party_id, p.display_name as name, prof.pay_basis, prof.country,
+           ${run.document_subsidiary_id}::uuid as subsidiary_id,
            prof.province, prof.residence_region, prof.labour_jurisdiction,
            ${effectiveFilingAccountSql("prof")} as filing_account_id,
            (${payrollEpisodeDate(rosterColumns, sql`er.hired_on`)})::text as hired_on,
@@ -1091,7 +1093,7 @@ async function activePayrollPopulation(
 ): Promise<RateScopeRow[]> {
   const rows = (await db.execute<RateScopeRow>(sql`
     select p.id as employee_party_id, p.display_name as name, prof.country, prof.province,
-           prof.residence_region,
+           p.subsidiary_id, prof.residence_region,
            ${effectiveFilingAccountSql("prof")} as filing_account_id
      from employee_payroll_profiles prof
       join parties p on p.id = prof.employee_party_id and p.org_id = prof.org_id
@@ -1145,13 +1147,14 @@ async function unconfiguredRatesForRun(
     if (error instanceof PayrollPackError) return [];
     throw error;
   }
-  const points = new Map<string, StatutoryRatePoint & { employees: { partyId: string; name: string }[] }>();
+  const points = new Map<string, StatutoryRatePoint & { subsidiaryId: string | null; employees: { partyId: string; name: string }[] }>();
   for (const person of people) {
     if (person.country !== country) continue;
-    const key = `${person.province ?? ""}:${person.filing_account_id ?? ""}`;
+    const key = `${person.subsidiary_id ?? ""}:${person.province ?? ""}:${person.filing_account_id ?? ""}`;
     const entry = points.get(key) ?? {
       region: person.province ?? null,
       filingAccountId: person.filing_account_id ?? null,
+      subsidiaryId: person.subsidiary_id,
       employees: [],
     };
     entry.employees.push({ partyId: person.employee_party_id, name: person.name });
@@ -1170,6 +1173,7 @@ async function unconfiguredRatesForRun(
   for (const point of points.values()) {
     const waived = new Set(await waive(db, {
       orgId, region: point.region, filingAccountId: point.filingAccountId, payDate: asOf,
+      subsidiaryId: point.subsidiaryId,
     }));
     found.push(...unconfiguredStatutoryRates(
       waived.size === 0
@@ -1722,7 +1726,11 @@ export async function payRunStaleness(
                                          where cover.org_id = o.id and cover.table_name = 'orgs'
                                            and cover.at >= o.updated_at)))
             or exists (select 1 from payroll_filing_accounts fa
-                        where fa.org_id = r.org_id and fa.updated_at > r.calculated_at))
+                        where fa.org_id = r.org_id and fa.updated_at > r.calculated_at)
+            or exists (select 1 from audit_log affiliation
+                         where affiliation.org_id = r.org_id
+                           and affiliation.table_name = 'payroll_us_filing_account_employer_lineage'
+                           and affiliation.at > r.calculated_at))
              as settings_changed,
            (select coalesce(jsonb_agg(org_audit.changes), '[]'::jsonb)
               from audit_log org_audit
@@ -1832,6 +1840,8 @@ export async function payRunStaleness(
   let exactOpeningBalancesChanged = false;
   let exactIncomeTaxOverridesChanged = false;
   let exactBankCashInputsChanged = false;
+  let exactLevyAdjustmentsChanged = false;
+  let exactDeclaredVacationAccrualsChanged = false;
   const storedSource = parsePayRunCalculationSource(row.calculation_source_snapshot);
   // Legacy calculated rows predate migration 0040. Keep their informational
   // timestamp display intact; commit itself refuses the missing evidence and
@@ -1858,14 +1868,16 @@ export async function payRunStaleness(
       exactOpeningBalancesChanged = changes.openingBalances;
       exactIncomeTaxOverridesChanged = changes.incomeTaxOverrides;
       exactBankCashInputsChanged = changes.bankCashInputs;
+      exactLevyAdjustmentsChanged = changes.employerLevyAdjustments;
+      exactDeclaredVacationAccrualsChanged = changes.declaredVacationAccruals;
       exactCompensationPackagesChanged = changes.compensationPackages;
       exactComponentsChanged = changes.components;
-      selectionChanged = !changes.time && !changes.timeTypes && !changes.wages && !changes.items && !changes.compensationPackages && !changes.components && !changes.roster && !changes.openingBalances && !changes.incomeTaxOverrides && !changes.bankCashInputs;
+      selectionChanged = !changes.time && !changes.timeTypes && !changes.wages && !changes.items && !changes.compensationPackages && !changes.components && !changes.roster && !changes.openingBalances && !changes.incomeTaxOverrides && !changes.bankCashInputs && !changes.declaredVacationAccruals && !changes.employerLevyAdjustments;
     }
   }
   const reasons = [
     selectionChanged ? "selection" : null,
-    row.adjustments_changed || row.assertions_changed || exactIncomeTaxOverridesChanged || exactBankCashInputsChanged ? "adjustments" : null,
+    row.adjustments_changed || row.assertions_changed || exactIncomeTaxOverridesChanged || exactBankCashInputsChanged || exactDeclaredVacationAccrualsChanged || exactLevyAdjustmentsChanged ? "adjustments" : null,
     row.time_changed || exactTimeChanged ? "time" : null,
     row.wages_changed || exactWagesChanged ? "wages" : null,
     row.schedule_changed ? "schedule" : null,

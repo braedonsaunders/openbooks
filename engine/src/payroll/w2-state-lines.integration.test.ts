@@ -11,7 +11,7 @@ import { commitPayRun } from "./run-commit.ts";
 import { createPayRun } from "./run-lifecycle.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
 import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from "../testing/fixtures.ts";
-import { seedUsSuiAccount } from "./filing-test-fixtures.ts";
+import { seedUsSuiAccount, seedUsEinAccount } from "./filing-test-fixtures.ts";
 import { US_PACK_RATES } from "./us/rates.ts";
 import { upsertStatutoryRate } from "./statutory-rates.ts";
 
@@ -34,6 +34,8 @@ interface Fixture {
   orgId: string;
   actorId: string;
   scheduleId: string;
+  subsidiaryId: string;
+  einAccountId: string;
 }
 
 async function usPayrollOrg(): Promise<Fixture> {
@@ -96,6 +98,7 @@ async function usPayrollOrg(): Promise<Fixture> {
                               is_elimination, is_active, custom)
     values (${subsidiaryId}, ${org.orgId}, ${org.subsidiaryId}, 'US Entity', 'USD', 'US',
             '{}'::jsonb, false, true, '{}'::jsonb)`);
+  const einAccountId = await seedUsEinAccount(org.orgId, actorId, subsidiaryId, "12-3456789");
   const scheduleId = randomUUID();
   await db.execute(sql`
     insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
@@ -103,16 +106,22 @@ async function usPayrollOrg(): Promise<Fixture> {
                                created_by, updated_by)
     values (${scheduleId}, ${org.orgId}, 'Biweekly US', 'biweekly', 26, '2026-07-18', 3,
             ${subsidiaryId}, true, ${actorId}, ${actorId})`);
-  return { orgId: org.orgId, actorId, scheduleId };
+  return { orgId: org.orgId, actorId, scheduleId, subsidiaryId, einAccountId };
 }
 
 /** The employer's SUI account for a state — the box-15 ID number's source. */
 async function suiAccount(fx: Fixture, state: string, accountNumber: string): Promise<void> {
-  await db.execute(sql`
+  const filingAccountId = randomUUID();
+  const inserted = await db.execute(sql`
     insert into payroll_filing_accounts (id, org_id, country, program_type, account_number, name,
-                                         state_code, is_default)
-    values (${randomUUID()}, ${fx.orgId}, 'US', 'us_state_sui', ${accountNumber}, ${`${state} SUI`},
-            ${state}, false)`);
+                                         subsidiary_id, state_code, is_default, created_by, updated_by)
+    values (${filingAccountId}, ${fx.orgId}, 'US', 'us_state_sui', ${accountNumber}, ${`${state} SUI`},
+            ${fx.subsidiaryId}, ${state}, false, ${fx.actorId}, ${fx.actorId}) returning id`);
+  assert.equal(inserted.rows.length, 1, "the declared numbered state registration must be created");
+  await seedUsSuiAccount(fx.orgId, fx.actorId, state, {
+    filingAccountId, federalAccountId: fx.einAccountId, subsidiaryId: fx.subsidiaryId,
+    effectiveFrom: "2026-01-01", effectiveTo: null, sourceReference: `${state} original employer registration`,
+  });
 }
 
 interface EmployeeOptions {
@@ -137,7 +146,10 @@ async function usEmployee(fx: Fixture, subsidiaryId: string, name: string, opts:
   // carries one and the profile points at it.
   const employmentId = await seedWorkerEmployment(fx.orgId, id, subsidiaryId);
   // Reuse the work state's account so box 15 keeps the asserted number.
-  const suiAccountId = await seedUsSuiAccount(fx.orgId, fx.actorId, opts.state);
+  const suiAccountId = await seedUsSuiAccount(fx.orgId, fx.actorId, opts.state, {
+    federalAccountId: fx.einAccountId, subsidiaryId, effectiveFrom: "2026-01-01", effectiveTo: null,
+    sourceReference: `${opts.state} original employer registration`,
+  });
   await upsertStatutoryRate({ orgId: fx.orgId, actorId: fx.actorId, rates: US_PACK_RATES,
     rateKey: "us_sui", region: opts.state, filingAccountId: suiAccountId, taxYear: 2026,
     sourceCitation: "Test rate notice", reason: "test fixture rate",
@@ -212,9 +224,6 @@ test(
       await suiAccount(fx, "NY", "NY-0099887");
       // The employer's EIN: the profile names the New York SUI account, yet
       // the W-2 is the EIN's slip while box 15 keeps the New York number.
-      await db.execute(sql`
-        insert into payroll_filing_accounts (id, org_id, country, program_type, account_number, name, is_default)
-        values (${randomUUID()}, ${fx.orgId}, 'US', 'us_ein', '12-3456789', 'Federal EIN', false)`);
       const subsidiary = (await db.execute<{ subsidiary_id: string }>(sql`
         select subsidiary_id from pay_schedules where org_id = ${fx.orgId} and id = ${fx.scheduleId}`)).rows[0]!
         .subsidiary_id;

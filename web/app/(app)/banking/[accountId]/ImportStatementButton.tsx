@@ -186,7 +186,6 @@ function rememberFormat(accountId: string, source: StatementTextSource) {
  * Map CSV columns, preview parsed + deduped lines, then import.
  */
 export function ImportStatementButton({ accountId }: { accountId: string }) {
-  const { money } = useMoney()
   const t = useTranslations('banking.import')
   const tBanking = useTranslations('banking')
   const tCommon = useTranslations('common')
@@ -335,6 +334,7 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
   const visiblePreview = preview?.accountId === selectedAccountId ? preview : null
   const previewStale = preview !== null && (visiblePreview === null || preview.sourceRevision !== sourceRevisionView)
   const selectedAccount = dialogAccounts?.find((a) => a.id === selectedAccountId) ?? null
+  const { money } = useMoney(visiblePreview?.currency ?? selectedAccount?.currency ?? undefined)
   const closingMismatch = statementClosingMismatch(openingBalance, closingBalance, visiblePreview?.statementLinesTotal ?? null, selectedAccount?.type ?? null)
   const statementCurrency = visiblePreview?.currency ?? null
   const currencyMismatch = statementCurrency !== null

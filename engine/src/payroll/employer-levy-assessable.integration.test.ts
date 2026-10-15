@@ -98,8 +98,8 @@ test(
                   50, ${actorId}, ${actorId})`);
         await db.execute(sql`
           insert into pay_component_statutory_treatments
-            (org_id, pay_component_id, effective_from, program_exclusions, created_by, updated_by)
-          values (${org.orgId}, ${id}, '2026-01-01', ${exclusionList}, ${actorId}, ${actorId})`);
+            (org_id, pay_component_id, effective_from, program_exclusions,vacationable, created_by, updated_by)
+          values (${org.orgId}, ${id}, '2026-01-01', ${exclusionList}, false, ${actorId}, ${actorId})`);
         return id;
       };
       const mealId = await component("MEAL", "70", false, ["wcb", "eht", "hsf", "cnt"]);

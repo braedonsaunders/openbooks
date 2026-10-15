@@ -43,7 +43,7 @@ export const BENEFIT_TRANSACTION_POLICY_ENTITY: SetupEntity = {
     ] }),
     field('capPercent', 'decimal', { decimalScale: 4, helpTextKey: 'transactionBenefits.capPercentHint' }),
     field('capProjectTypeId', 'ref', { ref: 'project-types', showWhen: { field: 'capPercent', present: true }, clearWhenHidden: true }),
-    field('limits', 'objectArray', { fullWidth: true, fields: [
+    field('limits', 'objectArray', { fullWidth: true, helpTextKey: 'transactionBenefits.limitsHint', fields: [
       group(), field('kind', 'select', { required: true, defaultValue: 'none', options: ['none', 'amount'].map(value => ({ value, labelKey: `transactionBenefits.limitKinds.${value}` })) }),
       field('amount', 'decimal', { required: true, decimalScale: 4, showWhen: { field: 'kind', in: ['amount'] }, clearWhenHidden: true }),
     ] }),

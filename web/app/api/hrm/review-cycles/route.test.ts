@@ -182,7 +182,7 @@ test("create validates the body through the real parser before the service runs"
 test("create refuses hostile payloads at the real boundary", async () => {
   reset();
   for (const body of ["{not json", "null"]) {
-    const refused = await collectionRoute!.POST(
+    const refused: Response = await collectionRoute!.POST(
       new Request("http://openbooks.test/api/hrm/review-cycles", {
         method: "POST",
         headers: { "content-type": "application/json" },

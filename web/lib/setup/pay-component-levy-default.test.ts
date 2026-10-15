@@ -24,7 +24,7 @@ test('an earning with no stated taxability is left alone', () => {
   assert.equal(foldPayComponentSetupCreate('pay-components', body), body)
 })
 
-test('legacy exclusion payloads become the initial effective-dated policy', () => {
+test('explicit exclusions become the initial effective-dated policy', () => {
   const body = { kind: 'earning', taxable: false, country: 'CA', programExclusions: ['qpip'] }
   assert.equal(foldPayComponentSetupCreate('pay-components', body), body)
   assert.deepEqual(defaultPayComponentProgramExclusions(body), ['qpip'])

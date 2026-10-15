@@ -84,6 +84,7 @@ export default function FlowBuilder({
   users,
   roles,
   permissions,
+  subsidiaries = [],
 }: {
   flow: { id: string; name: string; enabled: boolean; updatedAt: string; graph: AutomationGraph }
   runs: FlowRunRow[]
@@ -91,8 +92,13 @@ export default function FlowBuilder({
   users: OrgUser[]
   roles: OrgRole[]
   permissions: string[]
+  subsidiaries?: { id: string; name: string }[]
 }) {
   const t = useTranslations('admin.flows')
+  // Existing catalog labels, reused so every locale renders them: the
+  // legal-entity name and the organization-wide option.
+  const tLegalEntity = useTranslations('accounting.provisions')
+  const tAllEntities = useTranslations('crm.sales')
   const router = useRouter()
 
   const edgeLabels = useMemo(
@@ -112,6 +118,7 @@ export default function FlowBuilder({
   const [name, setName] = useState(flow.name)
   const [enabled, setEnabled] = useState(flow.enabled)
   const [ungatedOutcome, setUngatedOutcome] = useState<'apply' | undefined>(flow.graph.ungatedOutcome)
+  const [subjectScopeIds, setSubjectScopeIds] = useState<string[]>(flow.graph.subjectScope?.subsidiaryIds ?? [])
   const [tab, setTab] = useState<'canvas' | 'runs'>('canvas')
   const [dirty, setDirty] = useState(false)
   const [revision, setRevision] = useState(flow.updatedAt)
@@ -149,8 +156,8 @@ export default function FlowBuilder({
 
   // Live author-time lint — same rules the server reports on save.
   const warnings = useMemo(
-    () => lintAutomationGraph(fromFlow(nodes, edges, ungatedOutcome), profileFieldIds(profile), profile),
-    [nodes, edges, profile, ungatedOutcome],
+    () => lintAutomationGraph(fromFlow(nodes, edges, ungatedOutcome, subjectScopeIds), profileFieldIds(profile), profile),
+    [nodes, edges, profile, ungatedOutcome, subjectScopeIds],
   )
 
   const markDirtyOnNodesChange = useCallback(
@@ -239,7 +246,7 @@ export default function FlowBuilder({
       const res = await fetch(`/api/admin/flows/${flow.id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ expectedUpdatedAt: revision, name: name.trim() || flow.name, graph: fromFlow(nodes, edges, ungatedOutcome) }),
+        body: JSON.stringify({ expectedUpdatedAt: revision, name: name.trim() || flow.name, graph: fromFlow(nodes, edges, ungatedOutcome, subjectScopeIds) }),
       })
       if (!res.ok) {
         const failure = (await res.json().catch(() => null)) as {
@@ -407,6 +414,36 @@ export default function FlowBuilder({
           <Save size={15} /> {t('builder.save')}
         </Button>
       </div>
+
+      {/* Legal-entity limit: checked entities become the graph's typed
+          subject scope, admitted before the flow can run for a record.
+          Nothing checked keeps the ordinary organization-wide scope. */}
+      {subsidiaries.length > 0 ? (
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-lg border border-slate-200 px-3 py-2 dark:border-slate-700">
+          <span className="text-sm font-medium text-slate-700 dark:text-slate-200">{tLegalEntity('subsidiary')}</span>
+          {subjectScopeIds.length === 0 ? (
+            <span className="text-xs text-slate-500 dark:text-slate-400">{tAllEntities('allEntities')}</span>
+          ) : null}
+          {subsidiaries.map((subsidiary) => (
+            <label key={subsidiary.id} className="flex cursor-pointer items-center gap-1.5 text-sm text-slate-600 dark:text-slate-300">
+              <input
+                type="checkbox"
+                checked={subjectScopeIds.includes(subsidiary.id)}
+                onChange={(event) => {
+                  setSubjectScopeIds((current) =>
+                    event.target.checked
+                      ? [...current, subsidiary.id]
+                      : current.filter((id) => id !== subsidiary.id),
+                  )
+                  markDirty()
+                }}
+                className="h-4 w-4 rounded border-slate-300 text-teal-600 focus:ring-teal-500"
+              />
+              {subsidiary.name}
+            </label>
+          ))}
+        </div>
+      ) : null}
 
       {/* Fire-readiness: a flow that cannot run says so up front, in the same
           words as the flows list status column. */}

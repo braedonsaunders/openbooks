@@ -9,6 +9,7 @@ import { isUuid } from "../platform/uuid.ts";
 import { and, eq, sql } from "drizzle-orm";
 import {
   automationGraphSchema,
+  flowSubjectAdmission,
   planAutomation,
   type AutomationGraph,
   type AutomationPlan,
@@ -18,6 +19,7 @@ import { db, schema, withOrgTransaction, withTransactionSavepoint } from "../pla
 import type { FlowExecCtx } from "./types.ts";
 import { getFlowAdapter } from "./registry.ts";
 import { executeFlowPlan } from "./execute.ts";
+import { lockFlowSubjectAdmission } from "./subject-admission.ts";
 
 /**
  * Trigger dispatch — fire a subject's enabled flows at a lifecycle event from
@@ -217,6 +219,9 @@ export async function runRecordFlows(
     if (!subject) return EMPTY_RESULT;
 
     const result: RecordFlowsResult = { runs: [], gatesCreated: 0, failed: false, error: null };
+    // The subject's legal entity, resolved once through the adapter's
+    // native scope source the first time a scoped graph needs it.
+    let resolvedSubjectSubsidiary: { value: string | null } | null = null;
     for (const flow of flows) {
       const graph = parseFlowGraph(flow.id, flow.graph);
       if (!graph) {
@@ -254,6 +259,57 @@ export async function runRecordFlows(
         });
         result.failed = true;
         continue;
+      }
+
+      // Legal-entity admission, decided from the graph's typed subject
+      // scope BEFORE this flow is planned, creates a run, routes a gate or
+      // leaves any other effect for the subject. The first scoped graph
+      // takes the native scope-owner lock, so the entity (and any owner
+      // link) stays frozen from admission through this dispatch's effects
+      // for the rest of the caller's transaction; a rehome that committed
+      // before the lock is what the locked resolution sees. A resolved
+      // entity outside the list means the flow does not apply at all; an
+      // entity that cannot be resolved fails closed exactly like an
+      // invalid graph, so a scoped approval can never be bypassed by an
+      // ownerless record.
+      if (graph.subjectScope) {
+        if (!resolvedSubjectSubsidiary) {
+          const resolved = await lockFlowSubjectAdmission(ctx.orgId, adapter, subjectKind, subjectId, graph);
+          resolvedSubjectSubsidiary = { value: resolved.subsidiaryId };
+        }
+        const admission = flowSubjectAdmission(graph.subjectScope, resolvedSubjectSubsidiary.value);
+        if (admission === "out-of-scope") continue;
+        if (admission === "unresolved") {
+          const reason =
+            `flow "${flow.name}" is limited to specific legal entities, but this record's legal entity could not be resolved — ` +
+            `assign the record to a legal entity, then resubmit`;
+          console.error(`[flows] flow ${flow.id} ("${flow.name}") cannot prove legal-entity admission for ${subjectKind}/${subjectId}`);
+          const [failedRow] = await db
+            .insert(schema.flowRuns)
+            .values({
+              orgId: ctx.orgId,
+              flowId: flow.id,
+              subjectKind,
+              subjectId,
+              trigger: event.kind,
+              status: "failed",
+              error: reason,
+              finishedAt: new Date(),
+              context: JSON.parse(JSON.stringify({ ...subject.values, event_source: event.source ?? "api" })) as Record<string, unknown>,
+              createdBy: ctx.userId ?? null,
+            })
+            .returning({ id: schema.flowRuns.id });
+          result.runs.push({
+            runId: failedRow!.id,
+            flowId: flow.id,
+            flowName: flow.name,
+            status: "failed",
+            gatesCreated: 0,
+            error: reason,
+          });
+          result.failed = true;
+          continue;
+        }
       }
 
       // Fresh values per flow — a set_field in one flow's run must not bleed
@@ -504,6 +560,20 @@ async function retryFlowRunLocked(runId: string, ctx: FlowExecCtx): Promise<Retr
   if (!graph) throw new FlowRetryError("the flow for this run has an invalid graph");
   const subject = await adapter.loadContext(run.subjectId);
   if (!subject) throw new FlowRetryError("the run's subject no longer exists");
+
+  // The graph's legal-entity scope is re-judged against the subject's
+  // CURRENT resolved entity: a flow scoped away from this record (or a
+  // record whose entity can no longer be proven) must not be re-driven.
+  // Refusing here leaves the failed run — and any pending approval linkage
+  // on the subject — exactly as it was, never silently completed or
+  // released.
+  const retryAdmission = await lockFlowSubjectAdmission(ctx.orgId, adapter, run.subjectKind, run.subjectId, graph);
+  if (retryAdmission.admission === "out-of-scope") {
+    throw new FlowRetryError("the flow for this run is now limited to legal entities that do not include this record's legal entity; the failed run is unchanged — re-fire it from the record only under a flow that applies to it");
+  }
+  if (retryAdmission.admission === "unresolved") {
+    throw new FlowRetryError("this record's legal entity could not be resolved, so the flow's legal-entity limit cannot be proven — assign the record to a legal entity, then retry");
+  }
 
   const event = retryEvent(run.trigger);
   const source = run.context?.event_source;

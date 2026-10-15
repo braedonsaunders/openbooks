@@ -10,7 +10,7 @@ import { commitPayRun } from "../run-commit.ts";
 import { createPayRun } from "../run-lifecycle.ts";
 import { seedPayrollComponents } from "../run-setup.ts";
 import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from "../../testing/fixtures.ts";
-import { seedUsSuiAccount } from "../filing-test-fixtures.ts";
+import { seedUsSuiAccount, seedUsEinAccount } from "../filing-test-fixtures.ts";
 import { upsertPayrollEmployerFact } from "../employer-fact-store.ts";
 import { saveOpeningBalances } from "../opening-balances.ts";
 import { qualifyOpeningEmployerAuthority, readOpeningEmployerContext } from "../opening-employer-authority.ts";
@@ -50,6 +50,7 @@ interface Fixture {
   orgId: string;
   actorId: string;
   subsidiaryId: string;
+  einAccountId: string;
   scheduleId: string;
   deferralPayable: string;
   suiAccountId: string;
@@ -89,6 +90,13 @@ async function usPayrollOrg(): Promise<Fixture> {
   }
   await setPackSlotAccount(org.orgId, actorId, "US", "state_income_tax", statePayable);
   await setPackSlotAccount(org.orgId, actorId, "US", "local_income_tax", statePayable);
+  const subsidiaryId = randomUUID();
+  await db.execute(sql`
+    insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids,
+                              is_elimination, is_active, custom)
+    values (${subsidiaryId}, ${org.orgId}, ${org.subsidiaryId}, 'US Entity', 'USD', 'US',
+            '{}'::jsonb, false, true, '{}'::jsonb)`);
+  const einAccountId = await seedUsEinAccount(org.orgId, actorId, subsidiaryId, "12-3456789");
   // Texas SUI is always owed for these employees, but the subject asserted
   // here is withholding, never SUI amounts — so the fixture carries the
   // ordinary contributory setup exactly as an employer would enter it: the
@@ -96,7 +104,10 @@ async function usPayrollOrg(): Promise<Fixture> {
   // state's experience-rated row bound to that account. A live SUI with no
   // resolving rate still refuses by name at calculate; this fixture simply
   // does not leave it unconfigured.
-  const suiAccountId = await seedUsSuiAccount(org.orgId, actorId, "TX");
+  const suiAccountId = await seedUsSuiAccount(org.orgId, actorId, "TX", {
+    federalAccountId: einAccountId, subsidiaryId, effectiveFrom: "2026-01-01", effectiveTo: null,
+    sourceReference: "TX original employer registration",
+  });
   await db.execute(sql`
     insert into payroll_statutory_rates
       (org_id, country, rate_key, region, filing_account_id, tax_year, rate_values, created_by, updated_by)
@@ -112,12 +123,6 @@ async function usPayrollOrg(): Promise<Fixture> {
             ${actorId}, ${actorId})
   `);
 
-  const subsidiaryId = randomUUID();
-  await db.execute(sql`
-    insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids,
-                              is_elimination, is_active, custom)
-    values (${subsidiaryId}, ${org.orgId}, ${org.subsidiaryId}, 'US Entity', 'USD', 'US',
-            '{}'::jsonb, false, true, '{}'::jsonb)`);
   const scheduleId = randomUUID();
   await db.execute(sql`
     insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
@@ -125,7 +130,7 @@ async function usPayrollOrg(): Promise<Fixture> {
                                created_by, updated_by)
     values (${scheduleId}, ${org.orgId}, 'Biweekly US', 'biweekly', 26, ${PERIOD_END}, 3,
             ${subsidiaryId}, true, ${actorId}, ${actorId})`);
-  return { orgId: org.orgId, actorId, subsidiaryId, scheduleId, deferralPayable, suiAccountId };
+  return { orgId: org.orgId, actorId, subsidiaryId, einAccountId, scheduleId, deferralPayable, suiAccountId };
 }
 
 async function usEmployee(fx: Fixture, name: string): Promise<string> {
@@ -318,7 +323,7 @@ test(
     const fx = await usPayrollOrg();
     try {
       const employee = await usEmployee(fx, "Additional Medicare employee");
-      const einId = await seedEin(fx);
+      const einId = fx.einAccountId;
       await db.execute(sql`
         update labor_cost_rates set rate = '5330000'
          where org_id = ${fx.orgId} and employee_party_id = ${employee}
@@ -479,21 +484,10 @@ test(
   },
 );
 
-/** The employer's federal EIN account, under the fixture's legal employer. */
-async function seedEin(fx: Fixture): Promise<string> {
-  const id = randomUUID();
-  await db.execute(sql`
-    insert into payroll_filing_accounts (id, org_id, country, program_type, account_number, name,
-                                         subsidiary_id, is_active, created_by, updated_by)
-    values (${id}, ${fx.orgId}, 'US', 'us_ein', '12-3456789', 'Federal EIN', ${fx.subsidiaryId}, true,
-            ${fx.actorId}, ${fx.actorId})`);
-  return id;
-}
-
 async function qualifyUsOpeningLevySource(
   fx: Fixture,
   employeePartyId: string,
-  allocations: readonly { programKey: string; region: string; filingAccountId: string | null; amount: string }[],
+  allocations: readonly { programKey: string; region: string; filingAccountId: string | null; federalAccountId: string; amount: string }[],
 ): Promise<void> {
   const context = await readOpeningEmployerContext({
     orgId: fx.orgId, actorId: fx.actorId, employeePartyId, taxYear: 2026, allowedSubsidiaryIds: null,
@@ -501,7 +495,7 @@ async function qualifyUsOpeningLevySource(
   if (!context.record) throw new Error('The US opening balance was not retained');
   const folderId = randomUUID(), fileId = randomUUID(), versionId = randomUUID();
   const bytes = Buffer.from(JSON.stringify({ employeePartyId, legalEmployerSubsidiaryId: fx.subsidiaryId,
-    taxYear: 2026, allocations }));
+    taxYear: 2026, originalCountry: 'US', originalCurrency: 'USD', coverageStart: '2026-01-01', coverageEnd: '2026-01-01', coverageComplete: true, allocations }));
   const sourceSha256 = createHash('sha256').update(bytes).digest('hex');
   await db.execute(sql`insert into folders(id,org_id,name,is_private,owner_id,created_by,updated_by)
     values(${folderId},${fx.orgId},'Original US payroll opening',true,${fx.actorId},${fx.actorId},${fx.actorId})`);
@@ -517,9 +511,14 @@ async function qualifyUsOpeningLevySource(
     sourceSha256, sourceReference: 'Original US payroll opening by employee and employer',
     reason: 'Qualify the exact original US opening source', allowedSubsidiaryIds: null,
   });
+  const expectedOpeningChildrenSha256=(await db.execute<{sha:string}>(sql`select encode(public.digest(public.payroll_opening_source_children(b.org_id,b.id,b.employee_party_id,b.tax_year)::text,'sha256'),'hex') as sha
+    from payroll_opening_balances b where b.org_id=${fx.orgId} and b.id=${context.record.id}`)).rows[0]!.sha;
   await qualifyOpeningLevySourceAuthority({
+    expectedOpeningChildrenSha256,
     orgId: fx.orgId, actorId: fx.actorId, openingBalanceId: context.record.id,
     expectedOpeningSha256: context.record.openingSha256, allocations,
+    sourceFileId: fileId, sourceVersionId: versionId, sourceSha256, sourceReference: 'Original US statutory opening country, currency and complete coverage',
+    originalCountry: 'US', originalCurrency: 'USD', coverageStart: '2026-01-01', coverageEnd: '2026-01-01', coverageComplete: true,
     reason: 'Retain the original EIN and state SUI wage bases', allowedSubsidiaryIds: null,
   });
 }
@@ -531,7 +530,7 @@ test(
     const fx = await usPayrollOrg();
     try {
       const employee = await usEmployee(fx, "Account mover");
-      const einId = await seedEin(fx);
+      const einId = fx.einAccountId;
       const first = await createPayRun({
         orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
         periodStart: PERIOD_START, periodEnd: PERIOD_END,
@@ -581,7 +580,7 @@ test(
     const fx = await usPayrollOrg();
     try {
       const employee = await usEmployee(fx, "Mid-year adopter");
-      const einId = await seedEin(fx);
+      const einId = fx.einAccountId;
       const ficaWages = (amount: string) => [{
         programKey: "us_w2_fica_wages", filingAccountId: einId, region: null, insurableYtd: amount,
       }];
@@ -640,7 +639,7 @@ test(
     const fx = await usPayrollOrg();
     try {
       const employee = await usEmployee(fx, "Texas adopter");
-      const einId = await seedEin(fx);
+      const einId = fx.einAccountId;
       const suiBase = [{ programKey: "us_sui", filingAccountId: fx.suiAccountId, region: "TX", insurableYtd: "6000" }];
       await assert.rejects(
         saveOpeningBalances({ orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026, rows: [{
@@ -652,8 +651,8 @@ test(
         employeePartyId: employee, amounts: {}, accountBases: suiBase,
       }] });
       await qualifyUsOpeningLevySource(fx, employee, [
-        { programKey: 'us_futa', region: 'US', filingAccountId: einId, amount: '0' },
-        { programKey: 'us_sui', region: 'TX', filingAccountId: fx.suiAccountId, amount: '6000' },
+        { programKey: 'us_futa', region: 'US', filingAccountId: einId, federalAccountId: einId, amount: '0' },
+        { programKey: 'us_sui', region: 'TX', filingAccountId: fx.suiAccountId, federalAccountId: einId, amount: '6000' },
       ]);
       await assert.rejects(db.execute(sql`update payroll_opening_account_bases set insurable_ytd=0
         where org_id=${fx.orgId} and employee_party_id=${employee} and program_key='us_sui'`),

@@ -16,6 +16,7 @@ import { db, type SqlExecutor } from '@openbooks/engine/platform/db'
 import { normalizeMoney } from '@openbooks/engine/money/money'
 import { canonicalDecimal } from '../exact-decimal'
 import { ensurePartyRoleRow } from '../party-roles'
+import { PARTY_KINDS, isNaturalPersonPartyKind, EMPLOYEE_PERSON_REFUSAL } from '@openbooks/engine/organization/party-kinds'
 import { assetBankHygieneWarning } from '../accounts-hygiene'
 import { toSnake } from '../setup/registry'
 import { coerceBoolean } from '../setup/coerce'
@@ -89,7 +90,7 @@ export const INVENTORY_ITEM_KINDS = new Set(['inventory', 'assembly', 'kit'])
  * employee) store as-is, the way the hand form writes them, and the writer
  * below backs each with its native role row.
  */
-const PARTY_KIND_VALUES = ['company', 'person', 'customer', 'vendor', 'employee'] as const
+const PARTY_KIND_VALUES = PARTY_KINDS
 const PARTY_KIND_LABEL_KEYS: Record<(typeof PARTY_KIND_VALUES)[number], string> = {
   company: 'kindCompany',
   person: 'kindPerson',
@@ -761,6 +762,15 @@ async function writeMaster(
           ? `already exists (${identityLabel})`
           : `already exists (${m.naturalKey}=${nkVal})` })
         continue
+      }
+
+      if (m.key === 'parties' && pendingRoles.includes('employee')) {
+        const kind = setCols.find((column) => column.column === 'kind')?.value ?? storedKind
+        if (!isNaturalPersonPartyKind(kind)) {
+          outcome.failed++
+          outcome.errors.push({ row: rowNo, message: EMPLOYEE_PERSON_REFUSAL })
+          continue
+        }
       }
 
       const mergedCustom = { ...existingCustom, ...cv.cleaned }

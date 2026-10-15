@@ -43,6 +43,7 @@ import {
 import { WizardLayout } from "../../../components/page-layout";
 import { readApiErrorMessage } from "../../../lib/api-error";
 import { UnbilledAccrualPanel } from "./UnbilledAccrualPanel";
+import { RevaluationEvidencePanel } from "./RevaluationEvidencePanel";
 import { PeriodEndJournalsPanel } from "./PeriodEndJournalsPanel";
 
 /**
@@ -918,6 +919,14 @@ function TaskCard(props: Props & { task: CloseTaskRow }) {
             <Play size={14} />
             {t("actions.runRevaluation")}
           </Button>
+        ) : null}
+        {props.multiCurrency && props.task.key === "fx-revalued" ? (
+          <RevaluationEvidencePanel
+            periodId={props.run.period_id}
+            bookId={props.run.book_id}
+            subsidiaryIds={props.run.scope?.subsidiaryIds ?? []}
+            canRun={props.canRun}
+          />
         ) : null}
         {props.unbilledRevenueAccrual && props.task.key === "unbilled-revenue-accrued" ? (
           <UnbilledAccrualPanel periodId={props.run.period_id} canPost={props.canPostGl === true} />

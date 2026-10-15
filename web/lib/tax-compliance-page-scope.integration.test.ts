@@ -227,14 +227,14 @@ test('/compliance/information-returns and /compliance hide other entities\' fili
     })
     await withOrgContext(org.orgId, async () => {
       await restrict(null)
-      const allReturns = renderedText(await InformationReturnsPage())
+      const allReturns = renderedText(await InformationReturnsPage({}))
       assert.ok(allReturns.includes(hiddenFiling.id) && allReturns.includes(visibleFiling.id) && allReturns.includes(HIDDEN_ENTITY))
       assert.ok(allReturns.includes(HIDDEN_VENDOR))
       const allHome = renderedText(await ComplianceHomePage({ searchParams: Promise.resolve({ year: String(taxYear) }) }))
       assert.ok(allHome.includes(HIDDEN_VENDOR))
 
       await restrict([org.subsidiaryId])
-      const scopedReturns = renderedText(await InformationReturnsPage())
+      const scopedReturns = renderedText(await InformationReturnsPage({}))
       assert.ok(scopedReturns.includes(visibleFiling.id), 'the caller\'s own filing is listed')
       assert.ok(!scopedReturns.includes(hiddenFiling.id) && !scopedReturns.includes(HIDDEN_ENTITY), 'another entity\'s filing must not render')
       assert.ok(!scopedReturns.includes(HIDDEN_VENDOR), 'another entity\'s readiness queue must not render')

@@ -17,7 +17,7 @@ import { upsertStatutoryRate } from "../statutory-rates.ts";
 import {
   createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment,
 } from "../../testing/fixtures.ts";
-import { seedUsSuiAccount } from "../filing-test-fixtures.ts";
+import { seedUsSuiAccount, seedUsEinAccount } from "../filing-test-fixtures.ts";
 
 /**
  * Washington payroll: no state or local income tax, but PFML, WA Cares,
@@ -48,6 +48,7 @@ interface Fixture {
   orgId: string;
   actorId: string;
   subsidiaryId: string;
+  einAccountId: string;
   scheduleId: string;
   payDate: string;
   periodStart: string;
@@ -87,17 +88,18 @@ async function waPayrollOrg(year = 2026): Promise<Fixture> {
   for (const slot of ["fit", "fica", "futa", "suta"]) {
     await setPackSlotAccount(org.orgId, actorId, "US", slot, payrollPayable);
   }
+  const subsidiaryId = randomUUID();
+  await db.execute(sql`
+    insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids,
+                              is_elimination, is_active, custom)
+    values (${subsidiaryId}, ${org.orgId}, ${org.subsidiaryId}, 'US Entity', 'USD', 'US',
+            '{}'::jsonb, false, true, '{}'::jsonb)`);
+  const einAccountId = await seedUsEinAccount(org.orgId, actorId, subsidiaryId, "12-3456789");
   for (const state of ["WA", "CA", "OH"]) {
-    const filingAccountId = await seedUsSuiAccount(org.orgId, actorId, state);
-    if (year === 2025) {
-      // The shared SUI seeder records the financing method from 2026-01-01,
-      // which a 2025 pay date cannot read: the 2025 run gets its own row.
-      await upsertPayrollEmployerFact({
-        orgId: org.orgId, actorId, filingAccountId, country: "US",
-        factKey: "sui_financing_method", effectiveFrom: "2025-01-01", value: "contributory",
-        changeReason: "state account determination",
-      });
-    }
+    const filingAccountId = await seedUsSuiAccount(org.orgId, actorId, state, {
+      federalAccountId: einAccountId, subsidiaryId, effectiveFrom: `${year}-01-01`, effectiveTo: null,
+      sourceReference: `${state} original employer registration`,
+    });
     await upsertStatutoryRate({
       orgId: org.orgId, actorId, rates: US_PACK_RATES, rateKey: "us_sui",
       region: state, filingAccountId, taxYear: year, values: { rate: "0.03", wageBase: "7000" },
@@ -109,12 +111,6 @@ async function waPayrollOrg(year = 2026): Promise<Fixture> {
       sourceCitation: "Test rate notice", reason: "test fixture rate",
     });
   }
-  const subsidiaryId = randomUUID();
-  await db.execute(sql`
-    insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids,
-                              is_elimination, is_active, custom)
-    values (${subsidiaryId}, ${org.orgId}, ${org.subsidiaryId}, 'US Entity', 'USD', 'US',
-            '{}'::jsonb, false, true, '{}'::jsonb)`);
   const scheduleId = randomUUID();
   await db.execute(sql`
     insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
@@ -122,7 +118,7 @@ async function waPayrollOrg(year = 2026): Promise<Fixture> {
                                created_by, updated_by)
     values (${scheduleId}, ${org.orgId}, 'Biweekly US', 'biweekly', 26, ${dates.periodEnd}, 3,
             ${subsidiaryId}, true, ${actorId}, ${actorId})`);
-  return { orgId: org.orgId, actorId, subsidiaryId, scheduleId, ...dates };
+  return { orgId: org.orgId, actorId, subsidiaryId, einAccountId, scheduleId, ...dates };
 }
 
 async function waEmployee(
@@ -141,7 +137,10 @@ async function waEmployee(
     values (${fx.orgId}, ${id}, 'USD', ${annualSalary}, 'year', 2080, ${`${year}-01-01`}, true,
             ${fx.actorId}, ${fx.actorId})`);
   const employmentId = await seedWorkerEmployment(fx.orgId, id, fx.subsidiaryId);
-  const suiAccountId = await seedUsSuiAccount(fx.orgId, fx.actorId, state);
+  const suiAccountId = await seedUsSuiAccount(fx.orgId, fx.actorId, state, {
+    federalAccountId: fx.einAccountId, subsidiaryId: fx.subsidiaryId, effectiveFrom: `${year}-01-01`, effectiveTo: null,
+    sourceReference: `${state} original employer registration`,
+  });
   await db.execute(sql`
     insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
                                            country, province, residence_region, pay_basis,
@@ -415,15 +414,15 @@ describe("washington-obligation-derived-mappings", { skip: !DB }, () => {
       const pack = payrollPack("US");
       assert.ok(pack.waivedRateSlots);
       const covered = await pack.waivedRateSlots!(db, {
-        orgId: fx.orgId, region: "WA", filingAccountId: null, payDate: "2026-07-21",
+        orgId: fx.orgId, subsidiaryId: fx.subsidiaryId, region: "WA", filingAccountId: null, payDate: "2026-07-21",
       });
       assert.ok(covered.includes("us_wa_pfml"));
       const uncovered = await pack.waivedRateSlots!(db, {
-        orgId: fx.orgId, region: "WA", filingAccountId: null, payDate: "2027-03-15",
+        orgId: fx.orgId, subsidiaryId: fx.subsidiaryId, region: "WA", filingAccountId: null, payDate: "2027-03-15",
       });
       assert.ok(!uncovered.includes("us_wa_pfml"));
       const otherState = await pack.waivedRateSlots!(db, {
-        orgId: fx.orgId, region: "CA", filingAccountId: null, payDate: "2026-07-21",
+        orgId: fx.orgId, subsidiaryId: fx.subsidiaryId, region: "CA", filingAccountId: null, payDate: "2026-07-21",
       });
       assert.ok(!otherState.includes("us_wa_pfml"));
     } finally {

@@ -2,6 +2,7 @@ import { sql, type SQL } from 'drizzle-orm';
 import { db, withOrg } from '../platform/db.ts';
 import { decodeEntityMappings, netSuiteEntityMappingMetadata } from './entity-mapping-contract.ts';
 import { createEntityMappingProjector } from './entity-mappings.ts';
+import { parseExactJson } from '../platform/exact-json.ts';
 
 /** Operational imports use the same persisted mapping contract as the master and document loaders. */
 export async function netSuiteOperationalMappingWriter(orgId: string, connectionId: string, actorId: string | null) {
@@ -23,22 +24,26 @@ export async function netSuiteOperationalMappingWriter(orgId: string, connection
         await db.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`${orgId}:${connectionId}:${key}:${sourceRef}`},0))`);
         await beforeLock?.();
         const mapped = (await project(key, [{ ref: sourceRef, fields }]))[0]!;
-        const before = (await db.execute<{ snapshot: Record<string, unknown> }>(sql`select to_jsonb(t) as snapshot from ${sql.identifier(entity.table)} t where org_id=${orgId} and (${identity}) for update`)).rows;
+        const before = (await db.execute<{ snapshot: string }>(sql`select to_jsonb(t)::text as snapshot from ${sql.identifier(entity.table)} t where org_id=${orgId} and (${identity}) for update`)).rows;
         if (before.length > 1) throw new Error('The operational source identity is ambiguous');
+        const beforeSnapshot = before[0] ? parseExactJson(before[0].snapshot) as Record<string, unknown> : null;
         const id = await save(mapped.fields);
-        if (!id || (before[0] && before[0].snapshot.id !== id)) throw new Error('The mapped operational record did not retain its native identity');
-        if (Object.keys(mapped.custom).length || Object.hasOwn(before[0]?.snapshot.custom as object ?? {}, 'connectorMappedValues')) {
+        if (!id || (beforeSnapshot && beforeSnapshot.id !== id)) throw new Error('The mapped operational record did not retain its native identity');
+        if (Object.keys(mapped.custom).length || Object.hasOwn(beforeSnapshot?.custom as object ?? {}, 'connectorMappedValues')) {
           const updated = (await db.execute<{ id: string }>(sql`update ${sql.identifier(entity.table)} set custom=
             (coalesce(custom,'{}'::jsonb) - 'connectorMappedValues')
               || ${JSON.stringify(Object.keys(mapped.custom).length ? { ...mapped.custom, connectorMappedValues: mapped.custom } : {})}::jsonb
             where org_id=${orgId} and id=${id} returning id`)).rows[0];
           if (!updated) throw new Error('The operational custom-field update did not save a record');
         }
-        const after = (await db.execute<{ snapshot: Record<string, unknown> }>(sql`select to_jsonb(t) as snapshot from ${sql.identifier(entity.table)} t where org_id=${orgId} and id=${id}`)).rows[0];
+        const after = (await db.execute<{ snapshot: string }>(sql`select to_jsonb(t)::text as snapshot from ${sql.identifier(entity.table)} t where org_id=${orgId} and id=${id}`)).rows[0];
         if (!after) throw new Error('The mapped operational record is not readable in this organization');
-        if (JSON.stringify(stableMappingSnapshot(before[0]?.snapshot ?? null)) !== JSON.stringify(stableMappingSnapshot(after.snapshot))) {
+        if (!stableMappingSnapshotsMatch(before[0]?.snapshot ?? null, after.snapshot)) {
           const audit = (await db.execute<{ id: string }>(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id)
-            values(${orgId},${entity.table},${id},${before[0] ? 'update' : 'insert'},${JSON.stringify({ event: 'connector_entity_mapping_applied', connectionId, sourceRef, before: before[0]?.snapshot ?? null, after: after.snapshot })}::jsonb,${actorId}) returning id`)).rows[0];
+            values(${orgId},${entity.table},${id},${before[0] ? 'update' : 'insert'},
+              ${JSON.stringify({ event: 'connector_entity_mapping_applied', connectionId, sourceRef })}::jsonb
+                || jsonb_build_object('before',${before[0]?.snapshot ?? 'null'}::jsonb,'after',${after.snapshot}::jsonb),
+              ${actorId}) returning id`)).rows[0];
           if (!audit) throw new Error('The operational mapping audit was not saved');
         }
         return id;
@@ -51,6 +56,22 @@ export type OperationalMappingWriter = Awaited<ReturnType<typeof netSuiteOperati
 /** Extraction timestamps and native revision counters do not create replay-only business audits. */
 export function stableMappingSnapshot(value: unknown): unknown {
   return stableSnapshotValue(value, true);
+}
+
+/** Decimal tokens remain exact text for values; JSON types remain material.
+ * The ordinary decoder is used only for type names, never numeric values. */
+export function stableMappingSnapshotsMatch(before: string | null, after: string): boolean {
+  const exact = (text: string | null) => stableMappingSnapshot(text === null ? null : parseExactJson(text));
+  const types = (text: string | null) => mappingTypeShape(stableMappingSnapshot(text === null ? null : JSON.parse(text)));
+  return JSON.stringify(exact(before)) === JSON.stringify(exact(after))
+    && JSON.stringify(types(before)) === JSON.stringify(types(after));
+}
+
+function mappingTypeShape(value: unknown): unknown {
+  if (value === null) return "null";
+  if (Array.isArray(value)) return { array: value.map(mappingTypeShape) };
+  if (typeof value === "object") return { object: Object.fromEntries(Object.entries(value).map(([key, entry]) => [key, mappingTypeShape(entry)])) };
+  return typeof value;
 }
 function stableSnapshotValue(value: unknown, nativeRow = false): unknown {
   if (Array.isArray(value)) return value.map(entry => stableSnapshotValue(entry));

@@ -1,8 +1,9 @@
-import { roleEmploymentOverlapsPeriod } from "./employment-roster.ts";
 import { readPayrollPriorEarnings } from './prior-earnings.ts';
 import { approvedHolidayOccurrenceDates } from "./holiday-obligation-source.ts";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
+import { isIsoCalendarDate } from "../platform/civil-date.ts";
+import { isUuid } from "../platform/uuid.ts";
 import { resolveStoredEmployerFact } from "./employer-fact-store.ts";
 import { MB_CONSTRUCTION_HOLIDAY } from "./canada/employment-standards.ts";
 import { addCalendarDays, calendarDaysBetween, isoDateOf, utcDateFromParts } from "../platform/business-date.ts";
@@ -1239,6 +1240,8 @@ export interface StatutoryHolidayPayInput {
   subsidiaryId?: string | null;
   country?: string;
   employeePartyId: string;
+  /** Exact native employment selected for this payment; never reselected from a profile. */
+  employmentId: string;
   employeeName: string;
   /** 'CA-ON', 'CA', 'US-TX' — from `jurisdictionKey(country, province)`. */
   jurisdiction: string;
@@ -1545,6 +1548,86 @@ export async function applyOccupationWeeklyCap(
   };
 }
 
+interface HolidayEmploymentSpell {
+  from: string;
+  /** Native employment windows have an exclusive end. */
+  to: string | null;
+}
+
+export type StatutoryHolidayEmploymentSource = {
+  orgId: string;
+  employeePartyId: string;
+  employmentId: string;
+  subsidiaryId: string;
+  employmentRevision: number;
+  versionId: string | null;
+  versionNo: number | null;
+  status: string | null;
+  effectiveFrom: string | null;
+  effectiveTo: string | null;
+  recordedAt: string | null;
+}
+
+/** Exact selected legal-employment history shared by calculation and its
+ * retained source evidence. Closed recorded versions cannot govern pay. */
+export async function statutoryHolidayEmploymentSource(
+  tx: Pick<typeof db, "execute">,
+  input: Pick<StatutoryHolidayPayInput, "orgId" | "employeePartyId" | "employmentId" | "subsidiaryId" | "employeeName">,
+): Promise<StatutoryHolidayEmploymentSource[]> {
+  if (!isUuid(input.employmentId) || !isUuid(input.subsidiaryId)) {
+    throw new PayrollHolidayError(
+      `${input.employeeName}: statutory holiday pay needs the selected native employment and paying legal employer — review the payroll employment link and assign the run to its legal employer before calculating`,
+    );
+  }
+  const rows = (await tx.execute<StatutoryHolidayEmploymentSource>(sql`
+    select e.org_id::text as "orgId", e.worker_party_id::text as "employeePartyId",
+           e.id::text as "employmentId", e.employer_subsidiary_id::text as "subsidiaryId",
+           e.revision as "employmentRevision", v.id::text as "versionId", v.version_no as "versionNo",
+           v.status, v.effective_from::text as "effectiveFrom", v.effective_to::text as "effectiveTo",
+           to_char(v.recorded_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as "recordedAt"
+      from worker_employments e
+      left join worker_employment_versions v
+        on v.org_id = e.org_id and v.employment_id = e.id and v.recorded_until is null
+     where e.org_id = ${input.orgId} and e.id = ${input.employmentId}
+       and e.worker_party_id = ${input.employeePartyId}
+       and e.employer_subsidiary_id = ${input.subsidiaryId}
+     order by v.effective_from, v.version_no
+  `)).rows;
+  if (rows.length === 0) {
+    throw new PayrollHolidayError(
+      `${input.employeeName}: the selected holiday-pay employment does not belong to this employee, organization and paying legal employer — review the payroll employment link before calculating`,
+    );
+  }
+  return rows;
+}
+
+/** Continuous employed statuses share tenure; gaps and ended states do not. */
+function holidayEmploymentSpells(
+  rows: readonly StatutoryHolidayEmploymentSource[], employeeName: string,
+): HolidayEmploymentSpell[] {
+  const spells: HolidayEmploymentSpell[] = [];
+  let previousEnd: string | null | undefined;
+  for (const row of rows) {
+    if (!row.status || !isIsoCalendarDate(row.effectiveFrom)
+      || row.effectiveTo !== null && (!isIsoCalendarDate(row.effectiveTo) || row.effectiveTo <= row.effectiveFrom)) {
+      throw new PayrollHolidayError(
+        `${employeeName}: the selected employment has no usable effective holiday-pay history — record or correct its dated status through an HRM employment change request before calculating`,
+      );
+    }
+    if (previousEnd === null || previousEnd !== undefined && previousEnd > row.effectiveFrom) {
+      throw new PayrollHolidayError(
+        `${employeeName}: the selected employment has overlapping holiday-pay status windows — correct its dated HRM employment history before calculating`,
+      );
+    }
+    previousEnd = row.effectiveTo;
+    if (!["active", "on_leave", "suspended"].includes(row.status)) continue;
+    const previousSpell = spells.at(-1);
+    if (previousSpell?.to === row.effectiveFrom) previousSpell.to = row.effectiveTo;
+    else spells.push({ from: row.effectiveFrom, to: row.effectiveTo });
+  }
+  return spells;
+}
+
 export async function resolveStatutoryHolidayPay(
   tx: Pick<typeof db, "execute">,
   input: StatutoryHolidayPayInput,
@@ -1563,41 +1646,36 @@ export async function resolveStatutoryHolidayPay(
   const observedIn = (from: string, to: string) =>
     resolveObservedHolidays({ jurisdiction: input.jurisdiction, from, to, overrides });
 
-  const holidays = jurisdiction.holidayPay === null ? [] : observedIn(input.periodStart, input.periodEnd)
+  const periodHolidays = jurisdiction.holidayPay === null ? [] : observedIn(input.periodStart, input.periodEnd)
     .filter((holiday) => holiday.paid);
+  const mbConstruction = input.jurisdiction === "CA-MB" && input.constructionEmployee === true;
+  if (!mbConstruction && periodHolidays.length === 0 && workTriggeredHolidays.length === 0) return [];
+  const employmentSource = await statutoryHolidayEmploymentSource(tx, input);
+  const spells = holidayEmploymentSpells(employmentSource, input.employeeName);
+  const spellOn = (date: string) => spells.find(spell =>
+    spell.from <= date && (spell.to === null || date < spell.to));
+  // The pay period admits a worker, but only employment on the observed
+  // holiday admits that occurrence and its eligibility questions.
+  const holidays = periodHolidays.filter(holiday => spellOn(holiday.date) !== undefined);
   // Manitoba construction (CCSM c E110, s. 30) replaces the whole general
   // per-holiday rule for the asserted class — including on a pay with no
   // holiday in it, where the 4% still accrues, so this dispatch precedes
   // the no-holiday early return. Only the asserted class takes this path;
   // everyone else runs the general rule below.
-  if (input.jurisdiction === "CA-MB" && input.constructionEmployee === true) {
+  if (mbConstruction) {
     return resolveMbConstructionHolidayPay(tx, input, holidays);
   }
   if (holidays.length === 0 && workTriggeredHolidays.length === 0) return [];
 
-  const hire = (await tx.execute<{ hired_on: string | Date | null }>(sql`
-    select er.hired_on from employee_roles er
-     where er.org_id = ${input.orgId} and er.party_id = ${input.employeePartyId}
-       and ${roleEmploymentOverlapsPeriod({
-         hiredOn: sql`er.hired_on`, terminatedOn: sql`er.terminated_on`,
-         periodStart: sql`${input.periodStart}`, periodEnd: sql`${input.periodEnd}`,
-       })}
-     order by er.hired_on nulls last limit 1
-  `));
-  const hiredOn = hire.rows[0]?.hired_on
-    ? String(hire.rows[0].hired_on instanceof Date
-        ? hire.rows[0].hired_on.toISOString()
-        : hire.rows[0].hired_on).slice(0, 10)
-    : null;
-
   const lines: StatutoryHolidayEarningLine[] = [];
   let sequence = 45;
   const ownedEntitlementDates = await approvedHolidayOccurrenceDates(tx, {
-    orgId: input.orgId, employeePartyId: input.employeePartyId, subsidiaryId: input.subsidiaryId,
+    orgId: input.orgId, employeePartyId: input.employeePartyId, employmentId: input.employmentId, subsidiaryId: input.subsidiaryId,
     from: input.periodStart, to: input.periodEnd,
     obligationsAvailable: input.obligationsAvailable,
   });
   for (const holiday of holidays) {
+    const hiredOn = spellOn(holiday.date)!.from;
     // An independently adjudicated unpaid entitlement owns the ordinary
     // day's payment. Work on that date still follows the native premium
     // calculation and its eligibility facts; zero work needs no premium.
@@ -1744,8 +1822,8 @@ export async function resolveStatutoryHolidayPay(
         ? await hoursWorkedInLookback(tx, input, window)
         : undefined,
       daysWorkedInQualifyingWindow,
-      employmentDays: hiredOn ? calendarDaysBetween(hiredOn, holiday.date) : null,
-      employmentWeeks: hiredOn ? Math.floor(calendarDaysBetween(hiredOn, holiday.date) / 7) : null,
+      employmentDays: calendarDaysBetween(hiredOn, holiday.date),
+      employmentWeeks: Math.floor(calendarDaysBetween(hiredOn, holiday.date) / 7),
       commissionEarnings: commissionLookback?.earnings,
       paidOnCommission: input.paidOnCommission,
       absentWithoutConsent,
@@ -1809,6 +1887,8 @@ export async function resolveStatutoryHolidayPay(
       if (date < input.periodStart || date > input.periodEnd
         || (event.effectiveFrom !== null && date < event.effectiveFrom)
         || (event.effectiveTo !== null && date > event.effectiveTo)) continue;
+      const spell = spellOn(date);
+      if (!spell) continue;
       const hoursWorked = await hoursOn(tx, input, date);
       if (cmp(hoursWorked, "0") <= 0) continue;
       if (event.employerExemptionFact) {
@@ -1843,7 +1923,7 @@ export async function resolveStatutoryHolidayPay(
       const schedule = await resolveWorkSchedule(tx, input.orgId, input.employeePartyId, date);
       const result = computeWorkTriggeredHolidayPay(rule, event, {
         employee: input.employeeName, holiday, earnings, daysWorked: 0,
-        employmentDays: hiredOn ? calendarDaysBetween(hiredOn, date) : null,
+        employmentDays: calendarDaysBetween(spell.from, date),
         hoursWorked, hourlyRate: input.hourlyRate, schedule,
       });
       if (!result.qualified) continue;

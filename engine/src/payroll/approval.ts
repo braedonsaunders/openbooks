@@ -9,6 +9,7 @@ import { payrollSubsidiaryInScope, type PayrollSubsidiaryScope } from "./scope.t
 import { actorHasPermission } from "../organization/actor-permissions.ts";
 import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
 import { PAY_RUN_WORKFLOW_PERMISSIONS } from "../records/document-kind-permissions.ts";
+import { flowGraphAdmitsSubjectSql } from "../flows/subject-admission.ts";
 
 type Executor = Pick<typeof db, "execute">;
 
@@ -52,6 +53,10 @@ type Executor = Pick<typeof db, "execute">;
  * enabled `pay_run` flow whose graph carries an `on_submit` trigger and at
  * least one gate node. A pay-run flow that only does before_void routing or
  * pure automation is not an approval policy and must not block a commit.
+ * A flow limited by legal entity counts only for runs it would admit
+ * (flows/subject-admission.ts): a resolved entity outside its list is not
+ * this run's policy, while a run whose entity cannot be resolved still
+ * counts it, so the run fails closed instead of releasing.
  */
 
 export interface PayRunApprovalState {
@@ -93,7 +98,8 @@ export async function payRunApprovalState(
                and g.subject_id = d.id and g.status in ('pending', 'escalated')) as open_gates,
            (select count(*)::int from flows f
              where f.org_id = ${orgId} and f.subject_kind = ${PAY_RUN_SUBJECT_KIND}
-               and f.enabled and ${GATING_ON_SUBMIT_FLOW}) as policies
+               and f.enabled and ${GATING_ON_SUBMIT_FLOW}
+               and ${flowGraphAdmitsSubjectSql(sql`f.graph`, sql`d.subsidiary_id`)}) as policies
       from documents d
      where d.org_id = ${orgId} and d.id = ${documentId} and d.kind = 'pay_run'
   `));

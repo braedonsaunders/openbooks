@@ -2,13 +2,15 @@ import { z } from 'zod';
 import { NextResponse } from 'next/server';
 import { defineRoute } from '@/lib/api/route';
 import { apiErrorResponse } from '@/lib/api/error-response';
-import { uuidId } from '@/lib/api/json-schema';
+import { isoDate, uuidId } from '@/lib/api/json-schema';
 import { PayrollError } from '@openbooks/engine/payroll/error';
 import { qualifyOpeningLevySourceAuthority, readOpeningLevySourceContext } from '@openbooks/engine/payroll/opening-levy-source-authority';
+import { correctOpeningLevySourceAuthority } from '@openbooks/engine/payroll/opening-levy-source-correction';
 
 export const dynamic = 'force-dynamic';
 const query = z.strictObject({
   employeePartyId: uuidId,
+  sourceFileId: uuidId.optional(),
   taxYear: z.string().regex(/^\d{4}$/).transform(Number),
 });
 const allocation = z.strictObject({
@@ -16,13 +18,26 @@ const allocation = z.strictObject({
   region: z.string().trim().min(2).max(2),
   subRegion: z.string().trim().max(32).optional(),
   filingAccountId: uuidId.nullable().optional(),
+  federalAccountId: uuidId.nullable(),
   amount: z.string().trim().min(1).max(40),
 });
-const body = z.strictObject({
+const qualificationFields = {
   openingBalanceId: uuidId,
   expectedOpeningSha256: z.string().regex(/^[a-f0-9]{64}$/),
-  allocations: z.array(allocation).min(1).max(1000),
+  expectedOpeningChildrenSha256: z.string().regex(/^[a-f0-9]{64}$/),
+  sourceFileId: uuidId, sourceVersionId: uuidId,
+  sourceSha256: z.string().regex(/^[a-f0-9]{64}$/),
+  sourceReference: z.string().trim().min(1).max(2000),
+  originalCountry: z.string().regex(/^[A-Z]{2}$/), originalCurrency: z.string().regex(/^[A-Z]{3}$/),
+  coverageStart: isoDate(), coverageEnd: isoDate(),
+  coverageComplete: z.literal(true),
+  allocations: z.array(allocation).max(1000),
   reason: z.string().trim().min(1).max(2000),
+};
+const body = z.strictObject(qualificationFields).superRefine((input,ctx) => {
+  if ((input.originalCountry === 'CA' || input.originalCountry === 'US') && input.allocations.length === 0) {
+    ctx.addIssue({code:'custom',path:['allocations'],message:'Declare the complete original statutory levy allocations, including explicit zeros'});
+  }
 });
 
 export const GET = defineRoute({ permission: 'payroll.read', feature: 'payroll', handler: async ({ request, authz }) => {
@@ -41,6 +56,29 @@ export const GET = defineRoute({ permission: 'payroll.read', feature: 'payroll',
 export const POST = defineRoute({ permission: 'payroll.run', feature: 'payroll', body, invalidBodyStatus: 422, handler: async ({ request, authz, body: input }) => {
   try {
     const record = await qualifyOpeningLevySourceAuthority({
+      ...input, orgId: authz.user.orgId, actorId: authz.user.id,
+      allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
+    });
+    return NextResponse.json({ record });
+  } catch (error) {
+    return apiErrorResponse(error, { request, ...(error instanceof PayrollError ? { safeStatus: 422 } : {}) });
+  }
+} });
+
+const correctionBody = z.strictObject({
+  ...qualificationFields,
+  requestId: uuidId,
+  expectedAuthorityId: uuidId,
+  expectedAllocationSha256: z.string().regex(/^[a-f0-9]{64}$/),
+}).superRefine((input,ctx) => {
+  if ((input.originalCountry === 'CA' || input.originalCountry === 'US') && input.allocations.length === 0) {
+    ctx.addIssue({code:'custom',path:['allocations'],message:'Declare the complete original statutory levy allocations, including explicit zeros'});
+  }
+});
+
+export const PATCH = defineRoute({ permission: 'payroll.manage', feature: 'payroll', body: correctionBody, invalidBodyStatus: 422, handler: async ({ request, authz, body: input }) => {
+  try {
+    const record = await correctOpeningLevySourceAuthority({
       ...input, orgId: authz.user.orgId, actorId: authz.user.id,
       allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
     });

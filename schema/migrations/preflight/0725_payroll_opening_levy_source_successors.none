@@ -1,0 +1,1 @@
+Adds nullable immutable successor and idempotency references to sealed opening source certificates. Existing certificates, audit evidence, annual amounts and child balances are retained byte-for-byte; no tenant data is backfilled or reinterpreted.

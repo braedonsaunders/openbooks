@@ -1,9 +1,11 @@
+import { withOpeningReportingSnapshot } from './opening-reporting-snapshot.ts';
+import { takeOpeningSourceYearFence } from '../organization/payroll-source-fence.ts';
 import { lockPayrollEmploymentRoster } from "./employment-roster.ts";
 import { requireCompensationPackageConfiguration } from './compensation-package-payroll.ts';
 import { lockEmployerAssignmentProfiles } from './employer-assignment-history.ts';
 import { lockPayrollServiceConfiguration } from './service-credit.ts';
 import { assertRecurringBenefitsRunFresh } from './benefit-plan-inputs.ts';
-import { payrollSettings } from "./run-setup.ts";
+import { payrollSettingsForPayRun } from "./run-setup.ts";
 /**
  * Refusal acknowledgement, commit (GL projection write), and pre-commit preview.
  *
@@ -18,7 +20,7 @@ import { PayrollError } from "./error.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { add, cmp, neg, sum } from "../money/money.ts";
 import { legacyStatutoryLiabilityAccount, PAYROLL_COUNTRY_PACKS } from "./packs.ts";
-import { laborCostingSettings } from "../projects/labor-costing.ts";
+import { laborCostingSettingsInTx } from "../projects/labor-costing.ts";
 import { canonicalJson, payRunCalculationSourceDigest, parsePayRunCalculationSource, payRunCalculationSource, payRunCalculationSourceChanges, type PayRunCalculationError, type PayRunRefusalAcknowledgement, payRunCalculationRefusals, payRunRefusalDigest, parsePayRunCalculationErrors, parsePayRunRefusalAcknowledgement } from "./run-calculation-evidence.ts";
 import { lockStatutoryRatesForPayRun } from "./statutory-rates.ts";
 import { PERIODIC_RUN_TYPES } from "./run-contracts.ts";
@@ -73,8 +75,8 @@ async function payRunGlLegs(
   lineDestinations: { lineId: string; partyId: string | null }[];
 }> {
   {
-    const settings = await payrollSettings(orgId, allowedSubsidiaryIds);
-    const costing = await laborCostingSettings(orgId);
+    const settings = await payrollSettingsForPayRun(orgId, documentId, allowedSubsidiaryIds, tx);
+    const costing = await laborCostingSettingsInTx(tx, orgId);
     const control = (await tx.execute<{ c: Record<string, string | null> | null; p: Record<string, unknown> | null }>(sql`
       select settings->'controlAccounts' as c, settings->'payroll' as p from orgs where id = ${orgId}
     `));
@@ -281,6 +283,13 @@ export async function acknowledgePayRunRefusals(input: {
 }): Promise<PayRunRefusalAcknowledgement> {
   const { orgId, documentId, actorId } = input;
   return await db.transaction(async (tx) => withTransactionSavepoint(tx, async () => {
+    const sourceIdentity = (await tx.execute<{taxYear: number}>(sql`
+      select r.tax_year as "taxYear" from pay_runs r join documents d on d.org_id=r.org_id and d.id=r.document_id
+       where r.org_id=${orgId} and r.document_id=${documentId}
+       ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, input.allowedSubsidiaryIds)}
+    `)).rows;
+    if (sourceIdentity.length !== 1) throw new PayrollError("pay run not found");
+    await takeOpeningSourceYearFence(tx, orgId, sourceIdentity[0]!.taxYear);
     if (!(await lockAndCheckOrgFeature(tx, orgId, "payroll"))) throw new PayrollError("Payroll feature is disabled");
     const runRows = (await tx.execute<Record<string, unknown>>(sql`
       select r.*, d.status as doc_status, d.subsidiary_id as subsidiary_id from pay_runs r
@@ -289,6 +298,7 @@ export async function acknowledgePayRunRefusals(input: {
     `));
     const run = runRows.rows[0];
     if (!run) throw new PayrollError("pay run not found");
+    if (Number(run.tax_year) !== sourceIdentity[0]!.taxYear) throw new PayrollError("The payroll source year changed — reload and calculate the run before committing");
     if (!payrollSubsidiaryInScope(input.allowedSubsidiaryIds, run.subsidiary_id as string | null)) {
       throw new PayrollError("pay run not found");
     }
@@ -359,6 +369,13 @@ export async function commitPayRun(input: {
   // A caller may catch the late freshness refusal inside its own transaction.
   // Restore our projection, liability stamps, and time claims before returning it.
   return await db.transaction(async (tx) => withTransactionSavepoint(tx, async () => {
+    const sourceIdentity = (await tx.execute<{taxYear: number}>(sql`
+      select r.tax_year as "taxYear" from pay_runs r join documents d on d.org_id=r.org_id and d.id=r.document_id
+       where r.org_id=${orgId} and r.document_id=${documentId}
+       ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, input.allowedSubsidiaryIds)}
+    `)).rows;
+    if (sourceIdentity.length !== 1) throw new PayrollError("pay run not found");
+    await takeOpeningSourceYearFence(tx, orgId, sourceIdentity[0]!.taxYear);
     if (!(await lockAndCheckOrgFeature(tx, orgId, "payroll"))) throw new PayrollError("Payroll feature is disabled");
     const runRows = (await tx.execute<Record<string, string>>(sql`
       select r.*, d.status as doc_status, d.subsidiary_id as subsidiary_id, d.document_number from pay_runs r
@@ -367,6 +384,7 @@ export async function commitPayRun(input: {
     `));
     const run = runRows.rows[0];
     if (!run) throw new PayrollError("pay run not found");
+    if (Number(run.tax_year) !== sourceIdentity[0]!.taxYear) throw new PayrollError("The payroll source year changed — reload and calculate the run before committing");
     if (!payrollSubsidiaryInScope(input.allowedSubsidiaryIds, run.subsidiary_id)) {
       throw new PayrollError("pay run not found");
     }
@@ -524,6 +542,8 @@ export async function commitPayRun(input: {
       changes.items ? "items" : null,
       changes.incomeTaxOverrides ? "adjustments" : null,
       changes.bankCashInputs ? "adjustments" : null,
+      changes.employerLevyAdjustments ? "adjustments" : null,
+      changes.declaredVacationAccruals ? "adjustments" : null,
       changes.roster ? "roster" : null,
       changes.openingBalances ? "openingBalances" : null,
     ].filter((reason): reason is string => reason !== null);
@@ -715,10 +735,32 @@ export async function previewPayRunGl(
   orgId: string,
   documentId: string,
   allowedSubsidiaryIds?: PayrollSubsidiaryScope,
-): Promise<{ legs: (PayRunGlLeg & {
-  accountLabel: string; partyName: string | null; projectName: string | null;
-})[]; debitTotal: string }> {
-  const runRows = (await db.execute<{ run_status: string; subsidiary_id: string | null }>(sql`
+): Promise<{legs: (PayRunGlLeg & {accountLabel:string;partyName:string|null;projectName:string|null})[];debitTotal:string}> {
+  const source=(await db.execute<{taxYear:number}>(sql`select r.tax_year as "taxYear" from pay_runs r
+    join documents d on d.org_id=r.org_id and d.id=r.document_id
+    where r.org_id=${orgId} and r.document_id=${documentId}
+      ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`,allowedSubsidiaryIds)}`)).rows;
+  if(source.length!==1) throw new PayrollError('pay run not found');
+  return withOpeningReportingSnapshot(orgId,source[0]!.taxYear,async tx=>{
+    await tx.execute(sql`select id from orgs where id=${orgId} for share`);
+    const locked=(await tx.execute<{taxYear:number}>(sql`select r.tax_year as "taxYear" from pay_runs r
+      join documents d on d.org_id=r.org_id and d.id=r.document_id
+      where r.org_id=${orgId} and r.document_id=${documentId}
+        ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`,allowedSubsidiaryIds)} for share of r,d`)).rows;
+    if(locked.length!==1 || locked[0]!.taxYear!==source[0]!.taxYear) throw new PayrollError('The payroll source identity changed — reload the GL preview');
+    await lockPayrollEmploymentRoster(tx,orgId,documentId);
+    await lockAndCheckPayrollRunPopulation(tx,orgId,documentId,allowedSubsidiaryIds);
+    return previewPayRunGlInSnapshot(tx,orgId,documentId,allowedSubsidiaryIds);
+  });
+}
+
+async function previewPayRunGlInSnapshot(
+  tx: Pick<typeof db,'execute'>,
+  orgId:string,
+  documentId:string,
+  allowedSubsidiaryIds?:PayrollSubsidiaryScope,
+): Promise<{legs: (PayRunGlLeg & {accountLabel:string;partyName:string|null;projectName:string|null})[];debitTotal:string}> {
+  const runRows = (await tx.execute<{ run_status: string; subsidiary_id: string | null }>(sql`
     select r.run_status, d.subsidiary_id
       from pay_runs r
       join documents d on d.id = r.document_id and d.org_id = r.org_id
@@ -730,7 +772,7 @@ export async function previewPayRunGl(
     throw new PayrollError("calculate the pay run to preview its GL impact");
   }
   const { legs, debitTotal } = await payRunGlLegs(
-    db,
+    tx,
     orgId,
     documentId,
     allowedSubsidiaryIds,
@@ -739,14 +781,14 @@ export async function previewPayRunGl(
   const partyIds = [...new Set(legs.map((l) => l.partyId).filter(Boolean))] as string[];
   const projectIds = [...new Set(legs.map((l) => l.projectId).filter(Boolean))] as string[];
   const [accounts, parties, projects] = (await Promise.all([
-    db.execute<{ id: string; number: string | null; name: string }>(sql`select id, number, name from accounts
+    tx.execute<{ id: string; number: string | null; name: string }>(sql`select id, number, name from accounts
                     where org_id = ${orgId} and id = any(${`{${accountIds.join(",")}}`}::uuid[])`),
     partyIds.length
-      ? db.execute<{ id: string; display_name: string }>(sql`select id, display_name from parties
+      ? tx.execute<{ id: string; display_name: string }>(sql`select id, display_name from parties
                         where org_id = ${orgId} and id = any(${`{${partyIds.join(",")}}`}::uuid[])`)
       : { rows: [] },
     projectIds.length
-      ? db.execute<{ id: string; name: string }>(sql`select id, name from projects
+      ? tx.execute<{ id: string; name: string }>(sql`select id, name from projects
                         where org_id = ${orgId} and id = any(${`{${projectIds.join(",")}}`}::uuid[])`)
       : { rows: [] },
   ]));

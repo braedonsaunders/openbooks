@@ -12,8 +12,69 @@ import {
 import { calculatePayRun } from "./run-calculation.ts";
 import { createPayRun } from "./run-lifecycle.ts";
 import { previewPayRunGl } from "./run-commit.ts";
+import { payrollSettings, payrollSettingsForPayRun } from "./run-setup.ts";
+import { upsertPayrollEmployerFact } from "./employer-fact-store.ts";
+import { setPackSlotAccount } from "./packs.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
+
+test("GL preview resolves organization posting policy through scoped run ownership", { skip: !DB }, async () => {
+  const fx = await withBypassContext(() => seedHourlyPayrollOrg());
+  try {
+    await withOrgContext(fx.orgId, async () => {
+      const childId = randomUUID();
+      assert.equal((await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country)
+        values(${childId},${fx.orgId},${fx.subsidiaryId},'Payroll entity','CAD','CA') returning id`)).rows.length, 1);
+      assert.equal((await db.execute(sql`update pay_schedules set subsidiary_id=${childId}
+        where org_id=${fx.orgId} and id=${fx.scheduleId} returning id`)).rows.length, 1);
+      const employee = await seedHourlyPayrollEmployee({ ...fx, subsidiaryId: childId }, "Child employee", childId);
+      const filingAccountId = randomUUID();
+      assert.equal((await db.execute(sql`insert into payroll_filing_accounts(id,org_id,subsidiary_id,country,program_type,account_number,name,is_active)
+        values(${filingAccountId},${fx.orgId},${childId},'CA','ca_rp','123456789RP0001','Child payroll employer account',true)
+        returning id`)).rows.length, 1);
+      assert.equal((await db.execute(sql`update employee_payroll_profiles set filing_account_id=${filingAccountId}
+        where org_id=${fx.orgId} and employee_party_id=${employee.partyId} returning employee_party_id`)).rows.length, 1);
+      await upsertPayrollEmployerFact({ orgId: fx.orgId, actorId: fx.actorId, subsidiaryId: childId, country: "CA",
+        factKey: "eht_exemption_share_on", effectiveFrom: "2026-01-01", value: "0",
+        changeReason: "Declare the child legal employer exemption allocation" });
+      await setPackSlotAccount(fx.orgId, fx.actorId, "CA", "eht", fx.accounts.otherPayable);
+      await seedHourlyPayrollTime(fx, employee.partyId, ["2026-07-14"]);
+      const allowed = new Set([childId]);
+      const run = await createPayRun({ orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
+        periodStart: "2026-07-12", periodEnd: "2026-07-18", allowedSubsidiaryIds: allowed });
+      const input = { orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId };
+      const calculated = await calculatePayRun(input);
+      assert.deepEqual(calculated.errors, []);
+      assert.equal(calculated.employees, 1);
+      assert.equal((await db.execute<{ subsidiary_id: string }>(sql`select subsidiary_id from documents
+        where org_id=${fx.orgId} and id=${input.documentId}`)).rows[0]?.subsidiary_id, childId);
+      await assert.rejects(() => payrollSettings(fx.orgId, allowed), /payroll settings not found/);
+      const settings = await payrollSettings(fx.orgId);
+      assert.deepEqual(await payrollSettingsForPayRun(fx.orgId, input.documentId, allowed), settings);
+      const unrestricted = await previewPayRunGl(fx.orgId, input.documentId);
+      assert.ok(unrestricted.legs.length > 0);
+      assert.deepEqual(await previewPayRunGl(fx.orgId, input.documentId, allowed), unrestricted);
+      for (const scope of [new Set<string>(), new Set([fx.subsidiaryId])]) {
+        await assert.rejects(() => payrollSettingsForPayRun(fx.orgId, input.documentId, scope), /pay run not found/);
+        await assert.rejects(() => previewPayRunGl(fx.orgId, input.documentId, scope), /pay run not found/);
+      }
+      await assert.rejects(() => payrollSettingsForPayRun(fx.orgId, randomUUID(), allowed), /pay run not found/);
+      await assert.rejects(() => payrollSettingsForPayRun(randomUUID(), input.documentId, allowed), /pay run not found/);
+      // A later ownership change must invalidate the complete-population read.
+      assert.equal((await db.execute(sql`update parties set subsidiary_id=${fx.subsidiaryId}
+        where org_id=${fx.orgId} and id=${employee.partyId} returning id`)).rows.length, 1);
+      await assert.rejects(() => payrollSettingsForPayRun(fx.orgId, input.documentId, allowed), /pay run not found/);
+      await assert.rejects(() => previewPayRunGl(fx.orgId, input.documentId, allowed), /pay run not found/);
+      assert.equal((await db.execute(sql`update parties set subsidiary_id=${childId}
+        where org_id=${fx.orgId} and id=${employee.partyId} returning id`)).rows.length, 1);
+      assert.equal((await db.execute(sql`update documents set subsidiary_id=null
+        where org_id=${fx.orgId} and id=${input.documentId} returning id`)).rows.length, 1);
+      await assert.rejects(() => payrollSettingsForPayRun(fx.orgId, input.documentId, allowed), /pay run not found/);
+    });
+  } finally {
+    await dropScratchOrgReporting(fx.orgId);
+  }
+});
 
 test("GL preview refuses one valued lineless stub beside another complete employee", { skip: !DB }, async () => {
   const fx = await withBypassContext(() => seedHourlyPayrollOrg());

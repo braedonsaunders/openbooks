@@ -292,6 +292,8 @@ export type EmploymentSeedOptions = {
   from?: string;
   to?: string | null;
   withVersion?: boolean;
+  /** Seed an active employee role for canonical hire fixtures. */
+  employeeRole?: boolean;
 };
 
 /**
@@ -314,6 +316,11 @@ export async function seedEmployment(
     `);
   }
   const employmentId = randomUUID();
+  if (opts.employeeRole) {
+    await db.execute(sql`
+      insert into employee_roles (org_id, party_id) values (${orgId}, ${workerPartyId})
+    `);
+  }
   await db.execute(sql`
     insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision, service_start, service_start_provenance)
     values (${employmentId}, ${orgId}, ${workerPartyId}, ${subsidiaryId}, 1, ${opts.withVersion === false ? null : opts.from ?? "2020-01-01"}::date, ${opts.withVersion === false ? null : "Declared fixture hire date"})
@@ -755,6 +762,9 @@ export async function seedComponent(
     insert into pay_components (id, org_id, code, name, kind, is_active)
     values (${id}, ${orgId}, ${code}, ${opts.name ?? code}, ${opts.kind ?? "earning"}, true)
   `);
+  await db.execute(sql`insert into pay_component_statutory_treatments
+    (org_id,pay_component_id,effective_from,program_exclusions,vacationable)
+    values(${orgId},${id},'0001-01-01','{}',true)`);
   return id;
 }
 

@@ -1,10 +1,16 @@
+import { readCanadianOpeningYearEndSlices } from './canada/opening-reporting-yearend.ts';
+import { withOpeningReportingSnapshot } from './opening-reporting-snapshot.ts';
+import { currentOpeningLevySourceSql } from './opening-levy-source-correction-authority.ts';
 import { roeLaterSpellStubSql, roeProfileAdmission } from './canada/roe-event-source.ts';
 import { parseRoeEventRow, roeEventRow } from './roe-event-row.ts';
 import { roeWindowContext, readRoeReportingWindow, ROE_REPORTING_COUNTS } from './roe-reporting-window.ts';
 import { assertPayrollCountryKnown } from "./country.ts";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
+import { isUuid } from "../platform/uuid.ts";
+import { isIsoCalendarDate } from "../platform/iso-date.ts";
 import { openingProgramBasesByEmployee } from "./opening-balances.ts";
+import { readEmployeeOpeningLevySources } from "./opening-levy-source-reader.ts";
 import { add, cmp, mulRate, neg, normalizeMoney } from "../money/money.ts";
 import { ratesForPayDate } from "./us/rates.ts";
 import { US_FICA_WAGES_ACCOUNT_BASE, US_FICA_WITHHELD_ACCOUNT_BASE } from "./us/opening-ytd.ts";
@@ -272,7 +278,7 @@ export function carryOpeningYearEndYtd<S extends { employeePartyId: string }>(
   });
 }
 
-/** A legacy employee-only opening cannot be placed on one of several EIN slips. */
+/** An employee-only opening cannot be placed on one of several EIN slips. */
 export function assertUsOpeningYtdEinAttribution(
   slips: readonly Pick<W2Slip, "employeePartyId" | "filingAccountId">[],
   openings: ReadonlyMap<string, OpeningYearEndYtd>,
@@ -362,13 +368,10 @@ async function openingYearEndYtdByEmployee(
            b.taxable_ytd, b.tax_ytd, b.fica_withheld_ytd,
            b.employer_cpp_ytd, b.employer_cpp2_ytd, b.employer_ei_ytd, b.union_dues_ytd
       from payroll_opening_balances b
-      -- Strict country match, never a coalesce default: an opening whose
-      -- employee has no profile row is refused by the unknown-country guard
-      -- before any reader runs, so falling through to any country here would
-      -- only ever misattribute. (A profile row always carries a country.)
-      join employee_payroll_profiles prof
-        on prof.org_id = b.org_id and prof.employee_party_id = b.employee_party_id
-       and prof.country = ${country}
+      join payroll_opening_levy_source_authorities original
+        on original.org_id=b.org_id and original.opening_balance_id=b.id
+       and original.sealed and original.original_country=${country}
+       and ${currentOpeningLevySourceSql('original')}
      where b.org_id = ${orgId} and b.tax_year = ${taxYear}
        and (
          coalesce(b.pensionable_ytd, 0) <> 0 or coalesce(b.insurable_ytd, 0) <> 0
@@ -398,8 +401,12 @@ async function openingYearEndYtdByEmployee(
   }>(sql`
     select ab.employee_party_id, ab.program_key, ab.filing_account_id, ab.insurable_ytd
       from payroll_opening_account_bases ab
-      join employee_payroll_profiles prof
-        on prof.org_id = ab.org_id and prof.employee_party_id = ab.employee_party_id and prof.country = ${country}
+      join payroll_opening_balances b
+        on b.org_id=ab.org_id and b.employee_party_id=ab.employee_party_id and b.tax_year=ab.tax_year
+      join payroll_opening_levy_source_authorities original
+        on original.org_id=b.org_id and original.opening_balance_id=b.id
+       and original.sealed and original.original_country=${country}
+       and ${currentOpeningLevySourceSql('original')}
      where ab.org_id = ${orgId} and ab.tax_year = ${taxYear}
   `)).rows;
   const accountBasesByEmployee = new Map<string, Record<string, { filingAccountId: string; insurableYtd: string }[]>>();
@@ -409,7 +416,7 @@ async function openingYearEndYtdByEmployee(
     bases[row.program_key]!.push({ filingAccountId: row.filing_account_id, insurableYtd: normalizeMoney(String(row.insurable_ytd)) });
     accountBasesByEmployee.set(row.employee_party_id, bases);
   }
-  const legacy = new Map<string, OpeningYearEndYtd>(rows.rows.map((row) => [row.employee_party_id, {
+  const originalAmounts = new Map<string, OpeningYearEndYtd>(rows.rows.map((row) => [row.employee_party_id, {
     pensionableYtd: normalizeMoney(String(row.pensionable_ytd ?? "0")),
     insurableYtd: normalizeMoney(String(row.insurable_ytd ?? "0")),
     cppYtd: normalizeMoney(String(row.cpp_ytd ?? "0")),
@@ -426,14 +433,14 @@ async function openingYearEndYtdByEmployee(
     programBasesYtd: programs.get(row.employee_party_id) ?? {},
   } satisfies OpeningYearEndYtd]));
   for (const [employeePartyId, accountBasesYtd] of accountBasesByEmployee) {
-    const current = legacy.get(employeePartyId) ?? {
+    const current = originalAmounts.get(employeePartyId) ?? {
       pensionableYtd: "0.0000", insurableYtd: "0.0000", cppYtd: "0.0000", cpp2Ytd: "0.0000",
       eiYtd: "0.0000", qpipYtd: "0.0000", taxableYtd: "0.0000", taxYtd: "0.0000",
       ficaWithheldYtd: "0.0000", programBasesYtd: programs.get(employeePartyId) ?? {},
     };
-    legacy.set(employeePartyId, { ...current, accountBasesYtd });
+    originalAmounts.set(employeePartyId, { ...current, accountBasesYtd });
   }
-  return legacy;
+  return originalAmounts;
 }
 
 async function openingEmployeeProfiles(
@@ -492,20 +499,26 @@ export interface T4SummaryTotals {
  * is also the only shape in which the data is not a lie.
  */
 export async function t4Slips(orgId: string, taxYear: number): Promise<T4Slip[]> {
+  return withOpeningReportingSnapshot(orgId,taxYear,()=>t4SlipsInTransaction(orgId,taxYear));
+}
+
+async function t4SlipsInTransaction(orgId: string, taxYear: number): Promise<T4Slip[]> {
   await assertPayrollCountryKnown(db, orgId, taxYear);
   await assertPayrollFilingAccountKnown(db, orgId, { taxYear });
   const caps = caYearCaps(taxYear);
+  const originalSlices = await readCanadianOpeningYearEndSlices(db, orgId, taxYear);
   const rows = (await db.execute<Record<string, unknown>>(sql`
     with committed as (
       select s.*
         from pay_stubs s
       join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
+      join documents d on d.org_id=r.org_id and d.id=r.document_id and d.status<>'voided'
      where s.org_id = ${orgId} and s.tax_year = ${taxYear}
        and s.country = 'CA'
     )
     select c.employee_party_id, p.display_name, c.filing_account_id,
            c.province as province,
-           min(c.pay_date) as first_pay_date,
+           min(c.pay_date)::text as first_pay_date,
            count(*)::int as stub_count,
            sum(c.pensionable_earnings) as pensionable,
            sum(c.insurable_earnings) as insurable,
@@ -550,7 +563,6 @@ export async function t4Slips(orgId: string, taxYear: number): Promise<T4Slip[]>
      order by p.display_name, min(c.pay_date), c.province
   `));
 
-  const openings = await openingYearEndYtdByEmployee(orgId, taxYear, "CA");
   const stubSlips = rows.rows.map((row) => {
       const province = String(row.province ?? "");
       const isQuebec = province === QPIP_PROVINCE;
@@ -583,53 +595,41 @@ export async function t4Slips(orgId: string, taxYear: number): Promise<T4Slip[]>
         stubCount: Number(row.stub_count ?? 0),
       };
     });
-  const profiles = await openingEmployeeProfiles(orgId, [...openings.keys()], "CA");
-  const seeded = seedOpeningOnlySlips(stubSlips, openings.keys(), (employeePartyId) => {
-    const profile = profiles.get(employeePartyId);
-    const province = profile?.province ?? "";
-    return {
-      employeePartyId,
-      employeeName: profile?.name ?? employeePartyId,
-      province,
-      isQuebec: province === QPIP_PROVINCE,
-      filingAccountId: profile?.filingAccountId ?? null,
-      box14EmploymentIncome: "0",
-      box16Cpp: "0",
-      box16aCpp2: "0",
-      box18Ei: "0",
-      box22IncomeTax: "0",
-      box24EiInsurable: "0",
-      box26CppPensionable: "0",
-      box44UnionDues: "0",
-      box55Qpip: "0",
-      box56QpipInsurable: "0",
-      employerCpp: "0",
-      employerCpp2: "0",
-      employerEi: "0",
-      stubCount: 0,
-    };
+  // Original allocations carry their own RP/province and source-attested capped bases.
+  // Current employee profiles supply no historical reporting attribution.
+  for (const row of rows.rows) {
+    const original = originalSlices.find(slice => slice.employeePartyId === String(row.employee_party_id));
+    if (original && String(row.first_pay_date).slice(0, 10) <= original.coverageEnd) {
+      throw new PayrollError("Committed payroll overlaps the certified original reporting coverage — reconcile the original carry-in and retained payroll before preparing T4 slips");
+    }
+  }
+  const originalSlips: T4Slip[] = originalSlices.map(slice => openingYtdIntoT4Slip({
+    employeePartyId: slice.employeePartyId, employeeName: slice.employeeName,
+    province: slice.allocation.province, isQuebec: slice.allocation.province === QPIP_PROVINCE,
+    filingAccountId: slice.allocation.filingAccountId,
+    box14EmploymentIncome: '0', box16Cpp: '0', box16aCpp2: '0', box18Ei: '0', box22IncomeTax: '0',
+    box24EiInsurable: '0', box26CppPensionable: '0', box44UnionDues: '0', box55Qpip: '0', box56QpipInsurable: '0',
+    employerCpp: '0', employerCpp2: '0', employerEi: '0', stubCount: 0,
+  }, {...slice.ytd, insurableYtd: slice.allocation.reportableBases.ei,
+    pensionableYtd: slice.allocation.reportableBases.cpp,
+    programBasesYtd: {...slice.ytd.programBasesYtd, qpip: slice.allocation.reportableBases.qpip}}));
+  const all = [...originalSlips, ...stubSlips];
+  const capped = capAnnualEarnings(all.map(slip => ({employeePartyId: slip.employeePartyId,
+    insurable: slip.box24EiInsurable, pensionable: slip.box26CppPensionable, qpipInsurable: slip.box56QpipInsurable})), caps);
+  const result = new Map<string, T4Slip>();
+  const amountFields = ['box14EmploymentIncome','box16Cpp','box16aCpp2','box18Ei','box22IncomeTax',
+    'box24EiInsurable','box26CppPensionable','box44UnionDues','box55Qpip','box56QpipInsurable',
+    'employerCpp','employerCpp2','employerEi'] as const;
+  all.forEach((slip,index) => {
+    const value = {...slip,...capped[index]!};
+    const key = JSON.stringify([value.employeePartyId,value.filingAccountId,value.province]);
+    const prior = result.get(key);
+    if (!prior) {result.set(key,value); return;}
+    const merged = {...prior,stubCount:prior.stubCount+value.stubCount};
+    for (const field of amountFields) merged[field]=add(prior[field],value[field]);
+    result.set(key,merged);
   });
-  const carried = carryOpeningYearEndYtd(seeded, openings, openingYtdIntoT4Slip);
-  // The annual maxima are per EMPLOYEE, so they are consumed across that
-  // employee's slips in the chronological order the query (and seeded
-  // opening-only rows) supplies. Folding first is important: an adopter who
-  // already used part of the annual EI/CPP base with the prior provider must
-  // have only the remaining room on OpenBooks' slips.
-  const capped = capAnnualEarnings(
-    carried.map((slip) => ({
-      employeePartyId: slip.employeePartyId,
-      insurable: slip.box24EiInsurable,
-      pensionable: slip.box26CppPensionable,
-      qpipInsurable: slip.box56QpipInsurable,
-    })),
-    caps,
-  );
-  return carried.map((slip, index) => ({
-    ...slip,
-    box24EiInsurable: capped[index]!.box24EiInsurable,
-    box26CppPensionable: capped[index]!.box26CppPensionable,
-    box56QpipInsurable: capped[index]!.box56QpipInsurable,
-  }));
+  return [...result.values()];
 }
 
 /**
@@ -1213,13 +1213,21 @@ export async function roeCandidates(orgId: string, taxYear: number): Promise<{
 export async function periodicReturnAccountResolver(
   orgId: string,
   country: string,
-): Promise<(stubAccountId: string | null, employeeSubsidiaryId: string | null) => string | null> {
+): Promise<(stubAccountId: string | null, sourceSubsidiaryId: string | null, sourceDate: string) => string | null> {
   if (!payrollPack(country).periodicReturnFilesByEmployerAccount) {
     return (stubAccountId) => stubAccountId;
   }
   const accounts = await loadUsFilingAccounts(db, orgId);
-  return (stubAccountId, employeeSubsidiaryId) =>
-    resolveUsFederalFilingAccount(accounts, stubAccountId, employeeSubsidiaryId);
+  return (stubAccountId, sourceSubsidiaryId, sourceDate) =>
+    resolveUsFederalFilingAccount(accounts, stubAccountId, sourceSubsidiaryId, sourceDate);
+}
+
+/** A filed amount retains its pay-run owner and date, independent of the current employee profile. */
+function usFilingSource(row: { source_subsidiary_id?: unknown; source_date?: unknown }): { subsidiaryId: string; date: string } {
+  if (!isUuid(row.source_subsidiary_id) || !isIsoCalendarDate(row.source_date)) {
+    throw new PayrollError('US filing evidence needs the original pay-run legal employer and pay date — qualify its retained source before preparing returns');
+  }
+  return { subsidiaryId: row.source_subsidiary_id, date: row.source_date };
 }
 
 export interface Form941Quarter {
@@ -1256,7 +1264,8 @@ export async function form941Worksheet(orgId: string, taxYear: number): Promise<
   const rows = (await db.execute<Record<string, unknown>>(sql`
     select extract(quarter from s.pay_date)::int as quarter,
            s.filing_account_id as filing_account_id,
-           p.subsidiary_id as employee_subsidiary_id,
+           d.subsidiary_id as source_subsidiary_id,
+           s.pay_date::text as source_date,
            -- 941 line 2 is FIT-able wages: taxable earnings less the pack's
            -- income-reducing pre-tax deferrals (us/pack.ts deductionTreatments).
            sum((select coalesce(sum(l.amount), 0) from pay_stub_lines l
@@ -1283,17 +1292,17 @@ export async function form941Worksheet(orgId: string, taxYear: number): Promise<
                 where l.org_id = ${orgId} and l.stub_id = s.id and pc.system_key = 'medicare_addl')) as additional_medicare_tax
       from pay_stubs s
       join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
-      join parties p on p.id = s.employee_party_id and p.org_id = s.org_id
+      join documents d on d.org_id = r.org_id and d.id = r.document_id and d.kind = 'pay_run' and d.status <> 'voided'
      where s.org_id = ${orgId} and s.tax_year = ${taxYear} and s.country = 'US'
-     group by 1, 2, 3
+     group by 1, 2, 3, 4
   `));
   const returnAccountOf = await periodicReturnAccountResolver(orgId, "US");
   const byReturn = new Map<string, Form941Quarter>();
   for (const row of rows.rows) {
     const quarter = Number(row.quarter) as 1 | 2 | 3 | 4;
+    const source = usFilingSource(row);
     const filingAccountId = returnAccountOf(
-      (row.filing_account_id as string | null) ?? null,
-      (row.employee_subsidiary_id as string | null) ?? null,
+      (row.filing_account_id as string | null) ?? null, source.subsidiaryId, source.date,
     );
     const key = `${filingAccountId ?? ""}:${quarter}`;
     const prior = byReturn.get(key);
@@ -1579,7 +1588,8 @@ export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]>
   // smashed into one row.
   const rows = (await db.execute<Record<string, unknown>>(sql`
     select s.employee_party_id, p.display_name,
-           p.subsidiary_id as employee_subsidiary_id,
+           d.subsidiary_id as source_subsidiary_id,
+           s.pay_date::text as source_date,
            s.province as province,
            s.filing_account_id as filing_account_id,
            min(s.pay_date) as first_pay_date,
@@ -1615,8 +1625,9 @@ export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]>
       from pay_stubs s
       join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
       join parties p on p.id = s.employee_party_id and p.org_id = ${orgId}
+      join documents d on d.org_id = r.org_id and d.id = r.document_id and d.kind = 'pay_run' and d.status <> 'voided'
      where s.org_id = ${orgId} and s.tax_year = ${taxYear} and s.country = 'US'
-      group by s.employee_party_id, p.display_name, p.subsidiary_id, s.filing_account_id, s.province
+      group by s.employee_party_id, p.display_name, d.subsidiary_id, s.pay_date::text, s.filing_account_id, s.province
       -- The carry-in lands on the employee's FIRST slip, so an employee filed
       -- under more than one EIN needs a deterministic order, not just name.
      order by p.display_name, min(s.pay_date), s.province
@@ -1644,10 +1655,10 @@ export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]>
     );
   }
   const reportingRows = (await db.execute<{
-    employee_party_id: string; filing_account_id: string | null;
+    employee_party_id: string; filing_account_id: string | null; source_subsidiary_id: string | null; source_date: string;
     box_code: string; code: string; label: string; amount: string;
   }>(sql`
-    select s.employee_party_id, s.filing_account_id,
+    select s.employee_party_id, s.filing_account_id, d.subsidiary_id as source_subsidiary_id, s.pay_date::text as source_date,
            l.statutory_reporting_code->>'boxCode' as box_code,
            l.statutory_reporting_code->>'code' as code,
            l.statutory_reporting_code->>'label' as label,
@@ -1655,25 +1666,28 @@ export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]>
       from pay_stubs s
       join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
        and r.run_status = 'committed'
+      join documents d on d.org_id = r.org_id and d.id = r.document_id and d.kind = 'pay_run' and d.status <> 'voided'
       join pay_stub_lines l on l.org_id = s.org_id and l.stub_id = s.id
      where s.org_id = ${orgId} and s.tax_year = ${taxYear} and s.country = 'US'
        and l.statutory_reporting_code->>'formCode' = 'US_W2'
-     group by s.employee_party_id, s.filing_account_id,
+     group by s.employee_party_id, s.filing_account_id, d.subsidiary_id, s.pay_date::text,
               l.statutory_reporting_code->>'boxCode', l.statutory_reporting_code->>'code',
               l.statutory_reporting_code->>'label'
      order by l.statutory_reporting_code->>'code'
   `));
   const usAccounts = await loadUsFilingAccounts(db, orgId);
   const accountNumbers = new Map(usAccounts.map((account) => [account.id, account.accountNumber]));
-  const subsidiaryOf = new Map(rows.rows.map((row) =>
-    [String(row.employee_party_id), (row.employee_subsidiary_id as string | null) ?? null]));
-  const federalOf = (employeePartyId: string, stubAccountId: string | null) =>
-    resolveUsFederalFilingAccount(usAccounts, stubAccountId, subsidiaryOf.get(employeePartyId) ?? null);
-  const stateAccountOf = (employeePartyId: string, stubAccountId: string | null, province: string) =>
-    resolveUsW2StateAccount(usAccounts, stubAccountId, subsidiaryOf.get(employeePartyId) ?? null, province);
+  const federalOf = (row: { filing_account_id?: unknown; source_subsidiary_id?: unknown; source_date?: unknown }) => {
+    const source = usFilingSource(row);
+    return resolveUsFederalFilingAccount(usAccounts, (row.filing_account_id as string | null) ?? null, source.subsidiaryId, source.date);
+  };
+  const stateAccountOf = (row: { filing_account_id?: unknown; source_subsidiary_id?: unknown; source_date?: unknown }, province: string) => {
+    const source = usFilingSource(row);
+    return resolveUsW2StateAccount(usAccounts, (row.filing_account_id as string | null) ?? null, source.subsidiaryId, province, source.date);
+  };
   const box12BySlip = new Map<string, { boxCode: string; code: string; label: string; value: string }[]>();
   for (const row of reportingRows.rows) {
-    const key = `${row.employee_party_id}:${federalOf(row.employee_party_id, row.filing_account_id) ?? ""}`;
+    const key = `${row.employee_party_id}:${federalOf(row) ?? ""}`;
     const entries = box12BySlip.get(key) ?? [];
     // Two stub accounts of one EIN report one box 12 amount per code.
     const same = entries.find((entry) =>
@@ -1688,6 +1702,7 @@ export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]>
   const localRows = (await db.execute<Record<string, unknown>>(sql`
     with stub_wages as (
       select s.id as stub_id, s.employee_party_id, s.filing_account_id, s.province, s.factors,
+             d.subsidiary_id as source_subsidiary_id, s.pay_date::text as source_date,
              p.display_name as employee_name,
              (select coalesce(sum(l.amount), 0) from pay_stub_lines l
                join pay_components pc on pc.id = l.component_id and pc.org_id = l.org_id
@@ -1696,9 +1711,11 @@ export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]>
         from pay_stubs s
         join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
         join parties p on p.id = s.employee_party_id and p.org_id = ${orgId}
+        join documents d on d.org_id = r.org_id and d.id = r.document_id and d.kind = 'pay_run' and d.status <> 'voided'
        where s.org_id = ${orgId} and s.tax_year = ${taxYear} and s.country = 'US'
     )
     select w.employee_party_id, w.employee_name, w.filing_account_id, w.province, l.description,
+           w.source_subsidiary_id, w.source_date,
            sum(l.amount) as local_tax,
            sum(case when coalesce(line_tax.line_tax, 0) <> 0
                      and w.factors ? format('W2_LOCAL_WAGES_%s', l.sequence)
@@ -1715,12 +1732,12 @@ export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]>
          where l2.org_id = ${orgId} and l2.stub_id = w.stub_id and l2.kind = 'deduction'
            and l2.description = l.description
       ) line_tax on true
-     group by w.employee_party_id, w.employee_name, w.filing_account_id, w.province, l.description
+     group by w.employee_party_id, w.employee_name, w.filing_account_id, w.province, l.description, w.source_subsidiary_id, w.source_date
      order by l.description
    `));
-  const stateGroupKey = (employeePartyId: string, stubAccountId: string | null, province: string) =>
-    `${employeePartyId}:${federalOf(employeePartyId, stubAccountId) ?? ""}:${province}:`
-    + (stateAccountOf(employeePartyId, stubAccountId, province) ?? "");
+  const stateGroupKey = (row: { employee_party_id?: unknown; filing_account_id?: unknown; source_subsidiary_id?: unknown; source_date?: unknown }, province: string) =>
+    `${String(row.employee_party_id)}:${federalOf(row) ?? ""}:${province}:`
+    + (stateAccountOf(row, province) ?? "");
   const localByGroup = new Map<string, W2LocalLine[]>();
   for (const row of localRows.rows) {
     const tax = num(row.local_tax);
@@ -1729,8 +1746,7 @@ export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]>
       row.local_wages_unknown === true ? null : num(row.local_wages),
       String(row.employee_name), String(row.province), String(row.description),
     );
-    const key = stateGroupKey(
-      String(row.employee_party_id), (row.filing_account_id as string | null) ?? null, String(row.province ?? ""));
+    const key = stateGroupKey(row, String(row.province ?? ""));
     const list = localByGroup.get(key) ?? [];
     const same = list.find((line) => line.locality === String(row.description));
     if (same) {
@@ -1772,9 +1788,8 @@ export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]>
   }>();
   for (const row of rows.rows) {
     const employeePartyId = String(row.employee_party_id);
-    const stubAccountId = (row.filing_account_id as string | null) ?? null;
     const province = String(row.province ?? "");
-    const filingAccountId = federalOf(employeePartyId, stubAccountId);
+    const filingAccountId = federalOf(row);
     const key = `${employeePartyId}:${filingAccountId ?? ""}`;
     const slip = groupsBySlip.get(key) ?? {
       employeePartyId,
@@ -1784,8 +1799,8 @@ export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]>
     };
     slip.groups.push({
       province,
-      stateKey: stateGroupKey(employeePartyId, stubAccountId, province),
-      stateAccountId: stateAccountOf(employeePartyId, stubAccountId, province),
+      stateKey: stateGroupKey(row, province),
+      stateAccountId: stateAccountOf(row, province),
       wages: num(row.wages),
       fit: num(row.fit),
       ssWages: num(row.ss_wages),
@@ -1868,26 +1883,34 @@ export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]>
     };
   });
   const profiles = await openingEmployeeProfiles(orgId, [...openings.keys()], "US");
-  const seeded = seedOpeningOnlySlips(stubSlips, openings.keys(), (employeePartyId) => {
-    const profile = profiles.get(employeePartyId);
-    const states = profile?.province ? [profile.province] : [];
-    return {
-      employeePartyId,
-      employeeName: profile?.name ?? employeePartyId,
-      states,
-      state: states.join(" / "),
-      filingAccountId: resolveUsFederalFilingAccount(
-        usAccounts, profile?.filingAccountId ?? null, profile?.subsidiaryId ?? null),
-      box1Wages: "0",
-      box2FederalIncomeTax: "0",
-      box3SsWages: "0",
-      box4SsTax: "0",
-      box5MedicareWages: "0",
-      box6MedicareTax: "0",
-      box12Lines: [],
-      stateLines: [],
-    };
-  });
+  const seeded = [...stubSlips];
+  for (const [employeePartyId, opening] of openings) {
+    if (seeded.some(slip => slip.employeePartyId === employeePartyId)) continue;
+    const original = await readEmployeeOpeningLevySources(db, { orgId, employeePartyId, taxYear });
+    if (!original.facts || original.facts.originalCountry !== 'US' || !original.authority) {
+      throw new PayrollError('The original W-2 opening country and legal employer are unknown — qualify the original opening source before preparing slips');
+    }
+    const filingIds = [...new Set([
+      ...original.allocations.filter(row => row.programKey === 'us_futa').map(row => row.federalAccountId),
+      ...[US_FICA_WAGES_ACCOUNT_BASE, US_FICA_WITHHELD_ACCOUNT_BASE]
+        .flatMap(key => (opening.accountBasesYtd?.[key] ?? []).map(base => base.filingAccountId)),
+    ].filter((id): id is string => typeof id === 'string'))].sort();
+    if (!filingIds.length || filingIds.length > 1 && [opening.pensionableYtd, opening.taxableYtd,
+      opening.taxYtd, opening.ficaWithheldYtd].some(amount => cmp(amount, '0') !== 0)) {
+      throw new PayrollError('Original W-2 opening amounts do not identify one EIN, or contain an unallocated aggregate across multiple EINs. Preserve the original report and qualify its EIN-specific carry-ins before preparing slips');
+    }
+    for (const filingAccountId of filingIds) {
+      const resolved = resolveUsFederalFilingAccount(usAccounts, filingAccountId, original.authority.subsidiaryId, original.facts.coverageEnd);
+      if (resolved !== filingAccountId) throw new PayrollError('The original W-2 opening names a state account instead of its federal EIN — qualify the original employer registration');
+      seeded.push({
+        employeePartyId, employeeName: profiles.get(employeePartyId)?.name ?? employeePartyId,
+        // No state withholding source is retained by generic opening amounts.
+        states: [], state: '', filingAccountId,
+        box1Wages: '0', box2FederalIncomeTax: '0', box3SsWages: '0', box4SsTax: '0',
+        box5MedicareWages: '0', box6MedicareTax: '0', box12Lines: [], stateLines: [],
+      });
+    }
+  }
   const carried = carryOpeningYearEndYtd(seeded, openings, (slip, opening) => openingYtdIntoW2Slip(slip, opening, ficaRates));
   return carried.map((slip) => {
     const opening = openings.get(slip.employeePartyId);

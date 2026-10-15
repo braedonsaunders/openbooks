@@ -39,7 +39,7 @@ function rateInput(field: string) {
 
 export const runtime = "nodejs";
 const date = z.string().refine(isIsoCalendarDate, "enter a calendar date");
-export const revenueModificationSchema = z.object({
+const revenueModificationSchema = z.object({
   effectiveOn: date,
   reason: z.string().trim().min(8).max(1000),
   idempotencyKey: z.string().min(1).max(120),

@@ -5,7 +5,7 @@ import { PayrollError } from './error.ts';
 
 type Executor=Pick<typeof db,'execute'>;
 export type StatutoryHistoryScope={orgId:string;documentId:string;subsidiaryId:string;country:string;currency:string;taxYear:number};
-export type StatutoryHistorySubject={orgId:string;documentId:string;taxYear:number;employeePartyId?:string;employmentId?:string;subsidiaryId?:string|null;country:string};
+export type StatutoryHistorySubject={orgId:string;documentId:string;taxYear:number;employeePartyId?:string;employmentId?:string|null;subsidiaryId?:string|null;country:string};
 
 /** The run's retained document identifies its payer; current employment/profile state cannot replace it. */
 export async function resolveStatutoryHistoryScope(tx:Executor,input:StatutoryHistorySubject):Promise<StatutoryHistoryScope>{
@@ -54,7 +54,7 @@ export function employerScopedStatutoryStubs(scope:StatutoryHistoryScope,input:{
         :sql`r.run_status='committed' and r.document_id<>${scope.documentId}`})`;
 }
 
-/** A retained statutory factor is evidence; its absence or malformed shape is never a zero prior. */
+/** Missing factors refuse unless original zero cash lines and retained applicability prove a zero Canadian basis. */
 export async function requireStatutoryHistoryFactors(tx:Executor,scope:StatutoryHistoryScope,
   selection:{employeePartyId?:string;employmentId?:string;region?:string},keys:readonly string[]):Promise<void>{
   if(!keys.length||keys.some(key=>!key))throw new PayrollError('Declare the statutory history factor identities before reading prior amounts');
@@ -68,6 +68,41 @@ export async function requireStatutoryHistoryFactors(tx:Executor,scope:Statutory
   const unknown=(await tx.execute(sql`select s.id from ${employerScopedStatutoryStubs(scope,selection)} s
     cross join lateral jsonb_array_elements_text(${JSON.stringify(keys)}::jsonb) required(key)
     where coalesce(jsonb_typeof(s.factors->required.key) not in ('number','string')
-      or (s.factors->>required.key)!~'^[+-]?[0-9]{1,15}([.][0-9]{1,4})?$',true) limit 1`)).rows;
+      or (s.factors->>required.key)!~'^[+-]?[0-9]{1,15}([.][0-9]{1,4})?$',true)
+      and not (
+        s.country='CA' and required.key in ('WCB_EARN','EHT_EARN')
+        and not (s.factors ? required.key) and s.gross=0
+        and exists (
+          select 1 from pay_runs history_run
+          where history_run.org_id=s.org_id and history_run.document_id=s.pay_run_document_id
+            and jsonb_typeof(history_run.calculation_source_snapshot->'payComponentStatutoryTreatments')='array'
+            and exists (select 1 from pay_stub_lines line where line.org_id=s.org_id and line.stub_id=s.id)
+            and not exists (
+              select 1 from pay_stub_lines line where line.org_id=s.org_id and line.stub_id=s.id
+                and (line.kind is distinct from 'earning' or line.payment_kind is distinct from 'cash'
+                  or line.derived_rule_code is not null or line.amount<>0 or line.component_id is null))
+            and not exists (
+              select 1 from pay_stub_lines line where line.org_id=s.org_id and line.stub_id=s.id
+                and not exists (
+                  select 1 from jsonb_array_elements(case
+                    when jsonb_typeof(history_run.calculation_source_snapshot->'payComponentStatutoryTreatments')='array'
+                    then history_run.calculation_source_snapshot->'payComponentStatutoryTreatments'
+                    else '[]'::jsonb end) treatment
+                  where treatment->>'componentId'=line.component_id::text
+                    and jsonb_typeof(treatment->'programExclusions')='array'
+                    and treatment->>'effectiveFrom'<=history_run.pay_date::text
+                    and (treatment->>'effectiveTo' is null or treatment->>'effectiveTo'>=history_run.pay_date::text)))
+            and not exists (
+              select 1 from pay_stub_lines line
+              cross join lateral jsonb_array_elements(case
+                when jsonb_typeof(history_run.calculation_source_snapshot->'payComponentStatutoryTreatments')='array'
+                then history_run.calculation_source_snapshot->'payComponentStatutoryTreatments'
+                else '[]'::jsonb end) treatment
+              where line.org_id=s.org_id and line.stub_id=s.id
+                and treatment->>'componentId'=line.component_id::text
+                and (jsonb_typeof(treatment->'programExclusions') is distinct from 'array'
+                  or (treatment->'programExclusions') ? case when required.key='WCB_EARN' then 'wcb' else 'eht' end))
+        )
+      ) limit 1`)).rows;
   if(unknown.length)throw new PayrollError('Committed statutory history is missing a numeric factor required by this calculation — qualify its original retained source before calculating');
 }

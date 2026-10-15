@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { remapScopeFilter } from "./json-references.ts";
+import { remapFlowGraphSubjectScope, remapScopeFilter } from "./json-references.ts";
 
 const ids = {
   subsidiaries: new Map([["11111111-1111-4111-8111-111111111111", "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"]]),
@@ -14,6 +14,80 @@ test("remapScopeFilter keeps absent and null pins, maps both identities case-ins
     remapScopeFilter({ employer_subsidiary_id: "11111111-1111-4111-8111-111111111111".toUpperCase(), department_id: "22222222-2222-4222-8222-222222222222" }, ids, "t"),
     { employer_subsidiary_id: "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", department_id: "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb" },
   );
+});
+
+const flowCounterparts = new Map([
+  ["11111111-1111-4111-8111-111111111111", "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"],
+  ["22222222-2222-4222-8222-222222222222", "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"],
+]);
+
+function scopedFlowGraph(subsidiaryIds: unknown): Record<string, unknown> {
+  return {
+    schemaVersion: 1,
+    ungatedOutcome: "apply",
+    subjectScope: { subsidiaryIds, note: "kept verbatim" },
+    nodes: [
+      { id: "trigger", position: { x: 0, y: 0 }, data: { kind: "trigger", trigger: { trigger: "on_submit" } } },
+      { id: "gate", position: { x: 220, y: 0 }, data: { kind: "gate", gate: { title: "Approval", assignees: [{ type: "role", role: "admin" }], mode: "any" } } },
+    ],
+    edges: [{ id: "e1", source: "trigger", target: "gate", sourceHandle: "next" }],
+  };
+}
+
+test("remapFlowGraphSubjectScope rebases only the scope ids, preserving every other field", () => {
+  const graph = scopedFlowGraph(["11111111-1111-4111-8111-111111111111".toUpperCase(), "22222222-2222-4222-8222-222222222222"]);
+  const after = remapFlowGraphSubjectScope(graph, flowCounterparts, "flow") as Record<string, unknown>;
+  assert.deepEqual(after, {
+    ...graph,
+    subjectScope: {
+      subsidiaryIds: ["aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa", "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb"],
+      note: "kept verbatim",
+    },
+  });
+  // The production graph is evidence too: the rebase never mutates it.
+  assert.deepEqual((graph.subjectScope as { subsidiaryIds: unknown }).subsidiaryIds, [
+    "11111111-1111-4111-8111-111111111111".toUpperCase(),
+    "22222222-2222-4222-8222-222222222222",
+  ]);
+});
+
+test("remapFlowGraphSubjectScope leaves an unscoped graph untouched, by reference", () => {
+  const graph = { schemaVersion: 1, nodes: [], edges: [] };
+  assert.equal(remapFlowGraphSubjectScope(graph, flowCounterparts, "flow"), graph);
+});
+
+test("remapFlowGraphSubjectScope refuses counterparts that cannot be proven", () => {
+  const unknown = "33333333-3333-4333-8333-333333333333";
+  for (const graph of [
+    scopedFlowGraph([unknown]),
+    scopedFlowGraph(["11111111-1111-4111-8111-111111111111", unknown]),
+    scopedFlowGraph([unknown, "11111111-1111-4111-8111-111111111111"]),
+  ]) {
+    assert.throws(() => remapFlowGraphSubjectScope(graph, flowCounterparts, "sandbox flow 9"), /sandbox flow 9: flow subject scope subsidiary has no counterpart/);
+  }
+});
+
+test("remapFlowGraphSubjectScope refuses malformed scopes rather than repairing them", () => {
+  const overlength = Array.from({ length: 101 }, (_, i) =>
+    `11111111-1111-4111-8111-${String(i).padStart(12, "0")}`);
+  for (const graph of [
+    null,
+    [],
+    "graph",
+    { subjectScope: null },
+    { subjectScope: [] },
+    { subjectScope: {} },
+    { subjectScope: { subsidiaryIds: "11111111-1111-4111-8111-111111111111" } },
+    { subjectScope: { subsidiaryIds: [] } },
+    { subjectScope: { subsidiaryIds: [42] } },
+    { subjectScope: { subsidiaryIds: [null] } },
+    { subjectScope: { subsidiaryIds: ["not-a-uuid"] } },
+    scopedFlowGraph(["11111111-1111-4111-8111-111111111111", "11111111-1111-4111-8111-111111111111"]),
+    scopedFlowGraph(["11111111-1111-4111-8111-111111111111", "11111111-1111-4111-8111-111111111111".toUpperCase()]),
+    scopedFlowGraph(overlength),
+  ]) {
+    assert.throws(() => remapFlowGraphSubjectScope(graph, flowCounterparts, "sandbox flow 9"), /sandbox flow 9: invalid flow/);
+  }
 });
 
 test("remapScopeFilter refuses unknown keys, non-objects and identities without a counterpart", () => {

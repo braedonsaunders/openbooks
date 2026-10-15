@@ -22,8 +22,8 @@ test("installed Canada defaults are audited, isolated and preserve configured ra
       await db.execute(sql`insert into pay_components (id, org_id, code, name, kind, taxable, country)
         values (${id}, ${orgId}, ${id}, 'Non-taxable allowance', 'earning', false, ${country})`);
       await db.execute(sql`insert into pay_component_statutory_treatments
-        (org_id, pay_component_id, effective_from, program_exclusions)
-        values (${orgId}, ${id}, '2026-01-01', '{}'::text[])`);
+        (org_id, pay_component_id, effective_from, program_exclusions,vacationable)
+        values (${orgId}, ${id}, '2026-01-01', '{}'::text[],false)`);
       return id;
     };
     const shared = await component(org.orgId, null);
@@ -46,7 +46,7 @@ test("installed Canada defaults are audited, isolated and preserve configured ra
       provisionPayrollPackDefaults(org.orgId, actorId),
     ]);
     await provisionPayrollPackDefaults(other.orgId);
-    const exclusions = async (id: string) => (await db.execute<{ program_exclusions: string[] }>(
+    const exclusions = async (id: string) => (await db.execute<{ program_exclusions: string[]; vacationable: boolean }>(
       sql`select program_exclusions from pay_component_statutory_treatments
         where pay_component_id = ${id} and effective_from <= ${today}::date
           and (effective_to is null or effective_to >= ${today}::date)`,
@@ -100,15 +100,15 @@ test('Canadian defaults retain bounded policy windows and leave historical and g
     const bounded = randomUUID(), expired = randomUUID(), scoped = randomUUID();
     for (const id of [bounded, expired, scoped]) await db.execute(sql`insert into pay_components(id,org_id,code,name,kind,taxable,country)
       values(${id},${org.orgId},${id},'Non-taxable allowance','earning',false,'CA')`);
-    await db.execute(sql`insert into pay_component_statutory_treatments(org_id,pay_component_id,effective_from,effective_to,program_exclusions)
-      values(${org.orgId},${bounded},${today}::date-1,${today}::date+10,'{}'),
-        (${org.orgId},${bounded},${today}::date+11,null,array['eht']),
-        (${org.orgId},${expired},${today}::date-10,${today}::date-5,array['wcb'])`);
-    await db.execute(sql`insert into pay_component_statutory_treatments(org_id,pay_component_id,worker_comp_group_id,effective_from,program_exclusions)
-      values(${org.orgId},${scoped},${groupId},${today}::date-1,array['wcb'])`);
-    const read = async () => (await db.execute<{ component: string; scope: string | null; from: string; to: string | null; exclusions: string[] }>(sql`
+    await db.execute(sql`insert into pay_component_statutory_treatments(org_id,pay_component_id,effective_from,effective_to,program_exclusions,vacationable)
+      values(${org.orgId},${bounded},${today}::date-1,${today}::date+10,'{}',false),
+        (${org.orgId},${bounded},${today}::date+11,null,array['eht'],true),
+        (${org.orgId},${expired},${today}::date-10,${today}::date-5,array['wcb'],false)`);
+    await db.execute(sql`insert into pay_component_statutory_treatments(org_id,pay_component_id,worker_comp_group_id,effective_from,program_exclusions,vacationable)
+      values(${org.orgId},${scoped},${groupId},${today}::date-1,array['wcb'],true)`);
+    const read = async () => (await db.execute<{ component: string; scope: string | null; from: string; to: string | null; exclusions: string[]; vacationable: boolean }>(sql`
       select pay_component_id::text as component,worker_comp_group_id::text as scope,
-        effective_from::text as "from",effective_to::text as "to",program_exclusions as exclusions
+        effective_from::text as "from",effective_to::text as "to",program_exclusions as exclusions,vacationable
       from pay_component_statutory_treatments where org_id=${org.orgId}
         and pay_component_id in (${bounded},${expired},${scoped}) order by pay_component_id,effective_from`)).rows;
     const before = await read();
@@ -118,6 +118,7 @@ test('Canadian defaults retain bounded policy windows and leave historical and g
     const oldWindow = before.find(row => row.component===bounded && row.exclusions.length===0)!;
     const newWindow = after.find(row => row.component===bounded && row.exclusions.length===4)!;
     assert.equal(newWindow.to, oldWindow.to);
+    assert.equal(newWindow.vacationable, oldWindow.vacationable);
     assert.deepEqual(after.find(row => row.component===bounded && row.exclusions.length===1),
       before.find(row => row.component===bounded && row.exclusions.length===1));
     assert.equal(after.filter(row => row.component===bounded).length, 3);

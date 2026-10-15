@@ -144,3 +144,48 @@ test("upload_file writes through cabinet storage, replays idempotently, and enfo
     await dropScratchOrg(org.orgId);
   }
 });
+
+test("source uploads retain native identity, bytes and audit reason; retries and competing source claims remain unique", { skip: !DB }, async () => {
+  const org = await withBypassContext(() => createScratchOrg());
+  try {
+    const actor = await withBypassContext(() => createScratchUser(org.orgId, "Source uploader", "source_uploader"));
+    await withOrgContext(org.orgId, async () => {
+      const folderId = randomUUID();
+      await db.execute(sql`insert into folders(id,org_id,name) values(${folderId},${org.orgId},'Sources')`);
+      const context = ctxFor(org.orgId, actor, ["documents.read", "documents.manage"]);
+      const definition = applicationTool("upload_file")!;
+      const input = { folderId, filename: "source.txt", contentType: "text/plain", contentBase64,
+        sourceSystem: "payroll-source", sourceId: randomUUID(), auditReason: "Retain reviewed source evidence", idempotencyKey: randomUUID() };
+      const first = await executeApplicationTool(definition, context, input);
+      const read = await applicationFiles.getApplicationFile(context, String(first.id));
+      assert.deepEqual([read.sourceSystem, read.sourceId, read.currentVersionId, read.contentHash],
+        [input.sourceSystem, input.sourceId, first.currentVersionId, first.contentHash]);
+      assert.equal(read.versions[0]!.id, first.currentVersionId);
+      assert.equal(read.versions[0]!.contentHash, first.contentHash);
+      const stored = await db.execute<{ bytes: Buffer }>(sql`select b.bytes from file_blobs b join file_versions v on v.id=b.version_id join files f on f.id=v.file_id where f.org_id=${org.orgId} and v.id=${String(first.currentVersionId)}`);
+      assert.equal(stored.rows[0]!.bytes.toString("base64"), contentBase64);
+      const audits = await db.execute<{ actor_id: string; changes: { reason: string; after: { sourceId: string; contentHash: string } } }>(sql`select actor_id,changes from audit_log where org_id=${org.orgId} and table_name='files' and row_id=${String(first.id)} and changes->>'event'='upload'`);
+      assert.equal(audits.rows.length, 1);
+      assert.equal(audits.rows[0]!.actor_id, actor);
+      assert.equal(audits.rows[0]!.changes.reason, input.auditReason);
+      assert.equal(audits.rows[0]!.changes.after.sourceId, input.sourceId);
+      assert.equal(audits.rows[0]!.changes.after.contentHash, first.contentHash);
+      const replay = await executeApplicationTool(definition, context, input);
+      assert.deepEqual([replay.id, replay.replayed], [first.id, true]);
+      await assert.rejects(() => executeApplicationTool(definition, context, { ...input, auditReason: "Changed adoption basis" }), /idempotency|different|conflict/i);
+      await assert.rejects(() => executeApplicationTool(definition, context, { ...input, idempotencyKey: randomUUID() }), error => {
+        assert.equal((error as { status: number; code: string }).status, 409);
+        assert.equal((error as { code: string }).code, "conflict");
+        assert.equal(String(error).includes(String(first.id)), false);
+        return true;
+      });
+      await assert.rejects(() => executeApplicationTool(definition, context, { ...input, sourceId: undefined, idempotencyKey: randomUUID() }), /sourceSystem|sourceId/);
+      await assert.rejects(() => executeApplicationTool(definition, context, { ...input, auditReason: " ", idempotencyKey: randomUUID() }));
+      const concurrent = { ...input, sourceId: randomUUID() };
+      const race = await Promise.allSettled([1, 2].map(() => executeApplicationTool(definition, { ...context, requestId: randomUUID() }, { ...concurrent, idempotencyKey: randomUUID() })));
+      assert.equal(race.filter(item => item.status === "fulfilled").length, 1);
+      const count = await db.execute<{ n: number }>(sql`select count(*)::int as n from files where org_id=${org.orgId} and source_system=${input.sourceSystem}`);
+      assert.equal(count.rows[0]!.n, 2);
+    });
+  } finally { await dropScratchOrg(org.orgId); }
+});

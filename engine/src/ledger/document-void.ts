@@ -1,3 +1,4 @@
+import { takeOpeningSourceYearFence } from '../organization/payroll-source-fence.ts';
 import { accrueRebatesForDocument, rebateSettlementVoidContext, releaseVoidedRebateSettlement } from '../revenue/rebates.ts';
 import { assertJournalVoidNotAutomaticallyReversed, cancelScheduledJournalReversal } from "./journal-reversals.ts";
 import { releaseWithholdingDeposit } from "../contractor-withholding/deposits.ts";
@@ -1321,6 +1322,13 @@ export async function completeRequestedDocumentVoid(
   allowedSubsidiaryIds?: ReadonlySet<string> | null,
 ): Promise<string | null> {
   return withOrgTransaction(orgId, async () => {
+    // Serialize payroll release with retained opening-source replacement and filing snapshots.
+    // The fence precedes document locks so all payroll lifecycle writers use the same order.
+    const payrollYear=(await db.execute<{taxYear:number}>(sql`select r.tax_year as "taxYear" from pay_runs r
+      join documents d on d.org_id=r.org_id and d.id=r.document_id
+      where r.org_id=${orgId} and r.document_id=${documentId} and d.kind='pay_run'`)).rows;
+    if(payrollYear.length>1) throw new DocumentVoidError('The payroll source year is ambiguous');
+    if(payrollYear[0]) await takeOpeningSourceYearFence(db,orgId,payrollYear[0].taxYear);
     await lockLedgerSetupFence(db, orgId, "shared");
     const result: {
       reversalEntryId: string | null;

@@ -66,7 +66,7 @@ export async function upsertUnionFringe(
     // fill only an unconfigured component or the gap before its first future default.
     const statutoryTreatment = await tx.execute<{ id: string; effective_from: string; effective_to: string | null }>(sql`
       insert into pay_component_statutory_treatments
-        (org_id, pay_component_id, effective_from, effective_to, program_exclusions, created_by, updated_by)
+        (org_id, pay_component_id, effective_from, effective_to, program_exclusions, vacationable, created_by, updated_by)
       select ${orgId}, ${componentId},
         case when exists (select 1 from pay_component_statutory_treatments treatment
           where treatment.org_id=${orgId} and treatment.pay_component_id=${componentId})
@@ -74,7 +74,7 @@ export async function upsertUnionFringe(
         (select min(treatment.effective_from) - 1 from pay_component_statutory_treatments treatment
           where treatment.org_id=${orgId} and treatment.pay_component_id=${componentId}
             and treatment.worker_comp_group_id is null and treatment.effective_from > ${today}::date),
-        '{}'::text[], ${actorId}, ${actorId}
+        '{}'::text[], false, ${actorId}, ${actorId}
        where not exists (
          select 1 from pay_component_statutory_treatments treatment
           where treatment.org_id=${orgId} and treatment.pay_component_id=${componentId}
@@ -88,7 +88,7 @@ export async function upsertUnionFringe(
         values (${orgId}, 'pay_component_statutory_treatments', ${statutoryTreatment.rows[0].id}, 'insert', ${actorId},
           ${JSON.stringify({
             before: null,
-            after: { payComponentId: componentId, workerCompGroupId: null, programExclusions: [], effectiveFrom: statutoryTreatment.rows[0].effective_from, effectiveTo: statutoryTreatment.rows[0].effective_to },
+            after: { payComponentId: componentId, workerCompGroupId: null, programExclusions: [], vacationable: false, effectiveFrom: statutoryTreatment.rows[0].effective_from, effectiveTo: statutoryTreatment.rows[0].effective_to },
             reason: 'Initial contribution-program and employer-levy treatment created for the union pay component.',
           })}::jsonb)
       `);

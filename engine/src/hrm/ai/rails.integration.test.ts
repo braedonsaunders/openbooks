@@ -464,7 +464,10 @@ test("hours baseline compares each pay period once across a worker rehire", { sk
     const flags = await listFlags(db, {
       orgId: org.orgId, actorId: adminId, periodFrom: "2026-01-05", periodTo: "2026-01-18", kind: "hours_spike",
     });
-    assert.deepEqual(flags.map((flag) => [flag.employmentId, flag.detail.actual]).sort(), [
+    assert.deepEqual(flags.map((flag) => {
+      assert.ok(flag.detail !== null && typeof flag.detail === "object" && "actual" in flag.detail);
+      return [flag.employmentId, flag.detail.actual];
+    }).sort(), [
       [newEmploymentId, "4.0000"],
       [oldEmploymentId, "8.0000"],
     ].sort());

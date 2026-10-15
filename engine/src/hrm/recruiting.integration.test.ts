@@ -626,6 +626,16 @@ test("hire without an approval flow applies directly through the governed admiss
       select count(*)::int as n from parties where org_id = ${orgId}`)).rows[0]!.n;
     const hire = await acceptOfferAsHire({ orgId, actorId: h.recruiterId, offerId: offer.id });
     // The employee party is minted, the first version applied at once.
+    const employeeRole = (await db.execute<{ id: string; active: boolean }>(sql`
+      select id, is_active as active from employee_roles where org_id = ${orgId} and party_id = ${hire.workerPartyId}
+    `)).rows[0];
+    assert.equal(employeeRole?.active, true);
+    const roleAudit = (await db.execute<{ actor: string; reason: string }>(sql`
+      select actor_id::text as actor, changes ->> 'reason' as reason from audit_log
+       where org_id = ${orgId} and table_name = 'employee_roles' and row_id = ${employeeRole!.id}
+    `)).rows[0];
+    assert.equal(roleAudit?.actor, h.recruiterId);
+    assert.match(roleAudit!.reason, /Hire for requisition/);
     assert.equal(
       (await db.execute<{ n: number }>(sql`select count(*)::int as n from parties where org_id = ${orgId}`)).rows[0]!.n,
       partiesBefore + 1,
@@ -1388,3 +1398,43 @@ test("a public apply captures consents and records the posting source", { skip: 
     assert.ok(afterKinds.includes("apply_duplicate"), "the duplicate attempt is recorded for staff");
   });
 });
+
+for (const worker of [
+  { kind: 'employee', roleActive: true, permitted: true },
+  { kind: 'employee', roleActive: false, permitted: false },
+  { kind: 'company', roleActive: true, permitted: false },
+] as const) {
+  test(`recruiting hire preserves admission for ${worker.kind} with ${worker.roleActive ? 'active' : 'inactive'} employee role`, { skip: !DB }, async () => {
+    await withHarness(async (h) => {
+      const orgId = h.org.orgId
+      const partyId = randomUUID()
+      await db.execute(sql`insert into parties(id,org_id,kind,display_name,is_active,custom)
+        values (${partyId},${orgId},${worker.kind},'Linked candidate',true,'{}'::jsonb)`)
+      const role = (await db.execute<{ id: string }>(sql`insert into employee_roles(org_id,party_id,is_active)
+        values (${orgId},${partyId},${worker.roleActive}) returning id`)).rows[0]!
+      const requisition = await createRequisition({ orgId, actorId: h.recruiterId, title: 'Vacancy', employerSubsidiaryId: h.org.subsidiaryId, headcount: 1 })
+      await openRequisition({ orgId, actorId: h.recruiterId, requisitionId: requisition.id })
+      const { candidate } = await createCandidate({ orgId, actorId: h.recruiterId, displayName: 'Linked candidate' })
+      await db.execute(sql`update hrm_candidates set party_id=${partyId} where org_id=${orgId} and id=${candidate.id}`)
+      const application = await createApplication({ orgId, actorId: h.recruiterId, requisitionId: requisition.id, candidateId: candidate.id })
+      const offer = await createOffer({ orgId, actorId: h.recruiterId, applicationId: application.id, employerSubsidiaryId: h.org.subsidiaryId,
+        jobTitle: 'Engineer', proposedStartOn: '2026-10-01', compensationAmount: '90000', compensationCurrency: 'USD', compensationBasis: 'annual' })
+      await sendOffer({ orgId, actorId: h.recruiterId, offerId: offer.id })
+      if (worker.permitted) {
+        const hire = await acceptOfferAsHire({ orgId, actorId: h.recruiterId, offerId: offer.id })
+        assert.equal(hire.workerPartyId, partyId)
+        assert.deepEqual((await db.execute<{ status: string }>(sql`select status from worker_employment_versions
+          where org_id=${orgId} and employment_id=${hire.employmentId} and recorded_until is null`)).rows, [{ status: 'active' }])
+      } else {
+        await assert.rejects(acceptOfferAsHire({ orgId, actorId: h.recruiterId, offerId: offer.id }),
+          worker.kind === 'company' ? /active natural person/ : /employee role is inactive/)
+        assert.equal((await db.execute<{ n: string }>(sql`select count(*)::text as n from worker_employments
+          where org_id=${orgId} and worker_party_id=${partyId}`)).rows[0]!.n, '0')
+        assert.equal((await db.execute<{ status: string }>(sql`select status from hrm_offers where org_id=${orgId} and id=${offer.id}`)).rows[0]!.status, 'sent')
+      }
+      assert.deepEqual((await db.execute<{ id: string; active: boolean }>(sql`select id,is_active as active from employee_roles
+        where org_id=${orgId} and party_id=${partyId}`)).rows, [{ id: role.id, active: worker.roleActive }])
+      assert.equal((await db.execute<{ kind: string }>(sql`select kind from parties where org_id=${orgId} and id=${partyId}`)).rows[0]!.kind, worker.kind)
+    })
+  })
+}

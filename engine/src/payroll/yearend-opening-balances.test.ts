@@ -1,6 +1,11 @@
 import assert from "node:assert/strict";
 import test, { type TestContext } from "node:test";
-import { db } from "../platform/db.ts";
+import { drizzle } from "drizzle-orm/node-postgres";
+import { db, orgContext } from "../platform/db.ts";
+import { OPENING_BALANCE_FIELDS } from "./opening-balances.ts";
+import { rl1Slips } from "./canada/quebec/rl1.ts";
+import type { CanadianOpeningReportingAllocation } from "./canada/opening-reporting-source.ts";
+import type { OriginalOpeningSourceChildren } from "./opening-levy-source-reader.ts";
 import {
   capAnnualEarnings,
   carryOpeningYearEndYtd,
@@ -13,18 +18,7 @@ import {
 } from "./yearend.ts";
 import type { OpeningYearEndYtd, T4Slip, W2Slip } from "./yearend.ts";
 
-/**
- * The opening-balance carry-in on year-end slips.
- *
- * Every statutory column on `payroll_opening_balances` is a year-end input:
- * taxable/tax feed T4 14/22 and W-2 1/2, CPP/CPP2/EI/QPIP feed T4
- * 16/16A/18/55, and pensionable feeds T4 26 and W-2 3/5 while insurable
- * feeds T4 24. A mid-year adopter's slips understate those boxes if the
- * carry-in is reduced to taxable/tax only. The folding rule is still a
- * PER-EMPLOYEE fact landing on exactly ONE slip, ADDITIVE with committed
- * stubs, with T4 bases capped only after opening and committed amounts are
- * combined.
- */
+/** Pure arithmetic helpers and native source-qualified year-end attribution contracts. */
 
 const opening = (overrides: Partial<OpeningYearEndYtd> = {}): OpeningYearEndYtd => ({
   pensionableYtd: "0", insurableYtd: "0", cppYtd: "0", cpp2Ytd: "0",
@@ -88,11 +82,9 @@ test("employer levy carry-in is additive with the committed employer share", () 
   assert.equal(carried.box24EiInsurable, "50000.0000", "employer premiums never enter the insurable base");
 });
 
-test("a multi-slip employee's carry-in lands on exactly one slip", () => {
-  // One employee, two provinces of employment: the per-employee opening must
-  // not be multiplied by the slip count. It rides the FIRST slip in the
-  // caller's chronological order — the same first-slip-fill convention
-  // capAnnualEarnings uses for per-employee annual amounts.
+test("the generic employee carry helper adds an aggregate once", () => {
+  // This helper guarantees arithmetic deduplication only. Native Canadian
+  // readers use source-qualified RP/province slices, tested below.
   const slips = [
     t4("e1", { province: "BC", box14EmploymentIncome: "20000" }),
     t4("e1", { province: "ON", box14EmploymentIncome: "30000" }),
@@ -128,7 +120,7 @@ test("employees without a carry-in are untouched", () => {
   assert.notEqual(carried[1], slips[1]);
 });
 
-test("T4 carry-in folds the program's own base into box 56, never the EI base (C-13)", () => {
+test("T4 carry-in folds the program's own base into box 56, never the EI base", () => {
   // No program base carried: box 56 is untouched, not backfilled from the EI
   // carry-in folded into box 24 above.
   const untouched = openingYtdIntoT4Slip(t4("e1"), opening({
@@ -150,7 +142,7 @@ test("T4 carry-in folds the program's own base into box 56, never the EI base (C
   assert.equal(carried.box24EiInsurable, "50080.0000");
 });
 
-test("a mid-year adopter's box 56 is capped at the QPIP maximum with the stubs (C-13)", () => {
+test("a mid-year adopter's box 56 is capped at the QPIP maximum with the stubs", () => {
   // Stubs hold 90,000 of QPIP base; the carry-in adds 20,000 more. The QPIP
   // maximum (103,000) binds the program base while the EI maximum (68,900)
   // binds the EI base alone — neither program consumes the other's room.
@@ -171,7 +163,7 @@ test("a mid-year adopter's box 56 is capped at the QPIP maximum with the stubs (
   assert.equal(capped!.box24EiInsurable, "68900");
 });
 
-test("an opening with no committed stub still produces a slip", () => {
+test("the generic seed helper creates an opening-only arithmetic row", () => {
   const openings = new Map([["e-midyear", opening({ taxableYtd: "21000.50", taxYtd: "3150.75", pensionableYtd: "50000", insurableYtd: "40000" })]]);
   const seeded = seedOpeningOnlySlips([], openings.keys(), (id) => t4(id, {
     box14EmploymentIncome: "0", box22IncomeTax: "0", box24EiInsurable: "0", box26CppPensionable: "0", stubCount: 0,
@@ -218,7 +210,7 @@ test("opening bases are capped together with committed T4 bases", () => {
   assert.equal(capped[1]!.box26CppPensionable, "0");
 });
 
-test("box 56 consumes its OWN room at the QPIP maximum (C-12)", () => {
+test("box 56 consumes its OWN room at the QPIP maximum", () => {
   // A Québec two-slip employee: 70,000 + 50,000 of QPIP-insurable earnings
   // against a 103,000 QPIP maximum. The first slip fills first and the
   // second gets only the 33,000 of QPIP room that is left — while the EI
@@ -236,137 +228,219 @@ test("box 56 consumes its OWN room at the QPIP maximum (C-12)", () => {
   assert.equal(capped[1]!.box24EiInsurable, "18900.0000"); // 68,900 − 50,000
 });
 
-/**
- * An opening whose employee has no payroll profile row is refused — by name,
- * on BOTH year-end populations — never slipped as Canadian.
- *
- * The old reads folded the missing row into Canada (`coalesce(prof.country,
- * 'CA')`), so a profile-less carry-in became a Canadian T4; the inner-join
- * half of the same shape silently dropped it instead. Both are silent. The
- * mock below emulates the profile join per country the way the database
- * would, so the refusal (and the absence of any slip) is behavioral, through
- * the real `t4Slips`/`w2Slips` entry points.
- */
+/** Database-boundary facts preserve original source identity independently of live profiles. */
 interface MockPopulationRow {
   employeePartyId: string;
   employeeName: string;
   profileCountry: string | null;
+  originalCountry: "CA" | "US" | null;
   province: string;
   taxableYtd: string;
+  taxYtd?: string;
+  employerCppYtd?: string;
+  sourceMatches?: boolean;
+  annualAmounts?: Record<string, string>;
+  children?: OriginalOpeningSourceChildren;
+  reportingAllocations?: CanadianOpeningReportingAllocation[];
 }
 
-function mockOpeningPopulations(t: TestContext, population: readonly MockPopulationRow[]): void {
-  const dialect = (db as unknown as {
+const reportingOrg = "00000000-0000-4000-8000-000000000099";
+const originalRp = "00000000-0000-4000-8000-000000000006";
+const secondRp = "00000000-0000-4000-8000-000000000007";
+const zeroAnnual = Object.fromEntries(OPENING_BALANCE_FIELDS.map(field => [field.column, "0"]));
+const emptyChildren = (): OriginalOpeningSourceChildren => ({ components: [], programBases: [], accountBases: [], suiStates: [] });
+const reportingAllocation = (overrides: Partial<CanadianOpeningReportingAllocation> = {}): CanadianOpeningReportingAllocation => ({
+  sourceOrdinal: 1, firstCoveredPayDate: "2026-01-15", filingAccountId: originalRp, province: "ON",
+  annualAmounts: { ...zeroAnnual }, reportableBases: { ei: "0", cpp: "0", qpip: "0" },
+  children: emptyChildren(), ...overrides,
+});
+const originalEmployer = "00000000-0000-4000-8000-000000000004";
+const originalEin = "00000000-0000-4000-8000-000000000003";
+function mockOpeningPopulations(t: TestContext, population: readonly MockPopulationRow[]) {
+  const runner = drizzle.mock();
+  const dialect = (runner as unknown as {
     dialect: { sqlToQuery(query: Parameters<typeof db.execute>[0]): { sql: string; params: unknown[] } };
   }).dialect;
-  const requestedCountry = (params: unknown[]): string | null => {
-    for (const param of params) {
-      if (param === "CA" || param === "US") return param;
-    }
-    return null;
-  };
-  const zeroYtd = {
-    pensionable_ytd: "0", insurable_ytd: "0", cpp_ytd: "0", cpp2_ytd: "0",
-    ei_ytd: "0", qpip_ytd: "0", taxable_ytd: "0", tax_ytd: "0", fica_withheld_ytd: "0",
-  };
-  t.mock.method(db, "execute", async (query: Parameters<typeof db.execute>[0]) => {
+  const requestedCountry = (params: unknown[]): string | null =>
+    (params.find(param => param === "CA" || param === "US") as string | undefined) ?? null;
+  const material = (row: MockPopulationRow) =>
+    [row.taxableYtd, row.taxYtd ?? "0", row.employerCppYtd ?? "0"].some(value => value !== "0");
+  const amounts = (row: MockPopulationRow) => ({ ...zeroAnnual, taxable_ytd: row.taxableYtd,
+    tax_ytd: row.taxYtd ?? "0", employer_cpp_ytd: row.employerCppYtd ?? "0", ...row.annualAmounts });
+  t.mock.method(runner, "execute", async (query: Parameters<typeof db.execute>[0]) => {
     const built = dialect.sqlToQuery(query);
-    // The unknown-country guard's opening check: carry-ins with NO profile row.
-    if (built.sql.includes("from payroll_opening_balances")
-      && built.sql.includes("prof.employee_party_id is null")) {
-      return {
-        rows: population
-          .filter((row) => row.profileCountry == null)
-          .map((row) => ({ employee_party_id: row.employeePartyId, display_name: row.employeeName })),
-      };
+    if (built.sql === "show transaction_isolation") return { rows: [{ transaction_isolation: "read committed" }] };
+    if (built.sql.includes('as "openingSnapshot"')) {
+      const row = population.find(row => built.params.includes(row.employeePartyId));
+      if (!row) return { rows: [] };
+      return { rows: [{
+        id: row.employeePartyId, openingSnapshot: amounts(row),
+        openingChildren: row.children ?? emptyChildren(),
+        employerAuthorityId: row.employeePartyId, subsidiaryId: originalEmployer,
+        sourceAuthorityId: row.originalCountry ? row.employeePartyId : null,
+        sealed: row.originalCountry !== null, sourceMatches: row.sourceMatches ?? true,
+        originalCountry: row.originalCountry, originalCurrency: row.originalCountry === "US" ? "USD" : "CAD",
+        coverageStart: "2026-01-01", coverageEnd: "2026-06-30", coverageComplete: true,
+        sourceFileId: "00000000-0000-4000-8000-000000000010", sourceVersionId: "00000000-0000-4000-8000-000000000011", sourceSha256: "a".repeat(64),
+        sourceReference: "Complete original employer YTD report", openingSha256: "b".repeat(64),
+        hasMaterialHistory: material(row), hasWageHistory: row.taxableYtd !== "0",
+        hasFutaWageHistory: false, hasSuiWageHistory: false,
+      }] };
     }
-    // The readers' opening check: carry-ins joined to a profile of the
-    // requested country (a missing row joins to nothing, like the database).
-    if (built.sql.includes("from payroll_opening_balances")) {
+    if (built.sql.includes("from payroll_opening_levy_source_allocations")) {
+      const source = population.find(row => built.params.includes(row.employeePartyId));
+      if (source?.originalCountry === "CA") return { rows: [
+        ...["AB","BC","MB","NB","NL","NS","NT","NU","ON","PE","QC","SK","YT"].map(region =>
+          ({ programKey: "ca_wcb", region, subRegion: "", filingAccountId: null, federalAccountId: null, amount: "0" })),
+        ...["BC","MB","NL","ON"].map(region =>
+          ({ programKey: "ca_eht", region, subRegion: "", filingAccountId: null, federalAccountId: null, amount: "0" })),
+        { programKey: "ca_cnt", region: "QC", subRegion: "", filingAccountId: null, federalAccountId: null, amount: "0" },
+      ] };
+      return { rows: [{ programKey: "us_futa", region: "US", subRegion: "",
+        filingAccountId: originalEin, federalAccountId: originalEin, amount: "0" }] };
+    }
+    if (built.sql.includes("select distinct b.employee_party_id")) {
+      return { rows: population.filter(material).map(row => ({
+        employee_party_id: row.employeePartyId, display_name: row.employeeName,
+      })) };
+    }
+    if (built.sql.includes("from payroll_ca_opening_reporting_authorities r")) {
+      const row = population.find(row => built.params.includes(row.employeePartyId));
+      if (!row?.reportingAllocations) return { rows: [] };
+      return { rows: [{ id: row.employeePartyId, openingBalanceId: row.employeePartyId,
+        levyAuthorityId: row.employeePartyId, levyAllocationSha256: "c".repeat(64),
+        employerAuthorityId: row.employeePartyId, employeePartyId: row.employeePartyId, taxYear: 2026,
+        subsidiaryId: originalEmployer, originalCountry: "CA", originalCurrency: "CAD",
+        coverageStart: "2026-01-01", coverageEnd: "2026-06-30", openingSha256: "b".repeat(64),
+        openingChildrenSha256: "d".repeat(64), allocationSha256: "e".repeat(64),
+        sourceFileId: "00000000-0000-4000-8000-000000000010",
+        sourceVersionId: "00000000-0000-4000-8000-000000000011", sourceSha256: "a".repeat(64),
+        sourceReference: "Original RP/province year-to-date report", matches: true,
+        annualAmounts: amounts(row), children: row.children ?? emptyChildren(), allocationSnapshot: row.reportingAllocations,
+      }] };
+    }
+    if (built.sql.includes("select b.employee_party_id as id")) {
+      return { rows: population.map(row => ({ id: row.employeePartyId, name: row.employeeName })) };
+    }
+    if (built.sql.includes("from payroll_opening_balances b")) {
       const country = requestedCountry(built.params);
-      return {
-        rows: population
-          .filter((row) => row.profileCountry === country)
-          .map((row) => ({
-            employee_party_id: row.employeePartyId,
-            ...zeroYtd,
-            taxable_ytd: row.taxableYtd,
-          })),
-      };
+      return { rows: population.filter(row => material(row) && row.originalCountry === country).map(row => ({
+        employee_party_id: row.employeePartyId, ...amounts(row),
+      })) };
+    }
+    if (built.sql.includes('program_type as "programType"')) {
+      return { rows: [originalRp, secondRp].map(id => ({ id, orgId: reportingOrg, subsidiaryId: originalEmployer,
+        country: "CA", programType: "ca_rp" })) };
     }
     if (built.sql.includes("from parties p")) {
       const country = requestedCountry(built.params);
-      return {
-        rows: population
-          .filter((row) => row.profileCountry === country)
-          .map((row) => ({
-            employee_party_id: row.employeePartyId,
-            display_name: row.employeeName,
-            province: row.province,
-            filing_account_id: null,
-          })),
-      };
+      return { rows: population.filter(row => built.params.includes(row.employeePartyId)).map(row => ({
+        employee_party_id: row.employeePartyId, display_name: row.employeeName,
+        province: row.profileCountry === country ? row.province : "", filing_account_id: null,
+        subsidiary_id: "00000000-0000-4000-8000-000000000005",
+      })) };
     }
-    // No committed stubs: both populations are opening-only and are seeded by
-    // their country-routed opening rows above.
+    if (built.sql.includes("from payroll_filing_accounts") && built.sql.includes("for share")) {
+      return { rows: [{ id: originalEin, name: "Original federal EIN", program_type: "us_ein",
+        subsidiary_id: originalEmployer, state_code: null, is_active: false, account_number: "12-3456789" }] };
+    }
     return { rows: [] };
+  });
+  return <Reader extends (orgId: string, taxYear: number) => Promise<unknown>>(read: Reader, orgId = reportingOrg): ReturnType<Reader> =>
+    orgContext.run({ orgId, bypass: false, txDb: runner }, () => read(orgId, 2026)) as ReturnType<Reader>;
+}
+
+for (const amounts of [{ taxableYtd: "12000" }, { taxableYtd: "0", taxYtd: "125" },
+  { taxableYtd: "0", employerCppYtd: "75" }]) {
+  test("material openings require the original source even when a current country is known " + JSON.stringify(amounts), async (t) => {
+    const readInContext = mockOpeningPopulations(t, [{ employeePartyId: "00000000-0000-4000-8000-000000000001",
+      employeeName: "Unqualified Original", profileCountry: "CA", originalCountry: null, province: "ON", ...amounts }]);
+    for (const read of [t4Slips, w2Slips]) {
+      await assert.rejects(readInContext(read), /original opening source|statutory levy source allocation/);
+    }
   });
 }
 
-test("an opening with no profile refuses year-end by name and is never slipped as CA", async (t) => {
-  const orgId = "00000000-0000-4000-8000-000000000099";
-  mockOpeningPopulations(t, [
-    {
-      employeePartyId: "00000000-0000-4000-8000-000000000001",
-      employeeName: "No Profile", profileCountry: null, province: "", taxableYtd: "12000",
-    },
-    {
-      employeePartyId: "00000000-0000-4000-8000-000000000002",
-      employeeName: "US Employee", profileCountry: "US", province: "CA", taxableYtd: "34000",
-    },
-  ]);
-
-  await assert.rejects(
-    t4Slips(orgId, 2026),
-    (error: unknown) => {
-      assert.ok(error instanceof Error);
-      assert.match(error.message, /No Profile/);
-      assert.match(error.message, /unknown historical country/);
-      return true;
-    },
-  );
-  await assert.rejects(
-    w2Slips(orgId, 2026),
-    (error: unknown) => {
-      assert.ok(error instanceof Error);
-      assert.match(error.message, /No Profile/);
-      return true;
-    },
-  );
-});
-
-test("explicitly routed openings still seed exactly their own country's slips", async (t) => {
+test("original country routes openings despite a different or missing current profile", async (t) => {
   const caEmployee = "00000000-0000-4000-8000-000000000001";
   const usEmployee = "00000000-0000-4000-8000-000000000002";
   const orgId = "00000000-0000-4000-8000-000000000099";
-  mockOpeningPopulations(t, [
-    {
-      employeePartyId: caEmployee,
-      employeeName: "CA Employee", profileCountry: "CA", province: "ON", taxableYtd: "12000",
-    },
-    {
-      employeePartyId: usEmployee,
-      employeeName: "US Employee", profileCountry: "US", province: "CA", taxableYtd: "34000",
-    },
+  const readInContext = mockOpeningPopulations(t, [
+    { employeePartyId: caEmployee, employeeName: "CA Original", profileCountry: "US",
+      originalCountry: "CA", province: "TX", taxableYtd: "12000", taxYtd: "125",
+      reportingAllocations: [reportingAllocation({ annualAmounts: { ...zeroAnnual, taxable_ytd: "12000", tax_ytd: "125" } })] },
+    { employeePartyId: usEmployee, employeeName: "US Original", profileCountry: null,
+      originalCountry: "US", province: "", taxableYtd: "34000" },
   ]);
-
-  const ca = await t4Slips(orgId, 2026);
-  const us = await w2Slips(orgId, 2026);
-
-  assert.deepEqual(ca.map((slip) => slip.employeePartyId), [caEmployee]);
+  const ca = await readInContext(t4Slips, orgId), us = await readInContext(w2Slips, orgId);
+  assert.deepEqual(ca.map(slip => slip.employeePartyId), [caEmployee]);
   assert.equal(ca[0]!.box14EmploymentIncome, "12000.0000");
-  assert.deepEqual(us.map((slip) => slip.employeePartyId), [usEmployee]);
+  assert.equal(ca[0]!.box22IncomeTax, "125.0000");
+  assert.equal(ca[0]!.province, "ON");
+  assert.equal(ca[0]!.filingAccountId, originalRp);
+  assert.deepEqual(await readInContext(rl1Slips, orgId), [], "neither original ON nor US wages become Québec wages from a current profile");
+  assert.deepEqual(us.map(slip => slip.employeePartyId), [usEmployee]);
   assert.equal(us[0]!.box1Wages, "34000.0000");
+  assert.equal(us[0]!.filingAccountId, originalEin);
+});
+
+test("a mismatched original source refuses both year-end populations", async (t) => {
+  const readInContext = mockOpeningPopulations(t, [{ employeePartyId: "00000000-0000-4000-8000-000000000001",
+    employeeName: "Changed Source", profileCountry: "US", originalCountry: "CA",
+    province: "TX", taxableYtd: "12000", sourceMatches: false }]);
+  for (const read of [t4Slips, w2Slips]) {
+    await assert.rejects(readInContext(read), /no longer matches/);
+  }
+});
+
+for (const missing of ["certificate", "filingAccountId", "province", "ei", "cpp", "qpip"] as const) {
+  test(`Canadian material history refuses a missing original reporting ${missing}`, async (t) => {
+    const allocation = reportingAllocation({ annualAmounts: { ...zeroAnnual, taxable_ytd: "12000" } });
+    if (missing === "filingAccountId") allocation.filingAccountId = "";
+    if (missing === "province") allocation.province = "";
+    if (missing === "ei" || missing === "cpp" || missing === "qpip") Reflect.deleteProperty(allocation.reportableBases, missing);
+    const readInContext = mockOpeningPopulations(t, [{
+      employeePartyId: "00000000-0000-4000-8000-000000000001", employeeName: "Canadian Original",
+      originalCountry: "CA", profileCountry: "CA", province: "QC", taxableYtd: "12000",
+      ...(missing === "certificate" ? {} : { reportingAllocations: [allocation] }),
+    }]);
+    for (const read of [t4Slips, rl1Slips]) {
+      await assert.rejects(readInContext(read), /original reporting source|original native RP account and province|Original reportable bases must contain every original field/);
+    }
+  });
+}
+
+test("source-declared RP/province slices retain exact amounts and capped bases after a current profile move", async (t) => {
+  const annual = { ...zeroAnnual, taxable_ytd: "120000.0001", tax_ytd: "12000", pensionable_ytd: "120000",
+    insurable_ytd: "120000", cpp_ytd: "4000", cpp2_ytd: "396", ei_ytd: "1000", qpip_ytd: "200" };
+  const children = { ...emptyChildren(), programBases: [{ program_key: "qpip", insurable_ytd: "40000" }] };
+  const allocations = [
+    reportingAllocation({ sourceOrdinal: 2, firstCoveredPayDate: "2026-03-15", filingAccountId: secondRp, province: "ON",
+      annualAmounts: { ...zeroAnnual, taxable_ytd: "80000.0001", tax_ytd: "8000", pensionable_ytd: "80000",
+        insurable_ytd: "80000", cpp_ytd: "2500", cpp2_ytd: "296", ei_ytd: "650" },
+      reportableBases: { ei: "43900", cpp: "60000", qpip: "0" },
+      children: { ...emptyChildren(), programBases: [{ program_key: "qpip", insurable_ytd: "0" }] } }),
+    reportingAllocation({ province: "QC", annualAmounts: { ...zeroAnnual, taxable_ytd: "40000", tax_ytd: "4000",
+      pensionable_ytd: "40000", insurable_ytd: "40000", cpp_ytd: "1500", cpp2_ytd: "100", ei_ytd: "350", qpip_ytd: "200" },
+      reportableBases: { ei: "25000", cpp: "25000", qpip: "40000" }, children }),
+  ];
+  const row: MockPopulationRow = { employeePartyId: "00000000-0000-4000-8000-000000000001",
+    employeeName: "Original Canadian", originalCountry: "CA", profileCountry: "CA", province: "BC",
+    taxableYtd: annual.taxable_ytd, taxYtd: annual.tax_ytd, annualAmounts: annual, children, reportingAllocations: allocations };
+  const readInContext = mockOpeningPopulations(t, [row]);
+  const before = await readInContext(t4Slips);
+  assert.deepEqual(before.map(slip => [slip.filingAccountId, slip.province, slip.box14EmploymentIncome,
+    slip.box22IncomeTax, slip.box24EiInsurable, slip.box26CppPensionable, slip.box56QpipInsurable]), [
+    [originalRp, "QC", "40000.0000", "4000.0000", "25000.0000", "25000.0000", "40000.0000"],
+    [secondRp, "ON", "80000.0001", "8000.0000", "43900.0000", "60000.0000", "0.0000"],
+  ]);
+  row.profileCountry = "US"; row.province = "TX";
+  assert.deepEqual(await readInContext(t4Slips), before);
+  const quebec = await readInContext(rl1Slips);
+  assert.equal(quebec.length, 1);
+  assert.equal(quebec[0]!.boxA, "40000.0000");
+  assert.equal(quebec[0]!.boxG, "25000.0000");
+  assert.equal(quebec[0]!.boxI, "40000.0000");
 });
 
 test("a FICA tax withheld carry-in splits into W-2 boxes 4 and 6", () => {

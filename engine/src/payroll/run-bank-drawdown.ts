@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import { add, cmp, neg } from "../money/money.ts";
 import type { db } from "../platform/db.ts";
+import { bankCashSplitMatchesValuation } from "./run-bank-cash-evidence.ts";
 import { planBalanceExcludingRun } from "./entitlements-db.ts";
 import type { EntitlementMovement } from "./entitlements-movement-kernel.ts";
 import type { EntitlementPlan } from "./entitlements-types.ts";
@@ -71,6 +72,22 @@ export async function applyBankDrawdown(
     if (line.fundedByEntitlementBank === false) continue;
     const entry = settling.get(line.componentId);
     if (!entry) continue;
+    if (line.bankCashFundingSplit) {
+      // The drawdown validates the valuation frozen on the line before
+      // line construction — it never re-resolves a wage here. Only the
+      // bank-funded portion reaches the bank: the outside portion carries
+      // fundedByEntitlementBank=false and is skipped above, so a split
+      // withdraws exactly its bank-funded amount (or hours, on an hours
+      // plan) while the guard on the available balance is unchanged.
+      const split = line.bankCashFundingSplit;
+      const valuation = line.bankCashValuation;
+      if (!valuation || cmp(split.bankFundedAmount, line.amount) !== 0
+        || cmp(add(split.bankFundedAmount, split.outsideBankAmount), split.totalAmount) !== 0
+        || line.hours == null || cmp(line.hours, "0") <= 0
+        || !bankCashSplitMatchesValuation(split, line.hours, valuation)) {
+        throw new PayrollError(`${employeeName}'s audited bank payout split on the ${payDate} run no longer balances to its issued amount at its frozen pay-date wage; correct it through the bank cash input before recalculating`);
+      }
+    }
     const value = entry.plan.unit === "hours" ? line.hours ?? null : line.amount;
     if (value === null || cmp(value, "0") === 0) {
       if (entry.plan.unit === "hours" && line.hours == null && cmp(line.amount, "0") !== 0) {

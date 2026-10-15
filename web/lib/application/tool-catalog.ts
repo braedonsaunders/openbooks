@@ -898,8 +898,12 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
       filename: z.string().trim().min(1).max(255).describe("File name with extension, e.g. statement-jan.pdf"),
       contentType: z.string().max(120).describe("MIME type, one of the cabinet's allowlisted types, e.g. application/pdf or text/csv"),
       contentBase64: z.string().max(1400000).describe("File bytes as base64, at most 1 MB decoded"),
+      sourceSystem: z.string().min(1).max(100).refine(value => value.trim().length > 0).optional(),
+      sourceId: z.string().min(1).max(1000).refine(value => value.trim().length > 0).optional(),
+      auditReason: z.string().trim().min(1).max(2000).optional(),
       idempotencyKey: IDEMPOTENCY_KEY,
-    }),
+    }).refine(body => (body.sourceSystem === undefined) === (body.sourceId === undefined), "Supply both sourceSystem and sourceId")
+      .refine(body => body.sourceSystem === undefined || body.auditReason !== undefined, "Source uploads require an adoption reason"),
     readOnly: false, destructive: false, openWorld: false, assistantConfirmation: "always", visibleTo: anyPermission("documents.manage", "documents.read"),
     authorizeReplay: (context, input) => assertCabinetUploadAccess(context.authz, input.folderId),
     execute: async (context, input) => {
@@ -908,16 +912,20 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
       if (!can(context.authz, "documents.read") && !can(context.authz, "documents.manage")) {
         throw forbidden("documents.read");
       }
+      const source = {
+        ...(input.sourceSystem === undefined ? {} : { sourceSystem: input.sourceSystem, sourceId: input.sourceId }),
+        ...(input.auditReason === undefined ? {} : { auditReason: input.auditReason }),
+      };
       const outcome = await executeIdempotent({
         context, operation: "file.upload", idempotencyKey: input.idempotencyKey,
         request: withContentDigest(
-          { folderId: input.folderId, filename: input.filename, contentType: input.contentType },
+          { folderId: input.folderId, filename: input.filename, contentType: input.contentType, ...source },
           input.contentBase64.replace(/\s+/g, ""),
         ),
         authorizeReplay: () => assertCabinetUploadAccess(context.authz, input.folderId),
         execute: async () => uploadCabinetFile(context.authz, {
           folderId: input.folderId, filename: input.filename,
-          contentType: input.contentType, contentBase64: input.contentBase64,
+          contentType: input.contentType, contentBase64: input.contentBase64, ...source,
         }),
       });
       return { ok: true, replayed: outcome.replayed, ...outcome.value, href: "/documents" };

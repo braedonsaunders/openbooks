@@ -53,7 +53,6 @@ export async function appendApprovedHolidaySettlements(tx: SqlExecutor, input: {
       componentId: String(component.id), kind: "earning", description: "Approved unpaid holiday entitlement",
       hours: priced.hours, rate: priced.rate, amount: parseMoney(priced.amount), sequence: Number(component.sequence),
       taxable: component.taxable === true, pensionable: component.pensionable === true, insurable: component.insurable === true,
-      vacationable: component.vacationable === true,
       nonPeriodic: component.non_periodic === true, taxTreatment: component.tax_treatment as string,
       supplementalWageCategory: component.supplemental_wage_category as Line["supplementalWageCategory"],
       statutoryExemptionCategory: component.statutory_exemption_category as Line["statutoryExemptionCategory"],

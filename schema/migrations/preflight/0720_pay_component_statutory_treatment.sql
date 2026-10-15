@@ -16,6 +16,7 @@ WITH findings AS (
   WHERE to_regprocedure('public.payroll_worker_comp_group_at(uuid,uuid,date)') IS NOT NULL
     OR to_regprocedure('public.pay_component_statutory_treatment_clone_matches(jsonb)') IS NOT NULL
     OR to_regprocedure('public.pay_component_statutory_treatment_preserve_committed()') IS NOT NULL
+    OR to_regprocedure('public.pay_component_vacation_creation_default_guard()') IS NOT NULL
 
   UNION ALL
 
@@ -55,6 +56,70 @@ WITH findings AS (
        AND attribute.attname = 'program_exclusions'
        AND NOT attribute.attisdropped
   )
+
+  UNION ALL
+
+  SELECT
+    '0720.vacation_base_source_missing',
+    'public.pay_components.vacationable is not available for the dated-policy backfill',
+    'The migration preserves each existing vacation-base choice in its initial dated treatment before making the component flag creation-only.',
+    'Preserve payroll history and resolve the exact source schema before applying this migration.'
+  WHERE NOT EXISTS (
+    SELECT 1 FROM pg_catalog.pg_attribute attribute
+     WHERE attribute.attrelid = to_regclass('public.pay_components')
+       AND attribute.attname = 'vacationable' AND attribute.atttypid = 'boolean'::regtype
+       AND attribute.attnotnull AND NOT attribute.attisdropped
+  )
+
+  UNION ALL
+
+  SELECT
+    '0720.query_catalog_refresh_missing',
+    'the native governed-query catalog refresh is not available',
+    'The migration removes the frozen pay-components view before retiring its static column, then restores the governed views through the native registry.',
+    'Preserve the query catalog and restore its published native refresh function before applying this migration.'
+  WHERE to_regprocedure('public.openbooks_refresh_query_catalog()') IS NULL
+
+  UNION ALL
+
+  SELECT
+    '0720.pay_components_query_relation_changed',
+    'openbooks_query.pay_components is not a governed view',
+    'Only the disposable governed view may be removed before the source column is retired; a table or materialized view may contain retained data.',
+    'Preserve the relation and obtain database-owner review of its definition, data, ownership and dependencies before applying this migration.'
+  WHERE EXISTS (
+    SELECT 1 FROM pg_catalog.pg_class relation
+     WHERE relation.oid = to_regclass('openbooks_query.pay_components')
+       AND relation.relkind <> 'v'
+  )
+
+  UNION ALL
+
+  SELECT DISTINCT
+    '0720.pay_components_query_dependency_unreviewed',
+    format('%I.%I', dependent_namespace.nspname, dependent_view.relname),
+    'This view depends on the retiring static treatment column or its governed pay-components view. The migration removes only the native pay-components view and must preserve other dependent objects.',
+    'Preserve the dependent view and obtain database-owner review of a forward definition using the effective-dated statutory treatment source before applying this migration.'
+    FROM pg_catalog.pg_depend dependency
+    JOIN pg_catalog.pg_rewrite rewrite ON rewrite.oid = dependency.objid
+    JOIN pg_catalog.pg_class dependent_view ON dependent_view.oid = rewrite.ev_class
+    JOIN pg_catalog.pg_namespace dependent_namespace ON dependent_namespace.oid = dependent_view.relnamespace
+   WHERE dependency.classid = 'pg_catalog.pg_rewrite'::regclass
+     AND dependency.refclassid = 'pg_catalog.pg_class'::regclass
+     AND dependency.deptype = 'n'
+     AND dependent_view.oid IS DISTINCT FROM to_regclass('openbooks_query.pay_components')
+     AND (
+       dependency.refobjid = to_regclass('openbooks_query.pay_components')
+       OR (
+         dependency.refobjid = to_regclass('public.pay_components')
+         AND dependency.refobjsubid = (
+           SELECT attribute.attnum FROM pg_catalog.pg_attribute attribute
+            WHERE attribute.attrelid = to_regclass('public.pay_components')
+              AND attribute.attname = 'program_exclusions'
+              AND NOT attribute.attisdropped
+         )
+       )
+     )
 )
 SELECT code, 'refuse'::text AS severity, subject, detail, remedy
   FROM findings;

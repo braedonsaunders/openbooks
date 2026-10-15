@@ -21,7 +21,7 @@ test('missing vacation terms refuse eligible earnings but do not invent accruals
       const base = components.find(row => row.system_key === 'base_pay')!.id;
       await mutatePayRunAdjustment({ ...input, mutation: { action: 'add', employeePartyId: f.employeeId, componentId: base, amount: '1000' } });
       assert.match((await calculatePayRun(input)).errors[0]!.message, /effective vacation terms.*Benefits/);
-      await db.execute(sql`update pay_components set vacationable=false where org_id=${f.orgId} and id=${base}`);
+      await db.execute(sql`update pay_component_statutory_treatments set vacationable=false where org_id=${f.orgId} and pay_component_id=${base}`);
       assert.deepEqual((await calculatePayRun(input)).errors, []);
       const stub = (await db.execute<{ vacation_accrued: string }>(sql`select vacation_accrued::text from pay_stubs
         where org_id=${f.orgId} and pay_run_document_id=${run.documentId}`)).rows[0]!;
@@ -29,7 +29,7 @@ test('missing vacation terms refuse eligible earnings but do not invent accruals
       assert.equal((await db.execute(sql`select id from entitlement_ledger where org_id=${f.orgId}
         and pay_run_document_id=${run.documentId} and kind='accrual'`)).rows.length, 0);
       const allowance = components.find(row => row.system_key === 'allowance')!.id;
-      await db.execute(sql`update pay_components set vacationable=true where org_id=${f.orgId} and id=${allowance}`);
+      await db.execute(sql`update pay_component_statutory_treatments set vacationable=true where org_id=${f.orgId} and pay_component_id=${allowance}`);
       await mutatePayRunAdjustment({ ...input, mutation: { action: 'add', employeePartyId: f.employeeId, componentId: allowance, amount: '10' } });
       assert.match((await calculatePayRun(input)).errors[0]!.message, /effective vacation terms.*Benefits/);
     });

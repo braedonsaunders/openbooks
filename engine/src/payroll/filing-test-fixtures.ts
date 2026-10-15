@@ -10,6 +10,7 @@ import { createScratchOrg, seedFlowActors, seedWorkerEmployment, seedVacationTer
 import { type VacationMethod } from "./vacation-terms.ts";
 import { upsertPayrollEmployerFact } from "./employer-fact-store.ts";
 import { setPackSlotAccount } from "./packs.ts";
+import { validateUsFilingAccountLineage } from "./us/filing-account-lineage.ts";
 
 export { seedVacationTerms } from "../testing/fixtures.ts";
 
@@ -26,6 +27,7 @@ export interface AdoptionFixture {
 /** Seed explicit ON EHT pricing and its declared single-employer exemption allocation for fixtures. */
 export async function seedOntarioEhtFixture(
   orgId: string, actorId: string, annualExemption = "1000000", declareExemptionAllocation = true,
+  initialExemptionAllocation = annualExemption,
 ): Promise<void> {
   await db.execute(sql`
     insert into payroll_statutory_rates (org_id, country, rate_key, region, tax_year,
@@ -40,7 +42,7 @@ export async function seedOntarioEhtFixture(
     `)).rows[0];
     if (!employer) throw new Error('The Ontario EHT fixture requires a native Canadian legal employer');
     await upsertPayrollEmployerFact({ orgId, actorId, subsidiaryId: employer.id, country: 'CA',
-      factKey: 'eht_exemption_share_on', effectiveFrom: '2026-01-01', value: annualExemption,
+      factKey: 'eht_exemption_share_on', effectiveFrom: '2026-01-01', value: initialExemptionAllocation,
       changeReason: 'Declare the test legal employer share of the Ontario annual exemption' });
   }
 }
@@ -72,34 +74,84 @@ export async function seedRoeIssuanceFixture(orgId: string, employeeId: string):
     select ${orgId}, id, '2020-01-01', 'none', 'ROE fixture' from pay_components where org_id = ${orgId}`);
 }
 
-/**
- * Contributory SUI setup for US pay-run fixtures: the active state
- * unemployment account for one state — reused when the harness already
- * created it (box-15 tests assert its exact number), created otherwise —
- * with its financing method recorded through the product API. A run with no
- * recorded method refuses by design, so a contributory fixture that
- * configures a rate without its method tests nothing a real employer can
- * do. Pass a non-default method only for the account the test prices under.
- */
-export async function seedUsSuiAccount(
-  orgId: string, actorId: string, state: string, method = "contributory",
+/** Create the explicitly declared native federal payer for a US fixture. */
+export async function seedUsEinAccount(
+  orgId: string, actorId: string, subsidiaryId: string, accountNumber: string,
 ): Promise<string> {
-  const existing = (await db.execute<{ id: string }>(sql`
+  const id = randomUUID();
+  const employer = (await db.execute(sql`select id from subsidiaries where org_id=${orgId}
+    and id=${subsidiaryId} and country='US' and not is_elimination`)).rows;
+  assert.equal(employer.length, 1, "the declared EIN requires a native US legal employer");
+  const inserted = await db.execute(sql`insert into payroll_filing_accounts
+    (id,org_id,country,program_type,account_number,name,subsidiary_id,is_active,created_by,updated_by)
+    values(${id},${orgId},'US','us_ein',${accountNumber},'Federal EIN',${subsidiaryId},true,${actorId},${actorId}) returning id`);
+  assert.equal(inserted.rows.length, 1, "the declared federal EIN must be created");
+  return id;
+}
+
+export interface UsSuiFixtureSource {
+  federalAccountId: string;
+  subsidiaryId: string;
+  effectiveFrom: string;
+  effectiveTo: string | null;
+  sourceReference: string;
+  /** Select a declared account when the fixture contains multiple state registrations. */
+  filingAccountId?: string;
+  /** Null records payer lineage only, retaining an intentional missing financing method. */
+  financingMethod?: string | null;
+}
+
+/** Retain the original state registration's payer before any native payroll uses it. */
+export async function seedUsSuiAccount(
+  orgId: string, actorId: string, state: string, source: UsSuiFixtureSource,
+): Promise<string> {
+  const candidates = (await db.execute<{ id: string }>(sql`
     select id from payroll_filing_accounts
-     where org_id = ${orgId} and country = 'US' and program_type = 'us_state_sui'
-       and state_code = ${state} and is_active
-     limit 1`)).rows[0];
-  const filingAccountId = existing?.id ?? randomUUID();
-  if (!existing) {
-    await db.execute(sql`
-      insert into payroll_filing_accounts (id, org_id, country, program_type, account_number, name,
-                                           state_code, is_active, created_by, updated_by)
-      values (${filingAccountId}, ${orgId}, 'US', 'us_state_sui', ${`${state}-TEST`}, ${`${state} SUI`},
-              ${state}, true, ${actorId}, ${actorId})`);
+     where org_id=${orgId} and country='US' and program_type='us_state_sui'
+       and state_code=${state} and is_active
+       and (subsidiary_id is null or subsidiary_id=${source.subsidiaryId})
+       ${source.filingAccountId ? sql`and id=${source.filingAccountId}` : sql``}
+     order by id`)).rows;
+  assert.ok(candidates.length <= 1, "declare the exact state registration when candidate accounts are ambiguous");
+  if (source.filingAccountId) assert.equal(candidates.length, 1, "the declared state registration must exist");
+  const filingAccountId = candidates[0]?.id ?? randomUUID();
+  if (!candidates.length) {
+    const inserted = await db.execute(sql`
+      insert into payroll_filing_accounts (id,org_id,country,program_type,account_number,name,
+        subsidiary_id,state_code,is_active,created_by,updated_by)
+      values (${filingAccountId},${orgId},'US','us_state_sui',${`${state}-TEST`},${`${state} SUI`},
+        ${source.subsidiaryId},${state},true,${actorId},${actorId}) returning id`);
+    assert.equal(inserted.rows.length, 1, "the declared state registration must be created");
   }
-  await upsertPayrollEmployerFact({ orgId, actorId, filingAccountId, country: "US",
-    factKey: "sui_financing_method", effectiveFrom: "2026-01-01", value: method,
-    changeReason: "state account determination" });
+  await db.transaction(async tx => {
+    const input = { filingAccountId, federalAccountId: source.federalAccountId,
+      subsidiaryId: source.subsidiaryId, effectiveFrom: source.effectiveFrom,
+      effectiveTo: source.effectiveTo, sourceReference: source.sourceReference,
+      changeReason: "Retain the original state registration employer" };
+    await validateUsFilingAccountLineage(tx, orgId, input);
+    const retained = (await tx.execute<{ federalAccountId: string; subsidiaryId: string;
+      effectiveFrom: string; effectiveTo: string | null; sourceReference: string }>(sql`
+      select federal_account_id as "federalAccountId",subsidiary_id as "subsidiaryId",
+        effective_from::text as "effectiveFrom",effective_to::text as "effectiveTo",source_reference as "sourceReference"
+      from payroll_us_filing_account_employer_lineage where org_id=${orgId} and filing_account_id=${filingAccountId}`)).rows;
+    if (retained.length) {
+      assert.deepEqual(retained, [{ federalAccountId: source.federalAccountId, subsidiaryId: source.subsidiaryId,
+        effectiveFrom: source.effectiveFrom, effectiveTo: source.effectiveTo, sourceReference: source.sourceReference }],
+      "the declared state registration must retain exactly its original payer evidence");
+    } else {
+      const inserted = await tx.execute(sql`insert into payroll_us_filing_account_employer_lineage
+        (org_id,filing_account_id,federal_account_id,subsidiary_id,effective_from,effective_to,
+          source_reference,change_reason,created_by,updated_by)
+        values(${orgId},${filingAccountId},${source.federalAccountId},${source.subsidiaryId},
+          ${source.effectiveFrom},${source.effectiveTo},${source.sourceReference},${input.changeReason},${actorId},${actorId}) returning id`);
+      assert.equal(inserted.rows.length, 1, "the original state registration payer must be retained");
+    }
+  });
+  if (source.financingMethod !== null) {
+    await upsertPayrollEmployerFact({ orgId, actorId, filingAccountId, country: "US",
+      factKey: "sui_financing_method", effectiveFrom: source.effectiveFrom,
+      value: source.financingMethod ?? "contributory", changeReason: "state account determination" });
+  }
   return filingAccountId;
 }
 
@@ -318,17 +370,19 @@ async function seedEmployee(
 
 /** A Canadian org with payroll accounts, components, a schedule and one hire. */
 export async function seedAdoption(
-  options: { hiredOn?: string } = {},
+  options: { hiredOn?: string; initialOntarioEhtExemption?: string } = {},
 ): Promise<AdoptionFixture> {
   const org = await createScratchOrg();
   const actorId = (await seedFlowActors(org.orgId)).adminId;
   await db.execute(sql`insert into user_permission_overrides(org_id,user_id,permission,effect)
-    values(${org.orgId},${actorId},'payroll.manage','grant')`);
+    values(${org.orgId},${actorId},'payroll.manage','grant'),
+      (${org.orgId},${actorId},'payroll.run','grant'),
+      (${org.orgId},${actorId},'payroll.read','grant')`);
 
   await seedCanadianPostingAccounts(org.orgId, { liabilityType: "liability_current_other", enablePayroll: false });
   await seedPayrollComponents(org.orgId, actorId, "CA");
   // Shared Ontario fixtures configure EHT so unrelated tests reach their own behavior.
-  await seedOntarioEhtFixture(org.orgId, actorId);
+  await seedOntarioEhtFixture(org.orgId, actorId, '1000000', true, options.initialOntarioEhtExemption);
 
   const scheduleId = randomUUID();
   await db.execute(sql`

@@ -17,7 +17,7 @@ test('partial component imports preserve existing financial configuration throug
    from pay_components where org_id=${org.orgId} and code='QUANTITY'`)).rows[0]!;
   const before = await read();
   const resource = setupResource(SETUP_ENTITY_BY_KEY.get('pay-components')!,org.orgId);
-  const rows = [{code:'QUANTITY',name:'Travel allowance',kind:'earning',basis:'fixed_amount',unitOfMeasure:'quantity'}];
+  const rows = [{code:'QUANTITY',name:'Travel allowance',kind:'earning',basis:'fixed_amount',unitOfMeasure:'quantity',reason:'Approved non-hour quantity presentation'}];
   const preview = await resource.write(rows,'upsert',{orgId:org.orgId,actorId,dryRun:true});
   assert.equal(preview.updated,1,JSON.stringify(preview));
   assert.equal(preview.failed,0);
@@ -26,10 +26,11 @@ test('partial component imports preserve existing financial configuration throug
   assert.equal(committed.updated,1,JSON.stringify(committed));
   assert.equal(committed.failed,0);
   assert.deepEqual(await read(),{...before,unit_of_measure:'quantity'});
-  const evidence = (await db.execute<{actor_id:string;changes:{before:Record<string,unknown>;after:Record<string,unknown>}}>(sql`select actor_id,changes from audit_log
+  const evidence = (await db.execute<{actor_id:string;changes:{before:Record<string,unknown>;after:Record<string,unknown>;reason:string}}>(sql`select actor_id,changes from audit_log
    where org_id=${org.orgId} and table_name='pay_components' and changes->'after'->>'code'='QUANTITY'`)).rows;
   assert.equal(evidence.length,1);
   assert.equal(evidence[0]!.actor_id,actorId);
+  assert.equal(evidence[0]!.changes.reason,rows[0]!.reason);
   for(const [key,value] of Object.entries(before)) {
    assert.deepEqual(evidence[0]!.changes.before[key],value);
    assert.deepEqual(evidence[0]!.changes.after[key],key==='unit_of_measure'?'quantity':value);

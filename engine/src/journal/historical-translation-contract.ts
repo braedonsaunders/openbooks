@@ -18,7 +18,7 @@ export interface HistoricalTranslationSourceReference {
   versionId: string;
   contentHash: string;
 }
-export interface HistoricalTranslationLayerInstruction {
+export type HistoricalTranslationLayerInstruction = {
   amount: string;
   /** Presentation-currency units per measurement-currency unit. */
   rate: string;
@@ -35,7 +35,7 @@ export interface HistoricalTranslationInstruction {
   kind: "contribution" | "opening" | "correction";
   layers: HistoricalTranslationLayerInstruction[];
 }
-export interface HistoricalTranslationSourceFingerprint {
+export type HistoricalTranslationSourceFingerprint = {
   orgId: string;
   lineId: string;
   entryId: string;
@@ -49,12 +49,12 @@ export interface HistoricalTranslationSourceFingerprint {
   postingDate: string;
   origin: string;
   reversesEntryId: string | null;
-}
-export interface RetainedHistoricalTranslationLayer extends HistoricalTranslationLayerInstruction {
+};
+export type RetainedHistoricalTranslationLayer = HistoricalTranslationLayerInstruction & {
   id: string;
   versionNumber: number;
   translatedAmount: string;
-}
+};
 export interface HistoricalTranslationEvidence {
   instruction: HistoricalTranslationInstruction;
   sourceFingerprint: HistoricalTranslationSourceFingerprint;
@@ -127,7 +127,7 @@ export function assertHistoricalTranslationSource(instruction: HistoricalTransla
       instruction.layers.some(layer => (toUnits(layer.amount) > 0n) !== (sourceUnits > 0n) || layer.historicalDate > source.postingDate))
     throw new HistoricalTranslationEvidenceError("Exact signed layers must sum to the physical source amount, share its sign, and retain historical dates no later than posting.");
 }
-export interface AppliedHistoricalTranslationParent {
+export type AppliedHistoricalTranslationParent = {
   id: string;
   amount: string;
   rate: string;
@@ -147,7 +147,7 @@ export interface AppliedHistoricalTranslationParent {
   kind: HistoricalTranslationInstruction["kind"];
   /** Absolute allocations to immediate children, never reduced by descendants. */
   consumed: string;
-}
+};
 /** Each applied signed layer can parent opposite-signed corrections. Restoring
  * a correction creates new capacity without reclaiming its parent's allocation. */
 export function assertHistoricalTranslationCorrectionParent(

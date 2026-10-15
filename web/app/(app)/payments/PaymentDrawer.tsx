@@ -12,7 +12,8 @@ import { useRouter } from 'next/navigation'
 import { useLocale, useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Wand2 } from 'lucide-react'
-import { Badge, Button, FieldLabel, Input, Label, SearchSelect, Select } from '@openbooks/ui'
+import { Badge, Button, Drawer, FieldLabel, Input, Label, SearchSelect, Select, Textarea } from '@openbooks/ui'
+import { storedExplicitFx, type ExplicitFxDraft } from '../../../components/document-drawer-fx-rate'
 import { TransactionDrawer } from '../../../components/transaction-drawer'
 import { DocTypeBadge, docTypeMeta } from '../../../components/doc-type-badge'
 import { JournalEntryLink } from '../../../components/journal-entry-link'
@@ -320,6 +321,7 @@ function PaymentDrawerBody({
   const [postingEffectStatus, setPostingEffectStatus] = useIdentityState([doc.id, doc.posting_effect_status, doc.posting_effect_updated_at], doc.posting_effect_status)
   const [postingEffectsQueued, setPostingEffectsQueued] = useIdentityState([doc.id, doc.posting_effect_status, doc.posting_effect_updated_at], false)
   const tFunding = useTranslations('processorReceipts')
+  const tFx = useTranslations('documents.explicitFx')
   const [fundingRetry, setFundingRetry] = useState(0)
   const [fundingSubsidiaryId, setFundingSubsidiaryId] = useState(typeof doc.subsidiary_id === 'string' ? doc.subsidiary_id : '')
   const fundingSubsidiaries = (Array.isArray(doc.funding_subsidiaries) ? doc.funding_subsidiaries : []) as { id: string; name: string; currency: string }[]
@@ -403,6 +405,19 @@ function PaymentDrawerBody({
     key: string
     rates: SettlementRateOption[]
   }>({ key: '', rates: [] })
+  // Explicit settlement rate into the owning entity's functional currency:
+  // undefined keeps the stored evidence, null clears it, a draft records a
+  // replacement on the next Save with the exact pair and date shown.
+  const [explicitFx, setExplicitFx] = useState<ExplicitFxDraft | null | undefined>(undefined)
+  const [fxEditorOpen, setFxEditorOpen] = useState(false)
+  const [fxRateInput, setFxRateInput] = useState('')
+  const [fxSourceInput, setFxSourceInput] = useState('')
+  const [fxReasonInput, setFxReasonInput] = useState('')
+  const fxFunctional = fundingSubsidiaries.find((sub) => sub.id === fundingSubsidiaryId)?.currency
+    ?? (typeof doc.functional_currency === 'string' ? doc.functional_currency : null)
+  const storedFx = storedExplicitFx(doc.document_fx_rate_evidence)
+  const shownFx = explicitFx === undefined ? storedFx : explicitFx
+  const showFx = fxFunctional !== null && (currency !== fxFunctional || storedFx !== null)
   const settlementRates = settlementRateResult.key === settlementRateKey ? settlementRateResult.rates : []
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty' | 'error'>('saved')
   // The last successful save: the revision it was fenced on and the revision
@@ -580,8 +595,9 @@ function PaymentDrawerBody({
       ...(side === 'ar' ? { onAccountAmount: onAccount } : {}),
       ...(showWithholding ? { withholdingAuthorisation: withholdingAuthorisation || null, withholdingAuthorisedAmount: withholdingAuthorisedAmount.trim() || null } : {}),
       ...(tenderPatch !== null ? { storedValueTenders: tenderPatch } : {}),
+      ...(explicitFx !== undefined ? { explicitFx } : {}),
     }),
-    [partyId, bankAccountId, documentDate, referenceNumber, memo, validAllocations, onAccount, side, tenderPatch, documentRevision, showWithholding, withholdingAuthorisation, withholdingAuthorisedAmount, createMode, fundingSubsidiaryId],
+    [partyId, bankAccountId, documentDate, referenceNumber, memo, validAllocations, onAccount, side, tenderPatch, documentRevision, showWithholding, withholdingAuthorisation, withholdingAuthorisedAmount, createMode, fundingSubsidiaryId, explicitFx],
   )
   // Track unsaved edits (no autosave — Save is an explicit button). Adjusted
   // during render (same committed value, no extra render). `editable` is read
@@ -623,6 +639,7 @@ function PaymentDrawerBody({
     setWithholdingAuthorisation(typeof custom.withholdingAuthorisation === 'string' ? custom.withholdingAuthorisation : '')
     setWithholdingAuthorisedAmount(typeof custom.withholdingAuthorisedAmount === 'string' ? custom.withholdingAuthorisedAmount : '')
     setAllocs(Object.fromEntries(payment.allocations.map((a) => [a.openLineId, a])))
+    setExplicitFx(undefined)
     setTenderDrafts(initialTenderDrafts())
     // Restoring the party must not trip the party-change reset on the next
     // render: sync its tracking and bring back the loaded open items, or the
@@ -659,6 +676,7 @@ function PaymentDrawerBody({
       ...(side === 'ar' && cmp(onAccount, '0') > 0 ? { onAccountAmount: onAccount } : {}),
       ...(showWithholding ? { withholdingAuthorisation: withholdingAuthorisation || null, withholdingAuthorisedAmount: withholdingAuthorisedAmount.trim() || null } : {}),
       ...(tenderPatch !== null ? { storedValueTenders: tenderPatch } : {}),
+      ...(explicitFx !== undefined ? { explicitFx } : {}),
     }
     const ok = await execute(
       () =>
@@ -1231,7 +1249,90 @@ function PaymentDrawerBody({
           </div>
         </div>}
 
-
+        {showFx && fxFunctional ? (
+          <div className="space-y-1.5">
+            <FieldLabel fieldName={tFx('label')}>{tFx('label')}</FieldLabel>
+            {shownFx ? (
+              <div className="text-sm">
+                <p className="tabular-nums">
+                  {tFx('conversion', { from: shownFx.fromCurrency, rate: shownFx.rate, to: shownFx.toCurrency, date: shownFx.rateDate })}
+                  {explicitFx !== undefined ? <span className="ml-2 text-xs text-slate-500 dark:text-slate-400">{tFx('unsaved')}</span> : null}
+                </p>
+                <p className="text-xs text-slate-500 dark:text-slate-400">{tFx('sourceLine', { source: shownFx.source })}</p>
+              </div>
+            ) : (
+              <p className="text-sm">
+                {explicitFx === null ? tFx('clearedUnsaved') : tFx('marketRates', { from: currency, to: fxFunctional })}
+              </p>
+            )}
+            {shownFx && shownFx.rateDate !== documentDate ? (
+              <p role="alert" className="text-xs text-amber-700 dark:text-amber-300">
+                {tFx(explicitFx === undefined ? 'staleStored' : 'stalePending', { date: documentDate })}
+              </p>
+            ) : null}
+            {editable && isDraft ? (
+              <div className="flex flex-wrap gap-2">
+                <Button type="button" size="sm" variant="outline" onClick={() => {
+                  setFxRateInput(shownFx?.rate ?? '')
+                  setFxSourceInput(shownFx?.source ?? '')
+                  setFxReasonInput(explicitFx ? explicitFx.reason : '')
+                  setFxEditorOpen(true)
+                }}>
+                  {shownFx ? tFx('change') : tFx('record')}
+                </Button>
+                {shownFx ? (
+                  <Button type="button" size="sm" variant="ghost" onClick={() => setExplicitFx(storedFx ? null : undefined)}>
+                    {tFx('useMarketRates')}
+                  </Button>
+                ) : explicitFx === null ? (
+                  <Button type="button" size="sm" variant="ghost" onClick={() => setExplicitFx(undefined)}>
+                    {tFx('keepRecorded')}
+                  </Button>
+                ) : null}
+              </div>
+            ) : null}
+            <Drawer
+              open={fxEditorOpen}
+              stacked
+              size="sm"
+              onClose={() => setFxEditorOpen(false)}
+              title={tFx('editorTitle')}
+              description={tFx('editorDescription', { from: currency, to: fxFunctional, date: documentDate })}
+              footer={
+                <div className="flex justify-end gap-2">
+                  <Button type="button" variant="outline" onClick={() => setFxEditorOpen(false)}>{tFx('cancel')}</Button>
+                  <Button type="button" disabled={!fxRateInput.trim() || !fxSourceInput.trim() || !fxReasonInput.trim()} onClick={() => {
+                    setExplicitFx({
+                      rate: fxRateInput.trim(),
+                      source: fxSourceInput.trim(),
+                      reason: fxReasonInput.trim(),
+                      fromCurrency: currency,
+                      toCurrency: fxFunctional,
+                      rateDate: documentDate,
+                    })
+                    setFxEditorOpen(false)
+                  }}>{tFx('apply')}</Button>
+                </div>
+              }
+            >
+              <div className="space-y-4">
+                <div className="space-y-1.5">
+                  <Label htmlFor="payment-fx-rate">{tFx('rate', { from: currency, to: fxFunctional })}</Label>
+                  <Input id="payment-fx-rate" inputMode="decimal" value={fxRateInput} onChange={(event) => setFxRateInput(event.target.value)} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="payment-fx-source">{tFx('source')}</Label>
+                  <Input id="payment-fx-source" maxLength={120} value={fxSourceInput} placeholder={tFx('sourcePlaceholder')} onChange={(event) => setFxSourceInput(event.target.value)} />
+                </div>
+                <div className="space-y-1.5">
+                  <Label htmlFor="payment-fx-reason">{tFx('reason')}</Label>
+                  <Textarea id="payment-fx-reason" maxLength={500} rows={3} value={fxReasonInput} placeholder={tFx('reasonPlaceholder')} onChange={(event) => setFxReasonInput(event.target.value)} />
+                </div>
+                <p className="text-xs text-slate-500 dark:text-slate-400">{tFx('appliedOnSave')}</p>
+              </div>
+            </Drawer>
+          </div>
+        ) : null}
 
         {isDraft ? (
           <div className="space-y-2">

@@ -31,11 +31,13 @@ import {
 } from "./programs.ts";
 import {
   createBenefitAward,
+  recordSettledAward,
   submitBenefitAward,
 } from "./awards.ts";
 import {
   createAdjustingAward,
   confirmAwardPayrollDelivery,
+  reconcileIncentivePeriod,
   previewIncentiveSettlement,
   queueAwardForPayRun,
   settleIncentivePeriod,
@@ -260,19 +262,49 @@ settlementTest("signed adjustments have caller-stable identity and retain the or
   const settled = await settleIncentivePeriod(query);
   const award = settled.awards[0]!;
   await approveSettlementAward(h, award.id);
+  const original = (await db.execute<{program: unknown; source: unknown}>(sql`
+    select program_snapshot program, source_snapshot source from hrm_benefit_awards where org_id = ${h.org.orgId} and id = ${award.id}
+  `)).rows[0]!;
   const correction = {
     orgId: h.org.orgId, actorId: h.settlerId, awardId: award.id,
     correctionId: randomUUID(), value: "50.0000", reason: "July revenue restated upward",
+    sourceReference: "payroll-provider:paid-row:1144",
+    periodFrom: "2026-08-01", periodTo: "2026-08-31",
   };
   const topUp = await createAdjustingAward(correction);
   assert.equal(topUp.value, "50.0000");
   assert.equal(topUp.status, "draft");
+  assert.equal(topUp.periodFrom, "2026-08-01");
+  assert.equal(topUp.periodTo, "2026-08-31");
+  const retained = (await db.execute<{program: unknown; source: unknown}>(sql`
+    select program_snapshot program, source_snapshot source from hrm_benefit_awards where org_id = ${h.org.orgId} and id = ${topUp.id}
+  `)).rows[0]!;
+  assert.deepEqual(retained, original, "Paid-period changes retain the original earning-period source and policy");
+  assert.equal(topUp.evidence?.sourceReference, correction.sourceReference);
+  assert.equal(topUp.evidence?.direction, "reissue");
   // The same top-up retried returns the same award.
   const replay = await createAdjustingAward(correction);
   assert.equal(replay.id, topUp.id);
   await refuses(() => createAdjustingAward({
     ...correction, reason: "different evidence",
   }), /different details/);
+  await refuses(() => createAdjustingAward({
+    ...correction, correctionId: randomUUID(), sourceReference: undefined,
+  }), /period override needs its source row reference/);
+  await refuses(() => createAdjustingAward({...correction, sourceReference: "provider:other-row"}), /different details/);
+  await refuses(() => createAdjustingAward({...correction, periodTo: "2026-08-30"}), /different details/);
+  for (const reference of ["", " ", "x".repeat(501)]) {
+    await refuses(() => createAdjustingAward({...correction, correctionId: randomUUID(), sourceReference: reference}), /empty or longer than 500/);
+  }
+  const ordinary = await createAdjustingAward({...correction, correctionId: randomUUID(), sourceReference: undefined, periodFrom: undefined, periodTo: undefined});
+  assert.equal(ordinary.periodFrom, award.periodFrom);
+  assert.equal(ordinary.periodTo, award.periodTo);
+  await refuses(() => recordSettledAward({
+    orgId: h.org.orgId, actorId: h.settlerId, programId: program.id, employmentId: award.employmentId,
+    periodFrom: correction.periodFrom, periodTo: correction.periodTo, value: "10.00", currency: award.currency,
+    adjustsAwardId: award.id, sourceKey: `adjust:${award.id}:${randomUUID()}`,
+    evidence: {kind: "incentive-adjustment", sourceReference: correction.sourceReference, reason: correction.reason, computation: {}},
+  }), /same employment, currency, and period/);
   const separate = await createAdjustingAward({
     ...correction, correctionId: randomUUID(), reason: "another independent restatement",
   });
@@ -754,4 +786,13 @@ settlementTest('approved award queues and replays its original component, note a
   assert.equal((await queueAwardForPayRun({orgId:h.org.orgId,actorId:h.financeId,awardId:award.id,runDocumentId})).adjustmentId,queued.adjustmentId);
   assert.deepEqual((await db.execute<{program:unknown;source:unknown}>(sql`select program_snapshot as program,source_snapshot as source
     from hrm_benefit_awards where org_id=${h.org.orgId} and id=${award.id}`)).rows,source);
+});
+
+settlementTest("period reconciliation keeps aggregate benefit authority and exact current measurement", async (h) => {
+  const {query} = await seedSettlement(h, "Reconciliation member");
+  const result = await reconcileIncentivePeriod(query);
+  assert.equal(result.processedPayrollTotal, "0.0000");
+  assert.equal(result.payrollMinusCurrentMeasurement, "-1000.0000");
+  await assert.rejects(() => reconcileIncentivePeriod({...query, actorId: h.employeeId}), /permission|required|not visible|not found/i);
+  assert.equal(await awardCount(h.org.orgId), 0);
 });

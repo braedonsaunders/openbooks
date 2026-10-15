@@ -19,7 +19,7 @@ import { commitPayRun } from "./run-commit.ts";
 import { createPayRun } from "./run-lifecycle.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
 import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment, seedWorkAllocation } from "../testing/fixtures.ts";
-import { seedUsSuiAccount } from "./filing-test-fixtures.ts";
+import { seedUsSuiAccount, seedUsEinAccount } from "./filing-test-fixtures.ts";
 
 /**
  * The US state withholding engine, ON A REAL PAY RUN.
@@ -91,6 +91,7 @@ interface Fixture {
   orgId: string;
   actorId: string;
   subsidiaryId: string;
+  einAccountId: string;
   scheduleId: string;
   statePayable: string;
 }
@@ -134,8 +135,18 @@ async function usPayrollOrg(): Promise<Fixture> {
   }
   await setPackSlotAccount(org.orgId, actorId, "US", "state_income_tax", statePayable);
   await setPackSlotAccount(org.orgId, actorId, "US", "local_income_tax", statePayable);
+  const subsidiaryId = randomUUID();
+  await db.execute(sql`
+    insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids,
+                              is_elimination, is_active, custom)
+    values (${subsidiaryId}, ${org.orgId}, ${org.subsidiaryId}, 'US Entity', 'USD', 'US',
+            '{}'::jsonb, false, true, '{}'::jsonb)`);
+  const einAccountId = await seedUsEinAccount(org.orgId, actorId, subsidiaryId, "12-3456789");
   for (const state of ["AL", "CA", "NJ", "PA", "NY", "DC", "OH", "MA", "TX", "OR"]) {
-    const filingAccountId = await seedUsSuiAccount(org.orgId, actorId, state);
+    const filingAccountId = await seedUsSuiAccount(org.orgId, actorId, state, {
+      federalAccountId: einAccountId, subsidiaryId, effectiveFrom: "2026-01-01", effectiveTo: null,
+      sourceReference: `${state} original employer registration`,
+    });
     await upsertStatutoryRate({
       orgId: org.orgId, actorId, rates: US_PACK_RATES, rateKey: "us_sui",
       region: state, filingAccountId, taxYear: 2026, values: { rate: "0.03", wageBase: "7000" },
@@ -155,12 +166,6 @@ async function usPayrollOrg(): Promise<Fixture> {
     values (${org.orgId}, 'US', 'us_ca_ett', 'CA', 2026, '{"reserveBalance": "5000.00"}',
             ${actorId}, ${actorId})`);
 
-  const subsidiaryId = randomUUID();
-  await db.execute(sql`
-    insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids,
-                              is_elimination, is_active, custom)
-    values (${subsidiaryId}, ${org.orgId}, ${org.subsidiaryId}, 'US Entity', 'USD', 'US',
-            '{}'::jsonb, false, true, '{}'::jsonb)`);
   const scheduleId = randomUUID();
   await db.execute(sql`
     insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,
@@ -168,7 +173,7 @@ async function usPayrollOrg(): Promise<Fixture> {
                                created_by, updated_by)
     values (${scheduleId}, ${org.orgId}, 'Biweekly US', 'biweekly', 26, ${PERIOD_END}, 3,
             ${subsidiaryId}, true, ${actorId}, ${actorId})`);
-  return { orgId: org.orgId, actorId, subsidiaryId, scheduleId, statePayable };
+  return { orgId: org.orgId, actorId, subsidiaryId, einAccountId, scheduleId, statePayable };
 }
 
 interface EmployeeOptions {
@@ -217,7 +222,10 @@ async function usEmployee(fx: Fixture, name: string, opts: EmployeeOptions): Pro
   // Every hire works under a contributory SUI account for their work state:
   // a run with no recorded financing method refuses by design, and these
   // tests assert withholding, never the method refusal.
-  const suiAccountId = await seedUsSuiAccount(fx.orgId, fx.actorId, opts.state);
+  const suiAccountId = await seedUsSuiAccount(fx.orgId, fx.actorId, opts.state, {
+    federalAccountId: fx.einAccountId, subsidiaryId: fx.subsidiaryId, effectiveFrom: "2026-01-01", effectiveTo: null,
+    sourceReference: `${opts.state} original employer registration`,
+  });
   await db.execute(sql`
     insert into employee_payroll_profiles (org_id, employee_party_id, employment_id, pay_schedule_id,
                                            country, province, residence_region, pay_basis,

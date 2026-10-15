@@ -59,6 +59,8 @@ function ddlColumnsByTable(): Map<string, Set<string>> {
 /** Sources with a dedicated branch in loadEntityOptions (never generic). */
 const DEDICATED = new Set([
   "accounts",
+  "us-federal-filing-accounts",
+  "payroll-lineage-employers",
   "vendors",
   "accounting-periods",
   "items",

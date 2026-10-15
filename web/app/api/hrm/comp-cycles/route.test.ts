@@ -201,7 +201,7 @@ function patchRequest(url: string, body: unknown): Request {
     const request = () => new Request("http://openbooks.test/api/hrm/comp-cycles");
     assert.equal((await collectionRoute!.GET(request())).status, 404);
     routeState.features = { hrmCompensation: true, payroll: false };
-    const refused = await collectionRoute!.GET(request());
+    const refused: Response = await collectionRoute!.GET(request());
     assert.equal(refused.status, 422);
     assert.match(((await refused.json()) as { error: string }).error, /Payroll is off/);
     assert.deepEqual(routeState.calls, []);
@@ -234,7 +234,7 @@ function patchRequest(url: string, body: unknown): Request {
     const mapped = await itemRoute!.POST(postRequest(`http://openbooks.test/api/hrm/comp-cycles/${CYCLE_ID}`, { action: "push" }), params as never);
     assert.equal(mapped.status, 409);
     routeState.serviceThrow = new CompensationError("REFUSED", "3 lines still await decision");
-    const refused = await itemRoute!.POST(postRequest(`http://openbooks.test/api/hrm/comp-cycles/${CYCLE_ID}`, { action: "push" }), params as never);
+    const refused: Response = await itemRoute!.POST(postRequest(`http://openbooks.test/api/hrm/comp-cycles/${CYCLE_ID}`, { action: "push" }), params as never);
     assert.equal(refused.status, 422);
     routeState.serviceThrow = null;
   });
@@ -276,7 +276,7 @@ function patchRequest(url: string, body: unknown): Request {
     const params = { params: Promise.resolve({ id: CYCLE_ID, lineId: LINE_ID }) };
     const url = `http://openbooks.test/api/hrm/comp-cycles/${CYCLE_ID}/lines/${LINE_ID}?action=propose`;
     for (const proposedPct of ["abc", -2, "3.1234567"]) {
-      const refused = await lineRoute!.PATCH(patchRequest(url, { proposedPct }), params as never);
+      const refused: Response = await lineRoute!.PATCH(patchRequest(url, { proposedPct }), params as never);
       assert.equal(refused.status, 400, `${JSON.stringify(proposedPct)} refuses`);
       assert.match(
         ((await refused.json()) as { error: string }).error,
@@ -305,7 +305,7 @@ function patchRequest(url: string, body: unknown): Request {
     const params = { params: Promise.resolve({ id: CYCLE_ID, lineId: LINE_ID }) };
     const url = `http://openbooks.test/api/hrm/comp-cycles/${CYCLE_ID}/lines/${LINE_ID}?action=propose`;
     for (const proposedPct of [3.5, 0.12345600000000001]) {
-      const refused = await lineRoute!.PATCH(patchRequest(url, { proposedPct }), params as never);
+      const refused: Response = await lineRoute!.PATCH(patchRequest(url, { proposedPct }), params as never);
       assert.equal(refused.status, 400, `${proposedPct} must be a decimal string`);
       assert.match(((await refused.json()) as { error: string }).error, /proposedPct.*decimal string/);
     }
@@ -350,7 +350,7 @@ function patchRequest(url: string, body: unknown): Request {
       "INVALID_INPUT",
       "propose exactly one of proposedPct or proposedRate — the other derives, never both typed",
     );
-    const refused = await lineRoute!.PATCH(
+    const refused: Response = await lineRoute!.PATCH(
       patchRequest(`http://openbooks.test/api/hrm/comp-cycles/${CYCLE_ID}/lines/${LINE_ID}?action=propose`, {
         proposedPct: null,
         proposedRate: null,

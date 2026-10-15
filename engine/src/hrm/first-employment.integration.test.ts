@@ -27,7 +27,7 @@ import {
   withdrawChangeRequest,
 } from "./change-requests.ts";
 import { createPosition } from "./positions.ts";
-import { decideGate } from "../flows/gates.ts";
+import { decideGate, ReleaseError } from "../flows/gates.ts";
 import { installEngineSeams } from "../composition/install.ts";
 import { proposeFirstEmployment } from "./first-employment.ts";
 
@@ -58,12 +58,12 @@ const FIRST_EMPLOYMENT_SPEC = {
   ],
 } as const;
 
-/** An active person party holding the employee role — the roster side of a hire, without any employment. */
-async function seedEmployeeParty(orgId: string, displayName: string): Promise<string> {
+/** A party fixture holding an active employee role, without any employment. */
+async function seedEmployeeParty(orgId: string, displayName: string, kind: "person" | "employee" | "company" | "customer" | "vendor" = "person"): Promise<string> {
   const partyId = randomUUID();
   await db.execute(sql`
     insert into parties (id, org_id, kind, display_name, is_active, custom)
-    values (${partyId}, ${orgId}, 'person', ${displayName}, true, '{}'::jsonb)
+    values (${partyId}, ${orgId}, ${kind}, ${displayName}, true, '{}'::jsonb)
   `);
   await seedActiveEmployment(orgId, partyId, "2026-01-01");
   return partyId;
@@ -610,4 +610,94 @@ test("first hire is org-isolated: another org's party and entity refuse", { skip
     await dropScratchOrg(first.orgId);
     await dropScratchOrg(second.orgId);
   }
+});
+
+for (const kind of ["person", "employee"] as const) {
+  test(`first hire admits native ${kind} identity with its active employee role`, { skip: !DB }, async () => {
+    await withHarness(() => setupHarness(FIRST_EMPLOYMENT_SPEC), async (h) => {
+      const workerPartyId = await seedEmployeeParty(h.org.orgId, `Natural ${kind}`, kind);
+      const hire = await proposeFirstEmployment({ orgId: h.org.orgId, actorId: h.hrId, workerPartyId,
+        employerSubsidiaryId: h.org.subsidiaryId, effectiveFrom: "2026-09-01", reason: "Start employment" });
+      assert.equal(hire.status, "applied");
+      assert.deepEqual(await liveVersions(hire.employmentId), [{ no: 1, status: "active" }]);
+      assert.deepEqual(await findEmploymentsByParty({ orgId: h.org.orgId, actorId: h.hrId, workerPartyId }), [hire.employmentId]);
+      const stored = (await db.execute<{ kind: string; activeRole: boolean }>(sql`
+        select p.kind, r.is_active as "activeRole" from parties p
+        join employee_roles r on r.org_id = p.org_id and r.party_id = p.id
+        where p.org_id = ${h.org.orgId} and p.id = ${workerPartyId}
+      `)).rows[0];
+      assert.deepEqual(stored, { kind, activeRole: true });
+    });
+  });
+}
+
+for (const kind of ["company", "customer", "vendor"] as const) {
+  test(`first hire refuses ${kind} identity despite an active employee role`, { skip: !DB }, async () => {
+    await withHarness(() => setupHarness(FIRST_EMPLOYMENT_SPEC), async (h) => {
+      const workerPartyId = await seedEmployeeParty(h.org.orgId, `Corporate ${kind}`, kind);
+      const error = await refusalOf(proposeFirstEmployment({ orgId: h.org.orgId, actorId: h.hrId, workerPartyId,
+        employerSubsidiaryId: h.org.subsidiaryId, effectiveFrom: "2026-09-01", reason: "Start employment" }), HrmChangeRequestError);
+      assert.equal(error.code, "INVALID_PAYLOAD");
+      assert.match(error.message, /natural person/);
+      assert.equal(await employmentCount(h.org.orgId, workerPartyId), 0);
+      assert.equal(await hireRequestCount(h.org.orgId, workerPartyId), 0);
+    });
+  });
+}
+
+test("native employee identity without an active employee role refuses without reserving employment", { skip: !DB }, async () => {
+  await withHarness(() => setupHarness(FIRST_EMPLOYMENT_SPEC), async (h) => {
+    const workerPartyId = await seedEmployeeParty(h.org.orgId, "Inactive employee role", "employee");
+    await db.execute(sql`update employee_roles set is_active = false where org_id = ${h.org.orgId} and party_id = ${workerPartyId}`);
+    const error = await refusalOf(proposeFirstEmployment({ orgId: h.org.orgId, actorId: h.hrId, workerPartyId,
+      employerSubsidiaryId: h.org.subsidiaryId, effectiveFrom: "2026-09-01", reason: "Start employment" }), HrmChangeRequestError);
+    assert.equal(error.code, "REFUSED");
+    assert.match(error.message, /active employee role/);
+    assert.equal(await employmentCount(h.org.orgId, workerPartyId), 0);
+    await db.execute(sql`delete from employee_roles where org_id = ${h.org.orgId} and party_id = ${workerPartyId}`);
+    const missingRole = await refusalOf(proposeFirstEmployment({ orgId: h.org.orgId, actorId: h.hrId, workerPartyId,
+      employerSubsidiaryId: h.org.subsidiaryId, effectiveFrom: "2026-09-01", reason: "Start employment" }), HrmChangeRequestError);
+    assert.equal(missingRole.code, "REFUSED");
+    assert.equal(await hireRequestCount(h.org.orgId, workerPartyId), 0);
+  });
+});
+
+for (const change of ["deactivate_role", "corporate_identity"] as const) {
+  test(`hire approval rechecks worker admission after ${change}`, { skip: !DB }, async () => {
+    await withHarness(() => setupHarness(FIRST_EMPLOYMENT_SPEC), async (h) => {
+      await seedFlow(h.org.orgId, h.approverId);
+      const workerPartyId = await seedEmployeeParty(h.org.orgId, "Pending employee", "employee");
+      const hire = await proposeFirstEmployment({ orgId: h.org.orgId, actorId: h.hrId, workerPartyId,
+        employerSubsidiaryId: h.org.subsidiaryId, effectiveFrom: "2026-09-01", reason: "Start employment" });
+      if (change === "deactivate_role") {
+        await db.execute(sql`update employee_roles set is_active = false where org_id = ${h.org.orgId} and party_id = ${workerPartyId}`);
+      } else {
+        await db.execute(sql`update parties set kind = 'company' where org_id = ${h.org.orgId} and id = ${workerPartyId}`);
+      }
+      const gate = await gateOf(hire.changeRequestId);
+      await assert.rejects(decideGate({ gateId: gate.id, decision: "approved", userId: h.approverId }), (error: unknown) => {
+        assert.ok(error instanceof ReleaseError);
+        assert.match(error.message, change === "deactivate_role" ? /active employee role/ : /natural person/);
+        return true;
+      });
+      assert.deepEqual(await liveVersions(hire.employmentId), []);
+      const request = (await db.execute<{ status: string }>(sql`select status from hrm_employment_change_requests
+        where org_id = ${h.org.orgId} and id = ${hire.changeRequestId}`)).rows[0];
+      assert.equal(request?.status, "pending_approval");
+    });
+  });
+}
+
+test("canonical hire drafts refuse a reserved corporate identity despite its employee role", { skip: !DB }, async () => {
+  await withHarness(() => setupHarness(FIRST_EMPLOYMENT_SPEC), async (h) => {
+    const { employmentId, workerPartyId } = await seedEmployment(h.org.orgId, h.org.subsidiaryId,
+      { withVersion: false, employeeRole: true });
+    await db.execute(sql`update parties set kind = 'company' where org_id = ${h.org.orgId} and id = ${workerPartyId}`);
+    const error = await refusalOf(createChangeRequestDraft({ orgId: h.org.orgId, actorId: h.hrId, employmentId,
+      payload: { kind: "hire", status: "active", effectiveFrom: "2026-09-01" } }), HrmChangeRequestError);
+    assert.equal(error.code, "INVALID_PAYLOAD");
+    assert.match(error.message, /natural person/);
+    assert.equal(await hireRequestCount(h.org.orgId, workerPartyId), 0);
+    assert.deepEqual(await liveVersions(employmentId), []);
+  });
 });

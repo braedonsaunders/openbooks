@@ -117,6 +117,75 @@ test("refusals name the remedy: bad threshold, amountless subject, unknown role/
   assert.equal(user.code, "unknown-user");
 });
 
+const ENTITY_A = "11111111-1111-4111-8111-111111111111";
+const ENTITY_B = "22222222-2222-4222-8222-222222222222";
+
+test("a selected legal entity becomes the graph's typed subject scope", () => {
+  for (const input of [
+    { approver: { type: "role", role: "admin" } as const, subsidiaryIds: [ENTITY_A.toUpperCase()] },
+    { approver: { type: "user", userId: "u-1" } as const, threshold: 10, subsidiaryIds: [ENTITY_A, ENTITY_B] },
+  ]) {
+    const built = buildQuickApprovalGraph(PROFILE, input);
+    assert.equal(built.ok, true);
+    if (!built.ok) continue;
+    // Stored canonical (lowercase) so runtime admission compares against
+    // database uuid output without case drift.
+    const expected = input.subsidiaryIds.map((id) => id.toLowerCase());
+    assert.deepEqual(built.graph.subjectScope, { subsidiaryIds: expected });
+    const gate = built.graph.nodes.find((node) => node.id === "gate");
+    assert.equal(gate?.data.kind, "gate", "the scope never replaces the human gate");
+    const lint = lintFlowGraphForSubject("vendor_bill", built.graph, PROFILE);
+    assert.deepEqual(lint.ok ? [] : lint.errors, []);
+  }
+});
+
+test("no legal entity selected keeps organization-wide scope absent, not aliased", () => {
+  const built = buildQuickApprovalGraph(PROFILE, { approver: { type: "role", role: "admin" } });
+  assert.equal(built.ok, true);
+  if (!built.ok) return;
+  assert.equal(built.graph.subjectScope, undefined);
+});
+
+test("empty, blank and repeated legal entities are refused by name", () => {
+  for (const subsidiaryIds of [[], [""], [ENTITY_A, ENTITY_A], [ENTITY_A, ENTITY_A.toUpperCase()]]) {
+    const built = buildQuickApprovalGraph(PROFILE, {
+      approver: { type: "role", role: "admin" },
+      subsidiaryIds,
+    });
+    assert.equal(built.ok, false, JSON.stringify(subsidiaryIds));
+    if (built.ok) continue;
+    assert.equal(built.code, "bad-subject-scope");
+    assert.match(built.message, /legal entity/);
+  }
+});
+
+test("invalid, mixed and overlength legal entities refuse through the shared graph schema", () => {
+  const overlength = Array.from({ length: 101 }, (_, i) =>
+    `11111111-1111-4111-8111-${String(i).padStart(12, "0")}`);
+  for (const subsidiaryIds of [
+    ["not-a-uuid"],
+    [ENTITY_A, "not-a-uuid"],
+    ["not-a-uuid", ENTITY_B],
+    [` ${ENTITY_A} `],
+    [ENTITY_A, 42 as unknown as string],
+    overlength,
+  ]) {
+    const built = buildQuickApprovalGraph(PROFILE, {
+      approver: { type: "role", role: "admin" },
+      subsidiaryIds,
+    });
+    assert.equal(built.ok, false, JSON.stringify(subsidiaryIds).slice(0, 80));
+    if (built.ok) continue;
+    assert.equal(built.code, "bad-subject-scope");
+  }
+  // Exactly at the cap remains valid.
+  const atCap = buildQuickApprovalGraph(PROFILE, {
+    approver: { type: "role", role: "admin" },
+    subsidiaryIds: overlength.slice(0, 100),
+  });
+  assert.equal(atCap.ok, true);
+});
+
 test("self-approval prevention stays on unless the author explicitly opts out", () => {
   const off = buildQuickApprovalGraph(PROFILE, {
     approver: { type: "role", role: "admin" },

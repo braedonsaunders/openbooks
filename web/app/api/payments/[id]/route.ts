@@ -47,6 +47,13 @@ const paymentPatchBody = z.object({
   memo: z.string().nullable().optional(),
   withholdingAuthorisation: z.string().trim().max(100).nullable().optional(),
   withholdingAuthorisedAmount: exactMoney().nullable().optional(),
+  // Explicit settlement rate into the owning entity's functional currency:
+  // the same strict rate/source/reason/pair/date object the invoice/bill
+  // editor carries. Null clears recorded evidence; absent preserves it.
+  explicitFx: z.object({
+    rate: z.string(), source: z.string(), reason: z.string(),
+    fromCurrency: z.string(), toCurrency: z.string(), rateDate: isoDate(),
+  }).strict().nullable().optional(),
   allocations: z.array(allocationInput).optional(),
   // Cash received beyond the applications (customer receipts only).
   onAccountAmount: exactMoney().optional(),
@@ -165,6 +172,7 @@ async function patchPayment(req: Request, { params }: { params: Promise<{ id: st
         memo: body.memo,
         withholdingAuthorisation: body.withholdingAuthorisation,
         withholdingAuthorisedAmount: body.withholdingAuthorisedAmount,
+        explicitFx: body.explicitFx,
         allocations: body.allocations,
         onAccountAmount: body.onAccountAmount,
         creditAllocations: body.creditAllocations,

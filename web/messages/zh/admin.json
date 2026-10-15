@@ -2855,6 +2855,16 @@
       "cancel": "取消",
       "saveFailed": "无法保存配置。"
     },
+    "usFilingLineage": {
+          "stateAccount": "州申报账户",
+          "employer": "原始法定雇主",
+          "federalAccount": "原始联邦EIN",
+          "federalHelp": "已停用的EIN仍可用于核实历史来源。",
+          "datesHelp": "原始登记的日期范围包含起止日。结束日期不得早于最后一次已入账工资。",
+          "sourceReference": "原始登记证据引用",
+          "sourceHelp": "请指定证明此EIN和日期范围的登记函或保留记录。",
+          "reason": "变更原因"
+    },
     "entities": {
       "usage-meters": {
         "title": "用量计量器",
@@ -3009,6 +3019,11 @@
       "worker-comp-groups": {
         "title": "工伤保险组",
         "description": "用于人工成本核算的工伤补偿费率组。"
+      },
+      "pay-component-statutory-treatments": {
+        "title": "法定处理",
+        "singularTitle": "法定处理",
+        "description": "此项目按工资支付日期适用的带日期计划排除和假期工资基数计入规则。工伤组覆盖整个项目的处理规则。"
       },
       "pay-component-department-expenses": {
         "title": "部门费用科目",
@@ -3295,6 +3310,11 @@
         "title": "所得税税率",
         "singularTitle": "所得税税率",
         "description": "按辖区划分的法定所得税税率，带生效日期 — 用于 ASC 740 所得税计提。"
+      },
+      "payroll-us-filing-account-employer-lineage": {
+              "title": "雇主EIN历史",
+              "singularTitle": "雇主EIN归属",
+              "description": "州登记的原始所有权，包含起止日期和保留的证据。"
       },
       "payroll-filing-accounts": {
         "title": "申报账户",
@@ -3977,6 +3997,8 @@
       "taxable": "应税",
       "pensionable": "计养老金",
       "insurable": "计保险",
+      "initialVacationable": "初始假期工资基数计入",
+      "componentTreatmentReason": "变更原因",
       "vacationable": "计入年假工资",
       "nonPeriodic": "非周期性（奖金方法）",
       "programExclusions": "计划排除项",
@@ -4570,6 +4592,10 @@
       "mode": "政策"
     },
     "fieldHelp": {
+      "initialVacationable": "仅用于创建首个带日期的处理规则。现有项目请在法定处理历史中修改。",
+      "componentTreatmentPayDate": "起止日期均包含在内，按工资支付日期适用，包括补发工资和离职结算。工伤组覆盖整个项目的处理规则。",
+      "componentTreatmentVacationable": "在涵盖的工资支付日期，将此收入计入假期工资和可累积收入基数。",
+      "componentTreatmentReason": "说明法定处理或休假计算基数政策的变更，并注明支持证据。每次保存均须提供新的原因（1–2000 个字符），并记录在审计记录中。",
       "fxRateMaxAgeDays": "最新可用汇率距期末的天数超过此值时，重估和合并将拒绝该汇率。期末汇率从期末即期汇率的日期起算；平均汇率从计入平均的最新报价日期起算。未设置政策时的默认值：31 天。",
       "storedValueLiabilityAccount": "发行时贷记、兑换时借记的资产负债表科目。",
       "storedValueBreakageIncomeAccount": "确认断点或到期时贷记的收入科目。",
@@ -7293,7 +7319,7 @@
       "responsibilities": "有效期分配",
       "responsibilitiesHint": "将各分组和角色分配给具有明确日期的雇佣关系。每笔来源必须具备全部配置的份额。",
       "limits": "分组上限",
-      "limitsHint": "为每个分组选择金额上限或不设限。本计划此前的奖励会占用该上限。",
+      "limitsHint": "可按分组设置固定上限。此前的奖励会占用固定上限。设置项目预算百分比后，分组金额会替代该分组的默认上限；设为 0 可将该组上限设为零。",
       "reason": "审计原因",
       "reasonHint": "说明规则变更原因。所有部分一并保存；已生效计划的变更自所选日期起适用。",
       "changeEffectiveFromHint": "修订后的规则自该日期起适用;此前的期间沿用已生效的规则。",
@@ -7339,7 +7365,7 @@
         "amount": "金额上限"
       },
       "workDate": "作业日期",
-      "capPercentHint": "可选。将每个项目限制为其中标预算中计划项目的此百分比，减去计划费率乘以所有先前来源的金额。",
+      "capPercentHint": "可选默认值。将适用项目限制为中标预算中计划项目的此百分比，减去计划费率乘以所有先前来源的金额。分组固定上限会替代该组的默认值。",
       "sources": {
         "assignment": "有日期的分配",
         "field_ticket_foreman": "现场工单工长",

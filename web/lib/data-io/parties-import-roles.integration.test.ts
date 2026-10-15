@@ -98,3 +98,36 @@ test(
     }
   },
 )
+
+test('parties import admits native employees and refuses corporate employee role claims', { skip: !env.OPENBOOKS_DB_URL }, async () => {
+  const org = await withBypass(() => createScratchOrg())
+  const actorId = (await withBypass(() => seedFlowActors(org.orgId))).adminId
+  try {
+    await withOrgContext(org.orgId, async () => {
+      const resource = masterResource(MASTER_BY_KEY.get('parties')!, org.orgId)
+      const ctx = { orgId: org.orgId, actorId, dryRun: false, allowedSubsidiaryIds: null }
+      const accepted = await resource.write([
+        { shortCode: 'EMP-NEW', displayName: 'Native employee', kind: 'Employee' },
+        { shortCode: 'PERSON-NEW', displayName: 'Natural person', kind: 'Person', isEmployee: 'yes' },
+      ], 'upsert', ctx)
+      assert.equal(accepted.created, 2, JSON.stringify(accepted.errors))
+      const stored = (await db.execute<{ kind: string; active: boolean }>(sql`
+        select p.kind, r.is_active as active from parties p join employee_roles r on r.org_id=p.org_id and r.party_id=p.id
+        where p.org_id=${org.orgId} and p.short_code in ('EMP-NEW', 'PERSON-NEW') order by p.short_code
+      `)).rows
+      assert.deepEqual(stored, [{ kind: 'employee', active: true }, { kind: 'person', active: true }])
+      for (const dryRun of [true, false]) {
+        const refused = await resource.write([{ shortCode: 'CORP-EMP', displayName: 'Corporate identity', kind: 'Company', isEmployee: 'yes' }],
+          'upsert', { ...ctx, dryRun })
+        assert.equal(refused.failed, 1)
+        assert.match(refused.errors[0]!.message, /requires kind "person" or "employee"/)
+        assert.equal(refused.created, 0)
+      }
+      assert.equal((await db.execute<{ n: string }>(sql`select count(*)::text as n from parties where org_id=${org.orgId} and short_code='CORP-EMP'`)).rows[0]!.n, '0')
+      const imported = await resource.read()
+      assert.equal(imported.rows.find(row => row.shortCode === 'EMP-NEW')?.isEmployee, true)
+    })
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId))
+  }
+})

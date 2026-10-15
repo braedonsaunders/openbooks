@@ -16,6 +16,7 @@
  */
 
 import type { SetupEntity } from './types'
+import { PAYROLL_US_FILING_ACCOUNT_LINEAGE_ENTITY } from './payroll-us-filing-account-lineage'
 import { AI_CAPABILITIES_ENTITY } from './hrm-ai-rails'
 import { BENEFIT_TRANSACTION_POLICY_ENTITY } from './benefit-transaction-policy'
 import { SETUP_GROUPS } from './types'
@@ -86,6 +87,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
   ...WAREHOUSE_ENTITIES,
   ...SHIPPING_ENTITIES,
   ...WORKFORCE_ENTITIES,
+  PAYROLL_US_FILING_ACCOUNT_LINEAGE_ENTITY,
   ...SCHEDULING_ENTITIES,
   ...HRM_PROCESS_ENTITIES,
   ...ASSET_ENTITIES,
@@ -129,6 +131,7 @@ export function setupEntityHref(entity: SetupEntity): string {
     'tax-regimes': '/admin/setup/tax-depreciation?tab=regimes',
     'entitlement-plans': '/hrm/benefits?view=programs&type=time_off',
     'pay-components': '/admin/setup/payroll?tab=components',
+    'payroll-filing-accounts': '/admin/setup/payroll?tab=filing',
   }
   const home = parentHomes[parentKey] ?? `/admin/setup/${parentKey}`
   return `${home}${home.includes('?') ? '&' : '?'}${parentKey === 'items' ? 'itemSetup' : 'setupTab'}=${entity.key}`

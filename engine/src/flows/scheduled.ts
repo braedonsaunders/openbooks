@@ -16,6 +16,7 @@ import { db, schema, withBypassContext, withOrg, withOrgContext } from "../platf
 import { getFlowAdapter } from "./registry.ts";
 import { executeFlowPlan } from "./execute.ts";
 import { parseFlowGraph } from "./run.ts";
+import { lockFlowSubjectAdmission } from "./subject-admission.ts";
 
 /**
  * Scheduled flow triggers on the 60-second scheduler tick
@@ -741,6 +742,10 @@ async function runScheduledNode(
       throw new Error(
         "Schedule board delivery requires native record selection.",
       );
+    // A record-free firing has no subject whose legal entity could prove
+    // admission to a scoped flow, so it never fires (author-time lint
+    // refuses this shape; this is the runtime backstop).
+    if (!select && graph.subjectScope) return 0;
     if (!select) {
       const evalCtx: EvalContext = { values: { event_source: "schedule" }, rows: {} };
       const plan = planAutomation(graph, { kind: "scheduled" }, evalCtx, {
@@ -775,6 +780,16 @@ async function runScheduledNode(
     for (const subjectId of candidateIds) {
       const subject = await adapter.loadContext(subjectId);
       if (!subject) continue;
+      // Legal-entity admission before the record is selected or planned:
+      // out-of-scope records are not this flow's subjects at all, and a
+      // record whose entity cannot be proven never fires a scoped flow.
+      // The locked admission holds the scope owner until this firing's
+      // transaction commits, so a rehome cannot move the record out of
+      // the flow's scope between admission and its effects.
+      if (graph.subjectScope) {
+        const admission = await lockFlowSubjectAdmission(flow.orgId, adapter, flow.subjectKind, subjectId, graph);
+        if (admission.admission !== "admitted") continue;
+      }
       const evalCtx: EvalContext = {
         values: { ...subject.values, event_source: "schedule" },
         rows: subject.rows ?? {},

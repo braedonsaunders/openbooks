@@ -26,6 +26,7 @@ const unassignedTime = z.enum(["refuse", "exclude"]).optional();
 
 export const createProgramBody = z.object({
   action: z.literal("create"),
+  reason: reason.optional(),
   code: z.string().trim().min(1).max(60),
   name: z.string().trim().min(1).max(200),
   family,
@@ -105,10 +106,11 @@ const updateProgramBody = z.object({
   changeEffectiveFrom: civilDate.optional(),
 });
 
-const activateProgramBody = z.object({ action: z.literal("activate") });
+const activateProgramBody = z.object({ action: z.literal("activate"), reason: reason.optional() });
 const closeProgramBody = z.object({ action: z.literal("close"), reason });
-const addMemberBody = z.object({
+export const addMemberBody = z.object({
   action: z.literal("addMember"),
+  reason: reason.optional(),
   employmentId: uuid,
   effectiveFrom: civilDate,
   effectiveTo: civilDate.nullish(),

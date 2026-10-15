@@ -206,6 +206,32 @@ test("an hours bank with no wage is refused by name, never priced as zero", () =
 /* Cap behaviours                                                      */
 /* ------------------------------------------------------------------ */
 
+test("a cheque-declared accrual preserves exact cents, provenance and bank caps", () => {
+  const vacation = plan({ systemKey: 'vacation', capBehavior: 'block' });
+  const result = computePlanMovement(move({ plan: vacation, openingBalance: '0',
+    declaredAccrualAmount: '2500.81', declaredAccrualNote: 'Reviewed issued cheque liability' }));
+  assert.equal(result.movements[0]!.amount, '2500.8100');
+  assert.equal(result.movements[0]!.note, 'Reviewed issued cheque liability');
+  assert.throws(() => computePlanMovement(move({ plan: vacation, openingBalance: '2000',
+    limit: limit(), declaredAccrualAmount: '2500.81' })), /would exceed/);
+  for (const amount of ['0', '-1', '1.001', '1,000.00', '1e3']) {
+    assert.throws(() => computePlanMovement(move({ plan: vacation, declaredAccrualAmount: amount })), /declared vacation accrual/);
+  }
+});
+
+test("a declared vacation accrual preserves effective service and personal entitlements", () => {
+  const vacation = plan({ systemKey: "vacation" });
+  for (const rates of [
+    { employeeAccrualValue: "4", serviceAccrualValue: "6" },
+    { employeeAccrualValue: "6", serviceAccrualValue: "4" },
+  ]) {
+    const input = move({ plan: vacation, earnings: "240", ...rates });
+    assert.throws(() => computePlanMovement({ ...input, declaredAccrualAmount: "14.39" }), /below the effective policy accrual 14\.4000/);
+    assert.equal(computePlanMovement({ ...input, declaredAccrualAmount: "14.40" }).movements[0]!.amount, "14.4000");
+    assert.equal(computePlanMovement({ ...input, declaredAccrualAmount: "2500.81" }).movements[0]!.amount, "2500.8100");
+  }
+});
+
 test("warn: the accrual is still recorded and the breach is reported", () => {
   const result = computePlanMovement(move({
     plan: plan({ capBehavior: "warn" }),

@@ -120,6 +120,89 @@ test('a successful exclusion closes the drawer', async (t) => {
   assert.equal(closed.count, 1, 'the drawer must close once the exclusion succeeds')
 })
 
+async function setFieldValue(element: HTMLInputElement | HTMLSelectElement, value: string): Promise<void> {
+  await act(async () => {
+    const proto = element instanceof HTMLSelectElement ? window.HTMLSelectElement.prototype : window.HTMLInputElement.prototype
+    Object.getOwnPropertyDescriptor(proto, 'value')!.set!.call(element, value)
+    element.dispatchEvent(new window.Event(element instanceof HTMLSelectElement ? 'change' : 'input', { bubbles: true }))
+    for (let i = 0; i < 4; i++) await tick()
+  })
+}
+
+function labelledInput(label: string): HTMLInputElement {
+  const input = [...document.querySelectorAll('label')]
+    .find((candidate) => (candidate.textContent ?? '').includes(label))?.querySelector('input')
+  assert.ok(input, `the "${label}" field must render`)
+  return input as HTMLInputElement
+}
+
+test('a bank cash split submits its explicit outside-bank amount and resets the form', async (t) => {
+  const bodies: Record<string, unknown>[] = []
+  const host = document.createElement('div')
+  document.body.appendChild(host)
+  const rootHandle = createRoot(host)
+  t.after(async () => {
+    await act(async () => { rootHandle.unmount() })
+    host.remove()
+    for (const child of [...document.body.children]) child.remove()
+  })
+  const bankComponent = {
+    id: 'bank-component', code: 'BANKPAY', name: 'Bank payout', kind: 'earning', bank_cash_component: true,
+  } as unknown as StubDrawerProps['components'][number]
+  await act(async () => {
+    rootHandle.render(
+      <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+        <StubDrawer
+          stub={stub}
+          variance={null}
+          change={null}
+          onClose={() => {}}
+          fmt={(v) => String(v ?? '')}
+          adjustments={[]}
+          components={[bankComponent]}
+          canAdjust
+          busy={false}
+          onAdjust={async (body) => { bodies.push(body); return true }}
+          buckets={[]}
+          regionLabel=""
+          traceEngines={{}}
+          factorLabels={{}}
+        />
+      </NextIntlClientProvider>,
+    )
+    for (let i = 0; i < 8; i++) await tick()
+  })
+  const picker = document.querySelector('button[aria-label="Component"]') as HTMLButtonElement | null
+  assert.ok(picker, 'the component picker must render')
+  await click(picker)
+  const option = [...document.querySelectorAll('[role="option"]')].find((candidate) => (candidate.textContent ?? '').includes('Bank payout'))
+  assert.ok(option, 'the bank payout component must be offered')
+  await act(async () => {
+    option.dispatchEvent(new window.MouseEvent('click', { bubbles: true, cancelable: true }))
+    for (let i = 0; i < 6; i++) await tick()
+  })
+  await setFieldValue(document.querySelector('input[aria-label="Amount"]') as HTMLInputElement, '1150.64')
+  await setFieldValue(labelledInput('Signed bank hours'), '8.00')
+  await setFieldValue(labelledInput('Keyed hourly rate (optional)'), '143.83')
+  await setFieldValue(labelledInput('Cash paid outside the bank (optional)'), '782.64')
+  await setFieldValue(document.querySelector('input[aria-label="Source reference"]') as HTMLInputElement, 'Payroll source document 7')
+  await setFieldValue(document.querySelector('input[aria-label="Reason / note (optional)"]') as HTMLInputElement, 'Approved withdrawal with independently paid cash')
+  const add = [...document.querySelectorAll('button')].find((b) => (b.textContent ?? '').trim() === 'Add adjustment') as HTMLButtonElement | undefined
+  assert.ok(add, 'the Add adjustment control must render')
+  assert.equal(add.disabled, false, 'a complete split input enables Add')
+  await click(add)
+  assert.equal(bodies.length, 1)
+  assert.equal(bodies[0]!.action, 'bank-cash-input')
+  assert.equal(bodies[0]!.outsideBankAmount, '782.64')
+  assert.equal(bodies[0]!.amount, '1150.64')
+  assert.equal(bodies[0]!.hours, '8.00')
+  assert.equal(bodies[0]!.rate, '143.83')
+  // A successful add resets the whole form: the component clears, which
+  // unmounts the bank fields, and the shared amount field reads empty.
+  assert.equal([...document.querySelectorAll('label')].some((candidate) => (candidate.textContent ?? '').includes('Cash paid outside the bank')), false, 'a successful add resets the outside-bank amount with the form')
+  assert.equal((document.querySelector('input[aria-label="Amount"]') as HTMLInputElement).value, '', 'a successful add resets the amount')
+})
+
 function wizardProps(stubs: unknown[]) {
   return {
     run: { document_id: '11111111-1111-4111-8111-111111111111', document_number: 'PR-104', document_status: 'draft', currency: 'CAD', subsidiary_id: null, posted_entry_id: null, paid_at: null, paid_entry_id: null, schedule_name: 'Biweekly', period_start: '2026-08-01', period_end: '2026-08-14', pay_date: '2026-08-20', tax_year: 2026, run_status: 'calculated', run_type: 'regular', pay_schedule_id: '22222222-2222-4222-8222-222222222222', gross_total: '0', net_total: '0', employer_cost_total: '0', employee_count: 1 },

@@ -1076,5 +1076,30 @@
     },
     "by": "{name}（{at}）",
     "system": "システム"
+  },
+  "revaluationEvidence": {
+      "title": "記録済み決算レート",
+      "reload": "再読み込み",
+      "loading": "読み込み中…",
+      "loadFailed": "外貨ポジションを読み込めませんでした。",
+      "empty": "この選択に対する未決済の外貨ポジションはありません。",
+      "position": "{foreign} · 簿価 {carrying} · レート日 {date}",
+      "recordedRate": "記録済み: {rate}（バージョン {version}）",
+      "organizationRate": "組織レート: {rate}",
+      "rateMissing": "レートなし",
+      "recordRate": "レートを記録",
+      "recordSuccessor": "後継レートを記録",
+      "drawerTitle": "決算レートを記録",
+      "cancel": "キャンセル",
+      "legalEntity": "法人",
+      "account": "勘定科目",
+      "conversion": "換算",
+      "rateDate": "レート日",
+      "currentQuote": "現在のレート: {rate}（バージョン {version}）— 出典: {source}。後継レートはこれを変更せずに置き換えます。",
+      "rate": "為替レート",
+      "source": "出典",
+      "reason": "理由",
+      "recorded": "決算レートを記録しました。",
+      "recordFailed": "決算レートを記録できませんでした。"
   }
 }

@@ -448,11 +448,10 @@ describe("quebec-hsf", () => {
         );
         assert.equal(qcLines.rows[0]!.amount, "39.6000");
 
-        // The region gate: the ON stub carries no HSF evidence at all, even
-        // though the org holds a QC HSF rate.
+        // The region gate retains a zero HSF basis and emits no premium line.
         const onFactors = stubFor(onEmployeeId).factors;
         assert.equal(onFactors.HSF ?? "0", "0");
-        assert.ok(!("HSF_EARN" in onFactors), "no HSF assessable earnings outside QC");
+        assert.equal(onFactors.HSF_EARN, "0", "the HSF basis is explicitly zero outside QC");
         const onHsfLines = (await db.execute<{ amount: string }>(sql`
           select l.amount
             from pay_stub_lines l

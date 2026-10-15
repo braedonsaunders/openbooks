@@ -18,6 +18,7 @@ import {employeeYtd} from './compute-statutory.ts';
 import {saveOpeningBalances} from '../opening-balances.ts';
 import {qualifyOpeningEmployerAuthority,readOpeningEmployerContext} from '../opening-employer-authority.ts';
 import {qualifyOpeningLevySourceAuthority,readOpeningLevySourceContext} from '../opening-levy-source-authority.ts';
+import type { OpeningLevySourceFacts } from '../opening-levy-source-facts.ts';
 import {employeeOpeningLevyAmount,readEmployeeOpeningLevySources,requireEmployerOpeningLevySources} from '../opening-levy-source-reader.ts';
 import {errorChainMatches} from '../../testing/error-chain.ts';
 const DB=!!process.env.OPENBOOKS_DB_URL;
@@ -66,8 +67,8 @@ async function run(f:Fixture,owner:string,status:'draft'|'committed',amount='0',
  }
  return {tx:db,orgId:f.orgId,employeePartyId:f.employeeId,taxYear:2026,documentId:id,subsidiaryId:owner,calculationWarnings};
 }
-async function source(f:Fixture,amounts:Record<string,string>={pensionableYtd:'10000',insurableYtd:'10000',cppYtd:'100'},subsidiaryId=f.subsidiaryId,levyAllocations:readonly unknown[]=[]){
- const folder=randomUUID(),file=randomUUID(),version=randomUUID(),bytes=Buffer.from(JSON.stringify({employeePartyId:f.employeeId,legalEmployerSubsidiaryId:subsidiaryId,taxYear:2026,amounts,levyAllocations}));
+async function source(f:Fixture,amounts:Record<string,string>={pensionableYtd:'10000',insurableYtd:'10000',cppYtd:'100'},subsidiaryId=f.subsidiaryId,levyAllocations:readonly unknown[]=[],facts:OpeningLevySourceFacts={originalCountry:'CA',originalCurrency:'CAD',coverageStart:'2026-01-01',coverageEnd:'2026-05-30',coverageComplete:true}){
+ const folder=randomUUID(),file=randomUUID(),version=randomUUID(),bytes=Buffer.from(JSON.stringify({employeePartyId:f.employeeId,legalEmployerSubsidiaryId:subsidiaryId,taxYear:2026,amounts,levyAllocations,...facts}));
  const sha=createHash('sha256').update(bytes).digest('hex');
  await db.execute(sql`insert into folders(id,org_id,name,is_private,owner_id,created_by,updated_by)
   values(${folder},${f.orgId},'Original opening evidence',true,${f.actorId},${f.actorId},${f.actorId})`);
@@ -77,15 +78,17 @@ async function source(f:Fixture,amounts:Record<string,string>={pensionableYtd:'1
   values(${version},${file},1,${bytes.length},'text/plain',${sha},${f.actorId})`);
  await db.execute(sql`insert into file_blobs(version_id,bytes) values(${version},${bytes})`);
  await db.execute(sql`update files set current_version_id=${version} where org_id=${f.orgId} and id=${file}`);
- return {sourceFileId:file,sourceVersionId:version,sourceSha256:sha,sourceReference:'Original employer A employee opening report',reason:'Qualify original employer ownership'};
+ const expectedOpeningChildrenSha256=(await db.execute<{sha:string}>(sql`select encode(public.digest(public.payroll_opening_source_children(b.org_id,b.id,b.employee_party_id,b.tax_year)::text,'sha256'),'hex') as sha
+   from payroll_opening_balances b where b.org_id=${f.orgId} and b.employee_party_id=${f.employeeId} and b.tax_year=2026`)).rows[0]!.sha;
+ return {...facts,expectedOpeningChildrenSha256,sourceFileId:file,sourceVersionId:version,sourceSha256:sha,sourceReference:'Original employer A employee opening report',reason:'Qualify original employer ownership'};
 }
 function caLevyAllocations(wcb='0',eht='0',cnt='0'){
  const provinces=['AB','BC','MB','NB','NL','NS','NT','NU','ON','PE','QC','SK','YT'];
  const ehtProvinces=['BC','MB','NL','ON'];
  return [
-  ...provinces.map(region=>({programKey:'ca_wcb',region,amount:region==='ON'?wcb:'0'})),
-  ...ehtProvinces.map(region=>({programKey:'ca_eht',region,amount:region==='ON'?eht:'0'})),
-  {programKey:'ca_cnt',region:'QC',amount:cnt},
+  ...provinces.map(region=>({programKey:'ca_wcb',region,federalAccountId:null,amount:region==='ON'?wcb:'0'})),
+  ...ehtProvinces.map(region=>({programKey:'ca_eht',region,federalAccountId:null,amount:region==='ON'?eht:'0'})),
+  {programKey:'ca_cnt',region:'QC',federalAccountId:null,amount:cnt},
  ];
 }
 
@@ -170,7 +173,8 @@ test('unqualified opening payer refuses, exact source qualification replays, and
   const before=(await db.execute<{snapshot:string}>(sql`select to_jsonb(b)::text as snapshot from payroll_opening_balances b where org_id=${f.orgId}`)).rows;
   const context=await readOpeningEmployerContext({orgId:f.orgId,actorId:f.actorId,employeePartyId:f.employeeId,taxYear:2026,allowedSubsidiaryIds:null});assert.ok(context.record);
   const input={orgId:f.orgId,actorId:f.actorId,openingBalanceId:context.record.id,subsidiaryId:f.subsidiaryId,
-   expectedOpeningSha256:context.record.openingSha256,...await source(f),allowedSubsidiaryIds:null};
+   expectedOpeningSha256:context.record.openingSha256,...await source(f,
+    {cppYtd:'100',pensionableYtd:'10000',insurableYtd:'10000'},f.subsidiaryId,caLevyAllocations()),allowedSubsidiaryIds:null};
   const unrelated=randomUUID();
   await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country)
     values(${unrelated},${f.orgId},${f.subsidiaryId},'Unrelated legal employer','CAD','CA')`);
@@ -183,6 +187,8 @@ test('unqualified opening payer refuses, exact source qualification replays, and
   assert.equal((await db.execute(sql`update folders set owner_id=${f.actorId} where org_id=${f.orgId} and id=${packetFolder} returning id`)).rows.length,1);
   await assert.rejects(qualifyOpeningEmployerAuthority({...input,expectedOpeningSha256:'f'.repeat(64)}),/source changed/);
   const qualified=await qualifyOpeningEmployerAuthority(input);assert.deepEqual(await qualifyOpeningEmployerAuthority(input),qualified);
+  await assert.rejects(employeeYtd(current),/no complete statutory levy source allocation/);
+  await qualifyOpeningLevySourceAuthority({...input,allocations:caLevyAllocations()});
   assert.equal((await employeeYtd(current)).cpp,'100.0000');assert.equal((await employeeYtd(await run(f,f.other,'draft'))).cpp,'0');
   await assert.rejects(qualifyOpeningEmployerAuthority({...input,subsidiaryId:f.other}),/different source evidence/);
   await assert.rejects(qualifyOpeningEmployerAuthority({...input,allowedSubsidiaryIds:new Set([f.other])}),/outside your payroll authority/);
@@ -205,22 +211,22 @@ test('Canadian openings retain exact board, province, CNT, payer and sealed sour
    subsidiaryId:f.subsidiaryId,expectedOpeningSha256:context.record.openingSha256,...sourceEvidence,allowedSubsidiaryIds:null});
   const packetFolder=(await db.execute<{id:string}>(sql`select folder_id as id from files where org_id=${f.orgId} and id=${sourceEvidence.sourceFileId}`)).rows[0]!.id;
   assert.equal((await db.execute(sql`update folders set owner_id=null where org_id=${f.orgId} and id=${packetFolder} returning id`)).rows.length,1);
-  await assert.rejects(qualifyOpeningLevySourceAuthority({orgId:f.orgId,actorId:f.actorId,
+  await assert.rejects(qualifyOpeningLevySourceAuthority({...sourceEvidence,orgId:f.orgId,actorId:f.actorId,
    openingBalanceId:context.record.id,expectedOpeningSha256:context.record.openingSha256,
    allocations:caLevyAllocations('123.45','234.56','15.00'),reason:'Retain the exact Canadian levy allocation',allowedSubsidiaryIds:null}),
    error=>errorChainMatches(error,/Source file is unavailable to this operator/));
   assert.equal((await db.execute(sql`select id from payroll_opening_levy_source_authorities where org_id=${f.orgId}`)).rows.length,0);
   assert.equal((await db.execute(sql`update folders set owner_id=${f.actorId} where org_id=${f.orgId} and id=${packetFolder} returning id`)).rows.length,1);
   const allocations=caLevyAllocations('123.45','234.56','15.00');
-  await assert.rejects(qualifyOpeningLevySourceAuthority({orgId:f.orgId,actorId:f.actorId,
+  await assert.rejects(qualifyOpeningLevySourceAuthority({...sourceEvidence,orgId:f.orgId,actorId:f.actorId,
    openingBalanceId:context.record.id,expectedOpeningSha256:context.record.openingSha256,
    allocations:allocations.filter(row=>!(row.programKey==='ca_wcb'&&row.region==='PE')),
    reason:'Retain a complete original Canadian levy allocation',allowedSubsidiaryIds:null}),/original WCB\/WSIB opening for PE/);
-  await assert.rejects(qualifyOpeningLevySourceAuthority({orgId:f.orgId,actorId:f.actorId,
+  await assert.rejects(qualifyOpeningLevySourceAuthority({...sourceEvidence,orgId:f.orgId,actorId:f.actorId,
    openingBalanceId:context.record.id,expectedOpeningSha256:context.record.openingSha256,
    allocations:caLevyAllocations('123.46','234.56','15.00'),
    reason:'Retain a complete original Canadian levy allocation',allowedSubsidiaryIds:null}),/must equal the original workers/);
-  const qualified=await qualifyOpeningLevySourceAuthority({orgId:f.orgId,actorId:f.actorId,
+  const qualified=await qualifyOpeningLevySourceAuthority({...sourceEvidence,orgId:f.orgId,actorId:f.actorId,
    openingBalanceId:context.record.id,expectedOpeningSha256:context.record.openingSha256,allocations,
    reason:'Retain the complete original Canadian levy allocation',allowedSubsidiaryIds:null});
   const sourceRows=await readEmployeeOpeningLevySources(db,{orgId:f.orgId,employeePartyId:f.employeeId,taxYear:2026,subsidiaryId:f.subsidiaryId});
@@ -259,34 +265,34 @@ test('US openings retain original EIN and state scope after the account becomes 
   const context=await readOpeningEmployerContext({orgId:f.orgId,actorId:f.actorId,employeePartyId:f.employeeId,taxYear:2026,allowedSubsidiaryIds:null});
   assert.ok(context.record);
   const allocations=[
-   {programKey:'us_futa',region:'US',filingAccountId:einA,amount:'10000'},
-   {programKey:'us_sui',region:'NY',filingAccountId:null,amount:'4000'},
-   {programKey:'us_sui',region:'PA',filingAccountId:null,amount:'2000'},
-   {programKey:'us_pa_lst',region:'PA',subRegion:'123456',filingAccountId:null,amount:'0'},
+   {programKey:'us_futa',region:'US',filingAccountId:einA,federalAccountId:einA,amount:'10000'},
+   {programKey:'us_sui',region:'NY',filingAccountId:null,federalAccountId:einA,amount:'4000'},
+   {programKey:'us_sui',region:'PA',filingAccountId:null,federalAccountId:einA,amount:'2000'},
+   {programKey:'us_pa_lst',region:'PA',subRegion:'123456',filingAccountId:null,federalAccountId:einA,amount:'0'},
   ];
-  const sourceEvidence=await source(f,{insurableYtd:'10000'},usEmployer,allocations);
+  const sourceEvidence=await source(f,{insurableYtd:'10000'},usEmployer,allocations,{originalCountry:'US',originalCurrency:'USD',coverageStart:'2026-01-01',coverageEnd:'2026-05-30',coverageComplete:true});
   await qualifyOpeningEmployerAuthority({orgId:f.orgId,actorId:f.actorId,openingBalanceId:context.record.id,
    subsidiaryId:usEmployer,expectedOpeningSha256:context.record.openingSha256,...sourceEvidence,allowedSubsidiaryIds:null});
-  await assert.rejects(qualifyOpeningLevySourceAuthority({orgId:f.orgId,actorId:f.actorId,
+  await assert.rejects(qualifyOpeningLevySourceAuthority({...sourceEvidence,orgId:f.orgId,actorId:f.actorId,
    openingBalanceId:context.record.id,expectedOpeningSha256:context.record.openingSha256,
    allocations:allocations.filter(row=>row.programKey!=='us_futa'),
    reason:'Retain original US wage bases by EIN and state',allowedSubsidiaryIds:null}),/Declare FUTA opening wages/);
-  await assert.rejects(qualifyOpeningLevySourceAuthority({orgId:f.orgId,actorId:f.actorId,
+  await assert.rejects(qualifyOpeningLevySourceAuthority({...sourceEvidence,orgId:f.orgId,actorId:f.actorId,
    openingBalanceId:context.record.id,expectedOpeningSha256:context.record.openingSha256,
    allocations:allocations.map(row=>row.programKey==='us_futa'&&row.filingAccountId===einA?{...row,amount:'10001'}:row),
    reason:'Retain original US wage bases by EIN and state',allowedSubsidiaryIds:null}),/equal the original employee-only insurable wage opening/);
-  await assert.rejects(qualifyOpeningLevySourceAuthority({orgId:f.orgId,actorId:f.actorId,
+  await assert.rejects(qualifyOpeningLevySourceAuthority({...sourceEvidence,orgId:f.orgId,actorId:f.actorId,
    openingBalanceId:context.record.id,expectedOpeningSha256:context.record.openingSha256,
    allocations:allocations.filter(row=>row.programKey!=='us_sui'),
    reason:'Retain original US wage bases by EIN and state',allowedSubsidiaryIds:null}),/SUI jurisdiction allocations/);
   assert.equal((await db.execute(sql`update payroll_filing_accounts set is_active=false where org_id=${f.orgId} and id=${einA} returning id`)).rows.length,1);
-  const qualified=await qualifyOpeningLevySourceAuthority({orgId:f.orgId,actorId:f.actorId,
+  const qualified=await qualifyOpeningLevySourceAuthority({...sourceEvidence,orgId:f.orgId,actorId:f.actorId,
    openingBalanceId:context.record.id,expectedOpeningSha256:context.record.openingSha256,allocations,
    reason:'Retain original US wage bases by EIN and state',allowedSubsidiaryIds:null});
   const opening=await readEmployeeOpeningLevySources(db,{orgId:f.orgId,employeePartyId:f.employeeId,taxYear:2026,subsidiaryId:usEmployer});
   assert.equal(employeeOpeningLevyAmount(opening,{programKey:'us_futa',region:'US',filingAccountId:einA}),'10000.0000');
-  assert.equal(employeeOpeningLevyAmount(opening,{programKey:'us_sui',region:'NY'}),'4000.0000');
-  assert.equal(employeeOpeningLevyAmount(opening,{programKey:'us_pa_lst',region:'PA',subRegion:'123456'}),'0.0000');
+  assert.equal(employeeOpeningLevyAmount(opening,{programKey:'us_sui',region:'NY',federalAccountId:einA}),'4000.0000');
+  assert.equal(employeeOpeningLevyAmount(opening,{programKey:'us_pa_lst',region:'PA',subRegion:'123456',federalAccountId:einA}),'0.0000');
   assert.throws(()=>employeeOpeningLevyAmount(opening,{programKey:'us_sui',region:'CA'}),/no explicit us_sui/);
   assert.throws(()=>employeeOpeningLevyAmount(opening,{programKey:'us_pa_lst',region:'PA',subRegion:'654321'}),/no explicit us_pa_lst/);
   assert.throws(()=>employeeOpeningLevyAmount(opening,{programKey:'us_futa',region:'US',filingAccountId:randomUUID()}),/no explicit us_futa/);
@@ -298,17 +304,31 @@ test('US openings retain original EIN and state scope after the account becomes 
 test('qualifying employer source after calculation makes unchanged opening amounts stale until native recalculation',{skip:!DB},async()=>{
  const f=await withBypassContext(setup);
  try{await withOrgContext(f.orgId,async()=>{
-  await saveOpeningBalances({orgId:f.orgId,actorId:f.actorId,taxYear:2026,rows:[{employeePartyId:f.employeeId,amounts:{nonPeriodicYtd:'1000'}}]});
   const {input}=await calculatedRun(f);assert.deepEqual((await payRunStaleness(f.orgId,input.documentId)).reasons,[]);
+  const amounts={nonPeriodicYtd:'1000'},allocations=caLevyAllocations();
+  assert.deepEqual((await saveOpeningBalances({orgId:f.orgId,actorId:f.actorId,taxYear:2026,
+   rows:[{employeePartyId:f.employeeId,amounts}]})).errors,[]);
+  assert.ok((await payRunStaleness(f.orgId,input.documentId)).reasons.includes('openingBalances'));
+  await assert.rejects(commitPayRun(input),/openingBalances/);
+  const calculateSourceRefusal=async()=>{
+   const refused=await calculatePayRun(input);
+   assert.equal(refused.employees,0);assert.equal(refused.errors.length,1);
+   assert.equal(refused.errors[0]!.employeePartyId,f.employeeId);assert.equal(refused.errors[0]!.kind,'refusal');
+   assert.match(refused.errors[0]!.message,/opening.*(source|legal-employer|qualif)/i);
+   assert.equal((await db.execute(sql`select id from pay_stubs where org_id=${f.orgId}
+    and pay_run_document_id=${input.documentId}`)).rows.length,0,'A source refusal leaves no partial employee stub');
+   await assert.rejects(commitPayRun(input),/refused|no calculated stubs/);
+  };
+  await calculateSourceRefusal();
   const before=(await db.execute<{snapshot:string}>(sql`select to_jsonb(b)::text as snapshot from payroll_opening_balances b where org_id=${f.orgId}`)).rows;
   const context=await readOpeningEmployerContext({orgId:f.orgId,actorId:f.actorId,employeePartyId:f.employeeId,taxYear:2026,allowedSubsidiaryIds:null});assert.ok(context.record);
-  const sourceEvidence=await source(f,{nonPeriodicYtd:'1000'});
+  const sourceEvidence=await source(f,amounts,f.subsidiaryId,allocations);
   const qualified=await qualifyOpeningEmployerAuthority({orgId:f.orgId,actorId:f.actorId,openingBalanceId:context.record.id,subsidiaryId:f.subsidiaryId,
    expectedOpeningSha256:context.record.openingSha256,...sourceEvidence,allowedSubsidiaryIds:null});
   assert.deepEqual((await db.execute<{snapshot:string}>(sql`select to_jsonb(b)::text as snapshot from payroll_opening_balances b where org_id=${f.orgId}`)).rows,before);
   assert.ok((await payRunStaleness(f.orgId,input.documentId)).reasons.includes('openingBalances'));
   await assert.rejects(commitPayRun(input),/openingBalances/);
-  assert.deepEqual((await calculatePayRun(input)).errors,[]);
+  await calculateSourceRefusal();
   assert.deepEqual((await payRunStaleness(f.orgId,input.documentId)).reasons,[]);
   const retained=(await db.execute<{snapshot:PayRunCalculationSourceSnapshot;digest:string}>(sql`
     select calculation_source_snapshot as snapshot,calculation_source_digest as digest
@@ -319,9 +339,9 @@ test('qualifying employer source after calculation makes unchanged opening amoun
     employeePartyId:f.employeeId,taxYear:2026,subsidiaryId:f.subsidiaryId,
     sourceFileId:sourceEvidence.sourceFileId,sourceVersionId:sourceEvidence.sourceVersionId,
     sourceSha256:sourceEvidence.sourceSha256,openingSha256:context.record.openingSha256}]);
-  const levyAuthority=await qualifyOpeningLevySourceAuthority({orgId:f.orgId,actorId:f.actorId,
+  const levyAuthority=await qualifyOpeningLevySourceAuthority({...sourceEvidence,orgId:f.orgId,actorId:f.actorId,
    openingBalanceId:context.record.id,expectedOpeningSha256:context.record.openingSha256,
-   allocations:caLevyAllocations(),reason:'Retain the complete original Canadian levy allocation',allowedSubsidiaryIds:null});
+   allocations,reason:'Retain the complete original Canadian levy allocation',allowedSubsidiaryIds:null});
   assert.ok((await payRunStaleness(f.orgId,input.documentId)).reasons.includes('openingBalances'));
   await assert.rejects(commitPayRun(input),/openingBalances/);
   assert.deepEqual((await calculatePayRun(input)).errors,[]);
@@ -331,23 +351,127 @@ test('qualifying employer source after calculation makes unchanged opening amoun
   assert.equal(levySnapshot.openingLevySourceAuthorities?.[0]?.id,levyAuthority.id);
   assert.equal(levySnapshot.openingLevySourceAuthorities?.[0]?.allocationSha256,levyAuthority.allocationSha256);
   assert.equal(levySnapshot.openingLevySourceAuthorities?.[0]?.allocations.length,18);
+  const original=await readEmployeeOpeningLevySources(db,{orgId:f.orgId,employeePartyId:f.employeeId,taxYear:2026,
+   subsidiaryId:f.subsidiaryId});
+  assert.equal(original.authority?.sourceSha256,sourceEvidence.sourceSha256);
+  assert.equal(original.authority?.sourceVersionId,sourceEvidence.sourceVersionId);
+  assert.equal(original.openingSnapshot?.non_periodic_ytd,'1000.0000');
+  assert.equal((await employeeYtd({tx:db,orgId:f.orgId,employeePartyId:f.employeeId,taxYear:2026,
+   documentId:input.documentId,subsidiaryId:f.subsidiaryId})).non_periodic,'1000.0000');
   assert.deepEqual((await payRunStaleness(f.orgId,input.documentId)).reasons,[]);
  });}finally{await withBypassContext(()=>dropScratchOrgReporting(f.orgId));}
 });
 
 
+test('a known empty adoption opening consumes no levy history with or without an employer certificate',()=>{
+ const empty={hasOpening:true,hasWageHistory:false,hasMaterialHistory:false,facts:null,allocations:[]};
+ assert.equal(employeeOpeningLevyAmount(empty,{programKey:'ca_wcb',region:'ON'}),'0');
+ assert.equal(employeeOpeningLevyAmount({...empty,facts:{originalCountry:'CA',originalCurrency:'CAD',
+  coverageStart:'2026-01-01',coverageEnd:'2026-01-02',coverageComplete:true}},
+  {programKey:'ca_eht',region:'ON'}),'0');
+ assert.throws(()=>employeeOpeningLevyAmount({...empty,hasMaterialHistory:undefined} as unknown as Parameters<typeof employeeOpeningLevyAmount>[0],
+  {programKey:'ca_wcb',region:'ON'}),/Resolve the exact original opening history/);
+});
+
 test('opening levy reads require the exact requested scope and preserve an explicit zero',()=>{
  const ein=randomUUID(),otherEin=randomUUID(),stateAccount=randomUUID();
- const source={hasOpening:true,hasWageHistory:true,allocations:[
-  {programKey:'us_futa' as const,region:'US',subRegion:'',filingAccountId:ein,amount:'0.0000'},
-  {programKey:'us_sui' as const,region:'PA',subRegion:'',filingAccountId:stateAccount,amount:'2500.0000'},
-  {programKey:'us_pa_lst' as const,region:'PA',subRegion:'123456',filingAccountId:null,amount:'0.0000'},
+ const source={hasOpening:true,hasWageHistory:true,hasMaterialHistory:true,facts:{originalCountry:'US' as const,originalCurrency:'USD' as const,coverageStart:'2026-01-01',coverageEnd:'2026-05-30',coverageComplete:true as const},allocations:[
+  {programKey:'us_futa' as const,region:'US',subRegion:'',filingAccountId:ein,federalAccountId:ein,amount:'0.0000'},
+  {programKey:'us_sui' as const,region:'PA',subRegion:'',filingAccountId:stateAccount,federalAccountId:ein,amount:'2500.0000'},
+  {programKey:'us_pa_lst' as const,region:'PA',subRegion:'123456',filingAccountId:null,federalAccountId:ein,amount:'0.0000'},
  ]};
  assert.equal(employeeOpeningLevyAmount(source,{programKey:'us_futa',region:'US',filingAccountId:ein}),'0.0000');
- assert.equal(employeeOpeningLevyAmount(source,{programKey:'us_sui',region:'PA',filingAccountId:stateAccount}),'2500.0000');
+ assert.equal(employeeOpeningLevyAmount(source,{programKey:'us_sui',region:'PA',filingAccountId:stateAccount,federalAccountId:ein}),'2500.0000');
  assert.throws(()=>employeeOpeningLevyAmount(source,{programKey:'us_futa',region:'US',filingAccountId:otherEin}),/no explicit us_futa/);
  assert.throws(()=>employeeOpeningLevyAmount(source,{programKey:'us_sui',region:'PA'}),/no explicit us_sui/);
  assert.throws(()=>employeeOpeningLevyAmount(source,{programKey:'us_pa_lst',region:'PA',subRegion:'654321'}),/no explicit us_pa_lst/);
- assert.throws(()=>employeeOpeningLevyAmount({...source,hasWageHistory:false,allocations:[]},{programKey:'ca_cnt',region:'QC'}),/no explicit ca_cnt/);
+ assert.equal(employeeOpeningLevyAmount({...source,hasWageHistory:false,allocations:[]},{programKey:'ca_cnt',region:'QC'}),'0','a source-qualified US opening is not a Canadian programme prior');
  assert.equal(employeeOpeningLevyAmount({...source,hasOpening:false,allocations:[]},{programKey:'us_futa',region:'US',filingAccountId:ein}),'0');
+});
+
+
+test('employer-premium-only history requires original source facts and preserves them when current employer country changes',{skip:!DB},async()=>{
+ const f=await withBypassContext(setup);
+ try{await withOrgContext(f.orgId,async()=>{
+  const amounts={qpipEmployerYtd:'12.3456'};
+  await saveOpeningBalances({orgId:f.orgId,actorId:f.actorId,taxYear:2026,rows:[{employeePartyId:f.employeeId,amounts}]});
+  const read=()=>readEmployeeOpeningLevySources(db,{orgId:f.orgId,employeePartyId:f.employeeId,taxYear:2026});
+  await assert.rejects(read(),/opening payer is not source-qualified/);
+  const context=await readOpeningEmployerContext({orgId:f.orgId,actorId:f.actorId,employeePartyId:f.employeeId,taxYear:2026,allowedSubsidiaryIds:null});
+  assert.ok(context.record);
+  const allocations=caLevyAllocations(),sourceEvidence=await source(f,amounts,f.subsidiaryId,allocations);
+  await qualifyOpeningEmployerAuthority({...sourceEvidence,orgId:f.orgId,actorId:f.actorId,openingBalanceId:context.record.id,
+   subsidiaryId:f.subsidiaryId,expectedOpeningSha256:context.record.openingSha256,allowedSubsidiaryIds:null});
+  await assert.rejects(read(),/no complete statutory levy source allocation/);
+  const input={...sourceEvidence,orgId:f.orgId,actorId:f.actorId,openingBalanceId:context.record.id,
+   expectedOpeningSha256:context.record.openingSha256,allocations,allowedSubsidiaryIds:null};
+  const sealed=await qualifyOpeningLevySourceAuthority(input);
+  assert.deepEqual(await qualifyOpeningLevySourceAuthority(input),sealed,'replay preserves the exact source and authored facts');
+  await assert.rejects(qualifyOpeningLevySourceAuthority({...input,coverageEnd:'2026-05-29'}),/different allocation evidence/);
+  await assert.rejects(qualifyOpeningLevySourceAuthority({...input,expectedOpeningChildrenSha256:'f'.repeat(64)}),/amounts changed; reload/);
+  const before=await read();assert.equal(before.hasMaterialHistory,true);assert.equal(before.hasWageHistory,false);
+  assert.equal(before.openingSnapshot?.qpip_employer_ytd,'12.3456');
+  assert.equal(before.facts?.originalCountry,'CA');assert.equal(before.facts?.originalCurrency,'CAD');
+  assert.equal((await db.execute(sql`update subsidiaries set country='US',base_currency='USD' where org_id=${f.orgId} and id=${f.subsidiaryId} returning id`)).rows.length,1);
+  assert.deepEqual(await read(),before,'current employer configuration cannot reinterpret source-qualified original country or amounts');
+  const other=await readEmployeeOpeningLevySources(db,{orgId:f.orgId,employeePartyId:f.employeeId,taxYear:2026,subsidiaryId:f.other});
+  assert.equal(other.hasOpening,false);
+ });}finally{await withBypassContext(()=>dropScratchOrgReporting(f.orgId));}
+});
+
+test('same jurisdiction and original SUI account retains separate exact EIN allocations without guessing',()=>{
+ const einA=randomUUID(),einB=randomUUID(),state=randomUUID();
+ const source={hasOpening:true,hasWageHistory:true,hasMaterialHistory:true,facts:{originalCountry:'US',originalCurrency:'USD',coverageStart:'2026-01-01',coverageEnd:'2026-05-30',coverageComplete:true as const},allocations:[
+  {programKey:'us_sui' as const,region:'PA',subRegion:'',filingAccountId:state,federalAccountId:einA,amount:'1234.5678'},
+  {programKey:'us_sui' as const,region:'PA',subRegion:'',filingAccountId:state,federalAccountId:einB,amount:'9000.0001'},
+  {programKey:'us_pa_lst' as const,region:'PA',subRegion:'123456',filingAccountId:null,federalAccountId:einA,amount:'0.0000'},
+  {programKey:'us_pa_lst' as const,region:'PA',subRegion:'123456',filingAccountId:null,federalAccountId:einB,amount:'26.0000'},
+ ]};
+ assert.equal(employeeOpeningLevyAmount(source,{programKey:'us_sui',region:'PA',filingAccountId:state,federalAccountId:einA}),'1234.5678');
+ assert.equal(employeeOpeningLevyAmount(source,{programKey:'us_sui',region:'PA',filingAccountId:state,federalAccountId:einB}),'9000.0001');
+ assert.equal(employeeOpeningLevyAmount(source,{programKey:'us_pa_lst',region:'PA',subRegion:'123456',federalAccountId:einA}),'0.0000');
+ assert.equal(employeeOpeningLevyAmount(source,{programKey:'us_pa_lst',region:'PA',subRegion:'123456',federalAccountId:einB}),'26.0000');
+ assert.throws(()=>employeeOpeningLevyAmount(source,{programKey:'us_sui',region:'PA',filingAccountId:state}),/no explicit us_sui/);
+});
+
+
+test('original SUI and PA LST allocations can be explicitly split between multiple EINs under one retained legal employer',{skip:!DB},async()=>{
+ const f=await withBypassContext(setup);
+ try{await withOrgContext(f.orgId,async()=>{
+  const employer=randomUUID(),einA=randomUUID(),einB=randomUUID(),stateAccount=randomUUID();
+  assert.equal((await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country)
+    values(${employer},${f.orgId},${f.subsidiaryId},'Original US payer','USD','US') returning id`)).rows.length,1);
+  await seedWorkerEmployment(f.orgId,f.employeeId,employer);
+  for(const [id,number] of [[einA,'11-1111111'],[einB,'22-2222222']]){
+   assert.equal((await db.execute(sql`insert into payroll_filing_accounts(id,org_id,subsidiary_id,country,program_type,account_number,name,is_default,is_active,created_by,updated_by)
+    values(${id},${f.orgId},${employer},'US','us_ein',${number},'Original EIN',false,true,${f.actorId},${f.actorId}) returning id`)).rows.length,1);
+  }
+  assert.equal((await db.execute(sql`insert into payroll_filing_accounts(id,org_id,subsidiary_id,country,program_type,state_code,account_number,name,is_default,is_active,created_by,updated_by)
+    values(${stateAccount},${f.orgId},${employer},'US','us_state_sui','PA','PA-original','Original Pennsylvania account',false,true,${f.actorId},${f.actorId}) returning id`)).rows.length,1);
+  const amounts={insurableYtd:'10000'};
+  await saveOpeningBalances({orgId:f.orgId,actorId:f.actorId,taxYear:2026,rows:[{employeePartyId:f.employeeId,amounts}]});
+  const context=await readOpeningEmployerContext({orgId:f.orgId,actorId:f.actorId,employeePartyId:f.employeeId,taxYear:2026,allowedSubsidiaryIds:null});assert.ok(context.record);
+  const allocations=[
+   {programKey:'us_futa',region:'US',filingAccountId:einA,federalAccountId:einA,amount:'4000'},
+   {programKey:'us_futa',region:'US',filingAccountId:einB,federalAccountId:einB,amount:'6000'},
+   {programKey:'us_sui',region:'PA',filingAccountId:stateAccount,federalAccountId:einA,amount:'4000'},
+   {programKey:'us_sui',region:'PA',filingAccountId:stateAccount,federalAccountId:einB,amount:'6000'},
+   {programKey:'us_pa_lst',region:'PA',subRegion:'123456',filingAccountId:null,federalAccountId:einA,amount:'0'},
+   {programKey:'us_pa_lst',region:'PA',subRegion:'123456',filingAccountId:null,federalAccountId:einB,amount:'26'},
+  ];
+  const evidence=await source(f,amounts,employer,allocations,{originalCountry:'US',originalCurrency:'USD',coverageStart:'2026-01-01',coverageEnd:'2026-05-30',coverageComplete:true});
+  await qualifyOpeningEmployerAuthority({...evidence,orgId:f.orgId,actorId:f.actorId,openingBalanceId:context.record.id,
+   subsidiaryId:employer,expectedOpeningSha256:context.record.openingSha256,allowedSubsidiaryIds:null});
+  const input={...evidence,orgId:f.orgId,actorId:f.actorId,openingBalanceId:context.record.id,
+   expectedOpeningSha256:context.record.openingSha256,allocations,allowedSubsidiaryIds:null};
+  await assert.rejects(qualifyOpeningLevySourceAuthority({...input,allocations:allocations.map(row=>row.programKey==='us_sui'?{...row,federalAccountId:null}:row)}),/original federal EIN/);
+  await qualifyOpeningLevySourceAuthority(input);
+  const retained=await readEmployeeOpeningLevySources(db,{orgId:f.orgId,employeePartyId:f.employeeId,taxYear:2026,subsidiaryId:employer});
+  assert.equal(employeeOpeningLevyAmount(retained,{programKey:'us_sui',region:'PA',filingAccountId:stateAccount,federalAccountId:einA}),'4000.0000');
+  assert.equal(employeeOpeningLevyAmount(retained,{programKey:'us_sui',region:'PA',filingAccountId:stateAccount,federalAccountId:einB}),'6000.0000');
+  assert.equal(employeeOpeningLevyAmount(retained,{programKey:'us_pa_lst',region:'PA',subRegion:'123456',federalAccountId:einA}),'0.0000');
+  assert.equal(employeeOpeningLevyAmount(retained,{programKey:'us_pa_lst',region:'PA',subRegion:'123456',federalAccountId:einB}),'26.0000');
+  await assert.rejects(db.execute(sql`insert into payroll_opening_program_bases(org_id,employee_party_id,tax_year,program_key,insurable_ytd,created_by,updated_by)
+   values(${f.orgId},${f.employeeId},2026,'qpip','1',${f.actorId},${f.actorId})`),error=>errorChainMatches(error,/Source-qualified statutory opening amounts must be preserved/));
+ });}finally{await withBypassContext(()=>dropScratchOrgReporting(f.orgId));}
 });

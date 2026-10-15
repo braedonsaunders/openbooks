@@ -1076,5 +1076,30 @@
     },
     "by": "{name} le {at}",
     "system": "Système"
+  },
+  "revaluationEvidence": {
+      "title": "Taux de clôture enregistrés",
+      "reload": "Recharger",
+      "loading": "Chargement…",
+      "loadFailed": "Impossible de charger les positions en devises.",
+      "empty": "Aucune position ouverte en devises pour cette sélection.",
+      "position": "{foreign} · Valeur comptable {carrying} · Date du taux {date}",
+      "recordedRate": "Enregistré : {rate} (version {version})",
+      "organizationRate": "Taux de l'organisation : {rate}",
+      "rateMissing": "Aucun taux",
+      "recordRate": "Enregistrer le taux",
+      "recordSuccessor": "Enregistrer un taux successeur",
+      "drawerTitle": "Enregistrer le taux de clôture",
+      "cancel": "Annuler",
+      "legalEntity": "Entité juridique",
+      "account": "Compte",
+      "conversion": "Conversion",
+      "rateDate": "Date du taux",
+      "currentQuote": "Taux actuel : {rate} (version {version}) — Source : {source}. Un taux successeur le remplace sans le modifier.",
+      "rate": "Taux de change",
+      "source": "Source",
+      "reason": "Motif",
+      "recorded": "Taux de clôture enregistré.",
+      "recordFailed": "Impossible d'enregistrer le taux de clôture."
   }
 }

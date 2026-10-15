@@ -126,7 +126,15 @@ export async function validateBenefitContributionConfiguration(exec: SqlExecutor
   }
 
   if (basis === 'percent_of_eligible_pay' && !['all_cash_earnings','regular_cash_earnings'].includes(String(body.payBasis))) refuse('Percent contributions need a declared cash earnings basis — choose all cash earnings or regular cash earnings');
-  if (kind === 'earning' && component.vacationable === true && basis === 'percent_of_eligible_pay' && body.payBasis === 'all_cash_earnings') refuse('This contribution creates a circular vacation-pay basis — choose regular cash earnings, which excludes derived vacation pay, or use an independent hourly or fixed-period premium');
+  if (kind === 'earning' && basis === 'percent_of_eligible_pay' && body.payBasis === 'all_cash_earnings') {
+    const included = (await exec.execute(sql`select id from pay_component_statutory_treatments
+      where org_id=${orgId} and pay_component_id=${componentId} and vacationable
+        and (effective_to is null or effective_to >= ${String(body.effectiveFrom)}::date)
+        and (${body.effectiveTo == null || body.effectiveTo === '' ? null : String(body.effectiveTo)}::date is null
+          or effective_from <= ${body.effectiveTo == null || body.effectiveTo === '' ? null : String(body.effectiveTo)}::date)
+      limit 1`)).rows;
+    if (included.length) refuse('This contribution creates a circular vacation-pay basis under its dated component treatment — choose regular cash earnings, which excludes derived vacation pay, or use an independent hourly or fixed-period premium');
+  }
   if (basis === 'per_month' && (!Number.isSafeInteger(body.monthsPerYear) || (body.monthsPerYear as number) <= 0 || (body.monthsPerYear as number) > 12)) refuse('Monthly annualization requires explicit months per year from 1 through 12');
   if (body.periodsPerYear != null && (!Number.isSafeInteger(body.periodsPerYear) || (body.periodsPerYear as number) <= 0 || (body.periodsPerYear as number) > 366)) refuse('Annualization periods per year must be a whole number from 1 through 366');
   if (!['none','calendar_days'].includes(String(body.proration))) refuse('Declare partial-period proration: none or calendar days');

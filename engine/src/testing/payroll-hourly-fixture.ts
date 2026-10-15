@@ -4,7 +4,7 @@ import { db } from "../platform/db.ts";
 import {
   seedPayrollAccountingConfiguration, seedPayrollSchedule, seedPayrollEmployeeRole,
   seedPayrollPerson, seedPayrollProfile, seedPayrollWage, createScratchOrg,
-  seedFlowActors, seedWorkerEmployment, seedPayrollTime,
+  seedFlowActors, seedWorkerEmployment, seedPayrollTime, grantScratchPermissions,
 } from "./fixtures.ts";
 import { seedPayrollComponents } from "../payroll/run-setup.ts";
 import { seedOntarioEhtFixture } from "../payroll/filing-test-fixtures.ts";
@@ -24,6 +24,7 @@ async function account(orgId: string, number: string, name: string, type: string
 export async function seedHourlyPayrollOrg(): Promise<HourlyPayrollFixture> {
   const org = await createScratchOrg();
   const actorId = (await seedFlowActors(org.orgId)).adminId;
+  await grantScratchPermissions(org.orgId, actorId, ["payroll.manage"]);
   const accounts = {
     wageExpense: await account(org.orgId, "6000", "Wages expense", "expense"),
     burdenExpense: await account(org.orgId, "6010", "Payroll burden", "expense"),

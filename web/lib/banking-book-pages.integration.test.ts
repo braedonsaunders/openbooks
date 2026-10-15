@@ -49,6 +49,8 @@ const { loadMatch } = await import(root + 'web/app/(app)/banking/match/view.ts')
 const { loadReconciliation } = await import(
   root + 'web/app/(app)/banking/[accountId]/reconcile/[reconciliationId]/view.ts'
 )
+const { loadBankingAccount } = await import(root + 'web/app/(app)/banking/[accountId]/view.ts')
+const { StatementDrawer } = await import(root + 'web/app/(app)/banking/[accountId]/StatementDrawer.tsx')
 
 for (const page of ['match', 'reconcile'] as const) {
   test(`bank ${page} page uses primary book and bank-currency amounts`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
@@ -115,3 +117,65 @@ for (const page of ['match', 'reconcile'] as const) {
     }
   })
 }
+
+test('bank account detail and statement drawer preserve EUR amounts without secondary-book duplication', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const org = await withBypassContext(() => createScratchOrg())
+  try {
+    const actor = await withBypassContext(() => createScratchUser(org.orgId, 'EUR bank operator', 'admin'))
+    await withBypassContext(() => db.execute(sql`update app_roles set permissions='["*"]'::jsonb where org_id=${org.orgId} and key='admin'`))
+    state.user = { id: actor, orgId: org.orgId, isSuperAdmin: false, name: 'EUR bank operator', email: 'eur-bank@scratch.test',
+      roles: [], envKind: 'production', productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: actor }
+    const secondary = randomUUID()
+    await withBypassContext(async () => {
+      await db.execute(sql`insert into accounting_books(id,org_id,code,name,is_primary) values(${secondary},${org.orgId},'ALT','Alternate',false)`)
+      for (const [book, currency, amount, txnAmount, rate, name] of [
+        [org.bookId, 'EUR', '630', '525', '1.2', 'EUR-PRIMARY'],
+        [secondary, 'EUR', '1260', '525', '2.4', 'EUR-SECONDARY'],
+        [org.bookId, 'CAD', '100', '100', '1', 'CAD-LEGACY'],
+      ] as const) {
+        const entry = randomUUID()
+        await db.transaction(async tx => {
+          await tx.execute(sql`insert into journal_entries(id,org_id,book_id,subsidiary_id,entry_number,posting_date,period_id,status,origin)
+            values(${entry},${org.orgId},${book},${org.subsidiaryId},${name},${org.date},${org.periodId},'draft','manual')`)
+          await tx.execute(sql`insert into journal_lines(id,org_id,entry_id,line_number,account_id,subsidiary_id,amount,currency,txn_amount,fx_rate)
+            values(${randomUUID()},${org.orgId},${entry},1,${org.accounts.bank},${org.subsidiaryId},${amount},${currency},${txnAmount},${rate}),
+                  (${randomUUID()},${org.orgId},${entry},2,${org.accounts.adjustment},${org.subsidiaryId},${'-'+amount},${currency},${'-'+txnAmount},${rate})`)
+          await tx.execute(sql`update journal_entries set status='posted',posted_by=${actor} where org_id=${org.orgId} and id=${entry}`)
+        })
+      }
+      await db.execute(sql`update accounts set currency_restriction='EUR',reconcilable=true where org_id=${org.orgId} and id=${org.accounts.bank}`)
+    })
+    const ctx = { orgId: org.orgId, userId: actor, allowedSubsidiaryIds: null }
+    const statement = await withOrgContext(org.orgId, () => importStatement({
+      accountId: org.accounts.bank, source: 'manual', currency: 'EUR', statementDate: org.date,
+      openingBalance: '0', closingBalance: '525',
+      lines: [{ postedOn: org.date, amount: '525', description: 'Constructed EUR deposit', bankTransactionId: 'eur-deposit' }],
+    }, ctx))
+    const statementId = (await withBypassContext(() => db.execute<{ id: string }>(sql`
+      select id from bank_statements where org_id=${org.orgId} and account_id=${org.accounts.bank}
+    `))).rows[0]!.id
+    assert.equal(statement.imported, 1)
+    await withOrgContext(org.orgId, async () => {
+      await startReconciliation({ accountId: org.accounts.bank, throughDate: org.date, statementBalance: '525' }, ctx)
+      const data = await loadBankingAccount(org.accounts.bank, { statement: statementId })
+      assert.equal(data.glBalance, '525.0000', 'only primary EUR transaction amounts enter the balance')
+      assert.equal(data.accountCurrency, 'EUR')
+      assert.equal(data.glBalanceDisplay, '€525.00')
+      assert.equal(data.statementRows[0]!.openingBalance, '€0.00')
+      assert.equal(data.statementRows[0]!.closingBalance, '€525.00')
+      assert.equal(data.reconRows[0]!.statementBalance, '€525.00')
+      assert.equal(data.drawer!.statement.currency, 'EUR')
+      const drawer = await StatementDrawer(data.drawer!)
+      const renderedText = (node: React.ReactNode): string => {
+        if (typeof node === 'string' || typeof node === 'number') return String(node)
+        if (Array.isArray(node)) return node.map(renderedText).join(' ')
+        if (React.isValidElement<{ children?: React.ReactNode }>(node)) return renderedText(node.props.children)
+        return ''
+      }
+      assert.ok(renderedText(drawer).includes('€525.00'), 'the real drawer formats retained EUR line amounts')
+    })
+  } finally {
+    state.user = null
+    await dropScratchOrgReporting(org.orgId)
+  }
+})

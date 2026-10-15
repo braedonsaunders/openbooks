@@ -152,8 +152,18 @@ export function toFlow(
   }
 }
 
-/** React Flow state → the persisted AutomationGraph (positions rounded). */
-export function fromFlow(nodes: FlowNode[], edges: Edge[], ungatedOutcome?: 'apply'): AutomationGraph {
+/**
+ * React Flow state → the persisted AutomationGraph (positions rounded).
+ * `subsidiaryIds` carries the graph's legal-entity limit: a non-empty list
+ * persists as the typed subject scope; an empty list omits the scope
+ * entirely, which is the graph's only organization-wide spelling.
+ */
+export function fromFlow(
+  nodes: FlowNode[],
+  edges: Edge[],
+  ungatedOutcome?: 'apply',
+  subsidiaryIds?: readonly string[],
+): AutomationGraph {
   // Saving converges too: canvas state that somehow holds two nodes with one
   // id persists as one (first wins), so re-open → save can never grow nodes.
   const seen = new Set<string>()
@@ -162,9 +172,11 @@ export function fromFlow(nodes: FlowNode[], edges: Edge[], ungatedOutcome?: 'app
     seen.add(n.id)
     return true
   })
+  const scopeIds = [...new Set((subsidiaryIds ?? []).map((id) => id.toLowerCase()))]
   return {
     schemaVersion: 1,
     ...(ungatedOutcome ? { ungatedOutcome } : {}),
+    ...(scopeIds.length > 0 ? { subjectScope: { subsidiaryIds: scopeIds } } : {}),
     nodes: unique.map((n) => ({
       id: n.id,
       position: { x: Math.round(n.position.x), y: Math.round(n.position.y) },

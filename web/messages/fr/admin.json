@@ -2780,6 +2780,16 @@
         "weekly": "Hebdomadaire (lun.)"
       }
     },
+    "usFilingLineage": {
+          "stateAccount": "Compte de déclaration de l’État",
+          "employer": "Employeur légal original",
+          "federalAccount": "EIN fédéral original",
+          "federalHelp": "Les EIN retirés restent disponibles pour qualifier les sources historiques.",
+          "datesHelp": "Dates inclusives de l’inscription originale. La fin doit suivre la dernière paie comptabilisée.",
+          "sourceReference": "Référence de la preuve d’inscription originale",
+          "sourceHelp": "Identifiez la lettre d’inscription ou le document conservé établissant cet EIN et la période.",
+          "reason": "Motif du changement"
+    },
     "entities": {
       "usage-meters": {
         "title": "Compteurs d’usage",
@@ -2891,6 +2901,11 @@
       "worker-comp-groups": {
         "title": "Groupes accidents du travail",
         "description": "Groupes de taux d'indemnisation des accidentés du travail pour le coût de la main-d'œuvre."
+      },
+      "pay-component-statutory-treatments": {
+        "title": "Traitements légaux",
+        "singularTitle": "Traitement légal",
+        "description": "Exclusions de programmes et inclusion dans la base de vacances datées pour cette composante, déterminées à la date de paiement. Le groupe d’indemnisation remplace le traitement complet."
       },
       "pay-component-department-expenses": {
         "title": "Comptes de charge par service",
@@ -3220,6 +3235,11 @@
         "title": "Répartitions",
         "description": "Répartissez les coûts mutualisés vers des cibles au moyen d’un inducteur : ventilations à la saisie, contributions à la comptabilisation et balais de période.",
         "singular": "règle de répartition"
+      },
+      "payroll-us-filing-account-employer-lineage": {
+              "title": "Historique des EIN de l’employeur",
+              "singularTitle": "Affiliation à l’EIN de l’employeur",
+              "description": "Titularité originale du compte d’État, avec dates inclusives et preuves conservées."
       },
       "payroll-filing-accounts": {
         "title": "Comptes de déclaration",
@@ -4104,6 +4124,8 @@
       "trigger": "Déclenché par",
       "unionName": "Syndicat",
       "unit": "Unité",
+      "initialVacationable": "Inclusion initiale dans la base de vacances",
+      "componentTreatmentReason": "Motif du changement",
       "vacationable": "Compte pour la paie de vacances",
       "value": "Valeur",
       "allocatedThrough": "Attribué jusqu'au",
@@ -4495,6 +4517,10 @@
       "mode": "Politique"
     },
     "fieldHelp": {
+      "initialVacationable": "Utilisé uniquement pour créer le premier traitement daté. Pour une composante existante, modifiez son historique des traitements légaux.",
+      "componentTreatmentPayDate": "Les dates inclusives s’appliquent à la date de paiement, y compris les paies rétroactives et finales. Le groupe d’indemnisation remplace le traitement complet.",
+      "componentTreatmentVacationable": "Inclure ce gain dans les bases de vacances et de gains accumulables aux dates de paiement couvertes.",
+      "componentTreatmentReason": "Expliquez le changement de traitement légal ou de base de vacances et indiquez les justificatifs. Un nouveau motif de 1 à 2000 caractères est conservé dans le journal d’audit à chaque enregistrement.",
       "fxRateMaxAgeDays": "Nombre de jours entre le taux utilisable le plus récent et la fin de période au-delà duquel la réévaluation et la consolidation refusent le taux. Les taux de clôture se comptent depuis la date du taux comptant de fin de période ; les taux moyens depuis la cotation la plus récente incluse dans la moyenne. Valeur par défaut sans politique : 31 jours.",
       "storedValueLiabilityAccount": "Le compte de bilan crédité à l’émission et débité au rachat.",
       "storedValueBreakageIncomeAccount": "Le compte de produits crédité lorsque le breakage ou l’expiration est constaté.",
@@ -7293,7 +7319,7 @@
       "responsibilities": "Affectations datées",
       "responsibilitiesHint": "Affectez chaque groupe et fonction à un emploi pour des dates explicites. Chaque source exige toutes les parts configurées.",
       "limits": "Plafonds par groupe",
-      "limitsHint": "Choisissez un plafond monétaire ou aucun plafond par groupe. Les attributions antérieures du programme consomment le plafond.",
+      "limitsHint": "Définissez des plafonds fixes facultatifs par groupe. Les attributions antérieures consomment ces plafonds. Avec un pourcentage du budget du projet, un montant remplace le plafond par défaut pour son groupe ; zéro fixe le plafond à zéro.",
       "reason": "Motif d’audit",
       "reasonHint": "Expliquez la modification. Toutes les sections sont enregistrées ensemble; les modifications d’un programme actif s’appliquent à partir de la date choisie.",
       "changeEffectiveFromHint": "Les règles révisées s’appliquent à partir de cette date ; les périodes antérieures conservent les règles déjà en vigueur.",
@@ -7339,7 +7365,7 @@
         "amount": "Plafond monétaire"
       },
       "workDate": "Date des travaux",
-      "capPercentHint": "Facultatif. Plafonne chaque projet à ce pourcentage des articles du programme dans son budget attribué, moins le taux du programme sur toutes les sources antérieures.",
+      "capPercentHint": "Plafond par défaut facultatif. Plafonne chaque projet admissible à ce pourcentage des articles du programme dans son budget attribué, moins le taux du programme sur les sources antérieures. Un plafond fixe de groupe remplace ce défaut pour son groupe.",
       "sources": {
         "assignment": "Affectations datées",
         "field_ticket_foreman": "Contremaître du bon de travail",

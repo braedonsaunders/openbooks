@@ -50,6 +50,16 @@ export function lintFlowGraphForSubject(
   const profile = profileOverride ?? adapter.profile;
   const errors = lintAutomationGraph(parsed.data, profileFieldIds(profile), profile);
 
+  // A legal-entity limit is only meaningful when the subject kind declares
+  // where its legal entity lives. Subjects with no entity source can never
+  // prove admission, so the limit would fail every record closed at
+  // runtime; refuse it at author time instead.
+  if (parsed.data.subjectScope && adapter.scope.via === "none") {
+    errors.push(
+      `${profile.label} records have no legal entity to limit this flow by — remove the legal-entity limit`,
+    );
+  }
+
   const engineManagedReleaseStatuses = DOCUMENT_FLOW_KINDS.includes(subjectKind)
     ? ENGINE_MANAGED_RELEASE_STATUSES
     : subjectKind === BANK_ACCOUNT_SUBJECT_KIND

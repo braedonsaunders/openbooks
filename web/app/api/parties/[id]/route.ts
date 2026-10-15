@@ -1,3 +1,4 @@
+import { PARTY_KINDS, isNaturalPersonPartyKind, EMPLOYEE_PERSON_REFUSAL } from "@openbooks/engine/organization/party-kinds";
 import { parseJsonBody, uuidId } from '@/lib/api/json'
 import { defineRoute } from '@/lib/api/route'
 import { NextResponse } from 'next/server'
@@ -31,7 +32,7 @@ class PartyLifecycleError extends Error {}
 // every save — so PATCH must accept every kind the column actually holds.
 // Narrowing this to company|person 422'd every edit of a role-kind party
 // while the UI reported success.
-const PARTY_KINDS = ['company', 'person', 'customer', 'vendor', 'employee'] as const
+
 const PAYMENT_METHODS = ['eft', 'cheque', 'card', 'cash', 'other'] as const
 const CURRENCY_RE = /^[A-Za-z]{3}$/
 const partyPatchBody = z.object({
@@ -407,6 +408,12 @@ export const PATCH = defineRoute({
         `this party's kind is "${effectiveKind}" — change kind to "company" or "person" to drop the ${effectiveKind} role`,
       )
     }
+  }
+  const nextPartyKind = body.kind ?? existingParty.kind
+  const employeeWillBeActive = body.roles?.employee?.enabled ?? existingParty.has_employee_role
+  if (employeeWillBeActive && !isNaturalPersonPartyKind(nextPartyKind) &&
+      (body.kind !== undefined || body.roles?.employee?.enabled === true)) {
+    return bad(EMPLOYEE_PERSON_REFUSAL)
   }
   const willBeActive = body.isActive ?? (completesPlaceholder ? true : existingParty.is_active)
   const effectiveName = displayName ?? existingParty.display_name.trim()

@@ -14,7 +14,7 @@ import { upsertStatutoryRate } from "./statutory-rates.ts";
 import {
   createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment,
 } from "../testing/fixtures.ts";
-import { seedUsSuiAccount } from "./filing-test-fixtures.ts";
+import { seedUsSuiAccount, seedUsEinAccount } from "./filing-test-fixtures.ts";
 
 /**
  * A pay-run calculation must never hold a number_sequences row lock.
@@ -98,7 +98,17 @@ async function calculableOrg(): Promise<Fixture> {
   for (const slot of ["fit", "fica", "futa", "suta", "state_income_tax"]) {
     await setPackSlotAccount(org.orgId, actorId, "US", slot, payrollPayable);
   }
-  const filingAccountId = await seedUsSuiAccount(org.orgId, actorId, "CA");
+  const subsidiaryId = randomUUID();
+  await db.execute(sql`
+    insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids,
+                              is_elimination, is_active, custom)
+    values (${subsidiaryId}, ${org.orgId}, ${org.subsidiaryId}, 'US Entity', 'USD', 'US',
+            '{}'::jsonb, false, true, '{}'::jsonb)`);
+  const einAccountId = await seedUsEinAccount(org.orgId, actorId, subsidiaryId, "12-3456789");
+  const filingAccountId = await seedUsSuiAccount(org.orgId, actorId, "CA", {
+    federalAccountId: einAccountId, subsidiaryId, effectiveFrom: "2026-01-01", effectiveTo: null,
+    sourceReference: "CA original employer registration",
+  });
   await upsertStatutoryRate({
     orgId: org.orgId, actorId, rates: US_PACK_RATES, rateKey: "us_sui",
     region: "CA", filingAccountId, taxYear: 2026, values: { rate: "0.03", wageBase: "7000" },
@@ -117,12 +127,6 @@ async function calculableOrg(): Promise<Fixture> {
     values: { reserveBalance: "-100.00" },
     sourceCitation: "Test rate notice", reason: "test fixture rate",
   });
-  const subsidiaryId = randomUUID();
-  await db.execute(sql`
-    insert into subsidiaries (id, org_id, parent_id, name, base_currency, country, tax_ids,
-                              is_elimination, is_active, custom)
-    values (${subsidiaryId}, ${org.orgId}, ${org.subsidiaryId}, 'US Entity', 'USD', 'US',
-            '{}'::jsonb, false, true, '{}'::jsonb)`);
   const scheduleId = randomUUID();
   await db.execute(sql`
     insert into pay_schedules (id, org_id, name, frequency, periods_per_year, anchor_period_end,

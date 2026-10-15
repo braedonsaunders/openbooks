@@ -6,7 +6,7 @@ const stateKey = Symbol.for("openbooks.v1-files-route-test");
 interface RouteState {
   uploads: Array<{ authz: unknown; input: Record<string, unknown> }>;
   listed: Array<{ context: unknown; input: Record<string, unknown> }>;
-  claims: Array<{ operation: string; idempotencyKey: string }>;
+  claims: Array<{ operation: string; idempotencyKey: string; request: Record<string, unknown> }>;
 }
 
 const routeState: RouteState = { uploads: [], listed: [], claims: [] };
@@ -65,7 +65,7 @@ stubModules({
     "../../../../lib/application/idempotency": `
       const state = globalThis[Symbol.for('openbooks.v1-files-route-test')]
       export async function executeIdempotent(args) {
-        state.claims.push({ operation: args.operation, idempotencyKey: args.idempotencyKey })
+        state.claims.push({ operation: args.operation, idempotencyKey: args.idempotencyKey, request: args.request })
         const value = await args.execute()
         return { replayed: false, value }
       }
@@ -98,7 +98,8 @@ test("POST /api/v1/files uploads with the upload_file tool fields through a file
   const body = (await response.json()) as { id: string; name: string };
   assert.equal(body.id, "file-1");
   assert.equal(body.name, "statement-jan.pdf");
-  assert.deepEqual(routeState.claims[0], { operation: "file.upload", idempotencyKey: "file-key-1" });
+  assert.equal(routeState.claims[0]?.operation, "file.upload");
+  assert.equal(routeState.claims[0]?.idempotencyKey, "file-key-1");
   assert.deepEqual(routeState.uploads[0]?.input, {
     folderId: "ffffffff-ffff-ffff-ffff-ffffffffffff",
     filename: "statement-jan.pdf",
@@ -117,3 +118,14 @@ test("POST /api/v1/files refuses a missing Idempotency-Key", async () => {
   );
   assert.equal(response.status, 400);
 });
+
+ test("source upload fields are forwarded and bound to the idempotent request", async () => {
+  const source = { sourceSystem: "payroll", sourceId: "original-row", auditReason: "  Retain source for adoption  " };
+  const response = await POST(new Request("http://openbooks.test/api/v1/files", { method: "POST", headers: { "content-type": "application/json", "idempotency-key": "source-key" }, body: JSON.stringify({ folderId: "ffffffff-ffff-ffff-ffff-ffffffffffff", filename: "source.txt", contentType: "text/plain", contentBase64: "aGVsbG8=", ...source }) }));
+  assert.equal(response.status, 201);
+  const expected = { ...source, auditReason: source.auditReason.trim() };
+  for (const [field, value] of Object.entries(expected)) {
+    assert.equal(routeState.uploads.at(-1)?.input[field], value);
+    assert.equal(routeState.claims.at(-1)?.request[field], value);
+  }
+ });

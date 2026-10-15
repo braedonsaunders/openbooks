@@ -44,6 +44,15 @@ const CONSTRUCTION_COVERED: ReadonlySet<string> = new Set([
   "fx_rate_types.name",
   "gl_audit_number_policies.reason",
   "project_loss_policies.reason",
+  "payroll_us_filing_account_employer_lineage.source_reference",
+  "payroll_us_filing_account_employer_lineage.change_reason",
+  "fx_revaluation_rate_evidence.source",
+  "fx_revaluation_rate_evidence.reason",
+  "field_ticket_source_certifications.source_row_snapshot",
+  "field_ticket_source_certifications.reference_map",
+  "field_ticket_source_certifications.native_point_in_time",
+  "field_ticket_source_certifications.attestation",
+  "field_ticket_source_certifications.reason",
   "performance_obligations.allocation_basis",
   "rebate_accruals.basis",
   "rebate_agreements.name",
@@ -1190,6 +1199,17 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "fx_rates.rate_type",
   "fx_rates.source",
   "fx_rates.to_currency",
+  "fx_revaluation_rate_evidence.transaction_currency",
+  "fx_revaluation_rate_evidence.measurement_currency",
+  "fx_revaluation_rate_evidence.request_sha256",
+  "field_ticket_source_certifications.source_system",
+  "field_ticket_source_certifications.source_external_id",
+  "field_ticket_source_certifications.native_document_number",
+  "field_ticket_source_certifications.reviewed_basis",
+  "field_ticket_source_certifications.source_file_sha256",
+  "field_ticket_source_certifications.source_row_sha256",
+  "field_ticket_source_certifications.native_fingerprint_sha256",
+  "field_ticket_source_certifications.request_payload_sha256",
   "gifts.fair_value_basis",
   "gifts.gift_number",
   "gifts.kind",
@@ -2852,6 +2872,19 @@ const LEGAL_TRANSFORMS: ReadonlySet<MaskTransform> = new Set<MaskTransform>([
 
 async function clonedSensitiveColumns(): Promise<{ table: string; column: string; udtName: string }[]> {
   const cat = await loadCatalog();
+  // Original payer, levy and reporting attestations retain confidential source
+  // snapshots and Cabinet provenance; rebasing cannot grant destination authority.
+  for (const tableName of [
+    "payroll_opening_employer_authorities",
+    "payroll_opening_levy_source_authorities",
+    "payroll_opening_levy_source_allocations",
+    "payroll_ca_opening_reporting_authorities",
+    "payroll_ca_opening_reporting_allocations",
+  ]) {
+    assert.ok(cat.tenantTables.some(table => table.name === tableName), `${tableName} must remain tenant-owned for native teardown`);
+    assert.ok(!cat.tables.some(table => table.name === tableName), `${tableName} must never copy private source authority`);
+    assert.ok(!cat.rebaseSet.has(tableName), `${tableName} must never acquire destination source identity`);
+  }
   const out: { table: string; column: string; udtName: string }[] = [];
   for (const t of cat.tables) {
     for (const c of t.columns) {

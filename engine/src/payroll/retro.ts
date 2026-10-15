@@ -25,7 +25,7 @@ import { PayrollError } from "./error.ts";
  * COUNTRY-AGNOSTIC. Nothing here branches on a country or a region. How a
  * retro amount is TAXED is a pack declaration (`retroactivePayTreatment` in
  * engine/src/payroll/packs.ts); whether it accrues vacation is the pay
- * component's own `vacationable` flag. This module only knows money and the
+ * component's dated vacation-base treatment at the settling pay date. This module only knows money and the
  * dimensions money belongs to.
  *
  * ALL ARITHMETIC IS BIGINT (engine/src/money/money.ts). No floats anywhere.

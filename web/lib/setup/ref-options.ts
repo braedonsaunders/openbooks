@@ -53,6 +53,19 @@ export async function loadEntityOptions(
   orgId: string,
   allowedSubsidiaryIds: ReadonlySet<string> | null = null,
 ): Promise<RefOption[]> {
+  if (source === 'payroll-lineage-employers') {
+    return (await db.execute<RefOption>(sql`select id::text as value,name as label from subsidiaries
+      where org_id=${orgId} and country='US' and not is_elimination
+        ${subsidiaryVisibleFilter(sql`id`, allowedSubsidiaryIds)} order by name,id`)).rows
+  }
+  if (source === 'us-federal-filing-accounts') {
+    // Retired registrations remain available for original-source qualification.
+    return (await db.execute<RefOption>(sql`select id::text as value, account_number || ' · ' || name as label,
+      subsidiary_id::text as "scopeValue" from payroll_filing_accounts
+      where org_id=${orgId} and country='US' and program_type='us_ein'
+        ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowedSubsidiaryIds, { orgWideNull: true })}
+      order by name,id`)).rows
+  }
   if (source === 'renewable-subscriptions') return (await db.execute<RefOption>(sql`
     select s.id::text as value,p.display_name || ' · ' || plan.name as label from subscriptions s
     join parties p on p.org_id=s.org_id and p.id=s.customer_id join subscription_plans plan on plan.org_id=s.org_id and plan.id=s.plan_id

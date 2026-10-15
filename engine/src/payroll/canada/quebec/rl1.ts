@@ -1,25 +1,17 @@
+import { withOpeningReportingSnapshot } from '../../opening-reporting-snapshot.ts';
+import { readCanadianOpeningYearEndSlices } from '../opening-reporting-yearend.ts';
 import { assertPayrollCountryKnown } from "../../country.ts";
 import { sql } from "drizzle-orm";
-import { drizzle } from "drizzle-orm/node-postgres";
-import { pool, type SqlExecutor } from "../../../platform/db.ts";
+import { type SqlExecutor } from "../../../platform/db.ts";
 import { add, cmp, mulPercent, neg, normalizeMoney } from "../../../money/money.ts";
 import { resolveEmployerFact } from "../../employer-facts.ts";
 import { RATES_2026_JAN } from "../rates.ts";
 import { PayrollError } from "../../error.ts";
 import type { PayrollFilingData } from "../../filing-registry.ts";
-import { openingProgramBasesByEmployee } from "../../opening-balances.ts";
 import {
-  carryOpeningYearEndYtd,
-  seedOpeningOnlySlips,
   type OpeningYearEndYtd,
 } from "../../yearend.ts";
 
-// A return is a statutory artifact, so all of its source reads must come from
-// one pinned snapshot. Keep a dedicated handle: callers such as filing pages
-// may already be inside a request transaction whose isolation level was chosen
-// before this function was reached, and the application's `db` proxy would
-// otherwise reuse that transaction instead of applying repeatable-read.
-const rl1Db = drizzle({ client: pool });
 
 /**
  * RL-1 slip data assembly — Revenu Québec's "Revenus d'emploi et revenus
@@ -188,10 +180,12 @@ async function rl1SlipsInSnapshot(
       select s.*
         from pay_stubs s
         join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id and r.run_status = 'committed'
+        join documents d on d.org_id=r.org_id and d.id=r.document_id and d.status<>'voided'
        where s.org_id = ${orgId} and s.tax_year = ${taxYear}
          and s.country = 'CA' and s.province = 'QC'
     )
     select c.employee_party_id, p.display_name,
+           min(c.pay_date)::text as first_pay_date,
            count(*)::int as stub_count,
            sum(c.pensionable_earnings) as pensionable,
            sum(c.insurable_earnings) as insurable,
@@ -237,30 +231,23 @@ async function rl1SlipsInSnapshot(
     stubCount: Number(row.stub_count ?? 0),
   }));
 
-  // Mid-year adopters: fold the prior provider's year-to-date into the
-  // aggregates BEFORE the annual maxima are applied, exactly as the T4 folds
-  // its carry-in before `capAnnualEarnings`. An opening-only employee seeds a
-  // zero slip only on Québec-profile evidence, and the carry lands once per
-  // employee — the RL-1 is already one slip per employee, so no room-sharing
-  // across slips is needed.
-  const openings = await openingRl1YtdByEmployee(runner, orgId, taxYear);
-  const profiles = await openingRl1Profiles(runner, orgId, [...openings.keys()]);
-  // An opening-only employee seeds a zero slip only on Québec-profile
-  // evidence: the RL-1 is Québec employment, and an opening with no QC
-  // evidence anywhere must not conjure a Québec slip. (The T4/W-2 still carry
-  // that employee on their own returns.)
-  const qcOpeningIds = [...openings.keys()].filter(
-    (id) => profiles.get(id)?.province === "QC",
-  );
-  const seeded = seedOpeningOnlySlips(stubAggregates, qcOpeningIds, (employeePartyId) => ({
-    employeePartyId,
-    employeeName: profiles.get(employeePartyId)?.name ?? employeePartyId,
-    taxableIncome: "0", qpp: "0", qpp2: "0", ei: "0", qpip: "0",
-    qcIncomeTax: "0", unionDues: "0", pensionable: "0", insurable: "0",
-    qpipInsurable: "0",
-    stubCount: 0,
-  }));
-  const carried = carryOpeningYearEndYtd(seeded, openings, openingYtdIntoRl1Aggregates);
+  const originalSlices = (await readCanadianOpeningYearEndSlices(runner,orgId,taxYear)).filter(slice=>slice.allocation.province==='QC');
+  for (const row of rows.rows) {
+    const source=originalSlices.find(slice=>slice.employeePartyId===String(row.employee_party_id));
+    if(source && String(row.first_pay_date)<=source.coverageEnd) throw new PayrollError('Committed Québec payroll overlaps the certified original reporting coverage — reconcile its original carry-in before preparing RL-1 slips');
+  }
+  const result = new Map(stubAggregates.map(row=>[row.employeePartyId,row]));
+  for (const slice of originalSlices) {
+    const current = result.get(slice.employeePartyId) ?? {
+      employeePartyId:slice.employeePartyId,employeeName:slice.employeeName,
+      taxableIncome:'0',qpp:'0',qpp2:'0',ei:'0',qpip:'0',qcIncomeTax:'0',unionDues:'0',
+      pensionable:'0',insurable:'0',qpipInsurable:'0',stubCount:0,
+    };
+    result.set(slice.employeePartyId,openingYtdIntoRl1Aggregates(current,{...slice.ytd,
+      pensionableYtd:slice.allocation.reportableBases.cpp,
+      programBasesYtd:{...slice.ytd.programBasesYtd,qpip:slice.allocation.reportableBases.qpip}}));
+  }
+  const carried = [...result.values()];
   return carried.map((row) => assembleRl1Slip(row, caps));
 }
 
@@ -302,109 +289,6 @@ export function openingYtdIntoRl1Aggregates(
     pensionable: add(row.pensionable, opening.pensionableYtd),
     qpipInsurable: add(row.qpipInsurable, opening.programBasesYtd["qpip"] ?? "0"),
   };
-}
-
-/**
- * The statutory carry-ins for one org-year, keyed by Canadian-pack employee —
- * the RL-1's read of the same `payroll_opening_balances` rows the T4 folds
- * in. Queried through the caller's snapshot runner, never a second session:
- * the RL-1 assembles every source inside one repeatable-read transaction.
- */
-async function openingRl1YtdByEmployee(
-  runner: SqlExecutor,
-  orgId: string,
-  taxYear: number,
-): Promise<Map<string, OpeningYearEndYtd>> {
-  const rows = (await runner.execute<{
-    employee_party_id: string;
-    pensionable_ytd: unknown; insurable_ytd: unknown;
-    cpp_ytd: unknown; cpp2_ytd: unknown; ei_ytd: unknown; qpip_ytd: unknown;
-    taxable_ytd: unknown; tax_ytd: unknown; qc_tax_ytd: unknown; union_dues_ytd: unknown;
-  }>(sql`
-    select b.employee_party_id,
-           b.pensionable_ytd, b.insurable_ytd, b.cpp_ytd, b.cpp2_ytd, b.ei_ytd, b.qpip_ytd,
-           b.taxable_ytd, b.tax_ytd, b.qc_tax_ytd, b.union_dues_ytd
-      from payroll_opening_balances b
-      -- Strict country match, never a coalesce default: an opening whose
-      -- employee has no profile row is refused by the unknown-country guard
-      -- before this reader runs. (A profile row always carries a country.)
-      join employee_payroll_profiles prof
-        on prof.org_id = b.org_id and prof.employee_party_id = b.employee_party_id
-       and prof.country = 'CA'
-     where b.org_id = ${orgId} and b.tax_year = ${taxYear}
-       and (
-         coalesce(b.pensionable_ytd, 0) <> 0 or coalesce(b.insurable_ytd, 0) <> 0
-         or coalesce(b.cpp_ytd, 0) <> 0 or coalesce(b.cpp2_ytd, 0) <> 0
-         or coalesce(b.ei_ytd, 0) <> 0 or coalesce(b.qpip_ytd, 0) <> 0
-         or coalesce(b.taxable_ytd, 0) <> 0 or coalesce(b.tax_ytd, 0) <> 0
-         or coalesce(b.qc_tax_ytd, 0) <> 0
-         or coalesce(b.union_dues_ytd, 0) <> 0
-         -- A program-only carry-in still seeds slips: its base feeds box I
-         -- with no statutory column alongside.
-         or exists (
-           select 1 from payroll_opening_program_bases pb
-            where pb.org_id = b.org_id and pb.employee_party_id = b.employee_party_id
-              and pb.tax_year = b.tax_year and coalesce(pb.insurable_ytd, 0) <> 0
-         )
-       )
-  `));
-  // Through the caller's snapshot runner, never a second session (see above).
-  const programs = await openingProgramBasesByEmployee(orgId, taxYear, runner);
-  return new Map(rows.rows.map((row) => [row.employee_party_id, {
-    pensionableYtd: normalizeMoney(String(row.pensionable_ytd ?? "0")),
-    insurableYtd: normalizeMoney(String(row.insurable_ytd ?? "0")),
-    cppYtd: normalizeMoney(String(row.cpp_ytd ?? "0")),
-    cpp2Ytd: normalizeMoney(String(row.cpp2_ytd ?? "0")),
-    eiYtd: normalizeMoney(String(row.ei_ytd ?? "0")),
-    qpipYtd: normalizeMoney(String(row.qpip_ytd ?? "0")),
-    taxableYtd: normalizeMoney(String(row.taxable_ytd ?? "0")),
-    taxYtd: normalizeMoney(String(row.tax_ytd ?? "0")),
-    // Box E's own carry-in: the federal tax_ytd above is T4-box-22 money
-    // and must never leak into Québec tax, so Box E reads only this.
-    qcTaxYtd: normalizeMoney(String(row.qc_tax_ytd ?? "0")),
-    // RL-1 is Québec employment: US FICA withholding never applies here.
-    ficaWithheldYtd: "0",
-    unionDuesYtd: normalizeMoney(String(row.union_dues_ytd ?? "0")),
-    programBasesYtd: programs.get(row.employee_party_id) ?? {},
-  }]));
-}
-
-/**
- * Display names and employment provinces for opening-only employees, from the
- * same snapshot. Only Québec-profile employees can seed an RL-1 slip: the
- * slip is Québec employment, and an opening with no QC evidence anywhere must
- * not conjure one.
- */
-async function openingRl1Profiles(
-  runner: SqlExecutor,
-  orgId: string,
-  employeeIds: readonly string[],
-): Promise<Map<string, { name: string; province: string }>> {
-  if (employeeIds.length === 0) return new Map();
-  const rows = (await runner.execute<{
-    employee_party_id: string; display_name: string; province: string | null;
-  }>(sql`
-    select p.id as employee_party_id, p.display_name,
-           coalesce(prof.province, '') as province
-      from parties p
-      -- Strict country match: a missing profile row yields no province, so an
-      -- opening with no QC evidence anywhere still conjures no Québec slip.
-      left join employee_payroll_profiles prof
-        on prof.org_id = p.org_id and prof.employee_party_id = p.id
-       and prof.country = 'CA'
-     where p.org_id = ${orgId} and p.id in (${sql.join(employeeIds.map((id) => sql`${id}`), sql`, `)})
-  `));
-  return new Map(rows.rows.map((row) => [row.employee_party_id, {
-    name: row.display_name,
-    province: row.province ?? "",
-  }]));
-}
-
-export async function rl1Slips(orgId: string, taxYear: number): Promise<Rl1Slip[]> {
-  return rl1Db.transaction(
-    (tx) => rl1SlipsInSnapshot(tx, orgId, taxYear),
-    { isolationLevel: "repeatable read", accessMode: "read only" },
-  );
 }
 
 /**
@@ -621,13 +505,17 @@ async function wsdrfForSummary(
   };
 }
 
+/** Build the public slip population under the same pinned source-year snapshot as the return. */
+export async function rl1Slips(orgId: string, taxYear: number): Promise<Rl1Slip[]> {
+  return withOpeningReportingSnapshot(orgId, taxYear, (tx) => rl1SlipsInSnapshot(tx, orgId, taxYear));
+}
+
 export async function rl1Summary(orgId: string, taxYear: number): Promise<Rl1SummaryTotals> {
-  return rl1Db.transaction(
+  return withOpeningReportingSnapshot(orgId,taxYear,
     async (tx) => {
       const slips = await rl1SlipsInSnapshot(tx, orgId, taxYear);
       return rl1SummaryInSnapshot(tx, orgId, taxYear, slips);
     },
-    { isolationLevel: "repeatable read", accessMode: "read only" },
   );
 }
 
@@ -641,7 +529,7 @@ export interface Rl1Return {
 }
 
 export async function rl1Return(orgId: string, taxYear: number): Promise<Rl1Return> {
-  return rl1Db.transaction(
+  return withOpeningReportingSnapshot(orgId,taxYear,
     async (tx) => {
       const cfg = (await tx.execute<{ id_number: string | null }>(sql`
         select settings#>>'{payroll,rl1Transmitter,identificationNumber}' as id_number
@@ -654,7 +542,6 @@ export async function rl1Return(orgId: string, taxYear: number): Promise<Rl1Retu
         summary: await rl1SummaryInSnapshot(tx, orgId, taxYear, slips),
       };
     },
-    { isolationLevel: "repeatable read", accessMode: "read only" },
   );
 }
 
@@ -664,7 +551,7 @@ export async function rl1Return(orgId: string, taxYear: number): Promise<Rl1Retu
  * engine/src/payroll/canada/filings.ts.
  */
 export async function rl1Population(orgId: string, taxYear: number): Promise<PayrollFilingData> {
-  return rl1Db.transaction(
+  return withOpeningReportingSnapshot(orgId,taxYear,
     async (tx) => {
       const slips = await rl1SlipsInSnapshot(tx, orgId, taxYear);
       const summary = await rl1SummaryInSnapshot(tx, orgId, taxYear, slips);
@@ -723,6 +610,5 @@ export async function rl1Population(orgId: string, taxYear: number): Promise<Pay
         ],
       };
     },
-    { isolationLevel: "repeatable read", accessMode: "read only" },
   );
 }

@@ -71,6 +71,7 @@ const profileUuid = (field: string) => z.preprocess(
 // malformed money; preserve the raw value until that checked boundary.
 const optionalProfileMoney = z.unknown().nullable().optional()
 const profileBodySchema = z.strictObject({
+  auditReason: z.string().trim().min(1).max(2000).optional(),
   employeePartyId: z.string({ error: 'employeePartyId must be a UUID; select an active employee in this organization' })
     .refine(isUuid, { error: 'employeePartyId must be a UUID; select an active employee in this organization' }),
   payScheduleId: z.string({ error: 'payScheduleId must be a UUID; select an active payroll schedule' })
@@ -1241,11 +1242,12 @@ export const POST = defineRoute({
         where employee_payroll_profiles.org_id = ${orgId}
         returning ${PROFILE_AUDIT_COLUMNS}`)).rows[0]
       if (!after) throw new Error('payroll profile save returned no row')
-      await db.execute(sql`
+      const audited = await db.execute(sql`
         insert into audit_log (org_id, table_name, row_id, action, changes, actor_id, request_id, at)
         values (${orgId}, 'employee_payroll_profiles', ${after.id}, ${before ? 'update' : 'insert'},
-          ${JSON.stringify({ ...(before ? { before } : {}), after })}::jsonb,
-          ${userId}, ${req.headers.get('X-Request-Id')}, clock_timestamp())`)
+          ${JSON.stringify({ ...(before ? { before } : {}), after, ...(body.auditReason === undefined ? {} : { reason: body.auditReason }) })}::jsonb,
+          ${userId}, ${req.headers.get('X-Request-Id')}, clock_timestamp()) returning id`)
+      if (audited.rows.length !== 1) throw new Error('payroll profile audit returned no row')
       return NextResponse.json({ ok: true })
     })
 

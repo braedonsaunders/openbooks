@@ -8,6 +8,7 @@ import {
   validateChangePayload,
 } from "./change-requests.ts";
 import { inputGuards } from "./input-guards.ts";
+import { assertEmploymentWorker } from "./employment-worker.ts";
 import { isCivilDate, makeEffectiveInterval } from "./temporal.ts";
 
 /**
@@ -150,32 +151,7 @@ export async function proposeFirstEmployment(query: ProposeFirstEmploymentQuery)
   });
 
   return withOrgTransaction(orgId, async () => {
-    const party = (await db.execute<{ id: string; kind: string; isActive: boolean }>(sql`
-      select id, kind, is_active as "isActive" from parties
-       where org_id = ${orgId} and id = ${workerPartyId}
-    `)).rows[0];
-    if (!party || !party.isActive) {
-      throw new HrmChangeRequestError(
-        "NOT_FOUND",
-        "the person was not found in this organization — open the employee record and hire from there",
-      );
-    }
-    if (party.kind !== "person") {
-      throw new HrmChangeRequestError(
-        "INVALID_PAYLOAD",
-        "a hire records a person — company parties cannot hold employments; open the person's employee record instead",
-      );
-    }
-    const role = (await db.execute<{ one: number }>(sql`
-      select 1 as one from employee_roles
-       where org_id = ${orgId} and party_id = ${workerPartyId} and is_active
-    `)).rows[0];
-    if (!role) {
-      throw new HrmChangeRequestError(
-        "REFUSED",
-        "this person holds no active employee role — give the party the employee role, then hire",
-      );
-    }
+    await assertEmploymentWorker(db, orgId, workerPartyId);
     const subsidiary = (await db.execute<{ id: string; isActive: boolean }>(sql`
       select id, is_active as "isActive" from subsidiaries
        where org_id = ${orgId} and id = ${employerSubsidiaryId}

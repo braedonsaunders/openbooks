@@ -1,3 +1,4 @@
+import { takeOpeningSourceYearFence } from '../organization/payroll-source-fence.ts';
 import { sql, type SQL } from "drizzle-orm";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { decimalNullRefusal } from "../money/decimal-refusal.ts";
@@ -958,6 +959,7 @@ export async function saveOpeningBalances(input: {
   if (input.rows.length === 0) return result;
 
   return db.transaction(async (tx) => {
+    await takeOpeningSourceYearFence(tx,input.orgId,year);
     await requirePayrollFeature(tx, input.orgId)
     // The route's scope query is only an early refusal. Lock the current
     // employee rows again in the write transaction so a rehome cannot move a
@@ -1488,27 +1490,40 @@ export async function componentYearToDate(
     excludeRunDocumentId?: string | null;
   },
 ): Promise<string> {
+  const { readEmployeeOpeningLevySources } = await import("./opening-levy-source-reader.ts");
+  // Configured component caps are employee/year limits; a later employer or
+  // country change does not erase the same component's certified carry-in.
+  const opening = await readEmployeeOpeningLevySources(executor, {
+    orgId: args.orgId, employeePartyId: args.employeePartyId, taxYear: args.taxYear,
+  });
+  if (opening.hasMaterialHistory && !opening.openingChildren) {
+    throw new PayrollError("Qualify the exact original component opening source in Payroll → Opening balances → Levy source before calculating");
+  }
+  const components = opening.openingChildren?.components.filter((component) => component.component_id === args.componentId) ?? [];
+  if (components.length > 1) throw new PayrollError("The employee/year component opening identity is ambiguous");
+  const carryIn = components.length === 0 ? "0" : canonicalDecimal(components[0]!.ytd_amount, 4);
+  if (carryIn === null) {
+    throw new PayrollError(decimalNullRefusal("Component opening year-to-date", "an amount", components[0]!.ytd_amount, 4));
+  }
   const exclude = args.excludeRunDocumentId ?? null;
   const r = (await executor.execute<{ ytd: string }>(sql`
-    select (
-      coalesce((
+    select coalesce((
         select sum(l.amount) from pay_stub_lines l
           join pay_stubs s on s.id = l.stub_id and s.org_id = l.org_id
           join pay_runs r on r.document_id = s.pay_run_document_id and r.org_id = s.org_id
+          join documents d on d.id = r.document_id and d.org_id = r.org_id
          where l.org_id = ${args.orgId} and s.employee_party_id = ${args.employeePartyId}
            and s.tax_year = ${args.taxYear} and l.component_id = ${args.componentId}
-           and r.run_status = 'committed'
+           and r.run_status = 'committed' and d.status <> 'voided'
            and (${exclude}::uuid is null or s.pay_run_document_id <> ${exclude}::uuid)
-      ), 0)
-      + coalesce((
-        select oc.ytd_amount from payroll_opening_balance_components oc
-          join payroll_opening_balances b on b.id = oc.opening_balance_id and b.org_id = oc.org_id
-         where oc.org_id = ${args.orgId} and b.employee_party_id = ${args.employeePartyId}
-           and b.tax_year = ${args.taxYear} and oc.component_id = ${args.componentId}
-      ), 0)
-    )::text as ytd
+      ), 0)::text as ytd
   `));
-  return normalizeMoney(String(r.rows[0]?.ytd ?? "0"));
+  if (r.rows.length !== 1) throw new PayrollError("The committed component year-to-date could not be resolved uniquely");
+  const committed = canonicalDecimal(r.rows[0]!.ytd, 4);
+  if (committed === null) {
+    throw new PayrollError(decimalNullRefusal("Committed component year-to-date", "an amount", r.rows[0]!.ytd, 4));
+  }
+  return add(committed, carryIn);
 }
 
 /** One employer-scope carry-in row: the pre-adoption base for a levy. */

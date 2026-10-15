@@ -1,15 +1,18 @@
 import { assertIssuedChequeFunding } from "./cheques.ts";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db } from "../platform/db.ts";
+import { db, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
 import { add, cmp, mulRate, neg, sum } from "../money/money.ts";
 import { PayrollError } from "./error.ts";
 import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
 import { lockApplicationEvidence } from "../records/application-lock.ts";
 import { assertPeriodModulesOpen, CloseError, closeModuleForDocument } from "../periods/period-policy.ts";
 import { postEntry } from "../journal/post-entry.ts";
-import { payrollSettings } from "./run-setup.ts";
 import { payrollSubsidiaryOutsideScopeFilter, payrollSubsidiaryScopeFilter, type PayrollSubsidiaryScope } from "./scope.ts";
+import { lockActorCommandAuthority } from "../organization/actor-command-authority.ts";
+import { ScopeNotFoundError } from "../organization/subsidiary-scope.ts";
+import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
+import { isUuid } from "../platform/uuid.ts";
 import {
   intercompanyBalancingLegs,
   loadSubsidiaryContext,
@@ -52,13 +55,15 @@ export async function recordPayRunPayment(input: {
   paidOn?: string;
   /** Caller role scope; null/undefined is unrestricted. */
   allowedSubsidiaryIds?: PayrollSubsidiaryScope;
-}): Promise<{ entryId: string; total: string; eft: string; cheque: string }> {
+}): Promise<{ entryId: string; total: string; eft: string; cheque: string; evidence: PayRunPaymentEvidence }> {
+  for (const value of [input.orgId, input.actorId, input.documentId, input.bankAccountId]) {
+    if (!isUuid(value)) throw new PayrollError("pay run and bank account must have valid native identities");
+  }
+  input = { ...input, orgId: input.orgId.toLowerCase(), actorId: input.actorId.toLowerCase(),
+    documentId: input.documentId.toLowerCase(), bankAccountId: input.bankAccountId.toLowerCase() };
   const { orgId, actorId, documentId } = input;
-  // Preserve the settings/root-subsidiary authorization boundary, but never
-  // use today's posting policy to reinterpret an already-posted liability.
-  await payrollSettings(orgId, input.allowedSubsidiaryIds);
-
-  return await db.transaction(async (tx) => {
+  return await withOrgTransaction(orgId, () => db.transaction(async (tx) => {
+    const liveScope = await paymentAuthority(tx, orgId, actorId, "payroll.run", input.allowedSubsidiaryIds);
     const runRows = (await tx.execute<Record<string, string | null>>(sql`
       select r.run_status, r.paid_at, r.pay_date, d.status as doc_status, d.posted_entry_id,
              d.document_number, d.subsidiary_id, d.currency, e.book_id
@@ -66,7 +71,7 @@ export async function recordPayRunPayment(input: {
         join documents d on d.id = r.document_id and d.org_id = r.org_id
         left join journal_entries e on e.id = d.posted_entry_id and e.org_id = d.org_id
        where r.org_id = ${orgId} and r.document_id = ${documentId}
-         ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, input.allowedSubsidiaryIds)}
+         ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, liveScope)}
        for update of r
     `));
     const run = runRows.rows[0];
@@ -91,7 +96,7 @@ export async function recordPayRunPayment(input: {
     // behind. Treat the whole run as opaque when any open net-pay item is out
     // of scope, including an orphaned party row. Ownership follows the posted
     // liability; a later employee transfer must neither grant nor revoke it.
-    if (input.allowedSubsidiaryIds != null) {
+    if (liveScope != null) {
       const hidden = (await tx.execute<{ id: string }>(sql`
         select jl.id
           from journal_lines jl
@@ -100,7 +105,7 @@ export async function recordPayRunPayment(input: {
            and jl.is_open_item and jl.party_id is not null
            and jl.amount < 0
            and (p.id is null or ${payrollSubsidiaryOutsideScopeFilter(
-             sql`jl.subsidiary_id`, input.allowedSubsidiaryIds,
+             sql`jl.subsidiary_id`, liveScope,
            )})
          limit 1
       `));
@@ -147,7 +152,7 @@ export async function recordPayRunPayment(input: {
        where jl.org_id = ${orgId} and jl.entry_id = ${run.posted_entry_id}
          and jl.account_id = ${netPayable} and jl.is_open_item and jl.party_id is not null
          and jl.amount < 0
-         ${payrollSubsidiaryScopeFilter(sql`jl.subsidiary_id`, input.allowedSubsidiaryIds)}
+         ${payrollSubsidiaryScopeFilter(sql`jl.subsidiary_id`, liveScope)}
        order by jl.id
     `));
     if (postedItems.rows.length === 0) {
@@ -385,8 +390,10 @@ export async function recordPayRunPayment(input: {
         currency: leg.currency!,
       });
     });
+    const before = await capturePayRunPaymentEvidence(tx, orgId, documentId, liveScope);
+    const applicationIds: string[] = [];
     for (const settlement of settlements) {
-      await tx.execute(sql`
+      const saved = (await tx.execute<{ id: string }>(sql`
         insert into applications (org_id, from_line_id, to_line_id, amount, source_amount,
                                   source_transaction_amount, source_transaction_currency,
                                   target_transaction_amount, target_transaction_currency,
@@ -396,14 +403,109 @@ export async function recordPayRunPayment(input: {
                 ${settlement.amount}, ${settlement.txnAmount}, ${settlement.currency},
                 ${settlement.txnAmount}, ${settlement.currency},
                 1, 'same_currency', ${`Pay run ${run.document_number} settlement`},
-                ${paidOn}, ${actorId}, ${actorId})
-      `);
+                ${paidOn}, ${actorId}, ${actorId}) returning id
+      `)).rows;
+      if (saved.length !== 1) throw new PayrollError("the payroll settlement application was not saved; no payment was recorded");
+      applicationIds.push(saved[0]!.id);
     }
-    await tx.execute(sql`
+    const stamped = (await tx.execute<{ document_id: string }>(sql`
       update pay_runs set paid_at = now(), paid_entry_id = ${entryId},
              updated_by = ${actorId}, updated_at = now()
-       where org_id = ${orgId} and document_id = ${documentId}
-    `);
-    return { entryId, total, eft, cheque };
+       where org_id = ${orgId} and document_id = ${documentId} and paid_at is null and paid_entry_id is null
+       returning document_id
+    `)).rows;
+    if (stamped.length !== 1) throw new PayrollError("the payroll paid state changed; no payment was recorded");
+    const after = await capturePayRunPaymentEvidence(tx, orgId, documentId, liveScope);
+    if (after.paidEntryId !== entryId || applicationIds.some(id => !after.applications.some(application => application.id === id))) {
+      throw new PayrollError("the saved payroll settlement cannot be resolved; no payment was recorded");
+    }
+    const audit = (await tx.execute<{ id: string }>(sql`
+      insert into audit_log(org_id,table_name,row_id,action,changes,actor_id)
+      values(${orgId},'pay_runs',${documentId},'update',${JSON.stringify({
+        operation: "record_pay_run_payment", reason: "Record the native net-pay ledger settlement",
+        bankAccountId: input.bankAccountId, paidOn, total, eft, cheque, before, after,
+      })}::jsonb,${actorId}) returning id
+    `)).rows;
+    if (audit.length !== 1) throw new PayrollError("the payroll settlement audit was not saved; no payment was recorded");
+    return { entryId, total, eft, cheque, evidence: after };
+  }));
+}
+
+export type PayRunPaymentEvidence = {
+  documentId: string; sourceEntryId: string | null; paidEntryId: string | null; paidAt: string | null;
+  subsidiaryId: string | null; currency: string; bookId: string | null;
+  applications: {
+    id: string; fromLineId: string; toLineId: string; fromEntryId: string; toEntryId: string;
+    employeePartyId: string | null; subsidiaryId: string | null; accountId: string;
+    amount: string; sourceAmount: string; sourceTransactionAmount: string; targetTransactionAmount: string;
+    sourceCurrency: string; targetCurrency: string; settlementRate: string; rateSource: string;
+    appliedOn: string; unappliedAt: string | null; createdBy: string | null; createdAt: string;
+  }[];
+};
+
+async function paymentAuthority(tx: SqlExecutor, orgId: string, actorId: string, permission: "payroll.read" | "payroll.run", ceiling: PayrollSubsidiaryScope): Promise<PayrollSubsidiaryScope> {
+  if (!isUuid(orgId) || !isUuid(actorId)) throw new PayrollError("pay run not found");
+  if (ceiling != null) {
+    if ([...ceiling].some(id => !isUuid(id))) throw new PayrollError("pay run not found");
+    ceiling = new Set([...ceiling].map(id => id.toLowerCase()));
+  }
+  try {
+    const live = await lockActorCommandAuthority(tx, orgId, actorId, null, permission);
+    if (!(await lockAndCheckOrgFeature(tx, orgId, "payroll"))) throw new PayrollError("Payroll feature is disabled");
+    return live === null ? ceiling : ceiling == null ? live : new Set([...live].filter(id => ceiling.has(id)));
+  } catch (error) {
+    if (!(error instanceof ScopeNotFoundError)) throw error;
+    const refusal = new PayrollError("pay run not found"); refusal.cause = error; throw refusal;
+  }
+}
+
+/** Frozen posted liabilities own settlement visibility, including after a
+ * later employee transfer. No current banking instructions are exposed. */
+async function capturePayRunPaymentEvidence(tx: SqlExecutor, orgId: string, documentId: string, scope: PayrollSubsidiaryScope): Promise<PayRunPaymentEvidence> {
+  const run = (await tx.execute<Omit<PayRunPaymentEvidence, "applications">>(sql`
+    select r.document_id as "documentId", d.posted_entry_id as "sourceEntryId",
+      r.paid_entry_id as "paidEntryId", r.paid_at::text as "paidAt", d.currency,
+      d.subsidiary_id as "subsidiaryId", e.book_id as "bookId"
+    from pay_runs r join documents d on d.org_id=r.org_id and d.id=r.document_id and d.kind='pay_run'
+    left join journal_entries e on e.org_id=d.org_id and e.id=d.posted_entry_id
+    where r.org_id=${orgId} and r.document_id=${documentId}
+      ${payrollSubsidiaryScopeFilter(sql`d.subsidiary_id`, scope)} for share of r,d
+  `)).rows[0];
+  if (!run) throw new PayrollError("pay run not found");
+  if (scope != null) {
+    const hidden = (await tx.execute<{ id: string }>(sql`
+      select id from journal_lines where org_id=${orgId} and entry_id=${run.sourceEntryId}
+        and is_open_item and party_id is not null and amount<0
+        and (${payrollSubsidiaryOutsideScopeFilter(sql`subsidiary_id`, scope)}) limit 1
+    `)).rows[0];
+    if (hidden) throw new PayrollError("pay run not found");
+  }
+  const applications = run.paidEntryId === null ? [] : (await tx.execute<PayRunPaymentEvidence["applications"][number]>(sql`
+    select a.id, a.from_line_id as "fromLineId", a.to_line_id as "toLineId",
+      f.entry_id as "fromEntryId", t.entry_id as "toEntryId", t.party_id as "employeePartyId",
+      t.subsidiary_id as "subsidiaryId", t.account_id as "accountId", a.amount::text,
+      a.source_amount::text as "sourceAmount", a.source_transaction_amount::text as "sourceTransactionAmount",
+      a.target_transaction_amount::text as "targetTransactionAmount", a.source_transaction_currency as "sourceCurrency",
+      a.target_transaction_currency as "targetCurrency", a.settlement_rate::text as "settlementRate",
+      a.settlement_rate_source as "rateSource", a.applied_on::text as "appliedOn", a.unapplied_at::text as "unappliedAt",
+      a.created_by as "createdBy", a.created_at::text as "createdAt"
+    from applications a join journal_lines f on f.org_id=a.org_id and f.id=a.from_line_id
+      join journal_lines t on t.org_id=a.org_id and t.id=a.to_line_id
+    where a.org_id=${orgId} and f.entry_id=${run.paidEntryId} order by a.id
+  `)).rows;
+  if (applications.some(a => a.toEntryId !== run.sourceEntryId || !a.employeePartyId ||
+    (scope != null && (!a.subsidiaryId || !scope.has(a.subsidiaryId))))) {
+    throw new PayrollError("the payroll settlement has inconsistent source endpoints; review its retained journal and application history");
+  }
+  return { ...run, applications };
+}
+
+/** Native evidence reader for the settled run and its actual application identities. */
+export function readPayRunPaymentEvidence(input: { orgId: string; actorId: string; documentId: string; allowedSubsidiaryIds?: PayrollSubsidiaryScope }): Promise<PayRunPaymentEvidence> {
+  if (![input.orgId,input.actorId,input.documentId].every(isUuid)) throw new PayrollError("pay run not found");
+  input = { ...input, orgId: input.orgId.toLowerCase(), actorId: input.actorId.toLowerCase(), documentId: input.documentId.toLowerCase() };
+  return withOrgTransaction(input.orgId, async () => {
+    const scope = await paymentAuthority(db, input.orgId, input.actorId, "payroll.read", input.allowedSubsidiaryIds);
+    return capturePayRunPaymentEvidence(db, input.orgId, input.documentId, scope);
   });
 }

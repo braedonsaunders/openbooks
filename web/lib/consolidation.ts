@@ -6,6 +6,8 @@ import { currentUser } from "./auth";
 import type { StatementSubsidiaryContext } from "./statement-matrix";
 import { allowedSubsidiaryIds, subsidiaryOptions, subtreeIds, type SubsidiaryOption } from "./subsidiaries";
 import { subsidiaryFeatureEnabled } from "./features";
+import { ReportSubsidiarySelectionError, selectReportSubsidiary } from "./report-subsidiary-selection";
+import { notFound } from "next/navigation";
 
 /**
  * Resolves a report's subsidiary picker value into the statement engine's
@@ -157,9 +159,8 @@ export async function resolveSubsidiaryScope(
   const all = bookCurrencies
     ? listed.map((s) => ({ ...s, baseCurrency: bookCurrencies.get(s.id) ?? s.baseCurrency }))
     : listed;
-  const visible = allowed ? all.filter((s) => allowed.has(s.id)) : all;
-  const pickerOptions = visible.filter((s) => !s.isElimination);
-  if (allowed === null && all.filter((s) => !s.isElimination).length <= 1) {
+  const { options: pickerOptions, node } = selectReportSubsidiary(subsidiaryId, all, allowed);
+  if (subsidiaryId === undefined && allowed === null && all.filter((s) => !s.isElimination).length <= 1) {
     // A single-entity organization presents in the book's currency for it.
     const only = all.find((s) => !s.isElimination);
     const listedOnly = listed.find((s) => s.id === only?.id);
@@ -172,12 +173,6 @@ export async function resolveSubsidiaryScope(
   }
 
   const root = all.find((s) => s.parentId === null);
-  const node =
-    (subsidiaryId && pickerOptions.find((s) => s.id === subsidiaryId)) ||
-    (allowed
-      ? pickerOptions[0]
-      : root && pickerOptions.find((s) => s.id === root.id)) ||
-    pickerOptions[0];
   if (!node)
     return {
       consolidated: false,
@@ -434,7 +429,7 @@ export async function reportSubsidiaryScope(
   const user = await currentUser();
   const subsidiaryUiEnabled = Boolean(user && await subsidiaryFeatureEnabled(user.orgId));
   const allowed = user ? (user.isSuperAdmin ? null : await allowedSubsidiaryIds(user.id, user.orgId)) : new Set<string>();
-  if (!subsidiaryUiEnabled && allowed === null) {
+  if (!subsidiaryUiEnabled && allowed === null && subsidiaryId === undefined) {
     // One entity: a secondary book may still present it in its own currency.
     const single = bookId ? await resolveSubsidiaryScope(undefined, periodTo, null, bookId) : null;
     return {
@@ -442,7 +437,13 @@ export async function reportSubsidiaryScope(
       ...(single && !single.consolidated && single.currency ? { currency: single.currency } : {}),
     };
   }
-  const view = await resolveSubsidiaryScope(subsidiaryId, periodTo, allowed, bookId);
+  let view: ResolvedSubsidiaryScope;
+  try {
+    view = await resolveSubsidiaryScope(subsidiaryId, periodTo, allowed, bookId);
+  } catch (error) {
+    if (error instanceof ReportSubsidiarySelectionError) notFound();
+    throw error;
+  }
   if (!subsidiaryUiEnabled) return { ...view, picker: [] };
   const hasChildren = new Set(view.options.map((s) => s.parentId).filter(Boolean));
   const picker = view.options.map((s) => ({

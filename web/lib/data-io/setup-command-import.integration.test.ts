@@ -37,7 +37,7 @@ test('command-owned setup entities stay importable and bar sealed configuration'
   }
   const barred = SETUP_ENTITIES.filter((entity) => entity.importVia === 'none').map((entity) => entity.key)
   assert.ok(barred.length > 0, 'the refusal test below is vacuous without a barred entity')
-  for (const key of ['nonprofit-frameworks', 'fund-pairs', 'functional-mappings', 'dunning-policies', 'quote-to-cash-policy', 'customer-portal']) {
+  for (const key of ['nonprofit-frameworks', 'fund-pairs', 'functional-mappings', 'dunning-policies', 'quote-to-cash-policy', 'customer-portal', 'benefit-enrollment-configuration', 'benefit-enrollment-terms']) {
     assert.ok(barred.includes(key), `${key} must stay barred from import`)
   }
   const frameworks = SETUP_ENTITY_BY_KEY.get('nonprofit-frameworks')
@@ -232,4 +232,23 @@ test('command imports preview without persisting', DB, async () => {
   } finally {
     await dropScratchOrgReporting(org.orgId)
   }
+})
+
+test('worker enrollment and contribution-term imports refuse preview and commit with a native lifecycle remedy', DB, async () => {
+  const org = await createScratchOrg()
+  try {
+    const actorId = await createScratchUser(org.orgId, 'Enrollment Import Admin', 'admin')
+    for (const key of ['benefit-enrollment-configuration', 'benefit-enrollment-terms']) {
+      const entity = SETUP_ENTITY_BY_KEY.get(key)!
+      assert.equal(setupDescriptor(entity).supportsImport, false)
+      const before = (await db.execute(sql`select count(*)::int n from ${sql.raw(entity.table)} where org_id=${org.orgId}`)).rows[0]!.n
+      for (const dryRun of [true, false]) for (const mode of ['insert', 'upsert'] as const) {
+        const outcome = await setupResource(entity, org.orgId).write([{}], mode, { orgId: org.orgId, actorId, dryRun, permissions: new Set(['hrm.benefits.manage']) })
+        assert.deepEqual([outcome.created, outcome.updated, outcome.failed], [0, 0, 1])
+        assert.match(outcome.errors[0]!.message, /POST \/api\/hrm\/enrollments/)
+      }
+      const after = (await db.execute(sql`select count(*)::int n from ${sql.raw(entity.table)} where org_id=${org.orgId}`)).rows[0]!.n
+      assert.equal(after, before)
+    }
+  } finally { await dropScratchOrgReporting(org.orgId) }
 })

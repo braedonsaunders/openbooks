@@ -74,7 +74,11 @@ export function StubDrawer({
   const [adjNote, setAdjNote] = useState('')
   const [bankHours, setBankHours] = useState('')
   const [bankRate, setBankRate] = useState('')
+  const [outsideBankAmount, setOutsideBankAmount] = useState('')
   const [bankSourceReference, setBankSourceReference] = useState('')
+  const [declaredVacationAmount, setDeclaredVacationAmount] = useState('')
+  const [declaredVacationReason, setDeclaredVacationReason] = useState('')
+  const [declaredVacationSource, setDeclaredVacationSource] = useState('')
   const [adjEarnedFrom, setAdjEarnedFrom] = useState('')
   const [adjEarnedTo, setAdjEarnedTo] = useState('')
   const [adjReplace, setAdjReplace] = useState(false)
@@ -90,7 +94,7 @@ export function StubDrawer({
   // drawer still closes without prompting; the successful-exclude path below
   // keeps the direct onClose (its work already landed).
   const adjustGuard = useDirtyClose({
-    dirty: adjComponent !== '' || adjAmount !== '' || adjNote !== '' || bankHours !== '' || bankRate !== '' || bankSourceReference !== '' || adjEarnedFrom !== '' || adjEarnedTo !== '' || adjReplace,
+    dirty: adjComponent !== '' || adjAmount !== '' || adjNote !== '' || bankHours !== '' || bankRate !== '' || outsideBankAmount !== '' || bankSourceReference !== '' || adjEarnedFrom !== '' || adjEarnedTo !== '' || adjReplace || declaredVacationAmount !== '' || declaredVacationReason !== '' || declaredVacationSource !== '',
     busy,
     onClose,
     message: tCommon('feedback.unsavedChanges'),
@@ -293,7 +297,7 @@ export function StubDrawer({
                   <Select
                     aria-label={t('wizard.adjust.component')}
                     value={adjComponent}
-                    onChange={(e) => { setAdjComponent(e.target.value); setAdjEarnedFrom(''); setAdjEarnedTo(''); setBankHours(''); setBankRate(''); setBankSourceReference(''); setAdjReplace(false) }}
+                    onChange={(e) => { setAdjComponent(e.target.value); setAdjEarnedFrom(''); setAdjEarnedTo(''); setBankHours(''); setBankRate(''); setOutsideBankAmount(''); setBankSourceReference(''); setAdjReplace(false) }}
                   >
                     <option value="">{t('wizard.adjust.component')}</option>
                     <optgroup label={t('wizard.adjust.earnings')}>
@@ -335,6 +339,9 @@ export function StubDrawer({
                         <MoneyInput value={bankRate} onChange={setBankRate} field={t('wizard.adjust.bankRate')} noun="an hourly rate" maxScale={2} className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 dark:border-slate-700 dark:bg-slate-900" />
                       </label>
                     </div>
+                    <label className="block text-sm text-slate-700 dark:text-slate-200">{t('wizard.adjust.bankOutsideAmount')}
+                      <MoneyInput value={outsideBankAmount} onChange={setOutsideBankAmount} field={t('wizard.adjust.bankOutsideAmount')} noun="a money amount" maxScale={2} className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 dark:border-slate-700 dark:bg-slate-900" />
+                    </label>
                     <input
                       aria-label={t('wizard.adjust.bankSourceReference')}
                       value={bankSourceReference}
@@ -380,6 +387,7 @@ export function StubDrawer({
                       || moneyFieldError(t('wizard.adjust.amount'), 'a money amount', adjAmount, bankCashComponent ? 2 : 4, { required: !bankCashComponent || !bankRate }) !== null
                       || (bankCashComponent && (moneyFieldError(t('wizard.adjust.bankHours'), 'signed bank hours', bankHours, 2, { required: true }) !== null
                         || moneyFieldError(t('wizard.adjust.bankRate'), 'an hourly rate', bankRate, 2) !== null))
+                      || (outsideBankAmount.trim() !== '' && moneyFieldError(t('wizard.adjust.bankOutsideAmount'), 'a money amount', outsideBankAmount, 2) !== null)
                       || (bankCashComponent && (!bankHours.trim() || !(adjAmount.trim() || bankRate.trim()) || !adjNote.trim() || !bankSourceReference.trim()))
                       || ((adjEarnedFrom === '') !== (adjEarnedTo === ''))
                       || (adjEarnedFrom !== '' && adjEarnedFrom > adjEarnedTo)
@@ -394,6 +402,7 @@ export function StubDrawer({
                           hours: bankHours,
                           ...(adjAmount.trim() ? { amount: adjAmount } : {}),
                           ...(bankRate.trim() ? { rate: bankRate } : {}),
+                          ...(outsideBankAmount.trim() ? { outsideBankAmount } : {}),
                           reason: adjNote,
                           sourceReference: bankSourceReference,
                           idempotencyKey: requestKey,
@@ -410,7 +419,7 @@ export function StubDrawer({
                         })
                       }).then((added) => {
                         if (!added) return
-                        setAdjComponent(''); setAdjAmount(''); setAdjNote(''); setBankHours(''); setBankRate(''); setBankSourceReference(''); setAdjEarnedFrom(''); setAdjEarnedTo(''); setAdjReplace(false)
+                        setAdjComponent(''); setAdjAmount(''); setAdjNote(''); setBankHours(''); setBankRate(''); setOutsideBankAmount(''); setBankSourceReference(''); setAdjEarnedFrom(''); setAdjEarnedTo(''); setAdjReplace(false)
                         setRequestKey(crypto.randomUUID())
                       })
                     }}
@@ -421,6 +430,62 @@ export function StubDrawer({
                 </div>
               </div>
             )}
+          </div>
+        )}
+        {canAdjust && components.some(component => component.declared_vacation_accrual_enabled) && (
+          <div className="space-y-2 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
+            <h4 className="text-sm font-semibold text-slate-800 dark:text-slate-100">{t('wizard.adjust.declaredVacationTitle')}</h4>
+            <p className="text-xs text-slate-500">{t('wizard.adjust.declaredVacationHelp')}</p>
+            <MoneyInput
+              ariaLabel={t('wizard.adjust.declaredVacationAmount')}
+              value={declaredVacationAmount}
+              onChange={setDeclaredVacationAmount}
+              field={t('wizard.adjust.declaredVacationAmount')}
+              noun="a positive vacation accrual amount"
+              maxScale={2}
+              required
+              placeholder={t('wizard.adjust.declaredVacationAmount')}
+              className="w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-right text-sm tabular-nums dark:border-slate-700 dark:bg-slate-900"
+            />
+            <input
+              aria-label={t('wizard.adjust.declaredVacationReason')}
+              value={declaredVacationReason}
+              maxLength={500}
+              onChange={event => setDeclaredVacationReason(event.target.value)}
+              placeholder={t('wizard.adjust.declaredVacationReason')}
+              className="w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900"
+            />
+            <input
+              aria-label={t('wizard.adjust.declaredVacationSource')}
+              value={declaredVacationSource}
+              maxLength={300}
+              onChange={event => setDeclaredVacationSource(event.target.value)}
+              placeholder={t('wizard.adjust.declaredVacationSource')}
+              className="w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900"
+            />
+            <div className="flex justify-end">
+              <Button
+                size="sm"
+                disabled={moneyFieldError(t('wizard.adjust.declaredVacationAmount'), 'a positive vacation accrual amount', declaredVacationAmount, 2, { required: true }) !== null || cmp(declaredVacationAmount, '0') <= 0 || !declaredVacationReason.trim() || !declaredVacationSource.trim() || busy}
+                onClick={() => {
+                  void onAdjust({
+                    action: 'declared-vacation-accrual',
+                    employeePartyId: stub.employee_party_id,
+                    amount: declaredVacationAmount,
+                    reason: declaredVacationReason,
+                    sourceReference: declaredVacationSource,
+                    idempotencyKey: requestKey,
+                  }).then(added => {
+                    if (!added) return
+                    setDeclaredVacationAmount(''); setDeclaredVacationReason(''); setDeclaredVacationSource('')
+                    setRequestKey(crypto.randomUUID())
+                  })
+                }}
+              >
+                {busy ? <Loader2 size={14} className="animate-spin" aria-hidden /> : null}
+                {busy ? tCommon('actions.saving') : t('wizard.adjust.declaredVacationAdd')}
+              </Button>
+            </div>
           </div>
         )}
       </div>

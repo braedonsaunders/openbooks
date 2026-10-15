@@ -90,3 +90,48 @@ export function preflightNeedsRecordedGuardTransition(evidence: PreflightTransit
 }
 
 export const RECORDED_INSTRUCTION_GUARD_SIGNATURE = SIGNATURE;
+
+const PREREQUISITE_PUBLISHERS = new Map([
+  ["generated/0710_payroll_opening_legal_employer_authority.sql", "10081e407b35c0762496fd4400a8a0f479f06ecc1964e18a6904603b04efb23b"],
+  ["generated/0719_payroll_opening_levy_source_authority.sql", "e22ac82217135ce739381cc215a387d60332c1ec64783c0a548f117ff9086c3e"],
+  ["generated/0725_payroll_opening_levy_source_successors.sql", "29993271361b124a7c1bf9f50d0553bab5848476b486604d012367402918fc3e"],
+  ["generated/0727_document_explicit_fx_rate_evidence.sql", "f7a2bc15649388124fdda0ad27ef9d4e48b4fb5e7769ea31de1f5197d76f28fe"],
+]);
+const PREREQUISITE_CONSUMERS = new Map([
+  ["generated/0726_payroll_ca_opening_reporting_source.sql", {
+    source: "faebff8c40d76c240c18d3ef994d5d74e2195c9acf8d47d98cf74af1aaddd839",
+    preflight: "17395df54ae1f85a0e3b14fa7d713f5a57f3fe6bc82dda12b25f72e329bf8f10",
+    prerequisites: new Map([
+      ["0726.current_levy_source_missing:public.payroll_opening_levy_source_authorities.supersedes_authority_id", "generated/0725_payroll_opening_levy_source_successors.sql"],
+      ["0726.current_levy_source_missing:public.payroll_opening_source_children(uuid,uuid,uuid,integer)", "generated/0719_payroll_opening_levy_source_authority.sql"],
+      ["0726.native_source_missing:public.payroll_opening_employer_authorities", "generated/0710_payroll_opening_legal_employer_authority.sql"],
+    ]),
+  }],
+  ["generated/0728_scoped_close_and_settlement_fx_evidence.sql", {
+    source: "0f57dbde70d4f44b2cae02823ed2b47891340707e6032c5697984160616bdbe7",
+    preflight: "09dd878fa61abd688b6ace84ab1d3e779ae3f75847ae2040a4b2f8eeea28746f",
+    prerequisites: new Map([
+      ["0728.document_evidence_prerequisite_missing:public.documents.document_fx_rate_evidence", "generated/0727_document_explicit_fx_rate_evidence.sql"],
+      ["0728.document_evidence_prerequisite_missing:public.documents.documents_fx_rate_evidence_bound", "generated/0727_document_explicit_fx_rate_evidence.sql"],
+    ]),
+  }],
+]);
+
+/** Missing prerequisites defer only to exact earlier pending publishers.
+ * Existing objects, unknown prerequisites and data refusals keep their verdict.
+ * The unchanged strict preflight runs again in its migration transaction. */
+export function preflightNeedsPendingPrerequisite(
+  evidence: Pick<PreflightTransitionEvidence, "migration" | "consumerSql" | "findings" | "published" | "pendingBeforeConsumer">,
+): boolean {
+  const consumer = PREREQUISITE_CONSUMERS.get(evidence.migration);
+  if (!consumer || evidence.findings.length === 0
+    || digest(evidence.consumerSql) !== consumer.preflight
+    || digest(evidence.published.get(evidence.migration) ?? "") !== consumer.source) return false;
+  return evidence.findings.every(finding => {
+    if (finding.migration !== evidence.migration || finding.severity !== "refuse") return false;
+    const publisher = consumer.prerequisites.get(`${finding.code}:${finding.subject}`);
+    if (!publisher || !evidence.pendingBeforeConsumer.has(publisher)) return false;
+    const content = evidence.published.get(publisher);
+    return content !== undefined && digest(content) === PREREQUISITE_PUBLISHERS.get(publisher);
+  });
+}

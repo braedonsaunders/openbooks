@@ -193,7 +193,7 @@ test('future package proposals and retirement preserve pinned terms while native
     await updateCompensationPackage({ orgId: f.org.orgId, actorId: f.authorId, packageId: f.pack.id, expectedRevision: 1,
       name: f.pack.name, description: null, retire: true, reason: 'Stop new assignments while retaining obligations' });
     assert.deepEqual(await compensationPackageEmploymentSource(db, query), before);
-    const changed = await db.execute(sql`update pay_components set vacationable=false where org_id=${f.org.orgId} and id=${f.componentId} returning id`);
+    const changed = await db.execute(sql`update pay_components set insurable=false where org_id=${f.org.orgId} and id=${f.componentId} returning id`);
     assert.equal(changed.rows.length, 1);
     assert.notEqual(canonicalJson(await compensationPackageEmploymentSource(db, query)), canonicalJson(before), 'changed native financial flags must invalidate source equality');
     await transitionCompensationPackageAssignment({ ...base, expectedRevision: active.revision, action: 'end', effectiveTo: '2026-01-15' });
@@ -455,7 +455,7 @@ async function runtimeContext(f: Fixture, effectiveFrom = "2026-01-01"): Promise
   await db.execute(sql`insert into pay_runs(document_id,org_id,pay_schedule_id,period_start,period_end,pay_date,tax_year,created_by,updated_by)
     values(${documentId},${f.org.orgId},${f.scheduleId},'2026-01-01','2026-01-31','2026-01-31',2026,${f.authorId},${f.authorId})`);
   return { orgId: f.org.orgId, actorId: f.authorId, documentId, employeePartyId: f.workerPartyId, employmentId: f.employmentId,
-    subsidiaryId: f.org.subsidiaryId, country: 'CA', currency: 'CAD', periodStart: '2026-01-01', periodEnd: '2026-01-31',
+    subsidiaryId: f.org.subsidiaryId, country: 'CA', currency: 'CAD', periodStart: '2026-01-01', periodEnd: '2026-01-31', payDate: '2026-01-31',
     taxYear: 2026, hourlyWage: '25', payScheduleId: f.scheduleId, runType: 'regular', oneOffRun: false, terminationRun: false, simulate: false, assignedRows: [], unionAgreementId: null, unionClassificationId: null };
 }
 function nativeWages(): Line[] {

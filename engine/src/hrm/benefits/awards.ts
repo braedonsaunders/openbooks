@@ -5,7 +5,7 @@ import { BENEFIT_AWARD_SUBJECT_KIND } from "@openbooks/schema/src/benefits-progr
 import { sql } from "drizzle-orm";
 import { awardPayrollProcessedSql } from "./payroll-delivery-evidence.ts";
 import { lockFlowSubjectDecision } from "../../flows/decision-lock.ts";
-import { db, withOrgTransaction, withTransactionSavepoint, type SqlExecutor } from "../../platform/db.ts";
+import { db, pinnedTransactionExecutor, withOrgTransaction, withTransactionSavepoint, type SqlExecutor } from "../../platform/db.ts";
 import { fitsLedgerRange, normalizeMoney } from "../../money/money.ts";
 import { canonicalDecimal } from "../../money/exact-decimal.ts";
 import { moneyRefusal } from "../../money/decimal-refusal.ts";
@@ -20,6 +20,7 @@ import { PayrollError } from "../../payroll/error.ts";
 import { mutatePayRunAdjustment } from "../../payroll/run-adjustments.ts";
 import { benefitListWindow } from "./list-window.ts";
 import { BenefitsError, isUniqueViolation } from "./errors.ts";
+import { consumeSourceEvidenceAdmission } from "./source-evidence-capability.ts";
 import { getBenefitProgram, programPolicyInForce } from "./programs.ts";
 import {
   assertHrmEnabled,
@@ -30,7 +31,7 @@ import {
   requireOneRow,
   requireOrgId,
 } from "./shared.ts";
-import type { BenefitAward } from "./program-types.ts";
+import type { BenefitAward, BenefitProgram } from "./program-types.ts";
 
 /**
  * Employer-defined benefit award lifecycle.
@@ -152,10 +153,11 @@ async function appendAwardEvent(
   kind: string,
   reason: string,
 ): Promise<void> {
-  await exec.execute(sql`
+  requireOneRow((await exec.execute(sql`
     insert into hrm_benefit_award_events (org_id, award_id, kind, reason, actor, created_by)
     values (${orgId}, ${awardId}, ${kind}, ${reason}, ${actorId}, ${actorId})
-  `);
+    returning id
+  `)).rows, "recording the benefit award event");
 }
 
 async function auditAwardWrite(
@@ -168,7 +170,7 @@ async function auditAwardWrite(
   after: unknown,
   reason: string | null,
 ): Promise<void> {
-  await exec.execute(sql`
+  requireOneRow((await exec.execute(sql`
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
     values (${orgId}, 'hrm_benefit_awards', ${awardId}, 'update', ${JSON.stringify({
       event,
@@ -177,7 +179,8 @@ async function auditAwardWrite(
       after,
       reason,
     })}::jsonb, ${actorId})
-  `);
+    returning id
+  `)).rows, "auditing the benefit award write");
 }
 
 function canonicalValue(value: unknown, signed: boolean): string {
@@ -319,7 +322,14 @@ export interface CreateBenefitAwardQuery {
   readonly settlementMeasurement?: Record<string, unknown> | null;
 }
 
+interface SourceEvidencedAwardWrite extends CreateBenefitAwardQuery {
+  /** Confidential evidence and one-use admission stay out of the public award command type. */
+  readonly sourceEvidenceSnapshot?: Record<string, unknown> | null;
+  readonly sourceEvidenceAdmission?: object;
+}
+
 const SETTLEMENT_KEY = /^(settle|adjust):/i;
+const SOURCE_FIRST_KEY = /^source-first:/i;
 
 /**
  * Shared award recording. `origin` separates the two doors: manual awards
@@ -330,8 +340,9 @@ const SETTLEMENT_KEY = /^(settle|adjust):/i;
  * self-service-visible evidence.
  */
 async function recordAward(
-  query: CreateBenefitAwardQuery,
-  origin: "manual" | "settlement",
+  query: SourceEvidencedAwardWrite,
+  origin: "manual" | "settlement" | "source-evidenced-first",
+  sourcePeriod?: { readonly sourceReference: string; readonly periodFrom: string; readonly periodTo: string },
 ): Promise<BenefitAward> {
   const orgId = requireOrgId(query.orgId);
   const actorId = requireActorId(query.actorId);
@@ -360,10 +371,10 @@ async function recordAward(
       : String(query.sourceKey).trim().length > 0
         ? String(query.sourceKey).trim()
         : null;
-  if (origin === "manual" && sourceKey !== null && SETTLEMENT_KEY.test(sourceKey)) {
+  if (origin === "manual" && sourceKey !== null && (SETTLEMENT_KEY.test(sourceKey) || SOURCE_FIRST_KEY.test(sourceKey))) {
     throw new BenefitsError(
       "REFUSED",
-      "settlement keys are issued by the settlement calculation — record manual awards without a key or with a non-reserved key",
+      "measured and source-evidence keys are issued by their native settlement paths — record manual awards without a reserved key",
     );
   }
   if (origin === "settlement" && (sourceKey === null || !SETTLEMENT_KEY.test(sourceKey))) {
@@ -371,6 +382,9 @@ async function recordAward(
       "REFUSED",
       "settled awards carry a settle: or adjust: source key — the key is the idempotency proof, never a manual label",
     );
+  }
+  if (origin === "source-evidenced-first" && (sourceKey === null || !SOURCE_FIRST_KEY.test(sourceKey))) {
+    throw new BenefitsError("REFUSED", "source-evidenced first awards require a source-first: key issued by the retained-source settlement path");
   }
   const evidence = query.evidence ?? null;
   if (evidence !== null && (typeof evidence !== "object" || Array.isArray(evidence))) {
@@ -385,6 +399,13 @@ async function recordAward(
       "REFUSED",
       "manual awards never carry settlement measurement — the settlement calculation records its own facts",
     );
+  }
+  const sourceEvidenceSnapshot = query.sourceEvidenceSnapshot ?? null;
+  if (sourceEvidenceSnapshot !== null && (typeof sourceEvidenceSnapshot !== "object" || Array.isArray(sourceEvidenceSnapshot))) {
+    throw new BenefitsError("INVALID_INPUT", "source-evidenced snapshot is a JSON object of verified retained-source facts");
+  }
+  if ((origin === "source-evidenced-first") !== (sourceEvidenceSnapshot !== null)) {
+    throw new BenefitsError("REFUSED", "only the source-evidenced first-settlement path may write its confidential source snapshot");
   }
   return withOrgTransaction(orgId, async () => {
     if (adjustsAwardId === null) await requireHrmBenefitsManageOnEmployment(db, orgId, actorId, employmentId);
@@ -490,8 +511,7 @@ async function recordAward(
       if (
         target.employmentId !== employmentId ||
         target.currency !== currency ||
-        target.periodFrom !== periodFrom ||
-        (target.periodTo ?? null) !== periodTo
+        (sourcePeriod === undefined && (target.periodFrom !== periodFrom || (target.periodTo ?? null) !== periodTo))
       ) {
         throw new BenefitsError(
           "REFUSED",
@@ -548,7 +568,7 @@ async function recordAward(
         "benefit award not found in this organization — reload the award list and retry",
       );
     }
-    const serviceBoundary = origin === "settlement" ? periodTo ?? periodFrom : periodFrom;
+    const serviceBoundary = origin === "settlement" || origin === "source-evidenced-first" ? periodTo ?? periodFrom : periodFrom;
     if (adjustsAwardId === null && service.service_start !== null && String(service.service_start).slice(0, 10) > serviceBoundary) {
       throw new BenefitsError(
         "REFUSED",
@@ -562,7 +582,7 @@ async function recordAward(
     const awardRange = sql`daterange(${periodFrom}::date, ${(periodTo ?? periodFrom)}::date + 1, '[)')`;
     const activeCoverage = (await db.execute<{ covered: boolean }>(sql`
       select coalesce(
-        ${origin === "settlement" ? sql`${awardRange} && range_agg(daterange(effective_from, effective_to, '[)'))` : sql`${awardRange} <@ range_agg(daterange(effective_from, effective_to, '[)'))`},
+        ${origin === "settlement" || origin === "source-evidenced-first" ? sql`${awardRange} && range_agg(daterange(effective_from, effective_to, '[)'))` : sql`${awardRange} <@ range_agg(daterange(effective_from, effective_to, '[)'))`},
         false
       ) as covered
       from worker_employment_versions
@@ -572,7 +592,7 @@ async function recordAward(
     if (adjustsAwardId === null && !activeCoverage) {
       throw new BenefitsError(
         "REFUSED",
-        origin === "settlement"
+        origin === "settlement" || origin === "source-evidenced-first"
           ? "current employment history has no active service inside the settled period — settle periods the employee worked; end dates exclude their day"
           : "current employment history has no active service covering the full award period — issue awards inside active service; end dates exclude their day",
       );
@@ -610,44 +630,8 @@ async function recordAward(
         );
       }
     }
-    const programSnapshot = originalPolicy ? { ...originalPolicy } : {
-      id: program.id,
-      code: program.code,
-      name: program.name,
-      family: program.family,
-      currency: program.currency,
-      approvalMode: program.approvalMode,
-      deliveryMethod: program.deliveryMethod,
-      valuation: program.valuation,
-      metric: program.metric,
-      metricScope: program.metricScope,
-      scopes: [...program.scopeIds],
-      scopeCustomerIds: [...program.scopeCustomerIds],
-      scopeDepartmentIds: [...program.scopeDepartmentIds],
-      unassignedTime: program.unassignedTime,
-      scopeExcludedProjectIds: [...program.scopeExcludedProjectIds],
-      lossPercentRate: program.lossPercentRate,
-      projectProfitCap: program.projectProfitCap,
-      projectLossCap: program.projectLossCap,
-      poolRounding: program.poolRounding,
-      includeOpenCommitments: program.includeOpenCommitments,
-      hourClassifications: [...program.hourClassifications],
-      eligibility: program.eligibility,
-      allocation: program.allocation,
-      percentRate: program.percentRate,
-      fixedAmount: program.fixedAmount,
-      capAmount: program.capAmount,
-      budgetAmount: program.budgetAmount,
-      thresholdAmount: program.thresholdAmount,
-      frequency: program.frequency,
-      periodBasis: program.periodBasis,
-      paymentDelayDays: program.paymentDelayDays,
-      legalEntityId: program.legalEntityId,
-      effectiveFrom: program.effectiveFrom,
-      effectiveTo: program.effectiveTo,
-      revision: program.revision,
-    };
-    const sourceSnapshot = originalSources ?? {
+    const programSnapshot = originalPolicy ? { ...originalPolicy } : buildBenefitAwardProgramSnapshot(program);
+    const sourceSnapshot = originalSources ?? sourceEvidenceSnapshot ?? {
       accounts: sources.map((row) => ({
         accountId: String(row.account_id),
         weightBps: row.weight_bps,
@@ -699,11 +683,125 @@ async function recordAward(
       actorId,
       award.id,
       "created",
-      origin === "settlement" ? "award recorded from the settlement calculation" : "award recorded directly",
+      origin === "settlement"
+        ? "award recorded from the settlement calculation"
+        : origin === "source-evidenced-first"
+          ? "source-evidenced first obligation recorded as a draft"
+          : "award recorded directly",
     );
-    await auditAwardWrite(db, orgId, actorId, award.id, "created", null, award, null);
+    await auditAwardWrite(
+      db,
+      orgId,
+      actorId,
+      award.id,
+      "created",
+      null,
+      origin === "source-evidenced-first"
+        ? {
+            award,
+            sourceContext: auditSourceContext(sourceEvidenceSnapshot?.sourceEvidence),
+          }
+        : award,
+      origin === "source-evidenced-first" && typeof sourceEvidenceSnapshot?.reason === "string"
+        ? sourceEvidenceSnapshot.reason
+        : null,
+    );
     return award;
   });
+}
+
+function auditSourceContext(value: unknown): Record<string, unknown> | null {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return null;
+  const source = value as Record<string, unknown>;
+  const artifacts = Array.isArray(source.sourceArtifacts)
+    ? source.sourceArtifacts.flatMap((entry) => {
+        if (entry === null || typeof entry !== "object" || Array.isArray(entry)) return [];
+        const artifact = entry as Record<string, unknown>;
+        return [{
+          fileId: artifact.fileId,
+          versionId: artifact.versionId,
+          sha256: artifact.sha256,
+          rowPointer: artifact.rowPointer,
+          rowSha256: artifact.rowSha256,
+          pdfSelection: artifact.pdfSelection,
+        }];
+      })
+    : [];
+  return {
+    kind: source.kind,
+    requestKey: source.requestKey,
+    sourceSystem: source.sourceSystem,
+    sourceRowRef: source.sourceRowRef,
+    sourceIssueDate: source.sourceIssueDate,
+    periodFrom: source.periodFrom,
+    periodTo: source.periodTo,
+    value: source.value,
+    currency: source.currency,
+    sourceEvidenceClass: source.sourceEvidenceClass,
+    currentProgramRevision: source.currentProgramRevision,
+    effectivePolicyRevision: source.effectivePolicyRevision,
+    effectivePolicyRevisionId: source.effectivePolicyRevisionId,
+    sourceArtifacts: artifacts,
+    currencyEvidence: source.currencyEvidence,
+    sourceCoverageInterpretation: source.sourceCoverageInterpretation,
+    mappingAttestation: source.mappingAttestation,
+    missingAnchor: source.missingAnchor,
+    sourcePaidDate: source.sourcePaidDate,
+    governingDecision: source.governingDecision,
+    nativeMeasureAnchor: source.nativeMeasureAnchor,
+    nativePaymentClaim: source.nativePaymentClaim,
+    sourcePolicyEvidence: source.sourcePolicyEvidence,
+    nativeIdentity: source.nativeIdentity,
+    nativePreview: source.nativePreview && typeof source.nativePreview === "object"
+      ? {
+          currentProgramRevision: (source.nativePreview as Record<string, unknown>).currentProgramRevision,
+          effectivePolicyRevision: (source.nativePreview as Record<string, unknown>).effectivePolicyRevision,
+          effectivePolicyRevisionId: (source.nativePreview as Record<string, unknown>).effectivePolicyRevisionId,
+          digest: (source.nativePreview as Record<string, unknown>).digest,
+        }
+      : null,
+  };
+}
+
+/** The complete effective policy snapshot retained on a newly recorded award. */
+export function buildBenefitAwardProgramSnapshot(program: BenefitProgram): Record<string, unknown> {
+  return {
+    id: program.id,
+    code: program.code,
+    name: program.name,
+    family: program.family,
+    currency: program.currency,
+    approvalMode: program.approvalMode,
+    deliveryMethod: program.deliveryMethod,
+    valuation: program.valuation,
+    metric: program.metric,
+    metricScope: program.metricScope,
+    scopes: [...program.scopeIds],
+    scopeCustomerIds: [...program.scopeCustomerIds],
+    scopeDepartmentIds: [...program.scopeDepartmentIds],
+    unassignedTime: program.unassignedTime,
+    scopeExcludedProjectIds: [...program.scopeExcludedProjectIds],
+    lossPercentRate: program.lossPercentRate,
+    projectProfitCap: program.projectProfitCap,
+    projectLossCap: program.projectLossCap,
+    poolRounding: program.poolRounding,
+    includeOpenCommitments: program.includeOpenCommitments,
+    hourClassifications: [...program.hourClassifications],
+    eligibility: program.eligibility,
+    allocation: program.allocation,
+    percentRate: program.percentRate,
+    fixedAmount: program.fixedAmount,
+    capAmount: program.capAmount,
+    budgetAmount: program.budgetAmount,
+    thresholdAmount: program.thresholdAmount,
+    frequency: program.frequency,
+    periodBasis: program.periodBasis,
+    paymentDelayDays: program.paymentDelayDays,
+    legalEntityId: program.legalEntityId,
+    effectiveFrom: program.effectiveFrom,
+    effectiveTo: program.effectiveTo,
+    revision: program.revision,
+  };
 }
 
 /**
@@ -734,6 +832,95 @@ export async function recordSettledAward(query: CreateBenefitAwardQuery): Promis
     );
   }
   return recordAward(query, "settlement");
+}
+
+/** Record a dated source reissue while retaining its original financial policy. */
+export async function recordSourceBoundAdjustingAward(
+  query: CreateBenefitAwardQuery,
+  sourcePeriod: { readonly sourceReference: string; readonly periodFrom: string; readonly periodTo: string },
+): Promise<BenefitAward> {
+  const reference = typeof sourcePeriod?.sourceReference === "string" ? sourcePeriod.sourceReference.trim() : "";
+  if (!reference || reference.length > 500) {
+    throw new BenefitsError("INVALID_INPUT", "a dated adjustment needs an exact paid-row source reference of at most 500 characters");
+  }
+  const periodFrom = requireCivilDate(sourcePeriod.periodFrom, "periodFrom");
+  const periodTo = requireCivilDate(sourcePeriod.periodTo, "periodTo");
+  if (periodTo < periodFrom || query.periodFrom !== periodFrom || query.periodTo !== periodTo) {
+    throw new BenefitsError("INVALID_INPUT", "the adjustment period must match its source row's valid paid period");
+  }
+  const adjustedId = requireId(query.adjustsAwardId, "adjustsAwardId");
+  if (typeof query.sourceKey !== "string" || !query.sourceKey.startsWith(`adjust:${adjustedId}:`)) {
+    throw new BenefitsError("INVALID_INPUT", "a dated adjustment needs its original award and a caller-stable correction key");
+  }
+  const evidence = query.evidence;
+  if (!evidence || evidence.kind !== "incentive-adjustment" || evidence.sourceReference !== reference ||
+      typeof evidence.reason !== "string" || !evidence.reason.trim() ||
+      typeof evidence.computation !== "object" || evidence.computation === null || Array.isArray(evidence.computation)) {
+    throw new BenefitsError("INVALID_INPUT", "a dated adjustment needs its source reference, reason and signed settlement computation");
+  }
+  return recordAward(query, "settlement", { sourceReference: reference, periodFrom, periodTo });
+}
+
+/**
+ * Record a source-evidenced first obligation after the period settlement
+ * service has locked and remeasured the native program. This is a distinct
+ * origin and source-key namespace; it never fabricates computation evidence
+ * or enters the ordinary measured-award admission path.
+ */
+export async function recordSourceEvidencedFirstAward(query: SourceEvidencedAwardWrite): Promise<BenefitAward> {
+  if (query.adjustsAwardId != null || query.settlementMeasurement != null) {
+    throw new BenefitsError("REFUSED", "a source-evidenced first obligation cannot adjust another award or carry fabricated native measurement");
+  }
+  const sourceSnapshot = consumeSourceEvidenceAdmission({
+    executor: pinnedTransactionExecutor() ?? db,
+    token: query.sourceEvidenceAdmission,
+    facts: {
+      orgId: query.orgId.toLowerCase(),
+      actorId: query.actorId.toLowerCase(),
+      programId: query.programId.toLowerCase(),
+      programRevision: Number((query.sourceEvidenceSnapshot?.sourceEvidence as Record<string, unknown> | undefined)?.currentProgramRevision),
+      employmentId: query.employmentId.toLowerCase(),
+      legalPayerId: String(((query.sourceEvidenceSnapshot?.sourceEvidence as Record<string, unknown> | undefined)?.mappingAttestation as Record<string, unknown> | undefined)?.legalPayerId ?? "").toLowerCase(),
+      periodFrom: query.periodFrom,
+      periodTo: String(query.periodTo ?? ""),
+      currency: query.currency,
+      value: normalizeMoney(String(query.value)),
+      sourceKey: String(query.sourceKey ?? ""),
+      requestKey: String((query.sourceEvidenceSnapshot?.sourceEvidence as Record<string, unknown> | undefined)?.requestKey ?? "").toLowerCase(),
+      sourceEvidenceClass: String((query.sourceEvidenceSnapshot?.sourceEvidence as Record<string, unknown> | undefined)?.sourceEvidenceClass ?? ""),
+      sourcePaidDate: typeof (query.sourceEvidenceSnapshot?.sourceEvidence as Record<string, unknown> | undefined)?.sourcePaidDate === "string"
+        ? String((query.sourceEvidenceSnapshot?.sourceEvidence as Record<string, unknown>).sourcePaidDate)
+        : null,
+    },
+    snapshot: query.sourceEvidenceSnapshot,
+  });
+  const sourceEvidence = sourceSnapshot.sourceEvidence as Record<string, unknown> | undefined;
+  const isAboveNativeMeasure = sourceEvidence?.sourceEvidenceClass === "source-paid-above-native-measure";
+  const governingDecision = sourceEvidence?.governingDecision as Record<string, unknown> | undefined;
+  const classFactsValid = isAboveNativeMeasure
+    ? typeof sourceEvidence?.sourcePaidDate === "string" &&
+      sourceEvidence?.nativePaymentClaim === "none-established-by-this-source-recording" &&
+      sourceEvidence?.nativeMeasureAnchor !== null && typeof sourceEvidence?.nativeMeasureAnchor === "object" &&
+      !Array.isArray(sourceEvidence?.nativeMeasureAnchor) &&
+      governingDecision !== undefined && String(governingDecision.actorId ?? "").toLowerCase() === query.actorId.toLowerCase() &&
+      typeof governingDecision.attestedAt === "string" && governingDecision.attestedAt.length > 0 &&
+      typeof governingDecision.basis === "string" && governingDecision.basis.trim().length >= 8 &&
+      typeof governingDecision.reason === "string" && governingDecision.reason.trim().length >= 8
+    : sourceEvidence?.sourceEvidenceClass === "missing-source-identity" && sourceEvidence?.sourcePaidDate === undefined;
+  if (sourceEvidence?.kind !== "source-evidenced-first-incentive-v1" ||
+      !classFactsValid ||
+      !Array.isArray(sourceEvidence.sourceArtifacts) || sourceEvidence.sourceArtifacts.length === 0 ||
+      sourceEvidence.periodFrom !== query.periodFrom || sourceEvidence.periodTo !== query.periodTo ||
+      sourceEvidence.value !== normalizeMoney(String(query.value)) || sourceEvidence.currency !== query.currency ||
+      typeof sourceEvidence.sourceIssueDate !== "string") {
+    throw new BenefitsError("REFUSED", "source-evidenced obligations require the native retained-source first-settlement service");
+  }
+  const evidence = {
+    kind: "source-evidenced-first-obligation",
+    sourceIssueDate: sourceEvidence.sourceIssueDate,
+    sourceEvidenceClass: sourceEvidence.sourceEvidenceClass,
+  };
+  return recordAward({ ...query, evidence, sourceEvidenceSnapshot: sourceSnapshot }, "source-evidenced-first");
 }
 
 /** Submit once under the pinned no-approval setting or native Flows policy. */

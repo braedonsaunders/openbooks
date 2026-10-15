@@ -7,7 +7,7 @@ import { sql } from 'drizzle-orm'
 import { documentRevisionSql, isDocumentRevisionToken } from '@openbooks/engine/records/revision'
 import { db } from '@openbooks/engine/platform/db'
 import { automationGraphSchema } from '@openbooks/forms-core'
-import { flowSubjectProfileForOrg, lintFlowGraphForSubject } from '@openbooks/engine/flows/module'
+import { flowSubjectProfileForOrg, lintFlowGraphForSubject, validateFlowSubjectScopeRefs } from '@openbooks/engine/flows/module'
 import { guardFeaturePermission } from '../../../../../lib/feature-gates'
 
 import { filterFlowRunSubjectsToScope } from '../../../flows/_lib'
@@ -139,6 +139,7 @@ export const PATCH = defineRoute({
       if (body.enabled !== undefined) sets.push(sql`enabled = ${body.enabled}`)
 
       let warnings: string[] = []
+      let scopeRefusal: string | null = null
       if (body.graph !== undefined) {
         // Structural gate: a graph the executor cannot even parse is rejected.
         const parsed = automationGraphSchema.safeParse(body.graph)
@@ -150,6 +151,12 @@ export const PATCH = defineRoute({
         const profile = await flowSubjectProfileForOrg(user.orgId, String(flow.subject_kind))
         const lint = lintFlowGraphForSubject(String(flow.subject_kind), parsed.data, profile ?? undefined)
         warnings = lint.ok ? [] : lint.errors
+        // Legal-entity limits name native subsidiary references: they must
+        // exist in this organization and sit inside the writer's ceiling.
+        // Drafts keep the refusal as a warning; an enabled flow may not
+        // persist an unchecked limit (see the blocking lint below).
+        scopeRefusal = await validateFlowSubjectScopeRefs(user.orgId, parsed.data, gate.allowedSubsidiaryIds)
+        if (scopeRefusal) warnings = [...warnings, scopeRefusal]
         sets.push(sql`graph = ${JSON.stringify(parsed.data)}::jsonb`)
       }
 
@@ -162,8 +169,20 @@ export const PATCH = defineRoute({
       // or a draft, stays warning-only so authoring keeps its work-in-progress.
       const willBeEnabled =
         body.enabled === undefined ? Boolean(flow.enabled) : Boolean(body.enabled)
+      if (willBeEnabled && scopeRefusal) {
+        return NextResponse.json({ errors: [scopeRefusal] }, { status: 400 })
+      }
       if (willBeEnabled) {
         const candidateGraph = body.graph ?? flow.graph
+        // Enabling also revalidates a stored graph's legal-entity limit:
+        // an entity deleted since the draft was saved must not silently
+        // become the enabled policy's scope.
+        const candidateRefusal = scopeRefusal ?? (await validateFlowSubjectScopeRefs(
+          user.orgId,
+          candidateGraph as { subjectScope?: { subsidiaryIds: string[] } },
+          gate.allowedSubsidiaryIds,
+        ))
+        if (candidateRefusal) return NextResponse.json({ errors: [candidateRefusal] }, { status: 400 })
         const profile = await flowSubjectProfileForOrg(user.orgId, String(flow.subject_kind))
         const lint = lintFlowGraphForSubject(
           String(flow.subject_kind),

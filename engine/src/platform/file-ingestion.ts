@@ -5,6 +5,11 @@ import { activeStorageKind, putS3Blob } from './file-storage.ts'
 import { deriveExtension, deriveFileType } from './file-names.ts'
 import { recordFileEvent } from './file-audit.ts'
 
+export class FileIngestionError extends Error {
+  readonly name = 'FileIngestionError'
+  constructor(message: string, readonly status: 400 | 409) { super(message) }
+}
+
 export type FileMeta = {
   id: string
   folderId: string
@@ -15,6 +20,9 @@ export type FileMeta = {
   sizeBytes: number
   isInactive: boolean
   currentVersionId: string | null
+  sourceSystem?: string | null
+  sourceId?: string | null
+  contentHash?: string | null
   versionCount: number
   createdAt: string
   createdBy: string | null
@@ -36,9 +44,21 @@ export async function createCabinetFile(input: {
   createdBy: string | null
   executor: SqlExecutor
   auditActorId?: string | null
+  sourceSystem?: string
+  sourceId?: string
+  auditReason?: string
   authorizeFolder?: (tx: SqlExecutor) => Promise<void>
   onStagedS3?: (staged: { versionId: string; fileId: string }) => void
 }): Promise<FileMeta> {
+  const sourceSelected = input.sourceSystem !== undefined || input.sourceId !== undefined
+  if (sourceSelected && (typeof input.sourceSystem !== 'string' || !input.sourceSystem.trim() || input.sourceSystem.length > 100
+    || typeof input.sourceId !== 'string' || !input.sourceId.trim() || input.sourceId.length > 1000)) {
+    throw new FileIngestionError('Supply both sourceSystem and sourceId as nonblank text', 400)
+  }
+  const reason = input.auditReason === undefined ? undefined : typeof input.auditReason === 'string' ? input.auditReason.trim() : ''
+  if ((reason !== undefined && (!reason || reason.length > 2000)) || (sourceSelected && (!reason || !input.auditActorId))) {
+    throw new FileIngestionError('Source uploads require an audited actor and an adoption reason of 1–2000 characters', 400)
+  }
   const extension = deriveExtension(input.filename)
   const fileType = deriveFileType(input.contentType)
   const contentHash = createHash('sha256').update(input.bytes).digest('hex')
@@ -50,14 +70,19 @@ export async function createCabinetFile(input: {
   // commit verdict is known.
   const tx = input.executor
   await input.authorizeFolder?.(tx)
+  if (sourceSelected) {
+    await tx.execute(sql`select pg_advisory_xact_lock(hashtextextended(${JSON.stringify(['file-source', input.orgId, input.sourceSystem, input.sourceId])}, 0))`)
+    const existing = await tx.execute(sql`select 1 from files where org_id=${input.orgId} and source_system=${input.sourceSystem!} and source_id=${input.sourceId!} limit 1`)
+    if (existing.rows.length) throw new FileIngestionError('This source file already has a retained representation; select its existing native file version instead of uploading a duplicate', 409)
+  }
   {
     const fileIns = (await tx.execute<{ id: string }>(sql`
       insert into files (org_id, folder_id, name, extension, file_type, content_type,
                          size_bytes, storage_kind, content_hash, created_by, updated_by,
-                         created_at, updated_at)
+                         created_at, updated_at, source_system, source_id)
       values (${input.orgId}, ${input.folderId}, ${input.filename}, ${extension}, ${fileType},
               ${input.contentType}, ${input.bytes.length}, ${kind}, ${contentHash}, ${input.createdBy}, ${input.createdBy},
-              now(), now())
+              now(), now(), ${input.sourceSystem ?? null}, ${input.sourceId ?? null})
       returning id
     `))
     const fileId = fileIns.rows[0]?.id
@@ -100,6 +125,7 @@ export async function createCabinetFile(input: {
         action: 'upload',
         changes: {
           before: null,
+          ...(reason === undefined ? {} : { reason }),
           after: {
             id: fileId,
             name: input.filename,
@@ -107,6 +133,9 @@ export async function createCabinetFile(input: {
             contentType: input.contentType,
             sizeBytes: input.bytes.length,
             currentVersionId: versionId,
+            contentHash,
+            sourceSystem: input.sourceSystem ?? null,
+            sourceId: input.sourceId ?? null,
           },
         },
         executor: tx,
@@ -117,6 +146,7 @@ export async function createCabinetFile(input: {
       select fi.id, fi.folder_id as "folderId", fi.name, fi.extension, fi.file_type as "fileType",
              fi.content_type as "contentType", fi.size_bytes as "sizeBytes",
              fi.is_inactive as "isInactive", fi.current_version_id as "currentVersionId",
+             fi.source_system as "sourceSystem", fi.source_id as "sourceId", fi.content_hash as "contentHash",
              1 as "versionCount",
              fi.created_at as "createdAt", fi.created_by as "createdBy",
              fi.updated_at as "updatedAt", fi.updated_by as "updatedBy",

@@ -2942,6 +2942,16 @@
       "cancel": "Abbrechen",
       "saveFailed": "Die Konfiguration konnte nicht gespeichert werden."
     },
+    "usFilingLineage": {
+          "stateAccount": "Staatliches Meldekonto",
+          "employer": "Ursprünglicher rechtlicher Arbeitgeber",
+          "federalAccount": "Ursprüngliche Bundes-EIN",
+          "federalHelp": "Stillgelegte EIN-Registrierungen bleiben für historische Nachweise verfügbar.",
+          "datesHelp": "Inklusive ursprüngliche Registrierungsdaten. Das Ende darf nicht vor der letzten gebuchten Abrechnung liegen.",
+          "sourceReference": "Referenz des ursprünglichen Registrierungsnachweises",
+          "sourceHelp": "Geben Sie das Registrierungsschreiben oder einen aufbewahrten Beleg für diese EIN und den Zeitraum an.",
+          "reason": "Änderungsgrund"
+    },
     "entities": {
       "usage-meters": {
         "title": "Nutzungsmesser",
@@ -3053,6 +3063,11 @@
       "worker-comp-groups": {
         "title": "Unfallversicherungsgruppen",
         "description": "Beitragsgruppen der Arbeiterunfallversicherung für die Personalkostenrechnung."
+      },
+      "pay-component-statutory-treatments": {
+        "title": "Gesetzliche Behandlungen",
+        "singularTitle": "Gesetzliche Behandlung",
+        "description": "Datierte Programmausschlüsse und Einbeziehung in die Urlaubsbasis für diese Komponente, bestimmt am Zahltag. Die Unfallversicherungsgruppe ersetzt die gesamte Behandlung."
       },
       "pay-component-department-expenses": {
         "title": "Abteilungskonten",
@@ -3382,6 +3397,11 @@
         "title": "Felder für Informationsmeldungen",
         "description": "In welches 1099-/T4A-Kästchen die Ausgaben eines Kontos gehören. Alles nicht Zugeordnete fällt auf das Standardkästchen des Lieferanten zurück.",
         "singular": "Kästchenregel"
+      },
+      "payroll-us-filing-account-employer-lineage": {
+              "title": "EIN-Verlauf des Arbeitgebers",
+              "singularTitle": "EIN-Zuordnung des Arbeitgebers",
+              "description": "Ursprünglicher Inhaber des Staatskontos mit einschließlich geltenden Daten und aufbewahrten Nachweisen."
       },
       "payroll-filing-accounts": {
         "title": "Anmeldekonten",
@@ -4207,6 +4227,8 @@
       "taxType": "Steuerart",
       "taxable": "Steuerpflichtig",
       "unionName": "Gewerkschaft",
+      "initialVacationable": "Anfängliche Einbeziehung in die Urlaubsbasis",
+      "componentTreatmentReason": "Änderungsgrund",
       "vacationable": "Zählt zum Urlaubsgeld",
       "value": "Wert",
       "accrualComponentId": "Ansammlungskomponente",
@@ -4657,6 +4679,10 @@
       "mode": "Richtlinie"
     },
     "fieldHelp": {
+      "initialVacationable": "Wird nur zur Erstellung der ersten datierten Behandlung verwendet. Ändern Sie bei vorhandenen Komponenten den Verlauf der gesetzlichen Behandlungen.",
+      "componentTreatmentPayDate": "Die einschließlich geltenden Daten beziehen sich auf den Zahltag, auch bei Nachzahlungen und Abschlusszahlungen. Die Unfallversicherungsgruppe ersetzt die gesamte Behandlung.",
+      "componentTreatmentVacationable": "Dieses Entgelt an den abgedeckten Zahltagen in die Urlaubsbasis und die Basis ansparbarer Entgelte einbeziehen.",
+      "componentTreatmentReason": "Erläutern Sie die Änderung der gesetzlichen Behandlung oder der Urlaubsbasis und nennen Sie die Belege. Bei jedem Speichern wird ein neuer Grund mit 1–2000 Zeichen im Prüfprotokoll erfasst.",
       "fxRateMaxAgeDays": "Tage zwischen dem neuesten verwendbaren Kurs und dem Periodenende, ab denen Bewertung und Konsolidierung den Kurs ablehnen. Stichtagskurse zählen ab dem Datum des Kassakurses zum Periodenende, Durchschnittskurse ab der neuesten einbezogenen Notierung. Standard ohne Richtlinie: 31 Tage.",
       "storedValueLiabilityAccount": "Das Bilanzkonto, das bei Ausgabe gutgeschrieben und bei Einlösung belastet wird.",
       "storedValueBreakageIncomeAccount": "Das Ertragskonto, dem anerkannte Breakage- oder Verfallbeträge gutgeschrieben werden.",
@@ -7293,7 +7319,7 @@
       "responsibilities": "Datierte Zuordnungen",
       "responsibilitiesHint": "Ordnen Sie jede Gruppe und Rolle einem Beschäftigungsverhältnis mit ausdrücklichen Daten zu. Jede Quelle benötigt alle konfigurierten Anteile.",
       "limits": "Gruppenobergrenzen",
-      "limitsHint": "Wählen Sie je Gruppe eine Geldobergrenze oder keine Begrenzung. Frühere Zuteilungen dieses Programms verbrauchen die Obergrenze.",
+      "limitsHint": "Legen Sie optionale feste Obergrenzen je Gruppe fest. Frühere Zuteilungen verbrauchen diese Obergrenzen. Bei einem Projektbudget-Prozentsatz ersetzt ein Betrag den Standard für seine Gruppe; null setzt die Obergrenze auf null.",
       "reason": "Änderungsgrund",
       "reasonHint": "Begründen Sie die Änderung. Alle Abschnitte werden gemeinsam gespeichert; Änderungen an einem aktiven Programm gelten ab dem gewählten Datum.",
       "changeEffectiveFromHint": "Die geänderten Regeln gelten ab diesem Datum; frühere Zeiträume behalten die bisher geltenden Regeln.",
@@ -7339,7 +7365,7 @@
         "amount": "Geldobergrenze"
       },
       "workDate": "Arbeitsdatum",
-      "capPercentHint": "Optional. Begrenzt jedes Projekt auf diesen Prozentsatz der Programmpositionen im vergebenen Budget, abzüglich des Programmsatzes auf alle früheren Quellen.",
+      "capPercentHint": "Optionaler Standard. Begrenzt jedes zutreffende Projekt auf diesen Prozentsatz der Programmpositionen im vergebenen Budget, abzüglich des Programmsatzes auf frühere Quellen. Eine feste Gruppenobergrenze ersetzt diesen Standard für ihre Gruppe.",
       "sources": {
         "assignment": "Datierte Zuordnungen",
         "field_ticket_foreman": "Polier des Arbeitsscheins",

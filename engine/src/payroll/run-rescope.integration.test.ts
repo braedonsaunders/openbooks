@@ -10,8 +10,8 @@ import { commitPayRun } from "./run-commit.ts";
 import { createPayRun, discardPayRun, payScheduleSubsidiaryProblem, rescopePayScheduleRuns } from "./run-lifecycle.ts";
 import { PayrollError } from "./error.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedPostingAccount } from "../testing/fixtures.ts";
-import { seedHiredEmployee, seedUsSuiAccount } from "./filing-test-fixtures.ts";
+import { createScratchOrg, createScratchUser, dropScratchOrgReporting, grantScratchPermissions, seedFlowActors, seedPostingAccount } from "../testing/fixtures.ts";
+import { seedHiredEmployee, seedUsSuiAccount, seedUsEinAccount } from "./filing-test-fixtures.ts";
 import { US_PACK_RATES } from "./us/rates.ts";
 import { upsertStatutoryRate } from "./statutory-rates.ts";
 
@@ -30,6 +30,7 @@ interface Fixture {
 async function seedTwoEntityOrg(options: { scopedSchedule?: boolean } = {}): Promise<Fixture> {
   const org = await createScratchOrg();
   const actorId = (await seedFlowActors(org.orgId)).adminId;
+  await grantScratchPermissions(org.orgId, actorId, ["payroll.run"]);
   const account = seedPostingAccount.bind(null, org.orgId);
   const wageExpense = await account("6000", "Wages expense", "expense");
   const burdenExpense = await account("6010", "Payroll burden", "expense");
@@ -80,7 +81,11 @@ async function seedTwoEntityOrg(options: { scopedSchedule?: boolean } = {}): Pro
     province: "TX", payBasis: "salary", currency: "USD", rate: "104000", rateBasis: "year",
     annualHours: "2080", partySubsidiaryId: usSubsidiaryId, filingStatus: "married_joint",
   });
-  const suiAccountId = await seedUsSuiAccount(org.orgId, actorId, "TX");
+  const einAccountId = await seedUsEinAccount(org.orgId, actorId, usSubsidiaryId, "12-3456789");
+  const suiAccountId = await seedUsSuiAccount(org.orgId, actorId, "TX", {
+    federalAccountId: einAccountId, subsidiaryId: usSubsidiaryId, effectiveFrom: "2026-01-01", effectiveTo: null,
+    sourceReference: "TX original employer registration",
+  });
   await upsertStatutoryRate({ orgId: org.orgId, actorId, rates: US_PACK_RATES, rateKey: "us_sui",
     region: "TX", filingAccountId: suiAccountId, taxYear: 2026,
     sourceCitation: "Test rate notice", reason: "test fixture rate",
@@ -279,13 +284,28 @@ test(
         orgId: f.orgId, actorId: f.actorId, payScheduleId: f.scheduleId,
         periodStart: "2026-07-05", periodEnd: "2026-07-18",
       });
-      await calculatePayRun({ orgId: f.orgId, documentId: run.documentId, actorId: f.actorId });
+      const calculation = await calculatePayRun({ orgId: f.orgId, documentId: run.documentId, actorId: f.actorId });
+      assert.deepEqual(calculation.errors, [], JSON.stringify(calculation.errors));
       const stubsBefore = (await db.execute<{ n: number }>(sql`
         select count(*)::int as n from pay_stubs where org_id = ${f.orgId} and pay_run_document_id = ${run.documentId}
       `)).rows[0]!;
       assert.equal(stubsBefore.n, 1);
 
-      const discarded = await discardPayRun({ orgId: f.orgId, documentId: run.documentId, actorId: f.actorId });
+      const deniedActor = await createScratchUser(f.orgId, "Payroll reader", "payroll_discard_reader");
+      await db.execute(sql`update app_roles set permissions='[]'::jsonb where org_id=${f.orgId} and key='payroll_discard_reader'`);
+      await assert.rejects(() => discardPayRun({ orgId: f.orgId, documentId: run.documentId, actorId: deniedActor }), /pay run not found/);
+      await assert.rejects(() => discardPayRun({ orgId: f.orgId, documentId: run.documentId, actorId: f.actorId, allowedSubsidiaryIds: new Set() }), /pay run not found/);
+      for (const reason of [null, 12, {}, "", "  ", "x".repeat(2001)]) {
+        await assert.rejects(() => discardPayRun({ orgId: f.orgId, documentId: run.documentId, actorId: f.actorId, reason: reason as never }), /discard reason/);
+      }
+      const discarded = await discardPayRun({ orgId: f.orgId, documentId: run.documentId, actorId: f.actorId, reason: "  Replace the unused draft run  " });
+      const audit = (await db.execute<{ actor_id: string; changes: { reason: string } }>(sql`
+        select actor_id,changes from audit_log where org_id=${f.orgId} and row_id=${run.documentId}
+          and changes->>'operation'='discard_pay_run'
+      `)).rows;
+      assert.equal(audit.length, 1);
+      assert.equal(audit[0]!.actor_id, f.actorId);
+      assert.equal(audit[0]!.changes.reason, "Replace the unused draft run");
       const sequence = (await db.execute<{ prefix: string }>(sql`
         select prefix from number_sequences
          where org_id = ${f.orgId} and document_kind = 'pay_run' and subsidiary_id is null

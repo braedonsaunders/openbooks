@@ -60,6 +60,7 @@ export const POST = defineRoute({
         orgId: gate.user.orgId,
         actorId: gate.user.id,
         code: body.code,
+        reason: body.reason,
         name: body.name,
         family: body.family,
         description: body.description ?? null,

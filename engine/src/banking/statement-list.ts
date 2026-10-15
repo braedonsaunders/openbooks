@@ -26,6 +26,7 @@ export interface AccountStatementListInput {
 export type AccountStatementRow = {
   id: string;
   source: string;
+  currency: string;
   statement_date: string;
   opening_balance: string | null;
   closing_balance: string | null;
@@ -65,7 +66,7 @@ export async function listAccountStatements(
     const perPage = Math.min(MAX_PER_PAGE, Math.max(1, Math.trunc(input.perPage)));
     const page = Math.max(1, Math.trunc(input.page));
     const rows = await db.execute<AccountStatementRow>(sql`
-      select s.id, s.source, s.statement_date::text as statement_date,
+      select s.id, s.source, s.currency, s.statement_date::text as statement_date,
              s.opening_balance::text as opening_balance, s.closing_balance::text as closing_balance,
              s.imported_at,
              coalesce(lc.n, 0)::int as line_count, coalesce(lc.unmatched, 0)::int as unmatched_count,

@@ -188,7 +188,7 @@ export async function appendCompensationPackageStage(tx: SqlExecutor, prepared: 
       const component = source.components.find(component => component.id === evaluated.componentId)!;
       const line: Line = { componentId: component.id, kind: component.kind, description: component.name, amount: parseMoney(evaluated.amount),
         earnedFrom: from, earnedTo: to, sequence: component.sequence, taxable: component.taxable, pensionable: component.pensionable,
-        insurable: component.insurable, vacationable: component.vacationable, nonPeriodic: component.nonPeriodic,
+        insurable: component.insurable, nonPeriodic: component.nonPeriodic,
         taxTreatment: component.taxTreatment,
         paymentKind: component.paymentKind, nonCashAccountId: component.nonCashAccountId,
         protectionBase: component.protectionBase, protectionMaxPercent: component.protectionMaxPercent,

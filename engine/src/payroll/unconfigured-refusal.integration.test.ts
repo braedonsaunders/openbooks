@@ -16,7 +16,7 @@ import { calculatePayRun } from "./run-calculation.ts";
 import { commitPayRun } from "./run-commit.ts";
 import { createPayRun } from "./run-lifecycle.ts";
 import { seedPayrollComponents } from "./run-setup.ts";
-import { seedOntarioEhtFixture, seedUsSuiAccount } from "./filing-test-fixtures.ts";
+import { seedOntarioEhtFixture, seedUsSuiAccount, seedUsEinAccount } from "./filing-test-fixtures.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
 
@@ -36,6 +36,7 @@ const DB = !!process.env.OPENBOOKS_DB_URL;
 interface UsHarness {
   orgId: string;
   actorId: string;
+  subsidiaryId: string;
   scheduleId: string;
   employeeId: string;
   einAccountId: string;
@@ -87,15 +88,21 @@ async function seedTexasHarness(): Promise<UsHarness> {
   const einAccountId = randomUUID();
   await db.execute(sql`
     insert into payroll_filing_accounts (id, org_id, country, program_type, account_number, name,
-                                         is_default, is_active, created_by, updated_by)
+                                         subsidiary_id, is_default, is_active, created_by, updated_by)
     values (${einAccountId}, ${org.orgId}, 'US', 'us_ein', '12-3456789', 'Default employer',
-            true, true, ${actorId}, ${actorId})`);
+            ${usSubId}, true, true, ${actorId}, ${actorId})`);
   const txSuiAccountId = randomUUID();
   await db.execute(sql`
     insert into payroll_filing_accounts (id, org_id, country, program_type, account_number, name,
-                                         state_code, is_active, created_by, updated_by)
+                                         subsidiary_id, state_code, is_active, created_by, updated_by)
     values (${txSuiAccountId}, ${org.orgId}, 'US', 'us_state_sui', 'TX-001', 'Texas SUI',
-            'TX', true, ${actorId}, ${actorId})`);
+            ${usSubId}, 'TX', true, ${actorId}, ${actorId})`);
+
+  await seedUsSuiAccount(org.orgId, actorId, "TX", {
+    filingAccountId: txSuiAccountId, federalAccountId: einAccountId, subsidiaryId: usSubId,
+    effectiveFrom: "2026-01-01", effectiveTo: null, sourceReference: "TX original employer registration",
+    financingMethod: null,
+  });
 
   const employeeId = randomUUID();
   await seedPayrollPerson(org.orgId, employeeId, 'Tex Worker', {
@@ -135,7 +142,7 @@ async function seedTexasHarness(): Promise<UsHarness> {
     });
   }
   return {
-    orgId: org.orgId, actorId, scheduleId, employeeId, einAccountId, txSuiAccountId, sutaPayable,
+    orgId: org.orgId, actorId, subsidiaryId: usSubId, scheduleId, employeeId, einAccountId, txSuiAccountId, sutaPayable,
   };
 }
 
@@ -185,16 +192,28 @@ test(
   async () => {
     const h = await seedTexasHarness();
     try {
-      // Three perfectly good rates — linked to accounts this employee is not on.
-      const otherSui = randomUUID();
-      await db.execute(sql`
-        insert into payroll_filing_accounts (id, org_id, country, program_type, account_number, name,
-                                             state_code, is_active, created_by, updated_by)
-        values (${otherSui}, ${h.orgId}, 'US', 'us_state_sui', 'CA-001', 'California SUI',
-                'CA', true, ${h.actorId}, ${h.actorId})`);
-      await suiRow(h.orgId, h.actorId, "TX", h.txSuiAccountId, "0.034", "9000");
-      await suiRow(h.orgId, h.actorId, "CA", otherSui, "0.034", "7000");
-      await suiRow(h.orgId, h.actorId, "NY", otherSui, "0.041", "12700");
+      // Rates for another native payer cannot satisfy this employee's original EIN.
+      const otherEmployerId = randomUUID();
+      assert.equal((await db.execute(sql`insert into subsidiaries
+        (id,org_id,parent_id,name,base_currency,country,tax_ids,is_elimination,is_active,custom)
+        values(${otherEmployerId},${h.orgId},${h.subsidiaryId},'Other US employer','USD','US','{}'::jsonb,false,true,'{}'::jsonb)
+        returning id`)).rows.length, 1);
+      const otherEin = await seedUsEinAccount(h.orgId, h.actorId, otherEmployerId, "98-7654321");
+      const otherTxSui = await seedUsSuiAccount(h.orgId, h.actorId, "TX", {
+        federalAccountId: otherEin, subsidiaryId: otherEmployerId,
+        effectiveFrom: "2026-01-01", effectiveTo: null, sourceReference: "Other TX original employer registration",
+      });
+      const otherCaSui = await seedUsSuiAccount(h.orgId, h.actorId, "CA", {
+        federalAccountId: otherEin, subsidiaryId: otherEmployerId,
+        effectiveFrom: "2026-01-01", effectiveTo: null, sourceReference: "Other CA original employer registration",
+      });
+      const otherNySui = await seedUsSuiAccount(h.orgId, h.actorId, "NY", {
+        federalAccountId: otherEin, subsidiaryId: otherEmployerId,
+        effectiveFrom: "2026-01-01", effectiveTo: null, sourceReference: "Other NY original employer registration",
+      });
+      await suiRow(h.orgId, h.actorId, "TX", otherTxSui, "0.034", "9000");
+      await suiRow(h.orgId, h.actorId, "CA", otherCaSui, "0.034", "7000");
+      await suiRow(h.orgId, h.actorId, "NY", otherNySui, "0.041", "12700");
       const run = await createPayRun({
         orgId: h.orgId, actorId: h.actorId, payScheduleId: h.scheduleId,
         periodStart: "2026-07-05", periodEnd: "2026-07-18",
@@ -219,7 +238,10 @@ test(
     const h = await seedTexasHarness();
     try {
       await suiRow(h.orgId, h.actorId, "TX", h.txSuiAccountId, "0.027", "9000");
-      await seedUsSuiAccount(h.orgId, h.actorId, "TX");
+      await seedUsSuiAccount(h.orgId, h.actorId, "TX", {
+        filingAccountId: h.txSuiAccountId, federalAccountId: h.einAccountId, subsidiaryId: h.subsidiaryId,
+        effectiveFrom: "2026-01-01", effectiveTo: null, sourceReference: "TX original employer registration",
+      });
       await db.execute(sql`
         update employee_payroll_profiles set filing_account_id = ${h.txSuiAccountId}
          where org_id = ${h.orgId} and employee_party_id = ${h.employeeId}`);
@@ -279,7 +301,11 @@ test(
       // employer enters its own net rate — so this test records the
       // ordinary full-credit figure explicitly, keeping the no-notice
       // assertion an SUI property rather than a FUTA gap.
-      await seedUsSuiAccount(h.orgId, h.actorId, "TX", "reimbursable");
+      await seedUsSuiAccount(h.orgId, h.actorId, "TX", {
+        filingAccountId: h.txSuiAccountId, federalAccountId: h.einAccountId, subsidiaryId: h.subsidiaryId,
+        effectiveFrom: "2026-01-01", effectiveTo: null, sourceReference: "TX original employer registration",
+        financingMethod: "reimbursable",
+      });
       await db.execute(sql`
         insert into payroll_statutory_rates (org_id, country, rate_key, region, tax_year,
                                              rate_values, created_by, updated_by)
@@ -397,7 +423,7 @@ test(
         select factors from pay_stubs
          where org_id = ${org.orgId} and pay_run_document_id = ${run.documentId}`));
       assert.ok(!("HSF" in stubs.rows[0]!.factors), "no HSF factor outside QC");
-      assert.ok(!("HSF_EARN" in stubs.rows[0]!.factors));
+      assert.equal(stubs.rows[0]!.factors.HSF_EARN, "0", "non-applicable remuneration is retained as zero");
 
       // And no demand for the Quebec-only control accounts — neither in the
       // setup state nor in the run pre-flight.

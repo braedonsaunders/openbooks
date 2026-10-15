@@ -1,4 +1,4 @@
--- Contribution-program and employer-levy assessability is a policy that can
+-- Contribution-program, employer-levy and vacation-base treatment can
 -- change over time. Keep one effective-dated source and retain the version
 -- resolved by each payroll calculation.
 SET statement_timeout = 0;
@@ -21,6 +21,7 @@ CREATE TABLE public.pay_component_statutory_treatments (
   effective_from date NOT NULL,
   effective_to date,
   program_exclusions text[] DEFAULT '{}'::text[] NOT NULL,
+  vacationable boolean NOT NULL,
   created_at timestamp with time zone DEFAULT now() NOT NULL,
   created_by uuid,
   updated_at timestamp with time zone DEFAULT now() NOT NULL,
@@ -207,7 +208,7 @@ $function$;
 
 -- Published calculations bind the version that fed their statutory lines.
 -- A policy row used by a committed run may be closed after its last committed
--- pay date, but its component and exclusions remain part of that proof.
+-- pay date, but its component and policy values remain part of that proof.
 CREATE FUNCTION public.pay_component_statutory_treatment_preserve_committed()
 RETURNS trigger
 LANGUAGE plpgsql
@@ -341,6 +342,7 @@ BEGIN
      OR NEW.worker_comp_group_id IS DISTINCT FROM OLD.worker_comp_group_id
      OR NEW.effective_from IS DISTINCT FROM OLD.effective_from
      OR NEW.program_exclusions IS DISTINCT FROM OLD.program_exclusions
+     OR NEW.vacationable IS DISTINCT FROM OLD.vacationable
      OR (NEW.effective_to IS NOT NULL AND NEW.effective_to < last_committed_pay_date) THEN
     RAISE EXCEPTION 'a statutory treatment used by a committed payroll calculation cannot be changed over committed history'
       USING ERRCODE = '23514', CONSTRAINT = 'pay_component_statutory_treatment_committed_history';
@@ -350,11 +352,11 @@ END
 $function$;
 
 -- Move the legacy open-ended choice intact. Newly seeded components then use
--- this table as their sole assessability source.
+-- this table as their sole assessability and vacation-base policy source.
 INSERT INTO public.pay_component_statutory_treatments
-  (org_id, pay_component_id, worker_comp_group_id, effective_from, effective_to, program_exclusions,
+  (org_id, pay_component_id, worker_comp_group_id, effective_from, effective_to, program_exclusions, vacationable,
    created_at, created_by, updated_at, updated_by)
-SELECT org_id, id, NULL, DATE '0001-01-01', NULL, program_exclusions,
+SELECT org_id, id, NULL, DATE '0001-01-01', NULL, program_exclusions, vacationable,
        created_at, created_by, updated_at, updated_by
   FROM public.pay_components;
 
@@ -364,10 +366,38 @@ CREATE TRIGGER pay_component_statutory_treatment_preserve_committed
   BEFORE INSERT OR UPDATE OR DELETE ON public.pay_component_statutory_treatments
   FOR EACH ROW EXECUTE FUNCTION public.pay_component_statutory_treatment_preserve_committed();
 
+-- The component flag supplies only the first dated treatment at creation.
+-- Existing components change vacation-base policy through dated Setup history.
+CREATE FUNCTION public.pay_component_vacation_creation_default_guard()
+RETURNS trigger
+LANGUAGE plpgsql
+SET search_path = pg_catalog, public
+AS $function$
+BEGIN
+  IF NEW.vacationable IS DISTINCT FROM OLD.vacationable THEN
+    RAISE EXCEPTION 'The component vacation flag is a creation-only default; change vacation-base inclusion through a dated component statutory treatment in Payroll Setup.'
+      USING ERRCODE = '23514', CONSTRAINT = 'pay_component_vacation_creation_default';
+  END IF;
+  RETURN NEW;
+END
+$function$;
+CREATE TRIGGER pay_component_vacation_creation_default_guard
+  BEFORE UPDATE OF vacationable ON public.pay_components
+  FOR EACH ROW EXECUTE FUNCTION public.pay_component_vacation_creation_default_guard();
+COMMENT ON COLUMN public.pay_components.vacationable IS
+  'Creation-only initial vacation-base default. Payroll resolves vacation-base inclusion from pay_component_statutory_treatments at pay date.';
+COMMENT ON COLUMN public.pay_component_statutory_treatments.vacationable IS
+  'Whether the earning enters vacation and bankable earnings bases at payroll pay date; the selected group override governs the entire treatment.';
+
+-- The governed view freezes SELECT * at creation and still references the
+-- static column. Remove only that view before retiring the column; the native
+-- catalog refresh below restores its tenant filter, security barrier and grants.
+-- RESTRICT preserves any unexpected dependent objects for explicit review.
+DROP VIEW IF EXISTS openbooks_query.pay_components RESTRICT;
 ALTER TABLE public.pay_components DROP COLUMN program_exclusions;
 
 COMMENT ON TABLE public.pay_component_statutory_treatments IS
-  'Effective-dated contribution-program and employer-levy exclusions for a pay component. A workers-compensation-group row overrides the component-wide row; payroll retains the resolved identity and values in calculation evidence.';
+  'Effective-dated contribution-program and employer-levy exclusions and vacation-base inclusion at payroll pay date for a pay component. A workers-compensation-group row overrides the component-wide row; payroll retains the resolved identity and values in calculation evidence.';
 COMMENT ON CONSTRAINT pay_component_statutory_treatments_default_range_exclusion
   ON public.pay_component_statutory_treatments IS
   'One component-wide statutory treatment may cover each date; inclusive windows may not overlap.';

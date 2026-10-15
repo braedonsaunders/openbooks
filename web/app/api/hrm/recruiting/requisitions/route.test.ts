@@ -199,7 +199,7 @@ test("create validates the body through the real parser before the service runs"
 
 test("create forwards org, actor, and body, then 201s", async () => {
   reset();
-  const response = await collectionRoute!.POST(
+  const response: Response = await collectionRoute!.POST(
     jsonRequest("http://openbooks.test/api/hrm/recruiting/requisitions", "POST", {
       title: "Backend engineer",
       employerSubsidiaryId: SUBSIDIARY_ID,
@@ -220,7 +220,7 @@ test("list rejects unknown statuses before the service runs, then lists", async 
     400,
   );
   assert.deepEqual(routeState.calls, []);
-  const response = await collectionRoute!.GET(
+  const response: Response = await collectionRoute!.GET(
     new Request("http://openbooks.test/api/hrm/recruiting/requisitions?status=open"),
   );
   assert.equal(response.status, 200);
@@ -254,7 +254,7 @@ test("item PATCH dispatches every action with org, actor, and id", async () => {
     ["cancel", { reason: "cut" }, "cancel"],
   ] as const) {
     routeState.calls = [] as RouteState["calls"];
-    const response = await itemRoute!.PATCH(
+    const response: Response = await itemRoute!.PATCH(
       jsonRequest("http://openbooks.test/x", "PATCH", { action, ...extra }),
       paramsOf(REQUISITION_ID),
     );
@@ -268,7 +268,7 @@ test("a service refusal delegates to the shared mapping with the error intact", 
   reset();
   const refusal = new Error("the position shows no vacant FTE as of 2026-10-01 — open over establishment explicitly");
   routeState.serviceThrow = refusal;
-  const response = await itemRoute!.PATCH(
+  const response: Response = await itemRoute!.PATCH(
     jsonRequest("http://openbooks.test/x", "PATCH", { action: "open" }),
     paramsOf(REQUISITION_ID),
   );

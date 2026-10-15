@@ -423,6 +423,7 @@ export const BANKING_WIDGETS = {
       accountId={str(props, 'accountId') ?? ''}
       openReconciliationId={(props.openReconciliationId as string | null) ?? null}
       glBalance={str(props, 'glBalance') ?? ''}
+      currency={str(props, 'currency')}
     />
   ),
   /** The statement drawer owns its own sl* search/sort/pagination internally,

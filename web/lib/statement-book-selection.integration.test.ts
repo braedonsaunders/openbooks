@@ -119,14 +119,14 @@ for (const kind of ['pnl', 'balance-sheet'] as const) {
       assert.equal(resolved.render, 'view')
       if (resolved.render !== 'view') assert.fail('statement view required')
       assert.equal(resolved.view.lines.find(line => line.accountId === account)?.values?.[0], expected, 'shared export/schedule renderer')
-      const response = await exportStatement(request(`/api/reports/statement/${kind}/export?format=csv&${p}`), { params: Promise.resolve({ kind }) })
+      const response: Response = await exportStatement(request(`/api/reports/statement/${kind}/export?format=csv&${p}`), { params: Promise.resolve({ kind }) })
       assert.equal(response.status, 200, await response.clone().text())
       const csv = await response.text()
       assert.ok(csv.includes(expected.slice(0, -2)), csv)
       assert.equal(csv.includes(selected ? '100.00' : '700.00'), false)
     }
     const p = new URLSearchParams(params(org, book))
-    const response = await exportStatement(request(`/api/reports/statement/${kind}/export?format=xlsx&${p}`), { params: Promise.resolve({ kind }) })
+    const response: Response = await exportStatement(request(`/api/reports/statement/${kind}/export?format=xlsx&${p}`), { params: Promise.resolve({ kind }) })
     assert.equal(response.status, 200)
     const workbook = new ExcelJS.Workbook()
     await workbook.xlsx.load(Buffer.from(await response.arrayBuffer()) as unknown as Parameters<typeof workbook.xlsx.load>[0])
@@ -142,7 +142,7 @@ test('statement drill URL and route return the selected book supporting rows', e
   assert.ok(target)
   const parsed = parseReportDrillTarget(encodeReportDrillTarget(target))
   assert.equal(parsed?.kind === 'ledger' ? parsed.bookId : undefined, book)
-  const response = await drill(request('/api/reports/drill?target=' + encodeURIComponent(encodeReportDrillTarget(target))))
+  const response: Response = await drill(request('/api/reports/drill?target=' + encodeURIComponent(encodeReportDrillTarget(target))))
   assert.equal(response.status, 200, await response.clone().text())
   const body = await response.text()
   assert.ok(body.includes('SELECTED'), body)
@@ -160,11 +160,11 @@ test('explicit invalid or unavailable books never fall back to the primary book'
       const sp = params(org, selected)
       for (const kind of ['pnl', 'balance-sheet'] as const) {
         await assert.rejects(pages[kind]({ searchParams: Promise.resolve(sp) }), /accounting book/i)
-        const response = await exportStatement(request(`/api/reports/statement/${kind}/export?format=csv&${new URLSearchParams(sp)}`), { params: Promise.resolve({ kind }) })
+        const response: Response = await exportStatement(request(`/api/reports/statement/${kind}/export?format=csv&${new URLSearchParams(sp)}`), { params: Promise.resolve({ kind }) })
         assert.equal(response.status, 422, selected)
       }
       const target = { kind: 'ledger', label: 'Revenue', to: org.date, mode: 'flow', bookId: selected }
-      const response = await drill(request('/api/reports/drill?target=' + encodeURIComponent(JSON.stringify(target))))
+      const response: Response = await drill(request('/api/reports/drill?target=' + encodeURIComponent(JSON.stringify(target))))
       assert.equal(response.status, ['', 'invalid'].includes(selected) ? 400 : 422)
     }
   } finally { await withBypassContext(() => dropScratchOrgReporting(foreign.orgId)) }
@@ -184,7 +184,7 @@ test('budget Actual drills use the scenario book even after that book is retired
   assert.equal(target.scope, 'actual')
   for (const active of [true, false]) {
     await withBypassContext(() => (db.execute(sql`update accounting_books set is_active=${active} where id=${book} and org_id=${org.orgId}`)))
-    const response = await drill(request('/api/reports/drill?target=' + encodeURIComponent(encodeReportDrillTarget(target))))
+    const response: Response = await drill(request('/api/reports/drill?target=' + encodeURIComponent(encodeReportDrillTarget(target))))
     assert.equal(response.status, 200, await response.clone().text())
     const body = await response.text()
     assert.ok(body.includes('SELECTED'), body)

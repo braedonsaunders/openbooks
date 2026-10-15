@@ -10,7 +10,9 @@ import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
 import { COUNTRY_CODES } from '../countries'
 import { featureEnabled, featureGateLockKey, resolvedFeatureState } from '../features'
 import { SETUP_ENTITY_BY_KEY, resolveSetupEntityGate, setupEntityForFeatureState, toSnake, type SetupEntity, type SetupField } from '../setup/registry'
-import { buildRow, coerceBoolean, decodeStructuredSetupValues, idColumn, type Coerced } from '../setup/coerce'
+import { buildRow, coerceBoolean, decodeStructuredSetupValues, idColumn, setupAuditReason, type Coerced } from '../setup/coerce'
+import { createInitialComponentTreatment } from '../setup/initial-component-treatment'
+import { defaultPayComponentProgramExclusions, foldPayComponentSetupCreate } from '../setup/write-shared'
 import { filingAccountProblem } from '@openbooks/engine/payroll/filing-registry'
 import { payComponentTreatmentProblem } from '@openbooks/engine/payroll/treatment-bases'
 import { savePayComponentEarningClassification, validateEntityIntegrity } from '../setup/write'
@@ -170,10 +172,10 @@ async function jsonBackedRows(
   }
 }
 
-function setupFields(entity: SetupEntity): ResourceField[] {
-  return entity.fields
+function setupFields(entity: SetupEntity, forImport = false): ResourceField[] {
+  const fields: ResourceField[] = entity.fields
     .filter((f) => f.kind !== 'multiref') // join-table fields aren't bulk-importable yet
-    .filter((f) => !f.inputOnly) // save-command inputs are not row data
+    .filter((f) => !f.inputOnly || forImport && f.key === 'reason')
     .map((f) => ({
       key: f.key,
       label: f.key,
@@ -192,6 +194,15 @@ function setupFields(entity: SetupEntity): ResourceField[] {
         ? { resource: f.ref, by: refNaturalKey(f.ref) }
         : undefined,
     }))
+  // Audit-only inputs are accepted by imports, but never selected as stored
+  // columns or replayed from an export's historical explanation.
+  if (forImport && entity.key === 'pay-components' && !fields.some(field => field.key === 'reason')) {
+    fields.push({ key: 'reason', label: 'reason', kind: 'long_text', required: false })
+  }
+  if (forImport && entity.fields.some(field => field.key === 'reason' && !field.inputOnly)) {
+    fields.push({ key: 'auditReason', label: 'auditReason', kind: 'long_text', required: false })
+  }
+  return fields
 }
 
 export function setupDescriptor(entity: SetupEntity): ResourceDescriptor {
@@ -218,6 +229,9 @@ export function setupDescriptor(entity: SetupEntity): ResourceDescriptor {
  */
 function setupImportRefusal(entity: SetupEntity): string {
   switch (entity.key) {
+    case 'benefit-enrollment-configuration':
+    case 'benefit-enrollment-terms':
+      return `${entity.key} cannot be imported as configuration; elect coverage and its contribution terms through HRM Benefits enrollment (POST /api/hrm/enrollments), which checks eligibility and approval.`
     case 'nonprofit-frameworks':
     case 'fund-pairs':
     case 'functional-mappings':
@@ -255,7 +269,7 @@ export function setupResource(entity: SetupEntity, orgId: string): DataResource 
   return {
     descriptor: setupDescriptor(entity),
     async fields() {
-      return setupFields(await gatedSetupEntity(entity, orgId))
+      return setupFields(await gatedSetupEntity(entity, orgId), true)
     },
     async columns() {
       return setupFields(await gatedSetupEntity(entity, orgId)).map((f) => ({ key: f.key, label: f.label }))
@@ -298,6 +312,7 @@ export function setupResource(entity: SetupEntity, orgId: string): DataResource 
         created: 0, updated: 0, failed: rows.length,
         errors: rows.map((_, index) => ({ row: index + 1, message })),
       })
+      if (entity.importVia === 'none') return refuse(setupImportRefusal(entity))
       if (entity.readOnly) return refuse('resource is read-only')
       if (entity.dataSource) return refuse('Use the module settings drawer for audited value changes')
       if (ctx.orgId !== orgId) return refuse('resource belongs to another organization')
@@ -306,7 +321,6 @@ export function setupResource(entity: SetupEntity, orgId: string): DataResource 
       // entity without its import mapping fails closed instead of writing
       // raw rows past the command's guards. The registry guard test pins the
       // declaration; this is the runtime backstop.
-      if (entity.importVia === 'none') return refuse(setupImportRefusal(entity))
       if (entity.command && entity.importVia !== 'command') {
         return refuse(`${entity.key} writes through its setup command (POST /api/admin/setup/${entity.key}/command), which this import does not support yet. Maintain it through its settings screen instead of importing rows.`)
       }
@@ -503,6 +517,12 @@ async function writeSetup(
         continue
       }
       Object.assign(src, decoded.body)
+      const auditReason = setupAuditReason(entity, src)
+      if ('error' in auditReason) {
+        outcome.failed++
+        outcome.errors.push({ row: rowNo, message: auditReason.error })
+        continue
+      }
 
       if (entity.key === 'pay-components' && src.supplementalWageCategory != null && src.supplementalWageCategory !== '') {
         const kind = String(src.kind ?? '')
@@ -574,11 +594,24 @@ async function writeSetup(
         }
       }
 
+      if (!existingId && entity.allowCreate === false) {
+        outcome.failed++
+        outcome.errors.push({ row: rowNo, message: `${entity.key} cannot be created through configuration import; use its owning module lifecycle.` })
+        continue
+      }
+
       if (existingId && mode === 'insert') {
         outcome.failed++
         outcome.errors.push({ row: rowNo, message: `already exists (${entity.naturalKey}=${String(src[entity.naturalKey!])})` })
         continue
       }
+
+      if (entity.key === 'pay-components' && existingId && Object.hasOwn(src, 'vacationable')) {
+        outcome.failed++
+        outcome.errors.push({ row: rowNo, message: 'The component vacation flag is a creation-only default. Omit it when updating an existing component; change vacation-base inclusion through a dated component statutory treatment in Payroll Setup.' })
+        continue
+      }
+      if (!existingId) Object.assign(src, foldPayComponentSetupCreate(entity.key, src))
 
       // Domain checks that coercion cannot express (URL schemes, formula
       // shape, subsidiary/feature gates, tax-code invariants) run here —
@@ -674,6 +707,7 @@ async function writeSetup(
               orgId: ctx.orgId, table: entity.table, rowId, action: existingId ? 'update' : 'insert',
               changes: {
                 source: 'import',
+                ...auditReason,
                 ...(existingId ? { before } : { before: null }),
                 after: await loadSetupAuditRow(entity, ctx.orgId, rowId, tx),
               },
@@ -774,6 +808,7 @@ async function writeSetup(
                     action: 'update',
                     changes: {
                       source: 'import',
+                      ...auditReason,
                       before,
                       after: await loadSetupAuditRow(entity, ctx.orgId, existingId, tx),
                     },
@@ -804,6 +839,8 @@ async function writeSetup(
           outcome.errors.push({ row: rowNo, message: insertPackProblem })
           continue
         }
+        const initialProgramExclusions = entity.key === 'pay-components'
+          ? defaultPayComponentProgramExclusions(src) : null
         // Same merged-row validator as the update branch —
         // preview and commit share the refusal through the row path.
         if (entity.key === 'tax-pool-classes') {
@@ -854,6 +891,12 @@ async function writeSetup(
               const inserted = ins.rows[0]
               const rowId = String(inserted?.[idColumn(entity)] ?? '')
               if (!inserted || !rowId) throw new Error('insert did not return a row')
+              if (initialProgramExclusions !== null) {
+                await createInitialComponentTreatment(tx, {
+                  orgId: ctx.orgId, actorId: ctx.actorId, componentId: rowId,
+                  vacationable: inserted.vacationable, programExclusions: initialProgramExclusions,
+                })
+              }
               if (entity.key === 'pay-components' && (supplementalWageCategory !== undefined || statutoryReportingCategory !== undefined || statutoryExemptionCategory !== undefined)) {
                 await savePayComponentEarningClassification(tx, ctx.orgId, rowId, {
                   supplementalWageCategory,
@@ -867,7 +910,7 @@ async function writeSetup(
                   table: entity.table,
                   rowId,
                   action: 'insert',
-                  changes: { source: 'import', before: null, after: await loadSetupAuditRow(entity, ctx.orgId, rowId, tx) },
+                  changes: { source: 'import', ...auditReason, before: null, after: await loadSetupAuditRow(entity, ctx.orgId, rowId, tx) },
                   actorId: ctx.actorId,
                 },
                 tx,

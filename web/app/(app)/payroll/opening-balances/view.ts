@@ -73,6 +73,7 @@ export interface PayrollOpeningBalancesData {
     accountPrograms: BalancesProps['accountPrograms']
     components: BalancesProps['components']
     canManage: boolean
+    canQualify: boolean
   }
   banks: {
     initial: EntitlementOpeningsResult
@@ -166,6 +167,7 @@ export async function loadPayrollOpeningBalances(
       fields: [
         ...OPENING_BALANCE_FIELDS.map((field) => ({
           key: field.key,
+          column: field.column,
           label: field.label,
           help: field.help,
           packs: [...field.packs],
@@ -219,6 +221,7 @@ export async function loadPayrollOpeningBalances(
       ),
       components: data.components,
       canManage: can(authz, 'payroll.manage'),
+      canQualify: can(authz, 'payroll.run'),
     },
     banks: {
       initial: banks,

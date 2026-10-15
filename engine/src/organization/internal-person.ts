@@ -1,6 +1,7 @@
 import { sql } from "drizzle-orm";
 import type { SqlExecutor } from "../platform/db.ts";
 import { subsidiaryScopeAllows, subsidiaryVisibleFilter } from "./subsidiary-scope.ts";
+import { naturalPersonPartyKindFilter } from "./party-kinds.ts";
 
 export interface InternalPersonPin {
   id: string;
@@ -28,7 +29,7 @@ export async function pinInternalPerson(
     select id, subsidiary_id from parties
      where org_id = ${orgId} and id = ${partyId}
        and is_active
-       and kind in ('person', 'employee')
+       and ${naturalPersonPartyKindFilter(sql`kind`)}
        and (
          kind = 'person'
          or exists (
@@ -76,7 +77,7 @@ export async function listInternalPersonOptions(
       from parties p
      where p.org_id = ${orgId}
        and p.is_active
-       and p.kind in ('person', 'employee')
+       and ${naturalPersonPartyKindFilter(sql`p.kind`)}
        and (
          p.kind = 'person'
          or exists (

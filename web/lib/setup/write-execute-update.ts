@@ -9,7 +9,7 @@ import { CurrencyError } from '@openbooks/engine/fx/currencies'
 import { withOrgTransaction } from '@openbooks/engine/platform/db'
 import { rescopePayScheduleRuns } from '@openbooks/engine/payroll/run-lifecycle'
 import { toSnake } from './registry'
-import { buildRow, coerceBoolean, describeDbError, idColumn, multirefField, pgErrorCode, scaleShapeCheckRefusal, carrierCheckRefusal, shippingCheckRefusal } from './coerce'
+import { buildRow, coerceBoolean, describeDbError, idColumn, multirefField, pgErrorCode, scaleShapeCheckRefusal, carrierCheckRefusal, shippingCheckRefusal, setupAuditReason } from './coerce'
 import { normalizeHrmProcessTemplateInput } from './hrm-process-template'
 import { normalizeHrmPipelineStageInput } from './hrm-pipeline'
 import { HrmReviewTemplateScaleError, normalizeHrmReviewTemplateInput } from './hrm-review-template'
@@ -66,6 +66,14 @@ export async function updateSetupRecord(
     throw error
   }
   const body = normalizeHrmDocumentTemplateInput(entity.key, normalizeHrmBenefitPlanInput(entity.key, normalizeHrmPipelineStageInput(entity.key, normalizeHrmLeavePolicyInput(entity.key, reviewFolded))))
+  const auditReason = setupAuditReason(entity, body)
+  if ('error' in auditReason) return { status: 400, body: { error: auditReason.error, code: 'invalid' } }
+  if (entity.key === 'pay-components' && Object.hasOwn(body, 'vacationable')) {
+    return { status: 409, body: {
+      code: 'creation_only_vacation_default',
+      error: 'The component vacation flag is a creation-only default. Change vacation-base inclusion through a dated component statutory treatment in Payroll Setup.',
+    } }
+  }
   const id = String(body.id ?? '')
   if (!id) return { status: 400, body: { error: 'id required' } }
   if (entity.dataSource !== 'extension-settings' && idColumn(entity) === 'id' && !isUuid(id)) {
@@ -667,9 +675,7 @@ export async function updateSetupRecord(
         changes: {
           before,
           after,
-          ...(entity.key === 'leave-policies' && typeof body.reason === 'string'
-            ? { reason: body.reason.trim() }
-            : {}),
+          ...auditReason,
         },
         actorId,
       }, tx)

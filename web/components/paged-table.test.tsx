@@ -15,8 +15,47 @@ const { act } = await import("react");
 const { NextIntlClientProvider } = await import("next-intl");
 const messages = (await import("../messages/en")).default;
 const { PagedTable } = await import("./paged-table");
+const { ProgramPortfolioTable } = await import('../app/(app)/hrm/benefits/PortfolioTables');
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
+
+test('program counts use shared paging outside the record body and track filtered pages', async t => {
+  const host = document.createElement('div'); document.body.append(host);
+  const root = createRoot(host);
+  t.after(async () => { await act(async () => root.unmount()); host.remove(); });
+  const rows = Array.from({ length: 315 }, (_, index) => ({
+    id: String(index), code: `P${index}`, name: `Program ${index}`, family: 'allowance' as const, familyLabel: 'Benefit',
+    valueLabel: '100.00', effectiveFrom: '2026-01-01', effectiveTo: null,
+    statusLabel: 'Active', statusVariant: 'success' as const, programHref: `/hrm/benefits?program=${index}`,
+  }));
+  const text = { program: 'Program', family: 'Type', value: 'Value', effective: 'Effective', status: 'Status',
+    emptyTitle: 'No programs', emptyDescription: 'Create a program', totalLabel: 'Total records', truncatedLabel: 'Partial collection' };
+  const render = (selected = rows, truncated = false) => <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+    <ProgramPortfolioTable rows={selected} text={text} total={rows.length} truncated={truncated} />
+  </NextIntlClientProvider>;
+  await act(async () => { root.render(render()); await tick(); });
+  const body = host.querySelector('tbody')!;
+  assert.equal(body.querySelectorAll('tr').length, 10);
+  assert.ok(host.textContent?.includes('315'));
+  assert.equal(body.textContent?.includes('Total records'), false);
+  assert.equal(host.querySelector('tfoot'), null);
+  const next = [...host.querySelectorAll('button')].find(button => button.textContent?.trim() === 'Next');
+  assert.ok(next);
+  await act(async () => { next.click(); await tick(); });
+  assert.ok(body.textContent?.includes('Program 10'));
+  assert.equal(body.querySelectorAll('tr').length, 10);
+  const search = host.querySelector('input[aria-label="Search"]') as HTMLInputElement;
+  await act(async () => {
+    Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(search, 'Program 314');
+    search.dispatchEvent(new window.Event('input', { bubbles: true })); await tick();
+  });
+  assert.equal(body.querySelectorAll('tr').length, 1);
+  assert.ok(body.textContent?.includes('Program 314'));
+  assert.equal([...host.querySelectorAll('button')].some(button => button.textContent?.trim() === 'Next'), false);
+  await act(async () => { root.render(render(rows, true)); await tick(); });
+  assert.ok(host.textContent?.includes('Partial collection'));
+  assert.equal(body.textContent?.includes('Partial collection'), false);
+});
 
 test('a registered server window is never paginated a second time', async (t) => {
   const host = document.createElement('div')

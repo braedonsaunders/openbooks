@@ -440,26 +440,20 @@ test(
 );
 
 test(
-  "employer levies: a zero-gross stub emits no WCB or EHT evidence",
+  "employer levies: retained zero bases admit the next period without zero premium lines",
   { skip: !DB },
   async () => {
-    // EHT is configured, but the employee worked nothing: zero earnings must
-    // skip both levies without emitting zero-valued factor keys.
+    // A committed zero-money period must remain readable statutory history.
     const org = await createScratchOrg();
     const actorId = (await seedFlowActors(org.orgId)).adminId;
     try {
-      const harness = await seedWcbHarness(org.orgId, actorId, org.subsidiaryId, "30");
+      const harness = await seedWcbHarness(org.orgId, actorId, org.subsidiaryId, "30", "1000");
       const ehtPayable = randomUUID();
       await db.execute(sql`
         insert into accounts (id, org_id, number, name, type, is_summary, is_active, eliminate,
                               reconcilable, required_dimensions, custom, subsidiary_include_children)
         values (${ehtPayable}, ${org.orgId}, '2340', 'EHT payable', 'liability_current', false, true,
                 false, false, '[]'::jsonb, '{}'::jsonb, true)`);
-      await db.execute(sql`
-        update orgs
-           set settings = jsonb_set(settings, '{payroll,ca}',
-                                    '{"eht": {"enabled": true, "rate": "1.95", "annualExemption": "1000"}}')
-         where id = ${org.orgId}`);
       await setPackSlotAccount(org.orgId, actorId, "CA", "eht", ehtPayable);
 
       const run = await createPayRun({
@@ -473,9 +467,35 @@ test(
          where org_id = ${org.orgId} and pay_run_document_id = ${run.documentId}
       `));
       assert.equal(stubs.rows.length, 1);
-      for (const key of ["WCB", "WCB_EARN", "EHT", "EHT_EARN"]) {
+      for (const key of ["WCB", "EHT", "HSF", "CNT"]) {
         assert.ok(!(key in stubs.rows[0]!.factors), `no ${key} factor on zero earnings`);
       }
+      for (const key of ["WCB_EARN", "EHT_EARN", "HSF_EARN", "CNT_EARN"]) {
+        assert.equal(cmp(stubs.rows[0]!.factors[key]!, "0"), 0, `${key} retains an assessed zero`);
+      }
+      const zeroPremiums = (await db.execute(sql`
+        select l.id from pay_stub_lines l
+        join pay_stubs s on s.org_id=l.org_id and s.id=l.stub_id
+        join pay_components c on c.org_id=l.org_id and c.id=l.component_id
+        where l.org_id=${org.orgId} and s.pay_run_document_id=${run.documentId}
+          and c.system_key in ('wcb','eht','hsf','cnt')
+      `)).rows;
+      assert.deepEqual(zeroPremiums, [], "retaining a basis does not create a zero levy line");
+      await commitPayRun({ orgId: org.orgId, documentId: run.documentId, actorId });
+      await harness.postHours("2026-07-20", "40", null);
+      const next = await createPayRun({
+        orgId: org.orgId, actorId, payScheduleId: harness.scheduleId,
+        periodStart: "2026-07-19", periodEnd: "2026-08-01",
+      });
+      const nextResult = await calculatePayRun({ orgId: org.orgId, documentId: next.documentId, actorId });
+      assert.deepEqual(nextResult.errors, [], "explicit zero history satisfies the native history guard");
+      const nextFactors = (await db.execute<{ factors: Record<string,string> }>(sql`
+        select factors from pay_stubs where org_id=${org.orgId} and pay_run_document_id=${next.documentId}
+      `)).rows[0]!.factors;
+      assert.equal(nextFactors.WCB_EARN, "1200.0000");
+      assert.equal(nextFactors.WCB, "24.0000");
+      assert.equal(nextFactors.EHT_EARN, "1200.0000");
+      assert.equal(nextFactors.EHT, "3.9000", "the zero period consumes none of the 1000 exemption");
     } finally {
       await dropScratchOrgReporting(org.orgId);
     }

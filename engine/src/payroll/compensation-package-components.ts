@@ -6,7 +6,7 @@ import { PayrollError } from './error.ts';
 /** Native flags, limits and accounting destinations accompany the approved formula. */
 export type CompensationPackageComponentSource = Pick<typeof payComponents.$inferSelect,
   'id' | 'orgId' | 'code' | 'name' | 'kind' | 'country' | 'systemKey' | 'basis' | 'value' |
-  'paymentKind' | 'nonCashAccountId' | 'taxable' | 'pensionable' | 'insurable' | 'vacationable' |
+  'paymentKind' | 'nonCashAccountId' | 'taxable' | 'pensionable' | 'insurable' |
   'nonPeriodic' | 'taxTreatment' | 'protectionBase' | 'protectionMaxPercent' |
   'protectionPriority' | 'protectionClass' | 'includeInDisposableEarnings' | 'basisCapHoursPerPeriod' |
   'basisCapAmountPerPeriod' | 'basisCapAmountPerYear' | 'expenseAccountId' | 'liabilityAccountId' |
@@ -20,7 +20,7 @@ export const COMPENSATION_PACKAGE_COMPONENT_SOURCE = sql`jsonb_build_object(
   'id',c.id,'orgId',c.org_id,'code',c.code,'name',c.name,'kind',c.kind,'country',c.country,
   'systemKey',c.system_key,'basis',c.basis,'value',c.value::text,
   'paymentKind',c.payment_kind,'nonCashAccountId',c.non_cash_account_id,
-  'taxable',c.taxable,'pensionable',c.pensionable,'insurable',c.insurable,'vacationable',c.vacationable,
+  'taxable',c.taxable,'pensionable',c.pensionable,'insurable',c.insurable,
   'nonPeriodic',c.non_periodic,'taxTreatment',c.tax_treatment,
   'protectionBase',c.protection_base,'protectionMaxPercent',c.protection_max_percent::text,
   'protectionPriority',c.protection_priority,'protectionClass',c.protection_class,

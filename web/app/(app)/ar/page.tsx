@@ -21,7 +21,7 @@ export default async function AR({
   searchParams,
 }: {
   searchParams?: Promise<Record<string, string | string[] | undefined>>
-} = {}) {
+}) {
   const sp0 = (await searchParams) ?? {}
   const data = await loadArCockpit()
   return <ModuleView spec={arCockpitSpec(data)} data={data} searchParams={sp0} trusted />

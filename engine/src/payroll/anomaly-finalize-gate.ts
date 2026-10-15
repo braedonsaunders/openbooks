@@ -1,3 +1,4 @@
+import { payScheduleOwnerSql } from './schedule-owner.ts';
 import { sql } from "drizzle-orm";
 import { PayrollError } from "./error.ts";
 import type { SqlExecutor } from "../platform/db.ts";
@@ -27,10 +28,11 @@ export async function payrollAnomalyFinalizeCheck(
 ): Promise<PayrollAnomalyFinalizeCheck> {
   const run = (await exec.execute<{ periodFrom: string; periodTo: string; subsidiaryId: string | null; scheduleSubsidiaryId: string | null }>(sql`
     select r.period_start::text as "periodFrom", r.period_end::text as "periodTo",
-           d.subsidiary_id::text as "subsidiaryId", ps.subsidiary_id::text as "scheduleSubsidiaryId"
+           d.subsidiary_id::text as "subsidiaryId", owner.id::text as "scheduleSubsidiaryId"
       from pay_runs r
       join documents d on d.org_id = r.org_id and d.id = r.document_id
-      left join pay_schedules ps on ps.org_id = r.org_id and ps.id = r.pay_schedule_id
+      join pay_schedules ps on ps.org_id = r.org_id and ps.id = r.pay_schedule_id and ps.is_active
+      join lateral (${payScheduleOwnerSql(input.orgId, sql`ps.subsidiary_id`)}) owner on true
      where r.org_id = ${input.orgId}::uuid and r.document_id = ${input.documentId}::uuid
   `)).rows[0];
   if (!run) throw new PayrollError("pay run not found");
@@ -53,7 +55,7 @@ export async function payrollAnomalyFinalizeCheck(
        and f.severity = 'block' and f.status = 'open'
        and f.pay_period_from <= r.period_end and f.pay_period_to >= r.period_start
      where r.org_id = ${input.orgId}::uuid and r.document_id = ${input.documentId}::uuid
-       and ps.subsidiary_id is not distinct from d.subsidiary_id
+       and d.subsidiary_id = ${run.scheduleSubsidiaryId}::uuid
      order by id
   `)).rows;
   return {

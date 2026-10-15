@@ -34,6 +34,9 @@ const TRIGGER_INSERT_COLUMN_PARENTS: Readonly<Record<string, string>> = {
   subsidiary_id: "subsidiaries",
 };
 const TRIGGER_INSERT_TABLE_PARENTS: Readonly<Record<string, readonly string[]>> = {
+  payroll_us_filing_account_employer_lineage: ["payroll_filing_accounts", "subsidiaries", "users"],
+  // The closing-rate guard resolves its book, entity, period and account parents during INSERT.
+  fx_revaluation_rate_evidence: ["accounting_books", "subsidiaries", "accounting_periods", "accounts", "users"],
   // Financial history clone admission resolves all referenced tenant parents immediately.
   fx_rate_types: ["users"],
   journal_lines: ["journal_entries", "accounts", "subsidiaries", "accounting_periods", "parties", "departments", "projects", "locations", "classes", "equipment_units", "payment_cards", "tax_codes"],
@@ -71,6 +74,8 @@ const TRIGGER_INSERT_TABLE_PARENTS: Readonly<Record<string, readonly string[]>> 
   // Field Ticket ownership and provenance guards read these rows immediately.
   // Deferred FKs cannot admit child-first writes inside the cyclic tail.
   field_tickets: ["documents", "parties", "users"],
+  // The certification guard resolves its native ticket, project, legal entity and retained file version during INSERT.
+  field_ticket_source_certifications: ["documents", "projects", "subsidiaries", "files", "file_versions", "users"],
   field_ticket_labor_snapshots: ["field_tickets", "documents", "users"],
   field_ticket_signatures: ["field_tickets", "files"],
   field_ticket_labor_lines: [
@@ -102,6 +107,13 @@ export const EXCLUDE = new Set([
   "payroll_compensation_configuration",
   // Employer and statutory reporting certificates retain their original tenant source identity.
   "payroll_opening_employer_authorities",
+  "payroll_opening_levy_source_authorities",
+  "payroll_opening_levy_source_allocations",
+  "payroll_ca_opening_reporting_authorities",
+  "payroll_ca_opening_reporting_allocations",
+  // Approved translation layers retain protected source identity and Cabinet provenance.
+  "historical_translation_contributions",
+  "historical_translation_layers",
   "payroll_roe_historical_periods",
   "payroll_roe_line_evidence",
   "payroll_roe_issued_event_sources",

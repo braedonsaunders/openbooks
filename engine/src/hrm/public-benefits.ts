@@ -3,7 +3,21 @@ export * from './benefits/program-types.ts'
 export * from './benefits/program-catalog.ts'
 export * from './benefits/currency-options.ts'
 export * from './benefits/programs.ts'
-export * from './benefits/awards.ts'
+export {
+  getBenefitAward,
+  listBenefitAwards,
+  createBenefitAward,
+  recordSettledAward,
+  recordSourceBoundAdjustingAward,
+  submitBenefitAward,
+  completeBenefitAwardSubmission,
+  releaseBenefitAwardApproval,
+  queueBenefitAward,
+  recordPayrollDelivery,
+  recordExternalDelivery,
+  voidBenefitAward,
+} from './benefits/awards.ts'
+export type { BenefitAward, BenefitAwardStatus, CreateBenefitAwardQuery } from './benefits/awards.ts'
 export { BenefitsError } from './benefits/errors.ts'
 export * from './benefits/settlement.ts'
 export * from './benefits/incentives.ts'

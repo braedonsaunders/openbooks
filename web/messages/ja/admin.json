@@ -2942,6 +2942,16 @@
       "cancel": "キャンセル",
       "saveFailed": "構成を保存できませんでした。"
     },
+    "usFilingLineage": {
+          "stateAccount": "州申告口座",
+          "employer": "元の法的雇用主",
+          "federalAccount": "元の連邦EIN",
+          "federalHelp": "廃止済みのEINも過去の証拠の確認に使用できます。",
+          "datesHelp": "元の登録の開始日と終了日を含みます。確定済み給与の日付より前に終了できません。",
+          "sourceReference": "元の登録証拠の参照",
+          "sourceHelp": "このEINと期間を裏付ける登録通知書や保存済みの記録を指定してください。",
+          "reason": "変更理由"
+    },
     "entities": {
       "usage-meters": {
         "title": "使用量メーター",
@@ -3053,6 +3063,11 @@
       "worker-comp-groups": {
         "title": "労災保険グループ",
         "description": "労務原価計算用の労災補償料率グループ。"
+      },
+      "pay-component-statutory-treatments": {
+        "title": "法定取扱い",
+        "singularTitle": "法定取扱い",
+        "description": "給与支払日に適用する、この項目の日付付きプログラム除外と休暇給計算基準への算入。労災グループは項目全体の取扱いを上書きします。"
       },
       "pay-component-department-expenses": {
         "title": "部門別費用勘定",
@@ -3382,6 +3397,11 @@
         "title": "情報申告欄",
         "description": "口座の支出が属する1099/T4Aの欄です。未マッピングは仕入先の既定欄に落ちます。",
         "singular": "欄ルール"
+      },
+      "payroll-us-filing-account-employer-lineage": {
+              "title": "雇用主EIN履歴",
+              "singularTitle": "雇用主EINの所属",
+              "description": "州登録の元の所有者、両端を含む日付、保存された証拠。"
       },
       "payroll-filing-accounts": {
         "title": "申告口座",
@@ -4207,6 +4227,8 @@
       "taxType": "税種別",
       "taxable": "課税対象",
       "unionName": "組合",
+      "initialVacationable": "初期の休暇給計算基準への算入",
+      "componentTreatmentReason": "変更理由",
       "vacationable": "休暇給の対象",
       "value": "値",
       "accrualComponentId": "積立項目",
@@ -4657,6 +4679,10 @@
       "mode": "方針"
     },
     "fieldHelp": {
+      "initialVacationable": "最初の日付付き取扱いの作成にのみ使用します。既存の項目は法定取扱いの履歴で変更してください。",
+      "componentTreatmentPayDate": "開始日と終了日を含め、遡及給与と最終給与の支払日に適用します。労災グループは項目全体の取扱いを上書きします。",
+      "componentTreatmentVacationable": "対象支払日にこの収入を休暇給と積立対象収入の計算基準に含めます。",
+      "componentTreatmentReason": "法定の取扱いや休暇計算基準の変更内容と根拠資料を記載してください。保存するたびに、1〜2000文字の新しい理由が監査証跡に記録されます。",
       "fxRateMaxAgeDays": "使用可能な最新レートから期末までの日数がこれを超えると、再評価と連結はそのレートを拒否します。期末レートは期末スポットレートの日付から、平均レートは平均に含まれる最新の相場の日付から数えます。ポリシー未設定時の既定値: 31日。",
       "storedValueLiabilityAccount": "発行時に貸方記入し、利用時に借方記入する貸借対照表勘定。",
       "storedValueBreakageIncomeAccount": "ブレークまたは失効を認識したときに貸方記入する収益勘定。",
@@ -7293,7 +7319,7 @@
       "responsibilities": "期間付きの担当割当",
       "responsibilitiesHint": "グループと役割を明示した期間の雇用関係に割り当てます。各取引にはすべての配分先が必要です。",
       "limits": "グループ別上限",
-      "limitsHint": "グループごとに金額上限または上限なしを選択します。この制度の過去の支給決定額は上限から差し引かれます。",
+      "limitsHint": "グループごとに任意の固定上限を設定します。過去の支給額は固定上限を消費します。プロジェクト予算率も設定する場合、金額を指定したグループでは固定上限が既定値に優先し、0 で上限を 0 にできます。",
       "reason": "変更理由",
       "reasonHint": "変更理由を記録します。全セクションを一括保存します。有効な制度の変更は選択した日から適用されます。",
       "changeEffectiveFromHint": "変更後のルールはこの日から適用されます。それ以前の期間は既存のルールのままです。",
@@ -7339,7 +7365,7 @@
         "amount": "金額上限"
       },
       "workDate": "作業日",
-      "capPercentHint": "任意。各プロジェクトを、受注予算のプログラム品目に対するこの割合から、過去のすべてのソースにプログラム率を掛けた額を差し引いた額に制限します。",
+      "capPercentHint": "任意の既定上限。該当する各プロジェクトを、受注予算のプログラム品目に対するこの割合から、過去のすべてのソースにプログラム率を掛けた額を差し引いた額に制限します。グループ固定上限はそのグループでこの既定値に優先します。",
       "sources": {
         "assignment": "期間指定の割り当て",
         "field_ticket_foreman": "作業伝票の職長",

@@ -47,6 +47,8 @@ export function AwardDrawer({
   const [runsAttempt, setRunsAttempt] = useState(0)
   const [runsFailed, setRunsFailed] = useState<string | null>(null)
   const award = drawer.award
+  const evidenceReason = typeof award.evidence?.reason === 'string' ? award.evidence.reason : null
+  const sourceReference = typeof award.evidence?.sourceReference === 'string' ? award.evidence.sourceReference : null
 
   // Open pay runs resolve through the native payroll runs route with its
   // own scope — the drawer never reads run tables directly. Queuing names
@@ -186,6 +188,23 @@ export function AwardDrawer({
             </div>
           ) : null}
         </dl>
+
+        {evidenceReason || sourceReference || award.adjustsAwardId ? (
+          <dl className="grid grid-cols-1 gap-y-2 border-t border-slate-100 pt-3 text-sm dark:border-slate-800">
+            {evidenceReason ? <div>
+              <dt className="text-xs text-slate-500 dark:text-slate-400">{t('portfolio.awardEvidence.reason')}</dt>
+              <dd className="font-medium text-slate-900 dark:text-slate-100">{evidenceReason}</dd>
+            </div> : null}
+            {sourceReference ? <div>
+              <dt className="text-xs text-slate-500 dark:text-slate-400">{t('portfolio.awardEvidence.sourceReference')}</dt>
+              <dd className="break-all font-mono text-xs text-slate-900 dark:text-slate-100">{sourceReference}</dd>
+            </div> : null}
+            {award.adjustsAwardId ? <div>
+              <dt className="text-xs text-slate-500 dark:text-slate-400">{t('portfolio.awardEvidence.adjustsAward')}</dt>
+              <dd className="break-all font-mono text-xs text-slate-900 dark:text-slate-100">{award.adjustsAwardId}</dd>
+            </div> : null}
+          </dl>
+        ) : null}
 
         {award.status === 'approved' && award.decisionSnapshot?.mode === 'not_required' ? <p className="text-sm text-emerald-700 dark:text-emerald-300">{t('portfolio.noApprovalSubmissionHint')}</p> : null}
         {award.status === 'approved' && award.decisionSnapshot?.mode === 'automatic' ? <p className="text-sm text-emerald-700 dark:text-emerald-300">{t('portfolio.directProcessingHint')}</p> : null}

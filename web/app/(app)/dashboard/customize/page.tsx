@@ -15,7 +15,7 @@ export default async function CustomiseDashboardPage({
   // Optional: this route natively takes no props. The conversion needs a query
   // flag, and threading it through must not make the prop mandatory.
   searchParams?: Promise<Record<string, string | string[] | undefined>>
-} = {}) {
+}) {
   const sp = (await searchParams) ?? {}
   const data = await loadCustomizeDashboard()
   if (!data) return null

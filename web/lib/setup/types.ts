@@ -577,7 +577,7 @@ export function setupEntityClientDescriptor(entity: SetupEntity): Omit<SetupEnti
 
 /** Direct subsidiary anchor for generic row visibility and write authorization. */
 export function setupEntitySubsidiaryField(entity: SetupEntity): SetupField | undefined {
-  return entity.fields.find((field) => field.ref === 'subsidiaries')
+  return entity.fields.find((field) => field.ref === 'subsidiaries' || field.ref === 'payroll-lineage-employers')
 }
 
 /** Structured form references are loaded from the same catalog as top-level controls. */

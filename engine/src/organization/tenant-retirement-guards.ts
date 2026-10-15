@@ -1,24 +1,66 @@
 /** Published DELETE contracts; unknown live guards refuse retirement. */
 export const TENANT_RETIREMENT_GUARDS = [
   {
+    "name": "field_ticket_source_certification_guard",
+    "source": "0729_field_ticket_source_identity_certifications.sql",
+    "sha256": "24f5e61335086799a9fd4692c4fee132be9243fbaa34279cc02e0217d012c891",
+    "newSha256": "24f5e61335086799a9fd4692c4fee132be9243fbaa34279cc02e0217d012c891",
+    "patch": false
+  },
+  {
+    "name": "fx_revaluation_rate_evidence_guard",
+    "source": "0728_scoped_close_and_settlement_fx_evidence.sql",
+    "sha256": "2bb84f39705198d6677b59efa8158e59ab07a91a6fc49131705f96cfa013e984",
+    "newSha256": "2bb84f39705198d6677b59efa8158e59ab07a91a6fc49131705f96cfa013e984",
+    "patch": false
+  },
+  {
+    "name": "payroll_ca_opening_reporting_authority_guard",
+    "source": "0726_payroll_ca_opening_reporting_source.sql",
+    "sha256": "2ebf6495156b721da3f3b7255ae23127de02dc8e57424d0a66e98a23d2fe7377",
+    "newSha256": "2ebf6495156b721da3f3b7255ae23127de02dc8e57424d0a66e98a23d2fe7377",
+    "patch": false
+  },
+  {
+    "name": "payroll_ca_opening_reporting_allocation_guard",
+    "source": "0726_payroll_ca_opening_reporting_source.sql",
+    "sha256": "3cc2f9750422a396513a7b7db8b72fe5f9830fd5976205aac6ca517f1b245e63",
+    "newSha256": "3cc2f9750422a396513a7b7db8b72fe5f9830fd5976205aac6ca517f1b245e63",
+    "patch": false
+  },
+  {
+    "name": "payroll_ca_opening_reporting_account_guard",
+    "source": "0726_payroll_ca_opening_reporting_source.sql",
+    "sha256": "ba016f1c8294c60c29c9e2f19fcf9024d9f04312e98929f3fd75d40dd007356f",
+    "newSha256": "ba016f1c8294c60c29c9e2f19fcf9024d9f04312e98929f3fd75d40dd007356f",
+    "patch": false
+  },
+  {
+    "name": "payroll_us_filing_account_lineage_guard",
+    "source": "0724_payroll_us_filing_account_employer_lineage.sql",
+    "sha256": "beae5e1216675b30498fc074b62a2ba8dbf181f37b09301d98faf27db682b797",
+    "newSha256": "beae5e1216675b30498fc074b62a2ba8dbf181f37b09301d98faf27db682b797",
+    "patch": false
+  },
+  {
     "name": "payroll_opening_levy_opening_source_guard",
-    "source": "0719_payroll_opening_levy_source_authority.sql",
-    "sha256": "a1948c959d4df63037fe9f5113d87ed087b551971e7191eab8cb1b30c700a9b4",
-    "newSha256": "a1948c959d4df63037fe9f5113d87ed087b551971e7191eab8cb1b30c700a9b4",
+    "source": "0725_payroll_opening_levy_source_successors.sql",
+    "sha256": "4b9d0f5a415dd3f872fde20b13a6a7692cdabd18999f940f927f714f54c9eb10",
+    "newSha256": "4b9d0f5a415dd3f872fde20b13a6a7692cdabd18999f940f927f714f54c9eb10",
     "patch": false
   },
   {
     "name": "payroll_opening_levy_source_allocation_guard",
     "source": "0719_payroll_opening_levy_source_authority.sql",
-    "sha256": "2198ea095797dc636e0ef9aef75a39aec1a827a83dbefbfbdd432c215dd9d144",
-    "newSha256": "2198ea095797dc636e0ef9aef75a39aec1a827a83dbefbfbdd432c215dd9d144",
+    "sha256": "0dae5ebe92eb319027166ab52aa57d583c22ff2c7f20c65b2718abe06b00f47d",
+    "newSha256": "0dae5ebe92eb319027166ab52aa57d583c22ff2c7f20c65b2718abe06b00f47d",
     "patch": false
   },
   {
     "name": "payroll_opening_levy_source_authority_guard",
-    "source": "0719_payroll_opening_levy_source_authority.sql",
-    "sha256": "4ccd08c0a829864e2ffc525bf245988f665cab3bed59bb352684ce8088be04dd",
-    "newSha256": "4ccd08c0a829864e2ffc525bf245988f665cab3bed59bb352684ce8088be04dd",
+    "source": "0725_payroll_opening_levy_source_successors.sql",
+    "sha256": "56d569fa9dd247bb08d2b27bf7f8a94a52e943781943585b9250336e16a43878",
+    "newSha256": "56d569fa9dd247bb08d2b27bf7f8a94a52e943781943585b9250336e16a43878",
     "patch": false
   },
   {
@@ -1046,8 +1088,8 @@ export const TENANT_RETIREMENT_GUARDS = [
   {
     "name": "pay_component_statutory_treatment_preserve_committed",
     "source": "0720_pay_component_statutory_treatment.sql",
-    "sha256": "40bd732037695a675d574e2ce48e86331991392bc5565504000f3d3974fb6ed4",
-    "newSha256": "40bd732037695a675d574e2ce48e86331991392bc5565504000f3d3974fb6ed4",
+    "sha256": "14c4db9f621bf899259d58d6e33d766fc9e125225240aac2eb95f48252a3b6bf",
+    "newSha256": "14c4db9f621bf899259d58d6e33d766fc9e125225240aac2eb95f48252a3b6bf",
     "patch": false
   },
   {
@@ -1676,6 +1718,42 @@ export const TENANT_RETIREMENT_GUARDS = [
 ] as const;
 
 export const TENANT_RETIREMENT_GUARD_ATTRIBUTES = [
+  {
+    "name": "field_ticket_source_certification_guard",
+    "config": [
+      "search_path=public,pg_catalog"
+    ]
+  },
+  {
+    "name": "fx_revaluation_rate_evidence_guard",
+    "config": [
+      "search_path=public,pg_catalog"
+    ]
+  },
+  {
+    "name": "payroll_ca_opening_reporting_authority_guard",
+    "config": [
+      "search_path=public,pg_catalog"
+    ]
+  },
+  {
+    "name": "payroll_ca_opening_reporting_allocation_guard",
+    "config": [
+      "search_path=public,pg_catalog"
+    ]
+  },
+  {
+    "name": "payroll_ca_opening_reporting_account_guard",
+    "config": [
+      "search_path=public,pg_catalog"
+    ]
+  },
+  {
+    "name": "payroll_us_filing_account_lineage_guard",
+    "config": [
+      "search_path=pg_catalog,public"
+    ]
+  },
   {
     "name": "payroll_opening_levy_opening_source_guard",
     "config": [
@@ -2811,6 +2889,47 @@ export const TENANT_RETIREMENT_GUARD_ATTRIBUTES = [
 ] as const;
 
 export const TENANT_RETIREMENT_TRIGGER_CONTRACTS = [
+  {
+    "table": "field_ticket_source_certifications",
+    "trigger": "field_ticket_source_certification_guard",
+    "function": "field_ticket_source_certification_guard"
+  },
+  {
+    "table": "fx_revaluation_rate_evidence",
+    "trigger": "fx_revaluation_rate_evidence_guard",
+    "function": "fx_revaluation_rate_evidence_guard"
+  },
+  {
+    "table": "payroll_ca_opening_reporting_authorities",
+    "trigger": "payroll_ca_opening_reporting_authority_guard",
+    "function": "payroll_ca_opening_reporting_authority_guard"
+  },
+  {
+    "table": "payroll_ca_opening_reporting_allocations",
+    "trigger": "payroll_ca_opening_reporting_allocation_guard",
+    "function": "payroll_ca_opening_reporting_allocation_guard"
+  },
+  {
+    "table": "payroll_filing_accounts",
+    "trigger": "payroll_ca_opening_reporting_account_guard",
+    "function": "payroll_ca_opening_reporting_account_guard"
+  },
+  {
+    "table": "payroll_us_filing_account_employer_lineage",
+    "trigger": "payroll_us_filing_account_lineage_guard",
+    "function": "payroll_us_filing_account_lineage_guard"
+  },
+  {
+    "table": "payroll_opening_balance_components",
+    "trigger": "payroll_opening_levy_source_components_guard",
+    "function": "payroll_opening_levy_opening_source_guard"
+  },
+  {
+    "table": "payroll_opening_program_bases",
+    "trigger": "payroll_opening_levy_source_program_bases_guard",
+    "function": "payroll_opening_levy_opening_source_guard"
+  },
+
   {
     "table": "payroll_opening_account_bases",
     "trigger": "payroll_opening_levy_source_account_bases_guard",

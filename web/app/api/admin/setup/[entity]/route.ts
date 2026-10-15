@@ -35,7 +35,7 @@ function setupWriteResponse(result: { status: number; body: Record<string, unkno
 
 
 
-async function legacyDELETE(req: Request, { params }: { params: Promise<{ entity: string }> }) {
+async function legacyDELETE(req: Request, { params }: { params: Promise<{ entity: string }> }, options: { reason?: string; auditReason?: string } = {}) {
   const gate = await guardPermission(PERMISSION)
   if (gate instanceof NextResponse) return gate
   const actor = { ...gate.user, permissions: gate.permissions, allowedSubsidiaryIds: gate.allowedSubsidiaryIds }
@@ -44,7 +44,7 @@ async function legacyDELETE(req: Request, { params }: { params: Promise<{ entity
   if (refused) return setupWriteResponse(refused)
   const url = new URL(req.url)
   const id = url.searchParams.get('id') ?? ''
-  const result = await deleteSetupRecord(actor, entityKey, id)
+  const result = await deleteSetupRecord(actor, entityKey, id, options)
   return setupWriteResponse(result)
 }
 
@@ -108,5 +108,6 @@ export const DELETE = defineRoute({
   permission: "admin.setup.manage",
   feature: { none: "This endpoint has no single route-wide feature gate; its handler retains any action-specific feature checks." },
   params: z.object({ "entity": z.string() }),
-  handler: async ({ request, params }) => legacyDELETE(request as never, { params: Promise.resolve(params as never) } as never),
+  body: z.strictObject({ reason: z.string().trim().min(1).max(2000).optional(), auditReason: z.string().trim().min(1).max(2000).optional() }).optional(),
+  handler: async ({ request, params, body }) => legacyDELETE(request, { params: Promise.resolve(params) }, body),
 });

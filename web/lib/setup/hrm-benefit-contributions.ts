@@ -73,7 +73,7 @@ export const BENEFIT_CONTRIBUTION_ENTITIES: SetupEntity[] = [
       { key: 'effectiveFrom', kind: 'date', required: true }, { key: 'effectiveTo', kind: 'date' }],
   },
   {
-    ...common, key: 'benefit-enrollment-configuration', table: 'hrm_benefit_enrollments',
+    ...common, key: 'benefit-enrollment-configuration', table: 'hrm_benefit_enrollments', importVia: 'none',
     singularTitleKey: 'entities.benefit-enrollment-configuration.singular', hasActive: false, allowCreate: false, allowDelete: false,
     columns: [{ key: 'planId', kind: 'ref', ref: 'benefit-plans' }, { key: 'effectiveFrom', kind: 'date' }],
     fields: [{ key: 'employmentId', kind: 'ref', ref: 'worker-employments', lockedOnEdit: true, hidden: true }, { key: 'planId', kind: 'ref', ref: 'benefit-plans', lockedOnEdit: true },
@@ -81,7 +81,7 @@ export const BENEFIT_CONTRIBUTION_ENTITIES: SetupEntity[] = [
       { key: 'matchEligible', kind: 'boolean', helpTextKey: 'benefitContributions.matchHint' }],
   },
   {
-    ...common, key: 'benefit-enrollment-terms', table: 'hrm_benefit_enrollment_terms',
+    ...common, key: 'benefit-enrollment-terms', table: 'hrm_benefit_enrollment_terms', importVia: 'none',
     parentRecords: [{ entityKey: 'benefit-enrollment-configuration', fieldKey: 'enrollmentId' }], hasActive: false, orderBy: 'effective_from',
     columns: [{ key: 'ruleId', labelKey: 'benefitContributions.fields.ruleId', kind: 'ref', ref: 'benefit-contribution-rules' }, { key: 'electionMode', kind: 'badge', options: options('election', ['fixed', 'follows_policy']) }, { key: 'electedRate', kind: 'number' }, { key: 'effectiveFrom', kind: 'date' }, { key: 'effectiveTo', kind: 'date' }],
     fields: [{ key: 'enrollmentId', kind: 'ref', ref: 'benefit-enrollment-configuration', required: true },

@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
+import { parseExactJson } from "../platform/exact-json.ts";
 
 type Runner = Pick<typeof db, "execute">;
 
@@ -33,13 +34,26 @@ export interface TransactionAuditChanges {
   after: TransactionAuditSnapshot | null;
 }
 
+// The SQL JSON is authoritative for persistence and comparison. Its decoded
+// view exposes exact decimal text without changing the stored JSON types.
+const capturedEvidence = new WeakMap<TransactionAuditSnapshot, { json: string; comparableJson: string }>();
+
+function freezeEvidence(value: unknown): void {
+  if (value === null || typeof value !== "object") return;
+  for (const child of Object.values(value)) freezeEvidence(child);
+  Object.freeze(value);
+}
+
 /** Capture the document, lines, and complete current GL impact in one query. */
 export async function captureTransactionAuditSnapshot(
   runner: Runner,
   documentId: string,
   orgId: string,
 ): Promise<TransactionAuditSnapshot | null> {
-  const result = (await runner.execute<{ snapshot: TransactionAuditSnapshot }>(sql`
+  const volatileKeys = sql`array[${sql.join([...VOLATILE_SNAPSHOT_KEYS].map((key) => sql`${key}`), sql`, `)}]::text[]`;
+  const lineKeys = sql`array[${sql.join([...VOLATILE_SNAPSHOT_KEYS, ...LINE_IDENTITY_KEYS].map((key) => sql`${key}`), sql`, `)}]::text[]`;
+  const result = (await runner.execute<{ snapshot: string; comparable_snapshot: string }>(sql`
+    with captured as (
     select jsonb_build_object(
       'document', to_jsonb(d),
       'lines', coalesce((
@@ -94,8 +108,25 @@ export async function captureTransactionAuditSnapshot(
      where d.id = ${documentId} and d.org_id = ${orgId}
      limit 1
      for update of d
+    )
+    select snapshot::text as snapshot,
+      jsonb_build_object(
+        'document', (snapshot->'document') - ${volatileKeys},
+        'lines', coalesce((select jsonb_agg(value - ${lineKeys} order by position)
+          from jsonb_array_elements(snapshot->'lines') with ordinality as parts(value, position)), '[]'::jsonb),
+        'taxComponents', coalesce((select jsonb_agg(value - ${lineKeys} order by position)
+          from jsonb_array_elements(snapshot->'taxComponents') with ordinality as parts(value, position)), '[]'::jsonb),
+        'applications', snapshot->'applications',
+        'glImpact', snapshot->'glImpact'
+      )::text as comparable_snapshot
+      from captured
   `));
-  return result.rows[0]?.snapshot ?? null;
+  const row = result.rows[0];
+  if (!row) return null;
+  const snapshot = parseExactJson(row.snapshot) as TransactionAuditSnapshot;
+  freezeEvidence(snapshot);
+  capturedEvidence.set(snapshot, { json: row.snapshot, comparableJson: row.comparable_snapshot });
+  return snapshot;
 }
 
 /**
@@ -152,6 +183,11 @@ export function transactionSnapshotsMatch(
   before: TransactionAuditSnapshot,
   after: TransactionAuditSnapshot,
 ): boolean {
+  const capturedBefore = capturedEvidence.get(before);
+  const capturedAfter = capturedEvidence.get(after);
+  // Compare the original JSON types too: a numeric custom field becoming a
+  // string is a material change even when their displayed digits are equal.
+  if (capturedBefore && capturedAfter) return capturedBefore.comparableJson === capturedAfter.comparableJson;
   return JSON.stringify(comparableSnapshot(before)) === JSON.stringify(comparableSnapshot(after));
 }
 
@@ -202,9 +238,14 @@ export async function recordTransactionAudit(
     before: input.before,
     after: input.after,
   });
-  await runner.execute(sql`
+  const { before, after, ...envelope } = changes;
+  const beforeJson = capturedEvidence.get(before)?.json ?? JSON.stringify(before);
+  const afterJson = after === null ? "null" : capturedEvidence.get(after)?.json ?? JSON.stringify(after);
+  const inserted = await runner.execute(sql`
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id, request_id)
     values (${input.orgId}, 'documents', ${input.documentId}, ${input.action},
-            ${JSON.stringify(changes)}::jsonb, ${input.actorId ?? null}, ${input.source})
+            ${JSON.stringify(envelope)}::jsonb || jsonb_build_object('before', ${beforeJson}::jsonb, 'after', ${afterJson}::jsonb),
+            ${input.actorId ?? null}, ${input.source}) returning id
   `);
+  if (inserted.rows.length !== 1) throw new Error("The transaction audit was not retained; retry the transaction.");
 }

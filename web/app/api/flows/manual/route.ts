@@ -3,7 +3,7 @@ import { defineRoute } from "@/lib/api/route";
 
 import { NextResponse } from 'next/server'
 import { and, eq } from 'drizzle-orm'
-import { evaluateLogicRule, planAutomation, type EvalContext } from '@openbooks/forms-core'
+import { evaluateLogicRule, graphSubjectAdmission, planAutomation, type EvalContext } from '@openbooks/forms-core'
 import { db, schema, withOrgContext } from '@openbooks/engine/platform/db'
 import {
   dispatchFailureReason,
@@ -61,10 +61,8 @@ async function availableButtons(
   // Manual flows can mutate their subject. Resolve its legal entity before
   // loading any values or evaluating buttons so a restricted caller cannot
   // use a forged id to run an action on a hidden subsidiary's record.
-  const denied = guardSubsidiaryScope(
-    authz,
-    await loadFlowSubjectSubsidiary(subjectKind, subjectId, authz.user.orgId, authz.allowedSubsidiaryIds),
-  )
+  const subjectSubsidiaryId = await loadFlowSubjectSubsidiary(subjectKind, subjectId, authz.user.orgId, authz.allowedSubsidiaryIds)
+  const denied = guardSubsidiaryScope(authz, subjectSubsidiaryId)
   if (denied) return denied
 
   const subject = await adapter.loadContext(subjectId)
@@ -112,6 +110,10 @@ async function availableButtons(
   for (const flow of flows) {
     const graph = parseFlowGraph(flow.id, flow.graph)
     if (!graph) continue
+    // Legal-entity admission: a flow limited to other legal entities (or
+    // one whose limit this record's unresolved entity cannot prove)
+    // offers no buttons on this record.
+    if (graphSubjectAdmission(graph, subjectSubsidiaryId) !== 'admitted') continue
     for (const node of graph.nodes) {
       if (node.data.kind !== 'trigger' || node.data.trigger.trigger !== 'manual') continue
       const td = node.data.trigger

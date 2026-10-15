@@ -90,7 +90,7 @@ async function flow(org: ScratchOrg, actorId: string, kind: string, fields: { fi
 async function evidence(org: ScratchOrg, id: string) {
   const snapshot = await captureTransactionAuditSnapshot(db, id, org.orgId);
   assert.ok(snapshot);
-  const row = (await db.execute(sql`select
+  const row = (await db.execute<{ scripts: number; flows: number; effects: number; audits: number; tenders: unknown[] }>(sql`select
     (select count(*)::int from script_runs where org_id = ${org.orgId} and target_id = ${id}) as scripts,
     (select count(*)::int from flow_runs where org_id = ${org.orgId} and subject_id = ${id}) as flows,
     (select count(*)::int from flow_run_effects e join flow_runs r on r.org_id = e.org_id and r.id = e.run_id
@@ -99,6 +99,7 @@ async function evidence(org: ScratchOrg, id: string) {
       and table_name = 'documents' and row_id = ${id}) as audits,
     (select coalesce(jsonb_agg(to_jsonb(t) order by position), '[]'::jsonb)
       from document_tenders t where org_id = ${org.orgId} and document_id = ${id}) as tenders`)).rows[0];
+  assert.ok(row);
   return { snapshot, ...row };
 }
 
@@ -158,7 +159,10 @@ test("a before-post closeout flow rolls back earlier script and flow effects; op
     const after = await evidence(org, id);
     assert.equal(after.snapshot.document.status, "posted");
     assert.equal(after.snapshot.document.memo, "flow metadata");
-    assert.deepEqual(after.snapshot.document.custom, { closeout, marker: "approved", operationNote: "reviewed" });
+    assert.deepEqual(after.snapshot.document.custom, {
+      closeout: { ...closeout, parts: [{ position: "1", tip: "5.0000", fee: "0" }] },
+      marker: "approved", operationNote: "reviewed",
+    });
     assert.equal(after.scripts, 1);
     assert.equal(after.flows, 1);
     assert.equal(after.effects, 1);

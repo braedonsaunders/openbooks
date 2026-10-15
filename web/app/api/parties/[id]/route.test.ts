@@ -236,7 +236,7 @@ test('vendor hold release without a change reason is refused before any write', 
 test('impossible hired-on dates are refused before the employee upsert', async () => {
   reset()
 
-  const response = await patch({ roles: { employee: { enabled: true, hiredOn: '2026-02-30' } } })
+  const response = await patch({ kind: 'person', roles: { employee: { enabled: true, hiredOn: '2026-02-30' } } })
 
   assert.equal(response.status, 422)
   assert.equal(
@@ -248,7 +248,7 @@ test('impossible hired-on dates are refused before the employee upsert', async (
 test('valid hired-on dates reach the employee upsert', async () => {
   reset()
 
-  const response = await patch({ roles: { employee: { enabled: true, hiredOn: '2026-02-28' } } })
+  const response = await patch({ kind: 'person', roles: { employee: { enabled: true, hiredOn: '2026-02-28' } } })
 
   assert.equal(response.status, 200)
   const call = routeState.calls.find(({ text }) => text.includes('insert into employee_roles'))

@@ -161,6 +161,14 @@ export async function loadPaymentFlyout({
   // flow owns the post. The drawer labels its primary action from this so
   // "Post" never promises a direct posting a flow will intercept. With the
   // Flows feature off nothing can govern, whatever rows exist.
+  // The functional currency of the payment's legal entity: the drawer binds
+  // an explicit settlement rate to exactly this currency and displays the
+  // pair, so it comes from the live entity row, never from client state.
+  const functionalCurrency = fundingSubsidiaryId
+    ? (await db.execute<{ base_currency: string }>(sql`
+        select base_currency from subsidiaries
+         where org_id = ${orgId} and id = ${fundingSubsidiaryId} and is_active and not is_elimination`)).rows[0]?.base_currency ?? null
+    : null
   const governedByFlow = (await isFeatureEnabled(orgId, 'flows')) &&
     (await db.execute<{ one: number }>(sql`
       select 1 as one from flows
@@ -205,6 +213,7 @@ export async function loadPaymentFlyout({
           kind,
           status: 'draft',
           currency,
+          functional_currency: functionalCurrency,
           subsidiary_id: fundingSubsidiaryId ?? null,
           funding_subsidiaries: fundingSubsidiaries,
           total: '0',
@@ -237,7 +246,7 @@ export async function loadPaymentFlyout({
   }
   return {
     mode: 'record',
-    payment: { ...openPayment!, doc: { ...openPayment!.doc, subsidiary_id: fundingSubsidiaryId ?? openPayment!.doc.subsidiary_id }, governedByFlow,
+    payment: { ...openPayment!, doc: { ...openPayment!.doc, functional_currency: functionalCurrency, subsidiary_id: fundingSubsidiaryId ?? openPayment!.doc.subsidiary_id }, governedByFlow,
       canRetryPostingEffects: can(authz, side === 'ar' ? 'ar.pay' : 'ap.pay') && await isFeatureEnabled(orgId, 'banking') },
     initialOpenItems,
     parties: parties.rows,

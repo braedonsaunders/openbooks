@@ -1,17 +1,15 @@
 import type { ReactNode } from 'react'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
-import { Badge, TableCell, TableRow } from '@openbooks/ui'
+import { Badge } from '@openbooks/ui'
 import { PreparedPagedTable, type PreparedTableRow } from '../../../../components/prepared-paged-table'
 import type { PortfolioAwardRow } from '../../../../lib/hrm/benefits-workspace'
 
 /**
  * Portfolio operational lists over the prepared list sources: the shared
  * PagedTable composition with search and client paging, fed by
- * loader-resolved rows. Statuses render the shared Badge; names link to
- * their drawers. A truncated service window names itself in the footer —
- * the footer carries the true population beside the visible page, never a
- * silent first page pretending to be everything.
+ * loader-resolved rows. Record counts use the shared pagination summary;
+ * a truncated service window retains its population notice outside rows.
  */
 
 import { ListFilterSelect } from '../../../../components/list-filter-select'
@@ -86,17 +84,6 @@ function emptyBlock(title: string, description: string) {
   )
 }
 
-function footerBlock(totalLabel: string, total: number, truncatedLabel: string, truncated: boolean) {
-  return (
-    <TableRow>
-      <TableCell colSpan={5} className="text-xs tabular-nums text-slate-500 dark:text-slate-400">
-        {totalLabel} · {total}
-        {truncated ? ` · ${truncatedLabel}` : ''}
-      </TableCell>
-    </TableRow>
-  )
-}
-
 export function ProgramPortfolioTable({
   rows,
   text,
@@ -129,7 +116,7 @@ export function ProgramPortfolioTable({
         { key: 'status', header: text.status },
       ]}
       empty={emptyBlock(text.emptyTitle, text.emptyDescription)}
-      footer={footerBlock(text.totalLabel, total, text.truncatedLabel, truncated)}
+      paginationNote={truncated ? `${text.truncatedLabel} · ${text.totalLabel} ${total}` : undefined}
     />
   )
 }
@@ -161,7 +148,7 @@ export function AwardPortfolioTable({
         { key: 'status', header: text.status },
       ]}
       empty={emptyBlock(text.emptyTitle, text.emptyDescription)}
-      footer={footerBlock(text.totalLabel, total, text.truncatedLabel, truncated)}
+      paginationNote={truncated ? `${text.truncatedLabel} · ${text.totalLabel} ${total}` : undefined}
     />
   )
 }

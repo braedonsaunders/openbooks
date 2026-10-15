@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
-import { db } from "../platform/db.ts";
+import { db, withOrgTransaction } from "../platform/db.ts";
 import { isIsoCalendarDate } from "../platform/iso-date.ts";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { cmp, normalizeMoney } from "../money/money.ts";
@@ -9,12 +9,15 @@ import { priceRunHolidayHours } from "./run-holiday-input.ts";
 import { invalidateCalculatedRun } from "./run-lifecycle.ts";
 import { finalPayEmploymentIdentity, namedFinalPayEmployment, namedSupplementalEmployment, supplementalEmploymentIdentity, payrollEmploymentOverlapsPeriod } from "./employment-roster.ts";
 import { assertBankDepositAdjustment } from "./run-bank-input.ts";
-import { bankCashInputEvidence, canonicalBankCashInputValues, isBankCashInputEvidenceCandidate, parseBankCashInputEvidence } from "./run-bank-cash-evidence.ts";
+import { bankCashFundingSplit, bankCashInputEvidence, canonicalBankCashInputValues, isBankCashInputEvidenceCandidate, parseBankCashInputEvidence } from "./run-bank-cash-evidence.ts";
+import { declaredVacationAccrualEvidence, isDeclaredVacationAccrualCandidate, parseDeclaredVacationAccrualEvidence } from "./run-vacation-accrual-input.ts";
 import { lockAndCheckPayrollRunPopulation, payrollSubsidiaryInScope, type PayrollSubsidiaryScope } from "./scope.ts";
 import { lockActorCommandAuthority } from "../organization/actor-command-authority.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { takeEmployeeConfigurationFence } from "./fences.ts";
 import { resolvePayrollRunContext, assertPayrollRegionSupported, assertPayrollTaxYearSupported } from "./packs.ts";
+import { caPayrollConfig } from "./canada/config.ts";
+import { EMPLOYER_LEVY_PROGRAMS, type EmployerLevyProgramKey, canonicalEmployerLevyAdjustmentAmount, canonicalLevySourceKey, employerLevyAdjustmentEvidence, isEmployerLevyAdjustmentEvidenceCandidate, isEmployerLevyProgramKey, parseEmployerLevyAdjustmentEvidence } from "./run-levy-adjustment-evidence.ts";
 import { isUuid } from "../platform/uuid.ts";
 
 /**
@@ -28,8 +31,10 @@ import { isUuid } from "../platform/uuid.ts";
 export class PayRunAdjustmentIdempotencyConflict extends Error {
   readonly status = 409 as const;
   readonly code = "idempotency-conflict" as const;
-  constructor(reason: "changed-payload" | "foreign-key" | "corrected-request") {
-    super(reason === "foreign-key"
+  constructor(reason: "changed-payload" | "foreign-key" | "corrected-request" | "source-recorded") {
+    super(reason === "source-recorded"
+      ? "This issued levy source already has an audited recording. Review that recording and its correction history instead of entering the same source again."
+      : reason === "foreign-key"
       ? "This request key is already in use by another organization. Reopen the adjustment form to try again with a fresh request."
       : reason === "corrected-request"
       ? "This audited payroll input request has been corrected or removed. Review the current run input and submit any further correction with a fresh request key."
@@ -155,6 +160,32 @@ export type PayRunAdjustmentMutation =
       /** Supply an issued cash amount, a keyed hourly rate, or both for a consistency check. */
       amount?: string | null;
       rate?: string | null;
+      /** Positive withdrawal cash paid outside the entitlement bank; never inferred. */
+      outsideBankAmount?: string | null;
+      reason: string;
+      sourceReference: string;
+      idempotencyKey: string;
+    }
+  | {
+      action: "declared_vacation_accrual";
+      employeePartyId: string;
+      /** Exact positive vacation liability recorded on this cheque, in currency. */
+      amount: string;
+      reason: string;
+      sourceReference: string;
+      idempotencyKey: string;
+    }
+  | {
+      action: "employer_levy_adjustment";
+      employeePartyId: string;
+      /** Employer-only statutory levy programme being trued up. */
+      programKey: EmployerLevyProgramKey;
+      /** Required for ca_wcb: the group the issued premium belongs to. */
+      workerCompGroupId?: string | null;
+      /** Exact positive issued premium amount, recorded as issued. */
+      amount: string;
+      /** Stable identity of the issued source record; recorded once. */
+      sourceKey: string;
       reason: string;
       sourceReference: string;
       idempotencyKey: string;
@@ -282,22 +313,28 @@ export async function preflightPayRunAdjustment(
 
 async function executePayRunAdjustment(input: PayRunAdjustmentInput, validateOnly: boolean): Promise<{ changed: boolean; replayed: boolean }> {
   const { orgId, actorId } = input;
-  if ((input.mutation.action === "override_income_tax" || input.mutation.action === "bank_cash_input")
-    && (!isUuid(input.documentId) || !isUuid(input.mutation.employeePartyId)
-      || input.mutation.action === "bank_cash_input" && !isUuid(input.mutation.componentId))) {
-    throw new PayrollError("audited cheque inputs require a pay run id and employee id — select the run and employee before recording the input");
+  const auditedMutation = input.mutation.action === "override_income_tax"
+    || input.mutation.action === "bank_cash_input" || input.mutation.action === "declared_vacation_accrual" || input.mutation.action === "employer_levy_adjustment"
+    ? input.mutation : null;
+  if (auditedMutation
+    && (!isUuid(input.documentId) || !isUuid(auditedMutation.employeePartyId)
+      || auditedMutation.action === "bank_cash_input" && !isUuid(auditedMutation.componentId)
+      || auditedMutation.action === "employer_levy_adjustment"
+        && auditedMutation.workerCompGroupId != null && !isUuid(auditedMutation.workerCompGroupId))) {
+    throw new PayrollError("Audited payroll inputs require valid pay run, employee and component or group identities; select the recorded run and employee before saving.");
   }
-  const documentId = input.mutation.action === "override_income_tax" || input.mutation.action === "bank_cash_input"
-    ? input.documentId.toLowerCase() : input.documentId;
-  const mutation = input.mutation.action === "override_income_tax" || input.mutation.action === "bank_cash_input"
-    ? { ...input.mutation, employeePartyId: input.mutation.employeePartyId.toLowerCase(),
-        ...(input.mutation.action === "bank_cash_input" ? { componentId: input.mutation.componentId.toLowerCase() } : {}) }
+  const documentId = auditedMutation ? input.documentId.toLowerCase() : input.documentId;
+  const mutation = auditedMutation
+    ? { ...auditedMutation, employeePartyId: auditedMutation.employeePartyId.toLowerCase(),
+        ...(auditedMutation.action === "bank_cash_input" ? { componentId: auditedMutation.componentId.toLowerCase() } : {}),
+        ...(auditedMutation.action === "employer_levy_adjustment" && auditedMutation.workerCompGroupId != null
+          ? { workerCompGroupId: auditedMutation.workerCompGroupId.toLowerCase() } : {}) }
     : input.mutation;
   if (input.reason !== undefined && (!input.reason.trim() || input.reason.length > 500)) {
     throw new PayrollError("adjustment correction reason must contain 1 to 500 characters");
   }
   if (validateOnly && mutation.action !== "add") throw new PayrollError("adjustment preflight only supports adding a line");
-  return db.transaction(async (tx) => {
+  return withOrgTransaction(orgId, () => db.transaction(async (tx) => {
     if (!(await lockAndCheckOrgFeature(tx, orgId, "payroll"))) throw new PayrollError("Payroll feature is disabled");
     const runRows = (await tx.execute<{ run_status: string; run_type: string; pay_schedule_id: string; period_start: string; period_end: string; pay_date: string; tax_year: number; currency: string; document_status: string; subsidiary_id: string | null }>(sql`
       select r.run_status, r.run_type, r.pay_schedule_id, r.period_start::text, r.period_end::text,
@@ -329,8 +366,12 @@ async function executePayRunAdjustment(input: PayRunAdjustmentInput, validateOnl
     const deletesIncomeTaxOverride = deletedAdjustment?.replace_component === true
       && (deletedAdjustment.system_key === "income_tax" || parseIncomeTaxOverrideEvidence(deletedAdjustment.note) !== null);
     const deletesBankCashInput = isBankCashInputEvidenceCandidate(deletedAdjustment?.note ?? null);
+    const deletesLevyAdjustment = isEmployerLevyAdjustmentEvidenceCandidate(deletedAdjustment?.note ?? null);
+    const deletesDeclaredVacationAccrual = isDeclaredVacationAccrualCandidate(deletedAdjustment?.note ?? null);
     if (mutation.action === "override_income_tax" || mutation.action === "bank_cash_input"
-      || deletesIncomeTaxOverride || deletesBankCashInput) {
+      || mutation.action === "declared_vacation_accrual"
+      || mutation.action === "employer_levy_adjustment"
+      || deletesIncomeTaxOverride || deletesBankCashInput || deletesDeclaredVacationAccrual || deletesLevyAdjustment) {
       if (!run.subsidiary_id || (run.run_status !== "draft" && run.run_status !== "calculated")) {
         throw new PayrollError("audited cheque inputs require an editable pay run with a legal entity");
       }
@@ -410,13 +451,21 @@ async function executePayRunAdjustment(input: PayRunAdjustmentInput, validateOnl
       const amount = persistAdjustmentMoney(values.amount);
       const hours = persistAdjustmentHours(values.hours, amount);
       const rateExact = values.rate;
+      const outsideBankAmount = mutation.outsideBankAmount == null || mutation.outsideBankAmount === ""
+        ? null : canonicalDecimal(mutation.outsideBankAmount, 2);
+      if (mutation.outsideBankAmount != null && mutation.outsideBankAmount !== "" && outsideBankAmount === null) {
+        throw new PayrollError("cash paid outside the bank must be an exact currency amount in cents");
+      }
+      if (outsideBankAmount !== null && (cmp(hours, "0") <= 0 || !bankCashFundingSplit(amount, outsideBankAmount))) {
+        throw new PayrollError("cash paid outside the bank must be a positive part of a withdrawal, smaller than the issued payout; the remaining bank-funded cash must stay positive");
+      }
       const reason = mutation.reason.trim();
       const sourceReference = mutation.sourceReference.trim();
       if (reason.length === 0 || reason.length > 500) throw new PayrollError("bank cash input reason must contain 1 to 500 characters");
       if (sourceReference.length === 0 || sourceReference.length > 300) throw new PayrollError("bank cash input source reference must contain 1 to 300 characters");
       if (!isUuid(mutation.idempotencyKey)) throw new PayrollError("bank cash input needs a UUID Idempotency-Key; retry with a request key");
       const requestId = mutation.idempotencyKey.toLowerCase();
-      const note = bankCashInputEvidence(reason, sourceReference, requestId, rateExact);
+      const note = bankCashInputEvidence(reason, sourceReference, requestId, rateExact, outsideBankAmount);
 
       if (run.run_type === "termination") {
         throw new PayrollError("bank cash inputs require an ordinary editable run — final pay settles the bank through the native termination settlement");
@@ -477,7 +526,7 @@ async function executePayRunAdjustment(input: PayRunAdjustmentInput, validateOnl
           from entitlement_plans plan
           join pay_components component on component.org_id=plan.org_id
             and component.id=${mutation.componentId} and component.is_active
-         where plan.org_id=${orgId} and plan.is_active
+         where plan.org_id=${orgId} and plan.is_active and plan.unit in ('hours', 'money')
            and (plan.payout_component_id=${mutation.componentId} or plan.deposit_component_id=${mutation.componentId})
          order by plan.id
          for share of plan, component
@@ -486,10 +535,10 @@ async function executePayRunAdjustment(input: PayRunAdjustmentInput, validateOnl
       const componentMatchesDirection = plan !== undefined && (cmp(hours, "0") < 0
         ? plan.deposit_component_id === mutation.componentId
         : plan.payout_component_id === mutation.componentId);
-      if (bankPlans.length !== 1 || plan!.unit !== "hours" || plan!.kind !== "earning" || plan!.payment_kind !== "cash"
+      if (bankPlans.length !== 1 || !["hours", "money"].includes(plan!.unit) || plan!.kind !== "earning" || plan!.payment_kind !== "cash"
         || plan!.unit_of_measure === "quantity" || plan!.country !== null && plan!.country !== runContext.country
         || plan!.payout_component_id === plan!.deposit_component_id || !componentMatchesDirection) {
-        throw new PayrollError("choose one active hours-bank payout or deposit component configured as a cash earning before recording its issued hours");
+        throw new PayrollError("choose one active bank payout or deposit component configured as a cash earning before recording its issued hours");
       }
       await assertBankDepositAdjustment(tx, {
         orgId, componentId: mutation.componentId, amount, hours,
@@ -518,7 +567,7 @@ async function executePayRunAdjustment(input: PayRunAdjustmentInput, validateOnl
           && canonicalAdjustmentHours(prior.hours, prior.amount) === hours
           && evidence?.kind === "bank_cash_input" && evidence.requestId === requestId
           && evidence.reason === reason && evidence.sourceReference === sourceReference
-          && evidence.rate === rateExact;
+          && evidence.rate === rateExact && (evidence.outsideBankAmount ?? null) === outsideBankAmount;
         if (!same) throw new PayRunAdjustmentIdempotencyConflict("changed-payload");
         return { changed: false, replayed: true };
       }
@@ -538,6 +587,271 @@ async function executePayRunAdjustment(input: PayRunAdjustmentInput, validateOnl
         returning *
       `)).rows[0];
       if (!inserted) throw new PayrollError("bank cash input was not saved");
+      auditChanges.push({ id: inserted.id, before: null, after: inserted });
+      changed = true;
+    } else if (mutation.action === "employer_levy_adjustment") {
+      if (!isEmployerLevyProgramKey(mutation.programKey)) {
+        throw new PayrollError("employer levy adjustment needs an employer-only levy programme (ca_eht or ca_wcb) — employee-side amounts are recorded through their own audited inputs");
+      }
+      const program = EMPLOYER_LEVY_PROGRAMS[mutation.programKey];
+      const amount = persistAdjustmentMoney(canonicalEmployerLevyAdjustmentAmount(mutation.amount));
+      const sourceKey = canonicalLevySourceKey(mutation.sourceKey);
+      if (sourceKey === null) {
+        throw new PayrollError("employer levy adjustment needs the issued source record's stable key (no spaces, at most 200 characters) so the same issued amount cannot be recorded twice");
+      }
+      const reason = mutation.reason.trim();
+      const sourceReference = mutation.sourceReference.trim();
+      if (reason.length === 0 || reason.length > 500) throw new PayrollError("employer levy adjustment reason must contain 1 to 500 characters");
+      if (sourceReference.length === 0 || sourceReference.length > 300) throw new PayrollError("employer levy adjustment source reference must contain 1 to 300 characters");
+      if (!isUuid(mutation.idempotencyKey)) throw new PayrollError("employer levy adjustment needs a UUID Idempotency-Key; retry with a request key");
+      const requestId = mutation.idempotencyKey.toLowerCase();
+      const workerCompGroupId = mutation.workerCompGroupId ?? null;
+      if (mutation.programKey === "ca_wcb" && workerCompGroupId === null) {
+        throw new PayrollError("a WCB/WSIB levy adjustment needs the worker-compensation group the issued premium belongs to — select the employee's group before recording it");
+      }
+      if (mutation.programKey === "ca_eht" && workerCompGroupId !== null) {
+        throw new PayrollError("an employer health tax adjustment has no worker-compensation group — remove the group and record it against ca_eht alone");
+      }
+      const note = employerLevyAdjustmentEvidence({ programKey: mutation.programKey, workerCompGroupId, sourceKey, reason, sourceReference, requestId });
+
+      if (run.run_type === "termination") {
+        throw new PayrollError("employer levy adjustments require an ordinary editable run — record the issued true-up on a supplemental run for its period");
+      }
+      if (!isIsoCalendarDate(run.pay_date) || !isIsoCalendarDate(run.period_start)
+        || !isIsoCalendarDate(run.period_end) || run.period_end < run.period_start || run.pay_date < run.period_end) {
+        throw new PayrollError("employer levy adjustments require a pay run with valid pay and period dates");
+      }
+      const entity = (await tx.execute<{ id: string; name: string; country: string | null; baseCurrency: string | null }>(sql`
+        select id::text, name, country, base_currency as "baseCurrency" from subsidiaries
+         where org_id=${orgId} and id=${run.subsidiary_id} and is_active for share
+      `)).rows[0];
+      if (!entity) throw new PayrollError("the pay run's legal entity is missing or inactive");
+      const runContext = resolvePayrollRunContext({ payDate: run.pay_date, subsidiary: entity, runCurrency: run.currency });
+      if (runContext.country !== "CA" || runContext.taxYear !== run.tax_year) {
+        throw new PayrollError("employer levy adjustments require a Canadian pay run with a tax year matching its pay date");
+      }
+      const rosterColumns = {
+        org: sql`prof.org_id`, employee: sql`p.id`, employment: sql`prof.employment_id`,
+        employer: sql`p.subsidiary_id`, hiredOn: sql`er.hired_on`, terminatedOn: sql`er.terminated_on`,
+        periodStart: sql`${run.period_start}`, periodEnd: sql`${run.period_end}`,
+        runType: sql`${run.run_type}`, document: sql`${documentId}`,
+      };
+      const profile = (await tx.execute<{ country: string; province: string; eligible: boolean; excluded: boolean }>(sql`
+        select prof.country, prof.province, ${payrollEmploymentOverlapsPeriod(rosterColumns)} as eligible,
+               exists(select 1 from pay_run_adjustments exclusion
+                 where exclusion.org_id=${orgId} and exclusion.pay_run_document_id=${documentId}
+                   and exclusion.employee_party_id=p.id and exclusion.adjustment_type='exclude') as excluded
+          from employee_payroll_profiles prof
+          join parties p on p.org_id=prof.org_id and p.id=prof.employee_party_id
+          join worker_employments e on e.org_id=prof.org_id and e.id=prof.employment_id
+            and e.worker_party_id=p.id and e.employer_subsidiary_id=${run.subsidiary_id}
+          join pay_schedules schedule on schedule.org_id=prof.org_id and schedule.id=prof.pay_schedule_id
+            and schedule.is_active and (schedule.subsidiary_id is null or schedule.subsidiary_id=${run.subsidiary_id})
+          left join employee_roles er on er.org_id=p.org_id and er.party_id=p.id
+         where prof.org_id=${orgId} and prof.employee_party_id=${mutation.employeePartyId}
+           and prof.pay_schedule_id=${run.pay_schedule_id} and prof.is_active
+           and (p.subsidiary_id is null or p.subsidiary_id=${run.subsidiary_id})
+         for share of prof, p, e, schedule
+      `)).rows[0];
+      if (!profile) {
+        throw new PayrollError("this employee has no active payroll profile and employment on the run's legal entity and schedule — review the employment, legal entity and pay schedule before recording a levy adjustment");
+      }
+      if (profile.country !== "CA") {
+        throw new PayrollError("employer levy adjustments are available only for Canadian payroll profiles with a native Canadian levy line");
+      }
+      assertPayrollRegionSupported(profile.country, profile.province);
+      assertPayrollTaxYearSupported(profile.country, runContext.taxYear, profile.province);
+      if (!profile.eligible || profile.excluded) {
+        throw new PayrollError("this employee is outside the pay run's payable roster — review employment dates and include the employee before recording a levy adjustment");
+      }
+      // The programme must be configured for this employee before an issued
+      // amount can post against it: an unconfigured programme has no native
+      // rate, account or filing home, so the adjustment refuses here rather
+      // than calculating into a silent zero.
+      if (mutation.programKey === "ca_eht") {
+        const config = await caPayrollConfig(orgId, runContext.taxYear, run.pay_date);
+        if (!config.eht(profile.province)) {
+          throw new PayrollError(`CA ${profile.province} employer health tax is not configured for ${runContext.taxYear} — configure the ca_eht rate in Payroll Setup → Statutory rates before recording an EHT adjustment`);
+        }
+      } else {
+        const group = (await tx.execute<{ rate_percent: string | null; is_active: boolean }>(sql`
+          select rate_percent::text, is_active from worker_comp_groups
+           where org_id=${orgId} and id=${workerCompGroupId} for share
+        `)).rows[0];
+        if (!group || !group.is_active || group.rate_percent === null || cmp(group.rate_percent, "0") < 0) {
+          throw new PayrollError("the named worker-compensation group is missing, inactive or has no configured rate — review it in Company Setup → Worker compensation groups before recording a WCB/WSIB adjustment");
+        }
+        const datedGroupId = (await tx.execute<{ id: string | null }>(sql`
+          select public.payroll_worker_comp_group_at(${orgId}::uuid, ${mutation.employeePartyId}::uuid, ${run.pay_date}::date)::text as id
+        `)).rows[0]?.id ?? null;
+        if (datedGroupId !== workerCompGroupId) {
+          throw new PayrollError("the named worker-compensation group is not this employee's group on the run's pay date — record the adjustment against the group that assessed the issued premium, on a run dated while the employee belonged to it");
+        }
+      }
+      const levyComponents = (await tx.execute<{ id: string }>(sql`
+        select id::text from pay_components
+         where org_id=${orgId} and country='CA' and system_key=${program.systemKey}
+           and kind='employer_contribution' and is_active
+         order by id for share
+      `)).rows;
+      if (levyComponents.length !== 1) {
+        throw new PayrollError(`configure exactly one active Canadian ${program.label} employer-contribution component before recording a levy adjustment`);
+      }
+      const componentId = levyComponents[0]!.id;
+
+      // One issued source record, one recording: the source key locks
+      // duplicate submissions before either can claim it, whatever request
+      // key a retry arrives under.
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${'employer-levy-source:' + orgId + ':' + sourceKey}))`);
+      const sameSource = (await tx.execute<{ id: string; note: string | null }>(sql`
+        select id::text, note from pay_run_adjustments
+         where org_id=${orgId} and adjustment_type='line'
+           and note ~ '"kind"[[:space:]]*:[[:space:]]*"employer_levy_adjustment"'
+           and strpos(note, ${JSON.stringify(sourceKey)}) > 0
+         order by id for update
+      `)).rows.filter((row) => parseEmployerLevyAdjustmentEvidence(row.note)?.sourceKey === sourceKey);
+      const foreignSource = sameSource.find((row) => row.id !== requestId);
+      if (foreignSource) {
+        throw new PayRunAdjustmentIdempotencyConflict("source-recorded");
+      }
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${requestId}))`);
+      const prior = (await tx.execute<Record<string, unknown> & {
+        id: string; org_id: string; pay_run_document_id: string; employee_party_id: string;
+        component_id: string; amount: string; hours: string | null; note: string | null;
+        adjustment_type: string; replace_component: boolean; earned_from: string | null; earned_to: string | null;
+      }>(sql`
+        select id::text, org_id::text, pay_run_document_id::text, employee_party_id::text,
+               component_id::text, amount::text, hours::text, note, adjustment_type, replace_component, earned_from::text, earned_to::text
+          from pay_run_adjustments where id=${requestId} for update
+      `)).rows[0];
+      if (prior && prior.org_id !== orgId) throw new PayRunAdjustmentIdempotencyConflict("foreign-key");
+      if (prior) {
+        const evidence = parseEmployerLevyAdjustmentEvidence(prior.note);
+        const same = prior.adjustment_type === "line" && prior.replace_component === false
+          && prior.hours === null && prior.earned_from === null && prior.earned_to === null
+          && prior.pay_run_document_id === documentId
+          && prior.employee_party_id === mutation.employeePartyId
+          && prior.component_id === componentId
+          && normalizeMoney(prior.amount) === amount
+          && evidence?.kind === "employer_levy_adjustment" && evidence.requestId === requestId
+          && evidence.programKey === mutation.programKey
+          && evidence.workerCompGroupId === workerCompGroupId
+          && evidence.sourceKey === sourceKey
+          && evidence.reason === reason && evidence.sourceReference === sourceReference;
+        if (!same) throw new PayRunAdjustmentIdempotencyConflict("changed-payload");
+        return { changed: false, replayed: true };
+      }
+      const historicalUse = (await tx.execute(sql`
+        select 1 from audit_log
+         where org_id=${orgId} and table_name='pay_run_adjustments' and row_id=${requestId}
+         limit 1
+      `)).rows.length > 0;
+      if (historicalUse) throw new PayRunAdjustmentIdempotencyConflict("corrected-request");
+      const priorSourceEvents = (await tx.execute<{ note: string | null }>(sql`
+        select changes->'after'->>'note' as note from audit_log
+         where org_id=${orgId} and table_name='pay_run_adjustments'
+           and changes->'after'->>'note' ~ '"kind"[[:space:]]*:[[:space:]]*"employer_levy_adjustment"'
+           and strpos(changes->'after'->>'note', ${JSON.stringify(sourceKey)}) > 0
+      `)).rows;
+      if (priorSourceEvents.some(row => parseEmployerLevyAdjustmentEvidence(row.note)?.sourceKey === sourceKey)) {
+        throw new PayRunAdjustmentIdempotencyConflict("source-recorded");
+      }
+
+      const inserted = (await tx.execute<Record<string, unknown> & { id: string }>(sql`
+        insert into pay_run_adjustments
+          (id, org_id, pay_run_document_id, employee_party_id, adjustment_type,
+           component_id, amount, replace_component, note, created_by, updated_by)
+        values
+          (${requestId}, ${orgId}, ${documentId}, ${mutation.employeePartyId}, 'line',
+           ${componentId}, ${amount}, false, ${note}, ${actorId}, ${actorId})
+        returning *
+      `)).rows[0];
+      if (!inserted) throw new PayrollError("employer levy adjustment was not saved");
+      auditChanges.push({ id: inserted.id, before: null, after: inserted });
+      changed = true;
+    } else if (mutation.action === "declared_vacation_accrual") {
+      const exactCurrencyAmount = canonicalDecimal(mutation.amount, 2);
+      if (exactCurrencyAmount === null || cmp(exactCurrencyAmount, "0") <= 0) {
+        throw new PayrollError("declared vacation accrual must be a positive exact currency amount in cents");
+      }
+      const amount = persistAdjustmentMoney(exactCurrencyAmount);
+      const reason = mutation.reason.trim();
+      const sourceReference = mutation.sourceReference.trim();
+      if (!reason || reason.length > 500) throw new PayrollError("declared vacation accrual reason must contain 1 to 500 characters");
+      if (!sourceReference || sourceReference.length > 300) throw new PayrollError("declared vacation accrual source reference must contain 1 to 300 characters");
+      if (!isUuid(mutation.idempotencyKey)) throw new PayrollError("declared vacation accrual needs a UUID Idempotency-Key; retry with a request key");
+      const requestId = mutation.idempotencyKey.toLowerCase();
+      const planRows = (await tx.execute<{
+        id: string; accrual_component_id: string | null; unit: string; direction: string;
+        component_kind: string | null; component_active: boolean | null;
+      }>(sql`
+        select plan.id::text, plan.accrual_component_id::text, plan.unit, plan.direction,
+               component.kind as component_kind, component.is_active as component_active
+          from entitlement_plans plan
+          left join pay_components component
+            on component.org_id=plan.org_id and component.id=plan.accrual_component_id
+         where plan.org_id=${orgId} and plan.system_key='vacation' and plan.is_active
+         order by plan.id for share of plan
+      `)).rows;
+      if (planRows.length !== 1 || !planRows[0]!.accrual_component_id
+        || planRows[0]!.unit !== "money" || planRows[0]!.direction !== "accrue"
+        || planRows[0]!.component_kind !== "employer_contribution" || planRows[0]!.component_active !== true) {
+        throw new PayrollError("configure one active money-denominated vacation accrual plan with an active employer contribution component before recording a declared accrual");
+      }
+      const componentId = planRows[0]!.accrual_component_id;
+      const lockedComponent = (await tx.execute(sql`
+        select id from pay_components where org_id=${orgId} and id=${componentId}
+          and kind='employer_contribution' and is_active for share
+      `)).rows;
+      if (lockedComponent.length !== 1) {
+        throw new PayrollError("the vacation accrual component changed — reload the active vacation plan before recording a declared accrual");
+      }
+      const note = declaredVacationAccrualEvidence(reason, sourceReference, requestId);
+      await tx.execute(sql`select pg_advisory_xact_lock(hashtext(${requestId}))`);
+      const prior = (await tx.execute<Record<string, unknown> & {
+        id: string; org_id: string; pay_run_document_id: string; employee_party_id: string;
+        component_id: string; amount: string; note: string | null;
+      }>(sql`
+        select id::text, org_id::text, pay_run_document_id::text, employee_party_id::text,
+               component_id::text, amount::text, note
+          from pay_run_adjustments where id=${requestId} for update
+      `)).rows[0];
+      if (prior && prior.org_id !== orgId) throw new PayRunAdjustmentIdempotencyConflict("foreign-key");
+      if (prior) {
+        const evidence = parseDeclaredVacationAccrualEvidence(prior.note);
+        const same = prior.pay_run_document_id === documentId
+          && prior.employee_party_id === mutation.employeePartyId
+          && prior.component_id === componentId
+          && normalizeMoney(prior.amount) === amount
+          && evidence?.requestId === requestId && evidence.reason === reason
+          && evidence.sourceReference === sourceReference;
+        if (!same) throw new PayRunAdjustmentIdempotencyConflict("changed-payload");
+        return { changed: false, replayed: true };
+      }
+      const alreadyRecorded = (await tx.execute(sql`
+        select 1 from pay_run_adjustments
+         where org_id=${orgId} and pay_run_document_id=${documentId}
+           and employee_party_id=${mutation.employeePartyId} and adjustment_type='line'
+           and note ~ '"kind"[[:space:]]*:[[:space:]]*"declared_vacation_accrual"'
+         limit 1 for update
+      `)).rows.length > 0;
+      if (alreadyRecorded) throw new PayrollError("this cheque already has a declared vacation accrual — delete that audited input before recording a corrected amount");
+      const historicalUse = (await tx.execute(sql`
+        select 1 from audit_log
+         where org_id=${orgId} and table_name='pay_run_adjustments' and row_id=${requestId}
+         limit 1
+      `)).rows.length > 0;
+      if (historicalUse) throw new PayRunAdjustmentIdempotencyConflict("corrected-request");
+      const inserted = (await tx.execute<Record<string, unknown> & { id: string }>(sql`
+        insert into pay_run_adjustments
+          (id, org_id, pay_run_document_id, employee_party_id, adjustment_type,
+           component_id, amount, replace_component, note, created_by, updated_by)
+        values
+          (${requestId}, ${orgId}, ${documentId}, ${mutation.employeePartyId}, 'line',
+           ${componentId}, ${amount}, false, ${note}, ${actorId}, ${actorId})
+        returning *
+      `)).rows[0];
+      if (!inserted) throw new PayrollError("declared vacation accrual was not saved");
       auditChanges.push({ id: inserted.id, before: null, after: inserted });
       changed = true;
     } else if (mutation.action === "override_income_tax") {
@@ -728,6 +1042,12 @@ async function executePayRunAdjustment(input: PayRunAdjustmentInput, validateOnl
       if (isBankCashInputEvidenceCandidate(note)) {
         throw new PayrollError("audited bank cash evidence must be recorded through the bank cash input command with its reason, source reference and request key");
       }
+      if (isDeclaredVacationAccrualCandidate(note) || parseDeclaredVacationAccrualEvidence(note) !== null) {
+        throw new PayrollError("Record declared vacation accruals through the audited vacation-accrual command; ordinary line notes cannot create accrual authority.");
+      }
+      if (isEmployerLevyAdjustmentEvidenceCandidate(note)) {
+        throw new PayrollError("audited employer levy evidence must be recorded through the employer levy adjustment command with its reason, source reference and request key");
+      }
       // Idempotent add: the key becomes the row id (the document-create
       // contract), so a replayed request addresses the same row. Serialized
       // on the key's advisory lock: a concurrent duplicate waits, then sees
@@ -863,11 +1183,12 @@ async function executePayRunAdjustment(input: PayRunAdjustmentInput, validateOnl
       // Record each actual row change before invalidating the derived result.
       // Replays and previews return earlier and leave no duplicate audit event.
       for (const row of auditChanges) {
-        await tx.execute(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id)
+        const recordedAudit = (await tx.execute<{ id: string }>(sql`insert into audit_log(org_id,table_name,row_id,action,changes,actor_id)
           values (${orgId},'pay_run_adjustments',${row.id},${row.after ? (row.before ? 'update' : 'insert') : 'delete'},
             ${JSON.stringify({ before: row.before, after: row.after, source: input.source ?? 'payroll',
-              reason: mutation.action === "override_income_tax" ? mutation.reason.trim()
-                : input.reason ?? row.after?.note ?? row.before?.note ?? null })}::jsonb,${actorId})`);
+              reason: mutation.action === "override_income_tax" || mutation.action === "declared_vacation_accrual" || mutation.action === "employer_levy_adjustment" ? mutation.reason.trim()
+                : input.reason ?? row.after?.note ?? row.before?.note ?? null })}::jsonb,${actorId}) returning id`)).rows;
+        if (recordedAudit.length !== 1) throw new PayrollError("The adjustment audit event was not retained; no payroll input was saved.");
       }
       // Calculated stubs are a derived snapshot. Invalidate them through the
       // one shared helper — stubs, errors and acknowledgement together — in
@@ -875,5 +1196,5 @@ async function executePayRunAdjustment(input: PayRunAdjustmentInput, validateOnl
       await invalidateCalculatedRun(tx, { orgId, actorId, documentId });
     }
     return { changed, replayed: false };
-  });
+  }));
 }

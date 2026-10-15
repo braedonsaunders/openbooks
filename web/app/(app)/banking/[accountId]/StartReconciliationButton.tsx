@@ -19,12 +19,14 @@ export function StartReconciliationButton({
   accountId,
   openReconciliationId,
   glBalance,
+  currency,
 }: {
   accountId: string
   openReconciliationId: string | null
   glBalance: string
+  currency?: string | null
 }) {
-  const { money } = useMoney()
+  const { money } = useMoney(currency ?? undefined)
   const t = useTranslations('banking.start')
   const tBanking = useTranslations('banking')
   const tCommon = useTranslations('common')

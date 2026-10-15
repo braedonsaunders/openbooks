@@ -6,11 +6,22 @@ import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { lockLedgerSetupFence } from "../organization/ledger-setup-fence.ts";
 import { loadControlAccounts } from "../records/control-accounts.ts";
 import { add, isZero, mulRate, neg, sum } from "../money/money.ts";
-import { loadSubsidiaryContext, SubsidiaryError, validateSubsidiaryRestrictions } from "../organization/subsidiaries.ts";
+import { loadSubsidiaryContext, restrictionAdmits, SubsidiaryError, validateSubsidiaryRestrictions } from "../organization/subsidiaries.ts";
 import { assertPeriodModulesOpen, CloseError } from "../periods/period-policy.ts";
 import { postEntry } from "../journal/post-entry.ts";
 import { applyBookAccountMaps } from "../journal/book-account-maps.ts";
 import { closingSpotRateWithinAgeLimit } from "../fx/rate-age-policy.ts";
+import {
+  MONETARY_ACCOUNT_SQL,
+  type RevaluationLine,
+  type RevaluationPosition,
+} from "./fx-revaluation-contracts.ts";
+import {
+  loadCurrentClosingFxEvidence,
+  staleClosingFxEvidenceRefusal,
+} from "./fx-revaluation-evidence.ts";
+
+export type { RevaluationLine, RevaluationPosition } from "./fx-revaluation-contracts.ts";
 
 /**
  * Period-end UNREALIZED FX revaluation.
@@ -39,36 +50,12 @@ import { closingSpotRateWithinAgeLimit } from "../fx/rate-age-policy.ts";
  * The monetary-item predicate (IAS 21.8/16) over an `accounts` row aliased
  * `a`: bank, receivable, and payable types by default, plus any balance-sheet
  * account explicitly flagged `accounts.monetary = true`, minus any account
- * flagged `monetary = false`. ONE definition: the revaluation engine's
- * position loader and the close readiness check both consume it, so the
+ * flagged `monetary = false`. ONE definition, in fx-revaluation-contracts.ts
+ * below both this engine and the recorded closing-rate evidence service:
+ * the position loader and the close readiness check both consume it, so the
  * check can never demand a revaluation the engine would not post (or ignore
  * one it would).
  */
-const MONETARY_ACCOUNT_SQL = sql`case
-  when a.monetary is false then false
-  when a.monetary is true then a.type not in
-    ('income', 'income_other', 'cogs', 'expense', 'expense_other', 'expense_deferred', 'equity')
-  else a.type in ('asset_bank', 'asset_receivable', 'liability_payable')
-end`;
-
-/** One foreign-currency monetary exposure for a single legal entity. */
-export interface RevaluationPosition {
-  accountId: string;
-  /** The foreign (transaction) currency, always ≠ the subsidiary functional currency. */
-  currency: string;
-  /** Base-currency carrying value on the books at historical rates (SUM of line.amount). */
-  carryingBase: string;
-  /** Foreign-currency balance still on the books (SUM of line.txn_amount). */
-  foreignBalance: string;
-  /** Period-end spot rate, foreign → functional. */
-  periodEndRate: string;
-}
-
-export interface RevaluationLine {
-  accountId: string;
-  /** Signed base-currency amount: positive = debit, negative = credit. */
-  amount: string;
-}
 
 /**
  * Pure revaluation arithmetic — no database. For each position the base value is
@@ -217,6 +204,7 @@ async function loadExposures(
   bookId: string,
   subsidiaryId: string,
   functionalCurrency: string,
+  periodId: string,
   asOfDate: string,
   scope: SQL,
 ): Promise<RevaluationExposure[]> {
@@ -280,9 +268,41 @@ async function loadExposures(
     if (row.invalid_residual) {
       throw new RevaluationError(`inconsistent open-item residual for account ${row.account_id} in ${row.currency}`);
     }
-    const priced = isZero(row.foreign_balance)
-      ? { rate: "1", refusal: null }
-      : await closingSpotRateWithinAgeLimit(db, orgId, row.currency, functionalCurrency, asOfDate);
+    if (isZero(row.foreign_balance)) {
+      // Exact zero-foreign balances retain their zero-value restatement and
+      // never need a rate, recorded or otherwise.
+      exposures.push({
+        accountId: row.account_id,
+        currency: row.currency,
+        carryingBase: row.carrying_base,
+        foreignBalance: row.foreign_balance,
+        periodEndRate: "1",
+        rateRefusal: null,
+        rateEvidence: null,
+      });
+      continue;
+    }
+    // A recorded closing quote for this exact position wins over the
+    // organization's exchange rates. Resolution follows the successor chain
+    // without filtering on its measurement currency or rate date: a stale
+    // quote refuses here instead of being hidden behind a global rate.
+    const recorded = await loadCurrentClosingFxEvidence(db, orgId, {
+      bookId, subsidiaryId, periodId, accountId: row.account_id, transactionCurrency: row.currency,
+    });
+    if (recorded) {
+      const stale = staleClosingFxEvidenceRefusal(recorded, functionalCurrency, asOfDate);
+      exposures.push({
+        accountId: row.account_id,
+        currency: row.currency,
+        carryingBase: row.carrying_base,
+        foreignBalance: row.foreign_balance,
+        periodEndRate: stale ? null : recorded.rate,
+        rateRefusal: stale,
+        rateEvidence: recorded,
+      });
+      continue;
+    }
+    const priced = await closingSpotRateWithinAgeLimit(db, orgId, row.currency, functionalCurrency, asOfDate);
     exposures.push({
       accountId: row.account_id,
       currency: row.currency,
@@ -290,6 +310,7 @@ async function loadExposures(
       foreignBalance: row.foreign_balance,
       periodEndRate: priced.rate,
       rateRefusal: priced.refusal,
+      rateEvidence: null,
     });
   }
   return exposures;
@@ -304,6 +325,80 @@ type RevaluationExposure = Omit<RevaluationPosition, "periodEndRate"> & {
   periodEndRate: string | null;
   rateRefusal: string | null;
 };
+
+/** One position in the close read model: the engine's own exposure, its
+ *  account label, and the recorded closing quote behind its rate, if any. */
+export interface RevaluationExposureReadModel {
+  subsidiaryId: string;
+  subsidiaryName: string;
+  accountId: string;
+  accountNumber: string | null;
+  accountName: string;
+  currency: string;
+  /** The currency this book measures the legal entity in. */
+  measurementCurrency: string;
+  /** The assigned period's final day; every closing rate is dated here. */
+  rateDate: string;
+  carryingBase: string;
+  foreignBalance: string;
+  periodEndRate: string | null;
+  rateRefusal: string | null;
+  rateEvidence: RevaluationPosition["rateEvidence"];
+}
+
+/**
+ * The selected-entity exposure read model behind the close UI's recorded
+ * rate action. It is the posting population itself — same period scope,
+ * same recorded-quote overlay, same age-policed fallback — projected with
+ * account labels, so what the operator sees is exactly what a run prices.
+ */
+export async function listRevaluationExposures(
+  orgId: string,
+  bookId: string,
+  periodId: string,
+  allowedSubsidiaryIds?: string[],
+): Promise<RevaluationExposureReadModel[]> {
+  const period = await loadRevaluationPeriod(orgId, periodId);
+  const ctx = await loadSubsidiaryContext(db, orgId);
+  const scope = financialClosePeriodScope(period);
+  const result: RevaluationExposureReadModel[] = [];
+  for (const subsidiary of ctx.byId.values()) {
+    if (allowedSubsidiaryIds && !allowedSubsidiaryIds.includes(subsidiary.id)) continue;
+    const measurement = await bookMeasurementCurrency(orgId, bookId, subsidiary.id, subsidiary.baseCurrency);
+    const exposures = await loadExposures(orgId, bookId, subsidiary.id, measurement, periodId, period.ends_on, scope);
+    for (const exposure of exposures) {
+      const account = (await db.execute<{
+        number: string | null; name: string; subsidiary_id: string | null; subsidiary_include_children: boolean;
+      }>(sql`
+        select number, name, subsidiary_id, subsidiary_include_children from accounts
+         where org_id = ${orgId} and id = ${exposure.accountId}`)).rows[0];
+      // An account the native restrictions no longer admit to this entity
+      // cannot take a recorded rate for it: surface the same refusal the
+      // posting path would raise instead of offering an inert reference.
+      const restricted = account && !restrictionAdmits(
+        ctx, account.subsidiary_id, account.subsidiary_include_children, subsidiary.id,
+      );
+      result.push({
+        subsidiaryId: subsidiary.id,
+        subsidiaryName: subsidiary.name,
+        accountId: exposure.accountId,
+        accountNumber: account?.number ?? null,
+        accountName: account?.name ?? exposure.accountId,
+        currency: exposure.currency,
+        measurementCurrency: measurement,
+        rateDate: period.ends_on,
+        carryingBase: exposure.carryingBase,
+        foreignBalance: exposure.foreignBalance,
+        periodEndRate: exposure.periodEndRate,
+        rateRefusal: restricted
+          ? `account "${account.name}" is restricted to another subsidiary and cannot be used by "${subsidiary.name}"; record the closing rate on an account available to this legal entity`
+          : exposure.rateRefusal,
+        rateEvidence: exposure.rateEvidence ?? null,
+      });
+    }
+  }
+  return result;
+}
 
 /** Functional-currency FX lines cannot be allocated back to foreign currencies.
  * Net them by monetary account, including mirrors and earlier same-end periods.
@@ -436,7 +531,7 @@ export async function revaluationReadiness(
   for (const subsidiary of ctx.byId.values()) {
     if (allowedSubsidiaryIds && !allowedSubsidiaryIds.includes(subsidiary.id)) continue;
     const measurement = await bookMeasurementCurrency(orgId, bookId, subsidiary.id, subsidiary.baseCurrency);
-    const exposures = await loadExposures(orgId, bookId, subsidiary.id, measurement, period.ends_on, scope);
+    const exposures = await loadExposures(orgId, bookId, subsidiary.id, measurement, periodId, period.ends_on, scope);
     const positions: RevaluationPosition[] = [];
     const missingAccounts = new Set<string>();
     for (const exposure of exposures) {
@@ -551,7 +646,7 @@ async function postRevaluationEntry(
           lines: [{ accountId: configuredGainLossAccount, subsidiaryId }],
         })).lines[0]!.accountId;
     const scope = financialClosePeriodScope(period);
-    const exposures = await loadExposures(orgId, bookId, subsidiaryId, functionalCurrency, asOfDate, scope);
+    const exposures = await loadExposures(orgId, bookId, subsidiaryId, functionalCurrency, periodId, asOfDate, scope);
     const positions: RevaluationPosition[] = [];
     for (const exposure of exposures) {
       if (!exposure.periodEndRate) {

@@ -28,7 +28,7 @@ import {
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
 import { requirePermission, can, subsidiaryScopeAllows } from '../../../../lib/authz'
-import { listAccountStatements, reconciliationStalenessSummaries } from '@openbooks/engine/banking/banking'
+import { listAccountStatements, reconciliationBookId, reconciliationStalenessSummaries } from '@openbooks/engine/banking/banking'
 import { bankAccount } from '../../../../lib/banking-accounts'
 import { isUuid, mergeHref, parsePrefixedListParams, pickString } from '../../../../lib/list-params'
 import type { StatementDrawer as StatementDrawerComponent } from './StatementDrawer'
@@ -82,7 +82,7 @@ interface AccountRow extends Record<string, unknown> {
   name: string
   type: string
   currency_restriction: string | null
-  balance: string
+  balance: string | null
   reconciled_through: string | null
   unmatched_lines: string | number
   open_reconciliation_id: string | null
@@ -91,6 +91,7 @@ interface ReconciliationRow extends Record<string, unknown> {
   id: string
   through_date: string
   statement_balance: string
+  currency: string
   status: string
   signed_off_at: string | null
   created_at: string
@@ -158,6 +159,7 @@ export interface BankingAccountData {
   configureHref: string
   configureLabel: string
   accountId: string
+  accountCurrency: string | null
   openReconciliationId: string | null
   glBalance: string
   glBalanceDisplay: string
@@ -232,7 +234,6 @@ export async function loadBankingAccount(
   accountId: string,
   sp: Record<string, string | string[] | undefined>,
 ): Promise<BankingAccountData> {
-  const { money } = await getMoneyFormatter()
   const authz = await requirePermission('banking.read')
   const t = await getTranslations('banking')
   const tCommon = await getTranslations('common')
@@ -258,11 +259,16 @@ export async function loadBankingAccount(
   const membership = await bankAccount(orgId, accountId)
   if (!membership || !subsidiaryScopeAllows(authz.allowedSubsidiaryIds, membership.subsidiaryId)) notFound()
   const canReconcile = membership.reconcilable && can(authz, 'banking.reconcile')
+  const bookId = await reconciliationBookId(db, orgId)
+  // Physical account balances use the same book and transaction-currency
+  // basis as reconciliation. Unconfigured currency has no priced balance.
   const accountRes = (await db.execute<AccountRow>(sql`
     select a.id, a.number, a.name, a.type, a.currency_restriction,
-           coalesce((select sum(jl.amount) from journal_lines jl
+           case when a.currency_restriction is null then null else
+           coalesce((select sum(jl.txn_amount) from journal_lines jl
                       join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status in ('posted', 'reversed')
-                     where jl.account_id = a.id and jl.org_id = a.org_id), 0) as balance,
+                     where jl.account_id = a.id and jl.org_id = a.org_id
+                       and je.book_id = ${bookId} and jl.currency = a.currency_restriction), 0)::text end as balance,
            (select max(r.through_date) from reconciliations r
              where r.account_id = a.id and r.org_id = a.org_id and r.status = 'signed_off') as reconciled_through,
            (select count(*) from bank_statement_lines l
@@ -276,6 +282,7 @@ export async function loadBankingAccount(
   `))
   const account = accountRes.rows[0]
   if (!account) notFound()
+  const { money } = await getMoneyFormatter(orgId, account.currency_restriction ?? undefined)
 
   // -- statements list (prefixed: stmt*) ------------------------------------
   const stmtParams = parsePrefixedListParams(sp, 'stmt', {
@@ -317,7 +324,7 @@ export async function loadBankingAccount(
   const [sourceCounts, recons, reconCount, reconStatusCounts] = (await Promise.all([
     db.execute<SourceCountRow>(sql`select s.source, count(*) as n from bank_statements s where s.account_id = ${accountId} and s.org_id = ${orgId} group by s.source order by s.source`),
     db.execute<ReconciliationRow>(sql`
-      select r.id, r.through_date, r.statement_balance, r.status, r.signed_off_at, r.created_at,
+      select r.id, r.through_date, r.statement_balance, r.currency, r.status, r.signed_off_at, r.created_at,
              r.evidence_kind, r.evidence_connector
         from reconciliations r
        where ${reconWhere}
@@ -336,7 +343,7 @@ export async function loadBankingAccount(
   let drawer: BankingAccountData['drawer'] = null
   if (openStatementId && isUuid(openStatementId)) {
     const s = (await db.execute<StatementDetailRow>(sql`
-      select s.id, s.source, s.statement_date, s.opening_balance, s.closing_balance, s.imported_at
+      select s.id, s.source, s.currency, s.statement_date, s.opening_balance, s.closing_balance, s.imported_at
         from bank_statements s where s.id = ${openStatementId} and s.account_id = ${accountId} and s.org_id = ${orgId}
     `))
     if (s.rows[0]) {
@@ -387,6 +394,7 @@ export async function loadBankingAccount(
         statement: {
           id: s.rows[0].id,
           source: statementSourceLabel(s.rows[0].source),
+          currency: s.rows[0].currency,
           statement_date: s.rows[0].statement_date,
           opening_balance: s.rows[0].opening_balance,
           closing_balance: s.rows[0].closing_balance,
@@ -474,9 +482,10 @@ export async function loadBankingAccount(
     configureHref: `/accounts?account=${accountId}`,
     configureLabel: t('account.configure'),
     accountId: account.id,
+    accountCurrency: account.currency_restriction,
     openReconciliationId: account.open_reconciliation_id,
-    glBalance: String(account.balance),
-    glBalanceDisplay: money(account.balance),
+    glBalance: account.balance ?? '',
+    glBalanceDisplay: account.balance === null ? '—' : money(account.balance),
     glBalanceLabel: t('account.stats.glBalance'),
     reconciledThroughLabel: t('account.stats.reconciledThrough'),
     reconciledThrough: account.reconciled_through,
@@ -516,8 +525,8 @@ export async function loadBankingAccount(
         lineCount: lineCount.toLocaleString(locale),
         unmatchedCount: Number(s.unmatched_count).toLocaleString(locale),
         unmatchedIsZero: Number(s.unmatched_count) === 0,
-        openingBalance: money(s.opening_balance),
-        closingBalance: money(s.closing_balance),
+        openingBalance: money(s.opening_balance, { currency: s.currency }),
+        closingBalance: money(s.closing_balance, { currency: s.currency }),
         importedAt: formatImportTimestamp(s.imported_at),
         showDelete: canReconcile,
         deleteBlockedReason:
@@ -555,7 +564,7 @@ export async function loadBankingAccount(
     reconRows: recons.rows.map((r) => ({
       id: r.id,
       throughDate: r.through_date,
-      statementBalance: money(r.statement_balance),
+      statementBalance: money(r.statement_balance, { currency: r.currency }),
       statusLabel: reconStatusLabel(r.status),
       statusVariant: RECON_VARIANT[r.status] ?? 'secondary',
       staleLabel: staleness[r.id]?.stale && staleness[r.id]?.staleSince
@@ -606,6 +615,7 @@ export function bankingAccountSpec(data: BankingAccountData): PageSpec {
               accountId: data.accountId,
               openReconciliationId: data.openReconciliationId,
               glBalance: data.glBalance,
+              currency: data.accountCurrency,
             },
             f('canReconcile'),
           ),

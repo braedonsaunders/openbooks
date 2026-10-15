@@ -1,14 +1,16 @@
 import "server-only";
 import { sql } from "drizzle-orm";
 import { enqueueMigration, getMigrationQueue } from "@openbooks/jobs";
-import { db } from "@openbooks/engine/platform/database";
-import { sourceSupportsRunMode, syncConnectionRunLockKey, type ConnectionRow } from "@openbooks/engine/sync";
+import { db, withOrgTransaction } from "@openbooks/engine/platform/db";
+import { sourceSupportsRunMode, syncConnectionRunLockKey, validateTargetedRepairSourceRefs, type ConnectionRow } from "@openbooks/engine/sync";
+import { lockActorCommandAuthority } from "@openbooks/engine/organization/actor-command-authority";
+import { ScopeNotFoundError } from "@openbooks/engine/organization/scope";
 import { storageIdentityError } from "../../app/api/platform/connections/_storage-identity";
 import { connectionConfigUrlRefusal } from "../../app/api/platform/connections/_connector-guard";
 
 type ProbeRow = ConnectionRow & { updatedAt: Date | string | null };
 
-export const CONNECTION_RUN_MODES = ["full_migration", "preflight", "mirror", "project_financials", "attachments"] as const;
+export const CONNECTION_RUN_MODES = ["full_migration", "preflight", "mirror", "project_financials", "attachments", "targeted_repair"] as const;
 export type ConnectionRunMode = (typeof CONNECTION_RUN_MODES)[number];
 
 const ACTIVE_MIGRATION_JOB_STATES = new Set([
@@ -41,8 +43,18 @@ export async function requestConnectionRun(
   actor: { orgId: string; userId: string },
   connectionId: string,
   mode: ConnectionRunMode,
+  options?: { sourceRefs: string[] },
 ): Promise<ConnectionRunOutcome> {
   const { orgId } = actor;
+  let sourceRefs: string[] | undefined;
+  if (mode === "targeted_repair") {
+    try { sourceRefs = validateTargetedRepairSourceRefs(options?.sourceRefs); }
+    catch (error) {
+      return { status: 422, body: { errorCode: "SOURCE_REFS_REFUSED", error: (error as Error).message } };
+    }
+  } else if (options !== undefined) {
+    return { status: 422, body: { errorCode: "SOURCE_REFS_REFUSED", error: "Source transaction IDs are accepted only for a targeted repair." } };
+  }
   const conn = await db
     .execute<ProbeRow>(sql`
       select id, org_id as "orgId", source, display_name as "displayName",
@@ -70,11 +82,20 @@ export async function requestConnectionRun(
     return { status: 422, body: { error: urlError, errorCode: "CONNECTOR_URL_REFUSED" } };
   }
   if (!sourceSupportsRunMode(conn.source, mode)) {
-    return { status: 400, body: { errorCode: mode === "attachments" ? "ATTACHMENTS_UNSUPPORTED" : "PROJECT_FINANCIALS_UNSUPPORTED" } };
+    return { status: 400, body: { errorCode: mode === "attachments" ? "ATTACHMENTS_UNSUPPORTED" : mode === "targeted_repair" ? "TARGETED_REPAIR_UNSUPPORTED" : "PROJECT_FINANCIALS_UNSUPPORTED" } };
   }
 
   const readOnly = mode === "preflight";
-  const outcome = await db.transaction(async (tx) => {
+  const outcome = await withOrgTransaction(orgId, () => db.transaction(async (tx) => {
+    if (mode === "targeted_repair") {
+      try {
+        const scope = await lockActorCommandAuthority(tx, orgId, actor.userId, null, "sync.run");
+        if (scope !== null) return { kind: "denied" as const };
+      } catch (error) {
+        if (error instanceof ScopeNotFoundError) return { kind: "denied" as const };
+        throw error;
+      }
+    }
     // Match the worker's connection-wide lock. Preflight is the explicit
     // read-only exception; all other modes may rewrite shared sourceRefs.
     await tx.execute(sql`
@@ -124,11 +145,12 @@ export async function requestConnectionRun(
     }
 
     const job = await enqueueMigration(
-      { orgId, connectionId, mode, triggeredBy: actor.userId },
+      { orgId, connectionId, mode, triggeredBy: actor.userId, ...(sourceRefs ? { sourceRefs } : {}) },
       { jobId },
     );
     return { kind: "queued" as const, job };
-  });
+  }));
+  if (outcome.kind === "denied") return { status: 403, body: { errorCode: "SYNC_AUTHORITY_REFUSED", error: "A targeted repair requires current sync-run permission and unrestricted legal-entity access." } };
   if (outcome.kind === "changed") {
     return {
       status: 409,

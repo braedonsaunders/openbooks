@@ -5,7 +5,8 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { upsertPayrollEmployerFact } from "./employer-fact-store.ts";
 import { resolveStatutoryHolidayPay } from "./holidays.ts";
-import { createScratchOrg, dropScratchOrgReporting, seedFlowActors, seedWorkerEmployment } from "../testing/fixtures.ts";
+import { createScratchOrg, dropScratchOrgReporting, seedFlowActors } from "../testing/fixtures.ts";
+import { seedEmployment } from "../testing/hrm-harness.ts";
 
 /** End-to-end coverage for paid-leave evidence and effective-dated employer facts. */
 
@@ -16,6 +17,7 @@ interface Fixture {
   subsidiaryId: string;
   actorId: string;
   employeeId: string;
+  employmentId: string;
   vacationComponentId: string;
   holidayComponentId: string;
   premiumComponentId: string;
@@ -46,7 +48,7 @@ async function seedPaidVacationBeforeCanadaDay(options: {
   await db.execute(sql`
     insert into employee_roles (org_id, party_id, hired_on, is_active, created_by, updated_by)
     values (${org.orgId}, ${employeeId}, '2024-01-01', true, ${actorId}, ${actorId})`);
-  const employmentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
+  const { employmentId } = await seedEmployment(org.orgId, org.subsidiaryId, { workerPartyId: employeeId, from: "2024-01-01" });
 
   const component = async (code: string, systemKey: string) => {
     const id = randomUUID();
@@ -131,7 +133,7 @@ async function seedPaidVacationBeforeCanadaDay(options: {
             2026, 'calculated', ${actorId}, ${actorId})`);
 
   return {
-    orgId: org.orgId, subsidiaryId: org.subsidiaryId, actorId, employeeId, vacationComponentId,
+    orgId: org.orgId, subsidiaryId: org.subsidiaryId, actorId, employeeId, employmentId, vacationComponentId,
     holidayComponentId, premiumComponentId, currentRunId,
   };
 }
@@ -139,6 +141,7 @@ async function seedPaidVacationBeforeCanadaDay(options: {
 const holidayInput = (fx: Fixture) => ({
   orgId: fx.orgId,
   employeePartyId: fx.employeeId,
+  employmentId: fx.employmentId,
   employeeName: "Robin Vacationer",
   jurisdiction: "CA-BC",
   periodStart: "2026-06-29",
@@ -237,22 +240,29 @@ test(
     // the pack declares `lastAndFirstScheduledShift: true` for CA-AB — but the
     // demand fired only for CA-ON/CA-QC, so an Alberta run paid the holiday
     // without ever asking the employer the question the statute requires.
-    await assert.rejects(
-      resolveStatutoryHolidayPay(db, {
-        orgId: randomUUID(),
-        employeePartyId: randomUUID(),
-        employeeName: "Alberta Employee",
-        jurisdiction: "CA-AB",
-        periodStart: "2026-10-11",
-        periodEnd: "2026-10-17",
-        holidayComponentId: randomUUID(),
-        premiumComponentId: randomUUID(),
-        excludeDocumentId: randomUUID(),
-        hourlyRate: "25.00",
-        subsidiaryId: randomUUID(),
-      }),
-      /Alberta Employee[\s\S]*last-and-first-shift[\s\S]*absence assertion/,
-    );
+    const org = await createScratchOrg();
+    const { workerPartyId: employeePartyId, employmentId } = await seedEmployment(org.orgId, org.subsidiaryId, { from: "2020-01-01" });
+    try {
+      await assert.rejects(
+        resolveStatutoryHolidayPay(db, {
+          orgId: org.orgId,
+          employeePartyId,
+          employmentId,
+          employeeName: "Alberta Employee",
+          jurisdiction: "CA-AB",
+          periodStart: "2026-10-11",
+          periodEnd: "2026-10-17",
+          holidayComponentId: randomUUID(),
+          premiumComponentId: randomUUID(),
+          excludeDocumentId: randomUUID(),
+          hourlyRate: "25.00",
+          subsidiaryId: org.subsidiaryId,
+        }),
+        /Alberta Employee[\s\S]*last-and-first-shift[\s\S]*absence assertion/,
+      );
+    } finally {
+      await dropScratchOrgReporting(org.orgId);
+    }
   },
 );
 
@@ -275,10 +285,12 @@ test(
     await db.execute(sql`
       insert into employee_roles (org_id, party_id, hired_on, created_by, updated_by)
       values (${orgId}, ${employeePartyId}, '2020-01-01', ${actorId}, ${actorId})`);
+    const { employmentId } = await seedEmployment(orgId, org.subsidiaryId, { workerPartyId: employeePartyId, from: "2020-01-01" });
     try {
       const lines = await resolveStatutoryHolidayPay(db, {
         orgId,
         employeePartyId,
+        employmentId,
         employeeName: "BC Employee",
         jurisdiction: "CA-BC",
         periodStart: "2026-10-11",
@@ -321,7 +333,7 @@ async function straddlingStubCase(datedSpan: boolean): Promise<void> {
     await db.execute(sql`
       insert into employee_roles (org_id, party_id, hired_on, is_active, created_by, updated_by)
       values (${org.orgId}, ${employeeId}, '2024-01-01', true, ${actorId}, ${actorId})`);
-    const employmentId = await seedWorkerEmployment(org.orgId, employeeId, org.subsidiaryId);
+    const { employmentId } = await seedEmployment(org.orgId, org.subsidiaryId, { workerPartyId: employeeId, from: "2024-01-01" });
     const component = async (code: string, systemKey: string) => {
       const id = randomUUID();
       await db.execute(sql`
@@ -397,6 +409,7 @@ async function straddlingStubCase(datedSpan: boolean): Promise<void> {
         country: "CA",
         subsidiaryId: org.subsidiaryId,
         employeePartyId: employeeId,
+        employmentId,
         employeeName: "Alberta Hourly",
         jurisdiction: "CA-AB",
         periodStart: "2025-11-08",

@@ -188,6 +188,7 @@ export interface ComponentOption {
   name: string
   kind: string
   bank_cash_component?: boolean
+  declared_vacation_accrual_enabled?: boolean
 }
 
 /**

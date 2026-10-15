@@ -167,7 +167,7 @@ test("attach validates the body through the real parser before the service runs"
   assert.equal((await collectionRoute!.POST(jsonRequest(url, "POST", {}))).status, 400);
   assert.equal((await collectionRoute!.POST(jsonRequest(url, "POST", { requisitionId: "nope", candidateId: CANDIDATE_ID }))).status, 400);
   assert.deepEqual(routeState.calls, []);
-  const response = await collectionRoute!.POST(
+  const response: Response = await collectionRoute!.POST(
     jsonRequest(url, "POST", { requisitionId: REQUISITION_ID, candidateId: CANDIDATE_ID }),
   );
   assert.equal(response.status, 201);
@@ -195,7 +195,7 @@ test("item PATCH dispatches every action with org, actor, and id", async () => {
     [{ action: "withdraw" }, "withdraw"],
   ] as const) {
     routeState.calls = [] as RouteState["calls"];
-    const response = await itemRoute!.PATCH(jsonRequest("http://openbooks.test/x", "PATCH", body), params);
+    const response: Response = await itemRoute!.PATCH(jsonRequest("http://openbooks.test/x", "PATCH", body), params);
     assert.equal(response.status, 200);
     assert.equal(routeState.calls[0]!.fn, fn);
     assert.deepEqual((routeState.calls[0]!.args as Record<string, unknown>).applicationId, APPLICATION_ID);
@@ -206,7 +206,7 @@ test("a service refusal delegates to the shared mapping with the error intact", 
   reset();
   const refusal = new Error("the hired stage is reached only through hire");
   routeState.serviceThrow = refusal;
-  const response = await itemRoute!.PATCH(
+  const response: Response = await itemRoute!.PATCH(
     jsonRequest("http://openbooks.test/x", "PATCH", { action: "move", toStageId: STAGE_ID }),
     { params: Promise.resolve({ id: APPLICATION_ID }) },
   );

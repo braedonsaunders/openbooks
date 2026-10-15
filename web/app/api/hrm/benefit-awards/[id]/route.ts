@@ -93,7 +93,14 @@ export const PATCH = defineRoute({
           return NextResponse.json({ award });
         }
         case "adjust": {
-          const award = await createAdjustingAward({ ...base, correctionId: body.correctionId, value: body.value, reason: body.reason });
+          const award = await createAdjustingAward({
+            ...base,
+            correctionId: body.correctionId,
+            value: body.value,
+            reason: body.reason,
+            ...(body.sourceReference === undefined ? {} : { sourceReference: body.sourceReference }),
+            ...(body.periodFrom === undefined ? {} : { periodFrom: body.periodFrom, periodTo: body.periodTo! }),
+          });
           return NextResponse.json({ award });
         }
         case "void": {

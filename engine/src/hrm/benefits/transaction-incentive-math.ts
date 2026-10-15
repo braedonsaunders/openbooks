@@ -51,6 +51,41 @@ export interface TransactionIncentiveGroup {
   readonly limit: TransactionIncentiveLimit;
 }
 
+/** A fixed group ceiling replaces the default project-budget ceiling for its group. */
+export interface TransactionGroupLimitOverride {
+  readonly groupId: string;
+  readonly kind: "none" | "amount";
+  readonly amount: string | null;
+}
+
+export function applyTransactionGroupLimitOverrides(
+  groups: readonly TransactionIncentiveGroup[],
+  overrides: readonly TransactionGroupLimitOverride[],
+  previouslyAwarded: ReadonlyMap<string, bigint>,
+): TransactionIncentiveGroup[] {
+  return groups.map((group) => {
+    const override = overrides.find((row) => row.groupId === group.groupId);
+    if (!override) return group;
+    if (override.kind === "none") {
+      if (override.amount !== null) {
+        throw new BenefitsError("INVALID_INPUT", `Group ${group.groupId} has a no-limit decision with a ceiling amount — correct the Setup rule before settlement.`);
+      }
+      return { groupId: group.groupId, limit: { kind: "none" } };
+    }
+    if (override.amount === null) {
+      throw new BenefitsError("INVALID_INPUT", `Group ${group.groupId} has an amount ceiling without a value — correct the Setup rule before settlement.`);
+    }
+    return {
+      groupId: group.groupId,
+      limit: {
+        kind: "amount",
+        amount: override.amount,
+        previouslyAwarded: fromUnits(previouslyAwarded.get(group.groupId) ?? 0n),
+      },
+    };
+  });
+}
+
 export interface TransactionIncentiveResult {
   readonly currency: string;
   readonly totalAwarded: string;

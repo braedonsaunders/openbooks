@@ -77,8 +77,9 @@ async function finalRun(f:Fixture,mixed=false){
   let uninsured:string|null=null;
   if(mixed){
     uninsured=await seedComponent(f.orgId,{code:'REIMBURSEMENT',kind:'earning',name:'Expense reimbursement'});
-    const changed=await db.execute(sql`update pay_components set taxable=false,pensionable=false,insurable=false,vacationable=false
+    const changed=await db.execute(sql`update pay_components set taxable=false,pensionable=false,insurable=false
       where org_id=${f.orgId} and id=${uninsured} returning id`);assert.equal(changed.rows.length,1);
+    await db.execute(sql`update pay_component_statutory_treatments set vacationable=false where org_id=${f.orgId} and pay_component_id=${uninsured}`);
     await db.execute(sql`insert into payroll_roe_component_classifications(org_id,pay_component_id,effective_from,block,change_reason)
       values(${f.orgId},${uninsured},'2020-01-01','none','Original reimbursement classification')`);
     await mutatePayRunAdjustment({orgId:f.orgId,actorId:f.actorId,documentId:run.documentId,reason:'Original non-insurable reimbursement',
@@ -197,8 +198,9 @@ test('source-qualified separation cash reports once in the final period with tru
     await importRoePriorPeriod(scope(f),prior(f,ref,{periodStart:'2026-04-12',periodEnd:'2026-04-25',nilPeriod:true,
       payDate:null,earnedFrom:null,earnedTo:null,insurableEarnings:'0',insurableHours:'0'}));
     const component=await seedComponent(f.orgId,{code:'SEPVAC',kind:'earning',name:'Vacation cash'});
-    const changed=await db.execute(sql`update pay_components set taxable=true,pensionable=true,insurable=true,vacationable=false
+    const changed=await db.execute(sql`update pay_components set taxable=true,pensionable=true,insurable=true
       where org_id=${f.orgId} and id=${component} returning id`);assert.equal(changed.rows.length,1);
+    await db.execute(sql`update pay_component_statutory_treatments set vacationable=false where org_id=${f.orgId} and pay_component_id=${component}`);
     // Ordinary component policy remains independent of this payment's source declaration.
     assert.equal((await db.execute(sql`insert into payroll_roe_component_classifications(org_id,pay_component_id,effective_from,block,category_code,change_reason)
       values(${f.orgId},${component},'2020-01-01','17A','1','Ordinary vacation-with-pay classification') returning id`)).rows.length,1);

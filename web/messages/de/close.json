@@ -1076,5 +1076,30 @@
     },
     "by": "{name} am {at}",
     "system": "Automatisch"
+  },
+  "revaluationEvidence": {
+      "title": "Erfasste Abschlusskurse",
+      "reload": "Neu laden",
+      "loading": "Wird geladen…",
+      "loadFailed": "Die Wechselkurspositionen konnten nicht geladen werden.",
+      "empty": "Keine offenen Fremdwährungspositionen für diese Auswahl.",
+      "position": "{foreign} · Buchwert {carrying} · Kursdatum {date}",
+      "recordedRate": "Erfasst: {rate} (Version {version})",
+      "organizationRate": "Organisationskurs: {rate}",
+      "rateMissing": "Kein Kurs",
+      "recordRate": "Kurs erfassen",
+      "recordSuccessor": "Folgekurs erfassen",
+      "drawerTitle": "Abschlusskurs erfassen",
+      "cancel": "Abbrechen",
+      "legalEntity": "Gesellschaft",
+      "account": "Konto",
+      "conversion": "Umrechnung",
+      "rateDate": "Kursdatum",
+      "currentQuote": "Aktueller Kurs: {rate} (Version {version}) — Quelle: {source}. Ein Folgekurs ersetzt ihn, ohne ihn zu verändern.",
+      "rate": "Wechselkurs",
+      "source": "Quelle",
+      "reason": "Begründung",
+      "recorded": "Abschlusskurs erfasst.",
+      "recordFailed": "Der Abschlusskurs konnte nicht erfasst werden."
   }
 }

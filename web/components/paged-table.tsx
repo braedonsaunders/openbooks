@@ -46,6 +46,7 @@ export function PagedTable<T>({
   toolbarAlign,
   onRowClick,
   footer,
+  paginationNote,
   emptyAsRow,
   selection,
   source,
@@ -74,6 +75,8 @@ export function PagedTable<T>({
   /** Extra TableRow(s) rendered after the page's rows (e.g. a totals row).
    *  Computed from ALL rows by the caller, so it holds across pages/search. */
   footer?: ReactNode
+  /** Collection coverage belongs beside paging, outside the record rows. */
+  paginationNote?: ReactNode
   /** Empty composition: render the toolbar plus the table headers with
    *  `empty` as a single spanning row — the SetupEntitySection/departments
    *  composition. Registered lists retain this chrome by default; callers
@@ -262,7 +265,7 @@ export function PagedTable<T>({
             : undefined
         }
       />
-      {!external && filtered.length > pageSize ? (
+      {!external && filtered.length > 0 ? (
         <div className="flex shrink-0 items-center justify-between text-xs text-slate-500 dark:text-slate-400">
           <span>
             {tp.rich('showing', {
@@ -276,7 +279,7 @@ export function PagedTable<T>({
               ),
             })}
           </span>
-          <div className="flex items-center gap-1.5">
+          {filtered.length > pageSize ? <div className="flex items-center gap-1.5">
             <Button
               variant="outline"
               size="sm"
@@ -296,9 +299,10 @@ export function PagedTable<T>({
             >
               {t('actions.next')}
             </Button>
-          </div>
+          </div> : null}
         </div>
       ) : null}
+      {paginationNote ? <p className="text-xs text-slate-500 dark:text-slate-400">{paginationNote}</p> : null}
     </div>
   )
 }

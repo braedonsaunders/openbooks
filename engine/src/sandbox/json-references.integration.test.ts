@@ -221,6 +221,62 @@ test("a sandbox-only subsidiary cannot enter a production role through promotion
   assert.equal((await db.execute(sql`select id from change_sets where org_id=${org.orgId}`)).rows.length, 0);
 }));
 
+function flowGraphForClone(subsidiaryIds?: string[]): Record<string, unknown> {
+  return {
+    schemaVersion: 1,
+    ...(subsidiaryIds ? { subjectScope: { subsidiaryIds } } : {}),
+    nodes: [
+      { id: "trigger", position: { x: 0, y: 0 }, data: { kind: "trigger", trigger: { trigger: "on_submit" } } },
+      { id: "gate", position: { x: 220, y: 0 }, data: { kind: "gate", gate: { title: "Approval", assignees: [{ type: "role", role: "admin" }], mode: "any" } } },
+    ],
+    edges: [{ id: "e1", source: "trigger", target: "gate", sourceHandle: "next" }],
+  };
+}
+
+async function seedCloneFlow(orgId: string, name: string, graph: Record<string, unknown>): Promise<void> {
+  await db.execute(sql`
+    insert into flows (id, org_id, name, subject_kind, enabled, graph)
+    values (${randomUUID()}, ${orgId}, ${name}, 'vendor_bill', true, ${JSON.stringify(graph)}::jsonb)`);
+}
+
+for (const tier of ["full", "masked"] as const) {
+  test(`${tier} sandbox rebases a flow legal-entity scope to sandbox subsidiaries`, enabled, async () => fixture(async (org, _actors, child) => {
+    const scopedGraph = flowGraphForClone([child.toUpperCase(), org.subsidiaryId]);
+    const unscopedGraph = flowGraphForClone();
+    await seedCloneFlow(org.orgId, "Clone scoped approval", scopedGraph);
+    await seedCloneFlow(org.orgId, "Clone open approval", unscopedGraph);
+    const sandbox = await createSandbox({ productionOrgId: org.orgId, name: `Flow scope ${tier}`, tier, masked: tier === "masked" });
+
+    const entities = (await db.execute<{ id: string; parent_id: string | null }>(sql`
+      select id, parent_id from subsidiaries where org_id=${sandbox.sandboxOrgId}`)).rows;
+    const sandboxRoot = entities.find((row) => row.parent_id === null)!.id;
+    const sandboxBranch = entities.find((row) => row.parent_id === sandboxRoot)!.id;
+    const copied = (await db.execute<{ name: string; graph: Record<string, unknown> }>(sql`
+      select name, graph from flows where org_id=${sandbox.sandboxOrgId} and name like 'Clone % approval' order by name`)).rows;
+    assert.equal(copied.length, 2);
+    const scoped = copied.find((row) => row.name === "Clone scoped approval")!;
+    const scope = scoped.graph.subjectScope as { subsidiaryIds: string[] };
+    assert.deepEqual(new Set(scope.subsidiaryIds), new Set([sandboxBranch, sandboxRoot]));
+    assert.ok(!scope.subsidiaryIds.includes(child), "the production branch id must not survive the clone");
+    assert.ok(!scope.subsidiaryIds.includes(org.subsidiaryId), "the production root id must not survive the clone");
+    // Every unrelated graph field copies verbatim.
+    assert.deepEqual({ ...scoped.graph, subjectScope: scopedGraph.subjectScope }, scopedGraph);
+    const open = copied.find((row) => row.name === "Clone open approval")!;
+    assert.deepEqual(open.graph, unscopedGraph, "an unscoped flow graph is unchanged by the clone");
+    assert.equal(open.graph.subjectScope, undefined);
+  }));
+}
+
+test("a flow scope without a proven sandbox counterpart aborts the whole clone", enabled, async () => fixture(async (org) => {
+  await seedCloneFlow(org.orgId, "Clone stranded approval", flowGraphForClone([randomUUID()]));
+  await assert.rejects(
+    createSandbox({ productionOrgId: org.orgId, name: "Flow stranded scope", tier: "full", masked: false }),
+    /flow subject scope subsidiary has no counterpart in the target organization/,
+  );
+  const sandbox = (await db.execute<{ status: string }>(sql`select status from sandboxes where production_org_id=${org.orgId}`)).rows[0]!;
+  assert.equal(sandbox.status, "failed");
+}));
+
 test("invalid source role scope aborts the whole clone without broadening access", enabled, async () => fixture(async (org) => {
   await db.execute(sql`update app_roles set subsidiary_restriction=jsonb_build_object('mode','subtree','subsidiaryId',${randomUUID()}::text) where org_id=${org.orgId} and key='scoped_tree'`);
   await assert.rejects(createSandbox({ productionOrgId: org.orgId, name: "Invalid source scope", tier: "full", masked: false }), /no counterpart in the target organization/);

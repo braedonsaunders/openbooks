@@ -50,7 +50,7 @@ registerHooks({
 });
 
 const [setupAgent, aiAgent, ai, documentCapture] = await Promise.all([
-  import("../setup/agents/[agentKey]/route.ts"), import("./agents/[agentKey]/route.ts"), import("./route.ts"), import("./document-capture/route.ts"),
+  import("../setup/agents/[agentKey]/route.ts"), import("./agents/[agentKey]/route.ts"), import("./route.ts"), import("./document-capture/handlers.ts"),
 ]);
 const params = { params: Promise.resolve({ agentKey: "continuous_close_daily" }) };
 const request = () => new Request("http://localhost/api/admin/ai", {

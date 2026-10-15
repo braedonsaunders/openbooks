@@ -21,6 +21,8 @@ type RouteState = {
   releaseFirstEnqueue?: () => void;
   config: Record<string, unknown>;
   versionMatch: boolean;
+  queuedData: Array<Record<string, unknown>>;
+  authorityScope: Set<string> | null;
 };
 
 const stateKey = Symbol.for("openbooks.connection-run-route-test");
@@ -34,6 +36,8 @@ const routeState: RouteState = {
   blockFirstEnqueue: false,
   config: {},
   versionMatch: true,
+  queuedData: [],
+  authorityScope: null,
 };
 (
   globalThis as typeof globalThis & Record<symbol, unknown>
@@ -86,6 +90,14 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
+    "mock:command-authority",
+    `
+      export async function lockActorCommandAuthority() {
+        return globalThis[Symbol.for('openbooks.connection-run-route-test')].authorityScope
+      }
+    `,
+  ],
+  [
     "mock:jobs",
     `
       const state = globalThis[Symbol.for('openbooks.connection-run-route-test')]
@@ -102,8 +114,9 @@ const mockSources = new Map<string, string>([
         async getJob(jobId) { return state.jobs.get(jobId) || undefined },
       }
       export function getMigrationQueue() { return queue }
-      export async function enqueueMigration(_data, options) {
+      export async function enqueueMigration(data, options) {
         state.enqueueAttempts++
+        state.queuedData.push(data)
         const jobId = options.jobId
         const existing = state.jobs.get(jobId)
         if (existing) return existing
@@ -182,13 +195,14 @@ const mockSources = new Map<string, string>([
           }
         },
       }
+      export function withOrgTransaction(_orgId, callback) { return callback() }
     `,
   ],
 ]);
 
 const hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
-    const mock =
+    const mock = specifier === "@openbooks/engine/organization/actor-command-authority" ? "mock:command-authority" :
       specifier === "next/server"
         ? "mock:next-server"
         : specifier === "@/lib/authz"
@@ -229,13 +243,15 @@ function reset(): void {
   routeState.releaseFirstEnqueue = undefined;
   routeState.config = {};
   routeState.versionMatch = true;
+  routeState.queuedData.length = 0;
+  routeState.authorityScope = null;
 }
 
-function request(mode: string): Request {
+function request(mode: string, sourceRefs?: unknown): Request {
   return new Request("http://openbooks.test/api/platform/connections/00000000-0000-4000-8000-000000000001/run", {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ mode }),
+    body: JSON.stringify({ mode, ...(sourceRefs === undefined ? {} : { sourceRefs }) }),
   });
 }
 
@@ -269,6 +285,38 @@ test("concurrent requests serialize the check and queue claim", async () => {
   assert.deepEqual(await secondResponse.json(), { errorCode: "RUN_ALREADY_ACTIVE" });
   assert.equal(routeState.createdJobIds.length, 1, "only one queue job was created");
   assert.equal(routeState.enqueueAttempts, 1);
+});
+
+test("targeted repair queues only the reviewed source set and leaves the connection cursor untouched", async () => {
+  reset();
+  const refs = ["722205", "723659", "723967"];
+  const response = await POST(request("targeted_repair", refs), {
+    params: Promise.resolve({ id: "00000000-0000-4000-8000-000000000001" }),
+  });
+  assert.equal(response.status, 200);
+  assert.deepEqual(routeState.queuedData, [{ orgId: "org-1", connectionId: "00000000-0000-4000-8000-000000000001",
+    mode: "targeted_repair", triggeredBy: "user-1", sourceRefs: refs }]);
+  const repeated = await POST(request("targeted_repair", ["724487"]), {
+    params: Promise.resolve({ id: "00000000-0000-4000-8000-000000000001" }),
+  });
+  assert.equal(repeated.status, 409);
+  assert.equal(routeState.enqueueAttempts, 1, "an active repair cannot be replaced with a different target set");
+});
+
+test("targeted repair refuses malformed targets and a restricted actor before queueing", async () => {
+  for (const refs of [["1", "1"], [" 1"], ["1.0"]]) {
+    reset();
+    const response = await POST(request("targeted_repair", refs), { params: Promise.resolve({ id: "00000000-0000-4000-8000-000000000001" }) });
+    assert.equal(response.status, 422);
+    assert.equal(routeState.enqueueAttempts, 0);
+  }
+  reset();
+  const missing = await POST(request("targeted_repair"), { params: Promise.resolve({ id: "00000000-0000-4000-8000-000000000001" }) });
+  assert.equal(missing.status, 400);
+  routeState.authorityScope = new Set(["00000000-0000-4000-8000-000000000009"]);
+  const restricted = await POST(request("targeted_repair", ["1"]), { params: Promise.resolve({ id: "00000000-0000-4000-8000-000000000001" }) });
+  assert.equal(restricted.status, 403);
+  assert.equal(routeState.enqueueAttempts, 0);
 });
 
 test("a terminal queue record can be replaced for a later deliberate run", async () => {

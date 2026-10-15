@@ -2855,6 +2855,16 @@
       "cancel": "Cancelar",
       "saveFailed": "Não foi possível salvar a configuração."
     },
+    "usFilingLineage": {
+          "stateAccount": "Conta de declaração estadual",
+          "employer": "Empregador legal original",
+          "federalAccount": "EIN federal original",
+          "federalHelp": "EINs desativados permanecem disponíveis para qualificar fontes históricas.",
+          "datesHelp": "Datas inclusivas da inscrição original. O encerramento deve preservar a última folha contabilizada.",
+          "sourceReference": "Referência da evidência de inscrição original",
+          "sourceHelp": "Identifique a carta de inscrição ou o documento preservado que comprova este EIN e o período.",
+          "reason": "Motivo da alteração"
+    },
     "entities": {
       "usage-meters": {
         "title": "Medidores de uso",
@@ -3009,6 +3019,11 @@
       "worker-comp-groups": {
         "title": "Grupos de Seguro Acidentário",
         "description": "Grupos de alíquota de seguro acidentário para custeio de mão de obra."
+      },
+      "pay-component-statutory-treatments": {
+        "title": "Tratamentos legais",
+        "singularTitle": "Tratamento legal",
+        "description": "Exclusões de programas e inclusão na base de férias datadas para este componente, conforme a data de pagamento. O grupo de compensação substitui todo o tratamento."
       },
       "pay-component-department-expenses": {
         "title": "Contas de despesa por departamento",
@@ -3295,6 +3310,11 @@
         "title": "Alíquotas de imposto de renda",
         "singularTitle": "Alíquota de IR",
         "description": "Alíquotas promulgadas por jurisdição, com vigência — alimentam a provisão ASC 740."
+      },
+      "payroll-us-filing-account-employer-lineage": {
+              "title": "Histórico do EIN do empregador",
+              "singularTitle": "Vínculo ao EIN do empregador",
+              "description": "Titularidade original da conta estadual, com datas inclusivas e evidências preservadas."
       },
       "payroll-filing-accounts": {
         "title": "Contas de recolhimento",
@@ -3977,6 +3997,8 @@
       "taxable": "Tributável",
       "pensionable": "Previdenciário",
       "insurable": "Segurável",
+      "initialVacationable": "Inclusão inicial na base de férias",
+      "componentTreatmentReason": "Motivo da alteração",
       "vacationable": "Conta p/ férias",
       "nonPeriodic": "Não periódico (método de bônus)",
       "programExclusions": "Exclusões de programas",
@@ -4570,6 +4592,10 @@
       "mode": "Política"
     },
     "fieldHelp": {
+      "initialVacationable": "Usado apenas para criar o primeiro tratamento datado. Para um componente existente, altere seu histórico de tratamentos legais.",
+      "componentTreatmentPayDate": "As datas inclusivas se aplicam à data de pagamento, incluindo pagamentos retroativos e finais. O grupo de compensação substitui todo o tratamento.",
+      "componentTreatmentVacationable": "Incluir este ganho nas bases de férias e ganhos acumuláveis nas datas de pagamento cobertas.",
+      "componentTreatmentReason": "Explique a alteração do tratamento legal ou da base de férias e identifique os documentos de suporte. Um novo motivo de 1 a 2000 caracteres é registrado na trilha de auditoria a cada salvamento.",
       "fxRateMaxAgeDays": "Dias entre a taxa utilizável mais recente e o fim do período a partir dos quais a reavaliação e a consolidação recusam a taxa. Taxas de fechamento contam a partir da data da taxa à vista de fim de período; taxas médias, a partir da cotação mais recente incluída na média. Padrão sem política: 31 dias.",
       "storedValueLiabilityAccount": "A conta do balanço creditada ao emitir valor e debitada no resgate.",
       "storedValueBreakageIncomeAccount": "A conta de receita creditada quando breakage ou expiração é reconhecida.",
@@ -7293,7 +7319,7 @@
       "responsibilities": "Atribuições datadas",
       "responsibilitiesHint": "Associe cada grupo e função a um vínculo empregatício com datas explícitas. Cada origem exige todas as participações configuradas.",
       "limits": "Tetos por grupo",
-      "limitsHint": "Escolha um teto monetário ou sem limite para cada grupo. As concessões anteriores do programa consomem o teto.",
+      "limitsHint": "Defina tetos fixos opcionais por grupo. Concessões anteriores consomem esses tetos. Com um percentual do orçamento do projeto, um valor substitui o padrão para seu grupo; zero define o teto como zero.",
       "reason": "Motivo da alteração",
       "reasonHint": "Explique a alteração. Todas as seções são salvas juntas; alterações em um programa ativo valem a partir da data escolhida.",
       "changeEffectiveFromHint": "As regras revisadas valem a partir desta data; períodos anteriores mantêm as regras já vigentes.",
@@ -7339,7 +7365,7 @@
         "amount": "Teto monetário"
       },
       "workDate": "Data do trabalho",
-      "capPercentHint": "Opcional. Limita cada projeto a este percentual dos itens do programa no orçamento adjudicado, menos a taxa do programa sobre todas as fontes anteriores.",
+      "capPercentHint": "Padrão opcional. Limita cada projeto aplicável a este percentual dos itens do programa no orçamento adjudicado, menos a taxa do programa sobre fontes anteriores. Um teto fixo de grupo substitui esse padrão para o grupo.",
       "sources": {
         "assignment": "Atribuições datadas",
         "field_ticket_foreman": "Encarregado do boletim de campo",

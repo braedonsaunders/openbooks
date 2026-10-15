@@ -8,16 +8,29 @@ import { decidePeriodReopen, requestPeriodReopen } from "@openbooks/engine/close
 import { refreshCloseRun } from "@openbooks/engine/close/run-automation";
 import { startCloseRun } from "@openbooks/engine/close/run-start";
 import {
+  listRevaluationExposures,
   RevaluationError,
   RevaluationFeatureDisabledError,
   runRevaluation,
+  type RevaluationExposureReadModel,
 } from "@openbooks/engine/close/fx-revaluation";
+import {
+  ClosingFxEvidenceError,
+  ClosingFxEvidenceFeatureDisabledError,
+  recordClosingFxRateEvidence,
+  type ClosingFxRateEvidenceRecord,
+} from "@openbooks/engine/close/fx-revaluation-evidence";
+import {
+  readExactPeriodLocks,
+  type ExactPeriodLockRead,
+} from "@openbooks/engine/close/period-lock-read";
+import { ScopeNotFoundError } from "@openbooks/engine/organization/scope";
 import { can } from "../authz";
 import type { ApplicationContext } from "./context";
 import { assertApplicationPermission, assertSubsidiaryAccess } from "./context";
 import { ApplicationError, forbidden, notFound } from "./errors";
 import { isFeatureEnabled } from "../features";
-import { clamp } from "../list-params";
+import { clamp, isUuid } from "../list-params";
 import { executeIdempotent } from "./idempotency";
 
 /**
@@ -155,6 +168,50 @@ export async function listPeriodLocks(
       reopenExpiresAt: lock.reopen_expires_at,
     })),
   };
+}
+
+/**
+ * Exact effective lock state for one period/book/entity — the narrow
+ * counterpart to the organization-wide `listPeriodLocks` diagnostics above.
+ * A restricted caller authorized for exactly this entity may read it; the
+ * engine re-resolves live `close.read` authority and entity scope inside
+ * its read transaction. Scope and existence share the uniform not-found,
+ * so another entity's or tenant's rows are never distinguishable.
+ */
+/** Canonical form of a validated application-boundary UUID, or a refusal. */
+function canonicalApplicationUuid(value: string, field: string): string {
+  if (!isUuid(value)) {
+    throw new ApplicationError("invalid_input", `${field} must be a valid UUID`, 422);
+  }
+  return value.toLowerCase();
+}
+
+export async function readApplicationPeriodLocks(
+  context: ApplicationContext,
+  input: { periodId: string; bookId: string; subsidiaryId: string },
+): Promise<ExactPeriodLockRead> {
+  assertApplicationPermission(context, "close.read");
+  // Canonicalize before the scope check: a granted entity named in upper
+  // case is the same entity, while session scope sets carry canonical ids.
+  const periodId = canonicalApplicationUuid(input.periodId, "periodId");
+  const bookId = canonicalApplicationUuid(input.bookId, "bookId");
+  const subsidiaryId = canonicalApplicationUuid(input.subsidiaryId, "subsidiaryId");
+  assertSubsidiaryAccess(context, subsidiaryId);
+  try {
+    return await readExactPeriodLocks({
+      orgId: context.authz.user.orgId,
+      actorId: context.authz.user.id,
+      periodId,
+      bookId,
+      subsidiaryId,
+    });
+  } catch (error) {
+    if (error instanceof ScopeNotFoundError) throw notFound("period locks");
+    if (error instanceof CloseError) {
+      throw new ApplicationError("invalid_input", error.message, 422);
+    }
+    throw error;
+  }
 }
 
 const REOPEN_STATUSES = new Set(["requested", "approved", "rejected", "withdrawn", "expired", "reclosed"]);
@@ -373,6 +430,74 @@ export async function runPeriodRevaluation(context: ApplicationContext, input: {
     },
   });
   return { replayed: outcome.replayed, result: outcome.value };
+}
+
+/**
+ * The selected-entity exposure read model for recorded closing rates: the
+ * revaluation engine's own positions for one book and period, restricted to
+ * the caller's legal-entity scope. An empty restricted scope reads as an
+ * empty list, never as organization-wide evidence.
+ */
+export async function listApplicationRevaluationExposures(
+  context: ApplicationContext,
+  input: { periodId: string; bookId: string; subsidiaryIds?: string[] },
+): Promise<RevaluationExposureReadModel[]> {
+  assertApplicationPermission(context, "close.run");
+  const allowed = context.authz.allowedSubsidiaryIds;
+  const selected = input.subsidiaryIds ?? (allowed === null ? undefined : [...allowed]);
+  if (selected) {
+    for (const subsidiaryId of selected) assertSubsidiaryAccess(context, subsidiaryId);
+  }
+  return listRevaluationExposures(context.authz.user.orgId, input.bookId, input.periodId, selected);
+}
+
+/**
+ * Record one closing rate for an exact exposure position. The caller's
+ * idempotency key is the recording's single replay identity: it becomes the
+ * engine request id, so the ordinary and public transports cannot carry two
+ * conflicting keys for one recording.
+ */
+export async function recordApplicationClosingFxRateEvidence(
+  context: ApplicationContext,
+  input: {
+    bookId: string;
+    subsidiaryId: string;
+    periodId: string;
+    accountId: string;
+    transactionCurrency: string;
+    measurementCurrency: string;
+    rateDate?: string;
+    rate: string;
+    source: string;
+    reason: string;
+    expectedCurrentId: string | null;
+    idempotencyKey: string;
+  },
+): Promise<{ replayed: boolean; result: ClosingFxRateEvidenceRecord }> {
+  assertApplicationPermission(context, "close.run");
+  assertSubsidiaryAccess(context, input.subsidiaryId);
+  if (!isUuid(input.idempotencyKey)) {
+    throw new ApplicationError(
+      "invalid_input",
+      "Idempotency-Key must be a UUID — it becomes the recorded closing rate's request identity",
+      400,
+    );
+  }
+  try {
+    const outcome = await recordClosingFxRateEvidence({
+      orgId: context.authz.user.orgId,
+      actorId: context.authz.user.id,
+      input: { ...input, requestId: input.idempotencyKey },
+    });
+    return { replayed: outcome.replayed, result: outcome.evidence };
+  } catch (error) {
+    if (error instanceof ClosingFxEvidenceFeatureDisabledError) throw notFound("closing rate evidence");
+    if (error instanceof ScopeNotFoundError) throw notFound("closing rate evidence");
+    if (error instanceof ClosingFxEvidenceError) {
+      throw new ApplicationError("invalid_input", error.message, 422);
+    }
+    throw error;
+  }
 }
 
 export async function createReopenRequest(context: ApplicationContext, input: {

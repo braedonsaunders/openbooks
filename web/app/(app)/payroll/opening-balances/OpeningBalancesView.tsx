@@ -23,6 +23,8 @@ import { RecordTabs } from '../../../../components/module-home/record-tabs'
 import { MoneyInput, moneyFieldError } from '../../../../components/money-input'
 import { OpeningEmployerAuthorityForm } from './OpeningEmployerAuthorityForm'
 import { OpeningLevySourceForm } from './OpeningLevySourceForm'
+import { OpeningReportingSourceForm } from './OpeningReportingSourceForm'
+import { confirmDialog } from '../../../../lib/confirm'
 import { PeriodOpeningForm, type PeriodOpeningDraft } from './PeriodOpeningForm'
 import type {
   OpeningBalanceRow,
@@ -31,6 +33,7 @@ import type {
 
 interface FieldDescriptor {
   key: string
+  column?: string
   label: string
   help: string
   packs: string[]
@@ -94,6 +97,7 @@ type OpeningBalancesViewProps = {
   accountPrograms?: AccountProgramDescriptor[]
   components: ComponentDescriptor[]
   canManage: boolean
+  canQualify?: boolean
   hideYearPicker?: boolean
   onDirtyChange?: (count: number) => void
 }
@@ -112,10 +116,12 @@ function OpeningBalancesYearView({
   accountPrograms = [],
   components,
   canManage,
+  canQualify = false,
   hideYearPicker = false,
   onDirtyChange,
 }: OpeningBalancesViewProps) {
   const t = useTranslations('payroll')
+  const common = useTranslations('common')
   const router = useRouter()
   const text = (key: string, fallback: string) =>
     t.has(`openingBalances.${key}` as never)
@@ -144,7 +150,9 @@ function OpeningBalancesYearView({
   const [skipped, setSkipped] = useState<SaveError[]>([])
   const [onlyMissing, setOnlyMissing] = useState(false)
   const [activeId, setActiveId] = useState<string | null>(null)
-  const [section, setSection] = useState<'ytd' | 'bases' | 'caps' | 'period' | 'employer' | 'levies'>('ytd')
+  const [section, setSection] = useState<'ytd' | 'bases' | 'caps' | 'period' | 'employer' | 'levies' | 'reporting'>('ytd')
+  const [reportingDirty, setReportingDirty] = useState(false)
+  const [reportingBusy, setReportingBusy] = useState(false)
   const [periodDrafts, setPeriodDrafts] = useState<Record<string, PeriodOpeningDraft>>({})
   const [periodBusy, setPeriodBusy] = useState(false)
   const workspace = useTranslations('payroll.openingBalances.workspace')
@@ -326,7 +334,8 @@ function OpeningBalancesYearView({
     : initial.rows
   const activeRow = initial.rows.find((row) => row.employeePartyId === activeId)
   const unsavedEmployeeCount = new Set([...dirtyIds, ...Object.entries(periodDrafts)
-    .filter(([, period]) => period.dirty).map(([employeeId]) => employeeId)]).size
+    .filter(([, period]) => period.dirty).map(([employeeId]) => employeeId),
+    ...(reportingDirty && activeId ? [activeId] : [])]).size
   useEffect(() => {
     onDirtyChange?.(unsavedEmployeeCount)
   }, [unsavedEmployeeCount, onDirtyChange])
@@ -335,8 +344,15 @@ function OpeningBalancesYearView({
   ).length
   const lockedCount = initial.rows.filter((r) => r.locked).length
 
+  async function closeDrawer() {
+    if (saving || periodBusy || reportingBusy) return
+    if (reportingDirty && !await confirmDialog({ message: common('feedback.unsavedChanges'),
+      confirmLabel: common('confirm.discardChanges'), tone: 'danger' })) return
+    setActiveId(null)
+  }
+
   const save = async () => {
-    if (dirtyIds.length === 0 || periodBusy || saving) return
+    if (dirtyIds.length === 0 || periodBusy || reportingBusy || saving) return
     setSaving(true)
     setErrors([])
     const fallback = text('saveFailed', 'Nothing was saved.')
@@ -788,9 +804,7 @@ function OpeningBalancesYearView({
       />
       <Drawer
         open={!!activeRow}
-        onClose={() => {
-          if (!saving && !periodBusy) setActiveId(null)
-        }}
+        onClose={() => void closeDrawer()}
         title={activeRow?.employeeName ?? workspace('employees')}
         description={`${year} · ${[activeRow?.employeeNumber, activeRow?.country, activeRow?.province].filter(Boolean).join(' · ')}`}
         size="lg"
@@ -798,11 +812,12 @@ function OpeningBalancesYearView({
           <RecordTabs
             label={workspace('balanceSections')}
             active={section}
-            onChange={next => { if (!periodBusy) setSection(next) }}
+            onChange={next => { if (!periodBusy && !reportingBusy) setSection(next) }}
             tabs={[
               { key: 'ytd', label: workspace('ytd') },
               {key:'employer',label:text('employerAuthority.title','Employer source')},
               {key:'levies',label:t('openingBalances.levySource.title')},
+              {key:'reporting',label:t('openingBalances.reportingSource.title')},
               {
                 key: 'bases',
                 label: workspace('bases'),
@@ -825,13 +840,13 @@ function OpeningBalancesYearView({
             <p className="text-xs text-slate-500">{workspace('draftHint')}</p>
             <Button
               variant="outline"
-              disabled={saving || periodBusy}
-              onClick={() => setActiveId(null)}
+              disabled={saving || periodBusy || reportingBusy}
+              onClick={() => void closeDrawer()}
             >
               {workspace('done')}
             </Button>
             {canManage && (
-              <Button disabled={saving || periodBusy || dirtyIds.length === 0} onClick={save}>
+              <Button disabled={saving || periodBusy || reportingBusy || dirtyIds.length === 0} onClick={save}>
                 {saving
                   ? text('saving', 'Saving…')
                   : `${workspace('saveAll')} (${dirtyIds.length})`}
@@ -849,6 +864,13 @@ function OpeningBalancesYearView({
               employeePartyId={activeRow.employeePartyId} year={year}
               openingAmounts={activeRow.amounts ?? {}} canManage={canManage}
               annualDirty={dirtyIds.includes(activeRow.employeePartyId)} onSaved={()=>router.refresh()}/> }
+            <div hidden={section !== 'reporting'}>
+              <OpeningReportingSourceForm key={activeRow.employeePartyId+':'+year}
+                employeePartyId={activeRow.employeePartyId} year={year} canQualify={canQualify}
+                active={section === 'reporting'} fields={fields} components={components} programs={programs}
+                annualDirty={dirtyIds.includes(activeRow.employeePartyId)} onSaved={()=>router.refresh()}
+                onDirtyChange={setReportingDirty} onBusyChange={setReportingBusy} />
+            </div>
             {section === 'period' && <PeriodOpeningForm
               employeePartyId={activeRow.employeePartyId} employeeName={activeRow.employeeName} year={year}
               draft={periodDrafts[activeRow.employeePartyId]} canManage={canManage} locked={activeRow.locked}

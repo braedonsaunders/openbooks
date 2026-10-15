@@ -192,21 +192,20 @@ async function guardPayroll941Rows(
   const returnAccountOf = await periodicReturnAccountResolver(gate.user.orgId, country)
   const requestedIds = new Set(requested.map(row => row.id))
   const sources = (await db.execute<{
-    account: string | null; quarter: number; subsidiaryId: string | null; employeeSubsidiaryId: string | null;
+    account: string | null; quarter: number; subsidiaryId: string | null; sourceDate: string;
   }>(sql`
     select distinct s.filing_account_id as account,
            extract(quarter from s.pay_date)::int as quarter,
            d.subsidiary_id as "subsidiaryId",
-           p.subsidiary_id as "employeeSubsidiaryId"
+           s.pay_date::text as "sourceDate"
       from pay_stubs s
       join pay_runs r on r.org_id = s.org_id and r.document_id = s.pay_run_document_id
       left join documents d on d.org_id = r.org_id and d.id = r.document_id
-      left join parties p on p.org_id = s.org_id and p.id = s.employee_party_id
      where s.org_id = ${gate.user.orgId} and s.tax_year = ${taxYear}
        and s.country = ${country} and r.run_status in ('committed', 'voided')
        and extract(quarter from s.pay_date)::int in (${sql.join(requested.map(row => sql`${row.quarter}`), sql`, `)})
   `)).rows
-    .map(row => ({ ...row, account: returnAccountOf(row.account, row.employeeSubsidiaryId) }))
+    .map(row => ({ ...row, account: returnAccountOf(row.account, row.subsidiaryId, row.sourceDate) }))
     .filter(row => requestedIds.has(`${row.account ?? ''}:${row.quarter}`))
   const resolved = new Set(sources.map(row => `${row.account ?? ''}:${row.quarter}`))
   if (requested.some(row => !resolved.has(row.id))) return notFound("payroll record")

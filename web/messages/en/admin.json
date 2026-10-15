@@ -2855,6 +2855,16 @@
       "cancel": "Cancel",
       "saveFailed": "Could not save the configuration."
     },
+    "usFilingLineage": {
+          "stateAccount": "State filing account",
+          "employer": "Original legal employer",
+          "federalAccount": "Original federal EIN",
+          "federalHelp": "Retired EIN registrations remain available for historical qualification.",
+          "datesHelp": "Inclusive original registration dates. Close a range only after its last committed payroll date.",
+          "sourceReference": "Original registration evidence reference",
+          "sourceHelp": "Identify the registration letter, filing record or other retained evidence establishing this employer EIN and date range.",
+          "reason": "Change reason"
+    },
     "entities": {
       "usage-meters": {
         "title": "Usage meters",
@@ -3009,6 +3019,11 @@
       "worker-comp-groups": {
         "title": "Worker Comp Groups",
         "description": "Workers' compensation rate groups for labor costing."
+      },
+      "pay-component-statutory-treatments": {
+        "title": "Statutory treatments",
+        "singularTitle": "Statutory treatment",
+        "description": "Dated program exclusions and vacation-base inclusion for this component, resolved at payroll pay date. A worker-compensation group overrides the entire component-wide treatment."
       },
       "pay-component-department-expenses": {
         "title": "Department Expenses",
@@ -3295,6 +3310,11 @@
         "title": "Income Tax Rates",
         "singularTitle": "Income Tax Rate",
         "description": "Enacted income tax rates by jurisdiction, effective-dated — they drive the ASC 740 provision."
+      },
+      "payroll-us-filing-account-employer-lineage": {
+              "title": "Employer EIN history",
+              "singularTitle": "Employer EIN affiliation",
+              "description": "Original state-registration ownership, with inclusive dates and retained evidence."
       },
       "payroll-filing-accounts": {
         "title": "Filing Accounts",
@@ -3977,6 +3997,8 @@
       "taxable": "Taxable",
       "pensionable": "Pensionable",
       "insurable": "Insurable",
+      "initialVacationable": "Initial vacation-base inclusion",
+      "componentTreatmentReason": "Change reason",
       "vacationable": "Counts toward vacation pay",
       "nonPeriodic": "Non-periodic (bonus method)",
       "programExclusions": "Program exclusions",
@@ -4570,6 +4592,10 @@
       "mode": "Policy"
     },
     "fieldHelp": {
+      "initialVacationable": "Used only to create the first dated treatment. For an existing component, change vacation-base inclusion in its Statutory treatments history.",
+      "componentTreatmentPayDate": "Inclusive dates apply to the payroll pay date, including retroactive and final pay. A worker-compensation group overrides the entire component-wide treatment.",
+      "componentTreatmentVacationable": "Include this earning in vacation and bankable earnings bases on the covered payroll pay dates.",
+      "componentTreatmentReason": "Explain the statutory treatment or vacation-base policy change and identify its supporting evidence. A new reason of 1–2000 characters is recorded in the audit trail for every save.",
       "fxRateMaxAgeDays": "Days between the newest usable rate and the period end beyond which revaluation and consolidation refuse the rate. Closing rates count from the date of the period-end spot rate; average rates from the newest quote averaged. Default when no policy is set: 31 days.",
       "storedValueLiabilityAccount": "The balance-sheet account credited when value is issued and debited on redemption.",
       "storedValueBreakageIncomeAccount": "The income account credited when breakage or expiry is recognized.",
@@ -7293,7 +7319,7 @@
       "responsibilities": "Dated assignments",
       "responsibilitiesHint": "Assign each group and position to an employment for explicit dates. Every selected source needs all configured shares.",
       "limits": "Group ceilings",
-      "limitsHint": "Choose a monetary ceiling or no limit for each assigned group. Earlier awards in this program consume the ceiling.",
+      "limitsHint": "Set optional fixed ceilings by group. Earlier awards consume fixed ceilings. When a project budget percentage is set, an amount entry replaces that default for its group; choose zero to cap a group at zero.",
       "reason": "Audit reason",
       "reasonHint": "Explain this rule change. All sections save together; an active program’s changes apply from the date you choose.",
       "changeEffectiveFromHint": "The revised rules apply from this date; earlier periods keep the rules already in force.",
@@ -7339,7 +7365,7 @@
         "amount": "Monetary ceiling"
       },
       "workDate": "Work date",
-      "capPercentHint": "Optional. Caps each project at this percent of the program items on its awarded budget, less the program rate on all earlier sources.",
+      "capPercentHint": "Optional default. Caps each applicable project at this percent of the program items on its awarded budget, less the program rate on all earlier sources. A fixed group ceiling replaces this default for its group.",
       "sources": {
         "assignment": "Dated assignments",
         "field_ticket_foreman": "Field ticket foreman",

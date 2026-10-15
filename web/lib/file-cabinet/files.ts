@@ -47,6 +47,7 @@ export async function listFiles(
       select fi.id, fi.folder_id as "folderId", fi.name, fi.extension, fi.file_type as "fileType",
              fi.content_type as "contentType", fi.size_bytes as "sizeBytes",
              fi.is_inactive as "isInactive", fi.current_version_id as "currentVersionId",
+             fi.source_system as "sourceSystem", fi.source_id as "sourceId", fi.content_hash as "contentHash",
              coalesce(vc.n, 0) as "versionCount",
              fi.created_at as "createdAt", fi.created_by as "createdBy",
              fi.updated_at as "updatedAt", fi.updated_by as "updatedBy",
@@ -195,6 +196,7 @@ export async function getFile(orgId: string, id: string, viewer: FileViewer): Pr
     select fi.id, fi.folder_id as "folderId", fi.name, fi.extension, fi.file_type as "fileType",
            fi.content_type as "contentType", fi.size_bytes as "sizeBytes",
            fi.is_inactive as "isInactive", fi.current_version_id as "currentVersionId",
+             fi.source_system as "sourceSystem", fi.source_id as "sourceId", fi.content_hash as "contentHash",
            fi.created_at as "createdAt", fi.created_by as "createdBy",
            fi.updated_at as "updatedAt", fi.updated_by as "updatedBy",
            fo.name as "folderName",
@@ -242,6 +244,9 @@ export async function createFile(input: {
   contentType: string
   bytes: Buffer
   createdBy: string | null
+  sourceSystem?: string
+  sourceId?: string
+  auditReason?: string
   audit?: FileMutationAudit
 }): Promise<FileMeta> {
   let staged: { versionId: string; fileId: string } | null = null

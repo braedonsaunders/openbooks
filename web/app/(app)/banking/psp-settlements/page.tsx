@@ -13,7 +13,7 @@ export default async function PspSettlementsPage({
   searchParams,
 }: {
   searchParams?: Promise<Record<string, string | undefined>>
-} = {}) {
+}) {
   const sp = (await searchParams) ?? {}
   const data = await loadPspSettlements()
   return <ModuleView spec={pspSettlementsSpec(data)} data={data} searchParams={sp} trusted />

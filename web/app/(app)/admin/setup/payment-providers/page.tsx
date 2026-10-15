@@ -20,7 +20,7 @@ export default async function PaymentProvidersPage({
 }: {
   // Optional: this route natively takes no props.
   searchParams?: Promise<Record<string, string | string[] | undefined>>
-} = {}) {
+}) {
   const sp = (await searchParams) ?? {};
   const data = await loadPaymentProviders(sp);
   return <ModuleView spec={paymentProvidersSpec()} data={data} searchParams={sp} trusted />;

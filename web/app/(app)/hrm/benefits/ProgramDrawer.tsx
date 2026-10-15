@@ -1,12 +1,13 @@
 'use client'
 
 import Link from 'next/link'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { AlertTriangle } from 'lucide-react'
-import { Alert, Badge, Button, Drawer, Input, Label, Select } from '@openbooks/ui'
+import { Alert, Badge, Button, Drawer, Input, Label, Select, Textarea } from '@openbooks/ui'
+import { parseExactJson } from '@openbooks/engine/platform/exact-json'
 import { SublistAddButton } from '../../../../components/drawer-sublist'
 import { readApiErrorMessage } from '../../../../lib/api-error'
 import { promptDialog } from '../../../../lib/prompt'
@@ -18,6 +19,86 @@ import { InspectorPanel } from '../../../../components/builder/builder-kit'
 import { PreparedPagedTable } from '../../../../components/prepared-paged-table'
 import { AwardPortfolioTable, useEffectiveRangeLabel } from './PortfolioTables'
 import type { ProgramDetailDrawer } from '../../../../lib/hrm/benefits-workspace'
+import { CabinetFilePicker } from '../../../../components/cabinet-file-picker'
+import { RetainedPdfEvidence, type PdfEvidenceInput } from './RetainedPdfEvidence'
+
+type RetainedRowOption = { pointer: string; label: string; row: Record<string, unknown> }
+type RetainedFieldOption = { pointer: string; label: string; sample: string }
+type RetainedVersionOption = { id: string; label: string }
+type RetainedFieldName = 'sourceRowRef' | 'amount' | 'currency' | 'periodFrom' | 'periodTo' | 'sourceIssueDate' | 'sourcePaidDate'
+type SourceEvidenceClass = 'missing-source-identity' | 'source-paid-above-native-measure'
+const ROOT_ROW_SELECTION = '$root'
+
+function pointerEscape(value: string): string {
+  return value.replace(/~/g, '~0').replace(/\//g, '~1')
+}
+
+function humanFieldName(value: string): string {
+  return value.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/[_-]+/g, ' ').replace(/\s+/g, ' ').trim()
+}
+
+function retainedRowOptions(document: unknown, rowName: (number: number) => string): RetainedRowOption[] {
+  const rows: RetainedRowOption[] = []
+  const visit = (value: unknown, pointer: string, depth: number) => {
+    if (depth > 12 || rows.length >= 2000) return
+    if (Array.isArray(value)) {
+      value.forEach((entry, index) => {
+        const childPointer = `${pointer}/${index}`
+        if (entry !== null && typeof entry === 'object' && !Array.isArray(entry)) {
+          const row = entry as Record<string, unknown>
+          const summary = Object.entries(row).filter(([, item]) => ['string', 'number', 'boolean'].includes(typeof item))
+            .slice(0, 2).map(([key, item]) => `${humanFieldName(key)}: ${String(item).slice(0, 48)}`).join(' · ')
+          const number = rows.length + 1
+          rows.push({ pointer: childPointer, label: summary ? `${rowName(number)} · ${summary}` : rowName(number), row })
+        } else if (entry !== null && typeof entry === 'object') visit(entry, childPointer, depth + 1)
+      })
+      return
+    }
+    if (value !== null && typeof value === 'object') {
+      for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+        if (child !== null && typeof child === 'object') visit(child, `${pointer}/${pointerEscape(key)}`, depth + 1)
+      }
+    }
+  }
+  visit(document, '', 0)
+  if (rows.length === 0 && document !== null && typeof document === 'object' && !Array.isArray(document)) {
+    rows.push({ pointer: ROOT_ROW_SELECTION, label: rowName(1), row: document as Record<string, unknown> })
+  }
+  return rows
+}
+
+function retainedFieldOptions(row: Record<string, unknown> | undefined): RetainedFieldOption[] {
+  if (!row) return []
+  const fields: RetainedFieldOption[] = []
+  const visit = (value: unknown, pointer: string, label: string, depth: number) => {
+    if (depth > 6 || fields.length >= 200) return
+    if (value === null || ['string', 'number', 'boolean'].includes(typeof value)) {
+      fields.push({ pointer, label: humanFieldName(label), sample: String(value ?? '').slice(0, 48) })
+      return
+    }
+    if (Array.isArray(value)) return
+    if (typeof value === 'object') {
+      for (const [key, child] of Object.entries(value as Record<string, unknown>)) {
+        visit(child, `${pointer}/${pointerEscape(key)}`, label ? `${label}.${key}` : key, depth + 1)
+      }
+    }
+  }
+  for (const [key, value] of Object.entries(row)) visit(value, `/${pointerEscape(key)}`, key, 0)
+  return fields
+}
+
+function suggestedFieldPointer(fields: readonly RetainedFieldOption[], field: RetainedFieldName): string {
+  const aliases: Record<RetainedFieldName, readonly string[]> = {
+    sourceRowRef: ['sourcerowref', 'sourcecard', 'awardref', 'sourceref', 'externalid', 'card', 'awardid', 'transactionid', 'reference', 'id'],
+    amount: ['amount', 'value', 'awardamount', 'grossamount'],
+    currency: ['currency', 'currencycode'],
+    periodFrom: ['periodfrom', 'earningfrom', 'startdate', 'fromdate'],
+    periodTo: ['periodto', 'earningto', 'enddate', 'todate'],
+    sourceIssueDate: ['sourceissuedate', 'issuedate', 'paiddate', 'checkdate'],
+    sourcePaidDate: ['sourcepaiddate', 'paiddate', 'paymentdate', 'checkdate', 'chequedate'],
+  }
+  return fields.find((entry) => aliases[field].includes(entry.label.toLowerCase().replace(/[^a-z0-9]/g, '')))?.pointer ?? ''
+}
 
 /**
  * Program detail drawer, opened from a row through the `program=<id>`
@@ -60,8 +141,219 @@ export function ProgramDrawer({
     excluded: false,
   })
   const [memberError, setMemberError] = useState<string | null>(null)
+  const [sourceFileId, setSourceFileId] = useState('')
+  const [sourceVersionId, setSourceVersionId] = useState('')
+  const [sourceVersions, setSourceVersions] = useState<RetainedVersionOption[]>([])
+  const [sourceRows, setSourceRows] = useState<RetainedRowOption[]>([])
+  const [corroborationFileId, setCorroborationFileId] = useState('')
+  const [corroborationVersionId, setCorroborationVersionId] = useState('')
+  const [corroborationVersions, setCorroborationVersions] = useState<RetainedVersionOption[]>([])
+  const [corroborationRows, setCorroborationRows] = useState<RetainedRowOption[]>([])
+  const [corroborationRowPointer, setCorroborationRowPointer] = useState('')
+  const [sourceRowPointer, setSourceRowPointer] = useState('')
+  const [sourceFields, setSourceFields] = useState<Record<RetainedFieldName, string>>({
+    sourceRowRef: '', amount: '', currency: '', periodFrom: '', periodTo: '', sourceIssueDate: '', sourcePaidDate: '',
+  })
+  const [sourceEvidenceClass, setSourceEvidenceClass] = useState<SourceEvidenceClass>('missing-source-identity')
+  const [sourceEmploymentId, setSourceEmploymentId] = useState('')
+  const [sourceAsOf, setSourceAsOf] = useState('')
+  const [sourceMappingBasis, setSourceMappingBasis] = useState('')
+  const [sourceMappingReason, setSourceMappingReason] = useState('')
+  const [sourceGoverningBasis, setSourceGoverningBasis] = useState('')
+  const [sourceGoverningReason, setSourceGoverningReason] = useState('')
+  const [sourceReason, setSourceReason] = useState('')
+  const [pdfEvidence, setPdfEvidence] = useState<{ key: string; input: PdfEvidenceInput }[]>([])
+  const [nativeCurrencySelected, setNativeCurrencySelected] = useState(false)
+  const [nativeCurrencyReason, setNativeCurrencyReason] = useState('')
+  const sourceRequestRef = useRef<{ signature: string; requestKey: string } | null>(null)
+  const [sourceConfirmedReviewKey, setSourceConfirmedReviewKey] = useState('')
+  const [sourcePreview, setSourcePreview] = useState<{
+    reviewKey: string;
+    sourceRowRef: string; sourceIssueDate: string; sourcePaidDate?: string; periodFrom: string; periodTo: string;
+    value: string; currency: string; sourceRow: Record<string, unknown>; nativeMeasurementAsOf: string | null;
+    artifacts: { filename: string; sha256: string; rowPointer: string; rowSha256: string; row: Record<string, unknown> }[]
+    nativePreview: {
+      currentProgramRevision: number
+      effectivePolicyRevision: number
+      digest: string
+      targetRecipient: { value: string; capped: boolean; explanation: string } | null
+      measuredValue: string
+      nativePoolAvailable: boolean
+      targetCarryForward: string | null
+      canRecordFirstObligation: boolean
+    }
+  } | null>(null)
+  const [sourceError, setSourceError] = useState<string | null>(null)
   const program = drawer.program
   const effectiveRange = useEffectiveRangeLabel()
+  const sourceRow = sourceRows.find((entry) => entry.pointer === sourceRowPointer)?.row
+  const sourceFieldOptions = retainedFieldOptions(sourceRow)
+  const isAboveNativeMeasure = sourceEvidenceClass === 'source-paid-above-native-measure'
+  const claimForField = { sourceRowRef: 'sourceRowRef', amount: 'value', currency: 'currency', periodFrom: 'periodFrom', periodTo: 'periodTo', sourceIssueDate: 'sourceIssueDate', sourcePaidDate: 'sourcePaidDate' } as const
+  const sourceFieldsComplete = (['sourceRowRef', 'amount', 'currency', 'periodFrom', 'periodTo', 'sourceIssueDate', ...(isAboveNativeMeasure ? ['sourcePaidDate'] : [])] as RetainedFieldName[])
+    .every(field => sourceFields[field] !== '' || (field === 'currency' && nativeCurrencySelected && nativeCurrencyReason.trim().length >= 8) ||
+      pdfEvidence.some(entry => entry.input.pdfSelection.fields[claimForField[field]] !== undefined)) &&
+    pdfEvidence.every(entry => entry.input.fileId && entry.input.versionId && entry.input.pdfSelection.anchor.trim() &&
+      Object.values(entry.input.pdfSelection.fields).every(field => field?.quote.trim() && field.value.trim()))
+  const sourceReviewKey = JSON.stringify([
+    program.id, program.revision, drawer.simulation?.periodFrom ?? '', drawer.simulation?.periodTo ?? '', sourceAsOf,
+    sourceEvidenceClass,
+    sourceEmploymentId, sourceFileId, sourceVersionId, sourceRowPointer,
+    sourceFields.sourceRowRef, sourceFields.amount, sourceFields.currency,
+    sourceFields.periodFrom, sourceFields.periodTo, sourceFields.sourceIssueDate, sourceFields.sourcePaidDate,
+    corroborationFileId, corroborationVersionId, corroborationRowPointer,
+    sourceMappingBasis, sourceMappingReason, sourceGoverningBasis, sourceGoverningReason, sourceReason,
+    pdfEvidence, nativeCurrencySelected, nativeCurrencyReason,
+  ])
+  const sourceConfirmationKey = JSON.stringify([
+    sourceReviewKey,
+    program.legalEntityId,
+    sourcePreview?.reviewKey === sourceReviewKey ? [
+      sourcePreview.sourceRowRef,
+      sourcePreview.sourceIssueDate,
+      sourcePreview.sourcePaidDate ?? null,
+      sourcePreview.periodFrom,
+      sourcePreview.periodTo,
+      sourcePreview.value,
+      sourcePreview.currency,
+      sourcePreview.nativePreview.digest,
+    ] : null,
+    sourceMappingBasis,
+    sourceMappingReason,
+    sourceGoverningBasis,
+    sourceGoverningReason,
+    sourceReason,
+  ])
+  const sourceReviewKeyRef = useRef(sourceReviewKey)
+  sourceReviewKeyRef.current = sourceReviewKey
+  const previousSourceReviewKey = useRef(sourceReviewKey)
+
+  useEffect(() => {
+    if (previousSourceReviewKey.current !== sourceReviewKey) {
+      previousSourceReviewKey.current = sourceReviewKey
+      setSourcePreview(null)
+      setSourceConfirmedReviewKey('')
+      sourceRequestRef.current = null
+      setSourceError(null)
+    }
+  }, [sourceReviewKey])
+
+  useEffect(() => {
+    if (!sourceFileId) {
+      setSourceVersionId('')
+      setSourceVersions([])
+      setSourceRows([])
+      return
+    }
+    const controller = new AbortController()
+    let active = true
+    void fetch(`/api/file-cabinet/files/${encodeURIComponent(sourceFileId)}`, { signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) throw new Error(await readApiErrorMessage(response, t('sourceFirst.fileLookupFailed')))
+        const payload = await response.json() as { file?: { versions?: { id?: unknown; versionNumber?: unknown }[] } }
+        const versions = (payload.file?.versions ?? []).filter((entry): entry is { id: string; versionNumber?: unknown } => typeof entry.id === 'string')
+          .map((entry) => ({ id: entry.id, label: t('sourceFirst.version', { number: String(entry.versionNumber ?? '') }) }))
+        const version = versions[0]
+        if (!version) throw new Error(t('sourceFirst.noRetainedVersion'))
+        if (active) {
+          setSourceVersions(versions)
+          setSourceVersionId(version.id)
+        }
+      })
+      .catch((error: unknown) => {
+        if (active && !controller.signal.aborted) {
+          setSourceVersionId('')
+          setSourceVersions([])
+          setSourceError(error instanceof Error ? error.message : t('sourceFirst.fileLookupFailed'))
+        }
+      })
+    return () => { active = false; controller.abort() }
+  }, [sourceFileId, t])
+
+  useEffect(() => {
+    if (!sourceFileId || !sourceVersionId) {
+      setSourceRows([])
+      setSourceRowPointer('')
+      setSourceFields({ sourceRowRef: '', amount: '', currency: '', periodFrom: '', periodTo: '', sourceIssueDate: '', sourcePaidDate: '' })
+      return
+    }
+    const controller = new AbortController()
+    let active = true
+    const fileId = sourceFileId
+    const versionId = sourceVersionId
+    void fetch(`/api/file-cabinet/files/${encodeURIComponent(fileId)}/download?versionId=${encodeURIComponent(versionId)}`, { signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) throw new Error(await readApiErrorMessage(response, t('sourceFirst.fileReadFailed')))
+        const bytes = await response.arrayBuffer()
+        const parsed = parseExactJson(new TextDecoder('utf-8', { fatal: true }).decode(bytes), { rejectDuplicateKeys: true })
+        const rows = retainedRowOptions(parsed, (number) => t('sourceFirst.row', { number }))
+        if (active && sourceFileId === fileId && sourceVersionId === versionId) setSourceRows(rows)
+      })
+      .catch((error: unknown) => {
+        if (active && !controller.signal.aborted) {
+          setSourceRows([])
+          setSourceError(error instanceof Error ? error.message : t('sourceFirst.fileReadFailed'))
+        }
+      })
+    return () => { active = false; controller.abort() }
+  }, [sourceFileId, sourceVersionId, t])
+
+  useEffect(() => {
+    if (!corroborationFileId) {
+      setCorroborationVersionId('')
+      setCorroborationVersions([])
+      setCorroborationRows([])
+      return
+    }
+    const controller = new AbortController()
+    let active = true
+    void fetch(`/api/file-cabinet/files/${encodeURIComponent(corroborationFileId)}`, { signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) throw new Error(await readApiErrorMessage(response, t('sourceFirst.fileLookupFailed')))
+        const payload = await response.json() as { file?: { versions?: { id?: unknown; versionNumber?: unknown }[] } }
+        const versions = (payload.file?.versions ?? []).filter((entry): entry is { id: string; versionNumber?: unknown } => typeof entry.id === 'string')
+          .map((entry) => ({ id: entry.id, label: t('sourceFirst.version', { number: String(entry.versionNumber ?? '') }) }))
+        const version = versions[0]
+        if (!version) throw new Error(t('sourceFirst.noRetainedVersion'))
+        if (active) {
+          setCorroborationVersions(versions)
+          setCorroborationVersionId(version.id)
+        }
+      })
+      .catch((error: unknown) => {
+        if (active && !controller.signal.aborted) {
+          setCorroborationVersionId('')
+          setSourceError(error instanceof Error ? error.message : t('sourceFirst.fileLookupFailed'))
+        }
+      })
+    return () => { active = false; controller.abort() }
+  }, [corroborationFileId, t])
+
+  useEffect(() => {
+    if (!corroborationFileId || !corroborationVersionId) {
+      setCorroborationRows([])
+      setCorroborationRowPointer('')
+      return
+    }
+    const controller = new AbortController()
+    let active = true
+    const fileId = corroborationFileId
+    const versionId = corroborationVersionId
+    void fetch(`/api/file-cabinet/files/${encodeURIComponent(fileId)}/download?versionId=${encodeURIComponent(versionId)}`, { signal: controller.signal })
+      .then(async (response) => {
+        if (!response.ok) throw new Error(await readApiErrorMessage(response, t('sourceFirst.fileReadFailed')))
+        const parsed = parseExactJson(new TextDecoder('utf-8', { fatal: true }).decode(await response.arrayBuffer()), { rejectDuplicateKeys: true })
+        const rows = retainedRowOptions(parsed, (number) => t('sourceFirst.row', { number }))
+        if (active && corroborationFileId === fileId && corroborationVersionId === versionId) setCorroborationRows(rows)
+      })
+      .catch((error: unknown) => {
+        if (active && !controller.signal.aborted) {
+          setCorroborationRows([])
+          setSourceError(error instanceof Error ? error.message : t('sourceFirst.fileReadFailed'))
+        }
+      })
+    return () => { active = false; controller.abort() }
+  }, [corroborationFileId, corroborationVersionId, t])
 
   function close() {
     router.push(closeHref as never)
@@ -165,6 +457,134 @@ export function ProgramDrawer({
       router.refresh()
     } catch {
       toast.error(t('portfolio.programActionFailed'))
+    } finally {
+      setWorking(false)
+    }
+  }
+
+  function sourceEvidenceBody(action: 'previewSourceEvidence' | 'recordSourceEvidenceFirst') {
+    if (!drawer.simulation || !sourceFileId || !sourceVersionId || !sourceEmploymentId || !sourceAsOf ||
+      !sourceRowPointer || !sourceFieldsComplete ||
+      (corroborationFileId && (!corroborationVersionId || !corroborationRowPointer))) return null
+    const reviewKey = sourceReviewKeyRef.current
+    const requestSignature = sourceConfirmationKey
+    let requestKey: string | undefined
+    if (action === 'recordSourceEvidenceFirst') {
+      requestKey = sourceRequestRef.current?.signature === requestSignature
+        ? sourceRequestRef.current.requestKey
+        : crypto.randomUUID()
+      sourceRequestRef.current = { signature: requestSignature, requestKey }
+    }
+    return {
+      action,
+      expectedProgramRevision: program.revision,
+      employmentId: sourceEmploymentId,
+      periodFrom: drawer.simulation.periodFrom,
+      periodTo: drawer.simulation.periodTo,
+      asOf: sourceAsOf,
+      sourceEvidenceClass,
+      ...(nativeCurrencySelected ? { nativeCurrencyBasis: { confirmed: true, reason: nativeCurrencyReason } } : {}),
+      sourceArtifacts: [
+        {
+          fileId: sourceFileId,
+          versionId: sourceVersionId,
+          rowPointer: sourceRowPointer === ROOT_ROW_SELECTION ? '' : sourceRowPointer,
+          sourceFields: Object.fromEntries(Object.entries({
+            sourceRowRefPointer: sourceFields.sourceRowRef, amountPointer: sourceFields.amount,
+            currencyPointer: sourceFields.currency, periodFromPointer: sourceFields.periodFrom,
+            periodToPointer: sourceFields.periodTo, sourceIssueDatePointer: sourceFields.sourceIssueDate,
+            ...(isAboveNativeMeasure ? { sourcePaidDatePointer: sourceFields.sourcePaidDate } : {}),
+          }).filter(([, pointer]) => pointer !== '')),
+        },
+        ...(corroborationFileId && corroborationVersionId ? [{
+          fileId: corroborationFileId,
+          versionId: corroborationVersionId,
+          rowPointer: corroborationRowPointer,
+        }] : []),
+        ...pdfEvidence.map(entry => entry.input),
+      ],
+      ...(action === 'recordSourceEvidenceFirst' ? {
+        ...(requestKey ? { requestKey } : {}),
+        ...(sourcePreview?.reviewKey === reviewKey ? { expectedNativePreviewDigest: sourcePreview.nativePreview.digest } : {}),
+        mappingAttestation: {
+          basis: sourceMappingBasis,
+          reason: sourceMappingReason,
+          confirmed: sourceConfirmedReviewKey === requestSignature,
+        },
+        ...(isAboveNativeMeasure ? {
+          governingDecisionAttestation: {
+            basis: sourceGoverningBasis,
+            reason: sourceGoverningReason,
+            confirmed: sourceConfirmedReviewKey === requestSignature,
+          },
+        } : {}),
+        reason: sourceReason,
+      } : {}),
+    }
+  }
+
+  async function previewSourceEvidence() {
+    const body = sourceEvidenceBody('previewSourceEvidence')
+    if (!body) {
+      setSourceError(t('sourceFirst.completeSelection'))
+      return
+    }
+    setWorking(true)
+    setSourceError(null)
+    setSourcePreview(null)
+    const reviewedKey = sourceReviewKeyRef.current
+    try {
+      const response = await fetch(programResourceUrl(program.id), {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+      })
+      if (!response.ok) {
+        const message = await readApiErrorMessage(response, t('sourceFirst.previewFailed'))
+        if (sourceReviewKeyRef.current === reviewedKey) setSourceError(message)
+        return
+      }
+      const payload = await response.json() as { sourceEvidencePreview?: typeof sourcePreview }
+      if (!payload.sourceEvidencePreview) throw new Error(t('sourceFirst.previewIncomplete'))
+      if (sourceReviewKeyRef.current === reviewedKey) {
+        setSourcePreview({ ...payload.sourceEvidencePreview, reviewKey: reviewedKey })
+      }
+    } catch (error) {
+      if (sourceReviewKeyRef.current === reviewedKey) setSourceError(error instanceof Error ? error.message : t('sourceFirst.previewFailed'))
+    } finally {
+      setWorking(false)
+    }
+  }
+
+  async function recordSourceEvidenceFirst() {
+    const reviewedKey = sourceReviewKeyRef.current
+    if (!sourcePreview || sourcePreview.reviewKey !== reviewedKey || sourceConfirmedReviewKey !== sourceConfirmationKey ||
+      sourceMappingBasis.trim().length < 8 || sourceMappingReason.trim().length < 8 || sourceReason.trim().length < 8 ||
+      (isAboveNativeMeasure && (sourceGoverningBasis.trim().length < 8 || sourceGoverningReason.trim().length < 8))) {
+      setSourceError(t('sourceFirst.confirmReviewedRow'))
+      return
+    }
+    const body = sourceEvidenceBody('recordSourceEvidenceFirst')
+    if (!body) {
+      setSourceError(t('sourceFirst.completeSelection'))
+      return
+    }
+    setWorking(true)
+    setSourceError(null)
+    try {
+      const response = await fetch(programResourceUrl(program.id), {
+        method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body),
+      })
+      if (!response.ok) {
+        const message = await readApiErrorMessage(response, t('sourceFirst.recordFailed'))
+        if (sourceReviewKeyRef.current === reviewedKey) setSourceError(message)
+        return
+      }
+      if (sourceReviewKeyRef.current !== reviewedKey) return
+      toast.success(t('sourceFirst.recorded'))
+      const base = closeHref.split('?')[0]
+      router.push(`${base}?view=delivery` as never)
+      router.refresh()
+    } catch (error) {
+      if (sourceReviewKeyRef.current === reviewedKey) setSourceError(error instanceof Error ? error.message : t('sourceFirst.recordFailed'))
     } finally {
       setWorking(false)
     }
@@ -279,6 +699,28 @@ export function ProgramDrawer({
           </div>
         ))}
       </dl>
+      <dl className="grid grid-cols-2 gap-x-4 gap-y-1 border-t border-slate-100 pt-2 text-xs dark:border-slate-800">
+        <div className="flex items-baseline justify-between gap-2">
+          <dt className="text-slate-500 dark:text-slate-400">{t('sourceFirst.nativeMeasuredHistory')}</dt>
+          <dd className="font-medium tabular-nums text-slate-900 dark:text-slate-100">{drawer.simulation.reconciliation.nativeMeasuredHistoryTotal}</dd>
+        </div>
+        <div className="flex items-baseline justify-between gap-2">
+          <dt className="text-slate-500 dark:text-slate-400">{t('sourceFirst.sourceEvidencedHistory')}</dt>
+          <dd className="font-medium tabular-nums text-slate-900 dark:text-slate-100">{drawer.simulation.reconciliation.sourceEvidencedFirstTotal}</dd>
+        </div>
+        <div className="flex items-baseline justify-between gap-2">
+          <dt className="text-slate-500 dark:text-slate-400">{t('sourceFirst.obligationVariance')}</dt>
+          <dd className="font-medium tabular-nums text-slate-900 dark:text-slate-100">{drawer.simulation.reconciliation.obligationHistoryMinusCurrentMeasurement}</dd>
+        </div>
+        <div className="flex items-baseline justify-between gap-2">
+          <dt className="text-slate-500 dark:text-slate-400">{t('portfolio.simulate.processedPayrollTotal')}</dt>
+          <dd className="font-medium tabular-nums text-slate-900 dark:text-slate-100">{drawer.simulation.reconciliation.processedPayrollTotal}</dd>
+        </div>
+        <div className="flex items-baseline justify-between gap-2">
+          <dt className="text-slate-500 dark:text-slate-400">{t('portfolio.simulate.payrollMinusCurrentMeasurement')}</dt>
+          <dd className="font-medium tabular-nums text-slate-900 dark:text-slate-100">{drawer.simulation.reconciliation.payrollMinusCurrentMeasurement}</dd>
+        </div>
+      </dl>
       {drawer.simulation.recipients.length === 0 ? (
         <p className="text-sm text-slate-500 dark:text-slate-400">{t('portfolio.simulate.noRecipients')}</p>
       ) : (
@@ -310,13 +752,205 @@ export function ProgramDrawer({
         <span className="text-slate-500 dark:text-slate-400">{t('portfolio.simulate.totalAwarded')}</span>
         <span className="flex items-center gap-3">
           <span className="font-semibold tabular-nums text-slate-900 dark:text-slate-100">{drawer.simulation.totalAwarded}</span>
-          {canManage && program.status === 'active' && !drawer.simulation.isEstimate ? (
+          {canManage && program.status === 'active' && !drawer.simulation.isEstimate && drawer.simulation.canSettle ? (
             <Button size="sm" disabled={working} onClick={settle}>
               {t('portfolio.simulate.settle')}
             </Button>
           ) : null}
         </span>
       </div>
+      {canManage && program.status === 'active' && !drawer.simulation.isEstimate ? (
+        <details className="border-t border-slate-100 pt-3 dark:border-slate-800">
+          <summary className="cursor-pointer text-sm font-medium text-slate-800 dark:text-slate-100">{t('sourceFirst.title')}</summary>
+          <div className="mt-3 flex flex-col gap-3 text-sm">
+            <p className="text-xs text-slate-600 dark:text-slate-300">
+              {isAboveNativeMeasure ? t('sourceFirst.descriptionAboveNativeMeasure') : t('sourceFirst.description')}
+            </p>
+            <div>
+              <Label htmlFor="source-first-evidence-class">{t('sourceFirst.evidenceClass')}</Label>
+              <Select id="source-first-evidence-class" value={sourceEvidenceClass} onChange={(event) => setSourceEvidenceClass(event.target.value as SourceEvidenceClass)}>
+                <option value="missing-source-identity">{t('sourceFirst.classMissingIdentity')}</option>
+                <option value="source-paid-above-native-measure">{t('sourceFirst.classPaidAboveMeasure')}</option>
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="source-first-native-as-of">{t('sourceFirst.asOf')}</Label>
+              <Input id="source-first-native-as-of" type="date" value={sourceAsOf} required onChange={(event) => setSourceAsOf(event.target.value)} />
+              <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{t('sourceFirst.asOfHint')}</p>
+            </div>
+            <div>
+              <Label htmlFor="source-first-employment">{t('sourceFirst.recipient')}</Label>
+              <Select id="source-first-employment" value={sourceEmploymentId} onChange={(event) => setSourceEmploymentId(event.target.value)}>
+                <option value="">{t('sourceFirst.chooseRecipient')}</option>
+                {employmentOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+              </Select>
+            </div>
+            <p className="text-xs text-slate-600 dark:text-slate-300">{t('sourceFirst.legalPayer')}: {drawer.legalEntityLabel ?? t('sourceFirst.payerNotConfigured')}</p>
+            <div>
+              <Label htmlFor="source-first-file">{t('sourceFirst.issuedFile')}</Label>
+              <CabinetFilePicker id="source-first-file" label={t('sourceFirst.issuedFile')} value={sourceFileId} onChange={(value) => {
+                setSourceFileId(value); setSourceVersionId(''); setSourceRows([]); setSourceRowPointer('')
+                setSourceFields({ sourceRowRef: '', amount: '', currency: '', periodFrom: '', periodTo: '', sourceIssueDate: '', sourcePaidDate: '' })
+              }} disabled={working} />
+              {sourceFileId && sourceVersions.length > 0 ? (
+                <div className="mt-2">
+                  <Label htmlFor="source-first-version">{t('sourceFirst.fileVersion')}</Label>
+                  <Select id="source-first-version" value={sourceVersionId} onChange={(event) => {
+                    setSourceVersionId(event.target.value); setSourceRowPointer(''); setSourceRows([])
+                    setSourceFields({ sourceRowRef: '', amount: '', currency: '', periodFrom: '', periodTo: '', sourceIssueDate: '', sourcePaidDate: '' })
+                  }}>
+                    {sourceVersions.map((version) => <option key={version.id} value={version.id}>{version.label}</option>)}
+                  </Select>
+                </div>
+              ) : null}
+            </div>
+            <div>
+              <Label htmlFor="source-first-row">{t('sourceFirst.issuedRow')}</Label>
+              <Select id="source-first-row" value={sourceRowPointer} onChange={(event) => {
+                const pointer = event.target.value
+                setSourceRowPointer(pointer)
+                const row = sourceRows.find((entry) => entry.pointer === pointer)?.row
+                const options = retainedFieldOptions(row)
+                setSourceFields({
+                  sourceRowRef: suggestedFieldPointer(options, 'sourceRowRef'), amount: suggestedFieldPointer(options, 'amount'),
+                  currency: suggestedFieldPointer(options, 'currency'), periodFrom: suggestedFieldPointer(options, 'periodFrom'),
+                  periodTo: suggestedFieldPointer(options, 'periodTo'), sourceIssueDate: suggestedFieldPointer(options, 'sourceIssueDate'),
+                  sourcePaidDate: suggestedFieldPointer(options, 'sourcePaidDate'),
+                })
+              }} disabled={!sourceVersionId || sourceRows.length === 0}>
+                <option value="">{t('sourceFirst.chooseRow')}</option>
+                {sourceRows.map((row) => <option key={row.pointer} value={row.pointer}>{row.label}</option>)}
+              </Select>
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              {([
+                ['sourceRowRef', 'rowReferenceField'], ['amount', 'amountField'], ['currency', 'currencyField'],
+                ['periodFrom', 'periodFromField'], ['periodTo', 'periodToField'], ['sourceIssueDate', 'issueDateField'],
+                ...(isAboveNativeMeasure ? [['sourcePaidDate', 'paidDateField'] as const] : []),
+              ] as const).map(([field, labelKey]) => (
+                <div key={field}>
+                  <Label htmlFor={`source-first-${field}`}>{t(`sourceFirst.${labelKey}`)}</Label>
+                  <Select id={`source-first-${field}`} value={sourceFields[field]} onChange={(event) => setSourceFields((current) => ({ ...current, [field]: event.target.value }))} disabled={!sourceRowPointer || sourceFieldOptions.length === 0}>
+                    <option value="">{t('sourceFirst.chooseField')}</option>
+                    {sourceFieldOptions.map((option) => <option key={option.pointer} value={option.pointer}>{option.label}{option.sample ? ` · ${option.sample}` : ''}</option>)}
+                  </Select>
+                </div>
+              ))}
+            </div>
+            <div>
+              <Label htmlFor="source-first-corroboration">{t('sourceFirst.corroborationFile')}</Label>
+              <CabinetFilePicker id="source-first-corroboration" label={t('sourceFirst.corroborationFile')} value={corroborationFileId} onChange={(value) => {
+                setCorroborationFileId(value); setCorroborationVersionId(''); setCorroborationRows([]); setCorroborationRowPointer('')
+              }} disabled={working} />
+              {corroborationFileId && corroborationVersions.length > 0 ? (
+                <div className="mt-2">
+                  <Label htmlFor="source-first-corroboration-version">{t('sourceFirst.fileVersion')}</Label>
+                  <Select id="source-first-corroboration-version" value={corroborationVersionId} onChange={(event) => {
+                    setCorroborationVersionId(event.target.value); setCorroborationRows([]); setCorroborationRowPointer('')
+                  }}>
+                    {corroborationVersions.map((version) => <option key={version.id} value={version.id}>{version.label}</option>)}
+                  </Select>
+                </div>
+              ) : null}
+              {corroborationFileId && corroborationVersionId ? (
+                <div className="mt-2">
+                  <Label htmlFor="source-first-corroboration-row">{t('sourceFirst.corroboratingRow')}</Label>
+                  <Select id="source-first-corroboration-row" value={corroborationRowPointer} onChange={(event) => setCorroborationRowPointer(event.target.value)} disabled={corroborationRows.length === 0}>
+                    <option value="">{t('sourceFirst.chooseRow')}</option>
+                    {corroborationRows.map((row) => <option key={row.pointer} value={row.pointer}>{row.label}</option>)}
+                  </Select>
+                </div>
+              ) : null}
+            </div>
+            <div className="space-y-3">
+              {pdfEvidence.map((entry, index) => <RetainedPdfEvidence key={entry.key} value={entry.input} disabled={working}
+                onChange={input => setPdfEvidence(current => current.map((item, position) => position === index ? { ...item, input } : item))}
+                onRemove={() => setPdfEvidence(current => current.filter((_, position) => position !== index))} />)}
+              <Button variant="outline" type="button" disabled={working || pdfEvidence.length + (corroborationFileId ? 1 : 0) >= 4}
+                onClick={() => setPdfEvidence(current => [...current, { key: crypto.randomUUID(), input: { fileId: '', versionId: '', rowPointer: '', pdfSelection: { page: 1, anchor: '', fields: {} } } }])}>
+                {t('sourceFirst.addPdfEvidence')}
+              </Button>
+              <Label>{t('sourceFirst.currencyBasis')}<Select value={nativeCurrencySelected ? 'native' : 'source'} onChange={event => setNativeCurrencySelected(event.target.value === 'native')}>
+                <option value="source">{t('sourceFirst.currencyFromSource')}</option><option value="native">{t('sourceFirst.currencyFromPayroll')}</option>
+              </Select></Label>
+              {nativeCurrencySelected ? <><p className="text-xs text-slate-500">{t('sourceFirst.currencyBasisHint', { currency: program.currency })}</p>
+                <Label>{t('sourceFirst.currencyBasisReason')}<Textarea value={nativeCurrencyReason} onChange={event => setNativeCurrencyReason(event.target.value)} /></Label></> : null}
+            </div>
+            {sourcePreview ? (
+              <div className="rounded border border-slate-200 p-3 dark:border-slate-700">
+                <h4 className="font-medium">{t('sourceFirst.reviewedRow')}</h4>
+                <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
+                  <dt>{t('sourceFirst.rowReference')}</dt><dd>{sourcePreview.sourceRowRef}</dd>
+                  <dt>{t('sourceFirst.recipient')}</dt><dd>{employmentOptions.find((option) => option.value === sourceEmploymentId)?.label ?? t('sourceFirst.selectedRecipient')}</dd>
+                  <dt>{t('sourceFirst.legalPayer')}</dt><dd>{drawer.legalEntityLabel ?? t('sourceFirst.payerNotConfigured')}</dd>
+                  <dt>{t('sourceFirst.earningPeriod')}</dt><dd>{sourcePreview.periodFrom} – {sourcePreview.periodTo}</dd>
+                  <dt>{t('sourceFirst.sourceIssueDate')}</dt><dd>{sourcePreview.sourceIssueDate}</dd>
+                  {isAboveNativeMeasure ? <><dt>{t('sourceFirst.sourcePaidDate')}</dt><dd>{sourcePreview.sourcePaidDate ?? ''}</dd></> : null}
+                  <dt>{t('sourceFirst.issuedAmount')}</dt><dd className="font-semibold tabular-nums">{sourcePreview.value} {sourcePreview.currency}</dd>
+                  <dt>{t('sourceFirst.nativeRecipient')}</dt><dd>{sourcePreview.nativePreview.targetRecipient
+                    ? t('sourceFirst.nativeRecipientAmount', { value: sourcePreview.nativePreview.targetRecipient.value, currency: sourcePreview.currency })
+                    : t('sourceFirst.noNativeRecipient')}</dd>
+                  {isAboveNativeMeasure
+                    ? <><dt>{t('sourceFirst.nativeCarry')}</dt><dd>{sourcePreview.nativePreview.targetCarryForward ? `${sourcePreview.nativePreview.targetCarryForward} ${sourcePreview.currency}` : t('sourceFirst.noNativeCarry')}</dd></>
+                    : <><dt>{t('sourceFirst.nativePool')}</dt><dd>{sourcePreview.nativePreview.nativePoolAvailable ? t('sourceFirst.positivePool') : t('sourceFirst.noPayablePool')}</dd></>}
+                  <dt>{t('sourceFirst.nativeMeasure')}</dt><dd>{sourcePreview.nativePreview.measuredValue} {sourcePreview.currency}</dd>
+                  <dt>{t('sourceFirst.measurementCutoff')}</dt><dd>{sourcePreview.nativeMeasurementAsOf ?? t('sourceFirst.currentNativeState')}</dd>
+                </dl>
+                <details className="mt-2">
+                  <summary className="cursor-pointer text-xs">{t('sourceFirst.showSelectedRow')}</summary>
+                  <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
+                    {Object.entries(sourcePreview.sourceRow).map(([key, value]) => <div key={key} className="contents"><dt>{humanFieldName(key)}</dt><dd className="break-words">{typeof value === 'object' && value !== null ? JSON.stringify(value) : String(value ?? '')}</dd></div>)}
+                  </dl>
+                </details>
+                {sourcePreview.artifacts.length > 1 ? <p className="mt-2 text-xs text-slate-500 dark:text-slate-400">{t('sourceFirst.corroborationSelected', { count: sourcePreview.artifacts.length - 1 })}</p> : null}
+                <p className="mt-2 text-xs text-amber-700 dark:text-amber-300">{t('sourceFirst.nativeIdentityUnknown')}</p>
+                {sourcePreview.nativePreview.targetRecipient && sourcePreview.nativePreview.canRecordFirstObligation === false
+                  ? <Alert variant="destructive">{t('sourceFirst.nativeRecipientAlreadyPayable')}</Alert>
+                  : null}
+                {!isAboveNativeMeasure && !sourcePreview.nativePreview.nativePoolAvailable
+                  ? <Alert variant="destructive">{t('sourceFirst.positivePoolRequired')}</Alert>
+                  : null}
+                {isAboveNativeMeasure && !sourcePreview.nativePreview.canRecordFirstObligation && !sourcePreview.nativePreview.targetRecipient
+                  ? <Alert variant="destructive">{t('sourceFirst.negativeMeasureRequired')}</Alert>
+                  : null}
+              </div>
+            ) : null}
+            <div>
+              <Label htmlFor="source-first-mapping-basis">{t('sourceFirst.mappingBasis')}</Label>
+              <Textarea id="source-first-mapping-basis" value={sourceMappingBasis} onChange={(event) => setSourceMappingBasis(event.target.value)} />
+            </div>
+            <div>
+              <Label htmlFor="source-first-mapping-reason">{t('sourceFirst.mappingReason')}</Label>
+              <Textarea id="source-first-mapping-reason" value={sourceMappingReason} onChange={(event) => setSourceMappingReason(event.target.value)} />
+            </div>
+            {isAboveNativeMeasure ? (
+              <>
+                <div>
+                  <Label htmlFor="source-first-governing-basis">{t('sourceFirst.governingBasis')}</Label>
+                  <Textarea id="source-first-governing-basis" value={sourceGoverningBasis} onChange={(event) => setSourceGoverningBasis(event.target.value)} />
+                </div>
+                <div>
+                  <Label htmlFor="source-first-governing-reason">{t('sourceFirst.governingReason')}</Label>
+                  <Textarea id="source-first-governing-reason" value={sourceGoverningReason} onChange={(event) => setSourceGoverningReason(event.target.value)} />
+                </div>
+              </>
+            ) : null}
+            <label className="flex items-start gap-2 text-xs">
+              <Input id="source-first-mapping-confirmed" type="checkbox" className="mt-0.5 h-4 w-4 shrink-0 p-0" checked={sourceConfirmedReviewKey === sourceConfirmationKey} onChange={(event) => setSourceConfirmedReviewKey(event.target.checked ? sourceConfirmationKey : '')} disabled={!sourcePreview || sourcePreview.reviewKey !== sourceReviewKey} />
+              <span>{t('sourceFirst.mappingConfirmation')}</span>
+            </label>
+            <div>
+              <Label htmlFor="source-first-reason">{t('sourceFirst.obligationReason')}</Label>
+              <Textarea id="source-first-reason" value={sourceReason} onChange={(event) => setSourceReason(event.target.value)} />
+            </div>
+            {sourceError ? <Alert variant="destructive">{sourceError}</Alert> : null}
+            <div className="flex flex-wrap gap-2">
+              <Button variant="outline" disabled={working || !sourceAsOf || !sourceFileId || !sourceVersionId || !sourceRowPointer || !sourceFieldsComplete} onClick={() => void previewSourceEvidence()}>{t('sourceFirst.verifyRow')}</Button>
+              {sourcePreview ? <Button disabled={working || sourceConfirmedReviewKey !== sourceConfirmationKey || !sourcePreview.nativePreview.canRecordFirstObligation} onClick={() => void recordSourceEvidenceFirst()}>{t('sourceFirst.recordDraft')}</Button> : null}
+            </div>
+          </div>
+        </details>
+      ) : null}
     </section>
   ) : null
 

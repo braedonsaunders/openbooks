@@ -44,10 +44,10 @@ test('impossible hired-on dates are refused with 422 and store nothing', async (
   const { org } = await fixture()
   try {
     await withOrgContext(org.orgId, async () => {
-      const bad = await PATCH(patchRequest({ roles: { employee: { enabled: true, hiredOn: '2026-02-30' } }, expectedUpdatedAt: await revision(org.orgId, org.customerId) }), params(org.customerId))
+      const bad = await PATCH(patchRequest({ kind: 'person', roles: { employee: { enabled: true, hiredOn: '2026-02-30' } }, expectedUpdatedAt: await revision(org.orgId, org.customerId) }), params(org.customerId))
       assert.equal(bad.status, 422, await bad.clone().text())
       assert.equal((await db.execute<{ n: string }>(sql`select count(*)::text as n from employee_roles where org_id=${org.orgId} and party_id=${org.customerId}`)).rows[0]!.n, '0')
-      const good = await PATCH(patchRequest({ roles: { employee: { enabled: true, hiredOn: '2026-02-28' } }, expectedUpdatedAt: await revision(org.orgId, org.customerId) }), params(org.customerId))
+      const good = await PATCH(patchRequest({ kind: 'person', roles: { employee: { enabled: true, hiredOn: '2026-02-28' } }, expectedUpdatedAt: await revision(org.orgId, org.customerId) }), params(org.customerId))
       assert.equal(good.status, 200, await good.clone().text())
       assert.equal((await db.execute<{ hired_on: string }>(sql`select hired_on::text from employee_roles where org_id=${org.orgId} and party_id=${org.customerId}`)).rows[0]!.hired_on, '2026-02-28')
     })
@@ -174,6 +174,77 @@ test('transaction filter enums stay inside the caller subsidiary scope', async (
       const body = await res.json()
       assert.equal(body.rows.length, 1)
       assert.deepEqual(body.kinds, ['sales_order'])
+    })
+  } finally {
+    session.user = null
+    await dropScratchOrg(org.orgId)
+  }
+})
+
+test('native employee create remains employee and hires through the canonical lifecycle', async () => {
+  const { setupHarness, withHarness } = await import('@openbooks/engine/testing/hrm-harness')
+  const { POST } = await import('./route')
+  const { proposeFirstEmployment } = await import('@openbooks/engine/hrm/first-employment')
+  const { findEmploymentsByParty } = await import('@openbooks/engine/hrm/employment-read')
+  const { installEngineSeams } = await import('@openbooks/engine/composition/install')
+  installEngineSeams()
+  await withHarness(() => setupHarness({ features: ['hrm'], users: [
+    { key: 'hrId', name: 'Hiring manager', handle: 'party_hire_manager', permissions: ['*'], link: true },
+  ] } as const), async (h) => {
+    session.user = { id: h.hrId, orgId: h.org.orgId, name: 'Hiring manager', email: 'hr@example.test', roles: [], isSuperAdmin: false,
+      envKind: 'production', productionOrgId: h.org.orgId, homeOrgId: h.org.orgId, homeUserId: h.hrId }
+    try {
+      const partyId = randomUUID()
+      const response = await POST(new Request('http://audit.local/api/parties', { method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': partyId },
+        body: JSON.stringify({ kind: 'employee', displayName: 'New employee', subsidiaryId: h.org.subsidiaryId,
+          roles: { employee: { enabled: true } } }),
+      }))
+      assert.equal(response.status, 201, await response.clone().text())
+      const payload = await response.json() as { party: { id: string; kind: string }; employee: { is_active: boolean } }
+      assert.equal(payload.party.id, partyId)
+      assert.equal(payload.party.kind, 'employee')
+      assert.equal(payload.employee.is_active, true)
+      const hire = await proposeFirstEmployment({ orgId: h.org.orgId, actorId: h.hrId, workerPartyId: partyId,
+        employerSubsidiaryId: h.org.subsidiaryId, effectiveFrom: '2026-09-01', reason: 'Start employment' })
+      assert.equal(hire.status, 'applied')
+      assert.deepEqual(await findEmploymentsByParty({ orgId: h.org.orgId, actorId: h.hrId, workerPartyId: partyId }), [hire.employmentId])
+      const stored = (await db.execute<{ kind: string; status: string; activeRole: boolean }>(sql`
+        select p.kind, v.status, r.is_active as "activeRole" from parties p
+        join employee_roles r on r.org_id=p.org_id and r.party_id=p.id
+        join worker_employments e on e.org_id=p.org_id and e.worker_party_id=p.id
+        join worker_employment_versions v on v.org_id=e.org_id and v.employment_id=e.id and v.recorded_until is null
+        where p.org_id=${h.org.orgId} and p.id=${partyId}
+      `)).rows[0]
+      assert.deepEqual(stored, { kind: 'employee', status: 'active', activeRole: true })
+    } finally {
+      session.user = null
+    }
+  })
+})
+
+test('company keeps its commercial roles and refuses employee role assignment', async () => {
+  const { org } = await fixture()
+  try {
+    await withOrgContext(org.orgId, async () => {
+      await db.execute(sql`update parties set kind='company' where org_id=${org.orgId} and id=${org.customerId}`)
+      await db.execute(sql`insert into customer_roles (org_id, party_id) values (${org.orgId}, ${org.customerId})`)
+      const rejected = await PATCH(patchRequest({ roles: { employee: { enabled: true } },
+        expectedUpdatedAt: await revision(org.orgId, org.customerId) }), params(org.customerId))
+      assert.equal(rejected.status, 422, await rejected.clone().text())
+      assert.match((await rejected.json() as { error: string }).error, /requires kind "person" or "employee"/)
+      assert.equal((await db.execute<{ n: string }>(sql`select count(*)::text as n from employee_roles
+        where org_id=${org.orgId} and party_id=${org.customerId}`)).rows[0]!.n, '0')
+      const allowed = await PATCH(patchRequest({ roles: { vendor: { enabled: true } },
+        expectedUpdatedAt: await revision(org.orgId, org.customerId) }), params(org.customerId))
+      assert.equal(allowed.status, 200, await allowed.clone().text())
+      const party = (await db.execute<{ kind: string; customer: boolean; vendor: boolean }>(sql`
+        select p.kind,
+          exists(select 1 from customer_roles r where r.org_id=p.org_id and r.party_id=p.id and r.is_active) as customer,
+          exists(select 1 from vendor_roles r where r.org_id=p.org_id and r.party_id=p.id and r.is_active) as vendor
+        from parties p where p.org_id=${org.orgId} and p.id=${org.customerId}
+      `)).rows[0]
+      assert.deepEqual(party, { kind: 'company', customer: true, vendor: true })
     })
   } finally {
     session.user = null

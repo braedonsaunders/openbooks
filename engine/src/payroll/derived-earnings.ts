@@ -179,7 +179,6 @@ export interface DerivedComponent {
   taxable: boolean;
   pensionable: boolean;
   insurable: boolean;
-  vacationable: boolean;
   nonPeriodic: boolean;
   supplementalWageCategory?: UsSupplementalWageCategory | null;
   statutoryReportingCategory?: string | null;
@@ -202,7 +201,6 @@ export interface DerivedEarningLine {
   taxable: boolean;
   pensionable: boolean;
   insurable: boolean;
-  vacationable: boolean;
   programApplicability?: Record<string, boolean>;
   nonPeriodic: boolean;
   supplementalWageCategory?: UsSupplementalWageCategory | null;
@@ -834,7 +832,6 @@ export function applyDerivedRule(
       taxable: component.taxable,
       pensionable: component.pensionable,
       insurable: component.insurable,
-      vacationable: component.vacationable,
       nonPeriodic: component.nonPeriodic,
       supplementalWageCategory: component.supplementalWageCategory ?? null,
       statutoryReportingCategory: component.statutoryReportingCategory ?? null,
@@ -908,11 +905,11 @@ async function loadComponents(
   const r = (await tx.execute<{
       id: string; name: string; value: string | null; kind: string;
       taxable: boolean; pensionable: boolean; insurable: boolean;
-      vacationable: boolean; non_periodic: boolean; supplemental_wage_category: string | null;
+      non_periodic: boolean; supplemental_wage_category: string | null;
       statutory_reporting_category: string | null;
       statutory_exemption_category: string | null;
     }>(sql`
-    select c.id, c.name, c.value, c.kind, c.taxable, c.pensionable, c.insurable, c.vacationable, c.non_periodic,
+    select c.id, c.name, c.value, c.kind, c.taxable, c.pensionable, c.insurable, c.non_periodic,
            ec.supplemental_wage_category, ec.statutory_reporting_category, ec.statutory_exemption_category
       from pay_components c
       join pay_component_earning_classifications ec
@@ -929,7 +926,7 @@ async function loadComponents(
     map.set(row.id, {
       id: row.id, name: row.name, value: row.value,
       taxable: row.taxable === true, pensionable: row.pensionable === true,
-      insurable: row.insurable === true, vacationable: row.vacationable === true,
+      insurable: row.insurable === true,
       nonPeriodic: row.non_periodic === true,
       supplementalWageCategory: row.supplemental_wage_category as UsSupplementalWageCategory | null,
       statutoryReportingCategory: row.statutory_reporting_category,

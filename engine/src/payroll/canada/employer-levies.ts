@@ -1,3 +1,4 @@
+import { canonicalDecimal } from "../../money/exact-decimal.ts";
 import { sql } from "drizzle-orm";
 import { PayrollError } from "../error.ts";
 import { PayrollPackError } from "../payroll-error.ts";
@@ -5,6 +6,7 @@ import { resolveStoredEmployerFact } from "../employer-fact-store.ts";
 import { undecidedWorkerCompError } from "../employee-worker-comp.ts";
 import { resolveStatutoryHistoryScope, employerScopedStatutoryStubs, requireStatutoryHistoryFactors } from "../statutory-history-scope.ts";
 import { employeeOpeningLevyAmount, readEmployeeOpeningLevySources, requireEmployerOpeningLevySources } from "../opening-levy-source-reader.ts";
+import { EMPLOYER_LEVY_PROGRAMS, parseEmployerLevyAdjustmentEvidence } from "../run-levy-adjustment-evidence.ts";
 
 /**
  * The pay-run lifecycle states, as `pay_runs.run_status` spells them
@@ -185,6 +187,46 @@ export async function applyCaEmployerLevies(
   if (workerCompGroupId && (!wcb || wcb.rate_percent === null || cmp(wcb.rate_percent, '0') < 0 || wcb.max_assessable !== null && cmp(wcb.max_assessable, '0') < 0)) {
     throw new PayrollError(`${employeeName}: the dated worker-compensation group has no valid configured rate or assessable ceiling — review its rate and ceiling in Company Setup → Worker compensation groups before calculating.`);
   }
+  // Audited employer-only issued levy amounts recorded on this run. The
+  // operator states the exact issued premium; calculation books it exactly
+  // beside the native assessment of the run's own lines. It records no
+  // assessable earnings and re-prices nothing: dated assessability policy,
+  // annual maxima and exemptions apply to the run's own lines exactly as
+  // they would without it. Any employer-contribution levy adjustment
+  // without its audited evidence refuses rather than booking an
+  // unexplained amount.
+  const levyAdjustmentRows = (await tx.execute<{ id: string; amount: string; note: string | null; system_key: string; is_active: boolean; country: string | null }>(sql`
+    select a.id::text, a.amount::text as amount, a.note, c.system_key, c.is_active, c.country
+      from pay_run_adjustments a
+      join pay_components c on c.org_id=a.org_id and c.id=a.component_id
+     where a.org_id=${orgId} and a.pay_run_document_id=${documentId}
+       and a.employee_party_id=${employeePartyId} and a.adjustment_type='line'
+       and c.kind='employer_contribution' and c.system_key in ('eht', 'wcb')
+     order by a.created_at, a.id
+  `)).rows;
+  let wcbAdjustmentAmount: Money = "0" as Money;
+  let ehtAdjustmentAmount: Money = "0" as Money;
+  for (const row of levyAdjustmentRows) {
+    const evidence = parseEmployerLevyAdjustmentEvidence(row.note);
+    if (!evidence || evidence.requestId !== row.id || !row.is_active || row.country !== "CA"
+      || canonicalDecimal(canonicalDecimal(row.amount, 4), 2) === null || cmp(row.amount, "0") <= 0
+      || EMPLOYER_LEVY_PROGRAMS[evidence.programKey].systemKey !== row.system_key) {
+      throw new PayrollError(`${employeeName}: a saved employer levy adjustment is missing its programme, reason, source reference or request identity — correct it through the audited employer levy adjustment command before calculating`);
+    }
+    if (evidence.programKey === "ca_wcb") {
+      if (evidence.workerCompGroupId !== workerCompGroupId) {
+        throw new PayrollError(`${employeeName}: the saved WCB/WSIB levy adjustment names a different worker-compensation group than the employee's group on the pay date — correct it through the audited employer levy adjustment command before calculating`);
+      }
+      wcbAdjustmentAmount = add(wcbAdjustmentAmount, row.amount) as Money;
+    } else {
+      ehtAdjustmentAmount = add(ehtAdjustmentAmount, row.amount) as Money;
+    }
+  }
+  const hasWcbAdjustment = levyAdjustmentRows.some((row) => row.system_key === "wcb");
+  const hasEhtAdjustment = levyAdjustmentRows.some((row) => row.system_key === "eht");
+  if (hasWcbAdjustment && !(wcb?.rate_percent && cmp(wcb.rate_percent, "0") >= 0)) {
+    throw new PayrollError(`${employeeName}: a WCB/WSIB levy adjustment is recorded but the employee's worker-compensation group has no configured rate — configure the group in Company Setup → Worker compensation groups before calculating`);
+  }
   // An undecided coverage with assessable earnings is a refusal, never a
   // silent zero: without a rate class there is no premium, and without an
   // exemption the employee is covered by law. Readiness names every such
@@ -211,7 +253,7 @@ export async function applyCaEmployerLevies(
     // group maximum on the first stub.
     await requireStatutoryHistoryFactors(tx, historyScope, { employeePartyId, region }, ['WCB_EARN']);
     const openingSources = await readEmployeeOpeningLevySources(tx, {
-      orgId, employeePartyId, taxYear, subsidiaryId: historyScope.subsidiaryId,
+      orgId, employeePartyId, taxYear, subsidiaryId: historyScope.subsidiaryId, beforeDate: ctx.payDate,
     });
     const openingAssessable = employeeOpeningLevyAmount(openingSources, { programKey: 'ca_wcb', region });
     const priorAssessable = ((await tx.execute<{ prior: string }>(sql`
@@ -223,9 +265,18 @@ export async function applyCaEmployerLevies(
     const room = wcb.max_assessable
       ? (cmp(wcb.max_assessable, priorAssessable) > 0 ? add(wcb.max_assessable, neg(priorAssessable)) : "0")
       : assessable;
-    wcbAssessable = (cmp(assessable, room) <= 0 ? assessable : room) as Money;
-    if (cmp(wcbAssessable, "0") > 0) {
-      wcbAmount = ledgerPrecisionLevy(wcbAssessable, wcb.rate_percent);
+    const computedAssessable = (cmp(assessable, room) <= 0 ? assessable : room) as Money;
+    wcbAssessable = computedAssessable;
+    if (cmp(computedAssessable, "0") > 0 || hasWcbAdjustment) {
+      const computedAmount = cmp(computedAssessable, "0") > 0
+        ? ledgerPrecisionLevy(computedAssessable, wcb.rate_percent)
+        : "0" as Money;
+      // The assessed premium factor stays the native assessment of this
+      // stub's own lines; the issued operator amount rides the same line
+      // set and is retained separately (wcbAdjustmentAmount), never
+      // relabelled as assessment.
+      wcbAmount = computedAmount;
+      const lineTotal = add(computedAmount, wcbAdjustmentAmount) as Money;
       // Aggregate tagged ASSESSABLE earning lines by costing target (project +
       // department): hourly earnings post one line per DAY since dated
       // lookbacks, but WSIB assesses earnings and the stub allocates the
@@ -256,35 +307,43 @@ export async function applyCaEmployerLevies(
       const allTagged = cmp(sum(splits.map((s) => s.amount)), assessable) === 0;
       for (const [index, split] of splits.entries()) {
         const share = index === splits.length - 1 && allTagged
-          ? add(wcbAmount, neg(allocated))
-          : roundMoney(mulRatio(wcbAmount, toUnits(split.amount), assessableUnits), 2);
+          ? add(computedAmount, neg(allocated))
+          : roundMoney(mulRatio(computedAmount, toUnits(split.amount), assessableUnits), 2);
         if (cmp(share, "0") === 0) continue;
         allocated = add(allocated, share);
         allocations.push({
           amount: share, projectId: split.projectId, departmentId: split.departmentId,
         });
       }
-      const remainder = add(wcbAmount, neg(allocated));
+      const remainder = add(computedAmount, neg(allocated));
       if (cmp(remainder, "0") !== 0) {
         const last = allocations[allocations.length - 1];
         if (cmp(remainder, "0") < 0 && last) last.amount = add(last.amount, remainder);
         else allocations.push({ amount: remainder });
       }
+      // The issued operator entry carries no assessed earnings or
+      // costing target here: it posts unallocated, in the same single WCB
+      // line set (one earnings-assessed slot per stub).
+      if (cmp(wcbAdjustmentAmount, "0") !== 0) allocations.push({ amount: wcbAdjustmentAmount });
       const allocatedTotal = sum(allocations.map((a) => a.amount));
-      if (cmp(allocatedTotal, wcbAmount) !== 0) {
+      if (cmp(allocatedTotal, lineTotal) !== 0) {
         throw new PayrollError(
-          `WCB allocation ${allocatedTotal} does not equal the ${wcbAmount} premium `
+          `WCB allocation ${allocatedTotal} does not equal the ${lineTotal} premium `
           + `for ${employeeName}`,
         );
       }
-      pushStatutory("wcb", "employer_contribution", "WCB/WSIB", wcbAmount, 260, { allocations });
+      pushStatutory("wcb", "employer_contribution", "WCB/WSIB", lineTotal, 260, { allocations });
     }
   }
 
   const eht = config.eht(region);
+  if (hasEhtAdjustment && !eht) {
+    throw new PayrollError(`${employeeName}: an employer health tax levy adjustment is recorded but CA ${region} employer health tax is not configured for ${taxYear} — configure the ca_eht rate in Payroll Setup → Statutory rates before calculating`);
+  }
   if (eht) {
-    ehtEarnings = assessableFor("eht") as Money;
-    if (cmp(ehtEarnings, "0") > 0) {
+    const lineEarnings = assessableFor("eht") as Money;
+    ehtEarnings = lineEarnings;
+    if (cmp(lineEarnings, "0") > 0 || hasEhtAdjustment) {
       // Committed runs only (see `ehtExemptionConsumedByRunStatus`, which
       // this literal mirrors — SQL cannot call it): a calculated run is a
       // draft that may be abandoned or recalculated, and counting its
@@ -307,15 +366,6 @@ export async function applyCaEmployerLevies(
       // Pre-adoption remuneration is allocated by its original province and
       // summed only for this legal employer. The current employee profile is
       // never used to relabel another province's historical assessments.
-      await requireStatutoryHistoryFactors(tx, historyScope, { region }, ['EHT_EARN']);
-      const ehtOpening = await requireEmployerOpeningLevySources(tx, {
-        orgId, subsidiaryId: historyScope.subsidiaryId, taxYear, programKey: 'ca_eht', region,
-      });
-      const priorInProvince = ((await tx.execute<{ prior: string }>(sql`
-        select coalesce(sum((s.factors->>'EHT_EARN')::numeric), 0)
-               + ${ehtOpening}::numeric as prior
-          from ${employerScopedStatutoryStubs(historyScope, { region, includeCurrentDocument: true })} s
-      `))).rows[0]!.prior;
       const exemptionFact = `eht_exemption_share_${region.toLowerCase()}`;
       const declaredExemption = await resolveStoredEmployerFact({
         tx, orgId, subsidiaryId: historyScope.subsidiaryId, country: 'CA', factKey: exemptionFact,
@@ -335,15 +385,37 @@ export async function applyCaEmployerLevies(
           + `review ${exemptionFact} in Payroll Setup → Employer facts and the ${region} rate in Payroll Setup → Statutory rates.`,
         );
       }
+      // Prior remuneration can consume only a positive declared exemption.
+      // A zero allocation taxes this run's full base and needs no prior factor.
+      let priorInProvince = '0';
+      if (cmp(exemption, '0') > 0) {
+        await requireStatutoryHistoryFactors(tx, historyScope, { region }, ['EHT_EARN']);
+        const ehtOpening = await requireEmployerOpeningLevySources(tx, {
+          orgId, subsidiaryId: historyScope.subsidiaryId, taxYear, programKey: 'ca_eht', region, beforeDate: ctx.payDate,
+        });
+        const priorRows = (await tx.execute<{ prior: string }>(sql`
+          select (coalesce(sum((s.factors->>'EHT_EARN')::numeric), 0)
+                  + ${ehtOpening}::numeric)::text as prior
+            from ${employerScopedStatutoryStubs(historyScope, { region, includeCurrentDocument: true })} s
+        `)).rows;
+        if (priorRows.length !== 1) throw new PayrollError('Employer health tax prior remuneration could not be resolved uniquely');
+        priorInProvince = priorRows[0]!.prior;
+      }
       const exemptionLeft = cmp(exemption, priorInProvince) > 0
         ? add(exemption, neg(priorInProvince))
         : "0";
-      const taxableRemuneration = cmp(ehtEarnings, exemptionLeft) > 0
-        ? add(ehtEarnings, neg(exemptionLeft))
+      const taxableRemuneration = cmp(lineEarnings, exemptionLeft) > 0
+        ? add(lineEarnings, neg(exemptionLeft))
         : "0";
-      if (cmp(taxableRemuneration, "0") > 0) {
-        ehtAmount = ledgerPrecisionLevy(taxableRemuneration, eht.rate);
-        pushStatutory("eht", "employer_contribution", "Employer Health Tax", ehtAmount, 270);
+      const computedEhtAmount = cmp(taxableRemuneration, "0") > 0
+        ? ledgerPrecisionLevy(taxableRemuneration, eht.rate)
+        : "0" as Money;
+      // Assessed factor = native assessment of own lines only; the issued
+      // operator amount adds to the line and is retained separately.
+      ehtAmount = computedEhtAmount;
+      const ehtLineTotal = add(computedEhtAmount, ehtAdjustmentAmount) as Money;
+      if (cmp(ehtLineTotal, "0") !== 0) {
+        pushStatutory("eht", "employer_contribution", "Employer Health Tax", ehtLineTotal, 270);
       }
     }
   }
@@ -452,7 +524,7 @@ export async function applyCaEmployerLevies(
     if (cntExemption === "none") {
       await requireStatutoryHistoryFactors(tx, historyScope, { employeePartyId, region: 'QC' }, ['CNT_EARN']);
       const cntSources = await readEmployeeOpeningLevySources(tx, {
-        orgId, employeePartyId, taxYear, subsidiaryId: historyScope.subsidiaryId,
+        orgId, employeePartyId, taxYear, subsidiaryId: historyScope.subsidiaryId, beforeDate: ctx.payDate,
       });
       const cntOpening = employeeOpeningLevyAmount(cntSources, { programKey: 'ca_cnt', region: 'QC' });
       const priorCnt = ((await tx.execute<{ prior: string }>(sql`
@@ -469,5 +541,9 @@ export async function applyCaEmployerLevies(
     }
   }
 
-  return { wcbAmount, wcbAssessable, ehtAmount, ehtEarnings, hsfAmount, hsfEarnings, cntAmount, cntEarnings };
+  return {
+    wcbAmount, wcbAssessable, ehtAmount, ehtEarnings, hsfAmount, hsfEarnings, cntAmount, cntEarnings,
+    ...(hasWcbAdjustment ? { wcbAdjustmentAmount } : {}),
+    ...(hasEhtAdjustment ? { ehtAdjustmentAmount } : {}),
+  };
 }

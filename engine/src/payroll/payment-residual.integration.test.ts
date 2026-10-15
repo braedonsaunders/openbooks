@@ -158,15 +158,18 @@ test("payroll liability cannot masquerade as the credit; the run pays the full l
     await db.execute(sql`insert into document_lines(org_id,document_id,line_number,account_id,quantity,unit_price,amount,tax_amount,tax_input_amount)
       values(${fx.orgId},${invoiceId},1,${revenue.id},1,100,100,0,100)`);
     await db.execute(sql`update documents set status='approved' where org_id=${fx.orgId} and id=${invoiceId}`);
-    const invoiceEntry = await postDocument(invoiceId, { control: { ar: fx.source.account_id, ap: fx.source.account_id, bank: fx.bankAccountId } });
+    const controlAccounts = (await db.execute<{ id: string; type: string }>(sql`select id,type from accounts where org_id=${fx.orgId} and type in ('asset_receivable','liability_payable')`)).rows;
+    const receivable = controlAccounts.find(account => account.type === 'asset_receivable')!.id;
+    const payable = controlAccounts.find(account => account.type === 'liability_payable')!.id;
+    const invoiceEntry = await postDocument(invoiceId, { control: { ar: receivable, ap: payable, bank: fx.bankAccountId } });
     const target = (await db.execute<{ id: string }>(sql`select id from journal_lines where org_id=${fx.orgId}
-      and entry_id=${invoiceEntry} and account_id=${fx.source.account_id} and amount>0`)).rows[0]!;
+      and entry_id=${invoiceEntry} and account_id=${receivable} and amount>0`)).rows[0]!;
     await assert.rejects(
       withOrgTransaction(fx.orgId, async () => {
         const receipt = await createPaymentDocument({ allowedSubsidiaryIds: null, orgId: fx.orgId, createdBy: fx.actorId, kind: "customer_payment",
           partyId: fx.employeeId, bankAccountId: fx.bankAccountId, subsidiaryId: fx.subsidiaryId, documentDate: "2026-07-21", currency: "CAD" });
         await updateDraftPayment(receipt.id, {
-          controlAccountId: fx.source.account_id,
+          controlAccountId: receivable,
           allocations: [sameCurrencyAllocation(target.id, "50")],
           creditAllocations: [{ fromLineId: fx.source.id, toLineId: target.id, amount: "50", sourceDocumentId: fx.input.documentId }],
         }, fx.actorId, fx.orgId,

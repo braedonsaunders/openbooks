@@ -17,6 +17,7 @@ import { resolveStatutoryHolidayPay, undeclaredJurisdictionHolidayConflict, type
 import { planMovementsForStub, recordEntitlementMovements } from "./entitlements.ts";
 import { type EarningsAssessedLine } from "./limits.ts";
 import { payrollHourlyWage, type PayableRate } from "./rate.ts";
+import type { BankCashFundingSplit, BankCashPayDateValuation } from "./run-bank-cash-evidence.ts";
 import type { UsSupplementalWageCategory } from "./supplemental-wages.ts";
 import type { UsStatutoryExemptionCategory } from "./statutory-exemptions.ts";
 /**
@@ -64,6 +65,10 @@ export async function stampEarningLineStatutoryTreatments(tx: Pick<typeof db, "e
     if (line.kind !== "earning" || line.componentId === null) continue;
     const treatment = requireComponentStatutoryTreatment(line.componentId, treatments, input.payDate);
     line.programApplicability = programApplicabilityFromExclusions(treatment.program_exclusions);
+    // A funding split separates how an earning is funded, never its
+    // statutory policy: both portions keep the component's dated
+    // treatment exactly as an unsplit line would.
+    line.vacationable = treatment.vacationable;
   }
 }
 
@@ -77,6 +82,10 @@ export interface Line {
   entitlementMovementKey?: string;
   /** False only for newly earned cash paid independently of an entitlement bank. */
   fundedByEntitlementBank?: boolean;
+  /** Audited funding split; carried only by the bank-funded portion line. */
+  bankCashFundingSplit?: BankCashFundingSplit;
+  /** Frozen native pay-date wage source the split's bank-funded portion is valued at. */
+  bankCashValuation?: BankCashPayDateValuation;
   componentId: string | null;
   kind: "earning" | "deduction" | "employer_contribution" | "credit";
   // Brand boundary: every stub amount is canonical ledger money by the time
@@ -314,6 +323,7 @@ export async function statutoryHolidayLinesForStub(
     country,
     subsidiaryId,
     employeePartyId,
+    employmentId: emp.employment_id as string,
     employeeName,
     jurisdiction: employeeJurisdiction,
     periodStart,

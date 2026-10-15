@@ -13,7 +13,7 @@ test('live authorization sees tenant identity, permissions and subsidiary scope 
     const user={id:actor,orgId:org.orgId,isSuperAdmin:false} as SessionUser
     const initial=await resolveUserAuthz(user)
     const rollback=new Error('rollback scope fixture')
-    await assert.rejects(withOrgTransaction(org.orgId,async tx=>{
+    await assert.rejects(withOrgTransaction(org.orgId,()=>db.transaction(async tx=>{
       const changed=await tx.execute(sql`update app_roles set permissions='["reports.read"]'::jsonb,
         subsidiary_restriction=${JSON.stringify({mode:'list',subsidiaryIds:[org.subsidiaryId]})}::jsonb
         where org_id=${org.orgId} and key='poster' returning id`)
@@ -25,7 +25,7 @@ test('live authorization sees tenant identity, permissions and subsidiary scope 
       assert.equal(inactive.rows.length,1)
       assert.deepEqual((await resolveUserAuthz(user,tx)).allowedSubsidiaryIds,new Set())
       throw rollback
-    }),e=>e===rollback)
+    })),e=>e===rollback)
     assert.deepEqual((await resolveUserAuthz(user)).allowedSubsidiaryIds,initial.allowedSubsidiaryIds)
   }finally{await dropScratchOrg(org.orgId)}
 })

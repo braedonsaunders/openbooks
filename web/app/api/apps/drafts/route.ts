@@ -22,7 +22,7 @@ export const runtime = 'nodejs'
  * the body cap is that cap plus envelope headroom — a legal max-size bundle
  * must pass, while the house 1 MiB default would refuse every real package.
  */
-export const MAX_DRAFT_BODY_BYTES = 11 * 1024 * 1024
+const MAX_DRAFT_BODY_BYTES = 11 * 1024 * 1024
 
 export const POST = defineRoute({
   permission: 'apps.manage',

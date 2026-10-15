@@ -10,10 +10,35 @@ export type { DocumentFxRateEvidence };
 /**
  * An explicit exchange rate records the rate a document is measured at in
  * its legal entity's functional currency, with where it came from and why.
- * Only customer invoices and vendor bills accept one; every other kind is
- * measured at the organization's exchange rates.
+ * The generic document editor accepts one only on customer invoices and
+ * vendor bills; the native payment editor accepts one only on customer and
+ * vendor payments. Posting accepts the union, so every editor's recorded
+ * rate is honoured by the same stamping path; every other kind is measured
+ * at the organization's exchange rates.
  */
 export const EXPLICIT_FX_DOCUMENT_KINDS: ReadonlySet<string> = new Set(["customer_invoice", "vendor_bill"]);
+
+/** Kinds whose native payment editor may record an explicit settlement rate. */
+export const PAYMENT_FX_DOCUMENT_KINDS: ReadonlySet<string> = new Set(["customer_payment", "vendor_payment"]);
+
+/** Kinds whose recorded explicit rate posting must honour and validate. */
+export const POSTING_FX_DOCUMENT_KINDS: ReadonlySet<string> = new Set([
+  ...EXPLICIT_FX_DOCUMENT_KINDS,
+  ...PAYMENT_FX_DOCUMENT_KINDS,
+]);
+
+const KIND_LABEL: Record<string, string> = {
+  customer_invoice: "customer invoices",
+  vendor_bill: "vendor bills",
+  customer_payment: "customer payments",
+  vendor_payment: "vendor payments",
+};
+
+/** The allowed kinds named for an operator-facing refusal, in set order. */
+function allowedKindsLabel(allowedKinds: ReadonlySet<string>): string {
+  const labels = [...allowedKinds].map((kind) => KIND_LABEL[kind] ?? kind.replaceAll("_", " "));
+  return labels.length > 1 ? `${labels.slice(0, -1).join(", ")} and ${labels[labels.length - 1]}` : (labels[0] ?? "");
+}
 
 /** An explicit-rate request: the rate and the conversion it was quoted for. */
 export interface ExplicitFxInput {
@@ -156,8 +181,15 @@ export function planDocumentFxEdit(args: {
   input: unknown;
   stored: unknown;
   identity: DocumentFxIdentity | null;
+  /**
+   * Kinds this editor may record a rate on. Defaults to the generic
+   * document editor's invoice/bill set; the native payment editor passes
+   * the payment set, so each editor stays restricted to its own kinds.
+   */
+  allowedKinds?: ReadonlySet<string>;
 }): DocumentFxEditPlan {
   const { kind, input, identity } = args;
+  const allowedKinds = args.allowedKinds ?? EXPLICIT_FX_DOCUMENT_KINDS;
   if (input === null) return args.stored == null ? { action: "keep" } : { action: "clear" };
   if (input === undefined) {
     const stored = readDocumentFxRateEvidence(args.stored);
@@ -172,8 +204,8 @@ export function planDocumentFxEdit(args: {
       `previous ${changed}; record a rate for the new ${changed} with this change, or clear the explicit rate`,
     );
   }
-  if (!EXPLICIT_FX_DOCUMENT_KINDS.has(kind)) {
-    throw new DocumentFxError("an explicit exchange rate can be recorded only on customer invoices and vendor bills");
+  if (!allowedKinds.has(kind)) {
+    throw new DocumentFxError(`an explicit exchange rate can be recorded only on ${allowedKindsLabel(allowedKinds)}`);
   }
   if (!identity) {
     throw new DocumentFxError("assign the document an active subsidiary before recording an explicit exchange rate");
@@ -193,8 +225,8 @@ export function documentFxPostingRefusal(
   identity: DocumentFxIdentity,
   documentRate: string,
 ): string | null {
-  if (!EXPLICIT_FX_DOCUMENT_KINDS.has(kind)) {
-    return "an explicit exchange rate can be recorded only on customer invoices and vendor bills; return the document to draft and clear it";
+  if (!POSTING_FX_DOCUMENT_KINDS.has(kind)) {
+    return `an explicit exchange rate can be recorded only on ${allowedKindsLabel(POSTING_FX_DOCUMENT_KINDS)}; return the document to draft and clear it`;
   }
   const changes = documentFxIdentityChanges(evidence, identity);
   if (changes.length > 0) {

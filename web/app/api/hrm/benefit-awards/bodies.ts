@@ -53,6 +53,19 @@ export const adjustAwardBody = z.object({
   correctionId: uuid,
   value: z.string().trim().min(1).max(64),
   reason,
+  sourceReference: z.string().trim().min(1).max(500).optional(),
+  periodFrom: civilDate.optional(),
+  periodTo: civilDate.optional(),
+}).superRefine((body, context) => {
+  if ((body.periodFrom === undefined) !== (body.periodTo === undefined)) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: [body.periodFrom === undefined ? "periodFrom" : "periodTo"], message: "period overrides require both dates" });
+  }
+  if (body.periodFrom !== undefined && body.periodTo !== undefined && body.periodTo < body.periodFrom) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["periodTo"], message: "period end must not precede its start" });
+  }
+  if (body.periodFrom !== undefined && body.sourceReference === undefined) {
+    context.addIssue({ code: z.ZodIssueCode.custom, path: ["sourceReference"], message: "a dated adjustment needs its source row reference" });
+  }
 });
 export const voidAwardBody = z.object({ action: z.literal("void"), reason });
 

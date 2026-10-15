@@ -59,6 +59,13 @@ const paymentCreateBody = z.object({
   memo: z.string().nullable().optional(),
   withholdingAuthorisation: z.string().trim().max(100).nullable().optional(),
   withholdingAuthorisedAmount: exactMoney().nullable().optional(),
+  // Explicit settlement rate into the owning entity's functional currency.
+  // The insert below records no evidence; the locked draft save in the same
+  // transaction records it with its before/after audit.
+  explicitFx: z.object({
+    rate: z.string(), source: z.string(), reason: z.string(),
+    fromCurrency: z.string(), toCurrency: z.string(), rateDate: isoDate(),
+  }).strict().nullable().optional(),
   allocations: z.array(allocationInput).optional(),
   // Cash received beyond the applications (customer receipts only): it stays
   // on the receipt as an on-account credit rather than being dropped.
@@ -231,6 +238,7 @@ async function createPayment(request: Request) {
     memo: body.memo ?? null,
     ...(body.withholdingAuthorisation !== undefined ? { withholdingAuthorisation: body.withholdingAuthorisation } : {}),
     ...(body.withholdingAuthorisedAmount !== undefined ? { withholdingAuthorisedAmount: body.withholdingAuthorisedAmount } : {}),
+    ...(body.explicitFx !== undefined ? { explicitFx: body.explicitFx } : {}),
     allocations: body.allocations ?? [],
     ...(body.onAccountAmount !== undefined ? { onAccountAmount: body.onAccountAmount } : {}),
     storedValueTenders: body.storedValueTenders ?? [],
@@ -279,7 +287,11 @@ async function createPayment(request: Request) {
         if (replay !== 'replay') throw new Error('idempotency_key_conflict')
         return false
       }
-      const currencyBasis = body.currency !== undefined
+      // A supplied explicit rate replaces the ordinary organization
+      // exchange-rate lookup: resolving it here would fail a foreign
+      // payment that carries a valid manual election and no global rate
+      // row. The locked draft save below records the election instead.
+      const currencyBasis = body.currency !== undefined && body.explicitFx === undefined
         ? await resolvePaymentCurrencyBasis(user.orgId, subsidiaryId, currency, documentDate) : null
       const fxRate = currencyBasis?.fxRate ?? '1'
       const fundedCustom = { ...custom, ...(currencyBasis ? { paymentCurrencyEvidence: currencyBasis.evidence } : {}) }
@@ -321,7 +333,7 @@ async function createPayment(request: Request) {
                 ${user.id}, ${requestId})`)
       await updateDraftPayment(
         requestId,
-        { allocations, onAccountAmount: body.onAccountAmount, withholdingAuthorisation: body.withholdingAuthorisation, withholdingAuthorisedAmount: body.withholdingAuthorisedAmount, storedValueTenders: body.storedValueTenders },
+        { allocations, explicitFx: body.explicitFx, onAccountAmount: body.onAccountAmount, withholdingAuthorisation: body.withholdingAuthorisation, withholdingAuthorisedAmount: body.withholdingAuthorisedAmount, storedValueTenders: body.storedValueTenders },
         user.id, user.orgId,
         { allowedSubsidiaryIds: gate.allowedSubsidiaryIds },
       )

@@ -21,7 +21,8 @@ registerHooks({
     return s ? { format: "module", source: s, shortCircuit: true } : n(u, c);
   },
 });
-const { POST, commandRefusalResponse, commandOperationName, normalizeChannelLocationBody } = await import("./route.ts");
+const { POST } = await import("./route.ts");
+const { commandRefusalResponse, commandOperationName, normalizeChannelLocationBody } = await import("./contracts.ts");
 const { SETUP_ENTITY_BY_KEY } = await import("@/lib/setup/registry");
 const { POST: genericPOST, PATCH: genericPATCH, DELETE: genericDELETE } = await import("../route.ts");
 const call = (entity: string, body: string) => POST(new Request(`http://localhost/api/admin/setup/${entity}/command`, { method: "POST", headers: { "Idempotency-Key": "11111111-1111-4111-8111-111111111111" }, body }), { params: Promise.resolve({ entity }) });

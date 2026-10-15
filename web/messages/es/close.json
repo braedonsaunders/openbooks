@@ -1076,5 +1076,30 @@
     },
     "by": "{name} el {at}",
     "system": "Sistema"
+  },
+  "revaluationEvidence": {
+      "title": "Tipos de cambio de cierre registrados",
+      "reload": "Recargar",
+      "loading": "Cargando…",
+      "loadFailed": "No se pudieron cargar las posiciones en moneda extranjera.",
+      "empty": "No hay posiciones abiertas en moneda extranjera para esta selección.",
+      "position": "{foreign} · Valor en libros {carrying} · Fecha del tipo {date}",
+      "recordedRate": "Registrado: {rate} (versión {version})",
+      "organizationRate": "Tipo de la organización: {rate}",
+      "rateMissing": "Sin tipo de cambio",
+      "recordRate": "Registrar tipo",
+      "recordSuccessor": "Registrar tipo sucesor",
+      "drawerTitle": "Registrar tipo de cambio de cierre",
+      "cancel": "Cancelar",
+      "legalEntity": "Entidad legal",
+      "account": "Cuenta",
+      "conversion": "Conversión",
+      "rateDate": "Fecha del tipo",
+      "currentQuote": "Tipo actual: {rate} (versión {version}) — Fuente: {source}. Un tipo sucesor lo sustituye sin modificarlo.",
+      "rate": "Tipo de cambio",
+      "source": "Fuente",
+      "reason": "Motivo",
+      "recorded": "Tipo de cambio de cierre registrado.",
+      "recordFailed": "No se pudo registrar el tipo de cambio de cierre."
   }
 }

@@ -36,8 +36,8 @@ test('dated absence selects the default treatment and committed clone evidence k
         set program_exclusions=array['wcb'] where org_id=${f.orgId} and pay_component_id=${componentId}
           and worker_comp_group_id is null returning id`)).rows[0]!.id;
       const groupTreatmentId = (await db.execute<{ id: string }>(sql`insert into pay_component_statutory_treatments
-        (org_id,pay_component_id,worker_comp_group_id,effective_from,program_exclusions)
-        values(${f.orgId},${componentId},${groupId},'2026-01-01','{}') returning id`)).rows[0]!.id;
+        (org_id,pay_component_id,worker_comp_group_id,effective_from,program_exclusions,vacationable)
+        values(${f.orgId},${componentId},${groupId},'2026-01-01','{}',true) returning id`)).rows[0]!.id;
       const liability = (await db.execute<{ id: string }>(sql`select settings->'payroll'->>'eiPayableAccountId' as id
         from orgs where id=${f.orgId}`)).rows[0]!.id;
       await setPackSlotAccount(f.orgId, f.actorId, 'CA', 'wcb', liability);
@@ -73,6 +73,12 @@ test('dated absence selects the default treatment and committed clone evidence k
       await assert.rejects(db.transaction(tx => tx.execute(sql`update pay_component_statutory_treatments
         set program_exclusions='{}' where org_id=${f.orgId} and id=${defaultId}`)), error =>
         errorChainMatches(error,/cannot be changed over committed history/));
+      await assert.rejects(db.transaction(tx => tx.execute(sql`update pay_component_statutory_treatments
+        set vacationable=false where org_id=${f.orgId} and id=${defaultId}`)), error =>
+        errorChainMatches(error,/cannot be changed over committed history/));
+      await assert.rejects(db.transaction(tx => tx.execute(sql`update pay_components
+        set vacationable=false where org_id=${f.orgId} and id=${componentId}`)), error =>
+        errorChainMatches(error,/creation-only default.*dated.*Payroll Setup/));
       sandbox = await withBypassContext(() => createSandbox({ productionOrgId:f.orgId,name:'Statutory policy review',tier:'full',masked:false }));
       const target = sandbox.sandboxOrgId;
       await withBypassContext(async () => {

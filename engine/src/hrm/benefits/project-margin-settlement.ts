@@ -43,25 +43,145 @@ export interface ProjectMarginSnapshot {
 
 interface MarginMember extends BenefitProgramMember { readonly partyId: string }
 
-/** Projects already paid by earlier settlements, and the losses the latest one carried forward. */
+type SettledAwardRow = {
+  snapshot: Record<string, unknown> | null; period_from: string; period_to: string | null;
+  employment_id: string; source_key: string | null; id: string;
+};
+
+function malformedProjectEvidence(): BenefitsError {
+  return new BenefitsError("REFUSED", "An earlier award in this project-margin program has malformed project evidence in its retained snapshot — retain it and review its award history before settling further periods; ambiguous project evidence is never guessed.");
+}
+
+function projectMarginOf(value: unknown): ProjectMarginSnapshot | null {
+  if (value === undefined || value === null) return null;
+  if (typeof value !== "object" || Array.isArray(value)) throw malformedProjectEvidence();
+  const snapshot = value as ProjectMarginSnapshot;
+  if (snapshot.metric !== "project_margin" || !Array.isArray(snapshot.projects)) throw malformedProjectEvidence();
+  for (const project of snapshot.projects) {
+    if (typeof project?.projectId !== "string" || project.projectId === "" || !Array.isArray(project.shares)) throw malformedProjectEvidence();
+    for (const share of project.shares) {
+      if (typeof share?.employmentId !== "string" || share.employmentId === "" || typeof share.value !== "string") throw malformedProjectEvidence();
+      try { toUnits(share.value); } catch { throw malformedProjectEvidence(); }
+    }
+  }
+  if (snapshot.carryForward !== undefined) {
+    if (typeof snapshot.carryForward !== "object" || snapshot.carryForward === null || Array.isArray(snapshot.carryForward)) throw malformedProjectEvidence();
+    for (const value of Object.values(snapshot.carryForward)) {
+      if (typeof value !== "string") throw malformedProjectEvidence();
+      try { toUnits(value); } catch { throw malformedProjectEvidence(); }
+    }
+  }
+  return snapshot;
+}
+
+/** Native settlements retain their measure under measurement.settlement. */
+function nativeProjectMargin(row: SettledAwardRow): ProjectMarginSnapshot | null {
+  const measurement = row.snapshot?.measurement as { settlement?: { projectMargin?: unknown } } | undefined;
+  return projectMarginOf(measurement?.settlement?.projectMargin);
+}
+
+function isSourceFirstRow(row: SettledAwardRow): boolean {
+  return row.snapshot?.kind === "source-evidenced-first-incentive-v1" ||
+    (typeof row.source_key === "string" && row.source_key.startsWith("source-first:"));
+}
+
+/** Source-first rows retain project evidence only inside their native preview. */
+function sourceFirstProjectMargin(row: SettledAwardRow): ProjectMarginSnapshot | null {
+  const evidence = row.snapshot?.sourceEvidence as { nativePreview?: { snapshot?: Record<string, unknown> } } | undefined;
+  const preview = evidence?.nativePreview?.snapshot;
+  if (!preview || typeof preview !== "object" || Array.isArray(preview)) throw malformedProjectEvidence();
+  if (preview.kind === "incentive-measure") {
+    if (preview.metric !== "project_margin") {
+      if (preview.projectMargin !== undefined) throw malformedProjectEvidence();
+      return null;
+    }
+    const snapshot = projectMarginOf(preview.projectMargin);
+    if (!snapshot) throw malformedProjectEvidence();
+    return snapshot;
+  }
+  if (preview.kind === "incentive-native-measure-without-award") {
+    const measured = preview.measured as { metric?: unknown } | undefined;
+    if (preview.metric !== "project_margin" && measured?.metric !== "project_margin") return null;
+    const snapshot = projectMarginOf(preview.measuredSource);
+    if (!snapshot) throw malformedProjectEvidence();
+    return snapshot;
+  }
+  throw malformedProjectEvidence();
+}
+
+/**
+ * Projects already paid by earlier settlements, and the losses carried
+ * forward. Native snapshots keep complete latest-state semantics: each
+ * native settlement span replaces the carry map once, however many
+ * recipient rows duplicate its snapshot. A source-first row is never
+ * consumed as a whole native settlement: only projects whose sole share
+ * recipient is its own employment are paid, and only that employment's
+ * carry merges, chronologically after the native state of its own span.
+ * A source-first row with no share for its employment — or no resolvable
+ * project evidence in its native preview — consumes nothing.
+ */
 async function settledProjects(orgId: string, programId: string, periodFrom: string): Promise<{ paid: Set<string>; carried: Map<string, bigint> }> {
-  const rows = (await db.execute<{ snapshot: Record<string, unknown> | null; period_from: string }>(sql`
-    select source_snapshot as snapshot, period_from::text as period_from from hrm_benefit_awards
+  const rows = (await db.execute<SettledAwardRow>(sql`
+    select source_snapshot as snapshot, period_from::text as period_from, period_to::text as period_to,
+           employment_id::text as employment_id, source_key, id::text as id
+      from hrm_benefit_awards
      where org_id = ${orgId} and program_id = ${programId} and status not in ('voided','rejected') and adjusts_award_id is null
+     order by period_from, period_to, id
      for share`)).rows;
   if (rows.some((row) => row.period_from > periodFrom)) {
     throw new BenefitsError("REFUSED", "Later project-margin awards already exist — settle periods chronologically; preserve existing awards and correct history with adjusting awards.");
   }
   const paid = new Set<string>();
-  let latest: { from: string; snapshot: ProjectMarginSnapshot } | null = null;
+  let carried = new Map<string, bigint>();
+  const spans = new Map<string, SettledAwardRow[]>();
   for (const row of rows) {
     if (row.period_from >= periodFrom) continue;
-    const snapshot = ((row.snapshot?.measurement as { settlement?: { projectMargin?: ProjectMarginSnapshot } } | undefined)?.settlement?.projectMargin);
-    if (!snapshot) throw new BenefitsError("REFUSED", "An earlier award in this project-margin program has no project evidence — retain it and review its award history before settling further periods.");
-    for (const project of snapshot.projects) paid.add(project.projectId);
-    if (!latest || row.period_from > latest.from) latest = { from: row.period_from, snapshot };
+    const key = `${row.period_from}|${row.period_to ?? ""}`;
+    const span = spans.get(key);
+    if (span) span.push(row); else spans.set(key, [row]);
   }
-  const carried = new Map(Object.entries(latest?.snapshot.carryForward ?? {}).map(([employmentId, value]) => [employmentId, toUnits(value)]));
+  for (const span of spans.values()) {
+    let nativeStateApplied = false;
+    const sourceRows: SettledAwardRow[] = [];
+    for (const row of span) {
+      const snapshot = nativeProjectMargin(row);
+      if (snapshot) {
+        for (const project of snapshot.projects) paid.add(project.projectId);
+        if (!nativeStateApplied) {
+          carried = new Map(Object.entries(snapshot.carryForward ?? {}).map(([employmentId, value]) => [employmentId, toUnits(value)]));
+          nativeStateApplied = true;
+        }
+      } else if (isSourceFirstRow(row)) {
+        sourceRows.push(row);
+      } else {
+        throw new BenefitsError("REFUSED", "An earlier award in this project-margin program has no project evidence — retain it and review its award history before settling further periods.");
+      }
+    }
+    for (const row of sourceRows) {
+      const snapshot = sourceFirstProjectMargin(row);
+      if (!snapshot) continue;
+      const target = row.employment_id.toLowerCase();
+      let hasTargetShare = false;
+      const soleProjects: string[] = [];
+      for (const project of snapshot.projects) {
+        const shares = Array.isArray(project.shares) ? project.shares : [];
+        if (!shares.some((share) => String(share.employmentId).toLowerCase() === target)) continue;
+        hasTargetShare = true;
+        if (shares.length === 1) soleProjects.push(project.projectId);
+      }
+      if (!hasTargetShare || !soleProjects.length) continue;
+      for (const projectId of soleProjects) paid.add(projectId);
+      const carryEntry = Object.entries(snapshot.carryForward ?? {})
+        .find(([employmentId]) => employmentId.toLowerCase() === target);
+      if (carryEntry && typeof carryEntry[1] === "string" && toUnits(carryEntry[1]) < 0n) {
+        carried.set(carryEntry[0], toUnits(carryEntry[1]));
+      } else {
+        for (const employmentId of [...carried.keys()]) {
+          if (employmentId.toLowerCase() === target) carried.delete(employmentId);
+        }
+      }
+    }
+  }
   return { paid, carried };
 }
 
@@ -73,7 +193,9 @@ export async function measureProjectMarginSettlement(input: {
   readonly revenueAccountIds: readonly string[]; readonly expenseAccountIds: readonly string[];
   /** Financial sources dated after this date do not enter this settlement. */
   readonly asOf: string;
-}): Promise<{ measured: IncentiveMeasured; computation: IncentiveComputation; excluded: string[]; projectMarginSnapshot: ProjectMarginSnapshot }> {
+  /** Read-only reconciliation opt-in: return the full loss measure and carry instead of refusing. */
+  readonly allowNativeLossWithoutAward?: boolean;
+}): Promise<{ measured: IncentiveMeasured; computation: IncentiveComputation | null; nonpayableReason?: string; excluded: string[]; projectMarginSnapshot: ProjectMarginSnapshot }> {
   const { orgId, program, periodFrom, periodTo, minorUnits } = input;
   requireCivilDate(periodFrom, "periodFrom"); requireCivilDate(periodTo, "periodTo");
   requirePeriodShape(program.frequency, periodFrom, periodTo, input.basis);
@@ -179,12 +301,15 @@ export async function measureProjectMarginSettlement(input: {
   const recipients = [...exact].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0);
   const carryForward = Object.fromEntries(recipients.filter(([, value]) => value < 0n).map(([employmentId, value]) => [employmentId, fromUnits(value)]));
   const awarded = recipients.filter(([, value]) => value > 0n);
-  if (Object.keys(carryForward).length && !awarded.length) {
-    throw new BenefitsError("REFUSED", "Every recipient nets a project-margin loss this period, so no award can carry the losses forward — settle a longer span that includes a payment.");
-  }
   const totalAwarded = awarded.reduce((sum, [, value]) => sum + value, 0n);
   const body = { metric: "project_margin" as const, scope: "company" as const, asOf: input.asOf, projects, ...(Object.keys(carryForward).length ? { carryForward } : {}) };
   const projectMarginSnapshot = { ...body, digest: createHash("sha256").update(JSON.stringify(body)).digest("hex") };
+  const measured: IncentiveMeasured = { metric: "project_margin", scope: "company", sourceAccountIds: accounts, periodFrom, periodTo, value: fromUnits(measuredTotal), currency: program.currency };
+  if (Object.keys(carryForward).length && !awarded.length) {
+    const nonpayableReason = "Every recipient nets a project-margin loss this period, so no award can carry the losses forward — settle a longer span that includes a payment.";
+    if (!input.allowNativeLossWithoutAward) throw new BenefitsError("REFUSED", nonpayableReason);
+    return { measured, computation: null, nonpayableReason, excluded, projectMarginSnapshot };
+  }
   const computation: IncentiveComputation = {
     measuredValue: fromUnits(measuredTotal), poolValue: fromUnits(poolTotal), thresholdMet: true, currency: program.currency,
     totalAwarded: fromUnits(totalAwarded), undistributed: fromUnits(poolTotal - totalAwarded), excludedZero: [],
@@ -199,7 +324,7 @@ export async function measureProjectMarginSettlement(input: {
       explanation: `${fromUnits(value)} ${program.currency} net across ${projects.filter((p) => p.shares.some((s) => s.employmentId === employmentId)).length} project(s).`,
     })),
   };
-  return { measured: { metric: "project_margin", scope: "company", sourceAccountIds: accounts, periodFrom, periodTo, value: fromUnits(measuredTotal), currency: program.currency }, computation, excluded, projectMarginSnapshot };
+  return { measured, computation, excluded, projectMarginSnapshot };
 }
 
 function empty(program: BenefitProgram, periodFrom: string, periodTo: string, asOf: string, excluded: string[]) {

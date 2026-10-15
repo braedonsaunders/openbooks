@@ -42,6 +42,7 @@ import { subsidiaryUiOptions } from '../../../../../lib/subsidiaries'
 import { requireFeatureEnabled } from '../../../../../lib/feature-gates'
 import { isUuid } from '../../../../../lib/list-params'
 import { parseBankCashInputEvidence } from '@openbooks/engine/payroll/run-bank-cash-evidence'
+import { parseDeclaredVacationAccrualEvidence } from '@openbooks/engine/payroll/run-vacation-accrual-input'
 import { groupTabs } from '../../../../../components/module-home/group-tabs'
 import type {
   AdjustmentRow,
@@ -394,22 +395,32 @@ export async function loadPayRunWizard(
          order by p.display_name, a.created_at`),
       db.execute(sql`
         select component.id, component.code, component.name, component.kind,
+               exists(select 1 from entitlement_plans vacation_plan
+                 join pay_components accrual_component
+                   on accrual_component.org_id=vacation_plan.org_id
+                  and accrual_component.id=vacation_plan.accrual_component_id
+                  and accrual_component.is_active and accrual_component.kind='employer_contribution'
+                where vacation_plan.org_id=component.org_id and vacation_plan.system_key='vacation'
+                  and vacation_plan.is_active and vacation_plan.unit='money' and vacation_plan.direction='accrue') as declared_vacation_accrual_enabled,
                exists(select 1 from entitlement_plans plan
-                 where plan.org_id=component.org_id and plan.is_active and plan.unit='hours'
+                 where plan.org_id=component.org_id and plan.is_active and plan.unit in ('hours','money')
                    and component.kind='earning' and component.payment_kind='cash'
                    and (plan.payout_component_id=component.id or plan.deposit_component_id=component.id)) as bank_cash_component
           from pay_components component
          where component.org_id = ${orgId} and component.is_active
            and (component.system_key is null or component.system_key in ('base_pay','overtime','allowance','bonus','vacation_payout')
              or exists(select 1 from entitlement_plans plan
-               where plan.org_id=component.org_id and plan.is_active and plan.unit='hours'
+               where plan.org_id=component.org_id and plan.is_active and plan.unit in ('hours','money')
                  and component.kind='earning' and component.payment_kind='cash'
                  and (plan.payout_component_id=component.id or plan.deposit_component_id=component.id)))
          order by component.sequence, component.code`),
     ]))
     const adjustmentRows = adjustmentsRes.rows.map((row) => {
       const evidence = parseBankCashInputEvidence(typeof row.note === 'string' ? row.note : null)
-      return (evidence ? { ...row, note: `${evidence.reason} · ${evidence.sourceReference}${evidence.rate ? ` · ${evidence.rate}/h` : ''}` } : row) as unknown as AdjustmentRow
+      const declaredVacation = parseDeclaredVacationAccrualEvidence(typeof row.note === 'string' ? row.note : null)
+      return (evidence
+        ? { ...row, note: `${evidence.reason} · ${evidence.sourceReference}${evidence.rate ? ` · ${evidence.rate}/h` : ''}${evidence.outsideBankAmount ? ` · ${evidence.outsideBankAmount} paid outside bank` : ''}` }
+        : declaredVacation ? { ...row, note: `${declaredVacation.reason} · ${declaredVacation.sourceReference}` } : row) as unknown as AdjustmentRow
     })
     const componentRows = adjustableRes.rows as unknown as ComponentOption[]
 

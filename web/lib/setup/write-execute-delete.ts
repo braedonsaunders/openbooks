@@ -4,7 +4,7 @@ import { deleteHomeAnnouncementRow } from './home-announcements'
 import { sql } from 'drizzle-orm'
 import { assertStockLocationDeletionAllowed, WarehouseRefusal } from '@openbooks/engine/inventory/warehouses'
 import { jobDescriptionDeleteRefusal } from '@openbooks/engine/hrm/recruiting/job-descriptions'
-import { describeDbError, idColumn, pgErrorCode } from './coerce'
+import { describeDbError, idColumn, pgErrorCode, setupAuditReason } from './coerce'
 import { auditSetupChange as audit, loadSetupAuditRow } from './audit'
 import { entityPermissionRefusal, resolveEntity, setupEntityEnabled, setupRefusalResult, setupScopeRefusal, SetupWriteRefusal, syncMembers, type SetupActor, type SetupWriteResult } from './write-shared'
 import { validateEntityIntegrity } from './write-integrity'
@@ -16,6 +16,7 @@ export async function deleteSetupRecord(
   actor: SetupActor,
   entityKey: string,
   id: string,
+  options: { reason?: string; auditReason?: string } = {},
 ): Promise<SetupWriteResult> {
   const { orgId, id: actorId } = actor
   const scopeOptions = { allowedSubsidiaryIds: actor.allowedSubsidiaryIds }
@@ -26,6 +27,8 @@ export async function deleteSetupRecord(
   if (permissionRefusal) return permissionRefusal
   const scopeRefusal = setupScopeRefusal(actor, entity)
   if (scopeRefusal) return scopeRefusal
+  const auditReason = setupAuditReason({ ...entity, fields: [] }, options)
+  if ('error' in auditReason) return { status: 400, body: { error: auditReason.error, code: 'invalid' } }
   const owned = bomCommandOnly(entity)
   if (owned) return owned
   const commanded = commandOwnedOnly(entity)
@@ -75,7 +78,7 @@ export async function deleteSetupRecord(
           where ${sql.raw(idColumn(entity))}=${id}${orgFilter} returning *`)
         if (retired.rows.length !== 1) return false
         await audit({orgId: entity.orgScoped ? orgId : null, table: entity.table, rowId: id,
-          action: 'update', changes: {before, after: retired.rows[0], reason: 'Archive configuration record'}, actorId}, tx)
+          action: 'update', changes: {before, after: retired.rows[0], reason: auditReason.reason ?? 'Archive configuration record'}, actorId}, tx)
         return true
       }
       if (entity.key === 'stock-locations') await assertStockLocationDeletionAllowed(tx, orgId, id)
@@ -104,7 +107,7 @@ export async function deleteSetupRecord(
         table: entity.table,
         rowId: id,
         action: 'delete',
-        changes: { before },
+        changes: { before, ...auditReason },
         actorId,
       }, tx)
       return true

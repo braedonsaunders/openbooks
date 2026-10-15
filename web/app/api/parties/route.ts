@@ -1,3 +1,4 @@
+import { PARTY_KINDS, isNaturalPersonPartyKind, EMPLOYEE_PERSON_REFUSAL } from "@openbooks/engine/organization/party-kinds";
 import { parseJsonBody, uuidId } from "@/lib/api/json";
 import { defineRoute } from "@/lib/api/route";
 import { NextResponse } from 'next/server'
@@ -24,7 +25,7 @@ export const runtime = 'nodejs'
 // The stored party vocabulary: role lists (customers/vendors/employees) are
 // that kind by construction, and the drawer echoes the stored kind back on
 // every save — so POST must accept every kind the column actually holds.
-const PARTY_KINDS = ['company', 'person', 'customer', 'vendor', 'employee'] as const
+
 const PAYMENT_METHODS = ['eft', 'cheque', 'card', 'cash', 'other'] as const
 const CURRENCY_RE = /^[A-Za-z]{3}$/
 // This label belongs to the unsaved new-party drawer and is never valid
@@ -214,6 +215,9 @@ export const POST = defineRoute({
         'kind',
       )
     }
+  }
+  if (body.roles?.employee?.enabled === true && !isNaturalPersonPartyKind(kind)) {
+    return bad(EMPLOYEE_PERSON_REFUSAL, 'kind')
   }
   const displayName = strOrNull(body.displayName) ?? ''
   if (!displayName || PLACEHOLDER_NAMES.has(displayName)) {

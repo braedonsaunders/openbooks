@@ -62,7 +62,7 @@ const mockSources = new Map<string, string>([
   ],
   [
     'mock:authz',
-    'export function guardSubsidiaryScope() { return null }',
+    'export function guardSubsidiaryScope() { return null }; export function can(gate, permission) { return gate.permissions.has(permission) }',
   ],
   [
     'mock:db',
@@ -225,4 +225,26 @@ test('the idempotency key travels in the header, never a body field', async () =
   const bodyOnly = await post({ ...addBody(), idempotencyKey: KEY_TWO })
   assert.equal(bodyOnly.status, 422)
   assert.deepEqual(adjustState.mutations, [], 'a body idempotencyKey must never dispatch an adjustment')
+})
+
+
+test('issued employer levy action binds its typed fields and request key to the native writer', async () => {
+  asPayrollRunner()
+  const body = { action: 'employer-levy-adjustment', employeePartyId: EMPLOYEE,
+    programKey: 'ca_eht', amount: '26.32', sourceKey: 'export:levy:001',
+    reason: 'Retain the issued employer premium', sourceReference: 'Reviewed payroll export row 1' }
+  const missingKey = await post(body)
+  assert.equal(missingKey.status, 400)
+  assert.equal(adjustState.mutations.length, 0)
+  const response = await post(body, { 'Idempotency-Key': KEY_ONE })
+  assert.equal(response.status, 200)
+  const call = adjustState.mutations.at(-1) as { mutation: Record<string, unknown> }
+  assert.deepEqual(call.mutation, { action: 'employer_levy_adjustment', employeePartyId: EMPLOYEE,
+    programKey: 'ca_eht', workerCompGroupId: null, amount: '26.32', sourceKey: body.sourceKey,
+    reason: body.reason, sourceReference: body.sourceReference, idempotencyKey: KEY_ONE })
+  const count = adjustState.mutations.length
+  for (const invalid of [{ ...body, assessableAmount: '1000' }, { ...body, programKey: 'cpp' }]) {
+    assert.equal((await post(invalid, { 'Idempotency-Key': KEY_TWO })).status, 422)
+    assert.equal(adjustState.mutations.length, count)
+  }
 })

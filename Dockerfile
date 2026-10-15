@@ -105,7 +105,7 @@ RUN apt-get update \
       libcairo2 libcups2t64 libdbus-1-3 libdrm2 libgbm1 libglib2.0-0t64 \
       libgtk-3-0t64 libnspr4 libnss3 libpango-1.0-0 libx11-6 libxcb1 \
       libxcomposite1 libxdamage1 libxext6 libxfixes3 libxkbcommon0 libxrandr2 \
-      qpdf \
+      qpdf poppler-utils \
       fonts-liberation=1:2.1.5-3 \
       fonts-noto-core=20201225-2 \
       fonts-noto-cjk=1:20240730+repack1-1 \

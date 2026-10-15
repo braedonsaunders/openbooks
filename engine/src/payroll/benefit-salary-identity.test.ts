@@ -3,7 +3,7 @@ import test from 'node:test';
 import { parseMoney } from '../money/brands.ts';
 import { scheduledSalaryEarning } from './benefit-plan-inputs.ts';
 import type { Line } from './run-stub-records.ts';
-const line=(componentId:string,description:string,amount='1000'):Line=>({componentId,kind:'earning',description,amount:parseMoney(amount)});
+const line=(componentId:string,description:string,amount='1000'):Line=>({componentId,kind:'earning',description,amount:parseMoney(amount),sequence:10});
 test('scheduled salary uses the base-pay identity after a replacement or description rename',()=>{
   const salary=line('base','Approved salary replacement'),misleading=line('allowance','Salary');
   assert.equal(scheduledSalaryEarning([misleading,salary],'base','PENSION'),salary);

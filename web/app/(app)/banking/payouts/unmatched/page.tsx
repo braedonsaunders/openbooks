@@ -9,7 +9,7 @@ export default async function PspUnmatchedPage({
   searchParams,
 }: {
   searchParams?: Promise<Record<string, string | undefined>>
-} = {}) {
+}) {
   const sp = (await searchParams) ?? {}
   const data = await loadPspUnmatched(sp)
   return <ModuleView spec={pspUnmatchedSpec(data)} data={data} searchParams={sp} trusted />

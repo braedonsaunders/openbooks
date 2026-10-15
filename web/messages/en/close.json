@@ -1076,5 +1076,30 @@
     },
     "by": "{name} on {at}",
     "system": "System"
+  },
+  "revaluationEvidence": {
+      "title": "Recorded closing rates",
+      "reload": "Reload",
+      "loading": "Loading…",
+      "loadFailed": "The foreign-currency exposures could not be loaded.",
+      "empty": "No open foreign-currency positions for this selection.",
+      "position": "{foreign} · Carrying {carrying} · Rate date {date}",
+      "recordedRate": "Recorded: {rate} (version {version})",
+      "organizationRate": "Organization rate: {rate}",
+      "rateMissing": "No rate",
+      "recordRate": "Record rate",
+      "recordSuccessor": "Record successor rate",
+      "drawerTitle": "Record closing rate",
+      "cancel": "Cancel",
+      "legalEntity": "Legal entity",
+      "account": "Account",
+      "conversion": "Conversion",
+      "rateDate": "Rate date",
+      "currentQuote": "Current quote: {rate} (version {version}) — Source: {source}. A successor rate replaces it without changing it.",
+      "rate": "Exchange rate",
+      "source": "Source",
+      "reason": "Reason",
+      "recorded": "Closing rate recorded.",
+      "recordFailed": "The closing rate could not be recorded."
   }
 }

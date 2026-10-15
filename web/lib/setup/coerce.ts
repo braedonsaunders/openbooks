@@ -40,6 +40,20 @@ export function taxRatePercentProblem(raw: unknown): string | null {
 
 export type Coerced = { column: string; value: unknown }
 
+/** Deliberate explanations travel with audit evidence, independently of row storage. */
+export function setupAuditReason(
+  entity: SetupEntity,
+  body: Record<string, unknown>,
+): { reason?: string } | { error: string } {
+  const required = entity.fields.some((field) => field.key === 'reason' && field.inputOnly && field.required)
+  const supplied = body.auditReason === undefined ? body.reason : body.auditReason
+  if (supplied === undefined && !required) return {}
+  if (typeof supplied !== 'string' || !supplied.trim() || supplied.trim().length > 2000) {
+    return { error: 'Provide a change reason of 1–2000 characters for the audit trail' }
+  }
+  return { reason: supplied.trim() }
+}
+
 export function idColumn(entity: SetupEntity): string {
   return entity.idColumn ?? 'id'
 }
@@ -313,6 +327,8 @@ export function buildRow(
   body: Record<string, unknown>,
   opts: { forCreate: boolean; coverFoldedSlots?: boolean },
 ): { cols: Coerced[] } | { error: string } {
+  const auditReason = setupAuditReason(entity, body)
+  if ('error' in auditReason) return auditReason
   // Rule-slot prefills (ratingScaleMin/Max/Labels and kin) are never
   // written and never required once their folded object is present: the
   // normalizer stripped them and the integrity check proves the fold.
@@ -336,6 +352,7 @@ export function buildRow(
     const scoped = field.scopedOptions ? { ...field, options: setupFieldOptions(field, body) } : field
     const res = coerceField(scoped, raw, setupFieldVisible(field, body), body)
     if ('error' in res) return { error: res.error }
+    if (field.inputOnly) continue
     if (res.value === undefined) continue // required select left unset on edit → skip
     // Never write null to a NOT-NULL-with-default column: on create, omit it so
     // the DB default applies; on update, leave the existing value untouched.

@@ -32,10 +32,13 @@ test("committing a pay run evidences the authorization in audit_log", { skip: !D
          order by at, id
       `)
     ).rows;
-    assert.equal(rows.length, 1);
-    assert.equal(rows[0]!.action, "update");
-    assert.equal(rows[0]!.actor_id, fx.actorId);
-    const changes = rows[0]!.changes as {
+    assert.equal(rows.length, 2, "calculation and authorization retain separate events");
+    assert.deepEqual(rows.map(row => row.changes.operation).sort(), ["calculate_pay_run", "commit"]);
+    const committed = rows.filter(row => row.changes.operation === "commit");
+    assert.equal(committed.length, 1, "the authorization has exactly one event");
+    assert.equal(committed[0]!.action, "update");
+    assert.equal(committed[0]!.actor_id, fx.actorId);
+    const changes = committed[0]!.changes as {
       operation: string;
       before: { run_status: string };
       after: { run_status: string };

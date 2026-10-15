@@ -108,8 +108,8 @@ const consolidatedRows = [
               const beforeRehome = await loadFieldTicket(org.orgId, created.id)
               await assert.rejects(updateTicketHeader(org.orgId, actor, created.id, { projectId: nextProject }, beforeRehome.revision, null),
                 (e) => e instanceof FieldTicketError && /submitted or approved time/.test(e.message))
-              assert.equal((await loadFieldTicket(org.orgId, created.id)).project_id, beforeRehome.project_id)
-              assert.equal((await db.execute<{ project_id: string }>(sql`select project_id from time_entries where org_id=${org.orgId} and field_ticket_id=${created.id}`)).rows[0]!.project_id, beforeRehome.project_id)
+              assert.equal((await loadFieldTicket(org.orgId, created.id)).projectId, beforeRehome.projectId)
+              assert.equal((await db.execute<{ project_id: string }>(sql`select project_id from time_entries where org_id=${org.orgId} and field_ticket_id=${created.id}`)).rows[0]!.project_id, beforeRehome.projectId)
             } finally {
               await dropScratchOrg(org.orgId)
             }

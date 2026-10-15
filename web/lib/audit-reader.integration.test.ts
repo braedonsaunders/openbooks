@@ -5,6 +5,8 @@ import { sql } from 'drizzle-orm'
 import { db, withBypassContext, withOrgContext } from '@openbooks/engine/platform/db'
 import { createScratchOrg, createScratchUser, dropScratchOrg } from '@openbooks/engine/testing/fixtures'
 import { readAuditEvent, readAuditPage } from './audit-reader'
+import { calculatedRun, seedAdoption } from '@openbooks/engine/testing/payroll/filing-test-fixtures'
+import { calculatePayRun } from '@openbooks/engine/payroll/run-calculation'
 
 test('audit windows and exact facets preserve tenant, filter and snapshot semantics', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
   const first = await withBypassContext(() => createScratchOrg())
@@ -101,6 +103,51 @@ test('audit free text matches actor email, action, table label and reason', { sk
     })
   } finally {
     await dropScratchOrg(org.orgId)
+    await dropScratchOrg(other.orgId)
+  }
+})
+
+test('native calculated and recalculated results resolve through the ordinary audit reader', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const fixture = await withBypassContext(() => seedAdoption())
+  const other = await withBypassContext(() => createScratchOrg())
+  try {
+    const { input } = await withBypassContext(() => calculatedRun(fixture))
+    await withBypassContext(() => calculatePayRun(input))
+    const eventIds = (await withBypassContext(() => db.execute<{ id: string; recalculation: boolean }>(sql`
+      select id, (changes->>'recalculation')::boolean as recalculation from audit_log
+       where org_id=${fixture.orgId} and table_name='pay_runs' and row_id=${input.documentId}
+         and changes->>'operation'='calculate_pay_run'
+    `))).rows
+    assert.equal(eventIds.length, 2)
+    const recalculatedId = eventIds.find(row => row.recalculation)!.id
+    await withOrgContext(fixture.orgId, async () => {
+      const page = await readAuditPage(fixture.orgId, {
+        page: 1, perPage: 10, rtype: 'pay_runs', q: input.documentId, actor: fixture.actorId,
+      })
+      assert.equal(page.total, 2)
+      assert.deepEqual(page.rows.map(row => row.id).sort(), eventIds.map(row => row.id).sort())
+      assert.ok(page.rows.every(row => row.rowId === input.documentId && row.summaryKind === 'snapshot'))
+      const event = await readAuditEvent(fixture.orgId, recalculatedId)
+      assert.equal(event?.recordType, 'pay_runs')
+      const evidence = event!.changes as {
+        before: { run: { subsidiaryId: string }; stubs: Array<{ stubId: string; gross: string }> };
+        after: { run: { subsidiaryId: string }; stubs: Array<{ stubId: string; gross: string }> };
+      }
+      assert.equal(evidence.before.run.subsidiaryId, fixture.subsidiaryId)
+      assert.equal(evidence.after.run.subsidiaryId, fixture.subsidiaryId)
+      assert.equal(evidence.before.stubs[0]!.gross, '240.0000')
+      assert.equal(evidence.after.stubs[0]!.gross, '240.0000')
+      assert.notEqual(evidence.before.stubs[0]!.stubId, evidence.after.stubs[0]!.stubId)
+    })
+    await withOrgContext(other.orgId, async () => {
+      assert.equal(await readAuditEvent(other.orgId, recalculatedId), null)
+      assert.equal(await readAuditEvent(fixture.orgId, recalculatedId), null, 'explicit org cannot override RLS')
+      assert.equal((await readAuditPage(other.orgId, {
+        page: 1, perPage: 10, rtype: 'pay_runs', q: input.documentId,
+      })).total, 0)
+    })
+  } finally {
+    await dropScratchOrg(fixture.orgId)
     await dropScratchOrg(other.orgId)
   }
 })

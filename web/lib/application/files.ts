@@ -1,4 +1,5 @@
 import "server-only";
+import { FileIngestionError } from "@openbooks/engine/platform/file-ingestion";
 import { can, type Authz } from "../authz";
 import {
   accessAtLeast,
@@ -14,7 +15,7 @@ import {
 import { clamp, isUuid } from "../list-params";
 import type { ApplicationContext } from "./context";
 import { assertApplicationPermission } from "./context";
-import { forbidden, invalidInput, notFound } from "./errors";
+import { conflict, forbidden, invalidInput, notFound } from "./errors";
 
 /**
  * File Cabinet upload behind the `upload_file` application tool. Same
@@ -104,6 +105,10 @@ export async function listApplicationFiles(
       fileType: file.fileType,
       contentType: file.contentType,
       sizeBytes: file.sizeBytes,
+      currentVersionId: file.currentVersionId,
+      contentHash: file.contentHash,
+      sourceSystem: file.sourceSystem,
+      sourceId: file.sourceId,
       versionCount: file.versionCount,
       updatedAt: file.updatedAt,
       uploadedBy: file.createdBy,
@@ -128,12 +133,18 @@ export async function getApplicationFile(context: ApplicationContext, fileId: st
     contentType: file.contentType,
     sizeBytes: file.sizeBytes,
     isInactive: file.isInactive,
+    currentVersionId: file.currentVersionId,
+    contentHash: file.contentHash,
+    sourceSystem: file.sourceSystem,
+    sourceId: file.sourceId,
     versionCount: file.versionCount,
     createdAt: file.createdAt,
     uploadedBy: file.createdBy,
     updatedAt: file.updatedAt,
     updatedBy: file.updatedBy,
     versions: file.versions.map((version) => ({
+      id: version.id,
+      contentHash: version.contentHash,
       versionNumber: version.versionNumber,
       sizeBytes: version.sizeBytes,
       contentType: version.contentType,
@@ -183,8 +194,8 @@ function cabinetViewer(authz: Authz): FileViewer {
 
 export async function uploadCabinetFile(
   authz: Authz,
-  input: { folderId: string; filename: string; contentType: string; contentBase64: string },
-): Promise<{ id: string; name: string; folderId: string; folderName: string | null; contentType: string; sizeBytes: number }> {
+  input: { folderId: string; filename: string; contentType: string; contentBase64: string; sourceSystem?: string; sourceId?: string; auditReason?: string },
+): Promise<{ id: string; name: string; folderId: string; folderName: string | null; contentType: string; sizeBytes: number; currentVersionId: string | null; contentHash?: string | null; sourceSystem?: string | null; sourceId?: string | null }> {
   const { filename, contentType, bytes } = validateCabinetUpload(input);
   await assertCabinetUploadAccess(authz, input.folderId);
   const meta = await createFile({
@@ -194,7 +205,15 @@ export async function uploadCabinetFile(
     contentType,
     bytes,
     createdBy: authz.user.id,
+    sourceSystem: input.sourceSystem,
+    sourceId: input.sourceId,
+    auditReason: input.auditReason,
     audit: { actorId: authz.user.id, viewer: cabinetViewer(authz) },
+  }).catch((error: unknown) => {
+    if (error instanceof FileIngestionError) {
+      throw error.status === 409 ? conflict(error.message) : invalidInput(error.message);
+    }
+    throw error;
   });
   return {
     id: meta.id,
@@ -203,6 +222,10 @@ export async function uploadCabinetFile(
     folderName: meta.folderName,
     contentType: meta.contentType,
     sizeBytes: meta.sizeBytes,
+    currentVersionId: meta.currentVersionId,
+    contentHash: meta.contentHash,
+    sourceSystem: meta.sourceSystem,
+    sourceId: meta.sourceId,
   };
 }
 

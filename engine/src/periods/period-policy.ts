@@ -130,6 +130,47 @@ export function periodLockBlocksPosting(
   return lock.state === "soft_closed" || periodLockRequiresApprovedReopen(lock, now);
 }
 
+/** The stored period_locks row that effectively governs one exact scope. */
+export type EffectivePeriodLock = {
+  id: string;
+  /** Null names the organization-wide row; a value names the entity row. */
+  subsidiaryId: string | null;
+  state: string;
+  reason: string | null;
+  reopenExpiresAt: Date | string | null;
+  version: number;
+};
+
+/**
+ * The one effective-lock resolution every posting decision and exact read
+ * shares: the exact entity row wins, otherwise the organization-wide
+ * (null-subsidiary) row for the same organization, period, book and module
+ * governs. No row means no stored lock governs that scope — callers may
+ * derive openness only after they have verified the period, book and
+ * entity themselves, never from an organization-wide summary.
+ */
+export async function readEffectivePeriodLock(
+  executor: SqlExecutor,
+  args: {
+    orgId: string;
+    periodId: string;
+    bookId: string;
+    subsidiaryId: string | null;
+    module: CloseModule;
+  },
+): Promise<EffectivePeriodLock | undefined> {
+  const result = await executor.execute<EffectivePeriodLock>(sql`
+    select id, subsidiary_id as "subsidiaryId", state, reason,
+           reopen_expires_at as "reopenExpiresAt", version
+      from period_locks
+     where org_id = ${args.orgId} and period_id = ${args.periodId}
+       and book_id = ${args.bookId} and module = ${args.module}
+       and (subsidiary_id is not distinct from ${args.subsidiaryId} or subsidiary_id is null)
+     order by (subsidiary_id is not null) desc
+     limit 1`);
+  return result.rows[0];
+}
+
 /**
  * Period-close module per document kind. The drawer kinds mirror
  * web/lib/document-kinds.ts `closeModule` (a required registry field, so a
@@ -234,15 +275,14 @@ export async function assertPeriodModulesOpen(
     : [null];
   for (const subsidiaryId of subsidiaryIds) {
     for (const module of modules) {
-      const result = (await executor.execute<{ state: string; reopenExpiresAt: Date | string | null; reason: string | null }>(sql`
-        select state, reopen_expires_at as "reopenExpiresAt", reason
-          from period_locks
-         where org_id = ${args.orgId} and period_id = ${args.periodId}
-           and book_id = ${args.bookId} and module = ${module}
-           and (subsidiary_id is not distinct from ${subsidiaryId} or subsidiary_id is null)
-         order by (subsidiary_id is not null) desc
-         limit 1`));
-      if (periodLockBlocksPosting(result.rows[0], args.allowImportedLocks === true))
+      const lock = await readEffectivePeriodLock(executor, {
+        orgId: args.orgId,
+        periodId: args.periodId,
+        bookId: args.bookId,
+        subsidiaryId,
+        module,
+      });
+      if (periodLockBlocksPosting(lock, args.allowImportedLocks === true))
         throw new PeriodClosedError(
           `${module.toUpperCase()} is closed for this period and accounting book${await closedPeriodRoute(executor, args, module, subsidiaryId)}`,
           {
@@ -330,15 +370,14 @@ async function closedPeriodRoute(
     // exemption the caller opted into.
     let blocked = false;
     for (const name of [...new Set<CloseModule>([module, "gl"])]) {
-      const lock = (await executor.execute<{ state: string; reopenExpiresAt: Date | string | null; reason: string | null }>(sql`
-        select state, reopen_expires_at as "reopenExpiresAt", reason
-          from period_locks
-         where org_id = ${args.orgId} and period_id = ${adjustment.id}
-           and book_id = ${args.bookId} and module = ${name}
-           and (subsidiary_id is not distinct from ${subsidiaryId} or subsidiary_id is null)
-         order by (subsidiary_id is not null) desc
-         limit 1`));
-      if (periodLockBlocksPosting(lock.rows[0], args.allowImportedLocks === true)) {
+      const lock = await readEffectivePeriodLock(executor, {
+        orgId: args.orgId,
+        periodId: adjustment.id,
+        bookId: args.bookId,
+        subsidiaryId,
+        module: name,
+      });
+      if (periodLockBlocksPosting(lock, args.allowImportedLocks === true)) {
         blocked = true;
         break;
       }

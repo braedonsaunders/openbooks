@@ -156,10 +156,11 @@ export const Select = React.forwardRef<HTMLSelectElement, SelectProps>(function 
   function pick(v: string) {
     const el = innerRef.current
     if (!el) return
-    const setter = Object.getOwnPropertyDescriptor(window.HTMLSelectElement.prototype, 'value')?.set
+    const view = (el.ownerDocument.defaultView ?? window) as typeof window
+    const setter = Object.getOwnPropertyDescriptor(view.HTMLSelectElement.prototype, 'value')?.set
     if (setter) setter.call(el, v)
     else el.value = v
-    el.dispatchEvent(new Event('change', { bubbles: true }))
+    el.dispatchEvent(new view.Event('change', { bubbles: true }))
   }
 
   const isInvalid = rest['aria-invalid'] === true || rest['aria-invalid'] === 'true'

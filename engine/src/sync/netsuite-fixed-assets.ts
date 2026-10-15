@@ -1,4 +1,4 @@
-import { netSuiteOperationalMappingWriter } from './operational-entity-mappings.ts';
+import { netSuiteOperationalMappingWriter, stableMappingSnapshotsMatch } from './operational-entity-mappings.ts';
 import { sql } from "drizzle-orm";
 import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { businessToday } from "../platform/business-date.ts";
@@ -139,6 +139,153 @@ export function netSuiteFamState(asset: Row, value: Row | null, histories: Row[]
 
 const json = (value: unknown): string => JSON.stringify(value);
 
+/** One source acquisition row the sync wants represented in asset history. */
+export interface NetSuiteFamPlannedAcquisition {
+  sourceHistoryId: string;
+  occurredOn: string;
+  amount: string;
+}
+
+/** One admitted source-history event, as read back from native asset history. */
+export interface NetSuiteFamExistingAcquisition {
+  id: string;
+  kind: string;
+  occurredOn: string;
+  amount: string | null;
+  journalEntryId: string | null;
+  financialChangeId: string | null;
+  bookId: string | null;
+  memo: string | null;
+  reversed: boolean;
+}
+
+/**
+ * Admitted asset history is append-only, and an imported acquisition carries
+ * no governed change a native correction could reverse. A source snapshot
+ * that changes or drops admitted history therefore refuses: the remedy is to
+ * correct or restore the FAM record at source and rerun, never to rewrite
+ * the native evidence.
+ */
+function famHistoryRefusal(assetSourceId: string, sourceHistoryId: string, detail: string): Error {
+  return new Error(
+    `NetSuite FAM history ${sourceHistoryId} for asset ${assetSourceId} ${detail}; ` +
+    "admitted asset lifecycle evidence is append-only and has been preserved. " +
+    "Correct or restore the FAM depreciation-history record in NetSuite to match the admitted evidence, then rerun the sync.",
+  );
+}
+
+/**
+ * The source-history identity of an admitted event. The marker is the exact
+ * memo written on admission; anything else — including a row admitted before
+ * identities were required — proves nothing and is never treated as a match.
+ */
+export function netSuiteFamHistorySourceId(memo: string | null): string | null {
+  const match = memo?.match(/^\[NetSuite FAM history ([^\]]+)\]$/);
+  const sourceId = match?.[1]?.trim();
+  return sourceId && sourceId !== "unknown" ? sourceId : null;
+}
+
+/**
+ * Plan the acquisition evidence one asset's source histories require. Every
+ * acquisition row must carry its stable source id as text and an exact
+ * decimal amount; a missing identity or amount refuses instead of admitting
+ * evidence no later snapshot could ever be matched against.
+ */
+export function planNetSuiteFamAcquisitions(
+  assetSourceId: string,
+  histories: Row[],
+  acquiredOn: string | null,
+  asOf: string,
+): NetSuiteFamPlannedAcquisition[] {
+  const planned: NetSuiteFamPlannedAcquisition[] = [];
+  const seen = new Set<string>();
+  for (const history of histories) {
+    const sourceHistoryId = text(history.id);
+    if (sourceHistoryId) {
+      if (seen.has(sourceHistoryId)) {
+        throw new Error(`NetSuite FAM asset ${assetSourceId} repeats source history id ${sourceHistoryId}`);
+      }
+      seen.add(sourceHistoryId);
+    }
+    if ((text(history.fam_history_type_label) ?? "").toLowerCase() !== "acquisition") continue;
+    if (!sourceHistoryId) {
+      throw new Error(
+        `NetSuite FAM asset ${assetSourceId} has an acquisition history row without a stable source history id; ` +
+        "restore the source record's identity in NetSuite, then rerun the sync.",
+      );
+    }
+    planned.push({
+      sourceHistoryId,
+      occurredOn: netSuiteFamDate(history.custrecord_deprhistdate) ?? acquiredOn ?? asOf,
+      amount: persistSyncLineMoney(
+        text(history.custrecord_deprhistamount),
+        `NetSuite FAM history ${sourceHistoryId} acquisition amount`,
+      ),
+    });
+  }
+  return planned;
+}
+
+/**
+ * Reconcile planned source acquisitions against the asset's admitted
+ * source-history events. An exact match reuses the admitted event with zero
+ * writes; a genuinely new source row is returned for insertion. Changed
+ * facts, a conflicting native representation, a governed reversal, or a
+ * source row that vanished from the full snapshot all refuse.
+ */
+export function reconcileNetSuiteFamAcquisitions(
+  assetSourceId: string,
+  planned: NetSuiteFamPlannedAcquisition[],
+  existing: NetSuiteFamExistingAcquisition[],
+): { reusedEventIds: string[]; insert: NetSuiteFamPlannedAcquisition[] } {
+  const existingBySourceId = new Map<string, NetSuiteFamExistingAcquisition>();
+  for (const event of existing) {
+    const sourceHistoryId = netSuiteFamHistorySourceId(event.memo);
+    if (!sourceHistoryId) {
+      throw famHistoryRefusal(assetSourceId, event.id, "is admitted without a provable source history identity");
+    }
+    if (existingBySourceId.has(sourceHistoryId)) {
+      throw famHistoryRefusal(assetSourceId, sourceHistoryId, "is admitted more than once in native asset history");
+    }
+    existingBySourceId.set(sourceHistoryId, event);
+  }
+  const plannedIds = new Set(planned.map((row) => row.sourceHistoryId));
+  for (const sourceHistoryId of existingBySourceId.keys()) {
+    if (!plannedIds.has(sourceHistoryId)) {
+      throw famHistoryRefusal(
+        assetSourceId,
+        sourceHistoryId,
+        "was admitted previously but is absent from the full source snapshot",
+      );
+    }
+  }
+  const reusedEventIds: string[] = [];
+  const insert: NetSuiteFamPlannedAcquisition[] = [];
+  for (const row of planned) {
+    const event = existingBySourceId.get(row.sourceHistoryId);
+    if (!event) {
+      insert.push(row);
+      continue;
+    }
+    if (event.reversed) {
+      throw famHistoryRefusal(assetSourceId, row.sourceHistoryId, "was reversed by a governed native correction");
+    }
+    if (
+      event.kind !== "acquired"
+      || event.journalEntryId !== null
+      || event.financialChangeId !== null
+      || event.bookId !== null
+    ) {
+      throw famHistoryRefusal(assetSourceId, row.sourceHistoryId, "conflicts with the admitted native representation");
+    }
+    if (event.occurredOn !== row.occurredOn || event.amount === null || toUnits(event.amount) !== toUnits(row.amount)) {
+      throw famHistoryRefusal(assetSourceId, row.sourceHistoryId, "no longer matches the admitted date or amount");
+    }
+    reusedEventIds.push(event.id);
+  }
+  return { reusedEventIds, insert };
+}
+
 async function idMap(table: "accounts" | "subsidiaries" | "departments" | "projects" | "locations" | "parties", orgId: string) {
   // The table is a literal union with constant call sites (identifiers cannot
   // be bound); the org id is a value and is bound — manual quote-doubling is
@@ -212,7 +359,17 @@ export async function syncNetSuiteFixedAssets(
   const asOf = await extractionDate(snapshot, options.orgId);
   const historyByAsset = new Map<string, Row[]>();
   const orphanHistory: Row[] = [];
+  const sourceHistoryIds = new Set<string>();
   for (const row of snapshot.depreciationHistory) {
+    // Source history identity is the admission key for native asset history;
+    // one id naming two source rows could never be reconciled safely.
+    const sourceHistoryId = text(row.id);
+    if (sourceHistoryId) {
+      if (sourceHistoryIds.has(sourceHistoryId)) {
+        throw new Error(`NetSuite FAM snapshot repeats source history id ${sourceHistoryId}`);
+      }
+      sourceHistoryIds.add(sourceHistoryId);
+    }
     const assetRef = text(row.custrecord_deprhistasset);
     if (!assetRef) orphanHistory.push(row);
     else historyByAsset.set(assetRef, [...(historyByAsset.get(assetRef) ?? []), row]);
@@ -426,13 +583,51 @@ export async function syncNetSuiteFixedAssets(
           alternateDepreciation: assetAlternateDepreciation,
         },
       };
-      const existing = (await db.execute<{ id: string; subsidiary_id: string }>(sql`
-        select id, subsidiary_id from fixed_assets
-         where org_id = ${options.orgId}
-           and custom->'netsuiteFam'->>'connectionId' = ${options.connectionId}
-           and custom->'netsuiteFam'->>'sourceId' = ${state.sourceId}
+      // Plan and reconcile source-history evidence before the asset row is
+      // touched: admitted events are append-only, so a changed or vanished
+      // source row must refuse while this asset is still unmutated. The
+      // fixed_assets row lock below fences the comparison and the inserts
+      // that follow against a concurrent sync of the same asset.
+      const plannedAcquisitions = planNetSuiteFamAcquisitions(state.sourceId, state.histories, acquiredOn, asOf);
+      const existing = (await db.execute<{ id: string; subsidiary_id: string; snapshot: string }>(sql`
+        select t.id, t.subsidiary_id, to_jsonb(t)::text as snapshot from fixed_assets t
+         where t.org_id = ${options.orgId}
+           and t.custom->'netsuiteFam'->>'connectionId' = ${options.connectionId}
+           and t.custom->'netsuiteFam'->>'sourceId' = ${state.sourceId}
          limit 1 for update
       `));
+      let acquisitionsToInsert = plannedAcquisitions;
+      if (existing.rows[0]) {
+        const admitted = (await db.execute<{
+          id: string; kind: string; occurred_on: string; amount: string | null;
+          journal_entry_id: string | null; financial_change_id: string | null;
+          book_id: string | null; memo: string | null; reversed: boolean;
+        }>(sql`
+          select e.id, e.kind, e.occurred_on::text as occurred_on, e.amount::text as amount,
+                 e.journal_entry_id, e.financial_change_id, e.book_id, e.memo,
+                 exists(select 1 from asset_events r
+                         where r.org_id = e.org_id and r.reverses_event_id = e.id) as reversed
+            from asset_events e
+           where e.org_id = ${options.orgId} and e.asset_id = ${existing.rows[0].id}
+             and e.memo like '[NetSuite FAM history %]'
+           order by e.id
+        `));
+        acquisitionsToInsert = reconcileNetSuiteFamAcquisitions(
+          state.sourceId,
+          plannedAcquisitions,
+          admitted.rows.map((row) => ({
+            id: row.id,
+            kind: row.kind,
+            occurredOn: row.occurred_on,
+            amount: row.amount,
+            journalEntryId: row.journal_entry_id,
+            financialChangeId: row.financial_change_id,
+            bookId: row.book_id,
+            memo: row.memo,
+            reversed: row.reversed,
+          })),
+        ).insert;
+      }
       const assetId = await mappings.write('fixedAssets', state.sourceId, {
         name: text(asset.altname) ?? text(asset.custrecord_assetdescr) ?? text(asset.name) ?? `Asset ${state.sourceId}`,
         description: text(asset.custrecord_assetdescr), serialNumber: text(asset.custrecord_assetserialno),
@@ -489,21 +684,58 @@ export async function syncNetSuiteFixedAssets(
         return assetId;
       });
 
-      await db.execute(sql`
-        delete from asset_events
-         where org_id = ${options.orgId} and asset_id = ${assetId}
-           and journal_entry_id is null and memo like '[NetSuite FAM history %]'
-      `);
-      for (const history of state.histories) {
-        if ((text(history.fam_history_type_label) ?? "").toLowerCase() !== "acquisition") continue;
-        const occurredOn = netSuiteFamDate(history.custrecord_deprhistdate) ?? acquiredOn ?? asOf;
-        await db.execute(sql`
+      // The mapping writer audits the asset row itself when fixed-asset
+      // mappings are configured; audit the same before/after here when they
+      // are not, so a material import is never silent either way.
+      if (!mappings.enabled('fixedAssets')) {
+        const after = (await db.execute<{ snapshot: string }>(sql`
+          select to_jsonb(t)::text as snapshot from fixed_assets t where t.org_id = ${options.orgId} and t.id = ${assetId}
+        `)).rows[0];
+        if (!after) throw new Error('The imported fixed asset is not readable in this organization');
+        const before = existing.rows[0]?.snapshot ?? null;
+        if (!stableMappingSnapshotsMatch(before, after.snapshot)) {
+          const audit = (await db.execute<{ id: string }>(sql`
+            insert into audit_log(org_id, table_name, row_id, action, changes, actor_id)
+            values(${options.orgId}, 'fixed_assets', ${assetId}, ${before ? 'update' : 'insert'},
+              ${json({ event: 'netsuite_fam_asset_synced', connectionId: options.connectionId, sourceRef: state.sourceId })}::jsonb
+                || jsonb_build_object('before',${before ?? 'null'}::jsonb,'after',${after.snapshot}::jsonb),
+              ${options.actorId ?? null})
+            returning id
+          `)).rows[0];
+          if (!audit) throw new Error('The fixed asset sync audit was not saved');
+        }
+      }
+
+      // Admit only genuinely new source acquisitions. Exact replays were
+      // reconciled above and write nothing; admitted events are never
+      // deleted, updated, or reinserted.
+      for (const planned of acquisitionsToInsert) {
+        const inserted = (await db.execute<{ id: string }>(sql`
           insert into asset_events
             (org_id, asset_id, kind, occurred_on, amount, memo, created_by, updated_by)
           values
-            (${options.orgId}, ${assetId}, 'acquired', ${occurredOn}, ${money(history.custrecord_deprhistamount)},
-             ${`[NetSuite FAM history ${text(history.id) ?? "unknown"}]`}, ${options.actorId ?? null}, ${options.actorId ?? null})
-        `);
+            (${options.orgId}, ${assetId}, 'acquired', ${planned.occurredOn}, ${planned.amount},
+             ${`[NetSuite FAM history ${planned.sourceHistoryId}]`}, ${options.actorId ?? null}, ${options.actorId ?? null})
+          returning id
+        `));
+        if (inserted.rows.length !== 1 || !inserted.rows[0]) {
+          throw new Error(`NetSuite FAM history ${planned.sourceHistoryId} for asset ${state.sourceId} was not admitted`);
+        }
+        const audit = (await db.execute<{ id: string }>(sql`
+          insert into audit_log(org_id, table_name, row_id, action, changes, actor_id)
+          values(${options.orgId}, 'asset_events', ${inserted.rows[0].id}, 'insert',
+            ${json({
+              event: 'netsuite_fam_history_admitted',
+              connectionId: options.connectionId,
+              sourceRef: state.sourceId,
+              sourceHistoryId: planned.sourceHistoryId,
+              before: null,
+              after: { assetId, kind: 'acquired', occurredOn: planned.occurredOn, amount: planned.amount },
+            })}::jsonb,
+            ${options.actorId ?? null})
+          returning id
+        `)).rows[0];
+        if (!audit) throw new Error('The asset history admission audit was not saved');
       }
 
       const scheduleResult = (await db.execute<{ id: string }>(sql`

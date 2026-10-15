@@ -27,6 +27,8 @@ async function earningComponent(fx: Fixture, code: string): Promise<string> {
   await db.execute(sql`insert into pay_components(id,org_id,code,name,kind,country,taxable,pensionable,insurable,vacationable,
     tax_treatment,payment_kind,expense_account_id,liability_account_id)
     values(${id},${fx.orgId},${code},${code},'earning','CA',true,true,true,true,'none','cash',${fx.accounts.burdenExpense},${fx.accounts.otherPayable})`);
+  await db.execute(sql`insert into pay_component_statutory_treatments(org_id,pay_component_id,effective_from,program_exclusions,vacationable)
+    values(${fx.orgId},${id},'2026-01-01','{}',true)`);
   return id;
 }
 
@@ -39,6 +41,76 @@ async function balanceOf(fx: Fixture, partyId: string, planId: string, asOf: str
   const balances = await entitlementBalances(fx.orgId, partyId, asOf, { executor: db });
   return balances.find((b) => b.plan.id === planId)!.balance;
 }
+
+for (const unit of ['hours', 'money'] as const) {
+  test(`an audited keyed-rate payout uses its ${unit} bank and replays exactly once`, { skip: !DB }, async () => {
+    const fx = await payrollOrg();
+    try {
+      const { partyId } = await employee(fx, 'Keyed Rate Employee', fx.subsidiaryId);
+      const payout = await earningComponent(fx, 'KEYED-PAYOUT');
+      const planId = randomUUID();
+      await db.execute(sql`insert into entitlement_plans
+        (id,org_id,code,name,unit,direction,accrual_method,payout_component_id,
+         liability_account_id,cap_behavior,is_active,created_by,updated_by)
+        values(${planId},${fx.orgId},'KEYED','Accrued pay',${unit},'accrue','manual',${payout},
+          ${fx.accounts.vacationPayable},'warn',true,${fx.actorId},${fx.actorId})`);
+      await opening(fx, planId, partyId, unit === 'hours' ? '16' : '1200', unit === 'hours' ? '16' : null);
+      await hours(fx, partyId, ['2026-07-13']);
+      const run = await createPayRun({ orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
+        periodStart: '2026-07-12', periodEnd: '2026-07-18' });
+      const input = {
+        orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId,
+        allowedSubsidiaryIds: new Set([fx.subsidiaryId]),
+        mutation: { action: 'bank_cash_input' as const, employeePartyId: partyId,
+          componentId: payout, hours: '8.00', rate: '143.83', amount: '1150.64',
+          reason: 'Approved withdrawal at the recorded hourly rate',
+          sourceReference: 'Payroll source document 2', idempotencyKey: randomUUID() },
+      };
+      await mutatePayRunAdjustment(input);
+      await mutatePayRunAdjustment(input);
+      const saved = (await db.execute(sql`select amount::text,hours::text from pay_run_adjustments
+        where org_id=${fx.orgId} and pay_run_document_id=${run.documentId} and component_id=${payout}`)).rows;
+      assert.deepEqual(saved, [{ amount: '1150.6400', hours: '8.00' }]);
+      const result = await calculatePayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId });
+      assert.deepEqual(result.errors, []);
+      const paid = (await db.execute(sql`select line.amount::text,line.hours::text from pay_stub_lines line
+        join pay_stubs stub on stub.id=line.stub_id and stub.org_id=line.org_id
+        where stub.org_id=${fx.orgId} and stub.pay_run_document_id=${run.documentId}
+          and line.component_id=${payout}`)).rows;
+      assert.deepEqual(paid, [{ amount: '1150.6400', hours: '8.00' }], 'the keyed rate prices the bank cash line, independently of the current wage');
+      assert.equal(await balanceOf(fx, partyId, planId, '2026-07-21'), unit === 'hours' ? '8.0000' : '49.3600');
+    } finally { await dropScratchOrgReporting(fx.orgId); }
+  });
+}
+
+test('an audited money-bank input preserves the available-balance refusal', { skip: !DB }, async () => {
+  const fx = await payrollOrg();
+  try {
+    const { partyId } = await employee(fx, 'Limited Bank Employee', fx.subsidiaryId);
+    const payout = await earningComponent(fx, 'LIMITED-PAYOUT');
+    const planId = randomUUID();
+    await db.execute(sql`insert into entitlement_plans
+      (id,org_id,code,name,unit,direction,accrual_method,payout_component_id,
+       liability_account_id,cap_behavior,is_active,created_by,updated_by)
+      values(${planId},${fx.orgId},'LIMITED','Accrued pay','money','accrue','manual',${payout},
+        ${fx.accounts.vacationPayable},'warn',true,${fx.actorId},${fx.actorId})`);
+    await opening(fx, planId, partyId, '552', null);
+    await hours(fx, partyId, ['2026-07-13']);
+    const run = await createPayRun({ orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
+      periodStart: '2026-07-12', periodEnd: '2026-07-18' });
+    await mutatePayRunAdjustment({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId,
+      allowedSubsidiaryIds: new Set([fx.subsidiaryId]),
+      mutation: { action: 'bank_cash_input', employeePartyId: partyId, componentId: payout,
+        hours: '8.00', rate: '143.83', reason: 'Approved withdrawal at the recorded hourly rate',
+        sourceReference: 'Payroll source document 2', idempotencyKey: randomUUID() } });
+    const result = await calculatePayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId });
+    assert.equal(result.errors.length, 1);
+    assert.match(result.errors[0]!.message, /payout of 1150\.6400 exceeds the available 552\.0000/);
+    assert.equal(await balanceOf(fx, partyId, planId, '2026-07-21'), '552.0000');
+    assert.equal((await db.execute(sql`select id from pay_stubs where org_id=${fx.orgId}
+      and pay_run_document_id=${run.documentId}`)).rows.length, 0);
+  } finally { await dropScratchOrgReporting(fx.orgId); }
+});
 
 test('vacation paid as earned needs no bank balance while additional bank withdrawals still refuse', { skip: !DB }, async () => {
   const fx = await payrollOrg();
@@ -78,7 +150,7 @@ test('a zero vacation replacement preserves supplied cash earnings without regen
     await db.execute(sql`update payroll_vacation_terms set method='pay_each_period',updated_by=${fx.actorId},updated_at=now()
       where org_id=${fx.orgId} and employment_id=${employmentId}`);
     const suppliedVacation = await earningComponent(fx, 'EARNED-VACATION');
-    await db.execute(sql`update pay_components set vacationable=false where org_id=${fx.orgId} and id=${suppliedVacation}`);
+    await db.execute(sql`update pay_component_statutory_treatments set vacationable=false where org_id=${fx.orgId} and pay_component_id=${suppliedVacation}`);
     await hours(fx, partyId, ['2026-07-13']);
     const run = await createPayRun({ orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
       periodStart: '2026-07-12', periodEnd: '2026-07-18' });
@@ -122,7 +194,7 @@ test('banked wages retain their declared vacation eligibility without replenishi
     await db.execute(sql`insert into pay_run_adjustments(org_id,pay_run_document_id,employee_party_id,adjustment_type,component_id,amount)
       values(${fx.orgId},${run.documentId},${partyId},'line',${payoutComponent},'240')`);
     for (const eligible of [true, false, true]) {
-      await db.execute(sql`update pay_components set vacationable=${eligible} where org_id=${fx.orgId} and id=${payoutComponent}`);
+      await db.execute(sql`update pay_component_statutory_treatments set vacationable=${eligible} where org_id=${fx.orgId} and pay_component_id=${payoutComponent}`);
       const result = await calculatePayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId });
       assert.deepEqual(result.errors, []);
       const stub = (await db.execute<{ gross: string; vacation_accrued: string }>(sql`select gross::text,vacation_accrued::text
@@ -365,5 +437,301 @@ test('plan settlement configuration distinguishes accrued payouts from owed repa
     await validateEntitlementPlanConfiguration(db, fx.orgId, { direction: 'owe', payoutComponentId: dues, depositComponentId: null });
     await assert.rejects(() => validateEntitlementPlanConfiguration(db, fx.orgId, { direction: 'owe', payoutComponentId: payout }), /Recovery component VACPAY2 is not a deduction — choose an employee deduction component/);
     await assert.rejects(() => validateEntitlementPlanConfiguration(db, fx.orgId, { direction: 'owe', payoutComponentId: dues, depositComponentId: payout }), /leave the deposit component empty on the recovery plan/);
+  } finally { await dropScratchOrgReporting(fx.orgId); }
+});
+
+test('an audited split payout draws only its bank-funded portion at the pay-date wage', { skip: !DB }, async () => {
+  const fx = await payrollOrg();
+  try {
+    const { partyId, employmentId } = await employee(fx, 'Split Payout Employee', fx.subsidiaryId);
+    await db.execute(sql`update labor_cost_rates set rate='46' where org_id=${fx.orgId} and employee_party_id=${partyId}`);
+    await db.execute(sql`update payroll_vacation_terms set percent_floor='7',updated_by=${fx.actorId},updated_at=now()
+      where org_id=${fx.orgId} and employment_id=${employmentId}`);
+    const payout = await earningComponent(fx, 'SPLIT-PAYOUT');
+    const planId = randomUUID();
+    await db.execute(sql`insert into entitlement_plans
+      (id,org_id,code,name,unit,direction,accrual_method,payout_component_id,
+       liability_account_id,cap_behavior,is_active,created_by,updated_by)
+      values(${planId},${fx.orgId},'SPLIT','Accrued pay','money','accrue','manual',${payout},
+        ${fx.accounts.vacationPayable},'warn',true,${fx.actorId},${fx.actorId})`);
+    await opening(fx, planId, partyId, '552', null);
+    const run = await createPayRun({ orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
+      periodStart: '2026-07-12', periodEnd: '2026-07-18' });
+    const input = {
+      orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId,
+      allowedSubsidiaryIds: new Set([fx.subsidiaryId]),
+      mutation: { action: 'bank_cash_input' as const, employeePartyId: partyId,
+        componentId: payout, hours: '8.00', rate: '143.83', amount: '1150.64', outsideBankAmount: '782.64',
+        reason: 'Approved withdrawal with independently paid cash',
+        sourceReference: 'Payroll source document 7', idempotencyKey: randomUUID() },
+    };
+    await mutatePayRunAdjustment(input);
+    assert.deepEqual(await mutatePayRunAdjustment(input), { changed: false, replayed: true });
+    // The issued total is unchanged and assessed once; only the bank-funded
+    // portion withdraws, and the dated vacation treatment governs both
+    // portions exactly as it would an unsplit line (7% of the total here).
+    for (let attempt = 0; attempt < 2; attempt++) {
+      const result = await calculatePayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId });
+      assert.deepEqual(result.errors, []);
+      const paid = (await db.execute(sql`select line.amount::text,line.hours::text from pay_stub_lines line
+        join pay_stubs stub on stub.id=line.stub_id and stub.org_id=line.org_id
+        where stub.org_id=${fx.orgId} and stub.pay_run_document_id=${run.documentId}
+          and line.component_id=${payout} order by line.amount desc`)).rows;
+      assert.deepEqual(paid, [
+        { amount: '782.6400', hours: '0.00' },
+        { amount: '368.0000', hours: '8.00' },
+      ], 'the outside portion carries explicit zero hours; the bank-funded portion carries the worked hours');
+      const stub = (await db.execute(sql`select gross::text,vacation_accrued::text from pay_stubs
+        where org_id=${fx.orgId} and pay_run_document_id=${run.documentId}`)).rows[0];
+      assert.deepEqual(stub, { gross: '1150.6400', vacation_accrued: '80.5400' });
+      assert.equal(await balanceOf(fx, partyId, planId, '2026-07-21'), '184.0000',
+        'recalculation neither draws, deposits nor accrues the bank again');
+      const payouts = (await db.execute(sql`select amount::text from entitlement_ledger
+        where org_id=${fx.orgId} and plan_id=${planId} and pay_run_document_id=${run.documentId} and kind='payout'`)).rows;
+      assert.deepEqual(payouts, [{ amount: '-368.0000' }]);
+    }
+    // An excluded dated treatment excludes both portions alike: funding
+    // origin never rewrites the component's statutory policy.
+    await db.execute(sql`update pay_component_statutory_treatments set vacationable=false
+      where org_id=${fx.orgId} and pay_component_id=${payout}`);
+    assert.deepEqual((await calculatePayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId })).errors, []);
+    const excluded = (await db.execute(sql`select gross::text,vacation_accrued::text from pay_stubs
+      where org_id=${fx.orgId} and pay_run_document_id=${run.documentId}`)).rows[0];
+    assert.deepEqual(excluded, { gross: '1150.6400', vacation_accrued: '0.0000' });
+    assert.equal(await balanceOf(fx, partyId, planId, '2026-07-21'), '184.0000');
+  } finally { await dropScratchOrgReporting(fx.orgId); }
+});
+
+test('an audited split payout draws its bank-funded hours from an hours bank', { skip: !DB }, async () => {
+  const fx = await payrollOrg();
+  try {
+    const { partyId } = await employee(fx, 'Split Hours Employee', fx.subsidiaryId);
+    await db.execute(sql`update labor_cost_rates set rate='46' where org_id=${fx.orgId} and employee_party_id=${partyId}`);
+    const payout = await earningComponent(fx, 'SPLIT-HOURS-PAYOUT');
+    const planId = randomUUID();
+    await db.execute(sql`insert into entitlement_plans
+      (id,org_id,code,name,unit,direction,accrual_method,payout_component_id,
+       liability_account_id,cap_behavior,is_active,created_by,updated_by)
+      values(${planId},${fx.orgId},'SPLITHOURS','Accrued time','hours','accrue','manual',${payout},
+        ${fx.accounts.vacationPayable},'warn',true,${fx.actorId},${fx.actorId})`);
+    await opening(fx, planId, partyId, '16', '16');
+    const run = await createPayRun({ orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
+      periodStart: '2026-07-12', periodEnd: '2026-07-18' });
+    await mutatePayRunAdjustment({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId,
+      allowedSubsidiaryIds: new Set([fx.subsidiaryId]),
+      mutation: { action: 'bank_cash_input', employeePartyId: partyId, componentId: payout,
+        hours: '8.00', rate: '143.83', amount: '1150.64', outsideBankAmount: '782.64',
+        reason: 'Approved withdrawal with independently paid cash',
+        sourceReference: 'Payroll source document 7', idempotencyKey: randomUUID() } });
+    assert.deepEqual((await calculatePayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId })).errors, []);
+    assert.equal(await balanceOf(fx, partyId, planId, '2026-07-21'), '8.0000', 'only the eight bank-funded hours leave the bank');
+  } finally { await dropScratchOrgReporting(fx.orgId); }
+});
+
+test('split bank cash inputs refuse mismatched replays, deposits and malformed outside amounts', { skip: !DB }, async () => {
+  const fx = await payrollOrg();
+  try {
+    const { partyId } = await employee(fx, 'Split Input Employee', fx.subsidiaryId);
+    const payout = await earningComponent(fx, 'SPLIT-INPUT');
+    const planId = randomUUID();
+    await db.execute(sql`insert into entitlement_plans
+      (id,org_id,code,name,unit,direction,accrual_method,payout_component_id,
+       liability_account_id,cap_behavior,is_active,created_by,updated_by)
+      values(${planId},${fx.orgId},'SPLITINPUT','Accrued pay','money','accrue','manual',${payout},
+        ${fx.accounts.vacationPayable},'warn',true,${fx.actorId},${fx.actorId})`);
+    const run = await createPayRun({ orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
+      periodStart: '2026-07-12', periodEnd: '2026-07-18' });
+    const base = { orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId,
+      allowedSubsidiaryIds: new Set([fx.subsidiaryId]) };
+    const mutation = (patch: Record<string, unknown>) => ({ ...base, mutation: { action: 'bank_cash_input' as const,
+      employeePartyId: partyId, componentId: payout, hours: '8.00', rate: '143.83', amount: '1150.64',
+      outsideBankAmount: '782.64', reason: 'Approved withdrawal with independently paid cash',
+      sourceReference: 'Payroll source document 7', idempotencyKey: randomUUID(), ...patch } });
+    const saved = mutation({});
+    await mutatePayRunAdjustment(saved);
+    await assert.rejects(() => mutatePayRunAdjustment({ ...saved,
+      mutation: { ...saved.mutation, outsideBankAmount: '782.63' } }), /already saved with different details/);
+    for (const patch of [
+      { outsideBankAmount: '782.641' }, { outsideBankAmount: 'not-money' },
+      { outsideBankAmount: '0.00' }, { outsideBankAmount: '-1.00' },
+      { outsideBankAmount: '1150.64' }, { outsideBankAmount: '1150.65' },
+    ]) await assert.rejects(() => mutatePayRunAdjustment(mutation(patch)), /outside the bank/);
+    await assert.rejects(() => mutatePayRunAdjustment(mutation({
+      hours: '-8.00', amount: '-1150.64', rate: null,
+    })), /outside the bank must be a positive part of a withdrawal/);
+  } finally { await dropScratchOrgReporting(fx.orgId); }
+});
+
+test('a split that disagrees with the native pay-date wage, or has none, refuses by name', { skip: !DB }, async () => {
+  const fx = await payrollOrg();
+  try {
+    const mismatched = await employee(fx, 'Split Wage Mismatch Employee', fx.subsidiaryId);
+    const unvalued = await employee(fx, 'Split Unvalued Employee', fx.subsidiaryId);
+    const payout = await earningComponent(fx, 'SPLIT-WAGE');
+    const planId = randomUUID();
+    await db.execute(sql`insert into entitlement_plans
+      (id,org_id,code,name,unit,direction,accrual_method,payout_component_id,
+       liability_account_id,cap_behavior,is_active,created_by,updated_by)
+      values(${planId},${fx.orgId},'SPLITWAGE','Accrued pay','money','accrue','manual',${payout},
+        ${fx.accounts.vacationPayable},'warn',true,${fx.actorId},${fx.actorId})`);
+    await opening(fx, planId, mismatched.partyId, '552', null);
+    await opening(fx, planId, unvalued.partyId, '552', null);
+    // The unvalued employee keeps a period-end wage but none on the pay date.
+    await db.execute(sql`update labor_cost_rates set effective_to='2026-07-18'
+      where org_id=${fx.orgId} and employee_party_id=${unvalued.partyId}`);
+    const run = await createPayRun({ orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
+      periodStart: '2026-07-12', periodEnd: '2026-07-18' });
+    for (const partyId of [mismatched.partyId, unvalued.partyId]) {
+      await mutatePayRunAdjustment({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId,
+        allowedSubsidiaryIds: new Set([fx.subsidiaryId]),
+        mutation: { action: 'bank_cash_input', employeePartyId: partyId, componentId: payout,
+          hours: '8.00', rate: '143.83', amount: '1150.64', outsideBankAmount: '782.64',
+          reason: 'Approved withdrawal with independently paid cash',
+          sourceReference: 'Payroll source document 7', idempotencyKey: randomUUID() } });
+    }
+    const result = await calculatePayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId });
+    assert.equal(result.errors.length, 2);
+    const messages = result.errors.map((entry) => entry.message).join('\n');
+    assert.match(messages, /assigns 368\.0000 to the bank, but 8\.00 hours value to 240\.0000 at the native wage effective on 2026-07-21/);
+    assert.match(messages, /has no native hourly wage for bank valuation/);
+    assert.equal(await balanceOf(fx, mismatched.partyId, planId, '2026-07-21'), '552.0000');
+    assert.equal(await balanceOf(fx, unvalued.partyId, planId, '2026-07-21'), '552.0000');
+  } finally { await dropScratchOrgReporting(fx.orgId); }
+});
+
+test('a pay-date-only wage version change stales a calculated split before commit', { skip: !DB }, async () => {
+  const fx = await payrollOrg();
+  try {
+    const { partyId } = await employee(fx, 'Split Stale Wage Employee', fx.subsidiaryId);
+    await db.execute(sql`update labor_cost_rates set rate='46' where org_id=${fx.orgId} and employee_party_id=${partyId}`);
+    const payout = await earningComponent(fx, 'SPLIT-STALE');
+    const planId = randomUUID();
+    await db.execute(sql`insert into entitlement_plans
+      (id,org_id,code,name,unit,direction,accrual_method,payout_component_id,
+       liability_account_id,cap_behavior,is_active,created_by,updated_by)
+      values(${planId},${fx.orgId},'SPLITSTALE','Accrued pay','money','accrue','manual',${payout},
+        ${fx.accounts.vacationPayable},'warn',true,${fx.actorId},${fx.actorId})`);
+    await opening(fx, planId, partyId, '552', null);
+    const run = await createPayRun({ orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
+      periodStart: '2026-07-12', periodEnd: '2026-07-18' });
+    await mutatePayRunAdjustment({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId,
+      allowedSubsidiaryIds: new Set([fx.subsidiaryId]),
+      mutation: { action: 'bank_cash_input', employeePartyId: partyId, componentId: payout,
+        hours: '8.00', rate: '143.83', amount: '1150.64', outsideBankAmount: '782.64',
+        reason: 'Approved withdrawal with independently paid cash',
+        sourceReference: 'Payroll source document 7', idempotencyKey: randomUUID() } });
+    assert.deepEqual((await calculatePayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId })).errors, []);
+    // Effective after the period end (2026-07-18) and on the pay date: the
+    // period-end wage the run already retained cannot change, so only the
+    // frozen pay-date valuation can stale this calculation.
+    await db.execute(sql`update labor_cost_rates set effective_to='2026-07-20'
+      where org_id=${fx.orgId} and employee_party_id=${partyId} and is_active`);
+    await db.execute(sql`insert into labor_cost_rates (org_id, employee_party_id, currency, rate, basis, effective_from,
+        is_active, created_by, updated_by)
+      values (${fx.orgId}, ${partyId}, 'CAD', '50', 'hour', '2026-07-21', true, ${fx.actorId}, ${fx.actorId})`);
+    await assert.rejects(
+      () => commitPayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId }),
+      /inputs changed after it was last calculated/,
+    );
+    assert.equal(await balanceOf(fx, partyId, planId, '2026-07-21'), '184.0000', 'the refused commit moves no bank money');
+  } finally { await dropScratchOrgReporting(fx.orgId); }
+});
+
+test('a per-hour contribution counts bank-funded hours once and outside cash at explicit zero hours', { skip: !DB }, async () => {
+  const fx = await payrollOrg();
+  try {
+    const { partyId, employmentId } = await employee(fx, 'Split Contribution Employee', fx.subsidiaryId);
+    await db.execute(sql`update labor_cost_rates set rate='46' where org_id=${fx.orgId} and employee_party_id=${partyId}`);
+    const payout = await earningComponent(fx, 'SPLIT-CONTRIB-PAYOUT');
+    const regular = await earningComponent(fx, 'SPLIT-CONTRIB-REGULAR');
+    await db.execute(sql`update pay_components set unit_of_measure='hours' where org_id=${fx.orgId} and id in (${payout},${regular})`);
+    const bankPlanId = randomUUID();
+    await db.execute(sql`insert into entitlement_plans
+      (id,org_id,code,name,unit,direction,accrual_method,payout_component_id,
+       liability_account_id,cap_behavior,is_active,created_by,updated_by)
+      values(${bankPlanId},${fx.orgId},'SPLITCONTRIB','Accrued pay','money','accrue','manual',${payout},
+        ${fx.accounts.vacationPayable},'warn',true,${fx.actorId},${fx.actorId})`);
+    await opening(fx, bankPlanId, partyId, '552', null);
+    const benefitPlanId = randomUUID(), enrollmentId = randomUUID(), ruleId = randomUUID();
+    await db.execute(sql`insert into hrm_benefit_plans(id,org_id,code,name,kind,currency,employer_subsidiary_id,effective_from)
+      values(${benefitPlanId},${fx.orgId},'SPLITPENSION','Pension plan','retirement','CAD',${fx.subsidiaryId},'2026-01-01')`);
+    await db.execute(sql`insert into hrm_benefit_enrollments(id,org_id,employment_id,plan_id,status,effective_from,currency)
+      values(${enrollmentId},${fx.orgId},${employmentId},${benefitPlanId},'elected','2026-01-01','CAD')`);
+    const contribution = randomUUID();
+    await db.execute(sql`insert into pay_components(id,org_id,code,name,kind,country,taxable,pensionable,insurable,vacationable,
+      tax_treatment,payment_kind,expense_account_id,liability_account_id)
+      values(${contribution},${fx.orgId},'SPLIT-PENSION-ER','Pension employer','employer_contribution','CA',true,true,true,false,'none','cash',${fx.accounts.burdenExpense},${fx.accounts.otherPayable})`);
+    await db.execute(sql`insert into hrm_benefit_contribution_rules(id,org_id,plan_id,rule_key,name,kind,pay_component_id,basis,rate,rate_formula,hours_basis,
+      proration,effective_from,run_applicability)
+      values(${ruleId},${fx.orgId},${benefitPlanId},'SPLIT-PENSION-ER','Pension employer','employer_contribution',${contribution},'per_hour',0,'elected_rate','selected_components','none','2026-01-01','all_pay_runs')`);
+    for (const counted of [regular, payout]) {
+      await db.execute(sql`insert into hrm_benefit_contribution_rule_components(org_id,plan_id,rule_id,pay_component_id)
+        values(${fx.orgId},${benefitPlanId},${ruleId},${counted})`);
+    }
+    await db.execute(sql`insert into hrm_benefit_enrollment_terms(id,org_id,enrollment_id,rule_id,election_mode,elected_rate,effective_from,source_decimal,provenance)
+      values(${randomUUID()},${fx.orgId},${enrollmentId},${ruleId},'fixed','2','2026-01-01','2','{"source":"approved payroll election"}'::jsonb)`);
+    await db.execute(sql`update hrm_benefit_enrollments set submitted_by=${fx.actorId},submitted_at=now(),
+      submission_snapshot=public.benefit_enrollment_submission_source(org_id,id),updated_by=${fx.actorId},
+      decision_snapshot=jsonb_build_object('outcome','approved','mode','not_required','approvalMode','none','planId',plan_id),status='active'
+      where org_id=${fx.orgId} and id=${enrollmentId}`);
+    const run = await createPayRun({ orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
+      periodStart: '2026-07-12', periodEnd: '2026-07-18' });
+    await db.execute(sql`insert into pay_run_adjustments(org_id,pay_run_document_id,employee_party_id,adjustment_type,component_id,amount,hours)
+      values(${fx.orgId},${run.documentId},${partyId},'line',${regular},'46','1')`);
+    await mutatePayRunAdjustment({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId,
+      allowedSubsidiaryIds: new Set([fx.subsidiaryId]),
+      mutation: { action: 'bank_cash_input', employeePartyId: partyId, componentId: payout,
+        hours: '8.00', rate: '143.83', amount: '1150.64', outsideBankAmount: '782.64',
+        reason: 'Approved withdrawal with independently paid cash',
+        sourceReference: 'Payroll source document 7', idempotencyKey: randomUUID() } });
+    const result = await calculatePayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId });
+    assert.deepEqual(result.errors, [], 'the outside portion at explicit zero hours raises no missing-hours refusal');
+    const allocation = (await db.execute<{ amount: string; hours: string }>(sql`select amount::text,
+        source_snapshot#>>'{basis,hours}' as hours from pay_run_benefit_allocations
+      where org_id=${fx.orgId} and pay_run_document_id=${run.documentId} and rule_id=${ruleId}`)).rows;
+    assert.deepEqual(allocation, [{ amount: '18.0000', hours: '9.0000' }],
+      'one regular hour plus eight bank-funded hours count once; the outside cash adds zero');
+  } finally { await dropScratchOrgReporting(fx.orgId); }
+});
+
+test('a split valued from a foreign-currency wage refuses until the wage matches the run currency', { skip: !DB }, async () => {
+  const fx = await payrollOrg();
+  try {
+    const { partyId } = await employee(fx, 'Split Currency Employee', fx.subsidiaryId);
+    // Numerically the wage is exactly the split's bank valuation; only its
+    // currency differs from the CAD run. A spot rate lets the general wage
+    // path proceed, so the refusal observed is the split's own binding.
+    await db.execute(sql`update labor_cost_rates set rate='46',currency='USD'
+      where org_id=${fx.orgId} and employee_party_id=${partyId}`);
+    await db.execute(sql`insert into fx_rates (org_id, from_currency, to_currency, as_of, rate_type, rate)
+      values (${fx.orgId}, 'USD', 'CAD', '2026-01-01', 'spot', '1')`);
+    const payout = await earningComponent(fx, 'SPLIT-CURRENCY');
+    const planId = randomUUID();
+    await db.execute(sql`insert into entitlement_plans
+      (id,org_id,code,name,unit,direction,accrual_method,payout_component_id,
+       liability_account_id,cap_behavior,is_active,created_by,updated_by)
+      values(${planId},${fx.orgId},'SPLITCURRENCY','Accrued pay','money','accrue','manual',${payout},
+        ${fx.accounts.vacationPayable},'warn',true,${fx.actorId},${fx.actorId})`);
+    await opening(fx, planId, partyId, '552', null);
+    const run = await createPayRun({ orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
+      periodStart: '2026-07-12', periodEnd: '2026-07-18' });
+    await mutatePayRunAdjustment({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId,
+      allowedSubsidiaryIds: new Set([fx.subsidiaryId]),
+      mutation: { action: 'bank_cash_input', employeePartyId: partyId, componentId: payout,
+        hours: '8.00', rate: '143.83', amount: '1150.64', outsideBankAmount: '782.64',
+        reason: 'Approved withdrawal with independently paid cash',
+        sourceReference: 'Payroll source document 7', idempotencyKey: randomUUID() } });
+    const refused = await calculatePayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId });
+    assert.equal(refused.errors.length, 1);
+    assert.match(refused.errors[0]!.message, /valued from a USD wage, but this pay run pays CAD/);
+    assert.equal((await db.execute(sql`select id from pay_stubs where org_id=${fx.orgId}
+      and pay_run_document_id=${run.documentId}`)).rows.length, 0, 'the refused split leaves no stub');
+    assert.equal((await db.execute(sql`select id from entitlement_ledger where org_id=${fx.orgId}
+      and plan_id=${planId} and pay_run_document_id=${run.documentId}`)).rows.length, 0, 'the refused split moves no bank money');
+    assert.equal(await balanceOf(fx, partyId, planId, '2026-07-21'), '552.0000');
+    await db.execute(sql`update labor_cost_rates set currency='CAD'
+      where org_id=${fx.orgId} and employee_party_id=${partyId}`);
+    assert.deepEqual((await calculatePayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId })).errors, []);
+    assert.equal(await balanceOf(fx, partyId, planId, '2026-07-21'), '184.0000', 'the same split succeeds once the native wage is denominated in the run currency');
   } finally { await dropScratchOrgReporting(fx.orgId); }
 });

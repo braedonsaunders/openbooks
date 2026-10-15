@@ -1,7 +1,8 @@
-import type {
-  AssigneeTarget,
-  AutomationGraph,
-  FlowSubjectProfile,
+import {
+  flowGraphSubjectScopeSchema,
+  type AssigneeTarget,
+  type AutomationGraph,
+  type FlowSubjectProfile,
 } from "@openbooks/forms-core";
 
 /**
@@ -27,13 +28,21 @@ export type QuickApprovalInput = {
   title?: string;
   /** Default true: the submitter can never sign off their own record. */
   preventSelfApproval?: boolean;
+  /**
+   * Legal entities this approval applies to. Omitted: the approval applies
+   * organization-wide. When present it must name at least one entity, and
+   * the generated graph carries it as its typed subject scope so admission
+   * is decided before the flow can gate any other entity's records.
+   */
+  subsidiaryIds?: readonly string[];
 };
 
 export type QuickSetupRefusalCode =
   | "bad-threshold"
   | "no-amount-field"
   | "unknown-role"
-  | "unknown-user";
+  | "unknown-user"
+  | "bad-subject-scope";
 
 export type QuickSetupResult =
   | { ok: true; graph: AutomationGraph; amountField: string | null }
@@ -135,6 +144,25 @@ export function buildQuickApprovalGraph(
     }
   }
 
+  let subjectScope: AutomationGraph["subjectScope"];
+  if (input.subsidiaryIds !== undefined) {
+    // The shared graph schema is the one authority on a legal-entity
+    // limit — uuid shape, the entity cap, case canonicalization and
+    // case-variant uniqueness all refuse here exactly as they do in the
+    // ordinary flow editor, never through a second local check.
+    const parsed = flowGraphSubjectScopeSchema.safeParse({ subsidiaryIds: [...input.subsidiaryIds] });
+    if (!parsed.success) {
+      return {
+        ok: false,
+        code: "bad-subject-scope",
+        message:
+          "choose at least one legal entity for this approval, without repeats — " +
+          "leave the legal entity blank to apply organization-wide",
+      };
+    }
+    subjectScope = parsed.data;
+  }
+
   const preventSelfApproval = input.preventSelfApproval ?? true;
   const gate = {
     title: input.title?.trim() || "Approval",
@@ -149,6 +177,7 @@ export function buildQuickApprovalGraph(
       amountField: null,
       graph: {
         schemaVersion: 1,
+        ...(subjectScope ? { subjectScope } : {}),
         nodes: [
           { id: "trigger", position: { x: 0, y: 0 }, data: { kind: "trigger", trigger: { trigger: "on_submit" } } },
           { id: "gate", position: { x: 260, y: 0 }, data: { kind: "gate", gate } },
@@ -163,6 +192,7 @@ export function buildQuickApprovalGraph(
     amountField,
     graph: {
       schemaVersion: 1,
+      ...(subjectScope ? { subjectScope } : {}),
       nodes: [
         { id: "trigger", position: { x: 0, y: 0 }, data: { kind: "trigger", trigger: { trigger: "on_submit" } } },
         {

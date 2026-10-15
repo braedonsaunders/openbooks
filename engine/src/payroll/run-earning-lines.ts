@@ -1,3 +1,4 @@
+import { EMPLOYER_LEVY_PROGRAMS, isEmployerLevyAdjustmentEvidenceCandidate, parseEmployerLevyAdjustmentEvidence } from "./run-levy-adjustment-evidence.ts";
 import { applicableAssignedComponents } from "./assignment-run-applicability.ts";
 import type { PayRunType } from "./run-contracts.ts";
 import { type PayrollSubsidiaryScope } from "./scope.ts";
@@ -5,6 +6,7 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { PayrollError } from "./error.ts";
 import { add, cmp, mulDecimal, mulPercent, prorateDays, roundMoney } from "../money/money.ts";
+import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { parseMoney, type Money } from "../money/brands.ts";
 import { payrollPack } from "./packs.ts";
 import { type StatutoryHolidayEligibilityFacts } from "./holidays.ts";
@@ -19,8 +21,10 @@ import { payrollHourlyWage, salaryPeriodPay } from "./rate.ts";
 import { assignmentCoveredDays, assignmentCoversPeriod } from "./assignment-windows.ts";
 import { assertComponentServiceEligibility } from "./entitlements-component-eligibility.ts";
 import { assertBankDepositAdjustment } from "./run-bank-input.ts";
-import { isBankCashInputEvidenceCandidate, parseBankCashInputEvidence } from "./run-bank-cash-evidence.ts";
+import { bankCashFundingSplit, bankCashSplitMatchesValuation, bankFundedValuationCents, isBankCashInputEvidenceCandidate, parseBankCashInputEvidence, type BankCashPayDateValuation } from "./run-bank-cash-evidence.ts";
+import { bankSplitValuationRefusal, resolveBankPayDateValuation } from "./run-bank-valuation.ts";
 import { priceRunHolidayHours } from "./run-holiday-input.ts";
+import { isDeclaredVacationAccrualCandidate, isDeclaredVacationAccrualInput, parseDeclaredVacationAccrualEvidence, type DeclaredVacationAccrualInput } from "./run-vacation-accrual-input.ts";
 
 export async function appendPeriodicEarnings(
   tx: Pick<typeof db, "execute">,
@@ -172,7 +176,6 @@ export async function appendRetroSettlementLines(
         projectId: line.projectId,
         departmentId: line.departmentId,
         sequence: line.sequence,
-        vacationable: line.vacationable,
         nonPeriodic: line.nonPeriodic,
         supplementalWageCategory: line.supplementalWageCategory,
         statutoryReportingCategory: line.statutoryReportingCategory,
@@ -270,8 +273,7 @@ export async function appendDerivedEarningLines(
           taxable: line.taxable,
           pensionable: line.pensionable,
           insurable: line.insurable,
-          vacationable: line.vacationable,
-          programApplicability: line.programApplicability,
+            programApplicability: line.programApplicability,
           nonPeriodic: line.nonPeriodic,
       supplementalWageCategory: line.supplementalWageCategory,
       statutoryReportingCategory: line.statutoryReportingCategory,
@@ -290,10 +292,11 @@ async function runLineAdjustmentRows(
   employeePartyId: string,
 ): Promise<readonly Record<string, unknown>[]> {
   return (await tx.execute<Record<string, unknown>>(sql`
-    select a.id as adjustment_id, a.amount::text as adj_amount, a.hours::text as adj_hours, a.earned_from::text as adj_earned_from, a.earned_to::text as adj_earned_to, a.replace_component, a.note, c.*,
+    select a.id as adjustment_id, a.amount::text as adj_amount, a.hours::text as adj_hours, a.earned_from::text as adj_earned_from, a.earned_to::text as adj_earned_to, a.replace_component, a.note, r.pay_date::text as run_pay_date, d.currency as run_currency, c.*,
            ec.supplemental_wage_category, ec.statutory_reporting_category, ec.statutory_exemption_category
       from pay_run_adjustments a
       join pay_runs r on r.org_id=a.org_id and r.document_id=a.pay_run_document_id
+      join documents d on d.id = r.document_id and d.org_id = r.org_id
       join pay_components c on c.id = a.component_id and c.org_id = a.org_id
       join pay_component_earning_classifications ec
         on ec.org_id = c.org_id and ec.pay_component_id = c.id
@@ -391,7 +394,7 @@ export async function appendStatutoryHolidayEarningLines(
         // benefit basis can see them. Premium and percent-of-wages lines
         // never carry hours — they price hours the timesheet already paid —
         // so carrying cannot pay per-hour components twice. The component's
-        // own flags (taxable, pensionable, insurable, vacationable — all
+        // own flags (taxable, pensionable, insurable — all
         // true) classify the amount: holiday pay is wages.
         description: line.description,
         hours: line.hours,
@@ -539,7 +542,7 @@ export async function applyAssignedComponentLines(
       sourceEffectiveFrom: [periodStart, String(c.effective_from)].sort().at(-1)!,
       sourceEffectiveTo: [periodEnd, c.effective_to == null ? periodEnd : String(c.effective_to)].sort()[0]!,
       taxable: c.taxable as boolean, pensionable: c.pensionable as boolean,
-      insurable: c.insurable as boolean, vacationable: c.vacationable as boolean,
+      insurable: c.insurable as boolean,
       nonPeriodic: c.non_periodic as boolean, taxTreatment: c.tax_treatment as string,
       supplementalWageCategory: c.supplemental_wage_category as Line["supplementalWageCategory"],
       statutoryReportingCategory: c.statutory_reporting_category as string | null,
@@ -567,12 +570,52 @@ export async function applyRunLineAdjustments(
     bonusRun: boolean; retroRun: boolean; terminationRun: boolean;
     country: string;
     lines: Line[];
+    /** Per-cheque vacation liabilities are materialized by the entitlement plan, not as free-standing lines. */
+    declaredVacationAccruals?: Map<string, DeclaredVacationAccrualInput>;
   },
 ): Promise<ReadonlySet<string>> {
   const { orgId, documentId, employeePartyId, bonusRun, retroRun, terminationRun, country, lines } = args;
   const replacedComponentIds = new Set<string>();
   const adjustments = await runLineAdjustmentRows(tx, orgId, documentId, employeePartyId);
   for (const adj of adjustments) {
+    if (isEmployerLevyAdjustmentEvidenceCandidate(typeof adj.note === "string" ? adj.note : null)) {
+      const evidence = parseEmployerLevyAdjustmentEvidence(typeof adj.note === "string" ? adj.note : null);
+      const amount = canonicalDecimal(String(adj.adj_amount), 4);
+      if (!evidence || evidence.requestId !== String(adj.adjustment_id)
+        || country !== "CA" || adj.country !== "CA" || adj.kind !== "employer_contribution"
+        || adj.system_key !== EMPLOYER_LEVY_PROGRAMS[evidence.programKey].systemKey
+        || adj.is_active !== true || adj.replace_component !== false
+        || adj.adj_hours != null || adj.adj_earned_from != null || adj.adj_earned_to != null
+        || amount === null || cmp(amount, "0") <= 0 || cmp(roundMoney(amount, 2), amount) !== 0) {
+        throw new PayrollError("The saved issued levy input no longer identifies a positive employer-only amount with its audited request and active Canadian component; remove or correct the editable input before calculating.");
+      }
+      // The Canadian levy pass combines the issued premium and native
+      // assessment once while retaining their separate basis factors.
+      continue;
+    }
+    if (isDeclaredVacationAccrualCandidate(typeof adj.note === "string" ? adj.note : null)) {
+      const evidence = parseDeclaredVacationAccrualEvidence(typeof adj.note === "string" ? adj.note : null);
+      const amount = canonicalDecimal(String(adj.adj_amount), 4);
+      if (!evidence || evidence.requestId !== String(adj.adjustment_id)
+        || !amount || cmp(amount, "0") <= 0 || cmp(roundMoney(amount, 2), amount) !== 0
+        || adj.kind !== "employer_contribution" || adj.is_active !== true || !adj.id) {
+        throw new PayrollError("The saved declared vacation accrual lacks a positive amount, active accrual component or audited source evidence; correct it through the declared vacation accrual command before calculating.");
+      }
+      const source: DeclaredVacationAccrualInput = {
+        ...evidence, adjustmentId: String(adj.adjustment_id), componentId: String(adj.id), amount,
+      };
+      if (!isDeclaredVacationAccrualInput(source)) {
+        throw new PayrollError("The saved declared vacation accrual has invalid amount or source identity; correct it through the declared vacation accrual command before calculating.");
+      }
+      if (!args.declaredVacationAccruals) {
+        throw new PayrollError("The declared vacation input requires the native vacation-accrual planning path; calculate it through the pay-run command.");
+      }
+      if (args.declaredVacationAccruals.has(source.componentId)) {
+        throw new PayrollError("This employee has more than one declared vacation accrual on the run; remove the duplicate audited input before calculating.");
+      }
+      args.declaredVacationAccruals.set(source.componentId, source);
+      continue;
+    }
     const bankInput = parseBankCashInputEvidence(typeof adj.note === "string" ? adj.note : null);
     if (isBankCashInputEvidenceCandidate(typeof adj.note === "string" ? adj.note : null) && !bankInput) {
       throw new PayrollError("The saved bank payout input has invalid audited rate, reason, source or request evidence; correct it through the bank cash input command before calculating.");
@@ -612,6 +655,39 @@ export async function applyRunLineAdjustments(
         if (lines[i]!.componentId === adj.id) lines.splice(i, 1);
       }
     }
+    // A funding split is captured BEFORE its lines are constructed: the
+    // native pay-date wage is resolved once on this transaction (never
+    // from the keyed rate, a current profile or an average), the split is
+    // checked against it, and the frozen valuation rides the bank-funded
+    // line so the drawdown validates evidence instead of re-resolving.
+    const fundingSplit = bankInput?.outsideBankAmount
+      ? bankCashFundingSplit(String(adj.adj_amount), bankInput.outsideBankAmount)
+      : null;
+    if (bankInput?.outsideBankAmount && !fundingSplit) {
+      throw new PayrollError("The saved bank payout split no longer has a positive bank-funded amount below the issued cash amount; correct it through the audited bank cash input command before calculating.");
+    }
+    let bankValuation: BankCashPayDateValuation | undefined;
+    if (fundingSplit) {
+      if (adj.adj_hours == null || cmp(String(adj.adj_hours), "0") <= 0) {
+        throw new PayrollError("Cash paid outside the bank belongs only to a withdrawal with positive bank hours; correct it through the audited bank cash input command before calculating.");
+      }
+      const payDate = typeof adj.run_pay_date === "string" ? adj.run_pay_date : null;
+      if (!payDate) throw new PayrollError("The saved bank payout split has no pay date to value against; correct it through the audited bank cash input command before calculating.");
+      bankValuation = await resolveBankPayDateValuation(tx, orgId, employeePartyId, payDate, true) ?? undefined;
+      if (!bankValuation) throw bankSplitValuationRefusal(employeePartyId, payDate);
+      // Monetary scalars are only comparable in one currency: the native
+      // wage must be denominated in the pay-run document's currency. A
+      // foreign-currency wage refuses by name — the split is never priced
+      // through an invented or general-purpose FX conversion.
+      const runCurrency = typeof adj.run_currency === "string" ? adj.run_currency : null;
+      if (!runCurrency) throw new PayrollError("The saved bank payout split has no pay-run currency to value against; correct it through the audited bank cash input command before calculating.");
+      if (bankValuation.currency !== runCurrency) {
+        throw new PayrollError(`The audited bank payout split is valued from a ${bankValuation.currency} wage, but this pay run pays ${runCurrency}; configure a ${runCurrency} wage effective on ${payDate} and recalculate — a foreign-currency wage is never converted to price a split`);
+      }
+      if (!bankCashSplitMatchesValuation(fundingSplit, String(adj.adj_hours), bankValuation)) {
+        throw new PayrollError(`The audited bank payout split assigns ${fundingSplit.bankFundedAmount} to the bank, but ${String(adj.adj_hours)} hours value to ${bankFundedValuationCents(String(adj.adj_hours), bankValuation)} at the native wage effective on ${payDate}; correct the audited split through the bank cash input command before calculating.`);
+      }
+    }
     // Operator-entered adjustment, closed through roundMoney: canonical Money.
     const amount = roundMoney(String(adj.adj_amount), 2) as Money;
     // Paid-hour inputs can have no cash value when the corresponding wages
@@ -627,7 +703,7 @@ export async function applyRunLineAdjustments(
     // benefit hours bases, insurable-hours and wage-hour reports) reads
     // lines and stub hours, so a quantity line is excluded everywhere by
     // carrying none.
-    lines.push({
+    const line: Line = {
       componentId: adj.id as string, kind: adj.kind as Line["kind"],
       runAdjustmentId: String(adj.adjustment_id),
       earnedFrom: adj.adj_earned_from == null ? null : String(adj.adj_earned_from),
@@ -641,7 +717,7 @@ export async function applyRunLineAdjustments(
       ...(bankInput?.rate ? { rate: bankInput.rate } : {}),
       amount, sequence: Number(adj.sequence),
       taxable: adj.taxable as boolean, pensionable: adj.pensionable as boolean,
-      insurable: adj.insurable as boolean, vacationable: adj.vacationable as boolean,
+      insurable: adj.insurable as boolean,
       // On a bonus run every earning is non-periodic by definition: the
       // employee is not receiving this amount every period, so annualizing it
       // would over-withhold badly. On a RETRO run the same is true of a manual
@@ -665,7 +741,35 @@ export async function applyRunLineAdjustments(
       protectionPriority: Number(adj.protection_priority ?? 100),
       protectionClass: (adj.protection_class as string | null) ?? null,
       includeInDisposableEarnings: adj.include_in_disposable_earnings as boolean,
-    });
+    };
+    if (fundingSplit && bankValuation) {
+      // Keep the issued total on the same earning component while
+      // separating bank funding from independently paid cash. The bank-
+      // funded portion carries the worked hours and the frozen pay-date
+      // valuation; the outside portion worked none and is not bank-funded.
+      // Funding origin changes no statutory policy: the component's dated
+      // treatment governs both portions at the stamp, as unsplit.
+      lines.push({ ...line,
+        description: `${line.description} — bank-funded portion`,
+        amount: roundMoney(fundingSplit.bankFundedAmount, 2) as Money,
+        rate: undefined,
+        fundedByEntitlementBank: true,
+        bankCashFundingSplit: fundingSplit,
+        bankCashValuation: bankValuation,
+      });
+      lines.push({ ...line,
+        description: `${line.description} — paid outside the bank`,
+        amount: roundMoney(fundingSplit.outsideBankAmount, 2) as Money,
+        // Explicit zero, never absent: a selected per-hour contribution
+        // rule refuses a nonzero operator input with no hours, and this
+        // portion worked none — the bank-funded line holds them all.
+        hours: "0.00",
+        rate: undefined,
+        fundedByEntitlementBank: false,
+      });
+    } else {
+      lines.push(line);
+    }
   }
   return replacedComponentIds;
 }

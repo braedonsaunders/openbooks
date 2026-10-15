@@ -24,9 +24,10 @@ import { ApiResponseError, apiJson } from '../../../../lib/api-error'
 type ProfileOption = { subjectKind: string; label?: string; labelKey?: string; group?: string }
 
 type QuickState = {
-  flow: { id: string; name: string; enabled: boolean; updatedAt: string } | null
+  flow: { id: string; name: string; enabled: boolean; updatedAt: string; subsidiaryIds?: string[] } | null
   users: { id: string; name: string; email: string }[]
   roles: { key: string; name: string }[]
+  subsidiaries: { id: string; name: string }[]
   amountField: string | null
   subjectLabel: string
 }
@@ -36,6 +37,10 @@ const ERROR_CODES = ['bad-threshold', 'no-amount-field', 'unknown-role', 'unknow
 export function QuickApprovalButton() {
   const t = useTranslations('admin.flows')
   const tSubjects = useTranslations('customization.recordTypes')
+  // Existing catalog labels, reused so every locale renders them: the
+  // legal-entity name and the organization-wide option.
+  const tLegalEntity = useTranslations('accounting.provisions')
+  const tAllEntities = useTranslations('crm.sales')
   const router = useRouter()
   const params = useSearchParams()
   const [open, setOpen] = useState(false)
@@ -44,6 +49,7 @@ export function QuickApprovalButton() {
   const [state, setState] = useState<QuickState | null>(null)
   const [loading, setLoading] = useState(false)
   const [threshold, setThreshold] = useState('')
+  const [subsidiaryId, setSubsidiaryId] = useState('')
   const [approverKind, setApproverKind] = useState<'role' | 'user'>('role')
   const [approver, setApprover] = useState('')
   const [preventSelfApproval, setPreventSelfApproval] = useState(true)
@@ -85,6 +91,7 @@ export function QuickApprovalButton() {
         setApproverKind('role')
         setApprover(data.roles.some(r => r.key === 'admin') ? 'admin' : data.roles[0]?.key ?? '')
         setThreshold('')
+        setSubsidiaryId('')
         setPreventSelfApproval(true)
       })
       .catch(() => { if (!controller.signal.aborted && currentSubject.current === autoSubject) setState(null) })
@@ -109,6 +116,7 @@ export function QuickApprovalButton() {
       setApproverKind('role')
       setApprover(adminRole)
       setThreshold('')
+      setSubsidiaryId('')
       setPreventSelfApproval(true)
     } finally {
       setLoading(false)
@@ -140,6 +148,7 @@ export function QuickApprovalButton() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             subjectKind,
+            ...(subsidiaryId !== '' ? { subsidiaryIds: [subsidiaryId] } : {}),
             ...(parsed !== undefined ? { threshold: parsed } : {}),
             approver: approverKind === 'user'
               ? { type: 'user', userId: approver }
@@ -232,6 +241,15 @@ export function QuickApprovalButton() {
             <div className="space-y-2 rounded-md border border-slate-200 p-3 dark:border-slate-700">
               <p className="text-sm text-slate-600 dark:text-slate-300">{t('quick.existing')}</p>
               <p className="text-sm font-medium text-slate-900 dark:text-slate-100">{state.flow.name}</p>
+              {state.flow.subsidiaryIds && state.flow.subsidiaryIds.length > 0 ? (
+                <p className="text-sm text-slate-600 dark:text-slate-300">
+                  {tLegalEntity('subsidiary')}: {
+                    state.flow.subsidiaryIds
+                      .map((id) => state.subsidiaries?.find((s) => s.id === id)?.name ?? id)
+                      .join(', ')
+                  }
+                </p>
+              ) : null}
               <Link
                 href={`/admin/flows/${state.flow.id}`}
                 className="inline-block text-sm font-medium text-teal-700 hover:underline dark:text-teal-300"
@@ -256,6 +274,17 @@ export function QuickApprovalButton() {
                   {t('quick.noAmount')}
                 </p>
               )}
+              {(state.subsidiaries?.length ?? 0) > 0 ? (
+                <div className="space-y-1.5">
+                  <Label>{tLegalEntity('subsidiary')}</Label>
+                  <Select value={subsidiaryId} onChange={(e) => setSubsidiaryId(e.target.value)}>
+                    <option value="">{tAllEntities('allEntities')}</option>
+                    {state.subsidiaries.map((s) => (
+                      <option key={s.id} value={s.id}>{s.name}</option>
+                    ))}
+                  </Select>
+                </div>
+              ) : null}
               <div className="space-y-1.5">
                 <Label>{t('quick.approver')}</Label>
                 <Select value={approverKind} onChange={(e) => setApproverKind(e.target.value === 'user' ? 'user' : 'role')}>

@@ -6,10 +6,10 @@ import { guardRefusalMessage } from "../platform/database-refusal.ts";
 import { isCataloguePermission, permissionSetCovers, resolveEffectivePermissions } from "./permissions.ts";
 import { ScopeNotFoundError } from "./subsidiary-scope.ts";
 
-export interface ActorPrincipal {
+export type ActorPrincipal = {
   id: string; orgId: string; name: string; email: string;
   isSuperAdmin: boolean; isActive: boolean;
-}
+};
 
 /** Read only an identity eligible to act in this tenant. Local facts retain
  * the caller transaction; foreign home facts use the bounded identity pool. */

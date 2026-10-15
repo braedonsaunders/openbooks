@@ -139,9 +139,17 @@ export async function lockSubjectScope(
     case "party":
     case "project":
     case "employment": {
+      // Lock the REFERRING subject row as well as the owner: the link
+      // column lives on the subject, so locking only the owner would let a
+      // concurrent relink move the subject to another owner (and another
+      // legal entity) while the owner's own row stays frozen. The share
+      // lock on the subject row holds the relationship itself until the
+      // caller's transaction ends; the owner id is then read from the
+      // locked row, and the owner's share lock freezes its subsidiary.
       const row = (await db.execute<{ ownerId: string }>(sql`
         select ${sql.identifier(scope.column)} as "ownerId" from ${sql.identifier(scope.table)}
          where id = ${subjectId} and org_id = ${orgId}
+         for share
       `)).rows[0];
       if (!row) throw new FlowSubjectScopeUnresolvedError(subjectKind, subjectId);
       await lockScopeRow(db, orgId, scope.via, row.ownerId, allowed, "share");

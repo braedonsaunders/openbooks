@@ -1,3 +1,6 @@
+import { statutoryHolidayEmploymentSource, type StatutoryHolidayEmploymentSource } from './holidays.ts';
+import { currentOpeningLevySourceSql } from './opening-levy-source-correction-authority.ts';
+import { validateOpeningLevySourceFacts, type OpeningLevySourceFacts } from './opening-levy-source-facts.ts';
 import { resolveCaBonusIncomeReference, type CaBonusIncomeReferenceScope, type CaBonusIncomeReferenceSource } from './canada/bonus-income-reference.ts';
 import { PayrollError } from './error.ts';
 import { historicalEmploymentRosterSource, type HistoricalEmploymentRosterSource } from "./employment-roster.ts";
@@ -12,7 +15,12 @@ import { isUuid } from "../platform/uuid.ts";
 import { isIsoCalendarDate } from "../platform/civil-date.ts";
 import { canonicalDecimal, multiplyDecimal } from "../money/exact-decimal.ts";
 import { cmp, roundMoney } from "../money/money.ts";
-import { isBankCashInputEvidenceCandidate, parseBankCashInputEvidence } from "./run-bank-cash-evidence.ts";
+import { bankCashFundingSplit, isBankCashInputEvidenceCandidate, parseBankCashInputEvidence, type BankCashPayDateValuation } from "./run-bank-cash-evidence.ts";
+import { EMPLOYER_LEVY_PROGRAMS, canonicalLevySourceKey, isEmployerLevyProgramKey, parseEmployerLevyAdjustmentEvidence } from "./run-levy-adjustment-evidence.ts";
+import { resolveBankPayDateValuation } from "./run-bank-valuation.ts";
+import { PAYROLL_COUNTRY_PACKS } from "./pack-registry.ts";
+import { hourlyPayRate, isPayRateBasis } from "../projects/pay-rate-basis.ts";
+import { isDeclaredVacationAccrualInput, parseDeclaredVacationAccrualEvidence } from "./run-vacation-accrual-input.ts";
 
 export type OpeningEmployerAuthoritySource = {
   id: string; openingBalanceId: string; employeePartyId: string; taxYear: number; subsidiaryId: string;
@@ -24,6 +32,19 @@ export type IncomeTaxOverrideSource = {
   employeePartyId: string;
   componentId: string;
   amount: string;
+  reason: string;
+  sourceReference: string;
+  requestId: string;
+};
+
+export type EmployerLevyAdjustmentSource = {
+  adjustmentId: string;
+  employeePartyId: string;
+  componentId: string;
+  amount: string;
+  programKey: string;
+  workerCompGroupId: string | null;
+  sourceKey: string;
   reason: string;
   sourceReference: string;
   requestId: string;
@@ -45,7 +66,39 @@ export type BankCashInputSource = {
   sourceReference: string;
   requestId: string;
   rate: string | null;
+  /** Portion of an issued withdrawal paid outside the entitlement bank. */
+  outsideBankAmount?: string;
+  /** Native pay-date wage source the split's bank-funded portion is valued at; null records that none resolved. */
+  bankValuation?: BankCashPayDateValuation | null;
 };
+
+export type DeclaredVacationAccrualSource = {
+  adjustmentId: string;
+  employeePartyId: string;
+  componentId: string;
+  planId: string;
+  amount: string;
+  reason: string;
+  sourceReference: string;
+  requestId: string;
+};
+
+function isEmployerLevyAdjustmentSource(value: unknown): value is EmployerLevyAdjustmentSource {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const row = value as Record<string, unknown>;
+  return ["adjustmentId", "employeePartyId", "componentId", "requestId"]
+    .every(key => typeof row[key] === "string" && isUuid(row[key] as string))
+    && row.adjustmentId === row.requestId
+    && isEmployerLevyProgramKey(row.programKey)
+    && (row.programKey === "ca_wcb"
+      ? typeof row.workerCompGroupId === "string" && isUuid(row.workerCompGroupId)
+      : row.workerCompGroupId === null)
+    && canonicalLevySourceKey(row.sourceKey) === row.sourceKey
+    && typeof row.amount === "string" && canonicalDecimal(canonicalDecimal(row.amount, 4), 2) !== null
+    && cmp(canonicalDecimal(canonicalDecimal(row.amount, 4), 2)!, "0") > 0
+    && typeof row.reason === "string" && row.reason.trim().length > 0 && row.reason.length <= 500
+    && typeof row.sourceReference === "string" && row.sourceReference.trim().length > 0 && row.sourceReference.length <= 300;
+}
 
 function isIncomeTaxOverrideSource(value: unknown): value is IncomeTaxOverrideSource {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
@@ -61,11 +114,15 @@ export type OpeningLevySourceAuthoritySource = OpeningEmployerAuthoritySource & 
   id: string;
   employerAuthorityId: string;
   allocationSha256: string;
+  openingChildrenSha256: string;
+  originalCountry: string; originalCurrency: string;
+  coverageStart: string; coverageEnd: string; coverageComplete: true;
   allocations: {
     programKey: string;
     region: string;
     subRegion: string;
     filingAccountId: string | null;
+    federalAccountId: string | null;
     amount: string;
   }[];
 };
@@ -75,19 +132,45 @@ export type OpeningBalanceSourceState = {
   sourceDigest: string;
 };
 
+function isBankCashPayDateValuation(value: unknown): value is BankCashPayDateValuation {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const row = value as Record<string, unknown>;
+  const basis = row.basis;
+  if (typeof row.rateId !== "string" || !isUuid(row.rateId)
+    || !["employee", "job_title", "trade", "department", "subsidiary", "org"].includes(row.scope as string)
+    || typeof row.currency !== "string" || !/^[A-Z]{3}$/.test(row.currency)
+    || !isPayRateBasis(basis)
+    || typeof row.effectiveFrom !== "string" || !isIsoCalendarDate(row.effectiveFrom)
+    || !(row.effectiveTo === null || typeof row.effectiveTo === "string" && isIsoCalendarDate(row.effectiveTo) && row.effectiveTo >= row.effectiveFrom)
+    || !(row.updatedAt === null || typeof row.updatedAt === "string" && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/.test(row.updatedAt))) return false;
+  const hourlyWage = typeof row.hourlyWage === "string" ? canonicalDecimal(row.hourlyWage, 4) : null;
+  const rate = typeof row.rate === "string" ? canonicalDecimal(row.rate, 4) : null;
+  if (hourlyWage === null || rate === null || cmp(hourlyWage, "0") <= 0 || cmp(rate, "0") <= 0) return false;
+  if (basis === "hour") {
+    return row.annualHoursUsed === null && row.annualHoursSource === null && cmp(hourlyWage, rate) === 0;
+  }
+  if (!(row.annualHoursSource === "rate" || row.annualHoursSource === "labor_costing_settings")
+    || typeof row.annualHoursUsed !== "string") return false;
+  const annualHours = canonicalDecimal(row.annualHoursUsed, 4);
+  if (annualHours === null || cmp(annualHours, "0") <= 0) return false;
+  return cmp(hourlyPayRate(rate, basis, annualHours), hourlyWage) === 0;
+}
+
 function isBankCashInputSource(value: unknown): value is BankCashInputSource {
   if (!value || typeof value !== "object" || Array.isArray(value)) return false;
   const row = value as Record<string, unknown>;
   if (!["adjustmentId", "employeePartyId", "componentId", "requestId", "bankPlanId"].every(key =>
     typeof row[key] === "string" && isUuid(row[key] as string))
     || typeof row.amount !== "string" || typeof row.hours !== "string"
-    || row.bankPlanUnit !== "hours" || !["accrue", "owe"].includes(row.bankPlanDirection as string)
+    || !["hours", "money"].includes(row.bankPlanUnit as string) || !["accrue", "owe"].includes(row.bankPlanDirection as string)
     || typeof row.bankPlanAllowsNegativeBalance !== "boolean"
     || !(row.bankPlanPayoutComponentId === null || typeof row.bankPlanPayoutComponentId === "string" && isUuid(row.bankPlanPayoutComponentId))
     || !(row.bankPlanDepositComponentId === null || typeof row.bankPlanDepositComponentId === "string" && isUuid(row.bankPlanDepositComponentId))
     || typeof row.reason !== "string" || !row.reason.trim() || row.reason.length > 500
     || typeof row.sourceReference !== "string" || !row.sourceReference.trim() || row.sourceReference.length > 300
-    || !(row.rate === null || typeof row.rate === "string")) return false;
+    || !(row.rate === null || typeof row.rate === "string")
+    || !(row.outsideBankAmount === undefined || typeof row.outsideBankAmount === "string")
+    || !(row.bankValuation === undefined || row.bankValuation === null || isBankCashPayDateValuation(row.bankValuation))) return false;
   if (row.requestId !== row.adjustmentId || row.bankPlanPayoutComponentId === row.bankPlanDepositComponentId) return false;
   const amount = canonicalDecimal(row.amount, 4);
   const hours = canonicalDecimal(row.hours, 2);
@@ -105,7 +188,25 @@ function isBankCashInputSource(value: unknown): value is BankCashInputSource {
     const priced = multiplyDecimal(rate, hours.replace(/^[+-]/, ""), 2);
     if (cmp(cmp(hours, "0") < 0 ? `-${priced}` : priced, amount) !== 0) return false;
   }
+  if ((row.outsideBankAmount === undefined) !== (row.bankValuation === undefined)) return false;
+  if (row.outsideBankAmount !== undefined && !bankCashFundingSplit(amount, row.outsideBankAmount)) return false;
+  // A retained valuation that no longer prices the split is not corrupt
+  // evidence: it is a changed pay-date wage, and the digest comparison
+  // reads it stale. The calculation itself refuses the mismatch when the
+  // earning lines are constructed, so a stored snapshot never certifies
+  // a split its own valuation fails to price.
   return true;
+}
+
+function isDeclaredVacationAccrualSource(value: unknown): value is DeclaredVacationAccrualSource {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const row = value as Record<string, unknown>;
+  return ["adjustmentId", "employeePartyId", "componentId", "planId", "requestId"]
+    .every(key => typeof row[key] === "string" && isUuid(row[key] as string))
+    && row.adjustmentId === row.requestId
+    && typeof row.amount === "string" && typeof row.reason === "string"
+    && typeof row.sourceReference === "string"
+    && isDeclaredVacationAccrualInput({ ...row, kind: "declared_vacation_accrual" });
 }
 
 function isOpeningEmployerAuthoritySource(value: unknown): value is OpeningEmployerAuthoritySource {
@@ -121,14 +222,21 @@ function isOpeningLevySourceAuthoritySource(value: unknown): value is OpeningLev
   if (!isOpeningEmployerAuthoritySource(value) || !value || typeof value !== 'object') return false;
   const row = value as Record<string, unknown>;
   return typeof row.employerAuthorityId === 'string' && isUuid(row.employerAuthorityId)
+    && typeof row.openingChildrenSha256 === 'string' && /^[a-f0-9]{64}$/.test(row.openingChildrenSha256)
     && typeof row.allocationSha256 === 'string' && /^[a-f0-9]{64}$/.test(row.allocationSha256)
-    && Array.isArray(row.allocations) && row.allocations.length > 0
+    && typeof row.originalCountry === 'string' && /^[A-Z]{2}$/.test(row.originalCountry)
+    && typeof row.originalCurrency === 'string' && /^[A-Z]{3}$/.test(row.originalCurrency)
+    && row.coverageComplete === true && typeof row.coverageStart === 'string' && isIsoCalendarDate(row.coverageStart)
+    && typeof row.coverageEnd === 'string' && isIsoCalendarDate(row.coverageEnd)
+    && (() => { try { validateOpeningLevySourceFacts(row as unknown as OpeningLevySourceFacts, row.taxYear as number, PAYROLL_COUNTRY_PACKS[String(row.originalCountry)]); return true; } catch { return false; } })()
+    && Array.isArray(row.allocations) && (row.originalCountry !== 'CA' && row.originalCountry !== 'US' || row.allocations.length > 0)
     && row.allocations.every((value) => {
       if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
       const allocation = value as Record<string, unknown>;
       return typeof allocation.programKey === 'string' && typeof allocation.region === 'string'
         && typeof allocation.subRegion === 'string'
         && (allocation.filingAccountId === null || typeof allocation.filingAccountId === 'string' && isUuid(allocation.filingAccountId))
+        && (allocation.federalAccountId === null || typeof allocation.federalAccountId === 'string' && isUuid(allocation.federalAccountId))
         && typeof allocation.amount === 'string' && /^\d{1,15}(?:\.\d{1,4})?$/.test(allocation.amount);
     });
 }
@@ -138,6 +246,18 @@ function isOpeningBalanceSourceState(value: unknown): value is OpeningBalanceSou
   const row = value as Record<string, unknown>;
   return typeof row.openingBalanceId === 'string' && isUuid(row.openingBalanceId)
     && typeof row.sourceDigest === 'string' && /^[a-f0-9]{64}$/.test(row.sourceDigest);
+}
+
+function isHolidayEmploymentSource(value: unknown): value is StatutoryHolidayEmploymentSource {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const row=value as Record<string,unknown>;
+  return ['orgId','employeePartyId','employmentId','subsidiaryId'].every(key=>typeof row[key]==='string' && isUuid(row[key] as string))
+    && Number.isSafeInteger(row.employmentRevision) && Number(row.employmentRevision)>0
+    && (row.versionId===null || typeof row.versionId==='string' && isUuid(row.versionId))
+    && (row.versionNo===null || Number.isSafeInteger(row.versionNo) && Number(row.versionNo)>0)
+    && (row.status===null || typeof row.status==='string')
+    && ['effectiveFrom','effectiveTo'].every(key=>row[key]===null || typeof row[key]==='string' && isIsoCalendarDate(row[key] as string))
+    && (row.recordedAt===null || typeof row.recordedAt==='string' && /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{6}Z$/.test(row.recordedAt));
 }
 
 export interface PayRunCalculationSourceSnapshot {
@@ -205,8 +325,9 @@ export interface PayRunCalculationSourceSnapshot {
   employerAssignments?: EmployerAssignmentSource[];
   assignmentRunPolicies?: { id: string; employeePartyId: string; employmentId: string | null; componentId: string; policy: string; from: string; to: string | null }[];
   /** Exact component assessability versions consumed by earning lines at pay date. */
-  payComponentStatutoryTreatments?: { id: string; componentId: string; workerCompGroupId: string | null; employeeWorkerCompGroupId: string | null; effectiveFrom: string; effectiveTo: string | null; programExclusions: string[] }[];
+  payComponentStatutoryTreatments?: { id: string; componentId: string; workerCompGroupId: string | null; employeeWorkerCompGroupId: string | null; effectiveFrom: string; effectiveTo: string | null; programExclusions: string[]; vacationable: boolean }[];
   historicalEmploymentRoster?: HistoricalEmploymentRosterSource[];
+  holidayEmployments?: StatutoryHolidayEmploymentSource[];
   holidayObligations?: HolidayObligationSource[];
   bonusIncomeReferences?: CaBonusIncomeReferenceSource[];
   /** Exact retained employer and original-report identity of consumed opening history. */
@@ -215,11 +336,32 @@ export interface PayRunCalculationSourceSnapshot {
   incomeTaxOverrides?: IncomeTaxOverrideSource[];
   /** Audited operator-entered hours and optional keyed rates for bank cash lines. */
   bankCashInputs?: BankCashInputSource[];
+  /** Audited issued employer levy amounts recorded as issued on this run. */
+  employerLevyAdjustments?: EmployerLevyAdjustmentSource[];
+  /** Audited per-cheque vacation bank accruals explicitly declared by an operator. */
+  declaredVacationAccruals?: DeclaredVacationAccrualSource[];
   /** Exact sealed source allocations consumed by this pay run, including EIN and jurisdiction identities. */
   openingLevySourceAuthorities?: OpeningLevySourceAuthoritySource[];
   /** Opening rows that can affect employer-wide levies or make their source ambiguous. */
   openingBalanceSources?: OpeningBalanceSourceState[];
+  /** Original dated state-account affiliations used by current payroll and its statutory prior. */
+  usFilingAccountLineages?: UsFilingAccountLineageSource[];
   claimEntryIds: string[];
+}
+
+type UsFilingAccountLineageSource = {
+  id: string; filingAccountId: string; federalAccountId: string; subsidiaryId: string;
+  effectiveFrom: string; effectiveTo: string | null; sourceReference: string; updatedAt: string;
+};
+
+function isUsFilingAccountLineageSource(value: unknown): value is UsFilingAccountLineageSource {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const row = value as Record<string, unknown>;
+  return ['id', 'filingAccountId', 'federalAccountId', 'subsidiaryId'].every(key => isUuid(row[key]))
+    && isIsoCalendarDate(row.effectiveFrom)
+    && (row.effectiveTo === null || isIsoCalendarDate(row.effectiveTo) && row.effectiveTo >= row.effectiveFrom)
+    && typeof row.sourceReference === 'string' && row.sourceReference.trim().length > 0 && row.sourceReference.length <= 2000
+    && typeof row.updatedAt === 'string' && Number.isFinite(Date.parse(row.updatedAt));
 }
 
 function isComponentStatutoryTreatmentSource(value: unknown): boolean {
@@ -231,7 +373,8 @@ function isComponentStatutoryTreatmentSource(value: unknown): boolean {
     && typeof row.effectiveFrom === 'string' && isIsoCalendarDate(row.effectiveFrom)
     && (row.effectiveTo === null || typeof row.effectiveTo === 'string'
       && isIsoCalendarDate(row.effectiveTo) && row.effectiveTo >= row.effectiveFrom)
-    && Array.isArray(row.programExclusions) && row.programExclusions.every(key => typeof key === 'string');
+    && Array.isArray(row.programExclusions) && row.programExclusions.every(key => typeof key === 'string')
+    && typeof row.vacationable === 'boolean';
 }
 
 /** Lock the dated group authority and policy rows before producing the source snapshot. */
@@ -377,6 +520,7 @@ export function parsePayRunCalculationSource(
       || (Object.hasOwn(snapshot, 'assignmentRunPolicies') && !Array.isArray(snapshot.assignmentRunPolicies))
       || (Object.hasOwn(snapshot, 'payComponentStatutoryTreatments') && (!Array.isArray(snapshot.payComponentStatutoryTreatments)
         || snapshot.payComponentStatutoryTreatments.some(row => !isComponentStatutoryTreatmentSource(row))))
+      || (Object.hasOwn(snapshot, 'holidayEmployments') && (!Array.isArray(snapshot.holidayEmployments) || snapshot.holidayEmployments.some(row=>!isHolidayEmploymentSource(row))))
       || (Object.hasOwn(snapshot, 'historicalEmploymentRoster') && !Array.isArray(snapshot.historicalEmploymentRoster))
       || (Object.hasOwn(snapshot, 'employerAssignments') && !Array.isArray(snapshot.employerAssignments))
       || (Object.hasOwn(snapshot, 'holidayObligations') && !Array.isArray(snapshot.holidayObligations))
@@ -385,8 +529,14 @@ export function parsePayRunCalculationSource(
         || snapshot.incomeTaxOverrides.some(row => !isIncomeTaxOverrideSource(row))))
       || (Object.hasOwn(snapshot, 'bankCashInputs') && (!Array.isArray(snapshot.bankCashInputs)
         || snapshot.bankCashInputs.some(row => !isBankCashInputSource(row))))
+      || (Object.hasOwn(snapshot, 'employerLevyAdjustments') && (!Array.isArray(snapshot.employerLevyAdjustments)
+        || snapshot.employerLevyAdjustments.some(row => !isEmployerLevyAdjustmentSource(row))))
+      || (Object.hasOwn(snapshot, 'declaredVacationAccruals') && (!Array.isArray(snapshot.declaredVacationAccruals)
+        || snapshot.declaredVacationAccruals.some(row => !isDeclaredVacationAccrualSource(row))))
       || (Object.hasOwn(snapshot, 'openingEmployerAuthorities') && (!Array.isArray(snapshot.openingEmployerAuthorities)
         || snapshot.openingEmployerAuthorities.some(row => !isOpeningEmployerAuthoritySource(row))))
+      || (Object.hasOwn(snapshot, 'usFilingAccountLineages') && (!Array.isArray(snapshot.usFilingAccountLineages)
+        || snapshot.usFilingAccountLineages.some(row => !isUsFilingAccountLineageSource(row))))
       || (Object.hasOwn(snapshot, 'openingLevySourceAuthorities') && (!Array.isArray(snapshot.openingLevySourceAuthorities)
         || snapshot.openingLevySourceAuthorities.some(row => !isOpeningLevySourceAuthoritySource(row))))
       || (Object.hasOwn(snapshot, 'openingBalanceSources') && (!Array.isArray(snapshot.openingBalanceSources)
@@ -421,6 +571,29 @@ export async function payRunCalculationSource(
   calculatedBonusReferences?: readonly CaBonusIncomeReferenceSource[],
 ): Promise<PayRunCalculationSourceSnapshot | null> {
   if (lockSources) await lockStatutoryTreatmentSources(executor, orgId, documentId, allowedSubsidiaryIds);
+  if (lockSources) await executor.execute(sql`
+    select adjustment.id
+      from pay_run_adjustments adjustment
+     where adjustment.org_id=${orgId} and adjustment.pay_run_document_id=${documentId}
+       and adjustment.adjustment_type='line'
+       and adjustment.note ~ '"kind"[[:space:]]*:[[:space:]]*"declared_vacation_accrual"'
+     order by adjustment.id
+     for share of adjustment
+  `);
+  if (lockSources) await executor.execute(sql`
+    select adjustment.id
+      from pay_run_adjustments adjustment
+      join pay_components component
+        on component.org_id=adjustment.org_id and component.id=adjustment.component_id
+      join entitlement_plans plan
+        on plan.org_id=adjustment.org_id and plan.accrual_component_id=adjustment.component_id
+       and plan.system_key='vacation'
+     where adjustment.org_id=${orgId} and adjustment.pay_run_document_id=${documentId}
+       and adjustment.adjustment_type='line'
+       and adjustment.note ~ '"kind"[[:space:]]*:[[:space:]]*"declared_vacation_accrual"'
+     order by adjustment.id,plan.id
+     for share of adjustment,component,plan
+  `);
   if (lockSources) await executor.execute(sql`
     select adjustment.id
       from pay_run_adjustments adjustment
@@ -686,6 +859,46 @@ export async function payRunCalculationSource(
     }
     return source;
   });
+  const employerLevyAdjustmentRows = (await executor.execute<{
+    adjustmentId: string;
+    employeePartyId: string;
+    componentId: string;
+    amount: string;
+    note: string | null;
+    systemKey: string;
+  }>(sql`
+    select a.id::text as "adjustmentId", a.employee_party_id::text as "employeePartyId",
+           a.component_id::text as "componentId", a.amount::text as amount, a.note,
+           c.system_key as "systemKey"
+      from pay_run_adjustments a
+      join pay_components c on c.org_id=a.org_id and c.id=a.component_id
+     where a.org_id=${orgId} and a.pay_run_document_id=${documentId}
+       and a.adjustment_type='line' and c.kind='employer_contribution'
+       and c.system_key in ('eht', 'wcb')
+       and a.employee_party_id in (select jsonb_array_elements_text(${JSON.stringify(row.employee_party_ids ?? [])}::jsonb)::uuid)
+     order by a.employee_party_id, a.id
+     ${lockSources ? sql`for share of a, c` : sql``}
+  `)).rows;
+  const employerLevyAdjustments: EmployerLevyAdjustmentSource[] = employerLevyAdjustmentRows.map((adjustment) => {
+    const evidence = parseEmployerLevyAdjustmentEvidence(adjustment.note);
+    const source: EmployerLevyAdjustmentSource = {
+      adjustmentId: adjustment.adjustmentId,
+      employeePartyId: adjustment.employeePartyId,
+      componentId: adjustment.componentId,
+      amount: adjustment.amount,
+      programKey: evidence?.programKey ?? "",
+      workerCompGroupId: evidence?.workerCompGroupId ?? null,
+      sourceKey: evidence?.sourceKey ?? "",
+      reason: evidence?.reason ?? "",
+      sourceReference: evidence?.sourceReference ?? "",
+      requestId: evidence?.requestId ?? "",
+    };
+    if (!evidence || EMPLOYER_LEVY_PROGRAMS[evidence.programKey].systemKey !== adjustment.systemKey
+      || !isEmployerLevyAdjustmentSource(source)) {
+      throw new PayrollError("The saved employer levy adjustment lacks valid audited programme, amount, reason or source-reference evidence — correct it through the audited employer levy adjustment command before calculating or committing");
+    }
+    return source;
+  });
   const bankCashRows = (await executor.execute<{
     adjustmentId: string;
     employeePartyId: string;
@@ -715,7 +928,7 @@ export async function payRunCalculationSource(
            c.is_active as "componentActive", c.kind as "componentKind", c.unit_of_measure as "componentUnit", c.payment_kind as "paymentKind",
            a.replace_component as "replaceComponent", a.earned_from::text as "earnedFrom", a.earned_to::text as "earnedTo",
            (select count(*)::text from entitlement_plans plan
-             where plan.org_id=a.org_id and plan.is_active
+             where plan.org_id=a.org_id and plan.is_active and plan.unit in ('hours','money')
                and (plan.payout_component_id=a.component_id or plan.deposit_component_id=a.component_id)) as "activeBankPlanCount",
            bank_plan.id::text as "bankPlanId", bank_plan.unit as "bankPlanUnit",
            bank_plan.direction as "bankPlanDirection", bank_plan.allow_negative_balance as "bankPlanAllowsNegativeBalance",
@@ -728,7 +941,7 @@ export async function payRunCalculationSource(
         select plan.id,plan.unit,plan.direction,plan.allow_negative_balance,
                plan.payout_component_id,plan.deposit_component_id
           from entitlement_plans plan
-         where plan.org_id=a.org_id and plan.is_active and plan.unit='hours'
+         where plan.org_id=a.org_id and plan.is_active and plan.unit in ('hours','money')
            and (plan.payout_component_id=a.component_id or plan.deposit_component_id=a.component_id)
          order by plan.id limit 1
       ) bank_plan on true
@@ -750,12 +963,27 @@ export async function payRunCalculationSource(
       || input.componentActive !== true || input.componentKind !== "earning" || input.paymentKind !== "cash"
       || input.componentUnit === "quantity" || input.replaceComponent !== false || input.earnedFrom !== null || input.earnedTo !== null
       || input.activeBankPlanCount !== "1"
-      || !input.bankPlanId || input.bankPlanUnit !== "hours" || input.bankPlanDirection === null
+      || !input.bankPlanId || typeof input.bankPlanUnit !== "string" || !["hours", "money"].includes(input.bankPlanUnit) || input.bankPlanDirection === null
       || typeof input.bankPlanAllowsNegativeBalance !== "boolean"
       || (withdrawal && input.bankPlanPayoutComponentId !== input.componentId)
       || (deposit && input.bankPlanDepositComponentId !== input.componentId)
       || (!withdrawal && !deposit)) {
-      throw new PayrollError("The saved bank payout input no longer identifies one active hours-bank cash component with valid signed hours; correct it through the audited bank cash input command before calculating or committing");
+      throw new PayrollError("The saved bank payout input no longer identifies one active cash bank component with valid signed hours; correct it through the audited bank cash input command before calculating or committing");
+    }
+    // A split is valued at the native wage on the PAY DATE, never the
+    // period-end wage the run's payRates retain: resolve that dated source
+    // here, on this executor and under the same source locks, and freeze
+    // it with the input. Re-resolving at commit therefore stales on a
+    // pay-date-only wage change even when the period-end wage is unchanged.
+    // The observed wage currency is retained verbatim, including a foreign
+    // one the line phase refuses: hiding it would let a later currency
+    // edit pass as unchanged evidence instead of staling the calculation.
+    let bankValuation: BankCashPayDateValuation | null | undefined;
+    if (evidence.outsideBankAmount !== undefined) {
+      if (!bankCashFundingSplit(amount, evidence.outsideBankAmount)) {
+        throw new PayrollError("The saved bank payout split no longer has a positive bank-funded amount below the issued cash amount; correct it through the audited bank cash input command before calculating or committing");
+      }
+      bankValuation = await resolveBankPayDateValuation(executor, orgId, input.employeePartyId, row.pay_date, lockSources);
     }
     const source: BankCashInputSource = {
       adjustmentId: input.adjustmentId,
@@ -773,12 +1001,64 @@ export async function payRunCalculationSource(
       sourceReference: evidence.sourceReference,
       requestId: evidence.requestId,
       rate: evidence.rate,
+      ...(evidence.outsideBankAmount === undefined ? {} : { outsideBankAmount: evidence.outsideBankAmount }),
+      ...(bankValuation === undefined ? {} : { bankValuation }),
     };
     if (evidence.requestId !== input.adjustmentId || !isBankCashInputSource(source)) {
       throw new PayrollError("The saved bank payout input amount, keyed rate or audited source evidence no longer agrees; correct it through the audited bank cash input command before calculating or committing");
     }
     bankCashInputs.push(source);
   }
+  const declaredAccrualRows = (await executor.execute<{
+    adjustmentId: string; employeePartyId: string; componentId: string | null; amount: string; note: string | null;
+    componentActive: boolean | null; componentKind: string | null; planCount: string;
+    planId: string | null; planUnit: string | null; planDirection: string | null;
+    planSystemKey: string | null; planAccrualComponentId: string | null;
+  }>(sql`
+    select a.id::text as "adjustmentId", a.employee_party_id::text as "employeePartyId",
+           a.component_id::text as "componentId", a.amount::text as amount, a.note,
+           c.is_active as "componentActive", c.kind as "componentKind",
+           plan.plan_count as "planCount", plan.id as "planId", plan.unit as "planUnit",
+           plan.direction as "planDirection", plan.system_key as "planSystemKey",
+           plan.accrual_component_id as "planAccrualComponentId"
+      from pay_run_adjustments a
+      left join pay_components c on c.org_id=a.org_id and c.id=a.component_id
+      left join lateral (
+        select count(*)::text as plan_count, min(p.id::text) as id, min(p.unit) as unit,
+               min(p.direction) as direction, min(p.system_key) as system_key,
+               min(p.accrual_component_id::text) as accrual_component_id
+          from entitlement_plans p
+         where p.org_id=a.org_id and p.is_active and p.system_key='vacation'
+           and p.accrual_component_id=a.component_id
+      ) plan on true
+     where a.org_id=${orgId} and a.pay_run_document_id=${documentId}
+       and a.adjustment_type='line'
+       and a.employee_party_id in (select jsonb_array_elements_text(${JSON.stringify(row.employee_party_ids ?? [])}::jsonb)::uuid)
+       and a.note ~ '"kind"[[:space:]]*:[[:space:]]*"declared_vacation_accrual"'
+     order by a.employee_party_id,a.id
+  `)).rows;
+  const declaredVacationAccruals: DeclaredVacationAccrualSource[] = declaredAccrualRows.map((input) => {
+    const evidence = parseDeclaredVacationAccrualEvidence(input.note);
+    const amount = canonicalDecimal(input.amount, 4);
+    const source = {
+      adjustmentId: input.adjustmentId,
+      employeePartyId: input.employeePartyId,
+      componentId: input.componentId ?? "",
+      planId: input.planId ?? "",
+      amount: amount ?? "",
+      reason: evidence?.reason ?? "",
+      sourceReference: evidence?.sourceReference ?? "",
+      requestId: evidence?.requestId ?? "",
+    };
+    if (!evidence || !input.componentId || !amount || input.componentActive !== true
+      || input.componentKind !== "employer_contribution" || input.planCount !== "1"
+      || input.planUnit !== "money" || input.planDirection !== "accrue"
+      || input.planSystemKey !== "vacation" || input.planAccrualComponentId !== input.componentId
+      || evidence.requestId !== input.adjustmentId || !isDeclaredVacationAccrualSource(source)) {
+      throw new PayrollError("The saved declared vacation accrual no longer matches an active money vacation plan and audited cheque source; correct it through the declared accrual command before calculating or committing.");
+    }
+    return source;
+  });
   const assignmentRunPolicies = (await executor.execute<NonNullable<PayRunCalculationSourceSnapshot['assignmentRunPolicies']>[number]>(sql`
     select a.id::text, a.employee_party_id::text as "employeePartyId", a.employment_id::text as "employmentId",
       a.component_id::text as "componentId", a.run_applicability as policy,
@@ -796,7 +1076,8 @@ export async function payRunCalculationSource(
       (public.payroll_worker_comp_group_at(stub.org_id, stub.employee_party_id, r.pay_date))::text as "employeeWorkerCompGroupId",
       treatment.effective_from::text as "effectiveFrom",
       treatment.effective_to::text as "effectiveTo",
-      treatment.program_exclusions as "programExclusions"
+      treatment.program_exclusions as "programExclusions",
+      treatment.vacationable
     from pay_runs r
     join pay_stubs stub on stub.org_id=r.org_id and stub.pay_run_document_id=r.document_id
     join pay_stub_lines line on line.org_id=stub.org_id and line.stub_id=stub.id
@@ -816,7 +1097,7 @@ export async function payRunCalculationSource(
       and line.kind='earning' and line.component_id is not null
     group by treatment.id::text, treatment.pay_component_id::text, treatment.worker_comp_group_id::text,
       (public.payroll_worker_comp_group_at(stub.org_id, stub.employee_party_id, r.pay_date))::text,
-      treatment.effective_from::text, treatment.effective_to::text, treatment.program_exclusions
+      treatment.effective_from::text, treatment.effective_to::text, treatment.program_exclusions, treatment.vacationable
      order by "componentId", "workerCompGroupId" nulls first, "effectiveFrom", id
   `)).rows;
   const uncoveredEarningComponents = (await executor.execute<{ component_id: string }>(sql`
@@ -866,20 +1147,24 @@ export async function payRunCalculationSource(
       h.tax_year as "taxYear",h.subsidiary_id::text as "subsidiaryId",h.source_file_id::text as "sourceFileId",
       h.source_version_id::text as "sourceVersionId",h.source_sha256 as "sourceSha256",h.opening_sha256 as "openingSha256",
       h.employer_authority_id::text as "employerAuthorityId",h.allocation_sha256 as "allocationSha256",
-      h.allocation_snapshot as allocations,
+      h.allocation_snapshot as allocations,h.opening_children_sha256 as "openingChildrenSha256",
+      h.original_country as "originalCountry",h.original_currency as "originalCurrency",
+      h.coverage_start::text as "coverageStart",h.coverage_end::text as "coverageEnd",h.coverage_complete as "coverageComplete",
       (h.sealed and h.employer_authority_id=a.id and h.opening_sha256=a.opening_sha256
-        and h.source_file_id=a.source_file_id and h.source_version_id=a.source_version_id
-        and h.source_sha256=a.source_sha256 and h.source_reference=a.source_reference
-        and a.opening_snapshot=to_jsonb(b) and a.opening_sha256=encode(public.digest(to_jsonb(b)::text,'sha256'),'hex')
+                and a.opening_snapshot=to_jsonb(b) and a.opening_sha256=encode(public.digest(to_jsonb(b)::text,'sha256'),'hex')
         and h.employee_party_id=b.employee_party_id and h.tax_year=b.tax_year and h.subsidiary_id=a.subsidiary_id
         and h.allocation_snapshot=(select coalesce(jsonb_agg(jsonb_build_object(
           'programKey',x.program_key,'region',x.region,'subRegion',x.sub_region,
-          'filingAccountId',x.filing_account_id,'amount',x.amount::text
-        ) order by x.program_key,x.region,x.sub_region,x.filing_account_id nulls first),'[]'::jsonb)
+          'filingAccountId',x.filing_account_id,'federalAccountId',x.federal_account_id,'amount',x.amount::text
+        ) order by x.program_key,x.region,x.sub_region,x.filing_account_id nulls first,x.federal_account_id nulls first),'[]'::jsonb)
           from payroll_opening_levy_source_allocations x where x.org_id=h.org_id and x.authority_id=h.id)
+        and exists (select 1 from files f join file_versions v on v.file_id=f.id
+          where f.org_id=h.org_id and f.id=h.source_file_id and v.id=h.source_version_id and v.content_hash=h.source_sha256)
+        and h.opening_children_snapshot=public.payroll_opening_source_children(h.org_id,h.opening_balance_id,h.employee_party_id,h.tax_year)
+        and h.opening_children_sha256=encode(public.digest(h.opening_children_snapshot::text,'sha256'),'hex')
         and h.allocation_sha256=encode(public.digest(h.allocation_snapshot::text,'sha256'),'hex')) as matches
       from payroll_opening_levy_source_authorities h
-      join payroll_opening_balances b on b.org_id=h.org_id and b.id=h.opening_balance_id
+      join payroll_opening_balances b on b.org_id=h.org_id and b.id=h.opening_balance_id and ${currentOpeningLevySourceSql('h')}
       join payroll_opening_employer_authorities a on a.org_id=h.org_id and a.opening_balance_id=b.id
       join pay_runs r on r.org_id=h.org_id and r.document_id=${documentId}
       join documents d on d.org_id=r.org_id and d.id=r.document_id
@@ -901,21 +1186,38 @@ export async function payRunCalculationSource(
         'levyAuthority',to_jsonb(h),
         'allocations',(select coalesce(jsonb_agg(jsonb_build_object(
           'programKey',x.program_key,'region',x.region,'subRegion',x.sub_region,
-          'filingAccountId',x.filing_account_id,'amount',x.amount::text
-        ) order by x.program_key,x.region,x.sub_region,x.filing_account_id nulls first),'[]'::jsonb)
+          'filingAccountId',x.filing_account_id,'federalAccountId',x.federal_account_id,'amount',x.amount::text
+        ) order by x.program_key,x.region,x.sub_region,x.filing_account_id nulls first,x.federal_account_id nulls first),'[]'::jsonb)
           from payroll_opening_levy_source_allocations x where x.org_id=b.org_id and x.authority_id=h.id)
       )::text,'sha256'),'hex') as "sourceDigest"
       from payroll_opening_balances b
       join pay_runs r on r.org_id=b.org_id and r.document_id=${documentId}
       join documents d on d.org_id=r.org_id and d.id=r.document_id
       left join payroll_opening_employer_authorities a on a.org_id=b.org_id and a.opening_balance_id=b.id
-      left join payroll_opening_levy_source_authorities h on h.org_id=b.org_id and h.opening_balance_id=b.id
+      left join payroll_opening_levy_source_authorities h on h.org_id=b.org_id and h.opening_balance_id=b.id and ${currentOpeningLevySourceSql('h')}
      where b.org_id=${orgId} and b.tax_year=r.tax_year
        and (a.id is null or a.subsidiary_id=d.subsidiary_id)
      order by b.id
      ${lockSources ? sql`for share of b` : sql``}
   `)).rows;
   const historicalEmploymentRoster = await historicalEmploymentRosterSource(executor, orgId, documentId, allowedSubsidiaryIds);
+  const holidaySubjects=(await executor.execute<{orgId:string;employeePartyId:string;employmentId:string;subsidiaryId:string;employeeName:string}>(sql`
+    select s.org_id as "orgId",s.employee_party_id as "employeePartyId",s.employment_id as "employmentId",
+      d.subsidiary_id as "subsidiaryId",p.display_name as "employeeName"
+    from pay_stubs s join pay_runs r on r.org_id=s.org_id and r.document_id=s.pay_run_document_id
+    join documents d on d.org_id=r.org_id and d.id=r.document_id
+    join orgs o on o.id=s.org_id join parties p on p.org_id=s.org_id and p.id=s.employee_party_id
+    where s.org_id=${orgId} and r.document_id=${documentId} and s.country='CA' and r.run_type not in ('bonus','retro')
+      and o.settings#>>'{payroll,statutoryHolidayPay}'='true'
+      and s.employee_party_id in (select jsonb_array_elements_text(${JSON.stringify(row.employee_party_ids ?? [])}::jsonb)::uuid)
+    order by s.employee_party_id,s.employment_id
+  `)).rows;
+  const holidayEmployments:StatutoryHolidayEmploymentSource[]=[];
+  for(const subject of holidaySubjects) {
+    if(lockSources) await executor.execute(sql`select id from worker_employments where org_id=${orgId} and id=${subject.employmentId} for share`);
+    holidayEmployments.push(...await statutoryHolidayEmploymentSource(executor,subject));
+  }
+
   const employerAssignments = await employeeEmployerAssignmentHistory(executor, { orgId, payDate: row.pay_date, employeePartyIds: row.employee_party_ids ?? [] });
   const compensationPackages = await compensationPackageRunSource(executor, orgId, documentId, allowedSubsidiaryIds, lockSources);
   const holidayObligations = await holidayObligationRunSource(executor, orgId, documentId, allowedSubsidiaryIds);
@@ -952,26 +1254,57 @@ export async function payRunCalculationSource(
     }
     bonusIncomeReferences.push(source);
   }
+  const usFilingAccountLineages = (await executor.execute<UsFilingAccountLineageSource>(sql`
+    select affiliation.id::text as id, affiliation.filing_account_id::text as "filingAccountId",
+      affiliation.federal_account_id::text as "federalAccountId", affiliation.subsidiary_id::text as "subsidiaryId",
+      affiliation.effective_from::text as "effectiveFrom", affiliation.effective_to::text as "effectiveTo",
+      affiliation.source_reference as "sourceReference", affiliation.updated_at::text as "updatedAt"
+    from payroll_us_filing_account_employer_lineage affiliation
+    join pay_runs run on run.org_id=affiliation.org_id and run.document_id=${documentId}::uuid
+    join documents owner on owner.org_id=run.org_id and owner.id=run.document_id
+      and owner.subsidiary_id=affiliation.subsidiary_id
+    where affiliation.org_id=${orgId}::uuid
+      and exists (select 1 from pay_stubs current_stub
+        where current_stub.org_id=run.org_id and current_stub.pay_run_document_id=run.document_id
+          and current_stub.country='US')
+      and (run.pay_date between affiliation.effective_from and coalesce(affiliation.effective_to,'infinity'::date)
+        or exists (select 1 from pay_stubs prior_stub
+          join pay_runs prior_run on prior_run.org_id=prior_stub.org_id and prior_run.document_id=prior_stub.pay_run_document_id
+          join documents prior_owner on prior_owner.org_id=prior_run.org_id and prior_owner.id=prior_run.document_id
+          where prior_stub.org_id=run.org_id and prior_stub.tax_year=run.tax_year and prior_stub.country='US'
+            and prior_stub.employee_party_id in (select jsonb_array_elements_text(${JSON.stringify(row.employee_party_ids ?? [])}::jsonb)::uuid)
+            and prior_stub.filing_account_id=affiliation.filing_account_id
+            and prior_owner.subsidiary_id=owner.subsidiary_id and prior_owner.status<>'voided'
+            and prior_run.run_status='committed' and prior_run.document_id<>run.document_id
+            and prior_stub.pay_date between affiliation.effective_from and coalesce(affiliation.effective_to,'infinity'::date)))
+    order by affiliation.id for share of affiliation
+  `)).rows;
+  if (usFilingAccountLineages.some(source => !isUsFilingAccountLineageSource(source))) {
+    throw new PayrollError('US filing-account affiliation evidence is malformed — qualify the original employer registration before calculating');
+  }
   return {
     version: 1,
     timeEntries: row.time_entries ?? [],
     timeTypes: row.time_types ?? [],
     payRates: row.pay_rates ?? [],
     itemAccounts: row.item_accounts ?? [],
-    // Keep the exact legacy digest when this employment population has no
-    // approved package obligations; an empty new field would change history.
+    // Omit unused package fields to preserve the protected evidence shape.
     ...(compensationPackages.length ? { compensationPackages } : {}),
     ...(employerAssignments.length ? { employerAssignments } : {}),
     ...(assignmentRunPolicies.length ? { assignmentRunPolicies } : {}),
     payComponentStatutoryTreatments,
     ...(historicalEmploymentRoster.length ? { historicalEmploymentRoster } : {}),
     ...(holidayObligations.length ? { holidayObligations } : {}),
+    ...(holidayEmployments.length ? { holidayEmployments } : {}),
     ...(bonusIncomeReferences.length ? { bonusIncomeReferences } : {}),
     ...(openingEmployerAuthorities.length ? { openingEmployerAuthorities } : {}),
     ...(incomeTaxOverrides.length ? { incomeTaxOverrides } : {}),
     ...(bankCashInputs.length ? { bankCashInputs } : {}),
+    ...(employerLevyAdjustments.length ? { employerLevyAdjustments } : {}),
+    ...(declaredVacationAccruals.length ? { declaredVacationAccruals } : {}),
     ...(openingLevySourceAuthorities.length ? { openingLevySourceAuthorities } : {}),
     ...(openingBalanceSources.length ? { openingBalanceSources } : {}),
+    ...(usFilingAccountLineages.length ? { usFilingAccountLineages } : {}),
     claimEntryIds: row.claim_entry_ids ?? [],
   };
 }
@@ -979,13 +1312,15 @@ export async function payRunCalculationSource(
 export function payRunCalculationSourceChanges(
   stored: PayRunCalculationSourceSnapshot,
   current: PayRunCalculationSourceSnapshot,
-): { time: boolean; timeTypes: boolean; wages: boolean; items: boolean; components: boolean; compensationPackages: boolean; holidayObligations: boolean; roster: boolean; openingBalances: boolean; incomeTaxOverrides: boolean; bankCashInputs: boolean } {
+): { time: boolean; timeTypes: boolean; wages: boolean; items: boolean; components: boolean; compensationPackages: boolean; holidayObligations: boolean; roster: boolean; openingBalances: boolean; incomeTaxOverrides: boolean; bankCashInputs: boolean; declaredVacationAccruals: boolean; employerLevyAdjustments: boolean } {
   return {
     openingBalances: canonicalJson(stored.openingEmployerAuthorities ?? []) !== canonicalJson(current.openingEmployerAuthorities ?? [])
       || canonicalJson(stored.openingLevySourceAuthorities ?? []) !== canonicalJson(current.openingLevySourceAuthorities ?? [])
       || canonicalJson(stored.openingBalanceSources ?? []) !== canonicalJson(current.openingBalanceSources ?? []),
     incomeTaxOverrides: canonicalJson(stored.incomeTaxOverrides ?? []) !== canonicalJson(current.incomeTaxOverrides ?? []),
     bankCashInputs: canonicalJson(stored.bankCashInputs ?? []) !== canonicalJson(current.bankCashInputs ?? []),
+    employerLevyAdjustments: canonicalJson(stored.employerLevyAdjustments ?? []) !== canonicalJson(current.employerLevyAdjustments ?? []),
+    declaredVacationAccruals: canonicalJson(stored.declaredVacationAccruals ?? []) !== canonicalJson(current.declaredVacationAccruals ?? []),
     time: canonicalJson(stored.timeEntries) !== canonicalJson(current.timeEntries)
       || canonicalJson(stored.claimEntryIds) !== canonicalJson(current.claimEntryIds),
     timeTypes: canonicalJson(stored.timeTypes) !== canonicalJson(current.timeTypes),
@@ -994,8 +1329,10 @@ export function payRunCalculationSourceChanges(
     compensationPackages: canonicalJson(stored.compensationPackages ?? []) !== canonicalJson(current.compensationPackages ?? []),
     components: canonicalJson(stored.assignmentRunPolicies ?? []) !== canonicalJson(current.assignmentRunPolicies ?? [])
       || canonicalJson(stored.payComponentStatutoryTreatments ?? []) !== canonicalJson(current.payComponentStatutoryTreatments ?? []),
-    holidayObligations: canonicalJson(stored.holidayObligations ?? []) !== canonicalJson(current.holidayObligations ?? []),
-    roster: canonicalJson(stored.employerAssignments ?? []) !== canonicalJson(current.employerAssignments ?? [])
+    holidayObligations: canonicalJson(stored.holidayObligations ?? []) !== canonicalJson(current.holidayObligations ?? [])
+      || canonicalJson(stored.holidayEmployments ?? []) !== canonicalJson(current.holidayEmployments ?? []),
+    roster: canonicalJson(stored.usFilingAccountLineages ?? []) !== canonicalJson(current.usFilingAccountLineages ?? [])
+      || canonicalJson(stored.employerAssignments ?? []) !== canonicalJson(current.employerAssignments ?? [])
       || canonicalJson(stored.historicalEmploymentRoster ?? []) !== canonicalJson(current.historicalEmploymentRoster ?? []),
     items: canonicalJson(stored.itemAccounts ?? []) !== canonicalJson(current.itemAccounts ?? []),
   };

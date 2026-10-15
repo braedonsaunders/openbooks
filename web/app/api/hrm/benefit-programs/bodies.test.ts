@@ -103,3 +103,23 @@ test("approval setting accepts only no approvals or native Flows for create and 
   assert.equal(benefitProgramPostBody.safeParse({ ...create, approvalMode: "manual" }).success, false);
   assert.equal(benefitProgramPatchBody.safeParse({ action: "update", approvalMode: "manual", reason: "Revised controls" }).success, false);
 });
+
+test("program create retains and validates a supplied audit reason", () => {
+  const body = { action: "create", code: "REASON", name: "Reviewed program", family: "reward", currency: "CAD", effectiveFrom: "2026-01-01" };
+  const parsed = benefitProgramPostBody.parse({ ...body, reason: "  Approved compensation policy  " });
+  assert.equal(parsed.action, "create");
+  if (parsed.action === "create") assert.equal(parsed.reason, "Approved compensation policy");
+  for (const reason of [null, 12, {}, "", "  ", "x".repeat(2001)]) {
+    assert.equal(benefitProgramPostBody.safeParse({ ...body, reason }).success, false);
+  }
+});
+
+test("program activation and membership retain their supplied audit reasons", () => {
+  const commands = [{ action: "activate" }, { action: "addMember", employmentId: UUID, effectiveFrom: "2026-01-01" }];
+  for (const command of commands) {
+    const parsed = benefitProgramPostBody.parse({ ...command, reason: "  Approved eligible programme  " });
+    assert.ok(parsed.action === "activate" || parsed.action === "addMember");
+    if (parsed.action === "activate" || parsed.action === "addMember") assert.equal(parsed.reason, "Approved eligible programme");
+    for (const reason of [null, 12, {}, "", "  ", "x".repeat(2001)]) assert.equal(benefitProgramPostBody.safeParse({ ...command, reason }).success, false);
+  }
+});
