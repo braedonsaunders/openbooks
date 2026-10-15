@@ -335,3 +335,27 @@ test(
     }
   },
 );
+
+test('opening imports retain adoption rationale and source reference while exports omit those command inputs', {skip:!DB}, async () => {
+  const org=await withBypassContext(()=>createScratchOrg())
+  try {
+    const actorId=(await withBypassContext(()=>seedFlowActors(org.orgId))).adminId
+    await seedEmployee(org.orgId,actorId,'Carry-in worker','CARRY01')
+    const resource=payrollOpeningBalancesResource(org.orgId)
+    assert.ok((await resource.fields()).some(field=>field.key==='auditReason'))
+    assert.ok(!(await resource.columns()).some(field=>field.key==='auditReason'||field.key==='sourceReference'))
+    const row={...carryIn('CARRY01','100.25','0'),auditReason:'Retain reviewed adoption basis',sourceReference:'register:annual-2026'}
+    const ctx={orgId:org.orgId,actorId,dryRun:false,allowedSubsidiaryIds:null}
+    const saved=await resource.write([row],'insert',ctx)
+    assert.deepEqual(saved.errors,[])
+    const audit=(await db.execute<{changes:Record<string,unknown>}>(sql`select changes from audit_log where org_id=${org.orgId} and table_name='payroll_opening_balances' order by id desc limit 1`)).rows[0]!
+    assert.equal(audit.changes.reason,row.auditReason)
+    assert.equal(audit.changes.sourceReference,row.sourceReference)
+    for(const dryRun of [true,false]) {
+      const refused=await resource.write([{...row,auditReason:' '}],'upsert',{...ctx,dryRun})
+      assert.equal(refused.failed,1)
+      assert.equal(refused.updated,0)
+    }
+    assert.equal(await storedTaxable(org.orgId),'100.2500')
+  } finally {await dropScratchOrgReporting(org.orgId)}
+})

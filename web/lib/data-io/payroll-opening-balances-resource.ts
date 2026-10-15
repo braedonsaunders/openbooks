@@ -13,6 +13,7 @@ import {
   normalizeOpeningComponents,
   normalizeOpeningProgramBases,
   openingBalanceLocks,
+  openingBalanceAuditContext,
   openingComponentFields,
   OPENING_BALANCE_FIELDS,
   saveOpeningBalances,
@@ -150,6 +151,7 @@ function componentAmountsFrom(
 function fields(
   components: readonly OpeningComponentField[],
   programs: readonly DeclaredProgramBaseField[],
+  forImport = false,
 ): ResourceField[] {
   return [
     {
@@ -161,6 +163,10 @@ function fields(
     },
     { key: 'employeeName', label: 'Employee name', kind: 'text', readOnly: true },
     { key: 'taxYear', label: 'Tax year', kind: 'number', required: true },
+    ...(forImport ? [
+      { key: 'auditReason', label: 'Audit reason', kind: 'text' as const },
+      { key: 'sourceReference', label: 'Source reference', kind: 'text' as const },
+    ] : []),
     ...OPENING_BALANCE_FIELDS.map((field) => ({
       key: field.key,
       label: field.label,
@@ -247,10 +253,10 @@ export function payrollOpeningBalancesResource(orgId: string): DataResource {
   return {
     descriptor: PAYROLL_OPENING_BALANCES_DESCRIPTOR,
     async fields() {
-      return fields(await loadComponents(), await loadPrograms())
+      return fields(await loadComponents(), await loadPrograms(), true)
     },
     async columns() {
-      return (await this.fields()).map((f) => ({ key: f.key, label: f.label }))
+      return fields(await loadComponents(), await loadPrograms()).map((f) => ({ key: f.key, label: f.label }))
     },
     async read(readCtx?: ReadCtx) {
       const components = await loadComponents()
@@ -434,6 +440,7 @@ export function payrollOpeningBalancesResource(orgId: string): DataResource {
           }
 
           // Validate in both modes so the wizard's preview is a real preview.
+          openingBalanceAuditContext({ auditReason: src.auditReason, sourceReference: src.sourceReference })
           const amounts = normalizeOpeningBalance(src)
           const components = componentAmountsFrom(src)
           const normalizedComponents = components === undefined
@@ -465,6 +472,8 @@ export function payrollOpeningBalancesResource(orgId: string): DataResource {
           }
 
           const result = await saveOpeningBalances({
+            auditReason: src.auditReason as string | undefined,
+            sourceReference: src.sourceReference as string | undefined,
             orgId: ctx.orgId,
             actorId: ctx.actorId,
             taxYear,

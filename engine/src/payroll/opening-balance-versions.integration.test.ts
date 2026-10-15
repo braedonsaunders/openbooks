@@ -146,3 +146,61 @@ test(
     }
   },
 );
+
+test('source-referenced opening replacement and clearing retain exact before/after evidence and roll back when audit is refused', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const { db } = await import('../platform/db.ts');
+  const { sql } = await import('drizzle-orm');
+  const { randomUUID } = await import('node:crypto');
+  const fx = await seedAdoption();
+  const fault = `opening_audit_${randomUUID().replaceAll('-', '')}`;
+  const save = (amount: string, programs: Record<string, string> = { qpip: '120.25' }) => saveOpeningBalances({
+    orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026,
+    auditReason: '  Adopt the reviewed annual carry-in basis  ', sourceReference: '  source-register:annual-2026  ',
+    rows: [{ employeePartyId: fx.employeeId, amounts: { pensionableYtd: amount, insurableYtd: "0" }, components: {}, programs, suiStates: {}, accountBases: [] }],
+  });
+  const events = async () => (await db.execute<{ action: string; actor_id: string; changes: Record<string, any> }>(sql`
+    select action,actor_id,changes from audit_log where org_id=${fx.orgId} and table_name='payroll_opening_balances' order by id
+  `)).rows;
+  try {
+    await save('100.25');
+    let audit = (await events()).at(-1)!;
+    assert.equal(audit.action, 'insert');
+    assert.equal(audit.actor_id, fx.actorId);
+    assert.equal(audit.changes.reason, 'Adopt the reviewed annual carry-in basis');
+    assert.equal(audit.changes.sourceReference, 'source-register:annual-2026');
+    assert.equal(audit.changes.beforeRecord, null);
+    assert.equal(audit.changes.afterRecord.balance.pensionable_ytd, '100.2500');
+    assert.equal(audit.changes.afterRecord.children.programBases[0].insurable_ytd, '120.2500');
+    assert.ok(audit.changes.afterRecord.children.programBases[0].id);
+    const original = audit.changes.afterRecord;
+    const beforeCount = (await events()).length;
+    await db.execute(sql.raw(`create function public.${fault}() returns trigger language plpgsql as $$ begin if new.org_id='${fx.orgId}'::uuid and new.table_name='payroll_opening_balances' then return null; end if; return new; end $$`));
+    await db.execute(sql.raw(`create trigger ${fault} before insert on public.audit_log for each row execute function public.${fault}()`));
+    try { await assert.rejects(save('200.50'), /audit did not persist/); }
+    finally {
+      await db.execute(sql.raw(`drop trigger ${fault} on public.audit_log`));
+      await db.execute(sql.raw(`drop function public.${fault}()`));
+    }
+    assert.equal((await events()).length, beforeCount);
+    const current = (await openingBalancesForYear(fx.orgId, 2026)).rows.find(row => row.employeePartyId === fx.employeeId)!;
+    assert.equal(current.amounts!.pensionableYtd, '100.2500');
+    await save('200.50');
+    audit = (await events()).at(-1)!;
+    assert.equal(audit.action, 'update');
+    assert.deepEqual(audit.changes.beforeRecord, original);
+    assert.equal(audit.changes.before.pensionableYtd, '100.2500');
+    assert.equal(audit.changes.afterRecord.balance.pensionable_ytd, '200.5000');
+    const lastStored = audit.changes.afterRecord;
+    const cleared = await save('0', {});
+    assert.equal(cleared.deleted, 1);
+    audit = (await events()).at(-1)!;
+    assert.equal(audit.action, 'delete');
+    assert.deepEqual(audit.changes.beforeRecord, lastStored);
+    assert.equal(audit.changes.after, null);
+    assert.equal(audit.changes.afterRecord, null);
+    assert.equal(audit.changes.reason, 'Adopt the reviewed annual carry-in basis');
+    assert.equal((await db.execute(sql`select id from payroll_opening_program_bases where org_id=${fx.orgId}`)).rows.length, 0);
+    await assert.rejects(saveOpeningBalances({ orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026, auditReason: ' ', rows: [] }), /audit reason/);
+    await assert.rejects(saveOpeningBalances({ orgId: fx.orgId, actorId: fx.actorId, taxYear: 2026, sourceReference: 'source', rows: [] }), /requires an audit reason/);
+  } finally { await dropScratchOrgReporting(fx.orgId); }
+});

@@ -24,7 +24,7 @@ import {
 
 const stateKey = Symbol.for('openbooks.opening-balances-version-test'); const realAuthzUrl = new URL('../../../../lib/authz.ts', import.meta.url).href
 interface RouteState {
-  saveCalls: { rows: { employeePartyId: string; updatedAt?: string | null; components?: Record<string, unknown> }[]; allowedSubsidiaryIds?: Set<string> | null }[]
+  saveCalls: { auditReason?: string; sourceReference?: string; rows: { employeePartyId: string; updatedAt?: string | null; components?: Record<string, unknown> }[]; allowedSubsidiaryIds?: Set<string> | null }[]
   allowedSubsidiaryIds: Set<string> | null
   saveResult: unknown
   throwSave: unknown
@@ -249,4 +249,16 @@ test('omitted and null components remain valid requests that preserve stored val
     assert.equal(routeState.saveCalls.length, 1)
     assert.equal(routeState.saveCalls[0]!.rows[0]!.components, undefined)
   }
+})
+
+test('opening adoption reason and source reference reach the native writer without becoming business eligibility facts', async () => {
+  routeState.saveCalls.length = 0
+  const response = await post({taxYear:2026,rows:[],auditReason:'  Adopt reviewed annual carry-in  ',sourceReference:' register:2026 '})
+  assert.equal(response.status,200)
+  assert.equal(routeState.saveCalls.at(-1)?.auditReason,'Adopt reviewed annual carry-in')
+  assert.equal(routeState.saveCalls.at(-1)?.sourceReference,'register:2026')
+  const count=routeState.saveCalls.length
+  const refused = await post({taxYear:2026,rows:[],sourceReference:'register:2026'})
+  assert.equal(refused.status,422)
+  assert.equal(routeState.saveCalls.length,count)
 })

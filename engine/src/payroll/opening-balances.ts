@@ -925,6 +925,36 @@ export interface OpeningBalanceSaveResult {
   errors: { employeePartyId: string; employeeName?: string; message: string }[];
 }
 
+export function openingBalanceAuditContext(input: { auditReason?: unknown; sourceReference?: unknown }): { reason: string | null; sourceReference: string | null } {
+  const text = (value: unknown, label: string): string | null => {
+    if (value === undefined) return null;
+    if (typeof value !== "string" || !value.trim() || value.trim().length > 2000) {
+      throw new PayrollError(`${label} must contain 1–2000 characters`);
+    }
+    return value.trim();
+  };
+  const reason = text(input.auditReason, "Opening-balance audit reason");
+  const sourceReference = text(input.sourceReference, "Opening-balance source reference");
+  if (sourceReference !== null && reason === null) throw new PayrollError("A source-referenced opening change requires an audit reason");
+  return { reason, sourceReference };
+}
+
+/** Retain native identities and decimal text before replacing or clearing carry-in. */
+async function openingBalanceAuditRecord(runner: Pick<typeof db, "execute">, orgId: string, employeeId: string, year: number): Promise<{ balance: Record<string, unknown>; [key: string]: unknown } | null> {
+  const amounts = sql.join([
+    ...OPENING_BALANCE_FIELDS.map(field => sql`(${field.column}::text, b.${sql.identifier(field.column)}::text)`),
+    sql`('vacation_balance'::text, b.vacation_balance::text)`,
+  ], sql`, `);
+  const rows = await runner.execute<{ image: { balance: Record<string, unknown>; [key: string]: unknown } }>(sql`
+    select jsonb_build_object(
+      'balance', to_jsonb(b) || (select jsonb_object_agg(v.key, v.amount) from (values ${amounts}) v(key,amount)),
+      'children', public.payroll_opening_source_children(b.org_id, b.id, b.employee_party_id, b.tax_year)
+    ) image from payroll_opening_balances b
+    where b.org_id=${orgId} and b.employee_party_id=${employeeId} and b.tax_year=${year}
+  `);
+  return rows.rows[0]?.image ?? null;
+}
+
 /**
  * Create or replace opening balances for one tax year, all-or-nothing.
  *
@@ -949,12 +979,15 @@ export async function saveOpeningBalances(input: {
   actorId: string;
   taxYear: number;
   rows: OpeningBalanceWrite[];
+  auditReason?: string;
+  sourceReference?: string;
   /** Reject (rather than skip) rows locked by a committed run. Default true. */
   strictLocks?: boolean;
   /** Caller role scope; null/undefined is unrestricted. */
   allowedSubsidiaryIds?: PayrollSubsidiaryScope;
 }): Promise<OpeningBalanceSaveResult> {
   const year = assertTaxYear(input.taxYear);
+  const auditContext = openingBalanceAuditContext(input);
   const result: OpeningBalanceSaveResult = { created: 0, updated: 0, deleted: 0, skipped: [], errors: [] };
   if (input.rows.length === 0) return result;
 
@@ -1268,6 +1301,8 @@ export async function saveOpeningBalances(input: {
 
     const columns = OPENING_BALANCE_FIELDS.map((f) => f.column);
     for (const row of planned) {
+      const beforeRecord = await openingBalanceAuditRecord(tx, input.orgId, row.employeePartyId, year);
+      const beforeAmounts = beforeRecord === null ? null : Object.fromEntries(OPENING_BALANCE_FIELDS.map(field => [field.key, beforeRecord.balance[field.column]]));
       if (row.amounts === null) {
         const deleted = (await tx.execute<{ id: string }>(sql`
           delete from payroll_opening_balances
@@ -1275,6 +1310,7 @@ export async function saveOpeningBalances(input: {
              and tax_year = ${year}
            returning id
         `));
+        if (deleted.rows.length > 1 || (beforeRecord !== null && deleted.rows.length !== 1)) throw new PayrollError("The opening carry-in changed while it was being cleared");
         if (deleted.rows.length > 0) {
           result.deleted++;
           // The children cascade with the parent. Naming what they held is the
@@ -1286,6 +1322,9 @@ export async function saveOpeningBalances(input: {
             action: "delete",
             changes: {
               employeePartyId: row.employeePartyId, taxYear: year,
+              before: beforeAmounts, after: null, beforeRecord, afterRecord: null,
+              reason: auditContext.reason ?? "Opening payroll carry-in cleared",
+              ...(auditContext.sourceReference === null ? {} : { sourceReference: auditContext.sourceReference }),
               beforeComponents: storedByEmployee.get(row.employeePartyId) ?? {},
               beforePrograms: storedProgramsByEmployee.get(row.employeePartyId) ?? {},
               beforeSuiStates: storedSuiByRow.get(deleted.rows[0]!.id) ?? {},
@@ -1313,6 +1352,7 @@ export async function saveOpeningBalances(input: {
         where payroll_opening_balances.org_id = ${input.orgId}
         returning id
       `));
+      if (saved.rows.length !== 1) throw new PayrollError("The opening carry-in did not persist");
       const rowId = saved.rows[0]!.id;
 
       // Component openings are REPLACED as a set, in the same transaction and
@@ -1421,6 +1461,8 @@ export async function saveOpeningBalances(input: {
         }
       }
 
+      const afterRecord = await openingBalanceAuditRecord(tx, input.orgId, row.employeePartyId, year);
+      if (afterRecord === null) throw new PayrollError("The opening carry-in readback was not found");
       const wasThere = hasRow.has(row.employeePartyId);
       if (wasThere) result.updated++;
       else result.created++;
@@ -1429,6 +1471,9 @@ export async function saveOpeningBalances(input: {
         action: wasThere ? "update" : "insert",
         changes: {
           employeePartyId: row.employeePartyId, taxYear: year,
+          before: beforeAmounts, beforeRecord, afterRecord,
+          reason: auditContext.reason ?? "Opening payroll carry-in recorded",
+          ...(auditContext.sourceReference === null ? {} : { sourceReference: auditContext.sourceReference }),
           after: row.amounts, afterComponents: row.components,
           afterPrograms: row.programs, afterSuiStates: row.suiStates,
           afterAccountBases: row.accountBases,
@@ -1455,10 +1500,11 @@ async function auditOpeningBalance(
     changes: Record<string, unknown>;
   },
 ): Promise<void> {
-  await runner.execute(sql`
+  const written = await runner.execute(sql`
     insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
     values (${args.orgId}, 'payroll_opening_balances', ${args.rowId}, ${args.action},
-            ${JSON.stringify(args.changes)}, ${args.actorId})`);
+            ${JSON.stringify(args.changes)}, ${args.actorId}) returning id`);
+  if (written.rows.length !== 1) throw new PayrollError("The opening carry-in audit did not persist");
 }
 
 /** Field descriptor by key, for callers that map an import column onto one. */

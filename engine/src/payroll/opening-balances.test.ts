@@ -671,7 +671,7 @@ test(
         }),
         "23000.0000",
       );
-      assert.equal((await db.execute(sql`update documents set status='voided'
+      assert.equal((await db.execute(sql`update documents set status='voided', void_reason='Retired annual-room fixture', voided_at=now(), voided_by=${fx.actorId}
         where org_id=${fx.orgId} and id=${documentId} returning id`)).rows.length, 1);
       assert.equal(await componentYearToDate(db, {
         orgId: fx.orgId, employeePartyId: fx.employeeId, taxYear: 2026, componentId,

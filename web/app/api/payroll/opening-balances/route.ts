@@ -53,7 +53,9 @@ const openingBalanceRowSchema = z.strictObject({
 const requestBodySchema = z.strictObject({
   taxYear: z.union([z.number().int(), z.string().regex(/^\d{4}$/).transform(Number)]),
   rows: z.array(openingBalanceRowSchema),
-})
+  auditReason: z.string().trim().min(1).max(2000).optional(),
+  sourceReference: z.string().trim().min(1).max(2000).optional(),
+}).refine(body => body.sourceReference === undefined || body.auditReason !== undefined, "A source-referenced opening change requires an audit reason")
 
 
 /**
@@ -290,6 +292,8 @@ export const POST = defineRoute({
         })
       }
       const result = await saveOpeningBalances({
+        auditReason: body.auditReason,
+        sourceReference: body.sourceReference,
         orgId: gate.user.orgId,
         actorId: gate.user.id,
         taxYear: assertTaxYear(body.taxYear),

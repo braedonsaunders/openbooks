@@ -9,7 +9,7 @@ import { payRunStaleness } from "./readiness.ts";
 import { payRunCalculationSource, payRunCalculationSourceDigest } from "./run-calculation-evidence.ts";
 import { calculatePayRun } from "./run-calculation.ts";
 import { commitPayRun } from "./run-commit.ts";
-import { dropScratchOrgReporting, seedPayrollSettings } from "../testing/fixtures.ts";
+import { dropScratchOrgReporting, seedPayrollSettings, grantScratchPermissions } from "../testing/fixtures.ts";
 import { calculatedRun, seedAdoption, type AdoptionFixture } from "./filing-test-fixtures.ts";
 import { qualifyOpeningEmployerAuthority, readOpeningEmployerContext } from "./opening-employer-authority.ts";
 import { qualifyOpeningLevySourceAuthority, readOpeningLevySourceContext, type OpeningLevySourceAllocationInput } from "./opening-levy-source-authority.ts";
@@ -71,9 +71,7 @@ test(
     const fx = await withBypassContext(async () => {
       const fixture = await seedAdoption();
       await seedPayrollSettings(fixture.orgId, { features: { payroll: true } });
-      assert.equal((await db.execute(sql`insert into user_permission_overrides(org_id,user_id,permission,effect)
-        values(${fixture.orgId},${fixture.actorId},'payroll.read','grant'),
-          (${fixture.orgId},${fixture.actorId},'payroll.run','grant') returning permission`)).rows.length, 2);
+      await grantScratchPermissions(fixture.orgId, fixture.actorId, ['payroll.read', 'payroll.run']);
       return fixture;
     });
     try {
