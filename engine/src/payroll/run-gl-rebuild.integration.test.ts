@@ -80,6 +80,12 @@ test("rebuilding a committed, never-posted projection keeps every account total 
            and changes->>'operation' = 'rebuild-pay-run-gl-projection'`)).rows;
       assert.equal(audit.length, 1);
       assert.equal(audit[0]!.changes.reason, "refine committed line identity before posting");
+      await grantScratchPermissions(fx.orgId, fx.actorId, ["payroll.read"]);
+      await db.execute(sql`update orgs set settings = jsonb_set(settings, '{features}',
+        coalesce(settings->'features', '{}'::jsonb) || '{"payroll":false}'::jsonb)
+        where id=${fx.orgId}`);
+      await assert.rejects(readPayRunGlProjection(input), /Payroll feature is disabled/);
+      assert.deepEqual(await lines(fx.orgId, input.documentId), after);
     } finally {
       await dropScratchOrgReporting(fx.orgId);
     }

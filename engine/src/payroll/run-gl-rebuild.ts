@@ -93,6 +93,7 @@ export async function readPayRunGlProjection(input: {
   const { orgId, documentId, actorId } = input;
   return withOrgTransaction(orgId, async () => {
     if (!(await actorHasPermission(db, orgId, actorId, "payroll.read"))) throw new PayrollError("pay run not found");
+    if (!(await lockAndCheckOrgFeature(db, orgId, "payroll"))) throw new PayrollError("Payroll feature is disabled");
     const actorScope = await actorAllowedSubsidiaryIds(db, orgId, actorId);
     const run = (await db.execute<{
       run_status: string; doc_status: string; kind: string; subsidiary_id: string | null;
