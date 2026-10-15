@@ -1,3 +1,4 @@
+import { UUID_RE } from '@openbooks/engine/platform/uuid';
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import test, { after } from 'node:test'
@@ -119,7 +120,7 @@ test('a clone-stage database failure returns the named stage refusal without SQL
     assert.match(String(body.message), /copying the template's posted history failed/)
     assert.match(String(body.message), /Company readiness is unconfirmed/)
     assert.doesNotMatch(String(body.message), /Nothing was created|you can retry/)
-    assert.match(String(body.requestId), /^[0-9a-f-]{36}$/)
+    assert.match(String(body.requestId), UUID_RE)
     assert.equal(response.headers.get('x-request-id'), body.requestId)
     for (const leak of ['duplicate key', 'unique constraint', 'orgs_pkey', 'INSERT', 'STATEMENT', 'VALUES']) {
       assert.doesNotMatch(

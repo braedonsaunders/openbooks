@@ -1,7 +1,7 @@
 'use client'
 import { useEffect, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
-import { Alert, AlertDescription, Button, FieldLabel, Input, Select, Skeleton } from '@openbooks/ui'
+import { Alert, AlertDescription, Button, FieldLabel, Input, Select, Skeleton, Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@openbooks/ui'
 import { CabinetFilePicker } from '../../../../components/cabinet-file-picker'
 import { readApiErrorMessage } from '../../../../lib/api-error'
 import type { readOpeningLevySourceContext } from '@openbooks/engine/payroll/opening-levy-source-authority'
@@ -194,14 +194,13 @@ function OpeningLevySourceBody({ employeePartyId, year, openingAmounts, canManag
     {record && !sourceReady && <Alert variant="warning"><AlertDescription>{t('qualifyEmployerFirst')}</AlertDescription></Alert>}
     {record?.levyAuthorityId && context && !correcting && <>
       <Alert><AlertDescription>{t('sealed')}</AlertDescription></Alert>
-      <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-800">
-        <table className="w-full text-sm"><thead><tr className="text-left"><th scope="col" className="p-2">{t('programme')}</th><th scope="col" className="p-2">{t('jurisdiction')}</th><th scope="col" className="p-2">{t('filingAccount')}</th><th scope="col" className="p-2">{t('originalEin')}</th><th scope="col" className="p-2 text-right">{t('amount')}</th></tr></thead>
-          <tbody>{context.allocations.map((row, index) => <tr key={index} className="border-t border-slate-100 dark:border-slate-800">
-            <td className="p-2">{t(`programmes.${row.programKey}`)}</td><td className="p-2">{row.region}{row.subRegion ? ` · ${row.subRegion}` : ''}</td>
-            <td className="p-2">{context.eins.find(ein => ein.id === row.filingAccountId)?.name ?? context.suiAccounts.find(account => account.id === row.filingAccountId)?.name ?? row.filingAccountId ?? '—'}</td><td className="p-2">{context.eins.find(ein => ein.id === row.federalAccountId)?.name ?? row.federalAccountId ?? '—'}</td><td className="p-2 text-right tabular-nums">{row.amount}</td>
-          </tr>)}</tbody>
-        </table>
-      </div>
+      
+        <Table className="w-full text-sm"><TableHeader><TableRow className="text-left"><TableHead scope="col" className="p-2">{t('programme')}</TableHead><TableHead scope="col" className="p-2">{t('jurisdiction')}</TableHead><TableHead scope="col" className="p-2">{t('filingAccount')}</TableHead><TableHead scope="col" className="p-2">{t('originalEin')}</TableHead><TableHead scope="col" className="p-2 text-right">{t('amount')}</TableHead></TableRow></TableHeader>
+          <TableBody>{context.allocations.map((row, index) => <TableRow key={index} className="border-t border-slate-100 dark:border-slate-800">
+            <TableCell className="p-2">{t(`programmes.${row.programKey}`)}</TableCell><TableCell className="p-2">{row.region}{row.subRegion ? ` · ${row.subRegion}` : ''}</TableCell>
+            <TableCell className="p-2">{context.eins.find(ein => ein.id === row.filingAccountId)?.name ?? context.suiAccounts.find(account => account.id === row.filingAccountId)?.name ?? row.filingAccountId ?? '—'}</TableCell><TableCell className="p-2">{context.eins.find(ein => ein.id === row.federalAccountId)?.name ?? row.federalAccountId ?? '—'}</TableCell><TableCell className="p-2 text-right tabular-nums">{row.amount}</TableCell>
+          </TableRow>)}</TableBody>
+        </Table>
       <p className="text-xs text-slate-500">{t('reasonLabel')}: {record.levyReason}</p>
       {context.correctionRefusal && <Alert variant="warning"><AlertDescription>{context.correctionRefusal}</AlertDescription></Alert>}
       {canManage && <Button type="button" variant="outline" disabled={disabled || annualDirty || !!context.correctionRefusal} onClick={() => {

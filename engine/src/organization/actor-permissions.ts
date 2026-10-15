@@ -55,43 +55,10 @@ export async function lockActorIdentity(tx: SqlExecutor, orgId: string, actorId:
   const foreign=await actorPrincipal(tx,orgId,actorId);
   if(!foreign?.isActive)return undefined;
   if (!isUuid(foreign.orgId)) return undefined;
-  // The anonymous invoker command accepts only house-validated UUID literals.
-  // It changes neither database role nor bypass authority. Separate internal
-  // statements obtain their own RLS scope; a statement-scoped policy cache
-  // would make a scope-changing CTE unsuitable for this lock.
+  // The invoker function uses separate internal statements for each RLS scope,
+  // restoring the caller scope before another queued query can run.
   try {
-    await tx.execute(sql.raw(`
-    do $actor_identity_lock$
-    declare
-      original_scope text := current_setting('app.current_org', true);
-      target_member boolean;
-      locked users%rowtype;
-    begin
-      if original_scope is distinct from '${orgId}' then
-        raise exception 'Actor command tenant scope does not match its organization';
-      end if;
-      perform a.id from role_assignments a
-        join app_roles r on r.org_id=a.org_id and r.id=a.role_id
-        where a.org_id='${orgId}'::uuid and a.user_id='${actorId}'::uuid
-        order by a.id for share of a,r;
-      target_member := found;
-      begin
-        perform set_config('app.current_org', '${foreign.orgId}', true);
-        select u.* into locked from users u
-          where u.id='${actorId}'::uuid and u.org_id='${foreign.orgId}'::uuid
-          for share;
-        if not found or not locked.is_active
-          or (not locked.is_super_admin and not target_member) then
-          raise exception 'Actor is not eligible to command this organization';
-        end if;
-        perform set_config('app.current_org', original_scope, true);
-      exception when others then
-        perform set_config('app.current_org', original_scope, true);
-        raise;
-      end;
-    end;
-    $actor_identity_lock$;
-    `));
+    await tx.execute(sql`select public.lock_actor_home_identity(${orgId}::uuid, ${actorId}::uuid, ${foreign.orgId}::uuid)`);
   } catch (error) {
     if (guardRefusalMessage(error) === "Actor is not eligible to command this organization") {
       const refusal = new ScopeNotFoundError();

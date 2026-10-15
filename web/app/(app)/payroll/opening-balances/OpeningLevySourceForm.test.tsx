@@ -1,3 +1,4 @@
+import { UUID_RE } from '@openbooks/engine/platform/uuid';
 import assert from 'node:assert/strict'
 import test, { type TestContext } from 'node:test'
 import { bootJsdomEnvironment } from '../../../../testing/jsdom-env'
@@ -328,7 +329,7 @@ test('source correction replaces the active body and retries the same exact nati
   assert.deepEqual(requests[0], requests[1])
   assert.equal(requests[0]!.expectedAuthorityId, authorityId)
   assert.equal(requests[0]!.expectedAllocationSha256, 'c'.repeat(64))
-  assert.match(String(requests[0]!.requestId), /^[a-f0-9-]{36}$/)
+  assert.match(String(requests[0]!.requestId), UUID_RE)
   assert.equal(requests[0]!.sourceSha256, context.source!.sha256)
   assert.match(document.body.textContent!, /retained source is unavailable/)
   await click('Cancel source correction')

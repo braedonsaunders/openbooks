@@ -224,19 +224,17 @@ export const GET = defineRoute({
         ${q ? sql`and (e.action ilike ${`%${q}%`} or coalesce(u.name, '') ilike ${`%${q}%`} or e.changes::text ilike ${`%${q}%`})` : sql``}
       `
 
-      const [rows, count] = await Promise.all([
-        (tx.execute<{ id: string; action: string; changes: string; at: Date; request_id: string | null; actor_name: string | null }>(sql`
+      const rows = await tx.execute<{ id: string; action: string; changes: string; at: Date; request_id: string | null; actor_name: string | null }>(sql`
           with events as (${events})
           select e.id, e.action, e.changes::text as changes, e.at, e.request_id, u.name as actor_name
             from events e left join users u on u.id = e.actor_id and u.org_id = ${authz.user.orgId}
            where true ${filters}
            order by e.at desc, e.id desc
-           limit ${perPage} offset ${(page - 1) * perPage}`)),
-        (tx.execute(sql`
+           limit ${perPage} offset ${(page - 1) * perPage}`)
+      const count = await tx.execute(sql`
           with events as (${events})
           select count(*) as n from events e left join users u on u.id = e.actor_id and u.org_id = ${authz.user.orgId}
-           where true ${filters}`)),
-      ])
+           where true ${filters}`)
 
       return NextResponse.json({
         // Read JSONB as text so retained decimal digits never pass through

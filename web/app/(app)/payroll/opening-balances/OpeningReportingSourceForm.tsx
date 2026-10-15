@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react'
 import { useTranslations } from 'next-intl'
-import { Alert, AlertDescription, Button, FieldLabel, Input, Select, Skeleton } from '@openbooks/ui'
+import { Alert, AlertDescription, Button, FieldLabel, Input, Select, Skeleton, Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@openbooks/ui'
 import { CabinetFilePicker } from '../../../../components/cabinet-file-picker'
 import { RecordTabs } from '../../../../components/module-home/record-tabs'
 import { readApiErrorMessage } from '../../../../lib/api-error'
@@ -256,9 +256,9 @@ function OpeningReportingSourceBody({ employeePartyId, year, canQualify, annualD
         </div>
         <RecordTabs label={t('amountSections')} active={section} onChange={setSection} tabs={(['annual','reportableBases','components','programBases','accountBases','suiStates'] as const).map(key => ({ key,label: t(key) }))} />
         {section === 'reportableBases' && <p className="text-sm text-slate-500">{t('reportableHelp')}</p>}
-        <div className="overflow-x-auto rounded-lg border border-slate-200 dark:border-slate-800"><table className="w-full text-sm"><thead><tr className="text-left"><th scope="col" className="p-2">{t('field')}</th><th scope="col" className="p-2 text-right">{t('originalAmount')}</th><th scope="col" className="p-2">{t('allocatedAmount')}</th></tr></thead>
-          <tbody>{amountRows().map((row,index) => <tr key={row.key} className="border-t border-slate-100 dark:border-slate-800"><th scope="row" className="p-2 text-left font-normal">{row.label}</th><td className="p-2 text-right tabular-nums">{row.original}</td><td className="p-2">{sealed ? <span className="tabular-nums">{row.value}</span> : <Input id={`reporting-source-${section}-${index}`} aria-label={`${row.label}: ${t('allocatedAmount')}`} value={row.value} inputMode="decimal" disabled={disabled} onChange={event => row.change(event.target.value)} />}</td></tr>)}</tbody>
-        </table>{amountRows().length === 0 && <p className="p-3 text-sm text-slate-500">{t('noChildren')}</p>}</div>
+        <Table className="w-full text-sm"><TableHeader><TableRow className="text-left"><TableHead scope="col" className="p-2">{t('field')}</TableHead><TableHead scope="col" className="p-2 text-right">{t('originalAmount')}</TableHead><TableHead scope="col" className="p-2">{t('allocatedAmount')}</TableHead></TableRow></TableHeader>
+          <TableBody>{amountRows().map((row,index) => <TableRow key={row.key} className="border-t border-slate-100 dark:border-slate-800"><TableHead scope="row" className="p-2 text-left font-normal">{row.label}</TableHead><TableCell className="p-2 text-right tabular-nums">{row.original}</TableCell><TableCell className="p-2">{sealed ? <span className="tabular-nums">{row.value}</span> : <Input id={`reporting-source-${section}-${index}`} aria-label={`${row.label}: ${t('allocatedAmount')}`} value={row.value} inputMode="decimal" disabled={disabled} onChange={event => row.change(event.target.value)} />}</TableCell></TableRow>)}</TableBody>
+        </Table>{amountRows().length === 0 && <p className="p-3 text-sm text-slate-500">{t('noChildren')}</p>}
       </>}
       {!sealed && <>
         {annualDirty && <Alert variant="warning"><AlertDescription>{t('saveFirst')}</AlertDescription></Alert>}

@@ -46,6 +46,7 @@ const mockSources = new Map<string, string>([
   [
     'mock:db',
     `
+      export function pinnedTransactionExecutor() { throw new Error('unexpected pinned transaction in boundary test') }
       export function withTransactionSavepoint() { throw new Error('unexpected withTransactionSavepoint in route boundary test') }
 
       const state = globalThis[Symbol.for('openbooks.construction-fence-test')]

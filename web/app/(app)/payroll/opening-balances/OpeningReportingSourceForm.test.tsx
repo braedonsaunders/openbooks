@@ -1,3 +1,4 @@
+import { UUID_RE } from '@openbooks/engine/platform/uuid';
 import assert from 'node:assert/strict'
 import test, { type TestContext } from 'node:test'
 import { bootJsdomEnvironment } from '../../../../testing/jsdom-env'
@@ -83,7 +84,7 @@ test('qualification submits native source/head identity and explicit exact alloc
   assert.equal(button(qualify).disabled,true)
   await click('Remove selected allocation')
   await authorAllocation(); await click(qualify); await click(qualify)
-  assert.equal(posts.length,2); assert.deepEqual(posts[0],posts[1]); assert.match(String(posts[0]!.requestId),/^[a-f0-9-]{36}$/)
+  assert.equal(posts.length,2); assert.deepEqual(posts[0],posts[1]); assert.match(String(posts[0]!.requestId),UUID_RE)
   const { requestId: _requestId, ...payload } = posts[0]!
   assert.deepEqual(payload, { openingBalanceId, expectedLevyAuthorityId: id(6), expectedLevyAllocationSha256: 'd'.repeat(64),
     expectedOpeningSha256: 'b'.repeat(64), expectedOpeningChildrenSha256: 'c'.repeat(64),

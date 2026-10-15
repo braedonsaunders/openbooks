@@ -209,6 +209,7 @@ jobs:
         run: |
           set -euo pipefail
           smoke=(
+            engine/src/organization/actor-identity-scope.integration.test.ts
             engine/src/platform/db-rls.integration.test.ts
             engine/src/ledger/kernel-constraints.integration.test.ts
             engine/src/ledger/journal-posting-atomic.integration.test.ts
