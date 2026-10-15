@@ -140,6 +140,9 @@ FROM runtime-base AS runtime
 # node_modules + web/server.js + web/.next live inside it.
 COPY --chown=node:node --from=build /app/web/.next/standalone ./
 COPY --chown=node:node --from=build /app/web/.next/static ./web/.next/static
+# Standalone output omits public assets: the service worker, offline page and
+# installable-app icons are served from here.
+COPY --chown=node:node --from=build /app/web/public ./web/public
 COPY --chown=node:node --from=build /out/sample-companies.mjs ./scripts/sample-companies.mjs
 COPY --chown=node:node --from=build /out/bootstrap.mjs ./scripts/bootstrap.mjs
 COPY --chown=node:node --from=build /out/worker.mjs ./scripts/worker.mjs

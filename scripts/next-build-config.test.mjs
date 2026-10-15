@@ -15,7 +15,13 @@ test('production page collection and generation stay within a single-worker budg
 
 test('the production image uses isolated Webpack compilation within its heap budget', () => {
   const dockerfile = readFileSync(new URL('../Dockerfile', import.meta.url), 'utf8');
-  assert.match(dockerfile, /^RUN cd web && NODE_OPTIONS=--max-old-space-size=6144 npx next build --webpack$/m);
+  assert.match(dockerfile, /^RUN cd web && NODE_OPTIONS=--max-old-space-size=8192 npx next build --webpack$/m);
+});
+
+test('the runtime image serves public assets beside the standalone server', () => {
+  const dockerfile = readFileSync(new URL('../Dockerfile', import.meta.url), 'utf8');
+  const runtime = dockerfile.slice(dockerfile.indexOf(' AS runtime\n'));
+  assert.match(runtime, /^COPY --chown=node:node --from=build \/app\/web\/public \.\/web\/public$/m);
 });
 
 test('production compilers bound module work without retaining a build cache', () => {
