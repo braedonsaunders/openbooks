@@ -123,7 +123,7 @@ export function useDocumentDrawerDefaults(scope: DocumentDrawerScope) {
       appliedLineDefaults.current.set(row.clientKey, next.applied)
       return next.row
     }))
-  }, [fetchDocumentDefaults, lineDefaultsContext])
+  }, [fetchDocumentDefaults, lineDefaultsContext, setRows])
 
   useEffect(() => {
     if (!config.lineDefaults) return

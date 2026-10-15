@@ -225,7 +225,7 @@ export function ProgramDrawer({
     sourceReason,
   ])
   const sourceReviewKeyRef = useRef(sourceReviewKey)
-  sourceReviewKeyRef.current = sourceReviewKey
+  useEffect(() => { sourceReviewKeyRef.current = sourceReviewKey }, [sourceReviewKey])
   const previousSourceReviewKey = useRef(sourceReviewKey)
 
   useEffect(() => {
@@ -239,12 +239,7 @@ export function ProgramDrawer({
   }, [sourceReviewKey])
 
   useEffect(() => {
-    if (!sourceFileId) {
-      setSourceVersionId('')
-      setSourceVersions([])
-      setSourceRows([])
-      return
-    }
+    if (!sourceFileId) return
     const controller = new AbortController()
     let active = true
     void fetch(`/api/file-cabinet/files/${encodeURIComponent(sourceFileId)}`, { signal: controller.signal })
@@ -271,12 +266,7 @@ export function ProgramDrawer({
   }, [sourceFileId, t])
 
   useEffect(() => {
-    if (!sourceFileId || !sourceVersionId) {
-      setSourceRows([])
-      setSourceRowPointer('')
-      setSourceFields({ sourceRowRef: '', amount: '', currency: '', periodFrom: '', periodTo: '', sourceIssueDate: '', sourcePaidDate: '' })
-      return
-    }
+    if (!sourceFileId || !sourceVersionId) return
     const controller = new AbortController()
     let active = true
     const fileId = sourceFileId
@@ -299,12 +289,7 @@ export function ProgramDrawer({
   }, [sourceFileId, sourceVersionId, t])
 
   useEffect(() => {
-    if (!corroborationFileId) {
-      setCorroborationVersionId('')
-      setCorroborationVersions([])
-      setCorroborationRows([])
-      return
-    }
+    if (!corroborationFileId) return
     const controller = new AbortController()
     let active = true
     void fetch(`/api/file-cabinet/files/${encodeURIComponent(corroborationFileId)}`, { signal: controller.signal })
@@ -330,11 +315,7 @@ export function ProgramDrawer({
   }, [corroborationFileId, t])
 
   useEffect(() => {
-    if (!corroborationFileId || !corroborationVersionId) {
-      setCorroborationRows([])
-      setCorroborationRowPointer('')
-      return
-    }
+    if (!corroborationFileId || !corroborationVersionId) return
     const controller = new AbortController()
     let active = true
     const fileId = corroborationFileId
@@ -789,14 +770,14 @@ export function ProgramDrawer({
             <div>
               <Label htmlFor="source-first-file">{t('sourceFirst.issuedFile')}</Label>
               <CabinetFilePicker id="source-first-file" label={t('sourceFirst.issuedFile')} value={sourceFileId} onChange={(value) => {
-                setSourceFileId(value); setSourceVersionId(''); setSourceRows([]); setSourceRowPointer('')
+                setSourceFileId(value); setSourceVersionId(''); setSourceVersions([]); setSourceRows([]); setSourceRowPointer(''); setSourceFields({ sourceRowRef: '', amount: '', currency: '', periodFrom: '', periodTo: '', sourceIssueDate: '', sourcePaidDate: '' })
                 setSourceFields({ sourceRowRef: '', amount: '', currency: '', periodFrom: '', periodTo: '', sourceIssueDate: '', sourcePaidDate: '' })
               }} disabled={working} />
               {sourceFileId && sourceVersions.length > 0 ? (
                 <div className="mt-2">
                   <Label htmlFor="source-first-version">{t('sourceFirst.fileVersion')}</Label>
                   <Select id="source-first-version" value={sourceVersionId} onChange={(event) => {
-                    setSourceVersionId(event.target.value); setSourceRowPointer(''); setSourceRows([])
+                    setSourceVersionId(event.target.value); setSourceRowPointer(''); setSourceRows([]); setSourceFields({ sourceRowRef: '', amount: '', currency: '', periodFrom: '', periodTo: '', sourceIssueDate: '', sourcePaidDate: '' })
                     setSourceFields({ sourceRowRef: '', amount: '', currency: '', periodFrom: '', periodTo: '', sourceIssueDate: '', sourcePaidDate: '' })
                   }}>
                     {sourceVersions.map((version) => <option key={version.id} value={version.id}>{version.label}</option>)}
@@ -840,7 +821,7 @@ export function ProgramDrawer({
             <div>
               <Label htmlFor="source-first-corroboration">{t('sourceFirst.corroborationFile')}</Label>
               <CabinetFilePicker id="source-first-corroboration" label={t('sourceFirst.corroborationFile')} value={corroborationFileId} onChange={(value) => {
-                setCorroborationFileId(value); setCorroborationVersionId(''); setCorroborationRows([]); setCorroborationRowPointer('')
+                setCorroborationFileId(value); setCorroborationVersionId(''); setCorroborationVersions([]); setCorroborationRows([]); setCorroborationRowPointer('')
               }} disabled={working} />
               {corroborationFileId && corroborationVersions.length > 0 ? (
                 <div className="mt-2">

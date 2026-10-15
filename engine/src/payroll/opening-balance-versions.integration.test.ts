@@ -158,7 +158,7 @@ test('source-referenced opening replacement and clearing retain exact before/aft
     auditReason: '  Adopt the reviewed annual carry-in basis  ', sourceReference: '  source-register:annual-2026  ',
     rows: [{ employeePartyId: fx.employeeId, amounts: { pensionableYtd: amount, insurableYtd: "0" }, components: {}, programs, suiStates: {}, accountBases: [] }],
   });
-  const events = async () => (await db.execute<{ action: string; actor_id: string; changes: Record<string, any> }>(sql`
+  const events = async () => (await db.execute<{ action: string; actor_id: string; changes: { reason: string; sourceReference: string; beforeRecord: unknown; afterRecord: { balance: { pensionable_ytd: string }; children: { programBases: { id: string; insurable_ytd: string }[] } }; before: { pensionableYtd: string }; after: unknown } }>(sql`
     select action,actor_id,changes from audit_log where org_id=${fx.orgId} and table_name='payroll_opening_balances' order by id
   `)).rows;
   try {

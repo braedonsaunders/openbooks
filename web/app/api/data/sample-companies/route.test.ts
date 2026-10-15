@@ -1,4 +1,4 @@
-import { UUID_RE } from '@openbooks/engine/platform/uuid';
+import { UUID_RE } from '@openbooks/engine/platform/identifiers';
 import assert from 'node:assert/strict'
 import { registerHooks } from 'node:module'
 import test, { after } from 'node:test'

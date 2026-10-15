@@ -262,6 +262,8 @@ export function useDocumentDrawerPayload(scope: DocumentDrawerPickersScope) {
       persistedBaseline.current = decision.snapshot
       resetForm(decision.snapshot.payload)
       setDocumentRevision(decision.snapshot.revision)
+      // An accepted server revision replaces the entire clean edit snapshot; rejected or dirty revisions never reach this branch.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setDirty(false)
       setMode('view')
     }

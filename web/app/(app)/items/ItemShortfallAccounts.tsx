@@ -36,14 +36,14 @@ export function ItemShortfallAccounts({
 
   const load = useCallback(async (signal?: AbortSignal) => {
     const res = await fetch(`/api/items/${itemId}/shortfalls`, { signal })
-    if (!res.ok) return
+    if (!res.ok) return null
     const body = (await res.json()) as { shortfalls?: Shortfall[] }
-    setShortfalls(body.shortfalls ?? [])
+    return body.shortfalls ?? []
   }, [itemId])
 
   useEffect(() => {
     const controller = new AbortController()
-    load(controller.signal).catch(() => undefined)
+    load(controller.signal).then(rows => { if (!controller.signal.aborted && rows) setShortfalls(rows) }).catch(() => undefined)
     return () => controller.abort()
   }, [load])
 
@@ -63,7 +63,8 @@ export function ItemShortfallAccounts({
         return
       }
       toast.success(t('recorded'))
-      await load()
+      const rows = await load()
+      if (rows) setShortfalls(rows)
     } finally {
       setBusyId(null)
     }

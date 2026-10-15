@@ -301,7 +301,7 @@ sourceTest("source-evidenced first obligations stay separate, redact to self-ser
 });
 
 sourceTest("source first retries serialize, reject alternate evidence and overlaps, and refuse native-payable recipients", async (h) => {
-  const { program, target, contributor, artifact, row, query } = await seedSourceAwardCase(h);
+  const { program, target, contributor, row, query } = await seedSourceAwardCase(h);
   await assert.rejects(recordSourceEvidencedFirstIncentiveAward({
     ...query,
     expectedProgramRevision: query.expectedProgramRevision + 1,

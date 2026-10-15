@@ -193,7 +193,7 @@ export function inlineDocument(
   entry = '',
 ): string {
   const directory = entry.includes('/') ? entry.slice(0, entry.lastIndexOf('/') + 1) : ''
-  let html = entryHtml.replace(/\b(src|href)\s*=\s*(["'])([^"']+)\2/gi, (attribute, name: string, quote: string, reference: string) => {
+  const html = entryHtml.replace(/\b(src|href)\s*=\s*(["'])([^"']+)\2/gi, (attribute, name: string, quote: string, reference: string) => {
     if (/^(?:[a-z][a-z0-9+.-]*:|\/\/|#)/i.test(reference)) return attribute
     const path = reference.split(/[?#]/)[0]!
     const parts: string[] = []

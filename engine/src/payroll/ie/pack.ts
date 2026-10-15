@@ -535,7 +535,7 @@ export async function computeIeStatutory(
   ctx: PayrollStatutoryComputeContext,
 ): Promise<Record<string, string>> {
   const {
-    taxYear, region, run,
+    region, run,
     periodsPerYear: P, income, nonPeriodic, pensionable,
     deduction, pushStatutory, certificateFor, assertRegionSupported,
   } = ctx;

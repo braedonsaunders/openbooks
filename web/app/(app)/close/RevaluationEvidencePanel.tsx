@@ -57,7 +57,7 @@ export function RevaluationEvidencePanel(props: {
   const t = useTranslations("close.revaluationEvidence");
   const router = useRouter();
   const [attempt, setAttempt] = useState(0);
-  const [state, setState] = useState<LoadState>({ status: "loading" });
+  const [loaded, setLoaded] = useState<{ key: string; state: LoadState } | null>(null);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [rate, setRate] = useState("");
   const [source, setSource] = useState("");
@@ -65,30 +65,33 @@ export function RevaluationEvidencePanel(props: {
   const [busy, setBusy] = useState(false);
 
   const subsidiaryKey = props.subsidiaryIds.join(",");
+  const loadKey = JSON.stringify([props.periodId, props.bookId, subsidiaryKey, attempt]);
+  const state: LoadState = loaded?.key === loadKey ? loaded.state : { status: "loading" };
   const load = useCallback(async () => {
     const params = new URLSearchParams({ periodId: props.periodId, bookId: props.bookId });
     if (subsidiaryKey) params.set("subsidiaryIds", subsidiaryKey);
     const response = await fetch(`/api/close/revaluation-rate-evidence?${params.toString()}`);
     if (!response.ok) throw new Error(await readApiErrorMessage(response, t("loadFailed")));
     const body = (await response.json()) as { exposures: Exposure[] };
-    setState({ status: "ready", exposures: body.exposures });
+    return body.exposures;
   }, [props.periodId, props.bookId, subsidiaryKey, t]);
 
   useEffect(() => {
     let live = true;
-    setState({ status: "loading" });
-    load().catch((error: unknown) => {
+    load().then(exposures => {
+      if (live) setLoaded({ key: loadKey, state: { status: "ready", exposures } });
+    }).catch((error: unknown) => {
       if (live) {
-        setState({
+        setLoaded({ key: loadKey, state: {
           status: "failed",
           message: error instanceof Error ? error.message : t("loadFailed"),
-        });
+        } });
       }
     });
     return () => {
       live = false;
     };
-  }, [load, attempt]);
+  }, [load, loadKey, t]);
 
   const exposures = state.status === "ready" ? state.exposures : [];
   const selected = exposures.find((row) => exposureKey(row) === selectedKey) ?? null;

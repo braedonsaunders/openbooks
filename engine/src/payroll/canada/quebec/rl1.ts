@@ -3,7 +3,7 @@ import { readCanadianOpeningYearEndSlices } from '../opening-reporting-yearend.t
 import { assertPayrollCountryKnown } from "../../country.ts";
 import { sql } from "drizzle-orm";
 import { type SqlExecutor } from "../../../platform/db.ts";
-import { add, cmp, mulPercent, neg, normalizeMoney } from "../../../money/money.ts";
+import { add, cmp, mulPercent, neg } from "../../../money/money.ts";
 import { resolveEmployerFact } from "../../employer-facts.ts";
 import { RATES_2026_JAN } from "../rates.ts";
 import { PayrollError } from "../../error.ts";

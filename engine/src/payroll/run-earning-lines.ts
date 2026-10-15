@@ -437,7 +437,7 @@ export async function applyAssignedComponentLines(
 ): Promise<void> {
   const {
     orgId, employeePartyId, employmentId, taxYear, documentId, oneOffRun, lines,
-    periodStart, periodEnd, payDate,
+    periodStart, periodEnd,
   } = args;
   const assignedRows = applicableAssignedComponents(args.assignedRows, args.runType);
   // A rate-card assignment prices operational facts; its value is not also

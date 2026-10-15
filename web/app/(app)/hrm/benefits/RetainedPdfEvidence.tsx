@@ -20,7 +20,7 @@ export function RetainedPdfEvidence({ value, onChange, disabled, onRemove }: {
   const [error, setError] = useState('')
   const [newFact, setNewFact] = useState<(typeof facts)[number]>('value')
   useEffect(() => {
-    if (!value.fileId) { setVersions([]); return }
+    if (!value.fileId) return
     const controller = new AbortController()
     void fetch(`/api/file-cabinet/files/${encodeURIComponent(value.fileId)}`, { signal: controller.signal }).then(async response => {
       if (!response.ok) throw new Error(await readApiErrorMessage(response, t('fileLookupFailed')))
@@ -32,7 +32,7 @@ export function RetainedPdfEvidence({ value, onChange, disabled, onRemove }: {
   const selection = value.pdfSelection
   return <fieldset className="space-y-3 rounded border p-3" disabled={disabled}>
     <legend className="px-1 text-sm font-medium">{t('pdfEvidence')}</legend>
-    <CabinetFilePicker label={t('issuedFile')} value={value.fileId} onChange={fileId => { setError(''); onChange({ ...value, fileId, versionId: '' }) }} disabled={disabled} />
+    <CabinetFilePicker label={t('issuedFile')} value={value.fileId} onChange={fileId => { setError(''); setVersions([]); onChange({ ...value, fileId, versionId: '' }) }} disabled={disabled} />
     {error ? <p role="alert" className="text-sm text-red-600">{error}</p> : null}
     <Label>{t('fileVersion')}<Select value={value.versionId} onChange={event => onChange({ ...value, versionId: event.target.value })}>
       <option value="">{t('chooseRow')}</option>{versions.map(version => <option key={version.id} value={version.id}>{t('version', { number: version.number })}</option>)}

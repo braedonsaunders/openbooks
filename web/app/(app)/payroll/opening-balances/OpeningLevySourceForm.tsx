@@ -56,8 +56,8 @@ function OpeningLevySourceBody({ employeePartyId, year, openingAmounts, canManag
   const t = useTranslations('payroll.openingBalances.levySource')
   const [reload, setReload] = useState(0)
   const [context, setContext] = useState<Context | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [loadError, setLoadError] = useState('')
+  const [settledLoadKey, setSettledLoadKey] = useState<string | null>(null)
+  const [storedLoadError, setLoadError] = useState('')
   const [reason, setReason] = useState('')
   const [country, setCountry] = useState('')
   const [currency, setCurrency] = useState('')
@@ -72,13 +72,18 @@ function OpeningLevySourceBody({ employeePartyId, year, openingAmounts, canManag
   const correctionRequest = useRef<{ body: string; id: string } | null>(null)
   const [error, setError] = useState('')
   const dirty = useRef(false)
-  const draftOpening = useRef<string | null>(null)
+  const [isDirty, setIsDirty] = useState(false)
+  const [draftOpening, setDraftHead] = useState<string | null>(null)
   const mounted = useRef(false)
   const saveController = useRef<AbortController | null>(null)
   const savedCallback = useRef(onSaved)
-  savedCallback.current = onSaved
+  useEffect(() => { savedCallback.current = onSaved }, [onSaved])
   const loadFailed = t('loadFailed')
   const identityMismatch = t('identityMismatch')
+
+  const loadKey = JSON.stringify([employeePartyId, year, fileId, reload])
+  const loading = settledLoadKey !== loadKey
+  const loadError = settledLoadKey === loadKey ? storedLoadError : ''
 
   useEffect(() => {
     mounted.current = true
@@ -89,7 +94,6 @@ function OpeningLevySourceBody({ employeePartyId, year, openingAmounts, canManag
     const controller = new AbortController()
     let active = true
     const timeout = setTimeout(() => controller.abort(), 15000)
-    setLoading(true); setLoadError('')
     void (async () => {
       const params = new URLSearchParams({ employeePartyId, taxYear: String(year) })
       if (fileId) params.set('sourceFileId', fileId)
@@ -99,6 +103,7 @@ function OpeningLevySourceBody({ employeePartyId, year, openingAmounts, canManag
       if (!active) return
       if (controller.signal.aborted) throw Error(loadFailed)
       if (next.record && (next.record.employeePartyId !== employeePartyId || next.record.taxYear !== year)) throw Error(identityMismatch)
+      setLoadError('')
       setContext(next)
       // A refreshed account/source context must never replace unsaved operator entries.
       if (!dirty.current) {
@@ -108,24 +113,24 @@ function OpeningLevySourceBody({ employeePartyId, year, openingAmounts, canManag
         setCoverageEnd(next.record?.coverageEnd ?? '')
         setCoverageComplete(next.record?.coverageComplete === true)
         setDrafts(initialAllocations(next, next.record?.originalCountry ?? ''))
-        draftOpening.current = next.record ? `${next.record.openingBalanceId}:${next.record.openingSha256}:${next.record.openingChildrenSha256}:${next.record.levyAuthorityId ?? ''}:${next.record.allocationSha256 ?? ''}` : null
+        setDraftHead(next.record ? `${next.record.openingBalanceId}:${next.record.openingSha256}:${next.record.openingChildrenSha256}:${next.record.levyAuthorityId ?? ''}:${next.record.allocationSha256 ?? ''}` : null)
       }
     })().catch((cause: unknown) => {
       if (active) setLoadError(cause instanceof Error && cause.name !== 'AbortError' ? cause.message : loadFailed)
-    }).finally(() => { clearTimeout(timeout); if (active) setLoading(false) })
+    }).finally(() => { clearTimeout(timeout); if (active) setSettledLoadKey(loadKey) })
     return () => { active = false; clearTimeout(timeout); controller.abort() }
-  }, [employeePartyId, year, fileId, reload, loadFailed, identityMismatch])
+  }, [employeePartyId, year, fileId, reload, loadFailed, identityMismatch, loadKey])
 
   const record = context?.record
   const sourceReady = !!record?.employerAuthorityId && !!record.subsidiaryId
-  const staleDraft = dirty.current && draftOpening.current !== (record ? `${record.openingBalanceId}:${record.openingSha256}:${record.openingChildrenSha256}:${record.levyAuthorityId ?? ''}:${record.allocationSha256 ?? ''}` : null)
+  const staleDraft = isDirty && draftOpening !== (record ? `${record.openingBalanceId}:${record.openingSha256}:${record.openingChildrenSha256}:${record.levyAuthorityId ?? ''}:${record.allocationSha256 ?? ''}` : null)
   const disabled = !canManage || busy || loading || !!loadError || staleDraft || (correcting && !!context?.correctionRefusal)
   const update = (index: number, changes: Partial<Draft>) => {
-    dirty.current = true
+    dirty.current = true; setIsDirty(true)
     setDrafts(rows => rows?.map((row, rowIndex) => rowIndex === index ? { ...row, ...changes } : row) ?? null)
   }
   const addUsRow = (programKey: 'us_futa' | 'us_sui' | 'us_pa_lst') => {
-    dirty.current = true
+    dirty.current = true; setIsDirty(true)
     setDrafts(rows => [...(rows ?? []), { programKey, region: programKey === 'us_pa_lst' ? 'PA' : programKey === 'us_futa' ? 'US' : '', subRegion: '', filingAccountId: null, federalAccountId: null, amount: '' }])
   }
   const completeDraft = !!context?.source && context.source.id === fileId && !!sourceReference.trim() && !!country && !!currency
@@ -162,7 +167,7 @@ function OpeningLevySourceBody({ employeePartyId, year, openingAmounts, canManag
       if (!response.ok) throw Error(await readApiErrorMessage(response, t('saveFailed')))
       if (!mounted.current) return
       if (controller.signal.aborted) throw Error(t('saveFailed'))
-      dirty.current = false
+      dirty.current = false; setIsDirty(false)
       setCorrecting(false)
       correctionRequest.current = null
       setReload(value => value + 1)
@@ -213,28 +218,28 @@ function OpeningLevySourceBody({ employeePartyId, year, openingAmounts, canManag
         <Alert><AlertDescription>{t('correctionHelp')}</AlertDescription></Alert>
         {context.correctionRefusal && <Alert variant="warning"><AlertDescription>{context.correctionRefusal}</AlertDescription></Alert>}
         <Button type="button" variant="outline" disabled={busy} onClick={() => {
-          setCorrecting(false); dirty.current = false; setReason(''); setSourceReference(''); setFileId('')
+          setCorrecting(false); dirty.current = false; setIsDirty(false); setReason(''); setSourceReference(''); setFileId('')
           correctionRequest.current = null; setError(''); setReload(value => value + 1)
         }}>{t('cancelCorrection')}</Button>
       </>}
-      <CabinetFilePicker value={fileId} label={t('originalReport')} disabled={disabled} onChange={value => { dirty.current = true; setFileId(value) }} />
+      <CabinetFilePicker value={fileId} label={t('originalReport')} disabled={disabled} onChange={value => { dirty.current = true; setIsDirty(true); setFileId(value) }} />
       {context.source && <p className="break-all text-xs text-slate-500">{context.source.name} · {context.source.versionId} · {context.source.sha256}</p>}
-      <div><FieldLabel htmlFor="levy-source-reference">{t('reference')}</FieldLabel><Input id="levy-source-reference" value={sourceReference} maxLength={2000} disabled={disabled} onChange={event => { dirty.current = true; setSourceReference(event.target.value) }} /></div>
+      <div><FieldLabel htmlFor="levy-source-reference">{t('reference')}</FieldLabel><Input id="levy-source-reference" value={sourceReference} maxLength={2000} disabled={disabled} onChange={event => { dirty.current = true; setIsDirty(true); setSourceReference(event.target.value) }} /></div>
       <div className="grid gap-3 sm:grid-cols-2">
         <div><FieldLabel htmlFor="levy-source-country">{t('originalCountry')}</FieldLabel><Select id="levy-source-country" value={country} disabled={disabled} onChange={event => {
-          dirty.current = true; setCountry(event.target.value); setDrafts(initialAllocations({ ...context, allocations: [] }, event.target.value))
+          dirty.current = true; setIsDirty(true); setCountry(event.target.value); setDrafts(initialAllocations({ ...context, allocations: [] }, event.target.value))
         }}><option value="">{t('chooseCountry')}</option>{context.countries.map(option => <option key={option.country} value={option.country}>{option.country}</option>)}</Select></div>
-        <div><FieldLabel htmlFor="levy-source-currency">{t('originalCurrency')}</FieldLabel><Select id="levy-source-currency" value={currency} disabled={disabled} onChange={event => { dirty.current = true; setCurrency(event.target.value) }}><option value="">{t('chooseCurrency')}</option>{[...new Set(context.countries.map(option => option.currency))].map(code => <option key={code} value={code}>{code}</option>)}</Select></div>
-        <div><FieldLabel htmlFor="levy-source-coverage-start">{t('coverageStart')}</FieldLabel><Input type="date" id="levy-source-coverage-start" value={coverageStart} disabled={disabled} onChange={event => { dirty.current = true; setCoverageStart(event.target.value) }} /></div>
-        <div><FieldLabel htmlFor="levy-source-coverage-end">{t('coverageEnd')}</FieldLabel><Input type="date" id="levy-source-coverage-end" value={coverageEnd} disabled={disabled} onChange={event => { dirty.current = true; setCoverageEnd(event.target.value) }} /></div>
+        <div><FieldLabel htmlFor="levy-source-currency">{t('originalCurrency')}</FieldLabel><Select id="levy-source-currency" value={currency} disabled={disabled} onChange={event => { dirty.current = true; setIsDirty(true); setCurrency(event.target.value) }}><option value="">{t('chooseCurrency')}</option>{[...new Set(context.countries.map(option => option.currency))].map(code => <option key={code} value={code}>{code}</option>)}</Select></div>
+        <div><FieldLabel htmlFor="levy-source-coverage-start">{t('coverageStart')}</FieldLabel><Input type="date" id="levy-source-coverage-start" value={coverageStart} disabled={disabled} onChange={event => { dirty.current = true; setIsDirty(true); setCoverageStart(event.target.value) }} /></div>
+        <div><FieldLabel htmlFor="levy-source-coverage-end">{t('coverageEnd')}</FieldLabel><Input type="date" id="levy-source-coverage-end" value={coverageEnd} disabled={disabled} onChange={event => { dirty.current = true; setIsDirty(true); setCoverageEnd(event.target.value) }} /></div>
       </div>
-      <label className="flex gap-2 text-sm"><input type="checkbox" id="levy-source-complete" checked={coverageComplete} disabled={disabled} onChange={event => { dirty.current = true; setCoverageComplete(event.target.checked) }} />{t('coverageComplete')}</label>
+      <label className="flex gap-2 text-sm"><input type="checkbox" id="levy-source-complete" checked={coverageComplete} disabled={disabled} onChange={event => { dirty.current = true; setIsDirty(true); setCoverageComplete(event.target.checked) }} />{t('coverageComplete')}</label>
       {drafts && <>
 
       {annualDirty && <Alert variant="warning"><AlertDescription>{t('saveFirst')}</AlertDescription></Alert>}
       {staleDraft && <Alert variant="warning"><AlertDescription>{t('staleDraft')}</AlertDescription></Alert>}
       {staleDraft && canManage && <Button type="button" variant="outline" disabled={busy || loading} onClick={() => {
-        dirty.current = false; setReason(''); setError(''); setReload(value => value + 1)
+        dirty.current = false; setIsDirty(false); setReason(''); setError(''); setReload(value => value + 1)
       }}>{t('discardAndReload')}</Button>}
       {country === 'CA' && <p className="text-xs text-slate-500">{t('caTotals')}{' '}
         {t('wcbTotal')}: {openingAmounts.wcbAssessableYtd ?? t('unavailable')} · {t('ehtTotal')}: {openingAmounts.ehtRemunerationYtd ?? t('unavailable')}</p>}
@@ -266,13 +271,13 @@ function OpeningLevySourceBody({ employeePartyId, year, openingAmounts, canManag
             </Select></>}<FieldLabel htmlFor={fieldId('amount')} className={showAccount ? 'mt-2' : undefined}>{t('amount')}</FieldLabel><Input id={fieldId('amount')} value={row.amount} inputMode="decimal" disabled={disabled} onChange={event => update(index, { amount: event.target.value })} /></div>
             {country === 'US' && row.programKey !== 'us_futa' && <div><FieldLabel htmlFor={fieldId('federal-account')}>{t('originalEin')}</FieldLabel><Select id={fieldId('federal-account')} value={row.federalAccountId ?? ''} disabled={disabled} onChange={event => update(index, { federalAccountId: event.target.value || null })}><option value="">{t('chooseEin')}</option>{context.eins.map(account => <option key={account.id} value={account.id}>{account.name}{!account.isActive ? ` · ${t('inactiveAccount')}` : ''}</option>)}</Select></div>}
             <div className="flex items-end">{country === 'US' && <Button type="button" variant="outline" disabled={disabled} onClick={() => {
-              dirty.current = true; setDrafts(rows => rows?.filter((_, rowIndex) => rowIndex !== index) ?? null)
+              dirty.current = true; setIsDirty(true); setDrafts(rows => rows?.filter((_, rowIndex) => rowIndex !== index) ?? null)
             }}>{t('remove')}</Button>}</div>
           </div>
         })}
       </div>
       {country === 'US' && <div className="flex flex-wrap gap-2"><Button type="button" variant="outline" disabled={disabled} onClick={() => addUsRow('us_futa')}>{t('addFuta')}</Button><Button type="button" variant="outline" disabled={disabled} onClick={() => addUsRow('us_sui')}>{t('addSui')}</Button><Button type="button" variant="outline" disabled={disabled} onClick={() => addUsRow('us_pa_lst')}>{t('addLst')}</Button></div>}
-      <div><FieldLabel htmlFor="levy-source-reason">{t('reasonLabel')}</FieldLabel><Input id="levy-source-reason" value={reason} maxLength={2000} disabled={disabled} onChange={event => { dirty.current = true; setReason(event.target.value) }} /></div>
+      <div><FieldLabel htmlFor="levy-source-reason">{t('reasonLabel')}</FieldLabel><Input id="levy-source-reason" value={reason} maxLength={2000} disabled={disabled} onChange={event => { dirty.current = true; setIsDirty(true); setReason(event.target.value) }} /></div>
       {error && <Alert variant="warning"><AlertDescription>{error}</AlertDescription></Alert>}
       {canManage && <Button type="button" onClick={() => void save()} disabled={disabled || annualDirty || !completeDraft || !reason.trim()}>{busy ? t('saving') : t(correcting ? 'replaceCertificate' : 'qualify')}</Button>}
       </>}

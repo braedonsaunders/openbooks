@@ -265,7 +265,7 @@ test("a governed correction moves a committed bank draw from expense to the boun
       line.custom.entitlementPlanId, line.custom.entitlementMovementId, line.custom.stubLineIds]),
       [[fx.accounts.vacationPayable, "200.0000", false, "governed_correction", planId, movementId, [drawLine]]]);
     assert.deepEqual(await stubLineSnapshot(fx.orgId, run.documentId), stubsBefore, "the committed stub lines are never changed");
-    const audit = (await db.execute<{ changes: Record<string, any> }>(sql`
+    const audit = (await db.execute<{ changes: { projectionHashBefore: string; entitlementRelief: { bindings: unknown[]; corrections: Record<string, unknown>[] } } }>(sql`
       select changes from audit_log where org_id = ${fx.orgId} and row_id = ${run.documentId}
          and changes->>'operation' = 'rebuild-pay-run-gl-projection'`)).rows;
     assert.equal(audit.length, 1);

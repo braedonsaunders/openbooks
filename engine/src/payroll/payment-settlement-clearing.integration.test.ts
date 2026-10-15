@@ -66,7 +66,7 @@ test("net pay settles to the clearing account designated for the payment date, w
     const paid = (await db.execute<{ paid_entry_id: string }>(sql`select paid_entry_id::text as paid_entry_id from pay_runs
       where org_id=${fx.orgId} and document_id=${input.documentId}`)).rows[0]!;
     assert.equal(paid.paid_entry_id, payment.entryId);
-    const audit = (await db.execute<{ changes: Record<string, any> }>(sql`select changes from audit_log where org_id=${fx.orgId}
+    const audit = (await db.execute<{ changes: Record<string, unknown> }>(sql`select changes from audit_log where org_id=${fx.orgId}
       and table_name='pay_runs' and row_id=${input.documentId} and changes->>'operation'='record_pay_run_payment'`)).rows[0]!;
     assert.deepEqual(audit.changes.settlement, { kind: "clearing", accountId: clearing, designation: window });
     assert.equal(audit.changes.bankAccountId, null);

@@ -444,7 +444,7 @@ export async function computeUsStatutory(
   ctx: PayrollStatutoryComputeContext,
 ): Promise<Record<string, string>> {
   const {
-    tx, orgId, documentId, employeePartyId, employeeName, taxYear, country, region,
+    tx, orgId, employeePartyId, employeeName, taxYear, country, region,
     run, emp, filingAccountId, periodsPerYear: P, income, nonPeriodic, pensionable,
     supplementalWageAmounts, statutoryExemptionAmounts,
     insurable, employerEmployeeCount, reducedBases, pushStatutory, storedCertificates, certificateFor, bool,

@@ -1,7 +1,7 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
 import { drizzle } from 'drizzle-orm/node-postgres';
 import { sql } from 'drizzle-orm';
-import { db, orgContext, pool, type SqlExecutor } from '../platform/db.ts';
+import { orgContext, pool, type SqlExecutor } from '../platform/db.ts';
 import { PayrollError } from './error.ts';
 import { openingSourceYearFenceKey, takeOpeningSourceYearFence } from '../organization/payroll-source-fence.ts';
 

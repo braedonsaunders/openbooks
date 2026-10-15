@@ -103,7 +103,7 @@ function parseFieldTicketSourceHeaderJson(text: string): FieldTicketSourceHeader
   let value: unknown;
   try {
     value = JSON.parse(text);
-  } catch (cause) {
+  } catch {
     throw new FieldTicketSourceHeaderError("source file is not valid JSON; retain the exact source export and certify against its pinned version");
   }
   if (!Array.isArray(value)) {
@@ -183,7 +183,7 @@ export function parseFieldTicketSourceHeaders(bytes: Uint8Array): FieldTicketSou
   let decoded: string;
   try {
     decoded = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
-  } catch (cause) {
+  } catch {
     throw new FieldTicketSourceHeaderError("source file is not valid UTF-8; retain the exact source export without repairing its bytes");
   }
   const text = decoded.replace(/^\uFEFF/, "");
