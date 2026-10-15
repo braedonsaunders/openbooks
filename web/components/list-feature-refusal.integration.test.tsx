@@ -53,13 +53,13 @@ test('entity and document lists whose feature is off render the shared feature s
       assert.equal(featureStates(html), 1, `${name}: one shared feature state replaces the body`)
       assert.match(html, /data-route-placement="section"/)
       assert.match(html, new RegExp(`>${feature}<`), `${name}: the canvas names the switch`)
-      assert.match(html, /href="\/admin\/setup\/features"/, `${name}: a setup manager is linked to Features`)
+      assert.match(html, /href="\/admin\/setup\/features(?:\?[^"]*)?"/, `${name}: a setup manager is linked to Features`)
       assert.doesNotMatch(html, /feature_disabled|Company Settings/, `${name}: no refusal code or remedy text`)
       assert.doesNotMatch(html, /<table|views\.defaultName|type="search"/, `${name}: no table, view switcher or search`)
 
       const readerHtml = renderToStaticMarkup(await render(reader))
       assert.equal(featureStates(readerHtml), 1)
-      assert.doesNotMatch(readerHtml, /href="\/admin\/setup\/features"/, `${name}: no Features link without setup authority`)
+      assert.doesNotMatch(readerHtml, /href="\/admin\/setup\/features(?:\?[^"]*)?"/, `${name}: no Features link without setup authority`)
       assert.match(readerHtml, /askAdministrator/, `${name}: the reader is told who can turn it on`)
     }
   } finally {
