@@ -516,20 +516,26 @@ async function budgetData(target: Extract<ReportDrillTarget, { kind: 'budget' }>
       ? sql`and l.account_id in (with recursive sub as (select id from accounts where org_id = ${authz.user.orgId} and id in ${target.accountIds} union all select child.id from accounts child join sub on child.parent_id = sub.id where child.org_id = ${authz.user.orgId}) select id from sub)`
       : target.accountTypes?.length ? sql`and a.type in ${target.accountTypes}` : sql``
     const actualDims = dimSql(target.dims, 'l')
+    // The book is fixed, so each subsidiary's functional currency resolves
+    // once rather than once per journal line.
     const support = sql`
-      with support as (
+      with book_currency as (
+        select s.id as subsidiary_id, public.accounting_book_currency(s.org_id, ${row.book_id}::uuid, s.id) as func
+          from subsidiaries s where s.org_id = ${authz.user.orgId}
+      ),
+      support as (
         select 'actual'::text as source, e.id::text as key, e.posting_date as sort_date,
                e.posting_date::text as period, e.entry_number,
                a.number, a.name as account, coalesce(l.memo, e.memo) as detail,
                case when a.type in ('income', 'income_other') then -l.amount else l.amount end as amount,
                e.id as entry_id, d.kind as doc_kind, d.id as doc_id,
                -- The entry's book may carry the subsidiary in its own currency.
-               public.accounting_book_currency(l.org_id, e.book_id, l.subsidiary_id) as func, e.posting_date as late
+               bc.func, e.posting_date as late
           from journal_lines l
           join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
           join accounts a on a.id = l.account_id and a.org_id = l.org_id
           left join documents d on d.id = e.source_document_id and d.org_id = e.org_id
-          left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id
+          left join book_currency bc on bc.subsidiary_id = l.subsidiary_id
          where l.org_id = ${authz.user.orgId} and e.book_id = ${row.book_id}
            and e.posting_date >= ${from} and e.posting_date <= ${to}
            and ${excludePeriodEndJournals(sql`e.origin`)}

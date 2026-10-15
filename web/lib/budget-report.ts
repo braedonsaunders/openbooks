@@ -180,13 +180,19 @@ export async function budgetVsActualView(
   // column, like gl_month_activity). Each leg translates to the org
   // presentation currency at its latest date before the caller merges them
   // per account — the same second leg every consolidated flow reader applies.
+  // The book is fixed, so each subsidiary's functional currency resolves once
+  // rather than once per journal line.
   const actualRows = (await db.execute<{ account_id: string; func: string | null; amt: string; late: string | null }>(sql`
-    select l.account_id, public.accounting_book_currency(l.org_id, e.book_id, l.subsidiary_id) as func,
+    with book_currency as (
+      select s.id as subsidiary_id, public.accounting_book_currency(s.org_id, ${scenario.book_id}::uuid, s.id) as func
+        from subsidiaries s where s.org_id = ${orgId}
+    )
+    select l.account_id, bc.func,
       coalesce(sum(l.amount), 0) as amt, max(e.posting_date)::text as late
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
       join accounts a on a.id = l.account_id and a.org_id = l.org_id
-      left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id
+      left join book_currency bc on bc.subsidiary_id = l.subsidiary_id
      where e.org_id = ${orgId} and a.org_id = ${orgId}
        and a.type in ${PNL_TYPES} and e.book_id = ${scenario.book_id}
        and ${excludePeriodEndJournals(sql`e.origin`)}
@@ -197,7 +203,7 @@ export async function budgetVsActualView(
        ${dims.locationId ? sql`and l.location_id = ${dims.locationId}` : sql``}
        ${dims.classId ? sql`and l.class_id = ${dims.classId}` : sql``}
      -- The scenario's book may carry a subsidiary in its own currency.
-     group by l.account_id, public.accounting_book_currency(l.org_id, e.book_id, l.subsidiary_id)
+     group by l.account_id, bc.func
   `))
 
   const budgetRows = (await db.execute<{ account_id: string; func: string | null; amt: string; late: string | null }>(sql`

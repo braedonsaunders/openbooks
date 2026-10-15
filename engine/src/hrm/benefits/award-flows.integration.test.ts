@@ -654,7 +654,7 @@ test(
         assert.deepEqual(await submit(draft.id), ready);
         await rejectWrite(
           sql`update hrm_benefit_programs set approval_mode='flows' where org_id=${org.orgId} and id=${created.id}`,
-          /active policy.*replacement program.*new code/,
+          /active policy.*edit it with a change date/,
         );
         await rejectWrite(
           sql`update hrm_benefit_awards set decision_snapshot='{}'::jsonb where org_id=${org.orgId} and id=${draft.id}`,
