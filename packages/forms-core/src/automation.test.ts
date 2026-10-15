@@ -211,7 +211,8 @@ describe('graph subject scope (legal-entity admission)', () => {
   test('absent scope admits every subject, including an ownerless one', () => {
     assert.equal(flowSubjectAdmission(undefined, ENTITY_A), 'admitted')
     assert.equal(flowSubjectAdmission(null, null), 'admitted')
-    assert.equal(graphSubjectAdmission({ schemaVersion: 1, nodes: [], edges: [] }, undefined), 'admitted')
+    const unscopedGraph = { schemaVersion: 1 as const, nodes: [], edges: [] }
+    assert.equal(graphSubjectAdmission(unscopedGraph, undefined), 'admitted')
   })
 
   test('scoped admission admits only the listed entities', () => {

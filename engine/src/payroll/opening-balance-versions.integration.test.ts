@@ -170,8 +170,10 @@ test('source-referenced opening replacement and clearing retain exact before/aft
     assert.equal(audit.changes.sourceReference, 'source-register:annual-2026');
     assert.equal(audit.changes.beforeRecord, null);
     assert.equal(audit.changes.afterRecord.balance.pensionable_ytd, '100.2500');
-    assert.equal(audit.changes.afterRecord.children.programBases[0].insurable_ytd, '120.2500');
-    assert.ok(audit.changes.afterRecord.children.programBases[0].id);
+    const programBase = audit.changes.afterRecord.children.programBases[0];
+    assert.ok(programBase, 'the audited opening retains its programme base');
+    assert.equal(programBase.insurable_ytd, '120.2500');
+    assert.ok(programBase.id);
     const original = audit.changes.afterRecord;
     const beforeCount = (await events()).length;
     await db.execute(sql.raw(`create function public.${fault}() returns trigger language plpgsql as $$ begin if new.org_id='${fx.orgId}'::uuid and new.table_name='payroll_opening_balances' then return null; end if; return new; end $$`));
