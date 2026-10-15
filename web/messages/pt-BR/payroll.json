@@ -1690,7 +1690,11 @@
       "chooseCurrency": "Escolha a moeda confirmada pelo relatório original",
       "coverageComplete": "O relatório original confirma a cobertura completa desde o início do ano fiscal legal até a data final informada para cada programa, jurisdição e conta original do empregador aplicável, incluindo valores zero explícitos.",
       "originalEin": "EIN federal original",
-      "addFuta": "Adicionar alocação FUTA"
+      "addFuta": "Adicionar alocação FUTA",
+      "correctSource": "Corrigir o certificado de origem original",
+      "cancelCorrection": "Cancelar a correção da origem",
+      "replaceCertificate": "Registrar certificado de substituição",
+      "correctionHelp": "Selecione a evidência exata do arquivo de documentos para a origem original corrigida e explique a correção. A substituição preserva o empregador legal e todos os valores iniciais anuais e detalhados. A folha de pagamento confirmada deve primeiro concluir seu estorno controlado. A substituição não está disponível se alguma declaração tiver sido emitida para este ano, inclusive uma declaração cancelada posteriormente."
     },
     "reportingSource": {
       "retry": "Tentar novamente",

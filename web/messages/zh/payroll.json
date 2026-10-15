@@ -1690,7 +1690,11 @@
       "chooseCurrency": "选择原始报告确认的货币",
       "coverageComplete": "原始报告确认从法定纳税年度开始日至指定结束日期的完整年初至今覆盖范围，包括每项适用计划、管辖区域和原始雇主账户，以及明确的零金额。",
       "originalEin": "原始联邦EIN",
-      "addFuta": "添加FUTA分配"
+      "addFuta": "添加FUTA分配",
+      "correctSource": "更正原始来源证明",
+      "cancelCorrection": "取消来源更正",
+      "replaceCertificate": "记录替换证明",
+      "correctionHelp": "为更正后的原始来源选择文件柜中的确切证据，并说明更正原因。替换会保留法定雇主以及每一项年度和明细期初金额。已提交的工资单必须先完成受控作废。如果本年度已出具任何申报（包括之后被取消的申报），则无法替换。"
     },
     "reportingSource": {
       "retry": "重试",

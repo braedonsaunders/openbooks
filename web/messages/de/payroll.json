@@ -1690,7 +1690,11 @@
       "chooseCurrency": "Die im Originalbericht bestätigte Währung wählen",
       "coverageComplete": "Der Originalbericht bestätigt die vollständige Abdeckung ab Beginn des gesetzlichen Steuerjahres bis zum angegebenen Enddatum für alle anwendbaren Programme, Zuständigkeitsgebiete und ursprünglichen Arbeitgeberkonten, einschließlich ausdrücklich angegebener Nullbeträge.",
       "originalEin": "Ursprüngliche Bundes-EIN",
-      "addFuta": "FUTA-Zuordnung hinzufügen"
+      "addFuta": "FUTA-Zuordnung hinzufügen",
+      "correctSource": "Ursprüngliche Quellbescheinigung korrigieren",
+      "cancelCorrection": "Quellkorrektur abbrechen",
+      "replaceCertificate": "Ersatzbescheinigung erfassen",
+      "correctionHelp": "Wählen Sie den genauen Nachweis aus der Dateiablage für die korrigierte ursprüngliche Quelle aus und begründen Sie die Korrektur. Der Ersatz bewahrt den rechtlichen Arbeitgeber sowie jeden jährlichen und untergeordneten Anfangsbetrag. Bereits festgeschriebene Lohnabrechnungen müssen zuerst ihre gesteuerte Stornierung abschließen. Ein Ersatz ist nicht möglich, wenn für dieses Jahr bereits eine Meldung ausgestellt wurde, auch wenn sie später storniert wurde."
     },
     "reportingSource": {
       "retry": "Erneut versuchen",

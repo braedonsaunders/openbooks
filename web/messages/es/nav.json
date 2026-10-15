@@ -168,6 +168,8 @@
     "close-reopen-requests": "Solicitudes de reapertura",
     "intercompany": "Intercompañía",
     "intercompany-netting": "Compensación intercompañía",
+    "intercompany-transfers": "Transferencias intercompañía",
+    "rebates": "Reembolsos por volumen",
     "amortization": "Amortización de gastos",
     "asset-proposals": "Propuestas de activos",
     "asset-construction": "Obras en curso",
@@ -239,7 +241,8 @@
     "me-views": "Yo",
     "crm-sales": "Ventas",
     "hrm-compensation": "Compensación",
-    "scheduling": "Planificación"
+    "scheduling": "Planificación",
+    "intercompany": "Intercompañía"
   },
   "localWorkspaces": {
     "manufacturing": "Fabricación",

@@ -168,6 +168,8 @@
     "close-reopen-requests": "Wiedereröffnungsanträge",
     "intercompany": "Konzernverrechnung",
     "intercompany-netting": "Konzerninterne Verrechnung",
+    "intercompany-transfers": "Konzerninterne Überweisungen",
+    "rebates": "Rückvergütungen",
     "amortization": "Abgrenzungen",
     "asset-proposals": "Anlagenvorschläge",
     "asset-construction": "Anlagen im Bau",
@@ -228,7 +230,8 @@
     "me-views": "Ich",
     "crm-sales": "Vertrieb",
     "hrm-compensation": "Vergütung",
-    "scheduling": "Einsatzplanung"
+    "scheduling": "Einsatzplanung",
+    "intercompany": "Konzernverrechnung"
   },
   "modulesShort": {
     "hrm-performance-cycles": "Beurteilungen verwalten",

@@ -8,6 +8,9 @@ export function isDefaultLocalNavigationItem(groupId: string, item: NavItemConfi
   return !!module?.menuParent && groupId === module.group && item.placement !== 'custom'
 }
 
+/** Module keys the product renamed, mapped to their current key. */
+const RENAMED_MODULE_KEYS: Readonly<Record<string, string>> = { 'wip-billing': 'pre-billing' }
+
 /**
  * Reconcile shipped destinations without replacing company-defined groups,
  * labels, visibility, shortcuts, or deliberate placements. Legacy default
@@ -51,9 +54,22 @@ export function reconcileNavConfig(saved: OrgNavConfig): OrgNavConfig {
       ensureGroup('customers').items.push(...sales)
     }
   }
-  // Retired standalone setup destinations resolve through Company Setup.
+  // A renamed destination keeps the company's label, visibility, shortcut and
+  // position under its current key, unless that key is already placed.
+  const placed = new Set(groups.flatMap((group) => group.items.flatMap((item) => item.kind === 'module' ? [item.moduleKey] : [])))
   for (const group of groups) {
-    group.items = group.items.filter(item => !(item.kind === 'module' && (item.moduleKey === 'admin-setup-manufacturing' || MODULE_BY_KEY.get(item.moduleKey)?.localOnly)))
+    group.items = group.items.flatMap((item) => {
+      const current = item.kind === 'module' ? RENAMED_MODULE_KEYS[item.moduleKey] : undefined
+      if (item.kind !== 'module' || !current) return [item]
+      if (placed.has(current)) return []
+      placed.add(current)
+      return [{ ...item, moduleKey: current }]
+    })
+  }
+  // Retired standalone setup destinations resolve through Company Setup, and
+  // destinations the product no longer ships have nowhere to lead.
+  for (const group of groups) {
+    group.items = group.items.filter(item => !(item.kind === 'module' && (item.moduleKey === 'admin-setup-manufacturing' || !MODULE_BY_KEY.has(item.moduleKey) || MODULE_BY_KEY.get(item.moduleKey)?.localOnly)))
   }
   const present = new Set(groups.flatMap((group) => group.items.flatMap((item) => item.kind === 'module' ? [item.moduleKey] : [])))
   for (const module of NAV_MODULES) {

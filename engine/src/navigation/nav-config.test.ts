@@ -138,3 +138,28 @@ test('supporting People destinations stay inside their modules for saved and def
   assert.deepEqual(saved, before)
   assert.deepEqual(reconcileNavConfig(result), result)
 })
+
+test('renamed destinations keep saved choices and unshipped destinations drop out', () => {
+  const saved: OrgNavConfig = { version: 2, groups: [{ id: 'customers', label: 'Customers', items: [
+    { kind: 'module', moduleKey: 'wip-billing', label: 'Billing review', hidden: true },
+    { kind: 'module', moduleKey: 'retired-destination' },
+  ] }] }
+  const result = reconcileNavConfig(saved)
+  const items = result.groups.flatMap((group) => group.items)
+  const keys = items.flatMap((item) => item.kind === 'module' ? [item.moduleKey] : [])
+  assert.ok(!keys.includes('wip-billing') && !keys.includes('retired-destination'), 'no destination outside the registry survives')
+  const preBilling = items.filter((item) => item.kind === 'module' && item.moduleKey === 'pre-billing')
+  assert.equal(preBilling.length, 1, 'the renamed destination appears once')
+  assert.equal(preBilling[0]!.label, 'Billing review')
+  assert.equal(preBilling[0]!.hidden, true)
+  assert.equal(keys.length, new Set(keys).size)
+  assert.deepEqual(reconcileNavConfig(result), result, 'reconciliation is idempotent')
+
+  const both: OrgNavConfig = { version: 2, groups: [{ id: 'customers', label: 'Customers', items: [
+    { kind: 'module', moduleKey: 'pre-billing', label: 'Current' },
+    { kind: 'module', moduleKey: 'wip-billing', label: 'Stale' },
+  ] }] }
+  const merged = reconcileNavConfig(both).groups.flatMap((group) => group.items)
+    .filter((item) => item.kind === 'module' && item.moduleKey === 'pre-billing')
+  assert.deepEqual(merged.map((item) => item.label), ['Current'], 'an already placed current key wins')
+})

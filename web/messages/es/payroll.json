@@ -1690,7 +1690,11 @@
       "chooseCurrency": "Elija la moneda confirmada por el informe original",
       "coverageComplete": "El informe original confirma la cobertura completa desde el inicio del ejercicio fiscal legal hasta la fecha final indicada para cada programa, jurisdicción y cuenta original del empleador aplicable, incluidos los importes cero explícitos.",
       "originalEin": "EIN federal original",
-      "addFuta": "Añadir asignación FUTA"
+      "addFuta": "Añadir asignación FUTA",
+      "correctSource": "Corregir el certificado de origen original",
+      "cancelCorrection": "Cancelar la corrección de origen",
+      "replaceCertificate": "Registrar certificado de reemplazo",
+      "correctionHelp": "Seleccione la evidencia exacta del archivador para la fuente original corregida y explique la corrección. El reemplazo conserva el empleador legal y todos los importes iniciales anuales y de detalle. La nómina comprometida debe completar primero su anulación gobernada. El reemplazo no está disponible si se ha emitido alguna declaración para este año, incluida una declaración cancelada posteriormente."
     },
     "reportingSource": {
       "retry": "Reintentar",

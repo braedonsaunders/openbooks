@@ -168,6 +168,8 @@
     "close-reopen-requests": "Reopen Requests",
     "intercompany": "Intercompany",
     "intercompany-netting": "Intercompany Netting",
+    "intercompany-transfers": "Intercompany Transfers",
+    "rebates": "Rebates",
     "amortization": "Amortization",
     "asset-proposals": "Asset Proposals",
     "asset-construction": "Construction in Progress",
@@ -239,7 +241,8 @@
     "me-views": "Me",
     "crm-sales": "Sales",
     "hrm-compensation": "Compensation",
-    "scheduling": "Scheduling"
+    "scheduling": "Scheduling",
+    "intercompany": "Intercompany"
   },
   "localWorkspaces": {
     "manufacturing": "Manufacturing",

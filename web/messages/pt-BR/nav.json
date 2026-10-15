@@ -168,6 +168,8 @@
     "close-reopen-requests": "Solicitações de reabertura",
     "intercompany": "Entre empresas",
     "intercompany-netting": "Compensação entre empresas",
+    "intercompany-transfers": "Transferências entre empresas",
+    "rebates": "Bonificações",
     "amortization": "Apropriação de despesas",
     "asset-proposals": "Propostas de Ativos",
     "asset-construction": "Imobilizado em Andamento",
@@ -228,7 +230,8 @@
     "me-views": "Eu",
     "crm-sales": "Vendas",
     "hrm-compensation": "Remuneração",
-    "scheduling": "Programação"
+    "scheduling": "Programação",
+    "intercompany": "Entre empresas"
   },
   "modulesShort": {
     "hrm-performance-cycles": "Gerenciar avaliações",

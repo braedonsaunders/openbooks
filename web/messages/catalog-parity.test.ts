@@ -4033,6 +4033,18 @@ function cognateScope(entry: string): string {
   return entry.slice(0, entry.indexOf('|'))
 }
 
+// Conversion, Source, Version, Page, Programme and Date are French words with the same spelling.
+COGNATES.add('fr:close.revaluationEvidence.conversion|Conversion')
+COGNATES.add('fr:close.revaluationEvidence.source|Source')
+COGNATES.add('fr:documents.explicitFx.source|Source')
+COGNATES.add('fr:hrm.sourceFirst.version|Version {number}')
+COGNATES.add('fr:hrm.sourceFirst.pdfPage|Page')
+COGNATES.add('fr:payroll.openingBalances.levySource.programme|Programme')
+COGNATES.add('fr:timesheets.additional.date|Date')
+COGNATES.add('fr:timesheets.additional.source|Source')
+// Version and Text are German words with the same spelling.
+COGNATES.add('de:hrm.sourceFirst.version|Version {number}')
+COGNATES.add('de:hrm.sourceFirst.pdfText|Text')
 const COGNATE_SCOPES = new Set([...COGNATES].map(cognateScope))
 
 function sample(list: string[], limit = 25): string {
