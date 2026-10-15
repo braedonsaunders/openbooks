@@ -5,6 +5,7 @@ import { lockActorCommandAuthority } from "../organization/actor-command-authori
 import { actorHasPermission } from "../organization/actor-permissions.ts";
 import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
+import { lockLedgerSetupFence } from "../organization/ledger-setup-fence.ts";
 import { isDocumentRevisionToken } from "../records/revision.ts";
 import { add, cmp, neg, normalizeMoney, sum } from "../money/money.ts";
 import { canonicalJson } from "./run-calculation-evidence.ts";
@@ -313,6 +314,7 @@ export async function rebuildPayRunGlProjection(input: {
   const { orgId, documentId, actorId } = input;
   return withOrgTransaction(orgId, async () => {
     const tx = db;
+    await lockLedgerSetupFence(tx, orgId, "shared");
     if (!(await lockAndCheckOrgFeature(tx, orgId, "payroll"))) throw new PayrollError("Payroll feature is disabled");
     const run = (await tx.execute<{
       run_status: string; doc_status: string; kind: string; subsidiary_id: string | null;
