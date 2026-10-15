@@ -128,9 +128,11 @@ export function WidgetCard({
       return <MetricTile icon={<Scale size={15} />} label={t('widgets.ledgerBalance')} value={money(data.ledgerSum, { currency: data.baseCurrency })} href="/journal" tone="slate" />
     case 'kpi-cash-balance':
       if (data.baseCurrency === null) return withoutCurrency(t('widgets.cashBalance'), <Landmark size={15} />, '/banking', 'emerald')
+      if (data.cashUnavailable) return <MetricTile icon={<Landmark size={15} />} label={t('widgets.cashBalance')} value="—" href="/banking" tone="emerald" hint={withAsOf(data.cashUnavailable)} />
       return <MetricTile icon={<Landmark size={15} />} label={t('widgets.cashBalance')} value={money(data.cashBalance, { currency: data.baseCurrency })} href="/banking" tone="emerald" hint={withAsOf(t('metricContext.baseCurrency', { currency: data.baseCurrency }))} />
     case 'kpi-open-receivables': {
       if (data.baseCurrency === null) return withoutCurrency(t('widgets.openReceivables'), <CircleDollarSign size={15} />, '/ar', 'sky')
+      if (data.receivablesUnavailable) return <MetricTile icon={<CircleDollarSign size={15} />} label={t('widgets.openReceivables')} value="—" href="/ar" tone="sky" hint={withAsOf(data.receivablesUnavailable)} />
       // The withAsOf(outstanding) shape below: a money tile
       // must state its cut-off. The DSO qualifier appends after it, never
       // in place of it.
@@ -139,9 +141,11 @@ export function WidgetCard({
     }
     case 'kpi-overdue-receivables':
       if (data.baseCurrency === null) return withoutCurrency(t('widgets.overdueReceivables'), <AlertTriangle size={15} />, '/ar', 'rose')
+      if (data.receivablesUnavailable) return <MetricTile icon={<AlertTriangle size={15} />} label={t('widgets.overdueReceivables')} value="—" href="/ar" tone="rose" hint={withAsOf(data.receivablesUnavailable)} />
       return <MetricTile icon={<AlertTriangle size={15} />} label={t('widgets.overdueReceivables')} value={money(data.overdueReceivables, { currency: data.baseCurrency })} href="/ar" tone="rose" hint={withAsOf(t('metricContext.pastDue'))} />
     case 'kpi-open-payables': {
       if (data.baseCurrency === null) return withoutCurrency(t('widgets.openPayables'), <Receipt size={15} />, '/ap', 'violet')
+      if (data.payablesUnavailable) return <MetricTile icon={<Receipt size={15} />} label={t('widgets.openPayables')} value="—" href="/ap" tone="violet" hint={withAsOf(data.payablesUnavailable)} />
       // The withAsOf(outstanding) shape below: a money tile
       // must state its cut-off. The DPO qualifier appends after it, never
       // in place of it.
@@ -150,11 +154,13 @@ export function WidgetCard({
     }
     case 'kpi-expected-receipts-30d':
       if (data.baseCurrency === null) return withoutCurrency(t('widgets.expectedReceipts'), <CalendarCheck size={15} />, '/ar', 'teal')
+      if (data.receivablesUnavailable) return <MetricTile icon={<CalendarCheck size={15} />} label={t('widgets.expectedReceipts')} value="—" href="/ar" tone="teal" hint={withAsOf(data.receivablesUnavailable)} />
       return data.expectedReceipts30d === null
         ? <MetricTile icon={<CalendarCheck size={15} />} label={t('widgets.expectedReceipts')} value="—" href="/ar" tone="teal" hint={withAsOf(t('metricContext.noData'))} />
         : <MetricTile icon={<CalendarCheck size={15} />} label={t('widgets.expectedReceipts')} value={money(data.expectedReceipts30d, { currency: data.baseCurrency })} href="/ar" tone="teal" hint={withAsOf(t('metricContext.next30Days'))} />
     case 'kpi-bills-due-30d':
       if (data.baseCurrency === null) return withoutCurrency(t('widgets.expectedPayments'), <CalendarClock size={15} />, '/ap', 'amber')
+      if (data.payablesUnavailable) return <MetricTile icon={<CalendarClock size={15} />} label={t('widgets.expectedPayments')} value="—" href="/ap" tone="amber" hint={withAsOf(data.payablesUnavailable)} />
       return data.expectedPayments30d === null
         ? <MetricTile icon={<CalendarClock size={15} />} label={t('widgets.expectedPayments')} value="—" href="/ap" tone="amber" hint={withAsOf(t('metricContext.noData'))} />
         : <MetricTile icon={<CalendarClock size={15} />} label={t('widgets.expectedPayments')} value={money(data.expectedPayments30d, { currency: data.baseCurrency })} href="/ap" tone="amber" hint={withAsOf(t('metricContext.next30Days'))} />
@@ -181,6 +187,7 @@ export function WidgetCard({
     }
     case 'kpi-overdue-payables':
       if (data.baseCurrency === null) return withoutCurrency(t('widgets.overduePayables'), <AlertTriangle size={15} />, '/ap', 'orange')
+      if (data.payablesUnavailable) return <MetricTile icon={<AlertTriangle size={15} />} label={t('widgets.overduePayables')} value="—" href="/ap" tone="orange" hint={withAsOf(data.payablesUnavailable)} />
       return <MetricTile icon={<AlertTriangle size={15} />} label={t('widgets.overduePayables')} value={money(data.overduePayables, { currency: data.baseCurrency })} href="/ap" tone="orange" hint={withAsOf(t('metricContext.pastDue'))} />
     case 'kpi-revenue-mtd': {
       // Consolidated P&L tiles label the currency the reader returned and
@@ -231,9 +238,9 @@ export function WidgetCard({
         : <MetricTile icon={<Percent size={15} />} label={t('widgets.grossMargin')} value={money(data.grossProfitMtd, { currency: marginCcy })} href="/reports/pnl" tone="slate" hint={withAsOf(hint)} />
     }
     case 'list-top-customers':
-      return <PartyBalanceList title={t('widgets.topCustomers')} icon={<Users size={14} />} href="/ar" parties={data.topCustomers ?? []} />
+      return <PartyBalanceList title={t('widgets.topCustomers')} icon={<Users size={14} />} href="/ar" parties={data.topCustomers ?? []} unavailable={data.receivablesUnavailable} />
     case 'list-top-vendors':
-      return <PartyBalanceList title={t('widgets.topVendors')} icon={<Store size={14} />} href="/ap" parties={data.topVendors ?? []} />
+      return <PartyBalanceList title={t('widgets.topVendors')} icon={<Store size={14} />} href="/ap" parties={data.topVendors ?? []} unavailable={data.payablesUnavailable} />
     case 'kpi-items-to-reconcile':
       return (
         <MetricTile
@@ -583,21 +590,33 @@ function PendingApprovalsList({
 
 /**
  * Top balances by party — the same rollup rows the AR/AP cockpits list.
- * An empty book renders the empty card, never a zero row.
+ * An empty book renders the empty card, never a zero row; a refused read
+ * names its reason instead of reading as an empty book.
  */
 function PartyBalanceList({
   title,
   icon,
   href,
   parties,
+  unavailable,
 }: {
   title: string
   icon: React.ReactNode
   href: string
   parties: Array<{ partyId: string | null; partyName: string; amount: string; count: number; overdue: string }>
+  unavailable: string | null
 }) {
   const { money } = useMoney()
   const t = useTranslations('dashboard')
+  if (unavailable) {
+    return (
+      <CardShell title={title} icon={icon} href={href}>
+        <div className="flex h-full flex-col items-center justify-center gap-1 px-4 py-6 text-center">
+          <span className="text-sm text-slate-500 dark:text-slate-400">{unavailable}</span>
+        </div>
+      </CardShell>
+    )
+  }
   if (parties.length === 0) {
     return (
       <CardShell title={title} icon={icon}>

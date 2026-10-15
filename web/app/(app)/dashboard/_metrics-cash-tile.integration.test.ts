@@ -247,3 +247,36 @@ test("dashboard cash tile disagrees with the legacy reader correctly", { skip: !
     await withBypass(() => dropScratchOrg(org.orgId));
   }
 });
+
+test("a missing exchange rate refuses the cash tile by name without failing the dashboard", { skip: !DB }, async () => {
+  const org = await withBypass(() => createScratchOrg());
+  try {
+    await withBypass(async () => {
+      await db.execute(sql`insert into currencies (code, name, minor_units) values ('USD', 'US Dollar', 2) on conflict (code) do nothing`);
+      await db.execute(sql`insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
+        values (${randomUUID()}, ${org.orgId}, ${org.subsidiaryId}, 'US Co', 'USD', 'US')`);
+    });
+    await withBypass(async () => {
+      const usSub = (await db.execute<{ id: string }>(sql`select id from subsidiaries where org_id = ${org.orgId} and name = 'US Co'`)).rows[0]!.id;
+      await db.execute(sql`insert into accounts (id, org_id, number, name, type, subsidiary_id, is_summary, is_active)
+        values (${randomUUID()}, ${org.orgId}, '1010', 'USD Cash', 'asset_bank', ${usSub}, false, true)`);
+    });
+    await withBypass(async () => {
+      const usSub = (await db.execute<{ id: string }>(sql`select id from subsidiaries where org_id = ${org.orgId} and name = 'US Co'`)).rows[0]!.id;
+      const usdBank = (await db.execute<{ id: string }>(sql`select id from accounts where org_id = ${org.orgId} and number = '1010'`)).rows[0]!.id;
+      // No USD→CAD rate exists, so the USD leg cannot be translated.
+      await postBank(org, { sub: usSub, account: usdBank, amount: "100.0000", currency: "USD", label: "usd-unrated" });
+    });
+    const actor = await withBypass(() => createScratchUser(org.orgId, "Cash Reader", "admin"));
+    await pinClock(TODAY, async () => {
+      await withOrgContext(org.orgId, async () => {
+        const metrics = await loadDashboardMetrics(authzFor(org.orgId, actor, null), ["kpi-cash-balance", "kpi-ledger-balance"]);
+        assert.match(metrics.cashUnavailable ?? "", /USD→CAD/, "the tile names the missing rate");
+        assert.match(metrics.cashUnavailable ?? "", /Setup → Exchange Rates/, "the tile names the remedy");
+        assert.equal(metrics.baseCurrency, "CAD", "the rest of the dashboard still loads");
+      });
+    });
+  } finally {
+    await withBypass(() => dropScratchOrg(org.orgId));
+  }
+});

@@ -167,6 +167,22 @@ const canonicalMoneyReaders: DashboardMoneyReaders = {
   },
 }
 
+/** A side read whose missing exchange-rate coverage refuses by name. */
+type FxRefusableRead<T> = { rows: T[]; refusal: string | null }
+const FX_READ_NONE: FxRefusableRead<never> = { rows: [], refusal: null }
+
+/** Maps a missing exchange rate to the side's named refusal; anything else
+ * still throws. */
+function fxRefusable<T>(read: Promise<T[]>): Promise<FxRefusableRead<T>> {
+  return read.then(
+    (rows) => ({ rows, refusal: null }),
+    (error: unknown) => {
+      if (error instanceof MissingExchangeRateError) return { rows: [] as T[], refusal: error.message }
+      throw error
+    },
+  )
+}
+
 export type DashboardMetrics = {
   /**
    * Org base currency labelling the cash/AR/AP/runway tiles. Null only when
@@ -266,6 +282,15 @@ export type DashboardMetrics = {
    * reads as a healthy figure.
    */
   runwayRefused: string[]
+  /**
+   * Named refusals when a missing exchange rate blocks translating the cash,
+   * receivable or payable side into the base currency. The side's figures
+   * are then not authoritative: its tiles render this reason by name, never
+   * a partial sum or an empty list.
+   */
+  cashUnavailable: string | null
+  receivablesUnavailable: string | null
+  payablesUnavailable: string | null
   /** Unmatched bank statement lines awaiting reconciliation. A count, never
    * money — there is no currency to mix, by construction. */
   unreconciledItems: number
@@ -526,10 +551,10 @@ async function readDashboardMetrics(
   const recentEntryScope = subsidiaryVisibleFilter(sql`e.subsidiary_id`, authz.allowedSubsidiaryIds)
   const draftDocumentScope = subsidiaryVisibleFilter(sql`d.subsidiary_id`, authz.allowedSubsidiaryIds)
   const wantTotals = need('journalLineCount', 'accountCount', 'entriesToday', 'ledgerSum')
-  const wantCash = need('cashBalance')
+  const wantCash = need('cashBalance', 'cashUnavailable')
   const wantMoney = need('baseCurrency')
-  const wantAr = need('openReceivables', 'overdueReceivables', 'expectedReceipts30d', 'receivablesDso', 'topCustomers')
-  const wantAp = need('openPayables', 'overduePayables', 'expectedPayments30d', 'payablesDpo', 'topVendors')
+  const wantAr = need('openReceivables', 'overdueReceivables', 'expectedReceipts30d', 'receivablesDso', 'topCustomers', 'receivablesUnavailable')
+  const wantAp = need('openPayables', 'overduePayables', 'expectedPayments30d', 'payablesDpo', 'topVendors', 'payablesUnavailable')
   const wantPl = need('revenueMtd', 'expensesMtd', 'netIncomeMtd', 'grossProfitMtd', 'grossMarginMtd')
   const wantArStats = need('expectedReceipts30d', 'receivablesDso')
   const wantApStats = need('expectedPayments30d', 'payablesDpo')
@@ -577,7 +602,7 @@ async function readDashboardMetrics(
     cashPosition: cashPositionOnce,
   }
   const wantExpected = need('expectedReceipts30d', 'expectedPayments30d')
-  const [totals, banks, baseCurrency, arItems, apItems, recon, expenses, closeReadiness, arStats, apStats, pl, runway, recentEntries, draftDocuments, unifiedApprovals, agentFindings, resourcingPulse, expectedModel, persona, financial, cash, customers, vendors, projects, risk] = await Promise.all([
+  const [totals, bankRead, baseCurrency, arRead, apRead, recon, expenses, closeReadiness, arStats, apStats, pl, runway, recentEntries, draftDocuments, unifiedApprovals, agentFindings, resourcingPulse, expectedModel, persona, financial, cash, customers, vendors, projects, risk] = await Promise.all([
     // Posted-ledger line count and integrity sum come from the maintained
     // gl_month_activity aggregate — counting/summing the raw lines scanned the
     // whole ledger on every dashboard render.
@@ -597,7 +622,7 @@ async function readDashboardMetrics(
     // closing spot; the previous org-wide asset_bank sum counted those
     // accounts and added mixed functionals raw (F-u1-P4). Missing FX coverage
     // fails closed inside (the hub contract), never a silently mixed tile.
-    wantCash ? readers.bankBalances(today, subIds, orgId) : Promise.resolve([]),
+    wantCash ? fxRefusable(readers.bankBalances(today, subIds, orgId)) : Promise.resolve(FX_READ_NONE),
     // No fabricated default and no swallowed failure: base_currency is NOT
     // NULL, so a read failure is a real defect that throws — null means the
     // base was never requested for this layout, and only then do the tiles
@@ -607,8 +632,8 @@ async function readDashboardMetrics(
     // the /ar and /ap hubs and the aging report — so same-labeled figures tie
     // by construction. Missing FX coverage fails closed inside (the hub
     // contract), never a silently undercounted tile.
-    wantAr ? readers.openItems(orgId, 'ar', today, subIds) : Promise.resolve([]),
-    wantAp ? readers.openItems(orgId, 'ap', today, subIds) : Promise.resolve([]),
+    wantAr ? fxRefusable(readers.openItems(orgId, 'ar', today, subIds)) : Promise.resolve(FX_READ_NONE),
+    wantAp ? fxRefusable(readers.openItems(orgId, 'ap', today, subIds)) : Promise.resolve(FX_READ_NONE),
     // Gated inside on banking.read (null with no query for denied callers),
     // and on the visible widget set — a layout without the tile never runs
     // the reader at all.
@@ -810,6 +835,9 @@ async function readDashboardMetrics(
     loadRiskWidgetMetrics(widgetContext, need),
   ])
 
+  const banks = bankRead.rows
+  const arItems = arRead.rows
+  const apItems = apRead.rows
   const t = totals.rows[0]!
   // Hub KPI arithmetic, exactly as arPosition/apPosition derive it from the
   // same items: outstanding minus the Current bucket (null/future due),
@@ -943,6 +971,9 @@ async function readDashboardMetrics(
     lowestCash: runway?.lowest ?? null,
     lowestCashWeek: runway?.lowestWeek ?? null,
     runwayRefusal: runway?.refusal ?? null,
+    cashUnavailable: bankRead.refusal,
+    receivablesUnavailable: arRead.refusal,
+    payablesUnavailable: apRead.refusal,
     runwayRefused: runway?.refused ?? [],
     unreconciledItems: recon?.unreconciledItems ?? 0,
     pendingExpenses: expenses?.pendingExpenses ?? 0,
@@ -996,19 +1027,19 @@ const WIDGET_METRIC_FIELDS: Record<string, readonly (keyof DashboardMetrics)[]> 
   'kpi-pending-approvals': ['pendingApprovals'],
   'kpi-agent-findings': ['agentFindingsOpen', 'agentFindingsProposals', 'agentFindingsLastRun'],
   'kpi-ledger-balance': ['baseCurrency', 'ledgerSum'],
-  'kpi-cash-balance': ['baseCurrency', 'cashBalance', 'asOfDate'],
-  'kpi-open-receivables': ['baseCurrency', 'openReceivables', 'receivablesDso', 'asOfDate'],
-  'kpi-overdue-receivables': ['baseCurrency', 'overdueReceivables', 'asOfDate'],
-  'kpi-open-payables': ['baseCurrency', 'openPayables', 'payablesDpo', 'asOfDate'],
-  'kpi-overdue-payables': ['baseCurrency', 'overduePayables', 'asOfDate'],
+  'kpi-cash-balance': ['baseCurrency', 'cashBalance', 'cashUnavailable', 'asOfDate'],
+  'kpi-open-receivables': ['baseCurrency', 'openReceivables', 'receivablesDso', 'receivablesUnavailable', 'asOfDate'],
+  'kpi-overdue-receivables': ['baseCurrency', 'overdueReceivables', 'receivablesUnavailable', 'asOfDate'],
+  'kpi-open-payables': ['baseCurrency', 'openPayables', 'payablesDpo', 'payablesUnavailable', 'asOfDate'],
+  'kpi-overdue-payables': ['baseCurrency', 'overduePayables', 'payablesUnavailable', 'asOfDate'],
   'kpi-revenue-mtd': ['plCurrency', 'plPeriodLabel', 'plScopeLabel', 'plUnavailable', 'revenueMtd', 'asOfDate'],
   'kpi-expenses-mtd': ['plCurrency', 'plPeriodLabel', 'plScopeLabel', 'plUnavailable', 'expensesMtd', 'asOfDate'],
   'kpi-net-income-mtd': ['plCurrency', 'plPeriodLabel', 'plScopeLabel', 'plUnavailable', 'netIncomeMtd', 'asOfDate'],
   'kpi-gross-margin-mtd': ['plCurrency', 'plPeriodLabel', 'plScopeLabel', 'plUnavailable', 'grossProfitMtd', 'grossMarginMtd', 'asOfDate'],
-  'kpi-expected-receipts-30d': ['baseCurrency', 'expectedReceipts30d', 'asOfDate'],
-  'kpi-bills-due-30d': ['baseCurrency', 'expectedPayments30d', 'asOfDate'],
-  'list-top-customers': ['topCustomers'],
-  'list-top-vendors': ['topVendors'],
+  'kpi-expected-receipts-30d': ['baseCurrency', 'expectedReceipts30d', 'receivablesUnavailable', 'asOfDate'],
+  'kpi-bills-due-30d': ['baseCurrency', 'expectedPayments30d', 'payablesUnavailable', 'asOfDate'],
+  'list-top-customers': ['topCustomers', 'receivablesUnavailable'],
+  'list-top-vendors': ['topVendors', 'payablesUnavailable'],
   'kpi-cash-runway': ['baseCurrency', 'runwayWeeks', 'runwayStatus', 'projectedCash', 'lowestCash', 'lowestCashWeek', 'runwayRefusal', 'runwayRefused', 'asOfDate'],
   'kpi-items-to-reconcile': ['unreconciledItems'],
   'kpi-expenses-awaiting-approval': ['pendingExpenses'],
@@ -1129,6 +1160,9 @@ const EMPTY_METRICS: DashboardMetrics = {
   lowestCashWeek: null,
   runwayRefusal: null,
   runwayRefused: [],
+  cashUnavailable: null,
+  receivablesUnavailable: null,
+  payablesUnavailable: null,
   unreconciledItems: 0,
   pendingExpenses: 0,
   closeRuns: [],
