@@ -23,7 +23,7 @@ const labels: BalanceSheetLabels = {
 }
 
 async function fixture() {
-  const org = await createScratchOrg()
+  const org = await withBypassContext(() => createScratchOrg())
   const setup = await withBypassContext(async () => {
     const actors = await seedFlowActors(org.orgId)
     const equity = await seedPostingAccount(org.orgId, '3100', 'Share capital', 'equity')
@@ -144,7 +144,7 @@ test('account columns round only after exact fourteen-place products from ordina
     await f.apply({ ...instruction, kind: 'opening', layers: [instruction.layers[0]!, { ...instruction.layers[0]! }] })
     const matrix = await f.matrix()
     assert.deepEqual(matrix.rows.find(row => row.id === f.equity)?.values, ['0.0002'])
-    const other = await createScratchOrg()
+    const other = await withBypassContext(() => createScratchOrg())
     try {
       await assert.rejects(withOrgTransaction(other.orgId, () => readHistoricalTranslationContribution(db, {
         orgId: other.orgId, sourceLineId: opening.lineId, presentationCurrency: 'USD' })), /not found/i)

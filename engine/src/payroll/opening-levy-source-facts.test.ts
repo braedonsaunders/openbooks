@@ -24,3 +24,27 @@ test('fiscal original coverage follows the declared UK opening-year and Australi
   assert.throws(() => validateOpeningLevySourceFacts({ ...au, coverageStart: '2026-07-01', coverageEnd: '2026-07-02' }, 2026, PAYROLL_COUNTRY_PACKS.AU), /complete year-to-date/);
   assert.throws(() => validateOpeningLevySourceFacts({ ...au, coverageStart: '2026-01-01' }, 2026, PAYROLL_COUNTRY_PACKS.AU), /complete year-to-date/);
 });
+
+test('opening allocation policies retain country-specific scope and explicit zero coverage', async () => {
+  const canadian = PAYROLL_COUNTRY_PACKS.CA!.openingLevySource!;
+  const us = PAYROLL_COUNTRY_PACKS.US!.openingLevySource!;
+  assert.equal(PAYROLL_COUNTRY_PACKS.GB!.openingLevySource, undefined);
+  assert.throws(() => canadian.validateRequired([]), /original WCB/);
+  assert.throws(() => us.validateRequired([]), /FUTA/);
+  assert.throws(() => canadian.validateRequired([{ programKey: 'us_futa', region: 'US' }]), /cannot contain/);
+  assert.throws(() => us.validateRequired([{ programKey: 'ca_wcb', region: 'ON' }]), /cannot contain/);
+  const base = { subRegion: '', filingAccountId: null, federalAccountId: null };
+  assert.equal(canadian.validateScope({ ...base, programKey: 'ca_cnt', region: 'QC' }), true);
+  assert.equal(canadian.validateScope({ ...base, programKey: 'ca_cnt', region: 'ON' }), false);
+  assert.equal(canadian.validateScope({ ...base, programKey: 'ca_eht', region: 'AB' }), false);
+  assert.equal(canadian.validateScope({ ...base, programKey: 'ca_wcb', region: 'YT' }), true);
+  assert.equal(us.validateScope({ ...base, programKey: 'us_sui', region: 'WA', federalAccountId: 'original-ein' }), true);
+  assert.equal(us.validateScope({ ...base, programKey: 'us_sui', region: 'ON', federalAccountId: 'original-ein' }), false);
+  assert.throws(() => us.validateScope({ ...base, programKey: 'us_futa', region: 'US' }), /original federal EIN/);
+  const opening = { employeePartyId: 'employee', taxYear: 2026, wcbAssessableYtd: '10.0001', ehtRemunerationYtd: '20.0002', insurableYtd: '0' };
+  const allocations = [{ ...base, programKey: 'ca_wcb', region: 'ON', amount: '10.0001' },
+    { ...base, programKey: 'ca_eht', region: 'ON', amount: '20.0002' }];
+  await canadian.validateOpening({ orgId: 'org', subsidiaryId: 'employer', opening, allocations });
+  await assert.rejects(canadian.validateOpening({ orgId: 'org', subsidiaryId: 'employer', opening,
+    allocations: [{ ...allocations[0]!, amount: '10' }, allocations[1]!] }), /assessable opening/);
+});
