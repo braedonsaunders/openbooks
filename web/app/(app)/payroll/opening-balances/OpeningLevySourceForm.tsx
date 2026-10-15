@@ -194,7 +194,7 @@ function OpeningLevySourceBody({ employeePartyId, year, openingAmounts, canManag
     {record && !sourceReady && <Alert variant="warning"><AlertDescription>{t('qualifyEmployerFirst')}</AlertDescription></Alert>}
     {record?.levyAuthorityId && context && !correcting && <>
       <Alert><AlertDescription>{t('sealed')}</AlertDescription></Alert>
-      
+
         <Table className="w-full text-sm"><TableHeader><TableRow className="text-left"><TableHead scope="col" className="p-2">{t('programme')}</TableHead><TableHead scope="col" className="p-2">{t('jurisdiction')}</TableHead><TableHead scope="col" className="p-2">{t('filingAccount')}</TableHead><TableHead scope="col" className="p-2">{t('originalEin')}</TableHead><TableHead scope="col" className="p-2 text-right">{t('amount')}</TableHead></TableRow></TableHeader>
           <TableBody>{context.allocations.map((row, index) => <TableRow key={index} className="border-t border-slate-100 dark:border-slate-800">
             <TableCell className="p-2">{t(`programmes.${row.programKey}`)}</TableCell><TableCell className="p-2">{row.region}{row.subRegion ? ` · ${row.subRegion}` : ''}</TableCell>
