@@ -236,7 +236,7 @@ export async function payRunGlLegs(
     const frozenExpenseAccount = (line: Record<string, string | null>): string => {
       const stamped = line.line_expense_account_id;
       const committed = stamped ?? frozen!.expenseAccountByCoding.get(
-        payRunGlCodingKey(line.component_id, line.department_id, line.project_id));
+        payRunGlCodingKey(line.component_id ?? null, line.department_id ?? null, line.project_id ?? null));
       if (!committed) {
         throw new PayrollError(`the committed projection has no unique expense account for "${line.description ?? "payroll line"}" — its accounting basis cannot be rebuilt from committed records`);
       }
@@ -350,7 +350,7 @@ export async function payRunGlLegs(
         employeePartyId: line.employee_party_id, timeTypeId: line.time_type_id, itemId: line.item_id,
       };
       const expenseAccountType = (accountId: string): string | null =>
-        frozen ? frozenAccountTypes.get(accountId) ?? null : line.expense_account_type;
+        frozen ? frozenAccountTypes.get(accountId) ?? null : line.expense_account_type ?? null;
       if (line.kind === "earning") {
         if (line.payment_kind === "non_cash") {
           if (!line.non_cash_account_id) throw new PayrollError(`non-cash earning "${line.description}" has no calculated clearing account — recalculate the editable run after configuring its non-cash account`);
@@ -385,7 +385,7 @@ export async function payRunGlLegs(
             });
           } else if (relief) {
             const fromAccountId = line.line_expense_account_id ?? frozen!.expenseAccountByCoding.get(
-              payRunGlCodingKey(line.component_id, line.department_id, line.project_id)) ?? null;
+              payRunGlCodingKey(line.component_id ?? null, line.department_id ?? null, line.project_id ?? null)) ?? null;
             accumulate(relief.accountId, amount, line.description ?? "Entitlement payout", "entitlement_relief", {
               projectId: line.project_id, departmentId: line.department_id,
               payrollExpense: false, payComponentId: line.component_id, ...identity,
