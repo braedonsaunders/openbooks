@@ -338,7 +338,11 @@
       "entityTarget": "Entité juridique",
       "voidRun": "Annuler la paie",
       "voidTitle": "Annuler la paie {number} ?",
-      "voided": "{number} a été annulée et son écriture contrepassée."
+      "voided": "{number} a été annulée et son écriture contrepassée.",
+      "settlementSettleTo": "Régler sur",
+      "settlementBank": "Compte bancaire",
+      "settlementClearing": "Compte de compensation désigné",
+      "settlementPaidOn": "Date du paiement"
     },
     "adjust": {
       "title": "Ajustements",
@@ -1211,6 +1215,17 @@
         "day": "Jour {n}",
         "weekDay": "Semaine {week} · {day}"
       }
+    },
+    "netPayClearing": {
+      "title": "Compte de compensation du salaire net",
+      "description": "Un compte de compensation dans lequel le salaire net d'une paie peut être réglé au lieu d'un compte bancaire, pour les dates indiquées. L'employeur paie ensuite les chèques individuels à partir de ce compte. Une période déjà utilisée par un paiement ne peut qu'être close.",
+      "account": "Compte de compensation",
+      "from": "Du",
+      "to": "Au (facultatif)",
+      "reason": "Motif",
+      "add": "Ajouter un compte de compensation",
+      "remove": "Retirer",
+      "none": "Aucun compte de compensation désigné. Le salaire net est réglé sur un compte bancaire."
     }
   },
   "remittances": {

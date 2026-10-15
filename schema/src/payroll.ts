@@ -693,10 +693,11 @@ export const payStubLines = pgTable(
     /** Snapshot at calculate: the account this earning line was costed to.
      * Posting debits this, never the component's or item's current setup.
      * Resolution is item > department mapping > component > org default;
-     * see migrations 0180 and 0485. */
+     * a line settling an entitlement bank posts to the plan's liability
+     * account instead. See migrations 0180, 0489 and 0730. */
     expenseAccountId: uuid("expense_account_id"),
     expenseAccountSource: text("expense_account_source", {
-      enum: ["unknown", "item", "component", "department", "org_default"],
+      enum: ["unknown", "item", "component", "department", "org_default", "entitlement_plan"],
     }).notNull().default("unknown"),
     expenseAccountEvidence: jsonb("expense_account_evidence").$type<{ reason: string; reference: string }>(),
     /** Effective-date-resolved pack reporting code, snapshotted at payroll calculation. */
@@ -768,7 +769,7 @@ export const payStubLines = pgTable(
     index("pay_stub_lines_item").on(t.orgId, t.itemId),
     check("pay_stub_lines_expense_account_evidence", sql`
       (${t.expenseAccountSource} = 'unknown' and ${t.expenseAccountId} is null and ${t.expenseAccountEvidence} is null) or
-      (${t.expenseAccountSource} in ('item', 'component', 'org_default') and ${t.expenseAccountId} is not null and ${t.expenseAccountEvidence} is not null
+      (${t.expenseAccountSource} in ('item', 'component', 'department', 'org_default', 'entitlement_plan') and ${t.expenseAccountId} is not null and ${t.expenseAccountEvidence} is not null
         and jsonb_typeof(${t.expenseAccountEvidence}) = 'object'
         and coalesce(jsonb_typeof(${t.expenseAccountEvidence}->'reason') = 'string',false)
         and coalesce(jsonb_typeof(${t.expenseAccountEvidence}->'reference') = 'string',false)

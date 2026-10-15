@@ -48,6 +48,11 @@ export interface KernelLine {
   /** Expense-only payroll source identity, preserved through aggregation for rule matching. */
   payrollExpense?: boolean;
   payComponentId?: string | null;
+  /** Payroll source identity of the stub line behind an expense leg, kept
+   * apart from partyId so it never creates open items or subledger balances. */
+  payrollEmployeePartyId?: string | null;
+  payrollTimeTypeId?: string | null;
+  payrollItemId?: string | null;
   quantity?: string | null;
   unit?: string | null;
   eliminate?: boolean;

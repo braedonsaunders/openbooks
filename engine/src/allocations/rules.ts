@@ -793,6 +793,10 @@ function checkedDimensionFilters(value: unknown): DimensionFilters {
   if (itemIds !== undefined) out.itemIds = itemIds;
   const payComponentIds = idList("payComponentIds");
   if (payComponentIds !== undefined) out.payComponentIds = payComponentIds;
+  const payrollEmployeeIds = idList("payrollEmployeeIds");
+  if (payrollEmployeeIds !== undefined) out.payrollEmployeeIds = payrollEmployeeIds;
+  const timeTypeIds = idList("timeTypeIds");
+  if (timeTypeIds !== undefined) out.timeTypeIds = timeTypeIds;
   if (value["payrollExpensesOnly"] !== undefined) {
     if (typeof value["payrollExpensesOnly"] !== "boolean") throw new AllocationRuleError("INVALID", "dimensionFilters.payrollExpensesOnly must be a boolean");
     out.payrollExpensesOnly = value["payrollExpensesOnly"];
@@ -1214,8 +1218,9 @@ export async function publishVersion(
       throw new AllocationRuleError("FROZEN", `version ${id} is retired and cannot publish`);
     }
     const targets = await loadTargets(orgId, id);
-    if (version.dimensionFilters.payComponentIds?.length && !version.dimensionFilters.payrollExpensesOnly) {
-      throw new AllocationRuleError("INVALID", "Pay component filters require payroll expense scope — create the rule from Payroll setup → Expense allocations before publishing.");
+    if ((version.dimensionFilters.payComponentIds?.length || version.dimensionFilters.payrollEmployeeIds?.length
+         || version.dimensionFilters.timeTypeIds?.length) && !version.dimensionFilters.payrollExpensesOnly) {
+      throw new AllocationRuleError("INVALID", "Pay component, employee and time type filters require payroll expense scope — create the rule from Payroll setup → Expense allocations before publishing.");
     }
     if (version.dimensionFilters.payrollExpensesOnly) {
       if (!(await lockAndCheckOrgFeature(db, orgId, "payroll"))) throw new AllocationRuleError("INVALID", "Payroll is disabled — enable it in Company Settings → Features before publishing payroll expense allocations.");
@@ -1231,6 +1236,16 @@ export async function publishVersion(
       if (componentIds.length) {
         const components = (await db.execute<{ id: string }>(sql`select id from pay_components where org_id = ${orgId} and is_active and kind in ('earning', 'employer_contribution') and id = any(${`{${componentIds.join(",")}}`}::uuid[])`)).rows;
         if (new Set(componentIds).size !== components.length) throw new AllocationRuleError("INVALID", "A selected pay component is missing, inactive, or does not create payroll expense — choose active earnings or employer contributions before publishing.");
+      }
+      const employeeIds = version.dimensionFilters.payrollEmployeeIds ?? [];
+      if (employeeIds.length) {
+        const employees = (await db.execute<{ id: string }>(sql`select distinct party_id::text as id from employee_roles where org_id = ${orgId} and party_id = any(${`{${employeeIds.join(",")}}`}::uuid[])`)).rows;
+        if (new Set(employeeIds).size !== employees.length) throw new AllocationRuleError("INVALID", "A selected employee is not an employee of this organization — choose employees from the people directory before publishing.");
+      }
+      const timeTypeIds = version.dimensionFilters.timeTypeIds ?? [];
+      if (timeTypeIds.length) {
+        const timeTypes = (await db.execute<{ id: string }>(sql`select id::text as id from time_types where org_id = ${orgId} and id = any(${`{${timeTypeIds.join(",")}}`}::uuid[])`)).rows;
+        if (new Set(timeTypeIds).size !== timeTypes.length) throw new AllocationRuleError("INVALID", "A selected time type does not belong to this organization — choose time types from Time setup before publishing.");
       }
     }
     assertRuleVisible(input.allowedSubsidiaryIds, version, targets.map((t) => t.subsidiaryId));

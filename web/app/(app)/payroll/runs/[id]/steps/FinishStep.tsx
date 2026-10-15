@@ -3,7 +3,7 @@
 /** Split from RunWizard.tsx; moved without behavior changes. */
 import { type Funding, type RunHeader, type RemittanceRow } from '../run-wizard-model'
 import { FundingPanel } from '../FundingPanel'
-import { AttributeEntityControl, RecordPaymentControl } from '../run-wizard-controls'
+import { AttributeEntityControl, RecordPaymentControl, type ClearingDesignationOption, type RecordPaymentInput } from '../run-wizard-controls'
 import { useState } from 'react'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
@@ -94,6 +94,7 @@ export function FinishStep({
   onVoid,
   registerReportId,
   bankAccounts,
+  clearingDesignations,
   entityOptions,
   canAttributeEntity,
   funding,
@@ -110,12 +111,13 @@ export function FinishStep({
   busy: boolean
   onPost: () => void
   onEmailStubs: () => void
-  onRecordPayment: (bankAccountId: string) => void
+  onRecordPayment: (input: RecordPaymentInput) => void
   onAttributeEntity: (subsidiaryId: string) => void
   /** Void the committed run: reverses its posting by the document void path. */
   onVoid: () => void
   registerReportId: string | null
   bankAccounts: { id: string; label: string }[]
+  clearingDesignations: ClearingDesignationOption[]
   entityOptions: { id: string; label: string }[]
   canAttributeEntity: boolean
   funding: Funding
@@ -182,6 +184,8 @@ export function FinishStep({
           {posted && !run.paid_at && canRun && (
             <RecordPaymentControl
               bankAccounts={bankAccounts}
+              clearingDesignations={clearingDesignations}
+              payDate={run.pay_date}
               busy={busy}
               onRecord={onRecordPayment}
             />

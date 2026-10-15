@@ -526,6 +526,9 @@ export const RULES: Record<string, RuleFn> = {
         partyId,
         payrollExpense: payrollSource?.["payrollExpense"] === true,
         payComponentId: typeof payrollSource?.["payComponentId"] === "string" ? payrollSource["payComponentId"] : null,
+        payrollEmployeePartyId: typeof payrollSource?.["employeePartyId"] === "string" ? payrollSource["employeePartyId"] : null,
+        payrollTimeTypeId: typeof payrollSource?.["timeTypeId"] === "string" ? payrollSource["timeTypeId"] : null,
+        payrollItemId: typeof payrollSource?.["itemId"] === "string" ? payrollSource["itemId"] : null,
         // commitPayRun puts a party ONLY on the per-employee net-pay legs —
         // those are open items by construction (settled by the payment
         // journal), regardless of the payable account's configured type.

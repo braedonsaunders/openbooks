@@ -65,8 +65,9 @@ export async function applyBankDrawdown(
   }
   if (settling.size === 0) return;
   // Net settlement per plan in the plan's unit; the last contributing stub
-  // line carries the movement's evidence link.
-  const nets = new Map<string, { plan: EntitlementPlan; net: string; line: Line }>();
+  // line carries the movement's evidence link, and every contributing line
+  // is marked as settling the plan so it posts to the plan's liability.
+  const nets = new Map<string, { plan: EntitlementPlan; net: string; line: Line; lines: Line[] }>();
   for (const line of lines) {
     if (line.kind !== "earning" || line.componentId === null) continue;
     if (line.fundedByEntitlementBank === false) continue;
@@ -100,10 +101,12 @@ export async function applyBankDrawdown(
       plan: entry.plan,
       net: current ? add(current.net, value) : value,
       line,
+      lines: [...(current?.lines ?? []), line],
     });
   }
-  for (const { plan, net } of nets.values()) {
+  for (const { plan, net, lines: settlingLines } of nets.values()) {
     if (cmp(net, "0") === 0) continue;
+    for (const settlingLine of settlingLines) settlingLine.entitlementSettlementPlanId = plan.id;
     const inRun = entitlementMovements
       .filter((movement) => movement.planId === plan.id)
       .reduce((total, movement) => add(total, movement.amount), "0");

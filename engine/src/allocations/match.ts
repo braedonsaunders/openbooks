@@ -38,6 +38,8 @@ const DIMENSION_ID_KEYS = [
   "partyIds",
   "itemIds",
   "payComponentIds",
+  "payrollEmployeeIds",
+  "timeTypeIds",
 ] as const;
 
 type DimensionIdKey = (typeof DIMENSION_ID_KEYS)[number];
@@ -60,6 +62,10 @@ function lineValueFor(line: LineCoordinate, key: DimensionIdKey): string | null 
       return line.itemId;
     case "payComponentIds":
       return line.payComponentId;
+    case "payrollEmployeeIds":
+      return line.payrollEmployeeId;
+    case "timeTypeIds":
+      return line.timeTypeId;
   }
 }
 

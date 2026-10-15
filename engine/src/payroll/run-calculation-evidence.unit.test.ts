@@ -431,3 +431,27 @@ test('issued employer premiums retain positive cents, source ownership and their
   assert.notEqual(payRunCalculationSourceDigest(current),
     payRunCalculationSourceDigest({ ...current, employerLevyAdjustments: [{ ...input, sourceKey: 'export:levy:002' }] }));
 })
+
+test("treatment evidence captured before vacation eligibility stays readable and stales against a current capture", () => {
+  const treatment = { id: "0190d4c2-0000-7000-8000-000000000001", componentId: "0190d4c2-0000-7000-8000-000000000002",
+    workerCompGroupId: null, employeeWorkerCompGroupId: null, effectiveFrom: "2026-01-01", effectiveTo: null, programExclusions: ["eht"] };
+  const legacy = { ...snapshot(), payComponentStatutoryTreatments: [treatment] };
+  assert.deepEqual(parsePayRunCalculationSource(legacy), legacy, "a retained snapshot is read exactly as captured");
+  for (const vacationable of [null, "true", 1]) {
+    assert.equal(parsePayRunCalculationSource({ ...snapshot(), payComponentStatutoryTreatments: [{ ...treatment, vacationable }] }), null, String(vacationable));
+  }
+  const current = { ...snapshot(), payComponentStatutoryTreatments: [{ ...treatment, vacationable: false }] };
+  assert.deepEqual(parsePayRunCalculationSource(current), current);
+  assert.equal(payRunCalculationSourceChanges(legacy, current).components, true, "legacy evidence is never treated as matching a captured eligibility");
+});
+
+test("entitlement settlement accounts are optional evidence that stale a run when re-pointed", () => {
+  const plan = { planId: "0190d4c2-0000-7000-8000-000000000003", planActive: true,
+    liabilityAccountId: "0190d4c2-0000-7000-8000-000000000004", accrualComponentId: null, accrualLiabilityAccountId: null };
+  const calculated = { ...snapshot(), entitlementSettlementPlans: [plan] };
+  assert.deepEqual(parsePayRunCalculationSource(calculated), calculated);
+  assert.equal(parsePayRunCalculationSource({ ...snapshot(), entitlementSettlementPlans: [{ ...plan, planActive: "yes" }] }), null);
+  assert.equal(payRunCalculationSourceChanges(calculated, { ...snapshot(),
+    entitlementSettlementPlans: [{ ...plan, liabilityAccountId: "0190d4c2-0000-7000-8000-000000000005" }] }).components, true);
+  assert.equal(payRunCalculationSourceChanges(snapshot(), snapshot()).components, false);
+});

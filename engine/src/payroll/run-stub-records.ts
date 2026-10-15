@@ -14,7 +14,7 @@ import { sum } from "../money/money.ts";
 import { addMoney, sumMoney, type Money } from "../money/brands.ts";
 import { jurisdictionKey, labourJurisdictionProblem, PayrollJurisdictionError, payrollJurisdictionDeclared, payrollPack, resolvePayrollStatutoryReportingCode, type PayrollAssessedOn } from "./packs.ts";
 import { resolveStatutoryHolidayPay, undeclaredJurisdictionHolidayConflict, type StatutoryHolidayEligibilityFacts, type StatutoryHolidayEarningLine } from "./holidays.ts";
-import { planMovementsForStub, recordEntitlementMovements } from "./entitlements.ts";
+import { planMovementsForStub, recordEntitlementMovements, type EntitlementPlan } from "./entitlements.ts";
 import { type EarningsAssessedLine } from "./limits.ts";
 import { payrollHourlyWage, type PayableRate } from "./rate.ts";
 import type { BankCashFundingSplit, BankCashPayDateValuation } from "./run-bank-cash-evidence.ts";
@@ -27,7 +27,7 @@ import type { UsStatutoryExemptionCategory } from "./statutory-exemptions.ts";
  * carries no behavior, only shape.
  */
 /** Which rung of the expense-account resolution answered for a stub line. */
-export type ExpenseAccountSource = "item" | "component" | "department" | "org_default";
+export type ExpenseAccountSource = "item" | "component" | "department" | "org_default" | "entitlement_plan";
 
 /**
  * Per-program applicability stamped from a component's effective-dated
@@ -82,6 +82,8 @@ export interface Line {
   entitlementMovementKey?: string;
   /** False only for newly earned cash paid independently of an entitlement bank. */
   fundedByEntitlementBank?: boolean;
+  /** Entitlement plan whose bank this line withdraws from or deposits into. */
+  entitlementSettlementPlanId?: string;
   /** Audited funding split; carried only by the bank-funded portion line. */
   bankCashFundingSplit?: BankCashFundingSplit;
   /** Frozen native pay-date wage source the split's bank-funded portion is valued at. */
@@ -628,6 +630,54 @@ export async function employeeHomeDepartment(
      where org_id = ${args.orgId} and party_id = ${args.employeePartyId}
   `)).rows[0];
   return role?.department_id ?? null;
+}
+
+/**
+ * Entitlement settlement accounts (after the department pass, before
+ * persistence): a line that withdraws from or deposits into a bank posts to
+ * the plan's liability account. An accruing plan already expensed its bank as
+ * it accrued, so drawing it relieves the liability instead of expensing the
+ * same money twice; a deposit credits the account a later withdrawal
+ * relieves. Cash paid outside the bank never carries a settlement plan and
+ * keeps its expense stamp. Plans with neither an accrual component nor a
+ * liability account keep their banks off the balance sheet and are left
+ * unchanged.
+ */
+export function stampEntitlementSettlementAccounts(args: {
+  lines: Line[];
+  plans: readonly EntitlementPlan[];
+  /** Active pay components, for the accrual component's credited liability. */
+  components: readonly Record<string, unknown>[];
+  employeeName: string;
+}): void {
+  const { lines, plans, components, employeeName } = args;
+  for (const line of lines) {
+    if (!line.entitlementSettlementPlanId) continue;
+    if (line.kind !== "earning") {
+      throw new PayrollError(`${employeeName}'s "${line.description}" settles an entitlement bank but is not an earning line — recalculate after correcting the plan's payout and deposit components`);
+    }
+    const plan = plans.find((candidate) => candidate.id === line.entitlementSettlementPlanId);
+    if (!plan) throw new PayrollError(`${employeeName}'s "${line.description}" settles an entitlement plan that is no longer active — reactivate the plan or remove the payout before recalculating`);
+    if (!plan.liabilityAccountId) {
+      if (plan.accrualComponentId) {
+        throw new PayrollError(`Entitlement plan ${plan.code} accrues a liability but names no liability account — set the plan's liability account before paying from its bank`);
+      }
+      continue;
+    }
+    if (plan.accrualComponentId) {
+      const accrual = components.find((component) => component.id === plan.accrualComponentId);
+      const credited = accrual?.liability_account_id ? String(accrual.liability_account_id) : null;
+      if (credited && credited !== plan.liabilityAccountId) {
+        throw new PayrollError(`Entitlement plan ${plan.code} accrues to a different liability account than the plan names — align the accrual component's liability account with the plan's before paying from its bank`);
+      }
+    }
+    line.expenseAccountId = plan.liabilityAccountId;
+    line.expenseAccountSource = "entitlement_plan";
+    line.expenseAccountEvidence = {
+      reason: `settles the ${plan.code} entitlement bank, so it posts to the plan's liability account`,
+      reference: `entitlement_plans:${plan.id}`,
+    };
+  }
 }
 
 /**

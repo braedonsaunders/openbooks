@@ -338,7 +338,11 @@
       "entityTarget": "Entidad legal",
       "voidRun": "Anular nómina",
       "voidTitle": "¿Anular la nómina {number}?",
-      "voided": "{number} se anuló y se revirtió su asiento."
+      "voided": "{number} se anuló y se revirtió su asiento.",
+      "settlementSettleTo": "Liquidar en",
+      "settlementBank": "Cuenta bancaria",
+      "settlementClearing": "Cuenta puente designada",
+      "settlementPaidOn": "Fecha de pago"
     },
     "adjust": {
       "title": "Ajustes",
@@ -1211,6 +1215,17 @@
         "day": "Día {n}",
         "weekDay": "Semana {week} · {day}"
       }
+    },
+    "netPayClearing": {
+      "title": "Cuenta puente del pago neto",
+      "description": "Una cuenta puente en la que el pago neto de una nómina puede liquidarse en lugar de una cuenta bancaria, para las fechas indicadas. El empleador paga después los cheques individuales desde esa cuenta. Un periodo ya usado por un pago solo puede cerrarse.",
+      "account": "Cuenta puente",
+      "from": "Desde",
+      "to": "Hasta (opcional)",
+      "reason": "Motivo",
+      "add": "Añadir cuenta puente",
+      "remove": "Quitar",
+      "none": "No hay cuentas puente designadas. El pago neto se liquida en una cuenta bancaria."
     }
   },
   "remittances": {

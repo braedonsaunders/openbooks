@@ -338,7 +338,11 @@
       "entityTarget": "Legal entity",
       "voidRun": "Void pay run",
       "voidTitle": "Void pay run {number}?",
-      "voided": "{number} was voided and its posting reversed."
+      "voided": "{number} was voided and its posting reversed.",
+      "settlementSettleTo": "Settle to",
+      "settlementBank": "Bank account",
+      "settlementClearing": "Designated clearing account",
+      "settlementPaidOn": "Payment date"
     },
     "adjust": {
       "title": "Adjustments",
@@ -1211,6 +1215,17 @@
         "day": "Day {n}",
         "weekDay": "Week {week} · {day}"
       }
+    },
+    "netPayClearing": {
+      "title": "Net pay settlement clearing",
+      "description": "A clearing account a pay run's net pay may settle to instead of a bank, for the dates shown. The employer then pays the individual cheques out of that account. A window a recorded payment used can only be end-dated.",
+      "account": "Clearing account",
+      "from": "From",
+      "to": "To (optional)",
+      "reason": "Reason",
+      "add": "Add clearing account",
+      "remove": "Remove",
+      "none": "No clearing accounts designated. Net pay settles to a bank account."
     }
   },
   "remittances": {

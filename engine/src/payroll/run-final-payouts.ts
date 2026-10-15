@@ -63,6 +63,8 @@ export async function settleTerminationBankPayouts(
         componentId: balance.plan.payoutComponentId, kind: "earning",
         description: `${balance.plan.name} payout (accrued balance)`,
         amount: payoutMoney, sequence: 44,
+        entitlementSettlementPlanId: balance.plan.id,
+        entitlementMovementKey: `${balance.plan.id}:payout`,
       });
       entitlementMovements.push({
         planId: balance.plan.id, employeePartyId, movementDate: payDate,

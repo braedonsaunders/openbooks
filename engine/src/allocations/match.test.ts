@@ -105,6 +105,22 @@ test("payroll expense rules require an expense leg and every selected component 
   ]) assert.equal(matchLine(rule, { ...source, ...changed }).matched, false);
 });
 
+test("payroll expense rules can select the stub line's employee, time type and service item", () => {
+  const rule = version({ documentKinds: ["pay_run"], dimensionFilters: {
+    payrollExpensesOnly: true, payComponentIds: ["base"], payrollEmployeeIds: ["employee-a"],
+    timeTypeIds: ["admin-time"], itemIds: ["item-1"],
+  } });
+  const source = line({ documentKind: "pay_run", payrollExpense: true, payComponentId: "base",
+    payrollEmployeeId: "employee-a", timeTypeId: "admin-time", itemId: "item-1" });
+  assert.equal(matchLine(rule, source).matched, true);
+  for (const changed of [
+    { payrollEmployeeId: "employee-b" }, { payrollEmployeeId: null }, { timeTypeId: "field-time" },
+    { timeTypeId: null }, { itemId: "item-2" }, { payrollExpense: false },
+  ]) assert.equal(matchLine(rule, { ...source, ...changed }).matched, false);
+  assert.ok(matchLine(rule, source).specificity > matchLine(version({ documentKinds: ["pay_run"],
+    dimensionFilters: { payrollExpensesOnly: true, payComponentIds: ["base"] } }), source).specificity);
+});
+
 test("matchLine document_kinds: null matches any kind, list requires membership", () => {
   const v = version({ documentKinds: ["vendor_bill", "card_charge"] });
   assert.equal(matchLine(v, line({ documentKind: "vendor_bill" })).matched, true);

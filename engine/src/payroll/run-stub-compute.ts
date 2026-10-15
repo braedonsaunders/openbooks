@@ -35,7 +35,7 @@ import { reduceTaxBases } from "./treatment-bases.ts";
 import { assertVacationPlanResolved } from "./run-setup.ts";
 import { type StubComputation, storedTaxCertificates, resolvePayRate, resolveStubStatutoryHours } from "./run-calculation-support.ts";
 import { assertPackStatutoryRatesConfigured, createStubCertificateResolver } from "./run-stub-preflight.ts";
-import { type Line, installablePackOrThrow, insertPayStubRow, insertPayStubLineRows, persistEntitlementMovements, earningsAssessedSnapshot, resolveEmployeeJurisdiction, stampDepartmentExpenseAccounts, employeeHomeDepartment, stampEarningLineStatutoryTreatments } from "./run-stub-records.ts";
+import { type Line, installablePackOrThrow, insertPayStubRow, insertPayStubLineRows, persistEntitlementMovements, earningsAssessedSnapshot, resolveEmployeeJurisdiction, stampDepartmentExpenseAccounts, stampEntitlementSettlementAccounts, employeeHomeDepartment, stampEarningLineStatutoryTreatments } from "./run-stub-records.ts";
 import { appendPeriodicEarnings, appendRetroSettlementLines, appendDerivedEarningLines, appendStatutoryHolidayEarningLines, applyAssignedComponentLines, applyRunLineAdjustments } from "./run-earning-lines.ts";
 import { appendUnionFringeLines, applyEntitlementPlanMovements } from "./run-plan-earning-lines.ts";
 import type { DeclaredVacationAccrualInput } from "./run-vacation-accrual-input.ts";
@@ -774,6 +774,11 @@ export async function calculateStub(
     }
   }
   await stampDepartmentExpenseAccounts({ tx, orgId, lines, payDate: run.pay_date! });
+  // Bank settlements answer last: the liability they relieve or fund is the
+  // accounting nature of the line, whatever department or item costed it.
+  stampEntitlementSettlementAccounts({
+    lines, plans, components: ctx.components, employeeName: emp.display_name ?? employeePartyId,
+  });
 
   const stubId = await insertPayStubRow(tx, {
     orgId, actorId, documentId, employeePartyId, employmentId,

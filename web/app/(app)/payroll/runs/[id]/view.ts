@@ -1,4 +1,6 @@
 import 'server-only'
+import { NET_PAY_CLEARING_SETTINGS_KEY, parseNetPayClearingWindows } from '@openbooks/engine/payroll/net-pay-clearing'
+import type { ClearingDesignationOption } from './run-wizard-controls'
 
 import { PayrollError } from '@openbooks/engine/payroll/error'
 import { payrollAnomalyFinalizeCheck } from '@openbooks/engine/payroll/anomaly-finalize-gate'
@@ -95,6 +97,8 @@ export interface PayRunWizardData {
   adjustableComponents: ComponentOption[]
   remittance: RemittanceRow[]
   bankAccounts: { id: string; label: string }[]
+  /** Dated net-pay settlement clearing designations, for the finish step's payment control. */
+  clearingDesignations: ClearingDesignationOption[]
   readiness: PayRunReadiness
   staleness: PayRunStaleness
   funding: PayRunFunding
@@ -485,6 +489,19 @@ export async function loadPayRunWizard(
     // current book balances. Reuse its scoped rows for the settlement picker so
     // a restricted caller cannot select an account the funding panel omitted.
     const bankAccounts = funding.accounts.map(({ id, label }) => ({ id, label }))
+    // The engine re-resolves and re-validates the designation for the chosen
+    // payment date at write time; this only offers it.
+    const clearingWindows = parseNetPayClearingWindows((await db.execute<{ windows: unknown }>(sql`
+      select settings->'payroll'->${NET_PAY_CLEARING_SETTINGS_KEY} as windows from orgs where id = ${orgId}
+    `)).rows[0]?.windows)
+    const clearingLabels = clearingWindows.length === 0 ? new Map<string, string>() : new Map((await db.execute<{ id: string; label: string }>(sql`
+      select id::text as id, coalesce(number || ' · ', '') || name as label from accounts
+       where org_id = ${orgId} and id in (${sql.join(clearingWindows.map((window) => sql`${window.accountId}::uuid`), sql`, `)})
+    `)).rows.map((row) => [row.id, row.label]))
+    const clearingDesignations = clearingWindows.map((window) => ({
+      id: window.id, accountId: window.accountId, label: clearingLabels.get(window.accountId) ?? window.accountId,
+      effectiveFrom: window.effectiveFrom, effectiveTo: window.effectiveTo,
+    }))
 
     // Match the native commit gate: only open blockers for this run's
     // employment roster, schedule and legal entity keep the action disabled.
@@ -516,6 +533,7 @@ export async function loadPayRunWizard(
       adjustableComponents: componentRows,
       remittance: run.run_status === 'committed' ? remitRes.rows : [],
       bankAccounts,
+      clearingDesignations,
       readiness,
       staleness,
       funding,
@@ -574,6 +592,7 @@ export function payRunWizardSpec(data: PayRunWizardData): PageSpec {
         adjustableComponents: data.adjustableComponents,
         remittance: data.remittance,
         bankAccounts: data.bankAccounts,
+        clearingDesignations: data.clearingDesignations,
         readiness: data.readiness,
         staleness: data.staleness,
         funding: data.funding,

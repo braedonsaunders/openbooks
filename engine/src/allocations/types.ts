@@ -61,6 +61,9 @@ export interface DimensionFilters {
   /** Restrict payroll rules to expense legs, excluding employee payables and withholdings. */
   payrollExpensesOnly?: boolean;
   payComponentIds?: string[];
+  /** Payroll expense legs only: the employee and time type of the stub line. */
+  payrollEmployeeIds?: string[];
+  timeTypeIds?: string[];
   departmentIds?: string[];
   locationIds?: string[];
   classIds?: string[];
@@ -87,6 +90,8 @@ export interface DynamicTarget {
 export interface LineCoordinate extends Coordinate {
   payrollExpense?: boolean;
   payComponentId?: string | null;
+  payrollEmployeeId?: string | null;
+  timeTypeId?: string | null;
   documentKind?: string | null;
   itemId?: string | null;
   /** Signed canonical decimal (debit +). */

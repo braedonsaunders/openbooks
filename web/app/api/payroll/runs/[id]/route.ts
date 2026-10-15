@@ -70,7 +70,10 @@ const requestBodySchema = z.discriminatedUnion('action', [
   z.strictObject({ ...actionBody('exclude-employee'), employeePartyId: payrollRunUuid('employeePartyId', 'an employee id', 'pass the employee as an employee id', 'fix the id and try again') }),
   z.strictObject({ ...actionBody('include-employee'), employeePartyId: payrollRunUuid('employeePartyId', 'an employee id', 'pass the employee as an employee id', 'fix the id and try again') }),
   z.strictObject({ ...actionBody('email-stubs') }),
-  z.strictObject({ ...actionBody('record-payment'), bankAccountId: payrollRunUuid('bankAccountId', 'a bank account id', 'choose a bank account') }),
+  z.strictObject({ ...actionBody('record-payment'),
+    bankAccountId: payrollRunUuid('bankAccountId', 'a bank account id', 'choose a bank account').optional(),
+    settlementClearingAccountId: payrollRunUuid('settlementClearingAccountId', 'an account id', 'choose the designated settlement clearing account').optional(),
+    paidOn: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'paidOn must be a calendar date (YYYY-MM-DD)').optional() }),
   z.strictObject({ ...actionBody('submit-approval') }),
   z.strictObject({ ...actionBody('recalculate-approved') }),
   z.strictObject({ ...actionBody('approval-state') }),
@@ -828,10 +831,16 @@ export const POST = defineRoute({
         return NextResponse.json({ ok: true, ...result })
       }
       if (body.action === 'record-payment') {
-        if (typeof body.bankAccountId !== 'string' || !isUuid(body.bankAccountId)) return NextResponse.json({ error: 'choose a bank account' }, { status: 422 })
+        // Bank and clearing settlement are distinct inputs: exactly one names the account.
+        if ((body.bankAccountId === undefined) === (body.settlementClearingAccountId === undefined)) {
+          return NextResponse.json({ error: 'choose either a bank account or the designated settlement clearing account' }, { status: 422 })
+        }
         const result = await recordPayRunPayment({
           orgId: gate.user.orgId, actorId: gate.user.id, documentId: id,
-          bankAccountId: body.bankAccountId,
+          ...(body.bankAccountId !== undefined
+            ? { bankAccountId: body.bankAccountId }
+            : { settlementClearingAccountId: body.settlementClearingAccountId }),
+          ...(body.paidOn !== undefined ? { paidOn: body.paidOn } : {}),
           allowedSubsidiaryIds: gate.allowedSubsidiaryIds,
         })
         return NextResponse.json({ ok: true, ...result })

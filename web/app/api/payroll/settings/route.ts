@@ -9,6 +9,8 @@ import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
 import { lockLedgerSetupFence } from '@openbooks/engine/organization/ledger-setup'
 import { payrollSettings, seedPayrollComponents, statutoryHolidayPayEnabled } from "@openbooks/engine/payroll/run-setup";
 import { PAYROLL_ACCOUNT_SETTING_KEYS } from "@openbooks/engine/payroll/settings-references";
+import { NET_PAY_CLEARING_SETTINGS_KEY, parseNetPayClearingWindows, validateNetPayClearingChange } from "@openbooks/engine/payroll/net-pay-clearing";
+import { PayrollError } from "@openbooks/engine/payroll/error";
 import { type PayrollSubsidiaryScope } from "@openbooks/engine/payroll/scope";
 import {
   declaredRemittanceFrequencySettingsKeys,
@@ -69,6 +71,14 @@ const typedPayrollSettingsSchema = z.looseObject({
   stubPassword: z.strictObject({ enabled: z.boolean(), expression: z.string() }).optional(),
   countries: z.array(z.string().refine((country) => Object.hasOwn(PAYROLL_COUNTRY_PACKS, country), 'country must be a declared payroll pack')).optional(),
   statutoryHolidayPay: z.boolean().optional(),
+  // Dated clearing accounts a pay run's net pay may settle to instead of a bank.
+  netPaySettlementClearing: z.array(z.strictObject({
+    id: uuidId,
+    accountId: uuidId,
+    effectiveFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+    effectiveTo: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable(),
+    reason: z.string().trim().min(1).max(500),
+  })).max(100).optional(),
   slotAccounts: z.record(
     z.string().refine((country) => Object.hasOwn(PAYROLL_COUNTRY_PACKS, country), 'country must be a declared payroll pack'),
     z.record(z.string(), uuidId.nullable()),
@@ -383,9 +393,16 @@ export const GET = defineRoute({
       undefined,
       gate.allowedSubsidiaryIds,
     )
+    let netPaySettlementClearing
+    try {
+      netPaySettlementClearing = parseNetPayClearingWindows(blob[NET_PAY_CLEARING_SETTINGS_KEY])
+    } catch (error) {
+      if (error instanceof PayrollError) return apiErrorResponse(error, { safeStatus: 409 })
+      throw error
+    }
     return NextResponse.json({
       settings, packs, stubPassword, encryptionAvailable, paymentMethods, setup,
-      statutoryHolidayPay,
+      statutoryHolidayPay, netPaySettlementClearing,
       installable: installableCountries(),
       installablePacks: installablePackPairs(),
       ...options,
@@ -683,6 +700,20 @@ export const PUT = defineRoute({
     // gate; default OFF for tenants that predate the feature because it changes
     // gross pay.
     if ('statutoryHolidayPay' in body) settings.statutoryHolidayPay = body.statutoryHolidayPay
+    // A re-pointed net-pay payable is re-checked against the stored designations too.
+    if ('netPaySettlementClearing' in body || ('netPayAccountId' in body && before[NET_PAY_CLEARING_SETTINGS_KEY] != null)) {
+      try {
+        settings[NET_PAY_CLEARING_SETTINGS_KEY] = await validateNetPayClearingChange(db, {
+          orgId, actorId: gate.user.id,
+          before: before[NET_PAY_CLEARING_SETTINGS_KEY],
+          after: 'netPaySettlementClearing' in body ? body.netPaySettlementClearing : before[NET_PAY_CLEARING_SETTINGS_KEY],
+          netPayAccountId: typeof settings.netPayAccountId === 'string' ? settings.netPayAccountId : null,
+        })
+      } catch (error) {
+        if (error instanceof PayrollError) return apiErrorResponse(error, { safeStatus: 422 })
+        throw error
+      }
+    }
     // NOTE: the pre-scoping `us` / `ca` rate blobs are not accepted here. A SUI
     // rate is experience-rated per filing account, FUTA is scoped per state and
     // year, and each province levies its own employer health tax. The upgrade

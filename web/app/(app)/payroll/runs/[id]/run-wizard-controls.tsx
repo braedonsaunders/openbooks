@@ -56,30 +56,83 @@ export function AttributeEntityControl({
 }
 
 /** Bank pick + one-click settlement of the run's net-pay open items. */
+/** One dated net-pay settlement clearing designation, labelled for the picker. */
+export interface ClearingDesignationOption {
+  id: string
+  accountId: string
+  label: string
+  effectiveFrom: string
+  effectiveTo: string | null
+}
+
+export interface RecordPaymentInput {
+  bankAccountId?: string
+  settlementClearingAccountId?: string
+  paidOn: string
+}
+
 export function RecordPaymentControl({
   bankAccounts,
+  clearingDesignations,
+  payDate,
   busy,
   onRecord,
 }: {
   bankAccounts: { id: string; label: string }[]
+  clearingDesignations: ClearingDesignationOption[]
+  /** The run's pay date: the default payment date. */
+  payDate: string
   busy: boolean
-  onRecord: (bankAccountId: string) => void
+  onRecord: (input: RecordPaymentInput) => void
 }) {
   const t = useTranslations('payroll')
   const [bankAccountId, setBankAccountId] = useState(bankAccounts[0]?.id ?? '')
+  const [paidOn, setPaidOn] = useState(payDate)
+  const [settleTo, setSettleTo] = useState<'bank' | 'clearing'>('bank')
+  // Only the designation covering the chosen date may receive the settlement.
+  const clearing = clearingDesignations.find((designation) =>
+    designation.effectiveFrom <= paidOn && (designation.effectiveTo === null || paidOn <= designation.effectiveTo))
+  const target = settleTo === 'clearing' && clearing ? 'clearing' : 'bank'
+  const selectClass = 'rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900'
   return (
-    <span className="flex items-center gap-2">
-      <select
-        aria-label={t('wizard.finish.bankAccount')}
-        value={bankAccountId}
-        onChange={(e) => setBankAccountId(e.target.value)}
-        className="rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900"
+    <span className="flex flex-wrap items-center gap-2">
+      <input
+        type="date"
+        aria-label={t('wizard.finish.settlementPaidOn')}
+        value={paidOn}
+        onChange={(e) => setPaidOn(e.target.value)}
+        className={selectClass}
+      />
+      {clearing && (
+        <select
+          aria-label={t('wizard.finish.settlementSettleTo')}
+          value={target}
+          onChange={(e) => setSettleTo(e.target.value as 'bank' | 'clearing')}
+          className={selectClass}
+        >
+          <option value="bank">{t('wizard.finish.settlementBank')}</option>
+          <option value="clearing">{t('wizard.finish.settlementClearing')} · {clearing.label}</option>
+        </select>
+      )}
+      {target === 'bank' && (
+        <select
+          aria-label={t('wizard.finish.bankAccount')}
+          value={bankAccountId}
+          onChange={(e) => setBankAccountId(e.target.value)}
+          className={selectClass}
+        >
+          {bankAccounts.map((account) => (
+            <option key={account.id} value={account.id}>{account.label}</option>
+          ))}
+        </select>
+      )}
+      <Button
+        size="sm"
+        disabled={busy || !paidOn || (target === 'bank' && !bankAccountId)}
+        onClick={() => onRecord(target === 'clearing'
+          ? { settlementClearingAccountId: clearing!.accountId, paidOn }
+          : { bankAccountId, paidOn })}
       >
-        {bankAccounts.map((account) => (
-          <option key={account.id} value={account.id}>{account.label}</option>
-        ))}
-      </select>
-      <Button size="sm" disabled={busy || !bankAccountId} onClick={() => onRecord(bankAccountId)}>
         {t('wizard.finish.recordPayment')}
       </Button>
     </span>

@@ -338,7 +338,11 @@
       "entityTarget": "Entidade legal",
       "voidRun": "Cancelar folha",
       "voidTitle": "Cancelar a folha {number}?",
-      "voided": "{number} foi cancelada e o lançamento estornado."
+      "voided": "{number} foi cancelada e o lançamento estornado.",
+      "settlementSettleTo": "Liquidar em",
+      "settlementBank": "Conta bancária",
+      "settlementClearing": "Conta transitória designada",
+      "settlementPaidOn": "Data do pagamento"
     },
     "adjust": {
       "title": "Ajustes",
@@ -1211,6 +1215,17 @@
         "day": "Dia {n}",
         "weekDay": "Semana {week} · {day}"
       }
+    },
+    "netPayClearing": {
+      "title": "Conta transitória do pagamento líquido",
+      "description": "Uma conta transitória na qual o pagamento líquido de uma folha pode ser liquidado em vez de uma conta bancária, nas datas indicadas. O empregador paga depois os cheques individuais a partir dessa conta. Um período já usado por um pagamento só pode ser encerrado.",
+      "account": "Conta transitória",
+      "from": "De",
+      "to": "Até (opcional)",
+      "reason": "Motivo",
+      "add": "Adicionar conta transitória",
+      "remove": "Remover",
+      "none": "Nenhuma conta transitória designada. O pagamento líquido é liquidado em uma conta bancária."
     }
   },
   "remittances": {

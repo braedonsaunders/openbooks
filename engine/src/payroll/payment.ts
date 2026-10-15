@@ -13,6 +13,9 @@ import { lockActorCommandAuthority } from "../organization/actor-command-authori
 import { ScopeNotFoundError } from "../organization/subsidiary-scope.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { isUuid } from "../platform/uuid.ts";
+import { isIsoCalendarDate } from "../platform/iso-date.ts";
+import { lockLedgerSetupFence } from "../organization/ledger-setup-fence.ts";
+import { resolveNetPayClearingDesignation, type NetPayClearingWindow } from "./net-pay-clearing.ts";
 import {
   intercompanyBalancingLegs,
   loadSubsidiaryContext,
@@ -45,24 +48,45 @@ import {
  * (`eft` / `cheque` below, and on the funding panel) so a controller can see
  * what each rail costs, and each cheque's number rides its own settlement
  * line's memo so the bank reconciliation can match paper to ledger.
+ *
+ * Instead of a bank, the payment may settle to the net-pay settlement
+ * clearing account designated for the payment date (see net-pay-clearing.ts):
+ * the employer then pays the individual cheques out of that clearing account
+ * through its own bank transactions. A run with issued native cheques always
+ * settles to the bank those cheques are drawn on.
  */
 export async function recordPayRunPayment(input: {
   orgId: string;
   actorId: string;
   documentId: string;
-  bankAccountId: string;
+  /** The bank the net pay leaves from. Exactly one of this and settlementClearingAccountId. */
+  bankAccountId?: string;
+  /** The designated net-pay settlement clearing account for the payment date. */
+  settlementClearingAccountId?: string;
   /** Settlement date; defaults to the run's pay date. */
   paidOn?: string;
   /** Caller role scope; null/undefined is unrestricted. */
   allowedSubsidiaryIds?: PayrollSubsidiaryScope;
 }): Promise<{ entryId: string; total: string; eft: string; cheque: string; evidence: PayRunPaymentEvidence }> {
-  for (const value of [input.orgId, input.actorId, input.documentId, input.bankAccountId]) {
-    if (!isUuid(value)) throw new PayrollError("pay run and bank account must have valid native identities");
+  if ((input.bankAccountId === undefined) === (input.settlementClearingAccountId === undefined)) {
+    throw new PayrollError("choose either the bank account the net pay leaves from or the designated settlement clearing account");
   }
+  const settlementInput = input.bankAccountId ?? input.settlementClearingAccountId;
+  for (const value of [input.orgId, input.actorId, input.documentId, settlementInput]) {
+    if (!isUuid(value)) throw new PayrollError("pay run and settlement account must have valid native identities");
+  }
+  if (input.paidOn !== undefined && !isIsoCalendarDate(input.paidOn)) {
+    throw new PayrollError("enter the payment date as a calendar date (YYYY-MM-DD)");
+  }
+  const settlementKind: "bank" | "clearing" = input.bankAccountId !== undefined ? "bank" : "clearing";
+  const settlementAccountId = settlementInput!.toLowerCase();
   input = { ...input, orgId: input.orgId.toLowerCase(), actorId: input.actorId.toLowerCase(),
-    documentId: input.documentId.toLowerCase(), bankAccountId: input.bankAccountId.toLowerCase() };
+    documentId: input.documentId.toLowerCase() };
   const { orgId, actorId, documentId } = input;
   return await withOrgTransaction(orgId, () => db.transaction(async (tx) => {
+    // Shared side of the ledger-setup fence before any org state is read, so a
+    // clearing designation cannot change while this payment relies on it.
+    await lockLedgerSetupFence(tx, orgId, "shared");
     const liveScope = await paymentAuthority(tx, orgId, actorId, "payroll.run", input.allowedSubsidiaryIds);
     const runRows = (await tx.execute<Record<string, string | null>>(sql`
       select r.run_status, r.paid_at, r.pay_date, d.status as doc_status, d.posted_entry_id,
@@ -130,15 +154,33 @@ export async function recordPayRunPayment(input: {
     }
     const netPayable = netPayAccounts[0]!.account_id;
 
+    const paidOn = input.paidOn ?? run.pay_date!;
     // Follow the shared posting lock order: hierarchy, accounts, then writes.
     await tx.execute(sql`select id from subsidiaries where org_id=${orgId} order by id for share`);
-    const bank = (await tx.execute<{ id: string }>(sql`
-      select id from accounts where org_id = ${orgId} and id = ${input.bankAccountId}
-        and type = 'asset_bank' and is_active for share
-    `));
-    if (!bank.rows[0]) throw new PayrollError("choose an active bank account");
+    let designation: NetPayClearingWindow | null = null;
+    if (settlementKind === "bank") {
+      const bank = (await tx.execute<{ id: string }>(sql`
+        select id from accounts where org_id = ${orgId} and id = ${settlementAccountId}
+          and type = 'asset_bank' and is_active for share
+      `));
+      if (!bank.rows[0]) throw new PayrollError("choose an active bank account");
+    } else {
+      const issued = (await tx.execute<{ id: string }>(sql`
+        select id from pay_stubs where org_id = ${orgId} and pay_run_document_id = ${documentId}
+           and cheque_number is not null limit 1
+      `)).rows;
+      if (issued.length > 0) {
+        throw new PayrollError("this run has issued cheques — record its payment against the bank account those cheques are drawn on");
+      }
+      // The run's posted net-pay payable is frozen evidence; settling it to the
+      // same account would stamp the run paid while leaving the liability open.
+      if (settlementAccountId === netPayable.toLowerCase()) {
+        throw new PayrollError("the settlement clearing account is the net-pay payable this run posted to — choose a different clearing account");
+      }
+      designation = await resolveNetPayClearingDesignation(tx, { orgId, accountId: settlementAccountId, paidOn });
+    }
 
-    await assertIssuedChequeFunding(tx,orgId,documentId,input.bankAccountId);
+    await assertIssuedChequeFunding(tx,orgId,documentId,settlementAccountId);
 
     // The run's per-employee net-pay open items (credits on the payable).
     const postedItems = (await tx.execute<{
@@ -205,7 +247,6 @@ export async function recordPayRunPayment(input: {
     `));
     const rail = new Map(railRows.rows.map((row) => [row.employee_party_id, row]));
 
-    const paidOn = input.paidOn ?? run.pay_date!;
     // Ordinary posting uses the pay run entity's effective regular-period calendar.
     const period = await resolveCoveringPeriod(tx, orgId, paidOn, run.subsidiary_id);
     if (!period) throw new PayrollError(`no accounting period covers ${paidOn}`);
@@ -286,7 +327,7 @@ export async function recordPayRunPayment(input: {
       subsidiaryId: item.subsidiary_id,
     }));
     settlementLines.push({
-      accountId: input.bankAccountId,
+      accountId: settlementAccountId,
       amount: bankAmount,
       txnAmount: neg(total),
       currency: runCurrency,
@@ -351,13 +392,15 @@ export async function recordPayRunPayment(input: {
       lines: [
         ...debitLegs,
         {
-          accountId: input.bankAccountId,
+          accountId: settlementAccountId,
           subsidiaryId: run.subsidiary_id!,
           amount: bankAmount,
           currency: runCurrency,
           txnAmount: neg(total),
           fxRate: originFxRate,
-          memo: `Net pay ${run.document_number}`,
+          memo: settlementKind === "bank"
+            ? `Net pay ${run.document_number}`
+            : `Net pay ${run.document_number} · settled to clearing`,
         },
         ...intercompanyLegs.map((leg) => ({
           accountId: leg.accountId,
@@ -423,7 +466,9 @@ export async function recordPayRunPayment(input: {
       insert into audit_log(org_id,table_name,row_id,action,changes,actor_id)
       values(${orgId},'pay_runs',${documentId},'update',${JSON.stringify({
         operation: "record_pay_run_payment", reason: "Record the native net-pay ledger settlement",
-        bankAccountId: input.bankAccountId, paidOn, total, eft, cheque, before, after,
+        bankAccountId: settlementKind === "bank" ? settlementAccountId : null, paidOn, total, eft, cheque,
+        settlement: { kind: settlementKind, accountId: settlementAccountId, designation },
+        before, after,
       })}::jsonb,${actorId}) returning id
     `)).rows;
     if (audit.length !== 1) throw new PayrollError("the payroll settlement audit was not saved; no payment was recorded");

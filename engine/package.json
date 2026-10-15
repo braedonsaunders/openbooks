@@ -700,6 +700,8 @@
     "./payroll/run-calendar": "./src/payroll/run-calendar.ts",
     "./payroll/run-commit": "./src/payroll/run-commit.ts",
     "./payroll/run-contracts": "./src/payroll/run-contracts.ts",
+    "./payroll/run-gl-rebuild": "./src/payroll/run-gl-rebuild.ts",
+    "./payroll/net-pay-clearing": "./src/payroll/net-pay-clearing.ts",
     "./payroll/run-lifecycle": "./src/payroll/run-lifecycle.ts",
     "./testing/payroll/run-protection": "./src/payroll/run-protection.ts",
     "./payroll/run-setup": "./src/payroll/run-setup.ts",

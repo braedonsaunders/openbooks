@@ -934,3 +934,58 @@ test(
     }
   },
 );
+
+test("a final pay clears the bank against the vacation liability while vacation paid on final earnings stays an expense", { skip: !DB }, async () => {
+  const fx = await payrollOrg();
+  try {
+    const leaver = await employee(fx, "Eve Leaves", { terminatedOn: "2026-07-25" });
+    for (const day of ["2026-07-06", "2026-07-08", "2026-07-10", "2026-07-14"]) await hours(fx, leaver, day, "20");
+    const regular = await createPayRun({
+      orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
+      periodStart: "2026-07-05", periodEnd: "2026-07-18",
+    });
+    assert.deepEqual((await calculatePayRun({ orgId: fx.orgId, documentId: regular.documentId, actorId: fx.actorId })).errors, []);
+    await commitPayRun({ orgId: fx.orgId, documentId: regular.documentId, actorId: fx.actorId });
+    await hours(fx, leaver, "2026-07-21", "8");
+    const final = await createPayRun({
+      orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId,
+      periodStart: "2026-07-19", periodEnd: "2026-08-01", runType: "termination", employeePartyIds: [leaver],
+    });
+    assert.deepEqual((await calculatePayRun({ orgId: fx.orgId, documentId: final.documentId, actorId: fx.actorId })).errors, []);
+    const vacationLines = (await db.execute<{
+      id: string; component_id: string; description: string; amount: string; expense_account_id: string; expense_account_source: string;
+    }>(sql`
+      select l.id::text as id, l.component_id::text as component_id, l.description, l.amount::text as amount,
+             l.expense_account_id::text as expense_account_id, l.expense_account_source
+        from pay_stub_lines l
+        join pay_stubs s on s.org_id = l.org_id and s.id = l.stub_id
+        join pay_components c on c.org_id = l.org_id and c.id = l.component_id
+       where s.org_id = ${fx.orgId} and s.pay_run_document_id = ${final.documentId} and c.system_key = 'vacation_payout'
+       order by l.description`)).rows;
+    const bank = vacationLines.find((line) => line.description.endsWith("payout (accrued balance)"))!;
+    const cash = vacationLines.find((line) => line.description === "Vacation pay")!;
+    assert.deepEqual([bank.amount, bank.expense_account_source, bank.expense_account_id],
+      ["96.0000", "entitlement_plan", fx.accounts.vacationPayable], "the accrued bank is paid out of the vacation liability");
+    assert.equal(cash.amount, "9.6000");
+    assert.notEqual(cash.expense_account_source, "entitlement_plan", "vacation paid as it is earned never touches the bank");
+    const movement = (await db.execute<{ stub_line_id: string | null }>(sql`
+      select stub_line_id::text as stub_line_id from entitlement_ledger
+       where org_id = ${fx.orgId} and pay_run_document_id = ${final.documentId} and kind = 'payout'`)).rows;
+    assert.deepEqual(movement, [{ stub_line_id: bank.id }], "the final-pay withdrawal links the line that paid it");
+
+    await commitPayRun({ orgId: fx.orgId, documentId: final.documentId, actorId: fx.actorId });
+    const projected = (await db.execute<{ account_id: string; amount: string; custom: Record<string, unknown> }>(sql`
+      select account_id::text as account_id, amount::text as amount, custom from document_lines
+       where org_id = ${fx.orgId} and document_id = ${final.documentId}`)).rows;
+    const relief = projected.filter((line) => line.custom.legKind === "entitlement_relief");
+    assert.equal(relief.length, 1);
+    assert.deepEqual([relief[0]!.account_id, relief[0]!.amount, relief[0]!.custom.payrollExpense, relief[0]!.custom.entitlementReliefBasis, relief[0]!.custom.stubLineIds],
+      [fx.accounts.vacationPayable, "96.0000", false, "calculation_stamp", [bank.id]]);
+    const vacationExpense = projected.filter((line) => line.custom.legKind === "expense"
+      && line.custom.payComponentId === cash.component_id);
+    assert.deepEqual(vacationExpense.map((line) => [line.account_id, line.amount, line.custom.payrollExpense]),
+      [[cash.expense_account_id, "9.6000", true]], "the cash vacation is expensed with the final earnings");
+  } finally {
+    await dropScratchOrgReporting(fx.orgId);
+  }
+});

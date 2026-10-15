@@ -5,6 +5,7 @@ import { ModuleHomeTabs } from '../../../../../components/module-home/ui'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/platform/db'
 import { payrollSettings, statutoryHolidayPayEnabled } from "@openbooks/engine/payroll/run-setup";
+import { NET_PAY_CLEARING_SETTINGS_KEY, parseNetPayClearingWindows } from "@openbooks/engine/payroll/net-pay-clearing";
 import { type PayrollSubsidiaryScope } from "@openbooks/engine/payroll/scope";
 import { payrollPaymentMethodSettings } from '@openbooks/engine/payroll/payment-method'
 import { payrollSetupState } from '@openbooks/engine/payroll/readiness'
@@ -254,6 +255,7 @@ export async function AccountsTabSlot() {
         label: account.number ? `${account.number} · ${account.name}` : account.name,
       }))}
       vendors={vendorsRes.rows.map((vendor) => ({ id: vendor.id, label: vendor.name }))}
+      netPaySettlementClearing={parseNetPayClearingWindows(blob[NET_PAY_CLEARING_SETTINGS_KEY])}
     />
   )
 }

@@ -34,6 +34,9 @@ export type PostRunner = Pick<typeof db, "execute">;
 export interface PostSourceLine {
   payrollExpense?: boolean;
   payComponentId?: string | null;
+  payrollEmployeePartyId?: string | null;
+  payrollTimeTypeId?: string | null;
+  payrollItemId?: string | null;
   accountId: string;
   amount: string;
   subsidiaryId?: string | null;
@@ -711,7 +714,9 @@ export async function collectPostContributions(
       documentKind: doc.kind,
       payrollExpense: kernelLine.payrollExpense,
       payComponentId: kernelLine.payComponentId,
-      itemId: null,
+      payrollEmployeeId: kernelLine.payrollEmployeePartyId ?? null,
+      timeTypeId: kernelLine.payrollTimeTypeId ?? null,
+      itemId: kernelLine.payrollItemId ?? null,
       amount: kernelLine.amount,
     };
     const winner = selectRule(postRules, coordinate, { resolveAccountGroup });

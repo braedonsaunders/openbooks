@@ -31,6 +31,8 @@ const bodyObjectSchema = z.object({
     partyIds: z.array(z.string().uuid()).optional(),
     itemIds: z.array(z.string().uuid()).optional(),
     payComponentIds: z.array(z.string().uuid()).optional(),
+    payrollEmployeeIds: z.array(z.string().uuid()).optional(),
+    timeTypeIds: z.array(z.string().uuid()).optional(),
     payrollExpensesOnly: z.boolean().optional(),
     extraDims: z.record(z.string(), z.array(z.string())).optional(),
     requireUntagged: z.array(z.enum(['department', 'location', 'class', 'project'])).optional(),

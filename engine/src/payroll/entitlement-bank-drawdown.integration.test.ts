@@ -735,3 +735,86 @@ test('a split valued from a foreign-currency wage refuses until the wage matches
     assert.equal(await balanceOf(fx, partyId, planId, '2026-07-21'), '184.0000', 'the same split succeeds once the native wage is denominated in the run currency');
   } finally { await dropScratchOrgReporting(fx.orgId); }
 });
+
+test('a deposit into a liability-carrying bank credits the plan liability and a later withdrawal relieves it', { skip: !DB }, async () => {
+  const fx = await payrollOrg();
+  try {
+    await db.execute(sql`update pay_schedules set frequency='weekly',periods_per_year=52,subsidiary_id=${fx.subsidiaryId} where org_id=${fx.orgId} and id=${fx.scheduleId}`);
+    const { partyId } = await employee(fx, 'Banked Cash Employee', fx.subsidiaryId);
+    const cash = await earningComponent(fx, 'BANKEDCASH');
+    const planId = randomUUID();
+    await db.execute(sql`insert into entitlement_plans(id,org_id,code,name,unit,direction,accrual_method,payout_component_id,
+      liability_account_id,cap_behavior,is_active,created_by,updated_by)
+      values(${planId},${fx.orgId},'BANKEDCASH','Banked cash','money','accrue','manual',${cash},
+        ${fx.accounts.otherPayable},'warn',true,${fx.actorId},${fx.actorId})`);
+    const settlementLines = async (documentId: string) => (await db.execute<{ amount: string; expense_account_id: string; expense_account_source: string }>(sql`
+      select l.amount::text as amount, l.expense_account_id::text as expense_account_id, l.expense_account_source
+        from pay_stub_lines l join pay_stubs s on s.org_id=l.org_id and s.id=l.stub_id
+       where s.org_id=${fx.orgId} and s.pay_run_document_id=${documentId} and l.component_id=${cash}`)).rows;
+    const reliefLegs = async (documentId: string) => (await db.execute<{ account_id: string; amount: string; payroll_expense: boolean }>(sql`
+      select account_id::text as account_id, amount::text as amount, (custom->>'payrollExpense')::boolean as payroll_expense
+        from document_lines where org_id=${fx.orgId} and document_id=${documentId} and custom->>'legKind'='entitlement_relief'`)).rows;
+
+    await hours(fx, partyId, ['2026-07-13', '2026-07-14']);
+    const first = await createPayRun({ orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId, periodStart: '2026-07-12', periodEnd: '2026-07-18' });
+    await mutatePayRunAdjustment({ orgId: fx.orgId, actorId: fx.actorId, documentId: first.documentId,
+      allowedSubsidiaryIds: new Set([fx.subsidiaryId]),
+      mutation: { action: 'add', employeePartyId: partyId, componentId: cash, amount: '-60', hours: '-2',
+        note: 'Cash earnings transferred to the money bank' } });
+    assert.deepEqual((await calculatePayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: first.documentId })).errors, []);
+    assert.deepEqual(await settlementLines(first.documentId),
+      [{ amount: '-60.0000', expense_account_id: fx.accounts.otherPayable, expense_account_source: 'entitlement_plan' }]);
+    await commitPayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: first.documentId });
+    assert.deepEqual(await reliefLegs(first.documentId),
+      [{ account_id: fx.accounts.otherPayable, amount: '-60.0000', payroll_expense: false }], 'the deposit is carried in the plan liability');
+
+    await hours(fx, partyId, ['2026-07-20']);
+    const second = await createPayRun({ orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId, periodStart: '2026-07-19', periodEnd: '2026-07-25' });
+    await db.execute(sql`insert into pay_run_adjustments(org_id,pay_run_document_id,employee_party_id,adjustment_type,component_id,amount)
+      values(${fx.orgId},${second.documentId},${partyId},'line',${cash},'60')`);
+    assert.deepEqual((await calculatePayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: second.documentId })).errors, []);
+    await commitPayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: second.documentId });
+    assert.deepEqual(await reliefLegs(second.documentId),
+      [{ account_id: fx.accounts.otherPayable, amount: '60.0000', payroll_expense: false }], 'the withdrawal relieves exactly what was deposited');
+    assert.equal(await balanceOf(fx, partyId, planId, '2026-07-28'), '0.0000');
+  } finally { await dropScratchOrgReporting(fx.orgId); }
+});
+
+test('an accruing plan without a liability account refuses to pay from its bank instead of expensing the accrual twice', { skip: !DB }, async () => {
+  const fx = await payrollOrg();
+  try {
+    await db.execute(sql`update pay_schedules set frequency='weekly',periods_per_year=52 where org_id=${fx.orgId} and id=${fx.scheduleId}`);
+    const { partyId } = await employee(fx, 'Unbound Vacation Employee');
+    const plan = (await db.execute<{ id: string; payout_component_id: string }>(sql`select id,payout_component_id
+      from entitlement_plans where org_id=${fx.orgId} and system_key='vacation'`)).rows[0]!;
+    await db.execute(sql`update entitlement_plans set liability_account_id=null where org_id=${fx.orgId} and id=${plan.id}`);
+    await opening(fx, plan.id, partyId, '500', null);
+    await hours(fx, partyId, ['2026-07-13']);
+    const run = await createPayRun({ orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId, periodStart: '2026-07-12', periodEnd: '2026-07-18' });
+    await db.execute(sql`insert into pay_run_adjustments(org_id,pay_run_document_id,employee_party_id,adjustment_type,component_id,amount)
+      values(${fx.orgId},${run.documentId},${partyId},'line',${plan.payout_component_id},'100')`);
+    const refused = await calculatePayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId });
+    assert.equal(refused.errors.length, 1);
+    assert.match(refused.errors[0]!.message, /accrues a liability but names no liability account/);
+  } finally { await dropScratchOrgReporting(fx.orgId); }
+});
+
+test('re-pointing a settled plan liability after calculation stales the run instead of committing the old account', { skip: !DB }, async () => {
+  const fx = await payrollOrg();
+  try {
+    await db.execute(sql`update pay_schedules set frequency='weekly',periods_per_year=52 where org_id=${fx.orgId} and id=${fx.scheduleId}`);
+    const { partyId } = await employee(fx, 'Repointed Bank Employee');
+    const plan = (await db.execute<{ id: string; payout_component_id: string }>(sql`select id,payout_component_id
+      from entitlement_plans where org_id=${fx.orgId} and system_key='vacation'`)).rows[0]!;
+    await opening(fx, plan.id, partyId, '500', null);
+    await hours(fx, partyId, ['2026-07-13']);
+    const run = await createPayRun({ orgId: fx.orgId, actorId: fx.actorId, payScheduleId: fx.scheduleId, periodStart: '2026-07-12', periodEnd: '2026-07-18' });
+    await db.execute(sql`insert into pay_run_adjustments(org_id,pay_run_document_id,employee_party_id,adjustment_type,component_id,amount)
+      values(${fx.orgId},${run.documentId},${partyId},'line',${plan.payout_component_id},'100')`);
+    assert.deepEqual((await calculatePayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId })).errors, []);
+    await db.execute(sql`update entitlement_plans set liability_account_id=${fx.accounts.otherPayable} where org_id=${fx.orgId} and id=${plan.id}`);
+    await assert.rejects(commitPayRun({ orgId: fx.orgId, actorId: fx.actorId, documentId: run.documentId }), /changed/);
+    assert.equal((await db.execute(sql`select id from document_lines where org_id=${fx.orgId} and document_id=${run.documentId}`)).rows.length, 0,
+      'a stale settlement account writes no projection');
+  } finally { await dropScratchOrgReporting(fx.orgId); }
+});

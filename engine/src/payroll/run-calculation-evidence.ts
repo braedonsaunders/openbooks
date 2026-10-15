@@ -325,7 +325,10 @@ export interface PayRunCalculationSourceSnapshot {
   employerAssignments?: EmployerAssignmentSource[];
   assignmentRunPolicies?: { id: string; employeePartyId: string; employmentId: string | null; componentId: string; policy: string; from: string; to: string | null }[];
   /** Exact component assessability versions consumed by earning lines at pay date. */
-  payComponentStatutoryTreatments?: { id: string; componentId: string; workerCompGroupId: string | null; employeeWorkerCompGroupId: string | null; effectiveFrom: string; effectiveTo: string | null; programExclusions: string[]; vacationable: boolean }[];
+  payComponentStatutoryTreatments?: (Omit<ComponentStatutoryTreatmentSource, 'vacationable'> & {
+    /** Absent only on snapshots captured before treatments carried vacation eligibility. */
+    vacationable?: boolean;
+  })[];
   historicalEmploymentRoster?: HistoricalEmploymentRosterSource[];
   holidayEmployments?: StatutoryHolidayEmploymentSource[];
   holidayObligations?: HolidayObligationSource[];
@@ -346,7 +349,26 @@ export interface PayRunCalculationSourceSnapshot {
   openingBalanceSources?: OpeningBalanceSourceState[];
   /** Original dated state-account affiliations used by current payroll and its statutory prior. */
   usFilingAccountLineages?: UsFilingAccountLineageSource[];
+  /** The accounts each bank this run settles posts to: the plan liability and its accrual credit. */
+  entitlementSettlementPlans?: EntitlementSettlementPlanSource[];
   claimEntryIds: string[];
+}
+
+/**
+ * Everything the entitlement settlement stamp reads for one plan whose bank
+ * the run withdraws from or deposits into. Changing any of it after
+ * Calculate changes which account the settlement lines post to.
+ */
+type EntitlementSettlementPlanSource = {
+  planId: string; planActive: boolean; liabilityAccountId: string | null;
+  accrualComponentId: string | null; accrualLiabilityAccountId: string | null;
+};
+
+function isEntitlementSettlementPlanSource(value: unknown): value is EntitlementSettlementPlanSource {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const row = value as Record<string, unknown>;
+  return isUuid(row.planId) && typeof row.planActive === 'boolean'
+    && ['liabilityAccountId', 'accrualComponentId', 'accrualLiabilityAccountId'].every(key => row[key] === null || isUuid(row[key]));
 }
 
 type UsFilingAccountLineageSource = {
@@ -364,6 +386,18 @@ function isUsFilingAccountLineageSource(value: unknown): value is UsFilingAccoun
     && typeof row.updatedAt === 'string' && Number.isFinite(Date.parse(row.updatedAt));
 }
 
+/** One treatment version as current calculation captures it. */
+type ComponentStatutoryTreatmentSource = {
+  id: string; componentId: string; workerCompGroupId: string | null; employeeWorkerCompGroupId: string | null;
+  effectiveFrom: string; effectiveTo: string | null; programExclusions: string[]; vacationable: boolean;
+};
+
+/**
+ * Retained snapshots from before treatments carried vacation eligibility omit
+ * `vacationable`; they stay readable as captured. A present value must be a
+ * boolean. Comparing such a snapshot with a current capture always differs,
+ * so an uncommitted run calculated before the change reads stale.
+ */
 function isComponentStatutoryTreatmentSource(value: unknown): boolean {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
   const row = value as Record<string, unknown>;
@@ -374,7 +408,7 @@ function isComponentStatutoryTreatmentSource(value: unknown): boolean {
     && (row.effectiveTo === null || typeof row.effectiveTo === 'string'
       && isIsoCalendarDate(row.effectiveTo) && row.effectiveTo >= row.effectiveFrom)
     && Array.isArray(row.programExclusions) && row.programExclusions.every(key => typeof key === 'string')
-    && typeof row.vacationable === 'boolean';
+    && (!Object.hasOwn(row, 'vacationable') || typeof row.vacationable === 'boolean');
 }
 
 /** Lock the dated group authority and policy rows before producing the source snapshot. */
@@ -540,7 +574,9 @@ export function parsePayRunCalculationSource(
       || (Object.hasOwn(snapshot, 'openingLevySourceAuthorities') && (!Array.isArray(snapshot.openingLevySourceAuthorities)
         || snapshot.openingLevySourceAuthorities.some(row => !isOpeningLevySourceAuthoritySource(row))))
       || (Object.hasOwn(snapshot, 'openingBalanceSources') && (!Array.isArray(snapshot.openingBalanceSources)
-        || snapshot.openingBalanceSources.some(row => !isOpeningBalanceSourceState(row))))) return null;
+        || snapshot.openingBalanceSources.some(row => !isOpeningBalanceSourceState(row))))
+      || (Object.hasOwn(snapshot, 'entitlementSettlementPlans') && (!Array.isArray(snapshot.entitlementSettlementPlans)
+        || snapshot.entitlementSettlementPlans.some(row => !isEntitlementSettlementPlanSource(row))))) return null;
   // Snapshots stored before item routing existed carry no itemAccounts; they
   // read as "no mapped items", so the first post-upgrade commit compares
   // honestly and refuses with the items reason instead of a bare selection.
@@ -1069,7 +1105,7 @@ export async function payRunCalculationSource(
       and a.effective_from <= r.period_end and (a.effective_to is null or a.effective_to >= r.period_start)
     order by a.id
   `)).rows;
-  const payComponentStatutoryTreatments = (await executor.execute<NonNullable<PayRunCalculationSourceSnapshot['payComponentStatutoryTreatments']>[number]>(sql`
+  const payComponentStatutoryTreatments = (await executor.execute<ComponentStatutoryTreatmentSource>(sql`
     select treatment.id::text as id,
       treatment.pay_component_id::text as "componentId",
       treatment.worker_comp_group_id::text as "workerCompGroupId",
@@ -1100,6 +1136,9 @@ export async function payRunCalculationSource(
       treatment.effective_from::text, treatment.effective_to::text, treatment.program_exclusions, treatment.vacationable
      order by "componentId", "workerCompGroupId" nulls first, "effectiveFrom", id
   `)).rows;
+  if (payComponentStatutoryTreatments.some((row) => typeof row.vacationable !== 'boolean')) {
+    throw new PayrollError('A pay component statutory treatment has no vacation eligibility — review the component treatment before calculating');
+  }
   const uncoveredEarningComponents = (await executor.execute<{ component_id: string }>(sql`
     select distinct line.component_id::text as component_id
     from pay_runs r
@@ -1282,6 +1321,27 @@ export async function payRunCalculationSource(
   if (usFilingAccountLineages.some(source => !isUsFilingAccountLineageSource(source))) {
     throw new PayrollError('US filing-account affiliation evidence is malformed — qualify the original employer registration before calculating');
   }
+  // Mirrors the settlement stamp's reads: the plan's activity and liability,
+  // and its accrual component's credited liability while that component is
+  // active. Only plans this run's in-scope employees actually settle appear.
+  const entitlementSettlementPlans = (await executor.execute<EntitlementSettlementPlanSource>(sql`
+    select plan.id::text as "planId", plan.is_active as "planActive",
+           plan.liability_account_id::text as "liabilityAccountId",
+           plan.accrual_component_id::text as "accrualComponentId",
+           case when accrual.is_active then accrual.liability_account_id::text end as "accrualLiabilityAccountId"
+      from entitlement_plans plan
+      left join pay_components accrual on accrual.org_id=plan.org_id and accrual.id=plan.accrual_component_id
+     where plan.org_id=${orgId}::uuid
+       and exists (select 1 from entitlement_ledger movement
+         where movement.org_id=plan.org_id and movement.plan_id=plan.id
+           and movement.pay_run_document_id=${documentId}::uuid and movement.kind in ('payout', 'bank_in')
+           and movement.employee_party_id in (select jsonb_array_elements_text(${JSON.stringify(row.employee_party_ids ?? [])}::jsonb)::uuid))
+     order by plan.id
+     ${lockSources ? sql`for share of plan` : sql``}
+  `)).rows;
+  if (entitlementSettlementPlans.some(source => !isEntitlementSettlementPlanSource(source))) {
+    throw new PayrollError('Entitlement settlement evidence is malformed — review the plan configuration and recalculate');
+  }
   return {
     version: 1,
     timeEntries: row.time_entries ?? [],
@@ -1305,6 +1365,7 @@ export async function payRunCalculationSource(
     ...(openingLevySourceAuthorities.length ? { openingLevySourceAuthorities } : {}),
     ...(openingBalanceSources.length ? { openingBalanceSources } : {}),
     ...(usFilingAccountLineages.length ? { usFilingAccountLineages } : {}),
+    ...(entitlementSettlementPlans.length ? { entitlementSettlementPlans } : {}),
     claimEntryIds: row.claim_entry_ids ?? [],
   };
 }
@@ -1328,7 +1389,8 @@ export function payRunCalculationSourceChanges(
       || canonicalJson(stored.bonusIncomeReferences ?? []) !== canonicalJson(current.bonusIncomeReferences ?? []),
     compensationPackages: canonicalJson(stored.compensationPackages ?? []) !== canonicalJson(current.compensationPackages ?? []),
     components: canonicalJson(stored.assignmentRunPolicies ?? []) !== canonicalJson(current.assignmentRunPolicies ?? [])
-      || canonicalJson(stored.payComponentStatutoryTreatments ?? []) !== canonicalJson(current.payComponentStatutoryTreatments ?? []),
+      || canonicalJson(stored.payComponentStatutoryTreatments ?? []) !== canonicalJson(current.payComponentStatutoryTreatments ?? [])
+      || canonicalJson(stored.entitlementSettlementPlans ?? []) !== canonicalJson(current.entitlementSettlementPlans ?? []),
     holidayObligations: canonicalJson(stored.holidayObligations ?? []) !== canonicalJson(current.holidayObligations ?? [])
       || canonicalJson(stored.holidayEmployments ?? []) !== canonicalJson(current.holidayEmployments ?? []),
     roster: canonicalJson(stored.usFilingAccountLineages ?? []) !== canonicalJson(current.usFilingAccountLineages ?? [])

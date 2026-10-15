@@ -338,7 +338,11 @@
       "entityTarget": "法律实体",
       "voidRun": "作废工资发放",
       "voidTitle": "作废工资发放 {number}？",
-      "voided": "{number} 已作废，其过账已冲销。"
+      "voided": "{number} 已作废，其过账已冲销。",
+      "settlementSettleTo": "结算至",
+      "settlementBank": "银行账户",
+      "settlementClearing": "指定的过渡账户",
+      "settlementPaidOn": "付款日期"
     },
     "adjust": {
       "title": "调整",
@@ -1211,6 +1215,17 @@
         "day": "第 {n} 天",
         "weekDay": "第 {week} 周 · {day}"
       }
+    },
+    "netPayClearing": {
+      "title": "净工资结算过渡账户",
+      "description": "在所示日期内，工资单的净工资可结算至该过渡账户而非银行账户。雇主随后从该账户支付各张支票。已被付款使用的期间只能设置结束日期。",
+      "account": "过渡账户",
+      "from": "开始日期",
+      "to": "结束日期（可选）",
+      "reason": "原因",
+      "add": "添加过渡账户",
+      "remove": "移除",
+      "none": "未指定过渡账户。净工资结算至银行账户。"
     }
   },
   "remittances": {

@@ -338,7 +338,11 @@
       "entityTarget": "Rechtsträger",
       "voidRun": "Lohnlauf stornieren",
       "voidTitle": "Lohnlauf {number} stornieren?",
-      "voided": "{number} wurde storniert und die Buchung rückgängig gemacht."
+      "voided": "{number} wurde storniert und die Buchung rückgängig gemacht.",
+      "settlementSettleTo": "Ausgleichen über",
+      "settlementBank": "Bankkonto",
+      "settlementClearing": "Festgelegtes Verrechnungskonto",
+      "settlementPaidOn": "Zahlungsdatum"
     },
     "adjust": {
       "title": "Anpassungen",
@@ -1211,6 +1215,17 @@
         "day": "Tag {n}",
         "weekDay": "Woche {week} · {day}"
       }
+    },
+    "netPayClearing": {
+      "title": "Verrechnungskonto für Nettolohn",
+      "description": "Ein Verrechnungskonto, auf das der Nettolohn eines Lohnlaufs für die angegebenen Daten statt auf ein Bankkonto ausgeglichen werden kann. Der Arbeitgeber zahlt die einzelnen Schecks anschließend von diesem Konto. Ein bereits von einer Zahlung verwendeter Zeitraum kann nur beendet werden.",
+      "account": "Verrechnungskonto",
+      "from": "Von",
+      "to": "Bis (optional)",
+      "reason": "Begründung",
+      "add": "Verrechnungskonto hinzufügen",
+      "remove": "Entfernen",
+      "none": "Keine Verrechnungskonten festgelegt. Der Nettolohn wird über ein Bankkonto ausgeglichen."
     }
   },
   "remittances": {

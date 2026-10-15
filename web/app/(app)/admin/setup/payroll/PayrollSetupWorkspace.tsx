@@ -6,8 +6,9 @@ import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { readApiErrorMessage } from '../../../../../lib/api-error'
-import { Button, Label, Select } from '@openbooks/ui'
+import { Button, Input, Label, Select } from '@openbooks/ui'
 import type { PayrollSettings } from "@openbooks/engine/payroll/run-setup";
+import type { NetPayClearingWindow } from "@openbooks/engine/payroll/net-pay-clearing";
 
 // Generic, jurisdiction-free slots only. Statutory liabilities (CPP/EI/income
 // tax/…) are declared by the installed country packs and rendered from
@@ -38,6 +39,7 @@ export function PayrollSetupWorkspace(props: {
   packs: PackSlots[]
   accounts: { id: string; label: string }[]
   vendors: { id: string; label: string }[]
+  netPaySettlementClearing: NetPayClearingWindow[]
 }) {
   const t = useTranslations('payroll.settingsPage')
   const router = useRouter()
@@ -54,6 +56,9 @@ export function PayrollSetupWorkspace(props: {
   const [wagesTo, setWagesTo] = useState<'expense' | 'labor_clearing'>(props.settings.wagesTo)
   const [craRemittancePartyId, setCraRemittancePartyId] = useState(props.settings.craRemittancePartyId ?? '')
   const [rqRemittancePartyId, setRqRemittancePartyId] = useState(props.settings.rqRemittancePartyId ?? '')
+  const [clearing, setClearing] = useState<NetPayClearingWindow[]>(props.netPaySettlementClearing)
+  const updateClearing = (id: string, patch: Partial<NetPayClearingWindow>) =>
+    setClearing((current) => current.map((window) => (window.id === id ? { ...window, ...patch } : window)))
 
   async function save() {
     setBusy(true)
@@ -66,6 +71,9 @@ export function PayrollSetupWorkspace(props: {
           wagesTo,
           craRemittancePartyId: craRemittancePartyId || null,
           rqRemittancePartyId: rqRemittancePartyId || null,
+          netPaySettlementClearing: clearing.map((window) => ({
+            ...window, effectiveTo: window.effectiveTo || null,
+          })),
           slotAccounts: Object.fromEntries(Object.entries(slotAccounts).map(([country, slots]) => [
             country,
             Object.fromEntries(Object.entries(slots).map(([key, value]) => [key, value || null])),
@@ -113,6 +121,50 @@ export function PayrollSetupWorkspace(props: {
             </div>
           ))}
         </div>
+      </section>
+
+      <section className="space-y-3 rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
+        <div>
+          <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('netPayClearing.title')}</h3>
+          <p className="text-sm text-slate-500 dark:text-slate-400">{t('netPayClearing.description')}</p>
+        </div>
+        {clearing.length === 0 ? (
+          <p className="text-sm text-slate-500 dark:text-slate-400">{t('netPayClearing.none')}</p>
+        ) : (
+          clearing.map((window) => (
+            <div key={window.id} className="grid items-end gap-3 sm:grid-cols-[2fr_1fr_1fr_2fr_auto]">
+              <div>
+                <Label htmlFor={`npc-account-${window.id}`}>{t('netPayClearing.account')}</Label>
+                {accountPicker(`npc-account-${window.id}`, window.accountId, (next) => updateClearing(window.id, { accountId: next }))}
+              </div>
+              <div>
+                <Label htmlFor={`npc-from-${window.id}`}>{t('netPayClearing.from')}</Label>
+                <Input id={`npc-from-${window.id}`} type="date" value={window.effectiveFrom}
+                  onChange={(e) => updateClearing(window.id, { effectiveFrom: e.target.value })} />
+              </div>
+              <div>
+                <Label htmlFor={`npc-to-${window.id}`}>{t('netPayClearing.to')}</Label>
+                <Input id={`npc-to-${window.id}`} type="date" value={window.effectiveTo ?? ''}
+                  onChange={(e) => updateClearing(window.id, { effectiveTo: e.target.value || null })} />
+              </div>
+              <div>
+                <Label htmlFor={`npc-reason-${window.id}`}>{t('netPayClearing.reason')}</Label>
+                <Input id={`npc-reason-${window.id}`} value={window.reason} maxLength={500}
+                  onChange={(e) => updateClearing(window.id, { reason: e.target.value })} />
+              </div>
+              <Button type="button" variant="ghost"
+                onClick={() => setClearing((current) => current.filter((candidate) => candidate.id !== window.id))}>
+                {t('netPayClearing.remove')}
+              </Button>
+            </div>
+          ))
+        )}
+        <Button type="button" variant="outline"
+          onClick={() => setClearing((current) => [...current, {
+            id: crypto.randomUUID(), accountId: '', effectiveFrom: '', effectiveTo: null, reason: '',
+          }])}>
+          {t('netPayClearing.add')}
+        </Button>
       </section>
 
       {props.packs.length === 0 ? (

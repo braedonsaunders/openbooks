@@ -82,6 +82,9 @@ export interface DefinitionForm {
   filterPartyIds: string[]
   filterItemIds: string[]
   filterPayComponentIds: string[]
+  /** Payroll employee and time type selectors, preserved across edits until the drawer offers pickers. */
+  filterPayrollEmployeeIds: string[]
+  filterTimeTypeIds: string[]
   payrollExpensesOnly: boolean
   /** Custom-segment key → selected value ids. */
   filterExtraDims: Record<string, string[]>
@@ -129,6 +132,8 @@ export function blankDefinitionForm(): DefinitionForm {
     filterPartyIds: [],
     filterItemIds: [],
     filterPayComponentIds: [],
+    filterPayrollEmployeeIds: [],
+    filterTimeTypeIds: [],
     payrollExpensesOnly: false,
     filterExtraDims: {},
     requireUntagged: [],
@@ -219,6 +224,8 @@ export function definitionFormFromVersion(version: {
     filterPartyIds: ids(filters.partyIds),
     filterItemIds: ids(filters.itemIds),
     filterPayComponentIds: ids(filters.payComponentIds),
+    filterPayrollEmployeeIds: ids(filters.payrollEmployeeIds),
+    filterTimeTypeIds: ids(filters.timeTypeIds),
     payrollExpensesOnly: filters.payrollExpensesOnly === true,
     filterExtraDims: Object.fromEntries(
       Object.entries(filters.extraDims ?? {}).map(([segment, values]) => [segment, [...values]]),
@@ -273,6 +280,8 @@ export function definitionPayload(form: DefinitionForm, expectedRevision: string
   put('partyIds', form.filterPartyIds)
   put('itemIds', form.filterItemIds)
   put('payComponentIds', form.filterPayComponentIds)
+  put('payrollEmployeeIds', form.filterPayrollEmployeeIds)
+  put('timeTypeIds', form.filterTimeTypeIds)
   if (form.payrollExpensesOnly) filters['payrollExpensesOnly'] = true
   const extraDims: Record<string, string[]> = {}
   for (const [segment, values] of Object.entries(form.filterExtraDims)) {

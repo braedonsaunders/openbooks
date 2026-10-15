@@ -338,7 +338,11 @@
       "entityTarget": "エンティティ",
       "voidRun": "給与計算を取り消す",
       "voidTitle": "給与計算 {number} を取り消しますか？",
-      "voided": "{number} を取り消し、仕訳を逆仕訳しました。"
+      "voided": "{number} を取り消し、仕訳を逆仕訳しました。",
+      "settlementSettleTo": "決済先",
+      "settlementBank": "銀行口座",
+      "settlementClearing": "指定された仮勘定",
+      "settlementPaidOn": "支払日"
     },
     "adjust": {
       "title": "調整",
@@ -1211,6 +1215,17 @@
         "day": "第{n}日",
         "weekDay": "第{week}週 · {day}"
       }
+    },
+    "netPayClearing": {
+      "title": "差引支給額の決済用仮勘定",
+      "description": "表示された期間、給与計算の差引支給額を銀行口座の代わりに決済できる仮勘定です。雇用主はその後、この勘定から個別の小切手を支払います。支払いで使用済みの期間は終了日の設定のみ可能です。",
+      "account": "仮勘定",
+      "from": "開始日",
+      "to": "終了日（任意）",
+      "reason": "理由",
+      "add": "仮勘定を追加",
+      "remove": "削除",
+      "none": "仮勘定は指定されていません。差引支給額は銀行口座で決済されます。"
     }
   },
   "remittances": {

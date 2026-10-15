@@ -3,6 +3,7 @@
 import { useIdentityState } from '@/lib/use-identity-state'
 
 import { type WizardStep, STALE_REASON_FALLBACK, type Readiness, type Staleness, type Funding, type StubChange, type RunHeader, type StubRow, type RosterRow, type RemittanceRow, type GlLeg, type AdjustmentRow, type ComponentOption, runTypeLabel } from './run-wizard-model'
+import type { ClearingDesignationOption, RecordPaymentInput } from './run-wizard-controls'
 import { PeriodStep } from './steps/PeriodStep'
 import { ReadinessStep } from './steps/ReadinessStep'
 import { ReviewStep } from './steps/ReviewStep'
@@ -43,6 +44,7 @@ export function RunWizard(props: {
   /** Credit legs by account from the committed document lines (negative). */
   remittance: RemittanceRow[]
   bankAccounts: { id: string; label: string }[]
+  clearingDesignations: ClearingDesignationOption[]
   /** The seeded 'payroll-register' report definition (full report engine). */
   registerReportId: string | null
   /** Pack-declared withholding buckets for the review grid and stub header. */
@@ -527,13 +529,13 @@ export function RunWizard(props: {
     }
   }
 
-  async function recordPayment(bankAccountId: string) {
+  async function recordPayment(input: RecordPaymentInput) {
     setBusy(true)
     try {
       const res = await fetch(`/api/payroll/runs/${run.document_id}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ action: 'record-payment', bankAccountId }),
+        body: JSON.stringify({ action: 'record-payment', ...input }),
       })
       // The status is checked before the body is parsed (see act above).
       if (!res.ok) throw new Error(await readApiErrorMessage(res, 'failed'))
@@ -919,6 +921,7 @@ export function RunWizard(props: {
           onVoid={voidRun}
           registerReportId={props.registerReportId}
           bankAccounts={props.bankAccounts}
+          clearingDesignations={props.clearingDesignations ?? []}
           entityOptions={props.entityOptions}
           canAttributeEntity={props.canAttributeEntity}
           funding={props.funding}
