@@ -37,7 +37,7 @@ class GovernedPoolHarness {
         const text = typeof textOrConfig === "string" ? textOrConfig : textOrConfig.text;
         const values = typeof textOrConfig === "string" ? params : textOrConfig.values;
         this.queries.push({ text, params: values });
-        const normalized = text.replace(/\s+/g, " ").trim().toLowerCase();
+        const normalized = text.replace(/\s+/g, " ").replace(/\( /g, "(").replace(/ \)/g, ")").trim().toLowerCase();
         if (normalized.startsWith("explain")) {
           const plan = [{ Plan: { "Node Type": "Nested Loop", Plans: this.planRelations.map((name) => ({ "Node Type": "Seq Scan", "Relation Name": name })) } }];
           return { rows: [{ "QUERY PLAN": plan }], fields: [], rowCount: 1 };
@@ -311,6 +311,9 @@ test("SQL API operations use only the isolated governed pool", async () => {
     2,
   );
   assert.ok(statements.includes("set local statement_timeout = 1234"));
+  // Catalog introspection plans with nested loops; only ad-hoc console SQL disables them.
+  const catalogQuery = statements.findIndex((text) => text.includes("from information_schema.columns"));
+  assert.equal(statements[catalogQuery - 1], "set local enable_nestloop = on");
   const userQuery = harness.queries.find(({ text }) => text.includes("__ob_row_bytes") && !text.startsWith("explain"));
   assert.ok(userQuery, "governed user SQL must go through the measured wrapper");
   assert.match(userQuery!.text, /row_to_json/);

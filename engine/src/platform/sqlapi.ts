@@ -613,6 +613,10 @@ export async function listSchema(orgId: string, options: { payrollRead?: boolean
   try {
     await prepareQueryContext(client, orgId);
     await beginGovernedReadTransaction(client, orgId, 10_000);
+    // Nested loops are disabled for ad-hoc console SQL only. This fixed
+    // catalog introspection needs them: without them it plans hash joins
+    // across the whole system catalog and takes tens of seconds.
+    await client.query("set local enable_nestloop = on");
     const res = await client.query<{
       table_name: string;
       table_type: string;
