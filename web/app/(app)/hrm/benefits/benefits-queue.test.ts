@@ -44,7 +44,7 @@ stubModules({
         export async function listBenefitAwards() { const s = globalThis.__portfolioReads; if (s?.awardsError) throw new Error(s.awardsError); return { awards: s?.awards ?? [] } }
         export async function listProgramMemberships() { return [] }
         export async function listProgramSources() { const s = globalThis.__portfolioReads; if (s?.sourcesError) throw new Error(s.sourcesError); return s?.sources ?? [] }
-        export async function previewIncentiveSettlement() { throw new Error('Simulation was not requested') }
+        export async function reconcileIncentivePeriod() { throw new Error('Simulation was not requested') }
       `,
     './benefits-reports': 'export async function loadBenefitsReportLinks() { return [] }',
     '@openbooks/engine/platform/business-date/module': "export async function businessToday() { return '2026-09-22'; } export function utcDateFromParts() { throw new Error('unstubbed'); }",
