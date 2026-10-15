@@ -8,6 +8,13 @@ const snapshot = (before: Record<string, unknown>, after: Record<string, unknown
   after: { payroll: after },
 });
 
+test("a net-pay settlement clearing designation does not stale payroll amounts", () => {
+  assert.equal(orgSettingsAuditAffectsCalculation(snapshot(
+    {},
+    { netPaySettlementClearing: [{ accountId: "clearing", effectiveFrom: "2026-01-01" }] },
+  )), false);
+});
+
 test("a posting-account edit does not stale a calculated run", () => {
   assert.equal(
     orgSettingsAuditAffectsCalculation(snapshot(

@@ -22,6 +22,8 @@ const PAYROLL_POSTING_ONLY_KEYS: ReadonlySet<string> = new Set([
   // Ledger accounts the commit posts to; readiness and commit read them live.
   "burdenExpenseAccountId",
   "netPayAccountId",
+  // Settlement routing is applied after payroll recognition, never calculation.
+  "netPaySettlementClearing",
   "cppPayableAccountId",
   "eiPayableAccountId",
   "taxPayableAccountId",

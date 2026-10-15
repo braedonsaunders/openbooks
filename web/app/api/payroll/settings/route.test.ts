@@ -238,6 +238,16 @@ test("the removed CRA organization frequency is refused before database access",
   }
 });
 
+test("the payroll settings route accepts the declared settlement clearing collection", { skip: !DB }, async () => {
+  const fixture = await scratchPayrollOrg();
+  await withPayrollActor(fixture, async () => {
+    const response = await PUT(request("PUT", { netPaySettlementClearing: [] }));
+    assert.equal(response.status, 200, JSON.stringify(await response.json()));
+    const state = await payrollState(fixture.orgId);
+    assert.deepEqual(state.settings?.netPaySettlementClearing, []);
+  });
+});
+
 test("payroll settings distinguish malformed JSON from named field refusals before database access", async () => {
   authorize(randomUUID(), randomUUID());
   try {

@@ -425,6 +425,7 @@ function payrollSettingsShapeRefusal(body: Record<string, unknown>): string | nu
     'countries',
     'statutoryHolidayPay',
     'slotAccounts',
+    'netPaySettlementClearing',
   ])
   const unknownKey = Object.keys(body).find((key) => !acceptedKeys.has(key))
   if (unknownKey) {
