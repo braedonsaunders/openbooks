@@ -140,3 +140,23 @@ test('POST passes a non-empty caller scope through to the engine', async () => {
     await dropScratchOrg(org.orgId)
   }
 })
+
+test('POST confines an unrestricted actor to the explicitly selected subsidiary', async () => {
+  const { org } = await fixture(); state.scope = 'open';
+  try {
+    const result = await post({ periodId: org.periodId, subsidiaryIds: [org.subsidiaryId.toUpperCase()] });
+    assert.equal(result.status, 200, JSON.stringify(result.json));
+    assert.deepEqual((result.json as { skipped: unknown[] }).skipped, [{ subsidiaryId: org.subsidiaryId, reason: 'no revaluation needed' }]);
+    assert.equal(await entryCount(), 0);
+  } finally { await dropScratchOrg(org.orgId); }
+});
+test('POST refuses a requested entity beyond the actor ceiling without partial posting', async () => {
+  const { org } = await fixture(); state.scope = 'real'; state.realId = org.subsidiaryId;
+  try {
+    const result = await post({ periodId: org.periodId, subsidiaryIds: [org.subsidiaryId, randomUUID()] });
+    assert.equal(result.status, 403, JSON.stringify(result.json));
+    assert.match(JSON.stringify(result.json), /exceed your close scope/);
+    assert.equal(await entryCount(), 0);
+    assert.equal((await post({ periodId: org.periodId, subsidiaryIds: [] })).status, 400);
+  } finally { await dropScratchOrg(org.orgId); }
+});

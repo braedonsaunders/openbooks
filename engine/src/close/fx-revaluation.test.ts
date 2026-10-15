@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   computeRevaluation,
+  revaluationSubsidiarySelection,
+  RevaluationScopeError,
   missingReversalPeriodReason,
   revaluationLockKey,
   type RevaluationPosition,
@@ -152,3 +154,18 @@ test("a refused revaluation names the missing reversal period and the remedy", (
   assert.match(reason, /generate periods and re-run/);
 });
 
+
+const ENTITY_A = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+const ENTITY_B = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
+test("revaluation selection preserves omitted caller scope and permits an authorized subset", () => {
+  assert.equal(revaluationSubsidiarySelection(null), undefined);
+  assert.deepEqual(revaluationSubsidiarySelection(new Set([ENTITY_B, ENTITY_A])), [ENTITY_A, ENTITY_B]);
+  assert.deepEqual(revaluationSubsidiarySelection(null, [ENTITY_A.toUpperCase(), ENTITY_A]), [ENTITY_A]);
+  assert.deepEqual(revaluationSubsidiarySelection(new Set([ENTITY_A, ENTITY_B]), [ENTITY_B]), [ENTITY_B]);
+});
+test("revaluation selection refuses empty authority, empty selection and unauthorized entities", () => {
+  assert.throws(() => revaluationSubsidiarySelection(new Set(), [ENTITY_A]), error => error instanceof RevaluationScopeError && error.status === 403);
+  assert.throws(() => revaluationSubsidiarySelection(null, []), error => error instanceof RevaluationScopeError && error.status === 422);
+  assert.throws(() => revaluationSubsidiarySelection(null, ["invalid"]), error => error instanceof RevaluationScopeError && error.status === 422);
+  assert.throws(() => revaluationSubsidiarySelection(new Set([ENTITY_A]), [ENTITY_A, ENTITY_B]), error => error instanceof RevaluationScopeError && error.status === 403);
+});

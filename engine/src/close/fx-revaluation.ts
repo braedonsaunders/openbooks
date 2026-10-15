@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { sql, type SQL } from "drizzle-orm";
 import { db, withOrgTransaction, withTransactionSavepoint } from "../platform/db.ts";
+import { isUuid } from "../platform/uuid.ts";
 import { businessTimeZone } from "../platform/business-date.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
 import { lockLedgerSetupFence } from "../organization/ledger-setup-fence.ts";
@@ -127,6 +128,31 @@ export interface RevaluationProblem {
 
 export class RevaluationError extends Error {
   readonly name = "RevaluationError";
+}
+
+export class RevaluationScopeError extends Error {
+  readonly name = "RevaluationScopeError";
+  constructor(message: string, readonly status: 403 | 422) { super(message); }
+}
+
+/** A requested posting population may narrow, but never expand, actor authority. */
+export function revaluationSubsidiarySelection(
+  allowed: ReadonlySet<string> | null,
+  requested?: readonly string[],
+): string[] | undefined {
+  if (allowed !== null && allowed.size === 0) {
+    throw new RevaluationScopeError("no subsidiaries are in the caller's close scope — ask an administrator with unrestricted subsidiary visibility to run this close action", 403);
+  }
+  if (requested === undefined) return allowed === null ? undefined : [...allowed].map(id => id.toLowerCase()).sort();
+  if (!Array.isArray(requested) || requested.length === 0 || requested.length > 1000 || requested.some(id => !isUuid(id))) {
+    throw new RevaluationScopeError("Select between 1 and 1000 valid subsidiaries for revaluation", 422);
+  }
+  const selected = [...new Set(requested.map(id => id.toLowerCase()))].sort();
+  const ceiling = allowed === null ? null : new Set([...allowed].map(id => id.toLowerCase()));
+  if (ceiling !== null && selected.some(id => !ceiling.has(id))) {
+    throw new RevaluationScopeError("The selected subsidiaries exceed your close scope — choose only subsidiaries you are authorized to close", 403);
+  }
+  return selected;
 }
 
 export class RevaluationFeatureDisabledError extends Error {

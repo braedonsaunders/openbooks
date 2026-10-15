@@ -761,6 +761,7 @@ function TaskCard(props: Props & { task: CloseTaskRow }) {
       const result = await call("/api/close/run-revaluation", {
         periodId: props.run.period_id,
         bookId: props.run.book_id,
+        subsidiaryIds: props.run.scope?.subsidiaryIds?.length ? props.run.scope.subsidiaryIds : undefined,
       }, t("errors.actionFailed"));
       // Partial problems arrive with stable codes plus structured subsidiary
       // parameters and render through the close catalog; the legacy English

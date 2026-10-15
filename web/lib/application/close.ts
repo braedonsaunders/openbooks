@@ -11,6 +11,8 @@ import {
   listRevaluationExposures,
   RevaluationError,
   RevaluationFeatureDisabledError,
+  RevaluationScopeError,
+  revaluationSubsidiarySelection,
   runRevaluation,
   type RevaluationExposureReadModel,
 } from "@openbooks/engine/close/fx-revaluation";
@@ -385,20 +387,16 @@ export async function advanceCloseRun(context: ApplicationContext, input: {
 export async function runPeriodRevaluation(context: ApplicationContext, input: {
   periodId: string;
   bookId?: string;
+  subsidiaryIds?: string[];
   idempotencyKey: string;
 }): Promise<{ replayed: boolean; result: Record<string, unknown> }> {
   assertApplicationPermission(context, "close.run");
-  const allowed = context.authz.allowedSubsidiaryIds;
-  // Fail closed before the idempotent execution is recorded: an empty caller
-  // scope would otherwise run zero subsidiaries and report success with no
-  // observable work. Mirrors the run-revaluation route guard with the same
-  // wording; null stays the explicit unrestricted sentinel.
-  if (allowed !== null && allowed.size === 0) {
-    throw new ApplicationError(
-      "forbidden",
-      "no subsidiaries are in the caller's close scope — ask an administrator with unrestricted subsidiary visibility to run this close action",
-      403,
-    );
+  let selected: string[] | undefined;
+  try {
+    selected = revaluationSubsidiarySelection(context.authz.allowedSubsidiaryIds, input.subsidiaryIds);
+  } catch (error) {
+    if (error instanceof RevaluationScopeError) throw new ApplicationError(error.status === 403 ? "forbidden" : "invalid_input", error.message, error.status);
+    throw error;
   }
   const outcome = await executeIdempotent({
     context,
@@ -407,7 +405,7 @@ export async function runPeriodRevaluation(context: ApplicationContext, input: {
     request: {
       periodId: input.periodId,
       bookId: input.bookId ?? null,
-      subsidiaryIds: allowed === null ? null : [...allowed].sort(),
+      subsidiaryIds: selected ?? null,
     },
     execute: async (): Promise<Record<string, unknown>> => {
       try {
@@ -415,7 +413,7 @@ export async function runPeriodRevaluation(context: ApplicationContext, input: {
           context.authz.user.orgId,
           input.periodId,
           context.authz.user.id,
-          allowed === null ? undefined : [...allowed],
+          selected,
           input.bookId,
         );
         return { ...run };

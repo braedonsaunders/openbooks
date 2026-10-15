@@ -3,12 +3,12 @@ import { defineRoute } from "@/lib/api/route";
 import { apiErrorResponse } from '@/lib/api/error-response'
 
 import { NextResponse } from 'next/server'
-import { RevaluationError, RevaluationFeatureDisabledError, runRevaluation } from '@openbooks/engine/close/fx-revaluation'
+import { RevaluationError, RevaluationFeatureDisabledError, RevaluationScopeError, revaluationSubsidiarySelection, runRevaluation } from '@openbooks/engine/close/fx-revaluation'
 
 import { isUuid } from '../../../../lib/list-params'
 import { notFound } from "@/lib/api/responses";
 
-const requestBodySchema = z.object({ periodId: z.string().uuid(), bookId: z.string().uuid().optional() });
+const requestBodySchema = z.object({ periodId: z.string().uuid(), bookId: z.string().uuid().optional(), subsidiaryIds: z.array(z.string().uuid().transform(id => id.toLowerCase())).min(1).max(1000).optional() });
 
 
 
@@ -46,28 +46,17 @@ export const POST = defineRoute({
       return NextResponse.json({ error: 'invalid book' }, { status: 422 })
     }
 
-    // A restricted caller whose visibility resolves to an empty subsidiary set
-    // must fail closed like the sibling close runs and posting-periods routes:
-    // spreading the empty set into [] loops zero subsidiaries and reports 200
-    // {posted:[],skipped:[],problems:[]} with no observable work. Null is the
-    // explicit unrestricted sentinel and passes through untouched.
-    if (gate.allowedSubsidiaryIds !== null && gate.allowedSubsidiaryIds.size === 0) {
-      return NextResponse.json(
-        { error: "no subsidiaries are in the caller's close scope — ask an administrator with unrestricted subsidiary visibility to run this close action" },
-        { status: 403 },
-      )
-    }
-
     try {
       const result = await runRevaluation(
         user.orgId,
         body.periodId,
         user.id,
-        gate.allowedSubsidiaryIds ? [...gate.allowedSubsidiaryIds] : undefined,
+        revaluationSubsidiarySelection(gate.allowedSubsidiaryIds, body.subsidiaryIds),
         body.bookId,
       )
       return NextResponse.json(result)
     } catch (e: unknown) {
+      if (e instanceof RevaluationScopeError) return apiErrorResponse(e, { safeStatus: e.status });
       if (e instanceof RevaluationFeatureDisabledError) {
         return notFound("record")
       }

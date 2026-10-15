@@ -20,7 +20,7 @@ const executable = ts.transpileModule(handler.getText(source), {
 }).outputText;
 
 type Result = { posted: object[]; skipped: object[]; problems: string[] };
-async function invoke(result: Result | Error) {
+async function invoke(result: Result | Error, subsidiaryIds?: string[]) {
   const busy: boolean[] = [];
   const feedback: { kind: string; message: string; description?: string }[] = [];
   let refreshed = 0;
@@ -29,13 +29,13 @@ async function invoke(result: Result | Error) {
   };
   const run = new Function("call", "props", "setBusy", "toast", "t", "router",
     `${executable}\nreturn runRevaluation;`)(
-    async (url: string, body: { periodId: string; bookId?: string }) => {
+    async (url: string, body: { periodId: string; bookId?: string; subsidiaryIds?: string[] }) => {
       assert.equal(url, "/api/close/run-revaluation");
-      assert.deepEqual(body, { periodId: "test-period", bookId: "test-book" });
+      assert.deepEqual(body, { periodId: "test-period", bookId: "test-book", subsidiaryIds: subsidiaryIds?.length ? subsidiaryIds : undefined });
       if (result instanceof Error) throw result;
       return result;
     },
-    { run: { period_id: "test-period", book_id: "test-book" } },
+    { run: { period_id: "test-period", book_id: "test-book", scope: { subsidiaryIds } } },
     (value: boolean) => busy.push(value),
     { success: notification("success"), error: notification("error"), info: notification("info") },
     (key: string) => key,
@@ -69,4 +69,9 @@ test("clean no-op refreshes without claiming to have posted a revaluation", asyn
 test("request failure clears the busy state and shows the server error", async () => {
   const result = await invoke(new Error("request failed"));
   assert.deepEqual(result, { refreshed: 0, feedback: [{ kind: "error", message: "request failed", description: undefined }] });
+});
+
+test("revaluation action carries the close run's selected legal entities", async () => {
+  await invoke({ posted: [], skipped: [{}], problems: [] }, ["aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"]);
+  await invoke({ posted: [], skipped: [{}], problems: [] }, []);
 });

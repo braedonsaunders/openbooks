@@ -103,3 +103,20 @@ test("runPeriodRevaluation still runs organization-wide for an unrestricted call
     await dropScratchOrg(org.orgId);
   }
 });
+
+test("selected revaluation scope is bound to idempotency and cannot expand actor authority", { skip: !DB }, async () => {
+  const { org, actor } = await fixture(); const key = randomUUID();
+  try {
+    const ctx = contextFor(org.orgId, actor, null);
+    const input = { periodId: org.periodId, subsidiaryIds: [org.subsidiaryId.toUpperCase()], idempotencyKey: key };
+    const first = await withOrgContext(org.orgId, () => runPeriodRevaluation(ctx, input));
+    assert.deepEqual((first.result as { skipped: unknown[] }).skipped, [{ subsidiaryId: org.subsidiaryId, reason: "no revaluation needed" }]);
+    const replay = await withOrgContext(org.orgId, () => runPeriodRevaluation(ctx, { ...input, subsidiaryIds: [org.subsidiaryId] }));
+    assert.equal(replay.replayed, true);
+    await assert.rejects(withOrgContext(org.orgId, () => runPeriodRevaluation(ctx, { ...input, subsidiaryIds: [randomUUID()] })), error => error instanceof ApplicationError && error.status === 409);
+    const deniedKey = randomUUID();
+    await assert.rejects(withOrgContext(org.orgId, () => runPeriodRevaluation(contextFor(org.orgId, actor, new Set([org.subsidiaryId])), { ...input, idempotencyKey: deniedKey, subsidiaryIds: [org.subsidiaryId, randomUUID()] })), error => error instanceof ApplicationError && error.status === 403);
+    assert.equal(await idempotencyCount(org.orgId, deniedKey), 0);
+    assert.equal(await fxEntryCount(org.orgId), 0);
+  } finally { await dropScratchOrg(org.orgId); }
+});

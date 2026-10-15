@@ -11,6 +11,7 @@ import { runPeriodRevaluation } from "../../../../../lib/application/close";
 const runPeriodRevaluationBody = z.looseObject({
   periodId: z.string().min(1),
   bookId: z.string().min(1).optional(),
+  subsidiaryIds: z.array(z.string().uuid().transform(id => id.toLowerCase())).min(1).max(1000).optional(),
 });
 
 export const runtime = "nodejs";
@@ -22,6 +23,7 @@ async function handleV1POST(request: Request): Promise<NextResponse> {
     const outcome = await runPeriodRevaluation(context, {
       periodId: body.periodId,
       bookId: body.bookId,
+      subsidiaryIds: body.subsidiaryIds,
       idempotencyKey: requireV1IdempotencyKey(request),
     });
     return { status: 200, body: outcome.result, replayed: outcome.replayed };

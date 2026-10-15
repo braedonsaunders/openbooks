@@ -598,7 +598,7 @@ export const APPLICATION_TOOLS: readonly ApplicationToolDefinition[] = [
   definition({
     name: "run_revaluation", title: "Run FX Revaluation",
     description: "Period-end unrealized FX revaluation: restate foreign balances to spot, booking gain/loss plus next-period mirror. Reruns book incremental corrections only. Needs multi-currency and a gain/loss account.",
-    inputSchema: z.object({ periodId: UUID, bookId: UUID.optional(), idempotencyKey: IDEMPOTENCY_KEY }),
+    inputSchema: z.object({ periodId: UUID, bookId: UUID.optional(), subsidiaryIds: z.array(UUID).min(1).max(1000).optional().describe("Selected legal entities, within the caller’s close scope; omitted uses the caller’s whole scope"), idempotencyKey: IDEMPOTENCY_KEY }),
     readOnly: false, destructive: false, openWorld: false, assistantConfirmation: "always",
     visibleTo: hasPermission("close.run"), featureKey: "multiCurrency",
     execute: async (context, input) => ({ ok: true, ...(await runPeriodRevaluation(context, input)) }),
