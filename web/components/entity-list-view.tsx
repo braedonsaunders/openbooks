@@ -7,7 +7,7 @@ import Link from 'next/link'
 import { Eye } from 'lucide-react'
 import { getTranslations } from 'next-intl/server'
 import { sql, type SQL } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
+import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
 import { Badge, EmptyState, PageHeader, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
 import { getRecordType, listColumnMeta, recordTypeForFeatureState } from '@openbooks/customization'
 import { isFeatureEnabled } from '../lib/features'
@@ -207,7 +207,11 @@ export async function EntityListView({
   }
   const view = resolvedView.view
   const boardAvailable = recordType === 'project'
-  const preferredPresentation = boardAvailable ? await readWorkListPresentation(db,orgId,userId,'project') : null
+  // The personal presentation read locks the actor's identity, which the
+  // engine admits only on the organization's pinned transaction.
+  const preferredPresentation = boardAvailable
+    ? await withOrgTransaction(orgId, () => readWorkListPresentation(db, orgId, userId, 'project'))
+    : null
   const presentation = boardAvailable && (pickString(sp.presentation) ?? preferredPresentation ?? view.presentation ?? defaultPresentation) === 'board' ? 'board' : 'list'
   const readView = presentation === 'board' ? { ...view, columns: [...view.columns.filter(column => !['code','name','status','customer'].includes(column.key)), ...['code','name','status','customer'].map(key => ({key,visible:true}))] } : view
   const viewName = displayListViewName(resolvedView.row?.name, tCustom('views.defaultName'))
