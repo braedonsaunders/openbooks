@@ -246,8 +246,13 @@ export async function submitAndReleaseIfUngated(
     if (result.gated || result.flowError) {
       return { ...result, autoApproved: false, approvalRequired: false };
     }
-    const approvalDocument = (await db.select({ subsidiaryId:schema.documents.subsidiaryId, postingDate:schema.documents.postingDate, documentDate:schema.documents.documentDate })
+    const approvalDocument = (await db.select({ status:schema.documents.status, subsidiaryId:schema.documents.subsidiaryId, postingDate:schema.documents.postingDate, documentDate:schema.documents.documentDate })
       .from(schema.documents).where(and(eq(schema.documents.orgId,candidate.orgId),eq(schema.documents.id,targetId))))[0];
+    // An ungated on-submit Flow can release the document itself. Its native
+    // transition and audit already belong to this locked transaction.
+    if (approvalDocument?.status === "approved") {
+      return { ...result, autoApproved: true, approvalRequired: false };
+    }
     if ((targetKind === VENDOR_BILL_KIND && (await isVendorBillApprovalRequired(candidate.orgId))) ||
         (targetKind === 'journal' && approvalDocument?.subsidiaryId && (await accountingPreferences(db,candidate.orgId,approvalDocument.subsidiaryId,approvalDocument.postingDate ?? approvalDocument.documentDate)).requireJournalApproval)) {
       // A required approval cannot be replaced by an ungated release; submission evidence and the actionable policy refusal remain visible.

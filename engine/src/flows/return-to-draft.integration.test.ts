@@ -86,6 +86,28 @@ test("a return reason is required before any database work", async () => {
   }
 });
 
+test("an ungated submission retains the approval performed by its native Flow", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const actors = await seedFlowActors(org.orgId);
+    await pinApprovalNotRequired(org.orgId);
+    const id = await nativeBill(org, actors.submitterId);
+    const graph = { schemaVersion: 1, nodes: [
+      { id: "submit", position: { x: 0, y: 0 }, data: { kind: "trigger", trigger: { trigger: "on_submit" } } },
+      { id: "approve", position: { x: 200, y: 0 }, data: { kind: "action", action: { action: "change_status", to: "approved" } } },
+    ], edges: [{ id: "submit-approve", source: "submit", target: "approve" }] };
+    await db.execute(sql`insert into flows(org_id,name,subject_kind,enabled,graph)
+      values(${org.orgId},'Automatic document approval','vendor_bill',true,${JSON.stringify(graph)}::jsonb)`);
+    const result = await submitAndReleaseIfUngated("vendor_bill", id, actors.submitterId, { source: "script" });
+    assert.equal(result.gated, false);
+    assert.equal(result.autoApproved, true);
+    assert.equal(result.flowError, null);
+    assert.equal(await docStatus(org.orgId, id), "approved");
+  } finally {
+    await dropScratchOrg(org.orgId);
+  }
+});
+
 test("an approved bill returns to draft with a before/after audit, edits, and re-approves", { skip: !DB }, async () => {
   const org = await createScratchOrg();
   try {
