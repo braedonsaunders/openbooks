@@ -241,6 +241,8 @@ test("the removed CRA organization frequency is refused before database access",
 test("the payroll settings route accepts the declared settlement clearing collection", { skip: !DB }, async () => {
   const fixture = await scratchPayrollOrg();
   await withPayrollActor(fixture, async () => {
+    const { grantScratchPermissions } = await import("@openbooks/engine/testing/fixtures");
+    await withBypass(() => grantScratchPermissions(fixture.orgId, fixture.actorId, ["payroll.manage"]));
     const response = await PUT(request("PUT", { netPaySettlementClearing: [] }));
     assert.equal(response.status, 200, JSON.stringify(await response.json()));
     const state = await payrollState(fixture.orgId);
