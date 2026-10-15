@@ -27,3 +27,12 @@ export const CA_EMPLOYER_LEVY_PROGRAMS: readonly PayrollEmployerLevyProgram[] = 
       help: "Remuneration subject to the Québec contribution related to labour standards (LE-39.0.2-V).",
     },
   ];
+
+/** Issued premiums supported independently of the native assessment basis. */
+export const CA_ISSUED_EMPLOYER_LEVY_PROGRAMS = {
+  ca_eht: { country: "CA", systemKey: "eht", label: "Employer Health Tax" },
+  ca_wcb: { country: "CA", systemKey: "wcb", label: "WCB/WSIB" },
+} as const;
+
+/** A single issued withholding total cannot replace separately assessed provincial tax. */
+export const CA_ISSUED_INCOME_TAX_OVERRIDE = { country: 'CA', excludedRegions: ['QC'] } as const;

@@ -1,3 +1,4 @@
+import { CA_ISSUED_INCOME_TAX_OVERRIDE } from './canada/levy-programs.ts';
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "../platform/db.ts";
@@ -627,7 +628,7 @@ async function executePayRunAdjustment(input: PayRunAdjustmentInput, validateOnl
       `)).rows[0];
       if (!entity) throw new PayrollError("the pay run's legal entity is missing or inactive");
       const runContext = resolvePayrollRunContext({ payDate: run.pay_date, subsidiary: entity, runCurrency: run.currency });
-      if (runContext.country !== "CA" || runContext.taxYear !== run.tax_year) {
+      if (runContext.country !== EMPLOYER_LEVY_PROGRAMS[mutation.programKey].country || runContext.taxYear !== run.tax_year) {
         throw new PayrollError("employer levy adjustments require a Canadian pay run with a tax year matching its pay date");
       }
       const rosterColumns = {
@@ -656,7 +657,7 @@ async function executePayRunAdjustment(input: PayRunAdjustmentInput, validateOnl
       if (!profile) {
         throw new PayrollError("this employee has no active payroll profile and employment on the run's legal entity and schedule — review the employment, legal entity and pay schedule before recording a levy adjustment");
       }
-      if (profile.country !== "CA") {
+      if (profile.country !== EMPLOYER_LEVY_PROGRAMS[mutation.programKey].country) {
         throw new PayrollError("employer levy adjustments are available only for Canadian payroll profiles with a native Canadian levy line");
       }
       assertPayrollRegionSupported(profile.country, profile.province);
@@ -887,7 +888,7 @@ async function executePayRunAdjustment(input: PayRunAdjustmentInput, validateOnl
       `)).rows[0];
       if (!entity) throw new PayrollError("the pay run's legal entity is missing or inactive");
       const runContext = resolvePayrollRunContext({ payDate: run.pay_date, subsidiary: entity, runCurrency: run.currency });
-      if (runContext.country !== "CA" || runContext.taxYear !== run.tax_year) {
+      if (runContext.country !== CA_ISSUED_INCOME_TAX_OVERRIDE.country || runContext.taxYear !== run.tax_year) {
         throw new PayrollError("income-tax overrides require a Canadian pay run with a tax year matching its pay date");
       }
       const rosterColumns = {
@@ -916,14 +917,14 @@ async function executePayRunAdjustment(input: PayRunAdjustmentInput, validateOnl
       if (!profile) {
         throw new PayrollError("this employee has no active payroll profile and employment on the run's legal entity and schedule — review the employment, legal entity and pay schedule before recording cheque withholding");
       }
-      if (profile.country !== "CA") {
+      if (profile.country !== CA_ISSUED_INCOME_TAX_OVERRIDE.country) {
         throw new PayrollError("income-tax override is available only for Canadian payroll profiles with a native Canadian withholding line");
       }
-      if (profile.province === "QC") {
+      if ((CA_ISSUED_INCOME_TAX_OVERRIDE.excludedRegions as readonly string[]).includes(profile.province)) {
         throw new PayrollError("a single total cannot override Québec federal and provincial withholding separately — use native Québec calculation without an override");
       }
-      assertPayrollRegionSupported("CA", profile.province);
-      assertPayrollTaxYearSupported("CA", runContext.taxYear, profile.province);
+      assertPayrollRegionSupported(profile.country, profile.province);
+      assertPayrollTaxYearSupported(profile.country, runContext.taxYear, profile.province);
       if (!profile.eligible || profile.excluded) {
         throw new PayrollError("this employee is outside the pay run's payable roster — review employment dates and include the employee before recording cheque withholding");
       }

@@ -229,7 +229,7 @@ function isOpeningLevySourceAuthoritySource(value: unknown): value is OpeningLev
     && row.coverageComplete === true && typeof row.coverageStart === 'string' && isIsoCalendarDate(row.coverageStart)
     && typeof row.coverageEnd === 'string' && isIsoCalendarDate(row.coverageEnd)
     && (() => { try { validateOpeningLevySourceFacts(row as unknown as OpeningLevySourceFacts, row.taxYear as number, PAYROLL_COUNTRY_PACKS[String(row.originalCountry)]); return true; } catch { return false; } })()
-    && Array.isArray(row.allocations) && (row.originalCountry !== 'CA' && row.originalCountry !== 'US' || row.allocations.length > 0)
+    && Array.isArray(row.allocations) && (!PAYROLL_COUNTRY_PACKS[row.originalCountry]?.openingLevySource || row.allocations.length > 0)
     && row.allocations.every((value) => {
       if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
       const allocation = value as Record<string, unknown>;

@@ -861,6 +861,15 @@ export interface PayrollCountryPack {
    * Absent means the pack's openings need no per-account attribution.
    */
   accountOpeningBases?: readonly PayrollAccountOpeningBase[];
+  /** Country-owned validation of the original statutory opening allocation. */
+  openingLevySource?: {
+    programKeys: readonly string[];
+    validateScope: (row: { programKey: string; region: string; subRegion: string; filingAccountId: string | null; federalAccountId: string | null }) => boolean;
+    validateRequired: (rows: readonly { programKey: string; region: string }[]) => void;
+    validateOpening: (input: { orgId: string; subsidiaryId: string;
+      opening: { employeePartyId: string; taxYear: number; wcbAssessableYtd: string; ehtRemunerationYtd: string; insurableYtd: string };
+      allocations: readonly { programKey: string; region: string; subRegion: string; filingAccountId: string | null; federalAccountId: string | null; amount: string }[] }) => Promise<void>;
+  };
   /**
    * True when the pack's account-grouped periodic return files under the
    * legal employer's account rather than the account the stub records.

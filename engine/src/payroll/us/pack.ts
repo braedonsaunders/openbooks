@@ -1,3 +1,4 @@
+import { US_OPENING_LEVY_SOURCE } from "./opening-levy-source-policy.ts";
 import type {
   PayrollCountryPack,
   PayrollHoliday,
@@ -387,6 +388,7 @@ export const US_PAYROLL_PACK: PayrollCountryPack = {
   // The 941 and W-2 file by EIN: a stub naming a state SUI account still
   // belongs on its legal employer's return (see employer-scope.ts).
   periodicReturnFilesByEmployerAccount: true,
+  openingLevySource: US_OPENING_LEVY_SOURCE,
   accountOpeningBases: [
     {
       key: "us_futa",

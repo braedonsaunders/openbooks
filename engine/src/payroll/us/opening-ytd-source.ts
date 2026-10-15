@@ -42,3 +42,13 @@ export function usOpeningAccountBaseForEin(source: OriginalOpening, federalAccou
   if (rows.length > 1) throw new PayrollError('The original US per-EIN opening account source is ambiguous — reconcile the source before calculating');
   return rows.length ? normalizeMoney(rows[0]!.insurable_ytd) : '0';
 }
+
+/** W-2 opening-only slips require a qualified original US legal employer. */
+export function requireUsW2OpeningSource(source: OriginalOpening): asserts source is OriginalOpening & {
+  facts: NonNullable<OriginalOpening['facts']>;
+  authority: NonNullable<OriginalOpening['authority']>;
+} {
+  if (!source.facts || source.facts.originalCountry !== 'US' || !source.authority) {
+    throw new PayrollError('The original W-2 opening country and legal employer are unknown — qualify the original opening source before preparing slips');
+  }
+}

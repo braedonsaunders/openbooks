@@ -2,6 +2,7 @@ import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { cmp } from "../money/money.ts";
 import { isUuid } from "../platform/uuid.ts";
 import { PayrollError } from "./error.ts";
+import { CA_ISSUED_EMPLOYER_LEVY_PROGRAMS } from "./canada/levy-programs.ts";
 
 /**
  * Employer-only statutory levy programmes an operator may record an issued
@@ -9,10 +10,7 @@ import { PayrollError } from "./error.ts";
  * identities; each maps to the employer-contribution pay component the
  * Canadian pack assesses.
  */
-export const EMPLOYER_LEVY_PROGRAMS = {
-  ca_eht: { systemKey: "eht", label: "Employer Health Tax" },
-  ca_wcb: { systemKey: "wcb", label: "WCB/WSIB" },
-} as const;
+export const EMPLOYER_LEVY_PROGRAMS = CA_ISSUED_EMPLOYER_LEVY_PROGRAMS;
 
 export type EmployerLevyProgramKey = keyof typeof EMPLOYER_LEVY_PROGRAMS;
 

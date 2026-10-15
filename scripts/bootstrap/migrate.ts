@@ -280,6 +280,7 @@ async function evaluatePendingMigrations(
   const preflightDir = preflightDirFor(repoRoot);
   const client = await connectMigrationClient();
   let verifiedBaseline: boolean | undefined;
+  let recordedPrerequisites: Map<string, string> | undefined;
   try {
     for (let index = 0; index < pending.length; index += 1) {
       const item = pending[index]!;
@@ -337,7 +338,10 @@ async function evaluatePendingMigrations(
           const filename = `generated/${file}`;
           return [filename, readFileSync(join(migrationsDir, filename), "utf8")] as const;
         }));
-        if (preflightNeedsPendingPrerequisite({ migration: item.filename, consumerSql: sqlText,
+        recordedPrerequisites ??= new Map((await client.query<{ filename: string; sha256: string }>(
+          "select filename,sha256 from public._applied_migrations order by filename"
+        )).rows.map(row => [row.filename, row.sha256]));
+        if (preflightNeedsPendingPrerequisite({ migration: item.filename, consumerSql: sqlText, recordedPrerequisites,
           findings: evaluation.findings, published,
           pendingBeforeConsumer: new Set(pending.slice(0,index).map(row => row.filename)) })) {
           report.deferred.push({ file: item.file, filename: item.filename, ordinal: item.ordinal, sql: sqlText });

@@ -1,5 +1,5 @@
 import { sql } from 'drizzle-orm';
-import { add, cmp, normalizeMoney, sum } from '../money/money.ts';
+import { cmp, normalizeMoney } from '../money/money.ts';
 import { db, withOrgTransaction } from '../platform/db.ts';
 import { isUuid } from '../platform/uuid.ts';
 import { actorHasPermission } from '../organization/actor-permissions.ts';
@@ -34,15 +34,6 @@ export type OpeningLevySourceAllocationInput = {
   amount: string;
 };
 
-const CA_PROVINCES = ['AB', 'BC', 'MB', 'NB', 'NL', 'NS', 'NT', 'NU', 'ON', 'PE', 'QC', 'SK', 'YT'] as const;
-const CA_EHT_PROVINCES = ['BC', 'MB', 'NL', 'ON'] as const;
-const US_STATES = [
-  'AL','AK','AZ','AR','CA','CO','CT','DE','DC','FL','GA','HI','ID','IL','IN','IA','KS','KY','LA','ME','MD','MA',
-  'MI','MN','MS','MO','MT','NE','NV','NH','NJ','NM','NY','NC','ND','OH','OK','OR','PA','RI','SC','SD','TN','TX',
-  'UT','VT','VA','WA','WV','WI','WY',
-] as const;
-const CA_PROGRAMS = new Set<OpeningLevyProgram>(['ca_wcb', 'ca_eht', 'ca_cnt']);
-const US_PROGRAMS = new Set<OpeningLevyProgram>(['us_futa', 'us_sui', 'us_pa_lst']);
 
 type StoredEmployerAuthority = {
   id: string;
@@ -73,22 +64,10 @@ function canonicalAllocations(input: readonly OpeningLevySourceAllocationInput[]
     const subRegion = (raw.subRegion ?? '').trim();
     const filingAccountId = raw.filingAccountId ?? null;
     const federalAccountId = raw.federalAccountId;
-    if (CA_PROGRAMS.has(programKey) ? federalAccountId !== null : !federalAccountId
-      || programKey === 'us_futa' && federalAccountId !== filingAccountId) {
-      throw new PayrollError('Record the original federal EIN for each US allocation; Canadian allocations have no EIN');
-    }
     if (filingAccountId !== null && !isUuid(filingAccountId)) throw new PayrollError('Choose a native EIN account for the US wage-base opening');
-    const scopeValid = programKey === 'ca_wcb'
-      ? (CA_PROVINCES as readonly string[]).includes(region) && !subRegion && filingAccountId === null
-      : programKey === 'ca_eht'
-        ? (CA_EHT_PROVINCES as readonly string[]).includes(region) && !subRegion && filingAccountId === null
-        : programKey === 'ca_cnt'
-          ? region === 'QC' && !subRegion && filingAccountId === null
-          : programKey === 'us_futa'
-            ? region === 'US' && !subRegion && filingAccountId !== null
-            : programKey === 'us_sui'
-              ? (US_STATES as readonly string[]).includes(region) && !subRegion
-              : region === 'PA' && /^[0-9]{6}$/.test(subRegion) && filingAccountId === null;
+    const policy = Object.values(PAYROLL_COUNTRY_PACKS).map(pack => pack.openingLevySource)
+      .find(policy => policy?.programKeys.includes(programKey));
+    const scopeValid = policy?.validateScope({ programKey, region, subRegion, filingAccountId, federalAccountId });
     if (!scopeValid) throw new PayrollError(`${programKey} needs its original programme jurisdiction and legal-employer account scope`);
     if (canonicalNonNegativeDecimal(raw.amount, 4) === null) throw new PayrollError('Opening allocation must be an exact non-negative decimal with at most four decimal places');
     let amount: string;
@@ -103,28 +82,15 @@ function canonicalAllocations(input: readonly OpeningLevySourceAllocationInput[]
     .localeCompare([b.programKey, b.region, b.subRegion, b.filingAccountId ?? '', b.federalAccountId ?? ''].join('|')));
 }
 
+/** Whether the original statutory report must enumerate its levy allocations. */
+export function openingLevySourceRequiresAllocations(country: string): boolean {
+  return PAYROLL_COUNTRY_PACKS[country]?.openingLevySource !== undefined;
+}
+
 function requiredAllocations(country: string, rows: readonly OpeningLevySourceAllocation[]) {
-  const byProgram = new Map<OpeningLevyProgram, OpeningLevySourceAllocation[]>();
-  for (const row of rows) byProgram.set(row.programKey, [...(byProgram.get(row.programKey) ?? []), row]);
-  if (country === 'CA') {
-    if (rows.some((row) => !CA_PROGRAMS.has(row.programKey))) throw new PayrollError('A Canadian opening cannot contain US levy allocations');
-    for (const province of CA_PROVINCES) if (!byProgram.get('ca_wcb')?.some((row) => row.region === province)) {
-      throw new PayrollError(`Declare the original WCB/WSIB opening for ${province}, including zero when the source confirms none`);
-    }
-    for (const province of CA_EHT_PROVINCES) if (!byProgram.get('ca_eht')?.some((row) => row.region === province)) {
-      throw new PayrollError(`Declare the original EHT opening for ${province}, including zero when the source confirms none`);
-    }
-    if (!byProgram.get('ca_cnt')?.some((row) => row.region === 'QC')) {
-      throw new PayrollError('Declare the original Québec CNT opening, including zero when the source confirms none');
-    }
-    return;
-  }
-  if (country !== 'US') {
-    if (rows.length) throw new PayrollError('This original country has no declared opening levy allocation programmes; retain its generic opening amounts with an empty allocation set');
-    return;
-  }
-  if (rows.some((row) => !US_PROGRAMS.has(row.programKey))) throw new PayrollError('A US opening cannot contain Canadian levy allocations');
-  if (!byProgram.get('us_futa')?.length) throw new PayrollError('Declare FUTA opening wages for each original EIN, including zero when the source confirms none');
+  const policy = PAYROLL_COUNTRY_PACKS[country]?.openingLevySource;
+  if (policy) return policy.validateRequired(rows);
+  if (rows.length) throw new PayrollError('This original country has no declared opening levy allocation programmes; retain its generic opening amounts with an empty allocation set');
 }
 
 async function loadOpening(input: { orgId: string; openingBalanceId: string }, lock = false) {
@@ -299,88 +265,9 @@ async function saveOpeningLevySourceAuthority(input: OpeningLevySourceAuthorityI
         openingBalanceId: input.openingBalanceId, authorityId: correction.expectedAuthorityId });
     }
 
-    if (input.originalCountry === 'CA') {
-      const wcb = sum(allocations.filter((row) => row.programKey === 'ca_wcb').map((row) => row.amount));
-      const eht = sum(allocations.filter((row) => row.programKey === 'ca_eht').map((row) => row.amount));
-      if (cmp(wcb, opening.wcbAssessableYtd) !== 0) {
-        throw new PayrollError('The province allocations must equal the original workers’ compensation assessable opening amount');
-      }
-      if (cmp(eht, opening.ehtRemunerationYtd) !== 0) {
-        throw new PayrollError('The province allocations must equal the original EHT remuneration opening amount');
-      }
-    } else if (input.originalCountry === 'US') {
-      const einRows = (await db.execute<{ id: string; isActive: boolean }>(sql`
-        select id,is_active as "isActive" from payroll_filing_accounts
-         where org_id=${input.orgId} and country='US' and program_type='us_ein'
-           and (subsidiary_id=${employerAuthority.subsidiaryId} or subsidiary_id is null)
-         order by id for share
-      `)).rows;
-      const futa = allocations.filter((row) => row.programKey === 'us_futa');
-      if (allocations.some((row) => !einRows.some((ein) => ein.id === row.federalAccountId))) {
-        throw new PayrollError('Add or restore each original US EIN in Payroll Setup → Filing accounts, then bind every US opening allocation to its source-confirmed EIN');
-      }
-      if (allocations.some((row) => !futa.some((base) => base.filingAccountId === row.federalAccountId))) {
-        throw new PayrollError('Declare a FUTA opening for every original EIN named by a SUI or LST allocation, including explicit zeros');
-      }
-      const accountBaseRows = (await db.execute<{ programKey: string; region: string | null; filingAccountId: string; amount: string }>(sql`
-        select program_key as "programKey",region,filing_account_id as "filingAccountId",insurable_ytd::text as amount
-          from payroll_opening_account_bases where org_id=${input.orgId} and employee_party_id=${opening.employeePartyId}
-           and tax_year=${opening.taxYear} and program_key in ('us_futa','us_sui')
-      `)).rows;
-      const futaAccountBases = accountBaseRows.filter((row) => row.programKey === 'us_futa');
-      if (futaAccountBases.length) {
-        if (cmp(opening.insurableYtd, '0') !== 0) {
-          throw new PayrollError('The employee-only insurable opening must be zero when EIN-specific FUTA openings are recorded');
-        }
-        if (futaAccountBases.some((stored) =>
-          !futa.some((row) => row.filingAccountId === stored.filingAccountId && cmp(row.amount, stored.amount) === 0))
-          || futa.some((row) => !futaAccountBases.some((stored) => stored.filingAccountId === row.filingAccountId)
-            && cmp(row.amount, '0') !== 0)) {
-          throw new PayrollError('FUTA source allocations must preserve every exact EIN-specific opening wage base already recorded');
-        }
-      } else if (cmp(sum(futa.map((row) => row.amount)), opening.insurableYtd) !== 0) {
-        throw new PayrollError('The EIN-specific FUTA allocations must equal the original employee-only insurable wage opening');
-      }
-      const stateRows = (await db.execute<{ region: string; amount: string }>(sql`
-        select sw.state as region,sw.insurable_ytd::text as amount from payroll_opening_sui_wages sw
-          join payroll_opening_balances b on b.org_id=sw.org_id and b.id=sw.opening_balance_id
-         where b.org_id=${input.orgId} and b.employee_party_id=${opening.employeePartyId} and b.tax_year=${opening.taxYear}
-      `)).rows;
-      const suiAccountBases = accountBaseRows.filter((row) => row.programKey === 'us_sui');
-      const sui = allocations.filter((row) => row.programKey === 'us_sui');
-      const suiAccounts = (await db.execute<{ id: string; stateCode: string; isActive: boolean }>(sql`
-        select id,state_code as "stateCode",is_active as "isActive" from payroll_filing_accounts
-         where org_id=${input.orgId} and country='US' and program_type='us_state_sui'
-           and state_code is not null and (subsidiary_id=${employerAuthority.subsidiaryId} or subsidiary_id is null)
-         order by id for share
-      `)).rows;
-      for (const row of sui) {
-        if (row.filingAccountId !== null && !suiAccounts.some((account) =>
-          account.id === row.filingAccountId && account.stateCode === row.region)) {
-          throw new PayrollError('SUI source allocations must retain a state account for the same original state and legal employer');
-        }
-      }
-      for (const stored of suiAccountBases) {
-        if (!sui.some((row) => row.filingAccountId === stored.filingAccountId && row.region === stored.region)
-          || cmp(sum(sui.filter((row) => row.filingAccountId === stored.filingAccountId
-            && row.region === stored.region).map((row) => row.amount)), stored.amount) !== 0) {
-          throw new PayrollError(`SUI source allocations must preserve the original ${stored.region ?? 'state'} filing-account wage opening`);
-        }
-      }
-      const priorStates = new Map<string, string>();
-      for (const row of [...stateRows, ...suiAccountBases.map((base) => ({ region: base.region ?? '', amount: base.amount }))]) {
-        if (!row.region) continue;
-        priorStates.set(row.region, add(priorStates.get(row.region) ?? '0', row.amount));
-      }
-      if (cmp(opening.insurableYtd, '0') > 0 && sui.length === 0) {
-        throw new PayrollError('Declare the original US SUI jurisdiction allocations for the generic insurable opening, including a state with zero only when the retained source confirms no SUI wages');
-      }
-      for (const [state, amount] of priorStates) {
-        if (cmp(sum(sui.filter((row) => row.region === state).map((row) => row.amount)), amount) !== 0) {
-          throw new PayrollError(`SUI source allocations must preserve the original ${state} state opening wages`);
-        }
-      }
-    }
+    await PAYROLL_COUNTRY_PACKS[input.originalCountry]?.openingLevySource?.validateOpening({
+      orgId: input.orgId, subsidiaryId: employerAuthority.subsidiaryId, opening, allocations,
+    });
 
     const id = (await db.execute<{ id: string }>(sql`select public.uuid_generate_v7() as id`)).rows[0]?.id;
     if (!id) throw new PayrollError('The opening levy source authority could not allocate its native identity');

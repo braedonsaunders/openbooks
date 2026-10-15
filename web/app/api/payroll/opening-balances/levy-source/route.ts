@@ -4,7 +4,7 @@ import { defineRoute } from '@/lib/api/route';
 import { apiErrorResponse } from '@/lib/api/error-response';
 import { isoDate, uuidId } from '@/lib/api/json-schema';
 import { PayrollError } from '@openbooks/engine/payroll/error';
-import { qualifyOpeningLevySourceAuthority, readOpeningLevySourceContext } from '@openbooks/engine/payroll/opening-levy-source-authority';
+import { qualifyOpeningLevySourceAuthority, readOpeningLevySourceContext, openingLevySourceRequiresAllocations } from '@openbooks/engine/payroll/opening-levy-source-authority';
 import { correctOpeningLevySourceAuthority } from '@openbooks/engine/payroll/opening-levy-source-correction';
 
 export const dynamic = 'force-dynamic';
@@ -35,7 +35,7 @@ const qualificationFields = {
   reason: z.string().trim().min(1).max(2000),
 };
 const body = z.strictObject(qualificationFields).superRefine((input,ctx) => {
-  if ((input.originalCountry === 'CA' || input.originalCountry === 'US') && input.allocations.length === 0) {
+  if (openingLevySourceRequiresAllocations(input.originalCountry) && input.allocations.length === 0) {
     ctx.addIssue({code:'custom',path:['allocations'],message:'Declare the complete original statutory levy allocations, including explicit zeros'});
   }
 });
@@ -71,7 +71,7 @@ const correctionBody = z.strictObject({
   expectedAuthorityId: uuidId,
   expectedAllocationSha256: z.string().regex(/^[a-f0-9]{64}$/),
 }).superRefine((input,ctx) => {
-  if ((input.originalCountry === 'CA' || input.originalCountry === 'US') && input.allocations.length === 0) {
+  if (openingLevySourceRequiresAllocations(input.originalCountry) && input.allocations.length === 0) {
     ctx.addIssue({code:'custom',path:['allocations'],message:'Declare the complete original statutory levy allocations, including explicit zeros'});
   }
 });

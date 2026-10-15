@@ -174,3 +174,27 @@ test("measurement consumer defers only the complete pinned instruction publisher
     published: new Map([...files, [unexpected, files.get(next)!]]),
     recorded: new Map([...fromClone.recorded, [unexpected, hash(files.get(next)!)]]) }), false);
 });
+
+test("compound prerequisites require every publisher's pinned pending or recorded identity", () => {
+  const migration = "generated/0727_document_explicit_fx_rate_evidence.sql";
+  const clone = "generated/0401_clone_authority_role_bypass.sql";
+  const sales = "generated/0579_bound_sales_clone_source_matching.sql";
+  const input = {
+    migration, consumerSql: read("preflight/0727_document_explicit_fx_rate_evidence.sql"),
+    published: new Map([migration, clone, sales].map(file => [file, read(file)])),
+    pendingBeforeConsumer: new Set([sales]),
+    recordedPrerequisites: new Map([[clone, hash(read(clone))]]),
+    findings: [{ migration, code: "0727.clone_contract_missing", severity: "refuse" as const,
+      subject: "The native clone authority or sales source matching contract is unavailable",
+      detail: "Original sales matching is pending", remedy: "Apply exact publishers" }],
+  };
+  assert.equal(preflightNeedsPendingPrerequisite(input), true);
+  assert.equal(preflightNeedsPendingPrerequisite({ ...input, recordedPrerequisites: new Map() }), false);
+  assert.equal(preflightNeedsPendingPrerequisite({ ...input, recordedPrerequisites: new Map([[clone, "0".repeat(64)]]) }), false);
+  assert.equal(preflightNeedsPendingPrerequisite({ ...input, pendingBeforeConsumer: new Set() }), false);
+  for (const file of [migration, clone, sales]) {
+    const changed = new Map(input.published); changed.set(file, changed.get(file)! + "\n");
+    assert.equal(preflightNeedsPendingPrerequisite({ ...input, published: changed }), false);
+  }
+  assert.equal(preflightNeedsPendingPrerequisite({ ...input, findings: [{ ...input.findings[0]!, code: "0727.evidence_column_exists" }] }), false);
+});

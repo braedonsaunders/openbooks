@@ -582,7 +582,8 @@ export async function applyRunLineAdjustments(
       const evidence = parseEmployerLevyAdjustmentEvidence(typeof adj.note === "string" ? adj.note : null);
       const amount = canonicalDecimal(String(adj.adj_amount), 4);
       if (!evidence || evidence.requestId !== String(adj.adjustment_id)
-        || country !== "CA" || adj.country !== "CA" || adj.kind !== "employer_contribution"
+        || country !== EMPLOYER_LEVY_PROGRAMS[evidence.programKey].country
+        || adj.country !== EMPLOYER_LEVY_PROGRAMS[evidence.programKey].country || adj.kind !== "employer_contribution"
         || adj.system_key !== EMPLOYER_LEVY_PROGRAMS[evidence.programKey].systemKey
         || adj.is_active !== true || adj.replace_component !== false
         || adj.adj_hours != null || adj.adj_earned_from != null || adj.adj_earned_to != null

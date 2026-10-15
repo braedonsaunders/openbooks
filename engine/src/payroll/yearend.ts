@@ -1,3 +1,4 @@
+import { requireUsW2OpeningSource } from './us/opening-ytd-source.ts';
 import { readCanadianOpeningYearEndSlices } from './canada/opening-reporting-yearend.ts';
 import { withOpeningReportingSnapshot } from './opening-reporting-snapshot.ts';
 import { currentOpeningLevySourceSql } from './opening-levy-source-correction-authority.ts';
@@ -1887,9 +1888,7 @@ export async function w2Slips(orgId: string, taxYear: number): Promise<W2Slip[]>
   for (const [employeePartyId, opening] of openings) {
     if (seeded.some(slip => slip.employeePartyId === employeePartyId)) continue;
     const original = await readEmployeeOpeningLevySources(db, { orgId, employeePartyId, taxYear });
-    if (!original.facts || original.facts.originalCountry !== 'US' || !original.authority) {
-      throw new PayrollError('The original W-2 opening country and legal employer are unknown — qualify the original opening source before preparing slips');
-    }
+    requireUsW2OpeningSource(original);
     const filingIds = [...new Set([
       ...original.allocations.filter(row => row.programKey === 'us_futa').map(row => row.federalAccountId),
       ...[US_FICA_WAGES_ACCOUNT_BASE, US_FICA_WITHHELD_ACCOUNT_BASE]
