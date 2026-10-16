@@ -86,8 +86,8 @@ export async function readAuditPage(orgId: string, filters: AuditFilters) {
     ${action ? sql`and a.action = ${action}` : sql``}
     ${rtype ? sql`and (${typeExpression}) = ${rtype}` : sql``}
     ${actor ? (actor === 'system' ? sql`and a.actor_id is null` : sql`and a.actor_id = ${actor}`) : sql``}
-    ${from ? sql`and a.at >= ${from}::date` : sql``}
-    ${to ? sql`and a.at < (${to}::date + interval '1 day')` : sql``}
+    ${from ? sql`and a.at >= ${from}::date::timestamptz` : sql``}
+    ${to ? sql`and a.at < (${to}::date + interval '1 day')::timestamptz` : sql``}
     ${q ? sql`and ((${typeExpression}) ilike ${'%' + q + '%'}
       or replace((${typeExpression}), '_', ' ') ilike ${'%' + q + '%'}
       or a.action ilike ${'%' + q + '%'}
@@ -100,12 +100,17 @@ export async function readAuditPage(orgId: string, filters: AuditFilters) {
           and (searched_user.name ilike ${'%' + q + '%'} or searched_user.email ilike ${'%' + q + '%'})))` : sql``}`
 
   const [list, facets] = await Promise.all([
+    // Kind-filtered events may be far from the newest event. Resolve their
+    // metadata before sorting so the page does not walk full snapshots in
+    // timestamp order while looking for a rare kind.
     db.execute<AuditListSource>(sql`
-      with page_ids as materialized (
+      with candidates as ${rtype ? sql`materialized` : sql`not materialized`} (
         select a.id, a.at from audit_log a
         ${q || rtype ? documentJoin : sql``}
-        where a.org_id = ${orgId} and ${matches()}
-        order by a.at desc, a.id desc
+        where a.org_id = ${orgId} and ${matches(facetRecordType)}
+      ), page_ids as materialized (
+        select id, at from candidates
+        order by at desc, id desc
         limit ${perPage} offset ${(page - 1) * perPage}
       )
       select a.id, a.row_id, a.action, a.at, u.name as actor_name, (${recordType}) as rtype,
@@ -121,18 +126,30 @@ export async function readAuditPage(orgId: string, filters: AuditFilters) {
       left join users u on u.id = a.actor_id and u.org_id = a.org_id
       order by selected.at desc, selected.id desc
     `),
-    // One pass computes all exact facets and the filtered total. Only the
-    // grouped actor ids are joined to users; full snapshots never leave SQL.
+    // Aggregate ordinary records before combining them with document kinds.
+    // Only document events need the document join and retained-snapshot lookup.
+    // Counts remain exact, including filtered totals and deleted documents.
     db.execute<AuditFacet>(sql`
-      with facets as (
+      with metadata as (
+        select a.action, a.actor_id, a.table_name as rtype,
+          count(*) as n, count(*) filter (where ${matches(sql`a.table_name`)}) as filtered_n
+        from audit_log a
+        where a.org_id = ${orgId} and a.table_name <> 'documents'
+        group by a.action, a.actor_id, a.table_name
+        union all
         select a.action, a.actor_id, (${facetRecordType}) as rtype,
-          count(*) as n, count(*) filter (where ${matches(facetRecordType)}) as filtered_n,
-          grouping(a.action) as action_group,
-          grouping(a.actor_id) as actor_group,
-          grouping(${facetRecordType}) as rtype_group
+          count(*) as n, count(*) filter (where ${matches(facetRecordType)}) as filtered_n
         from audit_log a ${documentJoin}
-        where a.org_id = ${orgId}
-        group by grouping sets ((), (a.action), (a.actor_id), (${facetRecordType}))
+        where a.org_id = ${orgId} and a.table_name = 'documents'
+        group by a.action, a.actor_id, (${facetRecordType})
+      ), facets as (
+        select action, actor_id, rtype,
+          coalesce(sum(n), 0) as n, coalesce(sum(filtered_n), 0) as filtered_n,
+          grouping(action) as action_group,
+          grouping(actor_id) as actor_group,
+          grouping(rtype) as rtype_group
+        from metadata
+        group by grouping sets ((), (action), (actor_id), (rtype))
       )
       select f.*, u.name as actor_name from facets f
       left join users u on f.actor_group = 0 and u.id = f.actor_id and u.org_id = ${orgId}

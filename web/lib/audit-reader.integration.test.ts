@@ -2,7 +2,7 @@ import assert from 'node:assert/strict'
 import { randomUUID } from 'node:crypto'
 import test from 'node:test'
 import { sql } from 'drizzle-orm'
-import { db, withBypassContext, withOrgContext } from '@openbooks/engine/platform/db'
+import { db, withBypassContext, withOrgContext, withOrgTransaction } from '@openbooks/engine/platform/db'
 import { createScratchOrg, createScratchUser, dropScratchOrg } from '@openbooks/engine/testing/fixtures'
 import { readAuditEvent, readAuditPage } from './audit-reader'
 import { calculatedRun, seedAdoption } from '@openbooks/engine/testing/payroll/filing-test-fixtures'
@@ -104,6 +104,69 @@ test('audit free text matches actor email, action, table label and reason', { sk
   } finally {
     await dropScratchOrg(org.orgId)
     await dropScratchOrg(other.orgId)
+  }
+})
+
+test('audit facets combine record families without losing empty or retained document counts', { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
+  const org = await withBypassContext(() => createScratchOrg())
+  try {
+    const base = { page: 1, perPage: 10 }
+    await withOrgContext(org.orgId, async () => {
+      const empty = await readAuditPage(org.orgId, base)
+      assert.equal(empty.total, 0)
+      assert.deepEqual(empty.rows, [])
+      assert.deepEqual(empty.actions, [])
+      assert.deepEqual(empty.actors, [])
+      assert.deepEqual(empty.recordTypes, [])
+    })
+    const deletedDocument = randomUUID()
+    const retainedKinds = ['customer_invoice', 'vendor_bill', null] as const
+    await withBypassContext(async () => {
+      for (const kind of retainedKinds) {
+        const written = await db.execute(sql`
+          insert into audit_log (id, org_id, table_name, row_id, action, at, changes)
+          values (${randomUUID()}, ${org.orgId}, 'documents', ${deletedDocument}, 'delete',
+            '2026-09-01T12:00:00Z', ${JSON.stringify(kind ? { before: { document: { kind } } } : {})}::jsonb)
+          returning id
+        `)
+        assert.equal(written.rows.length, 1)
+      }
+      const written = await db.execute(sql`
+        insert into audit_log (id, org_id, table_name, row_id, action, at, changes)
+        values (${randomUUID()}, ${org.orgId}, 'customer_invoice', ${randomUUID()}, 'delete',
+          '2026-09-02T00:00:00Z', '{"reason":"Duplicate invoice"}') returning id
+      `)
+      assert.equal(written.rows.length, 1)
+    })
+    await withOrgTransaction(org.orgId, async () => {
+      await db.execute(sql`set local time zone 'UTC'`)
+      const all = await readAuditPage(org.orgId, base)
+      assert.equal(all.total, 4)
+      assert.deepEqual(all.actions.map(row => [row.action, Number(row.n)]), [['delete', 4]])
+      assert.deepEqual(all.actors.map(row => [row.actor_id, Number(row.n)]), [[null, 4]])
+      assert.deepEqual(all.recordTypes.map(row => [row.rtype, Number(row.n)]), [
+        ['customer_invoice', 2], ['documents', 1], ['vendor_bill', 1],
+      ])
+      for (const [filters, expected] of [
+        [{ rtype: 'customer_invoice' }, 2], [{ q: 'Customer Invoice' }, 2],
+        [{ from: '2026-09-02', actor: 'system', action: 'delete' }, 1],
+        [{ to: '2026-09-01' }, 3],
+        [{ q: 'Duplicate invoice' }, 1], [{ rtype: 'absent_type' }, 0],
+      ] as const) {
+        const filtered = await readAuditPage(org.orgId, { ...base, ...filters })
+        assert.equal(filtered.total, expected)
+        assert.equal(filtered.total, filtered.rows.length)
+        assert.deepEqual(filtered.recordTypes.map(row => [row.rtype, row.n]),
+          all.recordTypes.map(row => [row.rtype, row.n]))
+      }
+    })
+    await withOrgTransaction(org.orgId, async () => {
+      await db.execute(sql`set local time zone 'America/Toronto'`)
+      assert.equal((await readAuditPage(org.orgId, { ...base, to: '2026-09-01' })).total, 4)
+      assert.equal((await readAuditPage(org.orgId, { ...base, from: '2026-09-02' })).total, 0)
+    })
+  } finally {
+    await dropScratchOrg(org.orgId)
   }
 })
 
