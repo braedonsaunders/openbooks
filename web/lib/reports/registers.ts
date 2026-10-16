@@ -248,7 +248,7 @@ export interface RegisterResult {
   side: AgingSide
   truncated: boolean
   /** Set when the caller asked for one page of whole party sections. */
-  paging: { page: number; pageSize: number; partyCount: number } | null
+  paging?: { page: number; pageSize: number; partyCount: number } | null
 }
 
 /**

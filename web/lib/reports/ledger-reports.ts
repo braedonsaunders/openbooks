@@ -44,7 +44,7 @@ export interface GeneralLedgerResult {
   to: string
   truncated: boolean
   /** Set when the caller asked for one page of detail lines. */
-  paging: { page: number; pageSize: number; lineCount: number } | null
+  paging?: { page: number; pageSize: number; lineCount: number } | null
 }
 
 /**
@@ -299,7 +299,7 @@ export interface JournalReportResult {
   to: string
   truncated: boolean
   /** Set when the caller asked for one page of whole entries. */
-  paging: { page: number; pageSize: number; entryCount: number } | null
+  paging?: { page: number; pageSize: number; entryCount: number } | null
 }
 
 /**
