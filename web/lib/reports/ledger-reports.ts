@@ -185,17 +185,43 @@ export async function generalLedger(
   }
   const pageSize = opts.page !== undefined ? Math.max(1, Math.floor(opts.pageSize ?? 500)) : null
   const page = pageSize !== null ? Math.max(1, Math.floor(opts.page ?? 1)) : null
-  const lines = (await reportDb.execute<LedgerLineRow>(pageSize !== null && page !== null
+  // A page reads only the accounts it spans: per-account line counts locate
+  // the page in ledger order, and only those accounts' lines are sorted.
+  let pageAccounts: { ids: string[]; skip: number; lineCount: number } | null = null
+  if (pageSize !== null && page !== null) {
+    const counts = (await reportDb.execute<{ account_id: string; n: string }>(sql`
+      select ${reportDb.censusColumn}, u.account_id, count(*) as n
+        from (${lineSource}) u
+       group by u.account_id, u.number, u.name
+       order by u.number nulls last, u.name, u.account_id
+    `)).rows
+    const lineCount = counts.reduce((total, row) => total + Number(row.n), 0)
+    const offset = (page - 1) * pageSize
+    const ids: string[] = []
+    let before = 0
+    let skip = 0
+    for (const row of counts) {
+      const n = Number(row.n)
+      if (before + n > offset && before < offset + pageSize) {
+        if (ids.length === 0) skip = offset - before
+        ids.push(row.account_id)
+      }
+      before += n
+    }
+    pageAccounts = { ids, skip, lineCount }
+  }
+  const lines = (await reportDb.execute<LedgerLineRow>(pageAccounts !== null && pageSize !== null
     ? sql`
     select * from (
       select u.*,
              row_number() over (order by ${ledgerOrder}) as rn,
              sum(u.amount) over (partition by u.account_id order by ${ledgerOrder}
                rows between unbounded preceding and current row) as running,
-             count(*) over () as total_n
+             ${pageAccounts.lineCount} as total_n
         from (${lineSource}) u
+       where u.account_id = any(${`{${pageAccounts.ids.join(',')}}`}::uuid[])
     ) w
-     where w.rn > ${(page - 1) * pageSize} and w.rn <= ${page * pageSize}
+     where w.rn > ${pageAccounts.skip} and w.rn <= ${pageAccounts.skip + pageSize}
      order by w.rn
   `
     : sql`
@@ -263,7 +289,7 @@ export async function generalLedger(
     const activity = activityByAcct.get(account.id)
     if (activity !== undefined) account.closing = decimalAdd(account.opening, activity)
   }
-  const lineCount = pageSize !== null ? Number(lines.rows[0]?.total_n ?? 0) : null
+  const lineCount = pageAccounts !== null ? pageAccounts.lineCount : null
   return {
     accounts, from, to, truncated,
     paging: pageSize !== null && page !== null && lineCount !== null ? { page, pageSize, lineCount } : null,
