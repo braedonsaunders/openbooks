@@ -1,6 +1,6 @@
 import { readNetSuiteSettlements } from "./netsuite-settlements.ts";
 export { toSourceApplicationLinks, uniqueNetSuiteApplicationLinks } from "./netsuite-settlements.ts";
-import type { SettlementObservation } from "./settlement-observation.ts";
+import { settlementDigest, type SettlementObservation } from "./settlement-observation.ts";
 import { netSuiteEntityMappingMetadata, type EntityMappingField } from "./entity-mapping-contract.ts";
 import { netsuiteCustomizationChoices, netsuiteCustomRecordFields, type NetSuiteCustomizationKind } from "../connectors/netsuite.ts";
 import { NETSUITE_MAPPING_GROUPS, validateConnectionMappings } from "./connection-settings.ts";
@@ -508,6 +508,7 @@ export class NetSuiteSource implements MigrationSource {
   private readonly mappings: NetSuiteAccountMappings;
   private readonly configuredAccountingBookId: string | null;
   private accountingBookResolution: Promise<string> | null = null;
+  private settlementPayers: { graphDigest: string; payerDigests: Map<string, string> } | null = null;
 
   constructor(
     private readonly creds: NetSuiteCreds,
@@ -1550,12 +1551,14 @@ export class NetSuiteSource implements MigrationSource {
   }
 
   private async readSettlements(refs?: string[]) {
-    return readNetSuiteSettlements(query => this.q(query), {
+    const result = await readNetSuiteSettlements(query => this.q(query), {
       sourceAccount: this.expectedAccount,
       bookRef: await this.accountingBookId(),
       baseCurrency: this.baseCurrency,
       refs,
     });
+    this.settlementPayers = { graphDigest: result.observation.graphDigest, payerDigests: result.payerDigests };
+    return result;
   }
 
   async revalidateSettlementObservation(observation: SettlementObservation): Promise<void> {
@@ -1571,13 +1574,21 @@ export class NetSuiteSource implements MigrationSource {
   }
 
   async confirmSettlementReleases(observation: SettlementObservation, paymentRefs: string[]): Promise<void> {
-    // Confirm negative graph evidence again at the destructive boundary. An
-    // omitted workflow link alone cannot revoke an admitted posted settlement.
-    await this.revalidateSettlementObservation(observation);
+    // Recheck only affected payers while local settlement locks are held.
+    // Their exact link evidence must agree with the revalidated population.
+    const expected = this.settlementPayers;
+    if (!expected || expected.graphDigest !== observation.graphDigest) {
+      throw new Error("NetSuite settlement releases require their revalidated source observation");
+    }
     const refs = [...new Set(paymentRefs)].sort();
     if (refs.some(ref => !/^\d+$/.test(ref))) throw new Error("NetSuite settlement payment references must be numeric");
     for (let index = 0; index < refs.length; index += 150) {
       const chunk = refs.slice(index, index + 150);
+      const current = await this.readSettlements(chunk);
+      if (chunk.some(ref => (current.payerDigests.get(ref) ?? settlementDigest([]))
+          !== (expected.payerDigests.get(ref) ?? settlementDigest([])))) {
+        throw new Error("NetSuite settlement payer links changed before release; retry the sync; settlements were preserved");
+      }
       const query = `SELECT id,posting FROM transaction WHERE id IN (${chunk.join(",")}) ORDER BY id`;
       const first = await this.q<{ id: string; posting: string }>(query);
       const second = await this.q<{ id: string; posting: string }>(query);

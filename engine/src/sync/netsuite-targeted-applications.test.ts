@@ -198,3 +198,26 @@ test("removed links cannot release a payer that is now nonposting or inaccessibl
     await assert.rejects(() => source.confirmSettlementReleases(changes.settlementObservation!, ["20"]), /missing, nonposting, or changed.*settlements were preserved/);
   }
 });
+
+test("release confirmation rechecks only affected payer links and permits a stable posted payer", async () => {
+  const { source, queries } = allocationGraphSource();
+  const changes = await source.nativeChanges(new Date(), {} as NativeContext);
+  Object.defineProperty(source, "q", { configurable: true, value: async (query: string) => {
+    queries.push(query);
+    if (/nexttransactionlinelink/.test(query)) return /COUNT/.test(query) ? [{ n: "0" }] : [];
+    return [{ id: "20", posting: "T" }];
+  } });
+  const start = queries.length;
+  await source.confirmSettlementReleases(changes.settlementObservation!, ["20"]);
+  const graphQueries = queries.slice(start).filter(query => /nexttransactionlinelink/.test(query));
+  assert.equal(graphQueries.length, 4);
+  for (const query of graphQueries) assert.match(query, /n.nextdoc IN \(20\) OR n.previousdoc IN \(20\)/);
+});
+
+test("payer links appearing during release confirmation preserve prior allocations", async () => {
+  const { source } = allocationGraphSource();
+  const changes = await source.nativeChanges(new Date(), {} as NativeContext);
+  Object.defineProperty(source, "q", { configurable: true, value: async (query: string) => /COUNT/.test(query)
+    ? [{ n: "1" }] : [postedLink()] });
+  await assert.rejects(() => source.confirmSettlementReleases(changes.settlementObservation!, ["20"]), /payer links changed before release/);
+});

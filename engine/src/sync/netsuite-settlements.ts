@@ -53,7 +53,7 @@ type Query = <T>(query: string) => Promise<T[]>;
 export async function readNetSuiteSettlements(
   query: Query,
   options: { sourceAccount: string; bookRef: string; baseCurrency: string; refs?: string[] },
-): Promise<{ applications: SourceApplicationLink[]; observation: SettlementObservation }> {
+): Promise<{ applications: SourceApplicationLink[]; observation: SettlementObservation; payerDigests: Map<string, string> }> {
   if (!options.sourceAccount.trim() || !/^\d+$/.test(options.bookRef)
       || (options.refs && (!options.refs.length || options.refs.some(ref => !/^\d+$/.test(ref))))) {
     throw new Error("NetSuite settlement source account, book, or reference scope is invalid");
@@ -142,8 +142,16 @@ export async function readNetSuiteSettlements(
     eligible.push(link);
   }
   const applications = toSourceApplicationLinks(eligible, options.baseCurrency);
+  const rowsByPayer = new Map<string, NsApplicationLink[]>();
+  for (const row of rows) {
+    const key = String(row.nextdoc);
+    const group = rowsByPayer.get(key) ?? [];
+    group.push(row);
+    rowsByPayer.set(key, group);
+  }
   return {
     applications,
+    payerDigests: new Map([...rowsByPayer].map(([ref, group]) => [ref, settlementDigest(group)])),
     observation: {
       version: 1, source: "netsuite", sourceAccount: options.sourceAccount, bookRef: options.bookRef,
       scope: refs ? { kind: "references", refs } : { kind: "all" },
