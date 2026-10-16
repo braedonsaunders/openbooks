@@ -105,12 +105,17 @@ const mockSources = new Map<string, string>([
      const state = globalThis[Symbol.for('openbooks.aging-export-asof-test')]
      export const db = { async execute(query) {
        const compiled = new PgDialect().sqlToQuery(query);
-       if (compiled.sql.includes("settings->'features' as f from orgs")) {
+       if (/settings->'features' as (f|features) from orgs/.test(compiled.sql)) {
          if (compiled.params.length !== 1 || compiled.params[0] !== 'org-1') throw new Error('unexpected feature organization');
-         return { rows: [{ f: Object.fromEntries(FEATURES.map(feature => [feature.key, state.featuresOn.includes(feature.key)])) }] };
+         const features = Object.fromEntries(FEATURES.map(feature => [feature.key, state.featuresOn.includes(feature.key)]));
+         return { rows: [{ f: features, features }] };
        }
        const chunks = query?.queryChunks ?? [];
        const text = chunks.map((c) => typeof c === 'string' ? c : (Array.isArray(c?.value) ? c.value.join('') : '')).join(' ').slice(0, 200);
+       // The selected book resolves to itself; this export has no book set.
+       if (compiled.sql.includes('public.reporting_book_ids(')) {
+         return { rows: [{ id: compiled.params[1] }] };
+       }
        if (text.includes('from accounting_books')) {
          return { rows: [
            { id: '11111111-1111-1111-8111-111111111111', code: 'PRIMARY', name: 'Primary book', is_primary: true },

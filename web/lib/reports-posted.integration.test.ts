@@ -177,8 +177,8 @@ test("financial statements exclude draft and other unposted journals", () => {
         )
       \`);
       await db.execute(sql\`
-        insert into accounting_books (id, org_id, code, name, is_primary, is_active, posts_gl)
-        values (\${taxBookId}, \${scratch.orgId}, 'TAX', 'Tax book', false, true, true)
+        insert into accounting_books (id, org_id, code, name, is_primary, is_active, posts_gl, replication_mode, replication_from)
+        values (\${taxBookId}, \${scratch.orgId}, 'TAX', 'Tax book', false, true, true, 'full', '2000-01-01')
       \`);
       const regularEntryId = randomUUID();
       const adjustmentEntryId = randomUUID();
@@ -283,8 +283,8 @@ test("transaction detail excludes parallel-book lines", () => {
     try {
       await withBypass(async () => {
         await db.execute(sql\`
-          insert into accounting_books (id, org_id, code, name, is_primary, is_active, posts_gl)
-          values (\${taxBookId}, \${scratch.orgId}, 'TAX', 'Tax book', false, true, true)\`);
+          insert into accounting_books (id, org_id, code, name, is_primary, is_active, posts_gl, replication_mode, replication_from)
+          values (\${taxBookId}, \${scratch.orgId}, 'TAX', 'Tax book', false, true, true, 'full', '2000-01-01')\`);
         const postRevenue = async (bookId, amount, tag) => {
           const entryId = randomUUID();
           await db.execute(sql\`
@@ -420,8 +420,8 @@ test("ledger-backed detail reports read one accounting book (omitted means prima
     try {
       await withBypass(async () => {
         await db.execute(sql\`
-          insert into accounting_books (id, org_id, code, name, is_primary, is_active, posts_gl)
-          values (\${taxBookId}, \${scratch.orgId}, 'TAX', 'Tax book', false, true, true)\`);
+          insert into accounting_books (id, org_id, code, name, is_primary, is_active, posts_gl, replication_mode, replication_from)
+          values (\${taxBookId}, \${scratch.orgId}, 'TAX', 'Tax book', false, true, true, 'full', '2000-01-01')\`);
         const post = async (bookId, tag, cash, receivable) => {
           const cashEntryId = randomUUID();
           const arEntryId = randomUUID();

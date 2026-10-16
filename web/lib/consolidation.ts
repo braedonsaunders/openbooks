@@ -7,7 +7,6 @@ import type { StatementSubsidiaryContext } from "./statement-matrix";
 import { allowedSubsidiaryIds, subsidiaryOptions, subtreeIds, type SubsidiaryOption } from "./subsidiaries";
 import { subsidiaryFeatureEnabled } from "./features";
 import { ReportSubsidiarySelectionError, selectReportSubsidiary } from "./report-subsidiary-selection";
-import { notFound } from "next/navigation";
 
 /**
  * Resolves a report's subsidiary picker value into the statement engine's
@@ -441,7 +440,9 @@ export async function reportSubsidiaryScope(
   try {
     view = await resolveSubsidiaryScope(subsidiaryId, periodTo, allowed, bookId);
   } catch (error) {
-    if (error instanceof ReportSubsidiarySelectionError) notFound();
+    // Loaded on the refusal path only: this module also serves non-route
+    // readers that run outside Next's request runtime.
+    if (error instanceof ReportSubsidiarySelectionError) (await import("next/navigation")).notFound();
     throw error;
   }
   if (!subsidiaryUiEnabled) return { ...view, picker: [] };

@@ -25,8 +25,8 @@ test(
       const taxBookId = randomUUID();
       try {
         await withBypassContext(() => db.execute(sql\`
-          insert into accounting_books (id, org_id, code, name, is_primary, is_active, posts_gl)
-          values (\${taxBookId}, \${scratch.orgId}, 'TAX', 'Tax book', false, true, true)\`));
+          insert into accounting_books (id, org_id, code, name, is_primary, is_active, posts_gl, replication_mode, replication_from)
+          values (\${taxBookId}, \${scratch.orgId}, 'TAX', 'Tax book', false, true, true, 'full', '2000-01-01')\`));
 
         const postAR = async (bookId, tag) => {
           const entryId = randomUUID();
