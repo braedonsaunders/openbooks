@@ -86,6 +86,7 @@
       "attachments": "ソースの添付ファイルを確認してインポートしています"
     },
     "stats": {
+      "nonpostingSettlements": "未転記のソース取引{count}件を消込対象から除外",
       "contentExcluded": "{content}：接続設定で除外",
       "crm": "CRM：{accounts}件の取引先 · {opportunities}件の商談",
       "fixedAssets": "{count}件の固定資産",

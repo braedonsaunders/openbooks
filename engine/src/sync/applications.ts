@@ -7,7 +7,7 @@ import { lockApplicationEvidenceWithQuery } from "../records/application-lock.ts
 import type { SourceApplicationLink } from "./source.ts";
 import {
   releaseSourceApplications, sourceApplicationEvidence, postSourceSettlementEntry, sourceConnectionDocumentPredicate,
-  type CompleteApplicationSnapshot,
+  admitSettlementObservation, type ApplicationReconciliationContext,
 } from "./application-snapshot.ts";
 
 const applicationLockDialect = new PgDialect();
@@ -367,7 +367,7 @@ export async function reconcileApplications(
   orgId: string,
   refKey: string,
   links: SourceApplicationLink[],
-  snapshot?: CompleteApplicationSnapshot,
+  snapshot?: ApplicationReconciliationContext,
 ): Promise<ApplyStats> {
   // -- target: stated links per (payment, applied) pair -----------------------
   // Amounts stay STATED here: each pair resolves to functional at allocation
@@ -412,6 +412,7 @@ export async function reconcileApplications(
     await client.query("select pg_advisory_xact_lock(hashtextextended($1, 0))", [
       `sync-applications:${orgId}`,
     ]);
+    if (snapshot) await admitSettlementObservation(client, orgId, refKey, snapshot, links);
 
     // Serialize against MANUAL application writers on the same open items.
     // The advisory lock above orders overlapping syncs, but a manual posting
@@ -431,7 +432,7 @@ export async function reconcileApplications(
     // the join below would acquire the same rows in join-scan order, which
     // deadlocks against those writers' order. So scope the ids through the
     // join first (no locks), then lock exactly that set.
-    const priorEvidence = snapshot ? await sourceApplicationEvidence(client, orgId, refKey, snapshot) : [];
+    const priorEvidence = snapshot?.complete ? await sourceApplicationEvidence(client, orgId, refKey, snapshot) : [];
     const batchRefs = [...new Set([
       ...links.flatMap((l) => [l.paymentRef, l.appliedRef]),
       ...priorEvidence.flatMap((row) => [row.payment_ref, row.applied_ref]),
@@ -516,7 +517,7 @@ export async function reconcileApplications(
     }
     for (const arr of linesByRef.values()) arr.sort((a, b) => a.lineNo - b.lineNo);
 
-    if (snapshot) {
+    if (snapshot?.complete) {
       const evidence = await sourceApplicationEvidence(client, orgId, refKey, snapshot);
       const priorIds = new Set(priorEvidence.map((row) => row.id));
       if (evidence.some((row) => !priorIds.has(row.id))) {
@@ -577,6 +578,10 @@ export async function reconcileApplications(
           throw new Error(`source settlement ${row.payment_ref}→${row.applied_ref} conflicts with a manual allocation; manual evidence was preserved`);
         }
         changedPayers.add(row.payment_ref);
+      }
+      if (changedPayers.size && snapshot.observation) {
+        if (!snapshot.confirmReleases) throw new Error("source settlement releases require current source lifecycle confirmation");
+        await snapshot.confirmReleases([...changedPayers].sort());
       }
       released = await releaseSourceApplications(client, orgId, snapshot,
         evidence.filter((row) => changedPayers.has(row.payment_ref)),

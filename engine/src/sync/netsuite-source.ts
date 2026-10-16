@@ -1,3 +1,6 @@
+import { readNetSuiteSettlements } from "./netsuite-settlements.ts";
+export { toSourceApplicationLinks, uniqueNetSuiteApplicationLinks } from "./netsuite-settlements.ts";
+import type { SettlementObservation } from "./settlement-observation.ts";
 import { netSuiteEntityMappingMetadata, type EntityMappingField } from "./entity-mapping-contract.ts";
 import { netsuiteCustomizationChoices, netsuiteCustomRecordFields, type NetSuiteCustomizationKind } from "../connectors/netsuite.ts";
 import { NETSUITE_MAPPING_GROUPS, validateConnectionMappings } from "./connection-settings.ts";
@@ -15,7 +18,6 @@ import type {
   EntityStream,
   MigrationSource,
   NativeChanges,
-  SourceApplicationLink,
   SourceAccountMonthRow,
   SourceClearedLineState,
   SourceEntity,
@@ -267,83 +269,6 @@ export function uniqueNetSuiteTransactionLines(rows: NsLine[]): NsLine[] {
     unique.set(key, { payload, row });
   }
   return [...unique.values()].map(({ row }) => row);
-}
-
-export interface NsApplicationLink {
-  previousdoc: string;
-  previousline: string;
-  nextdoc: string;
-  nextline: string;
-  foreignamount: string;
-  payaccount?: string | null;
-  appaccount?: string | null;
-  /**
-   * The PAYING transaction's currency display value
-   * (`BUILTIN.DF(t.currency)` — the denomination of foreignamount). Raw ids
-   * resolve through the same alias/ISO rule the document builder uses.
-   */
-  paycurrency?: string | null;
-  /** The PAYING transaction's exchange rate (transaction→base). */
-  payexrate?: string | null;
-}
-
-/** Enforce a stable application-link identity across governed export retries. */
-export function uniqueNetSuiteApplicationLinks(rows: NsApplicationLink[]): NsApplicationLink[] {
-  const unique = new Map<string, { amount: string; currency: string; rate: string; row: NsApplicationLink }>();
-  for (const row of rows) {
-    const key = `${row.previousdoc}:${row.previousline}:${row.nextdoc}:${row.nextline}`;
-    const prior = unique.get(key);
-    if (prior) {
-      if (
-        prior.amount !== String(row.foreignamount) ||
-        prior.currency !== String(row.paycurrency ?? "") ||
-        prior.rate !== String(row.payexrate ?? "")
-      ) {
-        throw new Error(`NetSuite returned conflicting application link ${key}`);
-      }
-      continue;
-    }
-    unique.set(key, {
-      amount: String(row.foreignamount),
-      currency: String(row.paycurrency ?? ""),
-      rate: String(row.payexrate ?? ""),
-      row,
-    });
-  }
-  return [...unique.values()].map(({ row }) => row);
-}
-
-/**
- * Map NetSuite payment links to reconciler input: dedupe across governed
- * export retries, drop non-positive links, and state every link in its own
- * terms — the transaction-currency `foreignamount` plus the paying
- * transaction's currency and rate. The reconciler converts centrally and
- * refuses anything it cannot price; this mapper never converts and never
- * defaults a rate.
- *
- * Currency follows the document builder's rule exactly: the display value
- * resolves through `netSuiteCurrencyIso`; an unstated currency is the source
- * base (single-currency accounts state nothing); a stated-but-unresolvable
- * value stays empty so the reconciler refuses the link instead of settling
- * a guess.
- */
-export function toSourceApplicationLinks(rows: NsApplicationLink[], baseCurrency: string): SourceApplicationLink[] {
-  return uniqueNetSuiteApplicationLinks(rows)
-    .filter((link) => link.foreignamount != null && toUnits(link.foreignamount) > 0n)
-    .map((link) => {
-      const stated = String(link.paycurrency ?? "").trim() !== "";
-      return {
-        paymentRef: String(link.nextdoc),
-        appliedRef: String(link.previousdoc),
-        amount: String(link.foreignamount),
-        currency: netSuiteCurrencyIso(link.paycurrency) ?? (stated ? "" : baseCurrency),
-        rate: link.payexrate ?? null,
-        ...(link.payaccount != null || link.appaccount != null ? {
-          paymentAccountRef: String(link.payaccount ?? ""),
-          appliedAccountRef: String(link.appaccount ?? ""),
-        } : {}),
-      };
-    });
 }
 
 function parseNetSuiteTaxCodeFallbacks(value: unknown): NetSuiteTaxCodeFallbacks {
@@ -1453,7 +1378,6 @@ export class NetSuiteSource implements MigrationSource {
 
     const headers: NsHeader[] = [];
     const linesByTxn = new Map<string, NsLine[]>();
-    const links: NsApplicationLink[] = [];
     for (let index = 0; index < ids.length; index += 150) {
       const chunk = ids.slice(index, index + 150);
       headers.push(...await this.q<NsHeader>(
@@ -1465,9 +1389,7 @@ export class NetSuiteSource implements MigrationSource {
         const key = String(line.transaction);
         linesByTxn.set(key, [...(linesByTxn.get(key) ?? []), line]);
       }
-      links.push(...await this.q<NsApplicationLink>(
-        `SELECT previousdoc, previousline, nextdoc, nextline, foreignamount, BUILTIN.DF(t.currency) AS paycurrency, t.exchangerate AS payexrate FROM nexttransactionlinelink n JOIN transaction t ON t.id = n.nextdoc WHERE n.linktype = 'Payment' AND (n.nextdoc IN (${chunk.join(",")}) OR n.previousdoc IN (${chunk.join(",")})) ORDER BY n.previousdoc, n.previousline, n.nextdoc, n.nextline`,
-      ));
+
     }
     for (const [transactionId, rows] of linesByTxn) {
       linesByTxn.set(transactionId, uniqueNetSuiteTransactionLines(rows).sort((a, b) => Number(a.id) - Number(b.id)));
@@ -1486,8 +1408,8 @@ export class NetSuiteSource implements MigrationSource {
         documents.push(built.doc);
       }
     }
-    const applications = toSourceApplicationLinks(links, this.baseCurrency);
-    return { documents, applications, deletedRefs: [], syncedThrough, unbuildable, nonLedgerRefs };
+    const { applications, observation } = await this.readSettlements(ids);
+    return { documents, applications, settlementObservation: observation, deletedRefs: [], syncedThrough, unbuildable, nonLedgerRefs };
   }
 
   nativeChangesByRefs(
@@ -1603,50 +1525,7 @@ export class NetSuiteSource implements MigrationSource {
       documents.push(built.doc);
     }
 
-    // Allocation removals do not reliably advance either transaction's
-    // modification clock. A complete graph is required even when document
-    // headers are incremental; an omitted link must never be interpreted as
-    // a release from a partial pull. Voiding journals remain real payment
-    // links, while the original bill links may become zero or disappear.
-    const countQuery = "SELECT COUNT(*) AS n FROM nexttransactionlinelink n JOIN transaction t ON t.id=n.nextdoc WHERE n.linktype='Payment'";
-    const readCount = async () => {
-      const rows = await this.q<{ n: string }>(countQuery);
-      const stated = rows[0]?.n;
-      const count = Number(stated);
-      if ((typeof stated !== "number" && (typeof stated !== "string" || !/^\d+$/.test(stated)))
-          || rows.length !== 1 || !Number.isSafeInteger(count) || count < 0) {
-        throw new Error("NetSuite application graph count is unavailable; settlements were not reconciled");
-      }
-      return count;
-    };
-    const count = await readCount();
-    // The existing synchronous SuiteQL endpoint returns every ordered page.
-    // Counts on both sides refuse truncation or changing cardinality;
-    // allocation reconciliation does not require an asynchronous export task.
-    const applicationBookId = await this.accountingBookId();
-    const links = await this.q<NsApplicationLink>(
-      `SELECT n.previousdoc, n.previousline, n.nextdoc, n.nextline, n.foreignamount,
-         BUILTIN.DF(t.currency) AS paycurrency, t.exchangerate AS payexrate,
-         payline.account AS payaccount, appline.account AS appaccount
-       FROM nexttransactionlinelink n
-       JOIN transaction t ON t.id = n.nextdoc
-       LEFT JOIN transactionaccountingline payline
-         ON payline.transaction=n.nextdoc AND payline.transactionline=n.nextline
-        AND payline.accountingbook=${applicationBookId} AND payline.posting='T'
-       LEFT JOIN transactionaccountingline appline
-         ON appline.transaction=n.previousdoc AND appline.transactionline=n.previousline
-        AND appline.accountingbook=${applicationBookId} AND appline.posting='T'
-       WHERE n.linktype='Payment'
-       ORDER BY n.previousdoc,n.previousline,n.nextdoc,n.nextline`,
-    );
-    if (links.length !== count || uniqueNetSuiteApplicationLinks(links).length !== count || await readCount() !== count) {
-      throw new Error("NetSuite application graph is incomplete or changed during reading; settlements were not reconciled");
-    }
-    if (links.some(link => link.foreignamount != null && toUnits(link.foreignamount) > 0n
-        && (!String(link.payaccount ?? "").trim() || !String(link.appaccount ?? "").trim()))) {
-      throw new Error("NetSuite settlement control-account identity is unavailable; settlements were not reconciled");
-    }
-    const applications = toSourceApplicationLinks(links, this.baseCurrency);
+    const { applications, observation } = await this.readSettlements();
 
     // Pull deletion tombstones without attaching code to transaction saves.
     // The feed is account-wide, so retain only financially meaningful record
@@ -1662,12 +1541,53 @@ export class NetSuiteSource implements MigrationSource {
     return {
       documents,
       applications,
-      applicationSnapshot: "complete",
+      settlementObservation: observation,
       deletedRefs: [...new Set(deletedRefs)],
       syncedThrough,
       unbuildable,
       nonLedgerRefs,
     };
+  }
+
+  private async readSettlements(refs?: string[]) {
+    return readNetSuiteSettlements(query => this.q(query), {
+      sourceAccount: this.expectedAccount,
+      bookRef: await this.accountingBookId(),
+      baseCurrency: this.baseCurrency,
+      refs,
+    });
+  }
+
+  async revalidateSettlementObservation(observation: SettlementObservation): Promise<void> {
+    if (observation.source !== this.name || observation.sourceAccount !== this.expectedAccount
+        || observation.bookRef !== await this.accountingBookId()) {
+      throw new Error("source settlement observation belongs to a different source account or book");
+    }
+    const current = await this.readSettlements(observation.scope.kind === "references" ? observation.scope.refs : undefined);
+    if (current.observation.graphDigest !== observation.graphDigest) {
+      throw new Error("source settlement graph changed before reconciliation; retry the sync");
+    }
+    observation.observedThrough = current.observation.observedThrough;
+  }
+
+  async confirmSettlementReleases(observation: SettlementObservation, paymentRefs: string[]): Promise<void> {
+    // Confirm negative graph evidence again at the destructive boundary. An
+    // omitted workflow link alone cannot revoke an admitted posted settlement.
+    await this.revalidateSettlementObservation(observation);
+    const refs = [...new Set(paymentRefs)].sort();
+    if (refs.some(ref => !/^\d+$/.test(ref))) throw new Error("NetSuite settlement payment references must be numeric");
+    for (let index = 0; index < refs.length; index += 150) {
+      const chunk = refs.slice(index, index + 150);
+      const query = `SELECT id,posting FROM transaction WHERE id IN (${chunk.join(",")}) ORDER BY id`;
+      const first = await this.q<{ id: string; posting: string }>(query);
+      const second = await this.q<{ id: string; posting: string }>(query);
+      if (first.length !== chunk.length || second.length !== chunk.length
+          || first.some((row, position) => row.id !== second[position]?.id || row.posting !== "T" || second[position]?.posting !== "T")
+          || new Set(first.map(row => String(row.id))).size !== chunk.length
+          || first.some(row => !chunk.includes(String(row.id)))) {
+        throw new Error(`NetSuite settlement payers ${chunk.join(", ")} are missing, nonposting, or changed during release confirmation; restore source access or resolve their governed reversal, then retry the sync; settlements were preserved`);
+      }
+    }
   }
 
   // --- verification -----------------------------------------------------------------

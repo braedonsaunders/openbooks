@@ -86,6 +86,7 @@
       "attachments": "Inventaire et importation des pièces jointes sources"
     },
     "stats": {
+      "nonpostingSettlements": "{count} transactions sources non comptabilisées exclues du lettrage",
       "contentExcluded": "{content} : exclu par les paramètres de connexion",
       "crm": "CRM : {accounts} comptes · {opportunities} opportunités",
       "fixedAssets": "{count} immobilisations",

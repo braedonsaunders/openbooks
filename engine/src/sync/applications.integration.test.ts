@@ -6,6 +6,8 @@ import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "../platform/db.ts";
 import { sum, fromUnits, toUnits, normalizeMoney } from "../money/money.ts";
 import { recomputeOpenBalances, reconcileApplications } from "./applications.ts";
+import { applicationLinksDigest, settlementDigest, type SettlementObservation } from "./settlement-observation.ts";
+import type { SourceApplicationLink } from "./source.ts";
 import { DocumentVoidError, requestDocumentVoid } from "../ledger/document-void.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrg } from "../testing/fixtures.ts";
 
@@ -1788,5 +1790,109 @@ test("authenticated source settlement replay reverses and replaces FX evidence w
     const replay=await reconcileApplications(org.orgId,"nsId",[{...original[0]!,amount:"50"}],{...snapshot,syncRunId:runId});
     assert.equal(replay.released,0);assert.equal(replay.inserted,0);
     assert.deepEqual(await settlementSnapshot(org.orgId),after);
+  } finally { await dropScratchOrg(org.orgId); }
+});
+
+async function observedSettlementFixture(org: ScratchOrg, links: SourceApplicationLink[] = []) {
+  const context = await completeSnapshotFixture(org);
+  await db.execute(sql`update connections set config='{"account":"TEST","accountingBookId":"1"}'::jsonb
+    where org_id=${org.orgId} and id=${context.connectionId}`);
+  const observation: SettlementObservation = {
+    version: 1, source: "netsuite", sourceAccount: "TEST", bookRef: "1", scope: { kind: "all" },
+    consistency: "repeated_read", observedFrom: "2026-07-01T00:00:00Z", observedThrough: "2026-07-01T00:00:01Z",
+    rawLinks: links.length, eligibleLinks: links.length, graphDigest: settlementDigest(links),
+    applicationsDigest: applicationLinksDigest(links), exclusions: [], nonpostingRefs: [],
+  };
+  return { ...context, observation };
+}
+
+function pendingSettlement(observation: SettlementObservation): SettlementObservation {
+  return { ...observation, rawLinks: observation.rawLinks + 1, nonpostingRefs: ["pending-payment"], exclusions: [{
+    paymentRef: "pending-payment", appliedRef: "bill", paymentLineRef: "1", appliedLineRef: "0", amount: "100",
+    paymentPosting: "F", appliedPosting: "T", paymentStatus: "A", appliedStatus: "A", reason: "nonposting_payment",
+  }] };
+}
+
+test("nonposting observations admit no settlements and later posting settles exactly once", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const context = await observedSettlementFixture(org);
+    const pending = pendingSettlement(context.observation);
+    const runId = randomUUID();
+    await db.execute(sql`insert into sync_runs(id,org_id,connection_id,source,status)
+      values(${runId},${org.orgId},${context.connectionId},'netsuite','running')`);
+    const deferred = await reconcileApplications(org.orgId, "nsId", [], { ...context, syncRunId: runId, observation: pending });
+    assert.equal(deferred.inserted, 0); assert.equal(deferred.released, 0);
+    const saved = (await db.execute<{ evidence: SettlementObservation }>(sql`
+      select stats->'settlementObservation' as evidence from sync_runs where id=${runId} and org_id=${org.orgId}`)).rows[0]!;
+    assert.deepEqual(saved.evidence, pending);
+    await snapshotDoc(org, "pending-payment", "100", { connectionId: context.connectionId });
+    await snapshotDoc(org, "bill", "-100", { connectionId: context.connectionId });
+    const links = [{ paymentRef: "pending-payment", appliedRef: "bill", amount: "100", currency: "CAD" }];
+    const approved = { ...context, observation: { ...context.observation, rawLinks: 1, eligibleLinks: 1,
+      graphDigest: settlementDigest(links), applicationsDigest: applicationLinksDigest(links) } };
+    const admitted = await reconcileApplications(org.orgId, "nsId", links, approved);
+    assert.equal(admitted.inserted, 1);
+    const before = await settlementSnapshot(org.orgId);
+    const replay = await reconcileApplications(org.orgId, "nsId", links, approved);
+    assert.equal(replay.inserted, 0); assert.equal(replay.released, 0);
+    assert.deepEqual(await settlementSnapshot(org.orgId), before);
+    await assert.rejects(() => reconcileApplications(org.orgId, "nsId", [], { ...context, observation: pending }), /nonposting but has admitted posted history/);
+    assert.deepEqual(await settlementSnapshot(org.orgId), before);
+  } finally { await dropScratchOrg(org.orgId); }
+});
+
+test("removed settlements require lifecycle confirmation and rollback on source drift", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const links = [{ paymentRef: "payment", appliedRef: "bill", amount: "100", currency: "CAD" }];
+    const context = await observedSettlementFixture(org, links);
+    await snapshotDoc(org, "payment", "100", { connectionId: context.connectionId });
+    await snapshotDoc(org, "bill", "-100", { connectionId: context.connectionId });
+    await reconcileApplications(org.orgId, "nsId", links, context);
+    const before = await settlementSnapshot(org.orgId);
+    const removed = { ...context, observation: { ...context.observation, rawLinks: 0, eligibleLinks: 0,
+      graphDigest: settlementDigest([]), applicationsDigest: applicationLinksDigest([]) } };
+    await assert.rejects(() => reconcileApplications(org.orgId, "nsId", [], removed), /require current source lifecycle confirmation/);
+    await assert.rejects(() => reconcileApplications(org.orgId, "nsId", [], { ...removed,
+      confirmReleases: async () => { throw new Error("source lifecycle changed"); } }), /source lifecycle changed/);
+    assert.deepEqual(await settlementSnapshot(org.orgId), before);
+    let confirmed: string[] = [];
+    const released = await reconcileApplications(org.orgId, "nsId", [], { ...removed,
+      confirmReleases: async refs => { confirmed = refs; } });
+    assert.deepEqual(confirmed, ["payment"]); assert.equal(released.released, 1);
+    const replay = await reconcileApplications(org.orgId, "nsId", [], removed);
+    assert.equal(replay.released, 0);
+  } finally { await dropScratchOrg(org.orgId); }
+});
+
+test("observations refuse account, book, connection, and run mismatches before mutating", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const context = await observedSettlementFixture(org);
+    for (const observation of [{ ...context.observation, sourceAccount: "OTHER" }, { ...context.observation, bookRef: "2" }]) {
+      await assert.rejects(() => reconcileApplications(org.orgId, "nsId", [], { ...context, observation }), /source account or accounting book/);
+    }
+    await assert.rejects(() => reconcileApplications(org.orgId, "nsId", [], { ...context, connectionId: randomUUID() }), /connection is not available/);
+    await assert.rejects(() => reconcileApplications(org.orgId, "nsId", [], { ...context, syncRunId: randomUUID() }), /could not be recorded/);
+    assert.deepEqual(await settlementSnapshot(org.orgId), []);
+  } finally { await dropScratchOrg(org.orgId); }
+});
+
+test("partial observed pulls preserve existing allocations and enforce reference scope", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const links = [{ paymentRef: "payment", appliedRef: "bill", amount: "100", currency: "CAD" }];
+    const context = await observedSettlementFixture(org, links);
+    await snapshotDoc(org, "payment", "100", { connectionId: context.connectionId });
+    await snapshotDoc(org, "bill", "-100", { connectionId: context.connectionId });
+    await reconcileApplications(org.orgId, "nsId", links, context);
+    const before = await settlementSnapshot(org.orgId);
+    const partial = { ...context, complete: false, observation: { ...context.observation,
+      scope: { kind: "references" as const, refs: ["payment"] }, rawLinks: 0, eligibleLinks: 0,
+      graphDigest: settlementDigest([]), applicationsDigest: applicationLinksDigest([]) } };
+    const result = await reconcileApplications(org.orgId, "nsId", [], partial);
+    assert.equal(result.released, 0); assert.deepEqual(await settlementSnapshot(org.orgId), before);
+    await assert.rejects(() => reconcileApplications(org.orgId, "nsId", [], { ...partial, complete: true }), /does not authorize/);
   } finally { await dropScratchOrg(org.orgId); }
 });

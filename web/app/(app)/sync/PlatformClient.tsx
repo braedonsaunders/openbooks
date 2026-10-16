@@ -138,6 +138,7 @@ interface Run {
     ordersNew?: number;
     docsFailed?: number;
     applications?: { inserted?: number } | null;
+    settlementObservation?: { nonpostingRefs: string[] };
     tb?: { matches?: number; accounts?: number; mismatches?: unknown[] };
     openItems?: {
       checked?: number;
@@ -409,7 +410,10 @@ export function PlatformClient() {
       if (blockers > 0) {
         parts.push(t("runs.stats.preflightBlockers", { count: blockers }));
       }
-      if (s.attachments) parts.push(t("runs.stats.incrementalAttachments", {
+      if (s.settlementObservation?.nonpostingRefs.length) parts.push(t("runs.stats.nonpostingSettlements", {
+      count: s.settlementObservation.nonpostingRefs.length,
+    }));
+    if (s.attachments) parts.push(t("runs.stats.incrementalAttachments", {
       created: s.attachments.createdFiles, changed: s.attachments.newVersions, skipped: s.attachments.skippedUnchanged,
     }));
     if (s.projectFinancials) parts.push(t("runs.stats.projectFinancials", {
@@ -469,6 +473,9 @@ export function PlatformClient() {
           checked: s.projectPeriods.checked ?? 0,
         }),
       );
+    if (s.settlementObservation?.nonpostingRefs.length) parts.push(t("runs.stats.nonpostingSettlements", {
+      count: s.settlementObservation.nonpostingRefs.length,
+    }));
     if (s.attachments) parts.push(t("runs.stats.incrementalAttachments", {
       created: s.attachments.createdFiles, changed: s.attachments.newVersions, skipped: s.attachments.skippedUnchanged,
     }));

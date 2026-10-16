@@ -86,6 +86,7 @@
       "attachments": "Inventariando e importando archivos adjuntos de origen"
     },
     "stats": {
+      "nonpostingSettlements": "{count} transacciones de origen sin contabilizar excluidas de la liquidación",
       "contentExcluded": "{content}: excluido por la configuración de la conexión",
       "crm": "CRM: {accounts} cuentas · {opportunities} oportunidades",
       "fixedAssets": "{count} activos fijos",

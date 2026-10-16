@@ -3,6 +3,7 @@ import type { CrmImportReport } from "./netsuite-crm.ts";
 import type { NetSuiteFixedAssetSyncResult } from "./netsuite-fixed-assets.ts";
 import type { ImportSummary } from "./attachment-contract.ts";
 import type { NativeContext, NativeDocument } from "./native.ts";
+import type { SettlementObservation } from "./settlement-observation.ts";
 
 /**
  * MigrationSource — the adapter contract for pulling accounting data out of an
@@ -157,8 +158,8 @@ export interface NativeChanges {
   documents: NativeDocument[];
   /** Current application links. Partial pulls remain insert-only. */
   applications: SourceApplicationLink[];
-  /** Only an explicitly complete graph authorizes releasing source-owned settlements. */
-  applicationSnapshot?: "complete";
+  /** Scoped financial observations; only an all-population observation may release settlements. */
+  settlementObservation?: SettlementObservation;
   /** Source refs the source system reports deleted (voided in openbooks). */
   deletedRefs: string[];
   /** Source-clock high-water mark to persist for the next incremental pull. */
@@ -321,6 +322,10 @@ export interface MigrationSource {
   readonly refKey: string;
   /** ISO 4217 base currency of the source book. */
   readonly baseCurrency: string;
+  /** Recheck source evidence immediately before financial reconciliation. */
+  revalidateSettlementObservation?(observation: SettlementObservation): Promise<void>;
+  /** Confirm the source still posts payers whose admitted allocations would be released. */
+  confirmSettlementReleases?(observation: SettlementObservation, paymentRefs: string[]): Promise<void>;
 
   /**
    * Source fiscal periods normalized into posting-period rows plus per-module

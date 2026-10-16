@@ -8,12 +8,16 @@ import { reversalJournalLines } from "../records/reversal-journal-lines.ts";
 import { assertPeriodModulesOpen, CloseError } from "../periods/period-policy.ts";
 import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
 import { authorizeConnectorReplay } from "../journal/replay-authorization.ts";
+import { assertSettlementObservation, type SettlementObservation } from "./settlement-observation.ts";
+import type { SourceApplicationLink } from "./source.ts";
 
-export interface CompleteApplicationSnapshot {
-  complete: true;
+export interface ApplicationReconciliationContext {
+  complete: boolean;
   connectionId: string;
   source: string;
   syncRunId?: string;
+  observation?: SettlementObservation;
+  confirmReleases?: (paymentRefs: string[]) => Promise<void>;
 }
 
 export interface SourceApplicationEvidence {
@@ -37,6 +41,55 @@ const sourceKeys: Record<string, string> = {
   odoo: "odooId", erpnext: "erpId", dynamics: "bcId",
 };
 const dialect = new PgDialect();
+
+/** Check provenance and nonposting transitions before any settlement mutation. */
+export async function admitSettlementObservation(
+  client: PoolClient,
+  orgId: string,
+  refKey: string,
+  context: ApplicationReconciliationContext,
+  links: SourceApplicationLink[],
+): Promise<void> {
+  if (sourceKeys[context.source] !== refKey) {
+    throw new Error("application snapshot source identity does not match its reference namespace");
+  }
+  const connection = (await client.query<{ config: { account?: string; accountingBookId?: string } }>(
+    "select config from connections where org_id=$1 and id=$2 and source=$3 for share",
+    [orgId, context.connectionId, context.source],
+  )).rows[0];
+  if (!connection) throw new Error("application snapshot connection is not available in this organization");
+  const observation = context.observation;
+  if (!observation) return;
+  assertSettlementObservation(observation, context.source, links, context.complete);
+  if (String(connection.config.account ?? "") !== observation.sourceAccount
+      || (connection.config.accountingBookId && String(connection.config.accountingBookId) !== observation.bookRef)) {
+    throw new Error("source settlement observation does not match the connection's source account or accounting book");
+  }
+  if (observation.nonpostingRefs.length) {
+    // Document locks serialize admission against a concurrent posting. A source
+    // workflow exclusion must never erase an already admitted financial fact.
+    const admitted = (await client.query<{ ref: string; has_history: boolean }>(`
+      select d.custom->>$2 as ref,
+             exists(select 1 from journal_entries e where e.org_id=d.org_id
+                    and e.source_document_id=d.id and e.status in ('posted','reversed')) as has_history
+        from documents d
+       where d.org_id=$1 and d.custom->>$2=any($3::text[])
+         and ${sourceConnectionDocumentPredicate("d", "$4", "$5")}
+       order by d.id for update of d`,
+      [orgId, refKey, observation.nonpostingRefs, context.connectionId, context.source],
+    )).rows.find(row => row.has_history);
+    if (admitted) {
+      throw new Error(`source transaction ${admitted.ref} is nonposting but has admitted posted history; restore the source posting state or resolve its governed reversal before retrying the sync; settlements were preserved`);
+    }
+  }
+  if (context.syncRunId) {
+    const saved = await client.query(`update sync_runs
+      set stats=jsonb_set(stats,'{settlementObservation}',$1::jsonb)
+      where org_id=$2 and id=$3 and connection_id=$4 and source=$5 and status='running' returning id`,
+    [JSON.stringify(observation), orgId, context.syncRunId, context.connectionId, context.source]);
+    if (saved.rows.length !== 1) throw new Error("source settlement observation could not be recorded on its running sync");
+  }
+}
 
 export function sourceConnectionDocumentPredicate(alias: string, connection: string, source: string): string {
   return `(
@@ -84,7 +137,7 @@ export async function sourceApplicationEvidence(
   client: PoolClient,
   orgId: string,
   refKey: string,
-  snapshot: CompleteApplicationSnapshot,
+  snapshot: ApplicationReconciliationContext,
 ): Promise<SourceApplicationEvidence[]> {
   if (sourceKeys[snapshot.source] !== refKey) {
     throw new Error("application snapshot source identity does not match its reference namespace");
@@ -132,10 +185,11 @@ export async function sourceApplicationEvidence(
 export async function releaseSourceApplications(
   client: PoolClient,
   orgId: string,
-  snapshot: CompleteApplicationSnapshot,
+  snapshot: ApplicationReconciliationContext,
   rows: SourceApplicationEvidence[],
   nextEntryNumber: (preferred: string) => Promise<string>,
 ): Promise<{ count: number; amount: string }> {
+  if (!snapshot.complete) throw new Error("partial source observations cannot release settlements");
   if (!rows.length) return { count: 0, amount: "0.0000" };
   const runner = applicationTransaction(client);
   const ids = rows.map((row) => row.id);

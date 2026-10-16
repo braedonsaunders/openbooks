@@ -86,6 +86,7 @@
       "attachments": "正在清点并导入源附件"
     },
     "stats": {
+      "nonpostingSettlements": "已从结算中排除 {count} 笔未过账的源交易",
       "contentExcluded": "{content}：已被连接设置排除",
       "crm": "CRM：{accounts}个客户账户 · {opportunities}个商机",
       "fixedAssets": "{count}项固定资产",

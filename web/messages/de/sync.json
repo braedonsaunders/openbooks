@@ -86,6 +86,7 @@
       "attachments": "Quellanhänge werden inventarisiert und importiert"
     },
     "stats": {
+      "nonpostingSettlements": "{count} nicht gebuchte Quelltransaktionen vom Ausgleich ausgeschlossen",
       "contentExcluded": "{content}: durch Verbindungseinstellungen ausgeschlossen",
       "crm": "CRM: {accounts} Konten · {opportunities} Verkaufschancen",
       "fixedAssets": "{count} Anlagegüter",

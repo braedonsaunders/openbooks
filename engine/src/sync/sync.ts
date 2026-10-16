@@ -37,6 +37,7 @@ import {
   type SourceEvidenceOutcome,
 } from "./source-evidence.ts";
 import type { MigrationSource, SourceOpenItem, SourceOperationalSyncResult } from "./source.ts";
+import { assertSettlementObservation, type SettlementObservation } from "./settlement-observation.ts";
 import { syncProjectFinancialInputs, type ProjectFinancialInputSyncResult } from "./project-financial-inputs.ts";
 import { AttachmentImportError, type ImportSummary } from "./netsuite-attachments.ts";
 import {
@@ -103,6 +104,7 @@ export interface SyncResult {
    * Optional: runs persisted before this contract lack the key. */
   sourceEvidence?: SourceEvidenceOutcome | null;
   excludedPopulations?: SyncContentKey[];
+  settlementObservation?: SettlementObservation;
   attachments?: ImportSummary;
   projectFinancials?: ProjectFinancialInputSyncResult;
   operationalRecords?: SourceOperationalSyncResult;
@@ -1574,7 +1576,7 @@ export async function runSync(
     throw new Error("posted-change authorization is invalid");
   }
 
-  const supplemental: Pick<SyncResult, "attachments" | "projectFinancials" | "operationalRecords" | "excludedPopulations"> = {};
+  const supplemental: Pick<SyncResult, "attachments" | "projectFinancials" | "operationalRecords" | "excludedPopulations" | "settlementObservation"> = {};
 
   const [run] = await claimSyncRun({
     orgId: org.id,
@@ -1807,6 +1809,11 @@ export async function runSync(
     const changes = targetedRefs
       ? await source.nativeChangesByRefs!(targetedRefs, ctx)
       : await source.nativeChanges(since, ctx);
+    if (changes.settlementObservation) {
+      supplemental.settlementObservation = changes.settlementObservation;
+      assertSettlementObservation(changes.settlementObservation, source.name, changes.applications,
+        changes.settlementObservation.scope.kind === "all");
+    }
     if (targetedRefs) {
       const accountedFor = new Set([
         ...changes.documents.map((document) => document.sourceRef),
@@ -2456,17 +2463,22 @@ export async function runSync(
       },
       true,
     );
-    if (changes.applicationSnapshot === "complete" && !connectionId) {
-      throw new Error("complete settlement reconciliation requires its source connection");
+    const observation = changes.settlementObservation;
+    if (observation && (!connectionId || !source.revalidateSettlementObservation)) {
+      throw new Error("observed settlement reconciliation requires its source connection and revalidation");
     }
+    if (observation) await source.revalidateSettlementObservation!(observation);
     const applications =
-      changes.applications.length > 0 || changes.applicationSnapshot === "complete"
+      changes.applications.length > 0 || observation
         ? await reconcileApplications(org.id, refKey, changes.applications,
-            changes.applicationSnapshot === "complete" ? {
-              complete: true,
+            observation ? {
+              complete: observation.scope.kind === "all",
               connectionId: connectionId!,
               source: source.name,
               syncRunId: run!.id,
+              observation,
+              confirmReleases: source.confirmSettlementReleases
+                ? refs => source.confirmSettlementReleases!(observation, refs) : undefined,
             } : undefined)
         : null;
 
@@ -2667,44 +2679,31 @@ export async function runSync(
       throw new SyncVerificationError(result);
     }
 
-    await db
-      .update(schema.syncRuns)
-      .set({
-        status: "ok",
-        finishedAt: new Date(),
-        syncedThrough: targetedRefs ? null : changes.syncedThrough,
-        stats: result as unknown as Record<string, unknown>,
-      })
-      .where(sql`${schema.syncRuns.id} = ${run!.id} and ${schema.syncRuns.orgId} = ${org.id}`);
-
-    // Entity-load failures must not hide behind a green run: the mirror is
-    // knowingly incomplete (a role, address, or held party did not land) and
-    // the controller has to look. This is not a verification failure — the
-    // financial gates above already passed, the cursor advances, and the next
-    // run retries the failed rows — only the reported status changes.
-    // Raw SQL (not the drizzle model): downstream checkouts resolve
-    // @openbooks/schema from main until this commit is picked, and the
-    // widened status union ships in this same commit.
     const entityFailures = Object.values(entityStats ?? {}).reduce(
-      (total, stats) => total + (stats?.failed ?? 0),
-      0,
+      (total, stats) => total + (stats?.failed ?? 0), 0,
     );
-    if (entityFailures > 0) {
-      const summary =
-        `${entityFailures} master-data record${entityFailures === 1 ? "" : "s"}` +
-        " failed to load; see stats.entities for the named rows";
-      await db.execute(sql`
-        update sync_runs set status = 'ok_with_errors', error_message = ${summary}
-         where id = ${run!.id} and org_id = ${org.id}`);
-    }
-
-    if (connectionId && !targetedRefs) {
-      await db.execute(sql`
-        update connections
-           set cursor = ${changes.syncedThrough}, last_run_at = now(),
-               status = 'active', last_error = null
-         where id = ${connectionId} and org_id = ${org.id}`);
-    }
+    const entitySummary = entityFailures > 0
+      ? `${entityFailures} master-data record${entityFailures === 1 ? "" : "s"} failed to load; see stats.entities for the named rows`
+      : null;
+    // Run completion and the connection watermark are one recoverable checkpoint.
+    // Earlier document units are replay-safe if any later financial gate refuses.
+    await withOrg(org.id, async () => {
+      const completed = await db.update(schema.syncRuns).set({
+        status: entityFailures > 0 ? "ok_with_errors" : "ok",
+        finishedAt: new Date(), syncedThrough: targetedRefs ? null : changes.syncedThrough,
+        stats: result as unknown as Record<string, unknown>, errorMessage: entitySummary,
+      }).where(sql`${schema.syncRuns.id} = ${run!.id} and ${schema.syncRuns.orgId} = ${org.id}
+        and ${schema.syncRuns.status} = 'running'`).returning({ id: schema.syncRuns.id });
+      if (completed.length !== 1) throw new Error("running sync could not be completed; its watermark was preserved");
+      if (connectionId && !targetedRefs) {
+        const advanced = await db.execute(sql`
+          update connections set cursor = ${changes.syncedThrough}, last_run_at = now(),
+                 status = 'active', last_error = null
+           where id = ${connectionId} and org_id = ${org.id} and source = ${source.name}
+           returning id`);
+        if (advanced.rows.length !== 1) throw new Error("sync connection could not be checkpointed");
+      }
+    });
     return result;
   } catch (e) {
     const verificationResult =

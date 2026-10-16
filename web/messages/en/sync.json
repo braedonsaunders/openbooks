@@ -86,6 +86,7 @@
       "attachments": "Inventorying and importing source attachments"
     },
     "stats": {
+      "nonpostingSettlements": "{count} nonposting source transactions excluded from settlement",
       "contentExcluded": "{content}: excluded by connection settings",
       "crm": "CRM: {accounts} accounts · {opportunities} opportunities",
       "fixedAssets": "{count} fixed assets",
