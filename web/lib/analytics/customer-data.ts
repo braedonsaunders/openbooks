@@ -570,6 +570,8 @@ export async function customerProfitability(
   // The entry window materializes first. Joined inline, the planner drives
   // from accounts and probes the entry primary key once per journal line in
   // the tenant before the date filter narrows anything.
+  // Lines aggregate per (project, functional, day) before the project and
+  // customer joins, so those joins run once per leg rather than per line.
   const r = ((await analyticsQuery(sql`
     with ew as materialized (
       select id, org_id, posting_date from journal_entries
@@ -577,28 +579,36 @@ export async function customerProfitability(
          ${orgId ? sql`and org_id = ${orgId}` : sql``}
          and status in ('posted', 'reversed') and book_id = ${statementBookExpr(orgId)}
          and ${excludePeriodEndJournals(sql`origin`)}
+    ),
+    legs as (
+      select l.project_id, l.org_id, sub.base_currency as func, e.posting_date::date as day,
+        -sum(case when a.type in ${REVENUE_TYPES} then l.amount else 0 end) as revenue,
+        sum(case when a.type in (${PNL_COST_TYPES_SQL}) then l.amount else 0 end) as costs,
+        count(distinct e.id) as txns
+      from ew e
+      join journal_lines l on l.entry_id = e.id and l.org_id = e.org_id
+      join accounts a on a.id = l.account_id and a.org_id = l.org_id
+      left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id
+      where a.type in (${PNL_TYPES_SQL})
+        and l.project_id is not null
+        ${orgFilter}
+        ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowed)}
+      group by l.project_id, l.org_id, sub.base_currency, e.posting_date::date
     )
     select pr.customer_id as customer_id,
       coalesce(cp.display_name, 'Unknown') as customer_name,
       pr.id as job_id,
       coalesce(pr.name, 'Untitled project') as job_name,
-      sub.base_currency as func,
-      e.posting_date::date as day,
-      -sum(case when a.type in ${REVENUE_TYPES} then l.amount else 0 end) as revenue,
-      sum(case when a.type in (${PNL_COST_TYPES_SQL}) then l.amount else 0 end) as costs,
-      count(distinct e.id) as txns
-    from ew e
-    join journal_lines l on l.entry_id = e.id and l.org_id = e.org_id
-    join accounts a on a.id = l.account_id and a.org_id = l.org_id
-    join projects pr on pr.id = l.project_id and pr.org_id = l.org_id
+      legs.func,
+      legs.day,
+      legs.revenue,
+      legs.costs,
+      legs.txns
+    from legs
+    join projects pr on pr.id = legs.project_id and pr.org_id = legs.org_id
     join parties cp on cp.id = pr.customer_id and cp.org_id = pr.org_id
-    left join subsidiaries sub on sub.id = l.subsidiary_id and sub.org_id = l.org_id
-    where a.type in (${PNL_TYPES_SQL})
-      and l.project_id is not null and pr.customer_id is not null
-      ${orgFilter}
-      ${subsidiaryVisibleFilter(sql`l.subsidiary_id`, allowed)}
+    where pr.customer_id is not null
       ${subsidiaryVisibleFilter(sql`pr.subsidiary_id`, allowed)}
-    group by pr.customer_id, cp.display_name, pr.id, pr.name, sub.base_currency, e.posting_date::date
   `)));
 
   // Legs are stamped in their line entity's functional: translate each
