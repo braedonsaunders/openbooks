@@ -221,3 +221,23 @@ test("payer links appearing during release confirmation preserve prior allocatio
     ? [{ n: "1" }] : [postedLink()] });
   await assert.rejects(() => source.confirmSettlementReleases(changes.settlementObservation!, ["20"]), /payer links changed before release/);
 });
+
+test("nonposting source payments stay in both pull universes without becoming deletion candidates", async () => {
+  const { source } = allocationGraphSource();
+  Object.defineProperty(source, "q", { configurable: true, value: async (query: string) => {
+    if (/MAX\(lastmodifieddate\)/i.test(query)) return [{ now: "2026-07-31 12:00:00" }];
+    if (/COUNT\(\*\)/i.test(query)) return [{ n: "1" }];
+    if (/nexttransactionlinelink/i.test(query)) return [postedLink({ payposting: "F", payaccount: null })];
+    if (/FROM transactionline tl/i.test(query)) return [{ transaction: "20", id: "0" }];
+    if (/FROM transaction t WHERE/i.test(query)) return [{ id: "20", ttype: "VendPymt", posting: "F" }];
+    return [];
+  } });
+  for (const changes of [await source.nativeChanges(new Date(), {} as NativeContext),
+    await source.nativeTransactionsByIds(["20"], {} as NativeContext)]) {
+    assert.deepEqual(changes.nonLedgerRefs, ["20"]);
+    assert.deepEqual(changes.sourcePresence, [{ ref: "20", posting: false }]);
+    assert.deepEqual(changes.documents, []);
+    assert.deepEqual(changes.unbuildable, []);
+    assert.deepEqual(changes.applications, []);
+  }
+});

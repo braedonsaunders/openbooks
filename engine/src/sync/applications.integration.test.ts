@@ -1896,3 +1896,21 @@ test("partial observed pulls preserve existing allocations and enforce reference
     await assert.rejects(() => reconcileApplications(org.orgId, "nsId", [], { ...partial, complete: true }), /does not authorize/);
   } finally { await dropScratchOrg(org.orgId); }
 });
+
+test("a governed local void resolves a nonposting transition without rewriting posted history", { skip: !DB }, async () => {
+  const org = await createScratchOrg();
+  try {
+    const context = await observedSettlementFixture(org);
+    const payment = await snapshotDoc(org, "pending-payment", "100", { connectionId: context.connectionId });
+    const actorId = await createScratchUser(org.orgId, "Settlement controller", "admin");
+    const voided = await requestDocumentVoid({ documentId: payment.documentId, orgId: org.orgId, actorId,
+      reason: "Source payment no longer posts", reversalDate: org.date, source: "api" });
+    assert.equal(voided.status, "voided");
+    const before = (await db.execute(sql`select id,status,reverses_entry_id from journal_entries
+      where org_id=${org.orgId} order by id`)).rows;
+    const result = await reconcileApplications(org.orgId, "nsId", [], { ...context, observation: pendingSettlement(context.observation) });
+    assert.equal(result.inserted, 0); assert.equal(result.released, 0);
+    assert.deepEqual((await db.execute(sql`select id,status,reverses_entry_id from journal_entries
+      where org_id=${org.orgId} order by id`)).rows, before);
+  } finally { await dropScratchOrg(org.orgId); }
+});

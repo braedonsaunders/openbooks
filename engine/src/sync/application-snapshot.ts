@@ -70,8 +70,8 @@ export async function admitSettlementObservation(
     // workflow exclusion must never erase an already admitted financial fact.
     const admitted = (await client.query<{ ref: string; has_history: boolean }>(`
       select d.custom->>$2 as ref,
-             exists(select 1 from journal_entries e where e.org_id=d.org_id
-                    and e.source_document_id=d.id and e.status in ('posted','reversed')) as has_history
+             (d.status<>'voided' and exists(select 1 from journal_entries e where e.org_id=d.org_id
+                    and e.source_document_id=d.id and e.status in ('posted','reversed'))) as has_history
         from documents d
        where d.org_id=$1 and d.custom->>$2=any($3::text[])
          and ${sourceConnectionDocumentPredicate("d", "$4", "$5")}

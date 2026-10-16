@@ -1134,6 +1134,7 @@ export async function preflightFullSync(
   }
 
   const currentSourceRefs = [
+    ...(changes.sourcePresence ?? []).map(row => row.ref),
     ...changes.documents.map((document) => document.sourceRef),
     ...changes.unbuildable.map((row) => row.ref),
     ...(changes.nonLedgerRefs ?? []),
@@ -1861,6 +1862,16 @@ export async function runSync(
         });
       }
     }
+    const nonpostingRefs = new Set([
+      ...(changes.nonLedgerRefs ?? []),
+      ...(changes.sourcePresence ?? []).filter(row => !row.posting).map(row => row.ref),
+    ]);
+    for (const ref of nonpostingRefs) {
+      const admitted = existing.get(ref);
+      if (admitted?.posted && admitted.status !== "voided") {
+        throw new Error(`source transaction ${ref} is nonposting but has admitted posted history; restore its source posting state or resolve its governed reversal before retrying the sync; posted history was preserved`);
+      }
+    }
     const numberOwners = new Map(
       allDocumentRows.map((r) => [
         documentNumberOwnerKey(r.kind, r.document_number),
@@ -2368,6 +2379,7 @@ export async function runSync(
         since === null,
         nonVoidedExistingRefs,
         [
+          ...(changes.sourcePresence ?? []).map(row => row.ref),
           ...changes.documents.map((doc) => doc.sourceRef),
           ...changes.unbuildable.map((row) => row.ref),
           ...(changes.nonLedgerRefs ?? []),

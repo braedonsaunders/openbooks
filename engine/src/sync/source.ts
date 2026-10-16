@@ -160,6 +160,8 @@ export interface NativeChanges {
   applications: SourceApplicationLink[];
   /** Scoped financial observations; only an all-population observation may release settlements. */
   settlementObservation?: SettlementObservation;
+  /** Source existence and posting state are independent of document buildability. */
+  sourcePresence?: { ref: string; posting: boolean }[];
   /** Source refs the source system reports deleted (voided in openbooks). */
   deletedRefs: string[];
   /** Source-clock high-water mark to persist for the next incremental pull. */

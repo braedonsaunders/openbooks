@@ -324,3 +324,32 @@ test(
     );
   },
 );
+
+test("a present nonposting source record cannot trigger full-sweep reversal of admitted history", { skip: !DB }, async () => {
+  const o = await ctx();
+  const connectionId = await newConnection(o.orgId);
+  const source = new CancelledInvoiceSource(o);
+  const first = await runSync(source, "nonposting-source", {
+    kind: "full_migration", orgId: o.orgId, connectionId, since: null, loadEntitiesFirst: false,
+  });
+  assert.equal(first.docsNew, 1);
+  const before = (await db.execute(sql`select id,status,posted_entry_id,open_balance::text from documents
+    where org_id=${o.orgId} and custom->>'qboId'='TST-1'`)).rows;
+  const entriesBefore = (await db.execute(sql`select id,status,reverses_entry_id from journal_entries
+    where org_id=${o.orgId} order by id`)).rows;
+  Object.defineProperty(source, "nativeChanges", { value: async (): Promise<NativeChanges> => ({
+    documents: [], applications: [], deletedRefs: [], unbuildable: [], sourcePresence: [{ ref: "TST-1", posting: false }],
+    syncedThrough: new Date("2026-07-20T00:00:00Z"),
+  }) });
+  await assert.rejects(() => runSync(source, "nonposting-source", {
+    kind: "full_migration", orgId: o.orgId, connectionId, since: null, loadEntitiesFirst: false,
+  }), /nonposting but has admitted posted history/);
+  assert.deepEqual((await db.execute(sql`select id,status,posted_entry_id,open_balance::text from documents
+    where org_id=${o.orgId} and custom->>'qboId'='TST-1'`)).rows, before);
+  assert.deepEqual((await db.execute(sql`select id,status,reverses_entry_id from journal_entries
+    where org_id=${o.orgId} order by id`)).rows, entriesBefore);
+  const connection = (await db.execute<{ cursor: Date; status: string }>(sql`select cursor,status from connections
+    where id=${connectionId} and org_id=${o.orgId}`)).rows[0]!;
+  assert.equal(new Date(connection.cursor).toISOString(), first.syncedThrough);
+  assert.equal(connection.status, "error");
+});

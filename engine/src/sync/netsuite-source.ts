@@ -1403,14 +1403,14 @@ export class NetSuiteSource implements MigrationSource {
       if (!raw?.length) continue;
       const built = buildNativeFromNetSuite(ctx, { ...header, id: String(header.id) }, raw, { taxCodeFallbacks: this.mappings.taxCodeFallbacks });
       if ("skip" in built) {
-        if (built.skip.startsWith("non-ledger source transaction")) nonLedgerRefs.push(String(header.id));
+        if (built.skip === "posting='F'" || built.skip.startsWith("non-ledger source transaction")) nonLedgerRefs.push(String(header.id));
         else unbuildable.push({ ref: String(header.id), reason: built.skip });
       } else {
         documents.push(built.doc);
       }
     }
     const { applications, observation } = await this.readSettlements(ids);
-    return { documents, applications, settlementObservation: observation, deletedRefs: [], syncedThrough, unbuildable, nonLedgerRefs };
+    return { documents, applications, settlementObservation: observation, sourcePresence: this.sourcePresence(headers), deletedRefs: [], syncedThrough, unbuildable, nonLedgerRefs };
   }
 
   nativeChangesByRefs(
@@ -1514,7 +1514,7 @@ export class NetSuiteSource implements MigrationSource {
       if (!raw || raw.length === 0) continue;
       const built = buildNativeFromNetSuite(ctx, { ...h, id: String(h.id) }, raw, { taxCodeFallbacks: this.mappings.taxCodeFallbacks });
       if ("skip" in built) {
-        if (built.skip.startsWith("non-ledger source transaction")) {
+        if (built.skip === "posting='F'" || built.skip.startsWith("non-ledger source transaction")) {
           nonLedgerRefs.push(String(h.id));
           continue;
         }
@@ -1543,11 +1543,21 @@ export class NetSuiteSource implements MigrationSource {
       documents,
       applications,
       settlementObservation: observation,
+      sourcePresence: this.sourcePresence(headers),
       deletedRefs: [...new Set(deletedRefs)],
       syncedThrough,
       unbuildable,
       nonLedgerRefs,
     };
+  }
+
+  private sourcePresence(headers: NsHeader[]) {
+    return headers.map(header => {
+      if (header.posting !== "T" && header.posting !== "F") {
+        throw new Error(`NetSuite transaction ${header.id} has unknown posting state; restore source transaction access and retry the sync`);
+      }
+      return { ref: String(header.id), posting: header.posting === "T" };
+    });
   }
 
   private async readSettlements(refs?: string[]) {
