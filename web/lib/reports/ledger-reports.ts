@@ -2,7 +2,7 @@ import "server-only";
 import { sql } from "drizzle-orm";
 import { PAYROLL_RESTRICTED_PARTY_LABEL, collapseRestrictedPayrollLines } from "../payroll-confidentiality";
 import { functionalReportReader } from "./currency-basis";
-import { bucketSubsidiaryFilter, glSummaryEligibleDims, statementBookIdsExpr } from "../gl-summary";
+import { bucketSubsidiaryFilter, glActivityBuckets, glSummaryEligibleDims, statementBookIdsExpr } from "../gl-summary";
 import { resolveOrgId } from "../org-scope";
 import { fiscalYearStartOn } from "@openbooks/reports";
 import { decimalAdd, decimalCmp, decimalNeg, type ExactDecimal } from "../statement-format";
@@ -126,7 +126,14 @@ export async function generalLedger(
 
   // Keep the detail cap presentation-only. Closing balances must include all
   // posted activity in the report window, including lines omitted by `limit`.
-  const periodActivity = (await reportDb.execute<{ account_id: string; activity: string }>(sql`
+  const periodActivitySql = summaryOpening ? sql`
+    select ${reportDb.censusColumn}, b.account_id, coalesce(sum(b.amount), 0) as activity
+      from ${glActivityBuckets(orgId, { minDate: from, maxDate: to, boundaries: [], bookId: opts.bookId, includePeriodEndJournals: true })} b
+      join accounts a on a.id = b.account_id and a.org_id = ${orgId}
+     where true ${bucketSubsidiaryFilter(opts.dims?.subsidiaryIds)}
+       ${opts.accountId ? sql`and b.account_id = ${opts.accountId}` : sql``}
+     group by b.account_id
+  ` : sql`
     select ${reportDb.censusColumn}, l.account_id, coalesce(sum(l.amount), 0) as activity
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id and e.status in ('posted', 'reversed')
@@ -135,7 +142,8 @@ export async function generalLedger(
      where l.org_id = ${orgId} and e.posting_date >= ${from} and e.posting_date <= ${to}
        and ${dimWhere(opts.dims)}${acctFilter}
      group by l.account_id
-  `))
+  `
+  const periodActivity = await reportDb.execute<{ account_id: string; activity: string }>(periodActivitySql)
   const activityByAcct = new Map(periodActivity.rows.map((r) => [r.account_id, r.activity]))
 
   // Payroll legs collapse per (entry, account) in a UNION arm BEFORE the

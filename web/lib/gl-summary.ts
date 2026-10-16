@@ -31,7 +31,7 @@ import { excludePeriodEndJournals, statementMonthActivity } from '@openbooks/eng
  *
  * Amount math stays in Postgres numeric — nothing is summed in JS.
  *
- * Both legs are on the statement basis: period-end closing and opening
+ * Both legs default to the statement basis: period-end closing and opening
  * journals are left out (statementMonthActivity / excludePeriodEndJournals),
  * so statements compute retained earnings identically whether or not a year
  * has been closed by journal.
@@ -83,7 +83,7 @@ export function statementBookIdsExpr(orgId: string | SQL, bookId?: string | null
  */
 export function glActivityBuckets(
   orgId: string,
-  opts: { minDate: string | null; maxDate: string; boundaries: ActivityBoundary[]; bookId?: string | null },
+  opts: { minDate: string | null; maxDate: string; boundaries: ActivityBoundary[]; bookId?: string | null; includePeriodEndJournals?: boolean },
 ): SQL {
   const split = new Set<string>()
   const consider = (b: ActivityBoundary) => {
@@ -103,12 +103,15 @@ export function glActivityBuckets(
     ? sql`and g.month <> all(${`{${splitMonths.join(',')}}`}::date[])`
     : sql``
   const book = sql`and g.book_id in ${statementBookIdsExpr(orgId, opts.bookId)}`
+  // Statutory ledger detail includes the close itself; statements retain
+  // their existing basis that computes retained earnings independently.
+  const activity = opts.includePeriodEndJournals ? sql`gl_month_activity` : statementMonthActivity(orgId)
 
   if (!splitMonths.length) {
     return sql`(
       select g.account_id, g.subsidiary_id, g.month as d,
              (g.debit_total - g.credit_total) as amount, g.debit_total, g.credit_total
-        from ${statementMonthActivity(orgId)} g
+        from ${activity} g
        where g.org_id = ${orgId} ${book} ${summaryCaps}
     )`
   }
@@ -120,7 +123,7 @@ export function glActivityBuckets(
   return sql`(
     select g.account_id, g.subsidiary_id, g.month as d,
            (g.debit_total - g.credit_total) as amount, g.debit_total, g.credit_total
-      from ${statementMonthActivity(orgId)} g
+      from ${activity} g
      where g.org_id = ${orgId} ${book} ${summaryCaps} ${splitFilter}
     union all
     select l.account_id, l.subsidiary_id, e.posting_date as d,
@@ -128,7 +131,7 @@ export function glActivityBuckets(
       from journal_lines l
       join journal_entries e on e.id = l.entry_id and e.org_id = ${orgId}
        and e.status in ('posted', 'reversed')
-       and ${excludePeriodEndJournals(sql`e.origin`)}
+       ${opts.includePeriodEndJournals ? sql`` : sql`and ${excludePeriodEndJournals(sql`e.origin`)}`}
        and e.posting_date <= ${opts.maxDate}
        ${opts.minDate ? sql`and e.posting_date >= ${opts.minDate}` : sql``}
        and (${ranges})
