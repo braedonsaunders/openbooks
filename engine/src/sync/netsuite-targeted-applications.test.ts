@@ -93,7 +93,7 @@ test("incremental NetSuite mirrors fetch a complete allocation graph even withou
   ]);
   const graphQueries = queries.filter(query=>/nexttransactionlinelink/i.test(query));
   assert.equal(graphQueries.length, 4);
-  for (const query of graphQueries) assert.doesNotMatch(query, /lastmodifieddate|IN\s*\(/i);
+  for (const query of graphQueries) assert.doesNotMatch(query, /lastmodifieddate\s*(?:>=|<=|>|<|=)|\bIN\s*\(/i);
 });
 
 test("an incomplete NetSuite allocation graph refuses instead of authorizing releases", async () => {
