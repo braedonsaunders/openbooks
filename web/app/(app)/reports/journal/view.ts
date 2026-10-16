@@ -245,7 +245,7 @@ export async function loadJournal(sp: Record<string, string | undefined>): Promi
 }
 
 /** Entries per screen; exports and schedules read the full journal. */
-const JOURNAL_PAGE_SIZE = 200
+const JOURNAL_PAGE_SIZE = 100
 const JOURNAL_PAGE_PARAM = 'journalPage'
 
 const f = ref<JournalData>()

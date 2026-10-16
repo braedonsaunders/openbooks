@@ -335,7 +335,20 @@ export async function journalReport(
   // from the first `maxLines` entries in the same order. Narrowing to those
   // entries first lets the date index supply them directly, instead of sorting
   // every line in the window to throw all but a few thousand away.
-  const entryWindow = pageSize === null && glSummaryEligibleDims(opts.dims) && !opts.dims?.subsidiaryIds?.length
+  const entryGrain = glSummaryEligibleDims(opts.dims) && !opts.dims?.subsidiaryIds?.length
+  // Without a line-level slice a page of entries is a page of the entry index.
+  const pagedByEntry = entryGrain && pageSize !== null && page !== null
+  const entryWindow = pagedByEntry
+    ? sql`(
+        select id, entry_number, posting_date, memo, origin, source_document_id, org_id
+          from journal_entries
+         where org_id = ${orgId} and status in ('posted', 'reversed')
+           and book_id in ${statementBookIdsExpr(orgId, opts.bookId)}
+           and posting_date >= ${from} and posting_date <= ${to}
+         order by posting_date desc, entry_number desc, id
+         limit ${pageSize} offset ${(page! - 1) * pageSize!}
+      )`
+    : pageSize === null && entryGrain
     ? sql`(
         select id, entry_number, posting_date, memo, origin, source_document_id, org_id
           from journal_entries
@@ -394,7 +407,12 @@ export async function journalReport(
       line_memo: string | null; amount: string
       doc_kind: string | null; doc_id: string | null
       entry_count?: string
-    }>(pageSize !== null && page !== null
+    }>(pagedByEntry
+      ? sql`
+    select * from (${lineSource}) u
+     order by date desc, entry_number desc, id, line_no
+  `
+      : pageSize !== null && page !== null
       ? sql`
     select * from (
       select ranked.*, max(ranked.entry_rank) over () as entry_count
@@ -459,7 +477,13 @@ export async function journalReport(
     })
     if (decimalCmp(amt, ZERO) > 0) entry.totalDebit = decimalAdd(entry.totalDebit, amt)
   }
-  const entryCount = pageSize !== null ? Number(r.rows[0]?.entry_count ?? 0) : null
+  const entryCount = pagedByEntry
+    ? Number((await reportDb.execute<{ n: string }>(sql`
+        select ${reportDb.censusColumn}, count(*) as n from journal_entries
+         where org_id = ${orgId} and status in ('posted', 'reversed')
+           and book_id in ${statementBookIdsExpr(orgId, opts.bookId)}
+           and posting_date >= ${from} and posting_date <= ${to}`)).rows[0]?.n ?? 0)
+    : pageSize !== null ? Number(r.rows[0]?.entry_count ?? 0) : null
   return {
     entries, from, to, truncated,
     paging: pageSize !== null && page !== null && entryCount !== null ? { page, pageSize, entryCount } : null,
