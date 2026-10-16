@@ -247,6 +247,8 @@ export interface RegisterResult {
   to: string
   side: AgingSide
   truncated: boolean
+  /** Set when the caller asked for one page of whole party sections. */
+  paging: { page: number; pageSize: number; partyCount: number } | null
 }
 
 /**
@@ -273,6 +275,10 @@ export async function partyRegister(
      * payroll lines merge into the unassigned section.
      */
     canSeePayroll?: boolean;
+    /** One page of whole party sections in display order. Without a page the
+     * reader returns every section with the first `maxLines` lines. */
+    page?: number;
+    pageSize?: number;
   },
 ): Promise<RegisterResult> {
   const resolvedOrgId = await resolveOrgId(opts.orgId)
@@ -328,6 +334,32 @@ export async function partyRegister(
   `))
   const activityByParty = new Map(periodActivity.rows.map((r) => [r.party_id, r.activity]))
 
+  // Paged reads choose their party sections first, in display order, and
+  // read only those parties' lines: each section is whole on its page, so its
+  // running balance starts at its own opening exactly as unpaged.
+  const pageSize = opts.page !== undefined ? Math.max(1, Math.floor(opts.pageSize ?? 50)) : null
+  let page = pageSize !== null ? Math.max(1, Math.floor(opts.page ?? 1)) : null
+  let pageParties: (string | null)[] | null = null
+  let partyCount = 0
+  if (pageSize !== null && page !== null) {
+    const ids = [...new Set<string | null>([...openingByParty.keys(), ...activityByParty.keys()])]
+    const named = ids.some((id) => id !== null)
+      ? (await reportDb.execute<{ id: string; display_name: string | null }>(sql`
+          select ${reportDb.censusColumn}, p.id, p.display_name
+            from parties p
+           where p.org_id = ${resolvedOrgId} and p.id = any(${`{${ids.filter((id) => id !== null).join(",")}}`}::uuid[])
+        `)).rows
+      : []
+    const nameOf = new Map<string | null, string | null>(named.map((n) => [n.id, n.display_name]))
+    const ordered = ids.sort((a, b) => compareRegisterParty(nameOf.get(a) ?? null, a, nameOf.get(b) ?? null, b))
+    partyCount = ordered.length
+    if (page > 1 && (page - 1) * pageSize >= partyCount) page = 1
+    pageParties = ordered.slice((page - 1) * pageSize, page * pageSize)
+  }
+  const pageIds = pageParties?.filter((id): id is string => id !== null) ?? []
+  const pagePartyFilter = pageParties === null
+    ? sql``
+    : sql` and (${partyIdExpr} = any(${`{${pageIds.join(",")}}`}::uuid[])${pageParties.includes(null) ? sql` or ${partyIdExpr} is null` : sql``})`
   const lines = (await reportDb.execute<{
       party_id: string | null; party_name: string | null
       entry_id: string; entry_number: string | null; date: string; memo: string | null; amount: string
@@ -342,7 +374,7 @@ export async function partyRegister(
       left join parties pt on pt.id = l.party_id and pt.org_id = l.org_id
       left join documents d on d.id = e.source_document_id and d.org_id = e.org_id ${sourceDocumentScope}
      where a.type = ${acctType} and e.posting_date >= ${opts.from} and e.posting_date <= ${opts.to}
-       and l.org_id = ${resolvedOrgId} and ${dimWhere(opts.dims)}${partyFilter} ${bookFilter}
+       and l.org_id = ${resolvedOrgId} and ${dimWhere(opts.dims)}${partyFilter} ${bookFilter}${pagePartyFilter}
      order by ${partyNameExpr} nulls last, e.posting_date, e.entry_number, l.line_number
      limit ${maxLines + 1}
   `))
@@ -361,7 +393,7 @@ export async function partyRegister(
     group.push(x)
     lineGroups.set(x.party_id, group)
   }
-  const partyIds = new Set<string | null>([
+  const partyIds = new Set<string | null>(pageParties ?? [
     ...openingByParty.keys(),
     ...activityByParty.keys(),
     ...lineGroups.keys(),
@@ -407,13 +439,20 @@ export async function partyRegister(
     parties.push(current)
   }
   // Display-name order with unassigned last, matching the old detail order.
-  parties.sort((a, b) => {
-    if (a.partyName === null && b.partyName === null) return 0
-    if (a.partyName === null) return 1
-    if (b.partyName === null) return -1
-    return a.partyName < b.partyName ? -1 : a.partyName > b.partyName ? 1 : 0
-  })
-  return { parties, from: opts.from, to: opts.to, side, truncated }
+  parties.sort((a, b) => compareRegisterParty(a.partyName, a.partyId, b.partyName, b.partyId))
+  return {
+    parties, from: opts.from, to: opts.to, side, truncated,
+    paging: pageSize !== null && page !== null ? { page, pageSize, partyCount } : null,
+  }
+}
+
+/** Display-name order with unassigned last; party id breaks ties so pages are stable. */
+function compareRegisterParty(aName: string | null, aId: string | null, bName: string | null, bId: string | null): number {
+  if (aName === null && bName === null) return aId === bId ? 0 : aId === null ? 1 : bId === null ? -1 : aId < bId ? -1 : 1
+  if (aName === null) return 1
+  if (bName === null) return -1
+  if (aName !== bName) return aName < bName ? -1 : 1
+  return aId === bId ? 0 : aId === null ? 1 : bId === null ? -1 : aId < bId ? -1 : 1
 }
 
 // ---------------------------------------------------------------------------

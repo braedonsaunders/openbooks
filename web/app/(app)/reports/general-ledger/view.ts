@@ -13,6 +13,7 @@ import {
   textBlock,
   txn,
   drill,
+  pagination,
   widgetBlock,
   widgetCell,
   type PageSpec,
@@ -96,6 +97,11 @@ export interface GeneralLedgerData {
   periodTo: string
   truncated: boolean
   truncatedLabel: string
+  /** One page of detail lines; running balances carry across pages. */
+  paged: boolean
+  page: number
+  perPage: number
+  lineCount: number
   emptyLabel: string
   openingLabel: string
   closingLabel: string
@@ -161,6 +167,8 @@ export async function loadGeneralLedger(
       dims: { ...q.dims, subsidiaryIds: subView.subsidiary?.ids },
       bookId: selectedBook?.id,
       canSeePayroll,
+      page: GL_PAGE_PARAM in sp ? Number.parseInt(sp[GL_PAGE_PARAM] ?? '1', 10) || 1 : 1,
+      pageSize: GL_PAGE_SIZE,
     })
   } catch (e) {
     if (e instanceof ReportCurrencyBasisError) {
@@ -214,6 +222,10 @@ export async function loadGeneralLedger(
     periodTo: period.to,
     truncated: gl?.truncated ?? false,
     truncatedLabel: t('generalLedger.truncated'),
+    paged: (gl?.paging?.lineCount ?? 0) > GL_PAGE_SIZE,
+    page: gl?.paging?.page ?? 1,
+    perPage: gl?.paging?.pageSize ?? GL_PAGE_SIZE,
+    lineCount: gl?.paging?.lineCount ?? 0,
     emptyLabel: t('generalLedger.empty'),
     openingLabel,
     closingLabel,
@@ -290,6 +302,10 @@ export async function loadGeneralLedger(
     exportParams: stringReportParams(sp),
   }
 }
+
+/** Detail lines per screen; exports and schedules read the full ledger. */
+const GL_PAGE_SIZE = 500
+const GL_PAGE_PARAM = 'glPage'
 
 const f = ref<GeneralLedgerData>()
 const item = field
@@ -435,6 +451,16 @@ export function generalLedgerSpec(data: GeneralLedgerData): PageSpec {
           }),
         ],
       }),
+      {
+        ...pagination({
+          basePath: '/reports/general-ledger',
+          total: f('lineCount'),
+          page: f('page'),
+          perPage: f('perPage'),
+          pageParamKey: GL_PAGE_PARAM,
+        }),
+        when: f('paged'),
+      },
     ],
   })
 }

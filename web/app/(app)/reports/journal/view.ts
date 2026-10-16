@@ -5,6 +5,7 @@ import {
   column,
   field,
   money,
+  pagination,
   ref,
   repeat,
   rootRef,
@@ -90,6 +91,11 @@ export interface JournalData {
   periodPhrase: string
   truncated: boolean
   truncatedLabel: string
+  /** One page of whole entries, newest first. */
+  paged: boolean
+  page: number
+  perPage: number
+  entryCount: number
   emptyLabel: string
   columnAccount: string
   columnDetail: string
@@ -146,6 +152,8 @@ export async function loadJournal(sp: Record<string, string | undefined>): Promi
       dims: { ...q.dims, subsidiaryIds: subView.subsidiary?.ids },
       bookId: selectedBook?.id,
       canSeePayroll,
+      page: Number.parseInt(sp[JOURNAL_PAGE_PARAM] ?? '1', 10) || 1,
+      pageSize: JOURNAL_PAGE_SIZE,
     })
   } catch (e) {
     if (e instanceof ReportCurrencyBasisError) {
@@ -183,6 +191,10 @@ export async function loadJournal(sp: Record<string, string | undefined>): Promi
     company: org?.name ?? '',
     periodPhrase: `${selectedBook.name} · ${t('pnl.dateRange', { from: period.from, to: period.to })}`,
     truncated: journal?.truncated ?? false,
+    paged: (journal?.paging?.entryCount ?? 0) > JOURNAL_PAGE_SIZE,
+    page: journal?.paging?.page ?? 1,
+    perPage: journal?.paging?.pageSize ?? JOURNAL_PAGE_SIZE,
+    entryCount: journal?.paging?.entryCount ?? 0,
     truncatedLabel: t('journal.truncated'),
     emptyLabel: t('journal.empty'),
     columnAccount: tc('labels.account'),
@@ -231,6 +243,10 @@ export async function loadJournal(sp: Record<string, string | undefined>): Promi
     exportParams: stringReportParams(sp),
   }
 }
+
+/** Entries per screen; exports and schedules read the full journal. */
+const JOURNAL_PAGE_SIZE = 200
+const JOURNAL_PAGE_PARAM = 'journalPage'
 
 const f = ref<JournalData>()
 const item = field
@@ -338,6 +354,16 @@ export function journalSpec(data: JournalData): PageSpec {
           }),
         ],
       }),
+      {
+        ...pagination({
+          basePath: '/reports/journal',
+          total: f('entryCount'),
+          page: f('page'),
+          perPage: f('perPage'),
+          pageParamKey: JOURNAL_PAGE_PARAM,
+        }),
+        when: f('paged'),
+      },
     ],
   })
 }

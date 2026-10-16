@@ -43,6 +43,8 @@ export interface GeneralLedgerResult {
   from: string
   to: string
   truncated: boolean
+  /** Set when the caller asked for one page of detail lines. */
+  paging: { page: number; pageSize: number; lineCount: number } | null
 }
 
 /**
@@ -64,6 +66,13 @@ export async function generalLedger(
      * payroll lines collapse into one restricted line per entry per account.
      */
     canSeePayroll?: boolean;
+    /**
+     * One page of detail lines in ledger order. Running balances carry across
+     * pages, so a line shows the same balance on any page. Without a page the
+     * reader returns the first `maxLines` lines.
+     */
+    page?: number;
+    pageSize?: number;
   } = {},
 ): Promise<GeneralLedgerResult> {
   const orgId = await resolveOrgId(opts.orgId)
@@ -143,49 +152,70 @@ export async function generalLedger(
       left join parties p on p.id = l.party_id and p.org_id = l.org_id
       left join documents d on d.id = e.source_document_id and d.org_id = e.org_id
      where l.org_id = ${orgId} and e.posting_date >= ${from} and e.posting_date <= ${to} and ${dimWhere(opts.dims)}${acctFilter}`
-  const lines = (await reportDb.execute<{
-      account_id: string; number: string | null; name: string; type: string
-      entry_id: string; entry_number: string | null; date: string
-      memo: string | null; party: string | null; party_id: string | null; amount: string
-      doc_kind: string | null; doc_id: string | null; entry_origin: string
-    }>(opts.canSeePayroll === true
-      ? sql`
+  // Ledger order with tiebreakers, so pages never overlap or skip a line.
+  const ledgerOrder = sql`number nulls last, name, account_id, date, entry_number, entry_id, line_no`
+  const lineSource = opts.canSeePayroll === true
+    ? sql`
     select ${reportDb.censusColumn}, l.account_id, a.number, a.name, a.type,
            e.id as entry_id, e.entry_number, e.posting_date::text as date,
            l.memo, p.display_name as party, l.party_id, l.amount,
-           d.kind as doc_kind, d.id as doc_id, e.origin as entry_origin
-      ${lineJoins}
-     order by a.number nulls last, a.name, e.posting_date, e.entry_number, l.line_number
-     limit ${maxLines + 1}
-  `
-      : sql`
-    select * from (
+           d.kind as doc_kind, d.id as doc_id, e.origin as entry_origin, l.line_number as line_no
+      ${lineJoins}`
+    : sql`
       (select ${reportDb.censusColumn}, l.account_id, a.number, a.name, a.type,
               e.id as entry_id, e.entry_number, e.posting_date::text as date,
               l.memo, p.display_name as party, l.party_id, l.amount,
-              d.kind as doc_kind, d.id as doc_id, e.origin as entry_origin
+              d.kind as doc_kind, d.id as doc_id, e.origin as entry_origin, l.line_number as line_no
          ${lineJoins}
            and not (${payrollLeg}))
       union all
       (select ${reportDb.censusColumn}, l.account_id, max(a.number), max(a.name), max(a.type),
               e.id as entry_id, max(e.entry_number), max(e.posting_date)::text as date,
               null as memo, ${PAYROLL_RESTRICTED_PARTY_LABEL} as party, null as party_id, sum(l.amount) as amount,
-              max(d.kind) as doc_kind, max(d.id::text)::uuid as doc_id, max(e.origin) as entry_origin
+              max(d.kind) as doc_kind, max(d.id::text)::uuid as doc_id, max(e.origin) as entry_origin, min(l.line_number) as line_no
          ${lineJoins}
            and (${payrollLeg})
-         group by l.account_id, e.id)
-    ) u
-     order by number nulls last, name, date, entry_number
+         group by l.account_id, e.id)`
+  type LedgerLineRow = {
+    account_id: string; number: string | null; name: string; type: string
+    entry_id: string; entry_number: string | null; date: string
+    memo: string | null; party: string | null; party_id: string | null; amount: string
+    doc_kind: string | null; doc_id: string | null; entry_origin: string
+    running?: string; total_n?: string
+  }
+  const pageSize = opts.page !== undefined ? Math.max(1, Math.floor(opts.pageSize ?? 500)) : null
+  const page = pageSize !== null ? Math.max(1, Math.floor(opts.page ?? 1)) : null
+  const lines = (await reportDb.execute<LedgerLineRow>(pageSize !== null && page !== null
+    ? sql`
+    select * from (
+      select u.*,
+             row_number() over (order by ${ledgerOrder}) as rn,
+             sum(u.amount) over (partition by u.account_id order by ${ledgerOrder}
+               rows between unbounded preceding and current row) as running,
+             count(*) over () as total_n
+        from (${lineSource}) u
+    ) w
+     where w.rn > ${(page - 1) * pageSize} and w.rn <= ${page * pageSize}
+     order by w.rn
+  `
+    : sql`
+    select * from (${lineSource}) u
+     order by ${ledgerOrder}
      limit ${maxLines + 1}
   `))
-  const truncated = lines.rows.length > maxLines
+  // A page past the end resolves to the first page rather than an empty ledger.
+  if (page !== null && page > 1 && lines.rows.length === 0) {
+    return generalLedger(from, to, { ...opts, page: 1 })
+  }
+  const truncated = pageSize === null && lines.rows.length > maxLines
+  const pageRows = pageSize === null ? lines.rows.slice(0, maxLines) : lines.rows
   // Confidentiality collapses BEFORE the running balances below accumulate,
   // so opening/closing ties out exactly whether or not the reader holds
   // payroll.read. Without payroll.read the collapsed line keeps the account
   // and the summed amount but names no employee and shows no per-employee
   // memo (cheque numbers) or amount.
-  const visible = opts.canSeePayroll === true ? lines.rows.slice(0, maxLines) : collapseRestrictedPayrollLines(
-    lines.rows.slice(0, maxLines).map((r) => ({
+  const visible = opts.canSeePayroll === true ? pageRows : collapseRestrictedPayrollLines(
+    pageRows.map((r) => ({
       ...r,
       entryId: r.entry_id,
       accountId: r.account_id,
@@ -196,16 +226,26 @@ export async function generalLedger(
   )
   const rows = visible
 
+  // A page that starts mid-account carries in the activity of the lines on
+  // earlier pages, so each line's balance is the same on every page.
+  const carryIn = new Map<string, ExactDecimal>()
+  for (const r of pageRows) {
+    if (carryIn.has(r.account_id) || r.running === undefined) continue
+    carryIn.set(r.account_id, decimalAdd(openingByAcct.get(r.account_id) ?? ZERO, decimalAdd(r.running as ExactDecimal, decimalNeg(r.amount as ExactDecimal))))
+  }
   const accounts: GeneralLedgerAccount[] = []
   let current: GeneralLedgerAccount | null = null
+  let runningBalance: ExactDecimal = ZERO
   for (const r of rows) {
     if (!current || current.id !== r.account_id) {
       const open = openingByAcct.get(r.account_id) ?? ZERO
       current = { id: r.account_id, number: r.number, name: r.name, type: r.type, opening: open, closing: open, lines: [] }
       accounts.push(current)
+      runningBalance = carryIn.get(r.account_id) ?? open
     }
     const amt = r.amount
-    current.closing = decimalAdd(current.closing, amt)
+    runningBalance = decimalAdd(runningBalance, amt)
+    current.closing = runningBalance
     current.lines.push({
       entryId: r.entry_id,
       entryNumber: r.entry_number,
@@ -214,7 +254,7 @@ export async function generalLedger(
       party: r.party,
       debit: decimalCmp(amt, ZERO) > 0 ? amt : ZERO,
       credit: decimalCmp(amt, ZERO) < 0 ? decimalNeg(amt) : ZERO,
-      balance: current.closing,
+      balance: runningBalance,
       docKind: r.doc_kind,
       docId: r.doc_id,
     })
@@ -223,7 +263,11 @@ export async function generalLedger(
     const activity = activityByAcct.get(account.id)
     if (activity !== undefined) account.closing = decimalAdd(account.opening, activity)
   }
-  return { accounts, from, to, truncated }
+  const lineCount = pageSize !== null ? Number(lines.rows[0]?.total_n ?? 0) : null
+  return {
+    accounts, from, to, truncated,
+    paging: pageSize !== null && page !== null && lineCount !== null ? { page, pageSize, lineCount } : null,
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -254,6 +298,8 @@ export interface JournalReportResult {
   from: string
   to: string
   truncated: boolean
+  /** Set when the caller asked for one page of whole entries. */
+  paging: { page: number; pageSize: number; entryCount: number } | null
 }
 
 /**
@@ -272,10 +318,16 @@ export async function journalReport(
      * payroll lines collapse into one restricted line per entry per account.
      */
     canSeePayroll?: boolean;
+    /** One page of whole entries, newest first. Without a page the reader
+     * returns the first `maxLines` lines. */
+    page?: number;
+    pageSize?: number;
   } = {},
 ): Promise<JournalReportResult> {
   const orgId = await resolveOrgId(opts.orgId)
   const maxLines = opts.maxLines ?? 4000
+  const pageSize = opts.page !== undefined ? Math.max(1, Math.floor(opts.pageSize ?? 200)) : null
+  const page = pageSize !== null ? Math.max(1, Math.floor(opts.page ?? 1)) : null
   const reportDb = functionalReportReader(orgId, sql`e.posting_date >= ${from} and e.posting_date <= ${to}
     and e.book_id in ${statementBookIdsExpr(orgId, opts.bookId)} and ${dimWhere(opts.dims)}`)
   // Without a line-level dimension slice, every entry in the window
@@ -283,7 +335,7 @@ export async function journalReport(
   // from the first `maxLines` entries in the same order. Narrowing to those
   // entries first lets the date index supply them directly, instead of sorting
   // every line in the window to throw all but a few thousand away.
-  const entryWindow = glSummaryEligibleDims(opts.dims) && !opts.dims?.subsidiaryIds?.length
+  const entryWindow = pageSize === null && glSummaryEligibleDims(opts.dims) && !opts.dims?.subsidiaryIds?.length
     ? sql`(
         select id, entry_number, posting_date, memo, origin, source_document_id, org_id
           from journal_entries
@@ -314,42 +366,56 @@ export async function journalReport(
       left join parties p on p.id = l.party_id and p.org_id = l.org_id
       left join documents d on d.id = e.source_document_id and d.org_id = e.org_id
      where ${dimWhere(opts.dims)}`
-  const r = (await reportDb.execute<{
-      id: string; entry_number: string | null; date: string; entry_memo: string | null; origin: string
-      acct_number: string | null; acct_name: string; acct_id: string; party: string | null; party_id: string | null
-      line_memo: string | null; amount: string
-      doc_kind: string | null; doc_id: string | null
-    }>(opts.canSeePayroll === true
-      ? sql`
+  const lineSource = opts.canSeePayroll === true
+    ? sql`
     select ${reportDb.censusColumn}, e.id, e.entry_number, e.posting_date::text as date, e.memo as entry_memo, e.origin,
            a.number as acct_number, a.name as acct_name, l.account_id as acct_id, p.display_name as party, l.party_id,
            l.memo as line_memo, l.amount,
-           d.kind as doc_kind, d.id as doc_id
-      ${journalFrom}
-     order by e.posting_date desc, e.entry_number desc, e.id, l.line_number
-     limit ${maxLines + 1}
-  `
-      : sql`
-    select * from (
+           d.kind as doc_kind, d.id as doc_id, l.line_number as line_no
+      ${journalFrom}`
+    : sql`
       (select ${reportDb.censusColumn}, e.id, e.entry_number, e.posting_date::text as date, e.memo as entry_memo, e.origin,
               a.number as acct_number, a.name as acct_name, l.account_id as acct_id, p.display_name as party, l.party_id,
               l.memo as line_memo, l.amount,
-              d.kind as doc_kind, d.id as doc_id
+              d.kind as doc_kind, d.id as doc_id, l.line_number as line_no
          ${journalFrom}
            and not (${journalLeg}))
       union all
       (select ${reportDb.censusColumn}, e.id, max(e.entry_number), max(e.posting_date)::text as date, max(e.memo) as entry_memo, max(e.origin),
               max(a.number) as acct_number, max(a.name) as acct_name, l.account_id as acct_id, ${PAYROLL_RESTRICTED_PARTY_LABEL} as party, null as party_id,
               null as line_memo, sum(l.amount) as amount,
-              max(d.kind) as doc_kind, max(d.id::text)::uuid as doc_id
+              max(d.kind) as doc_kind, max(d.id::text)::uuid as doc_id, min(l.line_number) as line_no
          ${journalFrom}
            and (${journalLeg})
-         group by e.id, l.account_id)
-    ) u
-     order by date desc, entry_number desc, id
+         group by e.id, l.account_id)`
+  const r = (await reportDb.execute<{
+      id: string; entry_number: string | null; date: string; entry_memo: string | null; origin: string
+      acct_number: string | null; acct_name: string; acct_id: string; party: string | null; party_id: string | null
+      line_memo: string | null; amount: string
+      doc_kind: string | null; doc_id: string | null
+      entry_count?: string
+    }>(pageSize !== null && page !== null
+      ? sql`
+    select * from (
+      select ranked.*, max(ranked.entry_rank) over () as entry_count
+        from (
+          select u.*, dense_rank() over (order by u.date desc, u.entry_number desc, u.id) as entry_rank
+            from (${lineSource}) u
+        ) ranked
+    ) w
+     where w.entry_rank > ${(page - 1) * pageSize} and w.entry_rank <= ${page * pageSize}
+     order by w.date desc, w.entry_number desc, w.id, w.line_no
+  `
+      : sql`
+    select * from (${lineSource}) u
+     order by date desc, entry_number desc, id, line_no
      limit ${maxLines + 1}
   `))
-  const truncated = r.rows.length > maxLines
+  // A page past the end resolves to the first page rather than an empty journal.
+  if (page !== null && page > 1 && r.rows.length === 0) {
+    return journalReport(from, to, { ...opts, page: 1 })
+  }
+  const truncated = pageSize === null && r.rows.length > maxLines
   // Confidentiality collapses BEFORE entries are assembled below, so entry
   // totals still balance exactly. Without payroll.read the collapsed line
   // keeps the account and the summed amount but names no employee and shows
@@ -393,5 +459,9 @@ export async function journalReport(
     })
     if (decimalCmp(amt, ZERO) > 0) entry.totalDebit = decimalAdd(entry.totalDebit, amt)
   }
-  return { entries, from, to, truncated }
+  const entryCount = pageSize !== null ? Number(r.rows[0]?.entry_count ?? 0) : null
+  return {
+    entries, from, to, truncated,
+    paging: pageSize !== null && page !== null && entryCount !== null ? { page, pageSize, entryCount } : null,
+  }
 }

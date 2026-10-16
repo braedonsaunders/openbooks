@@ -9,6 +9,7 @@ import {
   drill,
   field,
   money,
+  pagination,
   ref,
   repeat,
   rootRef,
@@ -90,6 +91,11 @@ export interface RegistersData {
   company: string
   periodPhrase: string
   truncated: boolean
+  /** One page of whole party sections; each section's balance is exact. */
+  paged: boolean
+  page: number
+  perPage: number
+  partyCount: number
   truncatedLabel: string
   emptyLabel: string
   openingLabel: string
@@ -156,6 +162,8 @@ export async function loadRegisters(sp: Record<string, string | undefined>): Pro
       to: period.to,
       dims: { ...q.dims, subsidiaryIds: subView.subsidiary?.ids },
       canSeePayroll,
+      page: Number.parseInt(sp[REGISTER_PAGE_PARAM] ?? '1', 10) || 1,
+      pageSize: REGISTER_PAGE_SIZE,
     })
   } catch (e) {
     if (e instanceof ReportCurrencyBasisError) {
@@ -202,6 +210,10 @@ export async function loadRegisters(sp: Record<string, string | undefined>): Pro
     company: org?.name ?? '',
     periodPhrase: `${selectedBook.name} · ${t('pnl.dateRange', { from: period.from, to: period.to })}`,
     truncated: reg?.truncated ?? false,
+    paged: (reg?.paging?.partyCount ?? 0) > REGISTER_PAGE_SIZE,
+    page: reg?.paging?.page ?? 1,
+    perPage: reg?.paging?.pageSize ?? REGISTER_PAGE_SIZE,
+    partyCount: reg?.paging?.partyCount ?? 0,
     truncatedLabel: t('registers.truncated'),
     emptyLabel: t('registers.empty'),
     openingLabel,
@@ -279,6 +291,10 @@ export async function loadRegisters(sp: Record<string, string | undefined>): Pro
     exportParams: stringReportParams(sp),
   }
 }
+
+/** Party sections per screen; exports and schedules read every section. */
+const REGISTER_PAGE_SIZE = 50
+const REGISTER_PAGE_PARAM = 'registerPage'
 
 const f = ref<RegistersData>()
 const item = field
@@ -406,6 +422,16 @@ export function registersSpec(data: RegistersData): PageSpec {
           }),
         ],
       }),
+      {
+        ...pagination({
+          basePath: '/reports/registers',
+          total: f('partyCount'),
+          page: f('page'),
+          perPage: f('perPage'),
+          pageParamKey: REGISTER_PAGE_PARAM,
+        }),
+        when: f('paged'),
+      },
     ],
   })
 }
