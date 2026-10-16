@@ -150,25 +150,26 @@ export async function cashFlowIndirect(
   // investing/financing account type. Their working-capital legs are non-cash
   // (reclasses, credit asset purchases/sales) and their P&L legs are the
   // non-cash add-backs (depreciation, disposal gains/losses on account).
-  // Classifying by account id rather than joining `accounts` per line keeps
-  // the per-entry aggregate on (entries ⋈ lines) alone: the account join made
-  // the planner drive from accounts and probe the entry pk once per line —
-  // millions of loops for a window that the entry date index can walk
-  // directly. The two id sets are hashed once.
+  // The read starts from the investing/financing lines through the account
+  // index — a small population — rather than aggregating every line in the
+  // window, then excludes entries that carry a bank leg.
   const flaggedCte = sql`
     flagged as (
-      select l.entry_id as id
-        from journal_entries e
-        join journal_lines l on l.entry_id = e.id and l.org_id = e.org_id
-       where e.org_id = ${resolvedOrgId} and e.status in ('posted', 'reversed')
+      select distinct l.entry_id as id
+        from journal_lines l
+        join journal_entries e on e.id = l.entry_id and e.org_id = l.org_id
+       where l.org_id = ${resolvedOrgId}
+         and l.account_id in (
+               select id from accounts where org_id = ${resolvedOrgId} and type in ${IF_TYPES})
+         and e.status in ('posted', 'reversed')
          and e.posting_date >= ${from} and e.posting_date <= ${to}
          and e.book_id in ${statementBookIdsExpr(resolvedOrgId, bookId)}
          and ${excludePeriodEndJournals(sql`e.origin`)}
-       group by l.entry_id
-      having not bool_or(l.account_id in (
-               select id from accounts where org_id = ${resolvedOrgId} and type = 'asset_bank'))
-         and bool_or(l.account_id in (
-               select id from accounts where org_id = ${resolvedOrgId} and type in ${IF_TYPES}))
+         and not exists (
+               select 1 from journal_lines bank
+                where bank.org_id = l.org_id and bank.entry_id = l.entry_id
+                  and bank.account_id in (
+                        select id from accounts where org_id = ${resolvedOrgId} and type = 'asset_bank'))
     )`;
 
   // Net income for the window (credit-normal positive), posted only.
