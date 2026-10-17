@@ -1250,6 +1250,7 @@
       "estimates": "报价",
       "stored_value": "储值",
       "cash_sales": "现金销售",
+      "pos": "销售点",
       "usage": "按用量计费",
       "contract-costs": "合同成本",
       "autopay": "自动扣款",
@@ -1315,6 +1316,11 @@
     "cash_sales_create": "创建并提交现金销售与退款",
     "cash_sales_post": "将现金销售与退款过账至总账",
     "cash_sales_deposit": "将收银现金存入银行",
+    "pos_sell": "在收银台销售",
+    "pos_refund": "在收银台对以往收据退款",
+    "pos_override": "批准收银台改价和折扣",
+    "pos_drawer": "开启和关闭钱箱并办理现金存取",
+    "pos_manage": "配置收银台、快捷键和现金事由",
     "usage_read": "查看计量用量",
     "usage_manage": "管理用量计量器、费率计划和导入的用量记录",
     "usage_bill": "为用量定价并开具订阅费用账单",
@@ -8273,6 +8279,10 @@
     "storedValue": {
       "title": "储值卡与商店信用",
       "description": "将礼品卡和商店信用记为负债，支持发行、兑换、过期和余值收益确认。"
+    },
+    "posRegister": {
+      "title": "收银台（POS）",
+      "description": "基于现金销售的触控收银台：清点备用金开班、盲点结班、快捷键、分笔付款、打印和邮件收据，以及按原收据退款。需要启用现金销售。"
     },
     "crossBorderTax": {
       "title": "跨境税务",

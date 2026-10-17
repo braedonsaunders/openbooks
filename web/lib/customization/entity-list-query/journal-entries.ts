@@ -75,6 +75,8 @@ export const JOURNAL_GL_NATIVE_ORIGINS = [
   "book_opening",
   // Account merge reclasses move a merged account's balance to its survivor.
   "account_merge",
+  // Register drawer pay-ins, pay-outs and session over/short.
+  "pos",
 ];
 
 /**

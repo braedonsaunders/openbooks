@@ -177,6 +177,8 @@
     "./sync": "./src/sync/public.ts",
     "./connectors": "./src/connectors/public.ts",
     "./stored-value": "./src/stored-value/public.ts",
+    "./pos": "./src/pos/public.ts",
+    "./pos/cart": "./src/pos/cart.ts",
     "./tax-returns": "./src/tax-returns/public.ts",
     "./payroll/compensation-patterns": "./src/payroll/compensation-package-pattern.ts",
     "./testing/hrm": "./src/testing/public-hrm.ts",

@@ -565,6 +565,21 @@
         "sales"
       ]
     },
+    "pos": {
+      "description": "Point of sale: register configuration, drawer sessions with blind counts and over/short, register sales and refunds as native paid-at-sale documents, and held carts.",
+      "dependsOn": [
+        "flows",
+        "journal",
+        "ledger",
+        "money",
+        "organization",
+        "periods",
+        "platform",
+        "records",
+        "sales",
+        "stored-value"
+      ]
+    },
     "projects": {
       "description": "Project accounting: financials and profiles, recognition, project revenue, labor costing, overhead, construction billing, subcontracts, field-ticket labor evidence, billing source integrity.",
       "dependsOn": [

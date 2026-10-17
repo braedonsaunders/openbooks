@@ -98,6 +98,8 @@ export const EXCLUDE = new Set([
   "journal_reversal_instructions", "subscription_renewal_policies", "subscription_renewal_occurrences",
   // Executable warehouse suggestions and wave releases belong to the source environment.
   "warehouse_execution_tasks", "warehouse_scan_events", "pick_waves", "pick_wave_members",
+  // Carts parked at a register are working state of the source environment.
+  "pos_held_carts",
   // Issued e-invoices and filed withholding returns belong to the source environment.
   "einvoice_documents",
   "withholding_returns",

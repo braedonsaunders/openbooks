@@ -181,6 +181,10 @@ export const FEATURES: FeatureDef[] = [
   // receivable, no open item. Off by default; hiding the surface never
   // deletes posted sales or their history.
   { key: 'cashSales', defaultEnabled: false, category: 'sales', group: 'selling', navModules: ['cash-sales'] },
+  // Register (point of sale): the front-of-house register over cash sales —
+  // drawer sessions, register sales and refunds. Every register sale is a
+  // native cash sale, so it cannot run while Cash sales is off.
+  { key: 'posRegister', defaultEnabled: false, category: 'sales', group: 'selling', parentKey: 'cashSales', navModules: ['pos'] },
   // Stored value: gift cards and store credit carried as liabilities, with
   // issuance, redemption, breakage and expiry. Off by default — selling a
   // gift card changes what a sale posts, so adoption is deliberate.

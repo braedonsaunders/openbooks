@@ -105,6 +105,7 @@ export const journalEntries = pgTable(
         "expense_amortization",
         "account_merge",
         "asset_capitalization",
+        "pos",
       ],
     })
       .notNull()

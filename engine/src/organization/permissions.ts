@@ -66,6 +66,14 @@ export const PERMISSION_CATALOGUE = [
   "cash_sales.create",
   "cash_sales.post",
   "cash_sales.deposit",
+  // Register (point of sale): selling and refunding at a register, the
+  // manager override for prices and discounts, drawer custody (open, close,
+  // pay in and out) and register configuration are separate duties.
+  "pos.sell",
+  "pos.refund",
+  "pos.override",
+  "pos.drawer",
+  "pos.manage",
   // Usage billing: see metered usage and the charges rated from it.
   "usage.read",
   "usage.manage",
@@ -533,6 +541,17 @@ export const PERMISSION_GROUPS: {
       { key: "cash_sales.create", labelKey: permissionLabelKey("cash_sales.create") },
       { key: "cash_sales.post", labelKey: permissionLabelKey("cash_sales.post") },
       { key: "cash_sales.deposit", labelKey: permissionLabelKey("cash_sales.deposit") },
+    ],
+  },
+  {
+    key: "pos",
+    labelKey: "permissions.groups.pos",
+    permissions: [
+      { key: "pos.sell", labelKey: permissionLabelKey("pos.sell") },
+      { key: "pos.refund", labelKey: permissionLabelKey("pos.refund") },
+      { key: "pos.override", labelKey: permissionLabelKey("pos.override") },
+      { key: "pos.drawer", labelKey: permissionLabelKey("pos.drawer") },
+      { key: "pos.manage", labelKey: permissionLabelKey("pos.manage") },
     ],
   },
   {
@@ -1128,6 +1147,11 @@ export const BUILT_IN_ROLES: Record<
       "cash_sales.create",
       "cash_sales.post",
       "cash_sales.deposit",
+      "pos.sell",
+      "pos.refund",
+      "pos.override",
+      "pos.drawer",
+      "pos.manage",
       "usage.read",
       "usage.manage",
       "usage.bill",
@@ -1492,9 +1516,10 @@ export const BUILT_IN_ROLES: Record<
   cashier: {
     name: "Cashier",
     description:
-      "Rings up, posts and refunds cash sales at the till, drops till cash to the bank, and looks up gift card balances. Cannot see invoices, banking or the ledger.",
+      "Rings up, posts and refunds cash sales at the till and the register, opens and closes the register drawer, drops till cash to the bank, and looks up gift card balances. Cannot override prices, see invoices, banking or the ledger.",
     permissions: [
       "cash_sales.read", "cash_sales.create", "cash_sales.post", "cash_sales.deposit",
+      "pos.sell", "pos.refund", "pos.drawer",
       "stored_value.read", "items.read",
       "feedback.use", "hrm.self.read", "hrm.self.request", "hrm.leave.request", "time.self", "time.clock",
     ],

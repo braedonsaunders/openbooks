@@ -486,6 +486,18 @@ test("the cashier and project coordinator roles carry no bank, ledger or payment
   assert.equal(holds("project_coordinator", "ar.create"), true, "drafts customer invoices");
 });
 
+test("the cashier sells and keeps the drawer at the register but cannot approve overrides or configure registers", () => {
+  const holds = (role: string, perm: string) => permissionSetCovers(new Set(BUILT_IN_ROLES[role]!.permissions), perm);
+  for (const granted of ["pos.sell", "pos.refund", "pos.drawer"]) {
+    assert.equal(holds("cashier", granted), true, `cashier holds ${granted}`);
+  }
+  assert.equal(holds("cashier", "pos.override"), false, "price overrides and discounts need a manager");
+  assert.equal(holds("cashier", "pos.manage"), false, "register configuration stays with the books");
+  assert.equal(holds("controller", "pos.override"), true);
+  assert.equal(holds("controller", "pos.manage"), true);
+  assert.equal(holds("sales_rep", "pos.sell"), false, "selling at the register is a till duty");
+});
+
 test("hourly roles enter their own time through time.self, never the supervisory time grants", () => {
   const holds = (role: string, perm: string) => permissionSetCovers(new Set(BUILT_IN_ROLES[role]!.permissions), perm);
   assert.ok((PERMISSION_CATALOGUE as readonly string[]).includes("time.self"));

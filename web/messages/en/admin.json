@@ -1238,6 +1238,7 @@
       "estimates": "Estimates",
       "stored_value": "Stored value",
       "cash_sales": "Cash sales",
+      "pos": "Point of sale",
       "usage": "Usage billing",
       "contract-costs": "Contract costs",
       "autopay": "Autopay",
@@ -1304,6 +1305,11 @@
     "cash_sales_create": "Create and submit cash sales and refunds",
     "cash_sales_post": "Post cash sales and refunds to the ledger",
     "cash_sales_deposit": "Deposit till cash to the bank",
+    "pos_sell": "Sell at a register",
+    "pos_refund": "Refund prior receipts at a register",
+    "pos_override": "Approve register price overrides and discounts",
+    "pos_drawer": "Open and close register drawers and pay cash in or out",
+    "pos_manage": "Configure registers, quick keys and cash reasons",
     "usage_read": "View metered usage",
     "usage_manage": "Manage usage meters, rating plans, and imported usage records",
     "usage_bill": "Rate usage and bill subscription charges",
@@ -8273,6 +8279,10 @@
     "storedValue": {
       "title": "Stored value",
       "description": "Gift cards and store credit carried as liabilities, with issuance, redemption, breakage, and expiry."
+    },
+    "posRegister": {
+      "title": "Register (point of sale)",
+      "description": "A touch-friendly register over cash sales: drawer sessions with a counted float and a blind closing count, quick keys, split tenders, printed and emailed receipts, and refunds from prior receipts. Needs Cash sales."
     },
     "crossBorderTax": {
       "title": "Cross-border tax",

@@ -1250,6 +1250,7 @@
       "estimates": "Orçamentos",
       "stored_value": "Vales e créditos",
       "cash_sales": "Vendas à vista",
+      "pos": "Ponto de venda",
       "usage": "Faturamento por uso",
       "contract-costs": "Custos de contrato",
       "autopay": "Cobrança automática",
@@ -1315,6 +1316,11 @@
     "cash_sales_create": "Criar e enviar vendas à vista e reembolsos",
     "cash_sales_post": "Lançar vendas à vista e reembolsos no razão",
     "cash_sales_deposit": "Depositar o dinheiro do caixa no banco",
+    "pos_sell": "Vender em um caixa",
+    "pos_refund": "Reembolsar recibos anteriores em um caixa",
+    "pos_override": "Aprovar alterações de preço e descontos no caixa",
+    "pos_drawer": "Abrir e fechar gavetas de caixa e registrar entradas e saídas de dinheiro",
+    "pos_manage": "Configurar caixas, teclas rápidas e motivos de dinheiro",
     "usage_read": "Ver o uso medido",
     "usage_manage": "Gerenciar medidores, planos de tarifas e registros de uso importados",
     "usage_bill": "Tarifar o uso e faturar cobranças de assinatura",
@@ -8273,6 +8279,10 @@
     "storedValue": {
       "title": "Vales e créditos",
       "description": "Cartões-presente e créditos em loja registrados no passivo, com emissão, resgate, expiração e breakage."
+    },
+    "posRegister": {
+      "title": "Caixa (ponto de venda)",
+      "description": "Um caixa sensível ao toque sobre as vendas à vista: sessões de gaveta com fundo contado e contagem de fechamento às cegas, teclas rápidas, pagamentos divididos, recibos impressos e por e-mail, e reembolsos de recibos anteriores. Requer Vendas à vista."
     },
     "crossBorderTax": {
       "title": "Fiscalidade transfronteiriça",

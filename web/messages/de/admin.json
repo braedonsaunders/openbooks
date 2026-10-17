@@ -1250,6 +1250,7 @@
       "estimates": "Angebote",
       "stored_value": "Guthaben",
       "cash_sales": "Barverkäufe",
+      "pos": "Kasse (POS)",
       "usage": "Nutzungsabrechnung",
       "contract-costs": "Vertragskosten",
       "autopay": "Automatische Abbuchung",
@@ -1315,6 +1316,11 @@
     "cash_sales_create": "Barverkäufe und Erstattungen erstellen und übermitteln",
     "cash_sales_post": "Barverkäufe und Erstattungen im Hauptbuch buchen",
     "cash_sales_deposit": "Kassenbargeld bei der Bank einzahlen",
+    "pos_sell": "An der Kasse verkaufen",
+    "pos_refund": "Frühere Belege an der Kasse erstatten",
+    "pos_override": "Preisänderungen und Rabatte an der Kasse genehmigen",
+    "pos_drawer": "Kassenschubladen öffnen und schließen sowie Bargeld ein- und auszahlen",
+    "pos_manage": "Kassen, Schnelltasten und Bargeldgründe konfigurieren",
     "usage_read": "Gemessene Nutzung anzeigen",
     "usage_manage": "Nutzungsmesser, Tarifpläne und importierte Nutzungsdatensätze verwalten",
     "usage_bill": "Nutzung tarifieren und Abonnementgebühren abrechnen",
@@ -8085,6 +8091,10 @@
     "storedValue": {
       "title": "Guthaben",
       "description": "Geschenkkarten und Ladenguthaben als Verbindlichkeiten, mit Ausgabe, Einlösung, Verfall und Erlöserfassung."
+    },
+    "posRegister": {
+      "title": "Kasse (Point of Sale)",
+      "description": "Eine Touch-Kasse auf Basis der Barverkäufe: Kassensitzungen mit gezähltem Wechselgeld und blinder Abschlusszählung, Schnelltasten, geteilte Zahlungen, gedruckte und per E-Mail versendete Belege sowie Erstattungen früherer Belege. Erfordert Barverkäufe."
     },
     "crossBorderTax": {
       "title": "Grenzüberschreitende Besteuerung",

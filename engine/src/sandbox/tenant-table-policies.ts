@@ -777,6 +777,15 @@ export const TENANT_TABLE_POLICIES = {
   "stored_value_accounts": "clone:catalog-uuid-rebase",
   "stored_value_entries": "clone:catalog-uuid-rebase",
   "stored_value_programs": "clone:catalog-uuid-rebase",
+  // Register configuration, sessions and their posted transactions copy with
+  // the ledger they posted to; parked carts are working state and stay behind.
+  "pos_registers": "clone:catalog-uuid-rebase",
+  "pos_cash_reasons": "clone:catalog-uuid-rebase",
+  "pos_quick_keys": "clone:catalog-uuid-rebase",
+  "pos_sessions": "clone:catalog-uuid-rebase",
+  "pos_cash_movements": "clone:catalog-uuid-rebase",
+  "pos_transactions": "clone:catalog-uuid-rebase",
+  "pos_held_carts": "skip:no-copy",
   "external_links": "skip:no-copy",
   "integration_inbound_events": "skip:no-copy",
   "shopify_catalog_entries": "skip:no-copy",

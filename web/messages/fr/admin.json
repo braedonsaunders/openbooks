@@ -1250,6 +1250,7 @@
       "estimates": "Devis",
       "stored_value": "Cartes cadeaux et avoirs",
       "cash_sales": "Ventes au comptant",
+      "pos": "Point de vente",
       "usage": "Facturation à l’usage",
       "contract-costs": "Coûts de contrat",
       "autopay": "Prélèvement automatique",
@@ -1315,6 +1316,11 @@
     "cash_sales_create": "Créer et soumettre des ventes au comptant et des remboursements",
     "cash_sales_post": "Comptabiliser les ventes au comptant et les remboursements au grand livre",
     "cash_sales_deposit": "Déposer les espèces de la caisse à la banque",
+    "pos_sell": "Vendre à une caisse",
+    "pos_refund": "Rembourser des tickets antérieurs à une caisse",
+    "pos_override": "Approuver les modifications de prix et les remises en caisse",
+    "pos_drawer": "Ouvrir et fermer les tiroirs-caisses et enregistrer les entrées et sorties d'espèces",
+    "pos_manage": "Configurer les caisses, les touches rapides et les motifs d'espèces",
     "usage_read": "Consulter la consommation mesurée",
     "usage_manage": "Gérer les compteurs, les plans tarifaires et les enregistrements d'usage importés",
     "usage_bill": "Tarifer l'usage et facturer les frais d'abonnement",
@@ -8201,6 +8207,10 @@
     "storedValue": {
       "title": "Cartes cadeaux et avoirs",
       "description": "Cartes cadeaux et avoirs comptabilisés au passif, avec émission, utilisation, péremption et breakage."
+    },
+    "posRegister": {
+      "title": "Caisse (point de vente)",
+      "description": "Une caisse tactile adossée aux ventes au comptant : sessions de tiroir avec fond de caisse compté et comptage de clôture à l'aveugle, touches rapides, paiements fractionnés, tickets imprimés et envoyés par e-mail, et remboursements de tickets antérieurs. Nécessite les ventes au comptant."
     },
     "crossBorderTax": {
       "title": "Fiscalité transfrontalière",

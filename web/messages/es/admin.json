@@ -1250,6 +1250,7 @@
       "estimates": "Presupuestos",
       "stored_value": "Tarjetas regalo y crédito",
       "cash_sales": "Ventas en efectivo",
+      "pos": "Punto de venta",
       "usage": "Facturación por uso",
       "contract-costs": "Costos de contrato",
       "autopay": "Cobro automático",
@@ -1315,6 +1316,11 @@
     "cash_sales_create": "Crear y enviar ventas en efectivo y reembolsos",
     "cash_sales_post": "Contabilizar ventas en efectivo y reembolsos en el libro mayor",
     "cash_sales_deposit": "Depositar el efectivo de caja en el banco",
+    "pos_sell": "Vender en una caja",
+    "pos_refund": "Reembolsar recibos anteriores en una caja",
+    "pos_override": "Aprobar cambios de precio y descuentos en caja",
+    "pos_drawer": "Abrir y cerrar cajones y registrar entradas y salidas de efectivo",
+    "pos_manage": "Configurar cajas, teclas rápidas y motivos de efectivo",
     "usage_read": "Ver el uso medido",
     "usage_manage": "Gestionar medidores, planes de tarifas y registros de uso importados",
     "usage_bill": "Tarifar el uso y facturar cargos de suscripción",
@@ -8201,6 +8207,10 @@
     "storedValue": {
       "title": "Tarjetas regalo y crédito",
       "description": "Tarjetas regalo y crédito en tienda registrados como pasivo, con emisión, canje, caducidad y deterioro."
+    },
+    "posRegister": {
+      "title": "Caja (punto de venta)",
+      "description": "Una caja táctil sobre las ventas al contado: sesiones de cajón con fondo contado y arqueo de cierre a ciegas, teclas rápidas, pagos divididos, recibos impresos y por correo, y reembolsos de recibos anteriores. Requiere Ventas al contado."
     },
     "crossBorderTax": {
       "title": "Fiscalidad transfronteriza",
