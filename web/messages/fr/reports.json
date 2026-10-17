@@ -736,6 +736,14 @@
   },
   "catalog": {
     "entities": {
+      "equity_compensation_run_lines": {
+        "label": "Lignes des calculs de rémunération en actions",
+        "description": "Chaque ligne comptabilisée d’un calcul de rémunération en actions : l’attribution, son coût cumulé à la date du calcul, le montant comptabilisé par les calculs précédents et la variation comptabilisée par ce calcul."
+      },
+      "equity_securities_register": {
+        "label": "Registre des titres de capital",
+        "description": "Chaque certificat d’actions, option, RSU, bon de souscription, SAFE et billet convertible tel qu’émis : détenteur, catégorie, plan, tour de financement, quantité, prix et contrepartie."
+      },
       "ledger_lines": {
         "label": "Lignes du grand livre",
         "description": "Détail des lignes d’écriture joint à l’écriture, au compte, au tiers et aux dimensions — le grand livre brut. Une ligne par ligne d’écriture de journal comptabilisée (ou en brouillon)."
@@ -1226,6 +1234,40 @@
       }
     },
     "columns": {
+      "equity_compensation_run_lines": {
+        "through_date": "Calcul jusqu’au",
+        "security_number": "Titre",
+        "security_kind": "Type",
+        "holder": "Détenteur",
+        "share_class": "Catégorie d’actions",
+        "plan": "Plan",
+        "subsidiary": "Filiale",
+        "currency": "Devise",
+        "cumulative": "Comptabilisé à ce jour",
+        "previous": "Comptabilisé précédemment",
+        "period": "Comptabilisé par ce calcul",
+        "run_id": "Calcul (id)",
+        "security_id": "Titre (id)",
+        "journal_entry_id": "Écriture de journal (id)"
+      },
+      "equity_securities_register": {
+        "issue_date": "Date d’émission",
+        "security_number": "Titre",
+        "security_kind": "Type",
+        "holder": "Détenteur",
+        "share_class": "Catégorie d’actions",
+        "plan": "Plan",
+        "round": "Tour de financement",
+        "subsidiary": "Filiale",
+        "quantity_issued": "Quantité émise",
+        "price_per_share": "Prix par action",
+        "currency": "Devise",
+        "consideration": "Contrepartie",
+        "fair_value_per_unit": "Juste valeur par unité",
+        "voided": "Annulé",
+        "security_id": "Titre (id)",
+        "journal_entry_id": "Écriture d’émission (id)"
+      },
       "ledger_lines": {
         "posting_date": "Date de comptabilisation",
         "entry_number": "N° d’écriture",
@@ -3268,6 +3310,10 @@
     "subtotal": "{level} — total"
   },
   "builtIns": {
+    "equity-stock-compensation-schedule": {
+      "name": "Échéancier de charge de rémunération en actions",
+      "description": "Rémunération en actions comptabilisée par période et par devise, à partir des calculs comptabilisés."
+    },
     "ap-aging-by-vendor": {
       "name": "Âge des comptes fournisseurs par fournisseur",
       "description": "Soldes fournisseurs ouverts par fournisseur, par mois d’échéance."

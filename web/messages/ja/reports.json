@@ -736,6 +736,14 @@
   },
   "catalog": {
     "entities": {
+      "equity_compensation_run_lines": {
+        "label": "株式報酬計算明細",
+        "description": "転記済みの株式報酬計算の各明細です。付与、計算日までの累計費用、過去の計算で転記された金額、今回の計算で転記された増減を示します。"
+      },
+      "equity_securities_register": {
+        "label": "株式等証券台帳",
+        "description": "発行時点の株券、ストックオプション、RSU、ワラント、SAFE、転換社債の一覧です。保有者、種類株式、プラン、ラウンド、数量、価格、対価を示します。"
+      },
       "ledger_lines": {
         "label": "元帳明細",
         "description": "仕訳、勘定、取引先、ディメンションを含むすべての仕訳明細 — 記帳済みまたは下書きの総勘定元帳の全明細。"
@@ -1226,6 +1234,40 @@
       }
     },
     "columns": {
+      "equity_compensation_run_lines": {
+        "through_date": "計算基準日",
+        "security_number": "証券",
+        "security_kind": "種類",
+        "holder": "保有者",
+        "share_class": "株式の種類",
+        "plan": "プラン",
+        "subsidiary": "子会社",
+        "currency": "通貨",
+        "cumulative": "累計認識額",
+        "previous": "前回までの転記額",
+        "period": "今回の転記額",
+        "run_id": "計算 (ID)",
+        "security_id": "証券 (ID)",
+        "journal_entry_id": "仕訳 (ID)"
+      },
+      "equity_securities_register": {
+        "issue_date": "発行日",
+        "security_number": "証券",
+        "security_kind": "種類",
+        "holder": "保有者",
+        "share_class": "株式の種類",
+        "plan": "プラン",
+        "round": "ラウンド",
+        "subsidiary": "子会社",
+        "quantity_issued": "発行数量",
+        "price_per_share": "1株当たり価格",
+        "currency": "通貨",
+        "consideration": "対価",
+        "fair_value_per_unit": "1単位当たり公正価値",
+        "voided": "取消済み",
+        "security_id": "証券 (ID)",
+        "journal_entry_id": "発行仕訳 (ID)"
+      },
       "ledger_lines": {
         "posting_date": "記帳日",
         "entry_number": "仕訳番号",
@@ -3288,6 +3330,10 @@
     "export": "エクスポート"
   },
   "builtIns": {
+    "equity-stock-compensation-schedule": {
+      "name": "株式報酬費用スケジュール",
+      "description": "転記済みの計算に基づく、期間別・通貨別の株式報酬費用です。"
+    },
     "ap-aging-by-vendor": {
       "name": "仕入先別買掛金年齢分析",
       "description": "仕入先別・期日月別の未払残高。"

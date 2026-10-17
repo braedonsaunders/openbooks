@@ -736,6 +736,14 @@
   },
   "catalog": {
     "entities": {
+      "equity_compensation_run_lines": {
+        "label": "股权激励计提明细",
+        "description": "每条已过账的股权激励计提明细：授予、截至计提日的累计成本、以往计提已过账金额以及本次计提过账的变动。"
+      },
+      "equity_securities_register": {
+        "label": "权益证券登记簿",
+        "description": "按发行时条款列出每份股票凭证、期权、RSU、认股权证、SAFE 和可转换票据：持有人、股份类别、计划、融资轮次、数量、价格和对价。"
+      },
       "ledger_lines": {
         "label": "总账行",
         "description": "每条分录行及其分录、科目、往来方和维度——完整的总账明细，含已过账或草稿。"
@@ -1226,6 +1234,40 @@
       }
     },
     "columns": {
+      "equity_compensation_run_lines": {
+        "through_date": "计提截止日",
+        "security_number": "证券",
+        "security_kind": "类型",
+        "holder": "持有人",
+        "share_class": "股份类别",
+        "plan": "计划",
+        "subsidiary": "子公司",
+        "currency": "币种",
+        "cumulative": "累计确认",
+        "previous": "此前已过账",
+        "period": "本次过账",
+        "run_id": "计提 (ID)",
+        "security_id": "证券 (ID)",
+        "journal_entry_id": "日记账分录 (ID)"
+      },
+      "equity_securities_register": {
+        "issue_date": "发行日期",
+        "security_number": "证券",
+        "security_kind": "类型",
+        "holder": "持有人",
+        "share_class": "股份类别",
+        "plan": "计划",
+        "round": "融资轮次",
+        "subsidiary": "子公司",
+        "quantity_issued": "发行数量",
+        "price_per_share": "每股价格",
+        "currency": "币种",
+        "consideration": "对价",
+        "fair_value_per_unit": "每单位公允价值",
+        "voided": "已作废",
+        "security_id": "证券 (ID)",
+        "journal_entry_id": "发行分录 (ID)"
+      },
       "ledger_lines": {
         "posting_date": "过账日期",
         "entry_number": "分录号",
@@ -3288,6 +3330,10 @@
     "export": "导出"
   },
   "builtIns": {
+    "equity-stock-compensation-schedule": {
+      "name": "股权激励费用明细表",
+      "description": "根据已过账的计提，按期间和币种列示的已过账股权激励费用。"
+    },
     "ap-aging-by-vendor": {
       "name": "按供应商列示应付账龄",
       "description": "按供应商和到期月份列示未清应付款余额。"

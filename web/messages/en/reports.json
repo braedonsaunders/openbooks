@@ -736,6 +736,14 @@
   },
   "catalog": {
     "entities": {
+      "equity_compensation_run_lines": {
+        "label": "Stock compensation run lines",
+        "description": "Every posted stock compensation run line: the award, its cumulative cost through the run date, the amount earlier runs posted and the change this run posted."
+      },
+      "equity_securities_register": {
+        "label": "Equity securities register",
+        "description": "Every share certificate, option, RSU, warrant, SAFE and convertible note as issued: holder, class, plan, round, quantity, price and consideration."
+      },
       "ledger_lines": {
         "label": "Ledger lines",
         "description": "Every journal line with its entry, account, party and dimensions — the full general-ledger detail, posted or draft."
@@ -1226,6 +1234,40 @@
       }
     },
     "columns": {
+      "equity_compensation_run_lines": {
+        "through_date": "Run through",
+        "security_number": "Security",
+        "security_kind": "Kind",
+        "holder": "Holder",
+        "share_class": "Share class",
+        "plan": "Plan",
+        "subsidiary": "Subsidiary",
+        "currency": "Currency",
+        "cumulative": "Recognized to date",
+        "previous": "Previously posted",
+        "period": "Posted this run",
+        "run_id": "Run (id)",
+        "security_id": "Security (id)",
+        "journal_entry_id": "Journal entry (id)"
+      },
+      "equity_securities_register": {
+        "issue_date": "Issue date",
+        "security_number": "Security",
+        "security_kind": "Kind",
+        "holder": "Holder",
+        "share_class": "Share class",
+        "plan": "Plan",
+        "round": "Round",
+        "subsidiary": "Subsidiary",
+        "quantity_issued": "Quantity issued",
+        "price_per_share": "Price per share",
+        "currency": "Currency",
+        "consideration": "Consideration",
+        "fair_value_per_unit": "Fair value per unit",
+        "voided": "Voided",
+        "security_id": "Security (id)",
+        "journal_entry_id": "Issuance entry (id)"
+      },
       "ledger_lines": {
         "posting_date": "Posting date",
         "entry_number": "Entry #",
@@ -3288,6 +3330,10 @@
     "export": "Export"
   },
   "builtIns": {
+    "equity-stock-compensation-schedule": {
+      "name": "Stock compensation expense schedule",
+      "description": "Stock compensation posted by period and currency, from the posted runs."
+    },
     "ap-aging-by-vendor": {
       "name": "AP aging by vendor",
       "description": "Open payable balances per vendor, by due month."

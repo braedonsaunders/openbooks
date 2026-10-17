@@ -15,6 +15,7 @@ import { BANKING_REPORT_ENTITIES } from './banking-entities'
 import { REBATE_REPORT_ENTITIES } from './rebate-entities'
 import { CONTRACT_COST_REPORT_ENTITIES } from './contract-cost-entities'
 import { AMORTIZATION_REPORT_ENTITIES } from './amortization-entities'
+import { EQUITY_REPORT_ENTITIES } from './equity-entities'
 import { FIXED_ASSET_REPORT_ENTITIES } from './fixed-asset-entities'
 import { BILLING_IMPORT_REPORT_ENTITIES } from './billing-import-entities'
 import { DEMAND_REPORT_ENTITIES } from './demand-entities'
@@ -437,6 +438,23 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
   ...REBATE_REPORT_ENTITIES.map(entity => ({ slug: entity.key.replaceAll('_','-'), name: entity.label, description: entity.description, query: defaultRowsQuery(entity) })),
   ...CONTRACT_COST_REPORT_ENTITIES.map(entity => ({ slug: entity.key.replaceAll('_','-'), name: entity.label, description: entity.description, query: defaultRowsQuery(entity) })),
   ...AMORTIZATION_REPORT_ENTITIES.map(entity => ({ slug: entity.key.replaceAll('_','-'), name: entity.label, description: entity.description, query: defaultRowsQuery(entity) })),
+  ...EQUITY_REPORT_ENTITIES.map(entity => ({ slug: entity.key.replaceAll('_','-'), name: entity.label, description: entity.description, query: defaultRowsQuery(entity) })),
+  {
+    slug: 'equity-stock-compensation-schedule',
+    name: 'Stock compensation expense schedule',
+    description: 'Stock compensation posted by period and currency, from the posted runs.',
+    query: {
+      entity: 'equity_compensation_run_lines', mode: 'summarize', columns: [],
+      breakouts: [
+        { column: 'through_date', bin: 'month' },
+        { column: 'currency' },
+      ],
+      measures: [
+        { fn: 'sum', column: 'period', label: 'Posted' },
+      ],
+      filters: null, groupBy: null, limit: 1000,
+    },
+  },
   {
     slug: 'prepaid-expense-waterfall',
     name: 'Prepaid expense waterfall',

@@ -736,6 +736,14 @@
   },
   "catalog": {
     "entities": {
+      "equity_compensation_run_lines": {
+        "label": "Positionen der Läufe für aktienbasierte Vergütung",
+        "description": "Jede gebuchte Position eines Laufs für aktienbasierte Vergütung: die Zuteilung, ihr kumulierter Aufwand bis zum Laufdatum, der von früheren Läufen gebuchte Betrag und die in diesem Lauf gebuchte Änderung."
+      },
+      "equity_securities_register": {
+        "label": "Wertpapierregister Eigenkapital",
+        "description": "Jedes Aktienzertifikat, jede Option, RSU, jeder Optionsschein, SAFE und jedes Wandeldarlehen wie ausgegeben: Inhaber, Gattung, Plan, Finanzierungsrunde, Menge, Preis und Gegenleistung."
+      },
       "ledger_lines": {
         "label": "Hauptbuchzeilen",
         "description": "Jede Buchungszeile mit ihrer Buchung, ihrem Konto, Geschäftspartner und ihren Dimensionen – die vollständigen Hauptbuchdetails, gebucht oder Entwurf."
@@ -1226,6 +1234,40 @@
       }
     },
     "columns": {
+      "equity_compensation_run_lines": {
+        "through_date": "Lauf bis",
+        "security_number": "Wertpapier",
+        "security_kind": "Art",
+        "holder": "Inhaber",
+        "share_class": "Aktiengattung",
+        "plan": "Plan",
+        "subsidiary": "Tochtergesellschaft",
+        "currency": "Währung",
+        "cumulative": "Bisher erfasst",
+        "previous": "Zuvor gebucht",
+        "period": "In diesem Lauf gebucht",
+        "run_id": "Lauf (ID)",
+        "security_id": "Wertpapier (ID)",
+        "journal_entry_id": "Buchungssatz (ID)"
+      },
+      "equity_securities_register": {
+        "issue_date": "Ausgabedatum",
+        "security_number": "Wertpapier",
+        "security_kind": "Art",
+        "holder": "Inhaber",
+        "share_class": "Aktiengattung",
+        "plan": "Plan",
+        "round": "Finanzierungsrunde",
+        "subsidiary": "Tochtergesellschaft",
+        "quantity_issued": "Ausgegebene Menge",
+        "price_per_share": "Preis je Aktie",
+        "currency": "Währung",
+        "consideration": "Gegenleistung",
+        "fair_value_per_unit": "Beizulegender Zeitwert je Einheit",
+        "voided": "Storniert",
+        "security_id": "Wertpapier (ID)",
+        "journal_entry_id": "Ausgabebuchung (ID)"
+      },
       "ledger_lines": {
         "posting_date": "Buchungsdatum",
         "entry_number": "Buchung Nr.",
@@ -3288,6 +3330,10 @@
     "export": "Exportieren"
   },
   "builtIns": {
+    "equity-stock-compensation-schedule": {
+      "name": "Aufwandsplan aktienbasierte Vergütung",
+      "description": "Gebuchter Aufwand aus aktienbasierter Vergütung nach Periode und Währung, aus den gebuchten Läufen."
+    },
     "ap-aging-by-vendor": {
       "name": "Fälligkeitsanalyse Verbindlichkeiten nach Lieferant",
       "description": "Offene Verbindlichkeitssalden je Lieferant, nach Fälligkeitsmonat."

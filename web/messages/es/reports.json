@@ -736,6 +736,14 @@
   },
   "catalog": {
     "entities": {
+      "equity_compensation_run_lines": {
+        "label": "Líneas de ejecuciones de compensación en acciones",
+        "description": "Cada línea contabilizada de una ejecución de compensación en acciones: la adjudicación, su costo acumulado hasta la fecha de la ejecución, el importe contabilizado por ejecuciones anteriores y la variación contabilizada en esta ejecución."
+      },
+      "equity_securities_register": {
+        "label": "Registro de valores de patrimonio",
+        "description": "Cada certificado de acciones, opción, RSU, warrant, SAFE y nota convertible tal como se emitió: titular, clase, plan, ronda, cantidad, precio y contraprestación."
+      },
       "ledger_lines": {
         "label": "Líneas del mayor",
         "description": "Detalle de líneas de asiento unido a asiento, cuenta, tercero y dimensiones — el libro mayor en bruto. Una fila por línea de asiento contabilizada (o en borrador)."
@@ -1226,6 +1234,40 @@
       }
     },
     "columns": {
+      "equity_compensation_run_lines": {
+        "through_date": "Ejecución hasta",
+        "security_number": "Valor",
+        "security_kind": "Tipo",
+        "holder": "Titular",
+        "share_class": "Clase de acciones",
+        "plan": "Plan",
+        "subsidiary": "Subsidiaria",
+        "currency": "Moneda",
+        "cumulative": "Reconocido a la fecha",
+        "previous": "Contabilizado anteriormente",
+        "period": "Contabilizado en esta ejecución",
+        "run_id": "Ejecución (id)",
+        "security_id": "Valor (id)",
+        "journal_entry_id": "Asiento contable (id)"
+      },
+      "equity_securities_register": {
+        "issue_date": "Fecha de emisión",
+        "security_number": "Valor",
+        "security_kind": "Tipo",
+        "holder": "Titular",
+        "share_class": "Clase de acciones",
+        "plan": "Plan",
+        "round": "Ronda",
+        "subsidiary": "Subsidiaria",
+        "quantity_issued": "Cantidad emitida",
+        "price_per_share": "Precio por acción",
+        "currency": "Moneda",
+        "consideration": "Contraprestación",
+        "fair_value_per_unit": "Valor razonable por unidad",
+        "voided": "Anulado",
+        "security_id": "Valor (id)",
+        "journal_entry_id": "Asiento de emisión (id)"
+      },
       "ledger_lines": {
         "posting_date": "Fecha de contabilización",
         "entry_number": "N.º de asiento",
@@ -3268,6 +3310,10 @@
     "grandTotals": "Totales generales"
   },
   "builtIns": {
+    "equity-stock-compensation-schedule": {
+      "name": "Calendario de gasto por compensación en acciones",
+      "description": "Compensación en acciones contabilizada por período y moneda, a partir de las ejecuciones contabilizadas."
+    },
     "ap-aging-by-vendor": {
       "name": "Antigüedad de cuentas por pagar por proveedor",
       "description": "Saldos pendientes de cuentas por pagar por proveedor, por mes de vencimiento."

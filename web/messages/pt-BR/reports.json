@@ -736,6 +736,14 @@
   },
   "catalog": {
     "entities": {
+      "equity_compensation_run_lines": {
+        "label": "Linhas das execuções de remuneração em ações",
+        "description": "Cada linha lançada de uma execução de remuneração em ações: a outorga, seu custo acumulado até a data da execução, o valor lançado por execuções anteriores e a variação lançada nesta execução."
+      },
+      "equity_securities_register": {
+        "label": "Registro de valores mobiliários de patrimônio",
+        "description": "Cada certificado de ações, opção, RSU, warrant, SAFE e nota conversível conforme emitido: titular, classe, plano, rodada, quantidade, preço e contraprestação."
+      },
       "ledger_lines": {
         "label": "Linhas do razão",
         "description": "Cada linha de lançamento com seu lançamento, conta, parte e dimensões — o detalhamento completo do razão geral, lançado ou em rascunho."
@@ -1226,6 +1234,40 @@
       }
     },
     "columns": {
+      "equity_compensation_run_lines": {
+        "through_date": "Execução até",
+        "security_number": "Valor mobiliário",
+        "security_kind": "Tipo",
+        "holder": "Titular",
+        "share_class": "Classe de ações",
+        "plan": "Plano",
+        "subsidiary": "Subsidiária",
+        "currency": "Moeda",
+        "cumulative": "Reconhecido até a data",
+        "previous": "Lançado anteriormente",
+        "period": "Lançado nesta execução",
+        "run_id": "Execução (id)",
+        "security_id": "Valor mobiliário (id)",
+        "journal_entry_id": "Lançamento contábil (id)"
+      },
+      "equity_securities_register": {
+        "issue_date": "Data de emissão",
+        "security_number": "Valor mobiliário",
+        "security_kind": "Tipo",
+        "holder": "Titular",
+        "share_class": "Classe de ações",
+        "plan": "Plano",
+        "round": "Rodada",
+        "subsidiary": "Subsidiária",
+        "quantity_issued": "Quantidade emitida",
+        "price_per_share": "Preço por ação",
+        "currency": "Moeda",
+        "consideration": "Contraprestação",
+        "fair_value_per_unit": "Valor justo por unidade",
+        "voided": "Anulado",
+        "security_id": "Valor mobiliário (id)",
+        "journal_entry_id": "Lançamento de emissão (id)"
+      },
       "ledger_lines": {
         "posting_date": "Data de lançamento",
         "entry_number": "Nº do lançamento",
@@ -3288,6 +3330,10 @@
     "export": "Exportar"
   },
   "builtIns": {
+    "equity-stock-compensation-schedule": {
+      "name": "Cronograma de despesa de remuneração em ações",
+      "description": "Remuneração em ações lançada por período e moeda, a partir das execuções lançadas."
+    },
     "ap-aging-by-vendor": {
       "name": "Aging de contas a pagar por fornecedor",
       "description": "Saldos de contas a pagar em aberto por fornecedor, por mês de vencimento."
