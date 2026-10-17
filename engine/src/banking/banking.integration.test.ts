@@ -1180,7 +1180,7 @@ test(
       const changes = audits.rows[0]!.changes as {
         operation: string;
         matched: number;
-        pairs: { statementLineId: string; journalLineId: string; confidence: string }[];
+        pairs: { statementLineId: string; journalLineId: string; confidence: string; reasons: { code: string; days?: number }[] }[];
       };
       assert.equal(changes.operation, "auto_match");
       assert.equal(changes.matched, 2);
@@ -1188,7 +1188,22 @@ test(
         changes.pairs.map((pair) => pair.statementLineId).sort(),
         [...lineIds].sort(),
       );
-      for (const pair of changes.pairs) assert.equal(pair.confidence, "0.9");
+      // Same-day exact amounts clear the review ceiling, and each pair names
+      // why it was made.
+      for (const pair of changes.pairs) {
+        assert.ok(toUnits(pair.confidence) > toUnits("0.70"), `confidence ${pair.confidence} is high`);
+        assert.deepEqual(pair.reasons.slice(0, 2), [{ code: "exact_amount" }, { code: "date_lag", days: 0 }]);
+      }
+      const stored = (await db.execute<{ statement_line_id: string; confidence: string; match_reasons: unknown }>(sql`
+        select statement_line_id, confidence::text as confidence, match_reasons from reconciliation_matches
+         where org_id = ${org.orgId} and reconciliation_id = ${reconciliationId}
+      `)).rows;
+      assert.equal(stored.length, 2);
+      for (const row of stored) {
+        const pair = changes.pairs.find((candidate) => candidate.statementLineId === row.statement_line_id);
+        assert.ok(pair && toUnits(pair.confidence) === toUnits(row.confidence), "the stored confidence is the audited one");
+        assert.deepEqual(row.match_reasons, pair.reasons, "the stored reasons are the audited ones");
+      }
       assert.equal(audits.rows[0]!.actor_id, actor);
     } finally {
       await dropScratchOrg(org.orgId);

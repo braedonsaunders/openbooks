@@ -7,7 +7,7 @@ import { randomUUID } from "node:crypto"
 import { db, inDbTransaction, withOrgTransaction, withTransactionSavepoint } from "../platform/db.ts"
 import { fromUnits, sum, toUnits } from "../money/money.ts"
 import { excludePeriodEndJournals } from "../records/period-end-origins.ts"
-import { calendarDaysBetween } from "../platform/civil-date.ts"
+import { assignOneToOne, counterpartyTokens, REVIEW_SCORE_CEILING, scoreLedgerCandidate, type MatchReason, type PairProposal, type PriorPayee } from "./match-scoring"
 import { lockScopeRows, ScopeNotFoundError } from "../organization/subsidiary-scope.ts"
 import { assertRealDate, isBalanceSummaryRow, normalizeAmount } from "./statement-parsers/shared"
 
@@ -17,23 +17,33 @@ import { assertRealDate, isBalanceSummaryRow, normalizeAmount } from "./statemen
 
 export interface AutoMatchResult {
   matched: number;
-  highConfidence: number; // exact amount, ≤ 3 days apart → 0.9
-  mediumConfidence: number; // exact amount, ≤ 14 days apart → 0.7
+  /** Pairs scoring above REVIEW_SCORE_CEILING (confidence above 0.70). */
+  highConfidence: number;
+  /** Pairs at or below the ceiling: held in the review tab. */
+  mediumConfidence: number;
   totals: ReconciliationTotals;
 }
 
+/** Most recent confirmed matches consulted for the same-party evidence. */
+const PRIOR_PAYEE_HISTORY_LIMIT = 500;
+
 /**
  * Auto-match unmatched statement lines to unreconciled, unclaimed posted
- * journal lines on the session's account: exact amount under the account's
- * statement sign convention (liability accounts pair either sign: CSV
- * portals print charges owing-positive while OFX carries them GL-signed)
- * + posting date within 3 days ⇒ confidence 0.9; within 14 days ⇒ 0.7.
- * Each journal line is used at most once; when an exact-date candidate
- * exists it wins over any farther pairing, otherwise the closest date
- * wins. Lines flagged as possible duplicates are never auto-matched — the
- * reviewer clears the flag or excludes the line first — and neither are
- * balance-summary rows ("Opening balance …"), which have no GL counterpart
- * to pair with.
+ * journal lines on the session's account. Eligibility is unchanged and
+ * strict: exact amount under the account's statement sign convention
+ * (liability accounts pair either sign: CSV portals print charges
+ * owing-positive while OFX carries them GL-signed) and dates no more than
+ * LEDGER_MATCH_WINDOW_DAYS apart. Every eligible pair is scored with
+ * explainable reasons (match-scoring.ts): the date lag, asymmetric because
+ * banks post after the book date far more often than before it; a shared
+ * cheque or document reference; shared counterparty words between the
+ * statement text and the journal memo or party; and the same party as an
+ * earlier confirmed match for the same payee. Pairs are assigned one-to-one,
+ * strongest first, with deterministic tie-breaks; the score and reasons are
+ * stored on the match. Lines flagged as possible duplicates are never
+ * auto-matched — the reviewer clears the flag or excludes the line first —
+ * and neither are balance-summary rows ("Opening balance …"), which have no
+ * GL counterpart to pair with.
  */
 export async function autoMatch(reconciliationId: string, ctx: BankingContext): Promise<AutoMatchResult> {
   return db.transaction(async (tx) => {
@@ -57,8 +67,8 @@ export async function autoMatch(reconciliationId: string, ctx: BankingContext): 
     // not by matching: claiming one would double-count the opening.
     const carryStart = (await firstReconciliationCarry(tx, recon, ctx, bookId))?.startDate ?? null;
 
-    const stmtRes = (await tx.execute<{ id: string; posted_on: string; amount: string; description: string | null }>(sql`
-      select l.id, l.posted_on, l.amount, l.description
+    const stmtRes = (await tx.execute<{ id: string; posted_on: string; amount: string; description: string | null; counterparty_ref: string | null }>(sql`
+      select l.id, l.posted_on, l.amount, l.description, l.counterparty_ref
        from bank_statement_lines l
        where l.account_id = ${recon.account_id} and l.org_id = ${ctx.orgId}
          and l.currency = ${recon.currency}
@@ -67,11 +77,20 @@ export async function autoMatch(reconciliationId: string, ctx: BankingContext): 
        order by l.posted_on, l.line_number
        for update
     `));
-    const glRes = (await tx.execute<{ id: string; posting_date: string; amount: string }>(sql`
-      select jl.id, je.posting_date, jl.txn_amount as amount
+    const glRes = (await tx.execute<{
+      id: string; posting_date: string; amount: string; memo: string | null;
+      party_id: string | null; party_name: string | null;
+      document_number: string | null; reference_number: string | null;
+    }>(sql`
+      select jl.id, je.posting_date, jl.txn_amount as amount,
+             coalesce(jl.memo, je.memo) as memo,
+             p.id as party_id, p.display_name as party_name,
+             d.document_number, d.reference_number
         from journal_lines jl
         -- Live entries only: a reversed original is no longer an item to clear, so it is never a candidate.
         join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status = 'posted'
+        left join documents d on d.id = je.source_document_id and d.org_id = je.org_id
+        left join parties p on p.id = coalesce(jl.party_id, d.party_id) and p.org_id = jl.org_id
        where jl.account_id = ${recon.account_id} and jl.org_id = ${ctx.orgId}
          and je.book_id = ${bookId}
          and jl.currency = ${recon.currency}
@@ -95,7 +114,7 @@ export async function autoMatch(reconciliationId: string, ctx: BankingContext): 
     // convention: an owing-positive balance pairs the negated bucket first,
     // a GL-signed (negative) balance the direct one.
     const preferFlipped = inverted && toUnits(recon.statement_balance) >= 0n;
-    const byAmount = new Map<string, { id: string; date: string; flipped: boolean }[]>();
+    const byAmount = new Map<string, { id: string; flipped: boolean }[]>();
     for (const jl of glRes.rows) {
       const units = toUnits(jl.amount);
       const entries = inverted && units !== 0n
@@ -103,72 +122,87 @@ export async function autoMatch(reconciliationId: string, ctx: BankingContext): 
         : [{ key: units.toString(), flipped: false }];
       for (const entry of entries) {
         const list = byAmount.get(entry.key) ?? [];
-        list.push({ id: jl.id, date: jl.posting_date, flipped: entry.flipped });
+        list.push({ id: jl.id, flipped: entry.flipped });
         byAmount.set(entry.key, list);
       }
     }
 
-    const usedJournals = new Set<string>();
-    const pairs: { statementLineId: string; journalLineId: string; confidence: string }[] = [];
     // Balance-summary rows ("Opening balance …", "Opening 1,914.90")
     // never pair: they have no GL counterpart, so pairing one with a
     // same-amount payment is the mismatch this guard exists to prevent.
     // The reviewer matches or excludes the row by hand.
     const pairable = stmtRes.rows.filter((line) => !isBalanceSummaryRow(line.description));
-    const sortedCandidates = (line: { posted_on: string; amount: string }) =>
-      ((byAmount.get(toUnits(line.amount).toString()) ?? [])
-        .filter((c) => !usedJournals.has(c.id))
-        .map((c) => ({ ...c, days: Math.abs(calendarDaysBetween(line.posted_on, c.date)) }))
-        .sort((a, b) => a.days - b.days || Number(b.flipped === preferFlipped) - Number(a.flipped === preferFlipped)));
-    const claim = (
-      line: { id: string },
-      candidate: { id: string; days: number },
-    ) => {
-      usedJournals.add(candidate.id);
-      pairs.push({
-        statementLineId: line.id,
-        journalLineId: candidate.id,
-        confidence: candidate.days <= 3 ? "0.9" : "0.7",
-      });
-    };
-    // Exact-date pairings claim first, so a far line can never steal the
-    // journal a same-day line needs; remaining lines then take the closest
-    // candidate within 14 days.
-    const pending = new Set(pairable.map((line) => line.id));
-    for (const line of pairable) {
-      const exact = sortedCandidates(line).filter((c) => c.days === 0);
-      if (exact.length === 0) continue;
-      claim(line, exact[0]!);
-      pending.delete(line.id);
-    }
-    for (const line of pairable) {
-      if (!pending.has(line.id)) continue;
-      const [best] = sortedCandidates(line);
-      if (!best || best.days > 14) continue;
-      claim(line, best);
-      pending.delete(line.id);
-    }
+    const priorPayees = pairable.length > 0 && glRes.rows.some((row) => row.party_id)
+      ? await confirmedPayees(tx, ctx.orgId, recon.account_id)
+      : [];
+    const journalById = new Map(glRes.rows.map((row, index) => [row.id, { row, index }]));
+    // Every eligible pair is scored; one-to-one assignment then takes the
+    // strongest first. The same-day date score outranks every other date,
+    // so a farther line takes a same-day line's journal only on stronger
+    // reference, counterparty or history evidence.
+    const proposals: (PairProposal & { confidence: string; reasons: MatchReason[] })[] = [];
+    pairable.forEach((line, lineOrder) => {
+      for (const bucket of byAmount.get(toUnits(line.amount).toString()) ?? []) {
+        const journal = journalById.get(bucket.id)!;
+        const scored = scoreLedgerCandidate(
+          { id: line.id, postedOn: line.posted_on, description: line.description, counterpartyRef: line.counterparty_ref },
+          {
+            id: journal.row.id,
+            postingDate: journal.row.posting_date,
+            memo: journal.row.memo,
+            partyId: journal.row.party_id,
+            partyName: journal.row.party_name,
+            references: [journal.row.reference_number, journal.row.document_number],
+          },
+          priorPayees,
+        );
+        if (!scored) continue;
+        proposals.push({
+          lineId: line.id,
+          candidateId: bucket.id,
+          score: scored.score,
+          lagDays: scored.lagDays,
+          preferred: bucket.flipped === preferFlipped,
+          lineOrder,
+          candidateOrder: journal.index,
+          confidence: scored.confidence,
+          reasons: scored.reasons,
+        });
+      }
+    });
+    const pairs = assignOneToOne(proposals).map((proposal) => ({
+      statementLineId: proposal.lineId,
+      journalLineId: proposal.candidateId,
+      score: proposal.score,
+      confidence: proposal.confidence,
+      reasons: proposal.reasons,
+    }));
+    const highConfidence = pairs.filter((p) => p.score > REVIEW_SCORE_CEILING).length;
 
     if (pairs.length > 0) {
       // Each automatic pair is its own group: unmatching one line removes
       // only its pair, exactly the pre-group granularity.
       await tx.execute(sql`
         insert into reconciliation_matches
-          (org_id, reconciliation_id, statement_line_id, journal_line_id, group_id, matched_by, confidence, created_by)
+          (org_id, reconciliation_id, statement_line_id, journal_line_id, group_id, matched_by, confidence, match_reasons, created_by)
         values ${sql.join(
           pairs.map(
             (p) =>
-              sql`(${ctx.orgId}, ${recon.id}, ${p.statementLineId}, ${p.journalLineId}, ${randomUUID()}, 'auto', ${p.confidence}, ${ctx.userId})`,
+              sql`(${ctx.orgId}, ${recon.id}, ${p.statementLineId}, ${p.journalLineId}, ${randomUUID()}, 'auto', ${p.confidence}, ${JSON.stringify(p.reasons)}::jsonb, ${ctx.userId})`,
           ),
           sql`, `,
         )}
       `);
-      await tx.execute(sql`
+      const updated = await tx.execute<{ id: string }>(sql`
         update bank_statement_lines
            set match_status = 'matched', updated_at = now(), updated_by = ${ctx.userId}
          where id = any(${sql.param(pairs.map((p) => p.statementLineId))})
            and org_id = ${ctx.orgId}
+        returning id
       `);
+      if (updated.rows.length !== pairs.length) {
+        throw new BankingError("Statement lines changed while auto-matching; run auto-match again");
+      }
       // One row per auto-match run, carrying the matched pairs — per-pair
       // rows would spam the log on large sessions, while no row leaves
       // machine-made matches unattributed.
@@ -180,12 +214,13 @@ export async function autoMatch(reconciliationId: string, ctx: BankingContext): 
            ${JSON.stringify({
              operation: "auto_match",
              matched: pairs.length,
-             highConfidence: pairs.filter((p) => p.confidence === "0.9").length,
-             mediumConfidence: pairs.filter((p) => p.confidence === "0.7").length,
+             highConfidence,
+             mediumConfidence: pairs.length - highConfidence,
              pairs: pairs.map((p) => ({
                statementLineId: p.statementLineId,
                journalLineId: p.journalLineId,
                confidence: p.confidence,
+               reasons: p.reasons,
              })),
            })}::jsonb,
            ${ctx.userId})
@@ -195,11 +230,36 @@ export async function autoMatch(reconciliationId: string, ctx: BankingContext): 
     const totals = await refreshStatus(recon, ctx, tx);
     return {
       matched: pairs.length,
-      highConfidence: pairs.filter((p) => p.confidence === "0.9").length,
-      mediumConfidence: pairs.filter((p) => p.confidence === "0.7").length,
+      highConfidence,
+      mediumConfidence: pairs.length - highConfidence,
       totals,
     };
   });
+}
+
+/**
+ * Payee words of the account's confirmed matches and the party each cleared:
+ * manual and rule matches, plus automatic matches inside signed-off
+ * sessions. Unreviewed automatic matches are not evidence for new ones.
+ */
+async function confirmedPayees(tx: BankingTransaction, orgId: string, accountId: string): Promise<PriorPayee[]> {
+  const rows = (await tx.execute<{ party_id: string; description: string | null; counterparty_ref: string | null }>(sql`
+    select coalesce(jl.party_id, d.party_id) as party_id, sl.description, sl.counterparty_ref
+      from reconciliation_matches m
+      join reconciliations r on r.id = m.reconciliation_id and r.org_id = m.org_id
+      join bank_statement_lines sl on sl.id = m.statement_line_id and sl.org_id = m.org_id
+      join journal_lines jl on jl.id = m.journal_line_id and jl.org_id = m.org_id
+      join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id
+      left join documents d on d.id = je.source_document_id and d.org_id = je.org_id
+     where m.org_id = ${orgId} and r.account_id = ${accountId}
+       and (m.matched_by in ('manual', 'rule') or r.status = 'signed_off')
+       and coalesce(jl.party_id, d.party_id) is not null
+     order by m.created_at desc, m.id
+     limit ${PRIOR_PAYEE_HISTORY_LIMIT}
+  `)).rows;
+  return rows
+    .map((row) => ({ partyId: row.party_id, tokens: counterpartyTokens(row.description, row.counterparty_ref) }))
+    .filter((payee) => payee.tokens.length > 0);
 }
 
 type MatchOptions = {
@@ -260,7 +320,7 @@ async function createMatchInTransaction(
   `));
   if (stmt.rows.length !== statementLineIds.length) {
     throw new BankingError(
-      "One or more statement lines are unavailable, outside the reconciliation cutoff, or already matched",
+      "One or more statement lines are unavailable, outside the reconciliation cutoff, or already matched; refresh Match Bank Data to see their current state",
     );
   }
   if (stmt.rows.some((row) => row.possible_duplicate_of)) {

@@ -196,6 +196,13 @@ export const reconciliationMatches = pgTable(
     groupId: uuid("group_id").notNull(),
     matchedBy: text("matched_by", { enum: ["auto", "manual", "rule"] }).notNull(),
     confidence: money("confidence"), // 0..1 for auto matches
+    /**
+     * Structured reasons behind an automatic match's confidence
+     * (engine/src/banking/match-scoring.ts MatchReason[]). Null when none
+     * were recorded: manual and rule matches, and automatic matches made
+     * before reasons were kept (0736).
+     */
+    matchReasons: jsonb("match_reasons"),
     ...auditColumns,
   },
   (t) => [
@@ -203,6 +210,7 @@ export const reconciliationMatches = pgTable(
     index("recon_matches_journal_line").on(t.journalLineId),
     uniqueIndex("recon_matches_pair_claim").on(t.orgId, t.statementLineId, t.journalLineId),
     index("recon_matches_group").on(t.orgId, t.groupId),
+    check("reconciliation_matches_reasons_shape", sql`${t.matchReasons} is null or jsonb_typeof(${t.matchReasons}) = 'array'`),
   ],
 );
 
