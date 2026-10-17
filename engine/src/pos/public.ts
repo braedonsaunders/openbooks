@@ -39,4 +39,4 @@ export {
   type PosReceipt,
   type PosSaleLineInput,
 } from "./sales.ts";
-export { holdCart, listHeldCarts, resumeHeldCart, type HeldCartContent } from "./held-carts.ts";
+export { holdCart, listHeldCarts, resumeHeldCart, type HeldCartContent, type ResumedCart } from "./held-carts.ts";

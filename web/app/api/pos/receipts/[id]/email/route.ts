@@ -13,7 +13,8 @@ export const POST = defineRoute({
   feature: 'posRegister',
   params: z.object({ id: uuidId }),
   invalidParamsNotFound: 'record',
-  body: z.object({ to: z.string().trim().max(320).nullable().optional() }).strict(),
+  // Null sends to the email recorded on the sale's customer.
+  body: z.object({ to: z.string().trim().max(320).nullable() }).strict(),
   handler: async ({ authz, params, body }) => {
     try {
       const sent = await emailPosReceipt({

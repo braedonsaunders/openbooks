@@ -69,8 +69,13 @@ export async function listHeldCarts(orgId: string, registerId: string, allowedSu
   });
 }
 
-/** Resume a held cart: returns its content and removes it, exactly once. */
-export async function resumeHeldCart(orgId: string, registerId: string, heldCartId: string, allowedSubsidiaryIds: ReadonlySet<string> | null): Promise<HeldCartContent> {
+export interface ResumedCart extends HeldCartContent {
+  customerName: string | null;
+  items: Record<string, { name: string; code: string | null }>;
+}
+
+/** Resume a held cart: returns its content with current item and customer names, and removes it, exactly once. */
+export async function resumeHeldCart(orgId: string, registerId: string, heldCartId: string, allowedSubsidiaryIds: ReadonlySet<string> | null): Promise<ResumedCart> {
   if (!isUuid(heldCartId)) {
     throw posRefusal("That held cart does not exist.", "held_cart_not_found", 404, "Reload the held carts.");
   }
@@ -83,6 +88,14 @@ export async function resumeHeldCart(orgId: string, registerId: string, heldCart
     if (rows.length !== 1) {
       throw posRefusal("That held cart was already resumed or does not exist.", "held_cart_not_found", 404, "Reload the held carts.");
     }
-    return rows[0]!.cart;
+    const cart = rows[0]!.cart;
+    const itemIds = [...new Set(cart.lines.map((line) => line.itemId).filter((id) => isUuid(id)))];
+    const items = itemIds.length === 0 ? [] : (await db.execute<{ id: string; name: string; code: string | null }>(sql`
+      select id, name, code from items where org_id = ${orgId} and id in (${sql.join(itemIds.map((id) => sql`${id}`), sql`, `)})`)).rows;
+    const customerName = cart.customerId
+      ? (await db.execute<{ name: string }>(sql`
+          select display_name as name from parties where org_id = ${orgId} and id = ${cart.customerId}`)).rows[0]?.name ?? null
+      : null;
+    return { ...cart, customerName, items: Object.fromEntries(items.map((item) => [item.id, { name: item.name, code: item.code }])) };
   });
 }

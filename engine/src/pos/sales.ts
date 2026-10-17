@@ -355,7 +355,10 @@ async function planTenders(
       );
     }
     if (payment.kind === "cash") continue;
-    const amountUnits = parsePosAmount(payment.amount ?? "", `${label} amount`, register.currencyDecimals);
+    // A refund paid back through one tender takes the whole refund: the
+    // register cannot know the refund total before the writer prices it.
+    const wholeRefund = mode === "refund" && payments.length === 1 && (payment.amount === undefined || payment.amount === null || payment.amount === "");
+    const amountUnits = wholeRefund ? totalUnits : parsePosAmount(payment.amount ?? "", `${label} amount`, register.currencyDecimals);
     if (amountUnits <= 0n) throw posRefusal(`${label} amount must be greater than zero.`, "tender_mismatch", 422, "Enter the amount paid with this tender, or remove it.");
     nonCashUnits += amountUnits;
     if (payment.kind === "stored_value") {
