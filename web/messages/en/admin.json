@@ -2872,6 +2872,21 @@
           "reason": "Change reason"
     },
     "entities": {
+      "pos-registers": {
+        "title": "Registers",
+        "singular": "Register",
+        "description": "Point-of-sale registers: the legal entity, location and warehouse each till sells from, its walk-in customer and price level, and the accounts its tenders settle into."
+      },
+      "pos-cash-reasons": {
+        "title": "Register cash reasons",
+        "singular": "Cash reason",
+        "description": "Reasons a cashier pays cash into or out of the drawer, each posting to its own account."
+      },
+      "pos-quick-keys": {
+        "title": "Quick keys",
+        "singular": "Quick key",
+        "description": "Favourite items shown as buttons on the register screen."
+      },
       "usage-meters": {
         "title": "Usage meters",
         "singular": "Usage meter",
@@ -4595,9 +4610,24 @@
       "resetRule": "Reset rule",
       "segmentKey": "Segment key",
       "recordType": "Record type",
-      "mode": "Policy"
+      "mode": "Policy",
+      "registerId": "Register",
+      "defaultCustomerId": "Walk-in customer",
+      "cashAccountId": "Cash drawer account",
+      "cardAccountId": "Card clearing account",
+      "otherAccountId": "Other tender account",
+      "acceptsStoredValue": "Accepts gift cards and store credit",
+      "receiptHeader": "Receipt header",
+      "receiptFooter": "Receipt footer",
+      "denominations": "Cash denominations"
     },
     "fieldHelp": {
+      "posCashAccount": "The till's cash account. Cash sales, cash refunds, pay-ins, pay-outs and the closing over/short post here.",
+      "posCardAccount": "Card payments settle into this clearing account. Leave blank if this register does not take cards.",
+      "posOtherAccount": "Other payments, such as vouchers or cheques, settle into this account. Leave blank if this register does not take them.",
+      "posDenominations": "Notes and coins counted when the drawer opens and closes, for example 100, 50, 20, 10, 5, 1, 0.25. Leave empty to count one total.",
+      "posDefaultCustomer": "Sales that name no customer are recorded against this customer. Leave blank to record them without a customer.",
+      "posQuickKeyRegister": "Leave blank to show this key on every register.",
       "initialVacationable": "Used only to create the first dated treatment. For an existing component, change vacation-base inclusion in its Statutory treatments history.",
       "componentTreatmentPayDate": "Inclusive dates apply to the payroll pay date, including retroactive and final pay. A worker-compensation group overrides the entire component-wide treatment.",
       "componentTreatmentVacationable": "Include this earning in vacation and bankable earnings bases on the covered payroll pay dates.",
@@ -4808,6 +4838,10 @@
       "taxRateEffectiveTo": "Last transaction date covered by this rate, including that date. Leave blank for no end date. If the next rate starts July 1, end this rate June 30."
     },
     "options": {
+      "posCashDirection": {
+        "payIn": "Pay in",
+        "payOut": "Pay out"
+      },
       "withholdingCondominiumPayer": "Condominium payer",
       "storedValueKind": {
         "giftCard": "Gift card",

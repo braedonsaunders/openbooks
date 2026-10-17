@@ -2872,6 +2872,21 @@
           "reason": "变更原因"
     },
     "entities": {
+      "pos-registers": {
+        "title": "收银台",
+        "singular": "收银台",
+        "description": "销售点收银台：每台收银台销售所属的法人、地点和仓库，散客和价格等级，以及各支付方式的结算科目。"
+      },
+      "pos-cash-reasons": {
+        "title": "收银现金事由",
+        "singular": "现金事由",
+        "description": "向钱箱存入或取出现金的事由，每个事由记入各自的科目。"
+      },
+      "pos-quick-keys": {
+        "title": "快捷键",
+        "singular": "快捷键",
+        "description": "在收银界面以按钮形式显示的常用商品。"
+      },
       "usage-meters": {
         "title": "用量计量器",
         "singular": "用量计量器",
@@ -4595,9 +4610,24 @@
       "termMonths": "续订期限（月）",
       "settlementTaxCodeId": "结算税码",
       "recordType": "记录类型",
-      "mode": "政策"
+      "mode": "政策",
+      "registerId": "收银台",
+      "defaultCustomerId": "散客",
+      "cashAccountId": "钱箱现金科目",
+      "cardAccountId": "银行卡清算科目",
+      "otherAccountId": "其他支付科目",
+      "acceptsStoredValue": "接受礼品卡和店铺余额",
+      "receiptHeader": "收据抬头",
+      "receiptFooter": "收据页脚",
+      "denominations": "现金面额"
     },
     "fieldHelp": {
+      "posCashAccount": "收银台的现金科目。现金销售、现金退款、存入、取出以及结班长短款都记入此科目。",
+      "posCardAccount": "银行卡付款结算到此清算科目。如果此收银台不收银行卡，请留空。",
+      "posOtherAccount": "代金券、支票等其他付款结算到此科目。如果此收银台不收，请留空。",
+      "posDenominations": "开班和结班时清点的纸币和硬币，例如 100, 50, 20, 10, 5, 1, 0.5。留空则只清点一个总额。",
+      "posDefaultCustomer": "未指定客户的销售记入此客户。留空则不记录客户。",
+      "posQuickKeyRegister": "留空则在所有收银台显示此快捷键。",
       "initialVacationable": "仅用于创建首个带日期的处理规则。现有项目请在法定处理历史中修改。",
       "componentTreatmentPayDate": "起止日期均包含在内，按工资支付日期适用，包括补发工资和离职结算。工伤组覆盖整个项目的处理规则。",
       "componentTreatmentVacationable": "在涵盖的工资支付日期，将此收入计入假期工资和可累积收入基数。",
@@ -4808,6 +4838,10 @@
       "taxRateEffectiveTo": "此税率适用的最后一个交易日期，包含当天。不设结束日期时请留空。如果下一税率从7月1日开始，此税率应于6月30日结束。"
     },
     "options": {
+      "posCashDirection": {
+        "payIn": "存入",
+        "payOut": "取出"
+      },
       "withholdingCondominiumPayer": "公寓业主共同体付款人",
       "storedValueKind": {
         "giftCard": "礼品卡",

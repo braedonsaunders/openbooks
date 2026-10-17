@@ -35,6 +35,7 @@ import { CHART_ENTITIES } from './entities/chart'
 import { BILLING_ENTITIES } from './entities/billing'
 import { SALES_SETUP_ENTITIES } from './entities/sales'
 import { STORED_VALUE_ENTITIES } from './entities/stored-value'
+import { POS_ENTITIES } from './entities/pos'
 import { EINVOICING_ENTITIES } from './entities/einvoicing'
 import { REBATE_AGREEMENTS_ENTITY } from './entities/rebates'
 import { RENEWAL_POLICIES_ENTITY } from './entities/renewals'
@@ -79,6 +80,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
   ...BILLING_ENTITIES,
   ...SALES_SETUP_ENTITIES,
   ...STORED_VALUE_ENTITIES,
+  ...POS_ENTITIES,
   ...EINVOICING_ENTITIES,
   ...REVENUE_ENTITIES,
   REBATE_AGREEMENTS_ENTITY,

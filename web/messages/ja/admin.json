@@ -2959,6 +2959,21 @@
           "reason": "変更理由"
     },
     "entities": {
+      "pos-registers": {
+        "title": "レジ",
+        "singular": "レジ",
+        "description": "POSレジ：各レジが販売する法人・拠点・倉庫、店頭客と価格レベル、支払方法ごとの決済勘定。"
+      },
+      "pos-cash-reasons": {
+        "title": "レジ現金理由",
+        "singular": "現金理由",
+        "description": "ドロワーへの現金の入金・出金理由。理由ごとに専用の勘定へ計上されます。"
+      },
+      "pos-quick-keys": {
+        "title": "クイックキー",
+        "singular": "クイックキー",
+        "description": "レジ画面にボタンとして表示するお気に入り品目。"
+      },
       "usage-meters": {
         "title": "使用量メーター",
         "singular": "使用量メーター",
@@ -4682,9 +4697,24 @@
       "termMonths": "更新期間（月）",
       "settlementTaxCodeId": "決済の税コード",
       "recordType": "レコードの種類",
-      "mode": "方針"
+      "mode": "方針",
+      "registerId": "レジ",
+      "defaultCustomerId": "店頭客",
+      "cashAccountId": "レジ現金勘定",
+      "cardAccountId": "カード仮勘定",
+      "otherAccountId": "その他支払勘定",
+      "acceptsStoredValue": "ギフトカードとストアクレジットを受け付ける",
+      "receiptHeader": "レシートヘッダー",
+      "receiptFooter": "レシートフッター",
+      "denominations": "現金の金種"
     },
     "fieldHelp": {
+      "posCashAccount": "レジの現金勘定。現金売上、現金返金、入金、出金、締め時の過不足がここに計上されます。",
+      "posCardAccount": "カード支払はこの仮勘定で決済されます。カードを受け付けない場合は空欄にします。",
+      "posOtherAccount": "商品券や小切手などその他の支払はこの勘定で決済されます。受け付けない場合は空欄にします。",
+      "posDenominations": "ドロワーの開始時と締め時に数える紙幣と硬貨（例：10000, 5000, 1000, 500, 100, 10, 1）。合計のみを数える場合は空欄にします。",
+      "posDefaultCustomer": "顧客を指定しない売上はこの顧客で記録されます。顧客なしで記録する場合は空欄にします。",
+      "posQuickKeyRegister": "すべてのレジに表示する場合は空欄にします。",
       "initialVacationable": "最初の日付付き取扱いの作成にのみ使用します。既存の項目は法定取扱いの履歴で変更してください。",
       "componentTreatmentPayDate": "開始日と終了日を含め、遡及給与と最終給与の支払日に適用します。労災グループは項目全体の取扱いを上書きします。",
       "componentTreatmentVacationable": "対象支払日にこの収入を休暇給と積立対象収入の計算基準に含めます。",
@@ -4895,6 +4925,10 @@
       "taxRateEffectiveTo": "この税率が適用される最後の取引日です。この日も含みます。終了日がない場合は空欄にします。次の税率が7月1日から始まる場合、この税率の終了日は6月30日にします。"
     },
     "options": {
+      "posCashDirection": {
+        "payIn": "入金",
+        "payOut": "出金"
+      },
       "withholdingCondominiumPayer": "集合住宅管理組合の支払者",
       "storedValueKind": {
         "giftCard": "ギフトカード",

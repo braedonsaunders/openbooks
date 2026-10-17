@@ -14,6 +14,7 @@ export { sealSecret, unsealSecret, unsealLegacyEmailSecret, type SealedSecret } 
 export type { EmailOut }
 export { shipmentTrackingEmail } from './shipment-tracking'
 export { returnReceivedEmail, returnDecisionEmail } from './return-authorization'
+export { posReceiptEmail, type PosReceiptEmail, type PosReceiptEmailLine } from './pos-receipt'
 export { portalMagicLinkEmail } from './portal-magic-link'
 export { paymentMethodSetupEmail } from './payment-method-setup'
 export { scheduleChangeEmail } from './schedule-change'

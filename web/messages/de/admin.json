@@ -2959,6 +2959,21 @@
           "reason": "Änderungsgrund"
     },
     "entities": {
+      "pos-registers": {
+        "title": "Kassen",
+        "singular": "Kasse",
+        "description": "Kassen (Point of Sale): Gesellschaft, Standort und Lager, aus denen jede Kasse verkauft, ihr Laufkunde und ihre Preisstufe sowie die Konten, auf die ihre Zahlungsarten gebucht werden."
+      },
+      "pos-cash-reasons": {
+        "title": "Kassen-Bargeldgründe",
+        "singular": "Bargeldgrund",
+        "description": "Gründe, aus denen Bargeld in die Kassenschublade eingezahlt oder entnommen wird, jeweils mit eigenem Konto."
+      },
+      "pos-quick-keys": {
+        "title": "Schnelltasten",
+        "singular": "Schnelltaste",
+        "description": "Bevorzugte Artikel als Schaltflächen auf dem Kassenbildschirm."
+      },
       "usage-meters": {
         "title": "Nutzungsmesser",
         "singular": "Nutzungsmesser",
@@ -4682,9 +4697,24 @@
       "termMonths": "Verlängerungsdauer in Monaten",
       "settlementTaxCodeId": "Steuerschlüssel für die Abrechnung",
       "recordType": "Datensatztyp",
-      "mode": "Richtlinie"
+      "mode": "Richtlinie",
+      "registerId": "Kasse",
+      "defaultCustomerId": "Laufkunde",
+      "cashAccountId": "Kassenbestandskonto",
+      "cardAccountId": "Kartenverrechnungskonto",
+      "otherAccountId": "Konto für sonstige Zahlungen",
+      "acceptsStoredValue": "Akzeptiert Geschenkkarten und Guthaben",
+      "receiptHeader": "Belegkopf",
+      "receiptFooter": "Belegfuß",
+      "denominations": "Bargeldstückelung"
     },
     "fieldHelp": {
+      "posCashAccount": "Das Bargeldkonto der Kasse. Barverkäufe, Barerstattungen, Ein- und Auszahlungen sowie die Kassendifferenz beim Abschluss werden hier gebucht.",
+      "posCardAccount": "Kartenzahlungen werden auf dieses Verrechnungskonto gebucht. Leer lassen, wenn diese Kasse keine Karten annimmt.",
+      "posOtherAccount": "Sonstige Zahlungen wie Gutscheine oder Schecks werden auf dieses Konto gebucht. Leer lassen, wenn diese Kasse sie nicht annimmt.",
+      "posDenominations": "Scheine und Münzen, die beim Öffnen und Schließen der Schublade gezählt werden, zum Beispiel 100, 50, 20, 10, 5, 1, 0,25. Leer lassen, um nur eine Summe zu zählen.",
+      "posDefaultCustomer": "Verkäufe ohne Kunden werden diesem Kunden zugeordnet. Leer lassen, um sie ohne Kunden zu erfassen.",
+      "posQuickKeyRegister": "Leer lassen, um diese Taste an jeder Kasse anzuzeigen.",
       "initialVacationable": "Wird nur zur Erstellung der ersten datierten Behandlung verwendet. Ändern Sie bei vorhandenen Komponenten den Verlauf der gesetzlichen Behandlungen.",
       "componentTreatmentPayDate": "Die einschließlich geltenden Daten beziehen sich auf den Zahltag, auch bei Nachzahlungen und Abschlusszahlungen. Die Unfallversicherungsgruppe ersetzt die gesamte Behandlung.",
       "componentTreatmentVacationable": "Dieses Entgelt an den abgedeckten Zahltagen in die Urlaubsbasis und die Basis ansparbarer Entgelte einbeziehen.",
@@ -4895,6 +4925,10 @@
       "taxRateEffectiveTo": "Letztes von diesem Steuersatz abgedecktes Transaktionsdatum, einschließlich dieses Tages. Ohne Enddatum leer lassen. Beginnt der nächste Satz am 1. Juli, endet dieser Satz am 30. Juni."
     },
     "options": {
+      "posCashDirection": {
+        "payIn": "Einzahlung",
+        "payOut": "Auszahlung"
+      },
       "withholdingCondominiumPayer": "Wohnungseigentümergemeinschaft als Zahler",
       "storedValueKind": {
         "giftCard": "Geschenkkarte",

@@ -2797,6 +2797,21 @@
           "reason": "Motivo del cambio"
     },
     "entities": {
+      "pos-registers": {
+        "title": "Cajas",
+        "singular": "Caja",
+        "description": "Cajas de punto de venta: la entidad legal, ubicación y almacén desde los que vende cada caja, su cliente ocasional y nivel de precios, y las cuentas donde se liquidan sus formas de pago."
+      },
+      "pos-cash-reasons": {
+        "title": "Motivos de efectivo de caja",
+        "singular": "Motivo de efectivo",
+        "description": "Motivos por los que se ingresa o retira efectivo del cajón, cada uno contabilizado en su propia cuenta."
+      },
+      "pos-quick-keys": {
+        "title": "Teclas rápidas",
+        "singular": "Tecla rápida",
+        "description": "Artículos favoritos mostrados como botones en la pantalla de caja."
+      },
       "usage-meters": {
         "title": "Medidores de uso",
         "singular": "Medidor de uso",
@@ -4520,9 +4535,24 @@
       "termMonths": "Plazo de renovación en meses",
       "settlementTaxCodeId": "Código fiscal de la liquidación",
       "recordType": "Tipo de registro",
-      "mode": "Política"
+      "mode": "Política",
+      "registerId": "Caja",
+      "defaultCustomerId": "Cliente ocasional",
+      "cashAccountId": "Cuenta del cajón de efectivo",
+      "cardAccountId": "Cuenta puente de tarjetas",
+      "otherAccountId": "Cuenta de otros pagos",
+      "acceptsStoredValue": "Acepta tarjetas regalo y saldo a favor",
+      "receiptHeader": "Encabezado del recibo",
+      "receiptFooter": "Pie del recibo",
+      "denominations": "Denominaciones de efectivo"
     },
     "fieldHelp": {
+      "posCashAccount": "La cuenta de efectivo de la caja. Aquí se contabilizan las ventas y reembolsos en efectivo, los ingresos y retiros y la diferencia del cierre.",
+      "posCardAccount": "Los pagos con tarjeta se liquidan en esta cuenta puente. Déjela en blanco si esta caja no acepta tarjetas.",
+      "posOtherAccount": "Otros pagos, como vales o cheques, se liquidan en esta cuenta. Déjela en blanco si esta caja no los acepta.",
+      "posDenominations": "Billetes y monedas que se cuentan al abrir y cerrar el cajón, por ejemplo 100, 50, 20, 10, 5, 1, 0,25. Déjelo vacío para contar un solo total.",
+      "posDefaultCustomer": "Las ventas sin cliente se registran a nombre de este cliente. Déjelo en blanco para registrarlas sin cliente.",
+      "posQuickKeyRegister": "Déjelo en blanco para mostrar esta tecla en todas las cajas.",
       "initialVacationable": "Solo se usa para crear el primer tratamiento fechado. Para un componente existente, cambie su historial de tratamientos legales.",
       "componentTreatmentPayDate": "Las fechas inclusivas se aplican a la fecha de pago, incluidos pagos retroactivos y finales. El grupo de compensación sustituye todo el tratamiento.",
       "componentTreatmentVacationable": "Incluir este ingreso en las bases de vacaciones y de ingresos acumulables en las fechas de pago cubiertas.",
@@ -4733,6 +4763,10 @@
       "taxRateEffectiveTo": "Última fecha de transacción cubierta por esta tasa, incluida esa fecha. Déjelo en blanco si no hay fecha de fin. Si la siguiente tasa comienza el 1 de julio, finalice esta tasa el 30 de junio."
     },
     "options": {
+      "posCashDirection": {
+        "payIn": "Ingreso",
+        "payOut": "Retiro"
+      },
       "withholdingCondominiumPayer": "Pagador: comunidad de propietarios",
       "storedValueKind": {
         "giftCard": "Tarjeta regalo",

@@ -2797,6 +2797,21 @@
           "reason": "Motif du changement"
     },
     "entities": {
+      "pos-registers": {
+        "title": "Caisses",
+        "singular": "Caisse",
+        "description": "Caisses de point de vente : l'entité juridique, l'emplacement et l'entrepôt de chaque caisse, son client de passage et son niveau de prix, et les comptes sur lesquels ses moyens de paiement sont réglés."
+      },
+      "pos-cash-reasons": {
+        "title": "Motifs d'espèces de caisse",
+        "singular": "Motif d'espèces",
+        "description": "Motifs d'entrée ou de sortie d'espèces du tiroir-caisse, chacun comptabilisé sur son propre compte."
+      },
+      "pos-quick-keys": {
+        "title": "Touches rapides",
+        "singular": "Touche rapide",
+        "description": "Articles favoris affichés sous forme de boutons sur l'écran de caisse."
+      },
       "usage-meters": {
         "title": "Compteurs d’usage",
         "singular": "Compteur d’usage",
@@ -4520,9 +4535,24 @@
       "termMonths": "Durée du renouvellement en mois",
       "settlementTaxCodeId": "Code fiscal du règlement",
       "recordType": "Type d’enregistrement",
-      "mode": "Politique"
+      "mode": "Politique",
+      "registerId": "Caisse",
+      "defaultCustomerId": "Client de passage",
+      "cashAccountId": "Compte du tiroir-caisse",
+      "cardAccountId": "Compte d'attente cartes",
+      "otherAccountId": "Compte des autres paiements",
+      "acceptsStoredValue": "Accepte les cartes-cadeaux et avoirs",
+      "receiptHeader": "En-tête du ticket",
+      "receiptFooter": "Pied du ticket",
+      "denominations": "Coupures d'espèces"
     },
     "fieldHelp": {
+      "posCashAccount": "Le compte d'espèces de la caisse. Les ventes et remboursements en espèces, les entrées et sorties d'espèces et l'écart de clôture y sont comptabilisés.",
+      "posCardAccount": "Les paiements par carte sont réglés sur ce compte d'attente. Laissez vide si cette caisse n'accepte pas les cartes.",
+      "posOtherAccount": "Les autres paiements, comme les bons ou chèques, sont réglés sur ce compte. Laissez vide si cette caisse ne les accepte pas.",
+      "posDenominations": "Billets et pièces comptés à l'ouverture et à la clôture du tiroir, par exemple 100, 50, 20, 10, 5, 1, 0,25. Laissez vide pour compter un seul total.",
+      "posDefaultCustomer": "Les ventes sans client sont enregistrées au nom de ce client. Laissez vide pour les enregistrer sans client.",
+      "posQuickKeyRegister": "Laissez vide pour afficher cette touche sur toutes les caisses.",
       "initialVacationable": "Utilisé uniquement pour créer le premier traitement daté. Pour une composante existante, modifiez son historique des traitements légaux.",
       "componentTreatmentPayDate": "Les dates inclusives s’appliquent à la date de paiement, y compris les paies rétroactives et finales. Le groupe d’indemnisation remplace le traitement complet.",
       "componentTreatmentVacationable": "Inclure ce gain dans les bases de vacances et de gains accumulables aux dates de paiement couvertes.",
@@ -4733,6 +4763,10 @@
       "taxRateEffectiveTo": "Dernière date de transaction couverte par ce taux, cette date incluse. Laissez vide pour ne pas définir de date de fin. Si le taux suivant commence le 1er juillet, terminez ce taux le 30 juin."
     },
     "options": {
+      "posCashDirection": {
+        "payIn": "Entrée",
+        "payOut": "Sortie"
+      },
       "withholdingCondominiumPayer": "Payeur : copropriété",
       "storedValueKind": {
         "giftCard": "Carte cadeau",

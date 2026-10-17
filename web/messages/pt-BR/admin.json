@@ -2872,6 +2872,21 @@
           "reason": "Motivo da alteração"
     },
     "entities": {
+      "pos-registers": {
+        "title": "Caixas",
+        "singular": "Caixa",
+        "description": "Caixas de ponto de venda: a entidade legal, o local e o depósito de onde cada caixa vende, seu cliente avulso e nível de preço, e as contas em que suas formas de pagamento são liquidadas."
+      },
+      "pos-cash-reasons": {
+        "title": "Motivos de dinheiro do caixa",
+        "singular": "Motivo de dinheiro",
+        "description": "Motivos para entrada ou saída de dinheiro da gaveta, cada um lançado em sua própria conta."
+      },
+      "pos-quick-keys": {
+        "title": "Teclas rápidas",
+        "singular": "Tecla rápida",
+        "description": "Itens favoritos exibidos como botões na tela do caixa."
+      },
       "usage-meters": {
         "title": "Medidores de uso",
         "singular": "Medidor de uso",
@@ -4595,9 +4610,24 @@
       "termMonths": "Prazo de renovação em meses",
       "settlementTaxCodeId": "Código tributário da liquidação",
       "recordType": "Tipo de registro",
-      "mode": "Política"
+      "mode": "Política",
+      "registerId": "Caixa",
+      "defaultCustomerId": "Cliente avulso",
+      "cashAccountId": "Conta da gaveta de dinheiro",
+      "cardAccountId": "Conta transitória de cartões",
+      "otherAccountId": "Conta de outros pagamentos",
+      "acceptsStoredValue": "Aceita cartões-presente e crédito em loja",
+      "receiptHeader": "Cabeçalho do recibo",
+      "receiptFooter": "Rodapé do recibo",
+      "denominations": "Cédulas e moedas"
     },
     "fieldHelp": {
+      "posCashAccount": "A conta de dinheiro do caixa. Vendas e reembolsos em dinheiro, entradas, saídas e a diferença do fechamento são lançados aqui.",
+      "posCardAccount": "Pagamentos com cartão são liquidados nesta conta transitória. Deixe em branco se este caixa não aceita cartões.",
+      "posOtherAccount": "Outros pagamentos, como vales ou cheques, são liquidados nesta conta. Deixe em branco se este caixa não os aceita.",
+      "posDenominations": "Cédulas e moedas contadas ao abrir e fechar a gaveta, por exemplo 100, 50, 20, 10, 5, 1, 0,25. Deixe vazio para contar um único total.",
+      "posDefaultCustomer": "Vendas sem cliente são registradas para este cliente. Deixe em branco para registrá-las sem cliente.",
+      "posQuickKeyRegister": "Deixe em branco para mostrar esta tecla em todos os caixas.",
       "initialVacationable": "Usado apenas para criar o primeiro tratamento datado. Para um componente existente, altere seu histórico de tratamentos legais.",
       "componentTreatmentPayDate": "As datas inclusivas se aplicam à data de pagamento, incluindo pagamentos retroativos e finais. O grupo de compensação substitui todo o tratamento.",
       "componentTreatmentVacationable": "Incluir este ganho nas bases de férias e ganhos acumuláveis nas datas de pagamento cobertas.",
@@ -4808,6 +4838,10 @@
       "taxRateEffectiveTo": "Última data de transação abrangida por esta alíquota, incluindo essa data. Deixe em branco para não definir uma data final. Se a próxima alíquota começar em 1º de julho, encerre esta em 30 de junho."
     },
     "options": {
+      "posCashDirection": {
+        "payIn": "Entrada",
+        "payOut": "Saída"
+      },
       "withholdingCondominiumPayer": "Pagador: condomínio",
       "storedValueKind": {
         "giftCard": "Vale-presente",
