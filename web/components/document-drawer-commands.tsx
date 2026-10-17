@@ -7,6 +7,7 @@ import { previewPostedCorrection } from '../lib/posted-correction-preview'
 import { promptDialog } from '../lib/prompt'
 import { promptVoidReversalPeriod } from '../lib/void-reversal-period'
 import { runClientScripts } from '../lib/client-scripts'
+import { documentCreateHref, isDocumentCreateKind } from '../lib/document-kinds'
 import { parseTenderDrafts } from './cash-tenders-section'
 import type { DocPayload } from './document-drawer-types'
 import { findMissingAccountLine, positiveAmount } from './document-drawer-lines'
@@ -27,9 +28,19 @@ import type { DocumentDrawerPayloadScope } from './document-drawer-payload'
  * and discard, lifecycle actions, retries, delete, void, and the preferred
  * form. Every write runs on the shared action path from the scope.
  */
-export function buildDocumentDrawerCommands(scope: DocumentDrawerPayloadScope) {
+/**
+ * Where a successful save lands: the saved record in view mode, a fresh
+ * create form for the same kind, or the list the drawer opened from.
+ */
+export type DocumentSaveThen = 'view' | 'new' | 'close'
+
+export function buildDocumentDrawerCommands(
+  scope: DocumentDrawerPayloadScope,
+  { startFresh }: { startFresh?: () => void } = {},
+) {
   const {
     isCreate,
+    canCreate,
     config,
     partyId,
     documentDate,
@@ -220,7 +231,28 @@ export function buildDocumentDrawerCommands(scope: DocumentDrawerPayloadScope) {
     }
   }
 
-  const save = runExclusive(async () => {
+  // Save & new needs an unsaved create form for this kind; kinds without one
+  // (and readers who may not create) save to the record instead.
+  const freshFormHref = canCreate && isDocumentCreateKind(config.kind) ? documentCreateHref(basePath, config.kind) : null
+
+  /**
+   * Leave a saved record for the requested destination. A fresh form for
+   * the kind already open in create mode has the same URL, so the drawer
+   * remounts to drop the saved entries and the spent idempotency key.
+   */
+  function landAfterSave(then: DocumentSaveThen, recordHref: string) {
+    if (then === 'new' && freshFormHref) {
+      router.push(freshFormHref)
+      if (isCreate) startFresh?.()
+    } else if (then === 'close') {
+      router.push(basePath)
+    } else {
+      router.push(recordHref)
+    }
+    router.refresh()
+  }
+
+  const save = runExclusive(async (then: DocumentSaveThen = 'view') => {
     // Copy for a save the server failed to answer; a reason the server named
     // still pins verbatim, and only this exact copy marks the footer state.
     const unavailableCopy = t('drawer.saveState.unavailableDetail')
@@ -265,8 +297,7 @@ export function buildDocumentDrawerCommands(scope: DocumentDrawerPayloadScope) {
             // Land on the persisted record in view mode: the changed drawer
             // id remounts clean, so Submit/Post is available at once instead
             // of needing a second save to leave the editing caption behind.
-            router.push(`${basePath}?doc=${String(saved.id)}`)
-            router.refresh()
+            landAfterSave(then, `${basePath}?doc=${String(saved.id)}`)
           },
           onRefused: (error) => {
             setSaveState(error.serverMessage === unavailableCopy ? 'unavailable' : 'error')
@@ -331,8 +362,7 @@ export function buildDocumentDrawerCommands(scope: DocumentDrawerPayloadScope) {
           // The save consumes the explicit edit request: landing on the
           // mode-less record URL keeps a later reload in view mode instead
           // of resurrecting the editing caption with nothing to save.
-          router.push(hrefForDocument(String(data.doc.id), searchParams.get('form') ?? undefined))
-          router.refresh()
+          landAfterSave(then, hrefForDocument(String(data.doc.id), searchParams.get('form') ?? undefined))
         },
         onRefused: (error) => {
           // A save refusal stays on the record, not only in a toast:
@@ -613,6 +643,7 @@ export function buildDocumentDrawerCommands(scope: DocumentDrawerPayloadScope) {
 
   return {
     save,
+    freshFormHref,
     confirmDiscard,
     cancelWithConfirm,
     act,

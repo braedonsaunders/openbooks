@@ -15,6 +15,7 @@ import { EInvoiceButton } from './einvoice-button'
 import { SendButton } from './send-button'
 import { FlowManualButtons } from './flow-manual-buttons'
 import { ApprovalActions } from './approval-actions'
+import { FormShortcuts } from './shortcuts/form-shortcuts'
 import { DocumentDrawerTitle, STATUS_KEYS, STATUS_VARIANT } from './document-drawer-title'
 import { positiveAmount } from './document-drawer-lines'
 import type { DocumentDrawerHeaderScope } from './document-drawer-header'
@@ -78,6 +79,7 @@ export function renderDocumentDrawerChrome(scope: DocumentDrawerHeaderScope, chi
     refundHref,
     creditHref,
     save,
+    freshFormHref,
     cancelWithConfirm,
     confirmDiscard,
     act,
@@ -244,6 +246,14 @@ export function renderDocumentDrawerChrome(scope: DocumentDrawerHeaderScope, chi
         canEditStatus ? (
           mode === 'edit' ? (
             <>
+              <FormShortcuts
+                enabled={!busy}
+                actions={{
+                  save: () => void save(),
+                  saveAndNew: freshFormHref ? () => void save('new') : undefined,
+                  saveAndClose: () => void save('close'),
+                }}
+              />
               <Button size="sm" className="h-8 px-2.5 text-xs" disabled={busy} onClick={() => void save()}>
                 {busy ? tCommon('actions.saving') : tCommon('actions.save')}
               </Button>

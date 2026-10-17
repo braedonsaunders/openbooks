@@ -27,6 +27,7 @@ import {
   normalizeLineDecimal,
 } from '../lib/line-grid-decimal'
 import type { DistributionMenuKey, GroupHeaderModel, RowDistributionChip } from './allocations/distribution-groups'
+import { useShortcuts } from './shortcuts/shortcut-provider'
 
 export interface LineGridOption {
   value: string
@@ -292,6 +293,7 @@ export function LineGrid<Row extends Record<string, unknown>>({
   cloneRow?: (row: Row) => Row
 }) {
   const t = useTranslations('ui.lineGrid')
+  const tShortcuts = useTranslations('shell.shortcuts.commands')
   const tEntry = useTranslations('allocations')
   const tCommon = useTranslations('common')
   const [showDetails, setShowDetails] = useState(false)
@@ -425,6 +427,26 @@ export function LineGrid<Row extends Record<string, unknown>>({
     onRowsChange(next)
     focusCell(at, 0)
   }
+
+  // Ctrl+Alt+G (⌃⌥G) appends a line from anywhere in the grid's form. With
+  // several grids in one drawer, the grid holding focus takes it.
+  const rootRef = useRef<HTMLDivElement>(null)
+  useShortcuts([
+    {
+      id: 'formAddLine',
+      label: () => tShortcuts('addLine'),
+      binding: { modifier: 'chord', code: 'KeyG' },
+      scope: 'form',
+      allowInEditable: true,
+      enabled: () => !readOnly && !fixedRows,
+      container: () => {
+        const root = rootRef.current
+        if (!root) return null
+        return root.contains(document.activeElement) ? root : root.closest('[role="dialog"]') ?? root
+      },
+      run: () => insertRow(rowsRef.current.length),
+    },
+  ])
   const duplicateRow = (i: number) => {
     const base = takeCommittedRows()
     if (i < 0 || i >= base.length) return
@@ -575,7 +597,7 @@ export function LineGrid<Row extends Record<string, unknown>>({
     'w-full rounded-sm border-0 bg-transparent px-1.5 py-1 text-sm outline-none focus:ring-2 focus:ring-teal-500/60 dark:text-slate-100'
 
   return (
-    <div>
+    <div ref={rootRef}>
       {allColumns.some((column) => column.secondary) && !readOnly ? (
         <div className="mb-2 flex justify-end">
           <Button type="button" variant="outline" size="sm" aria-pressed={showDetails} onClick={() => setShowDetails((value) => !value)}>

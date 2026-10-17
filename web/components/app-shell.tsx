@@ -24,6 +24,8 @@ import { GlobalCreateMenu, type GlobalCreatePermissions } from './global-create-
 import { GlobalPartyDrawer, GlobalReportDrawer } from './global-drawer-hosts'
 import { ReportReloadIndicator } from './navigation-provider'
 import { AppLauncherLink, HeaderNavLink } from './header-nav-link'
+import { ShortcutProvider } from './shortcuts/shortcut-provider'
+import { GlobalShortcuts } from './shortcuts/global-shortcuts'
 
 export function AppShell({
   account,
@@ -78,6 +80,8 @@ export function AppShell({
     }))
     .filter((group) => group.items.length > 0)
   return (
+    <ShortcutProvider>
+    <GlobalShortcuts permissions={createPermissions} groups={groups} />
     <div className="flex h-screen overflow-hidden">
       {topbar ? null : <AppSidebar groups={navigationGroups} defaultCollapsed={defaultCollapsed} />}
 
@@ -131,5 +135,6 @@ export function AppShell({
         </div>
       </MobileNavProvider>
     </div>
+    </ShortcutProvider>
   )
 }

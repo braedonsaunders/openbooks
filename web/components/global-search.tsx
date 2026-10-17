@@ -11,6 +11,7 @@ import { ViewTabsContext } from './module-home/navigation-context'
 import { buildPageIndex, searchPages, type PageSearchHit } from '../lib/nav/page-search'
 import { readRecents, rememberRecent, writeRecents, type StoredRecent } from '../lib/search-recent'
 import { statusLabel } from '../lib/status-label'
+import { useShortcuts } from './shortcuts/shortcut-provider'
 import type { RecentRef, SearchBadge, SearchGroup, SearchHit, SearchResponse } from '../lib/search-types'
 
 type Hit = Omit<SearchHit, 'type'> & { type: SearchHit['type'] | 'page' }
@@ -57,6 +58,7 @@ export function GlobalSearch({
   recentScope: string
 }) {
   const t = useTranslations('shell.globalSearch')
+  const tShortcuts = useTranslations('shell.shortcuts.commands')
   const tCommon = useTranslations('common')
   const router = useRouter()
   const pathname = usePathname() ?? '/'
@@ -102,19 +104,24 @@ export function GlobalSearch({
       ? tCommon(`labels.${badge.value}` as never)
       : statusLabel(badge.value, (key) => tCommon(key as never), (key) => tCommon.has(key as never))
 
-  // ⌘K / Ctrl+K focuses the search from anywhere.
-  useEffect(() => {
-    function onKey(e: KeyboardEvent) {
-      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
-        e.preventDefault()
+  // ⌘K / Ctrl+K focuses the search from anywhere, typing included. The
+  // header can mount more than one search (desktop inline, mobile overlay);
+  // only a rendered one takes the shortcut.
+  useShortcuts([
+    {
+      id: 'search',
+      label: () => tShortcuts('search'),
+      binding: { modifier: 'primary', code: 'KeyK' },
+      scope: 'global',
+      allowInEditable: true,
+      enabled: () => (inputRef.current?.getClientRects().length ?? 0) > 0,
+      run: () => {
         inputRef.current?.focus()
         inputRef.current?.select()
         setOpen(true)
-      }
-    }
-    window.addEventListener('keydown', onKey)
-    return () => window.removeEventListener('keydown', onKey)
-  }, [])
+      },
+    },
+  ])
 
   // Close on outside click.
   useEffect(() => {

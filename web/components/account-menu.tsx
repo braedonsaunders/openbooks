@@ -18,6 +18,7 @@ import {
   ChevronDown,
   ChevronLeft,
   ChevronRight,
+  Keyboard,
   Languages,
   LayoutPanelLeft,
   LogOut,
@@ -32,6 +33,7 @@ import { EnvironmentPicker } from './environment-picker'
 import { PlatformWorkspacePicker, useOnPlatform } from './platform-menu'
 import { LOCALES, type Locale } from '../i18n/config'
 import { NAV_MODES, type NavMode } from '../lib/nav-mode'
+import { useShortcutHelp } from './shortcuts/shortcut-provider'
 import type { WorkspaceEnvironments } from '../lib/environments'
 
 // Two-letter monogram from a display name, falling back to the email. Handles the
@@ -92,6 +94,7 @@ export function AccountMenu({
       ? 'text-amber-600 dark:text-amber-400'
       : 'text-slate-600 dark:text-slate-400'
   const onPlatform = useOnPlatform()
+  const openShortcutHelp = useShortcutHelp()
   const showTenants =
     environments.tenants.length > 1 ||
     environments.tenants.some((tn) => tn.sandboxes.length > 0) ||
@@ -237,6 +240,17 @@ export function AccountMenu({
                 {t('security')}
               </span>
             </Link>
+            {openShortcutHelp ? (
+              <Card
+                icon={Keyboard}
+                tint="bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300"
+                label={t('keyboardShortcuts')}
+                onClick={() => {
+                  close()
+                  openShortcutHelp(null)
+                }}
+              />
+            ) : null}
             {environments.isSuperAdmin && (
               <Card
                 icon={ShieldAlert}

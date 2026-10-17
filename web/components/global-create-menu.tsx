@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import {
@@ -22,7 +22,7 @@ import {
   UsersRound,
   WalletCards,
 } from 'lucide-react'
-import { Popover, cn, useMenuTrigger } from '@openbooks/ui'
+import { Popover, cn, queryDrawerRouteGuard, useMenuTrigger } from '@openbooks/ui'
 import { toast } from 'sonner'
 import { documentCreateHref } from '../lib/document-kinds'
 import { refusalMessageFromBody } from '../lib/api-error'
@@ -116,28 +116,32 @@ const ACTIONS: CreateAction[] = [
 
 const GROUPS: GroupKey[] = ['sales', 'purchases', 'accounting', 'peopleAndLists']
 
-/** Prominent shell-level instant-create menu for every record the user may create. */
-export function GlobalCreateMenu({ permissions }: { permissions: GlobalCreatePermissions }) {
+export type GlobalCreateKey = CreateKey
+
+/**
+ * The shell's create paths, shared by the create menu and the keyboard
+ * shortcuts so both open the same native editor or mint the same draft.
+ * Navigation first asks an open drawer holding unsaved edits whether it may
+ * be left.
+ */
+export function useGlobalCreate(permissions: GlobalCreatePermissions) {
   const t = useTranslations('shell.globalCreate')
   const router = useRouter()
-  const [open, setOpen] = useState(false)
   const [busy, setBusy] = useState<CreateKey | null>(null)
+  const pending = useRef(false)
   const available = useMemo(() => ACTIONS.filter((action) => action.enabled(permissions)), [permissions])
-  // The trigger answers the pointer release as well as the click, so a
-  // press whose release never becomes a click still opens the menu.
-  // Keyboard activation (no pointer events) opens through onClick.
-  const triggerActivation = useMenuTrigger(() => setOpen(true))
 
-  if (available.length === 0) return null
-
-  async function create(action: CreateAction) {
-    setOpen(false)
-    if (action.directHref) {
-      router.push(action.directHref as never)
-      return
-    }
-    setBusy(action.key)
+  async function create(key: CreateKey) {
+    const action = available.find((candidate) => candidate.key === key)
+    if (!action || pending.current) return
+    pending.current = true
     try {
+      if (!(await queryDrawerRouteGuard())) return
+      if (action.directHref) {
+        router.push(action.directHref as never)
+        return
+      }
+      setBusy(action.key)
       // Order drafts mint server-side under the canonical idempotent-create
       // contract: every instant-create POST carries a caller UUID as its
       // Idempotency-Key, so a lost-response retry replays the same draft
@@ -162,9 +166,25 @@ export function GlobalCreateMenu({ permissions }: { permissions: GlobalCreatePer
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t('createFailed'))
     } finally {
+      pending.current = false
       setBusy(null)
     }
   }
+
+  return { available, busy, create }
+}
+
+/** Prominent shell-level instant-create menu for every record the user may create. */
+export function GlobalCreateMenu({ permissions }: { permissions: GlobalCreatePermissions }) {
+  const t = useTranslations('shell.globalCreate')
+  const [open, setOpen] = useState(false)
+  const { available, busy, create } = useGlobalCreate(permissions)
+  // The trigger answers the pointer release as well as the click, so a
+  // press whose release never becomes a click still opens the menu.
+  // Keyboard activation (no pointer events) opens through onClick.
+  const triggerActivation = useMenuTrigger(() => setOpen(true))
+
+  if (available.length === 0) return null
 
   return (
     <Popover
@@ -211,7 +231,10 @@ export function GlobalCreateMenu({ permissions }: { permissions: GlobalCreatePer
                       key={action.key}
                       type="button"
                       disabled={busy !== null}
-                      onClick={() => create(action)}
+                      onClick={() => {
+                        setOpen(false)
+                        void create(action.key)
+                      }}
                       className="group/item flex w-full items-center gap-3 rounded-lg px-2 py-2 text-left text-sm text-slate-700 transition-colors hover:bg-teal-50 hover:text-teal-900 disabled:opacity-50 dark:text-slate-200 dark:hover:bg-teal-950/40 dark:hover:text-teal-100"
                     >
                       <span className="grid h-8 w-8 shrink-0 place-items-center rounded-lg bg-slate-100 text-slate-500 transition-colors group-hover/item:bg-white group-hover/item:text-teal-600 dark:bg-slate-800 dark:text-slate-400 dark:group-hover/item:bg-slate-900 dark:group-hover/item:text-teal-300">

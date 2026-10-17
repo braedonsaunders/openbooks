@@ -1,5 +1,6 @@
 'use client'
 
+import { useCallback, useState } from 'react'
 import type { DocumentDrawerProps } from './document-drawer-props'
 import { useDocumentDrawerScope } from './document-drawer-scope'
 import { useDocumentDrawerDefaults } from './document-drawer-defaults'
@@ -32,6 +33,7 @@ export {
   reconcilePersistedDocumentSnapshot,
   revisionFromSuccessfulDocumentSave,
 } from './document-drawer-save'
+export type { DocumentSaveThen } from './document-drawer-commands'
 export type {
   CanonicalDraftAdoption,
   CurrencyMismatchedAccount,
@@ -56,17 +58,27 @@ export type { DocumentDrawerTotals } from './document-drawer-lines'
 export type { DocumentDrawerProps } from './document-drawer-props'
 
 /**
- * The shared transaction drawer for every document kind. Each stage reads
- * the scope built by the stages before it, in a fixed order, so hook order
- * and effect order stay identical on every render.
+ * The shared transaction drawer for every document kind. Save & new from an
+ * unsaved create form starts a new form instance, so no entry, baseline or
+ * idempotency key from the saved record carries into the next one.
  */
 export function DocumentDrawer(props: DocumentDrawerProps) {
+  const [formInstance, setFormInstance] = useState(0)
+  const startFresh = useCallback(() => setFormInstance((instance) => instance + 1), [])
+  return <DocumentDrawerForm key={formInstance} drawerProps={props} startFresh={startFresh} />
+}
+
+/**
+ * Each stage reads the scope built by the stages before it, in a fixed
+ * order, so hook order and effect order stay identical on every render.
+ */
+function DocumentDrawerForm({ drawerProps: props, startFresh }: { drawerProps: DocumentDrawerProps; startFresh: () => void }) {
   const scope = useDocumentDrawerScope(props)
   const withDefaults = { ...scope, ...useDocumentDrawerDefaults(scope) }
   const withDistribution = { ...withDefaults, ...useDocumentDrawerDistribution(withDefaults) }
   const withPickers = { ...withDistribution, ...useDocumentDrawerPickers(withDistribution) }
   const withPayload = { ...withPickers, ...useDocumentDrawerPayload(withPickers) }
-  const withCommands = { ...withPayload, ...buildDocumentDrawerCommands(withPayload) }
+  const withCommands = { ...withPayload, ...buildDocumentDrawerCommands(withPayload, { startFresh }) }
   const withColumns = { ...withCommands, ...useDocumentDrawerColumns(withCommands) }
   const drawer = { ...withColumns, ...useDocumentDrawerHeader(withColumns) }
   return renderDocumentDrawerChrome(drawer, renderDocumentDrawerBody(drawer))

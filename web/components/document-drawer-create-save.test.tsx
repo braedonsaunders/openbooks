@@ -62,6 +62,7 @@ const { NextIntlClientProvider } = await import("next-intl");
 const messages = (await import("../messages/en")).default;
 const { MoneyProvider } = await import("./money-provider");
 const { DocumentDrawer } = await import("./document-drawer");
+const { ShortcutProvider } = await import("./shortcuts/shortcut-provider");
 const { DOC_KINDS } = await import("../lib/document-kinds");
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
@@ -97,7 +98,7 @@ function blankCreateDoc() {
   };
 }
 
-async function mountCreate() {
+async function mountCreate({ shortcuts = false }: { shortcuts?: boolean } = {}) {
   const pushed: string[] = [];
   globalThis.__drawerRouter = {
     push(url: string) { pushed.push(url); },
@@ -112,6 +113,7 @@ async function mountCreate() {
     root.render(
       <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
         <MoneyProvider currency="USD">
+          <OptionalShortcuts enabled={shortcuts}>
           <DocumentDrawer
             payload={{
               doc: blankCreateDoc(),
@@ -144,6 +146,7 @@ async function mountCreate() {
             initialMode="edit"
             layout={{ header: { groups: [] }, lines: { columns: [] }, actions: [{ key: "submit", visible: true }] } as never}
           />
+          </OptionalShortcuts>
         </MoneyProvider>
       </NextIntlClientProvider>,
     );
@@ -152,6 +155,10 @@ async function mountCreate() {
   await tick();
   await tick();
   return { host, root, pushed };
+}
+
+function OptionalShortcuts({ enabled, children }: { enabled: boolean; children: React.ReactNode }) {
+  return enabled ? <ShortcutProvider>{children}</ShortcutProvider> : <>{children}</>;
 }
 
 function saveButton(): HTMLButtonElement {
@@ -594,4 +601,69 @@ test("confirming the duplicate warning saves anyway", async (t) => {
     calls.some((call) => call.url === "/api/documents" && call.init?.method === "POST"),
     "confirming the warning must proceed with the save",
   );
+});
+
+function savedDocumentResponse(id: string) {
+  return Response.json({
+    doc: {
+      id, kind: "customer_invoice", status: "draft", document_number: "INV-00005",
+      currency: "USD", party_id: PARTY_ID, updated_at: "2026-09-17T12:00:01.000000Z",
+      document_date: "2026-09-17", subtotal: "100.00", tax_total: "0.00", total: "100.00",
+    },
+    lines: [],
+  });
+}
+
+async function pressChord(code: string) {
+  const target = document.querySelector('[role="dialog"]') ?? document.body;
+  await act(async () => {
+    target.dispatchEvent(new window.KeyboardEvent("keydown", { code, key: code.slice(3).toLowerCase(), ctrlKey: true, altKey: true, bubbles: true, cancelable: true }));
+    await tick();
+  });
+  await tick();
+  await tick();
+}
+
+test("save and new from a create form opens a fresh form that cannot replay the saved record", async (t) => {
+  const { restore, calls } = scriptFetch((url) => {
+    if (url.startsWith("/api/documents/duplicates?")) return Response.json({ duplicates: [] });
+    if (url === "/api/documents") return savedDocumentResponse(randomUUID());
+    return null;
+  });
+  t.after(restore);
+  const { host, root, pushed } = await mountCreate({ shortcuts: true });
+  t.after(async () => {
+    await act(async () => {
+      root.unmount();
+    });
+    host.remove();
+  });
+  await pressChord("KeyS");
+  await pressChord("KeyS");
+  const creates = calls.filter((call) => call.url === "/api/documents" && call.init?.method === "POST");
+  assert.equal(creates.length, 2, "each Save and new writes exactly one record");
+  const keys = creates.map((call) => (call.init?.headers as Record<string, string>)["Idempotency-Key"]);
+  assert.ok(keys[0] && keys[1] && keys[0] !== keys[1], "the fresh form carries a new idempotency key, so the second save is a new record");
+  assert.deepEqual(pushed, [
+    "/ar/invoices?doc=new&kind=customer_invoice&mode=edit",
+    "/ar/invoices?doc=new&kind=customer_invoice&mode=edit",
+  ]);
+});
+
+test("save and close lands on the list instead of the record", async (t) => {
+  const { restore } = scriptFetch((url) => {
+    if (url.startsWith("/api/documents/duplicates?")) return Response.json({ duplicates: [] });
+    if (url === "/api/documents") return savedDocumentResponse(randomUUID());
+    return null;
+  });
+  t.after(restore);
+  const { host, root, pushed } = await mountCreate({ shortcuts: true });
+  t.after(async () => {
+    await act(async () => {
+      root.unmount();
+    });
+    host.remove();
+  });
+  await pressChord("KeyD");
+  assert.deepEqual(pushed, ["/ar/invoices"]);
 });
