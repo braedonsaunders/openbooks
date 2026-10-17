@@ -145,3 +145,4 @@ export * from "./payroll-opening-employer-authority";
 export * from "./payroll-opening-levy-source-authority";
 export * from "./payroll-ca-opening-reporting-source";
 export * from "./payroll-us-filing-account-employer-lineage";
+export * from "./expense-receipt-captures";

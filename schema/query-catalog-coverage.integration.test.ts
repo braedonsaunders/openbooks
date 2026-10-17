@@ -160,6 +160,7 @@ const EXCLUDED_TABLES: Record<string, string> = {
   payroll_ca_opening_reporting_allocations: "original RP and province reporting slices retain compensation-confidential annual and child history; native payroll reporting owns their scoped consumption.",
   number_sequences: "sequence counters for document numbering.",
   connector_replay_authorizations: "operational authorization evidence for closed-period replay; not a reporting entity.",
+  expense_receipt_captures: "receipt capture runtime: candidate readings before review; confirmed expenses report through documents.",
   einvoice_documents: "issued e-invoice files retained as legal originals; invoice facts report through documents.",
   employee_tax_certificates: "tax certificate PII.",
   source_deletion_resolutions: "sync conflict-resolution runtime.",

@@ -86,6 +86,17 @@ export async function getDocumentCaptureSettings(orgId: string): Promise<Documen
   return normalizeStoredDocumentCapture(capture);
 }
 
+/**
+ * Whether document capture can run for the organization: AI enabled, capture
+ * enabled, an endpoint and a sealed key present. Reads configuration only;
+ * the endpoint is verified when a capture runs.
+ */
+export async function documentCaptureOperational(orgId: string): Promise<boolean> {
+  const { globalEnabled, capture } = await readStored(orgId);
+  const settings = normalizeStoredDocumentCapture(capture);
+  return globalEnabled && settings.enabled && Boolean(settings.endpoint) && settings.hasKey;
+}
+
 /** The worker's only config resolver. Disabled/missing/tampered secrets fail closed. */
 export async function getDocumentCaptureRuntimeConfig(orgId: string, lookup?: AddressLookup): Promise<DocumentCaptureRuntimeConfig | null> {
   const { globalEnabled, capture } = await readStored(orgId);

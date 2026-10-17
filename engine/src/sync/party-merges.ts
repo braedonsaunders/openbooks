@@ -102,6 +102,7 @@ const SIMPLE_PARTY_REFS: readonly (readonly [table: string, column: string])[] =
   ["compliance_waivers", "party_id"],
   ["withholding_enrollments", "authority_party_id"],
   ["consolidation_groups", "payer_party_id"],
+  ["expense_receipt_captures", "merchant_party_id"],
   ["contacts", "party_id"],
   // Capitalized contract costs follow the surviving party wholesale: the
   // rep and the customer are counterparty references, and uniqueness on

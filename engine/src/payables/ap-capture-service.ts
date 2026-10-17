@@ -23,7 +23,8 @@ import {
 import { getDocumentCaptureRuntimeConfig } from "./ap-capture-config.ts";
 import { actorHasPermission } from "../organization/actor-permissions.ts";
 import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
-import { getS3Blob, refuseMaskedStorageKind } from "../platform/file-storage.ts";
+import { loadCaptureSourceBlob as loadCaptureBlob } from "./capture-source.ts";
+import { resolveVendorParty, vendorMatchKey } from "./vendor-resolution.ts";
 import { runRecordFlows } from "../flows/index.ts";
 
 type CaptureRow = {
@@ -97,65 +98,10 @@ export async function recoverStaleApCaptureClaims(now = new Date()): Promise<num
   return recovered;
 }
 
-function normalizedKey(value: string): string {
-  return value.normalize("NFKD").toLowerCase().replace(/[^a-z0-9]/g, "");
-}
+const normalizedKey = vendorMatchKey;
 
 function issue(code: string, severity: "blocking" | "warning", extra: Partial<CaptureIssue> = {}): CaptureIssue {
   return { code, severity, ...extra };
-}
-
-async function loadCaptureBlob(orgId: string, fileId: string): Promise<{ bytes: Buffer; contentType: string }> {
-  const result = (await db.execute<{ version_id: string; storage_kind: string; content_type: string; bytes: Buffer | null }>(sql`
-    select fv.id as version_id, fv.storage_kind, fv.content_type, fb.bytes
-      from files f
-      join file_versions fv on fv.id = f.current_version_id and fv.file_id = f.id
-      left join file_blobs fb on fb.version_id = fv.id
-     where f.org_id = ${orgId} and f.id = ${fileId} and not f.is_inactive
-  `));
-  const row = result.rows[0];
-  if (!row) throw new Error("Capture source file is missing");
-  // Masked-clone tombstone: refuse by name before the byte fetch.
-  refuseMaskedStorageKind(row.storage_kind);
-  const bytes = row.storage_kind === "s3" ? await getS3Blob(row.version_id) : row.bytes;
-  if (!bytes) throw new Error("Capture source bytes are missing");
-  return { bytes, contentType: row.content_type };
-}
-
-async function resolveVendor(orgId: string, capture: NormalizedCapture): Promise<string | null> {
-  if (capture.vendorTaxId) {
-    const taxKey = normalizedKey(capture.vendorTaxId);
-    const tax = (await db.execute<{ id: string }>(sql`
-      select distinct p.id
-        from parties p
-        join vendor_roles vr on vr.party_id = p.id and vr.org_id = p.org_id and vr.is_active
-        cross join lateral jsonb_each_text(coalesce(p.tax_ids, '{}'::jsonb)) tax_id
-       where p.org_id = ${orgId} and p.is_active
-         and regexp_replace(lower(tax_id.value), '[^a-z0-9]', '', 'g') = ${taxKey}
-       limit 2
-    `));
-    if (tax.rows.length === 1) return tax.rows[0]!.id;
-  }
-  if (!capture.vendorName) return null;
-  const alias = normalizedKey(capture.vendorName);
-  const learned = (await db.execute<{ id: string | null }>(sql`
-    select output->>'partyId' as id from ap_capture_rules
-     where org_id = ${orgId} and rule_kind = 'vendor_alias' and is_active
-       and match->>'alias' = ${alias}
-     order by confirmation_count desc limit 2
-  `));
-  if (learned.rows.length === 1 && learned.rows[0]!.id) return learned.rows[0]!.id;
-  const exact = (await db.execute<{ id: string }>(sql`
-    select p.id from parties p
-    join vendor_roles vr on vr.party_id = p.id and vr.org_id = p.org_id and vr.is_active
-    where p.org_id = ${orgId} and p.is_active
-      and (
-        regexp_replace(lower(p.display_name), '[^a-z0-9]', '', 'g') = ${alias}
-        or regexp_replace(lower(coalesce(p.legal_name, '')), '[^a-z0-9]', '', 'g') = ${alias}
-      )
-    limit 2
-  `));
-  return exact.rows.length === 1 ? exact.rows[0]!.id : null;
 }
 
 async function resolvePurchaseOrder(
@@ -439,7 +385,7 @@ export async function resolveAndValidateCapture(input: {
     select document_kind from ap_capture_items
      where org_id = ${input.orgId} and id = ${input.captureItemId}
   `)).rows[0]?.document_kind ?? "vendor_bill";
-  let vendorId = input.vendorId === undefined ? await resolveVendor(input.orgId, input.normalized) : input.vendorId;
+  let vendorId = input.vendorId === undefined ? await resolveVendorParty(input.orgId, { name: input.normalized.vendorName, taxId: input.normalized.vendorTaxId }) : input.vendorId;
   if (vendorId) {
     const valid = (await db.execute(sql`
       select 1 from parties p join vendor_roles vr on vr.party_id = p.id and vr.org_id = p.org_id

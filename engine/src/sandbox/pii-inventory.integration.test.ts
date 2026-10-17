@@ -790,6 +790,23 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "contract_cost_assets.method",
   "contract_cost_assets.status",
   "contract_cost_assets.source",
+  // Receipt captures hold a merchant's business identity, provider codes,
+  // confidence evidence and review issues for a business expense, as AP
+  // capture does for vendor bills; the receipt bytes stay in the cabinet.
+  "expense_receipt_captures.api_version",
+  "expense_receipt_captures.confirmed_merchant_name",
+  "expense_receipt_captures.content_hash",
+  "expense_receipt_captures.currency",
+  "expense_receipt_captures.draft",
+  "expense_receipt_captures.evidence",
+  "expense_receipt_captures.issues",
+  "expense_receipt_captures.last_error",
+  "expense_receipt_captures.merchant_key",
+  "expense_receipt_captures.model",
+  "expense_receipt_captures.normalized",
+  "expense_receipt_captures.original_filename",
+  "expense_receipt_captures.provider",
+  "expense_receipt_captures.status",
   // Expense amortization: template codes, names and percentage tables are
   // configuration; methods, statuses, kinds and currencies are codes;
   // schedule memos, hold and change reasons and event state are business

@@ -351,6 +351,10 @@ export const DSAR_EXCLUDED_TABLES: readonly DsarExcludedTable[] = [
     table: "ap_capture_items",
     reason: "AP capture; vendor_candidate_id is a vendor counterparty.",
   },
+  {
+    table: "expense_receipt_captures",
+    reason: "expense receipt capture; merchant_party_id is a vendor counterparty.",
+  },
   { table: "compliance_records", reason: "compliance module remit." },
   { table: "compliance_release_checks", reason: "compliance module remit." },
   { table: "compliance_waivers", reason: "compliance module remit." },

@@ -220,6 +220,7 @@ export const TENANT_TABLE_POLICIES = {
   "expense_amortization_schedules": "clone:catalog-uuid-rebase",
   "expense_amortization_schedule_lines": "clone:catalog-uuid-rebase",
   "expense_amortization_schedule_events": "clone:catalog-uuid-rebase",
+  "expense_receipt_captures": "clone:catalog-uuid-rebase",
   "cost_layer_consumptions": "clone:catalog-uuid-rebase",
   "cost_layer_weights": "clone:catalog-uuid-rebase",
   "cost_layers": "clone:catalog-uuid-rebase",

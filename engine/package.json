@@ -622,6 +622,8 @@
     "./payables/ap-capture-dispatch": "./src/payables/ap-capture-dispatch.ts",
     "./payables/ap-capture-service": "./src/payables/ap-capture-service.ts",
     "./payables/ap-capture": "./src/payables/ap-capture.ts",
+    "./payables/receipt-capture": "./src/payables/receipt-capture.ts",
+    "./payables/receipt-capture-service": "./src/payables/receipt-capture-service.ts",
     "./payments-core/payment-errors": "./src/payments-core/payment-errors.ts",
     "./payments-core/cheque-bank": "./src/payments-core/cheque-bank.ts",
     "./testing/payments-core/rail-cemtex": "./src/payments-core/rail-cemtex.ts",
