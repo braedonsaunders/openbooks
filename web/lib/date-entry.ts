@@ -294,7 +294,10 @@ const ALLOWED = /^[\p{L}0-9\s/.\-,']+$/u
 export function parseTypedDate(text: string, context: Pick<DateEntryContext, 'today' | 'locale'>): TypedDateResult {
   const trimmed = text.trim()
   if (trimmed === '') return { ok: false, reason: 'empty' }
-  if (isIsoCalendarDate(trimmed)) return { ok: true, iso: trimmed }
+  // The ISO guard narrows its argument to `string`, so test a widened copy
+  // and keep `trimmed` a string for the free-form reading below.
+  const candidate: unknown = trimmed
+  if (isIsoCalendarDate(candidate)) return { ok: true, iso: candidate }
   const cleaned = trimmed
     .replace(/(\d)(?:st|nd|rd|th|er)\b/giu, '$1')
     .replace(/'(\d{2})\b/gu, '$1')
