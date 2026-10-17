@@ -47,6 +47,17 @@ export const securityHeaders = [
   { key: "X-Frame-Options", value: "DENY" },
 ];
 
+/**
+ * Each webpack build worker returns its recorded trace spans to the parent in
+ * one IPC message, and V8 caps a single string near 512 MiB. Recording every
+ * span (Next's default threshold) puts the server compilation of this app over
+ * that cap, so the build fails while serializing its result. Recording spans
+ * of at least 100 ms keeps the slow-span profile in `.next/trace` and the
+ * message far below the cap. Workers inherit this environment, and an
+ * explicit threshold still wins.
+ */
+process.env.NEXT_TRACE_SPAN_THRESHOLD_MS ??= "100";
+
 /** @type {import('next').NextConfig} */
 const config = {
   experimental: {
