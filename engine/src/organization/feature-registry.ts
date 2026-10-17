@@ -98,6 +98,9 @@ export const FEATURES: FeatureDef[] = [
   { key: 'accountMerges', defaultEnabled: false, category: 'finance', group: 'structure' },
   { key: 'accountingContexts', defaultEnabled: false, category: 'finance', group: 'structure' },
   { key: 'segmentDependencies', defaultEnabled: false, category: 'finance', group: 'structure' },
+  // Equity and cap table: share classes, plans, securities and their GL
+  // postings per legal entity. Turning it off keeps every record and posting.
+  { key: 'equity', defaultEnabled: false, category: 'finance', group: 'structure', navModules: ['equity'] },
   { key: 'banking', defaultEnabled: true, category: 'finance', group: 'cash', navModules: ['banking', 'banking-cash', 'banking-transactions', 'banking-psp-settlements', 'banking-payouts', 'banking-match', 'banking-recons', 'banking-rules', 'banking-imports'] },
   // Automated bank connectivity (SFTP file drops + Plaid/GoCardless/TrueLayer
   // live feeds). Off by default — manual OFX/CSV import always works without it.

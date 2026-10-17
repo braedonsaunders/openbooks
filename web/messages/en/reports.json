@@ -3454,7 +3454,8 @@
       "book_opening": "Book opening balances",
       "expense_amortization": "Expense amortization",
       "account_merge": "Account merge",
-      "asset_capitalization": "Asset capitalization"
+      "asset_capitalization": "Asset capitalization",
+      "equity": "Equity"
     },
     "columns": {
       "detail": "Party / memo"

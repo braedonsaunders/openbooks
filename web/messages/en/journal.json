@@ -87,7 +87,8 @@
     "bookOpening": "Book opening",
     "expenseAmortization": "Expense amortization",
     "accountMerge": "Account merge",
-    "assetCapitalization": "Asset capitalization"
+    "assetCapitalization": "Asset capitalization",
+    "equity": "Equity"
   },
   "detail": {
     "notFound": "Entry not found",

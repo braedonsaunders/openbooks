@@ -1275,7 +1275,8 @@
       "banking": "Banking",
       "expenses": "Expense reports",
       "intercompany": "Intercompany",
-      "amortization": "Expense amortization"
+      "amortization": "Expense amortization",
+      "equity": "Equity & cap table"
     },
     "gl_read": "View journals and balances",
     "gl_manage": "Manage the chart of accounts",
@@ -1478,6 +1479,9 @@
     "gl_post_book_specific": "Post book-specific journals",
     "amortization_read": "View amortization schedules and reports",
     "amortization_manage": "Run amortization and change schedules",
+    "equity_read": "View the cap table, securities and stock compensation",
+    "equity_manage": "Record share classes, plans, issuances and award activity",
+    "equity_approve": "Approve voids, splits, repurchases and stock compensation runs",
     "assets_capitalize": "Accept asset proposals and capitalize construction in progress",
     "assets_maintain": "Maintain asset maintenance schedules and insurance policies"
   },
@@ -8309,6 +8313,10 @@
     "customerPortal": {
       "title": "Customer portal",
       "description": "Passwordless customer sign-in with invoices and pay-now, payment methods, subscription changes, order tracking, self-service returns, and gift card lookup."
+    },
+    "equity": {
+      "title": "Equity & cap table",
+      "description": "Share classes, equity plans, share certificates, options, RSUs, warrants and convertibles per legal entity, with the cap table, waterfall modelling and stock compensation posted to the general ledger."
     },
     "storedValue": {
       "title": "Stored value",

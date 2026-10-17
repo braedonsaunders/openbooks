@@ -1286,7 +1286,8 @@
       "banking": "银行业务",
       "expenses": "费用报告",
       "intercompany": "公司间",
-      "amortization": "费用摊销"
+      "amortization": "费用摊销",
+      "equity": "股权与股权结构表"
     },
     "gl_read": "查看日记账和余额",
     "gl_manage": "管理会计科目表",
@@ -1478,6 +1479,9 @@
     "gl_post_book_specific": "过账账簿专用日记账",
     "amortization_read": "查看摊销计划和报表",
     "amortization_manage": "运行摊销并变更摊销计划",
+    "equity_read": "查看股权结构表、证券和股权激励",
+    "equity_manage": "记录股份类别、计划、发行和授予变动",
+    "equity_approve": "批准作废、拆股、回购和股权激励过账",
     "assets_capitalize": "接受资产建议并将在建工程资本化",
     "assets_maintain": "管理资产维护计划和保险单"
   },
@@ -8309,6 +8313,10 @@
     "customerPortal": {
       "title": "客户门户",
       "description": "客户免密登录：查看发票并付款、管理付款方式、变更订阅、跟踪订单、自助退货、查询礼品卡余额。"
+    },
+    "equity": {
+      "title": "股权与股权结构表",
+      "description": "按法律实体管理股份类别、股权激励计划、股票凭证、期权、限制性股票单位、认股权证和可转换工具，提供股权结构表、清算分配模型，并将股权激励费用过账至总账。"
     },
     "storedValue": {
       "title": "储值卡与商店信用",

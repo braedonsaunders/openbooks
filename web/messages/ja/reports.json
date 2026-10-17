@@ -3454,7 +3454,8 @@
       "book_opening": "帳簿の期首残高",
       "expense_amortization": "費用の期間配分",
       "account_merge": "勘定の統合",
-      "asset_capitalization": "資産計上"
+      "asset_capitalization": "資産計上",
+      "equity": "資本"
     },
     "columns": {
       "detail": "取引先／摘要"

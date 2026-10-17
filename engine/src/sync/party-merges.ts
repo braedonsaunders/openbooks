@@ -175,6 +175,9 @@ const SIMPLE_PARTY_REFS: readonly (readonly [table: string, column: string])[] =
   ["stored_value_accounts", "customer_party_id"],
   // A register's walk-in customer follows the merged party.
   ["pos_registers", "default_customer_id"],
+  // Equity holdings follow the merged holder; the security guard admits a
+  // holder re-point and nothing else.
+  ["equity_securities", "holder_party_id"],
   ["time_entries", "employee_party_id"],
   ["union_agreements", "remittance_party_id"],
   ["usage_prepaid_grants", "customer_id"],

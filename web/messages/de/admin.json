@@ -1286,7 +1286,8 @@
       "banking": "Bankwesen",
       "expenses": "Spesenabrechnungen",
       "intercompany": "Konzernverrechnung",
-      "amortization": "Aufwandsabgrenzung"
+      "amortization": "Aufwandsabgrenzung",
+      "equity": "Eigenkapital und Cap Table"
     },
     "gl_read": "Journale und Salden anzeigen",
     "gl_manage": "Kontenplan verwalten",
@@ -1478,6 +1479,9 @@
     "gl_post_book_specific": "Buchspezifische Journale buchen",
     "amortization_read": "Abgrenzungspläne und Berichte anzeigen",
     "amortization_manage": "Auflösung ausführen und Pläne ändern",
+    "equity_read": "Cap Table, Wertpapiere und aktienbasierte Vergütung anzeigen",
+    "equity_manage": "Aktiengattungen, Pläne, Ausgaben und Zuteilungsvorgänge erfassen",
+    "equity_approve": "Stornos, Aktiensplits, Rückkäufe und Läufe der aktienbasierten Vergütung genehmigen",
     "assets_capitalize": "Anlagenvorschläge übernehmen und Anlagen im Bau aktivieren",
     "assets_maintain": "Wartungspläne und Versicherungspolicen für Anlagen pflegen"
   },
@@ -8121,6 +8125,10 @@
     "customerPortal": {
       "title": "Kundenportal",
       "description": "Passwortlose Kundenanmeldung mit Rechnungen und Jetzt-zahlen, Zahlungsmethoden, Abo-Änderungen, Sendungsverfolgung, Selfservice-Retouren und Guthabenabfrage."
+    },
+    "equity": {
+      "title": "Eigenkapital und Cap Table",
+      "description": "Aktiengattungen, Beteiligungspläne, Aktienzertifikate, Optionen, RSUs, Optionsscheine und Wandelinstrumente je Rechtsträger, mit Cap Table, Erlösverteilungsmodell und im Hauptbuch gebuchter aktienbasierter Vergütung."
     },
     "storedValue": {
       "title": "Guthaben",

@@ -1286,7 +1286,8 @@
       "banking": "Bancos",
       "expenses": "Informes de gastos",
       "intercompany": "Intercompañía",
-      "amortization": "Amortización de gastos"
+      "amortization": "Amortización de gastos",
+      "equity": "Patrimonio y tabla de capitalización"
     },
     "gl_read": "Ver asientos y saldos",
     "gl_manage": "Gestionar el plan de cuentas",
@@ -1478,6 +1479,9 @@
     "gl_post_book_specific": "Registrar asientos específicos de un libro",
     "amortization_read": "Ver calendarios de amortización e informes",
     "amortization_manage": "Ejecutar la amortización y modificar calendarios",
+    "equity_read": "Ver la tabla de capitalización, los valores y la compensación en acciones",
+    "equity_manage": "Registrar clases de acciones, planes, emisiones y movimientos de adjudicaciones",
+    "equity_approve": "Aprobar anulaciones, desdoblamientos, recompras y cálculos de compensación en acciones",
     "assets_capitalize": "Aceptar propuestas de activos y capitalizar obras en curso",
     "assets_maintain": "Gestionar planes de mantenimiento de activos y pólizas de seguro"
   },
@@ -8237,6 +8241,10 @@
     "customerPortal": {
       "title": "Portal del cliente",
       "description": "Acceso de clientes sin contraseña con facturas y pago inmediato, métodos de pago, cambios de suscripción, seguimiento de pedidos, devoluciones de autoservicio y consulta de tarjetas regalo."
+    },
+    "equity": {
+      "title": "Patrimonio y tabla de capitalización",
+      "description": "Clases de acciones, planes de incentivos, certificados de acciones, opciones, RSU, warrants e instrumentos convertibles por entidad legal, con la tabla de capitalización, la modelización de la cascada de liquidación y la compensación en acciones registrada en el libro mayor."
     },
     "storedValue": {
       "title": "Tarjetas regalo y crédito",

@@ -528,6 +528,7 @@ const JOURNAL: RecordTypeMeta = {
         ["migration", "migration"],
         ["book_opening", "bookOpening"],
         ["account_merge", "accountMerge"],
+        ["equity", "equity"],
       ].map(([value, key]) => ({ value: value!, labelKey: `journal.origins.${key}` })),
     },
     {

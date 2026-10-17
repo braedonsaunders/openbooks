@@ -87,7 +87,8 @@
     "bookOpening": "账簿期初",
     "expenseAmortization": "费用摊销",
     "accountMerge": "科目合并",
-    "assetCapitalization": "资产资本化"
+    "assetCapitalization": "资产资本化",
+    "equity": "股权"
   },
   "detail": {
     "notFound": "未找到分录",

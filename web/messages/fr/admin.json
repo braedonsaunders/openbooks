@@ -1286,7 +1286,8 @@
       "banking": "Banque",
       "expenses": "Notes de frais",
       "intercompany": "Intercompagnie",
-      "amortization": "Étalement des charges"
+      "amortization": "Étalement des charges",
+      "equity": "Capitaux propres et table de capitalisation"
     },
     "gl_read": "Consulter les journaux et les soldes",
     "gl_manage": "Gérer le plan comptable",
@@ -1478,6 +1479,9 @@
     "gl_post_book_specific": "Passer des écritures propres à un livre",
     "amortization_read": "Voir les échéanciers d’étalement et les rapports",
     "amortization_manage": "Exécuter l’étalement et modifier les échéanciers",
+    "equity_read": "Voir la table de capitalisation, les titres et la rémunération en actions",
+    "equity_manage": "Enregistrer les catégories d’actions, les plans, les émissions et les mouvements d’attributions",
+    "equity_approve": "Approuver les annulations, divisions, rachats et calculs de rémunération en actions",
     "assets_capitalize": "Accepter les propositions d’immobilisation et immobiliser les immobilisations en cours",
     "assets_maintain": "Gérer les plans d’entretien et les polices d’assurance des immobilisations"
   },
@@ -8237,6 +8241,10 @@
     "customerPortal": {
       "title": "Portail client",
       "description": "Connexion client sans mot de passe avec factures et paiement immédiat, moyens de paiement, modifications d’abonnement, suivi des commandes, retours en libre-service et consultation du solde des cartes cadeaux."
+    },
+    "equity": {
+      "title": "Capitaux propres et table de capitalisation",
+      "description": "Catégories d’actions, plans d’intéressement, certificats d’actions, options, UAR, bons de souscription et titres convertibles par entité juridique, avec la table de capitalisation, la modélisation de la cascade de liquidation et la rémunération en actions comptabilisée au grand livre."
     },
     "storedValue": {
       "title": "Cartes cadeaux et avoirs",

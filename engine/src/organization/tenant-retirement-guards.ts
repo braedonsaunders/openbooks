@@ -484,6 +484,13 @@ export const TENANT_RETIREMENT_GUARDS = [
     "patch": false
   },
   {
+    "name": "equity_record_immutable",
+    "source": "0733_equity_cap_table.sql",
+    "sha256": "6cfb14a1eb3c1332895e01e9f9c8ded1e880b07d1395abdc7cf7113d904bd9cc",
+    "newSha256": "6cfb14a1eb3c1332895e01e9f9c8ded1e880b07d1395abdc7cf7113d904bd9cc",
+    "patch": false
+  },
+  {
     "name": "financial_policy_version_immutable",
     "source": "0691_financial_rate_preferences_versions.sql",
     "sha256": "f1817fdfc45950978c79b5f91e43a65fcc897189ddb6c5a4a6d25d484d08690a",
@@ -2059,6 +2066,12 @@ export const TENANT_RETIREMENT_GUARD_ATTRIBUTES = [
     "config": []
   },
   {
+    "name": "equity_record_immutable",
+    "config": [
+      "search_path=public,pg_catalog"
+    ]
+  },
+  {
     "name": "financial_policy_version_immutable",
     "config": [
       "search_path=public,pg_catalog"
@@ -2889,6 +2902,61 @@ export const TENANT_RETIREMENT_GUARD_ATTRIBUTES = [
 ] as const;
 
 export const TENANT_RETIREMENT_TRIGGER_CONTRACTS = [
+  {
+    "table": "equity_share_classes",
+    "trigger": "equity_share_classes_immutable",
+    "function": "equity_record_immutable"
+  },
+  {
+    "table": "equity_class_amendments",
+    "trigger": "equity_class_amendments_immutable",
+    "function": "equity_record_immutable"
+  },
+  {
+    "table": "equity_plans",
+    "trigger": "equity_plans_immutable",
+    "function": "equity_record_immutable"
+  },
+  {
+    "table": "equity_plan_reserve_changes",
+    "trigger": "equity_plan_reserve_changes_immutable",
+    "function": "equity_record_immutable"
+  },
+  {
+    "table": "equity_financing_rounds",
+    "trigger": "equity_financing_rounds_immutable",
+    "function": "equity_record_immutable"
+  },
+  {
+    "table": "equity_securities",
+    "trigger": "equity_securities_immutable",
+    "function": "equity_record_immutable"
+  },
+  {
+    "table": "equity_security_events",
+    "trigger": "equity_security_events_immutable",
+    "function": "equity_record_immutable"
+  },
+  {
+    "table": "equity_splits",
+    "trigger": "equity_splits_immutable",
+    "function": "equity_record_immutable"
+  },
+  {
+    "table": "equity_compensation_runs",
+    "trigger": "equity_compensation_runs_immutable",
+    "function": "equity_record_immutable"
+  },
+  {
+    "table": "equity_compensation_run_lines",
+    "trigger": "equity_compensation_run_lines_immutable",
+    "function": "equity_record_immutable"
+  },
+  {
+    "table": "equity_account_policies",
+    "trigger": "equity_account_policies_immutable",
+    "function": "financial_policy_version_immutable"
+  },
   {
     "table": "field_ticket_source_certifications",
     "trigger": "field_ticket_source_certification_guard",

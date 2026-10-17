@@ -1286,7 +1286,8 @@
       "banking": "Banco",
       "expenses": "Relatórios de despesas",
       "intercompany": "Entre empresas",
-      "amortization": "Apropriação de despesas"
+      "amortization": "Apropriação de despesas",
+      "equity": "Patrimônio e tabela de capitalização"
     },
     "gl_read": "Ver lançamentos e saldos",
     "gl_manage": "Gerenciar o plano de contas",
@@ -1478,6 +1479,9 @@
     "gl_post_book_specific": "Lançar diários específicos de um livro",
     "amortization_read": "Ver cronogramas de apropriação e relatórios",
     "amortization_manage": "Executar a apropriação e alterar cronogramas",
+    "equity_read": "Ver a tabela de capitalização, os títulos e a remuneração em ações",
+    "equity_manage": "Registrar classes de ações, planos, emissões e movimentações de outorgas",
+    "equity_approve": "Aprovar anulações, desdobramentos, recompras e execuções de remuneração em ações",
     "assets_capitalize": "Aceitar propostas de ativos e capitalizar imobilizado em andamento",
     "assets_maintain": "Manter planos de manutenção de ativos e apólices de seguro"
   },
@@ -8309,6 +8313,10 @@
     "customerPortal": {
       "title": "Portal do cliente",
       "description": "Acesso do cliente sem senha com faturas e pagamento imediato, métodos de pagamento, alterações de assinatura, rastreamento de pedidos, devoluções de autoatendimento e consulta de vales-presente."
+    },
+    "equity": {
+      "title": "Patrimônio e tabela de capitalização",
+      "description": "Classes de ações, planos de incentivo, certificados de ações, opções, RSUs, bônus de subscrição e conversíveis por entidade legal, com a tabela de capitalização, a modelagem da cascata de liquidação e a remuneração em ações lançada no razão geral."
     },
     "storedValue": {
       "title": "Vales e créditos",

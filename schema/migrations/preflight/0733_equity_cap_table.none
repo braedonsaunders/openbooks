@@ -1,0 +1,1 @@
+The migration creates new, empty equity tables with their row security, retirement fences, retention guard and query-catalog registrations; no existing row is read or rewritten.

@@ -96,6 +96,15 @@ export const PERMISSION_CATALOGUE = [
   // schedule changes (hold, re-forecast, reduce, cancel), each with a reason.
   "amortization.read",
   "amortization.manage",
+  // Equity and cap table: read sees share classes, plans, securities, the
+  // cap table, waterfalls and stock compensation; manage records classes,
+  // plans, issuances, exercises, transfers, conversions and forfeitures;
+  // approve voids issued records, amends classes, changes plan reserves,
+  // records splits and repurchases and posts stock compensation runs
+  // (segregated from manage).
+  "equity.read",
+  "equity.manage",
+  "equity.approve",
   // Customer relationship management
   "crm.accounts.read",
   "crm.accounts.create",
@@ -578,6 +587,15 @@ export const PERMISSION_GROUPS: {
     permissions: [
       { key: "amortization.read", labelKey: permissionLabelKey("amortization.read") },
       { key: "amortization.manage", labelKey: permissionLabelKey("amortization.manage") },
+    ],
+  },
+  {
+    key: "equity",
+    labelKey: "permissions.groups.equity",
+    permissions: [
+      { key: "equity.read", labelKey: permissionLabelKey("equity.read") },
+      { key: "equity.manage", labelKey: permissionLabelKey("equity.manage") },
+      { key: "equity.approve", labelKey: permissionLabelKey("equity.approve") },
     ],
   },
   {
@@ -1163,6 +1181,9 @@ export const BUILT_IN_ROLES: Record<
       "contract_costs.approve",
       "amortization.read",
       "amortization.manage",
+      "equity.read",
+      "equity.manage",
+      "equity.approve",
       "crm.accounts.read",
       "crm.accounts.create",
       "crm.accounts.manage",
@@ -1316,6 +1337,10 @@ export const BUILT_IN_ROLES: Record<
       // Amortization runs and schedule upkeep are bookkeeping duties.
       "amortization.read",
       "amortization.manage",
+      // Recording issuances and award activity is bookkeeping; voids,
+      // splits, repurchases and compensation runs stay with an approver.
+      "equity.read",
+      "equity.manage",
       "reports.read",
       "reports.create",
       "budgets.read",
@@ -1424,6 +1449,10 @@ export const BUILT_IN_ROLES: Record<
       "contract_costs.read",
       "contract_costs.approve",
       "amortization.read",
+      // The approver reviews equity governance (read + approve) without the
+      // day-to-day recording duty.
+      "equity.read",
+      "equity.approve",
       "nonprofit.report",
       "funds.read",
       "grants.read",
@@ -1453,7 +1482,7 @@ export const BUILT_IN_ROLES: Record<
     name: "Viewer",
     description:
       "Read-only access to the ledger, subledgers, reports and insights. Cannot create, change, post or pay transactions.",
-    permissions: ["gl.read", "close.read", "ap.read", "purchase_orders.read", "ar.read", "estimates.read", "usage.read", "payment_methods.read", "contract_costs.read", "resourcing.read", "retainers.read", "reports.read", "budgets.read", "allocations.read", "intercompany.read", "nonprofit.report", "funds.read", "grants.read", "encumbrances.read", "insights.read", "records.read", "items.read", "assets.read", "time.read", "time.clock", "compliance.read", "assistant.use", "documents.read", "feedback.use", "data.export", "apps.use", "hrm.self.read", "hrm.self.request", "hrm.leave.request", "cash_sales.read", "amortization.read"],
+    permissions: ["gl.read", "close.read", "ap.read", "purchase_orders.read", "ar.read", "estimates.read", "usage.read", "payment_methods.read", "contract_costs.read", "resourcing.read", "retainers.read", "reports.read", "budgets.read", "allocations.read", "intercompany.read", "nonprofit.report", "funds.read", "grants.read", "encumbrances.read", "insights.read", "records.read", "items.read", "assets.read", "time.read", "time.clock", "compliance.read", "assistant.use", "documents.read", "feedback.use", "data.export", "apps.use", "hrm.self.read", "hrm.self.request", "hrm.leave.request", "cash_sales.read", "amortization.read", "equity.read"],
   },
   sales_manager: {
     name: "Sales Manager",

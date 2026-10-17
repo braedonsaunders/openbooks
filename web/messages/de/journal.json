@@ -87,7 +87,8 @@
     "bookOpening": "Buch-Eröffnung",
     "expenseAmortization": "Aufwandsabgrenzung",
     "accountMerge": "Kontenzusammenführung",
-    "assetCapitalization": "Anlagenaktivierung"
+    "assetCapitalization": "Anlagenaktivierung",
+    "equity": "Eigenkapital"
   },
   "detail": {
     "notFound": "Buchung nicht gefunden",

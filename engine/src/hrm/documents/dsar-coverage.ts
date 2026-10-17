@@ -266,6 +266,7 @@ export const DSAR_EXCLUDED_TABLES: readonly DsarExcludedTable[] = [
   { table: "consolidation_groups", reason: "consolidated billing config; customer counterparty. Finance remit." },
   { table: "stored_value_accounts", reason: "stored-value balances; customer counterparty. Finance remit." },
   { table: "pos_registers", reason: "point-of-sale register configuration; walk-in customer counterparty. Finance remit." },
+  { table: "equity_securities", reason: "share certificates, awards and convertibles; holder counterparty on the statutory register. Finance remit." },
   { table: "channel_orders", reason: "storefront order records; customer counterparty. Finance remit." },
   { table: "channel_order_economics", reason: "per-line margin facts; customer counterparty via the order. Finance remit." },
   { table: "channel_order_economics_pending", reason: "margin restatement queue; order link only. Finance remit." },

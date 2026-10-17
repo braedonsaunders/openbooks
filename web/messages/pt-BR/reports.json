@@ -3454,7 +3454,8 @@
       "book_opening": "Saldos de abertura do livro",
       "expense_amortization": "Apropriação de despesas",
       "account_merge": "Mesclagem de contas",
-      "asset_capitalization": "Capitalização de ativo"
+      "asset_capitalization": "Capitalização de ativo",
+      "equity": "Patrimônio líquido"
     },
     "columns": {
       "detail": "Parte / memorando"

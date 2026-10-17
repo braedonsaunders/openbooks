@@ -3454,7 +3454,8 @@
       "book_opening": "账簿期初余额",
       "expense_amortization": "费用摊销",
       "account_merge": "科目合并",
-      "asset_capitalization": "资产资本化"
+      "asset_capitalization": "资产资本化",
+      "equity": "股权"
     },
     "columns": {
       "detail": "往来方 / 备注"

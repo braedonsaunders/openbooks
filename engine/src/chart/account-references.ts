@@ -62,6 +62,12 @@ const periodEndPolicy = (label: string) => retained(label,
     where p.org_id = r.org_id and p.effective_from > r.effective_from and p.effective_from <= ${effectiveDate}::date)`,
   "Add a period-end journal policy using the surviving account, effective on or before the merge date. Earlier policy versions remain unchanged.");
 
+const equityAccountPolicy = (label: string) => retained(label,
+  (effectiveDate) => sql`not exists (select 1 from equity_account_policies p
+    where p.org_id = r.org_id and p.subsidiary_id = r.subsidiary_id
+      and p.effective_from > r.effective_from and p.effective_from <= ${effectiveDate}::date)`,
+  "Add an equity account policy using the surviving account, effective on or before the merge date (Setup → Equity accounts). Earlier policy versions remain unchanged.");
+
 const activeAmortization = (label: string) => retained(label, sql`r.status in ('draft', 'active', 'on_hold')`,
   "Complete or cancel the amortization schedules before merging their accounts. Schedules and release plans keep their recorded accounts.");
 
@@ -283,6 +289,15 @@ export const ACCOUNT_REFERENCE_RULES: Readonly<Record<string, AccountReferenceRu
   "promotions.discount_account_id": config("Promotions"),
   "restocking_fee_policies.income_account_id": config("Restocking fee policies"),
   "sales_channel_account_maps.account_id": config("Sales channel account maps"),
+  "equity_account_policies.common_stock_account_id": equityAccountPolicy("Equity account policies (common stock)"),
+  "equity_account_policies.preferred_stock_account_id": equityAccountPolicy("Equity account policies (preferred stock)"),
+  "equity_account_policies.apic_account_id": equityAccountPolicy("Equity account policies (additional paid-in capital)"),
+  "equity_account_policies.apic_share_based_account_id": equityAccountPolicy("Equity account policies (paid-in capital, share-based payments)"),
+  "equity_account_policies.compensation_expense_account_id": equityAccountPolicy("Equity account policies (stock compensation expense)"),
+  "equity_account_policies.treasury_stock_account_id": equityAccountPolicy("Equity account policies (treasury stock)"),
+  "equity_account_policies.convertible_instruments_account_id": equityAccountPolicy("Equity account policies (convertible instruments)"),
+  "equity_securities.consideration_account_id": history("Equity issuance consideration"),
+  "equity_security_events.consideration_account_id": history("Equity event consideration"),
   "stored_value_programs.liability_account_id": config("Stored value programs (liability)"),
   "stored_value_programs.breakage_income_account_id": config("Stored value programs (breakage)"),
   "stored_value_accounts.liability_account_id": config("Stored value accounts"),

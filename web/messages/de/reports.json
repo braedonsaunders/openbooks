@@ -3454,7 +3454,8 @@
       "book_opening": "Eröffnungssalden des Buchs",
       "expense_amortization": "Aufwandsabgrenzung",
       "account_merge": "Kontenzusammenführung",
-      "asset_capitalization": "Anlagenaktivierung"
+      "asset_capitalization": "Anlagenaktivierung",
+      "equity": "Eigenkapital"
     },
     "columns": {
       "detail": "Geschäftspartner / Notiz"

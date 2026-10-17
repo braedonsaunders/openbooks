@@ -3434,7 +3434,8 @@
       "book_opening": "Saldos de apertura del libro",
       "expense_amortization": "Amortización de gastos",
       "account_merge": "Fusión de cuentas",
-      "asset_capitalization": "Capitalización de activos"
+      "asset_capitalization": "Capitalización de activos",
+      "equity": "Patrimonio"
     },
     "columns": {
       "detail": "Tercero / nota"

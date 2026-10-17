@@ -77,6 +77,8 @@ export const JOURNAL_GL_NATIVE_ORIGINS = [
   "account_merge",
   // Register drawer pay-ins, pay-outs and session over/short.
   "pos",
+  // Equity issuance, exercise, repurchase and stock compensation journals.
+  "equity",
 ];
 
 /**

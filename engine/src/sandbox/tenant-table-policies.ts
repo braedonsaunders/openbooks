@@ -8,6 +8,18 @@ export const TENANT_TABLE_POLICIES = {
   "gl_audit_number_policies": "clone:catalog-uuid-rebase",
   "gl_audit_number_assignments": "clone:catalog-uuid-rebase",
   "project_loss_policies": "clone:catalog-uuid-rebase",
+  // Equity records copy with the ledger they posted to, under rebased identities.
+  "equity_share_classes": "clone:catalog-uuid-rebase",
+  "equity_class_amendments": "clone:catalog-uuid-rebase",
+  "equity_plans": "clone:catalog-uuid-rebase",
+  "equity_plan_reserve_changes": "clone:catalog-uuid-rebase",
+  "equity_financing_rounds": "clone:catalog-uuid-rebase",
+  "equity_securities": "clone:catalog-uuid-rebase",
+  "equity_security_events": "clone:catalog-uuid-rebase",
+  "equity_splits": "clone:catalog-uuid-rebase",
+  "equity_account_policies": "clone:catalog-uuid-rebase",
+  "equity_compensation_runs": "clone:catalog-uuid-rebase",
+  "equity_compensation_run_lines": "clone:catalog-uuid-rebase",
   "payroll_us_filing_account_employer_lineage": "clone:catalog-uuid-rebase",
   // Closing rate quotes price the copied ledger, so they copy with rebased
   // identities (masked copies redact the authored source and reason).

@@ -87,7 +87,8 @@
     "bookOpening": "帳簿期首",
     "expenseAmortization": "費用の期間配分",
     "accountMerge": "勘定の統合",
-    "assetCapitalization": "資産計上"
+    "assetCapitalization": "資産計上",
+    "equity": "資本"
   },
   "detail": {
     "notFound": "仕訳が見つかりません",

@@ -3434,7 +3434,8 @@
       "book_opening": "Soldes d’ouverture du livre",
       "expense_amortization": "Étalement des charges",
       "account_merge": "Fusion de comptes",
-      "asset_capitalization": "Immobilisation d’actifs"
+      "asset_capitalization": "Immobilisation d’actifs",
+      "equity": "Capitaux propres"
     },
     "columns": {
       "detail": "Tiers / mémo"
