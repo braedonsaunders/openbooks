@@ -103,5 +103,97 @@
       "bills": "Lieferantenrechnungen",
       "expenses": "Spesenberichte"
     }
+  },
+  "receipts": {
+    "tab": "Belege",
+    "scan": "Belege scannen",
+    "dropHint": "Belegfotos oder PDFs hierher ziehen",
+    "formats": "PDF, JPEG, PNG oder TIFF, jeweils bis 20 MB",
+    "chooseFiles": "Dateien auswählen",
+    "notConfigured": "Das Scannen von Belegen nutzt den Dokumenterfassungsdienst, der deaktiviert oder nicht eingerichtet ist.",
+    "askAdmin": "Bitten Sie einen Administrator, die Dokumenterfassung unter Plattform → KI zu aktivieren.",
+    "configure": "Dokumenterfassung einrichten",
+    "notDraft": "Belege können nur auf Berichtsentwürfe gescannt werden, die Sie bearbeiten dürfen.",
+    "loading": "Belege werden geladen…",
+    "loadFailed": "Die Belege konnten nicht geladen werden.",
+    "retryLoad": "Erneut versuchen",
+    "empty": "Noch keine Belege gescannt.",
+    "dismiss": "Ausblenden",
+    "progress": {
+      "queued": "Wartet",
+      "scanning": "Beleg wird gelesen…",
+      "failed": "Fehlgeschlagen"
+    },
+    "status": {
+      "extracting": "Wird gelesen",
+      "extracted": "Bereit zur Prüfung",
+      "failed": "Fehlgeschlagen",
+      "confirmed": "Bestätigt",
+      "discarded": "Verworfen",
+      "interrupted": "Unterbrochen"
+    },
+    "reading": "Der Beleg wird gelesen…",
+    "retry": "Wiederholen",
+    "discard": "Verwerfen",
+    "discardTitle": "Diesen Beleg verwerfen?",
+    "discardBody": "Er erstellt dann keine Zeile mehr und zählt nicht mehr als Duplikat. Die Datei bleibt in den Anhängen des Berichts, wo Sie sie entfernen können.",
+    "pending": "Zu den Berichtszeilen hinzugefügt. Speichern Sie den Bericht, um diesen Beleg zu bestätigen.",
+    "confirmedLine": "Als Zeile {line} bestätigt: {merchant}, {date}, {amount}",
+    "fields": {
+      "date": "Belegdatum",
+      "merchant": "Händler",
+      "total": "Gesamtbetrag",
+      "totalIn": "Gesamtbetrag ({currency})",
+      "tax": "Steuer",
+      "tip": "Trinkgeld",
+      "subtotal": "Zwischensumme",
+      "currency": "Währung",
+      "taxCode": "Steuerschlüssel",
+      "account": "Aufwandskonto",
+      "description": "Beschreibung"
+    },
+    "noTaxCode": "Kein Steuerschlüssel",
+    "readAs": "Beleg zeigt {value}",
+    "readAsConfidence": "Beleg zeigt {value} ({confidence} % sicher)",
+    "useReading": "Übernehmen",
+    "matchedVendor": "Zugeordneter Lieferant: {name}",
+    "clearVendor": "Nicht dieser Lieferant",
+    "suggested": {
+      "employee_history": "Vorschlag aus dem letzten Beleg dieses Mitarbeiters hier: {account}",
+      "organization_history": "Vorschlag aus dem letzten Beleg dieses Händlers: {account}",
+      "vendor_default": "Standard-Aufwandskonto des Lieferanten: {account}"
+    },
+    "useSuggestion": "Vorschlag übernehmen",
+    "requiredHint": "Füllen Sie die markierten Felder aus und wählen Sie ein Konto, um diesen Beleg hinzuzufügen.",
+    "lineAmount": "Zeilenbetrag {amount} zuzüglich Steuer {tax}",
+    "lineAmountNoTax": "Zeilenbetrag {amount}",
+    "addToReport": "Zum Bericht hinzufügen",
+    "previewAlt": "Beleg {name}",
+    "noPreview": "Für diesen Dateityp gibt es keine Vorschau.",
+    "openFile": "Datei öffnen",
+    "sourceColumn": "Herkunft",
+    "fromReceipt": "Aus Beleg",
+    "issues": {
+      "requiredField": "{field} wurde nicht vom Beleg gelesen. Bitte eingeben.",
+      "lowConfidence": "{field} wurde mit geringer Sicherheit gelesen. Bitte bestätigen.",
+      "invalidDate": "Das Datum „{value}“ ist nicht eindeutig lesbar. Geben Sie das Belegdatum ein.",
+      "futureDate": "Das Belegdatum {value} liegt nach dem heutigen Tag.",
+      "totalMismatch": "Zwischensumme, Steuer und Trinkgeld ergeben {expected}, der Gesamtbetrag lautet aber {actual}.",
+      "taxDetailMismatch": "Die Steuerzeilen ergeben {expected}, die Gesamtsteuer lautet aber {actual}.",
+      "itemsMismatch": "Die Positionen ergeben {expected}, die Zwischensumme lautet aber {actual}.",
+      "nonPositiveTotal": "Der Gesamtbetrag {value} ist nicht positiv.",
+      "amountOutOfRange": "{field} ist zu groß zum Erfassen.",
+      "currencyUnread": "Der Beleg nennt keine Währung. Bestätigen Sie, dass der Betrag in {currency} ist.",
+      "currencyMismatch": "Dieser Beleg ist in {actual}, der Bericht aber in {currency}. Erfassen Sie ihn auf einem Bericht in dieser Währung oder fügen Sie die Zeile manuell mit dem belasteten Betrag in {currency} hinzu.",
+      "currencyConflict": "Die Beträge auf dem Beleg zeigen verschiedene Währungen ({actual}). Bestätigen Sie die belastete Währung.",
+      "invalidCurrency": "„{actual}“ ist kein gültiger Währungscode.",
+      "duplicateFile": "Diese Belegdatei wurde bereits auf {report} gescannt. Verwerfen Sie sie, sofern es keine separate Ausgabe ist.",
+      "duplicateReceipt": "Ein Beleg mit gleichem Händler, Datum und Gesamtbetrag ist bereits auf {report}. Verwerfen Sie ihn, sofern es keine separate Ausgabe ist."
+    },
+    "toasts": {
+      "added": "Zeile aus dem Beleg hinzugefügt. Prüfen Sie sie und speichern Sie den Bericht.",
+      "discarded": "Beleg verworfen.",
+      "actionFailed": "Die Belegaktion ist fehlgeschlagen."
+    }
   }
 }

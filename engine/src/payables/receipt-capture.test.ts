@@ -7,7 +7,6 @@ import {
   isReceiptContentType,
   normalizeAzureReceipt,
   receiptDuplicateIssues,
-  receiptLineAmounts,
   receiptMerchantKey,
   validateNormalizedReceipt,
   type NormalizedReceipt,
@@ -264,12 +263,6 @@ test("a confident receipt drafts every field and carries the suggestion only as 
   assert.equal(draft.taxAmount.value, "10.9900");
   assert.equal(draft.tip.value, "15.0000");
   assert.deepEqual(draft.suggestedAccount, { accountId: "acct-meals", source: "employee_history" });
-});
-
-test("line amounts split the receipt total around its tax only under a tax code", () => {
-  assert.deepEqual(receiptLineAmounts({ total: "110.4900", taxAmount: "10.9900", withTaxCode: true }), { amount: "99.5000", taxAmount: "10.9900" });
-  assert.deepEqual(receiptLineAmounts({ total: "110.4900", taxAmount: "10.9900", withTaxCode: false }), { amount: "110.4900", taxAmount: null });
-  assert.deepEqual(receiptLineAmounts({ total: "24.10", taxAmount: null, withTaxCode: true }), { amount: "24.1000", taxAmount: null });
 });
 
 test("merchant keys ignore case, accents, punctuation and store numbers but keep every script", () => {

@@ -103,5 +103,97 @@
       "bills": "供应商账单",
       "expenses": "费用报销单"
     }
+  },
+  "receipts": {
+    "tab": "收据",
+    "scan": "扫描收据",
+    "dropHint": "将收据照片或 PDF 拖放到此处",
+    "formats": "PDF、JPEG、PNG 或 TIFF,每个不超过 20 MB",
+    "chooseFiles": "选择文件",
+    "notConfigured": "收据扫描使用文档采集服务,该服务已停用或尚未配置。",
+    "askAdmin": "请管理员在“平台 → AI”中启用文档采集。",
+    "configure": "配置文档采集",
+    "notDraft": "只能将收据扫描到您可编辑的草稿报销单。",
+    "loading": "正在加载收据…",
+    "loadFailed": "无法加载收据。",
+    "retryLoad": "重试",
+    "empty": "尚未扫描任何收据。",
+    "dismiss": "关闭",
+    "progress": {
+      "queued": "等待中",
+      "scanning": "正在读取收据…",
+      "failed": "失败"
+    },
+    "status": {
+      "extracting": "读取中",
+      "extracted": "待审核",
+      "failed": "失败",
+      "confirmed": "已确认",
+      "discarded": "已丢弃",
+      "interrupted": "已中断"
+    },
+    "reading": "正在读取收据…",
+    "retry": "重新读取",
+    "discard": "丢弃",
+    "discardTitle": "丢弃此收据?",
+    "discardBody": "它将不再生成明细行,也不再计为重复。文件仍保留在报销单附件中,您可以在那里删除。",
+    "pending": "已添加到报销单明细。保存报销单即可确认此收据。",
+    "confirmedLine": "已确认为第 {line} 行:{merchant},{date},{amount}",
+    "fields": {
+      "date": "交易日期",
+      "merchant": "商户",
+      "total": "合计",
+      "totalIn": "合计({currency})",
+      "tax": "税额",
+      "tip": "小费",
+      "subtotal": "小计",
+      "currency": "币种",
+      "taxCode": "税码",
+      "account": "费用科目",
+      "description": "摘要"
+    },
+    "noTaxCode": "无税码",
+    "readAs": "收据读取值:{value}",
+    "readAsConfidence": "收据读取值:{value}(置信度 {confidence}%)",
+    "useReading": "采用",
+    "matchedVendor": "匹配的供应商:{name}",
+    "clearVendor": "不是此供应商",
+    "suggested": {
+      "employee_history": "根据该员工在此商户的上一张收据建议:{account}",
+      "organization_history": "根据该商户的上一张收据建议:{account}",
+      "vendor_default": "供应商的默认费用科目:{account}"
+    },
+    "useSuggestion": "采用建议",
+    "requiredHint": "填写高亮字段并选择科目后即可添加此收据。",
+    "lineAmount": "明细金额 {amount},另加税额 {tax}",
+    "lineAmountNoTax": "明细金额 {amount}",
+    "addToReport": "添加到报销单",
+    "previewAlt": "收据 {name}",
+    "noPreview": "此文件类型无法预览。",
+    "openFile": "打开文件",
+    "sourceColumn": "来源",
+    "fromReceipt": "来自收据",
+    "issues": {
+      "requiredField": "未能从收据读取{field},请填写。",
+      "lowConfidence": "{field}的读取置信度较低,请确认。",
+      "invalidDate": "无法将日期“{value}”识别为唯一日期,请填写交易日期。",
+      "futureDate": "收据日期 {value} 晚于今天。",
+      "totalMismatch": "小计、税额和小费合计为 {expected},但合计显示为 {actual}。",
+      "taxDetailMismatch": "税额明细合计为 {expected},但税额合计显示为 {actual}。",
+      "itemsMismatch": "各项目合计为 {expected},但小计显示为 {actual}。",
+      "nonPositiveTotal": "合计 {value} 不是正数金额。",
+      "amountOutOfRange": "{field}过大,无法记录。",
+      "currencyUnread": "收据未注明币种,请确认金额以 {currency} 计。",
+      "currencyMismatch": "此收据以 {actual} 计,但报销单以 {currency} 计。请将其记录在该币种的报销单上,或按 {currency} 实际扣款金额手动添加明细。",
+      "currencyConflict": "收据金额显示不同币种({actual}),请确认实际扣款币种。",
+      "invalidCurrency": "“{actual}”不是有效的币种代码。",
+      "duplicateFile": "此收据文件已在 {report} 上扫描过。除非是另一笔费用,否则请丢弃。",
+      "duplicateReceipt": "{report} 上已有商户、日期和合计相同的收据。除非是另一笔费用,否则请丢弃。"
+    },
+    "toasts": {
+      "added": "已从收据添加明细。请检查后保存报销单。",
+      "discarded": "收据已丢弃。",
+      "actionFailed": "收据操作失败。"
+    }
   }
 }

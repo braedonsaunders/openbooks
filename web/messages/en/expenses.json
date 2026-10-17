@@ -103,5 +103,97 @@
       "bills": "Vendor bills",
       "expenses": "Expense reports"
     }
+  },
+  "receipts": {
+    "tab": "Receipts",
+    "scan": "Scan receipts",
+    "dropHint": "Drop receipt photos or PDFs here",
+    "formats": "PDF, JPEG, PNG or TIFF, up to 20 MB each",
+    "chooseFiles": "Choose files",
+    "notConfigured": "Receipt scanning uses the document capture provider, which is disabled or not configured.",
+    "askAdmin": "Ask an administrator to enable document capture under Platform → AI.",
+    "configure": "Configure document capture",
+    "notDraft": "Receipts can be scanned onto draft reports you can edit.",
+    "loading": "Loading receipts…",
+    "loadFailed": "Receipts could not be loaded.",
+    "retryLoad": "Try again",
+    "empty": "No receipts scanned yet.",
+    "dismiss": "Dismiss",
+    "progress": {
+      "queued": "Waiting",
+      "scanning": "Reading receipt…",
+      "failed": "Failed"
+    },
+    "status": {
+      "extracting": "Reading",
+      "extracted": "Ready for review",
+      "failed": "Failed",
+      "confirmed": "Confirmed",
+      "discarded": "Discarded",
+      "interrupted": "Interrupted"
+    },
+    "reading": "Reading the receipt…",
+    "retry": "Retry",
+    "discard": "Discard",
+    "discardTitle": "Discard this receipt?",
+    "discardBody": "It will no longer draft a line or count as a duplicate. The file stays in the report's attachments, where you can remove it.",
+    "pending": "Added to the report lines. Save the report to confirm this receipt.",
+    "confirmedLine": "Confirmed as line {line}: {merchant}, {date}, {amount}",
+    "fields": {
+      "date": "Transaction date",
+      "merchant": "Merchant",
+      "total": "Total",
+      "totalIn": "Total ({currency})",
+      "tax": "Tax",
+      "tip": "Tip",
+      "subtotal": "Subtotal",
+      "currency": "Currency",
+      "taxCode": "Tax code",
+      "account": "Expense account",
+      "description": "Description"
+    },
+    "noTaxCode": "No tax code",
+    "readAs": "Receipt reads {value}",
+    "readAsConfidence": "Receipt reads {value} ({confidence}% confident)",
+    "useReading": "Use",
+    "matchedVendor": "Matched vendor: {name}",
+    "clearVendor": "Not this vendor",
+    "suggested": {
+      "employee_history": "Suggested from this employee's last receipt here: {account}",
+      "organization_history": "Suggested from this merchant's last receipt: {account}",
+      "vendor_default": "The vendor's default expense account: {account}"
+    },
+    "useSuggestion": "Use suggestion",
+    "requiredHint": "Fill the highlighted fields and choose an account to add this receipt.",
+    "lineAmount": "Line amount {amount} plus tax {tax}",
+    "lineAmountNoTax": "Line amount {amount}",
+    "addToReport": "Add to report",
+    "previewAlt": "Receipt {name}",
+    "noPreview": "No preview for this file type.",
+    "openFile": "Open file",
+    "sourceColumn": "Source",
+    "fromReceipt": "From receipt",
+    "issues": {
+      "requiredField": "{field} was not read from the receipt. Enter it.",
+      "lowConfidence": "{field} was read with low confidence. Confirm it.",
+      "invalidDate": "The date \"{value}\" could not be read as one calendar date. Enter the transaction date.",
+      "futureDate": "The receipt date {value} is later than today.",
+      "totalMismatch": "Subtotal, tax and tip add up to {expected}, but the total reads {actual}.",
+      "taxDetailMismatch": "The tax lines add up to {expected}, but the total tax reads {actual}.",
+      "itemsMismatch": "The items add up to {expected}, but the subtotal reads {actual}.",
+      "nonPositiveTotal": "The total {value} is not a positive amount.",
+      "amountOutOfRange": "{field} is too large to record.",
+      "currencyUnread": "The receipt does not state a currency. Confirm the amount is in {currency}.",
+      "currencyMismatch": "This receipt is in {actual} but the report is in {currency}. Record it on a report in that currency, or add the line by hand with the {currency} amount charged.",
+      "currencyConflict": "The receipt amounts show different currencies ({actual}). Confirm the currency charged.",
+      "invalidCurrency": "\"{actual}\" is not a valid currency code.",
+      "duplicateFile": "This receipt file was already scanned on {report}. Discard it unless this is a separate expense.",
+      "duplicateReceipt": "A receipt with the same merchant, date and total is already on {report}. Discard it unless this is a separate expense."
+    },
+    "toasts": {
+      "added": "Line added from the receipt. Review it and save the report.",
+      "discarded": "Receipt discarded.",
+      "actionFailed": "The receipt action failed."
+    }
   }
 }

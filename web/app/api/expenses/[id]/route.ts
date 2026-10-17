@@ -14,6 +14,7 @@ import { documentRevisionCounterSql } from "@openbooks/engine/records/revision";
 import { assertReportEmployee, type ExpenseEditBody, persistExpenseEdit, prepareExpenseEdit } from '../../../../lib/expense-edit'
 import { loadExpenseReport } from '../../../../lib/expenses'
 import { notFound } from "@/lib/api/responses";
+import { confirmReceiptLines, ReceiptCaptureRefusal } from '@openbooks/engine/payables/receipt-capture-service'
 const DELETEBodySchema1 = z.object({
   // An omitted token reaches the named revision refusal below; a supplied
   // token must still be a non-empty string.
@@ -21,6 +22,14 @@ const DELETEBodySchema1 = z.object({
 });
 
 const nullableId = z.string().uuid().nullable();
+const receiptLineSchema = z.strictObject({
+  captureId: z.string().uuid(),
+  lineIndex: z.number().int().min(0),
+  transactionDate: z.string(),
+  merchantName: z.string(),
+  merchantPartyId: z.string().uuid().nullable(),
+});
+type ReceiptLineBody = z.output<typeof receiptLineSchema>
 const PATCHBodySchema1 = z.object({
   // The boundary admits the full edit shape and refuses only wrong types;
   // every domain rule (including a malformed documentDate) belongs to
@@ -34,6 +43,10 @@ const PATCHBodySchema1 = z.object({
   extraDims: z.record(z.string(), z.unknown()).optional(),
   custom: z.record(z.string(), z.unknown()).optional(),
   lines: z.array(z.looseObject({})).optional(),
+  // Receipt captures the reviewer confirmed into submitted lines. Each names
+  // the zero-based line it backs and the merchant and transaction date the
+  // reviewer confirmed; the confirmation commits with the line save.
+  receiptLines: z.array(receiptLineSchema).max(500).optional(),
 }).refine(body => Object.keys(body).length > 0, { message: 'Supply the expense changes to save.' });
 
 
@@ -140,7 +153,7 @@ export const PATCH = defineRoute({
     try {
         await runDocumentVersionedTransaction<
           RouteTransaction,
-          { status: string; updatedAt: string; subsidiaryId: string | null; partyId: string | null },
+          { status: string; updatedAt: string; subsidiaryId: string | null; partyId: string | null; currency: string },
           void
         >({
           expectedRevision,
@@ -149,8 +162,8 @@ export const PATCH = defineRoute({
           // the write transaction: a concurrent writer cannot slip between the
           // check and the header/line replacement.
           lock: async (tx) => {
-            const row = (await tx.execute<{ status: string; updatedAt: string; subsidiaryId: string | null; partyId: string | null }>(sql`
-              select status, subsidiary_id as "subsidiaryId", party_id as "partyId",
+            const row = (await tx.execute<{ status: string; updatedAt: string; subsidiaryId: string | null; partyId: string | null; currency: string }>(sql`
+              select status, subsidiary_id as "subsidiaryId", party_id as "partyId", currency,
                      ${documentRevisionCounterSql(sql.raw('revision_seq'))} as "updatedAt"
                 from documents
                where id = ${id} and kind = 'expense_report' and org_id = ${user.orgId}
@@ -186,6 +199,21 @@ export const PATCH = defineRoute({
               prepared,
             })
 
+            const receiptLines = (routeBody as { receiptLines?: ReceiptLineBody[] }).receiptLines ?? []
+            if (receiptLines.length > 0) {
+              if (!prepared.preparedLines) {
+                throw new DocumentEditError(422, 'Receipt lines are confirmed with the report lines — save the lines together with their receipts')
+              }
+              await confirmReceiptLines(tx, {
+                orgId: user.orgId,
+                documentId: id,
+                reportCurrency: locked.currency,
+                actorId: user.id,
+                lines: prepared.preparedLines.map((line) => ({ accountId: line.accountId, amount: line.amount, taxAmount: line.taxAmount })),
+                confirmations: receiptLines,
+              })
+            }
+
             const auditAfter = await captureTransactionAuditSnapshot(tx, id, user.orgId)
             if (!auditAfter) throw new Error(`expense report ${id} disappeared during update`)
             await recordTransactionAudit(tx, {
@@ -203,6 +231,7 @@ export const PATCH = defineRoute({
         if (e instanceof DocumentEditError) {
           return apiErrorResponse(e, { details: e.fieldErrors ? { fieldErrors: e.fieldErrors } : {} })
         }
+        if (e instanceof ReceiptCaptureRefusal) return apiErrorResponse(e)
         throw e
       }
     const report = await loadExpenseReport(id, user.orgId, gate.allowedSubsidiaryIds)

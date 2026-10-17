@@ -103,5 +103,97 @@
       "bills": "Contas de fornecedores",
       "expenses": "Relatórios de despesas"
     }
+  },
+  "receipts": {
+    "tab": "Recibos",
+    "scan": "Digitalizar recibos",
+    "dropHint": "Solte aqui fotos ou PDFs de recibos",
+    "formats": "PDF, JPEG, PNG ou TIFF, até 20 MB cada",
+    "chooseFiles": "Escolher arquivos",
+    "notConfigured": "A digitalização de recibos usa o provedor de captura de documentos, que está desativado ou não configurado.",
+    "askAdmin": "Peça a um administrador para ativar a captura de documentos em Plataforma → IA.",
+    "configure": "Configurar captura de documentos",
+    "notDraft": "Recibos só podem ser digitalizados em rascunhos de relatórios que você pode editar.",
+    "loading": "Carregando recibos…",
+    "loadFailed": "Não foi possível carregar os recibos.",
+    "retryLoad": "Tentar novamente",
+    "empty": "Nenhum recibo digitalizado ainda.",
+    "dismiss": "Dispensar",
+    "progress": {
+      "queued": "Aguardando",
+      "scanning": "Lendo o recibo…",
+      "failed": "Falhou"
+    },
+    "status": {
+      "extracting": "Lendo",
+      "extracted": "Pronto para revisão",
+      "failed": "Falhou",
+      "confirmed": "Confirmado",
+      "discarded": "Descartado",
+      "interrupted": "Interrompido"
+    },
+    "reading": "Lendo o recibo…",
+    "retry": "Tentar de novo",
+    "discard": "Descartar",
+    "discardTitle": "Descartar este recibo?",
+    "discardBody": "Ele deixará de sugerir uma linha e de contar como duplicado. O arquivo continua nos anexos do relatório, onde você pode removê-lo.",
+    "pending": "Adicionado às linhas do relatório. Salve o relatório para confirmar este recibo.",
+    "confirmedLine": "Confirmado como linha {line}: {merchant}, {date}, {amount}",
+    "fields": {
+      "date": "Data da transação",
+      "merchant": "Estabelecimento",
+      "total": "Valor total",
+      "totalIn": "Valor total ({currency})",
+      "tax": "Imposto",
+      "tip": "Gorjeta",
+      "subtotal": "Valor parcial",
+      "currency": "Moeda",
+      "taxCode": "Código de imposto",
+      "account": "Conta de despesa",
+      "description": "Descrição"
+    },
+    "noTaxCode": "Sem código de imposto",
+    "readAs": "O recibo indica {value}",
+    "readAsConfidence": "O recibo indica {value} ({confidence}% de confiança)",
+    "useReading": "Usar",
+    "matchedVendor": "Fornecedor correspondente: {name}",
+    "clearVendor": "Não é este fornecedor",
+    "suggested": {
+      "employee_history": "Sugerido pelo último recibo deste funcionário aqui: {account}",
+      "organization_history": "Sugerido pelo último recibo deste estabelecimento: {account}",
+      "vendor_default": "Conta de despesa padrão do fornecedor: {account}"
+    },
+    "useSuggestion": "Usar sugestão",
+    "requiredHint": "Preencha os campos destacados e escolha uma conta para adicionar este recibo.",
+    "lineAmount": "Valor da linha {amount} mais imposto {tax}",
+    "lineAmountNoTax": "Valor da linha {amount}",
+    "addToReport": "Adicionar ao relatório",
+    "previewAlt": "Recibo {name}",
+    "noPreview": "Não há visualização para este tipo de arquivo.",
+    "openFile": "Abrir arquivo",
+    "sourceColumn": "Origem",
+    "fromReceipt": "De um recibo",
+    "issues": {
+      "requiredField": "{field} não foi lido do recibo. Informe-o.",
+      "lowConfidence": "{field} foi lido com baixa confiança. Confirme-o.",
+      "invalidDate": "A data \"{value}\" não pôde ser lida como uma única data. Informe a data da transação.",
+      "futureDate": "A data do recibo {value} é posterior a hoje.",
+      "totalMismatch": "Valor parcial, imposto e gorjeta somam {expected}, mas o total indica {actual}.",
+      "taxDetailMismatch": "As linhas de imposto somam {expected}, mas o imposto total indica {actual}.",
+      "itemsMismatch": "Os itens somam {expected}, mas o valor parcial indica {actual}.",
+      "nonPositiveTotal": "O total {value} não é um valor positivo.",
+      "amountOutOfRange": "{field} é grande demais para ser registrado.",
+      "currencyUnread": "O recibo não informa uma moeda. Confirme que o valor está em {currency}.",
+      "currencyMismatch": "Este recibo está em {actual}, mas o relatório está em {currency}. Registre-o em um relatório nessa moeda ou adicione a linha manualmente com o valor cobrado em {currency}.",
+      "currencyConflict": "Os valores do recibo mostram moedas diferentes ({actual}). Confirme a moeda cobrada.",
+      "invalidCurrency": "\"{actual}\" não é um código de moeda válido.",
+      "duplicateFile": "Este arquivo de recibo já foi digitalizado em {report}. Descarte-o, a menos que seja uma despesa separada.",
+      "duplicateReceipt": "Já existe um recibo com o mesmo estabelecimento, data e total em {report}. Descarte-o, a menos que seja uma despesa separada."
+    },
+    "toasts": {
+      "added": "Linha adicionada a partir do recibo. Revise-a e salve o relatório.",
+      "discarded": "Recibo descartado.",
+      "actionFailed": "A ação no recibo falhou."
+    }
   }
 }

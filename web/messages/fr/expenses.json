@@ -103,5 +103,97 @@
       "bills": "Factures fournisseurs",
       "expenses": "Notes de frais"
     }
+  },
+  "receipts": {
+    "tab": "Reçus",
+    "scan": "Numériser des reçus",
+    "dropHint": "Déposez ici des photos ou des PDF de reçus",
+    "formats": "PDF, JPEG, PNG ou TIFF, 20 Mo maximum chacun",
+    "chooseFiles": "Choisir des fichiers",
+    "notConfigured": "La numérisation des reçus utilise le service de capture de documents, qui est désactivé ou non configuré.",
+    "askAdmin": "Demandez à un administrateur d'activer la capture de documents dans Plateforme → IA.",
+    "configure": "Configurer la capture de documents",
+    "notDraft": "Les reçus ne peuvent être numérisés que sur des brouillons de notes de frais que vous pouvez modifier.",
+    "loading": "Chargement des reçus…",
+    "loadFailed": "Les reçus n'ont pas pu être chargés.",
+    "retryLoad": "Réessayer",
+    "empty": "Aucun reçu numérisé pour l'instant.",
+    "dismiss": "Masquer",
+    "progress": {
+      "queued": "En attente",
+      "scanning": "Lecture du reçu…",
+      "failed": "Échec"
+    },
+    "status": {
+      "extracting": "Lecture",
+      "extracted": "Prêt à vérifier",
+      "failed": "Échec",
+      "confirmed": "Confirmé",
+      "discarded": "Écarté",
+      "interrupted": "Interrompu"
+    },
+    "reading": "Lecture du reçu en cours…",
+    "retry": "Relancer",
+    "discard": "Écarter",
+    "discardTitle": "Écarter ce reçu ?",
+    "discardBody": "Il ne proposera plus de ligne et ne comptera plus comme doublon. Le fichier reste dans les pièces jointes de la note, où vous pouvez le retirer.",
+    "pending": "Ajouté aux lignes de la note. Enregistrez la note pour confirmer ce reçu.",
+    "confirmedLine": "Confirmé en ligne {line} : {merchant}, {date}, {amount}",
+    "fields": {
+      "date": "Date de la transaction",
+      "merchant": "Commerçant",
+      "total": "Montant total",
+      "totalIn": "Montant total ({currency})",
+      "tax": "Taxe",
+      "tip": "Pourboire",
+      "subtotal": "Sous-total",
+      "currency": "Devise",
+      "taxCode": "Code de taxe",
+      "account": "Compte de charge",
+      "description": "Libellé"
+    },
+    "noTaxCode": "Aucun code de taxe",
+    "readAs": "Le reçu indique {value}",
+    "readAsConfidence": "Le reçu indique {value} (confiance {confidence} %)",
+    "useReading": "Utiliser",
+    "matchedVendor": "Fournisseur associé : {name}",
+    "clearVendor": "Pas ce fournisseur",
+    "suggested": {
+      "employee_history": "Suggéré d'après le dernier reçu de cet employé ici : {account}",
+      "organization_history": "Suggéré d'après le dernier reçu de ce commerçant : {account}",
+      "vendor_default": "Compte de charge par défaut du fournisseur : {account}"
+    },
+    "useSuggestion": "Utiliser la suggestion",
+    "requiredHint": "Remplissez les champs signalés et choisissez un compte pour ajouter ce reçu.",
+    "lineAmount": "Montant de la ligne {amount} plus taxe {tax}",
+    "lineAmountNoTax": "Montant de la ligne {amount}",
+    "addToReport": "Ajouter à la note",
+    "previewAlt": "Reçu {name}",
+    "noPreview": "Aucun aperçu pour ce type de fichier.",
+    "openFile": "Ouvrir le fichier",
+    "sourceColumn": "Origine",
+    "fromReceipt": "Depuis un reçu",
+    "issues": {
+      "requiredField": "{field} n'a pas été lu sur le reçu. Saisissez-le.",
+      "lowConfidence": "{field} a été lu avec une faible confiance. Confirmez-le.",
+      "invalidDate": "La date « {value} » ne correspond pas à une date unique. Saisissez la date de la transaction.",
+      "futureDate": "La date du reçu {value} est postérieure à aujourd'hui.",
+      "totalMismatch": "Le sous-total, la taxe et le pourboire font {expected}, mais le total indique {actual}.",
+      "taxDetailMismatch": "Les lignes de taxe font {expected}, mais la taxe totale indique {actual}.",
+      "itemsMismatch": "Les articles font {expected}, mais le sous-total indique {actual}.",
+      "nonPositiveTotal": "Le total {value} n'est pas un montant positif.",
+      "amountOutOfRange": "{field} est trop élevé pour être enregistré.",
+      "currencyUnread": "Le reçu n'indique pas de devise. Confirmez que le montant est en {currency}.",
+      "currencyMismatch": "Ce reçu est en {actual} mais la note est en {currency}. Enregistrez-le sur une note dans cette devise, ou ajoutez la ligne manuellement avec le montant débité en {currency}.",
+      "currencyConflict": "Les montants du reçu affichent des devises différentes ({actual}). Confirmez la devise débitée.",
+      "invalidCurrency": "« {actual} » n'est pas un code de devise valide.",
+      "duplicateFile": "Ce fichier de reçu a déjà été numérisé sur {report}. Écartez-le sauf s'il s'agit d'une dépense distincte.",
+      "duplicateReceipt": "Un reçu avec le même commerçant, la même date et le même total figure déjà sur {report}. Écartez-le sauf s'il s'agit d'une dépense distincte."
+    },
+    "toasts": {
+      "added": "Ligne ajoutée depuis le reçu. Vérifiez-la puis enregistrez la note.",
+      "discarded": "Reçu écarté.",
+      "actionFailed": "L'action sur le reçu a échoué."
+    }
   }
 }

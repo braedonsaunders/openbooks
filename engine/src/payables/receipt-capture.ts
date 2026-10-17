@@ -1,4 +1,4 @@
-import { add, cmp, neg, sum } from "../money/money.ts";
+import { cmp, sum } from "../money/money.ts";
 import { isIso4217CurrencyCode } from "../fx/currencies.ts";
 import { isIsoCalendarDate } from "../platform/iso-date.ts";
 import {
@@ -414,19 +414,6 @@ export function draftExpenseLineFromReceipt(input: {
     currencyMatchesReport,
     suggestedAccount: input.suggestedAccount,
   };
-}
-
-/**
- * The line amount a confirmed receipt books. With a tax code the receipt's
- * tax rides as the line's tax and the amount is the remainder; without one
- * the whole total is the expense.
- */
-export function receiptLineAmounts(input: { total: string; taxAmount: string | null; withTaxCode: boolean }): {
-  amount: string;
-  taxAmount: string | null;
-} {
-  if (!input.withTaxCode || input.taxAmount === null) return { amount: add(input.total, "0"), taxAmount: null };
-  return { amount: add(input.total, neg(input.taxAmount)), taxAmount: add(input.taxAmount, "0") };
 }
 
 /**

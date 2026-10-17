@@ -103,5 +103,97 @@
       "bills": "仕入先請求書",
       "expenses": "経費精算書"
     }
+  },
+  "receipts": {
+    "tab": "領収書",
+    "scan": "領収書をスキャン",
+    "dropHint": "領収書の写真またはPDFをここにドロップ",
+    "formats": "PDF、JPEG、PNG、TIFF(各20 MBまで)",
+    "chooseFiles": "ファイルを選択",
+    "notConfigured": "領収書のスキャンにはドキュメント取り込みサービスを使用しますが、無効または未設定です。",
+    "askAdmin": "管理者に「プラットフォーム → AI」でドキュメント取り込みを有効にするよう依頼してください。",
+    "configure": "ドキュメント取り込みを設定",
+    "notDraft": "領収書は、編集できる下書きのレポートにのみスキャンできます。",
+    "loading": "領収書を読み込み中…",
+    "loadFailed": "領収書を読み込めませんでした。",
+    "retryLoad": "再試行",
+    "empty": "スキャンした領収書はまだありません。",
+    "dismiss": "閉じる",
+    "progress": {
+      "queued": "待機中",
+      "scanning": "領収書を読み取り中…",
+      "failed": "失敗"
+    },
+    "status": {
+      "extracting": "読み取り中",
+      "extracted": "確認待ち",
+      "failed": "失敗",
+      "confirmed": "確認済み",
+      "discarded": "破棄済み",
+      "interrupted": "中断"
+    },
+    "reading": "領収書を読み取っています…",
+    "retry": "再実行",
+    "discard": "破棄",
+    "discardTitle": "この領収書を破棄しますか?",
+    "discardBody": "明細の作成や重複判定の対象外になります。ファイルはレポートの添付ファイルに残り、そこで削除できます。",
+    "pending": "レポートの明細に追加しました。レポートを保存すると、この領収書が確定します。",
+    "confirmedLine": "明細 {line} として確定: {merchant}、{date}、{amount}",
+    "fields": {
+      "date": "取引日",
+      "merchant": "店舗",
+      "total": "合計",
+      "totalIn": "合計({currency})",
+      "tax": "税額",
+      "tip": "チップ",
+      "subtotal": "小計",
+      "currency": "通貨",
+      "taxCode": "税コード",
+      "account": "費用勘定",
+      "description": "摘要"
+    },
+    "noTaxCode": "税コードなし",
+    "readAs": "領収書の読み取り値: {value}",
+    "readAsConfidence": "領収書の読み取り値: {value}(信頼度 {confidence}%)",
+    "useReading": "使用",
+    "matchedVendor": "一致した仕入先: {name}",
+    "clearVendor": "この仕入先ではない",
+    "suggested": {
+      "employee_history": "この従業員のこの店舗での前回の領収書からの候補: {account}",
+      "organization_history": "この店舗の前回の領収書からの候補: {account}",
+      "vendor_default": "仕入先の既定の費用勘定: {account}"
+    },
+    "useSuggestion": "候補を使用",
+    "requiredHint": "強調表示された項目を入力し、勘定を選択すると、この領収書を追加できます。",
+    "lineAmount": "明細金額 {amount}、税額 {tax}",
+    "lineAmountNoTax": "明細金額 {amount}",
+    "addToReport": "レポートに追加",
+    "previewAlt": "領収書 {name}",
+    "noPreview": "このファイル形式はプレビューできません。",
+    "openFile": "ファイルを開く",
+    "sourceColumn": "取得元",
+    "fromReceipt": "領収書から",
+    "issues": {
+      "requiredField": "{field}を領収書から読み取れませんでした。入力してください。",
+      "lowConfidence": "{field}の読み取りの信頼度が低いため、確認してください。",
+      "invalidDate": "日付「{value}」を1つの日付として読み取れませんでした。取引日を入力してください。",
+      "futureDate": "領収書の日付 {value} が今日より後です。",
+      "totalMismatch": "小計・税額・チップの合計は {expected} ですが、合計欄は {actual} です。",
+      "taxDetailMismatch": "税の内訳の合計は {expected} ですが、税額合計は {actual} です。",
+      "itemsMismatch": "品目の合計は {expected} ですが、小計は {actual} です。",
+      "nonPositiveTotal": "合計 {value} が正の金額ではありません。",
+      "amountOutOfRange": "{field}が大きすぎて記録できません。",
+      "currencyUnread": "領収書に通貨が記載されていません。金額が {currency} であることを確認してください。",
+      "currencyMismatch": "この領収書は {actual} ですが、レポートは {currency} です。その通貨のレポートに記録するか、{currency} での請求額で明細を手入力してください。",
+      "currencyConflict": "領収書の金額に異なる通貨({actual})が含まれています。請求された通貨を確認してください。",
+      "invalidCurrency": "「{actual}」は有効な通貨コードではありません。",
+      "duplicateFile": "この領収書ファイルは {report} で既にスキャンされています。別の経費でなければ破棄してください。",
+      "duplicateReceipt": "同じ店舗・日付・合計の領収書が {report} に既にあります。別の経費でなければ破棄してください。"
+    },
+    "toasts": {
+      "added": "領収書から明細を追加しました。確認してレポートを保存してください。",
+      "discarded": "領収書を破棄しました。",
+      "actionFailed": "領収書の操作に失敗しました。"
+    }
   }
 }

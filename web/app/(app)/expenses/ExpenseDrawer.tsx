@@ -7,7 +7,7 @@ import { CLEAR_SEGMENT, INHERIT_SEGMENT, segmentCellValue, segmentAssignmentsFro
 import { useMoney } from '@/components/money-provider'
 import { initialDrawerMode, type DrawerMode } from '@/lib/drawer-mode'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Badge, Button, Input, Label, SearchSelect } from '@openbooks/ui'
@@ -37,6 +37,7 @@ import { promptVoidReversalPeriod } from '../../../lib/void-reversal-period'
 import { FlowManualButtons } from '../../../components/flow-manual-buttons'
 import { ApprovalActions } from '../../../components/approval-actions'
 import { ApprovalHistory } from '../../../components/approval-history'
+import { ReceiptScanPanel, type ReceiptLineFacts, type ReceiptLineInput } from './ReceiptScanPanel'
 import {
   customFieldDefKey,
   isCustomFieldKey,
@@ -76,6 +77,8 @@ interface LineRow extends Record<string, unknown> {
    * and the clerk sees the value and can change it before saving, which is
    * exactly the reclassification moment. The save API still requires it. */
   settlementType: string
+  /** The scanned receipt this unsaved row came from; confirmed when the report saves. */
+  receiptCaptureId: string
 }
 interface ExpensePayload {
   doc: Record<string, unknown>
@@ -171,6 +174,7 @@ const emptyLine = (): LineRow => ({
   taxOverridden: false,
   taxAmount: '',
   settlementType: DEFAULT_SETTLEMENT_TYPE,
+  receiptCaptureId: '',
 })
 
 /** A single expense grid cell carries user content when it is anything but blank. */
@@ -263,6 +267,7 @@ function toRow(l: Record<string, unknown>, lineDefs: CustomFieldDefClient[], seg
     taxOverridden: l.tax_overridden === true,
     taxAmount: l.tax_amount != null ? String(l.tax_amount) : '',
     settlementType: lineText(l.settlement_type ?? DEFAULT_SETTLEMENT_TYPE),
+    receiptCaptureId: '',
   }
   const custom = isLineMap(l.custom) ? l.custom : null
   const extraDims = isLineMap(l.extra_dims) ? l.extra_dims : null
@@ -389,6 +394,16 @@ export function ExpenseDrawer({
   const [saveState, setSaveState] = useState<'saved' | 'saving' | 'dirty' | 'error'>('saved')
   const [busy, setBusy] = useState(false)
   const editable = mode === 'edit' && canEditStatus && !busy
+  // Receipt facts the reviewer confirmed for rows added from scanned
+  // receipts, keyed by capture; they ride with the next save.
+  const [receiptFacts, setReceiptFacts] = useState<Record<string, ReceiptLineFacts>>({})
+  const [receiptsRefreshKey, setReceiptsRefreshKey] = useState('')
+  const searchParams = useSearchParams()
+  const [activeTab, setActiveTab] = useState(() => {
+    const requested = searchParams.get('transactionTab') ?? ''
+    return ['receipts', 'approvals', 'attachments', 'audit'].includes(requested) && !isCreate ? requested : 'details'
+  })
+  const canScanReceipts = !isCreate && isDraft && canSubmit
 
   const taxProfiles = useMemo(() => [
     ...taxCodes.map((profile) => ({ ...profile, value: `code:${profile.id}` })),
@@ -425,6 +440,16 @@ export function ExpenseDrawer({
   }, [rows])
 
   // -- explicit save (no autosave) -----------------------------------------
+  const receiptLines = useMemo(() => {
+    const seen = new Set<string>()
+    return rows.filter((r) => !isBlankExpenseLine(r)).flatMap((r, lineIndex) => {
+      const facts = r.receiptCaptureId ? receiptFacts[r.receiptCaptureId] : undefined
+      if (!facts || seen.has(r.receiptCaptureId)) return []
+      seen.add(r.receiptCaptureId)
+      return [{ captureId: r.receiptCaptureId, lineIndex, ...facts }]
+    })
+  }, [rows, receiptFacts])
+  const pendingReceiptIds = useMemo(() => new Set(receiptLines.map((line) => line.captureId)), [receiptLines])
   const payload = useMemo(
     () => ({
       partyId: partyId || null,
@@ -458,8 +483,10 @@ export function ExpenseDrawer({
             lineDefs.map((d) => [d.key, r[`cf_${d.key}`]]).filter(([, v]) => v !== '' && v != null),
           ),
         })),
+      // Receipt confirmations commit with the lines they back.
+      ...(receiptLines.length > 0 ? { receiptLines } : {}),
     }),
-    [partyId, paymentCardId, documentDate, memo, customValues, extraDims, rows, lineDefs, segments],
+    [partyId, paymentCardId, documentDate, memo, customValues, extraDims, rows, lineDefs, segments, receiptLines],
   )
   // Track unsaved edits (no autosave — Save is an explicit button).
   const [dirty, setDirty] = useState(false)
@@ -523,6 +550,20 @@ export function ExpenseDrawer({
     setExtraDims(sourceDoc.extra_dims ?? {})
     setRows(source.lines.length > 0 ? source.lines.map((l) => toRow(l, lineDefs, segments)) : [emptyLine()])
     setTotals({ subtotal: sourceDoc.subtotal, taxTotal: sourceDoc.tax_total, total: sourceDoc.total })
+    setReceiptFacts({})
+  }
+
+  /** Add a confirmed receipt reading as an unsaved line; Save confirms the receipt. */
+  function addReceiptLine(captureId: string, line: ReceiptLineInput, facts: ReceiptLineFacts) {
+    if (!canScanReceipts) return
+    setMode('edit')
+    setRows((current) => [
+      ...current.filter((row) => !isBlankExpenseLine(row) && row.receiptCaptureId !== captureId),
+      { ...emptyLine(), ...line, receiptCaptureId: captureId },
+    ])
+    setReceiptFacts((current) => ({ ...current, [captureId]: facts }))
+    setActiveTab('details')
+    toast.success(t('receipts.toasts.added'))
   }
 
   /** Adopt a reloaded snapshot as the editor's baseline (drops edits). */
@@ -696,6 +737,7 @@ export function ExpenseDrawer({
       setSaveState('saved')
       setDirty(false)
       setMode('view')
+      setReceiptsRefreshKey(outcome.revision)
       router.refresh()
     } else {
       setSaveState('error')
@@ -942,6 +984,7 @@ export function ExpenseDrawer({
   }
 
   // -- grid columns ----------------------------------------------------------
+  const hasReceiptRows = rows.some((row) => row.receiptCaptureId !== '')
   const columns = useMemo<LineGridColumn<LineRow>[]>(
     () => {
       const builtIn: Record<string, LineGridColumn<LineRow>> = {
@@ -1015,7 +1058,14 @@ export function ExpenseDrawer({
         options: [{ value: INHERIT_SEGMENT, label: tCommon('labels.inheritHeader') }, { value: CLEAR_SEGMENT, label: tCommon('labels.noDimensionValue') }, ...segment.values.map((value) => ({ value: value.id, label: `${value.code ? `${value.code} · ` : ''}${value.name}` }))], placeholder: '—',
       }))
       const prepaidColumns = amortizationLineColumns<LineRow>(amortizationTemplates, tAmortization)
-      if (!layout) return [...Object.values(builtIn), ...segmentColumns, ...custom.values(), ...prepaidColumns]
+      const receiptColumns: LineGridColumn<LineRow>[] = hasReceiptRows ? [{
+        key: 'receiptCaptureId',
+        label: t('receipts.sourceColumn'),
+        width: '110px',
+        type: 'readonly',
+        render: (row) => row.receiptCaptureId ? <Badge variant="outline">{t('receipts.fromReceipt')}</Badge> : null,
+      }] : []
+      if (!layout) return [...receiptColumns, ...Object.values(builtIn), ...segmentColumns, ...custom.values(), ...prepaidColumns]
       const configured = layout.lines.columns.flatMap((placement) => {
         if (!placement.visible) return []
         const base = isCustomFieldKey(placement.key) ? custom.get(placement.key) : builtIn[placement.key]
@@ -1026,10 +1076,10 @@ export function ExpenseDrawer({
           label: placement.labelOverride?.trim() || base.label,
         }]
       })
-      return [...configured, ...segmentColumns, ...prepaidColumns]
+      return [...receiptColumns, ...configured, ...segmentColumns, ...prepaidColumns]
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [accounts, departments, projects, taxProfiles, lineDefs, segments, layout, t, tCommon, amortizationTemplates, tAmortization],
+    [accounts, departments, projects, taxProfiles, lineDefs, segments, layout, t, tCommon, amortizationTemplates, tAmortization, hasReceiptRows],
   )
 
   const field = 'space-y-1.5'
@@ -1070,6 +1120,9 @@ export function ExpenseDrawer({
       recordId={String(doc.id)}
       canEditAttachments={canSubmit && !isCreate}
       showEvidenceTabs={!isCreate}
+      activeTab={activeTab}
+      onActiveTabChange={setActiveTab}
+      keepRecordTabsMounted={['receipts']}
       panelClassName={docTypeMeta('expense_report').surfaceCls}
       title={
         <span className="flex items-center gap-2.5">
@@ -1090,6 +1143,11 @@ export function ExpenseDrawer({
       }
       actions={
         <>
+          {canScanReceipts ? (
+            <Button variant="outline" disabled={busy} onClick={() => setActiveTab('receipts')}>
+              {t('receipts.scan')}
+            </Button>
+          ) : null}
           {mode === 'edit' ? (
             <>
               <Button disabled={busy} onClick={save}>
@@ -1131,6 +1189,21 @@ export function ExpenseDrawer({
         </>
       }
       detailTabs={isCreate ? [] : [
+        {
+          key: 'receipts',
+          label: t('receipts.tab'),
+          content: (
+            <ReceiptScanPanel
+              documentId={String(doc.id)}
+              canAdd={canScanReceipts && !busy}
+              accounts={accounts.map((a) => ({ value: a.id, label: `${a.number ?? ''} ${a.name ?? ''}`.trim() }))}
+              taxProfiles={taxProfiles.map((profile) => ({ value: profile.value, label: profile.code ?? '' }))}
+              pendingCaptureIds={pendingReceiptIds}
+              refreshKey={receiptsRefreshKey}
+              onAddLine={addReceiptLine}
+            />
+          ),
+        },
         {
           key: 'approvals',
           label: tCommon('approvalFlow.historyTitle'),
