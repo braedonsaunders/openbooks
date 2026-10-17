@@ -2876,6 +2876,11 @@
           "reason": "Change reason"
     },
     "entities": {
+      "equity-account-policies": {
+        "title": "Equity Accounts",
+        "singular": "Equity account policy",
+        "description": "Per legal entity and effective date: the share capital, paid-in capital, treasury stock, stock compensation expense and convertible instruments accounts that equity transactions post to."
+      },
       "pos-registers": {
         "title": "Registers",
         "singular": "Register",
@@ -3912,6 +3917,13 @@
       "project-loss-policies": {"title": "Project Loss Policies", "description": "When projects forecasting a loss are flagged at close, and whether the close waits for their loss assessment."}
     },
     "fields": {
+      "commonStockAccountId": "Common stock account",
+      "preferredStockAccountId": "Preferred stock account",
+      "apicAccountId": "Additional paid-in capital account",
+      "apicShareBasedAccountId": "Paid-in capital (share-based payments) account",
+      "compensationExpenseAccountId": "Stock compensation expense account",
+      "treasuryStockAccountId": "Treasury stock account",
+      "convertibleInstrumentsAccountId": "Convertible instruments account",
       "aggregation": "Aggregation",
       "addressLine1": "Address line 1",
       "addressLine2": "Address line 2",
@@ -4626,6 +4638,8 @@
       "denominations": "Cash denominations"
     },
     "fieldHelp": {
+      "apicShareBasedAccount": "Credited as stock compensation is recognized; reclassified to share capital when awards are exercised or settled.",
+      "convertibleInstrumentsAccount": "Carries SAFEs and convertible notes at their converting amount (notes including accrued interest) until they convert.",
       "posCashAccount": "The till's cash account. Cash sales, cash refunds, pay-ins, pay-outs and the closing over/short post here.",
       "posCardAccount": "Card payments settle into this clearing account. Leave blank if this register does not take cards.",
       "posOtherAccount": "Other payments, such as vouchers or cheques, settle into this account. Leave blank if this register does not take them.",

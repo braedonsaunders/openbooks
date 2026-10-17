@@ -2963,6 +2963,11 @@
           "reason": "変更理由"
     },
     "entities": {
+      "equity-account-policies": {
+        "title": "資本勘定",
+        "singular": "資本勘定ポリシー",
+        "description": "法人および有効日ごとに、資本取引の転記先となる資本金、資本剰余金、自己株式、株式報酬費用、転換商品の各勘定を設定します。"
+      },
       "pos-registers": {
         "title": "レジ",
         "singular": "レジ",
@@ -3999,6 +4004,13 @@
       "project-loss-policies": {"title": "損失プロジェクト方針", "description": "損失が見込まれるプロジェクトを決算時に警告するか、また損失評価まで決算を保留するかを定めます。"}
     },
     "fields": {
+      "commonStockAccountId": "普通株式勘定",
+      "preferredStockAccountId": "優先株式勘定",
+      "apicAccountId": "資本剰余金勘定",
+      "apicShareBasedAccountId": "資本剰余金（株式報酬）勘定",
+      "compensationExpenseAccountId": "株式報酬費用勘定",
+      "treasuryStockAccountId": "自己株式勘定",
+      "convertibleInstrumentsAccountId": "転換商品勘定",
       "aggregation": "集計方法",
       "addressLine1": "住所 1",
       "addressLine2": "住所 2",
@@ -4713,6 +4725,8 @@
       "denominations": "現金の金種"
     },
     "fieldHelp": {
+      "apicShareBasedAccount": "株式報酬の認識に応じて貸方計上され、付与の行使または決済時に資本金へ振り替えられます。",
+      "convertibleInstrumentsAccount": "SAFE と転換社債を転換金額（社債は経過利息を含む）で転換まで計上します。",
       "posCashAccount": "レジの現金勘定。現金売上、現金返金、入金、出金、締め時の過不足がここに計上されます。",
       "posCardAccount": "カード支払はこの仮勘定で決済されます。カードを受け付けない場合は空欄にします。",
       "posOtherAccount": "商品券や小切手などその他の支払はこの勘定で決済されます。受け付けない場合は空欄にします。",

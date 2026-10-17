@@ -1,0 +1,481 @@
+{
+  "home": {
+    "title": "Patrimonio y tabla de capitalización",
+    "description": "Clases de acciones, planes, valores y accionistas de cada entidad jurídica, con la tabla de capitalización a cualquier fecha, modelos de rondas y de salida, y la compensación en acciones contabilizada en el libro mayor."
+  },
+  "tabs": {
+    "captable": "Tabla de capitalización",
+    "securities": "Valores",
+    "stakeholders": "Titulares",
+    "plans": "Planes",
+    "rounds": "Rondas e instrumentos convertibles",
+    "waterfall": "Cascada de liquidación",
+    "compensation": "Compensación en acciones"
+  },
+  "entity": {
+    "label": "Entidad jurídica",
+    "asOf": "Al"
+  },
+  "empty": {
+    "noEntities": "No hay ninguna entidad jurídica para mostrar",
+    "noEntitiesDescription": "El patrimonio se registra por entidad jurídica. Necesita acceso a una entidad jurídica activa con moneda base (Configuración de la empresa → Subsidiarias)."
+  },
+  "kpi": {
+    "fullyDiluted": "Acciones totalmente diluidas",
+    "outstanding": "Acciones en circulación",
+    "poolAvailable": "Reserva disponible",
+    "holders": "Titulares",
+    "convertibles": "Instrumentos convertibles abiertos"
+  },
+  "policy": {
+    "missing": "No hay ninguna política de cuentas de patrimonio vigente para esta entidad jurídica, por lo que no se pueden contabilizar emisiones, ejercicios ni compensación en acciones.",
+    "setup": "Configurar cuentas de patrimonio"
+  },
+  "actions": {
+    "cancel": "Cancelar",
+    "save": "Guardar"
+  },
+  "kind": {
+    "share": "Certificado de acciones",
+    "option": "Opción",
+    "rsu": "RSU",
+    "warrant": "Warrant",
+    "safe": "SAFE",
+    "note": "Nota convertible"
+  },
+  "kindPlural": {
+    "share": "Acciones",
+    "option": "Opciones",
+    "rsu": "RSU",
+    "warrant": "Warrants",
+    "safe": "SAFE",
+    "note": "Notas"
+  },
+  "classKind": {
+    "common": "Comunes",
+    "preferred": "Preferentes"
+  },
+  "partyKind": {
+    "company": "Empresa",
+    "person": "Persona",
+    "customer": "Cliente",
+    "vendor": "Proveedor",
+    "employee": "Empleado"
+  },
+  "status": {
+    "outstanding": "En circulación",
+    "exercised": "Ejercido",
+    "settled": "Liquidado",
+    "forfeited": "Perdido",
+    "expired": "Vencido",
+    "cancelled": "Cancelado",
+    "repurchased": "Recomprado",
+    "transferred": "Transferido",
+    "converted": "Convertido",
+    "void": "Anulado",
+    "not_issued": "Aún no emitido"
+  },
+  "eventKind": {
+    "exercise": "Ejercicio",
+    "settle": "Liquidación",
+    "forfeit": "Pérdida",
+    "expire": "Vencimiento",
+    "cancel": "Cancelación",
+    "repurchase": "Recompra",
+    "transfer": "Transferencia",
+    "convert": "Conversión",
+    "void": "Anulación"
+  },
+  "optionType": {
+    "iso": "Opción de incentivo (ISO)",
+    "nso": "Opción no calificada (NSO)"
+  },
+  "safeType": {
+    "pre_money": "Pre-money",
+    "post_money": "Post-money"
+  },
+  "interestBasis": {
+    "simple": "Interés simple",
+    "compound_annual": "Compuesto anualmente"
+  },
+  "frequency": {
+    "monthly": "Mensual",
+    "quarterly": "Trimestral",
+    "annual": "Anual"
+  },
+  "acceleration": {
+    "none": "Ninguna",
+    "single": "Disparador único",
+    "double": "Doble disparador"
+  },
+  "participation": {
+    "none": "No participativa",
+    "full": "Totalmente participativa",
+    "capped": "Participativa con límite"
+  },
+  "antiDilution": {
+    "none": "Ninguna",
+    "broad_based": "Promedio ponderado amplio",
+    "narrow_based": "Promedio ponderado restringido",
+    "full_ratchet": "Trinquete completo (full ratchet)"
+  },
+  "valuationMethod": {
+    "black_scholes": "Black-Scholes",
+    "share_price": "Precio de la acción en la fecha de otorgamiento"
+  },
+  "attribution": {
+    "straight_line": "Lineal",
+    "graded": "Escalonada (por tramo)"
+  },
+  "fields": {
+    "acceleration": "Aceleración",
+    "accelerationPercent": "Porción acelerada de lo no consolidado (%)",
+    "amountPaid": "Importe pagado",
+    "antiDilution": "Antidilución",
+    "attribution": "Atribución del costo",
+    "authorizedShares": "Acciones autorizadas",
+    "classKind": "Tipo de clase",
+    "cliffMonths": "Periodo de carencia (meses)",
+    "closedOn": "Fecha de cierre",
+    "code": "Código",
+    "consideration": "Contraprestación recibida",
+    "considerationAccount": "Se liquida mediante la cuenta",
+    "conversionPrice": "Precio de conversión",
+    "discountPercent": "Descuento (%)",
+    "dividendYieldPercent": "Rendimiento de dividendos (%)",
+    "effectiveOn": "Fecha de vigencia",
+    "exercisePrice": "Precio de ejercicio",
+    "expectedTermYears": "Plazo esperado (años)",
+    "expirationDate": "Fecha de vencimiento",
+    "fairValuePerUnit": "Valor razonable por unidad",
+    "grantSharePrice": "Precio de la acción en la fecha de otorgamiento",
+    "holder": "Titular",
+    "interestBasis": "Base de interés",
+    "interestRatePercent": "Tasa de interés (%)",
+    "issueDate": "Fecha de emisión",
+    "kind": "Tipo de valor",
+    "liquidationMultiple": "Múltiplo de liquidación",
+    "maturityDate": "Fecha de vencimiento",
+    "memo": "Nota",
+    "name": "Nombre",
+    "optionType": "Tipo de opción",
+    "originalIssuePrice": "Precio de emisión original",
+    "parValue": "Valor nominal por acción",
+    "participation": "Participación",
+    "participationCapMultiple": "Límite de participación (múltiplo)",
+    "plan": "Plan",
+    "preMoneyValuation": "Valoración pre-money",
+    "pricePerShare": "Precio por acción",
+    "principal": "Principal",
+    "quantity": "Cantidad",
+    "quantityIssued": "Cantidad emitida",
+    "reason": "Motivo",
+    "reservedShares": "Acciones reservadas",
+    "riskFreeRatePercent": "Tasa libre de riesgo (%)",
+    "round": "Ronda",
+    "safeType": "Tipo de SAFE",
+    "securityNumber": "Número de valor",
+    "seniority": "Prelación",
+    "shareClass": "Clase de acciones",
+    "shareDelta": "Acciones a agregar o quitar",
+    "sharesToConvert": "Acciones a convertir",
+    "splitNew": "Acciones nuevas",
+    "splitOld": "Por cada lote de acciones anteriores",
+    "targetClass": "Se convierte en la clase",
+    "transferee": "Cesionario",
+    "valuationCap": "Tope de valoración",
+    "valuationMethod": "Método de valoración",
+    "vestingFrequency": "Frecuencia de consolidación",
+    "vestingMonths": "Plazo de consolidación (meses)",
+    "vestingStart": "Inicio de consolidación",
+    "volatilityPercent": "Volatilidad (%)"
+  },
+  "capTable": {
+    "by": {
+      "class": "Por clase",
+      "holder": "Por titular"
+    },
+    "byLabel": "Vista de la tabla de capitalización",
+    "report": "Abrir el registro de valores",
+    "emptyClasses": "Aún no hay clases de acciones. Use Nuevo para registrar la primera clase de la entidad jurídica.",
+    "emptyHolders": "Aún no hay titulares. Emita acciones u otorgamientos para incorporar titulares a la tabla de capitalización.",
+    "amend": "Modificar",
+    "totalOutstanding": "En circulación",
+    "totalFullyDiluted": "Totalmente diluido",
+    "poolUnallocated": "Reserva sin asignar",
+    "columns": {
+      "class": "Clase",
+      "authorized": "Autorizadas",
+      "outstanding": "En circulación",
+      "asConverted": "Tras conversión",
+      "awards": "Otorgamientos",
+      "pool": "Reserva disponible",
+      "fullyDiluted": "Totalmente diluido",
+      "outstandingPercent": "En circulación %",
+      "fullyDilutedPercent": "Totalmente diluido %",
+      "holder": "Titular",
+      "options": "Opciones",
+      "rsus": "RSU",
+      "warrants": "Warrants",
+      "actions": "Acciones"
+    }
+  },
+  "classActions": {
+    "title": "Clase {code}",
+    "description": "Las modificaciones y divisiones surten efecto desde su fecha y se conservan con su motivo.",
+    "authorized": "Acciones autorizadas",
+    "conversionPrice": "Precio de conversión",
+    "split": "División",
+    "currentAuthorized": "Actualmente {value} acciones",
+    "currentConversionPrice": "Actualmente {value}",
+    "splitHelp": "Una división reexpresa cada tenencia, otorgamiento, reserva y precio de la clase desde su fecha. Debe tener una fecha posterior a la última actividad registrada de la clase.",
+    "saved": "Guardado",
+    "failed": "El cambio no se guardó."
+  },
+  "securities": {
+    "allKinds": "Todos",
+    "kindFilter": "Tipo de valor",
+    "clearHolder": "Mostrando {name} · mostrar todos los titulares",
+    "empty": "Ningún valor coincide.",
+    "columns": {
+      "number": "Número",
+      "kind": "Tipo",
+      "holder": "Titular",
+      "class": "Clase",
+      "issued": "Emitido",
+      "status": "Estado",
+      "outstanding": "En circulación",
+      "vested": "Consolidado",
+      "price": "Precio"
+    }
+  },
+  "stakeholders": {
+    "empty": "Aún no hay titulares en la tabla de capitalización.",
+    "columns": {
+      "name": "Nombre",
+      "kind": "Tipo",
+      "email": "Correo electrónico",
+      "shares": "Acciones (tras conversión)",
+      "vestedAwards": "Otorgamientos consolidados",
+      "fullyDiluted": "Totalmente diluido",
+      "percent": "Totalmente diluido %"
+    }
+  },
+  "plans": {
+    "empty": "Aún no hay planes de acciones. Use Nuevo para registrar un plan y su reserva.",
+    "changeReserve": "Cambiar reserva",
+    "reserveTitle": "Cambiar la reserva de {code}",
+    "reserveDescription": "Un cambio de reserva surte efecto desde su fecha. Una reducción no puede dejar la reserva sin asignar por debajo de cero en ninguna fecha posterior.",
+    "deltaHelp": "Un número negativo quita acciones de la reserva.",
+    "reserveSaved": "Reserva cambiada",
+    "reserveFailed": "El cambio de reserva no se guardó.",
+    "recycle": {
+      "forfeited": "Los otorgamientos perdidos y cancelados regresan",
+      "expired": "Las opciones vencidas regresan",
+      "repurchased": "Las acciones de otorgamientos recompradas regresan",
+      "none": "Sin reciclaje"
+    },
+    "columns": {
+      "plan": "Plan",
+      "class": "Clase",
+      "reserved": "Reservadas",
+      "used": "Otorgadas, neto",
+      "returned": "Devueltas",
+      "available": "Disponibles",
+      "recycling": "Reciclaje"
+    }
+  },
+  "rounds": {
+    "sections": {
+      "rounds": "Rondas",
+      "convertibles": "Instrumentos convertibles",
+      "model": "Modelar una ronda"
+    },
+    "empty": "Aún no hay rondas de financiación.",
+    "convertiblesEmpty": "No hay SAFE ni notas convertibles.",
+    "columns": {
+      "name": "Ronda",
+      "class": "Clase",
+      "closedOn": "Cerrada",
+      "price": "Precio por acción",
+      "preMoney": "Pre-money",
+      "raised": "Recaudado",
+      "shares": "Acciones emitidas",
+      "principal": "Principal",
+      "interest": "Intereses devengados",
+      "cap": "Tope de valoración",
+      "discount": "Descuento"
+    }
+  },
+  "model": {
+    "description": "Fija el precio de una ronda con el método pre-money sobre la tabla de capitalización a la fecha de corte: los SAFE y notas en circulación se convierten, las clases protegidas reciben sus acciones antidilución y la reserva se completa hasta su objetivo dentro de la valoración pre-money. No se registra nada.",
+    "preMoney": "Valoración pre-money",
+    "investment": "Capital nuevo",
+    "targetPool": "Objetivo de reserva tras la ronda (%)",
+    "run": "Modelar",
+    "failed": "No se pudo modelar la ronda.",
+    "price": "Precio por acción",
+    "postMoney": "Valoración post-money",
+    "investorShares": "Acciones de nuevos inversionistas",
+    "fullyDilutedAfter": "Totalmente diluido después",
+    "conversionShares": "Acciones de conversión",
+    "poolTopUp": "Complemento de reserva",
+    "antiDilutionShares": "Acciones antidilución",
+    "cashRounding": "Efectivo por fracciones de acciones",
+    "newInvestors": "Nuevos inversionistas",
+    "pool": "Reserva sin asignar",
+    "antiDilution": "Ajuste antidilución",
+    "empty": "Nada que mostrar.",
+    "pricedBy": {
+      "round": "Precio de la ronda",
+      "cap": "Tope de valoración",
+      "discount": "Descuento"
+    },
+    "columns": {
+      "holder": "Titular",
+      "sharesBefore": "Acciones antes",
+      "percentBefore": "Antes %",
+      "sharesAfter": "Acciones después",
+      "percentAfter": "Después %",
+      "amount": "Importe a convertir",
+      "pricedBy": "Precio según",
+      "price": "Precio de conversión",
+      "shares": "Acciones"
+    }
+  },
+  "waterfall": {
+    "description": "Distribuye un valor de salida sobre la tabla de capitalización a la fecha de corte: se reembolsan las notas, las preferencias se pagan por orden de prelación y el resto se reparte entre las acciones comunes, las preferentes participativas o que se convierten y los otorgamientos dentro del dinero. No se registra nada.",
+    "exitValue": "Valor de salida",
+    "unvested": "Otorgamientos no consolidados",
+    "unvestedParticipate": "Participan",
+    "unvestedCancel": "Cancelados (solo los consolidados y acelerados)",
+    "changeOfControl": "Cambio de control",
+    "terminated": "Termina el servicio de los titulares",
+    "run": "Calcular cascada",
+    "failed": "No se pudo calcular la cascada.",
+    "pricePerShare": "Por acción común",
+    "unallocated": "Sin asignar",
+    "byClass": "Por clase",
+    "byHolder": "Por titular",
+    "converts": "Se convierte en comunes",
+    "takesPreference": "Ejerce la preferencia",
+    "empty": "Nada que distribuir.",
+    "columns": {
+      "election": "Elección",
+      "preference": "Preferencia",
+      "participation": "Participación",
+      "total": "Total",
+      "perShare": "Por acción",
+      "payout": "Pago",
+      "percent": "Parte de la salida"
+    }
+  },
+  "compensation": {
+    "schedule": "Calendario",
+    "runs": "Ejecuciones contabilizadas",
+    "report": "Abrir el informe del calendario de gastos",
+    "post": "Contabilizar ejecución hasta el {date}",
+    "posted": "Compensación en acciones contabilizada hasta el {date}",
+    "replayed": "La ejecución hasta el {date} ya estaba contabilizada",
+    "failed": "La ejecución de compensación en acciones no se contabilizó.",
+    "lastRun": "Última ejecución hasta el {date}",
+    "noRuns": "Aún no hay ejecuciones contabilizadas",
+    "total": "Variación a contabilizar",
+    "empty": "Ningún otorgamiento de opciones o RSU genera costo hasta esta fecha.",
+    "runsEmpty": "Aún no hay ejecuciones de compensación en acciones contabilizadas.",
+    "noEntry": "Nada que contabilizar",
+    "columns": {
+      "cumulative": "Reconocido a la fecha",
+      "previous": "Contabilizado previamente",
+      "period": "Esta ejecución",
+      "through": "Hasta",
+      "total": "Total",
+      "entry": "Asiento contable"
+    }
+  },
+  "drawer": {
+    "tabs": "Secciones del valor",
+    "overview": "Resumen",
+    "vesting": "Consolidación",
+    "history": "Historial",
+    "actions": "Acciones",
+    "outstanding": "En circulación",
+    "vested": "Consolidado disponible",
+    "unvested": "No consolidado",
+    "asOf": "Al",
+    "accruedInterest": "Intereses devengados",
+    "convertingAmount": "Importe a convertir",
+    "grantValue": "Valor en la fecha de otorgamiento",
+    "recognized": "Reconocido a la fecha",
+    "posted": "Contabilizado",
+    "source": "Creado a partir de",
+    "resulting": "Generado",
+    "issuanceEntry": "Asiento de emisión:",
+    "viewEntry": "Ver asiento",
+    "vestDate": "Se consolida el",
+    "vestQuantity": "Unidades",
+    "vestCumulative": "Acumulado",
+    "noEvents": "No hay eventos registrados.",
+    "eventDate": "Fecha",
+    "eventKind": "Evento",
+    "eventQuantity": "Cantidad",
+    "eventAmount": "Importe",
+    "eventEntry": "Asiento",
+    "eventReason": "Motivo"
+  },
+  "events": {
+    "saved": "{kind} registrado",
+    "failed": "El evento no se registró.",
+    "help": {
+      "exercise": "Ejerza unidades consolidadas al precio de ejercicio. Se emite el certificado de acciones resultante, y el efectivo y el valor del otorgamiento en la fecha de otorgamiento se contabilizan en el capital.",
+      "settle": "Liquide unidades consolidadas en acciones. El valor del otorgamiento en la fecha de otorgamiento pasa del capital adicional por pagos basados en acciones al capital social.",
+      "forfeit": "Las unidades no consolidadas salen del otorgamiento; el costo reconocido por ellas se revierte en la siguiente ejecución de compensación en acciones.",
+      "expire": "Las unidades consolidadas no ejercidas caducan. Su costo reconocido se mantiene.",
+      "cancel": "Las unidades se cancelan, primero las no consolidadas. Cancelar unidades no consolidadas sin reemplazo reconoce su costo restante.",
+      "repurchase": "La empresa recompra acciones a tesorería por el importe pagado (requiere aprobación).",
+      "transfer": "Las unidades consolidadas pasan a otro titular con un nuevo certificado.",
+      "convert": "Los SAFE y las notas se convierten al precio de una ronda en su fecha de cierre; las acciones preferentes se convierten en comunes según la razón de conversión de la clase.",
+      "void": "Corrige un registro ingresado por error: su asiento se revierte en la fecha de anulación y se deshace el evento que lo generó (requiere aprobación)."
+    }
+  },
+  "new": {
+    "open": "Nuevo",
+    "title": "Nuevo registro de patrimonio",
+    "description": "Emita un valor o registre una clase de acciones, un plan o una ronda para la entidad jurídica seleccionada.",
+    "failed": "El registro no se guardó.",
+    "sections": {
+      "security": "Valor",
+      "class": "Clase de acciones",
+      "plan": "Plan",
+      "round": "Ronda"
+    },
+    "kindHelp": {
+      "share": "En las acciones emitidas a cambio de efectivo, la contraprestación se contabiliza en el capital social al valor nominal y el excedente en capital adicional pagado.",
+      "option": "Las opciones se valoran al otorgarse con Black-Scholes; su costo se contabiliza mediante la ejecución de compensación en acciones.",
+      "rsu": "Las RSU se valoran al precio de la acción en la fecha de otorgamiento; su costo se contabiliza mediante la ejecución de compensación en acciones.",
+      "warrant": "Los warrants tienen un precio de ejercicio; el efectivo pagado por el warrant se contabiliza en capital adicional pagado.",
+      "safe": "El importe de compra se contabiliza en la cuenta de instrumentos convertibles hasta que el SAFE se convierte.",
+      "note": "El principal se contabiliza en la cuenta de instrumentos convertibles; los intereses se devengan sobre una base Actual/365 hasta la conversión."
+    },
+    "considerationHint": "De forma predeterminada, el precio por la cantidad.",
+    "numberHint": "Déjelo en blanco para numerarlo automáticamente.",
+    "vesting": "Consolidación",
+    "vestingNone": "Totalmente consolidado",
+    "vestingTime": "Calendario por tiempo",
+    "valuation": "Valoración en la fecha de otorgamiento",
+    "valuationOption": "Datos de Black-Scholes. El valor razonable por opción se calcula y se guarda con el otorgamiento.",
+    "valuationRsu": "El precio de la acción en la fecha de otorgamiento es el valor razonable por unidad.",
+    "issue": "Emitir",
+    "securitySaved": "Valor emitido",
+    "conversionPriceHint": "De forma predeterminada, el precio de emisión original.",
+    "seniorityHint": "La mayor prelación se paga primero en una liquidación.",
+    "createClass": "Registrar clase",
+    "classSaved": "Clase de acciones registrada",
+    "recycling": "Unidades que regresan a la reserva",
+    "createPlan": "Registrar plan",
+    "planSaved": "Plan registrado",
+    "roundHelp": "Registre una ronda cerrada y, a continuación, emita sus acciones y convierta sus SAFE y notas con base en ella.",
+    "createRound": "Registrar ronda",
+    "roundSaved": "Ronda registrada"
+  }
+}

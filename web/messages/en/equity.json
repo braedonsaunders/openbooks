@@ -1,0 +1,481 @@
+{
+  "home": {
+    "title": "Equity & cap table",
+    "description": "Share classes, plans, securities and stakeholders of each legal entity, with the cap table as of any date, round and exit models, and stock compensation posted to the general ledger."
+  },
+  "tabs": {
+    "captable": "Cap table",
+    "securities": "Securities",
+    "stakeholders": "Stakeholders",
+    "plans": "Plans",
+    "rounds": "Rounds & convertibles",
+    "waterfall": "Waterfall",
+    "compensation": "Stock compensation"
+  },
+  "entity": {
+    "label": "Legal entity",
+    "asOf": "As of"
+  },
+  "empty": {
+    "noEntities": "No legal entity to show",
+    "noEntitiesDescription": "Equity is recorded per legal entity. You need access to an active legal entity with a base currency (Company Settings → Subsidiaries)."
+  },
+  "kpi": {
+    "fullyDiluted": "Fully diluted shares",
+    "outstanding": "Outstanding shares",
+    "poolAvailable": "Pool available",
+    "holders": "Holders",
+    "convertibles": "Open convertibles"
+  },
+  "policy": {
+    "missing": "No equity account policy is in force for this legal entity, so issuances, exercises and stock compensation cannot post.",
+    "setup": "Set up equity accounts"
+  },
+  "actions": {
+    "cancel": "Cancel",
+    "save": "Save"
+  },
+  "kind": {
+    "share": "Share certificate",
+    "option": "Option",
+    "rsu": "RSU",
+    "warrant": "Warrant",
+    "safe": "SAFE",
+    "note": "Convertible note"
+  },
+  "kindPlural": {
+    "share": "Shares",
+    "option": "Options",
+    "rsu": "RSUs",
+    "warrant": "Warrants",
+    "safe": "SAFEs",
+    "note": "Notes"
+  },
+  "classKind": {
+    "common": "Common",
+    "preferred": "Preferred"
+  },
+  "partyKind": {
+    "company": "Company",
+    "person": "Person",
+    "customer": "Customer",
+    "vendor": "Vendor",
+    "employee": "Employee"
+  },
+  "status": {
+    "outstanding": "Outstanding",
+    "exercised": "Exercised",
+    "settled": "Settled",
+    "forfeited": "Forfeited",
+    "expired": "Expired",
+    "cancelled": "Cancelled",
+    "repurchased": "Repurchased",
+    "transferred": "Transferred",
+    "converted": "Converted",
+    "void": "Void",
+    "not_issued": "Not yet issued"
+  },
+  "eventKind": {
+    "exercise": "Exercise",
+    "settle": "Settle",
+    "forfeit": "Forfeit",
+    "expire": "Expire",
+    "cancel": "Cancel",
+    "repurchase": "Repurchase",
+    "transfer": "Transfer",
+    "convert": "Convert",
+    "void": "Void"
+  },
+  "optionType": {
+    "iso": "Incentive (ISO)",
+    "nso": "Non-qualified (NSO)"
+  },
+  "safeType": {
+    "pre_money": "Pre-money",
+    "post_money": "Post-money"
+  },
+  "interestBasis": {
+    "simple": "Simple",
+    "compound_annual": "Compounded annually"
+  },
+  "frequency": {
+    "monthly": "Monthly",
+    "quarterly": "Quarterly",
+    "annual": "Annual"
+  },
+  "acceleration": {
+    "none": "None",
+    "single": "Single trigger",
+    "double": "Double trigger"
+  },
+  "participation": {
+    "none": "Non-participating",
+    "full": "Fully participating",
+    "capped": "Participating with cap"
+  },
+  "antiDilution": {
+    "none": "None",
+    "broad_based": "Broad-based weighted average",
+    "narrow_based": "Narrow-based weighted average",
+    "full_ratchet": "Full ratchet"
+  },
+  "valuationMethod": {
+    "black_scholes": "Black-Scholes",
+    "share_price": "Grant-date share price"
+  },
+  "attribution": {
+    "straight_line": "Straight-line",
+    "graded": "Graded (per tranche)"
+  },
+  "fields": {
+    "acceleration": "Acceleration",
+    "accelerationPercent": "Accelerated share of unvested (%)",
+    "amountPaid": "Amount paid",
+    "antiDilution": "Anti-dilution",
+    "attribution": "Cost attribution",
+    "authorizedShares": "Authorized shares",
+    "classKind": "Class kind",
+    "cliffMonths": "Cliff (months)",
+    "closedOn": "Closing date",
+    "code": "Code",
+    "consideration": "Consideration received",
+    "considerationAccount": "Settles through account",
+    "conversionPrice": "Conversion price",
+    "discountPercent": "Discount (%)",
+    "dividendYieldPercent": "Dividend yield (%)",
+    "effectiveOn": "Effective date",
+    "exercisePrice": "Exercise price",
+    "expectedTermYears": "Expected term (years)",
+    "expirationDate": "Expiration date",
+    "fairValuePerUnit": "Fair value per unit",
+    "grantSharePrice": "Grant-date share price",
+    "holder": "Holder",
+    "interestBasis": "Interest basis",
+    "interestRatePercent": "Interest rate (%)",
+    "issueDate": "Issue date",
+    "kind": "Security kind",
+    "liquidationMultiple": "Liquidation multiple",
+    "maturityDate": "Maturity date",
+    "memo": "Memo",
+    "name": "Name",
+    "optionType": "Option type",
+    "originalIssuePrice": "Original issue price",
+    "parValue": "Par value per share",
+    "participation": "Participation",
+    "participationCapMultiple": "Participation cap (multiple)",
+    "plan": "Plan",
+    "preMoneyValuation": "Pre-money valuation",
+    "pricePerShare": "Price per share",
+    "principal": "Principal",
+    "quantity": "Quantity",
+    "quantityIssued": "Quantity issued",
+    "reason": "Reason",
+    "reservedShares": "Reserved shares",
+    "riskFreeRatePercent": "Risk-free rate (%)",
+    "round": "Round",
+    "safeType": "SAFE type",
+    "securityNumber": "Security number",
+    "seniority": "Seniority",
+    "shareClass": "Share class",
+    "shareDelta": "Shares to add or remove",
+    "sharesToConvert": "Shares to convert",
+    "splitNew": "New shares",
+    "splitOld": "For each old shares",
+    "targetClass": "Converts into class",
+    "transferee": "Transferee",
+    "valuationCap": "Valuation cap",
+    "valuationMethod": "Valuation method",
+    "vestingFrequency": "Vesting frequency",
+    "vestingMonths": "Vesting term (months)",
+    "vestingStart": "Vesting start",
+    "volatilityPercent": "Volatility (%)"
+  },
+  "capTable": {
+    "by": {
+      "class": "By class",
+      "holder": "By holder"
+    },
+    "byLabel": "Cap table view",
+    "report": "Open the securities register",
+    "emptyClasses": "No share classes yet. Use New to record the legal entity's first class.",
+    "emptyHolders": "No holders yet. Issue shares or awards to put holders on the cap table.",
+    "amend": "Amend",
+    "totalOutstanding": "Outstanding",
+    "totalFullyDiluted": "Fully diluted",
+    "poolUnallocated": "Unallocated pool",
+    "columns": {
+      "class": "Class",
+      "authorized": "Authorized",
+      "outstanding": "Outstanding",
+      "asConverted": "As converted",
+      "awards": "Awards",
+      "pool": "Pool available",
+      "fullyDiluted": "Fully diluted",
+      "outstandingPercent": "Outstanding %",
+      "fullyDilutedPercent": "Fully diluted %",
+      "holder": "Holder",
+      "options": "Options",
+      "rsus": "RSUs",
+      "warrants": "Warrants",
+      "actions": "Actions"
+    }
+  },
+  "classActions": {
+    "title": "Class {code}",
+    "description": "Amendments and splits take effect from their date and are retained with their reason.",
+    "authorized": "Authorized shares",
+    "conversionPrice": "Conversion price",
+    "split": "Split",
+    "currentAuthorized": "Currently {value} shares",
+    "currentConversionPrice": "Currently {value}",
+    "splitHelp": "A split restates every holding, award, pool and price of the class from its date. It must be dated after the class's latest recorded activity.",
+    "saved": "Saved",
+    "failed": "The change was not saved."
+  },
+  "securities": {
+    "allKinds": "All",
+    "kindFilter": "Security kind",
+    "clearHolder": "Showing {name} · show all holders",
+    "empty": "No securities match.",
+    "columns": {
+      "number": "Number",
+      "kind": "Kind",
+      "holder": "Holder",
+      "class": "Class",
+      "issued": "Issued",
+      "status": "Status",
+      "outstanding": "Outstanding",
+      "vested": "Vested",
+      "price": "Price"
+    }
+  },
+  "stakeholders": {
+    "empty": "No holders on the cap table yet.",
+    "columns": {
+      "name": "Name",
+      "kind": "Kind",
+      "email": "Email",
+      "shares": "Shares (as converted)",
+      "vestedAwards": "Vested awards",
+      "fullyDiluted": "Fully diluted",
+      "percent": "Fully diluted %"
+    }
+  },
+  "plans": {
+    "empty": "No equity plans yet. Use New to record a plan and its reserve.",
+    "changeReserve": "Change reserve",
+    "reserveTitle": "Change the reserve of {code}",
+    "reserveDescription": "A reserve change takes effect from its date. A reduction cannot take the unallocated pool below zero on any later date.",
+    "deltaHelp": "A negative number removes shares from the reserve.",
+    "reserveSaved": "Reserve changed",
+    "reserveFailed": "The reserve change was not saved.",
+    "recycle": {
+      "forfeited": "Forfeited and cancelled awards return",
+      "expired": "Expired options return",
+      "repurchased": "Repurchased award shares return",
+      "none": "No recycling"
+    },
+    "columns": {
+      "plan": "Plan",
+      "class": "Class",
+      "reserved": "Reserved",
+      "used": "Granted, net",
+      "returned": "Returned",
+      "available": "Available",
+      "recycling": "Recycling"
+    }
+  },
+  "rounds": {
+    "sections": {
+      "rounds": "Rounds",
+      "convertibles": "Convertibles",
+      "model": "Model a round"
+    },
+    "empty": "No financing rounds yet.",
+    "convertiblesEmpty": "No SAFEs or convertible notes.",
+    "columns": {
+      "name": "Round",
+      "class": "Class",
+      "closedOn": "Closed",
+      "price": "Price per share",
+      "preMoney": "Pre-money",
+      "raised": "Raised",
+      "shares": "Shares issued",
+      "principal": "Principal",
+      "interest": "Accrued interest",
+      "cap": "Valuation cap",
+      "discount": "Discount"
+    }
+  },
+  "model": {
+    "description": "Prices a round on the pre-money method against the cap table on the as-of date: outstanding SAFEs and notes convert, protected classes take their anti-dilution shares, and the pool is topped up to its target inside the pre-money. Nothing is recorded.",
+    "preMoney": "Pre-money valuation",
+    "investment": "New money",
+    "targetPool": "Post-round pool target (%)",
+    "run": "Model",
+    "failed": "The round could not be modelled.",
+    "price": "Price per share",
+    "postMoney": "Post-money valuation",
+    "investorShares": "New investor shares",
+    "fullyDilutedAfter": "Fully diluted after",
+    "conversionShares": "Conversion shares",
+    "poolTopUp": "Pool top-up",
+    "antiDilutionShares": "Anti-dilution shares",
+    "cashRounding": "Cash for fractional shares",
+    "newInvestors": "New investors",
+    "pool": "Unallocated pool",
+    "antiDilution": "Anti-dilution adjustment",
+    "empty": "Nothing to show.",
+    "pricedBy": {
+      "round": "Round price",
+      "cap": "Valuation cap",
+      "discount": "Discount"
+    },
+    "columns": {
+      "holder": "Holder",
+      "sharesBefore": "Shares before",
+      "percentBefore": "Before %",
+      "sharesAfter": "Shares after",
+      "percentAfter": "After %",
+      "amount": "Converting amount",
+      "pricedBy": "Priced by",
+      "price": "Conversion price",
+      "shares": "Shares"
+    }
+  },
+  "waterfall": {
+    "description": "Distributes an exit value against the cap table on the as-of date: notes are repaid, preferences are paid by seniority, and the rest is shared by common, participating and converting preferred and in-the-money awards. Nothing is recorded.",
+    "exitValue": "Exit value",
+    "unvested": "Unvested awards",
+    "unvestedParticipate": "Take part",
+    "unvestedCancel": "Cancelled (vested and accelerated only)",
+    "changeOfControl": "Change of control",
+    "terminated": "Holders' service ends",
+    "run": "Run waterfall",
+    "failed": "The waterfall could not be run.",
+    "pricePerShare": "Per common share",
+    "unallocated": "Unallocated",
+    "byClass": "By class",
+    "byHolder": "By holder",
+    "converts": "Converts to common",
+    "takesPreference": "Takes preference",
+    "empty": "Nothing to distribute.",
+    "columns": {
+      "election": "Election",
+      "preference": "Preference",
+      "participation": "Participation",
+      "total": "Total",
+      "perShare": "Per share",
+      "payout": "Payout",
+      "percent": "Share of exit"
+    }
+  },
+  "compensation": {
+    "schedule": "Schedule",
+    "runs": "Posted runs",
+    "report": "Open the expense schedule report",
+    "post": "Post run through {date}",
+    "posted": "Stock compensation posted through {date}",
+    "replayed": "The run through {date} was already posted",
+    "failed": "The stock compensation run was not posted.",
+    "lastRun": "Last run through {date}",
+    "noRuns": "No runs posted yet",
+    "total": "Change to post",
+    "empty": "No option or RSU awards carry cost through this date.",
+    "runsEmpty": "No stock compensation runs posted yet.",
+    "noEntry": "Nothing to post",
+    "columns": {
+      "cumulative": "Recognized to date",
+      "previous": "Previously posted",
+      "period": "This run",
+      "through": "Through",
+      "total": "Total",
+      "entry": "Journal entry"
+    }
+  },
+  "drawer": {
+    "tabs": "Security sections",
+    "overview": "Overview",
+    "vesting": "Vesting",
+    "history": "History",
+    "actions": "Actions",
+    "outstanding": "Outstanding",
+    "vested": "Vested available",
+    "unvested": "Unvested",
+    "asOf": "As of",
+    "accruedInterest": "Accrued interest",
+    "convertingAmount": "Converting amount",
+    "grantValue": "Grant-date value",
+    "recognized": "Recognized to date",
+    "posted": "Posted",
+    "source": "Created from",
+    "resulting": "Produced",
+    "issuanceEntry": "Issuance entry:",
+    "viewEntry": "View entry",
+    "vestDate": "Vests on",
+    "vestQuantity": "Units",
+    "vestCumulative": "Cumulative",
+    "noEvents": "No events recorded.",
+    "eventDate": "Date",
+    "eventKind": "Event",
+    "eventQuantity": "Quantity",
+    "eventAmount": "Amount",
+    "eventEntry": "Entry",
+    "eventReason": "Reason"
+  },
+  "events": {
+    "saved": "{kind} recorded",
+    "failed": "The event was not recorded.",
+    "help": {
+      "exercise": "Exercise vested units at the exercise price. The resulting share certificate is issued and the cash and the award's grant-date value post to capital.",
+      "settle": "Settle vested units into shares. The award's grant-date value moves from share-based paid-in capital to share capital.",
+      "forfeit": "Unvested units leave the award; the cost recognized for them reverses in the next stock compensation run.",
+      "expire": "Vested, unexercised units lapse. Their recognized cost stays.",
+      "cancel": "Units are cancelled, unvested units first. Cancelling unvested units without a replacement recognizes their remaining cost.",
+      "repurchase": "The company buys shares back into treasury at the amount paid (an approval).",
+      "transfer": "Vested units move to another holder on a new certificate.",
+      "convert": "SAFEs and notes convert at a round's price on its closing date; preferred shares convert into common at the class's conversion ratio.",
+      "void": "Corrects a record entered in error: its entry is reversed on the void date and the event that produced it is undone (an approval)."
+    }
+  },
+  "new": {
+    "open": "New",
+    "title": "New equity record",
+    "description": "Issue a security, or record a share class, a plan or a round for the selected legal entity.",
+    "failed": "The record was not saved.",
+    "sections": {
+      "security": "Security",
+      "class": "Share class",
+      "plan": "Plan",
+      "round": "Round"
+    },
+    "kindHelp": {
+      "share": "Shares issued for cash post the consideration to share capital at par and additional paid-in capital.",
+      "option": "Options are valued at grant with Black-Scholes; their cost posts through the stock compensation run.",
+      "rsu": "RSUs are valued at the grant-date share price; their cost posts through the stock compensation run.",
+      "warrant": "Warrants carry an exercise price; any cash paid for the warrant posts to additional paid-in capital.",
+      "safe": "The purchase amount posts to the convertible instruments account until the SAFE converts.",
+      "note": "The principal posts to the convertible instruments account; interest accrues on an Actual/365 basis until conversion."
+    },
+    "considerationHint": "Defaults to the price times the quantity.",
+    "numberHint": "Leave blank to number it automatically.",
+    "vesting": "Vesting",
+    "vestingNone": "Fully vested",
+    "vestingTime": "Time-based schedule",
+    "valuation": "Grant-date valuation",
+    "valuationOption": "Black-Scholes inputs. The fair value per option is computed and stored with the award.",
+    "valuationRsu": "The grant-date share price is the fair value per unit.",
+    "issue": "Issue",
+    "securitySaved": "Security issued",
+    "conversionPriceHint": "Defaults to the original issue price.",
+    "seniorityHint": "Higher seniority is paid first in a liquidation.",
+    "createClass": "Record class",
+    "classSaved": "Share class recorded",
+    "recycling": "Units returned to the pool",
+    "createPlan": "Record plan",
+    "planSaved": "Plan recorded",
+    "roundHelp": "Record a closed round, then issue its shares and convert its SAFEs and notes against it.",
+    "createRound": "Record round",
+    "roundSaved": "Round recorded"
+  }
+}

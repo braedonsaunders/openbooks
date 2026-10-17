@@ -27,6 +27,7 @@ import { CALENDAR_ENTITIES } from './entities/calendars'
 import { WORK_CALENDARS_ENTITY } from './entities/work-calendars'
 import { ACCOUNTING_ENTITIES } from './entities/accounting'
 import { AMORTIZATION_ENTITIES } from './entities/amortization'
+import { EQUITY_ENTITIES } from './entities/equity'
 import { INTERNAL_BILLING_RULES_ENTITY } from './entities/internal-billing'
 import { MULTI_BOOK_ENTITIES } from './entities/multibook'
 import { TAX_ENTITIES } from './entities/taxes'
@@ -70,6 +71,7 @@ export const SETUP_ENTITIES: SetupEntity[] = [
   ...ACCOUNTING_ENTITIES,
   ...FINANCIAL_POLICY_ENTITIES,
   ...AMORTIZATION_ENTITIES,
+  ...EQUITY_ENTITIES,
   INTERNAL_BILLING_RULES_ENTITY,
   ...MULTI_BOOK_ENTITIES,
   ...CALENDAR_ENTITIES,

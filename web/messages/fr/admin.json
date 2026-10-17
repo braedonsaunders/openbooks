@@ -2801,6 +2801,11 @@
           "reason": "Motif du changement"
     },
     "entities": {
+      "equity-account-policies": {
+        "title": "Comptes de capitaux propres",
+        "singular": "Politique de comptes de capitaux propres",
+        "description": "Par entité juridique et date d’effet : les comptes de capital social, de primes d’émission, d’actions propres, de charge de rémunération en actions et d’instruments convertibles sur lesquels sont comptabilisées les opérations sur capitaux propres."
+      },
       "pos-registers": {
         "title": "Caisses",
         "singular": "Caisse",
@@ -3837,6 +3842,13 @@
       "project-loss-policies": {"title": "Politiques des projets déficitaires", "description": "Si les projets prévoyant une perte sont signalés à la clôture et si la clôture attend leur évaluation de perte."}
     },
     "fields": {
+      "commonStockAccountId": "Compte des actions ordinaires",
+      "preferredStockAccountId": "Compte des actions privilégiées",
+      "apicAccountId": "Compte de primes d’émission",
+      "apicShareBasedAccountId": "Compte de primes (paiements fondés sur des actions)",
+      "compensationExpenseAccountId": "Compte de charge de rémunération en actions",
+      "treasuryStockAccountId": "Compte des actions propres",
+      "convertibleInstrumentsAccountId": "Compte des instruments convertibles",
       "aggregation": "Agrégation",
       "addressLine1": "Adresse, ligne 1",
       "addressLine2": "Adresse, ligne 2",
@@ -4551,6 +4563,8 @@
       "denominations": "Coupures d'espèces"
     },
     "fieldHelp": {
+      "apicShareBasedAccount": "Crédité à mesure que la rémunération en actions est comptabilisée ; reclassé en capital social lors de l’exercice ou du règlement des attributions.",
+      "convertibleInstrumentsAccount": "Porte les SAFE et les billets convertibles à leur montant de conversion (intérêts courus inclus pour les billets) jusqu’à leur conversion.",
       "posCashAccount": "Le compte d'espèces de la caisse. Les ventes et remboursements en espèces, les entrées et sorties d'espèces et l'écart de clôture y sont comptabilisés.",
       "posCardAccount": "Les paiements par carte sont réglés sur ce compte d'attente. Laissez vide si cette caisse n'accepte pas les cartes.",
       "posOtherAccount": "Les autres paiements, comme les bons ou chèques, sont réglés sur ce compte. Laissez vide si cette caisse ne les accepte pas.",

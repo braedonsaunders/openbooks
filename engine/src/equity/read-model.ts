@@ -147,7 +147,8 @@ export interface SecurityDetail {
   shareClass: { id: string; code: string; name: string; kind: string } | null;
   plan: { id: string; code: string; name: string } | null;
   round: { id: string; name: string } | null;
-  state: Omit<HoldingState, "security" | "factor" | "exact" | "consumed"> & { consumed: Record<string, string> } | null;
+  /** Whole-share counts travel as decimal strings: bigints do not serialize. */
+  state: { status: HoldingState["status"]; outstanding: string; vestedAvailable: string; unvested: string; consumed: Record<string, string> } | null;
   convertible: ReturnType<typeof convertibleState> extends infer T ? Omit<T & object, "security"> | null : null;
   vesting: { date: string; quantity: string; cumulative: string }[];
   compensation: { total: string; recognized: string; posted: string } | null;
@@ -205,7 +206,7 @@ export async function loadSecurityDetail(input: ReadInput & { securityId: string
       plan: plan ? { id: plan.id, code: plan.code, name: plan.name } : null,
       round: round ? { id: round.id, name: round.name } : null,
       state: state ? {
-        status: state.status, outstanding: state.outstanding, vestedAvailable: state.vestedAvailable, unvested: state.unvested,
+        status: state.status, outstanding: state.outstanding.toString(), vestedAvailable: state.vestedAvailable.toString(), unvested: state.unvested.toString(),
         consumed: Object.fromEntries(Object.entries(state.consumed).map(([key, value]) => [key, value.toString()])),
       } : null,
       convertible: convertible ? { status: convertible.status, principal: convertible.principal, accruedInterest: convertible.accruedInterest, convertingAmount: convertible.convertingAmount, convertedOn: convertible.convertedOn, resultingSecurityId: convertible.resultingSecurityId } : null,

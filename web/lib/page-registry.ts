@@ -1576,6 +1576,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
+  '/equity': {
+    route: '/equity',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/equity/view')
+      return {
+        load: (input) => m.loadEquity(input.searchParams ?? {}),
+        spec: (data) => m.equitySpec(data as never),
+      }
+    },
+  },
   '/estimates': {
     route: '/estimates',
     segments: [],

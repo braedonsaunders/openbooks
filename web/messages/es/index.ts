@@ -35,6 +35,7 @@ import data from './data.json'
 import docs from './docs.json'
 import documents from './documents.json'
 import entities from './entities.json'
+import equity from './equity.json'
 import estimates from './estimates.json'
 import expenses from './expenses.json'
 import fieldTickets from './fieldTickets.json'
@@ -120,6 +121,7 @@ export default {
   docs,
   documents,
   entities,
+  equity,
   estimates,
   expenses,
   fieldTickets,

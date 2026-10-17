@@ -26,6 +26,7 @@ import { RESOURCING_RETAINER_WIDGETS } from './widgets-resourcing-retainers'
 import { SCHEDULING_WIDGETS } from './widgets-scheduling'
 import { RESOURCING_COCKPIT_WIDGETS } from './widgets-resourcing-cockpit'
 import { AMORTIZATION_WIDGETS } from './widgets-amortization'
+import { EQUITY_WIDGETS } from './widgets-equity'
 import type { WidgetRenderer } from './widget-props'
 
 /**
@@ -76,4 +77,5 @@ export const WIDGET_REGISTRY: Record<string, WidgetRenderer> = {
   ...SCHEDULING_WIDGETS,
   ...RESOURCING_COCKPIT_WIDGETS,
   ...AMORTIZATION_WIDGETS,
+  ...EQUITY_WIDGETS,
 }

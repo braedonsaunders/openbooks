@@ -26,6 +26,7 @@ const FAMILY_LOADERS: Record<WidgetFamily, () => Promise<WidgetFamilyRegistry>> 
   banking: () => import('./widgets-banking').then((m) => m.BANKING_WIDGETS),
   commerce: () => import('./widgets-commerce').then((m) => m.COMMERCE_WIDGETS),
   controls: () => import('./widgets-controls').then((m) => m.CONTROLS_WIDGETS),
+  equity: () => import('./widgets-equity').then((m) => m.EQUITY_WIDGETS),
   home: () => import('./widgets-home').then((m) => m.HOME_WIDGETS),
   'home-persona': () => import('./widgets-home-persona').then((m) => m.PERSONA_WIDGETS),
   hrm: () => import('./widgets-hrm').then((m) => m.HRM_WIDGETS),

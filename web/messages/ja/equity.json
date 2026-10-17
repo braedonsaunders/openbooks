@@ -1,0 +1,481 @@
+{
+  "home": {
+    "title": "資本と資本政策表",
+    "description": "各法人の株式クラス、プラン、証券、ステークホルダーを管理します。任意の日付時点の資本政策表、ラウンドおよびエグジットのモデル、総勘定元帳に転記される株式報酬を確認できます。"
+  },
+  "tabs": {
+    "captable": "資本政策表",
+    "securities": "証券",
+    "stakeholders": "ステークホルダー",
+    "plans": "プラン",
+    "rounds": "ラウンドと転換証券",
+    "waterfall": "ウォーターフォール",
+    "compensation": "株式報酬"
+  },
+  "entity": {
+    "label": "法人",
+    "asOf": "基準日"
+  },
+  "empty": {
+    "noEntities": "表示できる法人がありません",
+    "noEntitiesDescription": "資本は法人ごとに記録されます。基準通貨が設定された有効な法人へのアクセス権が必要です（会社設定 → 子会社）。"
+  },
+  "kpi": {
+    "fullyDiluted": "完全希薄化後株式数",
+    "outstanding": "発行済株式数",
+    "poolAvailable": "プール利用可能数",
+    "holders": "保有者",
+    "convertibles": "未転換の転換証券"
+  },
+  "policy": {
+    "missing": "この法人には有効な資本勘定ポリシーがないため、発行、行使、株式報酬を転記できません。",
+    "setup": "資本勘定を設定"
+  },
+  "actions": {
+    "cancel": "キャンセル",
+    "save": "保存"
+  },
+  "kind": {
+    "share": "株券",
+    "option": "オプション",
+    "rsu": "RSU",
+    "warrant": "ワラント",
+    "safe": "SAFE",
+    "note": "コンバーティブルノート"
+  },
+  "kindPlural": {
+    "share": "株式",
+    "option": "オプション",
+    "rsu": "RSU",
+    "warrant": "ワラント",
+    "safe": "SAFE",
+    "note": "ノート"
+  },
+  "classKind": {
+    "common": "普通株式",
+    "preferred": "優先株式"
+  },
+  "partyKind": {
+    "company": "会社",
+    "person": "個人",
+    "customer": "顧客",
+    "vendor": "仕入先",
+    "employee": "従業員"
+  },
+  "status": {
+    "outstanding": "発行済",
+    "exercised": "行使済",
+    "settled": "交付済",
+    "forfeited": "失効",
+    "expired": "期限切れ",
+    "cancelled": "取消済",
+    "repurchased": "買戻済",
+    "transferred": "譲渡済",
+    "converted": "転換済",
+    "void": "無効",
+    "not_issued": "未発行"
+  },
+  "eventKind": {
+    "exercise": "行使",
+    "settle": "交付",
+    "forfeit": "失効",
+    "expire": "期限切れ",
+    "cancel": "取消",
+    "repurchase": "買戻し",
+    "transfer": "譲渡",
+    "convert": "転換",
+    "void": "無効化"
+  },
+  "optionType": {
+    "iso": "インセンティブ（ISO）",
+    "nso": "非適格（NSO）"
+  },
+  "safeType": {
+    "pre_money": "プレマネー",
+    "post_money": "ポストマネー"
+  },
+  "interestBasis": {
+    "simple": "単利",
+    "compound_annual": "年複利"
+  },
+  "frequency": {
+    "monthly": "毎月",
+    "quarterly": "四半期ごと",
+    "annual": "毎年"
+  },
+  "acceleration": {
+    "none": "なし",
+    "single": "シングルトリガー",
+    "double": "ダブルトリガー"
+  },
+  "participation": {
+    "none": "非参加型",
+    "full": "完全参加型",
+    "capped": "上限付き参加型"
+  },
+  "antiDilution": {
+    "none": "なし",
+    "broad_based": "ブロードベース加重平均",
+    "narrow_based": "ナローベース加重平均",
+    "full_ratchet": "フルラチェット"
+  },
+  "valuationMethod": {
+    "black_scholes": "Black-Scholes",
+    "share_price": "付与日株価"
+  },
+  "attribution": {
+    "straight_line": "定額法",
+    "graded": "段階法（トランシェ別）"
+  },
+  "fields": {
+    "acceleration": "権利確定の加速",
+    "accelerationPercent": "加速される未確定分の割合（%）",
+    "amountPaid": "支払額",
+    "antiDilution": "希薄化防止",
+    "attribution": "費用配分方法",
+    "authorizedShares": "授権株式数",
+    "classKind": "クラス種別",
+    "cliffMonths": "クリフ（月）",
+    "closedOn": "クロージング日",
+    "code": "コード",
+    "consideration": "受領対価",
+    "considerationAccount": "決済勘定",
+    "conversionPrice": "転換価格",
+    "discountPercent": "ディスカウント（%）",
+    "dividendYieldPercent": "配当利回り（%）",
+    "effectiveOn": "発効日",
+    "exercisePrice": "行使価格",
+    "expectedTermYears": "予想残存期間（年）",
+    "expirationDate": "満了日",
+    "fairValuePerUnit": "1単位あたり公正価値",
+    "grantSharePrice": "付与日株価",
+    "holder": "保有者",
+    "interestBasis": "利息計算方法",
+    "interestRatePercent": "利率（%）",
+    "issueDate": "発行日",
+    "kind": "証券種別",
+    "liquidationMultiple": "残余財産優先倍率",
+    "maturityDate": "満期日",
+    "memo": "摘要",
+    "name": "名称",
+    "optionType": "オプション種別",
+    "originalIssuePrice": "当初発行価格",
+    "parValue": "1株あたり額面",
+    "participation": "参加権",
+    "participationCapMultiple": "参加上限（倍率）",
+    "plan": "プラン",
+    "preMoneyValuation": "プレマネー評価額",
+    "pricePerShare": "1株あたり価格",
+    "principal": "元本",
+    "quantity": "数量",
+    "quantityIssued": "発行数量",
+    "reason": "理由",
+    "reservedShares": "留保株式数",
+    "riskFreeRatePercent": "無リスク金利（%）",
+    "round": "ラウンド",
+    "safeType": "SAFE種別",
+    "securityNumber": "証券番号",
+    "seniority": "優先順位",
+    "shareClass": "株式クラス",
+    "shareDelta": "増減する株式数",
+    "sharesToConvert": "転換する株式数",
+    "splitNew": "新株式数",
+    "splitOld": "旧株式数あたり",
+    "targetClass": "転換先クラス",
+    "transferee": "譲受人",
+    "valuationCap": "バリュエーションキャップ",
+    "valuationMethod": "評価方法",
+    "vestingFrequency": "権利確定頻度",
+    "vestingMonths": "権利確定期間（月）",
+    "vestingStart": "権利確定開始日",
+    "volatilityPercent": "ボラティリティ（%）"
+  },
+  "capTable": {
+    "by": {
+      "class": "クラス別",
+      "holder": "保有者別"
+    },
+    "byLabel": "資本政策表の表示",
+    "report": "証券台帳を開く",
+    "emptyClasses": "株式クラスがまだありません。「新規」から法人の最初のクラスを記録してください。",
+    "emptyHolders": "保有者がまだいません。株式またはアワードを発行すると、保有者が資本政策表に追加されます。",
+    "amend": "変更",
+    "totalOutstanding": "発行済",
+    "totalFullyDiluted": "完全希薄化後",
+    "poolUnallocated": "未割当プール",
+    "columns": {
+      "class": "クラス",
+      "authorized": "授権",
+      "outstanding": "発行済",
+      "asConverted": "転換後換算",
+      "awards": "アワード",
+      "pool": "プール利用可能数",
+      "fullyDiluted": "完全希薄化後",
+      "outstandingPercent": "発行済 %",
+      "fullyDilutedPercent": "完全希薄化後 %",
+      "holder": "保有者",
+      "options": "オプション",
+      "rsus": "RSU",
+      "warrants": "ワラント",
+      "actions": "操作"
+    }
+  },
+  "classActions": {
+    "title": "クラス {code}",
+    "description": "変更と株式分割はその日付から発効し、理由とともに保持されます。",
+    "authorized": "授権株式数",
+    "conversionPrice": "転換価格",
+    "split": "株式分割",
+    "currentAuthorized": "現在 {value} 株",
+    "currentConversionPrice": "現在 {value}",
+    "splitHelp": "株式分割は、その日付以降のクラスのすべての保有株式、アワード、プール、価格を修正再表示します。日付はクラスで最後に記録された取引より後である必要があります。",
+    "saved": "保存しました",
+    "failed": "変更は保存されませんでした。"
+  },
+  "securities": {
+    "allKinds": "すべて",
+    "kindFilter": "証券種別",
+    "clearHolder": "{name} を表示中 · すべての保有者を表示",
+    "empty": "一致する証券はありません。",
+    "columns": {
+      "number": "番号",
+      "kind": "種別",
+      "holder": "保有者",
+      "class": "クラス",
+      "issued": "発行日",
+      "status": "ステータス",
+      "outstanding": "発行済",
+      "vested": "権利確定済",
+      "price": "価格"
+    }
+  },
+  "stakeholders": {
+    "empty": "資本政策表にはまだ保有者がいません。",
+    "columns": {
+      "name": "名称",
+      "kind": "種別",
+      "email": "メール",
+      "shares": "株式（転換後換算）",
+      "vestedAwards": "権利確定済アワード",
+      "fullyDiluted": "完全希薄化後",
+      "percent": "完全希薄化後 %"
+    }
+  },
+  "plans": {
+    "empty": "株式報酬プランがまだありません。「新規」からプランとその留保株式を記録してください。",
+    "changeReserve": "留保株式を変更",
+    "reserveTitle": "{code} の留保株式を変更",
+    "reserveDescription": "留保株式の変更はその日付から発効します。減少によって、以後のいずれの日付でも未割当プールがゼロを下回ることはできません。",
+    "deltaHelp": "負の数を入力すると留保株式から株式を減らします。",
+    "reserveSaved": "留保株式を変更しました",
+    "reserveFailed": "留保株式の変更は保存されませんでした。",
+    "recycle": {
+      "forfeited": "失効および取消されたアワードを戻す",
+      "expired": "期限切れのオプションを戻す",
+      "repurchased": "買い戻したアワード株式を戻す",
+      "none": "プールに戻さない"
+    },
+    "columns": {
+      "plan": "プラン",
+      "class": "クラス",
+      "reserved": "留保",
+      "used": "付与（純額）",
+      "returned": "返還",
+      "available": "利用可能",
+      "recycling": "プールへの返還"
+    }
+  },
+  "rounds": {
+    "sections": {
+      "rounds": "ラウンド",
+      "convertibles": "転換証券",
+      "model": "ラウンドをモデル化"
+    },
+    "empty": "資金調達ラウンドがまだありません。",
+    "convertiblesEmpty": "SAFE またはコンバーティブルノートはありません。",
+    "columns": {
+      "name": "ラウンド",
+      "class": "クラス",
+      "closedOn": "クロージング日",
+      "price": "1株あたり価格",
+      "preMoney": "プレマネー",
+      "raised": "調達額",
+      "shares": "発行株式数",
+      "principal": "元本",
+      "interest": "未収利息",
+      "cap": "バリュエーションキャップ",
+      "discount": "ディスカウント"
+    }
+  },
+  "model": {
+    "description": "基準日時点の資本政策表に対し、プレマネー方式でラウンドの価格を算定します。発行済の SAFE とノートは転換され、保護されたクラスには希薄化防止株式が割り当てられ、プールはプレマネーの範囲内で目標まで補充されます。記録は行われません。",
+    "preMoney": "プレマネー評価額",
+    "investment": "新規投資額",
+    "targetPool": "ラウンド後のプール目標（%）",
+    "run": "モデル化",
+    "failed": "ラウンドをモデル化できませんでした。",
+    "price": "1株あたり価格",
+    "postMoney": "ポストマネー評価額",
+    "investorShares": "新規投資家の株式数",
+    "fullyDilutedAfter": "ラウンド後の完全希薄化後株式数",
+    "conversionShares": "転換株式数",
+    "poolTopUp": "プール補充",
+    "antiDilutionShares": "希薄化防止株式数",
+    "cashRounding": "端株の現金精算",
+    "newInvestors": "新規投資家",
+    "pool": "未割当プール",
+    "antiDilution": "希薄化防止調整",
+    "empty": "表示する内容はありません。",
+    "pricedBy": {
+      "round": "ラウンド価格",
+      "cap": "バリュエーションキャップ",
+      "discount": "ディスカウント"
+    },
+    "columns": {
+      "holder": "保有者",
+      "sharesBefore": "ラウンド前株式数",
+      "percentBefore": "ラウンド前 %",
+      "sharesAfter": "ラウンド後株式数",
+      "percentAfter": "ラウンド後 %",
+      "amount": "転換額",
+      "pricedBy": "価格の根拠",
+      "price": "転換価格",
+      "shares": "株式数"
+    }
+  },
+  "waterfall": {
+    "description": "基準日時点の資本政策表に対してエグジット価値を分配します。ノートが返済され、優先分配が優先順位に従って支払われ、残額は普通株式、参加型および転換する優先株式、イン・ザ・マネーのアワードで分配されます。記録は行われません。",
+    "exitValue": "エグジット価値",
+    "unvested": "未確定アワード",
+    "unvestedParticipate": "分配に参加",
+    "unvestedCancel": "取消（確定済および加速分のみ）",
+    "changeOfControl": "支配権の変更",
+    "terminated": "保有者の勤務終了",
+    "run": "ウォーターフォールを実行",
+    "failed": "ウォーターフォールを実行できませんでした。",
+    "pricePerShare": "普通株式1株あたり",
+    "unallocated": "未割当",
+    "byClass": "クラス別",
+    "byHolder": "保有者別",
+    "converts": "普通株式に転換",
+    "takesPreference": "優先分配を受領",
+    "empty": "分配する金額はありません。",
+    "columns": {
+      "election": "選択",
+      "preference": "優先分配",
+      "participation": "参加分配",
+      "total": "合計",
+      "perShare": "1株あたり",
+      "payout": "支払額",
+      "percent": "エグジットに占める割合"
+    }
+  },
+  "compensation": {
+    "schedule": "スケジュール",
+    "runs": "転記済みの実行",
+    "report": "費用スケジュールレポートを開く",
+    "post": "{date} までの実行を転記",
+    "posted": "{date} までの株式報酬を転記しました",
+    "replayed": "{date} までの実行はすでに転記されています",
+    "failed": "株式報酬の実行は転記されませんでした。",
+    "lastRun": "前回の実行：{date} まで",
+    "noRuns": "転記済みの実行はまだありません",
+    "total": "転記する変動額",
+    "empty": "この日付までに費用が発生するオプションまたは RSU アワードはありません。",
+    "runsEmpty": "転記済みの株式報酬の実行はまだありません。",
+    "noEntry": "転記する内容はありません",
+    "columns": {
+      "cumulative": "累計認識額",
+      "previous": "前回までの転記額",
+      "period": "今回の実行",
+      "through": "対象期間末",
+      "total": "合計",
+      "entry": "仕訳"
+    }
+  },
+  "drawer": {
+    "tabs": "証券のセクション",
+    "overview": "概要",
+    "vesting": "権利確定",
+    "history": "履歴",
+    "actions": "操作",
+    "outstanding": "発行済",
+    "vested": "権利確定済（利用可能）",
+    "unvested": "未確定",
+    "asOf": "基準日",
+    "accruedInterest": "未収利息",
+    "convertingAmount": "転換額",
+    "grantValue": "付与日価値",
+    "recognized": "累計認識額",
+    "posted": "転記済み",
+    "source": "作成元",
+    "resulting": "作成先",
+    "issuanceEntry": "発行仕訳：",
+    "viewEntry": "仕訳を表示",
+    "vestDate": "権利確定日",
+    "vestQuantity": "単位数",
+    "vestCumulative": "累計",
+    "noEvents": "記録されたイベントはありません。",
+    "eventDate": "日付",
+    "eventKind": "イベント",
+    "eventQuantity": "数量",
+    "eventAmount": "金額",
+    "eventEntry": "仕訳",
+    "eventReason": "理由"
+  },
+  "events": {
+    "saved": "{kind}を記録しました",
+    "failed": "イベントは記録されませんでした。",
+    "help": {
+      "exercise": "権利確定済みの単位を行使価格で行使します。結果として株券が発行され、現金とアワードの付与日価値が資本に転記されます。",
+      "settle": "権利確定済みの単位を株式で交付します。アワードの付与日価値は株式報酬に係る払込資本から資本金に振り替えられます。",
+      "forfeit": "未確定の単位がアワードから除かれます。それらについて認識済みの費用は、次回の株式報酬の実行で戻し入れられます。",
+      "expire": "権利確定済みで未行使の単位が失効します。認識済みの費用はそのまま残ります。",
+      "cancel": "単位を取り消します（未確定の単位から優先）。代替なしで未確定の単位を取り消すと、残りの費用が認識されます。",
+      "repurchase": "会社が支払額で株式を買い戻し、自己株式とします（承認が必要です）。",
+      "transfer": "権利確定済みの単位を新しい株券で別の保有者に移転します。",
+      "convert": "SAFE とノートはラウンドのクロージング日にそのラウンドの価格で転換されます。優先株式はクラスの転換比率で普通株式に転換されます。",
+      "void": "誤って入力された記録を訂正します。その仕訳は無効化日付で取り消され、それを作成したイベントも元に戻されます（承認が必要です）。"
+    }
+  },
+  "new": {
+    "open": "新規",
+    "title": "新規資本記録",
+    "description": "選択した法人について、証券を発行するか、株式クラス、プラン、ラウンドを記録します。",
+    "failed": "記録は保存されませんでした。",
+    "sections": {
+      "security": "証券",
+      "class": "株式クラス",
+      "plan": "プラン",
+      "round": "ラウンド"
+    },
+    "kindHelp": {
+      "share": "現金で発行された株式は、対価を額面で資本金に、残額を資本剰余金に転記します。",
+      "option": "オプションは付与時に Black-Scholes で評価され、その費用は株式報酬の実行を通じて転記されます。",
+      "rsu": "RSU は付与日株価で評価され、その費用は株式報酬の実行を通じて転記されます。",
+      "warrant": "ワラントには行使価格があります。ワラントに対して支払われた現金は資本剰余金に転記されます。",
+      "safe": "購入額は SAFE が転換されるまで転換証券勘定に転記されます。",
+      "note": "元本は転換証券勘定に転記されます。利息は転換まで Actual/365 ベースで発生します。"
+    },
+    "considerationHint": "既定値は価格×数量です。",
+    "numberHint": "空欄にすると自動で採番されます。",
+    "vesting": "権利確定",
+    "vestingNone": "全部確定済み",
+    "vestingTime": "時間ベースのスケジュール",
+    "valuation": "付与日評価",
+    "valuationOption": "Black-Scholes の入力値です。オプション1個あたりの公正価値が計算され、アワードとともに保存されます。",
+    "valuationRsu": "付与日株価が1単位あたりの公正価値となります。",
+    "issue": "発行",
+    "securitySaved": "証券を発行しました",
+    "conversionPriceHint": "既定値は当初発行価格です。",
+    "seniorityHint": "優先順位が高いほど、清算時に先に支払われます。",
+    "createClass": "クラスを記録",
+    "classSaved": "株式クラスを記録しました",
+    "recycling": "プールに戻す単位",
+    "createPlan": "プランを記録",
+    "planSaved": "プランを記録しました",
+    "roundHelp": "クローズしたラウンドを記録し、そのラウンドに基づいて株式を発行し、SAFE とノートを転換します。",
+    "createRound": "ラウンドを記録",
+    "roundSaved": "ラウンドを記録しました"
+  }
+}

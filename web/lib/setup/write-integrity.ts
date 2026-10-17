@@ -14,6 +14,7 @@ import { validatePeopleIntegrity } from './write-integrity-people'
 import { validateReviewIntegrity } from './write-integrity-reviews'
 import { validateTalentIntegrity } from './write-integrity-talent'
 import { validatePosIntegrity } from './write-integrity-pos'
+import { validateEquityIntegrity } from './write-integrity-equity'
 
 /** Entity integrity rule groups, evaluated in this order until one decides. */
 const SETUP_INTEGRITY_RULES = [
@@ -25,6 +26,7 @@ const SETUP_INTEGRITY_RULES = [
   validateReviewIntegrity,
   validateTalentIntegrity,
   validatePosIntegrity,
+  validateEquityIntegrity,
 ] as const
 
 /** Domain checks that cannot be expressed by the generic field coercer. */

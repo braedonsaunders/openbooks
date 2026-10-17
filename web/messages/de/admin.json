@@ -2963,6 +2963,11 @@
           "reason": "Änderungsgrund"
     },
     "entities": {
+      "equity-account-policies": {
+        "title": "Eigenkapitalkonten",
+        "singular": "Eigenkapital-Kontenrichtlinie",
+        "description": "Je Rechtseinheit und Gültigkeitsdatum: die Konten für gezeichnetes Kapital, Kapitalrücklage, eigene Anteile, Aufwand aus aktienbasierter Vergütung und Wandelinstrumente, auf die Eigenkapitalvorgänge gebucht werden."
+      },
       "pos-registers": {
         "title": "Kassen",
         "singular": "Kasse",
@@ -3999,6 +4004,13 @@
       "project-loss-policies": {"title": "Richtlinien für Verlustprojekte", "description": "Ob Projekte mit erwartetem Verlust beim Abschluss gemeldet werden und ob der Abschluss auf ihre Verlustbewertung wartet."}
     },
     "fields": {
+      "commonStockAccountId": "Konto Stammaktien",
+      "preferredStockAccountId": "Konto Vorzugsaktien",
+      "apicAccountId": "Konto Kapitalrücklage",
+      "apicShareBasedAccountId": "Konto Kapitalrücklage (anteilsbasierte Vergütung)",
+      "compensationExpenseAccountId": "Konto Aufwand aktienbasierte Vergütung",
+      "treasuryStockAccountId": "Konto eigene Anteile",
+      "convertibleInstrumentsAccountId": "Konto Wandelinstrumente",
       "aggregation": "Aggregation",
       "addressLine1": "Adresszeile 1",
       "addressLine2": "Adresszeile 2",
@@ -4713,6 +4725,8 @@
       "denominations": "Bargeldstückelung"
     },
     "fieldHelp": {
+      "apicShareBasedAccount": "Wird bei Erfassung der aktienbasierten Vergütung im Haben gebucht und bei Ausübung oder Abwicklung von Zuteilungen in das gezeichnete Kapital umgegliedert.",
+      "convertibleInstrumentsAccount": "Führt SAFEs und Wandeldarlehen mit ihrem Wandlungsbetrag (Darlehen einschließlich aufgelaufener Zinsen), bis sie gewandelt werden.",
       "posCashAccount": "Das Bargeldkonto der Kasse. Barverkäufe, Barerstattungen, Ein- und Auszahlungen sowie die Kassendifferenz beim Abschluss werden hier gebucht.",
       "posCardAccount": "Kartenzahlungen werden auf dieses Verrechnungskonto gebucht. Leer lassen, wenn diese Kasse keine Karten annimmt.",
       "posOtherAccount": "Sonstige Zahlungen wie Gutscheine oder Schecks werden auf dieses Konto gebucht. Leer lassen, wenn diese Kasse sie nicht annimmt.",

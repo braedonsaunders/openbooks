@@ -2801,6 +2801,11 @@
           "reason": "Motivo del cambio"
     },
     "entities": {
+      "equity-account-policies": {
+        "title": "Cuentas de patrimonio",
+        "singular": "Política de cuentas de patrimonio",
+        "description": "Por entidad jurídica y fecha de vigencia: las cuentas de capital social, prima de emisión, acciones propias, gasto por compensación en acciones e instrumentos convertibles en las que se contabilizan las operaciones de patrimonio."
+      },
       "pos-registers": {
         "title": "Cajas",
         "singular": "Caja",
@@ -3837,6 +3842,13 @@
       "project-loss-policies": {"title": "Políticas de proyectos con pérdida", "description": "Si los proyectos que prevén pérdidas se señalan en el cierre y si el cierre espera su evaluación de pérdida."}
     },
     "fields": {
+      "commonStockAccountId": "Cuenta de acciones ordinarias",
+      "preferredStockAccountId": "Cuenta de acciones preferentes",
+      "apicAccountId": "Cuenta de prima de emisión",
+      "apicShareBasedAccountId": "Cuenta de prima (pagos basados en acciones)",
+      "compensationExpenseAccountId": "Cuenta de gasto por compensación en acciones",
+      "treasuryStockAccountId": "Cuenta de acciones propias",
+      "convertibleInstrumentsAccountId": "Cuenta de instrumentos convertibles",
       "aggregation": "Agregación",
       "addressLine1": "Dirección, línea 1",
       "addressLine2": "Dirección, línea 2",
@@ -4551,6 +4563,8 @@
       "denominations": "Denominaciones de efectivo"
     },
     "fieldHelp": {
+      "apicShareBasedAccount": "Se abona a medida que se reconoce la compensación en acciones; se reclasifica al capital social cuando se ejercen o liquidan las adjudicaciones.",
+      "convertibleInstrumentsAccount": "Registra los SAFE y las notas convertibles por su importe de conversión (las notas incluyen los intereses devengados) hasta su conversión.",
       "posCashAccount": "La cuenta de efectivo de la caja. Aquí se contabilizan las ventas y reembolsos en efectivo, los ingresos y retiros y la diferencia del cierre.",
       "posCardAccount": "Los pagos con tarjeta se liquidan en esta cuenta puente. Déjela en blanco si esta caja no acepta tarjetas.",
       "posOtherAccount": "Otros pagos, como vales o cheques, se liquidan en esta cuenta. Déjela en blanco si esta caja no los acepta.",

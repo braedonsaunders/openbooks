@@ -1,0 +1,481 @@
+{
+  "home": {
+    "title": "股权与股权结构表",
+    "description": "各法律实体的股份类别、计划、证券和利益相关方，可查看任意日期的股权结构表、融资轮次与退出模型，以及过账至总账的股权激励。"
+  },
+  "tabs": {
+    "captable": "股权结构表",
+    "securities": "证券",
+    "stakeholders": "利益相关方",
+    "plans": "计划",
+    "rounds": "融资轮次与可转换工具",
+    "waterfall": "清算瀑布",
+    "compensation": "股权激励"
+  },
+  "entity": {
+    "label": "法律实体",
+    "asOf": "截至"
+  },
+  "empty": {
+    "noEntities": "没有可显示的法律实体",
+    "noEntitiesDescription": "股权按法律实体记录。您需要有权访问一个已设置本位币的有效法律实体（公司设置 → 子公司）。"
+  },
+  "kpi": {
+    "fullyDiluted": "完全稀释股数",
+    "outstanding": "流通股数",
+    "poolAvailable": "期权池可用",
+    "holders": "持有人",
+    "convertibles": "未转换的可转换工具"
+  },
+  "policy": {
+    "missing": "此法律实体没有生效的股权科目政策，因此无法过账发行、行权和股权激励。",
+    "setup": "设置股权科目"
+  },
+  "actions": {
+    "cancel": "取消",
+    "save": "保存"
+  },
+  "kind": {
+    "share": "股票凭证",
+    "option": "期权",
+    "rsu": "RSU",
+    "warrant": "认股权证",
+    "safe": "SAFE",
+    "note": "可转换票据"
+  },
+  "kindPlural": {
+    "share": "股份",
+    "option": "期权",
+    "rsu": "RSU",
+    "warrant": "认股权证",
+    "safe": "SAFE",
+    "note": "票据"
+  },
+  "classKind": {
+    "common": "普通股",
+    "preferred": "优先股"
+  },
+  "partyKind": {
+    "company": "公司",
+    "person": "个人",
+    "customer": "客户",
+    "vendor": "供应商",
+    "employee": "员工"
+  },
+  "status": {
+    "outstanding": "流通中",
+    "exercised": "已行权",
+    "settled": "已结算",
+    "forfeited": "已没收",
+    "expired": "已到期",
+    "cancelled": "已取消",
+    "repurchased": "已回购",
+    "transferred": "已转让",
+    "converted": "已转换",
+    "void": "已作废",
+    "not_issued": "尚未发行"
+  },
+  "eventKind": {
+    "exercise": "行权",
+    "settle": "结算",
+    "forfeit": "没收",
+    "expire": "到期",
+    "cancel": "取消",
+    "repurchase": "回购",
+    "transfer": "转让",
+    "convert": "转换",
+    "void": "作废"
+  },
+  "optionType": {
+    "iso": "激励型（ISO）",
+    "nso": "非合格（NSO）"
+  },
+  "safeType": {
+    "pre_money": "投前",
+    "post_money": "投后"
+  },
+  "interestBasis": {
+    "simple": "单利",
+    "compound_annual": "按年复利"
+  },
+  "frequency": {
+    "monthly": "每月",
+    "quarterly": "每季度",
+    "annual": "每年"
+  },
+  "acceleration": {
+    "none": "无",
+    "single": "单触发",
+    "double": "双触发"
+  },
+  "participation": {
+    "none": "不参与分配",
+    "full": "完全参与分配",
+    "capped": "有上限参与分配"
+  },
+  "antiDilution": {
+    "none": "无",
+    "broad_based": "广义加权平均",
+    "narrow_based": "狭义加权平均",
+    "full_ratchet": "完全棘轮"
+  },
+  "valuationMethod": {
+    "black_scholes": "Black-Scholes",
+    "share_price": "授予日股价"
+  },
+  "attribution": {
+    "straight_line": "直线法",
+    "graded": "分级法（按批次）"
+  },
+  "fields": {
+    "acceleration": "加速归属",
+    "accelerationPercent": "未归属部分的加速比例（%）",
+    "amountPaid": "已付金额",
+    "antiDilution": "反稀释",
+    "attribution": "成本分摊",
+    "authorizedShares": "授权股数",
+    "classKind": "类别类型",
+    "cliffMonths": "等待期（月）",
+    "closedOn": "交割日期",
+    "code": "代码",
+    "consideration": "已收对价",
+    "considerationAccount": "结算科目",
+    "conversionPrice": "转换价格",
+    "discountPercent": "折扣（%）",
+    "dividendYieldPercent": "股息率（%）",
+    "effectiveOn": "生效日期",
+    "exercisePrice": "行权价格",
+    "expectedTermYears": "预期期限（年）",
+    "expirationDate": "到期日期",
+    "fairValuePerUnit": "每单位公允价值",
+    "grantSharePrice": "授予日股价",
+    "holder": "持有人",
+    "interestBasis": "计息方式",
+    "interestRatePercent": "利率（%）",
+    "issueDate": "发行日期",
+    "kind": "证券类型",
+    "liquidationMultiple": "清算倍数",
+    "maturityDate": "到期日",
+    "memo": "备注",
+    "name": "名称",
+    "optionType": "期权类型",
+    "originalIssuePrice": "原始发行价",
+    "parValue": "每股面值",
+    "participation": "参与分配",
+    "participationCapMultiple": "参与分配上限（倍数）",
+    "plan": "计划",
+    "preMoneyValuation": "投前估值",
+    "pricePerShare": "每股价格",
+    "principal": "本金",
+    "quantity": "数量",
+    "quantityIssued": "发行数量",
+    "reason": "原因",
+    "reservedShares": "预留股数",
+    "riskFreeRatePercent": "无风险利率（%）",
+    "round": "融资轮次",
+    "safeType": "SAFE 类型",
+    "securityNumber": "证券编号",
+    "seniority": "清偿顺位",
+    "shareClass": "股份类别",
+    "shareDelta": "增减股数",
+    "sharesToConvert": "待转换股数",
+    "splitNew": "新股数",
+    "splitOld": "对应旧股数",
+    "targetClass": "转换为类别",
+    "transferee": "受让人",
+    "valuationCap": "估值上限",
+    "valuationMethod": "估值方法",
+    "vestingFrequency": "归属频率",
+    "vestingMonths": "归属期（月）",
+    "vestingStart": "归属开始日",
+    "volatilityPercent": "波动率（%）"
+  },
+  "capTable": {
+    "by": {
+      "class": "按类别",
+      "holder": "按持有人"
+    },
+    "byLabel": "股权结构表视图",
+    "report": "打开证券登记簿",
+    "emptyClasses": "尚无股份类别。请使用“新建”记录该法律实体的第一个类别。",
+    "emptyHolders": "尚无持有人。发行股份或奖励后，持有人将出现在股权结构表中。",
+    "amend": "修改",
+    "totalOutstanding": "流通",
+    "totalFullyDiluted": "完全稀释",
+    "poolUnallocated": "未分配期权池",
+    "columns": {
+      "class": "类别",
+      "authorized": "授权",
+      "outstanding": "流通",
+      "asConverted": "按转换后",
+      "awards": "奖励",
+      "pool": "期权池可用",
+      "fullyDiluted": "完全稀释",
+      "outstandingPercent": "流通 %",
+      "fullyDilutedPercent": "完全稀释 %",
+      "holder": "持有人",
+      "options": "期权",
+      "rsus": "RSU",
+      "warrants": "认股权证",
+      "actions": "操作"
+    }
+  },
+  "classActions": {
+    "title": "类别 {code}",
+    "description": "修改和拆股自其日期起生效，并连同原因一并保留。",
+    "authorized": "授权股数",
+    "conversionPrice": "转换价格",
+    "split": "拆股",
+    "currentAuthorized": "当前 {value} 股",
+    "currentConversionPrice": "当前 {value}",
+    "splitHelp": "拆股将自其日期起重述该类别的所有持股、奖励、期权池和价格。拆股日期必须晚于该类别最近一次记录的活动。",
+    "saved": "已保存",
+    "failed": "更改未保存。"
+  },
+  "securities": {
+    "allKinds": "全部",
+    "kindFilter": "证券类型",
+    "clearHolder": "正在显示 {name} · 显示所有持有人",
+    "empty": "没有匹配的证券。",
+    "columns": {
+      "number": "编号",
+      "kind": "类型",
+      "holder": "持有人",
+      "class": "类别",
+      "issued": "发行",
+      "status": "状态",
+      "outstanding": "流通",
+      "vested": "已归属",
+      "price": "价格"
+    }
+  },
+  "stakeholders": {
+    "empty": "股权结构表中尚无持有人。",
+    "columns": {
+      "name": "名称",
+      "kind": "类型",
+      "email": "电子邮件",
+      "shares": "股份（按转换后）",
+      "vestedAwards": "已归属奖励",
+      "fullyDiluted": "完全稀释",
+      "percent": "完全稀释 %"
+    }
+  },
+  "plans": {
+    "empty": "尚无股权计划。请使用“新建”记录计划及其预留股份。",
+    "changeReserve": "调整预留",
+    "reserveTitle": "调整 {code} 的预留股份",
+    "reserveDescription": "预留调整自其日期起生效。减少预留不得使任何后续日期的未分配期权池低于零。",
+    "deltaHelp": "负数表示从预留中移除股份。",
+    "reserveSaved": "预留已调整",
+    "reserveFailed": "预留调整未保存。",
+    "recycle": {
+      "forfeited": "已没收和已取消的奖励回流",
+      "expired": "已到期期权回流",
+      "repurchased": "已回购的奖励股份回流",
+      "none": "不回流"
+    },
+    "columns": {
+      "plan": "计划",
+      "class": "类别",
+      "reserved": "预留",
+      "used": "已授予（净额）",
+      "returned": "已回流",
+      "available": "可用",
+      "recycling": "回流"
+    }
+  },
+  "rounds": {
+    "sections": {
+      "rounds": "融资轮次",
+      "convertibles": "可转换工具",
+      "model": "融资轮次建模"
+    },
+    "empty": "尚无融资轮次。",
+    "convertiblesEmpty": "没有 SAFE 或可转换票据。",
+    "columns": {
+      "name": "融资轮次",
+      "class": "类别",
+      "closedOn": "交割日期",
+      "price": "每股价格",
+      "preMoney": "投前",
+      "raised": "融资额",
+      "shares": "发行股数",
+      "principal": "本金",
+      "interest": "应计利息",
+      "cap": "估值上限",
+      "discount": "折扣"
+    }
+  },
+  "model": {
+    "description": "以截至日期的股权结构表为基础，按投前法为融资轮次定价：流通中的 SAFE 和票据转换，受保护类别获得反稀释股份，期权池在投前估值内补足至目标比例。不会记录任何内容。",
+    "preMoney": "投前估值",
+    "investment": "新增投资",
+    "targetPool": "本轮后期权池目标（%）",
+    "run": "建模",
+    "failed": "无法对该融资轮次建模。",
+    "price": "每股价格",
+    "postMoney": "投后估值",
+    "investorShares": "新投资人股数",
+    "fullyDilutedAfter": "本轮后完全稀释股数",
+    "conversionShares": "转换股数",
+    "poolTopUp": "期权池补足",
+    "antiDilutionShares": "反稀释股数",
+    "cashRounding": "零碎股现金支付",
+    "newInvestors": "新投资人",
+    "pool": "未分配期权池",
+    "antiDilution": "反稀释调整",
+    "empty": "没有可显示的内容。",
+    "pricedBy": {
+      "round": "本轮价格",
+      "cap": "估值上限",
+      "discount": "折扣"
+    },
+    "columns": {
+      "holder": "持有人",
+      "sharesBefore": "本轮前股数",
+      "percentBefore": "本轮前 %",
+      "sharesAfter": "本轮后股数",
+      "percentAfter": "本轮后 %",
+      "amount": "转换金额",
+      "pricedBy": "定价依据",
+      "price": "转换价格",
+      "shares": "股数"
+    }
+  },
+  "waterfall": {
+    "description": "以截至日期的股权结构表为基础分配退出价值：先偿还票据，再按清偿顺位支付优先清算权，其余部分由普通股、参与分配及转换的优先股以及价内奖励共享。不会记录任何内容。",
+    "exitValue": "退出价值",
+    "unvested": "未归属奖励",
+    "unvestedParticipate": "参与分配",
+    "unvestedCancel": "取消（仅限已归属和加速部分）",
+    "changeOfControl": "控制权变更",
+    "terminated": "持有人服务终止",
+    "run": "运行清算瀑布",
+    "failed": "无法运行清算瀑布。",
+    "pricePerShare": "每股普通股",
+    "unallocated": "未分配",
+    "byClass": "按类别",
+    "byHolder": "按持有人",
+    "converts": "转换为普通股",
+    "takesPreference": "行使优先清算权",
+    "empty": "没有可分配的金额。",
+    "columns": {
+      "election": "选择",
+      "preference": "优先清算",
+      "participation": "参与分配",
+      "total": "合计",
+      "perShare": "每股",
+      "payout": "支付额",
+      "percent": "占退出价值比例"
+    }
+  },
+  "compensation": {
+    "schedule": "计划表",
+    "runs": "已过账的运行",
+    "report": "打开费用计划表报表",
+    "post": "过账截至 {date} 的运行",
+    "posted": "已过账截至 {date} 的股权激励",
+    "replayed": "截至 {date} 的运行已过账",
+    "failed": "股权激励运行未过账。",
+    "lastRun": "上次运行截至 {date}",
+    "noRuns": "尚无已过账的运行",
+    "total": "待过账变动",
+    "empty": "截至该日期没有产生成本的期权或 RSU 奖励。",
+    "runsEmpty": "尚无已过账的股权激励运行。",
+    "noEntry": "无需过账",
+    "columns": {
+      "cumulative": "累计已确认",
+      "previous": "此前已过账",
+      "period": "本次运行",
+      "through": "截至",
+      "total": "合计",
+      "entry": "会计分录"
+    }
+  },
+  "drawer": {
+    "tabs": "证券分区",
+    "overview": "概览",
+    "vesting": "归属",
+    "history": "历史",
+    "actions": "操作",
+    "outstanding": "流通",
+    "vested": "已归属可用",
+    "unvested": "未归属",
+    "asOf": "截至",
+    "accruedInterest": "应计利息",
+    "convertingAmount": "转换金额",
+    "grantValue": "授予日价值",
+    "recognized": "累计已确认",
+    "posted": "已过账",
+    "source": "创建来源",
+    "resulting": "生成结果",
+    "issuanceEntry": "发行分录：",
+    "viewEntry": "查看分录",
+    "vestDate": "归属日期",
+    "vestQuantity": "单位数",
+    "vestCumulative": "累计",
+    "noEvents": "没有记录的事件。",
+    "eventDate": "日期",
+    "eventKind": "事件",
+    "eventQuantity": "数量",
+    "eventAmount": "金额",
+    "eventEntry": "分录",
+    "eventReason": "原因"
+  },
+  "events": {
+    "saved": "已记录{kind}",
+    "failed": "事件未记录。",
+    "help": {
+      "exercise": "按行权价格行使已归属的单位。系统将签发相应的股票凭证，现金和奖励的授予日价值过账至资本。",
+      "settle": "将已归属的单位结算为股份。奖励的授予日价值从股份支付资本公积转入股本。",
+      "forfeit": "未归属的单位从奖励中移出；已为其确认的成本将在下一次股权激励运行中转回。",
+      "expire": "已归属但未行权的单位失效。其已确认的成本保留。",
+      "cancel": "取消单位，优先取消未归属单位。在没有替代奖励的情况下取消未归属单位，将确认其剩余成本。",
+      "repurchase": "公司按已付金额回购股份作为库存股（需审批）。",
+      "transfer": "已归属的单位以新凭证转让给另一持有人。",
+      "convert": "SAFE 和票据在融资轮次的交割日按该轮价格转换；优先股按该类别的转换比例转换为普通股。",
+      "void": "更正错误录入的记录：其分录在作废日期冲销，生成该记录的事件也将撤销（需审批）。"
+    }
+  },
+  "new": {
+    "open": "新建",
+    "title": "新建股权记录",
+    "description": "为所选法律实体发行证券，或记录股份类别、计划或融资轮次。",
+    "failed": "记录未保存。",
+    "sections": {
+      "security": "证券",
+      "class": "股份类别",
+      "plan": "计划",
+      "round": "融资轮次"
+    },
+    "kindHelp": {
+      "share": "以现金发行的股份，其对价按面值过账至股本，其余过账至资本公积。",
+      "option": "期权在授予时采用 Black-Scholes 估值；其成本通过股权激励运行过账。",
+      "rsu": "RSU 按授予日股价估值；其成本通过股权激励运行过账。",
+      "warrant": "认股权证附有行权价格；为认股权证支付的现金过账至资本公积。",
+      "safe": "购买金额过账至可转换工具科目，直至 SAFE 转换。",
+      "note": "本金过账至可转换工具科目；利息按 Actual/365 基准计提，直至转换。"
+    },
+    "considerationHint": "默认为价格乘以数量。",
+    "numberHint": "留空则自动编号。",
+    "vesting": "归属",
+    "vestingNone": "全部归属",
+    "vestingTime": "按时间归属计划",
+    "valuation": "授予日估值",
+    "valuationOption": "Black-Scholes 输入参数。系统将计算每份期权的公允价值并随奖励一同保存。",
+    "valuationRsu": "授予日股价即为每单位公允价值。",
+    "issue": "发行",
+    "securitySaved": "证券已发行",
+    "conversionPriceHint": "默认为原始发行价。",
+    "seniorityHint": "清偿顺位越高，清算时越先获得支付。",
+    "createClass": "记录类别",
+    "classSaved": "股份类别已记录",
+    "recycling": "回流至期权池的单位",
+    "createPlan": "记录计划",
+    "planSaved": "计划已记录",
+    "roundHelp": "记录已交割的融资轮次，然后基于该轮发行股份并转换其 SAFE 和票据。",
+    "createRound": "记录融资轮次",
+    "roundSaved": "融资轮次已记录"
+  }
+}

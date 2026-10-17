@@ -2876,6 +2876,11 @@
           "reason": "变更原因"
     },
     "entities": {
+      "equity-account-policies": {
+        "title": "权益科目",
+        "singular": "权益科目策略",
+        "description": "按法律实体和生效日期设置权益交易过账所用的股本、资本公积、库存股、股权激励费用和可转换工具科目。"
+      },
       "pos-registers": {
         "title": "收银台",
         "singular": "收银台",
@@ -3912,6 +3917,13 @@
       "project-loss-policies": {"title": "亏损项目政策", "description": "决定在结账时是否标记预计亏损的项目，以及结账是否需等待其亏损评估。"}
     },
     "fields": {
+      "commonStockAccountId": "普通股科目",
+      "preferredStockAccountId": "优先股科目",
+      "apicAccountId": "资本公积科目",
+      "apicShareBasedAccountId": "资本公积（股份支付）科目",
+      "compensationExpenseAccountId": "股权激励费用科目",
+      "treasuryStockAccountId": "库存股科目",
+      "convertibleInstrumentsAccountId": "可转换工具科目",
       "aggregation": "聚合方式",
       "addressLine1": "地址行 1",
       "addressLine2": "地址行 2",
@@ -4626,6 +4638,8 @@
       "denominations": "现金面额"
     },
     "fieldHelp": {
+      "apicShareBasedAccount": "确认股权激励时贷记；授予被行权或结算时转入股本。",
+      "convertibleInstrumentsAccount": "按转换金额（票据含应计利息）核算 SAFE 和可转换票据，直至转换。",
       "posCashAccount": "收银台的现金科目。现金销售、现金退款、存入、取出以及结班长短款都记入此科目。",
       "posCardAccount": "银行卡付款结算到此清算科目。如果此收银台不收银行卡，请留空。",
       "posOtherAccount": "代金券、支票等其他付款结算到此科目。如果此收银台不收，请留空。",

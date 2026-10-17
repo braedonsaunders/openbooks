@@ -677,6 +677,17 @@ export const NAV_MODULES: NavModule[] = [
     recordTarget: { kind: 'query', param: 'run' },
   },
   {
+    key: 'equity',
+    href: '/equity',
+    label: 'Equity & Cap Table',
+    iconKey: 'coins',
+    group: 'accounting',
+    subgroup: 'ledger',
+    requiredPermission: 'equity.read',
+    featureKey: 'equity',
+    recordTarget: { kind: 'query', param: 'security' },
+  },
+  {
     key: 'accounts',
     href: '/accounts',
     label: 'Chart of Accounts',
@@ -1366,6 +1377,7 @@ export const DEFAULT_NAV_ORDER: Record<NavGroupKey, readonly string[]> = {
     'internal-billing',
     'intercompany',
     'intercompany-netting',
+    'equity',
   ],
   insights: ['reports', 'analytics', 'insights', 'saved-searches'],
   settings: [
