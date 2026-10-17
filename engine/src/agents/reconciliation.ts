@@ -16,12 +16,16 @@ import type { AgentFinding } from "./types.ts";
  * candidate, stale reconciliations, and accounts never reconciled.
  *
  * Reuse map:
- * - bank_line_match_candidate is a read-only dry run of the engine
- *   auto-matcher (`engine/src/banking/banking.ts` `autoMatch`): exact signed amount,
- *   closest date wins, one-to-one consumption, confidence 0.90 at <= 3 days
- *   else 0.70, silent past 14 days. The pack NEVER calls autoMatch itself —
- *   that would write matches. It proposes `match_bank_line` commands (an
- *   existing application tool) naming the open session when one exists.
+ * - bank_line_match_candidate is a read-only candidate scan in the spirit
+ *   of the engine auto-matcher (`engine/src/banking/matching.ts`
+ *   `autoMatch`): exact signed amount, closest date wins, one-to-one
+ *   consumption. It keeps its own two date bands — confidence 0.90 at <= 3
+ *   days, else 0.70, silent past the configured window — because the
+ *   detector's configured minimum-confidence percentage is defined against
+ *   those bands; auto-match's explainable score is a separate scale. The
+ *   pack NEVER calls autoMatch itself — that would write matches. It
+ *   proposes `match_bank_line` commands (an existing application tool)
+ *   naming the open session when one exists.
  * - stale_reconciliation reuses `reconciliationTotals` (the same authority
  *   the accounting pack's reconciliation_difference detector uses) and
  *   proposes `sign_off_reconciliation` only for exactly-zero differences.
@@ -61,13 +65,13 @@ export type MatchCandidate = {
   journalLineId: string;
   journalDate: string;
   daysBetween: number;
-  /** Mirrors autoMatch bands: 0.90 at <= 3 days, else 0.70. */
+  /** Detector bands: 0.90 at <= 3 days, else 0.70 (see the reuse map above). */
   confidence: "0.90" | "0.70";
   confidencePercent: 90 | 70;
 };
 
 /**
- * Pure autoMatch-mirror pairing: exact signed amount, closest date wins with
+ * Pure candidate pairing: exact signed amount, closest date wins with
  * greedy one-to-one consumption, silent past 14 days. Unit-tested against
  * the bands above; production rows come from the loaders below.
  */

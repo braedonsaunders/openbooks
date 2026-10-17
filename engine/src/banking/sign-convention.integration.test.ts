@@ -420,3 +420,90 @@ test(
     }
   },
 );
+
+test(
+  "auto-match prefers a lagging bank date over an equally distant leading one and stores why",
+  { skip: !DB },
+  async () => {
+    const { org, actor, ctx } = await setup("asset_bank");
+    try {
+      const journal = await postCardJournal(org, actor, "500.00", "2026-11-05", "receipt");
+      const imported = await importCsv(
+        {
+          accountId: org.accounts.bank,
+          source: "csv" as const,
+          statementDate: "2026-11-30",
+          currency: "CAD",
+          lines: [
+            { postedOn: "2026-11-03", amount: "500.00", description: "Deposit", bankTransactionId: "leading" },
+            { postedOn: "2026-11-07", amount: "500.00", description: "Deposit", bankTransactionId: "lagging" },
+          ],
+        },
+        ctx,
+      );
+      const [leading, lagging] = await statementLineIds(org.orgId, imported.statementId!);
+      const recon = await startReconciliation(
+        { accountId: org.accounts.bank, throughDate: "2026-11-30", statementBalance: "1000.00" },
+        ctx,
+      );
+      const result = await autoMatch(recon.id, ctx);
+      assert.equal(result.matched, 1);
+      assert.equal(result.highConfidence, 1, "a two-day lag clears the review ceiling");
+      assert.deepEqual(await matchedPairs(org.orgId, recon.id), [
+        { statement_line_id: lagging!, journal_line_id: journal! },
+      ], "banks post after the book date, so the lagging line wins the tie in distance");
+      assert.equal(await lineStatus(org.orgId, leading!), "unmatched");
+      const stored = (await db.execute<{ confidence: string; match_reasons: unknown }>(sql`
+        select confidence::text as confidence, match_reasons from reconciliation_matches
+         where org_id = ${org.orgId} and reconciliation_id = ${recon.id}
+      `)).rows;
+      assert.deepEqual(stored, [{
+        confidence: "0.7400",
+        match_reasons: [{ code: "exact_amount" }, { code: "date_lag", days: 2 }],
+      }]);
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
+
+test(
+  "a distant pair is held for review unless counterparty words support it",
+  { skip: !DB },
+  async () => {
+    const { org, actor, ctx } = await setup("asset_bank");
+    try {
+      await postCardJournal(org, actor, "-120.00", "2026-11-02", "Northwind Traders");
+      await postCardJournal(org, actor, "-80.00", "2026-11-02", "office");
+      await importCsv(
+        {
+          accountId: org.accounts.bank,
+          source: "csv" as const,
+          statementDate: "2026-11-30",
+          currency: "CAD",
+          lines: [
+            { postedOn: "2026-11-08", amount: "-120.00", description: "NORTHWIND TRADERS 0042", bankTransactionId: "supported" },
+            { postedOn: "2026-11-08", amount: "-80.00", description: "POS 7731", bankTransactionId: "bare" },
+          ],
+        },
+        ctx,
+      );
+      const recon = await startReconciliation(
+        { accountId: org.accounts.bank, throughDate: "2026-11-30", statementBalance: "-200.00" },
+        ctx,
+      );
+      const result = await autoMatch(recon.id, ctx);
+      assert.equal(result.matched, 2);
+      assert.equal(result.highConfidence, 1, "shared payee words lift the six-day pair above the ceiling");
+      assert.equal(result.mediumConfidence, 1, "the bare six-day pair waits in the review queue");
+      const held = (await db.execute<{ n: number }>(sql`
+        select count(*)::int as n from reconciliation_matches
+         where org_id = ${org.orgId} and reconciliation_id = ${recon.id}
+           and matched_by = 'auto' and confidence <= 0.7
+      `)).rows[0]!.n;
+      assert.equal(held, 1, "the review tab's ceiling holds exactly the unsupported pair");
+    } finally {
+      await dropScratchOrg(org.orgId);
+    }
+  },
+);
