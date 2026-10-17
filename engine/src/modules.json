@@ -281,6 +281,13 @@
         "records"
       ]
     },
+    "equity": {
+      "description": "Equity and cap table per legal entity: share classes, plans and pools, securities and their events, splits, the point-in-time cap table, vesting, convertible conversion, round and waterfall models, share-based payment valuation and the stock compensation run, posted through the journal kernel.",
+      "dependsOn": [
+        "money",
+        "platform"
+      ]
+    },
     "einvoice": {
       "description": "EN 16931 e-invoicing: profiles, validation, CII/UBL rendering, hybrid PDF containers and immutable issued documents.",
       "dependsOn": [

@@ -1,0 +1,127 @@
+/**
+ * Share-based payment cost of an option or RSU award (ASC 718 / IFRS 2):
+ * the grant-date fair value per unit times the units expected to vest,
+ * attributed over the requisite service period that starts on the grant
+ * (issue) date.
+ *
+ * - Straight-line attribution spreads the award's cost evenly to its final
+ *   vesting date, but the cumulative cost recognized at any date is never
+ *   less than the grant-date value of the units vested by then.
+ * - Graded attribution treats each vesting installment as a separate award
+ *   with its own service period from the grant date to its vesting date.
+ *
+ * Forfeitures are recognized as they occur: units forfeited before vesting
+ * leave the award, so the cost previously recognized for them reverses in
+ * the period of the forfeiture. Cancelling unvested units without a
+ * replacement recognizes their remaining cost on the cancellation date.
+ * Expiry of vested options and their exercise change nothing. A void (the
+ * record was entered in error) removes the award and reverses all of its
+ * cost from the void date.
+ *
+ * Amounts are exact here; the run rounds each award's cumulative cost to the
+ * currency's minor unit and posts the change since the previous run.
+ */
+import { calendarDaysBetween } from "../platform/civil-date.ts";
+import { eventsOf, vestingTermsOf } from "./cap-table.ts";
+import { EquityError } from "./errors.ts";
+import {
+  addRational,
+  compareRational,
+  divideRational,
+  maxRational,
+  minRational,
+  multiplyRational,
+  ONE,
+  parsePrice,
+  rational,
+  subtractRational,
+  sumRational,
+  ZERO,
+  type Rational,
+} from "./quantities.ts";
+import { splitFactor } from "./splits.ts";
+import type { EquityBook, SecurityRecord } from "./types.ts";
+import { vestingInstallments } from "./vesting.ts";
+
+interface Tranche {
+  date: string;
+  units: Rational;
+}
+
+/** Whether a security carries share-based payment cost. */
+export function isCompensatory(security: SecurityRecord): boolean {
+  return (security.kind === "option" || security.kind === "rsu") && security.fairValuePerUnit !== null && security.expenseAttribution !== null;
+}
+
+/** Remove `units` from the end of the schedule; returns what was removed from tranches after `after`. */
+function removeFromTail(tranches: Tranche[], units: Rational, after: string | null): Rational {
+  let remaining = units;
+  let removed = ZERO;
+  for (let index = tranches.length - 1; index >= 0 && compareRational(remaining, ZERO) > 0; index -= 1) {
+    const tranche = tranches[index]!;
+    if (after !== null && tranche.date <= after) break;
+    const take = minRational(tranche.units, remaining);
+    tranche.units = subtractRational(tranche.units, take);
+    remaining = subtractRational(remaining, take);
+    removed = addRational(removed, take);
+  }
+  return removed;
+}
+
+/** The award's live vesting tranches on `through`, in issue units, after forfeitures and cancellations. */
+export function compensationTranches(book: Pick<EquityBook, "events" | "splits">, security: SecurityRecord, through: string): Tranche[] {
+  const terms = vestingTermsOf(security);
+  const tranches: Tranche[] = vestingInstallments(terms).map((installment) => ({ date: installment.date, units: rational(installment.quantity) }));
+  const accelerated: Tranche[] = [];
+  for (const event of eventsOf(book, security.id, through)) {
+    if (event.kind === "void") return [];
+    if (event.kind !== "forfeit" && event.kind !== "cancel") continue;
+    if (event.quantity === null || !security.shareClassId) continue;
+    const units = divideRational(rational(event.quantity), splitFactor(book.splits, security.shareClassId, security.issueDate, event.effectiveOn));
+    if (event.kind === "forfeit") {
+      removeFromTail(tranches, units, null);
+    } else {
+      // Unvested units cancelled without replacement: their remaining cost lands on the cancellation date.
+      const fromUnvested = removeFromTail(tranches, units, event.effectiveOn);
+      if (compareRational(fromUnvested, ZERO) > 0) accelerated.push({ date: event.effectiveOn, units: fromUnvested });
+    }
+  }
+  return [...tranches, ...accelerated].filter((tranche) => compareRational(tranche.units, ZERO) > 0)
+    .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : 0));
+}
+
+/** Fraction of a service period [start, end] rendered by `through`. */
+function servedFraction(start: string, end: string, through: string): Rational {
+  if (through >= end || end <= start) return ONE;
+  if (through <= start) return ZERO;
+  return rational(BigInt(calendarDaysBetween(start, through)), BigInt(calendarDaysBetween(start, end)));
+}
+
+/** Cumulative cost of an award recognized through `through` (exact money). */
+export function cumulativeCompensation(book: Pick<EquityBook, "events" | "splits">, security: SecurityRecord, through: string): Rational {
+  if (!isCompensatory(security)) return ZERO;
+  if (through < security.issueDate) return ZERO;
+  const fairValue = parsePrice(security.fairValuePerUnit, "the fair value per unit");
+  if (compareRational(fairValue, ZERO) < 0) {
+    throw new EquityError(`Security ${security.securityNumber} carries a negative fair value.`, { code: "equity_valuation_invalid", remedy: "Review the award's valuation." });
+  }
+  const tranches = compensationTranches(book, security, through);
+  if (tranches.length === 0) return ZERO;
+  const start = security.issueDate;
+  const costOf = (tranche: Tranche): Rational => multiplyRational(tranche.units, fairValue);
+  if (security.expenseAttribution === "graded") {
+    return sumRational(tranches.map((tranche) => multiplyRational(costOf(tranche), servedFraction(start, tranche.date, through))));
+  }
+  const total = sumRational(tranches.map(costOf));
+  const end = tranches[tranches.length - 1]!.date;
+  const evenly = multiplyRational(total, servedFraction(start, end, through));
+  const vested = sumRational(tranches.filter((tranche) => tranche.date <= through).map(costOf));
+  return maxRational(evenly, vested);
+}
+
+/** Total grant-date cost of the award's live units (what it will have cost once fully vested). */
+export function totalCompensation(book: Pick<EquityBook, "events" | "splits">, security: SecurityRecord, through: string): Rational {
+  if (!isCompensatory(security)) return ZERO;
+  const fairValue = parsePrice(security.fairValuePerUnit, "the fair value per unit");
+  return sumRational(compensationTranches(book, security, through).map((tranche) => multiplyRational(tranche.units, fairValue)));
+}
