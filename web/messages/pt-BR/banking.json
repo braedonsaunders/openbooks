@@ -344,7 +344,8 @@
     "reviewTruncated": "Mostrando {shown} de {total}.",
     "columns": {
       "bankDate": "Data bancária",
-      "confidence": "Confiança"
+      "confidence": "Confiança",
+      "why": "Motivo"
     },
     "noReview": "Nada a revisar — todas as correspondências automáticas foram de alta confiança.",
     "excludedHint": "Linhas que você reservou — elas são ignoradas na conciliação.",
@@ -366,7 +367,58 @@
     "correctLine": "Corrigir linha",
     "correctTitle": "Corrigir linha do extrato",
     "correctHint": "Corrija um erro de importação desta linha não conciliada. A alteração é auditada; nada é contabilizado.",
-    "correctedToast": "Linha corrigida"
+    "correctedToast": "Linha corrigida",
+    "historySuggestion": "Do histórico: {account}",
+    "historySuggestionWhy": "Sugerido com base em conciliações confirmadas anteriores",
+    "reasons": {
+      "listLabel": "Motivos da conciliação",
+      "exactAmount": "Valor exato",
+      "sameDay": "Mesmo dia",
+      "bankPostedLater": "{count, plural, one {Banco lançou # dia depois} other {Banco lançou # dias depois}}",
+      "bankPostedEarlier": "{count, plural, one {Banco lançou # dia antes} other {Banco lançou # dias antes}}",
+      "sharedReference": "Referência {reference}",
+      "sharedCounterparty": "Palavras do favorecido: {words}",
+      "priorParty": "Mesma parte de uma conciliação confirmada anterior",
+      "exactOpenBalance": "O saldo em aberto corresponde exatamente",
+      "combinedOpenBalance": "{count, plural, one {# documento soma o valor} other {# documentos somam o valor}}",
+      "paidOnDueDate": "Pago no vencimento",
+      "paidAfterDueDate": "{count, plural, one {Pago # dia após o vencimento} other {Pago # dias após o vencimento}}",
+      "paidBeforeDueDate": "{count, plural, one {Pago # dia antes do vencimento} other {Pago # dias antes do vencimento}}",
+      "historyPayee": "Mesmo favorecido ({words}) da conciliação de {date}"
+    },
+    "settle": {
+      "open": "Faturas em aberto",
+      "title": "Faturas em aberto",
+      "titleInvoices": "Faturas de clientes em aberto",
+      "titleBills": "Contas de fornecedores em aberto",
+      "description": "{line} · liquidar {amount}",
+      "tabs": {
+        "proposals": "Propostas",
+        "documents": "Todos os documentos em aberto"
+      },
+      "loading": "Procurando documentos em aberto…",
+      "retry": "Tentar novamente",
+      "noProposalsTitle": "Nenhuma liquidação exata encontrada",
+      "noProposalsDescription": "Nenhum documento em aberto, nem conjunto de documentos de uma parte, em {currency} soma esta linha. Selecione os documentos você mesmo em Todos os documentos em aberto.",
+      "noDocumentsTitle": "Nenhum documento em aberto",
+      "noDocumentsDescription": "Não há nada em aberto em {currency} até este valor para a entidade desta conta bancária.",
+      "proposalsHint": "Documentos cujo saldo em aberto é igual ao valor bancário, os de evidência mais forte primeiro.",
+      "recordAndMatch": "Registrar pagamento e conciliar",
+      "recordHint": "Registra o pagamento desta conta bancária na data do extrato, liquida os documentos integralmente e o concilia com esta linha em uma única etapa.",
+      "selectionSummary": "Selecionado {selected} de {amount}",
+      "oneParty": "Selecione documentos de uma única parte",
+      "selectDocumentAria": "Selecionar {document}, em aberto {amount}",
+      "recordedToast": "Pagamento {number} registrado e conciliado",
+      "effectsPending": "O pagamento foi registrado e conciliado, mas seus efeitos posteriores precisam ser repetidos a partir do registro do pagamento: {reason}",
+      "columns": {
+        "party": "Parte",
+        "documents": "Documentos",
+        "document": "Documento",
+        "due": "Vencimento",
+        "open": "Saldo em aberto",
+        "why": "Motivo"
+      }
+    }
   },
   "transactionsSearch": "Buscar cobranças de cartão, cheques, transferências…",
   "transactionsEmptyTitle": "Nenhuma transação bancária ainda",

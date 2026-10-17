@@ -169,45 +169,54 @@ export async function assertNoForeignRunReservation(
   if (refusal) throw refusal;
 }
 
-export async function openItemsForParty(
-  partyId: string,
+type OpenItemRow = {
+  line_id: string;
+  amount: string;
+  due_date: string | null;
+  memo: string | null;
+  entry_id: string;
+  entry_number: string;
+  posting_date: string;
+  document_id: string | null;
+  document_number: string | null;
+  document_kind: string | null;
+  reference_number: string | null;
+  applied: string;
+  currency: string;
+  fx_rate: string;
+  transaction_amount: string;
+  transaction_applied: string;
+  reserved_run_id: string | null;
+  reserved_run_number: string | null;
+  reserved_run_status: string | null;
+  account_id: string;
+  account_number: string | null;
+  account_name: string;
+  party_id: string;
+  party_name: string | null;
+  subsidiary_id: string | null;
+};
+
+/**
+ * The one definition of a settleable open item: an is_open_item line on a
+ * live posted entry in the payment book, on the side's sign, with its live
+ * applications and any foreign payment-run reservation. `filter` narrows the
+ * set (party, currency, scope); `limit` bounds cross-party discovery.
+ */
+async function selectOpenItemRows(
+  tenantId: string,
   side: OpenItemSide,
-  orgId?: string,
-  allowedSubsidiaryIds?: ReadonlySet<string> | null,
-  opts: { paymentDocumentId?: string | null } = {},
-): Promise<OpenItem[]> {
-  const tenantId = orgId ?? orgContext.getStore()?.orgId;
-  if (!tenantId) throw new PaymentError("organization is required to select payment open items");
+  filter: ReturnType<typeof sql>,
+  opts: { paymentDocumentId?: string | null; limit?: number } = {},
+): Promise<OpenItemRow[]> {
   const bookId = await paymentBookId(tenantId);
   const signFilter = side === "ap" ? sql`jl.amount < 0` : sql`jl.amount > 0`;
   const orgFilter = sql`jl.org_id = ${tenantId} and je.book_id = ${bookId} and`;
-  const r = (await db.execute<{
-      line_id: string;
-      amount: string;
-      due_date: string | null;
-      memo: string | null;
-      entry_id: string;
-      entry_number: string;
-      posting_date: string;
-      document_id: string | null;
-      document_number: string | null;
-      document_kind: string | null;
-      reference_number: string | null;
-      applied: string;
-      currency: string;
-      fx_rate: string;
-      transaction_amount: string;
-      transaction_applied: string;
-      reserved_run_id: string | null;
-      reserved_run_number: string | null;
-      reserved_run_status: string | null;
-      account_id: string;
-      account_number: string | null;
-      account_name: string;
-    }>(sql`
+  return (await db.execute<OpenItemRow>(sql`
     select jl.id as line_id, abs(jl.amount) as amount, jl.due_date, jl.memo,
            jl.account_id, acct.number as account_number, acct.name as account_name,
            jl.currency, jl.fx_rate, abs(jl.txn_amount) as transaction_amount,
+           jl.party_id, party.display_name as party_name, jl.subsidiary_id,
            je.id as entry_id, je.entry_number, je.posting_date,
            d.id as document_id, d.document_number, d.kind as document_kind, d.reference_number,
            coalesce(ap.applied, 0) as applied,
@@ -218,6 +227,7 @@ export async function openItemsForParty(
       -- Live entries only: a reversed entry no longer carries a settleable open item.
       join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status = 'posted'
       join accounts acct on acct.id = jl.account_id and acct.org_id = jl.org_id
+      left join parties party on party.id = jl.party_id and party.org_id = jl.org_id
       left join documents d on d.id = je.source_document_id and d.org_id = je.org_id
       left join lateral (
         select sum(a.amount) as applied, sum(a.target_transaction_amount) as transaction_applied
@@ -237,38 +247,97 @@ export async function openItemsForParty(
                 or instruction.payment_document_id is distinct from ${opts.paymentDocumentId ?? null}::uuid)
          limit 1
       ) reservation on true
-     where ${orgFilter} jl.party_id = ${partyId} and jl.is_open_item and ${signFilter}
-       ${paymentSubsidiaryScope(sql`jl.subsidiary_id`, allowedSubsidiaryIds)}
-     order by jl.due_date nulls last, je.posting_date, je.entry_number
-  `));
-  return r.rows
-    .map((row) => ({
-      lineId: row.line_id,
-      entryId: row.entry_id,
-      entryNumber: row.entry_number,
-      postingDate: row.posting_date,
-      dueDate: row.due_date,
-      documentId: row.document_id,
-      documentNumber: row.document_number,
-      documentKind: row.document_kind,
-      referenceNumber: row.reference_number,
-      memo: row.memo,
-      accountId: row.account_id,
-      accountNumber: row.account_number,
-      accountName: row.account_name,
-      amount: row.amount,
-      applied: row.applied,
-      open: sum([row.amount, negStr(String(row.applied))]),
-      currency: row.currency,
-      fxRate: row.fx_rate,
-      transactionAmount: row.transaction_amount,
-      transactionApplied: row.transaction_applied,
-      transactionOpen: sum([row.transaction_amount, negStr(String(row.transaction_applied))]),
-      reservedByRun: row.reserved_run_id
-        ? { runId: row.reserved_run_id, runNumber: row.reserved_run_number ?? "", runStatus: row.reserved_run_status ?? "" }
-        : null,
-    }))
-    .filter((i) => cmp(i.open, "0") > 0);
+     where ${orgFilter} jl.is_open_item and ${signFilter} and ${filter}
+     order by jl.due_date nulls last, je.posting_date, je.entry_number, jl.id
+     ${opts.limit !== undefined ? sql`limit ${opts.limit}` : sql``}
+  `)).rows;
+}
+
+function openItemFromRow(row: OpenItemRow): OpenItem {
+  return {
+    lineId: row.line_id,
+    entryId: row.entry_id,
+    entryNumber: row.entry_number,
+    postingDate: row.posting_date,
+    dueDate: row.due_date,
+    documentId: row.document_id,
+    documentNumber: row.document_number,
+    documentKind: row.document_kind,
+    referenceNumber: row.reference_number,
+    memo: row.memo,
+    accountId: row.account_id,
+    accountNumber: row.account_number,
+    accountName: row.account_name,
+    amount: row.amount,
+    applied: row.applied,
+    open: sum([row.amount, negStr(String(row.applied))]),
+    currency: row.currency,
+    fxRate: row.fx_rate,
+    transactionAmount: row.transaction_amount,
+    transactionApplied: row.transaction_applied,
+    transactionOpen: sum([row.transaction_amount, negStr(String(row.transaction_applied))]),
+    reservedByRun: row.reserved_run_id
+      ? { runId: row.reserved_run_id, runNumber: row.reserved_run_number ?? "", runStatus: row.reserved_run_status ?? "" }
+      : null,
+  };
+}
+
+export async function openItemsForParty(
+  partyId: string,
+  side: OpenItemSide,
+  orgId?: string,
+  allowedSubsidiaryIds?: ReadonlySet<string> | null,
+  opts: { paymentDocumentId?: string | null } = {},
+): Promise<OpenItem[]> {
+  const tenantId = orgId ?? orgContext.getStore()?.orgId;
+  if (!tenantId) throw new PaymentError("organization is required to select payment open items");
+  const rows = await selectOpenItemRows(
+    tenantId,
+    side,
+    sql`jl.party_id = ${partyId} ${paymentSubsidiaryScope(sql`jl.subsidiary_id`, allowedSubsidiaryIds)}`,
+    opts,
+  );
+  return rows.map(openItemFromRow).filter((i) => cmp(i.open, "0") > 0);
+}
+
+/** An open item found by amount across parties, with the party and entity it settles under. */
+export interface SettlementOpenItem extends OpenItem {
+  partyId: string;
+  partyName: string | null;
+  subsidiaryId: string | null;
+}
+
+/**
+ * Open items of any party that a single receipt or payment of `maxAmount`
+ * could settle, for matching a bank line to the documents it pays: same
+ * transaction currency, inside the caller's scope and (when given) one legal
+ * entity, with a remaining transaction balance above zero and at most the
+ * amount. Items reserved by a payment run are excluded — that run pays them.
+ * Bounded by `limit`, earliest due first.
+ */
+export async function openItemsForSettlement(opts: {
+  orgId: string;
+  side: OpenItemSide;
+  currency: string;
+  maxTransactionAmount: string;
+  subsidiaryId: string | null;
+  allowedSubsidiaryIds: ReadonlySet<string> | null;
+  limit: number;
+}): Promise<SettlementOpenItem[]> {
+  const rows = await selectOpenItemRows(
+    opts.orgId,
+    opts.side,
+    sql`jl.party_id is not null and jl.currency = ${opts.currency}
+      and abs(jl.txn_amount) - coalesce(ap.transaction_applied, 0) > 0
+      and abs(jl.txn_amount) - coalesce(ap.transaction_applied, 0) <= ${opts.maxTransactionAmount}::numeric
+      and reservation.run_id is null
+      ${opts.subsidiaryId ? sql`and jl.subsidiary_id = ${opts.subsidiaryId}` : sql``}
+      ${paymentSubsidiaryScope(sql`jl.subsidiary_id`, opts.allowedSubsidiaryIds)}`,
+    { limit: opts.limit },
+  );
+  return rows
+    .map((row) => ({ ...openItemFromRow(row), partyId: row.party_id, partyName: row.party_name, subsidiaryId: row.subsidiary_id }))
+    .filter((item) => cmp(item.open, "0") > 0);
 }
 
 function negStr(a: string): string {

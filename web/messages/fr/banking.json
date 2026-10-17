@@ -344,7 +344,8 @@
     "reviewTruncated": "Affichage de {shown} sur {total}.",
     "columns": {
       "bankDate": "Date bancaire",
-      "confidence": "Confiance"
+      "confidence": "Confiance",
+      "why": "Motif"
     },
     "noReview": "Rien à vérifier — tous les rapprochements automatiques étaient fiables.",
     "excludedHint": "Lignes mises de côté — elles sont ignorées lors du rapprochement.",
@@ -366,7 +367,58 @@
     "correctLine": "Corriger la ligne",
     "correctTitle": "Corriger la ligne du relevé",
     "correctHint": "Corrigez une erreur d'import sur cette ligne non rapprochée. La modification est auditée ; rien n'est comptabilisé.",
-    "correctedToast": "Ligne corrigée"
+    "correctedToast": "Ligne corrigée",
+    "historySuggestion": "D’après l’historique : {account}",
+    "historySuggestionWhy": "Suggéré d’après des rapprochements confirmés antérieurs",
+    "reasons": {
+      "listLabel": "Motifs du rapprochement",
+      "exactAmount": "Montant exact",
+      "sameDay": "Même jour",
+      "bankPostedLater": "{count, plural, one {Banque comptabilisée # jour plus tard} other {Banque comptabilisée # jours plus tard}}",
+      "bankPostedEarlier": "{count, plural, one {Banque comptabilisée # jour plus tôt} other {Banque comptabilisée # jours plus tôt}}",
+      "sharedReference": "Référence {reference}",
+      "sharedCounterparty": "Mots du bénéficiaire : {words}",
+      "priorParty": "Même tiers qu’un rapprochement confirmé antérieur",
+      "exactOpenBalance": "Le solde ouvert correspond exactement",
+      "combinedOpenBalance": "{count, plural, one {# document totalise le montant} other {# documents totalisent le montant}}",
+      "paidOnDueDate": "Payé à l’échéance",
+      "paidAfterDueDate": "{count, plural, one {Payé # jour après l’échéance} other {Payé # jours après l’échéance}}",
+      "paidBeforeDueDate": "{count, plural, one {Payé # jour avant l’échéance} other {Payé # jours avant l’échéance}}",
+      "historyPayee": "Même bénéficiaire ({words}) que le rapprochement du {date}"
+    },
+    "settle": {
+      "open": "Factures ouvertes",
+      "title": "Factures ouvertes",
+      "titleInvoices": "Factures clients ouvertes",
+      "titleBills": "Factures fournisseurs ouvertes",
+      "description": "{line} · régler {amount}",
+      "tabs": {
+        "proposals": "Propositions",
+        "documents": "Tous les documents ouverts"
+      },
+      "loading": "Recherche des documents ouverts…",
+      "retry": "Réessayer",
+      "noProposalsTitle": "Aucun règlement exact trouvé",
+      "noProposalsDescription": "Aucun document ouvert, ni ensemble de documents d’un même tiers, en {currency} ne totalise cette ligne. Sélectionnez vous-même des documents sous Tous les documents ouverts.",
+      "noDocumentsTitle": "Aucun document ouvert",
+      "noDocumentsDescription": "Rien n’est ouvert en {currency} à hauteur de ce montant ou moins pour l’entité de ce compte bancaire.",
+      "proposalsHint": "Documents dont le solde ouvert égale le montant bancaire, les mieux étayés en premier.",
+      "recordAndMatch": "Enregistrer le paiement et rapprocher",
+      "recordHint": "Enregistre le paiement depuis ce compte bancaire à la date du relevé, règle entièrement les documents et le rapproche de cette ligne en une seule étape.",
+      "selectionSummary": "{selected} sélectionné sur {amount}",
+      "oneParty": "Sélectionnez les documents d’un seul tiers",
+      "selectDocumentAria": "Sélectionner {document}, ouvert {amount}",
+      "recordedToast": "Paiement {number} enregistré et rapproché",
+      "effectsPending": "Le paiement est enregistré et rapproché, mais ses effets de suivi doivent être relancés depuis la fiche du paiement : {reason}",
+      "columns": {
+        "party": "Tiers",
+        "documents": "Pièces",
+        "document": "Pièce",
+        "due": "Échéance",
+        "open": "Solde ouvert",
+        "why": "Motif"
+      }
+    }
   },
   "transactionsSearch": "Rechercher frais de carte, chèques, virements…",
   "transactionsEmptyTitle": "Aucune transaction bancaire pour l’instant",

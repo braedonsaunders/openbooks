@@ -344,7 +344,8 @@
     "reviewTruncated": "Mostrando {shown} de {total}.",
     "columns": {
       "bankDate": "Fecha bancaria",
-      "confidence": "Confianza"
+      "confidence": "Confianza",
+      "why": "Motivo"
     },
     "noReview": "Nada que revisar — todas las conciliaciones automáticas fueron de alta confianza.",
     "excludedHint": "Líneas apartadas — se omiten al conciliar.",
@@ -366,7 +367,58 @@
     "correctLine": "Corregir línea",
     "correctTitle": "Corregir línea del extracto",
     "correctHint": "Corrija un error de importación de esta línea no conciliada. El cambio queda auditado; no se contabiliza nada.",
-    "correctedToast": "Línea corregida"
+    "correctedToast": "Línea corregida",
+    "historySuggestion": "Del historial: {account}",
+    "historySuggestionWhy": "Sugerido a partir de conciliaciones confirmadas anteriores",
+    "reasons": {
+      "listLabel": "Motivos de la conciliación",
+      "exactAmount": "Importe exacto",
+      "sameDay": "Mismo día",
+      "bankPostedLater": "{count, plural, one {El banco registró # día después} other {El banco registró # días después}}",
+      "bankPostedEarlier": "{count, plural, one {El banco registró # día antes} other {El banco registró # días antes}}",
+      "sharedReference": "Referencia {reference}",
+      "sharedCounterparty": "Palabras del beneficiario: {words}",
+      "priorParty": "Misma parte que una conciliación confirmada anterior",
+      "exactOpenBalance": "El saldo pendiente coincide exactamente",
+      "combinedOpenBalance": "{count, plural, one {# documento suma el importe} other {# documentos suman el importe}}",
+      "paidOnDueDate": "Pagado en la fecha de vencimiento",
+      "paidAfterDueDate": "{count, plural, one {Pagado # día después del vencimiento} other {Pagado # días después del vencimiento}}",
+      "paidBeforeDueDate": "{count, plural, one {Pagado # día antes del vencimiento} other {Pagado # días antes del vencimiento}}",
+      "historyPayee": "Mismo beneficiario ({words}) que la conciliación del {date}"
+    },
+    "settle": {
+      "open": "Facturas pendientes",
+      "title": "Facturas pendientes",
+      "titleInvoices": "Facturas de clientes pendientes",
+      "titleBills": "Facturas de proveedores pendientes",
+      "description": "{line} · liquidar {amount}",
+      "tabs": {
+        "proposals": "Propuestas",
+        "documents": "Todos los documentos pendientes"
+      },
+      "loading": "Buscando documentos pendientes…",
+      "retry": "Reintentar",
+      "noProposalsTitle": "No se encontró una liquidación exacta",
+      "noProposalsDescription": "Ningún documento pendiente, ni conjunto de documentos de una parte, en {currency} suma esta línea. Seleccione los documentos usted mismo en Todos los documentos pendientes.",
+      "noDocumentsTitle": "No hay documentos pendientes",
+      "noDocumentsDescription": "No hay nada pendiente en {currency} por este importe o menos para la entidad de esta cuenta bancaria.",
+      "proposalsHint": "Documentos cuyo saldo pendiente coincide con el importe bancario, primero los de mayor evidencia.",
+      "recordAndMatch": "Registrar pago y conciliar",
+      "recordHint": "Registra el pago desde esta cuenta bancaria en la fecha del extracto, liquida los documentos por completo y lo concilia con esta línea en un solo paso.",
+      "selectionSummary": "Seleccionado {selected} de {amount}",
+      "oneParty": "Seleccione documentos de una sola parte",
+      "selectDocumentAria": "Seleccionar {document}, pendiente {amount}",
+      "recordedToast": "Pago {number} registrado y conciliado",
+      "effectsPending": "El pago está registrado y conciliado, pero sus efectos posteriores deben reintentarse desde el registro del pago: {reason}",
+      "columns": {
+        "party": "Parte",
+        "documents": "Documentos",
+        "document": "Documento",
+        "due": "Vencimiento",
+        "open": "Saldo pendiente",
+        "why": "Motivo"
+      }
+    }
   },
   "transactionsSearch": "Buscar cargos de tarjeta, cheques, transferencias…",
   "transactionsEmptyTitle": "Aún no hay transacciones bancarias",

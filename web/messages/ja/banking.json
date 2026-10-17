@@ -344,7 +344,8 @@
     "reviewTruncated": "{total} 件中 {shown} 件を表示しています。",
     "columns": {
       "bankDate": "銀行日付",
-      "confidence": "確度"
+      "confidence": "確度",
+      "why": "理由"
     },
     "noReview": "レビュー対象はありません。自動照合はすべて高確度でした。",
     "excludedHint": "保留した明細です。消込時にスキップされます。",
@@ -366,7 +367,58 @@
     "correctLine": "明細を訂正",
     "correctTitle": "明細を訂正する",
     "correctHint": "未消込明細のインポートエラーを修正します。変更は監査記録され、何も記帳されません。",
-    "correctedToast": "明細を訂正しました"
+    "correctedToast": "明細を訂正しました",
+    "historySuggestion": "履歴から: {account}",
+    "historySuggestionWhy": "過去に確定した照合から提案",
+    "reasons": {
+      "listLabel": "照合の理由",
+      "exactAmount": "金額が完全一致",
+      "sameDay": "同日",
+      "bankPostedLater": "{count, plural, other {銀行の計上が # 日後}}",
+      "bankPostedEarlier": "{count, plural, other {銀行の計上が # 日前}}",
+      "sharedReference": "参照番号 {reference}",
+      "sharedCounterparty": "支払先の語句: {words}",
+      "priorParty": "過去に確定した照合と同じ取引先",
+      "exactOpenBalance": "未決済残高が完全一致",
+      "combinedOpenBalance": "{count, plural, other {# 件の書類の合計が金額と一致}}",
+      "paidOnDueDate": "支払期日に支払い",
+      "paidAfterDueDate": "{count, plural, other {支払期日の # 日後に支払い}}",
+      "paidBeforeDueDate": "{count, plural, other {支払期日の # 日前に支払い}}",
+      "historyPayee": "{date} の照合と同じ支払先（{words}）"
+    },
+    "settle": {
+      "open": "未決済の請求書",
+      "title": "未決済の請求書",
+      "titleInvoices": "未決済の顧客請求書",
+      "titleBills": "未決済の仕入先請求書",
+      "description": "{line} · {amount} を決済",
+      "tabs": {
+        "proposals": "提案",
+        "documents": "すべての未決済書類"
+      },
+      "loading": "未決済の書類を検索しています…",
+      "retry": "再試行",
+      "noProposalsTitle": "完全に一致する決済が見つかりません",
+      "noProposalsDescription": "{currency} の未決済書類、または同じ取引先の書類の組み合わせで、この明細と一致するものはありません。「すべての未決済書類」から書類を選択してください。",
+      "noDocumentsTitle": "未決済の書類はありません",
+      "noDocumentsDescription": "この銀行口座の法人には、{currency} でこの金額以下の未決済書類がありません。",
+      "proposalsHint": "未決済残高が銀行金額と一致する書類を、根拠の強い順に表示します。",
+      "recordAndMatch": "支払いを記録して照合",
+      "recordHint": "この銀行口座から明細日付で支払いを記録し、書類を全額決済して、この明細と一度に照合します。",
+      "selectionSummary": "{amount} のうち {selected} を選択",
+      "oneParty": "同じ取引先の書類を選択してください",
+      "selectDocumentAria": "{document} を選択（未決済 {amount}）",
+      "recordedToast": "支払い {number} を記録して照合しました",
+      "effectsPending": "支払いは記録・照合されましたが、後続処理を支払いレコードから再実行する必要があります: {reason}",
+      "columns": {
+        "party": "取引先",
+        "documents": "書類",
+        "document": "書類",
+        "due": "期日",
+        "open": "未決済残高",
+        "why": "理由"
+      }
+    }
   },
   "transactionsSearch": "カード請求、小切手、振替を検索…",
   "transactionsEmptyTitle": "銀行取引はまだありません",

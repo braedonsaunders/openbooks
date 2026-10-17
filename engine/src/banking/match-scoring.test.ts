@@ -242,6 +242,24 @@ test("a single exact document outranks an equally evidenced combination", () => 
   assert.deepEqual(ranked.proposals.map((p) => p.openLineIds.length), [1, 2]);
 });
 
+test("documents a proposal settles stay listed beyond the document limit", () => {
+  // Evidenced filler outranks the two plain documents that combine exactly.
+  const filler = Array.from({ length: 5 }, (_, index) => doc({
+    openLineId: `filler-${index}`, documentNumber: "INV-1042", transactionOpen: "7.0000",
+  }));
+  const ranked = rankOpenDocuments(
+    { postedOn: "2026-10-10", amount: "300.00", description: "INV1042" },
+    [
+      ...filler,
+      doc({ openLineId: "a", partyId: "party-b", partyName: null, documentNumber: "B-1", transactionOpen: "100.0000", dueDate: null }),
+      doc({ openLineId: "b", partyId: "party-b", partyName: null, documentNumber: "B-2", transactionOpen: "200.0000", dueDate: null }),
+    ],
+    { maxDocuments: 2 },
+  );
+  assert.deepEqual(ranked.proposals.map((p) => p.openLineIds), [["a", "b"]]);
+  assert.deepEqual(ranked.documents.map((entry) => entry.openLineId), ["filler-0", "filler-1", "a", "b"]);
+});
+
 test("a non-positive amount proposes nothing", () => {
   assert.deepEqual(rankOpenDocuments({ postedOn: "2026-10-10", amount: "0", description: null }, [doc({})]), { proposals: [], documents: [] });
 });

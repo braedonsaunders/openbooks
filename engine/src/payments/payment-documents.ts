@@ -36,6 +36,8 @@ import {
 } from "../contractor-withholding/service.ts";
 export { isPaymentKind, lockEditablePaymentDocument };
 export { resolvePaymentCurrencyBasis };
+/** The legal entity's functional currency, as the draft save reads it for settlement rates. */
+export { subsidiaryFunctionalCurrency };
 const NUMBER_PREFIX: Record<PaymentKind, string> = {
   vendor_payment: "PAY-",
   customer_payment: "RCPT-",

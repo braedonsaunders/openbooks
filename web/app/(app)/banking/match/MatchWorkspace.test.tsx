@@ -75,7 +75,14 @@ const data = {
   exParams: { page: 1, perPage: 25 },
 }
 
-async function mountWorkspace(t: TestContext, fetchImpl: typeof fetch, dataOverride: typeof data = data): Promise<void> {
+type WorkspaceData = NonNullable<Parameters<typeof MatchWorkspace>[0]['data']>
+
+async function mountWorkspace(
+  t: TestContext,
+  fetchImpl: typeof fetch,
+  dataOverride: WorkspaceData = data,
+  tab: 'match' | 'review' | 'excluded' = 'match',
+): Promise<void> {
   const prior = globalThis.fetch
   globalThis.fetch = fetchImpl
   t.after(() => {
@@ -105,7 +112,7 @@ async function mountWorkspace(t: TestContext, fetchImpl: typeof fetch, dataOverr
             data={dataOverride}
             totals={{ statementBalance: '17070.01', clearedBalance: '17070.01', difference: '0.00' }}
             currentParams={{}}
-            tab="match"
+            tab={tab}
           />
         </MoneyProvider>
       </NextIntlClientProvider>,
@@ -451,4 +458,119 @@ test('the match view links to the reconciliation workspace instead of signing of
     (document.body.textContent ?? '').includes('Sign-off happens in the reconciliation workspace'),
     'the view must name why sign-off lives elsewhere',
   )
+})
+
+test('the review tab shows each automatic match\'s confidence and the reasons behind it', async (t) => {
+  await mountWorkspace(t, scriptedFetch({ '/rules/preview': () => Response.json({ matches: [] }) }), {
+    ...data,
+    reviewRows: [{
+      id: 'match-1',
+      statement_line_id: STMT_ID,
+      confidence: '0.6800',
+      match_reasons: [{ code: 'exact_amount' }, { code: 'date_lag', days: 4 }, { code: 'shared_counterparty', tokens: ['acme'] }],
+      stmt_date: '2026-06-15',
+      stmt_amount: '-25.00',
+      stmt_description: 'ACME fee',
+      entry_number: 'JE-1',
+    }],
+    reviewTotal: 1,
+  }, 'review')
+  const text = document.body.textContent ?? ''
+  assert.ok(text.includes('68%'), 'the confidence renders as an exact percentage')
+  for (const reason of ['Exact amount', 'Bank posted 4 days later', 'Payee words: acme']) {
+    assert.ok(text.includes(reason), `the reason "${reason}" renders`)
+  }
+})
+
+test('a history suggestion opens Add journal with the suggested account and why', async (t) => {
+  await mountWorkspace(t, scriptedFetch({ '/rules/preview': () => Response.json({ matches: [] }) }), {
+    ...data,
+    offsetSuggestions: {
+      [STMT_ID]: {
+        offsetAccountId: OFFSET_ID,
+        reasons: [{ code: 'history_payee', tokens: ['t05match'], matchedOn: '2026-05-15' }],
+      },
+    },
+  })
+  const chip = [...document.querySelectorAll('button')].find((b) => (b.textContent ?? '').includes('From history: 6800 Bank & Merchant Fees'))
+  assert.ok(chip, 'the history suggestion names the account')
+  await act(async () => {
+    chip.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    for (let i = 0; i < 8; i++) await tick()
+  })
+  const dialogs = document.querySelectorAll('[role="dialog"]')
+  const dialog = dialogs[dialogs.length - 1] as HTMLElement
+  assert.ok(dialog, 'Add journal opens')
+  assert.ok((dialog.textContent ?? '').includes('Same payee (t05match) as the match of 2026-05-15'), 'the drawer shows why')
+  const add = [...dialog.querySelectorAll('button')].find((b) => (b.textContent ?? '').trim() === 'Add journal') as HTMLButtonElement | undefined
+  assert.ok(add && !add.disabled, 'the suggested account is preselected, so Add journal is ready')
+})
+
+const candidatesBody = {
+  side: 'ap',
+  amount: '25.0000',
+  currency: 'CAD',
+  proposals: [{
+    openLineIds: ['ol-1'],
+    partyId: 'party-1',
+    partyName: 'T05 Supplies',
+    total: '25.0000',
+    reasons: [{ code: 'exact_open_balance' }, { code: 'shared_reference', reference: 'BILL-7' }],
+  }],
+  documents: [{
+    openLineId: 'ol-1', partyId: 'party-1', partyName: 'T05 Supplies', documentNumber: 'BILL-7', entryNumber: 'JE-7',
+    documentKind: 'vendor_bill', dueDate: '2026-06-10', transactionOpen: '25.0000', reasons: [{ code: 'exact_open_balance' }],
+  }],
+}
+
+async function openSettleDrawer(t: TestContext, recordPayment: (url: string, body?: string) => Response): Promise<HTMLElement> {
+  await mountWorkspace(t, scriptedFetch({
+    '/rules/preview': () => Response.json({ matches: [] }),
+    '/open-documents': () => Response.json(candidatesBody),
+    '/record-payment': recordPayment,
+  }), { ...data, canRecordPayments: true })
+  const open = [...document.querySelectorAll('button[title]')].find((b) => b.getAttribute('title') === 'Open invoices or bills')
+  assert.ok(open, 'the row offers open invoices or bills')
+  await act(async () => {
+    open.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    for (let i = 0; i < 8; i++) await tick()
+  })
+  const dialogs = document.querySelectorAll('[role="dialog"]')
+  const dialog = dialogs[dialogs.length - 1] as HTMLElement
+  assert.ok(dialog, 'the drawer opens')
+  assert.ok((dialog.textContent ?? '').includes('Open vendor bills'), 'money out proposes vendor bills')
+  assert.ok((dialog.textContent ?? '').includes('Reference BILL-7'), 'the proposal shows its reasons')
+  return dialog
+}
+
+async function clickRecord(dialog: HTMLElement): Promise<void> {
+  const record = [...dialog.querySelectorAll('button')].find((b) => (b.textContent ?? '').trim() === 'Record payment and match')
+  assert.ok(record, 'the proposal offers Record payment and match')
+  await act(async () => {
+    record.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    for (let i = 0; i < 6; i++) await tick()
+  })
+}
+
+test('record payment and match sends the proposal with the balances the reviewer saw', async (t) => {
+  let posted: unknown = null
+  const dialog = await openSettleDrawer(t, (_url, body) => {
+    posted = JSON.parse(body ?? 'null')
+    return Response.json({ ok: true, documentNumber: 'PAY-0042', effectsError: null })
+  })
+  await clickRecord(dialog)
+  assert.deepEqual(posted, { reconciliationId: 'rec-1', openLineIds: ['ol-1'], expectedOpen: { 'ol-1': '25.0000' } })
+  assert.ok(script.toasts.some((toast) => toast.kind === 'success' && toast.message.includes('PAY-0042')), JSON.stringify(script.toasts))
+})
+
+test('a refused record payment keeps the reason and remedy inline in the drawer', async (t) => {
+  const dialog = await openSettleDrawer(t, () => Response.json({
+    error: 'the GL period covering 2026-06-15 is closed',
+    remedy: 'Request a reopen of the period.',
+  }, { status: 422 }))
+  await clickRecord(dialog)
+  const alert = dialog.querySelector('[role="alert"]')
+  assert.ok(alert, 'the refusal persists inline')
+  assert.ok((alert.textContent ?? '').includes('is closed'), JSON.stringify(alert.textContent))
+  assert.ok(script.toasts.some((toast) => toast.kind === 'error'), 'the refusal also toasts')
 })

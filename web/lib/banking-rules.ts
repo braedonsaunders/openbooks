@@ -329,7 +329,7 @@ export async function applyRuleToLine(
  * charge is a GL credit, so the leg is negated (offsets still book its
  * negation). Anything else posts the line verbatim, exactly as before.
  */
-async function bankLegAmountInGlTerms(
+export async function bankLegAmountInGlTerms(
   orgId: string,
   accountId: string,
   accountType: string,

@@ -6,7 +6,8 @@ import { db } from '@openbooks/engine/platform/db'
 import { excludePeriodEndJournals } from '@openbooks/engine/records/period-end-origins'
 import { reconciliationBookId, reconciliationTotals } from '@openbooks/engine/banking/banking'
 import { page, pageHeader, ref, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { requirePermission, subsidiaryScopeAllows } from '../../../../lib/authz'
+import { can, requirePermission, subsidiaryScopeAllows } from '../../../../lib/authz'
+import { offsetSuggestionsFromHistory } from '../../../../lib/banking-match-candidates'
 import { listReconcilableBankAccounts, openingCarryStartDate } from '../../../../lib/banking-accounts'
 import { listScopedAccountOptions } from '../../../../lib/scoped-options'
 import { parsePrefixedListParams, pickString, isUuid } from '../../../../lib/list-params'
@@ -185,7 +186,7 @@ export async function loadMatch(
       db.execute<CountRow>(sql`select count(*) as n from journal_lines jl join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id where ${glWhere}`),
       // Review: auto matches with low confidence in this session
       db.execute<ReviewRow>(sql`
-        select m.id, m.statement_line_id, m.confidence,
+        select m.id, m.statement_line_id, m.confidence, m.match_reasons,
                sl.posted_on as stmt_date, sl.amount as stmt_amount, sl.description as stmt_description,
                je.entry_number, jl.txn_amount as gl_amount, coalesce(jl.memo, je.memo) as gl_memo
           from reconciliation_matches m
@@ -208,8 +209,14 @@ export async function loadMatch(
       db.execute<CountRow>(sql`select count(*) as n from bank_statement_lines l join bank_statements s on s.id = l.statement_id and s.org_id = l.org_id where ${exWhere}`),
     ]))
 
+    // Offset-account suggestions from confirmed history for the visible
+    // lines; the workspace shows one only where no rule suggests a posting.
+    const offsetSuggestions = await offsetSuggestionsFromHistory(orgId, account.id, stmt.rows)
+
     data = {
       stmtRows: stmt.rows, stmtTotal: Number(stmtC.rows[0]?.n ?? 0), stmtParams,
+      offsetSuggestions,
+      canRecordPayments: can(authz, 'ar.pay') || can(authz, 'ap.pay'),
       flaggedTotal: Number(flaggedC.rows[0]?.n ?? 0),
       glRows: gl.rows, glTotal: Number(glC.rows[0]?.n ?? 0), glParams,
       reviewRows: review.rows, reviewTotal: Number(reviewC.rows[0]?.n ?? 0),

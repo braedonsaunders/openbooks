@@ -354,7 +354,8 @@
     "reviewTruncated": "Showing {shown} of {total}.",
     "columns": {
       "bankDate": "Bank date",
-      "confidence": "Confidence"
+      "confidence": "Confidence",
+      "why": "Why"
     },
     "noReview": "Nothing to review — auto-matches were all high-confidence.",
     "excludedHint": "Lines you've set aside — they're skipped when reconciling.",
@@ -373,7 +374,58 @@
     "correctLine": "Correct line",
     "correctTitle": "Correct statement line",
     "correctHint": "Fix an import error on this unmatched line. The change is audited; nothing posts.",
-    "correctedToast": "Line corrected"
+    "correctedToast": "Line corrected",
+    "historySuggestion": "From history: {account}",
+    "historySuggestionWhy": "Suggested from earlier confirmed matches",
+    "reasons": {
+      "listLabel": "Match reasons",
+      "exactAmount": "Exact amount",
+      "sameDay": "Same day",
+      "bankPostedLater": "{count, plural, one {Bank posted # day later} other {Bank posted # days later}}",
+      "bankPostedEarlier": "{count, plural, one {Bank posted # day earlier} other {Bank posted # days earlier}}",
+      "sharedReference": "Reference {reference}",
+      "sharedCounterparty": "Payee words: {words}",
+      "priorParty": "Same party as an earlier confirmed match",
+      "exactOpenBalance": "Open balance matches exactly",
+      "combinedOpenBalance": "{count, plural, one {# document adds up to the amount} other {# documents add up to the amount}}",
+      "paidOnDueDate": "Paid on the due date",
+      "paidAfterDueDate": "{count, plural, one {Paid # day after the due date} other {Paid # days after the due date}}",
+      "paidBeforeDueDate": "{count, plural, one {Paid # day before the due date} other {Paid # days before the due date}}",
+      "historyPayee": "Same payee ({words}) as the match of {date}"
+    },
+    "settle": {
+      "open": "Open invoices or bills",
+      "title": "Open invoices or bills",
+      "titleInvoices": "Open customer invoices",
+      "titleBills": "Open vendor bills",
+      "description": "{line} · settle {amount}",
+      "tabs": {
+        "proposals": "Proposals",
+        "documents": "All open documents"
+      },
+      "loading": "Finding open documents…",
+      "retry": "Retry",
+      "noProposalsTitle": "No exact settlement found",
+      "noProposalsDescription": "No open document, or set of one party’s documents, in {currency} adds up to this line. Select documents yourself under All open documents.",
+      "noDocumentsTitle": "No open documents",
+      "noDocumentsDescription": "Nothing open in {currency} for this bank account’s entity is at or below this amount.",
+      "proposalsHint": "Documents whose open balances equal the bank amount, strongest evidence first.",
+      "recordAndMatch": "Record payment and match",
+      "recordHint": "Records the payment from this bank account on the statement date, settles the documents in full, and matches it to this line in one step.",
+      "selectionSummary": "Selected {selected} of {amount}",
+      "oneParty": "Select documents of one party",
+      "selectDocumentAria": "Select {document}, open {amount}",
+      "recordedToast": "Payment {number} recorded and matched",
+      "effectsPending": "The payment is recorded and matched, but its follow-up effects need a retry from the payment record: {reason}",
+      "columns": {
+        "party": "Party",
+        "documents": "Documents",
+        "document": "Document",
+        "due": "Due",
+        "open": "Open balance",
+        "why": "Why"
+      }
+    }
   },
   "transactionsSearch": "Search card charges, checks, transfers…",
   "transactionsEmptyTitle": "No banking transactions yet",

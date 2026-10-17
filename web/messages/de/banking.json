@@ -344,7 +344,8 @@
     "reviewTruncated": "{shown} von {total} werden angezeigt.",
     "columns": {
       "bankDate": "Bankdatum",
-      "confidence": "Sicherheit"
+      "confidence": "Sicherheit",
+      "why": "Begründung"
     },
     "noReview": "Nichts zu prüfen — alle automatischen Zuordnungen hatten hohe Sicherheit.",
     "excludedHint": "Zeilen, die Sie beiseitegelegt haben — sie werden bei der Abstimmung übersprungen.",
@@ -366,7 +367,58 @@
     "correctLine": "Zeile korrigieren",
     "correctTitle": "Kontoauszugszeile korrigieren",
     "correctHint": "Einen Importfehler dieser nicht abgeglichenen Zeile beheben. Die Änderung wird protokolliert; es wird nichts gebucht.",
-    "correctedToast": "Zeile korrigiert"
+    "correctedToast": "Zeile korrigiert",
+    "historySuggestion": "Aus dem Verlauf: {account}",
+    "historySuggestionWhy": "Vorgeschlagen aus früheren bestätigten Zuordnungen",
+    "reasons": {
+      "listLabel": "Zuordnungsgründe",
+      "exactAmount": "Exakter Betrag",
+      "sameDay": "Gleicher Tag",
+      "bankPostedLater": "{count, plural, one {Bank bucht # Tag später} other {Bank bucht # Tage später}}",
+      "bankPostedEarlier": "{count, plural, one {Bank bucht # Tag früher} other {Bank bucht # Tage früher}}",
+      "sharedReference": "Referenz {reference}",
+      "sharedCounterparty": "Empfängerbegriffe: {words}",
+      "priorParty": "Gleiche Partei wie eine früher bestätigte Zuordnung",
+      "exactOpenBalance": "Offener Saldo stimmt exakt",
+      "combinedOpenBalance": "{count, plural, one {# Beleg ergibt den Betrag} other {# Belege ergeben den Betrag}}",
+      "paidOnDueDate": "Am Fälligkeitstag bezahlt",
+      "paidAfterDueDate": "{count, plural, one {# Tag nach Fälligkeit bezahlt} other {# Tage nach Fälligkeit bezahlt}}",
+      "paidBeforeDueDate": "{count, plural, one {# Tag vor Fälligkeit bezahlt} other {# Tage vor Fälligkeit bezahlt}}",
+      "historyPayee": "Gleicher Empfänger ({words}) wie die Zuordnung vom {date}"
+    },
+    "settle": {
+      "open": "Offene Rechnungen oder Eingangsrechnungen",
+      "title": "Offene Rechnungen oder Eingangsrechnungen",
+      "titleInvoices": "Offene Kundenrechnungen",
+      "titleBills": "Offene Lieferantenrechnungen",
+      "description": "{line} · {amount} ausgleichen",
+      "tabs": {
+        "proposals": "Vorschläge",
+        "documents": "Alle offenen Belege"
+      },
+      "loading": "Offene Belege werden gesucht …",
+      "retry": "Erneut versuchen",
+      "noProposalsTitle": "Kein exakter Ausgleich gefunden",
+      "noProposalsDescription": "Kein offener Beleg und keine Belegkombination einer Partei in {currency} ergibt diese Zeile. Wählen Sie Belege selbst unter „Alle offenen Belege“ aus.",
+      "noDocumentsTitle": "Keine offenen Belege",
+      "noDocumentsDescription": "Für die Gesellschaft dieses Bankkontos ist in {currency} nichts bis zu diesem Betrag offen.",
+      "proposalsHint": "Belege, deren offener Saldo dem Bankbetrag entspricht, stärkste Belege zuerst.",
+      "recordAndMatch": "Zahlung erfassen und zuordnen",
+      "recordHint": "Erfasst die Zahlung von diesem Bankkonto zum Auszugsdatum, gleicht die Belege vollständig aus und ordnet sie in einem Schritt dieser Zeile zu.",
+      "selectionSummary": "{selected} von {amount} ausgewählt",
+      "oneParty": "Wählen Sie Belege einer einzigen Partei",
+      "selectDocumentAria": "{document} auswählen, offen {amount}",
+      "recordedToast": "Zahlung {number} erfasst und zugeordnet",
+      "effectsPending": "Die Zahlung ist erfasst und zugeordnet, ihre Folgeschritte müssen jedoch über den Zahlungsdatensatz erneut ausgeführt werden: {reason}",
+      "columns": {
+        "party": "Partei",
+        "documents": "Belege",
+        "document": "Beleg",
+        "due": "Fällig",
+        "open": "Offener Saldo",
+        "why": "Begründung"
+      }
+    }
   },
   "transactionsSearch": "Kartenbelastungen, Schecks, Überträge suchen…",
   "transactionsEmptyTitle": "Noch keine Banktransaktionen",

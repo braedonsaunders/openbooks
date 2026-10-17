@@ -1,6 +1,7 @@
 'use client'
 
-import { sum } from '@openbooks/engine/money/money'
+import { sum, toUnits } from '@openbooks/engine/money/money'
+import { parseStoredMatchReasons, type MatchReason } from '@openbooks/engine/banking/match-scoring'
 import { useMoney } from '@/components/money-provider'
 import type { MoneyValue } from '@/lib/money-format'
 import { readApiErrorMessage } from '@/lib/api-error'
@@ -8,7 +9,7 @@ import { useEffect, useId, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
-import { ArrowUpRight, Ban, FilePlus2, Link2, Pencil, RotateCcw, Sparkles, Wand2, Workflow } from 'lucide-react'
+import { ArrowUpRight, Ban, FilePlus2, Link2, Pencil, Receipt, RotateCcw, Sparkles, Wand2, Workflow } from 'lucide-react'
 import { toast } from 'sonner'
 import {
   Badge, Button, Drawer, EmptyState, Label, SearchSelect, Table, TableBody,
@@ -21,6 +22,8 @@ import { promptDialog } from '../../../../lib/prompt'
 import { isZeroAmount } from '../[accountId]/reconcile/[reconciliationId]/DifferenceBadge'
 import { InteractiveTableRow } from '@/components/interactive-table-row'
 import { CorrectStatementLineDialog } from './CorrectStatementLineDialog'
+import { MatchReasonBadges, matchReasonLabel } from './MatchReasons'
+import { SettleLineDrawer } from './SettleLineDrawer'
 type Search = Record<string, string | string[] | undefined>
 type Opt = { id: string; label: string; unmatched?: number };
 interface Account { id: string; label: string }
@@ -53,6 +56,8 @@ export interface ReviewRow extends Record<string, unknown> {
   id: string
   statement_line_id: string
   confidence: string | number
+  /** Stored reasons behind the automatic match; null for matches without recorded reasons. */
+  match_reasons?: unknown
   stmt_date: string
   stmt_amount: string
   stmt_description: string | null
@@ -62,6 +67,10 @@ interface MatchData {
   stmtRows: StatementRow[]
   stmtTotal: number
   stmtParams: ListParams
+  /** Offset accounts suggested from confirmed history, by statement line id. */
+  offsetSuggestions?: Record<string, { offsetAccountId: string; reasons: MatchReason[] }>
+  /** The viewer may record customer receipts or vendor payments. */
+  canRecordPayments?: boolean
   flaggedTotal: number
   glRows: GlRow[]
   glTotal: number
@@ -89,6 +98,12 @@ interface MatchActionResult {
 }
 
 const selectedRow = 'bg-teal-50 dark:bg-teal-950/40'
+const NO_REASONS: readonly MatchReason[] = []
+
+/** Stored confidence (0..1, four places) as a whole percentage, exactly. */
+export function confidencePercent(confidence: string | number): string {
+  return `${toUnits(String(confidence)) / 100n}%`
+}
 const NO_SUGGESTIONS: ReadonlyMap<string, { ruleId: string; ruleName: string }> = new Map()
 const NO_SELECTED_GL: ReadonlySet<string> = new Set()
 
@@ -114,11 +129,13 @@ export function MatchWorkspace({
   const tW = useTranslations('banking.workspace')
   const tCommon = useTranslations('common')
   const tBanking = useTranslations('banking')
+  const tReasons = useTranslations('banking.match.reasons')
   const router = useRouter()
   const accountPickerId = useId()
   const [busy, setBusy] = useState(false)
   const [selection, setSelection] = useState<{ scope: string; stmt: Set<string>; gl: Set<string> }>({ scope: '', stmt: new Set(), gl: new Set() })
-  const [addLine, setAddLine] = useState<{ id: string; label: string } | null>(null)
+  const [addLine, setAddLine] = useState<{ id: string; label: string; reasons: readonly MatchReason[] } | null>(null)
+  const [settleLine, setSettleLine] = useState<{ id: string; label: string } | null>(null)
   const [correctLine, setCorrectLine] = useState<{ id: string; posted_on: string; amount: string; description: string | null } | null>(null)
   const [offsetId, setOffsetId] = useState('')
   // A refused add-journal that only fires a transient toast reads as
@@ -473,6 +490,14 @@ export function MatchWorkspace({
                   <TableRow><TableCell colSpan={5} className="text-center text-slate-500 dark:text-slate-400">{data.stmtParams.q ? tW('noBankLinesSearch') : tW('allBankLinesMatched')}</TableCell></TableRow>
                 ) : data.stmtRows.map((l) => {
                   const sel = selectedStmts.has(l.id)
+                  const lineLabel = `${l.posted_on} · ${money(l.amount)}`
+                  // History suggests an offset only where no rule does, and
+                  // only an account the viewer can post to.
+                  const historyEntry = data.offsetSuggestions?.[l.id]
+                  const historyAccount = historyEntry ? offsetAccounts.find((a) => a.id === historyEntry.offsetAccountId) : undefined
+                  const historySuggestion = historyEntry && historyAccount
+                    ? { ...historyEntry, accountLabel: historyAccount.label }
+                    : null
                   const toggleStmt = () => setSelection((current) => {
                     const next = new Set(current.scope === matchScope ? selectedStmts : new Set<string>())
                     if (next.has(l.id)) next.delete(l.id); else next.add(l.id)
@@ -506,6 +531,16 @@ export function MatchWorkspace({
                           >
                             <Sparkles size={11} /> {t('suggestedBy', { rule: suggestions.get(l.id)!.ruleName })}
                           </button>
+                        ) : historySuggestion ? (
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); setAddLine({ id: l.id, label: lineLabel, reasons: historySuggestion.reasons }); setOffsetId(historySuggestion.offsetAccountId); setAddError(null) }}
+                            disabled={busy}
+                            className="mt-1 inline-flex items-center gap-1 rounded-full border border-slate-300 bg-white px-2 py-0.5 text-[11px] text-slate-700 transition-colors hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:hover:bg-slate-800"
+                            title={historySuggestion.reasons.map((reason) => matchReasonLabel(tReasons, reason)).join(' · ')}
+                          >
+                            <Sparkles size={11} /> {t('historySuggestion', { account: historySuggestion.accountLabel })}
+                          </button>
                         ) : null}
                       </TableCell>
                       <TableCell className="text-right tabular-nums">{money(l.amount)}</TableCell>
@@ -515,7 +550,10 @@ export function MatchWorkspace({
                             <Button variant="ghost" size="sm" disabled={busy} title={t('postAndMatch')} onClick={() => confirmSuggestion(l.id, suggestions.get(l.id)!.ruleId)}><Link2 size={14} /></Button>
                           ) : null}
                           <Button variant="ghost" size="sm" disabled={busy} title={t('createRule')} onClick={() => router.push((`/banking/rules?rule=new&fromLine=${l.id}`))}><Workflow size={14} /></Button>
-                          <Button variant="ghost" size="sm" disabled={busy} title={t('addJournal')} onClick={() => { setAddLine({ id: l.id, label: `${l.posted_on} · ${money(l.amount)}` }); setOffsetId(''); setAddError(null) }}><FilePlus2 size={14} /></Button>
+                          {data.canRecordPayments ? (
+                            <Button variant="ghost" size="sm" disabled={busy} title={t('settle.open')} onClick={() => setSettleLine({ id: l.id, label: lineLabel })}><Receipt size={14} /></Button>
+                          ) : null}
+                          <Button variant="ghost" size="sm" disabled={busy} title={t('addJournal')} onClick={() => { setAddLine({ id: l.id, label: lineLabel, reasons: NO_REASONS }); setOffsetId(''); setAddError(null) }}><FilePlus2 size={14} /></Button>
                           <Button variant="ghost" size="sm" disabled={busy} title={t('correctLine')} onClick={(e) => { e.stopPropagation(); setCorrectLine({ id: l.id, posted_on: l.posted_on, amount: l.amount, description: l.description }) }}><Pencil size={14} /></Button>
                           <Button variant="ghost" size="sm" disabled={busy} title={t('exclude')} onClick={() => exclude(l.id)}><Ban size={14} /></Button>
                         </div>
@@ -582,18 +620,20 @@ export function MatchWorkspace({
               <TableHead className="text-right">{tCommon('labels.amount')}</TableHead>
               <TableHead>{tBanking('labels.entry')}</TableHead>
               <TableHead className="text-right">{t('columns.confidence')}</TableHead>
+              <TableHead>{t('columns.why')}</TableHead>
               <TableHead />
             </TableRow></TableHeader>
             <TableBody>
               {data.reviewRows.length === 0 ? (
-                <TableRow><TableCell colSpan={6} className="text-center text-slate-500 dark:text-slate-400">{t('noReview')}</TableCell></TableRow>
+                <TableRow><TableCell colSpan={7} className="text-center text-slate-500 dark:text-slate-400">{t('noReview')}</TableCell></TableRow>
               ) : data.reviewRows.map((m) => (
                 <TableRow key={m.id}>
                   <TableCell className="whitespace-nowrap">{m.stmt_date}</TableCell>
                   <TableCell className="max-w-[14rem] truncate">{m.stmt_description ?? '—'}</TableCell>
                   <TableCell className="text-right tabular-nums">{money(m.stmt_amount)}</TableCell>
                   <TableCell className="font-mono text-[13px]">{m.entry_number}</TableCell>
-                  <TableCell className="text-right"><Badge variant="warning">{Number(m.confidence).toFixed(1)}</Badge></TableCell>
+                  <TableCell className="text-right"><Badge variant="warning">{confidencePercent(m.confidence)}</Badge></TableCell>
+                  <TableCell className="max-w-[22rem]"><MatchReasonBadges reasons={parseStoredMatchReasons(m.match_reasons)} /></TableCell>
                   <TableCell className="text-right"><Button variant="ghost" size="sm" disabled={busy} onClick={() => unmatch(m.statement_line_id)}>{tW('unmatch')}</Button></TableCell>
                 </TableRow>
               ))}
@@ -647,11 +687,29 @@ export function MatchWorkspace({
               {addError}
             </p>
           ) : null}
+          {addLine && addLine.reasons.length > 0 ? (
+            <div className="space-y-1 pb-2">
+              <p className="text-xs font-medium text-slate-600 dark:text-slate-300">{t('historySuggestionWhy')}</p>
+              <MatchReasonBadges reasons={addLine.reasons} />
+            </div>
+          ) : null}
           <Label>{t('offsetAccount')}</Label>
           <SearchSelect options={offsetAccounts.map((a) => ({ value: a.id, label: a.label }))} value={offsetId} onChange={(v) => { setAddError(null); setOffsetId(v ?? '') }} placeholder={tBanking('drawer.accountPlaceholder')} />
           <p className="text-xs text-slate-500 dark:text-slate-400">{t('addJournalHint')}</p>
         </div>
       </Drawer>
+
+      {/* open invoices/bills drawer */}
+      {settleLine ? (
+        <SettleLineDrawer
+          key={settleLine.id}
+          line={settleLine}
+          reconciliationId={session.id}
+          currency={session.currency}
+          onClose={() => setSettleLine(null)}
+          onRecorded={() => { setSettleLine(null); router.refresh() }}
+        />
+      ) : null}
 
       {/* correct-line drawer */}
       {correctLine ? (

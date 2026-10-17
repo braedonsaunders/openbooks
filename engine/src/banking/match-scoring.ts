@@ -519,9 +519,14 @@ export function rankOpenDocuments(
     || a.openLineIds.length - b.openLineIds.length
     || firstDue(a).localeCompare(firstDue(b))
     || a.openLineIds.join(",").localeCompare(b.openLineIds.join(",")));
+  const shownProposals = proposals.slice(0, options.maxProposals ?? 10);
+  // Every document a shown proposal settles stays listed, so the reviewer
+  // always sees (and the caller can quote) each balance being settled.
+  const proposed = new Set(shownProposals.flatMap((proposal) => proposal.openLineIds));
+  const limit = options.maxDocuments ?? 30;
   return {
-    proposals: proposals.slice(0, options.maxProposals ?? 10),
-    documents: documents.slice(0, options.maxDocuments ?? 30),
+    proposals: shownProposals,
+    documents: documents.filter((doc, index) => index < limit || proposed.has(doc.openLineId)),
   };
 }
 
