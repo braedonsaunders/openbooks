@@ -2,19 +2,15 @@
 
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
-import { Badge, Button, EmptyState } from '@openbooks/ui'
+import { Badge, EmptyState } from '@openbooks/ui'
 
 export type RegisterPickerEntry = { id: string; code: string; name: string; openSessionId: string | null; openedBy: string | null }
 
 /** Choose the register to sell from; each card shows whether its drawer is open. */
-export function RegisterPicker(props: { registers: RegisterPickerEntry[]; canManage: boolean; canViewSessions: boolean }) {
+export function RegisterPicker(props: { registers: RegisterPickerEntry[]; canManage: boolean }) {
   const t = useTranslations('pos')
   return (
     <div className="space-y-4">
-      <div className="flex flex-wrap gap-2">
-        {props.canViewSessions ? <Button asChild variant="outline"><Link href="/pos/sessions">{t('session.history')}</Link></Button> : null}
-        {props.canManage ? <Button asChild variant="outline"><Link href="/admin/setup/pos-registers">{t('picker.configure')}</Link></Button> : null}
-      </div>
       {props.registers.length === 0 ? (
         <EmptyState title={t('picker.emptyTitle')} description={props.canManage ? t('picker.emptyManage') : t('picker.emptyAsk')} />
       ) : (

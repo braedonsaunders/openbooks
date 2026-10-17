@@ -36,6 +36,8 @@ import {
   ChannelOrderDrawerSlot,
   ChannelReplayAll,
   ChannelPostingForm,
+  PosRegisterPicker,
+  PosRegisterScreen,
 } from './native-widgets.client'
 import { type ComponentProps } from 'react'
 import { ModuleHomeTabs } from '../module-home/ui'
@@ -388,6 +390,25 @@ export const COMMERCE_WIDGETS = {
     if (!issue) return null
     return <StoredValueIssueDrawer issue={issue} />
   },
+  /* --- point of sale ------------------------------------------------------- */
+  /** The register picker: one card per usable register with its drawer state. */
+  'pos-register-picker': (props) => (
+    <PosRegisterPicker
+      registers={(props.registers as ComponentProps<typeof PosRegisterPicker>['registers']) ?? []}
+      canManage={props.canManage === true}
+    />
+  ),
+  /** The full-viewport selling surface. Capability flags come from the
+   *  loader's permission checks; the register APIs re-check each one. */
+  'pos-register-screen': (props) => (
+    <PosRegisterScreen
+      registerId={str(props, 'registerId') ?? ''}
+      canRefund={props.canRefund === true}
+      canOverride={props.canOverride === true}
+      canManageDrawer={props.canManageDrawer === true}
+      canViewSessions={props.canViewSessions === true}
+    />
+  ),
   /* --- demand planning ------------------------------------------------------ */
   /** Header remedies for the planning work queue: run, confirm-all and
    *  grouped purchase-order creation are client state over the planning API. */

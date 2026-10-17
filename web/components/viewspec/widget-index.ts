@@ -641,6 +641,8 @@ export const WIDGET_FAMILY: Readonly<Record<string, WidgetFamily>> = {
   'warehouses-panel': 'warehouse',
   'webhook-endpoint-drawer': 'platform',
   'pre-billing-workspace': 'commerce',
+  'pos-register-picker': 'commerce',
+  'pos-register-screen': 'commerce',
   'work-item-drawer': 'agents',
   'year-end-workspace': 'payroll',
 }

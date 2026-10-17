@@ -100,6 +100,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
+  '/accounts/merges': {
+    route: '/accounts/merges',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/accounts/merges/view')
+      return {
+        load: (input) => m.loadAccountMerges(input.searchParams ?? {}),
+        spec: (data) => m.accountMergesSpec(data as never),
+      }
+    },
+  },
   '/admin': {
     route: '/admin',
     segments: [],
@@ -673,6 +685,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       return {
         load: (input) => m.loadReviewTemplateBuilder(segment(input, 'id')),
         spec: (data) => m.reviewTemplateBuilderSpec(data as never),
+      }
+    },
+  },
+  '/admin/setup/segment-dependencies': {
+    route: '/admin/setup/segment-dependencies',
+    segments: [],
+    searchParams: false,
+    module: async () => {
+      const m = await import('../app/(app)/admin/setup/segment-dependencies/view')
+      return {
+        load: () => m.loadSegmentDependencyExceptions(),
+        spec: (data) => m.segmentDependencyExceptionsSpec(data as never),
       }
     },
   },
@@ -2419,11 +2443,11 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
   '/payroll/work-locations': {
     route: '/payroll/work-locations',
     segments: [],
-    searchParams: false,
+    searchParams: true,
     module: async () => {
       const m = await import('../app/(app)/payroll/work-locations/view')
       return {
-        load: () => m.loadWorkLocations(),
+        load: (input) => m.loadWorkLocations(input.searchParams ?? {}),
         spec: (data) => m.workLocationsSpec(data as never),
       }
     },
@@ -2449,6 +2473,30 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       return {
         load: (input) => m.loadPicks(input.searchParams ?? {}),
         spec: (data) => m.picksSpec(data as never),
+      }
+    },
+  },
+  '/pos': {
+    route: '/pos',
+    segments: [],
+    searchParams: false,
+    module: async () => {
+      const m = await import('../app/(app)/pos/view')
+      return {
+        load: () => m.loadPosRegisters(),
+        spec: (data) => m.posRegistersSpec(data as never),
+      }
+    },
+  },
+  '/pos/[registerId]': {
+    route: '/pos/[registerId]',
+    segments: ['registerId'],
+    searchParams: false,
+    module: async () => {
+      const m = await import('../app/(app)/pos/[registerId]/view')
+      return {
+        load: (input) => m.loadPosRegister(segment(input, 'registerId')),
+        spec: (data) => m.posRegisterSpec(data as never),
       }
     },
   },

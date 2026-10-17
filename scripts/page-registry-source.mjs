@@ -72,7 +72,7 @@ export function describeView(file, source) {
   const routesMatch = /(?:^|[{,(])\s*routes:\s*\[((?:\s*'[^']*'\s*,?)+)\s*\]/m.exec(source)
   const routes = routesMatch
     ? [...routesMatch[1].matchAll(/'([^']*)'/g)].map((match) => match[1])
-    : [/(?:^|[{,(])\s*route: '([^']+)'/m.exec(source)?.[1]]
+    : [/(?:^|[{,(])\s*route: (['"])([^'"]+)\1/m.exec(source)?.[2]]
   if (routes.length === 0 || routes.some((route) => !route)) {
     throw new Error(`${file}: no literal \`route:\` or \`routes:\` field — a page without one cannot be customized`)
   }

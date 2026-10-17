@@ -221,6 +221,8 @@ export const PipelineBuilder = dynamic(() => import("../../app/(app)/admin/setup
 export const PipelineIndex = dynamic(() => import("../../app/(app)/admin/setup/hiring-pipelines/PipelineIndex").then(module => module.PipelineIndex))
 export const PlanLineApproveButton = dynamic(() => import("../../app/(app)/hrm/compensation/islands").then(module => module.PlanLineApproveButton))
 export const PlatformClient = dynamic(() => import("../../app/(app)/sync/PlatformClient").then(module => module.PlatformClient))
+export const PosRegisterPicker = dynamic(() => import("../pos/register-picker").then(module => module.RegisterPicker))
+export const PosRegisterScreen = dynamic(() => import("../pos/register-screen").then(module => module.RegisterScreen))
 export const PreBillingWorkspace = dynamic(() => import("../../app/(app)/projects/pre-billing/PreBillingWorkspace").then(module => module.PreBillingWorkspace))
 export const ProcessCreateDrawer = dynamic(() => import("../../app/(app)/hrm/processes/ProcessCreateDrawer").then(module => module.ProcessCreateDrawer))
 export const ProcessNewMenu = dynamic(() => import("../../app/(app)/hrm/processes/ProcessNewMenu").then(module => module.ProcessNewMenu))
