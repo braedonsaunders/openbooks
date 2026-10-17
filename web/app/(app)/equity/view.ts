@@ -70,7 +70,6 @@ export interface CapTableViewData {
   hasAccountPolicy: boolean
   accountsSetupHref: string
   reportHref: string | null
-  classes: StructureView['classes']
 }
 
 export interface SecuritiesViewData {
@@ -247,7 +246,6 @@ export async function loadEquity(sp: Record<string, string | string[] | undefine
 
   if (view === 'captable') {
     const by = pickString(sp.by) === 'holder' ? 'holder' : 'class'
-    const structureView = await loadStructure(scope)
     capTable = {
       context,
       by,
@@ -257,7 +255,6 @@ export async function loadEquity(sp: Record<string, string | string[] | undefine
       hasAccountPolicy: capView.hasAccountPolicy,
       accountsSetupHref: '/admin/setup/equity-account-policies',
       reportHref: await reportHref(orgId, 'equity-securities-register'),
-      classes: structureView.classes,
     }
   }
   if (view === 'securities') {
