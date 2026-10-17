@@ -26,7 +26,8 @@
     "sampleCompany": "empresa de ejemplo",
     "workspace": "Espacio de trabajo",
     "production": "Producción",
-    "manageEnvironments": "Gestionar entornos"
+    "manageEnvironments": "Gestionar entornos",
+    "keyboardShortcuts": "Atajos de teclado"
   },
   "sandboxBanner": {
     "sandbox": "Entorno de sandbox",
@@ -258,5 +259,54 @@
     "revokeOtherSessions": "Revocar las demás sesiones",
     "requestFailed": "No se pudo completar la solicitud de seguridad. Inténtelo de nuevo."
   },
-  "localNavigation": "Navegación local"
+  "localNavigation": "Navegación local",
+  "shortcuts": {
+    "title": "Atajos de teclado",
+    "description": "Atajos disponibles donde se encuentra ahora. Pulse ? para abrir esta lista.",
+    "scopes": {
+      "form": "En este formulario",
+      "page": "En esta página",
+      "global": "En toda la aplicación"
+    },
+    "commands": {
+      "help": "Mostrar atajos de teclado",
+      "search": "Buscar",
+      "newInvoice": "Nueva factura",
+      "newBill": "Nueva factura de proveedor",
+      "newJournal": "Nuevo asiento contable",
+      "newExpense": "Nuevo informe de gastos",
+      "newCustomerPayment": "Nuevo cobro de cliente",
+      "goDashboard": "Ir al panel",
+      "goReports": "Ir a informes",
+      "goBanking": "Ir a bancos",
+      "save": "Guardar",
+      "saveAndNew": "Guardar y nuevo",
+      "saveAndClose": "Guardar y cerrar",
+      "addLine": "Añadir línea"
+    }
+  },
+  "dateEntry": {
+    "title": "En un campo de fecha",
+    "keys": {
+      "nextDay": "Día siguiente",
+      "previousDay": "Día anterior",
+      "today": "Hoy",
+      "weekStart": "Primer día de la semana",
+      "weekEnd": "Último día de la semana",
+      "monthStart": "Primer día del mes",
+      "monthEnd": "Último día del mes",
+      "yearStart": "Primer día del año",
+      "yearEnd": "Último día del año"
+    },
+    "repeatHint": "Vuelva a pulsar una tecla de primer o último día para avanzar una semana, un mes o un año más.",
+    "pasteHint": "Pegue una fecha en su formato habitual, por ejemplo 15 mar 2026. Un año escrito con dos dígitos pasa al siglo más cercano al salir del campo.",
+    "changed": "Fecha establecida en {date}",
+    "outsideCalendar": "Esa fecha está fuera del calendario admitido.",
+    "outsideAllowed": "Esa fecha está fuera del intervalo que admite este campo.",
+    "notAccepted": "El campo no aceptó esa fecha.",
+    "incomplete": "Esta fecha está incompleta. Complete el día, el mes y el año, o vacíe el campo.",
+    "checkYear": "Revise el año: escriba los cuatro dígitos.",
+    "pasteUnreadable": "«{text}» no es una fecha que este campo pueda leer. Use un formato como 2026-03-15.",
+    "pasteImpossible": "«{text}» no es una fecha real del calendario."
+  }
 }

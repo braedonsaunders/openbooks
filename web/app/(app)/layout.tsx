@@ -20,6 +20,7 @@ import { orgFeatureState, featureEnabled } from '../../lib/features'
 import { isFeedbackReady } from '../../lib/feedback/config'
 import { businessToday } from '@openbooks/engine/platform/business-date/module'
 import { BusinessDateProvider } from '../../components/business-date-provider'
+import { DateEntryKeyboard } from '../../components/date-entry-keyboard'
 import { MoneyProvider } from '../../components/money-provider'
 import { OnboardingWizard } from '../../components/onboarding-wizard'
 
@@ -83,6 +84,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <MoneyProvider currency={org.base_currency}>
       <BusinessDateProvider today={today}>
+      {/* Date-field keys and forgiving paste for every date input, read
+        against the organization's business date. */}
+      <DateEntryKeyboard />
       <ThemeProvider>
         <NavigationProvider>
           <ViewTabsProvider groups={localNavigation.groups} preferences={localNavigation.preferences} ownership={localNavigation.ownership} managed>

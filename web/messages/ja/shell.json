@@ -26,7 +26,8 @@
     "sampleCompany": "サンプル企業",
     "workspace": "ワークスペース",
     "production": "本番環境",
-    "manageEnvironments": "環境を管理"
+    "manageEnvironments": "環境を管理",
+    "keyboardShortcuts": "キーボードショートカット"
   },
   "sandboxBanner": {
     "sandbox": "サンドボックス環境",
@@ -258,5 +259,54 @@
     "revokeOtherSessions": "他のすべてのセッションを取り消す",
     "requestFailed": "セキュリティのリクエストを完了できませんでした。もう一度お試しください。"
   },
-  "localNavigation": "ローカルナビゲーション"
+  "localNavigation": "ローカルナビゲーション",
+  "shortcuts": {
+    "title": "キーボードショートカット",
+    "description": "現在の場所で使用できるショートカットです。? を押すとこの一覧を開きます。",
+    "scopes": {
+      "form": "このフォーム内",
+      "page": "このページ内",
+      "global": "どこでも"
+    },
+    "commands": {
+      "help": "キーボードショートカットを表示",
+      "search": "検索",
+      "newInvoice": "新規請求書",
+      "newBill": "新規仕入請求書",
+      "newJournal": "新規仕訳",
+      "newExpense": "新規経費精算書",
+      "newCustomerPayment": "新規顧客入金",
+      "goDashboard": "ダッシュボードへ移動",
+      "goReports": "レポートへ移動",
+      "goBanking": "銀行へ移動",
+      "save": "保存",
+      "saveAndNew": "保存して新規作成",
+      "saveAndClose": "保存して閉じる",
+      "addLine": "行を追加"
+    }
+  },
+  "dateEntry": {
+    "title": "日付フィールド内",
+    "keys": {
+      "nextDay": "翌日",
+      "previousDay": "前日",
+      "today": "今日",
+      "weekStart": "週の初日",
+      "weekEnd": "週の最終日",
+      "monthStart": "月の初日",
+      "monthEnd": "月の最終日",
+      "yearStart": "年の初日",
+      "yearEnd": "年の最終日"
+    },
+    "repeatHint": "初日または最終日のキーをもう一度押すと、さらに1週間、1か月、または1年移動します。",
+    "pasteHint": "普段の形式で日付を貼り付けられます（例: 2026年3月15日）。2桁で入力した年は、フィールドを離れると最も近い世紀に補完されます。",
+    "changed": "日付を {date} に設定しました",
+    "outsideCalendar": "その日付はサポートされている暦の範囲外です。",
+    "outsideAllowed": "その日付はこのフィールドで許可された範囲外です。",
+    "notAccepted": "フィールドがその日付を受け付けませんでした。",
+    "incomplete": "日付が不完全です。年・月・日をすべて入力するか、フィールドを空にしてください。",
+    "checkYear": "年を確認してください。4桁すべてを入力します。",
+    "pasteUnreadable": "「{text}」はこのフィールドで読み取れる日付ではありません。2026-03-15 のような形式を使用してください。",
+    "pasteImpossible": "「{text}」は実在する日付ではありません。"
+  }
 }

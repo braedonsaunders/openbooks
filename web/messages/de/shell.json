@@ -26,7 +26,8 @@
     "sampleCompany": "Beispielunternehmen",
     "workspace": "Arbeitsbereich",
     "production": "Produktion",
-    "manageEnvironments": "Umgebungen verwalten"
+    "manageEnvironments": "Umgebungen verwalten",
+    "keyboardShortcuts": "Tastenkürzel"
   },
   "sandboxBanner": {
     "sandbox": "Sandbox-Umgebung",
@@ -258,5 +259,54 @@
     "revokeOtherSessions": "Alle anderen Sitzungen beenden",
     "requestFailed": "Die Sicherheitsanfrage konnte nicht abgeschlossen werden. Bitte versuchen Sie es erneut."
   },
-  "localNavigation": "Lokale Navigation"
+  "localNavigation": "Lokale Navigation",
+  "shortcuts": {
+    "title": "Tastenkürzel",
+    "description": "Kürzel, die an Ihrer aktuellen Stelle verfügbar sind. Drücken Sie ?, um diese Liste zu öffnen.",
+    "scopes": {
+      "form": "In diesem Formular",
+      "page": "Auf dieser Seite",
+      "global": "Überall"
+    },
+    "commands": {
+      "help": "Tastenkürzel anzeigen",
+      "search": "Suchen",
+      "newInvoice": "Neue Rechnung",
+      "newBill": "Neue Eingangsrechnung",
+      "newJournal": "Neue Journalbuchung",
+      "newExpense": "Neue Spesenabrechnung",
+      "newCustomerPayment": "Neue Kundenzahlung",
+      "goDashboard": "Zum Dashboard",
+      "goReports": "Zu den Berichten",
+      "goBanking": "Zum Bankwesen",
+      "save": "Speichern",
+      "saveAndNew": "Speichern und neu",
+      "saveAndClose": "Speichern und schließen",
+      "addLine": "Zeile hinzufügen"
+    }
+  },
+  "dateEntry": {
+    "title": "In einem Datumsfeld",
+    "keys": {
+      "nextDay": "Nächster Tag",
+      "previousDay": "Vorheriger Tag",
+      "today": "Heute",
+      "weekStart": "Erster Tag der Woche",
+      "weekEnd": "Letzter Tag der Woche",
+      "monthStart": "Erster Tag des Monats",
+      "monthEnd": "Letzter Tag des Monats",
+      "yearStart": "Erster Tag des Jahres",
+      "yearEnd": "Letzter Tag des Jahres"
+    },
+    "repeatHint": "Drücken Sie eine Taste für den ersten oder letzten Tag erneut, um eine weitere Woche, einen Monat oder ein Jahr weiterzugehen.",
+    "pasteHint": "Fügen Sie ein Datum in Ihrem gewohnten Format ein, etwa 15. März 2026. Eine zweistellig eingegebene Jahreszahl wird beim Verlassen des Felds dem nächstgelegenen Jahrhundert zugeordnet.",
+    "changed": "Datum auf {date} gesetzt",
+    "outsideCalendar": "Dieses Datum liegt außerhalb des unterstützten Kalenders.",
+    "outsideAllowed": "Dieses Datum liegt außerhalb des für dieses Feld zulässigen Bereichs.",
+    "notAccepted": "Das Feld hat dieses Datum nicht übernommen.",
+    "incomplete": "Dieses Datum ist unvollständig. Ergänzen Sie Tag, Monat und Jahr oder leeren Sie das Feld.",
+    "checkYear": "Prüfen Sie das Jahr: Geben Sie alle vier Ziffern ein.",
+    "pasteUnreadable": "„{text}“ ist kein Datum, das dieses Feld lesen kann. Verwenden Sie ein Format wie 2026-03-15.",
+    "pasteImpossible": "„{text}“ ist kein gültiges Kalenderdatum."
+  }
 }

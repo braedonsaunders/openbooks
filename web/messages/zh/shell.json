@@ -26,7 +26,8 @@
     "sampleCompany": "示例企业",
     "workspace": "工作区",
     "production": "生产环境",
-    "manageEnvironments": "管理环境"
+    "manageEnvironments": "管理环境",
+    "keyboardShortcuts": "键盘快捷键"
   },
   "sandboxBanner": {
     "sandbox": "沙盒环境",
@@ -258,5 +259,54 @@
     "revokeOtherSessions": "撤销其他所有会话",
     "requestFailed": "无法完成安全请求。请重试。"
   },
-  "localNavigation": "局部导航"
+  "localNavigation": "局部导航",
+  "shortcuts": {
+    "title": "键盘快捷键",
+    "description": "当前位置可用的快捷键。按 ? 打开此列表。",
+    "scopes": {
+      "form": "在此表单中",
+      "page": "在此页面上",
+      "global": "任何位置"
+    },
+    "commands": {
+      "help": "显示键盘快捷键",
+      "search": "搜索",
+      "newInvoice": "新建发票",
+      "newBill": "新建应付账单",
+      "newJournal": "新建日记账分录",
+      "newExpense": "新建费用报告",
+      "newCustomerPayment": "新建客户收款",
+      "goDashboard": "前往仪表板",
+      "goReports": "前往报表",
+      "goBanking": "前往银行",
+      "save": "保存",
+      "saveAndNew": "保存并新建",
+      "saveAndClose": "保存并关闭",
+      "addLine": "添加行"
+    }
+  },
+  "dateEntry": {
+    "title": "在日期字段中",
+    "keys": {
+      "nextDay": "下一天",
+      "previousDay": "前一天",
+      "today": "今天",
+      "weekStart": "本周第一天",
+      "weekEnd": "本周最后一天",
+      "monthStart": "本月第一天",
+      "monthEnd": "本月最后一天",
+      "yearStart": "本年第一天",
+      "yearEnd": "本年最后一天"
+    },
+    "repeatHint": "再次按第一天或最后一天的按键，可再移动一周、一个月或一年。",
+    "pasteHint": "以常用格式粘贴日期，例如 2026年3月15日。离开字段时，输入的两位数年份会归入最接近的世纪。",
+    "changed": "日期已设为 {date}",
+    "outsideCalendar": "该日期超出支持的日历范围。",
+    "outsideAllowed": "该日期超出此字段允许的范围。",
+    "notAccepted": "该字段未接受此日期。",
+    "incomplete": "此日期不完整。请补全年、月、日，或清空该字段。",
+    "checkYear": "请检查年份：输入完整的四位数字。",
+    "pasteUnreadable": "“{text}”不是此字段可识别的日期。请使用 2026-03-15 等格式。",
+    "pasteImpossible": "“{text}”不是真实存在的日历日期。"
+  }
 }

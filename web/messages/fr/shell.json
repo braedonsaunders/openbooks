@@ -26,7 +26,8 @@
     "sandbox": "sandbox",
     "workspace": "Espace de travail",
     "production": "Production",
-    "manageEnvironments": "Gérer les environnements"
+    "manageEnvironments": "Gérer les environnements",
+    "keyboardShortcuts": "Raccourcis clavier"
   },
   "sandboxBanner": {
     "sandbox": "Environnement sandbox",
@@ -258,5 +259,54 @@
     "revokeOtherSessions": "Révoquer toutes les autres sessions",
     "requestFailed": "La demande de sécurité n’a pas abouti. Veuillez réessayer."
   },
-  "localNavigation": "Navigation locale"
+  "localNavigation": "Navigation locale",
+  "shortcuts": {
+    "title": "Raccourcis clavier",
+    "description": "Raccourcis disponibles à l’endroit où vous êtes. Appuyez sur ? pour ouvrir cette liste.",
+    "scopes": {
+      "form": "Dans ce formulaire",
+      "page": "Sur cette page",
+      "global": "Partout"
+    },
+    "commands": {
+      "help": "Afficher les raccourcis clavier",
+      "search": "Rechercher",
+      "newInvoice": "Nouvelle facture",
+      "newBill": "Nouvelle facture fournisseur",
+      "newJournal": "Nouvelle écriture de journal",
+      "newExpense": "Nouvelle note de frais",
+      "newCustomerPayment": "Nouveau paiement client",
+      "goDashboard": "Aller au tableau de bord",
+      "goReports": "Aller aux rapports",
+      "goBanking": "Aller à la banque",
+      "save": "Enregistrer",
+      "saveAndNew": "Enregistrer et nouveau",
+      "saveAndClose": "Enregistrer et fermer",
+      "addLine": "Ajouter une ligne"
+    }
+  },
+  "dateEntry": {
+    "title": "Dans un champ de date",
+    "keys": {
+      "nextDay": "Jour suivant",
+      "previousDay": "Jour précédent",
+      "today": "Aujourd’hui",
+      "weekStart": "Premier jour de la semaine",
+      "weekEnd": "Dernier jour de la semaine",
+      "monthStart": "Premier jour du mois",
+      "monthEnd": "Dernier jour du mois",
+      "yearStart": "Premier jour de l’année",
+      "yearEnd": "Dernier jour de l’année"
+    },
+    "repeatHint": "Appuyez de nouveau sur une touche de premier ou de dernier jour pour avancer d’une semaine, d’un mois ou d’une année de plus.",
+    "pasteHint": "Collez une date dans votre format habituel, par exemple 15 mars 2026. Une année saisie sur deux chiffres passe au siècle le plus proche lorsque vous quittez le champ.",
+    "changed": "Date définie au {date}",
+    "outsideCalendar": "Cette date est hors du calendrier pris en charge.",
+    "outsideAllowed": "Cette date est hors de la plage autorisée pour ce champ.",
+    "notAccepted": "Le champ n’a pas accepté cette date.",
+    "incomplete": "Cette date est incomplète. Complétez le jour, le mois et l’année, ou videz le champ.",
+    "checkYear": "Vérifiez l’année : saisissez les quatre chiffres.",
+    "pasteUnreadable": "« {text} » n’est pas une date lisible par ce champ. Utilisez un format tel que 2026-03-15.",
+    "pasteImpossible": "« {text} » n’est pas une date réelle du calendrier."
+  }
 }

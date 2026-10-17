@@ -26,7 +26,8 @@
     "organizationWorkspace": "Organization workspace",
     "organizationWorkspaceDescription": "Modules for the current organization",
     "platformDescription": "Deployment-wide operator tools",
-    "security": "Sign-in security"
+    "security": "Sign-in security",
+    "keyboardShortcuts": "Keyboard shortcuts"
   },
   "sandboxBanner": {
     "sandbox": "Sandbox environment",
@@ -258,5 +259,54 @@
     "revokeOtherSessions": "Revoke all other sessions",
     "requestFailed": "The security request could not be completed. Please try again."
   },
-  "localNavigation": "Local navigation"
+  "localNavigation": "Local navigation",
+  "shortcuts": {
+    "title": "Keyboard shortcuts",
+    "description": "Shortcuts available where you are now. Press ? to open this list.",
+    "scopes": {
+      "form": "In this form",
+      "page": "On this page",
+      "global": "Everywhere"
+    },
+    "commands": {
+      "help": "Show keyboard shortcuts",
+      "search": "Search",
+      "newInvoice": "New invoice",
+      "newBill": "New bill",
+      "newJournal": "New journal entry",
+      "newExpense": "New expense report",
+      "newCustomerPayment": "New customer payment",
+      "goDashboard": "Go to dashboard",
+      "goReports": "Go to reports",
+      "goBanking": "Go to banking",
+      "save": "Save",
+      "saveAndNew": "Save and new",
+      "saveAndClose": "Save and close",
+      "addLine": "Add line"
+    }
+  },
+  "dateEntry": {
+    "title": "In a date field",
+    "keys": {
+      "nextDay": "Next day",
+      "previousDay": "Previous day",
+      "today": "Today",
+      "weekStart": "First day of the week",
+      "weekEnd": "Last day of the week",
+      "monthStart": "First day of the month",
+      "monthEnd": "Last day of the month",
+      "yearStart": "First day of the year",
+      "yearEnd": "Last day of the year"
+    },
+    "repeatHint": "Press a first-day or last-day key again to move one more week, month or year.",
+    "pasteHint": "Paste a date in your usual format, such as 15 Mar 2026. A two-digit year you type moves to the nearest century when you leave the field.",
+    "changed": "Date set to {date}",
+    "outsideCalendar": "That date is outside the supported calendar.",
+    "outsideAllowed": "That date is outside the range this field allows.",
+    "notAccepted": "The field did not accept that date.",
+    "incomplete": "This date is incomplete. Finish the day, month and year, or clear the field.",
+    "checkYear": "Check the year: enter all four digits.",
+    "pasteUnreadable": "“{text}” is not a date this field can read. Use a format such as 2026-03-15.",
+    "pasteImpossible": "“{text}” is not a real calendar date."
+  }
 }
