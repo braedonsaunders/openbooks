@@ -415,7 +415,7 @@ export function RegisterScreen(props: { registerId: string; canRefund: boolean; 
                 <li key={cart.id} className="flex items-center justify-between gap-3 px-3 py-3">
                   <span>
                     <span className="font-medium">{cart.label}</span>
-                    <span className="block text-xs text-slate-500">{t('held.summary', { count: cart.lineCount, by: cart.heldBy ?? '' })}</span>
+                    <span className="block text-xs text-slate-500">{cart.heldBy ? t('held.summaryBy', { count: cart.lineCount, by: cart.heldBy }) : t('held.summary', { count: cart.lineCount })}</span>
                   </span>
                   <Button size="lg" disabled={lines.length > 0} onClick={() => void resume(cart.id)}>{t('held.resume')}</Button>
                 </li>

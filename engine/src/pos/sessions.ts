@@ -4,7 +4,7 @@ import { fromUnits } from "../money/money.ts";
 import { isUuid } from "../platform/uuid.ts";
 import { businessToday } from "../platform/business-date.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
-import { subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
+import { subsidiaryScopeAllows, subsidiaryVisibleFilter } from "../organization/subsidiary-scope.ts";
 import { CashCloseoutError, resolveCashCloseoutAccounts } from "../sales/cash-closeout.ts";
 import { expectedDrawerCash, parsePosAmount, totalDenominationCount, type DenominationCount } from "./cart.ts";
 import { posRefusal } from "./errors.ts";
@@ -440,6 +440,7 @@ export type SessionListRow = {
   sessionNumber: number;
   status: string;
   businessDate: string;
+  currency: string;
   openedAt: string;
   openedByName: string | null;
   closedAt: string | null;
@@ -453,22 +454,34 @@ export type SessionListRow = {
   refundsTotalMinor: string;
 };
 
-/** Session history for the Z report list, newest first, scoped like the registers. */
+/**
+ * Session history for the Z report list, newest first. The legal-entity
+ * scope is part of the query, so the total and every page window count only
+ * sessions the caller may see.
+ */
 export async function listSessions(
   runner: SqlExecutor,
   orgId: string,
   filters: { registerId?: string | null; status?: "open" | "closed" | null; from?: string | null; to?: string | null; limit?: number; offset?: number },
   allowedSubsidiaryIds: ReadonlySet<string> | null,
-): Promise<{ rows: SessionListRow[]; hasMore: boolean }> {
+): Promise<{ rows: SessionListRow[]; total: number; hasMore: boolean }> {
   const limit = Math.min(Math.max(Math.floor(filters.limit ?? 50), 1), 200);
   const offset = Math.max(Math.floor(filters.offset ?? 0), 0);
-  const rows = (await runner.execute<SessionListRow & { subsidiaryId: string }>(sql`
+  const where = sql`
+     where s.org_id = ${orgId}
+       ${subsidiaryVisibleFilter(sql`s.subsidiary_id`, allowedSubsidiaryIds)}
+       ${filters.registerId && isUuid(filters.registerId) ? sql`and s.register_id = ${filters.registerId}` : sql``}
+       ${filters.status ? sql`and s.status = ${filters.status}` : sql``}
+       ${filters.from ? sql`and s.business_date >= ${filters.from}::date` : sql``}
+       ${filters.to ? sql`and s.business_date <= ${filters.to}::date` : sql``}`;
+  const total = (await runner.execute<{ total: number }>(sql`select count(*)::int as total from pos_sessions s ${where}`)).rows[0]?.total ?? 0;
+  const rows = (await runner.execute<SessionListRow>(sql`
     select s.id, s.register_id as "registerId", r.code as "registerCode", r.name as "registerName",
-           s.session_number as "sessionNumber", s.status, s.business_date::text as "businessDate",
+           s.session_number as "sessionNumber", s.status, s.business_date::text as "businessDate", s.currency,
            s.opened_at::text as "openedAt", ou.name as "openedByName", s.closed_at::text as "closedAt",
            cu.name as "closedByName", s.opening_float_minor::text as "openingFloatMinor",
            s.expected_cash_minor::text as "expectedCashMinor", s.counted_cash_minor::text as "countedCashMinor",
-           s.over_short_minor::text as "overShortMinor", s.subsidiary_id as "subsidiaryId",
+           s.over_short_minor::text as "overShortMinor",
            coalesce(t.sale_count, 0)::int as "saleCount",
            coalesce(t.sales_total, 0)::text as "salesTotalMinor",
            coalesce(t.refunds_total, 0)::text as "refundsTotalMinor"
@@ -482,15 +495,10 @@ export async function listSessions(
                sum(total_minor) filter (where kind = 'refund') as refunds_total
           from pos_transactions pt where pt.org_id = s.org_id and pt.session_id = s.id
       ) t on true
-     where s.org_id = ${orgId}
-       ${filters.registerId && isUuid(filters.registerId) ? sql`and s.register_id = ${filters.registerId}` : sql``}
-       ${filters.status ? sql`and s.status = ${filters.status}` : sql``}
-       ${filters.from ? sql`and s.business_date >= ${filters.from}::date` : sql``}
-       ${filters.to ? sql`and s.business_date <= ${filters.to}::date` : sql``}
+     ${where}
      order by s.opened_at desc, s.id
-     limit ${limit + 1} offset ${offset}`)).rows;
-  const visible = rows.filter((row) => subsidiaryScopeAllows(allowedSubsidiaryIds, row.subsidiaryId));
-  return { rows: visible.slice(0, limit).map(({ subsidiaryId: _subsidiaryId, ...row }) => row), hasMore: rows.length > limit };
+     limit ${limit} offset ${offset}`)).rows;
+  return { rows, total, hasMore: offset + rows.length < total };
 }
 
 /** Register context for the register screen: configuration the cashier needs and the open session. */

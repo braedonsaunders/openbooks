@@ -914,6 +914,8 @@ const SOURCES = {
   asset_insurance_coverages: { route: '/assets/insurance', rowsField: 'selected.coverages', rowKeyField: 'assetId', mode: 'loaded' },
   asset_insured_values: { route: '/assets/insurance', rowsField: 'comparison', rowKeyField: 'assetId', mode: 'loaded' },
   asset_components: { route: '/assets', rowsField: 'members', rowKeyField: 'id', mode: 'loaded' },
+  // Register drawer sessions: the session reader scopes and counts the window.
+  pos_sessions: { route: '/pos/sessions', rowsField: 'rows', rowKeyField: 'id', mode: 'server', clientSearch: false, paging: { totalField: 'total', pageField: 'page', perPageField: 'perPage' } },
 } satisfies Record<string, PreparedListSource>
 
 export type PreparedListSourceKey = keyof typeof SOURCES
