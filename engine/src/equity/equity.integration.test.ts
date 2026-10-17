@@ -144,6 +144,12 @@ test("a cash issuance without an equity account policy refuses with the Setup re
   }
 });
 
+/** The trigger's refusal arrives as the driver error's cause, under the failed-query wrapper. */
+function refusedAsRetainedHistory(error: unknown): boolean {
+  const cause = (error as { cause?: { message?: unknown } }).cause;
+  return /retained history/.test(String(cause?.message ?? (error as Error).message));
+}
+
 test("equity records are retained history: updates and deletes refuse at the database", { skip: !DB }, async () => {
   const w = await setupWorld();
   try {
@@ -151,9 +157,9 @@ test("equity records are retained history: updates and deletes refuse at the dat
       orgId: w.org.orgId, actorId: w.managerId, subsidiaryId: w.org.subsidiaryId, kind: "share", holderPartyId: w.holderId,
       issueDate: w.org.date, shareClassId: w.commonClassId, quantity: "1000", pricePerShare: "1", considerationAccountId: w.org.accounts.bank,
     });
-    await assert.rejects(db.execute(sql`update equity_securities set quantity = 2000 where org_id = ${w.org.orgId} and id = ${issued.id}`), /retained history/);
-    await assert.rejects(db.execute(sql`delete from equity_securities where org_id = ${w.org.orgId} and id = ${issued.id}`), /retained history/);
-    await assert.rejects(db.execute(sql`update equity_share_classes set par_value = 1 where org_id = ${w.org.orgId} and id = ${w.commonClassId}`), /retained history/);
+    await assert.rejects(db.execute(sql`update equity_securities set quantity = 2000 where org_id = ${w.org.orgId} and id = ${issued.id}`), refusedAsRetainedHistory);
+    await assert.rejects(db.execute(sql`delete from equity_securities where org_id = ${w.org.orgId} and id = ${issued.id}`), refusedAsRetainedHistory);
+    await assert.rejects(db.execute(sql`update equity_share_classes set par_value = 1 where org_id = ${w.org.orgId} and id = ${w.commonClassId}`), refusedAsRetainedHistory);
   } finally {
     await dropScratchOrgReporting(w.org.orgId);
   }
