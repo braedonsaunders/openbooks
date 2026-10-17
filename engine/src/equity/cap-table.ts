@@ -90,11 +90,23 @@ export function vestingTermsOf(security: SecurityRecord): VestingTerms {
   };
 }
 
-/** Events of one security on or before `asOf`, in date then recording order. */
+/** Securities voided on or before `asOf`. */
+export function voidedSecurities(book: Pick<EquityBook, "events">, asOf: string): Set<string> {
+  return new Set(book.events.filter((event) => event.kind === "void" && event.effectiveOn <= asOf).map((event) => event.securityId));
+}
+
+/**
+ * Events of one security on or before `asOf`, in date then recording order.
+ * An exercise, settlement, transfer or conversion whose resulting security
+ * was voided is undone from the void date: voiding the certificate an event
+ * produced is how that event is corrected.
+ */
 export function eventsOf(book: Pick<EquityBook, "events">, securityId: string, asOf: string): SecurityEventRecord[] {
+  const voided = voidedSecurities(book, asOf);
   return book.events
     .map((event, index) => ({ event, index }))
-    .filter(({ event }) => event.securityId === securityId && event.effectiveOn <= asOf)
+    .filter(({ event }) => event.securityId === securityId && event.effectiveOn <= asOf
+      && !(event.resultingSecurityId !== null && voided.has(event.resultingSecurityId)))
     .sort((a, b) => (a.event.effectiveOn < b.event.effectiveOn ? -1 : a.event.effectiveOn > b.event.effectiveOn ? 1 : a.index - b.index))
     .map(({ event }) => event);
 }

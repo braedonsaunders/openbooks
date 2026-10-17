@@ -176,3 +176,16 @@ test("convertibles report principal and accrued interest beside the table", () =
   assert.equal(row.convertingAmount, "108000.0000");
   assert.equal(table.totals.fullyDiluted, "10000000");
 });
+
+test("voiding the certificate an exercise produced returns its units to the option from the void date", () => {
+  const exercised = security({ id: "s-ex", kind: "share", holderPartyId: "employee", sourceSecurityId: "o-1", issueDate: "2024-07-01", quantity: 100_000n });
+  const events = [
+    event({ id: "e-1", securityId: "o-1", kind: "exercise", effectiveOn: "2024-07-01", quantity: 100_000n, resultingSecurityId: "s-ex" }),
+    event({ id: "e-2", securityId: "s-ex", kind: "void", effectiveOn: "2024-07-10" }),
+  ];
+  const current = book({ events, securities: [...book().securities, exercised] });
+  const option = current.securities.find((row) => row.id === "o-1")!;
+  assert.equal(holdingState(current, option, "2024-07-09").outstanding, 380_000n);
+  assert.equal(holdingState(current, option, "2024-07-10").outstanding, 480_000n);
+  assert.equal(buildCapTable(current, "2024-07-10").totals.outstanding, "9000000");
+});

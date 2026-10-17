@@ -138,6 +138,17 @@ export function formatPercent(fraction: Rational, scale = PERCENT_SCALE): string
   return formatUnits(quantize(multiplyRational(fraction, HUNDRED), scale, "half_up"), scale);
 }
 
+/**
+ * An exact amount as ledger units (four places), rounded half up to the
+ * currency's minor unit first: what a journal line for that currency carries.
+ */
+export function ledgerUnits(value: Rational, currencyExponent: number): bigint {
+  return quantize(value, currencyExponent, "half_up") * 10n ** BigInt(MONEY_SCALE - currencyExponent);
+}
+
+/** Ledger units back to an exact rational. */
+export const fromLedgerUnits = (units: bigint): Rational => rational(units, 10n ** BigInt(MONEY_SCALE));
+
 export const sharesRational = (shares: bigint): Rational => rational(shares);
 export const isZero = (value: Rational): boolean => value.numerator === 0n;
 export const isNegative = (value: Rational): boolean => value.numerator < 0n;
