@@ -1,0 +1,286 @@
+import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
+import test from "node:test";
+import { sql } from "drizzle-orm";
+import { db } from "../platform/db.ts";
+import {
+  createScratchOrg,
+  createScratchUser,
+  dropScratchOrgReporting,
+  seedPostingAccount,
+  type ScratchOrg,
+} from "../testing/fixtures.ts";
+import { postCompensationRun, previewCompensationRun } from "./compensation-run.ts";
+import { EquityError } from "./errors.ts";
+import { recordSecurityEvent } from "./events.ts";
+import { loadCapTableView, loadSecurityDetail } from "./read-model.ts";
+import { issueSecurity } from "./securities.ts";
+import { createPlan, createShareClass } from "./structure.ts";
+
+const DB = !!process.env.OPENBOOKS_DB_URL;
+
+interface World {
+  org: ScratchOrg;
+  managerId: string;
+  approverId: string;
+  outsiderId: string;
+  holderId: string;
+  accounts: { common: string; preferred: string; apic: string; apicShareBased: string; expense: string; treasury: string; convertible: string };
+  commonClassId: string;
+}
+
+async function setFeature(orgId: string, key: string, on: boolean): Promise<void> {
+  const updated = await db.execute(sql`
+    update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), ${`{features,${key}}`}::text[], ${on ? "true" : "false"}::jsonb, true)
+     where id = ${orgId} returning id`);
+  assert.equal(updated.rows.length, 1, `feature ${key} written`);
+}
+
+async function grant(orgId: string, roleKey: string, permissions: string[]): Promise<void> {
+  const updated = await db.execute(sql`
+    update app_roles set permissions = ${JSON.stringify(permissions)}::jsonb where org_id = ${orgId} and key = ${roleKey} returning id`);
+  assert.equal(updated.rows.length, 1, `role ${roleKey} granted`);
+}
+
+async function seedPolicy(w: Omit<World, "commonClassId">, effectiveFrom: string): Promise<void> {
+  const a = w.accounts;
+  await db.execute(sql`
+    insert into equity_account_policies (org_id, subsidiary_id, effective_from, common_stock_account_id, preferred_stock_account_id,
+      apic_account_id, apic_share_based_account_id, compensation_expense_account_id, treasury_stock_account_id,
+      convertible_instruments_account_id, reason, created_by, updated_by)
+    values (${w.org.orgId}, ${w.org.subsidiaryId}, ${effectiveFrom}, ${a.common}, ${a.preferred}, ${a.apic}, ${a.apicShareBased},
+      ${a.expense}, ${a.treasury}, ${a.convertible}, 'Initial equity accounts', ${w.approverId}, ${w.approverId})`);
+}
+
+async function setupWorld(options: { policy?: boolean } = {}): Promise<World> {
+  const org = await createScratchOrg();
+  const managerId = await createScratchUser(org.orgId, "Equity Manager", "equity_manager");
+  await grant(org.orgId, "equity_manager", ["equity.read", "equity.manage"]);
+  const approverId = await createScratchUser(org.orgId, "Equity Approver", "equity_approver");
+  await grant(org.orgId, "equity_approver", ["equity.read", "equity.approve"]);
+  const outsiderId = await createScratchUser(org.orgId, "Equity Outsider", "equity_outsider");
+  await grant(org.orgId, "equity_outsider", ["gl.read"]);
+  await setFeature(org.orgId, "equity", true);
+  const holderId = randomUUID();
+  await db.execute(sql`insert into parties (id, org_id, kind, display_name) values (${holderId}, ${org.orgId}, 'person', 'Founder One')`);
+  const accounts = {
+    common: await seedPostingAccount(org.orgId, "3010", "Common Stock", "equity"),
+    preferred: await seedPostingAccount(org.orgId, "3020", "Preferred Stock", "equity"),
+    apic: await seedPostingAccount(org.orgId, "3100", "Additional Paid-in Capital", "equity"),
+    apicShareBased: await seedPostingAccount(org.orgId, "3110", "Paid-in Capital - Share-based", "equity"),
+    expense: await seedPostingAccount(org.orgId, "6400", "Stock Compensation Expense", "expense"),
+    treasury: await seedPostingAccount(org.orgId, "3200", "Treasury Stock", "equity"),
+    convertible: await seedPostingAccount(org.orgId, "2600", "Convertible Instruments", "liability_current_other"),
+  };
+  const base = { org, managerId, approverId, outsiderId, holderId, accounts };
+  if (options.policy !== false) await seedPolicy(base, "2026-01-01");
+  const commonClass = await createShareClass({
+    orgId: org.orgId, actorId: managerId, subsidiaryId: org.subsidiaryId, code: "CS", name: "Common Stock", kind: "common",
+    effectiveOn: "2026-01-01", authorizedShares: "10000000", parValue: "0.0001",
+  });
+  return { ...base, commonClassId: commonClass.id };
+}
+
+function refusal(code: string) {
+  return (error: unknown) => error instanceof EquityError && error.code === code;
+}
+
+async function entryLines(orgId: string, entryId: string): Promise<{ account_id: string; amount: string }[]> {
+  return (await db.execute<{ account_id: string; amount: string }>(sql`
+    select account_id, amount::text as amount from journal_lines where org_id = ${orgId} and entry_id = ${entryId} order by line_number`)).rows;
+}
+
+async function accountBalance(orgId: string, accountId: string): Promise<string> {
+  const row = (await db.execute<{ balance: string }>(sql`
+    select coalesce(sum(jl.amount), 0)::numeric(19,4)::text as balance
+      from journal_lines jl join journal_entries je on je.org_id = jl.org_id and je.id = jl.entry_id
+     where jl.org_id = ${orgId} and jl.account_id = ${accountId} and je.status in ('posted', 'reversed')`)).rows[0];
+  return row?.balance ?? "0.0000";
+}
+
+test("shares issued for cash post a balanced equity entry: cash, share capital at par and APIC", { skip: !DB }, async () => {
+  const w = await setupWorld();
+  try {
+    const issued = await issueSecurity({
+      orgId: w.org.orgId, actorId: w.managerId, subsidiaryId: w.org.subsidiaryId, kind: "share", holderPartyId: w.holderId,
+      issueDate: w.org.date, shareClassId: w.commonClassId, quantity: "4000000", pricePerShare: "0.0010",
+      considerationAccountId: w.org.accounts.bank,
+    });
+    assert.ok(issued.journalEntryId, "the cash issuance posted");
+    const entry = (await db.execute<{ origin: string; status: string }>(sql`
+      select origin, status from journal_entries where org_id = ${w.org.orgId} and id = ${issued.journalEntryId}`)).rows[0]!;
+    assert.equal(entry.origin, "equity");
+    assert.equal(entry.status, "posted");
+    const lines = await entryLines(w.org.orgId, issued.journalEntryId!);
+    const total = lines.reduce((sum, line) => sum + BigInt(line.amount.replace(".", "")), 0n);
+    assert.equal(total, 0n, "the entry balances");
+    assert.equal(await accountBalance(w.org.orgId, w.org.accounts.bank), "4000.0000");
+    assert.equal(await accountBalance(w.org.orgId, w.accounts.common), "-400.0000", "par value: 4,000,000 × 0.0001");
+    assert.equal(await accountBalance(w.org.orgId, w.accounts.apic), "-3600.0000");
+    const audit = (await db.execute<{ n: string }>(sql`
+      select count(*)::text as n from audit_log where org_id = ${w.org.orgId} and row_id = ${issued.id} and action = 'equity.security.issue'`)).rows[0]!;
+    assert.equal(audit.n, "1", "the issuance is audited");
+    const view = await loadCapTableView({ orgId: w.org.orgId, actorId: w.managerId, subsidiaryId: w.org.subsidiaryId, asOf: w.org.date });
+    assert.equal(view.table.totals.outstanding, "4000000");
+  } finally {
+    await dropScratchOrgReporting(w.org.orgId);
+  }
+});
+
+test("a cash issuance without an equity account policy refuses with the Setup remedy and writes nothing", { skip: !DB }, async () => {
+  const w = await setupWorld({ policy: false });
+  try {
+    await assert.rejects(
+      issueSecurity({
+        orgId: w.org.orgId, actorId: w.managerId, subsidiaryId: w.org.subsidiaryId, kind: "share", holderPartyId: w.holderId,
+        issueDate: w.org.date, shareClassId: w.commonClassId, quantity: "1000", pricePerShare: "1", considerationAccountId: w.org.accounts.bank,
+      }),
+      (error: unknown) => refusal("equity_account_policy_missing")(error) && (error as EquityError).remedy.includes("Setup → Equity accounts"),
+    );
+    const count = (await db.execute<{ n: string }>(sql`select count(*)::text as n from equity_securities where org_id = ${w.org.orgId}`)).rows[0]!;
+    assert.equal(count.n, "0");
+  } finally {
+    await dropScratchOrgReporting(w.org.orgId);
+  }
+});
+
+test("equity records are retained history: updates and deletes refuse at the database", { skip: !DB }, async () => {
+  const w = await setupWorld();
+  try {
+    const issued = await issueSecurity({
+      orgId: w.org.orgId, actorId: w.managerId, subsidiaryId: w.org.subsidiaryId, kind: "share", holderPartyId: w.holderId,
+      issueDate: w.org.date, shareClassId: w.commonClassId, quantity: "1000", pricePerShare: "1", considerationAccountId: w.org.accounts.bank,
+    });
+    await assert.rejects(db.execute(sql`update equity_securities set quantity = 2000 where org_id = ${w.org.orgId} and id = ${issued.id}`), /retained history/);
+    await assert.rejects(db.execute(sql`delete from equity_securities where org_id = ${w.org.orgId} and id = ${issued.id}`), /retained history/);
+    await assert.rejects(db.execute(sql`update equity_share_classes set par_value = 1 where org_id = ${w.org.orgId} and id = ${w.commonClassId}`), /retained history/);
+  } finally {
+    await dropScratchOrgReporting(w.org.orgId);
+  }
+});
+
+test("voids are approvals: the manager is refused, the approver's void reverses the entry and removes the shares", { skip: !DB }, async () => {
+  const w = await setupWorld();
+  try {
+    const issued = await issueSecurity({
+      orgId: w.org.orgId, actorId: w.managerId, subsidiaryId: w.org.subsidiaryId, kind: "share", holderPartyId: w.holderId,
+      issueDate: w.org.date, shareClassId: w.commonClassId, quantity: "1000", pricePerShare: "1", considerationAccountId: w.org.accounts.bank,
+    });
+    const voidInput = { orgId: w.org.orgId, securityId: issued.id, kind: "void" as const, effectiveOn: w.org.date, reason: "Entered against the wrong holder" };
+    await assert.rejects(recordSecurityEvent({ ...voidInput, actorId: w.managerId }), refusal("equity_forbidden"));
+    const voided = await recordSecurityEvent({ ...voidInput, actorId: w.approverId });
+    assert.ok(voided.reversalEntryId, "the issuance entry is reversed");
+    const original = (await db.execute<{ status: string }>(sql`
+      select status from journal_entries where org_id = ${w.org.orgId} and id = ${issued.journalEntryId}`)).rows[0]!;
+    assert.equal(original.status, "reversed");
+    assert.equal(await accountBalance(w.org.orgId, w.org.accounts.bank), "0.0000");
+    const view = await loadCapTableView({ orgId: w.org.orgId, actorId: w.approverId, subsidiaryId: w.org.subsidiaryId, asOf: w.org.date });
+    assert.equal(view.table.totals.outstanding, "0");
+    await assert.rejects(recordSecurityEvent({ ...voidInput, actorId: w.approverId }), refusal("equity_security_void"));
+  } finally {
+    await dropScratchOrgReporting(w.org.orgId);
+  }
+});
+
+test("equity reads and writes stay inside the organization and require the equity duties", { skip: !DB }, async () => {
+  const a = await setupWorld();
+  const b = await setupWorld();
+  try {
+    const issued = await issueSecurity({
+      orgId: a.org.orgId, actorId: a.managerId, subsidiaryId: a.org.subsidiaryId, kind: "share", holderPartyId: a.holderId,
+      issueDate: a.org.date, shareClassId: a.commonClassId, quantity: "1000", pricePerShare: "1", considerationAccountId: a.org.accounts.bank,
+    });
+    await assert.rejects(loadSecurityDetail({ orgId: b.org.orgId, actorId: b.managerId, securityId: issued.id, asOf: a.org.date }), refusal("equity_security_unknown"));
+    await assert.rejects(
+      recordSecurityEvent({ orgId: b.org.orgId, actorId: b.approverId, securityId: issued.id, kind: "void", effectiveOn: b.org.date, reason: "Cross-tenant attempt" }),
+      refusal("equity_security_unknown"),
+    );
+    await assert.rejects(
+      issueSecurity({
+        orgId: b.org.orgId, actorId: b.managerId, subsidiaryId: a.org.subsidiaryId, kind: "share", holderPartyId: b.holderId,
+        issueDate: b.org.date, shareClassId: a.commonClassId, quantity: "1", pricePerShare: "1", considerationAccountId: b.org.accounts.bank,
+      }),
+      refusal("equity_entity_unknown"),
+    );
+    await assert.rejects(loadCapTableView({ orgId: a.org.orgId, actorId: a.outsiderId, subsidiaryId: a.org.subsidiaryId, asOf: a.org.date }), refusal("equity_forbidden"));
+    await setFeature(a.org.orgId, "equity", false);
+    await assert.rejects(
+      issueSecurity({
+        orgId: a.org.orgId, actorId: a.managerId, subsidiaryId: a.org.subsidiaryId, kind: "share", holderPartyId: a.holderId,
+        issueDate: a.org.date, shareClassId: a.commonClassId, quantity: "1", pricePerShare: "1", considerationAccountId: a.org.accounts.bank,
+      }),
+      refusal("equity_feature_off"),
+    );
+  } finally {
+    await dropScratchOrgReporting(a.org.orgId);
+    await dropScratchOrgReporting(b.org.orgId);
+  }
+});
+
+test("an option exercise reclassifies its grant-date value and the compensation run is idempotent and balanced", { skip: !DB }, async () => {
+  const w = await setupWorld();
+  try {
+    const plan = await createPlan({
+      orgId: w.org.orgId, actorId: w.managerId, subsidiaryId: w.org.subsidiaryId, code: "EIP", name: "Equity incentive plan",
+      shareClassId: w.commonClassId, effectiveOn: "2026-01-01", reservedShares: "1000000", recycleForfeited: true, recycleExpired: true, recycleRepurchased: false,
+    });
+    const option = await issueSecurity({
+      orgId: w.org.orgId, actorId: w.managerId, subsidiaryId: w.org.subsidiaryId, kind: "option", holderPartyId: w.holderId,
+      issueDate: "2026-01-01", shareClassId: w.commonClassId, planId: plan.id, quantity: "4800", pricePerShare: "1.0000", optionType: "nso",
+      expirationDate: "2036-01-01", vestingStart: "2026-01-01", vestingMonths: 48, cliffMonths: 0, vestingFrequency: "monthly",
+      valuation: { sharePrice: "1", volatilityPercent: "50", riskFreeRatePercent: "4", expectedTermYears: "6", dividendYieldPercent: "0", attribution: "straight_line" },
+    });
+    assert.equal(option.journalEntryId, null, "a grant posts nothing");
+    const preview = await previewCompensationRun({ orgId: w.org.orgId, actorId: w.managerId, subsidiaryId: w.org.subsidiaryId, throughDate: w.org.date });
+    assert.equal(preview.lines.length, 1);
+    const run = await postCompensationRun({ orgId: w.org.orgId, actorId: w.approverId, subsidiaryId: w.org.subsidiaryId, throughDate: w.org.date });
+    assert.equal(run.total, preview.total, "the run posts what the preview measured");
+    assert.ok(run.journalEntryId);
+    const lines = await entryLines(w.org.orgId, run.journalEntryId!);
+    assert.deepEqual(lines.map((line) => line.account_id).sort(), [w.accounts.apicShareBased, w.accounts.expense].sort());
+    assert.equal(await accountBalance(w.org.orgId, w.accounts.expense), run.total);
+    const replay = await postCompensationRun({ orgId: w.org.orgId, actorId: w.approverId, subsidiaryId: w.org.subsidiaryId, throughDate: w.org.date });
+    assert.equal(replay.replayed, true);
+    assert.equal(replay.runId, run.runId);
+    assert.equal(await accountBalance(w.org.orgId, w.accounts.expense), run.total, "a replay posts nothing more");
+    await assert.rejects(
+      postCompensationRun({ orgId: w.org.orgId, actorId: w.managerId, subsidiaryId: w.org.subsidiaryId, throughDate: w.org.date }),
+      refusal("equity_forbidden"),
+    );
+    const exercised = await recordSecurityEvent({
+      orgId: w.org.orgId, actorId: w.managerId, securityId: option.id, kind: "exercise", effectiveOn: w.org.date, quantity: "100",
+      considerationAccountId: w.org.accounts.bank,
+    });
+    assert.ok(exercised.resultingSecurityId && exercised.journalEntryId);
+    const exerciseLines = await entryLines(w.org.orgId, exercised.journalEntryId!);
+    assert.equal(exerciseLines.reduce((sum, line) => sum + BigInt(line.amount.replace(".", "")), 0n), 0n, "the exercise entry balances");
+    assert.ok(exerciseLines.some((line) => line.account_id === w.accounts.apicShareBased && !line.amount.startsWith("-")), "share-based paid-in capital is relieved");
+    await assert.rejects(
+      recordSecurityEvent({ orgId: w.org.orgId, actorId: w.managerId, securityId: option.id, kind: "exercise", effectiveOn: w.org.date, quantity: "4800", considerationAccountId: w.org.accounts.bank }),
+      refusal("equity_event_exceeds_vested"),
+    );
+  } finally {
+    await dropScratchOrgReporting(w.org.orgId);
+  }
+});
+
+test("concurrent grants against one pool serialize: the one that would exhaust it refuses", { skip: !DB }, async () => {
+  const w = await setupWorld();
+  try {
+    const plan = await createPlan({
+      orgId: w.org.orgId, actorId: w.managerId, subsidiaryId: w.org.subsidiaryId, code: "SMALL", name: "Small plan",
+      shareClassId: w.commonClassId, effectiveOn: "2026-01-01", reservedShares: "1000", recycleForfeited: true, recycleExpired: true, recycleRepurchased: false,
+    });
+    const grant = () => issueSecurity({
+      orgId: w.org.orgId, actorId: w.managerId, subsidiaryId: w.org.subsidiaryId, kind: "rsu", holderPartyId: w.holderId,
+      issueDate: w.org.date, shareClassId: w.commonClassId, planId: plan.id, quantity: "700",
+      valuation: { sharePrice: "1", attribution: "straight_line" },
+    });
+    const outcomes = await Promise.allSettled([grant(), grant()]);
+    assert.equal(outcomes.filter((outcome) => outcome.status === "fulfilled").length, 1);
+    const rejected = outcomes.find((outcome) => outcome.status === "rejected") as PromiseRejectedResult;
+    assert.ok(refusal("equity_pool_exhausted")(rejected.reason));
+  } finally {
+    await dropScratchOrgReporting(w.org.orgId);
+  }
+});
