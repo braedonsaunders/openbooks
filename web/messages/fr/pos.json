@@ -176,6 +176,7 @@
   "history": {
     "description": "Services de tiroir de toutes les caisses de vos entités juridiques. Ouvrez un service pour son rapport X, ou son rapport Z une fois clôturé.",
     "registers": "Caisses",
+    "reports": "Rapports de caisse",
     "empty": "Aucun service de caisse ne correspond à ces filtres.",
     "register": "Caisse",
     "allRegisters": "Toutes les caisses",

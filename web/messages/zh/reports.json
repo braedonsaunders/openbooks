@@ -1136,6 +1136,14 @@
         "label": "储值余额",
         "description": "每个储值账户一行，含未清余额、客户地区和最近活动。按状态筛选，按地区和活动月份分组，复核无人认领款项。"
       },
+      "pos_sessions": {
+        "label": "收银班次",
+        "description": "每个收银台钱箱班次一行，包含销售、退款、期初备用金、预期现金、清点现金和长短款。筛选已关班的班次即为 Z 报表历史。"
+      },
+      "pos_transactions": {
+        "label": "收银销售与退款",
+        "description": "每笔收银销售或退款一行，包含小票、收银台、班次、收银员和客户。按收银台或收银员分组即可查看各收银台和各收银员的销售额。"
+      },
       "demand_forecast_accuracy": {
         "label": "预测准确率",
         "description": "按物料类别将历史需求预测与实际消耗对比评分: 已评分周数、平均绝对百分比误差与偏差。"
@@ -2741,6 +2749,46 @@
         "base_currency": "记账本位币",
         "subsidiary": "子公司"
       },
+      "pos_sessions": {
+        "id": "班次键",
+        "register_code": "收银台编码",
+        "register": "收银台",
+        "session_number": "班次",
+        "status": "状态",
+        "business_date": "营业日",
+        "opened_by": "开启人",
+        "closed_by": "关班人",
+        "opening_float": "期初备用金",
+        "sale_count": "销售笔数",
+        "sales_total": "销售合计",
+        "refund_count": "退款笔数",
+        "refunds_total": "退款合计",
+        "expected_cash": "预期现金",
+        "counted_cash": "清点现金",
+        "over_short": "长短款",
+        "currency": "币种",
+        "subsidiary": "子公司",
+        "close_note": "关班备注"
+      },
+      "pos_transactions": {
+        "id": "交易键",
+        "receipt_number": "小票",
+        "kind": "类型",
+        "document_status": "单据状态",
+        "business_date": "营业日",
+        "register_code": "收银台编码",
+        "register": "收银台",
+        "session_number": "班次",
+        "cashier": "收银员",
+        "customer": "客户",
+        "total": "合计",
+        "net_sales": "净销售额",
+        "cash_applied": "冲抵现金",
+        "change_given": "已找零",
+        "currency": "币种",
+        "subsidiary": "子公司",
+        "document_id": "单据键"
+      },
       "demand_forecast_accuracy": {
         "item_class": "物料类别",
         "scored_weeks": "已评分周数",
@@ -3126,6 +3174,7 @@
       "label": "标签",
       "payout": "结算",
       "refund": "退款",
+      "sale": "销售",
       "estimate": "估计",
       "import": "导入",
       "manual": "手动",
@@ -3406,6 +3455,14 @@
     "prepaid-expense-reconciliation": {
       "name": "预付费用对账",
       "description": "按科目、子公司、账簿和币种比较总账中递延科目余额与其摊销计划的未摊销余额。"
+    },
+    "register-z-report-history": {
+      "name": "收银 Z 报表历史",
+      "description": "已关班收银班次的销售、退款、预期现金、清点现金和长短款。"
+    },
+    "register-sales-by-register-and-cashier": {
+      "name": "按收银台和收银员的收银销售",
+      "description": "按收银台和收银员列示已过账的收银销售、退款和净销售额。"
     }
   },
   "generalLedger": {

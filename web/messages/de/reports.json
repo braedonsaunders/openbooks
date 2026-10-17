@@ -1136,6 +1136,14 @@
         "label": "Guthabenbestände",
         "description": "Eine Zeile je Guthabenkonto mit offenem Saldo, Kundenregion und letzter Aktivität. Nach Status filtern und nach Region und Aktivitätsmonat gruppieren für die Prüfung nicht beanspruchter Guthaben."
       },
+      "pos_sessions": {
+        "label": "Kassenschichten",
+        "description": "Eine Zeile je Schubladenschicht einer Kasse mit Verkäufen, Erstattungen, Anfangsbestand, erwartetem und gezähltem Bargeld sowie Kassendifferenz. Auf abgeschlossene Schichten filtern für den Verlauf der Z-Berichte."
+      },
+      "pos_transactions": {
+        "label": "Kassenverkäufe und -erstattungen",
+        "description": "Eine Zeile je Kassenverkauf oder -erstattung mit Beleg, Kasse, Schicht, Kassierer und Kunde. Nach Kasse oder Kassierer gruppieren für Umsätze je Kasse und je Kassierer."
+      },
       "demand_forecast_accuracy": {
         "label": "Prognosegenauigkeit",
         "description": "Frühere Bedarfsprognosen im Abgleich mit tatsächlichen Verbräuchen je Artikelklasse: bewertete Wochen, mittlerer absoluter Prozentfehler und Verzerrung."
@@ -2741,6 +2749,46 @@
         "base_currency": "Funktionale Währung",
         "subsidiary": "Tochtergesellschaft"
       },
+      "pos_sessions": {
+        "id": "Schichtschlüssel",
+        "register_code": "Kassencode",
+        "register": "Kasse",
+        "session_number": "Schicht",
+        "status": "Zustand",
+        "business_date": "Geschäftstag",
+        "opened_by": "Geöffnet von",
+        "closed_by": "Geschlossen von",
+        "opening_float": "Anfangsbestand",
+        "sale_count": "Verkäufe",
+        "sales_total": "Verkaufssumme",
+        "refund_count": "Erstattungen",
+        "refunds_total": "Erstattungssumme",
+        "expected_cash": "Erwartetes Bargeld",
+        "counted_cash": "Gezähltes Bargeld",
+        "over_short": "Überschuss / Fehlbetrag",
+        "currency": "Währung",
+        "subsidiary": "Tochtergesellschaft",
+        "close_note": "Abschlussnotiz"
+      },
+      "pos_transactions": {
+        "id": "Transaktionsschlüssel",
+        "receipt_number": "Beleg",
+        "kind": "Art",
+        "document_status": "Belegstatus",
+        "business_date": "Geschäftstag",
+        "register_code": "Kassencode",
+        "register": "Kasse",
+        "session_number": "Schicht",
+        "cashier": "Kassierer",
+        "customer": "Kunde",
+        "total": "Gesamt",
+        "net_sales": "Nettoumsatz",
+        "cash_applied": "Angerechnetes Bargeld",
+        "change_given": "Ausgegebenes Rückgeld",
+        "currency": "Währung",
+        "subsidiary": "Tochtergesellschaft",
+        "document_id": "Belegschlüssel"
+      },
       "demand_forecast_accuracy": {
         "item_class": "Artikelklasse",
         "scored_weeks": "Bewertete Wochen",
@@ -3126,6 +3174,7 @@
       "label": "Etikett",
       "payout": "Auszahlung",
       "refund": "Erstattung",
+      "sale": "Verkauf",
       "estimate": "Schätzung",
       "import": "Import",
       "manual": "Manuell",
@@ -3406,6 +3455,14 @@
     "prepaid-expense-reconciliation": {
       "name": "Abstimmung der aktiven Rechnungsabgrenzung",
       "description": "Salden der Abgrenzungskonten im Hauptbuch gegenüber dem nicht aufgelösten Saldo ihrer Pläne, je Konto, Tochtergesellschaft, Buch und Währung."
+    },
+    "register-z-report-history": {
+      "name": "Verlauf der Z-Berichte",
+      "description": "Abgeschlossene Kassenschichten mit Verkäufen, Erstattungen, erwartetem und gezähltem Bargeld sowie Kassendifferenz."
+    },
+    "register-sales-by-register-and-cashier": {
+      "name": "Kassenumsätze nach Kasse und Kassierer",
+      "description": "Gebuchte Kassenverkäufe, Erstattungen und Nettoumsatz nach Kasse und Kassierer."
     }
   },
   "generalLedger": {

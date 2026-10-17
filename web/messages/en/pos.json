@@ -176,6 +176,7 @@
   "history": {
     "description": "Drawer sessions for every register in your legal entities. Open a session for its X report, or its Z report once closed.",
     "registers": "Registers",
+    "reports": "Register reports",
     "empty": "No register sessions match these filters.",
     "register": "Register",
     "allRegisters": "All registers",

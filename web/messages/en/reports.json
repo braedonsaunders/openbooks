@@ -1136,6 +1136,14 @@
         "label": "Stored-value balances",
         "description": "One row per stored-value account with its open balance, customer region and last activity. Filter to open statuses and group by region and activity month for unclaimed-property (escheat) review."
       },
+      "pos_sessions": {
+        "label": "Register sessions",
+        "description": "One row per register drawer session with its sales, refunds, opening float, expected and counted cash and over/short. Filter to closed sessions for the Z report history."
+      },
+      "pos_transactions": {
+        "label": "Register sales and refunds",
+        "description": "One row per register sale or refund with its receipt, register, session, cashier and customer. Group by register or cashier for sales by register and by cashier."
+      },
       "demand_forecast_accuracy": {
         "label": "Forecast accuracy",
         "description": "Past demand forecasts scored against actual issues by item class: scored weeks, mean absolute percentage error, and bias."
@@ -2741,6 +2749,46 @@
         "base_currency": "Base currency",
         "subsidiary": "Subsidiary"
       },
+      "pos_sessions": {
+        "id": "Session key",
+        "register_code": "Register code",
+        "register": "Register",
+        "session_number": "Session",
+        "status": "Status",
+        "business_date": "Business date",
+        "opened_by": "Opened by",
+        "closed_by": "Closed by",
+        "opening_float": "Opening float",
+        "sale_count": "Sales",
+        "sales_total": "Sales total",
+        "refund_count": "Refunds",
+        "refunds_total": "Refunds total",
+        "expected_cash": "Expected cash",
+        "counted_cash": "Counted cash",
+        "over_short": "Over / short",
+        "currency": "Currency",
+        "subsidiary": "Subsidiary",
+        "close_note": "Closing note"
+      },
+      "pos_transactions": {
+        "id": "Transaction key",
+        "receipt_number": "Receipt",
+        "kind": "Type",
+        "document_status": "Document status",
+        "business_date": "Business date",
+        "register_code": "Register code",
+        "register": "Register",
+        "session_number": "Session",
+        "cashier": "Cashier",
+        "customer": "Customer",
+        "total": "Total",
+        "net_sales": "Net sales",
+        "cash_applied": "Cash applied",
+        "change_given": "Change given",
+        "currency": "Currency",
+        "subsidiary": "Subsidiary",
+        "document_id": "Document key"
+      },
       "demand_forecast_accuracy": {
         "item_class": "Item class",
         "scored_weeks": "Scored weeks",
@@ -3126,6 +3174,7 @@
       "label": "Label",
       "payout": "Payout",
       "refund": "Refund",
+      "sale": "Sale",
       "estimate": "Estimate",
       "import": "Import",
       "manual": "Manual",
@@ -3406,6 +3455,14 @@
     "prepaid-expense-reconciliation": {
       "name": "Prepaid expense reconciliation",
       "description": "Deferral account balances in the general ledger against the unamortized balance of their schedules, by account, subsidiary, book and currency."
+    },
+    "register-z-report-history": {
+      "name": "Register Z report history",
+      "description": "Closed register sessions with sales, refunds, expected and counted cash and over/short."
+    },
+    "register-sales-by-register-and-cashier": {
+      "name": "Register sales by register and cashier",
+      "description": "Posted register sales, refunds and net sales by register and cashier."
     }
   },
   "generalLedger": {

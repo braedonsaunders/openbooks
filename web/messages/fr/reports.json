@@ -1136,6 +1136,14 @@
         "label": "Soldes de cartes cadeaux et avoirs",
         "description": "Une ligne par compte avec son solde, la région du client et la dernière activité. Filtrez par statut et regroupez par région et mois d’activité pour la revue des avoirs en déshérence."
       },
+      "pos_sessions": {
+        "label": "Services de caisse",
+        "description": "Une ligne par service de tiroir-caisse avec ses ventes, remboursements, fond de caisse initial, espèces attendues et comptées, et excédent ou manque. Filtrez les services clôturés pour l’historique des rapports Z."
+      },
+      "pos_transactions": {
+        "label": "Ventes et remboursements en caisse",
+        "description": "Une ligne par vente ou remboursement en caisse avec son ticket, sa caisse, son service, son caissier et son client. Regroupez par caisse ou par caissier pour les ventes par caisse et par caissier."
+      },
       "demand_forecast_accuracy": {
         "label": "Précision des prévisions",
         "description": "Prévisions de demande passées comparées aux sorties réelles, par classe d'articles : semaines évaluées, erreur absolue moyenne en pourcentage et biais."
@@ -2741,6 +2749,46 @@
         "base_currency": "Monnaie fonctionnelle",
         "subsidiary": "Filiale"
       },
+      "pos_sessions": {
+        "id": "Clé du service",
+        "register_code": "Code de caisse",
+        "register": "Caisse",
+        "session_number": "Service",
+        "status": "Statut",
+        "business_date": "Date comptable",
+        "opened_by": "Ouvert par",
+        "closed_by": "Clôturé par",
+        "opening_float": "Fond de caisse initial",
+        "sale_count": "Ventes",
+        "sales_total": "Total des ventes",
+        "refund_count": "Remboursements",
+        "refunds_total": "Total des remboursements",
+        "expected_cash": "Espèces attendues",
+        "counted_cash": "Espèces comptées",
+        "over_short": "Excédent / manque",
+        "currency": "Devise",
+        "subsidiary": "Filiale",
+        "close_note": "Note de clôture"
+      },
+      "pos_transactions": {
+        "id": "Clé de transaction",
+        "receipt_number": "Ticket",
+        "kind": "Nature",
+        "document_status": "Statut de la pièce",
+        "business_date": "Date comptable",
+        "register_code": "Code de caisse",
+        "register": "Caisse",
+        "session_number": "Service",
+        "cashier": "Caissier",
+        "customer": "Client",
+        "total": "Montant total",
+        "net_sales": "Ventes nettes",
+        "cash_applied": "Espèces imputées",
+        "change_given": "Monnaie rendue",
+        "currency": "Devise",
+        "subsidiary": "Filiale",
+        "document_id": "Clé de pièce"
+      },
       "demand_forecast_accuracy": {
         "item_class": "Classe d'articles",
         "scored_weeks": "Semaines évaluées",
@@ -3126,6 +3174,7 @@
       "label": "Étiquette",
       "payout": "Versement",
       "refund": "Remboursement",
+      "sale": "Vente",
       "estimate": "Estimation",
       "import": "Importation",
       "manual": "Manuel",
@@ -3386,6 +3435,14 @@
     "prepaid-expense-reconciliation": {
       "name": "Rapprochement des charges constatées d’avance",
       "description": "Soldes des comptes de régularisation au grand livre face au restant à étaler de leurs échéanciers, par compte, filiale, livre et devise."
+    },
+    "register-z-report-history": {
+      "name": "Historique des rapports Z de caisse",
+      "description": "Services de caisse clôturés avec ventes, remboursements, espèces attendues et comptées, et excédent ou manque."
+    },
+    "register-sales-by-register-and-cashier": {
+      "name": "Ventes en caisse par caisse et caissier",
+      "description": "Ventes, remboursements et ventes nettes en caisse comptabilisés, par caisse et par caissier."
     }
   },
   "generalLedger": {

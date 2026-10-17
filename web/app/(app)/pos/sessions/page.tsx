@@ -61,7 +61,12 @@ export default async function PosSessionsPage({ searchParams }: { searchParams: 
         <PageHeader
           title={t('session.historyTitle')}
           description={t('history.description')}
-          actions={<Button asChild variant="outline"><Link href="/pos">{t('history.registers')}</Link></Button>}
+          actions={(
+            <div className="flex flex-wrap gap-2">
+              <Button asChild variant="outline"><Link href="/reports">{t('history.reports')}</Link></Button>
+              <Button asChild variant="outline"><Link href="/pos">{t('history.registers')}</Link></Button>
+            </div>
+          )}
         />
       )}
     >

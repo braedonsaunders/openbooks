@@ -176,6 +176,7 @@
   "history": {
     "description": "Schubladenschichten aller Kassen in Ihren Rechtseinheiten. Öffnen Sie eine Schicht für ihren X-Bericht oder nach dem Abschluss für ihren Z-Bericht.",
     "registers": "Kassen",
+    "reports": "Kassenberichte",
     "empty": "Keine Kassenschichten entsprechen diesen Filtern.",
     "register": "Kasse",
     "allRegisters": "Alle Kassen",

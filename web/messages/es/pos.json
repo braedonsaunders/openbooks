@@ -176,6 +176,7 @@
   "history": {
     "description": "Turnos de cajón de todas las cajas de sus entidades legales. Abra un turno para ver su informe X, o su informe Z una vez cerrado.",
     "registers": "Cajas",
+    "reports": "Informes de caja",
     "empty": "Ningún turno de caja coincide con estos filtros.",
     "register": "Caja",
     "allRegisters": "Todas las cajas",

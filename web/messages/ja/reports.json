@@ -1136,6 +1136,14 @@
         "label": "ストアドバリュー残高",
         "description": "口座ごとに未利用残高、顧客地域、最終利用日を1行ずつ表示します。ステータスで絞り込み、地域別・最終利用月別に集計して休眠残高を確認します。"
       },
+      "pos_sessions": {
+        "label": "レジシフト",
+        "description": "レジのドロワーシフトごとに 1 行。販売、返金、釣銭準備金、予定現金、実際の現金、過不足を表示します。締め済みシフトで絞り込むと Z レポートの履歴になります。"
+      },
+      "pos_transactions": {
+        "label": "レジの販売と返金",
+        "description": "レジの販売または返金ごとに 1 行。レシート、レジ、シフト、レジ担当者、顧客を表示します。レジ別またはレジ担当者別に集計すると、レジ別・担当者別の売上になります。"
+      },
       "demand_forecast_accuracy": {
         "label": "予測精度",
         "description": "品目クラス別の実績に対する過去の需要予測の評価: 評価週数、MAPE、バイアス。"
@@ -2741,6 +2749,46 @@
         "base_currency": "機能通貨",
         "subsidiary": "子会社"
       },
+      "pos_sessions": {
+        "id": "シフトキー",
+        "register_code": "レジコード",
+        "register": "レジ",
+        "session_number": "シフト",
+        "status": "ステータス",
+        "business_date": "営業日",
+        "opened_by": "開始者",
+        "closed_by": "締め担当者",
+        "opening_float": "釣銭準備金",
+        "sale_count": "販売件数",
+        "sales_total": "販売合計",
+        "refund_count": "返金件数",
+        "refunds_total": "返金合計",
+        "expected_cash": "予定現金",
+        "counted_cash": "実際の現金",
+        "over_short": "過不足",
+        "currency": "通貨",
+        "subsidiary": "子会社",
+        "close_note": "締めのメモ"
+      },
+      "pos_transactions": {
+        "id": "取引キー",
+        "receipt_number": "レシート",
+        "kind": "種類",
+        "document_status": "伝票ステータス",
+        "business_date": "営業日",
+        "register_code": "レジコード",
+        "register": "レジ",
+        "session_number": "シフト",
+        "cashier": "レジ担当者",
+        "customer": "顧客",
+        "total": "合計",
+        "net_sales": "純売上",
+        "cash_applied": "充当現金",
+        "change_given": "お釣り",
+        "currency": "通貨",
+        "subsidiary": "子会社",
+        "document_id": "伝票キー"
+      },
       "demand_forecast_accuracy": {
         "item_class": "品目クラス",
         "scored_weeks": "評価週数",
@@ -3126,6 +3174,7 @@
       "label": "ラベル",
       "payout": "支払い",
       "refund": "返金",
+      "sale": "販売",
       "estimate": "見積もり",
       "import": "インポート",
       "manual": "手動",
@@ -3406,6 +3455,14 @@
     "prepaid-expense-reconciliation": {
       "name": "前払費用の照合",
       "description": "総勘定元帳の繰延勘定残高とスケジュールの未配分残高を、勘定・子会社・帳簿・通貨別に比較します。"
+    },
+    "register-z-report-history": {
+      "name": "レジ Z レポート履歴",
+      "description": "締め済みのレジシフトの販売、返金、予定現金、実際の現金、過不足。"
+    },
+    "register-sales-by-register-and-cashier": {
+      "name": "レジ別・担当者別のレジ売上",
+      "description": "転記済みのレジ販売、返金、純売上をレジ別・レジ担当者別に表示します。"
     }
   },
   "generalLedger": {

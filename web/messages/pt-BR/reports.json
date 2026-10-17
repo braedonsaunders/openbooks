@@ -1136,6 +1136,14 @@
         "label": "Saldos de vales e créditos",
         "description": "Uma linha por conta com saldo em aberto, região do cliente e última atividade. Filtre por situação e agrupe por região e mês de atividade para revisar valores abandonados."
       },
+      "pos_sessions": {
+        "label": "Turnos de caixa",
+        "description": "Uma linha por turno de gaveta de um caixa, com vendas, reembolsos, fundo de troco inicial, dinheiro esperado e contado, e sobra ou falta. Filtre os turnos fechados para o histórico de relatórios Z."
+      },
+      "pos_transactions": {
+        "label": "Vendas e reembolsos de caixa",
+        "description": "Uma linha por venda ou reembolso de caixa, com recibo, caixa, turno, operador e cliente. Agrupe por caixa ou por operador para ver as vendas por caixa e por operador."
+      },
       "demand_forecast_accuracy": {
         "label": "Precisão da previsão",
         "description": "Previsões de demanda passadas avaliadas contra consumos reais por classe de item: semanas avaliadas, erro percentual absoluto médio e viés."
@@ -2741,6 +2749,46 @@
         "base_currency": "Moeda funcional",
         "subsidiary": "Subsidiária"
       },
+      "pos_sessions": {
+        "id": "Chave do turno",
+        "register_code": "Código do caixa",
+        "register": "Caixa",
+        "session_number": "Turno",
+        "status": "Situação",
+        "business_date": "Data contábil",
+        "opened_by": "Aberto por",
+        "closed_by": "Fechado por",
+        "opening_float": "Fundo de troco inicial",
+        "sale_count": "Vendas",
+        "sales_total": "Total de vendas",
+        "refund_count": "Reembolsos",
+        "refunds_total": "Total de reembolsos",
+        "expected_cash": "Dinheiro esperado",
+        "counted_cash": "Dinheiro contado",
+        "over_short": "Sobra / falta",
+        "currency": "Moeda",
+        "subsidiary": "Subsidiária",
+        "close_note": "Observação de fechamento"
+      },
+      "pos_transactions": {
+        "id": "Chave da transação",
+        "receipt_number": "Recibo",
+        "kind": "Tipo",
+        "document_status": "Situação do documento",
+        "business_date": "Data contábil",
+        "register_code": "Código do caixa",
+        "register": "Caixa",
+        "session_number": "Turno",
+        "cashier": "Operador de caixa",
+        "customer": "Cliente",
+        "total": "Valor total",
+        "net_sales": "Vendas líquidas",
+        "cash_applied": "Dinheiro aplicado",
+        "change_given": "Troco entregue",
+        "currency": "Moeda",
+        "subsidiary": "Subsidiária",
+        "document_id": "Chave do documento"
+      },
       "demand_forecast_accuracy": {
         "item_class": "Classe de item",
         "scored_weeks": "Semanas avaliadas",
@@ -3126,6 +3174,7 @@
       "label": "Etiqueta",
       "payout": "Repasse",
       "refund": "Reembolso",
+      "sale": "Venda",
       "estimate": "Estimativa",
       "import": "Importação",
       "manual": "Manual",
@@ -3406,6 +3455,14 @@
     "prepaid-expense-reconciliation": {
       "name": "Conciliação de despesas antecipadas",
       "description": "Saldos das contas de diferimento no razão geral frente ao saldo a apropriar dos cronogramas, por conta, subsidiária, livro e moeda."
+    },
+    "register-z-report-history": {
+      "name": "Histórico de relatórios Z do caixa",
+      "description": "Turnos de caixa fechados com vendas, reembolsos, dinheiro esperado e contado, e sobra ou falta."
+    },
+    "register-sales-by-register-and-cashier": {
+      "name": "Vendas de caixa por caixa e operador",
+      "description": "Vendas, reembolsos e vendas líquidas de caixa lançados, por caixa e por operador."
     }
   },
   "generalLedger": {

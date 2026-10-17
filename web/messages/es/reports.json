@@ -1136,6 +1136,14 @@
         "label": "Saldos de tarjetas regalo y crédito",
         "description": "Una fila por cuenta con su saldo, la región del cliente y la última actividad. Filtre por estado y agrupe por región y mes de actividad para revisar saldos abandonados."
       },
+      "pos_sessions": {
+        "label": "Turnos de caja",
+        "description": "Una fila por turno de cajón de una caja con sus ventas, reembolsos, fondo inicial, efectivo esperado y contado, y sobrante o faltante. Filtre los turnos cerrados para el historial de informes Z."
+      },
+      "pos_transactions": {
+        "label": "Ventas y reembolsos de caja",
+        "description": "Una fila por venta o reembolso de caja con su recibo, caja, turno, cajero y cliente. Agrupe por caja o por cajero para ver las ventas por caja y por cajero."
+      },
       "demand_forecast_accuracy": {
         "label": "Precisión del pronóstico",
         "description": "Pronósticos de demanda pasados evaluados contra consumos reales por clase de artículo: semanas evaluadas, error porcentual absoluto medio y sesgo."
@@ -2741,6 +2749,46 @@
         "base_currency": "Moneda funcional",
         "subsidiary": "Subsidiaria"
       },
+      "pos_sessions": {
+        "id": "Clave del turno",
+        "register_code": "Código de caja",
+        "register": "Caja",
+        "session_number": "Turno",
+        "status": "Estado",
+        "business_date": "Fecha contable",
+        "opened_by": "Abierto por",
+        "closed_by": "Cerrado por",
+        "opening_float": "Fondo inicial",
+        "sale_count": "Ventas",
+        "sales_total": "Total de ventas",
+        "refund_count": "Reembolsos",
+        "refunds_total": "Total de reembolsos",
+        "expected_cash": "Efectivo esperado",
+        "counted_cash": "Efectivo contado",
+        "over_short": "Sobrante / faltante",
+        "currency": "Moneda",
+        "subsidiary": "Subsidiaria",
+        "close_note": "Nota de cierre"
+      },
+      "pos_transactions": {
+        "id": "Clave de la transacción",
+        "receipt_number": "Recibo",
+        "kind": "Tipo",
+        "document_status": "Estado del documento",
+        "business_date": "Fecha contable",
+        "register_code": "Código de caja",
+        "register": "Caja",
+        "session_number": "Turno",
+        "cashier": "Cajero",
+        "customer": "Cliente",
+        "total": "Importe total",
+        "net_sales": "Ventas netas",
+        "cash_applied": "Efectivo aplicado",
+        "change_given": "Cambio entregado",
+        "currency": "Moneda",
+        "subsidiary": "Subsidiaria",
+        "document_id": "Clave de documento"
+      },
       "demand_forecast_accuracy": {
         "item_class": "Clase de artículo",
         "scored_weeks": "Semanas evaluadas",
@@ -3126,6 +3174,7 @@
       "label": "Etiqueta",
       "payout": "Liquidación",
       "refund": "Reembolso",
+      "sale": "Venta",
       "estimate": "Estimación",
       "import": "Importación",
       "manual": "Manual",
@@ -3386,6 +3435,14 @@
     "prepaid-expense-reconciliation": {
       "name": "Conciliación de gastos anticipados",
       "description": "Saldos de las cuentas de diferimiento en el libro mayor frente al saldo pendiente de sus calendarios, por cuenta, subsidiaria, libro y moneda."
+    },
+    "register-z-report-history": {
+      "name": "Historial de informes Z de caja",
+      "description": "Turnos de caja cerrados con ventas, reembolsos, efectivo esperado y contado, y sobrante o faltante."
+    },
+    "register-sales-by-register-and-cashier": {
+      "name": "Ventas de caja por caja y cajero",
+      "description": "Ventas, reembolsos y ventas netas de caja contabilizados, por caja y cajero."
     }
   },
   "generalLedger": {

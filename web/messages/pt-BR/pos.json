@@ -176,6 +176,7 @@
   "history": {
     "description": "Turnos de gaveta de todos os caixas das suas entidades legais. Abra um turno para ver o relatório X, ou o relatório Z depois de fechado.",
     "registers": "Caixas",
+    "reports": "Relatórios de caixa",
     "empty": "Nenhum turno de caixa corresponde a estes filtros.",
     "register": "Caixa",
     "allRegisters": "Todos os caixas",

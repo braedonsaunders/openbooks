@@ -176,6 +176,7 @@
   "history": {
     "description": "您的法律实体中所有收银台的钱箱班次。打开班次可查看其 X 报表，关班后可查看 Z 报表。",
     "registers": "收银台列表",
+    "reports": "收银报表",
     "empty": "没有符合这些筛选条件的收银班次。",
     "register": "收银台",
     "allRegisters": "全部收银台",
