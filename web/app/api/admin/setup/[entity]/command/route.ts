@@ -10,7 +10,7 @@ import { applicationContextFromSession } from "@/lib/application/context";
 import { executeIdempotent } from "@/lib/application/idempotency";
 import { isUuid } from "@/lib/list-params";
 import { SETUP_ENTITY_BY_KEY } from "@/lib/setup/registry";
-import type { SetupCommandName } from "@/lib/setup/types";
+import type { SetupCommandDescriptor, SetupCommandName } from "@/lib/setup/types";
 import { setFramework } from "@openbooks/engine/nonprofit/frameworks";
 import { setFundPair } from "@openbooks/engine/nonprofit/funds";
 import { setFunctionalMapping } from "@openbooks/engine/nonprofit/functional";
@@ -331,7 +331,7 @@ async function handler(request: Request, params: { entity: string }, authz: Auth
 }
 
 /** Every grant a command descriptor may name. The handler re-asserts the entity's own. */
-const COMMAND_PERMISSIONS = ["funds.manage", "channels.manage", "equity.manage"] as const;
+const COMMAND_PERMISSIONS = ["funds.manage", "channels.manage", "documents.manage", "equity.manage"] as const satisfies readonly SetupCommandDescriptor["permission"][];
 
 export const POST = defineRoute({
   authorize: async () => {
