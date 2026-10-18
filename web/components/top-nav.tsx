@@ -3,8 +3,8 @@
 // Top menu bar — the alternative to the left sidebar rail. Each
 // SidebarNavGroup (the same `groups` prop the sidebar consumes from
 // resolveNav) becomes a dropdown via the portal-based Popover (escapes the
-// header's overflow-hidden). Active matching reuses findActiveNavHref so the
-// two layouts always agree on "where am I".
+// header's overflow-hidden). Active matching reuses useActiveNav so the two
+// layouts always agree on "where am I".
 //
 // Items sharing a `subgroup` render as labeled sections in a two-column panel,
 // avoiding precision-hover cascades. The same toBlocks fold drives the
@@ -16,33 +16,21 @@
 
 import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react'
 import Link from 'next/link'
-import { usePathname, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { ChevronDown, ChevronRight } from 'lucide-react'
 import { Popover, cn } from '@openbooks/ui'
-import { NavIcon, toBlocks, type SidebarNavGroup, type SidebarNavItem } from './sidebar-nav'
+import { NavIcon, toBlocks, useActiveNav, type SidebarNavGroup, type SidebarNavItem } from './sidebar-nav'
 import { NavCountBadge } from './nav-count-badge'
-import { findActiveNavHref } from './sidebar-nav-active'
 import { useNavGroups } from './use-platform-nav'
 import { visibleTopNavGroupCount } from '../lib/top-nav-overflow'
 import { menuColumns } from '../lib/nav/menu-columns'
 
 const MORE_MENU_INDEX = -1
 
-function groupContainsActiveHref(group: SidebarNavGroup, activeHref: string | null) {
-  return (
-    group.groupHref === activeHref ||
-    group.items.some((item) => item.href === activeHref || item.subgroupHref === activeHref)
-  )
-}
-
 export function TopNav({ groups }: { groups: SidebarNavGroup[] }) {
   const t = useTranslations('shell.topNav')
-  const pathname = usePathname() ?? ''
-  const searchParams = useSearchParams()
   const navGroups = useNavGroups(groups)
-  const query = searchParams.toString()
-  const activeHref = findActiveNavHref(query ? `${pathname}?${query}` : pathname, navGroups)
+  const { activeHref, activeGroupId } = useActiveNav(navGroups)
   const moreLabel = t('more')
   const [openIdx, setOpenIdx] = useState<number | null>(null)
   const [visibleCount, setVisibleCount] = useState(navGroups.length)
@@ -146,7 +134,7 @@ export function TopNav({ groups }: { groups: SidebarNavGroup[] }) {
   const visibleGroups = navGroups.slice(0, visibleCount)
   const overflowGroups = navGroups.slice(visibleCount)
   const moreOpen = openIdx === MORE_MENU_INDEX
-  const moreActive = overflowGroups.some((group) => groupContainsActiveHref(group, activeHref))
+  const moreActive = overflowGroups.some((group) => group.id === activeGroupId)
 
   return (
     <nav
@@ -180,7 +168,7 @@ export function TopNav({ groups }: { groups: SidebarNavGroup[] }) {
 
       {visibleGroups.map((group, i) => {
         const open = openIdx === i
-        const groupActive = groupContainsActiveHref(group, activeHref)
+        const groupActive = group.id === activeGroupId
         const triggerCls = cn(
           'flex h-14 shrink-0 items-center gap-1 whitespace-nowrap px-2 text-sm font-medium transition-colors',
           groupActive
@@ -290,7 +278,7 @@ export function TopNav({ groups }: { groups: SidebarNavGroup[] }) {
             onClick={() => closeMenu()}
           >
             {overflowGroups.map((group, i) => (
-              <OverflowGroupRow key={`${group.label}-${visibleCount + i}`} group={group} activeHref={activeHref} />
+              <OverflowGroupRow key={`${group.label}-${visibleCount + i}`} group={group} activeHref={activeHref} active={group.id === activeGroupId} />
             ))}
           </NavigationMenu>
         </Popover>
@@ -391,12 +379,19 @@ function GroupMenu({
   )
 }
 
-function OverflowGroupRow({ group, activeHref }: { group: SidebarNavGroup; activeHref: string | null }) {
+function OverflowGroupRow({
+  group,
+  activeHref,
+  active,
+}: {
+  group: SidebarNavGroup
+  activeHref: string | null
+  active: boolean
+}) {
   const [open, setOpen] = useState(false)
   const [flip, setFlip] = useState(false)
   const rowRef = useRef<HTMLDivElement>(null)
   const closeTimer = useRef<number | null>(null)
-  const active = groupContainsActiveHref(group, activeHref)
   const [focusEdge, setFocusEdge] = useState<'first' | undefined>()
   function openByKeyboard(event: KeyboardEvent<HTMLElement>) {
     if (event.key !== 'ArrowRight') return
