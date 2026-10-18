@@ -142,12 +142,6 @@ function applyRowFields<Row extends Record<string, unknown>>(row: Row, fields: R
   return Object.assign({}, row, fields)
 }
 
-function DecimalCell<Row extends Record<string, unknown>>({
-  value,
-  scale,
-  inputBase,
-  onChange,
-  rowKey,
 /**
  * A date cell. Typed text settles on blur or Enter like every date field;
  * until then it is published as a draft, so a reorder or delete applies the
@@ -195,6 +189,12 @@ function DateCell<Row extends Record<string, unknown>>({
   )
 }
 
+function DecimalCell<Row extends Record<string, unknown>>({
+  value,
+  scale,
+  inputBase,
+  onChange,
+  rowKey,
   colKey,
   registerDraft,
   ariaLabelledBy,
@@ -1096,14 +1096,6 @@ function RowCells<Row extends Record<string, unknown>>({
                 className="w-full"
                 triggerClassName="h-auto min-h-0 rounded-sm border-0 bg-transparent px-1.5 py-1 shadow-none focus:ring-0"
               />
-            ) : c.type === 'select' ? (
-              <Select
-                aria-labelledby={ariaLabelledBy}
-                value={(value as string) ?? ''}
-                onChange={(e) => commitCell(rowKey, c.key, e.target.value)}
-                className="w-full border-0 bg-transparent shadow-none"
-              >
-                {(c.optionsFor?.(row, i) ?? c.options ?? []).map((o) => (
             ) : c.type === 'date' ? (
               <DateCell<Row>
                 value={typeof value === 'string' ? value : ''}
@@ -1114,6 +1106,14 @@ function RowCells<Row extends Record<string, unknown>>({
                 registerDraft={registerDraft}
                 ariaLabelledBy={ariaLabelledBy}
               />
+            ) : c.type === 'select' ? (
+              <Select
+                aria-labelledby={ariaLabelledBy}
+                value={(value as string) ?? ''}
+                onChange={(e) => commitCell(rowKey, c.key, e.target.value)}
+                className="w-full border-0 bg-transparent shadow-none"
+              >
+                {(c.optionsFor?.(row, i) ?? c.options ?? []).map((o) => (
                   <option key={o.value} value={o.value}>
                     {o.label}
                   </option>
