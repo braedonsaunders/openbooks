@@ -32,6 +32,7 @@ import {
   type PayRateBasis,
 } from '@openbooks/engine/projects/pay-rate-basis'
 import type { LaborControlAccountOption } from './view'
+import { DateField } from '@/components/date-field'
 
 export interface RateRow {
   id: string
@@ -203,7 +204,7 @@ function LaborCostCatchUpCard({ preview, currentParams }: { preview: UnpostedLab
           <div className="flex flex-wrap items-end gap-2">
             <div>
               <Label htmlFor="catch-up-through">{t('catchUp.through')}</Label>
-              <Input id="catch-up-through" type="date" value={through} onChange={(e) => changeThrough(e.target.value)} />
+              <DateField id="catch-up-through" value={through} onChange={(value) => changeThrough(value)} />
             </div>
             <div className="min-w-64 flex-1">
               <Label htmlFor="catch-up-reason">{t('catchUp.reason')}</Label>
@@ -970,11 +971,11 @@ export function LaborCostingWorkspace(props: {
             </div> : null}
             <div>
               <Label htmlFor="rec-from">{t('reconciliation.from')}</Label>
-              <Input id="rec-from" type="date" value={recFrom} onChange={(e) => setRecFrom(e.target.value)} />
+              <DateField id="rec-from" value={recFrom} onChange={(value) => setRecFrom(value)} />
             </div>
             <div>
               <Label htmlFor="rec-to">{t('reconciliation.to')}</Label>
-              <Input id="rec-to" type="date" value={recTo} onChange={(e) => setRecTo(e.target.value)} />
+              <DateField id="rec-to" value={recTo} onChange={(value) => setRecTo(value)} />
             </div>
             <Button size="sm" variant="outline" onClick={loadReconciliation} disabled={busy}>
               {t('reconciliation.load')}
@@ -1308,12 +1309,12 @@ function RateDrawer({
           onChange={(scale, rounding) => { setPayrollRateScale(scale); setPayrollAmountRounding(rounding) }} />
         <div>
           <Label htmlFor="rate-from">{t('rates.from')}</Label>
-          <Input id="rate-from" type="date" value={effectiveFrom} disabled={!creating} onChange={(event) => setEffectiveFrom(event.target.value)} />
+          <DateField id="rate-from" value={effectiveFrom} disabled={!creating} onChange={(value) => setEffectiveFrom(value)} />
         </div>
         {!creating ? (
           <div>
             <Label htmlFor="rate-to">{t('rates.to')}</Label>
-            <Input id="rate-to" type="date" min={effectiveFrom} value={effectiveTo} onChange={(event) => setEffectiveTo(event.target.value)} />
+            <DateField id="rate-to" min={effectiveFrom} value={effectiveTo} onChange={(value) => setEffectiveTo(value)} />
             <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{t('rates.endDateHint')}</p>
           </div>
         ) : null}

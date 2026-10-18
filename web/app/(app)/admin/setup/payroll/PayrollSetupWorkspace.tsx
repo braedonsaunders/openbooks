@@ -9,6 +9,7 @@ import { readApiErrorMessage } from '../../../../../lib/api-error'
 import { Button, Input, Label, Select } from '@openbooks/ui'
 import type { PayrollSettings } from "@openbooks/engine/payroll/run-setup";
 import type { NetPayClearingWindow } from "@openbooks/engine/payroll/net-pay-clearing";
+import { DateField } from '../../../../../components/date-field'
 
 // Generic, jurisdiction-free slots only. Statutory liabilities (CPP/EI/income
 // tax/…) are declared by the installed country packs and rendered from
@@ -139,13 +140,13 @@ export function PayrollSetupWorkspace(props: {
               </div>
               <div>
                 <Label htmlFor={`npc-from-${window.id}`}>{t('netPayClearing.from')}</Label>
-                <Input id={`npc-from-${window.id}`} type="date" value={window.effectiveFrom}
-                  onChange={(e) => updateClearing(window.id, { effectiveFrom: e.target.value })} />
+                <DateField id={`npc-from-${window.id}`} value={window.effectiveFrom}
+                  onChange={(value) => updateClearing(window.id, { effectiveFrom: value })} />
               </div>
               <div>
                 <Label htmlFor={`npc-to-${window.id}`}>{t('netPayClearing.to')}</Label>
-                <Input id={`npc-to-${window.id}`} type="date" value={window.effectiveTo ?? ''}
-                  onChange={(e) => updateClearing(window.id, { effectiveTo: e.target.value || null })} />
+                <DateField id={`npc-to-${window.id}`} value={window.effectiveTo ?? ''}
+                  onChange={(value) => updateClearing(window.id, { effectiveTo: value || null })} />
               </div>
               <div>
                 <Label htmlFor={`npc-reason-${window.id}`}>{t('netPayClearing.reason')}</Label>

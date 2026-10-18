@@ -12,6 +12,7 @@ import { StripeBillingImport } from "./StripeBillingImport";
 import { usePathname, useSearchParams } from 'next/navigation';
 import { ModuleHomeTabs } from '@/components/module-home/tabs';
 import { ProcessorReceiptPolicies } from './ProcessorReceiptPolicies';
+import { DateField } from '@/components/date-field'
 
 type ProviderKey = "stripe" | "adyen" | "gocardless";
 
@@ -738,7 +739,7 @@ function SurchargeRules({
           </div>
           <div className="space-y-1.5">
             <Label>{t("effectiveFrom")}</Label>
-            <Input type="date" value={effectiveFrom} onChange={(e) => setEffectiveFrom(e.target.value)} />
+            <DateField value={effectiveFrom} onChange={(value) => setEffectiveFrom(value)} />
           </div>
         </div>
         <div className="flex justify-end">

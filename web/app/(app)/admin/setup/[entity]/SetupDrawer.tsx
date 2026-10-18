@@ -41,6 +41,7 @@ import { countryOptions } from '../../../../../lib/countries'
 import { timeZoneOptions } from '@/lib/zoned-date-time'
 import { DirtyDrawerFormScope, useDirtyDrawerState } from '@/components/dirty-url-drawer'
 import { ZonedDateTimeControl } from '@/components/zoned-date-time-control'
+import { DateField } from '@/components/date-field'
 
 type RefOption = { value: string; label: string; scopeValue?: string | null; accountType?: string; minorUnits?: number }
 
@@ -1455,13 +1456,17 @@ export function FieldControl({
         {label}
         {requiredMark}
       </Label>
-      <Input
-        aria-label={label}
-        type={field.kind === 'date' ? 'date' : 'text'}
-        inputMode={numeric ? 'decimal' : undefined}
-        value={String(value ?? '')}
-        onChange={(e) => onChange(e.target.value)}
-      />
+      {field.kind === 'date' ? (
+        <DateField aria-label={label} value={String(value ?? '')} onChange={(next) => onChange(next)} />
+      ) : (
+        <Input
+          aria-label={label}
+          type="text"
+          inputMode={numeric ? 'decimal' : undefined}
+          value={String(value ?? '')}
+          onChange={(e) => onChange(e.target.value)}
+        />
+      )}
     </div>
   )
 }

@@ -11,6 +11,7 @@ import { CalendarDays, ChevronRight, Plus } from "lucide-react";
 import { pickString } from "../../../../../lib/list-params";
 import { Check, ConfigListControls, EmptyList, Field, RowLink, SectionHeading, dataText, drawerHref, post } from "./close-setup-shared";
 import type { CalendarDraft, CalendarRow, Props } from "./close-setup-types";
+import { DateField } from '@/components/date-field'
 
 export function CalendarsTab(props: Props) {
   const t = useTranslations("close.setup");
@@ -238,11 +239,10 @@ export function CalendarDrawer({
             label={t("fields.anchorDate")}
             hint={t("calendars.anchorHint")}
           >
-            <Input
-              type="date"
+            <DateField
               value={draft.anchorDate}
-              onChange={(e) =>
-                setDraft({ ...draft, anchorDate: e.target.value })
+              onChange={(value) =>
+                setDraft({ ...draft, anchorDate: value })
               }
             />
           </Field>

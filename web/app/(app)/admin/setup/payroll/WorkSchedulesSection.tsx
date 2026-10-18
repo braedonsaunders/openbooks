@@ -17,6 +17,7 @@ import { useBusinessToday } from '../../../../../components/business-date-provid
 import { PagedTable } from '../../../../../components/paged-table'
 import { useDirtyClose } from '../../../../../lib/use-dirty-close'
 import { apiJson } from '@/lib/api-error'
+import { DateField } from '@/components/date-field'
 
 /**
  * Work schedules — the hours and days an employee is normally scheduled to
@@ -450,18 +451,16 @@ function ScheduleForm({
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
           <Label help={t('help.effectiveFrom')}>{t('fields.effectiveFrom')}</Label>
-          <Input
-            type="date"
+          <DateField
             value={draft.effectiveFrom}
-            onChange={(event) => patch({ effectiveFrom: event.target.value })}
+            onChange={(value) => patch({ effectiveFrom: value })}
           />
         </div>
         <div>
           <FieldLabel fieldName="workScheduleEffectiveTo">{t('fields.effectiveTo')}</FieldLabel>
-          <Input
-            type="date"
+          <DateField
             value={draft.effectiveTo ?? ''}
-            onChange={(event) => patch({ effectiveTo: event.target.value || null })}
+            onChange={(value) => patch({ effectiveTo: value || null })}
           />
         </div>
       </div>
@@ -529,10 +528,9 @@ function ScheduleForm({
             </div>
             <div>
               <Label help={t('help.cycleAnchor')}>{t('fields.cycleAnchor')}</Label>
-              <Input
-                type="date"
+              <DateField
                 value={draft.cycleAnchor ?? ''}
-                onChange={(event) => patch({ cycleAnchor: event.target.value })}
+                onChange={(value) => patch({ cycleAnchor: value })}
               />
             </div>
           </div>

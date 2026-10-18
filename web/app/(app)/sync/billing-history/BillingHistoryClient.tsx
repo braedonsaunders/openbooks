@@ -17,6 +17,7 @@ import {
   PageHeader,
   Select,
 } from "@openbooks/ui";
+import { DateField } from '../../../../components/date-field'
 
 // --- shapes (mirror the API responses) -----------------------------------------
 
@@ -328,7 +329,7 @@ export function BillingHistoryClient() {
                 </div>
                 <div>
                   <Label>{t("cutover")}</Label>
-                  <Input type="date" value={cutoverOn} onChange={(e) => setCutoverOn(e.target.value)} />
+                  <DateField value={cutoverOn} onChange={(value) => setCutoverOn(value)} />
                 </div>
               </div>
             </DisclosureSection>

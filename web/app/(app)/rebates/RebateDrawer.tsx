@@ -8,6 +8,7 @@ import { readApiErrorMessage } from '@/lib/api-error';
 import { useMoney } from '@/components/money-provider';
 import type { RebateAgreement, RebateClaim } from '@openbooks/engine/revenue/rebates';
 import { cmp } from '@openbooks/engine/money/money';
+import { DateField } from '@/components/date-field'
 
 type Data={agreement:RebateAgreement;claim:RebateClaim|null;parties:{id:string;name:string}[];banks:{id:string;name:string}[];canPost:boolean;today:string;baseCurrency:string;sources:{lineId:string;documentId:string;label:string}[]};
 export function RebateDrawer({data,closeHref}:{data:Data;closeHref:string}) {
@@ -21,7 +22,7 @@ export function RebateDrawer({data,closeHref}:{data:Data;closeHref:string}) {
   } catch {setError('Rebate action could not be completed');}finally{setBusy(false);}
  }
  const reasonInput=<label className="block text-sm">Review reason<Input value={reason} onChange={e=>setReason(e.target.value)}/></label>;
- const dateInput=<label className="block text-sm">Posting or cutoff date<Input type="date" value={date} onChange={e=>setDate(e.target.value)}/></label>;
+ const dateInput=<label className="block text-sm">Posting or cutoff date<DateField value={date} onChange={value=>setDate(value)}/></label>;
  return <UrlDrawer open closeHref={closeHref} size="xl" title={c?'Rebate claim':a.name} description={`${a.code} · ${a.side} · ${c?.status??a.status}`}>
   <div className="space-y-4 p-1">
    {error?<p role="alert" className="text-sm text-destructive">{error}</p>:null}

@@ -5,6 +5,7 @@ import { Input, Label, Select, Textarea } from '@openbooks/ui'
 import type { ActionData, ActionKind, FlowSubjectProfile } from '@openbooks/forms-core'
 import { buildAction, type OrgRole, type OrgUser } from './graph'
 import { TargetsEditor } from './TargetsEditor'
+import { DateField } from '../../../../../components/date-field'
 
 /**
  * Action inspector: kind picker plus per-kind editors. Email/notify bodies
@@ -252,9 +253,14 @@ export function ActionEditor({
                   <option value="true">{t('logic.true')}</option>
                   <option value="false">{t('logic.false')}</option>
                 </Select>
+              ) : selectedField?.type === 'date' ? (
+                <DateField
+                  value={String(action.value.value ?? '')}
+                  onChange={(next) => onChange({ ...action, value: { kind: 'literal', value: next } })}
+                />
               ) : (
                 <Input
-                  type={selectedField?.type === 'date' ? 'date' : selectedField?.type === 'number' ? 'number' : 'text'}
+                  type={selectedField?.type === 'number' ? 'number' : 'text'}
                   value={String(action.value.value ?? '')}
                   onChange={(e) => {
                     const raw = e.target.value

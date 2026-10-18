@@ -9,6 +9,7 @@ import { useTranslations } from 'next-intl'
 import { Badge, Button, FieldHelp, Input, Label, SearchSelect, Select } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../../lib/api-error'
 import { decodeEntityMappings, validateEntityMappingCatalog, type ConnectionEntityMappings, type EntityFieldMapping, type EntityMappingField, type EntityMappingMetadata, type MappingScalar } from '@openbooks/engine/sync/entity-mapping-contract'
+import { DateField } from '@/components/date-field'
 
 export function EntityMappingEditor({ connectionId, value, onChange, onPendingChange }: {
   connectionId?: string; value: unknown; onChange: (value: ConnectionEntityMappings) => void; onPendingChange: (pending: boolean) => void
@@ -157,5 +158,6 @@ function MappingValueControl({ id, field, value, onChange, connectionId, entity,
   if (field.kind === 'choice' || field.kind === 'boolean') return <Select id={id} value={String(value ?? '')} onChange={event => onChange(event.target.value === '' ? undefined : field.kind === 'boolean' ? event.target.value === 'true' : event.target.value)}>
     <option value="">{t('none')}</option>{(field.kind === 'boolean' ? [{ value: 'true', label: t('yes') }, { value: 'false', label: t('no') }] : field.options ?? []).map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
   </Select>
-  return <Input id={id} type={field.kind === 'date' ? 'date' : 'text'} inputMode={field.kind === 'decimal' ? 'decimal' : undefined} value={String(value ?? '')} onChange={event => onChange(event.target.value || undefined)} />
+  if (field.kind === 'date') return <DateField id={id} value={String(value ?? '')} onChange={next => onChange(next || undefined)} />
+  return <Input id={id} type="text" inputMode={field.kind === 'decimal' ? 'decimal' : undefined} value={String(value ?? '')} onChange={event => onChange(event.target.value || undefined)} />
 }

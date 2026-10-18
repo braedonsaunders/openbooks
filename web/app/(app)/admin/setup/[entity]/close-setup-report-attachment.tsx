@@ -2,12 +2,13 @@
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
-import { Badge, Button, Input, Label, SearchSelect, Select, cn } from "@openbooks/ui";
+import { Badge, Button, Label, SearchSelect, Select, cn } from "@openbooks/ui";
 import { ChevronRight, X } from "lucide-react";
 import type { ReportDescriptor } from "../../../../../lib/close/report-descriptor";
 import type { Opt } from "../../../../../lib/documents.ts";
 import { BREAKOUT_DIMENSIONS, Field, periodOptions } from "./close-setup-shared";
 import type { Props, ReportAttachment, ReportDefEntry } from "./close-setup-types";
+import { DateField } from '../../../../../components/date-field'
 
 /** Read-only recap of the parameters a report already carries in its own
  * definition, shown above the editable overrides. */
@@ -164,17 +165,15 @@ export function ReportAttachmentCard({
           {period === "custom" ? (
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label={t("reportParams.from")}>
-                <Input
-                  type="date"
+                <DateField
                   value={attachment.from ?? ""}
-                  onChange={(event) => onChange({ from: event.target.value })}
+                  onChange={(value) => onChange({ from: value })}
                 />
               </Field>
               <Field label={t("reportParams.to")}>
-                <Input
-                  type="date"
+                <DateField
                   value={attachment.to ?? ""}
-                  onChange={(event) => onChange({ to: event.target.value })}
+                  onChange={(value) => onChange({ to: value })}
                 />
               </Field>
             </div>

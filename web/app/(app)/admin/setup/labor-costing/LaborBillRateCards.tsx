@@ -43,6 +43,7 @@ import {
   ADJUSTMENT_TEXT_TARGETS,
 } from "../../../../../lib/rate-adjustment-types";
 import { InteractiveTableRow } from '@/components/interactive-table-row'
+import { DateField } from '@/components/date-field';
 
 export interface BillCardRow {
   id: string;
@@ -650,11 +651,11 @@ function renderHeaderField(args: {
           ))}
         </Select>
       ) : (
-        <Input
-          type={placement.key.startsWith("effective_") ? "date" : "text"}
-          value={value}
-          onChange={(e) => set(e.target.value)}
-        />
+        placement.key.startsWith("effective_") ? (
+          <DateField value={value} onChange={(next) => set(next)} />
+        ) : (
+          <Input value={value} onChange={(e) => set(e.target.value)} />
+        )
       )}
     </div>
   );

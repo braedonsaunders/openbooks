@@ -21,6 +21,7 @@ import {
 import { cn, Input, Label, Select } from '@openbooks/ui'
 import { WizardShell } from '../wizard/WizardShell'
 import { readApiErrorMessage } from '../../../../../lib/api-error'
+import { DateField } from '../../../../../components/date-field'
 
 /**
  * Payroll onboarding wizard — the module's first-run flow, composed on the
@@ -653,11 +654,10 @@ export function PayrollOnboardingWizard(props: {
                   <Label htmlFor="pw-schedule-anchor" help={t('schedule.anchorHelp')}>
                     {t('schedule.anchor')}
                   </Label>
-                  <Input
+                  <DateField
                     id="pw-schedule-anchor"
-                    type="date"
                     value={anchorPeriodEnd}
-                    onChange={(e) => setAnchorPeriodEnd(e.target.value)}
+                    onChange={(value) => setAnchorPeriodEnd(value)}
                   />
                 </div>
                 {multiEntity && (

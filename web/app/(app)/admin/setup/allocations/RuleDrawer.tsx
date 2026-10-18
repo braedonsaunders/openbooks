@@ -43,6 +43,7 @@ import {
 } from './rule-drawer-form'
 import { AllocationRuleWizard } from './AllocationRuleWizard'
 import { ComputationView, type Computation } from './runs-tab'
+import { DateField } from '@/components/date-field'
 
 type DrawerTab = 'general' | 'definition' | 'versions' | 'test'
 
@@ -665,10 +666,10 @@ function DefinitionTab({
           <DrawerSection first title={t('rules.definition.windowHeading')}>
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label={t('rules.definition.effectiveFrom')}>
-                <Input type="date" value={form.effectiveFrom} disabled={!isDraft} aria-label={t('rules.definition.effectiveFrom')} onChange={(e) => set('effectiveFrom', e.target.value)} />
+                <DateField value={form.effectiveFrom} disabled={!isDraft} aria-label={t('rules.definition.effectiveFrom')} onChange={(value) => set('effectiveFrom', value)} />
               </Field>
               <Field label={t('rules.definition.effectiveTo')}>
-                <Input type="date" value={form.effectiveTo} disabled={!isDraft} aria-label={t('rules.definition.effectiveTo')} onChange={(e) => set('effectiveTo', e.target.value)} />
+                <DateField value={form.effectiveTo} disabled={!isDraft} aria-label={t('rules.definition.effectiveTo')} onChange={(value) => set('effectiveTo', value)} />
               </Field>
             </div>
             <Field label={t('rules.definition.bookScope')}>

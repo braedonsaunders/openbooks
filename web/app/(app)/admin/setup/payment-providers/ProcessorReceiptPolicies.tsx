@@ -14,6 +14,7 @@ import { useBusinessToday } from '@/components/business-date-provider'
 import { PagedTable } from '@/components/paged-table'
 import type { ProcessorReceiptPolicy } from '@openbooks/engine/payments/documents'
 import { confirmDialog } from '@/lib/confirm'
+import { DateField } from '@/components/date-field'
 
 type Configuration = {
   canManage: boolean;
@@ -119,8 +120,8 @@ export function ProcessorReceiptPolicies() {
           {data.subsidiaries.map(sub => <option key={sub.id} value={sub.id}>{sub.name}</option>)}
         </Select></div>
         <div><Label>{t('currency')}</Label><Input disabled={editing.existing || !data.canManage} maxLength={3} value={editing.policy.currency} onChange={event => patch({ currency: event.target.value.toUpperCase() })} /></div>
-        <div><Label>{t('effectiveFrom')}</Label><Input disabled={editing.existing || !data.canManage} type="date" value={editing.policy.effectiveFrom} onChange={event => patch({ effectiveFrom: event.target.value })} /></div>
-        <div><Label>{t('effectiveTo')}</Label><Input disabled={!data.canManage} type="date" value={editing.policy.effectiveTo ?? ''} onChange={event => patch({ effectiveTo: event.target.value || null })} /></div>
+        <div><Label>{t('effectiveFrom')}</Label><DateField disabled={editing.existing || !data.canManage} value={editing.policy.effectiveFrom} onChange={value => patch({ effectiveFrom: value })} /></div>
+        <div><Label>{t('effectiveTo')}</Label><DateField disabled={!data.canManage} value={editing.policy.effectiveTo ?? ''} onChange={value => patch({ effectiveTo: value || null })} /></div>
         <div><Label>{t('reason')}</Label><Input disabled={!data.canManage} maxLength={500} value={reason} onChange={event => setReason(event.target.value)} /></div>
       </div> : null}
     </AsyncUrlDrawer>

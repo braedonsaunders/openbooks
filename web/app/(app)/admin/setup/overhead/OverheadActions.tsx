@@ -12,6 +12,7 @@ import { ApiResponseError, throwApiErrorIfNotOk } from '@/lib/api-error'
 import { confirmDialog } from '@/lib/confirm'
 import { cmp } from '@openbooks/engine/money/money'
 import { formatOverheadPublishRate } from '@openbooks/engine/projects/overhead-rates'
+import { DateField } from '@/components/date-field'
 
 export interface DeptRate {
   id: string
@@ -195,7 +196,7 @@ export function OverheadActions({ departments, projectTypes, autoOpen }: { depar
       </div>
       <div className="max-w-[12rem] space-y-1">
         <Label>{t('effectiveFrom')}</Label>
-        <Input type="date" value={effectiveFrom} onChange={(e) => setEffectiveFrom(e.target.value)} />
+        <DateField value={effectiveFrom} onChange={(value) => setEffectiveFrom(value)} />
       </div>
     </div>
   )

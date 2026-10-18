@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 import { Button, Input, Label, SearchSelect, Select } from '@openbooks/ui'
 import { PagedTable, type PagedColumn } from '../../../../../components/paged-table'
 import { readApiErrorMessage } from '../../../../../lib/api-error'
+import { DateField } from '../../../../../components/date-field'
 
 type Option = { value: string; label: string }
 type Scope = {
@@ -163,8 +164,8 @@ export function ConstructionRateScheduleEditor({
           <div className="space-y-1.5"><Label htmlFor="rate-line-fringe">{t('fringeRate')}</Label><Input id="rate-line-fringe" inputMode="decimal" value={fringeRate} onChange={(event) => setFringeRate(event.target.value)} /></div>
           <div className="space-y-1.5"><Label htmlFor="rate-line-credit">{t('fringeCreditRate')}</Label><Input id="rate-line-credit" inputMode="decimal" value={fringeCreditRate} onChange={(event) => setFringeCreditRate(event.target.value)} /></div>
           <div className="space-y-1.5"><Label htmlFor="rate-line-ot">{t('overtimeMultiplier')}</Label><Input id="rate-line-ot" inputMode="decimal" value={overtimeMultiplier} onChange={(event) => setOvertimeMultiplier(event.target.value)} /></div>
-          <div className="space-y-1.5"><Label htmlFor="rate-line-from">{t('effectiveFrom')}</Label><Input id="rate-line-from" type="date" value={effectiveFrom} onChange={(event) => setEffectiveFrom(event.target.value)} /></div>
-          <div className="space-y-1.5"><Label htmlFor="rate-line-to">{t('effectiveTo')}</Label><Input id="rate-line-to" type="date" value={effectiveTo} onChange={(event) => setEffectiveTo(event.target.value)} /></div>
+          <div className="space-y-1.5"><Label htmlFor="rate-line-from">{t('effectiveFrom')}</Label><DateField id="rate-line-from" value={effectiveFrom} onChange={(value) => setEffectiveFrom(value)} /></div>
+          <div className="space-y-1.5"><Label htmlFor="rate-line-to">{t('effectiveTo')}</Label><DateField id="rate-line-to" value={effectiveTo} onChange={(value) => setEffectiveTo(value)} /></div>
         </div>
         <Button type="button" disabled={busy || loading} onClick={addLine}>{busy ? tc('actions.saving') : t('addLine')}</Button>
         {loading ? <p className="text-sm text-slate-500">{tc('labels.loading')}</p> : data.lines.length ? <PagedTable rows={[...data.lines]} columns={columns} rowKey={(line) => line.id} empty={t('noLines')} /> : <p className="text-sm text-slate-500">{t('noLines')}</p>}

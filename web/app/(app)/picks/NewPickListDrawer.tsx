@@ -22,6 +22,7 @@ import { resolveScanValue } from '../../../lib/scan'
 import { fulfillmentRequest } from '../_fulfillment/fulfillment-client'
 import { fulfillmentHref } from '../_fulfillment/FulfillmentSections'
 import type { NewPickListData } from '../_fulfillment/types'
+import { DateField } from '@/components/date-field'
 
 interface PickRow extends Record<string, unknown> {
   /** Client-only grid identity; never sent. */
@@ -367,7 +368,7 @@ export function NewPickListDrawer({ data }: { data: NewPickListData }) {
         return (
           <>
             <FieldLabel fieldName={label}>{label}</FieldLabel>
-            <Input type="date" aria-label={label} value={documentDate} disabled={!editable} onChange={(event) => { setDocumentDate(event.target.value); setDirty(true) }} />
+            <DateField aria-label={label} value={documentDate} disabled={!editable} onChange={(value) => { setDocumentDate(value); setDirty(true) }} />
           </>
         )
       }

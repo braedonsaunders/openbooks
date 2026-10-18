@@ -7,6 +7,7 @@ import { fetchAction } from '@braedonsaunders/appkit-errors'
 import { Alert, Button, Input, Label, Select } from '@openbooks/ui'
 import { useBusinessToday } from '../../../../../components/business-date-provider'
 import { useAppAction } from '../../../../../lib/use-app-action'
+import { DateField } from '../../../../../components/date-field'
 
 interface Fact {
   key: string
@@ -163,12 +164,14 @@ export function EmployerFactsSection() {
             {fact && <div className="rounded-md border p-3 text-sm"><p>{fact.legalBasis}</p><p className="mt-1 text-muted-foreground">{fact.refusalReason}</p></div>}
             <div className="space-y-1">
               <Label htmlFor="employer-fact-effective">{t('effectiveFrom')}</Label>
-              <Input id="employer-fact-effective" type={fact?.effectivePeriod === 'calendar_year' ? 'number' : 'date'} min={fact?.effectivePeriod === 'calendar_year' ? '2000' : undefined} max={fact?.effectivePeriod === 'calendar_year' ? '2100' : undefined} value={fact?.effectivePeriod === 'calendar_year' ? effectiveFrom.slice(0, 4) : effectiveFrom} onChange={(event) => setEffectiveFrom(fact?.effectivePeriod === 'calendar_year' ? `${event.target.value}-01-01` : event.target.value)} />
+              {fact?.effectivePeriod === 'calendar_year'
+                ? <Input id="employer-fact-effective" type="number" min="2000" max="2100" value={effectiveFrom.slice(0, 4)} onChange={(event) => setEffectiveFrom(`${event.target.value}-01-01`)} />
+                : <DateField id="employer-fact-effective" value={effectiveFrom} onChange={(next) => setEffectiveFrom(next)} />}
             </div>
             {fact?.effectiveThroughRequiredFor?.includes(value) && (
               <div className="space-y-1">
                 <Label htmlFor="employer-fact-through">Effective through (inclusive)</Label>
-                <Input id="employer-fact-through" type="date" min={effectiveFrom} value={effectiveThrough} onChange={(event) => setEffectiveThrough(event.target.value)} required />
+                <DateField id="employer-fact-through" min={effectiveFrom} value={effectiveThrough} onChange={(value) => setEffectiveThrough(value)} required />
               </div>
             )}
             {fact?.kind === 'choice' ? (

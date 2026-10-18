@@ -53,6 +53,7 @@ import {
   type WizardDraft,
   type WizardDriver,
 } from './rule-wizard'
+import { DateField } from '../../../../../components/date-field'
 
 interface Option {
   id: string
@@ -786,10 +787,10 @@ export function AllocationRuleWizard({ closeHref, payrollExpenses = false }: { c
         <StepFrame title={t('wizard.policy.title')} description={t('wizard.policy.description')}>
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label={t('rules.definition.effectiveFrom')}>
-              <Input type="date" value={effectiveFrom || today} required aria-label={t('rules.definition.effectiveFrom')} onChange={(e) => setEffectiveFrom(e.target.value)} />
+              <DateField value={effectiveFrom || today} required aria-label={t('rules.definition.effectiveFrom')} onChange={(value) => setEffectiveFrom(value)} />
             </Field>
             <Field label={t('rules.definition.effectiveTo')}>
-              <Input type="date" value={effectiveTo} min={effectiveFrom || today} aria-label={t('rules.definition.effectiveTo')} onChange={(e) => setEffectiveTo(e.target.value)} />
+              <DateField value={effectiveTo} min={effectiveFrom || today} aria-label={t('rules.definition.effectiveTo')} onChange={(value) => setEffectiveTo(value)} />
             </Field>
           </div>
           {draft.mode === 'entry' ? (

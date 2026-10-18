@@ -16,6 +16,7 @@ import { readApiErrorMessage } from '@/lib/api-error'
 import { promptDialog } from '@/lib/prompt'
 import { useDirtyClose } from '@/lib/use-dirty-close'
 import type { InternalBillingDrawerData, InternalBillingOption } from '@/lib/internal-billing'
+import { DateField } from '@/components/date-field'
 
 /**
  * The internal billing flyout. The simple path is: pick the rule (chosen for
@@ -349,8 +350,8 @@ export function InternalBillingDrawer(props: InternalBillingDrawerData & { initi
               </Select>
             )) : null}
             {field('ib-date', tCommon('labels.date'), (
-              <Input id="ib-date" type="date" value={header.documentDate} disabled={!editable}
-                onChange={(event) => setHeaderField('documentDate', event.target.value)} />
+              <DateField id="ib-date" value={header.documentDate} disabled={!editable}
+                onChange={(value) => setHeaderField('documentDate', value)} />
             ))}
             {picker('ib-subsidiary', tCommon('labels.subsidiary'), header.subsidiaryId, props.options.subsidiaries, (value) => setHeaderField('subsidiaryId', value))}
             {picker('ib-department', tCommon('labels.department'), header.departmentId, props.options.departments, (value) => setHeaderField('departmentId', value))}

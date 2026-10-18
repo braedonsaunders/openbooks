@@ -11,6 +11,7 @@ import { readApiErrorMessage } from '../../../../../lib/api-error'
 import { confirmDialog } from '../../../../../lib/confirm'
 import { useBusinessToday } from '../../../../../components/business-date-provider'
 import type { FinancialProfile, InvoicingProfile, BackupProfile, PnlLine } from '@openbooks/schema'
+import { DateField } from '../../../../../components/date-field'
 
 export interface ProjectTypeRow {
   id: string
@@ -349,11 +350,10 @@ export function ProjectTypesWorkspace({
                     <div className="mt-3 grid gap-3 sm:grid-cols-2">
                       <div className="space-y-1.5">
                         <Label>{t('financialEffectiveFrom')}</Label>
-                        <Input
-                          type="date"
+                        <DateField
                           min={today}
                           value={financialEffectiveFrom}
-                          onChange={(e) => setFinancialEffectiveFrom(e.target.value)}
+                          onChange={(value) => setFinancialEffectiveFrom(value)}
                         />
                       </div>
                       <div className="space-y-1.5">

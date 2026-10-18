@@ -6,6 +6,7 @@ import { Button, Input, SearchSelect, Select } from '@openbooks/ui'
 import type { FlowSubjectProfile, LogicRule } from '@openbooks/forms-core'
 import type { OrgUser } from './graph'
 import { fieldPickerOptions, withRuleValueType } from './logic-rule-builder'
+import { DateField } from '../../../../../components/date-field'
 
 /**
  * Recursive LogicRule editor — the one condition language shared with the
@@ -137,7 +138,7 @@ function ValueInput({
     )
   }
   if (fieldType === 'date') {
-    return <Input type="date" value={String(value ?? '')} onChange={(e) => set(e.target.value)} />
+    return <DateField value={String(value ?? '')} onChange={(value) => set(value)} />
   }
   if (rule.field === 'status') {
     return (

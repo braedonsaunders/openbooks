@@ -13,6 +13,7 @@ import { PagedTable, type PagedColumn } from '../../../../../components/paged-ta
 import type { LineGridOption } from '../../../../../components/line-grid'
 import { confirmDialog } from '@/lib/confirm'
 import { refusalMessageFromBody } from '@/lib/api-error'
+import { DateField } from '@/components/date-field'
 
 export interface RateBookLine extends Record<string, unknown> {
   itemId: string
@@ -330,8 +331,8 @@ export function RateBookDrawer({
                   <option value="time_type_multipliers">{tLabor('derivations.time_type_multipliers')}</option>
                 </Select>
               </div>
-              <div className="w-44 space-y-1.5"><Label htmlFor="rate-book-effective-from">{tRates('effectiveFrom')}</Label><Input id="rate-book-effective-from" type="date" value={effectiveFrom} onChange={(event) => setEffectiveFrom(event.target.value)} /></div>
-              <div className="w-44 space-y-1.5"><Label htmlFor="rate-book-effective-to" help={t('effectiveToHelp')}>{tRates('effectiveTo')}</Label><Input id="rate-book-effective-to" type="date" min={effectiveFrom || undefined} value={effectiveTo} onChange={(event) => setEffectiveTo(event.target.value)} /></div>
+              <div className="w-44 space-y-1.5"><Label htmlFor="rate-book-effective-from">{tRates('effectiveFrom')}</Label><DateField id="rate-book-effective-from" value={effectiveFrom} onChange={(value) => setEffectiveFrom(value)} /></div>
+              <div className="w-44 space-y-1.5"><Label htmlFor="rate-book-effective-to" help={t('effectiveToHelp')}>{tRates('effectiveTo')}</Label><DateField id="rate-book-effective-to" min={effectiveFrom || undefined} value={effectiveTo} onChange={(value) => setEffectiveTo(value)} /></div>
               <Button type="button" variant="outline" onClick={addLine}><Plus size={15} />{t('addItem')}</Button>
             </div>
           </div>

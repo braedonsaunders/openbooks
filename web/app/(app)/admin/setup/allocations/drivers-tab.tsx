@@ -31,6 +31,7 @@ import {
   type DriverFormState,
   type DriverSourceKind,
 } from './driver-form'
+import { DateField } from '../../../../../components/date-field'
 
 interface Driver {
   id: string
@@ -369,15 +370,12 @@ function ManualValuesSection({
                 </TableCell>
                 <TableCell>
                   <span className="flex items-center gap-1">
-                    <Input
-                      type="date"
+                    <DateField
                       className="h-8 w-36"
                       defaultValue={row.effectiveTo ?? ''}
                       aria-label={t('endValue')}
-                      onBlur={(e) => {
-                        if (e.target.value && e.target.value !== (row.effectiveTo ?? '')) {
-                          void patchValue(row, { effectiveTo: e.target.value || null })
-                        }
+                      onChange={(value) => {
+                        if (value && value !== (row.effectiveTo ?? '')) void patchValue(row, { effectiveTo: value })
                       }}
                     />
                     <Button type="button" variant="ghost" size="sm" onClick={() => void removeValue(row)}>
@@ -410,19 +408,17 @@ function ManualValuesSection({
           </Field>
         </div>
         <Field label={t('effectiveFrom')}>
-          <Input
-            type="date"
+          <DateField
             value={valueDraft.effectiveFrom}
             aria-label={t('effectiveFrom')}
-            onChange={(e) => setValueDraft((d) => ({ ...d, effectiveFrom: e.target.value }))}
+            onChange={(value) => setValueDraft((d) => ({ ...d, effectiveFrom: value }))}
           />
         </Field>
         <Field label={t('effectiveTo')}>
-          <Input
-            type="date"
+          <DateField
             value={valueDraft.effectiveTo}
             aria-label={t('effectiveTo')}
-            onChange={(e) => setValueDraft((d) => ({ ...d, effectiveTo: e.target.value }))}
+            onChange={(value) => setValueDraft((d) => ({ ...d, effectiveTo: value }))}
           />
         </Field>
         <Field label={t('value')}>
@@ -964,13 +960,12 @@ export function DriversTab() {
                 />
               </Field>
               <Field label={t('asOfDate')}>
-                <Input
-                  type="date"
+                <DateField
                   value={previewDate}
                   aria-label={t('asOfDate')}
-                  onChange={(e) => {
-                    setPreviewDate(e.target.value)
-                    if (e.target.value) setPreviewPeriod('')
+                  onChange={(value) => {
+                    setPreviewDate(value)
+                    if (value) setPreviewPeriod('')
                   }}
                 />
               </Field>

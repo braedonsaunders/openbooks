@@ -7,7 +7,6 @@ import {
   Badge,
   Button,
   DisclosureSection,
-  Input,
   Label,
   SearchSelect,
   Select,
@@ -23,6 +22,7 @@ import { useAppAction } from "../../../../../lib/use-app-action";
 import { useBusinessToday } from "../../../../../components/business-date-provider";
 import { confirmDialog } from "../../../../../lib/confirm";
 import { promptDialog } from "../../../../../lib/prompt";
+import { DateField } from '../../../../../components/date-field'
 
 type UnlinkedCustomer = {
   stripeId: string;
@@ -319,11 +319,11 @@ export function StripeBillingImport() {
       <div className="flex flex-wrap items-end gap-3">
         <div className="space-y-1.5">
           <Label>{t("billingImport.since")}</Label>
-          <Input type="date" value={since} max={until} onChange={(e) => setSince(e.target.value)} />
+          <DateField value={since} max={until} onChange={(value) => setSince(value)} />
         </div>
         <div className="space-y-1.5">
           <Label>{t("billingImport.until")}</Label>
-          <Input type="date" value={until} min={since} max={today} onChange={(e) => setUntil(e.target.value)} />
+          <DateField value={until} min={since} max={today} onChange={(value) => setUntil(value)} />
         </div>
         <Button disabled={busy} onClick={() => void runImport()}>
           {t("billingImport.runImport")}

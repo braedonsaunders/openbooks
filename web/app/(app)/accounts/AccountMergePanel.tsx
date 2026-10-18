@@ -4,8 +4,9 @@ import { useId, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { Badge, Button, Input, Label, SearchSelect, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Textarea } from '@openbooks/ui'
+import { Badge, Button, Label, SearchSelect, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Textarea } from '@openbooks/ui'
 import { ApiResponseError, apiJson } from '../../../lib/api-error'
+import { DateField } from '../../../components/date-field'
 
 type Option = { value: string; label: string }
 
@@ -145,7 +146,7 @@ export function AccountMergePanel({
         </div>
         <div className="space-y-1.5">
           <Label htmlFor={`${fieldId}-date`}>{t('merge.effectiveDate')}</Label>
-          <Input id={`${fieldId}-date`} type="date" value={effectiveDate} max={today} onChange={(event) => { setEffectiveDate(event.target.value); setPreview(null) }} />
+          <DateField id={`${fieldId}-date`} value={effectiveDate} max={today} onChange={(value) => { setEffectiveDate(value); setPreview(null) }} />
         </div>
       </section>
       <div className="flex flex-wrap gap-2">
