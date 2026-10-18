@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
 import type { CapTable } from '@openbooks/engine/equity'
-import { capTableLayout, parseDimension, parseInstrument } from './equity-cap-table'
+import { capTableFilters, capTableLayout, parseDimension, parseInstrument } from './equity-cap-table'
 
 const COMMON = 'c0000000-0000-4000-8000-000000000001'
 const SERIES = 'c0000000-0000-4000-8000-000000000002'
@@ -53,7 +53,7 @@ test('the view and instrument filters default to every instrument by class and i
 })
 
 test('by class across every instrument, the totals reconcile to the fully diluted capitalization', () => {
-  const layout = capTableLayout(table, 'class', 'all')
+  const layout = capTableLayout(table, { dimension: 'class', instrument: 'all', query: '' })
   assert.deepEqual(layout.columns.map((column) => column.key), ['authorized', 'outstanding', 'asConverted', 'awards', 'pool', 'fullyDiluted', 'outstandingPercent', 'fullyDilutedPercent'])
   assert.deepEqual(layout.lines.map((line) => line.shareClassId), [COMMON, SERIES])
   assert.equal(layout.totals.fullyDiluted, table.totals.fullyDiluted)
@@ -63,23 +63,34 @@ test('by class across every instrument, the totals reconcile to the fully dilute
 })
 
 test('one award kind by class or holder lists only who holds it, with its vested and unvested units', () => {
-  const byClass = capTableLayout(table, 'class', 'option')
+  const byClass = capTableLayout(table, { dimension: 'class', instrument: 'option', query: '' })
   assert.deepEqual(byClass.columns.map((column) => column.key), ['instrumentOutstanding', 'vested', 'unvested'])
   assert.deepEqual(byClass.lines.map((line) => [line.shareClassId, line.values]), [[COMMON, { instrumentOutstanding: '48000', vested: '12000', unvested: '36000' }]])
-  const byHolder = capTableLayout(table, 'holder', 'warrant')
+  const byHolder = capTableLayout(table, { dimension: 'holder', instrument: 'warrant', query: '' })
   assert.deepEqual(byHolder.lines.map((line) => line.holderPartyId), [INVESTOR])
   assert.equal(byHolder.totals.instrumentOutstanding, '10000')
-  assert.deepEqual(capTableLayout(table, 'holder', 'rsu').lines.map((line) => line.values.unvested), ['2000'])
+  assert.deepEqual(capTableLayout(table, { dimension: 'holder', instrument: 'rsu', query: '' }).lines.map((line) => line.values.unvested), ['2000'])
 })
 
 test('shares by holder show each class column and leave out holders with only awards', () => {
-  const layout = capTableLayout(table, 'holder', 'share')
+  const layout = capTableLayout(table, { dimension: 'holder', instrument: 'share', query: '' })
   assert.deepEqual(layout.columns.map((column) => column.key), [`class:${COMMON}`, `class:${SERIES}`, 'asConverted', 'outstandingPercent'])
   assert.deepEqual(layout.lines.map((line) => line.holderPartyId), [FOUNDER, INVESTOR])
   assert.equal(layout.totals[`class:${COMMON}`], '4000000')
   assert.equal(layout.totals.asConverted, table.totals.asConvertedOutstanding)
-  const everything = capTableLayout(table, 'holder', 'all')
+  const everything = capTableLayout(table, { dimension: 'holder', instrument: 'all', query: '' })
   assert.equal(everything.lines.length, 3)
   assert.equal(everything.totals.options, '48000')
   assert.equal(everything.totals.fullyDiluted, '5060000', 'holder totals exclude the unallocated pool')
+})
+
+test('a search keeps the matching classes or holders and totals what remains', () => {
+  const parties = { [FOUNDER]: 'Founder One', [INVESTOR]: 'Seed Fund', [EMPLOYEE]: 'Employee One' }
+  const holders = capTableLayout(table, capTableFilters({ by: 'holder', q: '  one ' }), parties)
+  assert.deepEqual(holders.lines.map((line) => line.holderPartyId), [FOUNDER, EMPLOYEE], 'case-folded substring of the holder name')
+  assert.equal(holders.totals.fullyDiluted, '4050000')
+  const classes = capTableLayout(table, capTableFilters({ q: 'sa' }), parties)
+  assert.deepEqual(classes.lines.map((line) => line.shareClassId), [SERIES], 'the class code or name matches')
+  assert.equal(classes.totals.fullyDiluted, '1000000')
+  assert.deepEqual(capTableFilters({ by: 'holder', instrument: 'rsu', q: null }), { dimension: 'holder', instrument: 'rsu', query: '' })
 })

@@ -210,9 +210,6 @@
     "emptyClasses": "Ainda não há classes de ações. Registre a primeira classe da entidade em Classes de ações.",
     "emptyHolders": "Ainda não há titulares. Emita ações ou outorgas para incluir titulares na tabela de capitalização.",
     "amend": "Alterar",
-    "totalOutstanding": "Em circulação",
-    "totalFullyDiluted": "Totalmente diluído",
-    "poolUnallocated": "Pool não alocado",
     "columns": {
       "class": "Classe",
       "authorized": "Autorizadas",

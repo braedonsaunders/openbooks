@@ -4,10 +4,8 @@ import type { CapTableView } from '@openbooks/engine/equity'
 import { capTableExportData, capTableExportHref, type CapTableExportLabels } from './equity-cap-table-export'
 
 const labels: CapTableExportLabels = {
-  title: 'Main Co — cap table', dateRange: 'As of 2026-07-31', class: 'Class', kind: (kind) => kind, holder: 'Holder', authorized: 'Authorized',
-  outstanding: 'Outstanding', asConverted: 'As converted', awards: 'Awards', pool: 'Pool', fullyDiluted: 'Fully diluted',
-  outstandingPercent: 'Outstanding %', fullyDilutedPercent: 'Fully diluted %', options: 'Options', rsus: 'RSUs', warrants: 'Warrants',
-  totalOutstanding: 'Total outstanding', totalFullyDiluted: 'Total fully diluted', poolUnallocated: 'Unallocated pool',
+  title: 'Main Co — cap table', dateRange: 'As of 2026-07-31', class: 'Class', kind: (kind) => kind, holder: 'Holder',
+  column: (key) => `[${key}]`, total: 'Total',
 }
 
 const view = {
@@ -30,16 +28,22 @@ const view = {
   },
 } as CapTableView
 
+const all = (dimension: 'class' | 'holder') => ({ dimension, instrument: 'all' as const, query: '' })
+
 test('the cap table exports by class and by holder with share counts kept as exact text', () => {
-  const byClass = capTableExportData(view, 'class', labels)
+  const byClass = capTableExportData(view, all('class'), labels)
   assert.equal(byClass.groups[0]!.rows[0]![2], '9007199254740993', 'a count above 2^53 is never coerced through a float')
   assert.equal(byClass.groups[0]!.columns.length, byClass.groups[0]!.rows[0]!.length)
-  const byHolder = capTableExportData(view, 'holder', labels)
+  const byHolder = capTableExportData(view, all('holder'), labels)
   assert.deepEqual(byHolder.groups[0]!.columns.slice(0, 2), ['Holder', 'CS'])
   assert.equal(byHolder.groups[0]!.rows[0]![0], 'Founder One')
-  assert.deepEqual(byHolder.summary.map((item) => item.value), ['9007199254740993', '9007199254740993', '0'])
+  assert.deepEqual(byHolder.groups[0]!.rows.at(-1)!.slice(0, 2), ['Total', '9007199254740993'], 'the totals row the page shows closes the export')
 })
 
-test('the export link names the legal entity, date and basis', () => {
-  assert.equal(capTableExportHref('sub', '2026-07-31', 'holder'), '/api/equity/cap-table/export?subsidiaryId=sub&asOf=2026-07-31&by=holder')
+test('the export link carries the legal entity, date and every filter the page applies', () => {
+  assert.equal(capTableExportHref('sub', '2026-07-31', all('holder')), '/api/equity/cap-table/export?subsidiaryId=sub&asOf=2026-07-31&by=holder')
+  assert.equal(
+    capTableExportHref('sub', '2026-07-31', { dimension: 'class', instrument: 'option', query: 'Series A' }),
+    '/api/equity/cap-table/export?subsidiaryId=sub&asOf=2026-07-31&by=class&instrument=option&q=Series+A',
+  )
 })

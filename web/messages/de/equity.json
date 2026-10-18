@@ -210,9 +210,6 @@
     "emptyClasses": "Noch keine Anteilsklassen. Erfassen Sie die erste Klasse der Gesellschaft unter Anteilsklassen.",
     "emptyHolders": "Noch keine Inhaber. Geben Sie Anteile oder Zuteilungen aus, um Inhaber in die Kapitaltabelle aufzunehmen.",
     "amend": "Ändern",
-    "totalOutstanding": "Ausstehend",
-    "totalFullyDiluted": "Voll verwässert",
-    "poolUnallocated": "Nicht zugeteilter Pool",
     "columns": {
       "class": "Klasse",
       "authorized": "Genehmigt",

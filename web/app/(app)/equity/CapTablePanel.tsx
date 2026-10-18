@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl'
 import { Badge, TableCell, TableRow } from '@openbooks/ui'
 import { RegisteredListTable } from '@/components/registered-list-table'
 import { ListFilterSelect } from '@/components/list-filter-select'
+import { SearchInput } from '@/components/search-input'
 import { capTableExportHref } from '@/lib/equity-cap-table-export'
 import { capTableLayout, CAP_TABLE_INSTRUMENTS, type CapTableColumn, type CapTableLine } from '@/lib/equity-cap-table'
 import { ExportMenu } from '../reports/ExportMenu'
@@ -16,16 +17,18 @@ const BASE = '/equity'
 
 /**
  * The cap table on the as-of date, in the shared filtered table: the
- * dimension (share class or holder) and the instrument are toolbar filters
- * in the URL, beside the native as-of control. Each holder opens their
- * securities in the register.
+ * search, the dimension (share class or holder) and the instrument are
+ * toolbar filters in the URL, beside the native as-of control, and the
+ * export carries the same filters. Each holder opens their securities in the
+ * register.
  */
 export function EquityCapTablePanel({ view }: { view: CapTableViewData | null }) {
   const t = useTranslations('equity')
   const shares = useShares()
   if (!view) return null
   const { table, context } = view
-  const layout = capTableLayout(table, view.dimension, view.instrument)
+  const filters = { dimension: view.dimension, instrument: view.instrument, query: view.query }
+  const layout = capTableLayout(table, filters, view.parties)
   const classById = new Map(table.classes.map((row) => [row.shareClassId, row]))
   const header = (column: CapTableColumn) => ('code' in column
     ? <span className="font-mono">{column.code}</span>
@@ -47,7 +50,6 @@ export function EquityCapTablePanel({ view }: { view: CapTableViewData | null })
             </span>
           ) : null
         },
-        search: (line: CapTableLine) => classById.get(line.shareClassId ?? '')?.code ?? '',
       }
     : {
         key: 'holder', header: <>{t('capTable.columns.holder')}</>, headerClassName: HEAD, className: CELL,
@@ -56,7 +58,6 @@ export function EquityCapTablePanel({ view }: { view: CapTableViewData | null })
             {view.parties[line.holderPartyId ?? ''] ?? line.holderPartyId}
           </Link>
         ),
-        search: (line: CapTableLine) => view.parties[line.holderPartyId ?? ''] ?? '',
       }
   return (
     <div className="space-y-4">
@@ -67,9 +68,11 @@ export function EquityCapTablePanel({ view }: { view: CapTableViewData | null })
         rows={layout.lines}
         rowKey={(line) => line.key}
         empty={view.dimension === 'class' ? t('capTable.emptyClasses') : t('capTable.emptyHolders')}
-        resetPageKey={`${view.dimension}:${view.instrument}`}
+        resetPageKey={`${view.dimension}:${view.instrument}:${view.query}`}
+        searchable={false}
         toolbarAfter={
           <div className="flex flex-1 flex-wrap items-center gap-2">
+            <SearchInput />
             <ListFilterSelect
               basePath={BASE} currentParams={context.params} paramKey="by" pageParamKey={null} label={t('capTable.filters.view')}
               options={[{ value: '', label: t('capTable.by.class') }, { value: 'holder', label: t('capTable.by.holder') }]}
@@ -83,7 +86,7 @@ export function EquityCapTablePanel({ view }: { view: CapTableViewData | null })
             <div className="ml-auto flex items-center gap-2">
               <OpenReport href={view.asOfReportHref} label={t('capTable.openAsOfReport')} />
               <OpenReport href={view.reportHref} label={t('capTable.report')} />
-              <ExportMenu baseHref={capTableExportHref(context.subsidiaryId, context.asOf, view.dimension)} kind="cap-table" />
+              <ExportMenu baseHref={capTableExportHref(context.subsidiaryId, context.asOf, filters)} kind="cap-table" />
             </div>
           </div>
         }

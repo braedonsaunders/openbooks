@@ -210,9 +210,6 @@
     "emptyClasses": "株式クラスはまだありません。「株式クラス」で法人の最初のクラスを登録してください。",
     "emptyHolders": "保有者がまだいません。株式またはアワードを発行すると、保有者が資本政策表に追加されます。",
     "amend": "変更",
-    "totalOutstanding": "発行済",
-    "totalFullyDiluted": "完全希薄化後",
-    "poolUnallocated": "未割当プール",
     "columns": {
       "class": "クラス",
       "authorized": "授権",

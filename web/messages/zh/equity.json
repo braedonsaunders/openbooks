@@ -210,9 +210,6 @@
     "emptyClasses": "尚无股份类别。请在“股份类别”中登记法律实体的首个类别。",
     "emptyHolders": "尚无持有人。发行股份或奖励后，持有人将出现在股权结构表中。",
     "amend": "修改",
-    "totalOutstanding": "流通",
-    "totalFullyDiluted": "完全稀释",
-    "poolUnallocated": "未分配期权池",
     "columns": {
       "class": "类别",
       "authorized": "授权",

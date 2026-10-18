@@ -75,8 +75,38 @@ const positionValues = (row: { outstanding: bigint; vested: bigint; unvested: bi
   instrumentOutstanding: row.outstanding.toString(), vested: row.vested.toString(), unvested: row.unvested.toString(),
 })
 
-/** Rows and columns of the cap table for one dimension and instrument. */
-export function capTableLayout(table: CapTable, dimension: CapTableDimension, instrument: CapTableInstrument): CapTableLayout {
+/** Every filter the cap table view applies; the export applies the same ones. */
+export interface CapTableFilters {
+  dimension: CapTableDimension
+  instrument: CapTableInstrument
+  /** Text search over the class code and name, or the holder's name. */
+  query: string
+}
+
+/** The filters a cap table URL (the page's, or its export's) carries. */
+export function capTableFilters(params: { by?: string | null; instrument?: string | null; q?: string | null }): CapTableFilters {
+  return { dimension: parseDimension(params.by), instrument: parseInstrument(params.instrument), query: (params.q ?? '').trim() }
+}
+
+/**
+ * Rows and columns of the cap table for its filters. A search keeps the
+ * lines whose class code or name, or holder name, contains the text (case
+ * folded), and the totals sum the lines that remain.
+ */
+export function capTableLayout(table: CapTable, filters: CapTableFilters, parties: Readonly<Record<string, string>> = {}): CapTableLayout {
+  const { dimension, instrument } = filters
+  const layout = unfilteredLayout(table, dimension, instrument)
+  const query = filters.query.toLocaleLowerCase()
+  if (!query) return layout
+  const classes = new Map(table.classes.map((row) => [row.shareClassId, `${row.code} ${row.name}`]))
+  const lines = layout.lines.filter((line) => {
+    const text = line.shareClassId ? classes.get(line.shareClassId) ?? '' : parties[line.holderPartyId ?? ''] ?? ''
+    return text.toLocaleLowerCase().includes(query)
+  })
+  return { columns: layout.columns, lines, totals: sumColumns(layout.columns, lines) }
+}
+
+function unfilteredLayout(table: CapTable, dimension: CapTableDimension, instrument: CapTableInstrument): CapTableLayout {
   const award = instrument === 'option' || instrument === 'rsu' || instrument === 'warrant' ? instrument : null
   let columns: CapTableColumn[]
   let lines: CapTableLine[]

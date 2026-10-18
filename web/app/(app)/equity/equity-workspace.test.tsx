@@ -23,6 +23,7 @@ const { ViewTabsProvider, PageViewTabs } = await import('../../../components/mod
 const { EquityOwnership, EquityActivityList } = await import('./OverviewSections')
 const { AttentionList } = await import('../purchasing/sections')
 const { EquityCapTablePanel } = await import('./CapTablePanel')
+const { capTableExportData } = await import('../../../lib/equity-cap-table-export')
 const { EquityRunsPanel } = await import('./RunsPanel')
 const { EquityWaterfallPanel } = await import('./WaterfallPanel')
 
@@ -130,7 +131,7 @@ const capTable: CapTable = {
 test('the cap table filters its view and instrument with toolbar drop-downs beside the native as-of control', async () => {
   const view = {
     context: { ...context(), params: { sub: SUB, view: 'captable', by: 'holder', instrument: 'option' } }, asOfControl,
-    dimension: 'holder' as const, instrument: 'option' as const, table: capTable, parties: { [HOLDER]: 'Founder One', [EMPLOYEE]: 'Employee One' },
+    dimension: 'holder' as const, instrument: 'option' as const, query: '', table: capTable, parties: { [HOLDER]: 'Founder One', [EMPLOYEE]: 'Employee One' },
     hasAccountPolicy: true, accountsSetupHref: '/admin/setup/equity-account-policies', reportHref: '/reports/custom/run/r1', asOfReportHref: '/reports/custom/run/r2',
   }
   const screen = await mount(<EquityCapTablePanel view={view} />, `/equity?view=captable&sub=${SUB}&by=holder&instrument=option`)
@@ -145,6 +146,37 @@ test('the cap table filters its view and instrument with toolbar drop-downs besi
     assert.deepEqual(rows, ['Employee One 48,000 12,000 36,000', 'Total 48,000 12,000 36,000'], 'only option holders are listed, with an aligned totals row')
   } finally {
     await screen.close()
+  }
+})
+
+test('the cap table export holds exactly the rows, columns and totals on screen for every filter', async () => {
+  const parties = { [HOLDER]: 'Founder One', [EMPLOYEE]: 'Employee One' }
+  const labels = (messages as unknown as { equity: { capTable: { columns: Record<string, string> }; waterfall: { columns: { total: string } } } }).equity
+  const exportLabels = {
+    title: 'Cap table', dateRange: 'As of', class: labels.capTable.columns.class!, holder: labels.capTable.columns.holder!, kind: () => 'common',
+    column: (key: string) => labels.capTable.columns[key === 'instrumentOutstanding' ? 'optionOutstanding' : key]!, total: labels.waterfall.columns.total,
+  }
+  // The page groups digits and shows a dash for none; the file keeps exact text.
+  const plain = (value: string) => { const bare = value.replace(/,/g, ''); return bare === '—' || bare === '0' ? '' : bare }
+  for (const [dimension, instrument, query] of [['class', 'all', ''], ['holder', 'all', ''], ['holder', 'option', ''], ['holder', 'share', ''], ['holder', 'all', 'employee'], ['class', 'option', 'cs']] as const) {
+    const params = { sub: SUB, view: 'captable', by: dimension, instrument, q: query }
+    const view = {
+      context: { ...context(), params }, asOfControl, dimension, instrument, query, table: capTable, parties,
+      hasAccountPolicy: true, accountsSetupHref: '/admin/setup/equity-account-policies', reportHref: null, asOfReportHref: null,
+    }
+    const screen = await mount(<EquityCapTablePanel view={view} />, `/equity?${new URLSearchParams(params)}`)
+    try {
+      const exported = capTableExportData({ entity: { id: SUB, name: 'Main', currency: 'USD' }, table: capTable, parties, hasAccountPolicy: true }, { dimension, instrument, query }, exportLabels).groups[0]!
+      const headers = [...screen.host.querySelectorAll('th')].map((cell) => text(cell))
+      assert.deepEqual(exported.columns, headers, `${dimension}/${instrument}/${query}: the same columns`)
+      const rows = [...screen.host.querySelectorAll('tbody tr')].map((row) => [...row.querySelectorAll('td')].map((cell) => plain(text(cell))))
+      assert.equal(exported.rows.length, rows.length, `${dimension}/${instrument}/${query}: the same lines and totals row`)
+      exported.rows.forEach((row, index) => {
+        assert.deepEqual(row.slice(1).map((cell) => plain(String(cell))), rows[index]!.slice(1), `${dimension}/${instrument}/${query}: line ${index} values`)
+      })
+    } finally {
+      await screen.close()
+    }
   }
 })
 

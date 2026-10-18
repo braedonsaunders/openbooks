@@ -210,9 +210,6 @@
     "emptyClasses": "No share classes yet. Record the legal entity's first class under Share classes.",
     "emptyHolders": "No holders yet. Issue shares or awards to put holders on the cap table.",
     "amend": "Amend",
-    "totalOutstanding": "Outstanding",
-    "totalFullyDiluted": "Fully diluted",
-    "poolUnallocated": "Unallocated pool",
     "columns": {
       "class": "Class",
       "authorized": "Authorized",

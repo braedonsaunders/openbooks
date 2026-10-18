@@ -6,6 +6,7 @@ import { businessToday } from '@openbooks/engine/platform/business-date/module'
 import { defineRoute } from '@/lib/api/route'
 import { isoDate, uuidId } from '@/lib/api/json'
 import { capTableExportData } from '@/lib/equity-cap-table-export'
+import { CAP_TABLE_INSTRUMENTS, capTableFilters } from '@/lib/equity-cap-table'
 import { csvResponse, pdfResponse, safeName, xlsxResponse } from '@/lib/export'
 import { exportDataToCsv, exportDataToPdf, exportDataToXlsx, orgBranding } from '@/lib/report-pdf'
 import { reportCsvOptions } from '@/lib/report-labels'
@@ -17,42 +18,37 @@ const query = z.object({
   subsidiaryId: uuidId,
   asOf: isoDate(),
   by: z.enum(['class', 'holder']).default('class'),
+  instrument: z.enum(['all', ...CAP_TABLE_INSTRUMENTS]).default('all'),
+  q: z.string().max(200).optional(),
   format: z.enum(['pdf', 'xlsx', 'csv']),
 })
 
-/** The legal entity's cap table as of a date, by class or by holder, as PDF, Excel or CSV. */
+/**
+ * The legal entity's cap table as of a date as PDF, Excel or CSV, with the
+ * page's filters (view, instrument and search) applied, so the file holds
+ * exactly the lines and totals the page shows.
+ */
 export const GET = defineRoute({
   permission: 'equity.read',
   feature: 'equity',
   handler: async ({ authz, request }) => {
     const parsed = parseQuery(request, query)
     if (!parsed.ok) return parsed.response
-    const { subsidiaryId, asOf, by, format } = parsed.data
+    const { subsidiaryId, asOf, format } = parsed.data
+    const filters = capTableFilters({ by: parsed.data.by, instrument: parsed.data.instrument, q: parsed.data.q })
     const view = await loadCapTableView({ orgId: authz.user.orgId, actorId: authz.user.id, subsidiaryId, asOf })
     const t = await getTranslations('equity')
-    const data = capTableExportData(view, by, {
+    const data = capTableExportData(view, filters, {
       title: t('capTable.exportTitle', { entity: view.entity.name }),
       dateRange: t('capTable.exportAsOf', { date: asOf }),
       class: t('capTable.columns.class'),
       kind: (kind) => t(`classKind.${kind}`),
       holder: t('capTable.columns.holder'),
-      authorized: t('capTable.columns.authorized'),
-      outstanding: t('capTable.columns.outstanding'),
-      asConverted: t('capTable.columns.asConverted'),
-      awards: t('capTable.columns.awards'),
-      pool: t('capTable.columns.pool'),
-      fullyDiluted: t('capTable.columns.fullyDiluted'),
-      outstandingPercent: t('capTable.columns.outstandingPercent'),
-      fullyDilutedPercent: t('capTable.columns.fullyDilutedPercent'),
-      options: t('capTable.columns.options'),
-      rsus: t('capTable.columns.rsus'),
-      warrants: t('capTable.columns.warrants'),
-      totalOutstanding: t('capTable.totalOutstanding'),
-      totalFullyDiluted: t('capTable.totalFullyDiluted'),
-      poolUnallocated: t('capTable.poolUnallocated'),
+      column: (key) => t(`capTable.columns.${key === 'instrumentOutstanding' ? `${filters.instrument as 'option' | 'rsu' | 'warrant'}Outstanding` : key}`),
+      total: t('waterfall.columns.total'),
     })
     const stamp = await businessToday(authz.user.orgId)
-    const filename = safeName(`${view.entity.name}-cap-table-${by}-${asOf}`)
+    const filename = safeName(`${view.entity.name}-cap-table-${filters.dimension}${filters.instrument === 'all' ? '' : `-${filters.instrument}`}-${asOf}`)
     if (format === 'csv') {
       const { sectionHeader } = await reportCsvOptions()
       return csvResponse(exportDataToCsv(data, { sectionHeader }), filename)

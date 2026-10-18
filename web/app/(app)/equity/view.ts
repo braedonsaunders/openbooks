@@ -47,7 +47,7 @@ import { builtInReportDefinitionId } from '../../../lib/custom-reports'
 import { resolvePeriod } from '../../../lib/periods'
 import { getMoneyFormatter } from '../../../lib/money-server'
 import { formatCivilDate, formatExactPercent } from '../../../lib/format'
-import { parseDimension, parseInstrument, type CapTableDimension, type CapTableInstrument } from '../../../lib/equity-cap-table'
+import { capTableFilters, type CapTableDimension, type CapTableInstrument } from '../../../lib/equity-cap-table'
 import { defaultExitAnchor, exitPresets } from '../../../lib/equity-waterfall'
 import type { DirectoryItem } from '../../../components/module-home/ui'
 import type { AttentionItem } from '../purchasing/sections'
@@ -120,6 +120,8 @@ export interface CapTableViewData {
   asOfControl: AsOfControl
   dimension: CapTableDimension
   instrument: CapTableInstrument
+  /** The table's search, in the URL so the export applies it too. */
+  query: string
   table: CapTable
   parties: Record<string, string>
   hasAccountPolicy: boolean
@@ -468,8 +470,7 @@ export async function loadEquity(sp: Record<string, string | string[] | undefine
     capTable = {
       context,
       asOfControl,
-      dimension: parseDimension(pickString(sp.by)),
-      instrument: parseInstrument(pickString(sp.instrument)),
+      ...capTableFilters({ by: pickString(sp.by), instrument: pickString(sp.instrument), q: pickString(sp.q) }),
       table: capView.table,
       parties: capView.parties,
       hasAccountPolicy: capView.hasAccountPolicy,

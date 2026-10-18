@@ -210,9 +210,6 @@
     "emptyClasses": "Aucune catégorie d’actions. Enregistrez la première catégorie de l’entité sous Catégories d’actions.",
     "emptyHolders": "Aucun porteur pour l’instant. Émettez des actions ou des attributions pour inscrire des porteurs à la table de capitalisation.",
     "amend": "Modifier",
-    "totalOutstanding": "En circulation",
-    "totalFullyDiluted": "Entièrement dilué",
-    "poolUnallocated": "Réserve non attribuée",
     "columns": {
       "class": "Catégorie",
       "authorized": "Autorisées",
