@@ -1243,6 +1243,7 @@ const poolMockSources = new Map<string, string>([
     export async function actorIdentity(_db, orgId, actorId) { return orgId === '${ORG_ID}' && actorId === '${USER_ID}' ? { isActive: true, isSuperAdmin: false } : null }
     export async function actorHasPermission() { return true }
     export async function actorAllowedSubsidiaryIds() { return null }
+    export function isSystemAutomationActor(actorId) { return actorId === '00000000-0000-0000-0000-000000000000' }
   `],
   ['pool:scripting-gates', `
     // The script is configured in this pool harness for an enabled feature;
