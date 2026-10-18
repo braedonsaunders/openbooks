@@ -16,6 +16,7 @@ import { createCompensationPackage } from "../payroll/compensation-package-store
 import { moveConsignment } from "../inventory/consignment.ts";
 import { recordSupplyEvidence } from "../tax/cross-border-records.ts";
 import { saveQuoteTerm } from "../billing/quote-to-cash.ts";
+import { ensureFiling } from "../compliance/information-returns.ts";
 import { sampleCompanyFeatures } from "./features.ts";
 import { scenarioRecordId, type DemoContext } from "./scenarios.ts";
 import { SampleCompanyError } from "./provisioning-failures.ts";
@@ -134,6 +135,11 @@ export async function installFeatureWorkflows(c: DemoContext): Promise<void> {
       await recordProgress({ ...actor, projectId, taskId, entryDate: await businessTodayInTx(db, c.orgId),
         quantity: "45.00", unit: "m2", note: "Corrected synthetic measured area", allowedSubsidiaryIds: scope });
     }
+  }
+  if (f.informationReturns) {
+    // The year's draft contractor filing for the legal entity; recipients are
+    // computed only after the operator reviews TINs, box rules and thresholds.
+    await ensureFiling({ orgId: c.orgId, taxYear: c.year, formType: "1099-NEC", subsidiaryId: c.subsidiaryId, actorId: c.actorId });
   }
   if (f.outboundWebhooks) {
     const key = id("webhook_endpoints");
