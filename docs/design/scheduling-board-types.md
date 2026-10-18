@@ -55,9 +55,22 @@ Consumers read the registry rather than listing types:
 | `governed_publication` | Publication recorded as a Flows subject; published history immutable. | `publications.ts`, `flows/schedule-publication-adapter.ts` |
 | `attendance` | Device check-ins observed against published shifts. | `attendance.ts`, `attendance-math.ts` |
 | `closing` | Formal closing of ended shifts with complete attendance. | `attendance.ts` |
+| `dispatch` | Service visits assigned to technicians from an unscheduled queue, with conflict checks and live field status. Needs Service dispatch. | `engine/src/service/dispatch.ts`, `dispatch-rules.ts` |
 
 Types today: `people` and `resources` (bookings), `tasks` (project Gantt),
-and `shift_roster` (all of the above for people).
+`shift_roster` (all of the above for people) and `dispatch` (bookings and
+dispatch for people; live publication only, opening on the `dispatch` view).
+
+Dispatch boards are read and worked with the service grants
+(`service.read`, `service.dispatch`), not the shift grants, so a dispatcher
+works the board without reading every other people board. A visit booking is
+an ordinary published `schedule_entries` row carrying `service_visit_id`; the
+shared exclusion constraint and leave and qualification guards therefore
+refuse double-booking across every board, and the visit guard keeps a visit's
+bookings and status in step. The capability's commands live with the service
+domain (`engine/src/service`), which owns the visit lifecycle, and call
+`requireBoardCapability(board, "dispatch")`; the generic entry commands refuse
+to edit a visit booking directly. See `docs/design/service-dispatch.md`.
 
 ## Approvals
 
@@ -71,8 +84,7 @@ applies the decision. The adapters forbid self-approval through
 
 ## Adding a type
 
-A new type, such as a live dispatch board for service work (an unscheduled
-job queue, a column per technician, drag to assign, live job status), is:
+A new type (the `dispatch` type is the worked example) is:
 
 1. An entry in `SCHEDULE_BOARD_TYPES` with its row kind, capabilities, views
    and publication policies; new capabilities are added to
@@ -81,10 +93,13 @@ job queue, a column per technician, drag to assign, live job status), is:
 2. A forward migration inserting the type (and any new capability) into
    `openbooks_schedule_board_types`, plus the capability's own tables, each
    guarded by `schedule_board_has_capability`.
-3. Capability commands in `engine/src/schedule-boards` that call
-   `requireBoardCapability`, and a view registered for the board's `views`
-   (a dispatch queue would be a new view value alongside `grid` and
-   `timeline`, rendered by the workspace body switch).
+3. Capability commands that call `requireBoardCapability` (in
+   `engine/src/schedule-boards`, or in the domain module that owns the
+   booked records, as `engine/src/service/dispatch.ts` does), and a view
+   registered for the board's `views`, rendered by the workspace body switch
+   (`DispatchView.tsx` for `dispatch`). The database guard
+   `schedule_board_views_valid` and the board type guard must admit the new
+   view value.
 4. A New board preset that takes the type's defaults, and catalog entries for
    the type's Setup option label.
 
