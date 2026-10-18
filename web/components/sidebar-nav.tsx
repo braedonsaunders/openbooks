@@ -97,7 +97,7 @@ import {
   Warehouse,
   type LucideIcon,
 } from 'lucide-react'
-import { Popover, cn, useHydrated } from '@openbooks/ui'
+import { cn, useHydrated } from '@openbooks/ui'
 import { findActiveNavHref } from './sidebar-nav-active'
 import { NavCountBadge } from './nav-count-badge'
 
@@ -244,7 +244,8 @@ export type SidebarNavGroup = {
 const EXPANDED_STORAGE_KEY = 'openbooks.nav.expanded-workspaces'
 
 /**
- * Pathname-aware sidebar nav.
+ * Pathname-aware accordion nav: every workspace in one scrolling list (the
+ * mobile drawer). The desktop sidebar composes the same pieces as two layers.
  *
  *   • 2px left accent rail on active + hover
  *   • teal-tinted background + label color on active
@@ -254,12 +255,8 @@ const EXPANDED_STORAGE_KEY = 'openbooks.nav.expanded-workspaces'
  * The "active" check is greedy: /equipment/123 highlights the /equipment
  * top-level nav item. Sub-routes therefore keep the parent illuminated.
  */
-export function SidebarNav({ groups, collapsed = false }: { groups: SidebarNavGroup[]; collapsed?: boolean }) {
-  const pathname = usePathname() ?? ''
-  const searchParams = useSearchParams()
-  const query = searchParams.toString()
-  const activeHref = findActiveNavHref(query ? `${pathname}?${query}` : pathname, groups)
-  const activeGroupId = groups.find((group) => groupContainsActiveHref(group, activeHref))?.id ?? null
+export function SidebarNav({ groups }: { groups: SidebarNavGroup[] }) {
+  const { activeHref, activeGroupId } = useActiveNav(groups)
   const navRef = useRef<HTMLElement>(null)
   const [openGroupIds, setOpenGroupIds] = useState<Set<string>>(
     () => new Set([groups[0]?.id, activeGroupId].filter((id): id is string => Boolean(id))),
@@ -308,13 +305,7 @@ export function SidebarNav({ groups, collapsed = false }: { groups: SidebarNavGr
     }
   }
 
-  useEffect(() => {
-    if (collapsed) return
-    const frame = window.requestAnimationFrame(() => {
-      navRef.current?.querySelector<HTMLElement>('[aria-current="page"]')?.scrollIntoView({ block: 'nearest' })
-    })
-    return () => window.cancelAnimationFrame(frame)
-  }, [collapsed, openGroupKey, pathname])
+  useScrollActiveIntoView(navRef, `${openGroupKey}|${activeHref}`)
 
   function toggleGroup(id: string) {
     setOpenGroupIds((current) => {
@@ -338,84 +329,95 @@ export function SidebarNav({ groups, collapsed = false }: { groups: SidebarNavGr
   }
 
   return (
-    <nav ref={navRef} className={cn('app-scroll flex-1 overflow-y-auto px-2 py-3', collapsed && 'space-y-1')}>
-      {collapsed
-        ? groups.map((group) => (
-            <CollapsedWorkspace
-              key={group.id}
-              group={group}
-              activeHref={activeHref}
-              active={group.id === activeGroupId}
-            />
-          ))
-        : groups.map((group) => {
-            const open = openGroupIds.has(group.id)
-            const active = group.id === activeGroupId
-            const panelId = `nav-workspace-${group.id.replace(/[^a-zA-Z0-9_-]/g, '-')}`
-            const headerCls = cn(
-              'group flex w-full items-center text-xs font-semibold tracking-wide transition-colors',
-              active
-                ? 'bg-teal-50/80 text-teal-800 dark:bg-teal-950/40 dark:text-teal-200'
-                : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100',
-              'rounded-md focus-visible:ring-2 focus-visible:ring-teal-500/40 focus-visible:outline-none',
-            )
-            return (
-              <section key={group.id} className="mb-1">
-                {group.groupHref ? (
-                  // Linked header: the label navigates to the workspace's
-                  // module home; the chevron stays a separate toggle target.
-                  <div className={headerCls}>
-                    <Link
-                      href={group.groupHref as never}
-                      prefetch
-                      aria-current={activeHref === group.groupHref ? 'page' : undefined}
-                      data-walkthrough={`nav:${group.groupHref}`}
-                      onClick={() => openGroup(group.id)}
-                      className="flex min-w-0 flex-1 items-center gap-2 rounded-l-md px-2 py-1.5"
-                    >
-                      <NavIcon iconKey={group.iconKey} size={14} className="shrink-0" />
-                      <span className="min-w-0 flex-1 truncate text-left uppercase">{group.label}</span>
-                    </Link>
-                    <button
-                      type="button"
-                      aria-expanded={open}
-                      aria-controls={panelId}
-                      aria-label={group.label}
-                      onClick={() => toggleGroup(group.id)}
-                      className="grid shrink-0 place-items-center self-stretch rounded-r-md pr-2 pl-1.5 hover:bg-slate-200/60 focus-visible:ring-2 focus-visible:ring-teal-500/40 focus-visible:outline-none dark:hover:bg-slate-700/60"
-                    >
-                      <ChevronRight
-                        size={13}
-                        className={cn('shrink-0 opacity-60 transition-transform duration-150', open && 'rotate-90')}
-                      />
-                    </button>
-                  </div>
-                ) : (
-                  <button
-                    type="button"
-                    aria-expanded={open}
-                    aria-controls={panelId}
-                    onClick={() => toggleGroup(group.id)}
-                    className={cn(headerCls, 'gap-2 px-2 py-1.5')}
-                  >
-                    <NavIcon iconKey={group.iconKey} size={14} className="shrink-0" />
-                    <span className="min-w-0 flex-1 truncate text-left uppercase">{group.label}</span>
-                    <ChevronRight
-                      size={13}
-                      className={cn('shrink-0 opacity-60 transition-transform duration-150', open && 'rotate-90')}
-                    />
-                  </button>
-                )}
-                {open ? (
-                  <div id={panelId} className="mt-0.5 space-y-0.5">
-                    <WorkspaceItems items={group.items} activeHref={activeHref} />
-                  </div>
-                ) : null}
-              </section>
-            )
-          })}
+    <nav ref={navRef} className="app-scroll flex-1 overflow-y-auto px-2 py-3">
+      {groups.map((group) => {
+        const open = openGroupIds.has(group.id)
+        const active = group.id === activeGroupId
+        const panelId = `nav-workspace-${group.id.replace(/[^a-zA-Z0-9_-]/g, '-')}`
+        const headerCls = cn(
+          'group flex w-full items-center text-xs font-semibold tracking-wide transition-colors',
+          active
+            ? 'bg-teal-50/80 text-teal-800 dark:bg-teal-950/40 dark:text-teal-200'
+            : 'text-slate-500 hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100',
+          'rounded-md focus-visible:ring-2 focus-visible:ring-teal-500/40 focus-visible:outline-none',
+        )
+        return (
+          <section key={group.id} className="mb-1">
+            {group.groupHref ? (
+              // Linked header: the label navigates to the workspace's
+              // module home; the chevron stays a separate toggle target.
+              <div className={headerCls}>
+                <Link
+                  href={group.groupHref as never}
+                  prefetch
+                  aria-current={activeHref === group.groupHref ? 'page' : undefined}
+                  data-walkthrough={`nav:${group.groupHref}`}
+                  onClick={() => openGroup(group.id)}
+                  className="flex min-w-0 flex-1 items-center gap-2 rounded-l-md px-2 py-1.5"
+                >
+                  <NavIcon iconKey={group.iconKey} size={14} className="shrink-0" />
+                  <span className="min-w-0 flex-1 truncate text-left uppercase">{group.label}</span>
+                </Link>
+                <button
+                  type="button"
+                  aria-expanded={open}
+                  aria-controls={panelId}
+                  aria-label={group.label}
+                  onClick={() => toggleGroup(group.id)}
+                  className="grid shrink-0 place-items-center self-stretch rounded-r-md pr-2 pl-1.5 hover:bg-slate-200/60 focus-visible:ring-2 focus-visible:ring-teal-500/40 focus-visible:outline-none dark:hover:bg-slate-700/60"
+                >
+                  <ChevronRight
+                    size={13}
+                    className={cn('shrink-0 opacity-60 transition-transform duration-150', open && 'rotate-90')}
+                  />
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                aria-expanded={open}
+                aria-controls={panelId}
+                onClick={() => toggleGroup(group.id)}
+                className={cn(headerCls, 'gap-2 px-2 py-1.5')}
+              >
+                <NavIcon iconKey={group.iconKey} size={14} className="shrink-0" />
+                <span className="min-w-0 flex-1 truncate text-left uppercase">{group.label}</span>
+                <ChevronRight
+                  size={13}
+                  className={cn('shrink-0 opacity-60 transition-transform duration-150', open && 'rotate-90')}
+                />
+              </button>
+            )}
+            {open ? (
+              <div id={panelId} className="mt-0.5 space-y-0.5">
+                <WorkspaceItems items={group.items} activeHref={activeHref} />
+              </div>
+            ) : null}
+          </section>
+        )
+      })}
     </nav>
   )
+}
+
+/** The current page's nav entry and the workspace that owns it. */
+export function useActiveNav(groups: SidebarNavGroup[]) {
+  const pathname = usePathname() ?? ''
+  const query = useSearchParams().toString()
+  const activeHref = findActiveNavHref(query ? `${pathname}?${query}` : pathname, groups)
+  const activeGroupId = groups.find((group) => groupContainsActiveHref(group, activeHref))?.id ?? null
+  return { activeHref, activeGroupId }
+}
+
+/** Keep the current page's entry visible in a scrolling nav whenever `key` changes. */
+export function useScrollActiveIntoView(ref: React.RefObject<HTMLElement | null>, key: string, enabled = true) {
+  useEffect(() => {
+    if (!enabled) return
+    const frame = window.requestAnimationFrame(() => {
+      ref.current?.querySelector<HTMLElement>('[aria-current="page"]')?.scrollIntoView({ block: 'nearest' })
+    })
+    return () => window.cancelAnimationFrame(frame)
+  }, [ref, key, enabled])
 }
 
 function groupContainsActiveHref(group: SidebarNavGroup, activeHref: string | null) {
@@ -447,71 +449,6 @@ function WorkspaceItems({ items, activeHref }: { items: SidebarNavItem[]; active
         activeHref={activeHref}
       />
     ),
-  )
-}
-
-function CollapsedWorkspace({
-  group,
-  activeHref,
-  active,
-}: {
-  group: SidebarNavGroup
-  activeHref: string | null
-  active: boolean
-}) {
-  const [open, setOpen] = useState(false)
-  return (
-    <Popover
-      open={open}
-      onOpenChange={setOpen}
-      side="right"
-      align="start"
-      className="max-h-[min(36rem,calc(100vh-2rem))] w-64 overflow-y-auto py-1.5"
-      trigger={
-        <button
-          type="button"
-          aria-label={group.label}
-          aria-expanded={open}
-          title={group.label}
-          onClick={() => setOpen((value) => !value)}
-          className={cn(
-            'relative grid h-9 w-full place-items-center rounded-md transition-colors',
-            'before:absolute before:top-1/2 before:left-0 before:h-5 before:w-[2px] before:-translate-y-1/2 before:rounded-full',
-            active
-              ? 'bg-teal-50 text-teal-700 before:bg-teal-700 dark:bg-teal-950/50 dark:text-teal-300 dark:before:bg-teal-400'
-              : 'text-slate-500 before:bg-transparent hover:bg-slate-100 hover:text-slate-800 dark:text-slate-400 dark:hover:bg-slate-800 dark:hover:text-slate-100',
-            'focus-visible:ring-2 focus-visible:ring-teal-500/40 focus-visible:outline-none',
-          )}
-        >
-          <NavIcon iconKey={group.iconKey} size={17} />
-        </button>
-      }
-    >
-      <div
-        onClick={(event) => {
-          if ((event.target as HTMLElement).closest('a')) setOpen(false)
-        }}
-      >
-        {group.groupHref ? (
-          <Link
-            href={group.groupHref as never}
-            prefetch
-            aria-current={activeHref === group.groupHref ? 'page' : undefined}
-            data-walkthrough={`nav:${group.groupHref}`}
-            className="block border-b border-slate-100 px-3 py-2 text-xs font-semibold tracking-wide text-slate-500 uppercase transition-colors hover:text-teal-700 dark:border-slate-800 dark:text-slate-400 dark:hover:text-teal-300"
-          >
-            {group.label}
-          </Link>
-        ) : (
-          <div className="border-b border-slate-100 px-3 py-2 text-xs font-semibold tracking-wide text-slate-500 uppercase dark:border-slate-800 dark:text-slate-400">
-            {group.label}
-          </div>
-        )}
-        <div className="py-1">
-          <WorkspaceItems items={group.items} activeHref={activeHref} />
-        </div>
-      </div>
-    </Popover>
   )
 }
 
@@ -558,11 +495,23 @@ export function toBlocks(items: SidebarNavItem[]): NavBlock[] {
   return blocks
 }
 
-/** A single nav link. `nested` indents it under a subgroup header. */
-function NavLink({ item, active, nested = false }: { item: SidebarNavItem; active: boolean; nested?: boolean }) {
+/** A single nav link. `nested` indents it under a subgroup header; `dense`
+ *  tightens the row for the desktop panel, where pointer targets suffice. */
+export function NavLink({
+  item,
+  active,
+  nested = false,
+  dense = false,
+}: {
+  item: SidebarNavItem
+  active: boolean
+  nested?: boolean
+  dense?: boolean
+}) {
   const Icon = ICONS[item.iconKey] ?? Gauge
   const className = cn(
-    'group relative flex items-center rounded-md py-1.5 text-sm',
+    'group relative flex items-center rounded-md',
+    dense ? 'py-[5px] text-[13px]' : 'py-1.5 text-sm',
     'transition-colors duration-150 ease-out',
     nested ? 'gap-2.5 pr-2 pl-8' : 'gap-2.5 px-2',
     'before:absolute before:top-1/2 before:left-0 before:h-5 before:w-[2px] before:-translate-y-1/2 before:rounded-full',
@@ -575,7 +524,7 @@ function NavLink({ item, active, nested = false }: { item: SidebarNavItem; activ
   const content = (
     <>
       <Icon
-        size={15}
+        size={dense ? 14 : 15}
         className={cn(
           'shrink-0 transition-colors duration-150',
           active
@@ -583,7 +532,7 @@ function NavLink({ item, active, nested = false }: { item: SidebarNavItem; activ
             : 'text-slate-500 group-hover:text-slate-700 dark:text-slate-400 dark:group-hover:text-slate-200',
         )}
       />
-      <span>{item.label}</span>
+      <span className={dense ? 'min-w-0 flex-1 truncate' : undefined}>{item.label}</span>
       {item.badgeCountHref ? <NavCountBadge source={item.badgeCountHref} /> : null}
     </>
   )

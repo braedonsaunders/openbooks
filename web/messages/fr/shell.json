@@ -150,7 +150,8 @@
   },
   "sidebar": {
     "expand": "Déployer la barre latérale",
-    "collapse": "Réduire la barre latérale"
+    "collapse": "Réduire la barre latérale",
+    "workspaces": "Espaces de travail"
   },
   "mobileNav": {
     "openMenu": "Ouvrir le menu",

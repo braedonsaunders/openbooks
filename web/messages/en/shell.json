@@ -150,7 +150,8 @@
   },
   "sidebar": {
     "expand": "Expand sidebar",
-    "collapse": "Collapse sidebar"
+    "collapse": "Collapse sidebar",
+    "workspaces": "Workspaces"
   },
   "mobileNav": {
     "openMenu": "Open menu",

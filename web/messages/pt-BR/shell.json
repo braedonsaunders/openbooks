@@ -150,7 +150,8 @@
   },
   "sidebar": {
     "expand": "Expandir barra lateral",
-    "collapse": "Recolher barra lateral"
+    "collapse": "Recolher barra lateral",
+    "workspaces": "Áreas de trabalho"
   },
   "mobileNav": {
     "openMenu": "Abrir menu",

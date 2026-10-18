@@ -150,7 +150,8 @@
   },
   "sidebar": {
     "expand": "展开侧边栏",
-    "collapse": "折叠侧边栏"
+    "collapse": "折叠侧边栏",
+    "workspaces": "工作区"
   },
   "mobileNav": {
     "openMenu": "打开菜单",

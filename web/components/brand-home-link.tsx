@@ -6,9 +6,10 @@
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import { cn } from '@openbooks/ui'
-import { Logo } from './brand-logo'
+import { Logo, LogoMark } from './brand-logo'
 
-export function BrandHomeLink({ className }: { className?: string }) {
+/** `mark` renders the book mark alone, for narrow rails. */
+export function BrandHomeLink({ className, mark = false }: { className?: string; mark?: boolean }) {
   const t = useTranslations('shell.brand')
   return (
     <Link
@@ -21,7 +22,7 @@ export function BrandHomeLink({ className }: { className?: string }) {
         className,
       )}
     >
-      <Logo className="h-7 w-auto" />
+      {mark ? <LogoMark className="h-7 w-auto" /> : <Logo className="h-7 w-auto" />}
     </Link>
   )
 }

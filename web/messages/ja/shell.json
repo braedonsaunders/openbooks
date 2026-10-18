@@ -150,7 +150,8 @@
   },
   "sidebar": {
     "expand": "サイドバーを展開",
-    "collapse": "サイドバーを折りたたむ"
+    "collapse": "サイドバーを折りたたむ",
+    "workspaces": "ワークスペース"
   },
   "mobileNav": {
     "openMenu": "メニューを開く",

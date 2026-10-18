@@ -150,7 +150,8 @@
   },
   "sidebar": {
     "expand": "Seitenleiste erweitern",
-    "collapse": "Seitenleiste einklappen"
+    "collapse": "Seitenleiste einklappen",
+    "workspaces": "Arbeitsbereiche"
   },
   "mobileNav": {
     "openMenu": "Menü öffnen",
