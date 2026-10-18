@@ -136,20 +136,10 @@ test("fund balancing stays data-driven and fund postings use configured interfun
       account(org, actors!, "liability_current_other", "Due to other funds"),
     );
 
-    await withOrgContext(org.orgId, async () => {
-      const result = await db.execute<{ id: string }>(sql`
-        update segment_definitions set is_balancing = false
-         where org_id = ${org.orgId} and id = ${initial.segmentId}
-        returning id
-      `);
-      assert.equal(result.rows.length, 1);
-    });
     clearBalancingLegProviders();
     const unmatched = giftEntry(org, `FUND-BEFORE-${randomUUID()}`, operatingId, restricted.id);
-    const first = await postDirect(org, unmatched);
-    assert.equal(first.lines.length, 2);
 
-    const adopted = await provisionFundAccounting({
+    const reprovisioned = await provisionFundAccounting({
       orgId: org.orgId,
       defaultFund: { code: "OPERATING", name: "Operating Fund" },
       classifications: {
@@ -158,8 +148,9 @@ test("fund balancing stays data-driven and fund postings use configured interfun
       },
       actorId: actors,
     });
-    assert.ok(adopted.historicalUnbalancedByFund.some((row) => row.fundId === operatingId && row.unbalancedEntries === 1));
-    assert.ok(adopted.historicalUnbalancedByFund.some((row) => row.fundId === restricted.id && row.unbalancedEntries === 1));
+    assert.equal(reprovisioned.segmentId, initial.segmentId);
+    assert.equal(reprovisioned.defaultFundId, operatingId);
+    assert.equal(reprovisioned.historicalUnbalancedEntryCount, 0);
 
     installEngineSeams();
     await assert.rejects(
@@ -277,6 +268,49 @@ test("fund balancing stays data-driven and fund postings use configured interfun
     clearBalancingLegProviders();
     await dropScratchOrg(org.orgId);
   }
+});
+
+test("a non-balancing fund segment with unbalanced posted history refuses to become the balancing fund segment", { skip: !DB }, async (t) => {
+  const org = await withBypass(() => createScratchOrg());
+  t.after(() => dropScratchOrg(org.orgId));
+  const actorId = await withBypass(() => createScratchUser(org.orgId, "Fund Controller", "admin"));
+  const enabled = await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`
+    update orgs set settings=coalesce(settings,'{}'::jsonb)||'{"features":{"nonprofit":true,"fundAccounting":true}}'::jsonb where id=${org.orgId} returning id`));
+  assert.equal(enabled.rows.length, 1);
+  // An operator-defined reporting segment keyed "fund" that never balanced.
+  const segment = await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`
+    insert into segment_definitions (org_id, key, name, plural_name, source_kind, is_balancing, created_by, updated_by)
+    values (${org.orgId}, 'fund', 'Fund', 'Funds', 'custom', false, ${actorId}, ${actorId})
+    returning id`));
+  assert.equal(segment.rows.length, 1);
+  const values = await withOrgContext(org.orgId, () => db.execute<{ id: string }>(sql`
+    insert into segment_values (org_id, segment_id, code, name, created_by, updated_by)
+    values (${org.orgId}, ${segment.rows[0]!.id}, 'OPERATING', 'Operating Fund', ${actorId}, ${actorId}),
+           (${org.orgId}, ${segment.rows[0]!.id}, 'SCHOLARSHIP', 'Youth Scholarship Fund', ${actorId}, ${actorId})
+    returning id`));
+  assert.equal(values.rows.length, 2);
+  clearBalancingLegProviders();
+  const posted = await postDirect(org, giftEntry(org, `FUND-UNBALANCED-${randomUUID()}`, values.rows[0]!.id, values.rows[1]!.id));
+  assert.equal(posted.lines.length, 2);
+
+  await assert.rejects(
+    provisionFundAccounting({
+      orgId: org.orgId,
+      defaultFund: { code: "OPERATING", name: "Operating Fund" },
+      classifications: {
+        OPERATING: { kind: "operating", restrictionClass: "without_donor_restrictions" },
+        SCHOLARSHIP: { kind: "restricted", restrictionClass: "with_donor_restrictions" },
+      },
+      actorId,
+    }),
+    (error) => error instanceof NonprofitError && error.code === "fund_history_unbalanced" &&
+      error.status === 409 && error.message.startsWith("1 posted journal entry does not balance by fund"),
+  );
+  const after = await withOrgContext(org.orgId, () => db.execute<{ isBalancing: boolean; funds: number }>(sql`
+    select d.is_balancing as "isBalancing",
+           (select count(*)::int from funds f where f.org_id = d.org_id) as funds
+      from segment_definitions d where d.org_id = ${org.orgId} and d.key = 'fund'`));
+  assert.deepEqual(after.rows[0], { isBalancing: false, funds: 0 });
 });
 
 test("fund readers return the drawer projection with same-org isolation", { skip: !DB }, async (t) => {

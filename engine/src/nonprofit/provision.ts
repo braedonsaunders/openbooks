@@ -112,15 +112,16 @@ export async function provisionFundAccounting(
     await assertFundAccountingEnabled(input.orgId);
 
     // A concurrent provisioner may have inserted this key; the row is always
-    // re-read and checked before any segment value is adopted.
+    // re-read and checked before any segment value is adopted. An existing
+    // segment is never re-inserted, so its own balancing transition is
+    // checked below rather than by the insert.
     await db.execute(sql`
       insert into segment_definitions
         (org_id, key, name, plural_name, source_kind, is_hierarchical,
          allow_account_requirement, is_balancing, feature_key, created_by, updated_by)
-      values (
-        ${input.orgId}, 'fund', 'Fund', 'Funds', 'custom', true,
-        true, true, 'fundAccounting', ${input.actorId ?? null}, ${input.actorId ?? null}
-      )
+      select ${input.orgId}, 'fund', 'Fund', 'Funds', 'custom', true,
+             true, true, 'fundAccounting', ${input.actorId ?? null}::uuid, ${input.actorId ?? null}::uuid
+       where not exists (select 1 from segment_definitions where org_id = ${input.orgId} and key = 'fund')
       -- Concurrent provisioning reuses the segment below and verifies its balancing configuration.
       on conflict (org_id, key) do nothing
     `);
@@ -335,6 +336,31 @@ export async function provisionFundAccounting(
     const segmentNeedsUpdate =
       !segment.isHierarchical || !segment.allowAccountRequirement || !segment.isBalancing ||
       segment.defaultValueId !== defaultValue.id || segment.featureKey !== "fundAccounting";
+    if (!segment.isBalancing) {
+      // Posted entries keep the balancing policy they were posted under, so a
+      // fund segment can only start balancing while its posted history
+      // already balances by entity and fund.
+      const unbalanced = await db.execute<{ count: number }>(sql`
+        select count(distinct unbalanced.entry_id)::int as count
+          from (
+            select e.id as entry_id
+              from journal_entries e
+              join journal_lines l on l.org_id = e.org_id and l.entry_id = e.id
+             where e.org_id = ${input.orgId} and e.status in ('posted', 'reversed')
+             group by e.id, l.subsidiary_id, l.extra_dims->>'fund'
+            having sum(l.amount) <> 0
+          ) unbalanced
+      `);
+      const count = unbalanced.rows[0]?.count ?? 0;
+      if (count > 0) {
+        throw refusal(
+          `${count} posted journal ${count === 1 ? "entry does" : "entries do"} not balance by fund, so the existing "fund" segment cannot become the balancing fund segment.`,
+          "fund_history_unbalanced",
+          "Posted entries cannot be rebalanced retroactively. Keep the existing segment for reporting, or provision fund accounting in an organization whose fund-tagged entries balance by fund.",
+          409,
+        );
+      }
+    }
     if (segmentNeedsUpdate) {
       const updated = await db.execute<{ id: string }>(sql`
         update segment_definitions
