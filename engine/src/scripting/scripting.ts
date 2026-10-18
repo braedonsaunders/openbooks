@@ -16,7 +16,7 @@ import { CronExpressionParser } from "cron-parser";
 import { listSchema, runUserSql } from "../platform/sqlapi.ts";
 import type { ScriptJournalResult } from "../journal/script-journal-contract.ts";
 import { installedScriptJournalWriter } from "./journal-writer.ts";
-import { actorHasPermission, actorIdentity, actorPrincipal } from "../organization/actor-permissions.ts";
+import { actorHasPermission, actorIdentity, actorPrincipal, isSystemAutomationActor } from "../organization/actor-permissions.ts";
 import { grantsConferring } from "../organization/permissions.ts";
 import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
 import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
@@ -1531,13 +1531,14 @@ export interface ScriptRunOptions {
 }
 
 /** A supplied human identity must resolve live in the target tenant. Only an
- * explicitly absent actor can use the script's recorded unattended identity. */
+ * absent actor, or the engine's system automation principal, runs the script
+ * under its recorded unattended identity; any other unresolved actor refuses. */
 export async function resolveScriptUser(
   orgId: string,
   actorId: string | null,
   _options: { required?: boolean } = {},
 ): Promise<NonNullable<ScriptContext["user"]> | null> {
-  if (!actorId) return null;
+  if (!actorId || isSystemAutomationActor(actorId)) return null;
   const u = await actorPrincipal(db, orgId, actorId);
   if (!u?.isActive) {
     throw new ScriptActorError(`run actor ${actorId} is not an active authorized user of organization ${orgId}`);

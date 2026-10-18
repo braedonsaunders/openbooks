@@ -6,6 +6,18 @@ import { guardRefusalMessage } from "../platform/database-refusal.ts";
 import { isCataloguePermission, permissionSetCovers, resolveEffectivePermissions } from "./permissions.ts";
 import { ScopeNotFoundError } from "./subsidiary-scope.ts";
 
+/**
+ * The nil UUID is the engine's system automation principal: it attributes
+ * writes the engine performs itself (provider webhooks, payment runs, carrier
+ * tracking, sync) on actor columns without a users foreign key. It is never an
+ * organization user and holds no permissions of its own.
+ */
+export const SYSTEM_AUTOMATION_ACTOR_ID = "00000000-0000-0000-0000-000000000000";
+
+export function isSystemAutomationActor(actorId: string | null | undefined): boolean {
+  return actorId === SYSTEM_AUTOMATION_ACTOR_ID;
+}
+
 export type ActorPrincipal = {
   id: string; orgId: string; name: string; email: string;
   isSuperAdmin: boolean; isActive: boolean;

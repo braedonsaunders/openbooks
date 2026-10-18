@@ -7,6 +7,7 @@ import { claimDueScriptOccurrence } from "../scheduling/scheduler.ts";
 import { ScriptActorError, resolveScriptUser, runBulkScript, runScheduledScript } from "./scripting.ts";
 import { processScriptJobData } from "../worker/scripts-worker.ts";
 import { installEngineSeams } from "../composition/install.ts";
+import { SYSTEM_AUTOMATION_ACTOR_ID } from "../organization/actor-permissions.ts";
 
 // Script journal writes go through the installed writer.
 installEngineSeams();
@@ -400,6 +401,8 @@ test("script human identity supports platform actors and never downgrades unknow
       assert.equal((await resolveScriptUser(target.orgId, platform))?.id, platform);
       await assert.rejects(resolveScriptUser(target.orgId, randomUUID(), { required: false }), ScriptActorError);
       assert.equal(await resolveScriptUser(target.orgId, null, { required: false }), null);
+      // The engine's own automation principal is not a user: scripts run under their recorded unattended identity.
+      assert.equal(await resolveScriptUser(target.orgId, SYSTEM_AUTOMATION_ACTOR_ID, { required: false }), null);
     });
     await withBypass(() => db.execute(sql`update users set is_super_admin=false where id=${platform}`));
     await withOrg(target.orgId, () => assert.rejects(resolveScriptUser(target.orgId, platform, { required: false }), ScriptActorError));

@@ -1,6 +1,7 @@
 import { and, eq, sql } from "drizzle-orm";
 import { db, schema } from "../platform/db.ts";
 import { PaymentError } from "../payments-core/payment-errors.ts";
+import { SYSTEM_AUTOMATION_ACTOR_ID } from "../organization/actor-permissions.ts";
 /** The only run statuses a cancellation may consume. */
 const CANCELLABLE_RUN_STATUSES = ["draft", "rejected", "rolled_back"];
 
@@ -11,7 +12,7 @@ const CANCELLABLE_RUN_STATUSES = ["draft", "rejected", "rolled_back"];
  * foreign key (`payment_runs.updated_by`), so a system-initiated
  * cancellation is stamped on the mutated row itself.
  */
-export const PAYMENT_RUN_SYSTEM_ACTOR_ID = "00000000-0000-0000-0000-000000000000";
+export const PAYMENT_RUN_SYSTEM_ACTOR_ID = SYSTEM_AUTOMATION_ACTOR_ID;
 
 /**
  * Cancel a draft run: void nothing — drafts are deleted, instructions cancelled.
