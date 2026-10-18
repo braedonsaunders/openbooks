@@ -41,8 +41,9 @@ function sampleCount(rng: Rng, ratePerDay: number, weekend: boolean): number {
   const rate = weekend ? ratePerDay * 0.15 : ratePerDay;
   let n = Math.floor(rate);
   if (rng.chance(rate - n)) n += 1;
-  // occasional busy day
-  if (rng.chance(0.05)) n += rng.int(1, 2);
+  // An occasional busy day, for activity the profile generates at all: a
+  // zero rate (a company whose revenue is entirely recurring, say) stays zero.
+  if (ratePerDay > 0 && rng.chance(0.05)) n += rng.int(1, 2);
   return n;
 }
 

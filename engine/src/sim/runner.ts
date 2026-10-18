@@ -135,7 +135,7 @@ export async function autopilotRunToEnd(runDir: string): Promise<RunManifest> {
     const start = await dayStart(runDir);
     if (start.halted) {
       throw new Error(
-        `sample simulation halted on ${start.simDate}: ${start.halted.failures.map((failure) => failure.invariant).join(", ")}`,
+        `sample simulation halted on ${start.simDate}: ${start.halted.failures.map((failure) => `${failure.invariant} (${failure.detail})`).join("; ")}`,
       );
     }
     if (start.done) {
@@ -158,7 +158,7 @@ export async function autopilotRunToEnd(runDir: string): Promise<RunManifest> {
     const end = await dayEnd(runDir);
     if (end.halted) {
       throw new Error(
-        `sample simulation halted on ${end.simDate}: ${end.halted.failures.map((failure) => failure.invariant).join(", ")}`,
+        `sample simulation halted on ${end.simDate}: ${end.halted.failures.map((failure) => `${failure.invariant} (${failure.detail})`).join("; ")}`,
       );
     }
   }
