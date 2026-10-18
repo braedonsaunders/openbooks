@@ -17,7 +17,8 @@ const dirs = ['schema/migrations', 'schema/migrations/generated']
 const files = dirs.flatMap((d) => { try { return readdirSync(join(root, d)).filter((f) => f.endsWith('.sql')).map((f) => join(root, d, f)) } catch { return [] } }).sort((a, b) => a.split('/').pop().localeCompare(b.split('/').pop()))
 const tables = new Map()
 for (const f of files) {
-  const sql = readFileSync(f, 'utf8')
+  // Line comments are prose: a comment that mentions DROP TABLE must not swallow the statement after it.
+  const sql = readFileSync(f, 'utf8').replace(/--[^\n]*/g, '')
   for (const m of sql.matchAll(/CREATE TABLE (?:IF NOT EXISTS )?(?:public\.)?"?([a-z0-9_]+)"?\s*\(([\s\S]*?)\n\);/gi)) tables.set(m[1], /\borg_id\b/.test(m[2]))
   for (const m of sql.matchAll(/ALTER TABLE (?:IF EXISTS )?(?:ONLY )?(?:public\.)?"?([a-z0-9_]+)"? RENAME TO "?([a-z0-9_]+)"?/gi)) { if (tables.has(m[1])) { tables.set(m[2], tables.get(m[1])); tables.delete(m[1]) } }
   for (const m of sql.matchAll(/ALTER TABLE (?:IF EXISTS )?(?:ONLY )?(?:public\.)?"?([a-z0-9_]+)"? ADD COLUMN (?:IF NOT EXISTS )?org_id\b/gi)) if (tables.has(m[1])) tables.set(m[1], true)

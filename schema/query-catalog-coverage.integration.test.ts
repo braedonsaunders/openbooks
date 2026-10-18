@@ -27,9 +27,34 @@ const EXCLUDED_CATEGORIES: Category[] = [
       "filing submissions, ROE filing inputs and addizionali opening carry-ins carry taxpayer and employee PII; parallel, prior, retro, anomaly, ROE and carry-in tables are computation runs, import staging or filing policy, not books of record.",
   },
   {
+    prefixes: [
+      "payroll_compensation_",
+      "payroll_holiday_",
+      "payroll_opening_employer_",
+      "payroll_period_openings",
+      "payroll_service_credits",
+      "payroll_vacation_terms",
+      "payroll_employee_employer_assignments",
+      "pay_run_benefit_allocations",
+    ],
+    reason:
+      "compensation definitions and calculations, holiday and vacation entitlements, service credits, employer assignments, opening carry-ins and benefit payroll allocations are compensation-confidential employee records; payroll reporting flows through pay stubs.",
+  },
+  {
     prefixes: ["time_clock_", "time_kiosks", "worker_clock_", "crew_"],
     reason:
       "clock, kiosk, pin and crew rows are field-time operational detail; labor reporting flows through timesheet_weeks and labor_cost_rates.",
+  },
+  {
+    prefixes: [
+      "schedule_attendance_batches",
+      "schedule_attendance_events",
+      "schedule_attendance_event_claims",
+      "schedule_attendance_observation_events",
+      "schedule_attendance_watermarks",
+    ],
+    reason:
+      "attendance device batches, raw check-in events, their claims and capture watermarks are capture evidence; attendance reporting flows through schedule_attendance_observations.",
   },
   {
     prefixes: ["ai_"],
@@ -77,6 +102,7 @@ const EXCLUDED_CATEGORIES: Category[] = [
       "change_set",
       "script_",
       "backup_", "storage_cleanup_",
+      "data_transfer_",
     ],
     reason: "operational runtimes, outboxes and audit logs, not reporting.",
   },

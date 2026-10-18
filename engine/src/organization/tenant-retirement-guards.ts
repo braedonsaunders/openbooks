@@ -1,6 +1,174 @@
 /** Published DELETE contracts; unknown live guards refuse retirement. */
 export const TENANT_RETIREMENT_GUARDS = [
   {
+    "name": "payroll_roe_separation_basis_reference_guard",
+    "source": "0752_governed_catalog_coverage_and_guard_repairs.sql",
+    "sha256": "c9336b7c7bf3a33b660ac3f522ffa13a738107f9a523edb6431334ddb45e63de",
+    "newSha256": "c9336b7c7bf3a33b660ac3f522ffa13a738107f9a523edb6431334ddb45e63de",
+    "patch": false
+  },
+  {
+    "name": "time_type_financial_semantics_guard",
+    "source": "0714_time_type_financial_semantics.sql",
+    "sha256": "41a110e2f33bc387a21d7791e792fa310e371cce9deaf0e6d34c4a6b8513fd27",
+    "newSha256": "41a110e2f33bc387a21d7791e792fa310e371cce9deaf0e6d34c4a6b8513fd27",
+    "patch": false
+  },
+  {
+    "name": "payroll_roe_used_exclusion_guard",
+    "source": "0713_roe_exclusion_evidence_row_shape.sql",
+    "sha256": "bd27324c014060afb7ffac2995714db4036126dd5982c774fb4f8d47ff055790",
+    "newSha256": "bd27324c014060afb7ffac2995714db4036126dd5982c774fb4f8d47ff055790",
+    "patch": false
+  },
+  {
+    "name": "payroll_roe_issued_event_source_guard",
+    "source": "0711_roe_subsequent_service_source.sql",
+    "sha256": "4836e1aa77f7b2bd3cfdc246c259f5cb2824410a539178a2d54ed0459de7f614",
+    "newSha256": "4836e1aa77f7b2bd3cfdc246c259f5cb2824410a539178a2d54ed0459de7f614",
+    "patch": false
+  },
+  {
+    "name": "payroll_roe_subsequent_service_source_guard",
+    "source": "0711_roe_subsequent_service_source.sql",
+    "sha256": "6f7582c5491c30d83b678de1aadfd7c4a59066405d7ce83193d4378805be98d8",
+    "newSha256": "6f7582c5491c30d83b678de1aadfd7c4a59066405d7ce83193d4378805be98d8",
+    "patch": false
+  },
+  {
+    "name": "payroll_opening_employer_authority_guard",
+    "source": "0710_payroll_opening_legal_employer_authority.sql",
+    "sha256": "cfd0fcc78d530af887f87f345a78b17c4b219a86a201b6b1ab58d50fa3bc28df",
+    "newSha256": "cfd0fcc78d530af887f87f345a78b17c4b219a86a201b6b1ab58d50fa3bc28df",
+    "patch": false
+  },
+  {
+    "name": "payroll_opening_qualified_source_guard",
+    "source": "0710_payroll_opening_legal_employer_authority.sql",
+    "sha256": "0df2ebc963b29e050b286169ed8564a41214a3fd1de7d8163bae9e1244967c1f",
+    "newSha256": "0df2ebc963b29e050b286169ed8564a41214a3fd1de7d8163bae9e1244967c1f",
+    "patch": false
+  },
+  {
+    "name": "payroll_roe_reporting_evidence_guard",
+    "source": "0709_roe_issued_event_source_binding.sql",
+    "sha256": "cf0d7d140805d19a59b92303f1b96a4114101d62cda002595befbcac9814799d",
+    "newSha256": "cf0d7d140805d19a59b92303f1b96a4114101d62cda002595befbcac9814799d",
+    "patch": false
+  },
+  {
+    "name": "payroll_roe_separation_facts_guard",
+    "source": "0709_roe_issued_event_source_binding.sql",
+    "sha256": "882dcdb0f9cfceb172386f4947e7153e4c15c284150455cd796e328624fc819e",
+    "newSha256": "882dcdb0f9cfceb172386f4947e7153e4c15c284150455cd796e328624fc819e",
+    "patch": false
+  },
+  {
+    "name": "rebate_agreement_guard",
+    "source": "0699_financial_history_native_clone_guards.sql",
+    "sha256": "70eda52193664d3f548291608a4828e9780c97194df5a4ed4fa8d643080d6efe",
+    "newSha256": "70eda52193664d3f548291608a4828e9780c97194df5a4ed4fa8d643080d6efe",
+    "patch": false
+  },
+  {
+    "name": "rebate_claim_guard",
+    "source": "0697_rebate_policy_settlements.sql",
+    "sha256": "5dd3382123d65acba2da92186e5ab090c4ca95796c92ace37c65c0651afcfbdd",
+    "newSha256": "5dd3382123d65acba2da92186e5ab090c4ca95796c92ace37c65c0651afcfbdd",
+    "patch": false
+  },
+  {
+    "name": "rebate_fact_immutable",
+    "source": "0697_rebate_policy_settlements.sql",
+    "sha256": "19983175d3685537c95d634c788b82991cbeef1c035dce74db83ef0018bbb427",
+    "newSha256": "19983175d3685537c95d634c788b82991cbeef1c035dce74db83ef0018bbb427",
+    "patch": false
+  },
+  {
+    "name": "renewal_policy_guard",
+    "source": "0696_renewal_policy_documents.sql",
+    "sha256": "c0fa72318a1fb9dc70209e8afbab886eebd84d23dcd5acca026b3b8c0ac190b3",
+    "newSha256": "c0fa72318a1fb9dc70209e8afbab886eebd84d23dcd5acca026b3b8c0ac190b3",
+    "patch": false
+  },
+  {
+    "name": "fair_value_used_policy_guard",
+    "source": "0695_revenue_recognition_fair_value_delivery.sql",
+    "sha256": "51db1038c2fcf434307a45a24e3164eafdbdbb10dc9455349da07ebe1afe3438",
+    "newSha256": "51db1038c2fcf434307a45a24e3164eafdbdbb10dc9455349da07ebe1afe3438",
+    "patch": false
+  },
+  {
+    "name": "recognition_control_immutable",
+    "source": "0695_revenue_recognition_fair_value_delivery.sql",
+    "sha256": "01717f9b0b6f6ff5b890cc0e0a4fd88d0942d26d608623af7da414c5309a8696",
+    "newSha256": "01717f9b0b6f6ff5b890cc0e0a4fd88d0942d26d608623af7da414c5309a8696",
+    "patch": false
+  },
+  {
+    "name": "journal_reversal_instruction_guard",
+    "source": "0692_journal_instruction_modes.sql",
+    "sha256": "d57042081fc24caa21b4640f5ac3a6c6649fcfb191bad2e9ba5e4df4314569ef",
+    "newSha256": "d57042081fc24caa21b4640f5ac3a6c6649fcfb191bad2e9ba5e4df4314569ef",
+    "patch": false
+  },
+  {
+    "name": "intercompany_fulfillment_charge_immutable",
+    "source": "0686_intercompany_paired_transactions_cross_subsidiary_fulfillment.sql",
+    "sha256": "04bf84b2d384b0e4e5654090ad89c3bb4e9f438f833b62d705fb358703409276",
+    "newSha256": "04bf84b2d384b0e4e5654090ad89c3bb4e9f438f833b62d705fb358703409276",
+    "patch": false
+  },
+  {
+    "name": "intercompany_transaction_pair_guard",
+    "source": "0686_intercompany_paired_transactions_cross_subsidiary_fulfillment.sql",
+    "sha256": "bd11595bf3c9769f72b20c8f314845d360847131038e224d1648e5d0ddb15e03",
+    "newSha256": "bd11595bf3c9769f72b20c8f314845d360847131038e224d1648e5d0ddb15e03",
+    "patch": false
+  },
+  {
+    "name": "intercompany_transfer_pricing_policy_guard",
+    "source": "0686_intercompany_paired_transactions_cross_subsidiary_fulfillment.sql",
+    "sha256": "490da8c21f22969b197f9f998d2097b5078a0e4c27e200cc0d3483103a41d82e",
+    "newSha256": "490da8c21f22969b197f9f998d2097b5078a0e4c27e200cc0d3483103a41d82e",
+    "patch": false
+  },
+  {
+    "name": "intercompany_fund_transfer_guard",
+    "source": "0685_intercompany_representing_parties_and_netting.sql",
+    "sha256": "3e275abb17104e72ef36cdf07ff9c708506b5dd7f0f97ff1a6795ef94331b6b5",
+    "newSha256": "3e275abb17104e72ef36cdf07ff9c708506b5dd7f0f97ff1a6795ef94331b6b5",
+    "patch": false
+  },
+  {
+    "name": "intercompany_netting_line_guard",
+    "source": "0685_intercompany_representing_parties_and_netting.sql",
+    "sha256": "c42af7c8e3b66f332312d70cf6897eaf9a43ceea7e7477d6901e9017f66308ed",
+    "newSha256": "c42af7c8e3b66f332312d70cf6897eaf9a43ceea7e7477d6901e9017f66308ed",
+    "patch": false
+  },
+  {
+    "name": "intercompany_netting_run_guard",
+    "source": "0685_intercompany_representing_parties_and_netting.sql",
+    "sha256": "e3d7561f399608bfce6f333f572b6b5fb979e1768dc6315cc8fe829f5e2e3a7c",
+    "newSha256": "e3d7561f399608bfce6f333f572b6b5fb979e1768dc6315cc8fe829f5e2e3a7c",
+    "patch": false
+  },
+  {
+    "name": "account_merge_immutable",
+    "source": "0680_account_localization_and_merge.sql",
+    "sha256": "90dc884d5ae0fbb80f4a5ba330a80107bd9f201c2b659298c438d25f132469e2",
+    "newSha256": "90dc884d5ae0fbb80f4a5ba330a80107bd9f201c2b659298c438d25f132469e2",
+    "patch": false
+  },
+  {
+    "name": "hrm_benefit_program_revision_immutable",
+    "source": "0667_benefit_program_revisions.sql",
+    "sha256": "0a27548afa8b82c92b1fb9a423cf7967ebb956fda461c2ede441357cc28ed439",
+    "newSha256": "0a27548afa8b82c92b1fb9a423cf7967ebb956fda461c2ede441357cc28ed439",
+    "patch": false
+  },
+  {
     "name": "field_ticket_source_certification_guard",
     "source": "0729_field_ticket_source_identity_certifications.sql",
     "sha256": "24f5e61335086799a9fd4692c4fee132be9243fbaa34279cc02e0217d012c891",
@@ -65,9 +233,9 @@ export const TENANT_RETIREMENT_GUARDS = [
   },
   {
     "name": "historical_translation_basis_guard",
-    "source": "0722_historical_translation_contribution_evidence.sql",
-    "sha256": "9ebae1c5c7ad6e66f696fa8ba90a53d80c740d7c41b5f358ad9ce51e0d176560",
-    "newSha256": "9ebae1c5c7ad6e66f696fa8ba90a53d80c740d7c41b5f358ad9ce51e0d176560",
+    "source": "0732_historical_translation_basis_guard_layer_case.sql",
+    "sha256": "7d7ca87034fe986f1781c179c7a92d55546703ba9b1138be90cd3f6418075ef0",
+    "newSha256": "7d7ca87034fe986f1781c179c7a92d55546703ba9b1138be90cd3f6418075ef0",
     "patch": false
   },
   {
@@ -235,7 +403,7 @@ export const TENANT_RETIREMENT_GUARDS = [
     "name": "benefit_transaction_rule_guard",
     "source": "0570_benefit_transaction_policies.sql",
     "sha256": "7ad7733994a255e302b12421dc613f0dbd130c2a8aacc7534e5eb55d8292b39f",
-    "newSha256": "57293769559fd70a48e0e8c07999d20a66e47ed74906b5d429f67c4033273675",
+    "newSha256": "ff8c88f12b663e94a7a416d12991d5466a3f5f6e12aec4abfeac3e456ad1c467",
     "patch": true
   },
   {
@@ -863,9 +1031,9 @@ export const TENANT_RETIREMENT_GUARDS = [
   },
   {
     "name": "jl_guard",
-    "source": "0400_ledger_guard_reversal_and_clone_authority.sql",
-    "sha256": "1df5f4f1edb4be73b3ae570859412dfda9d4e0fe25a23ee17ed43fc8551cdca1",
-    "newSha256": "4adeae78366e442cfdbbdc9c2b19d999eb3fa00382c686ea6482ee37e8d4e4c6",
+    "source": "0669_reconciliation_signoff_withdrawal.sql",
+    "sha256": "05c9fd13613199ff8f8e571e52bf6e32c2fbe51587a8be15afaf5242357a4242",
+    "newSha256": "7d99adf2194cdb727672a9cbc5b5b07cc6e75788422e678439b276191eb13b3f",
     "patch": true
   },
   {
@@ -1739,6 +1907,138 @@ export const TENANT_RETIREMENT_GUARDS = [
 ] as const;
 
 export const TENANT_RETIREMENT_GUARD_ATTRIBUTES = [
+  {
+    "name": "account_merge_immutable",
+    "config": [
+      "search_path=public,pg_catalog"
+    ]
+  },
+  {
+    "name": "fair_value_used_policy_guard",
+    "config": []
+  },
+  {
+    "name": "hrm_benefit_program_revision_immutable",
+    "config": [
+      "search_path=public,pg_catalog"
+    ]
+  },
+  {
+    "name": "intercompany_fulfillment_charge_immutable",
+    "config": [
+      "search_path=public,pg_catalog"
+    ]
+  },
+  {
+    "name": "intercompany_fund_transfer_guard",
+    "config": [
+      "search_path=public,pg_catalog"
+    ]
+  },
+  {
+    "name": "intercompany_netting_line_guard",
+    "config": [
+      "search_path=public,pg_catalog"
+    ]
+  },
+  {
+    "name": "intercompany_netting_run_guard",
+    "config": [
+      "search_path=public,pg_catalog"
+    ]
+  },
+  {
+    "name": "intercompany_transaction_pair_guard",
+    "config": [
+      "search_path=public,pg_catalog"
+    ]
+  },
+  {
+    "name": "intercompany_transfer_pricing_policy_guard",
+    "config": [
+      "search_path=public,pg_catalog"
+    ]
+  },
+  {
+    "name": "journal_reversal_instruction_guard",
+    "config": [
+      "search_path=public,pg_catalog"
+    ]
+  },
+  {
+    "name": "payroll_opening_employer_authority_guard",
+    "config": [
+      "search_path=public,pg_catalog"
+    ]
+  },
+  {
+    "name": "payroll_opening_qualified_source_guard",
+    "config": [
+      "search_path=public,pg_catalog"
+    ]
+  },
+  {
+    "name": "payroll_roe_issued_event_source_guard",
+    "config": [
+      "search_path=public,pg_catalog"
+    ]
+  },
+  {
+    "name": "payroll_roe_reporting_evidence_guard",
+    "config": [
+      "search_path=public,pg_catalog"
+    ]
+  },
+  {
+    "name": "payroll_roe_separation_basis_reference_guard",
+    "config": [
+      "search_path=public,pg_catalog"
+    ]
+  },
+  {
+    "name": "payroll_roe_separation_facts_guard",
+    "config": [
+      "search_path=public,pg_catalog"
+    ]
+  },
+  {
+    "name": "payroll_roe_subsequent_service_source_guard",
+    "config": [
+      "search_path=public,pg_catalog"
+    ]
+  },
+  {
+    "name": "payroll_roe_used_exclusion_guard",
+    "config": [
+      "search_path=public,pg_catalog"
+    ]
+  },
+  {
+    "name": "rebate_agreement_guard",
+    "config": []
+  },
+  {
+    "name": "rebate_claim_guard",
+    "config": []
+  },
+  {
+    "name": "rebate_fact_immutable",
+    "config": []
+  },
+  {
+    "name": "recognition_control_immutable",
+    "config": []
+  },
+  {
+    "name": "renewal_policy_guard",
+    "config": []
+  },
+  {
+    "name": "time_type_financial_semantics_guard",
+    "config": [
+      "search_path=public,pg_catalog"
+    ]
+  },
   {
     "name": "field_ticket_source_certification_guard",
     "config": [
@@ -4727,6 +5027,151 @@ export const TENANT_RETIREMENT_TRIGGER_CONTRACTS = [
     "table": "expense_amortization_schedule_events",
     "trigger": "expense_amortization_event_guard",
     "function": "expense_amortization_event_guard"
+  },
+  {
+    "table": "account_merges",
+    "trigger": "account_merge_immutable",
+    "function": "account_merge_immutable"
+  },
+  {
+    "table": "fair_value_prices",
+    "trigger": "fair_value_used_policy",
+    "function": "fair_value_used_policy_guard"
+  },
+  {
+    "table": "hrm_benefit_program_revisions",
+    "trigger": "hrm_benefit_program_revision_immutable",
+    "function": "hrm_benefit_program_revision_immutable"
+  },
+  {
+    "table": "intercompany_fulfillment_charges",
+    "trigger": "intercompany_fulfillment_charge_immutable",
+    "function": "intercompany_fulfillment_charge_immutable"
+  },
+  {
+    "table": "intercompany_fund_transfers",
+    "trigger": "intercompany_fund_transfer_guard",
+    "function": "intercompany_fund_transfer_guard"
+  },
+  {
+    "table": "intercompany_netting_lines",
+    "trigger": "intercompany_netting_line_guard",
+    "function": "intercompany_netting_line_guard"
+  },
+  {
+    "table": "intercompany_netting_runs",
+    "trigger": "intercompany_netting_run_guard",
+    "function": "intercompany_netting_run_guard"
+  },
+  {
+    "table": "intercompany_transaction_pairs",
+    "trigger": "intercompany_transaction_pair_guard",
+    "function": "intercompany_transaction_pair_guard"
+  },
+  {
+    "table": "intercompany_transfer_pricing_policies",
+    "trigger": "intercompany_transfer_pricing_policy_guard",
+    "function": "intercompany_transfer_pricing_policy_guard"
+  },
+  {
+    "table": "journal_reversal_instructions",
+    "trigger": "journal_reversal_instruction_guard",
+    "function": "journal_reversal_instruction_guard"
+  },
+  {
+    "table": "payroll_opening_balances",
+    "trigger": "payroll_opening_qualified_source_guard",
+    "function": "payroll_opening_qualified_source_guard"
+  },
+  {
+    "table": "payroll_opening_employer_authorities",
+    "trigger": "payroll_opening_employer_authority_guard",
+    "function": "payroll_opening_employer_authority_guard"
+  },
+  {
+    "table": "payroll_roe_historical_periods",
+    "trigger": "payroll_roe_historical_periods_guard",
+    "function": "payroll_roe_reporting_evidence_guard"
+  },
+  {
+    "table": "payroll_roe_issued_event_sources",
+    "trigger": "payroll_roe_issued_event_source_guard",
+    "function": "payroll_roe_issued_event_source_guard"
+  },
+  {
+    "table": "payroll_roe_line_evidence",
+    "trigger": "payroll_roe_line_evidence_guard",
+    "function": "payroll_roe_reporting_evidence_guard"
+  },
+  {
+    "table": "payroll_roe_line_evidence",
+    "trigger": "payroll_roe_used_line_exclusion_guard",
+    "function": "payroll_roe_used_exclusion_guard"
+  },
+  {
+    "table": "payroll_roe_separation_events",
+    "trigger": "payroll_roe_separation_facts_guard",
+    "function": "payroll_roe_separation_facts_guard"
+  },
+  {
+    "table": "payroll_roe_separation_events",
+    "trigger": "payroll_roe_used_event_exclusion_guard",
+    "function": "payroll_roe_used_exclusion_guard"
+  },
+  {
+    "table": "payroll_roe_separation_payments",
+    "trigger": "payroll_roe_separation_payment_basis_reference_guard",
+    "function": "payroll_roe_separation_basis_reference_guard"
+  },
+  {
+    "table": "payroll_roe_subsequent_service_sources",
+    "trigger": "payroll_roe_subsequent_service_source_guard",
+    "function": "payroll_roe_subsequent_service_source_guard"
+  },
+  {
+    "table": "rebate_accruals",
+    "trigger": "rebate_accruals_immutable",
+    "function": "rebate_fact_immutable"
+  },
+  {
+    "table": "rebate_agreements",
+    "trigger": "rebate_agreement_guard",
+    "function": "rebate_agreement_guard"
+  },
+  {
+    "table": "rebate_claims",
+    "trigger": "rebate_claim_guard",
+    "function": "rebate_claim_guard"
+  },
+  {
+    "table": "rebate_cost_attestations",
+    "trigger": "rebate_costs_immutable",
+    "function": "rebate_fact_immutable"
+  },
+  {
+    "table": "rebate_settlement_reversals",
+    "trigger": "rebate_reversals_immutable",
+    "function": "rebate_fact_immutable"
+  },
+  {
+    "table": "recognition_control_events",
+    "trigger": "recognition_controls_immutable",
+    "function": "recognition_control_immutable"
+  },
+  {
+    "table": "subscription_renewal_occurrences",
+    "trigger": "renewal_occurrence_guard",
+    "function": "renewal_policy_guard"
+  },
+  {
+    "table": "subscription_renewal_policies",
+    "trigger": "renewal_policy_guard",
+    "function": "renewal_policy_guard"
+  },
+  {
+    "table": "time_types",
+    "trigger": "time_type_financial_semantics_guard",
+    "function": "time_type_financial_semantics_guard"
   }
 ] as const;
 
