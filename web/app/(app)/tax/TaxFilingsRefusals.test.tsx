@@ -149,8 +149,8 @@ test("changing filing forms resets edited dates to the current business month", 
     const option = [...document.querySelectorAll('[role="option"]')].find((el) => el.textContent?.trim() === "VAT Return");
     assert.ok(option, "the second return form must be offered");
     await click(option as HTMLButtonElement);
-    assert.equal(from.value, "2026-07-01");
-    assert.equal(to.value, "2026-07-31");
+    assert.equal(from.value, "07/01/2026");
+    assert.equal(to.value, "07/31/2026");
   } finally {
     await unmount();
     restoreFetch();

@@ -2,11 +2,12 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Button, Drawer, Input, Label, Textarea } from "@openbooks/ui";
+import { Button, Drawer, Label, Textarea } from "@openbooks/ui";
 import { useBusinessToday } from "@/components/business-date-provider";
 import { useDirtyClose } from "@/lib/use-dirty-close";
 import { refusalMessageFromBody } from "@/lib/api-error";
 import { useTranslations } from "next-intl";
+import { DateField } from '@/components/date-field'
 export function ReverseAssetChange({
   id,
   domain = "asset",
@@ -96,12 +97,11 @@ export function ReverseAssetChange({
           {domain === "asset" || operation === "net_investment_oci" ? (
             <div>
               <Label>Reversal date</Label>
-              <Input
-                type="date"
+              <DateField
                 disabled={busy}
                 value={date}
-                onChange={(e) => {
-                  setDate(e.target.value);
+                onChange={(value) => {
+                  setDate(value);
                   setKey(crypto.randomUUID());
                 }}
               />

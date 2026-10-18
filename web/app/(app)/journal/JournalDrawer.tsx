@@ -51,6 +51,7 @@ import {
   type FormLayoutConfig,
   type HeaderFieldPlacement,
 } from '@openbooks/customization'
+import { DateField } from '@/components/date-field'
 type Opt = {
   id: string
   display_name?: string
@@ -1190,7 +1191,7 @@ function JournalDrawerBody({
     }
     switch (placement.key) {
       case 'document_date':
-        return <><Label>{override || tc('labels.date')}{isEditable ? <span className="text-red-500"> *</span> : null}</Label>{isEditable ? <Input type="date" value={documentDate} onChange={(event) => setDocumentDate(event.target.value)} /> : <p className="text-sm">{doc.document_date}</p>}</>
+        return <><Label>{override || tc('labels.date')}{isEditable ? <span className="text-red-500"> *</span> : null}</Label>{isEditable ? <DateField value={documentDate} onChange={(value) => setDocumentDate(value)} /> : <p className="text-sm">{doc.document_date}</p>}</>
       case 'party_id':
         return <><Label>{override || tc('labels.party')}</Label>{isEditable ? <SearchSelect options={parties.map((party) => ({ value: party.id, label: party.display_name ?? '' }))} value={partyId} onChange={(value) => setPartyId(value ?? '')} placeholder={t('noParty')} clearable emptyLabel={t('noParty')} /> : <p className="text-sm">{doc.party_name ?? '—'}</p>}</>
       case 'reference_number':
@@ -1366,14 +1367,14 @@ function JournalDrawerBody({
           <div className={field}><Label>{t('instructions.mode')}</Label>{editable ? <SearchSelect value={journalMode} onChange={setJournalMode} options={['monetary','statistical','currency_adjustment'].map(value => ({value,label:t(`instructions.${value}`)}))} /> : <p className="text-sm">{t(`instructions.${journalMode}`)}</p>}</div>
           {!statistical ? <><div className={field}><Label>{t('instructions.currency')}</Label>{editable ? <Input value={currency} maxLength={3} onChange={event => setCurrency(event.target.value.toUpperCase())} /> : <p className="text-sm">{currency}</p>}</div>
           <div className={field}><Label>{t('instructions.rate')}</Label>{editable ? <Input value={fxRate} inputMode="decimal" onChange={event => setFxRate(event.target.value)} /> : <p className="text-sm">{fxRate}</p>}</div></> : null}
-          <div className={field}><Label>{t('instructions.reverseOn')}</Label>{editable ? <Input type="date" value={reverseOn} onChange={event => setReverseOn(event.target.value)} /> : <p className="text-sm">{reverseOn || '—'}</p>}</div>
+          <div className={field}><Label>{t('instructions.reverseOn')}</Label>{editable ? <DateField value={reverseOn} onChange={value => setReverseOn(value)} /> : <p className="text-sm">{reverseOn || '—'}</p>}</div>
         </div>
         {mixedCurrencies ? <p className="text-xs text-slate-500">{t('instructions.serverBalance')}</p> : null}
         {layout ? <HeaderFields layout={layout} editable={editable} renderField={renderHeaderField} /> : <><div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <div className={field}>
             <Label>{tc('labels.date')}{editable ? <span className="text-red-500"> *</span> : null}</Label>
             {editable ? (
-              <Input type="date" value={documentDate} onChange={(e) => setDocumentDate(e.target.value)} />
+              <DateField value={documentDate} onChange={(value) => setDocumentDate(value)} />
             ) : (
               <p className="text-sm">{doc.document_date}</p>
             )}

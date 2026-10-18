@@ -27,6 +27,7 @@ import { useMoney } from "@/components/money-provider";
 import { fetchAction } from "@braedonsaunders/appkit-errors";
 import { useAppAction } from "../../../lib/use-app-action";
 import { amendmentRequestPayload } from "./amendment-payload";
+import { DateField } from '@/components/date-field'
 
 type BasePlan = {
   id: string;
@@ -450,13 +451,12 @@ export function AdvancedSubscriptionsPanel({
                 </Field>
                 <div className="grid gap-5 sm:grid-cols-2">
                   <Field label={t("effectiveFrom")} required>
-                    <Input
-                      type="date"
+                    <DateField
                       value={versionForm.effectiveFrom}
-                      onChange={(e) =>
+                      onChange={(value) =>
                         setVersionForm({
                           ...versionForm,
-                          effectiveFrom: e.target.value,
+                          effectiveFrom: value,
                         })
                       }
                     />
@@ -792,37 +792,34 @@ export function AdvancedSubscriptionsPanel({
               <InspectorPanel title={forms("contractTerm")}>
                 <div className="grid gap-5 sm:grid-cols-2">
                   <Field label={t("termStarts")} required>
-                    <Input
-                      type="date"
+                    <DateField
                       value={lifecycleForm.termStartsOn}
-                      onChange={(e) =>
+                      onChange={(value) =>
                         setLifecycleForm({
                           ...lifecycleForm,
-                          termStartsOn: e.target.value,
+                          termStartsOn: value,
                         })
                       }
                     />
                   </Field>
                   <Field label={t("termEnds")}>
-                    <Input
-                      type="date"
+                    <DateField
                       value={lifecycleForm.termEndsOn}
-                      onChange={(e) =>
+                      onChange={(value) =>
                         setLifecycleForm({
                           ...lifecycleForm,
-                          termEndsOn: e.target.value,
+                          termEndsOn: value,
                         })
                       }
                     />
                   </Field>
                   <Field label={t("trialEnds")}>
-                    <Input
-                      type="date"
+                    <DateField
                       value={lifecycleForm.trialEndsOn}
-                      onChange={(e) =>
+                      onChange={(value) =>
                         setLifecycleForm({
                           ...lifecycleForm,
-                          trialEndsOn: e.target.value,
+                          trialEndsOn: value,
                         })
                       }
                     />
@@ -1023,13 +1020,12 @@ export function AdvancedSubscriptionsPanel({
                     </Select>
                   </Field>
                   <Field label={t("effectiveOn")}>
-                    <Input
-                      type="date"
+                    <DateField
                       value={amendForm.effectiveOn}
-                      onChange={(e) =>
+                      onChange={(value) =>
                         setAmendForm({
                           ...amendForm,
-                          effectiveOn: e.target.value,
+                          effectiveOn: value,
                         })
                       }
                     />
@@ -1107,13 +1103,12 @@ export function AdvancedSubscriptionsPanel({
                   )}
                   {amendForm.type === "change_term" && (
                     <Field label={t("newTermEnd")}>
-                      <Input
-                        type="date"
+                      <DateField
                         value={amendForm.termEndsOn}
-                        onChange={(e) =>
+                        onChange={(value) =>
                           setAmendForm({
                             ...amendForm,
-                            termEndsOn: e.target.value,
+                            termEndsOn: value,
                           })
                         }
                       />

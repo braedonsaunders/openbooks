@@ -11,6 +11,7 @@ import { Button, Drawer, Input, Label } from '@openbooks/ui'
 import { useBusinessToday } from '../../../../components/business-date-provider'
 import { readApiErrorMessage } from '../../../../lib/api-error'
 import { canonicalDecimal } from '../../../../lib/exact-decimal'
+import { DateField } from '@/components/date-field'
 /**
  * Start a reconciliation session (through date + bank statement balance),
  * or resume the account's open one — one open session per account.
@@ -96,7 +97,7 @@ export function StartReconciliationButton({
             <Label htmlFor={throughDateId}>
               {tBanking('labels.reconcileThrough')}<span className="text-red-500"> *</span>
             </Label>
-            <Input id={throughDateId} type="date" value={throughDate} onChange={(e) => setThroughDate(e.target.value)} />
+            <DateField id={throughDateId} value={throughDate} onChange={(value) => setThroughDate(value)} />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor={statementBalanceId}>

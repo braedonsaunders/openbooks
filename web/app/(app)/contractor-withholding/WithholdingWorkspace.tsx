@@ -14,6 +14,7 @@ import { DocTypeBadge } from '@/components/doc-type-badge'
 import { readApiErrorMessage } from '@/lib/api-error'
 import type { WithholdingPeriodSummary, WithholdingReturnView, WithholdingStatement } from '@openbooks/engine/contractor-withholding'
 import type { WithholdingEnrollmentOption } from '@/lib/contractor-withholding'
+import { DateField } from '@/components/date-field'
 
 type DepositRow = { documentId: string; documentNumber: string; kind: string; status: string; throughDate: string; dueDate: string | null; currency: string; total: string; sourceChanged: boolean }
 type StandingRow = { id: string; entityName: string | null; partyName: string; schemeCode: string; bandCode: string; status: string; validFrom: string; validTo: string | null }
@@ -101,8 +102,8 @@ export function WithholdingWorkspace({ enrollments, canManage, canReadJournal, c
     <div className="flex gap-2"><Button variant={tab === 'periods' ? 'secondary' : 'ghost'} onClick={() => navigate({ tab: null, return: null })}>{t('periods')}</Button>{enrollment?.canDeposit && <Button variant={tab === 'deposits' ? 'secondary' : 'ghost'} onClick={() => navigate({ tab: 'deposits', return: null })}>{t('deposits')}</Button>}{canStandings && <Button variant={tab === 'standings' ? 'secondary' : 'ghost'} onClick={() => navigate({ tab: 'standings', return: null })}>{t('standings')}</Button>}</div>
     {tab !== 'standings' && <div className="flex flex-wrap items-end gap-3">
       <div className="min-w-64"><Label>{t('enrollment')}</Label><Select value={selected} onChange={event => navigate({ enrollment: event.target.value, return: null })}><option value="">{t('selectEnrollment')}</option>{enrollments.map(row => <option value={row.id} key={row.id}>{row.entityName} · {row.schemeName} · {row.contractorReference}</option>)}</Select></div>
-      {canManage && tab === 'deposits' && enrollment?.canDeposit && <><div><Label>{t('depositThrough')}</Label><Input type="date" value={depositThrough} onChange={event => setDepositThrough(event.target.value)} /></div><Button variant="outline" disabled={busy || !depositThrough} onClick={() => action('/api/contractor-withholding/deposits', { enrollmentId: selected, throughDate: depositThrough }, openAuthority)}>{t('deposit')}</Button></>}
-      {canManage && tab === 'periods' && selected && <><div><Label>{t('periodStart')}</Label><Input type="date" value={periodStart} onChange={event => setPeriodStart(event.target.value)} /></div><Button disabled={busy || !periodStart} onClick={() => prepare(periodStart)}>{t('prepare')}</Button></>}
+      {canManage && tab === 'deposits' && enrollment?.canDeposit && <><div><Label>{t('depositThrough')}</Label><DateField value={depositThrough} onChange={value => setDepositThrough(value)} /></div><Button variant="outline" disabled={busy || !depositThrough} onClick={() => action('/api/contractor-withholding/deposits', { enrollmentId: selected, throughDate: depositThrough }, openAuthority)}>{t('deposit')}</Button></>}
+      {canManage && tab === 'periods' && selected && <><div><Label>{t('periodStart')}</Label><DateField value={periodStart} onChange={value => setPeriodStart(value)} /></div><Button disabled={busy || !periodStart} onClick={() => prepare(periodStart)}>{t('prepare')}</Button></>}
     </div>}
     {enrollment?.filingNotice && tab === 'periods' && <p className="text-sm text-muted-foreground">{enrollment.filingNotice}</p>}
     {notice && <p role="status" className="text-sm text-muted-foreground">{notice}</p>}

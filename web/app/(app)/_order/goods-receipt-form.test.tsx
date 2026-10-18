@@ -152,7 +152,7 @@ test('the receipt form opens prefilled from the order', async (t) => {
   await openReceiptForm()
   const date = dialog()?.querySelector('#receipt-date') as HTMLInputElement | null
   assert.ok(date, 'the receipt date is editable')
-  assert.equal(date.value, '2026-08-01', 'the date defaults to today in the business calendar')
+  assert.equal(date.value, '08/01/2026', 'the date defaults to today in the business calendar')
   const qty = dialog()?.querySelector('[aria-label="Receive qty 1"]') as HTMLInputElement | null
   assert.equal(qty?.value, '10', 'each line prefills its remaining quantity')
   assert.match(dialog()?.textContent ?? '', /10 ea remaining/, 'the form shows what is left to receive')

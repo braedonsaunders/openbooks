@@ -14,6 +14,7 @@ import {
   CELL, Field, HEAD, LINK, NUM_CELL, NUM_HEAD, PillTabs, STATUS_VARIANT, SegmentTabs, Stat,
   percentText, postJson, priceText, searchText, useShares, withParams,
 } from './shared'
+import { DateField } from '@/components/date-field'
 
 const BASE = '/equity'
 
@@ -23,13 +24,12 @@ export function EquityAsOf({ value, label }: { value: string; label: string }) {
   return (
     <label className="inline-flex items-center gap-2 text-sm">
       <span className="text-slate-500 dark:text-slate-400">{label}</span>
-      <Input
-        type="date"
+      <DateField
         className="h-8 w-40"
         defaultValue={value}
         aria-label={label}
-        onChange={(event) => {
-          const next = event.target.value
+        onChange={(value) => {
+          const next = value
           if (!/^\d{4}-\d{2}-\d{2}$/.test(next)) return
           const url = new URL(window.location.href)
           url.searchParams.set('asOf', next)
@@ -193,7 +193,7 @@ function ClassActionDrawer({ shareClass, code, context, onClose }: { shareClass:
       <div className="space-y-4 p-4">
         <SegmentTabs value={mode} onChange={setMode} tabs={modes} label={t('classActions.title', { code })} />
         <div className="grid grid-cols-2 gap-3">
-          <Field label={t('fields.effectiveOn')}><Input type="date" value={form.effectiveOn} onChange={(e) => set('effectiveOn')(e.target.value)} /></Field>
+          <Field label={t('fields.effectiveOn')}><DateField value={form.effectiveOn} onChange={(value) => set('effectiveOn')(value)} /></Field>
           {mode === 'authorized_shares' && (
             <Field label={t('fields.authorizedShares')} hint={t('classActions.currentAuthorized', { value: shareClass.authorized })}>
               <Input inputMode="numeric" value={form.value} onChange={(e) => set('value')(e.target.value)} />
@@ -360,7 +360,7 @@ function ReserveDrawer({ plan, context, onClose }: { plan: { id: string; code: s
     <Drawer open onClose={onClose} title={t('plans.reserveTitle', { code: plan.code })} description={t('plans.reserveDescription')}>
       <div className="space-y-4 p-4">
         <div className="grid grid-cols-2 gap-3">
-          <Field label={t('fields.effectiveOn')}><Input type="date" value={form.effectiveOn} onChange={(e) => setForm({ ...form, effectiveOn: e.target.value })} /></Field>
+          <Field label={t('fields.effectiveOn')}><DateField value={form.effectiveOn} onChange={(value) => setForm({ ...form, effectiveOn: value })} /></Field>
           <Field label={t('fields.shareDelta')} hint={t('plans.deltaHelp')}><Input inputMode="numeric" value={form.shareDelta} onChange={(e) => setForm({ ...form, shareDelta: e.target.value })} /></Field>
         </div>
         <Field label={t('fields.reason')}><Textarea rows={3} value={form.reason} onChange={(e) => setForm({ ...form, reason: e.target.value })} /></Field>

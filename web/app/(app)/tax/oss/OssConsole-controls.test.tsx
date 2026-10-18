@@ -26,22 +26,28 @@ async function mount(today = '2028-02-15') {
 async function change(node: HTMLSelectElement | HTMLInputElement, value: string) {
   const prototype = node instanceof window.HTMLSelectElement ? window.HTMLSelectElement.prototype : window.HTMLInputElement.prototype
   Object.getOwnPropertyDescriptor(prototype, 'value')!.set!.call(node, value)
-  await act(async () => { node.dispatchEvent(new window.Event('change', { bubbles: true })); await tick() })
+  await act(async () => {
+    // A text control records typing on input before the entry settles.
+    if (node instanceof window.HTMLInputElement) node.dispatchEvent(new window.Event('input', { bubbles: true }))
+    node.dispatchEvent(new window.Event('change', { bubbles: true }))
+    await tick()
+  })
 }
 
 test('switching OSS to IOSS selects a complete calendar month including leap February', async () => {
   const view = await mount()
   try {
-    const dates = [...view.host.querySelectorAll<HTMLInputElement>('input[type="date"]')]
-    assert.deepEqual(dates.map(d => d.value), ['2028-01-01','2028-03-31'])
+    // Date fields show the viewer's format (en-US here) and settle on change.
+    const dates = [...view.host.querySelectorAll<HTMLInputElement>('input[data-date-field]')]
+    assert.deepEqual(dates.map(d => d.value), ['01/01/2028','03/31/2028'])
     await change(dates[0]!, '2028-02-01')
     await change(view.host.querySelector('select')!, 'ioss')
-    assert.deepEqual(dates.map(d => d.value), ['2028-02-01','2028-02-29'])
+    assert.deepEqual(dates.map(d => d.value), ['02/01/2028','02/29/2028'])
     await change(view.host.querySelector('select')!, 'union')
-    assert.deepEqual(dates.map(d => d.value), ['2028-01-01','2028-03-31'])
-    await change(dates[0]!, '2028-12-01')
+    assert.deepEqual(dates.map(d => d.value), ['01/01/2028','03/31/2028'])
+    await change(dates[0]!, '12/1/2028')
     await change(view.host.querySelector('select')!, 'ioss')
-    assert.deepEqual(dates.map(d => d.value), ['2028-12-01','2028-12-31'])
+    assert.deepEqual(dates.map(d => d.value), ['12/01/2028','12/31/2028'])
   } finally { await view.close() }
 })
 

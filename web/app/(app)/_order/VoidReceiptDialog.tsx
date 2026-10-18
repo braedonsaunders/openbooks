@@ -4,13 +4,14 @@ import * as React from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useTranslations } from 'next-intl'
-import { Button, FieldLabel, Input, Textarea } from '@openbooks/ui'
+import { Button, FieldLabel, Textarea } from '@openbooks/ui'
 import { fetchAppAction, readAppActionResult, readRefusalDetails } from '@/lib/api-error'
 import { PermissionHint } from '../../../components/permission-hint'
 import {
   formatReversalSummary,
   type VoidReversalSuggestion,
 } from '../../../lib/void-reversal-period'
+import { DateField } from '@/components/date-field'
 
 type AdjustmentPeriod = { id: string; name: string }
 
@@ -341,12 +342,11 @@ export function VoidReceiptDialog({
                       <FieldLabel htmlFor="void-reversal-date">
                         {tCommon('amendment.voidReversalDateLabel')}
                       </FieldLabel>
-                      <Input
+                      <DateField
                         id="void-reversal-date"
-                        type="date"
                         value={reversalDate}
                         disabled={busy}
-                        onChange={(e) => setReversalDate(e.target.value)}
+                        onChange={(value) => setReversalDate(value)}
                       />
                     </div>
                     {suggestion.periods.length > 0 ? (

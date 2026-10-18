@@ -11,6 +11,7 @@ import { useTranslations } from 'next-intl'
 import { FileUp, Upload } from 'lucide-react'
 import { toast } from 'sonner'
 import { Badge, Button, Drawer, Input, Label, Select, Textarea } from '@openbooks/ui'
+import { DateField } from '@/components/date-field'
 interface PreviewLine {
   postedOn: string
   amount: string
@@ -807,12 +808,11 @@ export function ImportStatementButton({ accountId }: { accountId: string }) {
               <div className="grid gap-4 sm:grid-cols-3">
                 <div className={field}>
                   <Label htmlFor={`${fieldId}-statement-date`}>{tBanking('labels.statementDate')}</Label>
-                  <Input
+                  <DateField
                     id={`${fieldId}-statement-date`}
                     disabled={busy}
-                    type="date"
                     value={statementDate}
-                    onChange={(e) => { reviseInputs(); setStatementDate(e.target.value) }}
+                    onChange={(value) => { reviseInputs(); setStatementDate(value) }}
                   />
                 </div>
                 <div className={field}>

@@ -1,10 +1,11 @@
 'use client';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Button, Input } from '@openbooks/ui';
+import { Button } from '@openbooks/ui';
 import { toast } from 'sonner';
 import { promptDialog } from '@/lib/prompt';
 import { readApiErrorMessage } from '@/lib/api-error';
+import { DateField } from '@/components/date-field'
 
 export function RecognitionControls({ obligationId, held, revision, deliveredOn, deliveryRequired }: { obligationId: string; held: boolean; revision: number; deliveredOn: string | null; deliveryRequired: boolean }) {
   const router = useRouter();
@@ -23,7 +24,7 @@ export function RecognitionControls({ obligationId, held, revision, deliveredOn,
   }
   return <div className="flex flex-wrap items-center gap-2">
     <Button variant="outline" disabled={busy} onClick={() => apply(held ? 'release' : 'hold')}>{held ? 'Release recognition' : 'Hold recognition'}</Button>
-    {deliveryRequired && !deliveredOn ? <><label className="text-sm">Delivery date <Input type="date" value={deliveryDate} onChange={event => setDeliveryDate(event.target.value)} /></label><Button variant="outline" disabled={busy || !deliveryDate} onClick={() => apply('deliver')}>Record delivery acceptance</Button></> : deliveryRequired ? <span className="text-sm">Delivered {deliveredOn}</span> : null}
+    {deliveryRequired && !deliveredOn ? <><label className="text-sm">Delivery date <DateField value={deliveryDate} onChange={value => setDeliveryDate(value)} /></label><Button variant="outline" disabled={busy || !deliveryDate} onClick={() => apply('deliver')}>Record delivery acceptance</Button></> : deliveryRequired ? <span className="text-sm">Delivered {deliveredOn}</span> : null}
     {held ? <span className="text-sm">Recognition is on hold</span> : null}
   </div>;
 }

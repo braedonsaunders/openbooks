@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 import { Button, Input } from '@openbooks/ui';
 import { readApiErrorMessage } from '@/lib/api-error';
+import { DateField } from '@/components/date-field'
 export function RenewalActions({subscriptionId,initialDocument,canAccept}:{subscriptionId:string;initialDocument:{documentId:string;kind:string}|null;canAccept:boolean}) {
  const router=useRouter();
  const [date,setDate]=useState(''),[error,setError]=useState(''),[busy,setBusy]=useState(false),[document,setDocument]=useState<{documentId:string;kind:string}|null>(initialDocument),[reason,setReason]=useState('');
@@ -18,7 +19,7 @@ export function RenewalActions({subscriptionId,initialDocument,canAccept}:{subsc
   catch {setError('Renewal could not be accepted');}finally{setBusy(false);}
  }
  return <section className="space-y-2"><p><Link className="underline" href="/admin/setup/subscription-renewal-policies">Renewal policy and reminders</Link></p>
-  <div className="flex flex-wrap items-end gap-2"><label className="text-sm">Review as of <Input type="date" value={date} onChange={e=>setDate(e.target.value)}/></label><Button variant="outline" disabled={busy||!date} onClick={generate}>Generate renewal document</Button></div>
+  <div className="flex flex-wrap items-end gap-2"><label className="text-sm">Review as of <DateField value={date} onChange={value=>setDate(value)}/></label><Button variant="outline" disabled={busy||!date} onClick={generate}>Generate renewal document</Button></div>
   {error?<p role="alert" className="text-sm text-destructive">{error}</p>:null}{document?<Link className="underline" href={document.kind==='quote'?`/estimates?estimate=${document.documentId}`:`/sales-orders?order=${document.documentId}`}>Open renewal {document.kind==='quote'?'quote':'sales order'}</Link>:null}
   {document&&canAccept?<><label className="block text-sm">Renewal acceptance reason<Input value={reason} onChange={e=>setReason(e.target.value)}/></label><Button variant="outline" disabled={busy||reason.trim().length<8} onClick={accept}>Accept approved renewal</Button></>:null}
  </section>;

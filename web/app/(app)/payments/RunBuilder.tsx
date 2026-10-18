@@ -6,11 +6,12 @@ import { useId, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { Badge, Button, Input, Label, SearchSelect, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
+import { Badge, Button, Label, SearchSelect, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
 import { sum } from '@openbooks/engine/money/money'
 import { isUuid } from '@openbooks/engine/platform/identifiers'
 import { SortTh } from '../../../components/sortable-th'
 import { readApiErrorMessage } from '../../../lib/api-error'
+import { DateField } from '@/components/date-field'
 /**
  * Payment-run builder: select posted vendor bills with an open balance
  * (across vendors), pick the paying bank account, create the run. Selection
@@ -207,15 +208,14 @@ export function RunBuilder({
           </div>
           <div className="space-y-1.5">
             <Label id={`${fieldId}-funds-date-label`} htmlFor={`${fieldId}-funds-date`}>{t('fundsDate')}</Label>
-            <Input
+            <DateField
               id={`${fieldId}-funds-date`}
               aria-labelledby={`${fieldId}-funds-date-label`}
-              type="date"
               disabled={busy}
               value={scheduledFor}
-              onChange={(e) => {
+              onChange={(value) => {
                 setFieldError(null)
-                setScheduledFor(e.target.value)
+                setScheduledFor(value)
               }}
             />
           </div>

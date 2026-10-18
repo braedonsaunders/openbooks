@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import { toast } from "sonner";
 import { Button, Drawer, Input, SearchSelect, Select } from "@openbooks/ui";
 import { readApiErrorMessage } from "@/lib/api-error";
+import { DateField } from '@/components/date-field'
 
 /**
  * Capitalize a commission from the workspace: the journal preview (DR
@@ -93,7 +94,7 @@ export function CapitalizeButton({
             </div>
             <div className="space-y-1">
               <label className="text-sm font-medium">{t("capitalize.date")}</label>
-              <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+              <DateField value={date} onChange={(value) => setDate(value)} />
             </div>
             <div className="space-y-1">
               <label className="text-sm font-medium">{t("capitalize.expenseAccount")}</label>

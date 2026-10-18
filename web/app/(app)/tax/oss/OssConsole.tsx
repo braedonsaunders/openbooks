@@ -6,7 +6,7 @@ import { useLocale, useTranslations } from 'next-intl'
 import { addCalendarDays, addMonthsStart, calendarQuarterBounds, startOfMonth } from '@openbooks/engine/platform/civil-date'
 import { useBusinessToday } from '@/components/business-date-provider'
 import { ActionError, kindForStatus, transportError, type ActionResult } from '@braedonsaunders/appkit-errors'
-import { Badge, Button, Card, CardContent, EmptyState, Input, Label, PageHeader, Select } from '@openbooks/ui'
+import { Badge, Button, Card, CardContent, EmptyState, Label, PageHeader, Select } from '@openbooks/ui'
 import { RecordTabs } from '@/components/module-home/record-tabs'
 import { KpiStrip } from '@/components/kpi-strip'
 import { PagedTable, type PagedColumn } from '@/components/paged-table'
@@ -16,6 +16,7 @@ import { normalizeDecimal, roundMoney } from '@openbooks/engine/money'
 import { formatExactPercent } from '@/lib/format'
 import { formatDecimal } from '@/lib/money-format'
 import { useAppAction } from '@/lib/use-app-action'
+import { DateField } from '@/components/date-field'
 
 type Scheme = 'union' | 'non_union' | 'ioss'
 
@@ -214,11 +215,11 @@ export function OssConsole({ setupHref }: { setupHref: string }) {
         </div>
         <div className="space-y-1.5">
           <Label>{t('from')}</Label>
-          <Input type="date" value={from} disabled={busy} onChange={(event) => { setFrom(event.target.value); setResult(null); setFailure(null) }} />
+          <DateField value={from} disabled={busy} onChange={(value) => { setFrom(value); setResult(null); setFailure(null) }} />
         </div>
         <div className="space-y-1.5">
           <Label>{t('to')}</Label>
-          <Input type="date" value={to} disabled={busy} onChange={(event) => { setTo(event.target.value); setResult(null); setFailure(null) }} />
+          <DateField value={to} disabled={busy} onChange={(value) => { setTo(value); setResult(null); setFailure(null) }} />
         </div>
         <Button disabled={busy} onClick={() => void prepare()}>
           {busy ? t('preparing') : t('prepare')}

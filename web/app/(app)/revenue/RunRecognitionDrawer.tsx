@@ -8,7 +8,8 @@ import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { readApiErrorMessage } from '@/lib/api-error'
-import { Badge, Button, Drawer, Input, Label, Select, TableCell, TableRow } from '@openbooks/ui'
+import { Badge, Button, Drawer, Label, Select, TableCell, TableRow } from '@openbooks/ui'
+import { DateField } from '@/components/date-field'
 
 export interface RecognitionBook {
   id: string
@@ -306,11 +307,10 @@ export function RunRecognitionDrawer({
           <section className="grid gap-4 md:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="recognition-as-of">{t('review.asOf')}</Label>
-              <Input
+              <DateField
                 id="recognition-as-of"
-                type="date"
                 value={asOfDate}
-                onChange={(event) => setAsOfDate(event.target.value)}
+                onChange={(value) => setAsOfDate(value)}
               />
               <p className="text-xs text-slate-500 dark:text-slate-400">{t('review.asOfHint')}</p>
             </div>

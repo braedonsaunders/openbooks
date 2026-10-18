@@ -46,6 +46,7 @@ import { cmp, fromUnits, mul, sum, toUnits } from '@openbooks/engine/money/money
 import { computeLineTaxes, type TaxComponentConfig } from '@openbooks/engine/tax/tax'
 import { fromQuantityUnits, toQuantityUnits } from '../../../lib/order-cycle-math'
 import { viewerDateTime } from '@/lib/format'
+import { DateField } from '@/components/date-field'
 type Opt = {
   id: string
   display_name?: string
@@ -1954,8 +1955,8 @@ export function OrderDrawer({
         key: 'projectId', label: tCommon('labels.project'), width: 'minmax(150px,1.2fr)', type: 'search-select',
         options: projects.map((project) => ({ value: project.id, label: project.name ?? '' })), placeholder: '—',
       },
-      work_from: { key: 'workFrom', label: tCommon('labels.workFrom'), width: '130px', type: 'text', placeholder: 'YYYY-MM-DD' },
-      work_to: { key: 'workTo', label: tCommon('labels.workTo'), width: '130px', type: 'text', placeholder: 'YYYY-MM-DD' },
+      work_from: { key: 'workFrom', label: tCommon('labels.workFrom'), width: '130px', type: 'date' },
+      work_to: { key: 'workTo', label: tCommon('labels.workTo'), width: '130px', type: 'date' },
       tax_code_id: {
         key: 'taxProfileId',
         label: tCommon('labels.tax'),
@@ -2046,12 +2047,12 @@ export function OrderDrawer({
       case 'party_id':
         return <><FieldLabel fieldName={label || t('partyLabel', { kind })}>{label || t('partyLabel', { kind })}{isEditable ? <span className="text-red-500"> *</span> : null}</FieldLabel>{isEditable ? <SearchSelect options={parties.map((party) => ({ value: party.id, label: party.display_name ?? '' }))} value={partyId} onChange={(value) => setPartyId(value ?? '')} placeholder={t('selectPartyPlaceholder', { kind })} /> : <p className="text-sm">{doc.party_name ?? '—'}</p>}</>
       case 'document_date':
-        return <><FieldLabel fieldName={label || t('dateLabel', { kind })}>{label || t('dateLabel', { kind })}</FieldLabel>{isEditable ? <Input type="date" value={documentDate} onChange={(event) => setDocumentDate(event.target.value)} /> : <p className="text-sm">{doc.document_date}</p>}</>
+        return <><FieldLabel fieldName={label || t('dateLabel', { kind })}>{label || t('dateLabel', { kind })}</FieldLabel>{isEditable ? <DateField value={documentDate} onChange={(value) => setDocumentDate(value)} /> : <p className="text-sm">{doc.document_date}</p>}</>
       case 'due_date':
-        return <><FieldLabel fieldName={label || t('expiryLabel', { kind })}>{label || t('expiryLabel', { kind })}</FieldLabel>{isEditable ? <Input type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} /> : <p className="text-sm">{doc.due_date ?? '—'}</p>}</>
+        return <><FieldLabel fieldName={label || t('expiryLabel', { kind })}>{label || t('expiryLabel', { kind })}</FieldLabel>{isEditable ? <DateField value={dueDate} onChange={(value) => setDueDate(value)} /> : <p className="text-sm">{doc.due_date ?? '—'}</p>}</>
       case 'work_completed_on':
         if (kind !== 'sales_order') return null
-        return <><FieldLabel fieldName={label || tCommon('labels.workCompletedOn')}>{label || tCommon('labels.workCompletedOn')}</FieldLabel>{isEditable ? <Input type="date" value={workCompletedOn} onChange={(event) => setWorkCompletedOn(event.target.value)} /> : <p className="text-sm">{doc.work_completed_on ?? '—'}</p>}</>
+        return <><FieldLabel fieldName={label || tCommon('labels.workCompletedOn')}>{label || tCommon('labels.workCompletedOn')}</FieldLabel>{isEditable ? <DateField value={workCompletedOn} onChange={(value) => setWorkCompletedOn(value)} /> : <p className="text-sm">{doc.work_completed_on ?? '—'}</p>}</>
       case 'department_id':
         return <><FieldLabel fieldName={label || tCommon('labels.department')}>{label || tCommon('labels.department')}</FieldLabel>{isEditable ? <SearchSelect options={[{ value: '', label: '—' }, ...departments.map((department) => ({ value: department.id, label: department.name ?? '' }))]} value={departmentId} onChange={(value) => setDepartmentId(value ?? '')} placeholder="—" /> : <p className="text-sm">{departments.find((department) => department.id === doc.department_id)?.name ?? '—'}</p>}</>
       case 'project_id':
@@ -2495,7 +2496,7 @@ export function OrderDrawer({
           <div className={field}>
             <Label>{t('dateLabel', { kind })}</Label>
             {editable ? (
-              <Input type="date" value={documentDate} onChange={(e) => setDocumentDate(e.target.value)} />
+              <DateField value={documentDate} onChange={(value) => setDocumentDate(value)} />
             ) : (
               <p className="text-sm">{doc.document_date}</p>
             )}
@@ -2503,7 +2504,7 @@ export function OrderDrawer({
           <div className={field}>
             <Label>{t('expiryLabel', { kind })}</Label>
             {editable ? (
-              <Input type="date" value={dueDate} onChange={(e) => setDueDate(e.target.value)} />
+              <DateField value={dueDate} onChange={(value) => setDueDate(value)} />
             ) : (
               <p className="text-sm">{doc.due_date ?? '—'}</p>
             )}

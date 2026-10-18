@@ -44,6 +44,7 @@ import {
   type FormLayoutConfig,
   type HeaderFieldPlacement,
 } from '@openbooks/customization'
+import { DateField } from '@/components/date-field'
 type Opt = {
   id: string
   display_name?: string
@@ -1105,7 +1106,7 @@ export function ExpenseDrawer({
         return <><Label>{override || t('drawer.cardLabel')}</Label>{isEditable ? <SearchSelect options={[{ value: '', label: t('drawer.noCard') }, ...cards.map((card) => ({ value: card.id, label: card.display_name ?? '' }))]} value={paymentCardId} onChange={(value) => setPaymentCardId(value ?? '')} placeholder={t('drawer.cardPlaceholder')} /> : <p className="text-sm">{cardLabel ?? '—'}</p>}</>
       }
       case 'document_date':
-        return <><Label>{override || t('drawer.reportDate')}</Label>{isEditable ? <Input type="date" value={documentDate} onChange={(event) => setDocumentDate(event.target.value)} /> : <p className="text-sm">{doc.document_date}</p>}</>
+        return <><Label>{override || t('drawer.reportDate')}</Label>{isEditable ? <DateField value={documentDate} onChange={(value) => setDocumentDate(value)} /> : <p className="text-sm">{doc.document_date}</p>}</>
       case 'memo':
         return <><Label>{override || tCommon('labels.memo')}</Label>{isEditable ? <Input value={memo} onChange={(event) => setMemo(event.target.value)} /> : <p className="text-sm">{doc.memo ?? '—'}</p>}</>
       default:
@@ -1282,7 +1283,7 @@ export function ExpenseDrawer({
           <div className={field}>
             <Label>{t('drawer.reportDate')}</Label>
             {editable ? (
-              <Input type="date" value={documentDate} onChange={(e) => setDocumentDate(e.target.value)} />
+              <DateField value={documentDate} onChange={(value) => setDocumentDate(value)} />
             ) : (
               <p className="text-sm">{doc.document_date}</p>
             )}

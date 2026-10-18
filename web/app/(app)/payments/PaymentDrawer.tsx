@@ -32,8 +32,10 @@ import { ApprovalActions } from '../../../components/approval-actions'
 import { ApprovalHistory } from '../../../components/approval-history'
 import { promptDialog } from '../../../lib/prompt'
 import { StoredValueTendersSection, type CustomerCreditOption, type TenderDraft } from './StoredValueTendersSection'
+import { CreditApplicationsPanel } from '../../../components/credit-applications-panel'
 import type { FormLayoutConfig, HeaderFieldPlacement } from '@openbooks/customization'
 import { cmp, divRate, formatMoney, mulRate, normalizeMoney, sum } from '@openbooks/engine/money/money'
+import { DateField } from '@/components/date-field'
 
 /**
  * Shared payment/receipt flyout. side='ap' → vendor payment applying open
@@ -127,6 +129,8 @@ export interface PaymentPayload {
   governedByFlow?: boolean
   /** Server-resolved payment duty and Banking feature for effect recovery. */
   canRetryPostingEffects?: boolean
+  /** Server-resolved payment duty: the viewer may apply this payment's unapplied cash to other open documents. */
+  canApplyUnapplied?: boolean
   /** Live applications as the loader hands them; narrowed to
    *  PaymentAppliedRow for rendering below. */
   applied: Record<string, unknown>[]
@@ -956,7 +960,7 @@ function PaymentDrawerBody({
       case 'bank_account_id':
         return <><FieldLabel fieldName={label || fundingLabel}>{label || fundingLabel}{isEditable ? <span className="text-red-500"> *</span> : null}</FieldLabel>{isEditable && !soleSelectedBank ? <SearchSelect options={fundingAccounts.map((account) => ({ value: account.id, label: fundingOptionLabel(account) }))} value={bankAccountId} onChange={(value) => setBankAccountId(value ?? '')} placeholder={fundingPlaceholder} /> : <p className="text-sm">{soleSelectedBank ? `${soleSelectedBank.number ?? ''} ${soleSelectedBank.name ?? ''}`.trim() : `${doc.bank_account_number ?? ''} ${doc.bank_account_name ?? ''}`.trim() || '—'}</p>}</>
       case 'document_date':
-        return <><FieldLabel fieldName={label || tCommon('labels.date')}>{label || tCommon('labels.date')}</FieldLabel>{isEditable ? <Input type="date" value={documentDate} onChange={(event) => setDocumentDate(event.target.value)} /> : <p className="text-sm">{doc.document_date}</p>}</>
+        return <><FieldLabel fieldName={label || tCommon('labels.date')}>{label || tCommon('labels.date')}</FieldLabel>{isEditable ? <DateField value={documentDate} onChange={(value) => setDocumentDate(value)} /> : <p className="text-sm">{doc.document_date}</p>}</>
       case 'reference_number':
         return <><FieldLabel fieldName={label || tCommon('labels.reference')}>{label || tCommon('labels.reference')}</FieldLabel>{isEditable ? <Input value={referenceNumber} onChange={(event) => setReferenceNumber(event.target.value)} placeholder={t('referencePlaceholder')} /> : <p className="text-sm">{doc.reference_number ?? '—'}</p>}</>
       case 'memo':
@@ -1222,7 +1226,7 @@ function PaymentDrawerBody({
           <div className={field}>
             <Label>{tCommon('labels.date')}</Label>
             {editable ? (
-              <Input type="date" value={documentDate} onChange={(e) => setDocumentDate(e.target.value)} />
+              <DateField value={documentDate} onChange={(value) => setDocumentDate(value)} />
             ) : (
               <p className="text-sm">{doc.document_date}</p>
             )}
@@ -1581,6 +1585,18 @@ function PaymentDrawerBody({
           </div>
         )}
 
+        {/* Cash this payment moved beyond what it applied stays open for the
+            party; it is applied to the party's other documents here, with no
+            new cash, and released the same way. */}
+        {!createMode && doc.status === 'posted' && typeof doc.id === 'string' ? (
+          <CreditApplicationsPanel
+            documentId={doc.id}
+            side={side}
+            partyId={typeof doc.party_id === 'string' ? doc.party_id : null}
+            canApply={payment.canApplyUnapplied === true}
+            source="payment"
+          />
+        ) : null}
       </div>
     </TransactionDrawer>
   )

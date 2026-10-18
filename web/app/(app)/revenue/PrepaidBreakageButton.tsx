@@ -2,12 +2,13 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
-import { Button,Drawer,Input,Label,SearchSelect,Select,Textarea } from '@openbooks/ui'
+import { Button, Drawer, Label, SearchSelect, Select, Textarea } from '@openbooks/ui'
 import { MoneyInput,moneyFieldError } from '@/components/money-input'
 import { useBusinessToday } from '@/components/business-date-provider'
 import { useDirtyClose } from '@/lib/use-dirty-close'
 import { readApiErrorMessage } from '@/lib/api-error'
 import type { breakageGrantOptions } from '@openbooks/engine/revenue'
+import { DateField } from '@/components/date-field'
 /** Composes the contract-modification editor's native Drawer, controls and
  * dirty-close behavior. Applying an approved estimate updates the same usage
  * recognition schedules shown by this contract. */
@@ -30,7 +31,7 @@ export function PrepaidBreakageButton({grants}:{grants:Awaited<ReturnType<typeof
   return <><Button variant="outline" onClick={()=>setOpen(true)}>{t('title')}</Button>{open ? <Drawer open title={t('title')} onClose={guard.close} size="lg"><div className="space-y-4">
     <p className="text-sm text-muted-foreground">{t('hint')}</p>
     <div className="space-y-1"><Label>{t('grant')}</Label><SearchSelect ariaLabel={t('grant')} value={values.grant ?? ''} onChange={value=>update('grant',value)} options={grants.map(grant=>({value:grant.id,label:`${grant.description} · ${grant.amount} ${grant.currency}`}))} placeholder={t('choose')} /></div>
-    <div className="space-y-1"><Label htmlFor="breakage-date">{t('date')}</Label><Input id="breakage-date" type="date" value={values.date ?? ''} onChange={event=>update('date',event.target.value)} /></div>
+    <div className="space-y-1"><Label htmlFor="breakage-date">{t('date')}</Label><DateField id="breakage-date" value={values.date ?? ''} onChange={value=>update('date',value)} /></div>
     <div className="space-y-1"><Label htmlFor="breakage-method">{t('method')}</Label><Select id="breakage-method" value={values.method ?? 'expected_proportional'} onChange={event=>update('method',event.target.value)}><option value="expected_proportional">{t('expected_proportional')}</option><option value="remaining_use_remote">{t('remaining_use_remote')}</option></Select></div>
     <MoneyInput value={values.amount ?? ''} onChange={value=>update('amount',value)} field={t('amount')} ariaLabel={t('amount')} required />
     {yesNo('entitled')}{yesNo('constraint')}{yesNo('thirdParty')}

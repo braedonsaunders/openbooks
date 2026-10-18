@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { Button, Drawer, Input } from "@openbooks/ui";
 import { readApiErrorMessage } from "@/lib/api-error";
 import { useMoney } from "@/components/money-provider";
+import { DateField } from '@/components/date-field'
 
 /**
  * Recognize impairment: the write-down preview (carrying less recoverable)
@@ -86,7 +87,7 @@ export function ImpairAssetButton({
             </div>
             <div className="space-y-1">
               <label className="text-sm font-medium">{t("impair.date")}</label>
-              <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+              <DateField value={date} onChange={(value) => setDate(value)} />
             </div>
             <div className="flex justify-end gap-2">
               <Button variant="ghost" onClick={() => setOpen(false)}>

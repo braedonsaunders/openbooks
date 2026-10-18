@@ -15,6 +15,7 @@ import {
   Select,
 } from "@openbooks/ui";
 import { Field } from "@/components/field";
+import { DateField } from '@/components/date-field'
 
 type CatalogFeature = {
   id: string;
@@ -311,7 +312,7 @@ export function PlanVersionEntitlementsDrawer({
       footer={
         <>
           {readReady ? <Field label={et("effectiveFrom")}>
-            <Input type="date" value={effectiveFrom} onChange={(e) => setEffectiveFrom(e.target.value)} />
+            <DateField value={effectiveFrom} onChange={(value) => setEffectiveFrom(value)} />
           </Field> : null}
           <Button variant="outline" onClick={onClose}>{actions("cancel")}</Button>
           {readReady ? <Button onClick={save} disabled={saving || loading || changedCount === 0}>
@@ -568,10 +569,10 @@ export function SubscriptionEntitlementsDrawer({
             </Field>
             <div className="grid grid-cols-2 gap-3">
               <Field label={et("effectiveFrom")}>
-                <Input type="date" value={form.effectiveFrom} onChange={(e) => setForm({ ...form, effectiveFrom: e.target.value })} />
+                <DateField value={form.effectiveFrom} onChange={(value) => setForm({ ...form, effectiveFrom: value })} />
               </Field>
               <Field label={et("effectiveTo")}>
-                <Input type="date" value={form.effectiveTo} onChange={(e) => setForm({ ...form, effectiveTo: e.target.value })} />
+                <DateField value={form.effectiveTo} onChange={(value) => setForm({ ...form, effectiveTo: value })} />
               </Field>
             </div>
             <div>

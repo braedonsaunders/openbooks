@@ -14,6 +14,7 @@ import type { FindingProposalCommand } from '@/lib/agents/proposals'
 import { useDirtyClose } from '@/lib/use-dirty-close'
 import { displayRoleName } from '@/lib/role-display'
 import { readApiErrorMessage } from '../../../lib/api-error'
+import { DateField } from '@/components/date-field'
 type Evidence = {
   id: string
   kind: string
@@ -353,7 +354,7 @@ export function WorkItemDrawer({
                   </select>
                 </label>
                 <label className="block text-xs font-medium text-slate-500">{ta('drawer.assignment.due')}
-                  <input type="date" value={dueDate} onChange={(event) => setDueDate(event.target.value)} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-900 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100" />
+                  <DateField value={dueDate} onChange={(value) => setDueDate(value)} className="mt-1 w-full rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-sm text-slate-900 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-100" />
                 </label>
               </div>
             ) : null}

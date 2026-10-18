@@ -32,14 +32,20 @@ function recordReplaces(): { replaces: string[] } {
 }
 
 function dateInputs(): HTMLInputElement[] {
-  return [...document.querySelectorAll('input[type="date"]')] as HTMLInputElement[]
+  return [...document.querySelectorAll('input[data-date-field]')] as HTMLInputElement[]
 }
 
-async function typeDate(input: HTMLInputElement, value: string): Promise<void> {
+/**
+ * Type into a date bound. A finished entry settles as moving to the next
+ * control does; an unfinished one is still typed text, which Enter settles.
+ */
+async function typeDate(input: HTMLInputElement, value: string, { finish = true }: { finish?: boolean } = {}): Promise<void> {
   await act(async () => {
     const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!
     setter.call(input, value)
     input.dispatchEvent(new window.Event('input', { bubbles: true }))
+    if (finish) input.dispatchEvent(new window.Event('change', { bubbles: true }))
+    await Promise.resolve()
   })
 }
 
@@ -103,7 +109,7 @@ test('choosing Custom on an as-of report waits for one complete date', async () 
     assert.equal(replaces.length, 0)
     const dates = dateInputs()
     assert.equal(dates.length, 1, 'the as-of control remains a single date')
-    await typeDate(dates[0]!, '2026-02-28')
+    await typeDate(dates[0]!, '2/28/2026', { finish: false })
     await pressEnter(dates[0]!)
     assert.equal(replaces.length, 1)
     const params = new URL(replaces[0]!, 'https://example.test').searchParams
@@ -172,7 +178,7 @@ test('Enter in a custom bound applies the staged range', async () => {
     const [from, to] = dateInputs()
     assert.ok(to, 'the custom To field renders')
     await typeDate(from!, '2026-02-01')
-    await typeDate(to!, '2026-02-28')
+    await typeDate(to!, '2026-02-28', { finish: false })
     await pressEnter(to!)
     assert.equal(replaces.length, 1, 'Enter commits the staged range')
     assert.ok(replaces[0]!.includes('from=2026-02-01'), 'the commit carries the typed From')

@@ -418,7 +418,7 @@ test("changing the payment date hides prior-date FX evidence while new rates loa
   t.after(restoreFetch);
   const { unmount } = await mountPayment(doc, [item], "edit", null, [{ openLineId: "bill-fx", sourceTransactionAmount: "125.00", targetTransactionAmount: "100.00", settlementRate: "0.80", settlementRateSource: "provider", settlementRateReference: "daily · 2026-09-17", settlementFxRateId: "fx-old" }]);
   t.after(unmount);
-  const date = document.querySelector('input[type="date"]') as HTMLInputElement;
+  const date = document.querySelector('input[data-date-field]') as HTMLInputElement;
   const evidence = [...document.querySelectorAll("select")].find((select) => [...select.options].some((option) => option.textContent?.includes("2026-09-17")));
   assert.ok(evidence, "the initially fetched FX evidence renders");
   globalThis.fetch = (async () => new Promise<Response>(() => {})) as typeof fetch;

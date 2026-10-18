@@ -11,6 +11,7 @@ import { useMoney } from '@/components/money-provider'
 import type { RecordEventResult } from '@openbooks/engine/equity'
 import type { SecurityDrawerData } from './view'
 import { Field, LINK, STATUS_VARIANT, SegmentTabs, Stat, percentText, postJson, priceText, useShares, withParams } from './shared'
+import { DateField } from '@/components/date-field'
 
 type ActionKind = 'exercise' | 'settle' | 'forfeit' | 'expire' | 'cancel' | 'transfer' | 'convert' | 'repurchase' | 'void'
 
@@ -283,7 +284,7 @@ function ActionForm({ securityId, convertible, actions, asOf, holders, rounds, c
       <SegmentTabs value={action} onChange={setAction} label={t('drawer.actions')} tabs={actions.map((key) => ({ key, label: t(`eventKind.${key}`) }))} />
       <p className="text-sm text-slate-500 dark:text-slate-400">{t(`events.help.${action}`)}</p>
       <div className="grid grid-cols-2 gap-3">
-        <Field label={t('fields.effectiveOn')}><Input type="date" value={form.effectiveOn} onChange={(e) => set('effectiveOn')(e.target.value)} /></Field>
+        <Field label={t('fields.effectiveOn')}><DateField value={form.effectiveOn} onChange={(value) => set('effectiveOn')(value)} /></Field>
         {needsQuantity && (
           <Field label={action === 'convert' ? t('fields.sharesToConvert') : t('fields.quantity')}>
             <Input inputMode="numeric" value={form.quantity} onChange={(e) => set('quantity')(e.target.value)} />

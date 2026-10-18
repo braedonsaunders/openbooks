@@ -5,6 +5,7 @@ import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useTranslations } from 'next-intl'
 import { Button, FieldLabel, Input, Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@openbooks/ui'
+import { DateField } from '../../../components/date-field'
 
 export interface ReceiptPrefillLine {
   sourceLineId: string
@@ -200,12 +201,11 @@ export function GoodsReceiptForm({ orderId, apiBase, warehouses, onSubmit, onClo
               <>
                 <div>
                   <FieldLabel htmlFor="receipt-date">{t('receive.receiptDate')}</FieldLabel>
-                  <Input
+                  <DateField
                     id="receipt-date"
-                    type="date"
                     value={receiptDate}
                     disabled={saving}
-                    onChange={(e) => setReceiptDate(e.target.value)}
+                    onChange={(value) => setReceiptDate(value)}
                   />
                 </div>
                 <Table containerClassName="overflow-visible rounded-none border-0 bg-transparent shadow-none" className="w-full text-sm">

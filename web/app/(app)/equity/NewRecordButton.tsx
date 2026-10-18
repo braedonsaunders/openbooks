@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 import { Button, Drawer, Input, SearchSelect, Textarea } from '@openbooks/ui'
 import type { NewRecordData } from './view'
 import { Field, SegmentTabs, postJson, withParams } from './shared'
+import { DateField } from '../../../components/date-field'
 
 type Section = 'security' | 'class' | 'plan' | 'round'
 type Kind = 'share' | 'option' | 'rsu' | 'warrant' | 'safe' | 'note'
@@ -155,7 +156,7 @@ function IssueSecurityForm({ data, onDone }: { data: NewRecordData; onDone: () =
         <Field label={t('fields.holder')}>
           <SearchSelect value={form.holderPartyId} options={data.holders} onChange={(value) => set('holderPartyId')(value ?? '')} ariaLabel={t('fields.holder')} />
         </Field>
-        <Field label={t('fields.issueDate')}><Input type="date" value={form.issueDate} onChange={(e) => set('issueDate')(e.target.value)} /></Field>
+        <Field label={t('fields.issueDate')}><DateField value={form.issueDate} onChange={(value) => set('issueDate')(value)} /></Field>
         {shareBased && (
           <>
             <Field label={t('fields.shareClass')}>
@@ -195,7 +196,7 @@ function IssueSecurityForm({ data, onDone }: { data: NewRecordData; onDone: () =
           </Field>
         )}
         {(kind === 'option' || kind === 'warrant') && (
-          <Field label={t('fields.expirationDate')}><Input type="date" value={form.expirationDate} onChange={(e) => set('expirationDate')(e.target.value)} /></Field>
+          <Field label={t('fields.expirationDate')}><DateField value={form.expirationDate} onChange={(value) => set('expirationDate')(value)} /></Field>
         )}
         {kind === 'safe' && (
           <Field label={t('fields.safeType')}>
@@ -214,7 +215,7 @@ function IssueSecurityForm({ data, onDone }: { data: NewRecordData; onDone: () =
             <Field label={t('fields.interestBasis')}>
               <SearchSelect value={form.interestBasis} options={[{ value: 'simple', label: t('interestBasis.simple') }, { value: 'compound_annual', label: t('interestBasis.compound_annual') }]} onChange={(value) => set('interestBasis')(value ?? 'simple')} ariaLabel={t('fields.interestBasis')} />
             </Field>
-            <Field label={t('fields.maturityDate')}><Input type="date" value={form.maturityDate} onChange={(e) => set('maturityDate')(e.target.value)} /></Field>
+            <Field label={t('fields.maturityDate')}><DateField value={form.maturityDate} onChange={(value) => set('maturityDate')(value)} /></Field>
           </>
         )}
         <Field label={t('fields.securityNumber')} hint={t('new.numberHint')}><Input value={form.securityNumber} onChange={(e) => set('securityNumber')(e.target.value)} /></Field>
@@ -224,7 +225,7 @@ function IssueSecurityForm({ data, onDone }: { data: NewRecordData; onDone: () =
           <SegmentTabs value={vesting} onChange={setVesting} label={t('new.vesting')} tabs={[{ key: 'none', label: t('new.vestingNone') }, { key: 'time', label: t('new.vestingTime') }]} />
           {vesting === 'time' && (
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-              <Field label={t('fields.vestingStart')}><Input type="date" value={form.vestingStart} onChange={(e) => set('vestingStart')(e.target.value)} /></Field>
+              <Field label={t('fields.vestingStart')}><DateField value={form.vestingStart} onChange={(value) => set('vestingStart')(value)} /></Field>
               <Field label={t('fields.vestingMonths')}><Input inputMode="numeric" value={form.vestingMonths} onChange={(e) => set('vestingMonths')(e.target.value)} /></Field>
               <Field label={t('fields.cliffMonths')}><Input inputMode="numeric" value={form.cliffMonths} onChange={(e) => set('cliffMonths')(e.target.value)} /></Field>
               <Field label={t('fields.vestingFrequency')}>
@@ -295,7 +296,7 @@ function ShareClassForm({ data, onDone }: { data: NewRecordData; onDone: () => v
         <Field label={t('fields.classKind')}>
           <SearchSelect value={form.kind} options={[{ value: 'common', label: t('classKind.common') }, { value: 'preferred', label: t('classKind.preferred') }]} onChange={(value) => set('kind')(value ?? 'common')} ariaLabel={t('fields.classKind')} />
         </Field>
-        <Field label={t('fields.effectiveOn')}><Input type="date" value={form.effectiveOn} onChange={(e) => set('effectiveOn')(e.target.value)} /></Field>
+        <Field label={t('fields.effectiveOn')}><DateField value={form.effectiveOn} onChange={(value) => set('effectiveOn')(value)} /></Field>
         <Field label={t('fields.authorizedShares')}><Input inputMode="numeric" value={form.authorizedShares} onChange={(e) => set('authorizedShares')(e.target.value)} /></Field>
         <Field label={t('fields.parValue')}><Input inputMode="decimal" value={form.parValue} onChange={(e) => set('parValue')(e.target.value)} /></Field>
         {preferred && (
@@ -334,7 +335,7 @@ function PlanForm({ data, onDone }: { data: NewRecordData; onDone: () => void })
         <Field label={t('fields.shareClass')}>
           <SearchSelect value={form.shareClassId} options={data.classes} onChange={(value) => setForm({ ...form, shareClassId: value ?? '' })} ariaLabel={t('fields.shareClass')} />
         </Field>
-        <Field label={t('fields.effectiveOn')}><Input type="date" value={form.effectiveOn} onChange={(e) => setForm({ ...form, effectiveOn: e.target.value })} /></Field>
+        <Field label={t('fields.effectiveOn')}><DateField value={form.effectiveOn} onChange={(value) => setForm({ ...form, effectiveOn: value })} /></Field>
         <Field label={t('fields.reservedShares')}><Input inputMode="numeric" value={form.reservedShares} onChange={(e) => setForm({ ...form, reservedShares: e.target.value })} /></Field>
       </div>
       <fieldset className="space-y-2 text-sm">
@@ -361,7 +362,7 @@ function RoundForm({ data, onDone }: { data: NewRecordData; onDone: () => void }
         <Field label={t('fields.shareClass')}>
           <SearchSelect value={form.shareClassId} options={data.classes} onChange={(value) => setForm({ ...form, shareClassId: value ?? '' })} ariaLabel={t('fields.shareClass')} />
         </Field>
-        <Field label={t('fields.closedOn')}><Input type="date" value={form.closedOn} onChange={(e) => setForm({ ...form, closedOn: e.target.value })} /></Field>
+        <Field label={t('fields.closedOn')}><DateField value={form.closedOn} onChange={(value) => setForm({ ...form, closedOn: value })} /></Field>
         <Field label={t('fields.pricePerShare')}><Input inputMode="decimal" value={form.pricePerShare} onChange={(e) => setForm({ ...form, pricePerShare: e.target.value })} /></Field>
         <Field label={t('fields.preMoneyValuation')}><Input inputMode="decimal" value={form.preMoneyValuation} onChange={(e) => setForm({ ...form, preMoneyValuation: e.target.value })} /></Field>
       </div>

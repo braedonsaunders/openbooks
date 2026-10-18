@@ -19,6 +19,7 @@ import type {
   RevenueModificationPromise,
 } from "@openbooks/engine/revenue/contract-modifications";
 import type { ContractPayload, RevenueModificationOptions } from "./_lib";
+import { DateField } from '@/components/date-field'
 type Group = RevenueModificationInput["groups"][number];
 function Field({
   label,
@@ -185,10 +186,9 @@ function Form({
     >
       <div className="space-y-5 p-4">
         <Field label={t("modify.fieldEffectiveDate")}>
-          <Input
-            type="date"
+          <DateField
             value={date}
-            onChange={(e) => setDate(e.target.value)}
+            onChange={(value) => setDate(value)}
           />
         </Field>
         <Field label={t("modify.fieldEntity")}>
@@ -362,12 +362,11 @@ function Form({
                   />
                 </Field>
                 <Field label={t("modify.endsOn")}>
-                  <Input
-                    type="date"
+                  <DateField
                     value={p.recognitionEndsOn ?? ""}
-                    onChange={(e) =>
+                    onChange={(value) =>
                       promise(i, n, {
-                        recognitionEndsOn: e.target.value || null,
+                        recognitionEndsOn: value || null,
                       })
                     }
                   />

@@ -7,6 +7,7 @@ import { useBusinessToday } from '@/components/business-date-provider'
 import { useDirtyClose } from '@/lib/use-dirty-close'
 import { readApiErrorMessage } from '@/lib/api-error'
 import type { loadNetInvestmentOptions } from '@openbooks/engine/consolidation'
+import { DateField } from '@/components/date-field'
 type Setup=Awaited<ReturnType<typeof loadNetInvestmentOptions>>
 /** Composes the existing accounting proposal drawer; Flows owns approval. */
 export function NetInvestmentButton({interestId}:{interestId:string}) {
@@ -37,7 +38,7 @@ export function NetInvestmentButton({interestId}:{interestId:string}) {
       {picker('elimination',t('elimination'),setup.eliminations.map(entity=>({value:entity.id,label:entity.name+' — '+entity.base_currency})))}
       {picker('oci',t('oci'),setup.accounts.filter(account=>account.type==='equity').map(account=>({value:account.id,label:account.number+' — '+account.name})))}
       {picker('pnl',t('pnl'),setup.accounts.filter(account=>account.type!=='equity').map(account=>({value:account.id,label:account.number+' — '+account.name})))}
-      <div className="space-y-1"><Label htmlFor={prefix+'date'}>{t('date')}</Label><Input id={prefix+'date'} type="date" value={values.date ?? ''} disabled={busy} onChange={event=>update('date',event.target.value)}/></div>
+      <div className="space-y-1"><Label htmlFor={prefix+'date'}>{t('date')}</Label><DateField id={prefix+'date'} value={values.date ?? ''} disabled={busy} onChange={value=>update('date',value)}/></div>
       <fieldset className="space-y-2"><legend className="text-sm font-medium">{t('sources')}</legend>{setup.sources.filter(source=>source.pairId===values.pair && source.bookId===values.book && source.postingDate<=(values.date ?? '')).map(source=><label key={source.id} className="flex items-start gap-2 text-sm"><Input type="checkbox" checked={sources.includes(source.id)} disabled={busy} onChange={event=>{setSources(current=>event.target.checked ? [...current,source.id] : current.filter(id=>id!==source.id));setKey(crypto.randomUUID())}}/>{source.label}</label>)}<p className="text-sm text-muted-foreground">{t('sourceHint')}</p></fieldset>
       <label className="flex items-start gap-2 text-sm"><Input type="checkbox" checked={qualified} disabled={busy} onChange={event=>{setQualified(event.target.checked);setKey(crypto.randomUUID())}}/>{t('qualified')}</label>
       <label className="flex items-start gap-2 text-sm"><Input type="checkbox" checked={nonTrade} disabled={busy} onChange={event=>{setNonTrade(event.target.checked);setKey(crypto.randomUUID())}}/>{t('nonTrade')}</label>

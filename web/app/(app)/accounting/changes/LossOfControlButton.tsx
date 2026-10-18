@@ -14,6 +14,7 @@ import {
 import { useBusinessToday } from "@/components/business-date-provider";
 import { useDirtyClose } from "@/lib/use-dirty-close";
 import { useTranslations } from "next-intl";
+import { DateField } from '../../../../components/date-field';
 type Setup = {
   interest: { investment_account_id: string; equity_income_account_id: string };
   subsidiaries: { id: string; name: string; base_currency: string }[];
@@ -111,16 +112,24 @@ export function LossOfControlButton({ interestId }: { interestId: string }) {
       value: a.id,
       label: `${a.number} — ${a.name}`,
     })) ?? [];
-  const field = (name: string, label: string, type = "text") => (
+  const field = (name: string, label: string, kind: "text" | "date" = "text") => (
     <div key={name} className="space-y-1.5">
       <Label htmlFor={`${fieldId}-${name}`}>{label}</Label>
-      <Input
-        id={`${fieldId}-${name}`}
-        type={type}
-        disabled={busy}
-        value={values[name] ?? ""}
-        onChange={(e) => set(name, e.target.value)}
-      />
+      {kind === "date" ? (
+        <DateField
+          id={`${fieldId}-${name}`}
+          disabled={busy}
+          value={values[name] ?? ""}
+          onChange={(next) => set(name, next)}
+        />
+      ) : (
+        <Input
+          id={`${fieldId}-${name}`}
+          disabled={busy}
+          value={values[name] ?? ""}
+          onChange={(e) => set(name, e.target.value)}
+        />
+      )}
     </div>
   );
   const account = (name: string, label: string) => (

@@ -15,6 +15,7 @@ import { MoneyInput, moneyFieldError } from '../../../components/money-input'
 import { editableMoneyDecimal } from '../../../lib/exact-decimal'
 import { readApiErrorMessage } from '../../../lib/api-error'
 import { confirmDialog } from '../../../lib/confirm'
+import { DateField } from '../../../components/date-field'
 
 /** A confirmed receipt reading, as the expense line it becomes. */
 export interface ReceiptLineInput {
@@ -508,8 +509,8 @@ function ReceiptCard({
               <div className="grid gap-3 sm:grid-cols-2">
                 <div className="space-y-1">
                   <Label htmlFor={`${capture.id}-date`}>{t('receipts.fields.date')}</Label>
-                  <Input id={`${capture.id}-date`} type="date" value={date} className={flagged(draft.transactionDate, 'date')}
-                    onChange={(event) => { setDate(event.target.value); touch('date') }} />
+                  <DateField id={`${capture.id}-date`} value={date} className={flagged(draft.transactionDate, 'date')}
+                    onChange={(value) => { setDate(value); touch('date') }} />
                   {reading(draft.transactionDate, 'date', setDate, isIsoCalendarDate(draft.transactionDate.reading))}
                 </div>
                 <div className="space-y-1">

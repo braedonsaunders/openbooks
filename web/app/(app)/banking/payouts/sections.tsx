@@ -14,7 +14,6 @@ import {
   DisclosureSection,
   Drawer,
   EmptyState,
-  Input,
   SearchSelect,
   Table,
   TableBody,
@@ -35,6 +34,7 @@ import type {
   PayoutsStrings,
 } from './view'
 import { adjustmentCurrency } from './adjustment-currency'
+import { DateField } from '../../../../components/date-field'
 
 /**
  * Banking → Payouts workspace: one state graph for the cockpit and the
@@ -665,10 +665,9 @@ export function PayoutsWorkspace(props: PayoutsWorkspaceProps) {
           <div className="flex flex-wrap items-end gap-2">
             <label className="flex flex-col gap-1 text-sm">
               {strings.accrualDateLabel}
-              <Input
-                type="date"
+              <DateField
                 value={accrualDate}
-                onChange={(event) => setAccrualDate(event.target.value)}
+                onChange={(value) => setAccrualDate(value)}
               />
             </label>
             <Button size="sm" disabled={accruing || accrualDate.trim() === ''} onClick={() => void runAccrual()}>

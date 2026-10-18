@@ -16,6 +16,7 @@ import type {
   AmortizationReconciliationRow,
   AmortizationScheduleRow,
 } from './view'
+import { DateField } from '@/components/date-field'
 
 const CELL = 'px-4 py-2.5'
 const HEAD = 'px-4 py-2 font-medium'
@@ -213,11 +214,10 @@ export function AmortizationReconciliationPanel({
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="space-y-1">
           <label className="text-sm font-medium" htmlFor="amortization-as-of">{t('reconciliation.asOf')}</label>
-          <Input
+          <DateField
             id="amortization-as-of"
-            type="date"
             defaultValue={asOf}
-            onChange={(e) => e.target.value && router.push(`/accounting/amortization?view=reconciliation&asOf=${e.target.value}`)}
+            onChange={(value) => value && router.push(`/accounting/amortization?view=reconciliation&asOf=${value}`)}
           />
         </div>
         {reportHref && <Link href={reportHref} className="text-xs font-medium text-teal-700 dark:text-teal-300">{t('reconciliation.report')}</Link>}
@@ -334,10 +334,10 @@ export function AmortizationNewScheduleButton({ data, templatesHref }: { data: A
                     <Input inputMode="decimal" value={form.openingAmortizedAmount} onChange={(e) => set('openingAmortizedAmount')(e.target.value)} placeholder="0.00" />
                   </Field>
                   <Field label={t('newSchedule.serviceStart')}>
-                    <Input type="date" value={form.serviceStartOn} onChange={(e) => set('serviceStartOn')(e.target.value)} />
+                    <DateField value={form.serviceStartOn} onChange={(value) => set('serviceStartOn')(value)} />
                   </Field>
                   <Field label={t('newSchedule.serviceEnd')}>
-                    <Input type="date" value={form.serviceEndOn} onChange={(e) => set('serviceEndOn')(e.target.value)} />
+                    <DateField value={form.serviceEndOn} onChange={(value) => set('serviceEndOn')(value)} />
                   </Field>
                   <Field label={t('newSchedule.amortizeFrom')}>
                     <Input type="month" value={form.amortizeFromPeriod} onChange={(e) => set('amortizeFromPeriod')(e.target.value)} />

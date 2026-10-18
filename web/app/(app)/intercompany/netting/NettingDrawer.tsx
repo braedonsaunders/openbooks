@@ -4,9 +4,10 @@ import Link from 'next/link'
 import { useMemo, useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
-import { Badge, Button, Input, Label, Select, Textarea, UrlDrawer, Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@openbooks/ui'
+import { Badge, Button, Label, Select, Textarea, UrlDrawer, Table, TableHeader, TableBody, TableRow, TableHead, TableCell } from '@openbooks/ui'
 import { promptDialog } from '../../../../lib/prompt'
 import { readApiErrorMessage } from '../../../../lib/api-error'
+import { DateField } from '../../../../components/date-field'
 
 /**
  * One netting run drawer through its whole life: a new run is previewed,
@@ -153,7 +154,7 @@ function NewRun({ closeHref, today, subsidiaries, banks, currencies }: Extract<N
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-1">
           <Label htmlFor="netting-as-of">{t('netting.asOf')}</Label>
-          <Input id="netting-as-of" type="date" value={asOfDate} onChange={(event) => { setAsOfDate(event.target.value); setPreview(null) }} />
+          <DateField id="netting-as-of" value={asOfDate} onChange={(value) => { setAsOfDate(value); setPreview(null) }} />
         </div>
         <label className="flex items-center gap-2 self-end text-sm">
           <input type="checkbox" checked={settleCash} onChange={(event) => { setSettleCash(event.target.checked); setPreview(null) }} />
@@ -327,7 +328,7 @@ function ExistingRun({ closeHref, today, run, canManage, canSettle }: Extract<Ne
           ) : null}
           {canSettle && run.status === 'posted' ? (
             <>
-              <Input aria-label={t('netting.reversalDate')} type="date" className="w-40" value={reversalDate} onChange={(event) => setReversalDate(event.target.value)} />
+              <DateField aria-label={t('netting.reversalDate')} className="w-40" value={reversalDate} onChange={(value) => setReversalDate(value)} />
               <Button variant="outline" disabled={busy} onClick={reverse}>{t('netting.reverse')}</Button>
             </>
           ) : null}

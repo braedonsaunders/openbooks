@@ -222,8 +222,8 @@ const mockSources = new Map<string, string>([
   ],
   ['mock:money-provider', `export function useMoney() { return { money: String } }`],
   ['mock:next-navigation', `export function useRouter() { return { refresh() {} } }`],
-  ['mock:next-intl', `export function useTranslations() { return (key) => key }`],
-  ['mock:icons', `export function FileUp() { return null }; export function Upload() { return null }`],
+  ['mock:next-intl', `export function useTranslations() { return (key) => key }; export function useLocale() { return 'en' }`],
+  ['mock:icons', `export function FileUp() { return null }; export function Upload() { return null }; export function CalendarDays() { return null }; export function ChevronLeft() { return null }; export function ChevronRight() { return null }`],
   ['mock:sonner', `const state = globalThis[Symbol.for('openbooks.bank-statement-upload-test')]; export const toast = { error(message) { state.toastErrors.push(message) }, success() {} }`],
   [
     'mock:ui',
@@ -232,6 +232,8 @@ const mockSources = new Map<string, string>([
       export function Button() { return null }
       export function Drawer() { return null }
       export function Input() { return null }
+      export function Popover() { return null }
+      export function cn(...classes) { return classes.filter(Boolean).join(' ') }
       export function Label() { return null }
       export function Select() { return null }
       export function Textarea() { return null }

@@ -27,6 +27,7 @@ import { useMoney } from '../../../../components/money-provider'
 import { useBusinessToday } from '../../../../components/business-date-provider'
 import { promptDialog } from '@/lib/prompt'
 import { useAppAction } from '@/lib/use-app-action'
+import { DateField } from '@/components/date-field'
 
 const SETTLEMENT_PROVIDERS = [
   'stripe',
@@ -877,7 +878,7 @@ export function PspSettlementsWorkspace({
           </div>
           <div>
             <Label htmlFor="psp-settlement-date">{strings.settlementDate}</Label>
-            <Input id="psp-settlement-date" type="date" value={settlementDate} onChange={(e) => setSettlementDate(e.target.value)} />
+            <DateField id="psp-settlement-date" value={settlementDate} onChange={(value) => setSettlementDate(value)} />
           </div>
           <div>
             <Label htmlFor="psp-bank-account">{strings.bankAccountId}</Label>
@@ -1055,7 +1056,7 @@ export function PspSettlementsWorkspace({
         <div className="mb-4 grid gap-3 sm:grid-cols-[12rem_1fr]">
           <div>
             <Label htmlFor={reversalDateId}>{strings.reversalDate}</Label>
-            <Input id={reversalDateId} type="date" value={reversalDate} onChange={(e) => setReversalDate(e.target.value)} />
+            <DateField id={reversalDateId} value={reversalDate} onChange={(value) => setReversalDate(value)} />
           </div>
           <div>
             <Label htmlFor={reversalReasonId}>{strings.reversalReason}</Label>

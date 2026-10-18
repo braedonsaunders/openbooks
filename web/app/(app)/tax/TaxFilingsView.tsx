@@ -22,6 +22,7 @@ import {
   Popover,
   Select,
 } from '@openbooks/ui'
+import { DateField } from '../../../components/date-field'
 
 type Form = {
   code: string
@@ -365,11 +366,11 @@ export function TaxFilingsView({
               </div> : null}
               <div className="space-y-1.5">
                 <Label htmlFor="tax-from">{t('from')}</Label>
-                <Input id="tax-from" type="date" disabled={busy || saving} value={from} onChange={(event) => { setFrom(event.target.value); setAdjustments([]); invalidatePreview() }} />
+                <DateField id="tax-from" disabled={busy || saving} value={from} onChange={(value) => { setFrom(value); setAdjustments([]); invalidatePreview() }} />
               </div>
               <div className="space-y-1.5">
                 <Label htmlFor="tax-to">{t('to')}</Label>
-                <Input id="tax-to" type="date" disabled={busy || saving} value={to} onChange={(event) => { setTo(event.target.value); setAdjustments([]); invalidatePreview() }} />
+                <DateField id="tax-to" disabled={busy || saving} value={to} onChange={(value) => { setTo(value); setAdjustments([]); invalidatePreview() }} />
               </div>
               <Button onClick={() => compute()} disabled={busy || saving}>
                 <Play size={15} />

@@ -12,6 +12,7 @@ import { canonicalDecimal } from '@/lib/exact-decimal'
 import { isUuid } from '@/lib/list-params'
 import type { readHistoricalTranslationAuthoringContext } from '@openbooks/engine/journal/historical-translation-evidence'
 import type { HistoricalTranslationEvidence, HistoricalTranslationInstruction, HistoricalTranslationLayerInstruction } from '@openbooks/engine/journal/historical-translation-evidence'
+import { DateField } from '@/components/date-field'
 
 export type HistoricalTranslationSourceOption = { id: string; label: string }
 type AuthoringContext = Awaited<ReturnType<typeof readHistoricalTranslationAuthoringContext>>
@@ -172,7 +173,7 @@ function SourceAssessment({ sourceLineId, onDirtyChange, onBusyChange }: { sourc
         <div className="grid gap-4 sm:grid-cols-2">
           <div className="space-y-2"><Label htmlFor={`historical-amount-${sourceLineId}-${index}`}>{t('amount')}</Label><Input id={`historical-amount-${sourceLineId}-${index}`} value={layer.amount} inputMode="decimal" onChange={event => updateLayer(index, { amount: event.target.value })} /></div>
           <div className="space-y-2"><Label htmlFor={`historical-rate-${sourceLineId}-${index}`}>{t('rate')}</Label><Input id={`historical-rate-${sourceLineId}-${index}`} value={layer.rate} inputMode="decimal" readOnly={kind === 'correction'} onChange={event => updateLayer(index, { rate: event.target.value })} /><p className="text-xs text-muted-foreground">{t('rateDirection', { presentation: presentationCurrency || '—', measurement: measurementCurrency || '—' })}</p></div>
-          <div className="space-y-2"><Label htmlFor={`historical-date-${sourceLineId}-${index}`}>{t('historicalDate')}</Label><Input id={`historical-date-${sourceLineId}-${index}`} value={layer.historicalDate} type="date" max={context.source.postingDate} readOnly={kind === 'correction'} onChange={event => updateLayer(index, { historicalDate: event.target.value })} /></div>
+          <div className="space-y-2"><Label htmlFor={`historical-date-${sourceLineId}-${index}`}>{t('historicalDate')}</Label><DateField id={`historical-date-${sourceLineId}-${index}`} value={layer.historicalDate} max={context.source.postingDate} readOnly={kind === 'correction'} onChange={value => updateLayer(index, { historicalDate: value })} /></div>
           <div className="space-y-2"><Label htmlFor={`historical-provenance-${sourceLineId}-${index}`}>{t('provenance')}</Label><Input id={`historical-provenance-${sourceLineId}-${index}`} value={layer.provenance} maxLength={2000} readOnly={kind === 'correction'} onChange={event => updateLayer(index, { provenance: event.target.value })} /></div>
         </div>
         {kind === 'correction' ? <div className="break-all text-xs text-muted-foreground">{layer.source.fileId}<br />{layer.source.versionId}<br />{layer.source.contentHash}</div> : <CabinetSourceVersionPicker value={layer.source} disabled={busy} onChange={source => updateLayer(index, { source })} />}

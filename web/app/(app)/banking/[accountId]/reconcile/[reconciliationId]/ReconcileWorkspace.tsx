@@ -36,6 +36,7 @@ import { canonicalDecimal } from '../../../../../../lib/exact-decimal'
 import { useDirtyClose } from '../../../../../../lib/use-dirty-close'
 import { NeutralHistoryReview } from './NeutralHistoryReview'
 import { InteractiveTableRow } from '@/components/interactive-table-row'
+import { DateField } from '@/components/date-field'
 
 type Search = Record<string, string | string[] | undefined>
 interface PaneParams {
@@ -1030,7 +1031,7 @@ function ReconcileWorkspaceForId({
         <div className="space-y-4">
           <div className="space-y-1.5">
             <Label htmlFor={adjustThroughDateId}>{tBanking('labels.reconcileThrough')}</Label>
-            <Input id={adjustThroughDateId} type="date" disabled={busy} value={throughDate} onChange={(e) => setThroughDate(e.target.value)} />
+            <DateField id={adjustThroughDateId} disabled={busy} value={throughDate} onChange={(value) => setThroughDate(value)} />
           </div>
           <div className="space-y-1.5">
             <Label htmlFor={adjustStatementBalanceId}>{tBanking('labels.statementBalance')}</Label>

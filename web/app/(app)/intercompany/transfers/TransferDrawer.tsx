@@ -7,6 +7,7 @@ import { useTranslations } from 'next-intl'
 import { Badge, Button, Input, Label, Select, Textarea, UrlDrawer } from '@openbooks/ui'
 import { promptDialog } from '../../../../lib/prompt'
 import { readApiErrorMessage } from '../../../../lib/api-error'
+import { DateField } from '../../../../components/date-field'
 
 /**
  * Records a bank transfer from one entity's bank account to another's, or
@@ -156,7 +157,7 @@ function NewTransfer({ closeHref, today, subsidiaries, banks }: Extract<Transfer
         })}
         <div className="space-y-1">
           <Label htmlFor="transfer-date">{t('transfers.date')}</Label>
-          <Input id="transfer-date" type="date" value={form.transferDate} onChange={(event) => set('transferDate')(event.target.value)} />
+          <DateField id="transfer-date" value={form.transferDate} onChange={(value) => set('transferDate')(value)} />
         </div>
         <div className="space-y-1">
           <Label htmlFor="transfer-amount">{t('transfers.amount')}</Label>
@@ -223,7 +224,7 @@ function ExistingTransfer({ closeHref, today, transfer, canSettle }: Extract<Tra
       footer={
         canSettle && transfer.status === 'posted' ? (
           <div className="flex items-center justify-end gap-2">
-            <Input aria-label={t('transfers.reversalDate')} type="date" className="w-40" value={reversalDate} onChange={(event) => setReversalDate(event.target.value)} />
+            <DateField aria-label={t('transfers.reversalDate')} className="w-40" value={reversalDate} onChange={(value) => setReversalDate(value)} />
             <Button variant="outline" disabled={busy} onClick={reverse}>{t('transfers.reverse')}</Button>
           </div>
         ) : undefined

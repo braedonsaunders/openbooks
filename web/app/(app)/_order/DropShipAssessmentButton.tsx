@@ -2,10 +2,11 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
-import { Button,Drawer,Input,Label,SearchSelect,Select,Textarea } from '@openbooks/ui'
+import { Button, Drawer, Label, SearchSelect, Select, Textarea } from '@openbooks/ui'
 import { useBusinessToday } from '@/components/business-date-provider'
 import { useDirtyClose } from '@/lib/use-dirty-close'
 import { readApiErrorMessage } from '@/lib/api-error'
+import { DateField } from '@/components/date-field'
 export function DropShipAssessmentButton({lines,accounts}:{lines:{id:string;label:string}[];accounts:{id:string;label:string}[]}) {
   const t=useTranslations('salesOrders.agency'),common=useTranslations('common'),router=useRouter(),today=useBusinessToday()
   const [open,setOpen]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState<string|null>(null)
@@ -21,7 +22,7 @@ export function DropShipAssessmentButton({lines,accounts}:{lines:{id:string;labe
   return <><Button variant="outline" onClick={()=>setOpen(true)}>{t('title')}</Button>{open ? <Drawer open title={t('title')} onClose={guard.close} size="lg"><div className="space-y-4">
     <p className="text-sm text-muted-foreground">{t('hint')}</p>
     <div className="space-y-1"><Label>{t('line')}</Label><SearchSelect ariaLabel={t('line')} value={values.line ?? ''} onChange={value=>update('line',value)} options={lines.map(line=>({value:line.id,label:line.label}))} placeholder={t('choose')} /></div>
-    <div className="space-y-1"><Label htmlFor="agency-date">{t('date')}</Label><Input id="agency-date" type="date" value={values.date ?? ''} onChange={event=>update('date',event.target.value)} /></div>
+    <div className="space-y-1"><Label htmlFor="agency-date">{t('date')}</Label><DateField id="agency-date" value={values.date ?? ''} onChange={value=>update('date',value)} /></div>
     <div className="space-y-1"><Label htmlFor="agency-control">{t('control')}</Label><Select id="agency-control" value={values.control ?? ''} onChange={event=>update('control',event.target.value)}><option value="">{t('choose')}</option><option value="yes">{t('principal')}</option><option value="no">{t('agent')}</option></Select></div>
     {values.control==='no' ? <div className="space-y-1"><Label>{t('account')}</Label><SearchSelect ariaLabel={t('account')} value={values.account ?? ''} onChange={value=>update('account',value)} options={accounts.map(account=>({value:account.id,label:account.label}))} placeholder={t('choose')} /></div> : null}
     <div className="space-y-1"><Label htmlFor="agency-evidence">{t('evidence')}</Label><Textarea id="agency-evidence" value={values.evidence ?? ''} onChange={event=>update('evidence',event.target.value)} maxLength={10000} /></div>

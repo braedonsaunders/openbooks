@@ -12,6 +12,7 @@ import { MoneyInput, moneyFieldError } from '@/components/money-input'
 import { useBusinessToday } from '@/components/business-date-provider'
 import { useDirtyClose } from '@/lib/use-dirty-close'
 import { readApiErrorMessage } from '@/lib/api-error'
+import { DateField } from '@/components/date-field'
 
 type Choices = Awaited<ReturnType<typeof provisionEditorOptions>>
 
@@ -90,7 +91,7 @@ export function ProvisionAssessmentButton({ options, identity }: { options: Choi
             {picker('expense', options.accounts.filter(row => ['expense', 'expense_other'].includes(row.type)))}
             {picker('liability', options.accounts.filter(row => ['liability_current_other', 'liability_long_term'].includes(row.type)))}</div>
         </>}
-        <div className="space-y-1"><Label htmlFor="provision-date">{t('date')}</Label><Input id="provision-date" type="date" value={values.date ?? ''} onChange={event => update('date', event.target.value)} /></div>
+        <div className="space-y-1"><Label htmlFor="provision-date">{t('date')}</Label><DateField id="provision-date" value={values.date ?? ''} onChange={value => update('date', value)} /></div>
         <div className="grid gap-3 sm:grid-cols-2">{yesNo('obligation')}{yesNo('estimable')}
           <div className="space-y-1"><Label htmlFor="provision-outflow">{t('outflow')}</Label><Select id="provision-outflow" value={values.outflow ?? ''} onChange={event => update('outflow', event.target.value)}>
             <option value="">{t('choose')}</option>{['probable', 'possible', 'remote'].map(value => <option key={value} value={value}>{t(value)}</option>)}

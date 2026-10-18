@@ -102,8 +102,9 @@ async function mountQuote() {
 }
 
 function textInputs(): HTMLInputElement[] {
+  // Date fields are text controls too; they are not free-text fields.
   return [...document.querySelectorAll('input')].filter(
-    (input) => (input as HTMLInputElement).type === 'text',
+    (input) => (input as HTMLInputElement).type === 'text' && !input.hasAttribute('data-date-field'),
   ) as HTMLInputElement[]
 }
 

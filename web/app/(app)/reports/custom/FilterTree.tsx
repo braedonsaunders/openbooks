@@ -14,6 +14,7 @@ import {
   type ReportRule,
   type ReportRuleGroup,
 } from '@openbooks/reports'
+import { DateField } from '@/components/date-field'
 
 const PRESET_GROUP_ORDER: PeriodPresetGroup[] = [
   'fiscal_year',
@@ -236,12 +237,18 @@ function RuleRow({
             </option>
           ))}
         </Select>
+      ) : needsValue === 'one' && column?.kind === 'date' ? (
+        <DateField
+          className="h-8 w-40"
+          value={typeof rule.value === 'string' ? rule.value : ''}
+          onChange={(next) => onChange({ ...rule, value: next })}
+        />
       ) : needsValue === 'one' ? (
         <Input
           className="h-8 w-40"
           value={typeof rule.value === 'string' || typeof rule.value === 'number' ? String(rule.value) : ''}
-          placeholder={column?.kind === 'date' ? 'YYYY-MM-DD' : t('valuePlaceholder')}
-          type={column?.kind === 'date' ? 'date' : column?.kind === 'number' || column?.kind === 'money' ? 'number' : 'text'}
+          placeholder={t('valuePlaceholder')}
+          type={column?.kind === 'number' || column?.kind === 'money' ? 'number' : 'text'}
           onChange={(e) => onChange({ ...rule, value: e.target.value })}
         />
       ) : needsValue === 'list' && options?.length ? (

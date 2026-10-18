@@ -13,6 +13,7 @@ import { DEFAULT_SEGMENT_ALL_KEY, isDefaultSegmentName, type BuiltinSegmentKey }
 import { setAllReportSections } from './report-section-events'
 import { isOverlayOnlyHrefChange, stripReportOverlay } from '../../../lib/report-overlay'
 import { useReportOverlayOptional } from '../../../components/navigation-provider'
+import { DateField } from '@/components/date-field'
 
 type DimOption = { id: string; name: string }
 type SegmentOption = { key: string; name: string; pluralName: string; showInReports: boolean; values: DimOption[] }
@@ -60,7 +61,7 @@ const PRESET_GROUP_ORDER: PeriodPresetGroup[] = [
 ]
 
 const SELECT = 'h-8 w-auto min-w-0 shrink-0 border-0 bg-transparent px-1.5 text-sm font-medium shadow-none hover:bg-slate-100 dark:hover:bg-slate-800'
-const DATE = 'h-8 shrink-0 rounded-md border border-slate-200 bg-white px-2 text-sm dark:border-slate-700 dark:bg-slate-950'
+const DATE = 'h-8 w-36 shrink-0 rounded-md border border-slate-200 bg-white px-2 text-sm dark:border-slate-700 dark:bg-slate-950'
 const EMPTY_RESET_KEYS: readonly string[] = []
 
 /** A compact inline control: tiny uppercase label + the control, on one line. */
@@ -316,15 +317,15 @@ export function ReportFilterBar({
 
       {isCustom && controls.asOf && (
         <>
-          <input type="date" value={shownTo} onChange={(e) => setRangeDraft({ from: e.target.value, to: e.target.value })} onKeyDown={applyRangeOnEnter} className={DATE} aria-label={t('asOf')} />
+          <DateField value={shownTo} onChange={(value) => setRangeDraft({ from: value, to: value })} onKeyDown={applyRangeOnEnter} className={DATE} aria-label={t('asOf')} />
           {applyRangeButton}
         </>
       )}
       {isCustom && !controls.asOf && !controls.dateRange && (
         <>
-          <input type="date" value={shownFrom} onChange={(e) => setRangeDraft({ from: e.target.value, to: shownTo })} onKeyDown={applyRangeOnEnter} className={DATE} aria-label={t('from')} />
+          <DateField value={shownFrom} onChange={(value) => setRangeDraft({ from: value, to: shownTo })} onKeyDown={applyRangeOnEnter} className={DATE} aria-label={t('from')} />
           <span className="text-slate-400">–</span>
-          <input type="date" value={shownTo} onChange={(e) => setRangeDraft({ from: shownFrom, to: e.target.value })} onKeyDown={applyRangeOnEnter} className={DATE} aria-label={t('to')} />
+          <DateField value={shownTo} onChange={(value) => setRangeDraft({ from: shownFrom, to: value })} onKeyDown={applyRangeOnEnter} className={DATE} aria-label={t('to')} />
           {applyRangeButton}
         </>
       )}
@@ -332,10 +333,9 @@ export function ReportFilterBar({
       {controls.dateRange && (
         <>
           <Field label={t('from')}>
-            <input
-              type="date"
+            <DateField
               value={shownFrom}
-              onChange={(e) => setRangeDraft({ from: e.target.value, to: shownTo })}
+              onChange={(value) => setRangeDraft({ from: value, to: shownTo })}
               onKeyDown={applyRangeOnEnter}
               className={DATE}
               aria-label={t('from')}
@@ -343,10 +343,9 @@ export function ReportFilterBar({
           </Field>
           <span className="text-slate-400">–</span>
           <Field label={t('to')}>
-            <input
-              type="date"
+            <DateField
               value={shownTo}
-              onChange={(e) => setRangeDraft({ from: shownFrom, to: e.target.value })}
+              onChange={(value) => setRangeDraft({ from: shownFrom, to: value })}
               onKeyDown={applyRangeOnEnter}
               className={DATE}
               aria-label={t('to')}

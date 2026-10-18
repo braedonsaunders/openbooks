@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { Button, Drawer, Input, Label } from '@openbooks/ui'
 import { readApiErrorMessage } from '@/lib/api-error'
+import { DateField } from '@/components/date-field'
 
 /**
  * Correct one unmatched statement line's amount, sign, date or description.
@@ -107,13 +108,12 @@ export function CorrectStatementLineDialog({
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="correct-line-date">{tCommon('labels.date')}</Label>
-          <Input
+          <DateField
             id="correct-line-date"
-            type="date"
             disabled={busy}
             value={postedOn}
-            onChange={(e) => {
-              setPostedOn(e.target.value)
+            onChange={(value) => {
+              setPostedOn(value)
               setError(null)
             }}
           />

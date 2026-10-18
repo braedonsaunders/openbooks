@@ -122,7 +122,7 @@ test('the inventory receive entry opens the order with the receipt form raised',
   await tick()
   assert.ok(receiptDialog(), 'receive=1 raises the receipt form without touching Actions')
   const date = receiptDialog()?.querySelector('#receipt-date') as HTMLInputElement | null
-  assert.equal(date?.value, '2026-08-01', 'the raised form prefills the business date')
+  assert.equal(date?.value, '08/01/2026', 'the raised form prefills the business date')
 })
 
 test('the receive entry honors nothing on a draft order', async (t) => {

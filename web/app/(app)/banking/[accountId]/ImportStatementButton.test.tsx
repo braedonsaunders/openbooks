@@ -423,12 +423,13 @@ test('editing the statement date after preview disables import with a notice', a
   ) as HTMLButtonElement | undefined
   assert.ok(importButton, 'the fresh preview must enable Import')
   assert.equal(importButton.disabled, false)
-  const dateInput = document.querySelector('input[type="date"]') as HTMLInputElement | null
+  const dateInput = document.querySelector('input[data-date-field]') as HTMLInputElement | null
   assert.ok(dateInput, 'the preview must offer the statement date')
   await act(async () => {
     const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!
     setter.call(dateInput, '2026-11-29')
     dateInput.dispatchEvent(new window.Event('input', { bubbles: true }))
+    dateInput.dispatchEvent(new window.Event('change', { bubbles: true }))
     await tick()
   })
   assert.ok(

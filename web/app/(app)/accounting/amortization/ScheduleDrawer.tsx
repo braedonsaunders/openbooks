@@ -23,6 +23,7 @@ import { DrawerTabStrip } from '../../../../components/drawer-tab-strip'
 import { useMoney } from '@/components/money-provider'
 import { readApiErrorMessage } from '@/lib/api-error'
 import type { AmortizationScheduleDrawerData } from './view'
+import { DateField } from '@/components/date-field'
 
 export const SCHEDULE_STATUS_VARIANT: Record<string, 'success' | 'secondary' | 'warning' | 'outline' | 'destructive'> = {
   draft: 'outline',
@@ -303,7 +304,7 @@ function ScheduleChangeForm({
       )}
       {(action === 'reduce' || action === 'cancel') && (
         <Field label={t('changes.effectiveDate')}>
-          <Input type="date" value={effectiveDate} onChange={(e) => setEffectiveDate(e.target.value)} />
+          <DateField value={effectiveDate} onChange={(value) => setEffectiveDate(value)} />
         </Field>
       )}
       <Field label={t('changes.reason')}>

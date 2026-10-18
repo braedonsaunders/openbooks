@@ -32,6 +32,7 @@ import { fetchAppAction, readApiErrorMessage } from "../../../lib/api-error";
 import { ActionError, fetchAction } from "@braedonsaunders/appkit-errors";
 import { useAppAction } from "../../../lib/use-app-action";
 import { z } from "zod";
+import { DateField } from '@/components/date-field'
 
 interface Schedule {
   id: string;
@@ -1011,20 +1012,18 @@ function SubscriptionsPanel({
                     />
                   </Field>
                   <Field label={forms("startOn")}>
-                    <Input
-                      type="date"
+                    <DateField
                       value={subForm.startOn}
-                      onChange={(e) =>
-                        setSubForm({ ...subForm, startOn: e.target.value })
+                      onChange={(value) =>
+                        setSubForm({ ...subForm, startOn: value })
                       }
                     />
                   </Field>
                   <Field label={t("firstFullBill")}>
-                    <Input
-                      type="date"
+                    <DateField
                       value={subForm.firstBillOn}
-                      onChange={(e) =>
-                        setSubForm({ ...subForm, firstBillOn: e.target.value })
+                      onChange={(value) =>
+                        setSubForm({ ...subForm, firstBillOn: value })
                       }
                     />
                   </Field>
@@ -1166,10 +1165,9 @@ function SubscriptionsPanel({
           </p>
           <InspectorPanel title={forms("subscriptionDetails")}>
             <Field label={t("cancelEffectiveOn")} required>
-              <Input
-                type="date"
+              <DateField
                 value={cancelOn}
-                onChange={(e) => setCancelOn(e.target.value)}
+                onChange={(value) => setCancelOn(value)}
               />
             </Field>
             <p className="mt-2 text-xs text-muted-foreground">
@@ -1755,20 +1753,18 @@ function RecurringPanel({ creating, onClose }: EditorProps) {
                 </Select>
               </Field>
               <Field label={t("firstRunLabel")}>
-                <Input
-                  type="date"
+                <DateField
                   value={form.nextRunOn}
-                  onChange={(e) =>
-                    setForm({ ...form, nextRunOn: e.target.value })
+                  onChange={(value) =>
+                    setForm({ ...form, nextRunOn: value })
                   }
                 />
               </Field>
               <Field label={t("endsOnLabel")}>
-                <Input
-                  type="date"
+                <DateField
                   value={form.endsOn}
-                  onChange={(e) =>
-                    setForm({ ...form, endsOn: e.target.value })
+                  onChange={(value) =>
+                    setForm({ ...form, endsOn: value })
                   }
                 />
               </Field>
@@ -1807,10 +1803,9 @@ function RecurringPanel({ creating, onClose }: EditorProps) {
             <p className="text-sm text-muted-foreground">{t("skippedDatesHint")}</p>
             <div className="flex items-end gap-2">
               <Field label={t("skippedDatesLabel")}>
-                <Input
-                  type="date"
+                <DateField
                   value={skipDateInput}
-                  onChange={(e) => setSkipDateInput(e.target.value)}
+                  onChange={(value) => setSkipDateInput(value)}
                 />
               </Field>
               <Button

@@ -17,6 +17,7 @@ import {
 } from '@openbooks/engine/projects/award-plan'
 import { readApiErrorMessage } from '../../../lib/api-error'
 import { PermissionHint } from '../../../components/permission-hint'
+import { DateField } from '@/components/date-field'
 
 /**
  * Award an issued quote: one action on the quote that opens a drawer to
@@ -327,7 +328,7 @@ export function QuoteAwardAction({ quoteId, docStatus, canAward = true }: { quot
                 </div>
                 <div className="space-y-1.5">
                   <Label>{t('startsOn')}</Label>
-                  <Input type="date" value={startsOn} onChange={(event) => setStartsOn(event.target.value)} />
+                  <DateField value={startsOn} onChange={(value) => setStartsOn(value)} />
                 </div>
                 <div className="col-span-2 space-y-1.5">
                   <Label>{t('contractValue')}</Label>

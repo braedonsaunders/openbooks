@@ -9,12 +9,14 @@ await bootJsdomEnvironment({ url: 'http://localhost/journal', event: 'jsdom' })
 const state = { fileId: randomUUID(), versionId: randomUUID(), hash: 'a'.repeat(64) }
 ;(globalThis as typeof globalThis & { historicalAuthoringFixture?: typeof state }).historicalAuthoringFixture = state
 stubModules({ extra: {
-  'next-intl': `const t=(key)=>key; export function useTranslations(){return t}`,
+  'next-intl': `const t=(key)=>key; export function useTranslations(){return t}; export function useLocale(){return 'en'}`,
   'next/link': `const React=globalThis.React; export default function Link({href,children}){return React.createElement('a',{href},children)}`,
   '@/lib/confirm': `export async function confirmDialog(){return true}`,
   './cabinet-file-picker': `const React=globalThis.React; export function CabinetFilePicker({onChange,disabled}){return React.createElement('button',{disabled,onClick:()=>onChange(globalThis.historicalAuthoringFixture.fileId)},'chooseCabinetFile')}`,
   '@openbooks/ui': `const React=globalThis.React;
     export function Input(p){return React.createElement('input',p)}
+    export function Popover({trigger}){return trigger}
+    export function cn(...classes){return classes.filter(Boolean).join(' ')}
     export function Label(p){return React.createElement('label',p)}
     export function Skeleton(){return React.createElement('div')}
     export function Badge({children}){return React.createElement('span',null,children)}
