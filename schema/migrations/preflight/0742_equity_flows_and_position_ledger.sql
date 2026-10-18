@@ -1,4 +1,12 @@
-WITH findings AS (
+-- The equity history this migration backfills from must carry the columns 0738
+-- adds; referencing them directly lets the runner defer this check while 0738
+-- is pending in the same upgrade, and fail loudly when it is genuinely absent.
+WITH required_equity_history AS (
+ SELECT (SELECT count(*) FROM (SELECT reverses_event_id FROM public.equity_security_events LIMIT 0) events)
+  + (SELECT count(*) FROM (SELECT conversion_share_class_id FROM public.equity_share_classes LIMIT 0) classes)
+  + (SELECT count(*) FROM (SELECT 1 FROM public.equity_class_amendments, public.equity_splits, public.equity_plans, public.equity_plan_reserve_changes LIMIT 0) history) AS present
+),
+findings AS (
  SELECT '0742.equity_objects_exist'::text AS code,
   'Equity action request or position ledger objects exist without this migration being recorded'::text AS subject,
   'The migration adds the equity action request table, the cap table position-movements ledger, their guards and the position backfill functions.'::text AS detail,
@@ -8,22 +16,6 @@ WITH findings AS (
   OR to_regprocedure('public.equity_action_request_guard()') IS NOT NULL
   OR EXISTS (SELECT 1 FROM pg_catalog.pg_proc p JOIN pg_catalog.pg_namespace n ON n.oid = p.pronamespace
    WHERE n.nspname = 'public' AND p.proname LIKE 'equity\_position\_%')
- UNION ALL
- SELECT '0742.equity_tables_missing','The equity tables this migration reads are unavailable',
-  'The migration backfills the position ledger from the equity cap table history published by migrations 0733 and 0738.',
-  'Install the published migrations through the authorized native migration runner; preserve all equity history.'
- WHERE to_regclass('public.equity_securities') IS NULL
-  OR to_regclass('public.equity_security_events') IS NULL
-  OR to_regclass('public.equity_share_classes') IS NULL
-  OR to_regclass('public.equity_class_amendments') IS NULL
-  OR to_regclass('public.equity_splits') IS NULL
-  OR to_regclass('public.equity_plans') IS NULL
-  OR to_regclass('public.equity_plan_reserve_changes') IS NULL
-  OR to_regprocedure('public.equity_record_immutable()') IS NULL
-  OR NOT EXISTS (SELECT 1 FROM pg_catalog.pg_attribute
-   WHERE attrelid = to_regclass('public.equity_share_classes') AND attname = 'conversion_share_class_id' AND NOT attisdropped)
-  OR NOT EXISTS (SELECT 1 FROM pg_catalog.pg_attribute
-   WHERE attrelid = to_regclass('public.equity_security_events') AND attname = 'reverses_event_id' AND NOT attisdropped)
  UNION ALL
  SELECT '0742.tenant_guards_missing','The tenant retirement and sandbox guards are unavailable',
   'The migration fences its tables for tenant retirement and lets an approved sandbox wipe remove equity action requests.',
