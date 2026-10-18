@@ -455,7 +455,15 @@
         "rateInvalid": "Introduzca un tipo positivo, su fuente y un motivo de al menos ocho caracteres.",
         "onAccountCustomerToast": "{amount} a cuenta como crédito de cliente sin aplicar",
         "onAccountVendorToast": "{amount} como anticipo a proveedor",
-        "writtenOffToast": "{amount} cancelado"
+        "writtenOffToast": "{amount} cancelado",
+        "lineEquivalent": "≈ {amount} al tipo de liquidación",
+        "noSettlementRate": "No hay tipo de liquidación registrado",
+        "settlementRateMissing": "Cada documento en otra moneda necesita un tipo de liquidación; un tipo indicado por usted necesita su fuente y un motivo de al menos ocho caracteres.",
+        "unappliedCredit": "Este tercero ya tiene crédito sin aplicar: {credits}. Aplíquelo a sus documentos desde ese pago o nota de crédito antes de liquidarlos con dinero nuevo.",
+        "hasUnappliedCredit": "Tiene crédito sin aplicar",
+        "recordedSettlementRate": "Se liquida a {rate} {from} → {to} ({source}, {date})",
+        "statedSettlementRateToggle": "Usar en su lugar el tipo que aplicó el banco",
+        "settlementRate": "Tipo de liquidación ({from} → {to})"
       }
     }
   },

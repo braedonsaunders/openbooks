@@ -1,5 +1,5 @@
 import { canonicalDecimal } from "../money/exact-decimal.ts";
-import { add, cmp, fromUnits, mulRate, mulRatio, neg, toUnits } from "../money/money.ts";
+import { add, cmp, divRate, fromUnits, mulRate, mulRatio, neg, toUnits } from "../money/money.ts";
 import { PaymentError } from "../payments-core/payment-errors.ts";
 import { CurrencyError, updateFxRate } from "../fx/currencies.ts";
 
@@ -71,6 +71,49 @@ export function sameCurrencyAllocation(
     settlementRate: "1",
     settlementRateSource: "same_currency",
     settlementRateReference: "same transaction currency",
+  };
+}
+
+/**
+ * The source-currency amount that settles a target-currency balance at a
+ * settlement rate (target units per source unit), within the exact
+ * cross-foot every allocation must satisfy: the largest four-place source
+ * whose `mulRate(source, rate)` does not exceed the target. `settles` is that
+ * cross-rate; it equals the target whenever the rate admits an exact source,
+ * and otherwise falls short of it by less than one rounding unit.
+ */
+export function sourceSettlingTarget(target: string, rate: string): { source: string; settles: string } {
+  const targetUnits = toUnits(target);
+  if (targetUnits <= 0n) throw new PaymentError("a settled balance must be positive");
+  let source = toUnits(divRate(target, rate));
+  while (source > 0n && toUnits(mulRate(fromUnits(source), rate)) > targetUnits) source -= 1n;
+  while (toUnits(mulRate(fromUnits(source + 1n), rate)) <= targetUnits) source += 1n;
+  if (source <= 0n) throw new PaymentError("the settlement rate settles nothing of this balance; check the rate");
+  return { source: fromUnits(source), settles: mulRate(fromUnits(source), rate) };
+}
+
+/** Settlement-rate evidence for a cross-currency application, as the payment drawers record it. */
+export interface CrossCurrencyEvidence {
+  rate: string;
+  source: Exclude<SettlementRateSource, "same_currency">;
+  reference: string;
+  fxRateId?: string | null;
+}
+
+/**
+ * A cross-currency allocation of `sourceAmount` (payment currency) at the
+ * evidenced rate: the target extinguished is exactly the cross-rate, so the
+ * allocation cross-foots by construction.
+ */
+export function crossCurrencyAllocation(openLineId: string, sourceAmount: string, evidence: CrossCurrencyEvidence): AllocationInput {
+  return {
+    openLineId,
+    sourceTransactionAmount: fromUnits(toUnits(sourceAmount)),
+    targetTransactionAmount: mulRate(sourceAmount, evidence.rate),
+    settlementRate: canonicalSettlementRate(evidence.rate),
+    settlementRateSource: evidence.source,
+    settlementRateReference: evidence.reference,
+    ...(evidence.fxRateId ? { settlementFxRateId: evidence.fxRateId } : {}),
   };
 }
 

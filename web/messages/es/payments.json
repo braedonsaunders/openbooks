@@ -332,6 +332,9 @@
     "noOpenItems": "Este tercero no tiene partidas abiertas a las que aplicar el crédito.",
     "nothingSelected": "Introduzca un importe en al menos una partida abierta.",
     "applyFailed": "No se pudo aplicar el crédito.",
-    "releaseFailed": "No se pudo liberar la aplicación."
+    "releaseFailed": "No se pudo liberar la aplicación.",
+    "unappliedCreditTitle": "Crédito sin aplicar",
+    "prepaymentTitle": "Anticipo a proveedor",
+    "unappliedRemaining": "{amount} sin aplicar"
   }
 }

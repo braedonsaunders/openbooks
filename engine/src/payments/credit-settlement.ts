@@ -16,7 +16,10 @@ import { ScopeNotFoundError, subsidiaryScopeAllows, subsidiaryVisibleFilter } fr
 
 /**
  * Standalone credit settlement: applying a posted credit memo to a posted
- * invoice or bill when NO cash moves.
+ * invoice or bill when NO cash moves. A payment's unapplied cash — the
+ * on-account credit a receipt kept, or a vendor payment's prepayment — is a
+ * credit on the same control account and is applied the same way, later,
+ * to the party's other open documents.
  *
  * Why this is not a payment document. A credit memo and the invoice it settles
  * already sit on the SAME control account, same party, same book: the credit
@@ -37,6 +40,16 @@ import { ScopeNotFoundError, subsidiaryScopeAllows, subsidiaryVisibleFilter } fr
  * the deferred `app_check_open` constraint trigger remains the final authority
  * on over-application in both currency frames.
  */
+
+/**
+ * Evidence reference of an application this path records from a payment's
+ * unapplied cash. A payment's own posting-time applications carry their
+ * allocation's evidence instead, so the release path can tell the two apart:
+ * it releases these, and leaves the payment's cash applications to its void.
+ */
+export const UNAPPLIED_PAYMENT_APPLICATION_REFERENCE = "unapplied payment applied without cash";
+const CREDIT_APPLICATION_REFERENCE = "credit applied without cash";
+const PAYMENT_SOURCE_KINDS: ReadonlySet<string> = new Set(["customer_payment", "vendor_payment"]);
 
 /** One credit memo line settling one invoice/bill line, in their shared transaction currency. */
 export type CreditSettlementInput = CreditAllocationInput;
@@ -63,7 +76,10 @@ export interface CreditSettlementState {
 }
 
 /**
- * What a posted credit memo has settled so far, and what is left to apply.
+ * What a posted credit memo — or a payment's unapplied cash — has settled so
+ * far, and what is left to apply. For a payment, the remaining figure is the
+ * cash it moved beyond everything it applied, and the settlements are the
+ * later applications of that cash.
  *
  * The panel that applies and releases credits reads this, so its "remaining"
  * figure and the engine's open-balance check come from the same `applications`
@@ -76,9 +92,9 @@ export async function creditSettlementState(
 ): Promise<CreditSettlementState | null> {
   return withOrgTransaction(orgId, async () => {
   const line = (await db.execute<{
-    id: string; amount: string; currency: string; applied: string;
+    id: string; amount: string; currency: string; applied: string; kind: string;
   }>(sql`
-    select jl.id, abs(jl.txn_amount)::text as amount, jl.currency,
+    select jl.id, abs(jl.txn_amount)::text as amount, jl.currency, source_document.kind,
            coalesce(ap.applied, 0)::numeric(19,4)::text as applied
       from journal_lines jl
       -- Live entries only: a voided credit has nothing left to apply.
@@ -109,6 +125,8 @@ export async function creditSettlementState(
       left join documents settled
         on settled.id = target_entry.source_document_id and settled.org_id = a.org_id
      where a.org_id = ${orgId} and a.from_line_id = ${line.id} and a.unapplied_at is null
+       -- A payment's own cash applications are its record, not settlements of its unapplied cash.
+       ${PAYMENT_SOURCE_KINDS.has(line.kind) ? sql`and a.settlement_rate_reference = ${UNAPPLIED_PAYMENT_APPLICATION_REFERENCE}` : sql``}
        ${subsidiaryVisibleFilter(sql`settled.subsidiary_id`, allowedSubsidiaryIds)}
      order by a.applied_on desc, a.created_at desc
   `)).rows;
@@ -140,6 +158,7 @@ export interface CreditSettlementResult {
 
 interface EndpointRow extends Record<string, unknown> {
   id: string;
+  document_kind: string | null;
   account_id: string;
   subsidiary_id: string;
   book_id: string;
@@ -189,6 +208,7 @@ export async function applyStandaloneCredits(
     const endpointIds = [...new Set(input.credits.flatMap((credit) => [credit.fromLineId, credit.toLineId]))];
     const endpoints = (await db.execute<EndpointRow>(sql`
       select jl.id, jl.account_id, jl.subsidiary_id, je.book_id,
+             endpoint_document.kind as document_kind,
              endpoint_document.subsidiary_id as document_subsidiary_id,
              je.posting_date::text as posting_date,
              coalesce(endpoint_document.document_number, je.entry_number) as entry_number
@@ -307,6 +327,7 @@ export async function applyStandaloneCredits(
       side: input.side,
       controlAccountId,
       foreignCurrency: true,
+      admitUnappliedPayments: true,
     });
     // A credit or open item a payment run has reserved is that run's to
     // settle; applying it here would let the run pay the same item again.
@@ -362,6 +383,8 @@ export async function applyStandaloneCredits(
       const applicationId = index === 0 ? input.idempotencyKey : randomUUID();
       const source = balances.get(credit.fromLineId)!;
       const target = balances.get(credit.toLineId)!;
+      const fromPayment = PAYMENT_SOURCE_KINDS.has(endpoints.find((row) => row.id === credit.fromLineId)?.document_kind ?? "");
+      const reference = fromPayment ? UNAPPLIED_PAYMENT_APPLICATION_REFERENCE : CREDIT_APPLICATION_REFERENCE;
       const sourceBase = carryingAmountForSettlement(source.open_base, source.open_txn, credit.amount);
       const targetBase = carryingAmountForSettlement(target.open_base, target.open_txn, credit.amount);
       source.open_base = fromUnits(toUnits(source.open_base) - toUnits(sourceBase));
@@ -404,7 +427,7 @@ export async function applyStandaloneCredits(
         select ${applicationId}, ${orgId}, ${credit.fromLineId}, ${credit.toLineId}, ${targetBase},
                ${sourceBase}, ${credit.amount}, jl.currency,
                ${credit.amount}, jl.currency,
-               '1', 'same_currency', 'credit applied without cash',
+               '1', 'same_currency', ${reference},
                ${input.appliedOn}, ${fxEntryId}, ${userId}, ${userId}
           from journal_lines jl
          where jl.id = ${credit.fromLineId} and jl.org_id = ${orgId}
@@ -437,6 +460,7 @@ export async function applyStandaloneCredits(
                     realizedFxEntryId: fxEntryId,
                     appliedOn: input.appliedOn,
                     side: input.side,
+                    fromUnappliedPayment: fromPayment,
                   },
                 })}::jsonb,
                 ${userId}, ${input.idempotencyKey})
@@ -463,6 +487,7 @@ export async function applyStandaloneCredits(
                   amount: input.credits[0]!.amount,
                   appliedOn: input.appliedOn,
                   side: input.side,
+                  fromUnappliedPayment: PAYMENT_SOURCE_KINDS.has(endpoints.find((row) => row.id === input.credits[0]!.fromLineId)?.document_kind ?? ""),
                   result: { applicationIds, amount: settlementAmount },
                 },
               })}::jsonb,
@@ -474,6 +499,7 @@ export async function applyStandaloneCredits(
 
 interface LiveApplicationRow extends Record<string, unknown> {
   id: string;
+  settlement_rate_reference: string;
   amount: string;
   fx_gain_loss_entry_id: string | null;
   applied_on: string;
@@ -510,6 +536,7 @@ export async function unapplyCreditSettlement(
   return withOrgTransaction(orgId, async () => {
     const application = (await db.execute<LiveApplicationRow>(sql`
       select a.id, a.amount, a.applied_on::text as applied_on, a.fx_gain_loss_entry_id,
+             a.settlement_rate_reference,
              a.from_line_id, a.to_line_id,
              from_document.kind as from_document_kind,
              from_document.document_number as from_document_number,
@@ -543,18 +570,25 @@ export async function unapplyCreditSettlement(
         || !subsidiaryScopeAllows(allowedSubsidiaryIds, application.to_document_subsidiary_id ?? application.subsidiary_id)) {
       throw new ScopeNotFoundError();
     }
+    // A payment's unapplied cash applied later through this path is released
+    // like a credit; the payment's own posting-time cash applications belong
+    // to the payment and are released only by its void.
+    const unappliedPayment = PAYMENT_SOURCE_KINDS.has(application.from_document_kind ?? "")
+      && application.settlement_rate_reference === UNAPPLIED_PAYMENT_APPLICATION_REFERENCE;
     if (
       application.from_document_kind !== "customer_credit" &&
-      application.from_document_kind !== "vendor_credit"
+      application.from_document_kind !== "vendor_credit" &&
+      !unappliedPayment
     ) {
       throw new PaymentError(
         `${application.from_document_number ?? "this settlement"} is a cash application, not a credit; void the payment to release what it settled`,
       );
     }
-    // The settled side follows from the credit's kind, not from the sign of a
-    // line: a customer credit settles AR, a vendor credit settles AP.
+    // The settled side follows from the source's kind, not from the sign of a
+    // line: a customer credit or receipt settles AR, a vendor credit or
+    // payment settles AP.
     const side: OpenItemSide =
-      application.from_document_kind === "customer_credit" ? "ar" : "ap";
+      application.from_document_kind === "customer_credit" || application.from_document_kind === "customer_payment" ? "ar" : "ap";
     // A credit the cash path recorded carries its evidence on that payment's
     // stored creditAllocations. Releasing it here would leave the payment — and
     // the remittance advice printed from it — claiming a credit the bill was no
@@ -609,11 +643,14 @@ export async function unapplyCreditSettlement(
     // releasing it reverses that entry on the settlement's own date, the
     // period the gate above held open.
     if (application.fx_gain_loss_entry_id) {
+      // The realized FX entry is stated in the functional currency its lines
+      // carry; the entry header has no currency of its own.
       const fx = (await db.execute<{ entry_number: string; status: string; book_id: string; subsidiary_id: string; currency: string; source_document_id: string | null }>(sql`
-        select entry_number, status, book_id, subsidiary_id, currency, source_document_id
-          from journal_entries
-         where org_id = ${orgId} and id = ${application.fx_gain_loss_entry_id}
-         for update`)).rows[0];
+        select e.entry_number, e.status, e.book_id, e.subsidiary_id, e.source_document_id,
+               (select min(l.currency) from journal_lines l where l.org_id = e.org_id and l.entry_id = e.id) as currency
+          from journal_entries e
+         where e.org_id = ${orgId} and e.id = ${application.fx_gain_loss_entry_id}
+         for update of e`)).rows[0];
       if (!fx || fx.status !== "posted") {
         throw new PaymentError("this settlement's realized FX entry is no longer posted; it cannot be released");
       }

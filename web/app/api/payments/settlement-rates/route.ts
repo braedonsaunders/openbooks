@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server'
-import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
+import { settlementRateObservations } from '@openbooks/engine/payments/payment-queries'
 import { isIsoCalendarDate } from '@openbooks/engine/platform/business-date/module'
 import { guardPermission } from '../../../../lib/authz'
 import { defineRoute } from '@/lib/api/route'
@@ -27,23 +26,9 @@ async function listSettlementRates(req: Request) {
     return NextResponse.json({ error: 'valid settlement date is required' }, { status: 400 })
   }
 
-  const result = (await db.execute<{ id: string; toCurrency: string; rate: string; asOf: string; source: string }>(sql`
-    select id, to_currency as "toCurrency", rate::text, as_of::text as "asOf", source
-      from (
-        select r.*,
-               row_number() over (partition by r.to_currency order by r.as_of desc, r.imported_at desc nulls last, r.created_at desc) as ordinal
-          from fx_rates r
-         where r.org_id = ${gate.user.orgId}
-           and r.from_currency = ${from}
-           and r.to_currency in ${targets}
-           and r.rate_type = 'spot'
-           and r.as_of <= ${date}::date
-      ) ranked
-     where ordinal <= 10
-     order by "toCurrency", "asOf" desc
-  `))
+  const rates = await settlementRateObservations(gate.user.orgId, from, targets, date)
 
-  return NextResponse.json({ rates: result.rows })
+  return NextResponse.json({ rates })
 }
 
 export const GET = defineRoute({

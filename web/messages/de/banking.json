@@ -455,7 +455,15 @@
         "rateInvalid": "Geben Sie einen positiven Kurs, seine Quelle und einen Grund mit mindestens acht Zeichen ein.",
         "onAccountCustomerToast": "{amount} als nicht zugeordnetes Kundenguthaben behalten",
         "onAccountVendorToast": "{amount} als Lieferantenvorauszahlung behalten",
-        "writtenOffToast": "{amount} abgeschrieben"
+        "writtenOffToast": "{amount} abgeschrieben",
+        "lineEquivalent": "≈ {amount} zum Abrechnungskurs",
+        "noSettlementRate": "Kein Abrechnungskurs erfasst",
+        "settlementRateMissing": "Jeder Beleg in einer anderen Währung braucht einen Abrechnungskurs; ein selbst angegebener Kurs braucht seine Quelle und einen Grund mit mindestens acht Zeichen.",
+        "unappliedCredit": "Dieser Partner hat bereits nicht zugeordnetes Guthaben: {credits}. Wenden Sie es über diese Zahlung oder Gutschrift auf seine Belege an, bevor Sie sie mit neuem Geld ausgleichen.",
+        "hasUnappliedCredit": "Hat nicht zugeordnetes Guthaben",
+        "recordedSettlementRate": "Abrechnung zu {rate} {from} → {to} ({source}, {date})",
+        "statedSettlementRateToggle": "Stattdessen den Kurs der Bank verwenden",
+        "settlementRate": "Abrechnungskurs ({from} → {to})"
       }
     }
   },

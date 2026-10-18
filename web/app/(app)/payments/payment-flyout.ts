@@ -247,7 +247,8 @@ export async function loadPaymentFlyout({
   return {
     mode: 'record',
     payment: { ...openPayment!, doc: { ...openPayment!.doc, functional_currency: functionalCurrency, subsidiary_id: fundingSubsidiaryId ?? openPayment!.doc.subsidiary_id }, governedByFlow,
-      canRetryPostingEffects: can(authz, side === 'ar' ? 'ar.pay' : 'ap.pay') && await isFeatureEnabled(orgId, 'banking') },
+      canRetryPostingEffects: can(authz, side === 'ar' ? 'ar.pay' : 'ap.pay') && await isFeatureEnabled(orgId, 'banking'),
+      canApplyUnapplied: can(authz, side === 'ar' ? 'ar.pay' : 'ap.pay') },
     initialOpenItems,
     parties: parties.rows,
     bankAccounts: banks.rows,

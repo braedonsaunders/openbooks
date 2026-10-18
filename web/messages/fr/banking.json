@@ -455,7 +455,15 @@
         "rateInvalid": "Saisissez un taux positif, sa source et un motif d’au moins huit caractères.",
         "onAccountCustomerToast": "{amount} conservé en compte comme avoir client non imputé",
         "onAccountVendorToast": "{amount} conservé comme acompte fournisseur",
-        "writtenOffToast": "{amount} passé en perte"
+        "writtenOffToast": "{amount} passé en perte",
+        "lineEquivalent": "≈ {amount} au taux de règlement",
+        "noSettlementRate": "Aucun taux de règlement enregistré",
+        "settlementRateMissing": "Chaque document dans une autre devise doit avoir un taux de règlement ; un taux saisi doit indiquer sa source et un motif d’au moins huit caractères.",
+        "unappliedCredit": "Ce tiers détient déjà un avoir non imputé : {credits}. Imputez-le à ses documents depuis ce paiement ou cet avoir avant de les régler avec de nouveaux fonds.",
+        "hasUnappliedCredit": "A un avoir non imputé",
+        "recordedSettlementRate": "Réglé à {rate} {from} → {to} ({source}, {date})",
+        "statedSettlementRateToggle": "Utiliser plutôt le taux appliqué par la banque",
+        "settlementRate": "Taux de règlement ({from} → {to})"
       }
     }
   },

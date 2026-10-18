@@ -67,6 +67,8 @@ async function fixture(options: {
   documentAmount: string;
   lineAmount: string;
   currency?: string;
+  /** The document's currency, when it differs from the line's. */
+  documentCurrency?: string;
   documentFxRate?: string;
   permissions?: readonly string[];
 }): Promise<Fixture> {
@@ -91,7 +93,7 @@ async function fixture(options: {
     kind: side === "ar" ? "customer_invoice" : "vendor_bill",
     number: side === "ar" ? "INV-7731" : "BILL-4410",
     amount: options.documentAmount,
-    currency,
+    currency: options.documentCurrency ?? currency,
     fxRate: options.documentFxRate ?? "1",
   });
   const statementId = randomUUID();
@@ -335,6 +337,94 @@ test("two reviewers settling the same line in part concurrently produce one paym
     assert.equal(outcomes.filter((outcome) => outcome.status === "fulfilled").length, 1);
     assert.equal(await paymentCount(f.org.orgId), 1);
     assert.equal(await openOf(f, "ar", f.org.customerId), "250.0000", "the invoice is paid once");
+  } finally {
+    await withBypassContext(() => dropScratchOrg(f.org.orgId));
+  }
+});
+
+test("a CAD deposit settles a USD invoice at the recorded settlement rate and realizes the difference", { skip: !DB }, async () => {
+  const f = await fixture({ documentAmount: "100.00", lineAmount: "135.0000", documentCurrency: "USD", documentFxRate: "1.30" });
+  try {
+    const rateId = randomUUID();
+    await withBypassContext(() => db.execute(sql`
+      insert into fx_rates (id, org_id, from_currency, to_currency, as_of, rate_type, rate, source)
+      values (${rateId}, ${f.org.orgId}, 'CAD', 'USD', ${f.org.date}, 'spot', '0.7407407407', 'Bank of Canada')`));
+    const proposed = await candidates(f);
+    const doc = proposed.documents.find((entry) => entry.openLineId === f.openLineId)!;
+    assert.equal(doc.currency, "USD");
+    assert.equal(doc.transactionOpen, "100.0000");
+    assert.equal(doc.lineEquivalent, "135.0000");
+    assert.equal(doc.settlementRate?.fxRateId, rateId);
+    const exact = proposed.proposals.find((proposal) => proposal.openLineIds.includes(f.openLineId));
+    assert.equal(exact?.settlement, "exact", "135 CAD settles the 100 USD invoice exactly at the recorded rate");
+
+    const result = await record(f, "100.0000");
+    assert.equal(await openOf(f, "ar", f.org.customerId), "0");
+    const application = (await withBypassContext(() => db.execute<{ source: string; target: string; rate_source: string; fx_rate_id: string | null; fx_entry: string | null }>(sql`
+      select source_transaction_amount::text as source, target_transaction_amount::text as target, settlement_rate_source as rate_source,
+             settlement_fx_rate_id as fx_rate_id, fx_gain_loss_entry_id as fx_entry
+        from applications where org_id = ${f.org.orgId} and to_line_id = ${f.openLineId} and unapplied_at is null`))).rows[0]!;
+    assert.deepEqual([application.source, application.target, application.rate_source, application.fx_rate_id], ["135.0000", "100.0000", "provider", rateId]);
+    assert.ok(application.fx_entry, "the realized difference posts natively");
+    const gain = (await withBypassContext(() => db.execute<{ amount: string }>(sql`
+      select coalesce(sum(amount), 0)::text as amount from journal_lines where org_id = ${f.org.orgId} and account_id = ${f.org.accounts.fxGainLoss}`))).rows[0]!;
+    assert.equal(toUnits(gain.amount), toUnits("-5"), "135 CAD received for an invoice carried at 130 CAD is a 5 CAD gain");
+    assert.equal(await lineStatus(f.org.orgId, f.lineId), "matched");
+    assert.equal(result.kind, "customer_payment");
+  } finally {
+    await withBypassContext(() => dropScratchOrg(f.org.orgId));
+  }
+});
+
+test("a document in another currency with no recorded rate settles at a rate the operator states with its source and reason", { skip: !DB }, async () => {
+  const f = await fixture({ documentAmount: "100.00", lineAmount: "60.0000", documentCurrency: "USD", documentFxRate: "1.30" });
+  try {
+    const proposed = await candidates(f);
+    const doc = proposed.documents.find((entry) => entry.openLineId === f.openLineId)!;
+    assert.equal(doc.lineEquivalent, null, "it is listed for the operator to state a rate");
+    assert.equal(doc.settlementRate, null);
+    await assert.rejects(
+      record(f, "100.0000", { applied: { [f.openLineId]: "60.0000" } }),
+      (error: unknown) => error instanceof SettlementMatchRefusal && /no CAD→USD settlement rate is recorded/.test(error.message),
+    );
+    await assert.rejects(
+      record(f, "100.0000", { applied: { [f.openLineId]: "60.0000" }, settlementRates: { [f.openLineId]: { rate: "0.75", source: "Bank advice", reason: "short" } } }),
+      (error: unknown) => error instanceof SettlementMatchRefusal && /reason of at least eight characters/.test(error.message),
+    );
+    assert.equal(await paymentCount(f.org.orgId), 0);
+    await record(f, "100.0000", {
+      applied: { [f.openLineId]: "60.0000" },
+      settlementRates: { [f.openLineId]: { rate: "0.75", source: "Bank advice", reason: "Rate on the bank's credit advice" } },
+    });
+    assert.equal(await openOf(f, "ar", f.org.customerId), "55.0000", "60 CAD at 0.75 settles 45 of the 100 USD");
+    const application = (await withBypassContext(() => db.execute<{ rate_source: string; reference: string }>(sql`
+      select settlement_rate_source as rate_source, settlement_rate_reference as reference
+        from applications where org_id = ${f.org.orgId} and to_line_id = ${f.openLineId} and unapplied_at is null`))).rows[0]!;
+    assert.equal(application.rate_source, "manual");
+    assert.match(application.reference, /Bank advice/);
+  } finally {
+    await withBypassContext(() => dropScratchOrg(f.org.orgId));
+  }
+});
+
+test("a party's unapplied credit is suggested beside the documents it could settle", { skip: !DB }, async () => {
+  const f = await fixture({ documentAmount: "1250.00", lineAmount: "1300.0000" });
+  try {
+    await record(f, "1250.0000", { applied: { [f.openLineId]: "1250.0000" } });
+    // A second deposit for the same customer: the 50 kept on account is suggested.
+    const statementId = randomUUID();
+    const lineId = randomUUID();
+    await postDocumentFor(f.org, f.actorId, { kind: "customer_invoice", number: "INV-7740", amount: "200.00", currency: "CAD", fxRate: "1" });
+    await withBypassContext(async () => {
+      await db.execute(sql`
+        insert into bank_statements (id, org_id, account_id, source, statement_date, closing_balance, raw_file_ref)
+        values (${statementId}, ${f.org.orgId}, ${f.org.accounts.bank}, 'settlement-fixture', ${f.org.date}, '150.0000', 'settlement-fixture-2.raw')`);
+      await db.execute(sql`
+        insert into bank_statement_lines (id, org_id, statement_id, line_number, posted_on, amount, currency, description, match_status, account_id)
+        values (${lineId}, ${f.org.orgId}, ${statementId}, 1, ${f.org.date}, '150.0000', 'CAD', 'DEPOSIT INV7740', 'unmatched', ${f.org.accounts.bank})`);
+    });
+    const proposed = await withOrgContext(f.org.orgId, () => listOpenDocumentCandidates(f.org.orgId, f.actorId, { statementLineId: lineId, reconciliationId: f.reconId }, null));
+    assert.deepEqual(proposed.unappliedCredits[f.org.customerId]?.map((credit) => credit.open), ["50.0000"]);
   } finally {
     await withBypassContext(() => dropScratchOrg(f.org.orgId));
   }

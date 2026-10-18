@@ -2,7 +2,7 @@ import 'server-only'
 import { randomUUID } from 'node:crypto'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
-import { fromUnits, toUnits } from '@openbooks/engine/money/money'
+import { fromUnits, mulRate, toUnits } from '@openbooks/engine/money/money'
 import { createMatchWithJournal, type ReconciliationTotals } from '@openbooks/engine/banking/banking'
 import {
   rankOpenDocuments,
@@ -12,10 +12,10 @@ import {
   type OpenDocumentProposal,
   type RankedOpenDocument,
 } from '@openbooks/engine/banking/match-scoring'
-import { openItemsForParty, openItemsForSettlement } from '@openbooks/engine/payments/payment-queries'
+import { creditItemsForParty, openItemsForParty, openItemsForSettlement, settlementRateObservations } from '@openbooks/engine/payments/payment-queries'
 import { createPaymentDocument, subsidiaryFunctionalCurrency, updateDraftPayment } from '@openbooks/engine/payments/payment-documents'
 import { postPaymentWithApplications } from '@openbooks/engine/payments/payment-posting'
-import { sameCurrencyAllocation } from '@openbooks/engine/payments/settlement-policy'
+import { canonicalSettlementRate, crossCurrencyAllocation, sameCurrencyAllocation, sourceSettlingTarget, type CrossCurrencyEvidence } from '@openbooks/engine/payments/settlement-policy'
 import type { PaymentKind } from '@openbooks/engine/payments/payment-contracts'
 import {
   resolvePaymentCurrencyBasis,
@@ -69,6 +69,8 @@ import { isFeatureEnabled } from './features'
 
 /** Open items considered for one line: earliest due first, at most this many. */
 const SETTLEMENT_CANDIDATE_LIMIT = 500
+/** Documents in another currency with no recorded settlement rate listed for the operator, at most this many. */
+const SETTLEMENT_UNRATED_LIMIT = 30
 /** Most open documents one recorded payment may settle from this screen. */
 const MAX_SETTLED_DOCUMENTS = 20
 /** Confirmed matches consulted for offset-account suggestions. */
@@ -182,13 +184,46 @@ export interface SettlementExchangeRate {
   manualRateAllowed: boolean
 }
 
+/** The organization's latest settlement-rate observation from the line's currency into a document's. */
+export interface SettlementRateEvidence {
+  fxRateId: string
+  /** Document-currency units per line-currency unit. */
+  rate: string
+  asOf: string
+  source: string
+}
+
+export interface CandidateDocument extends RankedOpenDocument {
+  documentKind: string | null
+  postingDate: string
+  /** The document's transaction currency; `transactionOpen` is in it. */
+  currency: string
+  /**
+   * For a document in another currency: the line-currency cash that settles
+   * its open balance at the evidenced rate, or null until a rate is entered.
+   */
+  lineEquivalent: string | null
+  /** The evidenced settlement rate for a document in another currency, if one is recorded. */
+  settlementRate: SettlementRateEvidence | null
+}
+
+/** Credit a party already has unapplied: receipts or payments on account and open credit memos. */
+export interface UnappliedCredit {
+  documentNumber: string
+  documentKind: string | null
+  currency: string
+  open: string
+}
+
 export interface OpenDocumentCandidates {
   side: SettlementSide
   /** Positive statement amount, in `currency`. */
   amount: string
   currency: string
   proposals: OpenDocumentProposal[]
-  documents: (RankedOpenDocument & { documentKind: string | null; postingDate: string })[]
+  documents: CandidateDocument[]
+  /** Unapplied credit of each listed party, which can settle its documents without this line. */
+  unappliedCredits: Record<string, UnappliedCredit[]>
   /** Exchange-rate basis per legal entity, for entities whose functional currency differs from the line's. */
   exchangeRates: Record<string, SettlementExchangeRate>
   /** Whether the viewer may write off a short-paid remainder (ar.post on receipts; ap.pay already covers a bill payment's discount). */
@@ -240,14 +275,44 @@ export async function listOpenDocumentCandidates(
     side: line.side,
     currency: line.currency,
     targetTransactionAmount: line.magnitude,
+    includeOtherCurrencies: true,
     subsidiaryId: line.accountSubsidiaryId,
     allowedSubsidiaryIds: scope,
     limit: SETTLEMENT_CANDIDATE_LIMIT,
   })
   const byLine = new Map(items.map((item) => [item.lineId, item]))
+  // A document in another currency is ranked by the line-currency cash that
+  // settles it at the organization's latest settlement rate; without a rate
+  // it is still listed, for the operator to state one.
+  const foreignCurrencies = [...new Set(items.map((item) => item.currency).filter((currency) => currency !== line.currency))]
+  const rates = new Map((await settlementRateObservations(orgId, line.currency, foreignCurrencies, line.postedOn, 1))
+    .map((rate) => [rate.toCurrency, { fxRateId: rate.id, rate: rate.rate, asOf: rate.asOf, source: rate.source }]))
+  const lineEquivalent = new Map<string, string | null>()
+  for (const item of items) {
+    if (item.currency === line.currency) continue
+    const rate = rates.get(item.currency)
+    lineEquivalent.set(item.lineId, rate ? sourceSettlingTarget(item.transactionOpen, rate.rate).source : null)
+  }
+  const rankable = items.filter((item) => item.currency === line.currency || lineEquivalent.get(item.lineId))
   const ranked = rankOpenDocuments(
     { postedOn: line.postedOn, amount: line.magnitude, description: line.description, counterpartyRef: line.counterpartyRef },
-    items.map((item) => ({
+    rankable.map((item) => ({
+      openLineId: item.lineId,
+      partyId: item.partyId,
+      partyName: item.partyName,
+      accountId: item.accountId,
+      subsidiaryId: item.subsidiaryId,
+      documentNumber: item.documentNumber,
+      referenceNumber: item.referenceNumber,
+      entryNumber: item.entryNumber,
+      dueDate: item.dueDate,
+      transactionOpen: item.currency === line.currency ? item.transactionOpen : lineEquivalent.get(item.lineId)!,
+    })),
+  )
+  const unrated = items
+    .filter((item) => item.currency !== line.currency && !lineEquivalent.get(item.lineId))
+    .slice(0, SETTLEMENT_UNRATED_LIMIT)
+    .map((item): RankedOpenDocument => ({
       openLineId: item.lineId,
       partyId: item.partyId,
       partyName: item.partyName,
@@ -258,23 +323,49 @@ export async function listOpenDocumentCandidates(
       entryNumber: item.entryNumber,
       dueDate: item.dueDate,
       transactionOpen: item.transactionOpen,
-    })),
-  )
+      score: 0,
+      reasons: [],
+    }))
+  const documents: CandidateDocument[] = [...ranked.documents, ...unrated].map((doc) => {
+    const item = byLine.get(doc.openLineId)!
+    const foreign = item.currency !== line.currency
+    return {
+      ...doc,
+      // Every document states its own open balance in its own currency.
+      transactionOpen: fromUnits(toUnits(item.transactionOpen)),
+      documentKind: item.documentKind,
+      postingDate: item.postingDate,
+      currency: item.currency,
+      lineEquivalent: foreign ? lineEquivalent.get(doc.openLineId) ?? null : null,
+      settlementRate: foreign ? rates.get(item.currency) ?? null : null,
+    }
+  })
   const exchangeRates: Record<string, SettlementExchangeRate> = {}
-  for (const subsidiaryId of new Set(ranked.documents.map((doc) => doc.subsidiaryId).filter((id): id is string => !!id))) {
+  for (const subsidiaryId of new Set(documents.map((doc) => doc.subsidiaryId).filter((id): id is string => !!id))) {
     const basis = await exchangeRateFor(orgId, subsidiaryId, line.currency, line.postedOn)
     if (basis) exchangeRates[subsidiaryId] = basis
+  }
+  // A party that already holds unapplied credit may not need this line at
+  // all for some of its documents: the drawer suggests applying it first.
+  const unappliedCredits: Record<string, UnappliedCredit[]> = {}
+  for (const partyId of new Set(documents.map((doc) => doc.partyId))) {
+    const credits = await creditItemsForParty(partyId, line.side, orgId, scope, { includeUnappliedPayments: true })
+    if (credits.length > 0) {
+      unappliedCredits[partyId] = credits.map((credit) => ({
+        documentNumber: credit.documentNumber ?? credit.entryNumber,
+        documentKind: credit.documentKind,
+        currency: credit.currency,
+        open: fromUnits(toUnits(credit.transactionOpen)),
+      }))
+    }
   }
   return {
     side: line.side,
     amount: line.magnitude,
     currency: line.currency,
     proposals: ranked.proposals,
-    documents: ranked.documents.map((doc) => ({
-      ...doc,
-      documentKind: byLine.get(doc.openLineId)?.documentKind ?? null,
-      postingDate: byLine.get(doc.openLineId)?.postingDate ?? '',
-    })),
+    documents,
+    unappliedCredits,
     exchangeRates,
     canWriteOff: line.side === 'ar' ? can(viewer, 'ar.post') : true,
   }
@@ -297,6 +388,14 @@ export interface RecordPaymentMatchInput {
   writeOff?: { reason: string; discountAccountId?: string | null } | null
   /** A rate the operator enters for a foreign-currency line, overriding the evidenced rate. */
   exchangeRate?: { rate: string; source: string; reason: string } | null
+  /**
+   * Settlement rate for each selected document in another currency than the
+   * line (document-currency units per line-currency unit): a recorded
+   * observation by id, or a rate the operator states with its source and
+   * reason. A document with neither settles at the organization's latest
+   * recorded observation on the line's date.
+   */
+  settlementRates?: Record<string, { fxRateId: string } | { rate: string; source: string; reason: string }> | null
 }
 
 export interface RecordPaymentMatchResult {
@@ -509,8 +608,53 @@ export async function recordPaymentAndMatch(
 }
 
 /**
+ * The settlement-rate evidence for a document in another currency than the
+ * line, as the payment drawers record it: a recorded observation (provider
+ * evidence, cited by id and re-validated at posting), or a rate the operator
+ * states with its source and reason (manual evidence). With neither, the
+ * organization's latest observation on the line's date; with none recorded,
+ * the line refuses.
+ */
+async function crossCurrencyEvidence(
+  orgId: string,
+  line: SettlementLine,
+  currency: string,
+  label: string,
+  stated: { fxRateId: string } | { rate: string; source: string; reason: string } | null,
+): Promise<CrossCurrencyEvidence> {
+  if (stated && 'rate' in stated) {
+    const source = stated.source.trim()
+    const reason = stated.reason.trim()
+    if (!source || reason.length < 8) {
+      throw new SettlementMatchRefusal(`The settlement rate for ${label} needs its source and a reason of at least eight characters`, 422, 'State where the rate comes from and why it applies.')
+    }
+    let rate: string
+    try {
+      rate = canonicalSettlementRate(stated.rate)
+    } catch (error) {
+      if (error instanceof PaymentError) throw new SettlementMatchRefusal(`The settlement rate for ${label}: ${error.message}`, 422, 'Enter a positive rate with at most ten decimal places.')
+      throw error
+    }
+    return { rate, source: 'manual', reference: `${source} · ${reason}` }
+  }
+  const observations = await settlementRateObservations(orgId, line.currency, [currency], line.postedOn, 10)
+  const observation = stated ? observations.find((row) => row.id === stated.fxRateId) : observations[0]
+  if (!observation) {
+    throw new SettlementMatchRefusal(
+      stated
+        ? `The settlement rate chosen for ${label} is not a recorded ${line.currency}→${currency} rate on or before ${line.postedOn}`
+        : `${label} is in ${currency} and no ${line.currency}→${currency} settlement rate is recorded on or before ${line.postedOn}`,
+      422,
+      'Record the dated rate in Setup → Exchange rates, or enter the rate the bank applied with its source and reason.',
+    )
+  }
+  return { rate: observation.rate, source: 'provider', reference: `${observation.source} · ${observation.asOf}`, fxRateId: observation.id }
+}
+
+/**
  * Validate the selection against live open items and build the settlement:
- * one party, one legal entity, one control account, the line's currency,
+ * one party, one legal entity, one control account, settlement-rate evidence
+ * for every document in another currency than the line,
  * nothing reserved by a payment run, every open balance exactly what the
  * operator saw, and the operator's allocation (or, absent one, every
  * document in full, equal to the statement amount exactly). A foreign
@@ -580,9 +724,9 @@ async function settleableAllocations(
     if (item.reservedByRun) {
       throw new SettlementMatchRefusal(`${label} is reserved by payment run ${item.reservedByRun.runNumber}, which will pay it`, 409, 'Pay it through that run, or release it from the run first.')
     }
-    if (item.currency !== line.currency) {
-      throw new SettlementMatchRefusal(`${label} is in ${item.currency}, but the statement line is in ${line.currency}`, 422, 'Select documents in the line’s currency.')
-    }
+    const evidence = item.currency === line.currency
+      ? null
+      : await crossCurrencyEvidence(orgId, line, item.currency, label, input.settlementRates?.[openLineId] ?? null)
     const expected = input.expectedOpen[openLineId]
     if (expected === undefined || toUnits(expected) !== toUnits(item.transactionOpen)) {
       throw new SettlementMatchRefusal(
@@ -592,7 +736,10 @@ async function settleableAllocations(
       )
     }
     accountIds.add(item.accountId)
-    documents.push({ item, label, open: fromUnits(toUnits(item.transactionOpen)) })
+    // The settlement works in the line's currency: a document in another
+    // currency is open for the cash that settles its balance at its rate.
+    const settling = evidence ? sourceSettlingTarget(item.transactionOpen, evidence.rate) : null
+    documents.push({ item, label, evidence, open: settling ? settling.source : fromUnits(toUnits(item.transactionOpen)) })
   }
   if (accountIds.size !== 1) {
     throw new SettlementMatchRefusal('One payment settles documents on a single receivable or payable account', 422, 'Select documents on one control account, or record separate payments.')
@@ -641,20 +788,26 @@ async function settleableAllocations(
         if (doc.item.documentKind !== 'customer_invoice' || !doc.item.documentId) {
           throw new SettlementMatchRefusal(`${doc.label} is not a customer invoice, so its short-paid balance cannot be written off here`, 422, 'Apply the full amount to it, or leave its remainder open.')
         }
-        // The invoice write-off states amounts to two decimal places; a
+        // The invoice keeps, in its own currency, what the cash did not settle;
+        // the invoice write-off states that to two decimal places, and a
         // remainder finer than that cannot be written off exactly.
-        const units = toUnits(planned.writeOff)
+        const settledTarget = doc.evidence ? toUnits(mulRate(planned.applied, doc.evidence.rate)) : toUnits(planned.applied)
+        const units = toUnits(doc.item.transactionOpen) - settledTarget
         if (units % 100n !== 0n) {
-          throw new SettlementMatchRefusal(`${doc.label}'s remainder of ${planned.writeOff} has more than two decimal places, so it cannot be written off exactly`, 422, 'Apply an amount with at most two decimal places so the remainder can be written off.')
+          throw new SettlementMatchRefusal(`${doc.label}'s remainder of ${fromUnits(units)} has more than two decimal places, so it cannot be written off exactly`, 422, 'Apply an amount with at most two decimal places so the remainder can be written off.')
         }
         writeOffDocuments.push({ documentId: doc.item.documentId, amount: fromUnits(units).slice(0, -2), label: doc.label })
       }
     }
   }
-  const allocations = plan.documents.map((planned) => sameCurrencyAllocation(
-    planned.openLineId,
-    discount ? fromUnits(toUnits(planned.applied) + toUnits(planned.writeOff)) : planned.applied,
-  ))
+  // A bill payment's discount settles with its cash: the allocation consumes
+  // both from the payment, in the payment's currency, and a document in
+  // another currency extinguishes exactly their cross-rate.
+  const allocations = plan.documents.map((planned) => {
+    const source = discount ? fromUnits(toUnits(planned.applied) + toUnits(planned.writeOff)) : planned.applied
+    const evidence = byLine.get(planned.openLineId)!.evidence
+    return evidence ? crossCurrencyAllocation(planned.openLineId, source, evidence) : sameCurrencyAllocation(planned.openLineId, source)
+  })
   return { partyId, subsidiaryId, allocations, plan, discount, writeOffDocuments, explicitFx, currencyBasis }
 }
 

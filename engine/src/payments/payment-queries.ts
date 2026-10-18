@@ -309,8 +309,9 @@ export interface SettlementOpenItem extends OpenItem {
 
 /**
  * Open items of any party that a receipt or payment of `targetTransactionAmount`
- * may settle, for matching a bank line to the documents it pays: same
- * transaction currency, inside the caller's scope and (when given) one legal
+ * may settle, for matching a bank line to the documents it pays: the line's
+ * transaction currency (and, when asked, every other currency a settlement
+ * rate can convert to, listed last), inside the caller's scope and (when given) one legal
  * entity, with a remaining transaction balance above zero. Items reserved by
  * a payment run are excluded — that run pays them. Bounded by `limit`: items
  * whose balance equals the amount first, then those at or below it (which
@@ -322,6 +323,8 @@ export async function openItemsForSettlement(opts: {
   side: OpenItemSide;
   currency: string;
   targetTransactionAmount: string;
+  /** Also list items in other transaction currencies, after every item in `currency`. */
+  includeOtherCurrencies?: boolean;
   subsidiaryId: string | null;
   allowedSubsidiaryIds: ReadonlySet<string> | null;
   limit: number;
@@ -329,7 +332,7 @@ export async function openItemsForSettlement(opts: {
   const rows = await selectOpenItemRows(
     opts.orgId,
     opts.side,
-    sql`jl.party_id is not null and jl.currency = ${opts.currency}
+    sql`jl.party_id is not null ${opts.includeOtherCurrencies ? sql`` : sql`and jl.currency = ${opts.currency}`}
       and abs(jl.txn_amount) - coalesce(ap.transaction_applied, 0) > 0
       and reservation.run_id is null
       ${opts.subsidiaryId ? sql`and jl.subsidiary_id = ${opts.subsidiaryId}` : sql``}
@@ -337,6 +340,7 @@ export async function openItemsForSettlement(opts: {
     {
       limit: opts.limit,
       priority: sql`case
+        when jl.currency <> ${opts.currency} then 3
         when abs(jl.txn_amount) - coalesce(ap.transaction_applied, 0) = ${opts.targetTransactionAmount}::numeric then 0
         when abs(jl.txn_amount) - coalesce(ap.transaction_applied, 0) < ${opts.targetTransactionAmount}::numeric then 1
         else 2 end`,
@@ -345,6 +349,46 @@ export async function openItemsForSettlement(opts: {
   return rows
     .map((row) => ({ ...openItemFromRow(row), partyId: row.party_id, partyName: row.party_name, subsidiaryId: row.subsidiary_id }))
     .filter((item) => cmp(item.open, "0") > 0);
+}
+
+/** One tenant-owned spot observation usable as settlement-rate evidence. */
+export interface SettlementRateObservation extends Record<string, unknown> {
+  id: string;
+  toCurrency: string;
+  /** Target-currency units per one unit of `from`. */
+  rate: string;
+  asOf: string;
+  source: string;
+}
+
+/**
+ * The organization's spot observations from one currency into others, dated
+ * on or before the settlement date, newest first, at most `perCurrency` per
+ * target: the evidence a cross-currency application cites as `provider`.
+ */
+export async function settlementRateObservations(
+  orgId: string,
+  from: string,
+  targets: readonly string[],
+  onDate: string,
+  perCurrency = 10,
+): Promise<SettlementRateObservation[]> {
+  if (targets.length === 0) return [];
+  return (await db.execute<SettlementRateObservation>(sql`
+    select id, to_currency as "toCurrency", rate::text, as_of::text as "asOf", source
+      from (
+        select r.*,
+               row_number() over (partition by r.to_currency order by r.as_of desc, r.imported_at desc nulls last, r.created_at desc) as ordinal
+          from fx_rates r
+         where r.org_id = ${orgId}
+           and r.from_currency = ${from}
+           and r.to_currency in ${[...targets]}
+           and r.rate_type = 'spot'
+           and r.as_of <= ${onDate}::date
+      ) ranked
+     where ordinal <= ${perCurrency}
+     order by "toCurrency", "asOf" desc
+  `)).rows;
 }
 
 function negStr(a: string): string {
@@ -356,18 +400,25 @@ function negStr(a: string): string {
  * party: the mirror of openItemsForParty, which lists only debit items a
  * payment can extinguish. Credits carry the opposite sign (AR: amount < 0,
  * AP: amount > 0) and are consumed from the from_line side of applications.
- * Only lines with remaining open balance are returned.
+ * Only lines with remaining open balance are returned. With
+ * `includeUnappliedPayments`, a receipt's unapplied credit and a vendor
+ * payment's prepayment are listed too: the cash those payments moved beyond
+ * what they applied, which the standalone application path settles.
  */
 export async function creditItemsForParty(
   partyId: string,
   side: OpenItemSide = "ar",
   orgId?: string,
   allowedSubsidiaryIds?: ReadonlySet<string> | null,
+  options: { includeUnappliedPayments?: boolean } = {},
 ): Promise<OpenItem[]> {
   const tenantId = orgId ?? orgContext.getStore()?.orgId;
   if (!tenantId) throw new PaymentError("organization is required to select credit open items");
   const bookId = await paymentBookId(tenantId);
   const creditKind = side === "ap" ? "vendor_credit" : "customer_credit";
+  const sourceKinds = options.includeUnappliedPayments
+    ? [creditKind, side === "ap" ? "vendor_payment" : "customer_payment"]
+    : [creditKind];
   const signFilter = side === "ap" ? sql`jl.amount > 0` : sql`jl.amount < 0`;
   const r = (await db.execute<{
     line_id: string;
@@ -405,7 +456,7 @@ export async function creditItemsForParty(
       from journal_lines jl
       -- Live entries only: a voided credit is never offered for application.
       join journal_entries je on je.id = jl.entry_id and je.org_id = jl.org_id and je.status = 'posted'
-      join documents d on d.id = je.source_document_id and d.org_id = je.org_id and d.kind = ${creditKind}
+      join documents d on d.id = je.source_document_id and d.org_id = je.org_id and d.kind in ${sourceKinds}
       join accounts acct on acct.id = jl.account_id and acct.org_id = jl.org_id
       left join lateral (
         select sum(a.source_amount) as applied, sum(a.source_transaction_amount) as transaction_applied

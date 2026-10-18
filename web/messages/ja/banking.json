@@ -455,7 +455,15 @@
         "rateInvalid": "正のレート、その出所、8 文字以上の理由を入力してください。",
         "onAccountCustomerToast": "{amount} を未充当の顧客入金として保持しました",
         "onAccountVendorToast": "{amount} を仕入先前払として保持しました",
-        "writtenOffToast": "{amount} を償却しました"
+        "writtenOffToast": "{amount} を償却しました",
+        "lineEquivalent": "決済レートで約 {amount}",
+        "noSettlementRate": "決済レートが登録されていません",
+        "settlementRateMissing": "他通貨の書類にはそれぞれ決済レートが必要です。入力するレートには出所と 8 文字以上の理由が必要です。",
+        "unappliedCredit": "この取引先には未充当の残高があります：{credits}。新たな入金で消込む前に、その支払またはクレジットメモから書類に充当してください。",
+        "hasUnappliedCredit": "未充当残高あり",
+        "recordedSettlementRate": "{rate} {from} → {to} で決済（{source}、{date}）",
+        "statedSettlementRateToggle": "代わりに銀行が適用したレートを使う",
+        "settlementRate": "決済レート（{from} → {to}）"
       }
     }
   },

@@ -21,7 +21,9 @@ import { defineRoute } from '@/lib/api/route'
 export const runtime = 'nodejs'
 
 /**
- * Settle a posted credit memo against posted open items with NO cash.
+ * Settle a posted credit memo — or a payment's unapplied cash: a receipt's
+ * on-account credit or a vendor prepayment — against posted open items with
+ * NO cash.
  *
  * A credit that fully covers an invoice had no workflow at all: posting a
  * payment refuses zero cash allocations, so the balance stayed open on both
@@ -87,7 +89,7 @@ async function getCreditApplications(req: Request) {
   const doc = (await db.execute<{ partyId: string | null; subsidiaryId: string | null }>(sql`
     select party_id as "partyId", subsidiary_id as "subsidiaryId" from documents
      where id = ${documentId} and org_id = ${gate.user.orgId}
-       and kind = ${side === 'ap' ? 'vendor_credit' : 'customer_credit'}
+       and kind in ${side === 'ap' ? ['vendor_credit', 'vendor_payment'] : ['customer_credit', 'customer_payment']}
   `))
   if (!doc.rows[0]) return notFound("record")
   const documentDenied = guardSubsidiaryScope(gate, doc.rows[0].subsidiaryId)
@@ -169,7 +171,8 @@ async function releaseCredits(req: Request) {
      where a.id = ${applicationId} and a.org_id = ${gate.user.orgId}
   `))
   const row = settlement.rows[0]
-  const actualSide = row?.kind === 'vendor_credit' ? 'ap' : row?.kind === 'customer_credit' ? 'ar' : null
+  const actualSide = row?.kind === 'vendor_credit' || row?.kind === 'vendor_payment' ? 'ap'
+    : row?.kind === 'customer_credit' || row?.kind === 'customer_payment' ? 'ar' : null
   if (!row || actualSide !== side) {
     return notFound("record")
   }

@@ -339,6 +339,9 @@
     "noOpenItems": "Este parceiro não tem itens em aberto para aplicar o crédito.",
     "nothingSelected": "Informe um valor em pelo menos um item em aberto.",
     "applyFailed": "Não foi possível aplicar o crédito.",
-    "releaseFailed": "Não foi possível liberar a aplicação."
+    "releaseFailed": "Não foi possível liberar a aplicação.",
+    "unappliedCreditTitle": "Crédito não aplicado",
+    "prepaymentTitle": "Adiantamento a fornecedor",
+    "unappliedRemaining": "{amount} não aplicado"
   }
 }

@@ -4,9 +4,10 @@ import { useEffect, useMemo, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { RotateCcw } from 'lucide-react'
-import { fromUnits, sum, toUnits } from '@openbooks/engine/money/money'
+import { fromUnits, mulRate, sum, toUnits } from '@openbooks/engine/money/money'
 import type { MatchReason, ProposalSettlement } from '@openbooks/engine/banking/match-scoring'
 import { allocateOldestFirst, settlementOrder } from '@openbooks/engine/payments/statement-settlement'
+import { sourceSettlingTarget } from '@openbooks/engine/payments/settlement-policy'
 import {
   Button, Drawer, EmptyState, Input, Label, SearchSelect, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Textarea, cn,
 } from '@openbooks/ui'
@@ -24,8 +25,20 @@ interface CandidateDocument {
   documentKind: string | null
   dueDate: string | null
   postingDate: string
+  /** Open balance in the document's own currency. */
   transactionOpen: string
+  currency: string
+  /** Line-currency cash that settles a document in another currency at its recorded rate; null until a rate exists. */
+  lineEquivalent: string | null
+  settlementRate: { fxRateId: string; rate: string; asOf: string; source: string } | null
   reasons: MatchReason[]
+}
+
+interface UnappliedCredit {
+  documentNumber: string
+  documentKind: string | null
+  currency: string
+  open: string
 }
 
 interface Proposal {
@@ -54,7 +67,16 @@ interface Candidates {
   proposals: Proposal[]
   documents: CandidateDocument[]
   exchangeRates: Record<string, ExchangeRateBasis>
+  unappliedCredits: Record<string, UnappliedCredit[]>
   canWriteOff: boolean
+}
+
+/** The settlement rate a review uses for a document in another currency: the recorded one, or one the operator states. */
+interface RateDraft {
+  manual: boolean
+  rate: string
+  source: string
+  reason: string
 }
 
 /** The operator's settlement of the line: what each document receives, a write-off, and a manual rate. */
@@ -68,34 +90,74 @@ interface SettlementDraft {
   rate: string
   rateSource: string
   rateReason: string
+  /** Per document in another currency than the line. */
+  settlementRates: Record<string, RateDraft>
 }
 
 const AMOUNT_PATTERN = /^\d{1,13}(\.\d{1,4})?$/
 const RATE_PATTERN = /^\d{1,9}(\.\d{1,10})?$/
 
-/** Exact settlement arithmetic for the review: per-document validity, the applied total, cash on account and the write-off. */
+/** The settlement rate in force for a document in another currency, or null when none is usable. */
+function settlementRateOf(doc: CandidateDocument, draft: SettlementDraft): string | null {
+  const stated = draft.settlementRates[doc.openLineId]
+  if (stated?.manual) {
+    const rate = stated.rate.trim()
+    return RATE_PATTERN.test(rate) && !/^0+(\.0+)?$/.test(rate) ? rate : null
+  }
+  return doc.settlementRate?.rate ?? null
+}
+
+/** Whether a manually stated settlement rate carries the source and reason the evidence needs. */
+function manualRateComplete(stated: RateDraft | undefined): boolean {
+  return !stated?.manual || (stated.source.trim().length > 0 && stated.reason.trim().length >= 8)
+}
+
+/**
+ * Exact settlement arithmetic for the review: per-document validity, the
+ * applied total, cash on account and the write-off, all in the line's
+ * currency. A document in another currency is open for the cash that settles
+ * its balance at its settlement rate, and keeps, in its own currency, what
+ * the cash does not settle.
+ */
 function summarize(candidates: Candidates, docs: CandidateDocument[], draft: SettlementDraft) {
   const line = toUnits(candidates.amount)
   let applied = 0n
   let shortfall = 0n
   let invalid = false
+  let rateMissing = false
   const rows = settlementOrder(docs.map((doc) => ({ openLineId: doc.openLineId, open: doc.transactionOpen, dueDate: doc.dueDate, postingDate: doc.postingDate, label: doc.documentNumber ?? doc.entryNumber })))
     .map((ordered) => {
       const doc = docs.find((candidate) => candidate.openLineId === ordered.openLineId)!
+      const foreign = doc.currency !== candidates.currency
+      const rate = foreign ? settlementRateOf(doc, draft) : null
+      if (foreign && (rate === null || !manualRateComplete(draft.settlementRates[doc.openLineId]))) rateMissing = true
       const raw = (draft.applied[doc.openLineId] ?? '').trim()
       const units = AMOUNT_PATTERN.test(raw) ? toUnits(raw) : null
-      const open = toUnits(doc.transactionOpen)
-      const rowInvalid = units === null || units <= 0n || units > open
+      let open: bigint | null = toUnits(doc.transactionOpen)
+      if (foreign) {
+        try { open = rate ? toUnits(sourceSettlingTarget(doc.transactionOpen, rate).source) : null } catch { open = null }
+      }
+      const rowInvalid = units === null || open === null || units <= 0n || units > open
       if (rowInvalid) invalid = true
       else {
         applied += units
-        shortfall += open - units
+        shortfall += open! - units
       }
-      return { doc, raw, invalid: rowInvalid, remaining: units === null || rowInvalid ? null : open - units }
+      // What the document still carries, in its own currency.
+      const remaining = rowInvalid ? null
+        : foreign ? toUnits(doc.transactionOpen) - toUnits(mulRate(fromUnits(units!), rate!))
+          : open! - units!
+      // A write-off clears the rest: a receipt's invoice write-off states it
+      // in the invoice's currency, and a bill payment's discount settles the
+      // bill in full at its rate, leaving only what that rate cannot express.
+      const remainingAfterWriteOff = rowInvalid ? null
+        : foreign && candidates.side === 'ap' ? toUnits(doc.transactionOpen) - toUnits(mulRate(fromUnits(open!), rate!))
+          : 0n
+      return { doc, raw, foreign, rate, lineOpen: open, invalid: rowInvalid, remaining, remainingAfterWriteOff }
     })
   const overApplied = applied > line
   const onAccount = overApplied ? 0n : line - applied
-  return { rows, applied, onAccount, shortfall, invalid, overApplied, conflict: draft.writeOff && onAccount > 0n }
+  return { rows, applied, onAccount, shortfall, invalid, rateMissing, overApplied, conflict: draft.writeOff && onAccount > 0n }
 }
 
 type LoadState =
@@ -150,6 +212,7 @@ export function SettleLineDrawer({
   const tBanking = useTranslations('banking')
   const { money: formatMoney } = useMoney(currency)
   const money = (value: string) => formatMoney(value, { maximumFractionDigits: 4 })
+  const moneyIn = (value: string, inCurrency: string) => formatMoney(value, { currency: inCurrency, maximumFractionDigits: 4 })
   const [state, setState] = useState<LoadState>({ status: 'loading' })
   const [view, setView] = useState<'proposals' | 'documents' | 'settle'>('proposals')
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set())
@@ -178,9 +241,14 @@ export function SettleLineDrawer({
     [candidates],
   )
   const selectedDocs = [...selected].map((id) => documentsById.get(id)).filter((doc): doc is CandidateDocument => !!doc)
-  const selectedTotal = sum(selectedDocs.map((doc) => doc.transactionOpen))
+  // Selections are compared in the line's currency: a document in another
+  // currency counts at its recorded settlement rate, and one without a rate
+  // must be reviewed with a rate the operator states.
+  const lineOpenOf = (doc: CandidateDocument) => (doc.currency === candidates?.currency ? doc.transactionOpen : doc.lineEquivalent)
+  const selectedTotal = sum(selectedDocs.map((doc) => lineOpenOf(doc) ?? '0'))
   const selectionParties = new Set(selectedDocs.map((doc) => doc.partyId))
   const selectionSettles = candidates !== null && selectedDocs.length > 0 && selectionParties.size === 1
+    && selectedDocs.every((doc) => lineOpenOf(doc) !== null)
     && toUnits(selectedTotal) === toUnits(candidates.amount)
 
   /** Open the settlement review for a set of documents, with the cash applied oldest first unless a proposal states it. */
@@ -188,7 +256,7 @@ export function SettleLineDrawer({
     if (!candidates) return
     const docs = openLineIds.map((id) => documentsById.get(id)).filter((doc): doc is CandidateDocument => !!doc)
     const allocation = applied ?? allocateOldestFirst(candidates.amount, docs.map((doc) => ({
-      openLineId: doc.openLineId, open: doc.transactionOpen, dueDate: doc.dueDate, postingDate: doc.postingDate, label: doc.documentNumber ?? doc.entryNumber,
+      openLineId: doc.openLineId, open: lineOpenOf(doc) ?? '0', dueDate: doc.dueDate, postingDate: doc.postingDate, label: doc.documentNumber ?? doc.entryNumber,
     })))
     setRecordError(null)
     setDraft({
@@ -201,6 +269,10 @@ export function SettleLineDrawer({
       rate: '',
       rateSource: '',
       rateReason: '',
+      settlementRates: Object.fromEntries(docs.filter((doc) => doc.currency !== candidates.currency).map((doc) => [
+        doc.openLineId,
+        { manual: doc.settlementRate === null, rate: doc.settlementRate?.rate ?? '', source: '', reason: '' },
+      ])),
     })
     setView('settle')
   }
@@ -230,6 +302,14 @@ export function SettleLineDrawer({
             exchangeRate: settlement.manualRate
               ? { rate: settlement.rate.trim(), source: settlement.rateSource.trim(), reason: settlement.rateReason.trim() }
               : null,
+            settlementRates: Object.keys(settlement.settlementRates).length === 0 ? null : Object.fromEntries(
+              Object.entries(settlement.settlementRates).map(([id, stated]) => {
+                const doc = documentsById.get(id)
+                return [id, stated.manual || !doc?.settlementRate
+                  ? { rate: stated.rate.trim(), source: stated.source.trim(), reason: stated.reason.trim() }
+                  : { fxRateId: doc.settlementRate.fxRateId }]
+              }),
+            ),
           } : {}),
         }),
       })
@@ -267,9 +347,21 @@ export function SettleLineDrawer({
   const rateValid = !draft?.manualRate || (RATE_PATTERN.test(draft.rate.trim()) && !/^0+(\.0+)?$/.test(draft.rate.trim())
     && draft.rateSource.trim().length > 0 && draft.rateReason.trim().length >= 8)
   const writeOffValid = !draft?.writeOff || (draft.writeOffReason.trim().length > 0 && (candidates?.side !== 'ap' || draft.discountAccountId !== ''))
-  const settlementReady = !!summary && !summary.invalid && !summary.overApplied && !summary.conflict && rateValid && writeOffValid
+  const settlementReady = !!summary && !summary.invalid && !summary.rateMissing && !summary.overApplied && !summary.conflict && rateValid && writeOffValid
     && (!fx || fx.rate !== null || !!draft?.manualRate)
     && (!draft?.writeOff || summary.shortfall > 0n)
+  /** A suggestion when the party already holds unapplied credit that could settle its documents without this line. */
+  const unappliedNotice = (partyId: string | null) => {
+    const credits = partyId ? candidates?.unappliedCredits[partyId] ?? [] : []
+    if (credits.length === 0) return null
+    return (
+      <p role="note" className="rounded-md border border-amber-200 bg-amber-50 p-2.5 text-sm text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200">
+        {t('settlement.unappliedCredit', {
+          credits: credits.map((credit) => `${credit.documentNumber} ${moneyIn(credit.open, credit.currency)}`).join(', '),
+        })}
+      </p>
+    )
+  }
   const updateDraft = (patch: Partial<SettlementDraft>) => {
     setRecordError(null)
     setDraft((current) => (current ? { ...current, ...patch } : current))
@@ -350,11 +442,16 @@ export function SettleLineDrawer({
                 <TableBody>
                   {candidates.proposals.map((proposal) => (
                     <TableRow key={proposal.openLineIds.join(',')}>
-                      <TableCell className="max-w-[10rem] truncate">{proposal.partyName ?? '—'}</TableCell>
+                      <TableCell className="max-w-[10rem]">
+                        <div className="truncate">{proposal.partyName ?? '—'}</div>
+                        {(candidates.unappliedCredits[proposal.partyId]?.length ?? 0) > 0 ? (
+                          <div className="text-xs text-amber-700 dark:text-amber-300">{t('settlement.hasUnappliedCredit')}</div>
+                        ) : null}
+                      </TableCell>
                       <TableCell className="font-mono text-[13px]">
                         {proposal.openLineIds.map((id) => {
                           const doc = documentsById.get(id)
-                          return doc ? <div key={id}>{docLabel(doc)} <span className="text-slate-400">{money(doc.transactionOpen)}</span></div> : null
+                          return doc ? <div key={id}>{docLabel(doc)} <span className="text-slate-400">{doc.currency === candidates.currency ? money(doc.transactionOpen) : moneyIn(doc.transactionOpen, doc.currency)}</span></div> : null
                         })}
                       </TableCell>
                       <TableCell><MatchReasonBadges reasons={proposal.reasons} formatAmount={money} /></TableCell>
@@ -413,7 +510,16 @@ export function SettleLineDrawer({
                         <TableCell className="font-mono text-[13px]">{docLabel(doc)}</TableCell>
                         <TableCell className="max-w-[10rem] truncate">{doc.partyName ?? '—'}</TableCell>
                         <TableCell className="whitespace-nowrap">{doc.dueDate ?? '—'}</TableCell>
-                        <TableCell className="text-right tabular-nums">{money(doc.transactionOpen)}</TableCell>
+                        <TableCell className="text-right tabular-nums">
+                          {doc.currency === candidates.currency ? money(doc.transactionOpen) : (
+                            <>
+                              <div>{moneyIn(doc.transactionOpen, doc.currency)}</div>
+                              <div className="text-xs text-slate-500">
+                                {doc.lineEquivalent ? t('settlement.lineEquivalent', { amount: money(doc.lineEquivalent) }) : t('settlement.noSettlementRate')}
+                              </div>
+                            </>
+                          )}
+                        </TableCell>
                         <TableCell><MatchReasonBadges reasons={doc.reasons} formatAmount={money} /></TableCell>
                       </TableRow>
                     )
@@ -437,9 +543,23 @@ export function SettleLineDrawer({
               <TableBody>
                 {summary.rows.map((row) => (
                   <TableRow key={row.doc.openLineId}>
-                    <TableCell className="font-mono text-[13px]">{docLabel(row.doc)}</TableCell>
+                    <TableCell className="font-mono text-[13px]">
+                      {docLabel(row.doc)}
+                      {row.foreign ? (
+                        <SettlementRateEditor
+                          from={candidates.currency}
+                          to={row.doc.currency}
+                          recorded={row.doc.settlementRate}
+                          stated={draft.settlementRates[row.doc.openLineId]!}
+                          onChange={(next) => updateDraft({ settlementRates: { ...draft.settlementRates, [row.doc.openLineId]: next } })}
+                        />
+                      ) : null}
+                    </TableCell>
                     <TableCell className="whitespace-nowrap">{row.doc.dueDate ?? '—'}</TableCell>
-                    <TableCell className="text-right tabular-nums">{money(row.doc.transactionOpen)}</TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {row.foreign ? moneyIn(row.doc.transactionOpen, row.doc.currency) : money(row.doc.transactionOpen)}
+                      {row.foreign && row.lineOpen !== null ? <div className="text-xs text-slate-500">{t('settlement.lineEquivalent', { amount: money(fromUnits(row.lineOpen)) })}</div> : null}
+                    </TableCell>
                     <TableCell className="text-right">
                       <Input
                         inputMode="decimal"
@@ -451,13 +571,16 @@ export function SettleLineDrawer({
                       />
                     </TableCell>
                     <TableCell className="text-right tabular-nums">
-                      {row.remaining === null ? '—' : money(fromUnits(draft.writeOff ? 0n : row.remaining))}
+                      {row.remaining === null ? '—'
+                        : moneyIn(fromUnits(draft.writeOff ? row.remainingAfterWriteOff ?? 0n : row.remaining), row.doc.currency)}
                     </TableCell>
                   </TableRow>
                 ))}
               </TableBody>
             </Table>
+            {summary.rateMissing ? <p role="alert" className="text-sm text-red-700 dark:text-red-300">{t('settlement.settlementRateMissing')}</p> : null}
             {summary.invalid ? <p role="alert" className="text-sm text-red-700 dark:text-red-300">{t('settlement.invalidAmount')}</p> : null}
+            {unappliedNotice(draftDocs[0]?.partyId ?? null)}
             <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm tabular-nums sm:grid-cols-4">
               <div><dt className="text-xs text-slate-500">{t('settlement.lineAmount')}</dt><dd>{money(candidates.amount)}</dd></div>
               <div><dt className="text-xs text-slate-500">{t('settlement.appliedTotal')}</dt><dd>{money(fromUnits(summary.applied))}</dd></div>
@@ -539,5 +662,40 @@ export function SettleLineDrawer({
         {candidates ? <p className="text-xs text-slate-500 dark:text-slate-400">{t('recordHint')}</p> : null}
       </div>
     </Drawer>
+  )
+}
+
+/**
+ * The settlement rate of one document in another currency than the line:
+ * the organization's recorded rate (cited as provider evidence), or a rate
+ * the operator states with its source and reason.
+ */
+function SettlementRateEditor({ from, to, recorded, stated, onChange }: {
+  from: string
+  to: string
+  recorded: CandidateDocument['settlementRate']
+  stated: RateDraft
+  onChange: (next: RateDraft) => void
+}) {
+  const t = useTranslations('banking.match.settle.settlement')
+  return (
+    <div className="mt-1 space-y-1 font-sans text-xs text-slate-600 dark:text-slate-300">
+      {recorded && !stated.manual ? (
+        <p>{t('recordedSettlementRate', { from, to, rate: recorded.rate, source: recorded.source, date: recorded.asOf })}</p>
+      ) : null}
+      {recorded ? (
+        <label className="flex items-center gap-1.5">
+          <input type="checkbox" className="accent-teal-700" checked={stated.manual} onChange={(event) => onChange({ ...stated, manual: event.target.checked, rate: event.target.checked ? stated.rate : recorded.rate })} />
+          {t('statedSettlementRateToggle')}
+        </label>
+      ) : null}
+      {stated.manual ? (
+        <div className="grid gap-1">
+          <Input className="h-7 text-xs" inputMode="decimal" aria-label={t('settlementRate', { from, to })} placeholder={t('settlementRate', { from, to })} value={stated.rate} onChange={(event) => onChange({ ...stated, rate: event.target.value })} />
+          <Input className="h-7 text-xs" maxLength={120} aria-label={t('rateSource')} placeholder={t('rateSource')} value={stated.source} onChange={(event) => onChange({ ...stated, source: event.target.value })} />
+          <Input className="h-7 text-xs" maxLength={500} aria-label={t('rateReason')} placeholder={t('rateReason')} value={stated.reason} onChange={(event) => onChange({ ...stated, reason: event.target.value })} />
+        </div>
+      ) : null}
+    </div>
   )
 }

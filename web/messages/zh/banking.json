@@ -455,7 +455,15 @@
         "rateInvalid": "请输入正数汇率、其来源以及至少八个字符的原因。",
         "onAccountCustomerToast": "已将 {amount} 保留为未核销的客户收款",
         "onAccountVendorToast": "已将 {amount} 保留为供应商预付款",
-        "writtenOffToast": "已冲销 {amount}"
+        "writtenOffToast": "已冲销 {amount}",
+        "lineEquivalent": "按结算汇率约 {amount}",
+        "noSettlementRate": "未登记结算汇率",
+        "settlementRateMissing": "每张其他币种的单据都需要结算汇率；自行输入的汇率需要注明来源和至少八个字符的原因。",
+        "unappliedCredit": "该往来方已有未核销余额：{credits}。请先通过该付款或贷项通知单将其核销到单据，再用新资金结算。",
+        "hasUnappliedCredit": "有未核销余额",
+        "recordedSettlementRate": "按 {rate} {from} → {to} 结算（{source}，{date}）",
+        "statedSettlementRateToggle": "改用银行实际适用的汇率",
+        "settlementRate": "结算汇率（{from} → {to}）"
       }
     }
   },

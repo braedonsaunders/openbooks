@@ -258,10 +258,18 @@ test("an AR-gated caller cannot release an AP settlement", async () => {
   assert.deepEqual(await res.json(), { error: "not_found" });
 });
 
-test("a cash application id is not releasable through this route", async () => {
+test("an application of a payment's unapplied cash is released on its own side, and the engine decides whether it is releasable", async () => {
+  // The engine releases a later application of a receipt's unapplied cash
+  // and refuses the receipt's own cash applications by name; the route only
+  // binds the side.
   reset({ settlementRow: { kind: "customer_payment", partyId: PARTY_ID } });
   const res = await DELETE(releaseRequest({ applicationId: APPLICATION_ID, side: "ar" }));
-  assert.equal(res.status, 404);
+  assert.equal(res.status, 200);
+  assert.deepEqual(state.released, [APPLICATION_ID]);
+
+  reset({ settlementRow: { kind: "customer_payment", partyId: PARTY_ID } });
+  const wrongSide = await DELETE(releaseRequest({ applicationId: APPLICATION_ID, side: "ap" }));
+  assert.equal(wrongSide.status, 404);
   assert.deepEqual(state.released, []);
 });
 

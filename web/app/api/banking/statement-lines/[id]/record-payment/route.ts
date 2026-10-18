@@ -28,6 +28,15 @@ const recordPaymentBody = z.object({
     source: z.string().trim().min(1).max(120),
     reason: z.string().trim().min(1).max(500),
   }).strict().nullable().optional(),
+  /** Settlement rate per selected document in another currency than the line. */
+  settlementRates: z.record(z.string(), z.union([
+    z.object({ fxRateId: uuidId }).strict(),
+    z.object({
+      rate: z.string().trim().min(1).max(40),
+      source: z.string().trim().min(1).max(120),
+      reason: z.string().trim().min(1).max(500),
+    }).strict(),
+  ])).nullable().optional(),
 }).strict()
 
 /**
@@ -35,7 +44,8 @@ const recordPaymentBody = z.object({
  * payment an unmatched bank line represents through the native payment
  * services — settling the selected open documents in full or in part,
  * keeping any excess on account, optionally writing off a short-paid
- * remainder, and measuring a foreign-currency line at its evidenced rate —
+ * remainder, measuring a foreign-currency line at its evidenced rate, and
+ * settling documents in another currency at their settlement rate —
  * and matches its bank line to the statement line in the same transaction.
  * Posting the payment additionally requires ar.pay or ap.pay for the line's
  * direction; a customer-side write-off also requires ar.post.
@@ -59,6 +69,7 @@ export const POST = defineRoute({
           applied: body.applied ?? null,
           writeOff: body.writeOff ?? null,
           exchangeRate: body.exchangeRate ?? null,
+          settlementRates: body.settlementRates ?? null,
         },
         authz.allowedSubsidiaryIds,
       )

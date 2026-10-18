@@ -55,8 +55,8 @@ function isPositiveEntry(value: string): boolean {
 }
 
 /**
- * Apply a posted credit memo to open items with NO cash, and release what it
- * already settled.
+ * Apply a posted credit memo — or a payment's unapplied cash — to open items
+ * with NO cash, and release what it already settled.
  *
  * A credit that fully covers an invoice previously had no workflow at all —
  * posting a payment refuses zero cash allocations, so the balance stayed open
@@ -72,11 +72,14 @@ export function CreditApplicationsPanel({
   side,
   partyId,
   canApply,
+  source = "credit",
 }: {
   documentId: string;
   side: "ap" | "ar";
   partyId: string | null;
   canApply: boolean;
+  /** A credit memo, or a payment whose unapplied cash (on-account credit or prepayment) is applied the same way. */
+  source?: "credit" | "payment";
 }) {
   const t = useTranslations("payments.creditApplications");
   const tCommon = useTranslations("common");
@@ -227,11 +230,11 @@ export function CreditApplicationsPanel({
     <section className="space-y-2 border-t border-slate-200 pt-4 dark:border-slate-800">
       <div className="flex items-center justify-between">
         <h3 className="text-xs font-semibold uppercase tracking-wide text-slate-500 dark:text-slate-400">
-          {t("title")}
+          {source === "payment" ? t(side === "ar" ? "unappliedCreditTitle" : "prepaymentTitle") : t("title")}
         </h3>
         <div className="flex items-center gap-3">
           <span className="text-xs text-slate-500 tabular-nums dark:text-slate-400">
-            {t("remaining", { amount: money(state.open, { currency }) })}
+            {source === "payment" ? t("unappliedRemaining", { amount: money(state.open, { currency }) }) : t("remaining", { amount: money(state.open, { currency }) })}
           </span>
           {canApply && remainingSign > 0 && openItems === null ? (
             <Button size="sm" variant="outline" disabled={busy || !partyId} onClick={() => void startApply()}>

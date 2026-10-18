@@ -52,6 +52,14 @@ export async function validateCreditAllocations(
      * amounts and both endpoints must share that currency.
      */
     foreignCurrency?: boolean;
+    /**
+     * Admit a payment's unapplied cash — a receipt's on-account credit or a
+     * vendor payment's prepayment — as a credit. Only the standalone
+     * application path sets it: it records such an application with its own
+     * evidence reference, so the release path can tell it from the
+     * payment's posting-time cash applications.
+     */
+    admitUnappliedPayments?: boolean;
   },
 ): Promise<void> {
   if (!credits.length) return;
@@ -108,9 +116,13 @@ export async function validateCreditAllocations(
     // this closes the engine to what the product means, not only what the
     // UI offers.
     const expectedKind = scope.side === "ap" ? "vendor_credit" : "customer_credit";
-    if (byId.get(credit.fromLineId)?.source_document_kind !== expectedKind) {
+    const paymentKind = scope.side === "ap" ? "vendor_payment" : "customer_payment";
+    const sourceKind = byId.get(credit.fromLineId)?.source_document_kind;
+    if (sourceKind !== expectedKind && !(scope.admitUnappliedPayments && sourceKind === paymentKind)) {
       throw new PaymentError(
-        `the credit in a ${scope.side} settlement must be a posted ${expectedKind} line; cash-sourced or invoice open items settle through a payment, not the credit path`,
+        scope.admitUnappliedPayments
+          ? `the credit in a ${scope.side} settlement must be a posted ${expectedKind} line or the unapplied cash of a posted ${paymentKind}; invoice and bill open items are not credits`
+          : `the credit in a ${scope.side} settlement must be a posted ${expectedKind} line; cash-sourced or invoice open items settle through a payment, not the credit path`,
       );
     }
     for (const [id, source] of [[credit.fromLineId, true], [credit.toLineId, false]] as const) {

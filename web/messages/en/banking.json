@@ -462,7 +462,15 @@
         "rateInvalid": "Enter a positive rate, its source, and a reason of at least eight characters.",
         "onAccountCustomerToast": "{amount} kept on account as an unapplied customer credit",
         "onAccountVendorToast": "{amount} kept as a vendor prepayment",
-        "writtenOffToast": "{amount} written off"
+        "writtenOffToast": "{amount} written off",
+        "lineEquivalent": "≈ {amount} at the settlement rate",
+        "noSettlementRate": "No settlement rate recorded",
+        "settlementRateMissing": "Each document in another currency needs a settlement rate; a rate you state needs its source and a reason of at least eight characters.",
+        "unappliedCredit": "This party already holds unapplied credit: {credits}. Apply it to their documents from that payment or credit memo before settling them with new cash.",
+        "hasUnappliedCredit": "Has unapplied credit",
+        "recordedSettlementRate": "Settles at {rate} {from} → {to} ({source}, {date})",
+        "statedSettlementRateToggle": "Use the rate the bank applied instead",
+        "settlementRate": "Settlement rate ({from} → {to})"
       }
     }
   },

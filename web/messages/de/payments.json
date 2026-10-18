@@ -339,6 +339,9 @@
     "noOpenItems": "Für diesen Geschäftspartner gibt es keine offenen Posten, auf die die Gutschrift angewendet werden kann.",
     "nothingSelected": "Geben Sie für mindestens einen offenen Posten einen Betrag ein.",
     "applyFailed": "Die Gutschrift konnte nicht zugeordnet werden.",
-    "releaseFailed": "Die Zuordnung konnte nicht freigegeben werden."
+    "releaseFailed": "Die Zuordnung konnte nicht freigegeben werden.",
+    "unappliedCreditTitle": "Nicht zugeordnetes Guthaben",
+    "prepaymentTitle": "Lieferantenvorauszahlung",
+    "unappliedRemaining": "{amount} nicht zugeordnet"
   }
 }

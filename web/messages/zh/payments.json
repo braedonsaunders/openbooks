@@ -339,6 +339,9 @@
     "noOpenItems": "该往来单位没有可供核销贷项的未结项目。",
     "nothingSelected": "请至少为一个未结项目输入金额。",
     "applyFailed": "无法应用该笔抵免。",
-    "releaseFailed": "无法释放该笔应用。"
+    "releaseFailed": "无法释放该笔应用。",
+    "unappliedCreditTitle": "未核销收款",
+    "prepaymentTitle": "供应商预付款",
+    "unappliedRemaining": "未核销 {amount}"
   }
 }

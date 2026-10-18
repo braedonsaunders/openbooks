@@ -523,8 +523,10 @@ const candidatesBody = {
   documents: [{
     openLineId: 'ol-1', partyId: 'party-1', partyName: 'T05 Supplies', subsidiaryId: 'sub-1', documentNumber: 'BILL-7', entryNumber: 'JE-7',
     documentKind: 'vendor_bill', dueDate: '2026-06-10', postingDate: '2026-06-01', transactionOpen: '25.0000', reasons: [{ code: 'exact_open_balance' }],
+    currency: 'CAD', lineEquivalent: null, settlementRate: null,
   }],
   exchangeRates: {},
+  unappliedCredits: {},
   canWriteOff: true,
 }
 
@@ -543,6 +545,7 @@ const partialCandidatesBody = {
   documents: [{
     openLineId: 'ol-2', partyId: 'party-1', partyName: 'T05 Supplies', subsidiaryId: 'sub-1', documentNumber: 'BILL-8', entryNumber: 'JE-8',
     documentKind: 'vendor_bill', dueDate: '2026-06-10', postingDate: '2026-06-01', transactionOpen: '40.0000', reasons: [],
+    currency: 'CAD', lineEquivalent: null, settlementRate: null,
   }],
 }
 
@@ -629,6 +632,7 @@ test('a part payment opens the settlement review, and the reviewed amounts are w
     applied: { 'ol-2': '20.00' },
     writeOff: null,
     exchangeRate: null,
+    settlementRates: null,
   })
   assert.ok(script.toasts.some((toast) => toast.message.includes('vendor prepayment')), JSON.stringify(script.toasts))
 })

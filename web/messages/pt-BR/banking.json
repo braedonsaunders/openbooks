@@ -455,7 +455,15 @@
         "rateInvalid": "Informe uma taxa positiva, sua fonte e um motivo com pelo menos oito caracteres.",
         "onAccountCustomerToast": "{amount} mantido como crédito de cliente não aplicado",
         "onAccountVendorToast": "{amount} mantido como adiantamento a fornecedor",
-        "writtenOffToast": "{amount} baixado"
+        "writtenOffToast": "{amount} baixado",
+        "lineEquivalent": "≈ {amount} pela taxa de liquidação",
+        "noSettlementRate": "Nenhuma taxa de liquidação registrada",
+        "settlementRateMissing": "Cada documento em outra moeda precisa de uma taxa de liquidação; uma taxa informada por você precisa da fonte e de um motivo com pelo menos oito caracteres.",
+        "unappliedCredit": "Este parceiro já tem crédito não aplicado: {credits}. Aplique-o aos documentos dele a partir desse pagamento ou nota de crédito antes de liquidá-los com novo dinheiro.",
+        "hasUnappliedCredit": "Tem crédito não aplicado",
+        "recordedSettlementRate": "Liquida a {rate} {from} → {to} ({source}, {date})",
+        "statedSettlementRateToggle": "Usar a taxa aplicada pelo banco",
+        "settlementRate": "Taxa de liquidação ({from} → {to})"
       }
     }
   },

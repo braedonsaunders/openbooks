@@ -339,6 +339,9 @@
     "noOpenItems": "This party has no open items to apply the credit to.",
     "nothingSelected": "Enter an amount on at least one open item.",
     "applyFailed": "Could not apply the credit",
-    "releaseFailed": "Could not release the application"
+    "releaseFailed": "Could not release the application",
+    "unappliedCreditTitle": "Unapplied credit",
+    "prepaymentTitle": "Vendor prepayment",
+    "unappliedRemaining": "{amount} unapplied"
   }
 }

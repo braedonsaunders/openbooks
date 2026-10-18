@@ -73,7 +73,7 @@ const stateBody = (open: string, settlements: unknown[] = []) =>
     },
   });
 
-async function mount(canApply = true) {
+async function mount(canApply = true, source: "credit" | "payment" = "credit") {
   const host = document.createElement("div");
   document.body.appendChild(host);
   const root = createRoot(host);
@@ -87,6 +87,7 @@ async function mount(canApply = true) {
               side="ar"
               partyId={PARTY}
               canApply={canApply}
+              source={source}
             />
           </BusinessDateProvider>
         </MoneyProvider>
@@ -366,6 +367,20 @@ test("a reader without the pay permission sees the state but no controls", async
     assert.match(host.textContent ?? "", /INV-4001/);
     assert.equal(button(host, "Apply to open items"), null);
     assert.equal(button(host, "Release"), null);
+    await act(async () => { root.unmount(); });
+  } finally {
+    net.restore();
+  }
+});
+
+test("a receipt's unapplied cash is offered for application under its own title", async () => {
+  const net = scriptFetch(() => stateBody("50.0000"));
+  try {
+    const { host, root } = await mount(true, "payment");
+    assert.ok((host.textContent ?? "").includes("Unapplied credit"), host.textContent ?? "");
+    assert.ok((host.textContent ?? "").includes("unapplied"), "the remaining figure names the unapplied cash");
+    assert.ok(button(host, "Apply to open items"), "the unapplied cash can be applied to the party's open items");
+    assert.ok(net.sent.some((call) => call.url.includes(`documentId=${DOC}`)), "the panel reads the payment's own settlement state");
     await act(async () => { root.unmount(); });
   } finally {
     net.restore();
