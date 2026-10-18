@@ -39,7 +39,7 @@ test('a new ROE event clears issued fields and a changed employee ignores the la
     lastInsurableEarningsOn: '2026-05-08', sourceReference: 'Original first spell', updatedAt: '2026-05-10T00:00:00.000001Z',
   } })))
   assert.match(host.textContent!, /First employer/)
-  assert.equal((host.querySelector('#roe-first-worked') as HTMLInputElement).value, '2019-01-01')
+  assert.equal((host.querySelector('#roe-first-worked') as HTMLInputElement).value, '01/01/2019')
   const button = [...host.querySelectorAll('button')].find(b => b.textContent === messages.payroll.filings.separationFacts.newEvent)
   assert.ok(button)
   await act(() => button.click())

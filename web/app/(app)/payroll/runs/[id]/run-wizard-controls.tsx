@@ -4,6 +4,7 @@
 import { useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { Button } from '@openbooks/ui'
+import { DateField } from '../../../../../components/date-field'
 
 /* ------------------------------------------------------------------ */
 
@@ -96,12 +97,11 @@ export function RecordPaymentControl({
   const selectClass = 'rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-900'
   return (
     <span className="flex flex-wrap items-center gap-2">
-      <input
-        type="date"
+      <DateField
         aria-label={t('wizard.finish.settlementPaidOn')}
         value={paidOn}
-        onChange={(e) => setPaidOn(e.target.value)}
-        className={selectClass}
+        onChange={(value) => setPaidOn(value)}
+        className={`${selectClass} h-9 w-40`}
       />
       {clearing && (
         <select

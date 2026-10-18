@@ -5,11 +5,12 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { Alert, AlertDescription, Badge, Button, Input } from '@openbooks/ui'
+import { Alert, AlertDescription, Badge, Button } from '@openbooks/ui'
 import type { RemittanceEntitySlice, RemittanceGroup } from '@openbooks/engine/payroll/remittance'
 import { readApiErrorMessage } from '../../../../lib/api-error'
 import { PagedTable, type PagedColumn } from '../../../../components/paged-table'
 import { useMoney } from '../../../../components/money-provider'
+import { DateField } from '../../../../components/date-field'
 
 /**
  * Remittances list: one row per destination (CRA vendor, union funds,
@@ -109,22 +110,20 @@ export function RemittancesView({
       action="/payroll/remittances"
       method="get"
     >
-      <Input
-        type="date"
+      <DateField
         name="from"
         aria-label={t('from')}
         className="w-auto"
         value={range.from}
-        onChange={(e) => setRange((r) => ({ ...r, from: e.target.value }))}
+        onChange={(value) => setRange((r) => ({ ...r, from: value }))}
       />
       <span aria-hidden className="text-slate-400 dark:text-slate-500">–</span>
-      <Input
-        type="date"
+      <DateField
         name="to"
         aria-label={t('to')}
         className="w-auto"
         value={range.to}
-        onChange={(e) => setRange((r) => ({ ...r, to: e.target.value }))}
+        onChange={(value) => setRange((r) => ({ ...r, to: value }))}
       />
       <Button type="submit" variant="outline">{t('apply')}</Button>
       {rangeChanged ? (

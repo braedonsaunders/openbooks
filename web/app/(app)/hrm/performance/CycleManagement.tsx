@@ -10,6 +10,7 @@ import { readApiErrorMessage } from '../../../../lib/api-error'
 import { confirmDialog } from '../../../../lib/confirm'
 import { CycleActions } from './CycleActions'
 import type { PerformancePageData } from './view'
+import { DateField } from '../../../../components/date-field'
 type Detail = NonNullable<PerformancePageData['detail']>
 export function CycleManagement({ detail }: { detail: Detail }) {
   const t = useTranslations('hrm.talentWorkspace'),
@@ -291,20 +292,18 @@ export function CycleManagement({ detail }: { detail: Detail }) {
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
                 <Label htmlFor="edit-self-due">{t('selfDue')}</Label>
-                <Input
+                <DateField
                   id="edit-self-due"
-                  type="date"
                   value={selfDue}
-                  onChange={(e) => setSelfDue(e.target.value)}
+                  onChange={(value) => setSelfDue(value)}
                 />
               </div>
               <div>
                 <Label htmlFor="edit-manager-due">{t('managerDue')}</Label>
-                <Input
+                <DateField
                   id="edit-manager-due"
-                  type="date"
                   value={managerDue}
-                  onChange={(e) => setManagerDue(e.target.value)}
+                  onChange={(value) => setManagerDue(value)}
                 />
               </div>
             </div>

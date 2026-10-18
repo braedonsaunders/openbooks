@@ -92,8 +92,11 @@ test('bill creation refuses an unapplied date draft', async (t) => {
   t.after(() => { globalThis.fetch = priorFetch })
 
   for (const [name, value] of [['from', '2026-08-01'], ['to', '2026-08-31']] as const) {
-    const input = document.querySelector(`input[name="${name}"]`) as HTMLInputElement | null
-    assert.ok(input, `${name} date field is rendered`)
+    // The form submits the ISO date under the field name; the viewer types
+    // into the field's text control beside it.
+    const submitted = document.querySelector(`input[name="${name}"]`) as HTMLInputElement | null
+    const input = submitted?.parentElement?.querySelector('input[data-date-field]') as HTMLInputElement | null
+    assert.ok(submitted && input, `${name} date field is rendered`)
     await act(async () => {
       const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set
       setter?.call(input, value)
@@ -101,7 +104,7 @@ test('bill creation refuses an unapplied date draft', async (t) => {
       input.dispatchEvent(new window.Event('change', { bubbles: true }))
       await tick()
     })
-    assert.equal(input.value, value, `${name} date field accepts the edited value`)
+    assert.equal(submitted.value, value, `${name} date field accepts the edited value`)
   }
   const create = [...document.querySelectorAll('button')].find((button) =>
     button.textContent?.includes(messages.remittances.createBill),

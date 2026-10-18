@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl'
 import { Button, Input, Label, Select, Textarea } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../../../lib/api-error'
 import { useDirtyUrlDrawer } from '../../../../components/dirty-url-drawer'
+import { DateField } from '../../../../components/date-field'
 
 const REASONS = [
   'resignation',
@@ -186,11 +187,10 @@ export function ExitRecordForm({
       <div className="grid grid-cols-2 gap-3">
         <div>
           <Label htmlFor="exit-interview-date">{t('performance.exitInterviewDate')}</Label>
-          <Input
+          <DateField
             id="exit-interview-date"
-            type="date"
             value={interviewDate}
-            onChange={(e) => setInterviewDate(e.target.value)}
+            onChange={(value) => setInterviewDate(value)}
           />
         </div>
         <div>

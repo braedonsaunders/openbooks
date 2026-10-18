@@ -8,6 +8,7 @@ import { canonicalDecimal } from '../../../../lib/exact-decimal'
 import { decimalNullRefusal } from '../../../../lib/payroll-decimal-refusal'
 import { useAppAction } from '@/lib/use-app-action'
 import { useDirtyUrlDrawer } from '@/components/dirty-url-drawer'
+import { DateField } from '@/components/date-field'
 
 /**
  * Compensation client islands — one drawer/dialog per mutation, each
@@ -134,7 +135,7 @@ export function CycleCreateForm({
       </div>
       <div>
         <Label htmlFor="comp-cycle-effective">{effectiveLabel}</Label>
-        <Input id="comp-cycle-effective" type="date" value={effectiveOn} onChange={(e) => setEffectiveOn(e.target.value)} required />
+        <DateField id="comp-cycle-effective" value={effectiveOn} onChange={(value) => setEffectiveOn(value)} required />
       </div>
       <div>
         <Label htmlFor="comp-cycle-employer">{employerLabel}</Label>
@@ -470,11 +471,11 @@ export function PlanCreateForm({
       </div>
       <div>
         <Label htmlFor="comp-plan-from">{fromLabel}</Label>
-        <Input id="comp-plan-from" type="date" value={from} onChange={(e) => setFrom(e.target.value)} required />
+        <DateField id="comp-plan-from" value={from} onChange={(value) => setFrom(value)} required />
       </div>
       <div>
         <Label htmlFor="comp-plan-to">{toLabel}</Label>
-        <Input id="comp-plan-to" type="date" value={to} onChange={(e) => setTo(e.target.value)} required />
+        <DateField id="comp-plan-to" value={to} onChange={(value) => setTo(value)} required />
       </div>
       {error ? <p className="text-sm text-red-600">{error}</p> : null}
       <div className="flex gap-2">
@@ -584,7 +585,7 @@ export function EquityGenerateForm({
     <form onSubmit={submit} className="flex flex-col gap-4">
       <div>
         <Label htmlFor="comp-gap-asof">{asOfLabel}</Label>
-        <Input id="comp-gap-asof" type="date" value={asOf} onChange={(e) => setAsOf(e.target.value)} required />
+        <DateField id="comp-gap-asof" value={asOf} onChange={(value) => setAsOf(value)} required />
       </div>
       <div>
         <Label htmlFor="comp-gap-a">{groupALabel}</Label>

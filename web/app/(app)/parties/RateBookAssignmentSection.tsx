@@ -7,11 +7,12 @@ import { usePathname, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { ActionError, kindForStatus, transportError } from '@braedonsaunders/appkit-errors'
-import { Alert, Badge, Button, Drawer, Input, Label, Select } from '@openbooks/ui'
+import { Alert, Badge, Button, Drawer, Label, Select } from '@openbooks/ui'
 import { DrawerSublist, SublistAddButton, SublistEmpty, SublistPager } from '@/components/drawer-sublist'
 import { useAppAction } from '@/lib/use-app-action'
 import { confirmDialog } from '@/lib/confirm'
 import { refusalMessageFromBody } from '@/lib/api-error'
+import { DateField } from '@/components/date-field'
 
 interface RateBook {
   id: string; name: string; currency: string; is_default: boolean; latest_version_id: string | null
@@ -338,11 +339,11 @@ export function RateBookAssignmentSection({
             <div className="grid gap-4 sm:grid-cols-3">
               <div className={field}>
                 <Label>{t('effectiveFrom')}</Label>
-                <Input type="date" value={form.effectiveFrom} onChange={(e) => setForm({ ...form, effectiveFrom: e.target.value })} />
+                <DateField value={form.effectiveFrom} onChange={(value) => setForm({ ...form, effectiveFrom: value })} />
               </div>
               <div className={field}>
                 <Label>{t('effectiveTo')}</Label>
-                <Input type="date" value={form.effectiveTo} onChange={(e) => setForm({ ...form, effectiveTo: e.target.value })} />
+                <DateField value={form.effectiveTo} onChange={(value) => setForm({ ...form, effectiveTo: value })} />
               </div>
               <div className={field}>
                 <Label>{t('dateBasis')}</Label>

@@ -5,6 +5,7 @@ import { Alert, AlertDescription, Button, FieldLabel, Input, Select, Skeleton, T
 import { CabinetFilePicker } from '../../../../components/cabinet-file-picker'
 import { readApiErrorMessage } from '../../../../lib/api-error'
 import type { readOpeningLevySourceContext } from '@openbooks/engine/payroll/opening-levy-source-authority'
+import { DateField } from '../../../../components/date-field'
 
 type Context = Awaited<ReturnType<typeof readOpeningLevySourceContext>>
 type Allocation = Context['allocations'][number]
@@ -230,8 +231,8 @@ function OpeningLevySourceBody({ employeePartyId, year, openingAmounts, canManag
           dirty.current = true; setIsDirty(true); setCountry(event.target.value); setDrafts(initialAllocations({ ...context, allocations: [] }, event.target.value))
         }}><option value="">{t('chooseCountry')}</option>{context.countries.map(option => <option key={option.country} value={option.country}>{option.country}</option>)}</Select></div>
         <div><FieldLabel htmlFor="levy-source-currency">{t('originalCurrency')}</FieldLabel><Select id="levy-source-currency" value={currency} disabled={disabled} onChange={event => { dirty.current = true; setIsDirty(true); setCurrency(event.target.value) }}><option value="">{t('chooseCurrency')}</option>{[...new Set(context.countries.map(option => option.currency))].map(code => <option key={code} value={code}>{code}</option>)}</Select></div>
-        <div><FieldLabel htmlFor="levy-source-coverage-start">{t('coverageStart')}</FieldLabel><Input type="date" id="levy-source-coverage-start" value={coverageStart} disabled={disabled} onChange={event => { dirty.current = true; setIsDirty(true); setCoverageStart(event.target.value) }} /></div>
-        <div><FieldLabel htmlFor="levy-source-coverage-end">{t('coverageEnd')}</FieldLabel><Input type="date" id="levy-source-coverage-end" value={coverageEnd} disabled={disabled} onChange={event => { dirty.current = true; setIsDirty(true); setCoverageEnd(event.target.value) }} /></div>
+        <div><FieldLabel htmlFor="levy-source-coverage-start">{t('coverageStart')}</FieldLabel><DateField id="levy-source-coverage-start" value={coverageStart} disabled={disabled} onChange={value => { dirty.current = true; setIsDirty(true); setCoverageStart(value) }} /></div>
+        <div><FieldLabel htmlFor="levy-source-coverage-end">{t('coverageEnd')}</FieldLabel><DateField id="levy-source-coverage-end" value={coverageEnd} disabled={disabled} onChange={value => { dirty.current = true; setIsDirty(true); setCoverageEnd(value) }} /></div>
       </div>
       <label className="flex gap-2 text-sm"><input type="checkbox" id="levy-source-complete" checked={coverageComplete} disabled={disabled} onChange={event => { dirty.current = true; setIsDirty(true); setCoverageComplete(event.target.checked) }} />{t('coverageComplete')}</label>
       {drafts && <>

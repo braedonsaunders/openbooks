@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { Button, Input, Label, Select, Textarea } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../../../lib/api-error'
+import { DateField } from '../../../../components/date-field'
 
 export interface RecruitingCreateOption {
   value: string
@@ -181,7 +182,7 @@ export function RecruitingCreateForm({ basePath, employers, employerRefusal, dep
       </div>
       <div>
         <Label htmlFor="recruiting-target">{labels.targetStart}</Label>
-        <Input id="recruiting-target" type="date" value={targetStart} onChange={(event) => setTargetStart(event.target.value)} />
+        <DateField id="recruiting-target" value={targetStart} onChange={(value) => setTargetStart(value)} />
       </div>
       <div>
         <Label htmlFor="recruiting-description">{labels.description}</Label>

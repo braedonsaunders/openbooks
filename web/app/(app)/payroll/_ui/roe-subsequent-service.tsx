@@ -6,6 +6,7 @@ import { CabinetFilePicker } from '../../../../components/cabinet-file-picker'
 import { readApiErrorMessage } from '../../../../lib/api-error'
 import type { RoeSeparationFacts } from '@openbooks/engine/payroll/roe-separation-facts'
 import type { readRoeSubsequentServiceContext } from '@openbooks/engine/payroll/canada/roe-subsequent-service'
+import { DateField } from '../../../../components/date-field'
 type Context = Awaited<ReturnType<typeof readRoeSubsequentServiceContext>>
 type State = ({ kind: 'loading' } | { kind: 'error'; message: string } | { kind: 'ready'; context: Context }) & { requestKey: string }
 
@@ -80,7 +81,7 @@ function RoeSubsequentServiceBody({ employeePartyId, event, canEdit, onSaved }: 
     {state.kind === 'ready' && <>
       {record && <p className="text-xs text-slate-500">{t('retained')}: {record.firstDayWorked} · {record.sourceReference}</p>}
       <div><FieldLabel htmlFor="roe-return-first-worked">{t('firstWorked')}</FieldLabel>
-        <Input id="roe-return-first-worked" type="date" value={firstDayWorked} onChange={e => setFirstDayWorked(e.target.value)} disabled={disabled} /></div>
+        <DateField id="roe-return-first-worked" value={firstDayWorked} onChange={value => setFirstDayWorked(value)} disabled={disabled} /></div>
       {state.context.source && <p className="text-xs text-slate-500">{state.context.source.name}</p>}
       <div><FieldLabel htmlFor="roe-return-source">{t('reference')}</FieldLabel>
         <Input id="roe-return-source" value={sourceReference} onChange={e => setSourceReference(e.target.value)} maxLength={2000} disabled={disabled} /></div>

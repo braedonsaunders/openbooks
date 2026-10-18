@@ -10,6 +10,7 @@ import { ChoiceCards } from '../../../../components/builder/builder-kit'
 import { ClipboardList } from 'lucide-react'
 import { readApiErrorMessage } from '../../../../lib/api-error'
 import { useDirtyClose } from '../../../../lib/use-dirty-close'
+import { DateField } from '../../../../components/date-field'
 
 export interface ProcessCreateData {
   closeHref: string
@@ -208,7 +209,7 @@ export function ProcessCreateDrawer({ create }: { create: ProcessCreateData | nu
         </div>
         <div>
           <Label htmlFor="process-effective">{t('processes.columns.effective')}</Label>
-          <Input id="process-effective" type="date" value={effectiveDate} onChange={(event) => setEffectiveDate(event.target.value)} />
+          <DateField id="process-effective" value={effectiveDate} onChange={(value) => setEffectiveDate(value)} />
         </div>
         <div>
           <Label htmlFor="process-template">{t('processes.templates.template')}</Label>

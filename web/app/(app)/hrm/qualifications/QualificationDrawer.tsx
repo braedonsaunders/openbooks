@@ -9,6 +9,7 @@ import { promptDialog } from '../../../../lib/prompt'
 import { useDirtyClose } from '../../../../lib/use-dirty-close'
 import { useBusinessToday } from '../../../../components/business-date-provider'
 import { CabinetFilePicker } from '@/components/cabinet-file-picker'
+import { DateField } from '@/components/date-field'
 
 /**
  * Qualification record and detail drawer. Opens blank for recording
@@ -413,11 +414,11 @@ export function QualificationDrawer({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label htmlFor="q-issued">{t('qualifications.recordForm.issuedOn')}</Label>
-              <Input id="q-issued" type="date" value={form.issuedOn} onChange={(e) => setForm({ ...form, issuedOn: e.target.value })} />
+              <DateField id="q-issued" value={form.issuedOn} onChange={(value) => setForm({ ...form, issuedOn: value })} />
             </div>
             <div>
               <Label htmlFor="q-expires">{t('qualifications.recordForm.expiresOn')}</Label>
-              <Input id="q-expires" type="date" value={form.expiresOn} onChange={(e) => setForm({ ...form, expiresOn: e.target.value })} />
+              <DateField id="q-expires" value={form.expiresOn} onChange={(value) => setForm({ ...form, expiresOn: value })} />
             </div>
           </div>
           <div>

@@ -88,6 +88,6 @@ test('the header request opens the editor prefilled from the list scope', async 
   const dialog = document.querySelector('[role="dialog"]')
   assert.ok(dialog, 'the editor drawer is open')
   assert.equal(dialog.querySelector('#work-location-employment')?.textContent, 'Ada Lovelace · Main Co')
-  assert.equal((dialog.querySelector('#work-location-start') as HTMLInputElement).value, '2026-09-01')
-  assert.equal((dialog.querySelector('#work-location-end') as HTMLInputElement).value, '2026-09-15')
+  assert.equal((dialog.querySelector('#work-location-start') as HTMLInputElement).value, '09/01/2026')
+  assert.equal((dialog.querySelector('#work-location-end') as HTMLInputElement).value, '09/15/2026')
 })

@@ -7,6 +7,7 @@ import { useRouter } from 'next/navigation'
 import { Button, EmptyState, Input, Label, Select } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../../../lib/api-error'
 import { useDirtyUrlDrawer } from '../../../../components/dirty-url-drawer'
+import { DateField } from '../../../../components/date-field'
 
 /**
  * The cycle create form inside the cycle dialog. Fields are the house form
@@ -163,41 +164,37 @@ export function CycleCreateForm(props: CycleCreateProps) {
       </div>
       <div>
         <Label htmlFor="cycle-start">{props.startLabel}</Label>
-        <Input
+        <DateField
           id="cycle-start"
-          type="date"
           value={periodStart}
-          onChange={(e) => setPeriodStart(e.target.value)}
+          onChange={(value) => setPeriodStart(value)}
           required
         />
       </div>
       <div>
         <Label htmlFor="cycle-end">{props.endLabel}</Label>
-        <Input
+        <DateField
           id="cycle-end"
-          type="date"
           value={periodEnd}
-          onChange={(e) => setPeriodEnd(e.target.value)}
+          onChange={(value) => setPeriodEnd(value)}
           required
         />
       </div>
       <div className="grid gap-4 sm:grid-cols-2">
         <div>
           <Label htmlFor="self-due">{t('selfDue')}</Label>
-          <Input
+          <DateField
             id="self-due"
-            type="date"
             value={selfDue}
-            onChange={(e) => setSelfDue(e.target.value)}
+            onChange={(value) => setSelfDue(value)}
           />
         </div>
         <div>
           <Label htmlFor="manager-due">{t('managerDue')}</Label>
-          <Input
+          <DateField
             id="manager-due"
-            type="date"
             value={managerDue}
-            onChange={(e) => setManagerDue(e.target.value)}
+            onChange={(value) => setManagerDue(value)}
           />
         </div>
       </div>

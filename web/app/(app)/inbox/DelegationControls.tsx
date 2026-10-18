@@ -17,9 +17,10 @@
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { useTranslations } from 'next-intl'
-import { Button, Drawer, Input, Label, Select } from '@openbooks/ui'
+import { Button, Drawer, Label, Select } from '@openbooks/ui'
 import type { DelegateOption } from './GateActions'
 import { readApiErrorMessage } from '@/lib/api-error'
+import { DateField } from '@/components/date-field'
 
 const CHANGED_EVENT = 'ob:delegations-changed'
 
@@ -131,20 +132,18 @@ export function OutOfOfficeButton({ users }: { users: DelegateOption[] }) {
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-1.5">
               <Label htmlFor="ooo-from">{t('from')}</Label>
-              <Input
+              <DateField
                 id="ooo-from"
-                type="date"
                 value={from}
-                onChange={(e) => setFrom(e.target.value)}
+                onChange={(value) => setFrom(value)}
               />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="ooo-until">{t('until')}</Label>
-              <Input
+              <DateField
                 id="ooo-until"
-                type="date"
                 value={until}
-                onChange={(e) => setUntil(e.target.value)}
+                onChange={(value) => setUntil(value)}
               />
             </div>
           </div>

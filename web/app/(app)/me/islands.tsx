@@ -7,6 +7,7 @@ import type { SetupField } from '../../../lib/setup/types'
 import { useRouter } from 'next/navigation'
 import { Button, Input, Label, Select, Textarea, UrlDrawer } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../../lib/api-error'
+import { DateField } from '../../../components/date-field'
 
 /**
  * Me workspace client islands. Every string arrives loader-resolved as
@@ -736,7 +737,7 @@ export function BenefitElectDialog({
         </div>
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="me-elect-from">{dialog.fromLabel}</Label>
-          <Input id="me-elect-from" type="date" value={from} onChange={(event) => setFrom(event.target.value)} />
+          <DateField id="me-elect-from" value={from} onChange={(value) => setFrom(value)} />
         </div>
         {classes.length > 0 ? <>
           <div className="flex flex-col gap-1.5">

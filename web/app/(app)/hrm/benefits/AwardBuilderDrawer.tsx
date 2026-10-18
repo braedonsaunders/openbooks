@@ -19,6 +19,7 @@ import {
   type AwardFieldErrors,
   type BuilderOption as PortfolioOption,
 } from '../../../../lib/hrm/benefits-portfolio'
+import { DateField } from '../../../../components/date-field'
 
 /**
  * New-award builder, opened through `award=new`. Records one award against
@@ -209,22 +210,20 @@ export function AwardBuilderDrawer({
         <div className="grid grid-cols-2 gap-3">
           <div>
             <Label htmlFor="award-builder-from">{t('portfolio.awardFields.periodFrom')}</Label>
-            <Input
+            <DateField
               id="award-builder-from"
-              type="date"
               value={draft.periodFrom}
-              onChange={(e) => set('periodFrom', e.target.value)}
+              onChange={(value) => set('periodFrom', value)}
               aria-invalid={errors.periodFrom !== undefined}
             />
             <FieldError id="award-builder-periodFrom-error" message={errors.periodFrom} />
           </div>
           <div>
             <Label htmlFor="award-builder-to">{t('portfolio.awardFields.periodTo')}</Label>
-            <Input
+            <DateField
               id="award-builder-to"
-              type="date"
               value={draft.periodTo}
-              onChange={(e) => set('periodTo', e.target.value)}
+              onChange={(value) => set('periodTo', value)}
               aria-invalid={errors.periodTo !== undefined}
             />
             <FieldError id="award-builder-periodTo-error" message={errors.periodTo} />

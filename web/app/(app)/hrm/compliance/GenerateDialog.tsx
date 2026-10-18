@@ -4,8 +4,9 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useId, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { Button, Input, Label, Select, UrlDrawer } from '@openbooks/ui'
+import { Button, Label, Select, UrlDrawer } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../../../lib/api-error'
+import { DateField } from '../../../../components/date-field'
 
 /**
  * Certified-payroll generate dialog, opened from the page header through
@@ -94,7 +95,7 @@ export function GenerateDialog({
           </div>
           <div className="flex flex-col gap-1.5">
             <Label id={`${fieldId}-week-label`} htmlFor={`${fieldId}-week`}>{weekLabel}</Label>
-            <Input id={`${fieldId}-week`} aria-labelledby={`${fieldId}-week-label`} aria-label={weekLabel} type="date" value={weekEnding} onChange={(event) => setWeekEnding(event.target.value)} />
+            <DateField id={`${fieldId}-week`} aria-labelledby={`${fieldId}-week-label`} aria-label={weekLabel} value={weekEnding} onChange={(value) => setWeekEnding(value)} />
           </div>
           <div className="flex flex-col gap-1.5">
             <Label id={`${fieldId}-format-label`}>{formatLabel}</Label>

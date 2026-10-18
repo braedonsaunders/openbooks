@@ -236,7 +236,7 @@ test('editing an active program sends its reason and apply-from date and keeps t
   const seed = { ...emptyProgramDraft('reward'), status: 'active', businessToday: '2026-10-11', code: 'THANKS', name: 'Recognition', currency: 'USD', effectiveFrom: '2026-01-01', fixedAmount: '25.00', legalEntityId: 'entity', payComponentId: 'cash-component', sourceAccountIds: [], paymentDelayDays: 0 }
   await mount(t, <MoneyProvider currency="USD"><ProgramBuilderDrawer closeHref="/hrm/benefits" initialFamily="reward" familyLocked mode="edit" programId="program" editSeed={seed as never} currencyOptions={[{ value: 'USD', label: 'USD · US Dollar', scopeValue: 'entity' }]} subsidiaryOptions={[{ value: 'entity', label: 'Employer' }]} departmentOptions={[]} projectOptions={[]} accountOptions={[]} employmentsTruncated={false} payComponentOptions={[{ value: 'cash-component', label: 'Cash reward', paymentKind: 'cash' }]} /></MoneyProvider>, fetcher)
   for (let index = 0; index < 5; index++) await click('Next')
-  assert.equal((document.getElementById('program-builder-changeEffectiveFrom') as HTMLInputElement | null)?.value, '2026-10-11', 'the apply-from date defaults to the business day')
+  assert.equal((document.getElementById('program-builder-changeEffectiveFrom') as HTMLInputElement | null)?.value, '10/11/2026', 'the apply-from date defaults to the business day')
   await click('Save changes')
   assert.equal(writes.length, 0, 'a missing reason refuses before the request')
   await fill('program-builder-reason', 'Rate review')

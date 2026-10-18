@@ -56,6 +56,7 @@ import { PartyPulseSection } from './PartyPulseSection'
 import { StoreCreditPanel } from './StoreCreditPanel'
 import { PartyRelationshipSection } from './PartyRelationshipSection'
 import { ExternalIdsPanel } from '../channels/ExternalIdsPanel'
+import { DateField } from '@/components/date-field'
 
 /**
  * The party row's concurrency revision plus the worker-compensation class the
@@ -1378,7 +1379,7 @@ export function PartyDrawer({
       case 'department_id': return <><Label>{label(placement, tc('labels.department'))}</Label>{editable ? <Select value={employee.departmentId} onChange={(event) => setEmployee({ ...employee, departmentId: event.target.value })}><option value="">—</option>{departments.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</Select> : partyValue(optionName(departments, employee.departmentId))}</>
       case 'trade_id': return <><Label>{label(placement, t('trade'))}</Label>{editable ? <Select value={employee.tradeId} onChange={(event) => setEmployee({ ...employee, tradeId: event.target.value })}><option value="">—</option>{trades.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</Select> : partyValue(optionName(trades, employee.tradeId))}</>
       case 'worker_comp_group_id': if (!payrollEnabled) return null; return <><Label>{label(placement, t('workerCompGroup'))}</Label>{editable ? <Select value={employee.workerCompGroupId} onChange={(event) => setEmployee({ ...employee, workerCompGroupId: event.target.value })}><option value="">—</option>{workerCompGroups.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</Select> : partyValue(optionName(workerCompGroups, employee.workerCompGroupId))}</>
-      case 'hired_on': return <><Label>{label(placement, t('hiredOn'))}</Label>{editable ? <Input type="date" value={employee.hiredOn} onChange={(event) => setEmployee({ ...employee, hiredOn: event.target.value })} /> : partyValue(employee.hiredOn)}</>
+      case 'hired_on': return <><Label>{label(placement, t('hiredOn'))}</Label>{editable ? <DateField value={employee.hiredOn} onChange={(value) => setEmployee({ ...employee, hiredOn: value })} /> : partyValue(employee.hiredOn)}</>
       default: return null
     }
     })()
@@ -2134,10 +2135,9 @@ export function PartyDrawer({
                 </div> : null}
                 <div className={field}>
                   <Label>{t('hiredOn')}</Label>
-                  <Input
-                    type="date"
+                  <DateField
                     value={employee.hiredOn}
-                    onChange={(e) => setEmployee({ ...employee, hiredOn: e.target.value })}
+                    onChange={(value) => setEmployee({ ...employee, hiredOn: value })}
                     disabled={ro}
                   />
                 </div>

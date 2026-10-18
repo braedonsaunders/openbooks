@@ -12,6 +12,7 @@ import { canonicalDecimal } from '../../../lib/exact-decimal'
 import { confirmDialog } from '@/lib/confirm'
 import { refusalMessageFromBody } from '@/lib/api-error'
 import type { AssignmentRunApplicability } from '@openbooks/engine/payroll/assigned-components'
+import { DateField } from '@/components/date-field'
 
 interface AssignmentRow {
   id: string
@@ -426,20 +427,18 @@ export function EmployeePayComponents({
           </div>
           <div>
             <Label htmlFor="employee-pay-effective-from">{t('effectiveFrom')}</Label>
-            <Input
+            <DateField
               id="employee-pay-effective-from"
-              type="date"
               value={effectiveFrom}
-              onChange={(event) => { setEffectiveFrom(event.target.value); markDirty() }}
+              onChange={(value) => { setEffectiveFrom(value); markDirty() }}
             />
           </div>
           <div>
             <Label htmlFor="employee-pay-effective-to">{t('effectiveTo')}</Label>
-            <Input
+            <DateField
               id="employee-pay-effective-to"
-              type="date"
               value={effectiveTo}
-              onChange={(event) => { setEffectiveTo(event.target.value); markDirty() }}
+              onChange={(value) => { setEffectiveTo(value); markDirty() }}
             />
           </div>
           </div>

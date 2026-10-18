@@ -3,12 +3,13 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
-import { Badge, Button, Input, Label, Select, Textarea } from '@openbooks/ui'
+import { Badge, Button, Label, Select, Textarea } from '@openbooks/ui'
 import { TransactionDrawer } from '../../../../components/transaction-drawer'
 import { BenefitContributionChoices, type BenefitElectionRule, type ContributionChoice } from '../../me/islands'
 import { readApiErrorMessage } from '../../../../lib/api-error'
 import { promptDialog } from '../../../../lib/prompt'
 import { useDirtyClose } from '../../../../lib/use-dirty-close'
+import { DateField } from '../../../../components/date-field'
 
 export interface EnrollmentDrawerRecord {
   id: string
@@ -115,7 +116,7 @@ export function EnrollmentDrawer({ record, closeHref, canManage, canChange, stac
     </> : null}
     footer={mode !== 'view' || error ? <div className="w-full space-y-3">
       {mode !== 'view' ? <div className="grid gap-3 sm:grid-cols-2">
-        <div><Label htmlFor="enrollment-change-date">{t('effectiveDate')}</Label><Input id="enrollment-change-date" type="date" disabled={busy} min={record.effectiveFrom} value={date} onChange={event => { setDate(event.target.value); setError(null) }} /></div>
+        <div><Label htmlFor="enrollment-change-date">{t('effectiveDate')}</Label><DateField id="enrollment-change-date" disabled={busy} min={record.effectiveFrom} value={date} onChange={value => { setDate(value); setError(null) }} /></div>
         <div><Label htmlFor="enrollment-change-reason">{t('reason')}</Label><Textarea id="enrollment-change-reason" disabled={busy} value={reason} onChange={event => { setReason(event.target.value); setError(null) }} /></div>
       </div> : null}
       {error ? <p role="alert" className="text-sm text-red-600 dark:text-red-400">{error}</p> : null}

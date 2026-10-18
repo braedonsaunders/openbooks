@@ -54,6 +54,7 @@ import { AddFieldButton, FieldRow } from '../../../records/types/TypeBuilderDraw
 import { readApiErrorMessage } from '../../../../../lib/api-error'
 import { confirmDialog } from '../../../../../lib/confirm'
 import { promptDialog } from '../../../../../lib/prompt'
+import { DateField } from '../../../../../components/date-field'
 
 type Option = { value: string; label: string }
 export type ProcessTemplateEditorValue = ChecklistDesignerValue
@@ -739,11 +740,10 @@ function ChecklistDesigner({
                 </div>
                 <div>
                   <Label htmlFor="sample-date">{t('effectiveDate')}</Label>
-                  <Input
+                  <DateField
                     id="sample-date"
-                    type="date"
                     value={sampleDate}
-                    onChange={(e) => setSampleDate(e.target.value)}
+                    onChange={(value) => setSampleDate(value)}
                   />
                 </div>
               </div>

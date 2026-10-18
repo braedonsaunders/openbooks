@@ -9,6 +9,7 @@ import {
   useDirtyUrlDrawer,
 } from '../../../../../components/dirty-url-drawer'
 import { readApiErrorMessage } from '../../../../../lib/api-error'
+import { DateField } from '../../../../../components/date-field'
 type Initial = {
   goal: GoalDTO
   updates: {
@@ -200,11 +201,10 @@ function GoalForm({
             </div>
             <div>
               <Label htmlFor="goal-due">{t('due')}</Label>
-              <Input
+              <DateField
                 id="goal-due"
-                type="date"
                 value={due}
-                onChange={(e) => setDue(e.target.value)}
+                onChange={(value) => setDue(value)}
               />
             </div>
           </>

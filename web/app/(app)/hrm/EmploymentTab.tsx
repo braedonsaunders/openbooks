@@ -12,6 +12,7 @@ import { ChangeRequestActions } from './ChangeRequestActions'
 import { ChangeRequestDrawer } from './ChangeRequestDrawer'
 import { ExitRecordForm } from './performance/ExitRecordForm'
 import { promptDialog } from '../../../lib/prompt'
+import { DateField } from '@/components/date-field'
 
 /**
  * The employee drawer's Employment tab — the ONE place the native
@@ -193,7 +194,8 @@ export function EmploymentTab({
   const tCommon = useTranslations('common')
   // New dated records default to the org's business day from the server,
   // never the browser's UTC day (tomorrow after 5pm Pacific).
-  const [date, setDate] = useState(useBusinessToday())
+  const today = useBusinessToday()
+  const [date, setDate] = useState(today)
   const [revision, setRevision] = useState(0)
   const [proposing, setProposing] = useState(false)
   const [exit, setExit] = useState<ExitState>({ status: 'hidden', record: null, message: null })
@@ -418,7 +420,8 @@ export function EmploymentTab({
       message: t('employment.episodes.correctStartMessage', { start: recordedStart }),
       label: t('employment.episodes.correctStartDate'),
       initialValue: recordedStart,
-      placeholder: 'YYYY-MM-DD',
+      kind: 'date',
+      businessToday: today,
     })
     if (!correctedStart || correctedStart === recordedStart) return
     const reason = await promptDialog({
@@ -507,11 +510,10 @@ export function EmploymentTab({
         </h3>
         <div className="mb-3 w-44 space-y-1.5">
           <Label htmlFor="employment-asof-date">{t('employment.asOf.dateLabel')}</Label>
-          <input
+          <DateField
             id="employment-asof-date"
-            type="date"
             value={date}
-            onChange={(event) => event.target.value && setDate(event.target.value)}
+            onChange={(value) => value && setDate(value)}
             className="w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
           />
         </div>

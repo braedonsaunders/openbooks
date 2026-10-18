@@ -13,7 +13,7 @@ import {
   Lock,
   Upload,
 } from 'lucide-react'
-import { Badge, Button, Drawer, Input, Label } from '@openbooks/ui'
+import { Badge, Button, Drawer, Label } from '@openbooks/ui'
 import {
   canonicalDecimal,
   isZeroDecimal,
@@ -22,6 +22,7 @@ import { apiJson, ApiResponseError } from '../../../../lib/api-error'
 import { PagedTable } from '../../../../components/paged-table'
 import { MoneyInput, moneyFieldError } from '../../../../components/money-input'
 import type { EntitlementOpeningsResult } from '@openbooks/engine/payroll/entitlements/operations'
+import { DateField } from '../../../../components/date-field'
 
 interface SaveError {
   employeePartyId: string
@@ -212,13 +213,12 @@ export function EntitlementOpeningsView({
           >
             {text('asOf', 'Carried in as at')}
           </Label>
-          <Input
+          <DateField
             id="entitlement-openings-asof"
-            type="date"
             value={asOf}
             disabled={!canManage || saving}
             className="w-40"
-            onChange={(event) => setAsOf(event.target.value)}
+            onChange={(value) => setAsOf(value)}
           />
         </div>
         <Button variant="outline" size="sm" asChild>

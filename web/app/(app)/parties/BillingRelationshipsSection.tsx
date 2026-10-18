@@ -5,7 +5,6 @@ import { useTranslations } from 'next-intl'
 import {
   Button,
   Drawer,
-  Input,
   Label,
   SearchSelect,
   Select,
@@ -23,6 +22,7 @@ import { useAppAction } from '@/lib/use-app-action'
 import { confirmDialog } from '@/lib/confirm'
 import { refusalMessageFromBody } from '@/lib/api-error'
 import { toast } from 'sonner'
+import { DateField } from '@/components/date-field'
 
 type Relationship = {
   id: string
@@ -459,11 +459,11 @@ export function BillingRelationshipsSection({
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label>{t('effectiveFrom')}</Label>
-                  <Input type="date" value={draft.from} onChange={(e) => setDraft({ ...draft, from: e.target.value })} />
+                  <DateField value={draft.from} onChange={(value) => setDraft({ ...draft, from: value })} />
                 </div>
                 <div>
                   <Label>{t('effectiveTo')}</Label>
-                  <Input type="date" value={draft.to} onChange={(e) => setDraft({ ...draft, to: e.target.value })} />
+                  <DateField value={draft.to} onChange={(value) => setDraft({ ...draft, to: value })} />
                 </div>
               </div>
             </div>

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { Button, Input, Label } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../../../lib/api-error'
+import { DateField } from '../../../../components/date-field'
 
 /**
  * The goal form in the review drawer: set a goal on the review's
@@ -57,7 +58,7 @@ export function GoalForm({ employmentId, cycleId }: { employmentId: string; cycl
       </div>
       <div>
         <Label htmlFor="goal-due">{t('performance.goalDue')}</Label>
-        <Input id="goal-due" type="date" value={dueOn} onChange={(e) => setDueOn(e.target.value)} />
+        <DateField id="goal-due" value={dueOn} onChange={(value) => setDueOn(value)} />
       </div>
       {error ? (
         <p role="alert" className="text-sm text-red-600 dark:text-red-400">

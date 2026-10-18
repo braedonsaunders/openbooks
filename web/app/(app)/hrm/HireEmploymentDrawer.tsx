@@ -8,6 +8,7 @@ import { Button, Drawer, Input, Label, SearchSelect, Select, Textarea } from '@o
 import { readApiErrorMessage } from '../../../lib/api-error'
 import { useDirtyClose } from '../../../lib/use-dirty-close'
 import { useBusinessToday } from '../../../components/business-date-provider'
+import { DateField } from '../../../components/date-field'
 
 /**
  * The first-employment Hire action. Opens from an employee record with no
@@ -490,13 +491,12 @@ export function HireEmploymentDrawer({
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="hire-effective-from">{t('employment.hire.startLabel')}</Label>
-          <input
+          <DateField
             id="hire-effective-from"
-            type="date"
             value={effectiveFrom}
             disabled={busy}
             required
-            onChange={(event) => event.target.value && setEffectiveFrom(event.target.value)}
+            onChange={(value) => value && setEffectiveFrom(value)}
             className="w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
           />
         </div>

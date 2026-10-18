@@ -6,6 +6,7 @@ import { Button, Input, Label, Select, Textarea } from '@openbooks/ui'
 import type { PayrollPeriodOpeningView } from '@openbooks/engine/payroll/period-openings'
 import { apiJson, ApiResponseError } from '@/lib/api-error'
 import { MoneyInput, moneyFieldError } from '@/components/money-input'
+import { DateField } from '@/components/date-field'
 
 export interface PeriodOpeningDraft {
   context: PayrollPeriodOpeningView
@@ -131,7 +132,7 @@ export function PeriodOpeningForm({ employeePartyId, employeeName, year, draft, 
             {draft.context.currencies.map(currency => <option key={currency.value} value={currency.value}>{currency.label}</option>)}
           </Select></div>
         {(['periodStart', 'periodEnd', 'paidThrough'] as const).map(key => <div key={key} className="space-y-1.5">
-          <Label htmlFor={`${id}-${key}`}>{t(key)}</Label><Input id={`${id}-${key}`} type="date" value={draft[key]} disabled={disabled} onChange={event => change({ [key]: event.target.value })} />
+          <Label htmlFor={`${id}-${key}`}>{t(key)}</Label><DateField id={`${id}-${key}`} value={draft[key]} disabled={disabled} onChange={value => change({ [key]: value })} />
         </div>)}
       </div>
       <div className="grid gap-4 sm:grid-cols-2">

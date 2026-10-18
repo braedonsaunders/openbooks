@@ -8,6 +8,7 @@ import { useTranslations } from 'next-intl'
 import { Alert, AlertDescription, Button, FieldLabel, Input, Select, Skeleton } from '@openbooks/ui'
 import type { RoeSeparationFacts, RoeSeparationEmployee } from '@openbooks/engine/payroll/roe-separation-facts'
 import { readApiErrorMessage } from '../../../../lib/api-error'
+import { DateField } from '../../../../components/date-field'
 
 type State = ({ status: 'loading' } | { status: 'error'; message: string }
   | { status: 'ready'; record: RoeSeparationFacts | null; employee: RoeSeparationEmployee }) & { requestKey: string }
@@ -109,13 +110,13 @@ function RoeSeparationFactsBody({ employeePartyId, canEdit, onSaved }: Props) {
       </p>}
       <div className="grid gap-3 sm:grid-cols-2">
         <div><FieldLabel htmlFor="roe-first-worked">{t('firstWorked')}</FieldLabel>
-          <Input id="roe-first-worked" type="date" value={firstDayWorked} onChange={event => setFirstDayWorked(event.target.value)} disabled={disabled} /></div>
+          <DateField id="roe-first-worked" value={firstDayWorked} onChange={value => setFirstDayWorked(value)} disabled={disabled} /></div>
         <div><FieldLabel htmlFor="roe-interruption">{t('interruption')}</FieldLabel>
-          <Input id="roe-interruption" type="date" value={interruptionOn} onChange={event => setInterruptionOn(event.target.value)} disabled={disabled} /></div>
+          <DateField id="roe-interruption" value={interruptionOn} onChange={value => setInterruptionOn(value)} disabled={disabled} /></div>
         <div><FieldLabel htmlFor="roe-last-insurable">{t('lastInsurable')}</FieldLabel>
-          <Input id="roe-last-insurable" type="date" value={lastInsurableEarningsOn} onChange={event => setLastInsurableEarningsOn(event.target.value)} disabled={disabled} /></div>
+          <DateField id="roe-last-insurable" value={lastInsurableEarningsOn} onChange={value => setLastInsurableEarningsOn(value)} disabled={disabled} /></div>
         <div><FieldLabel htmlFor="roe-continuance">{t('continuance')}</FieldLabel>
-          <Input id="roe-continuance" type="date" value={salaryContinuanceEndOn} onChange={event => setSalaryContinuanceEndOn(event.target.value)} disabled={disabled} /></div>
+          <DateField id="roe-continuance" value={salaryContinuanceEndOn} onChange={value => setSalaryContinuanceEndOn(value)} disabled={disabled} /></div>
         <div><FieldLabel htmlFor="roe-facts-status">{t('status')}</FieldLabel>
           <Select id="roe-facts-status" value={status} onChange={event => setStatus(event.target.value as 'draft' | 'confirmed')} disabled={disabled}>
             <option value="draft">{t('draft')}</option><option value="confirmed">{t('confirmed')}</option></Select></div>

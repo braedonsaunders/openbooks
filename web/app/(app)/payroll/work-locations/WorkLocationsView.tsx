@@ -13,6 +13,7 @@ import { ListFilterSelect } from "../../../../components/list-filter-select";
 import { DateRangeFilter } from "../../../../components/date-range-filter";
 import { readApiErrorMessage } from "../../../../lib/api-error";
 import { useHeaderAction } from "../_ui/use-header-action";
+import { DateField } from '../../../../components/date-field'
 
 interface EmployeeChoice {
   employmentId: string;
@@ -344,23 +345,21 @@ export function WorkLocationsView() {
               </div>
               <div className="space-y-2">
                 <Label htmlFor="work-location-start">{t("fields.periodStart")}</Label>
-                <Input
+                <DateField
                   id="work-location-start"
-                  type="date"
                   value={draftScope.periodStart}
-                  onChange={(event) =>
-                    setDraftScope((current) => ({ ...current, periodStart: event.target.value }))
+                  onChange={(value) =>
+                    setDraftScope((current) => ({ ...current, periodStart: value }))
                   }
                 />
               </div>
               <div className="space-y-2">
                 <Label htmlFor="work-location-end">{t("fields.periodEnd")}</Label>
-                <Input
+                <DateField
                   id="work-location-end"
-                  type="date"
                   value={draftScope.periodEnd}
-                  onChange={(event) =>
-                    setDraftScope((current) => ({ ...current, periodEnd: event.target.value }))
+                  onChange={(value) =>
+                    setDraftScope((current) => ({ ...current, periodEnd: value }))
                   }
                 />
               </div>

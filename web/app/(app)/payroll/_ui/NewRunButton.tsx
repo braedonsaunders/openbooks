@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 import { Play, Plus } from 'lucide-react'
 import { Button, Drawer, Label, Select } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../../../lib/api-error'
+import { DateField } from '../../../../components/date-field'
 
 export interface FinalPayCandidate {
   id: string
@@ -261,26 +262,26 @@ export function NewRunButton({
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="run-start">{t('newRun.periodStart')}</Label>
-              <input
-                id="run-start" type="date" value={shown.start}
-                onChange={(e) => setField('start', e.target.value)}
+              <DateField
+                id="run-start" value={shown.start}
+                onChange={(value) => setField('start', value)}
                 className="h-9 w-full rounded-md border border-slate-200 bg-white px-2 text-sm dark:border-slate-700 dark:bg-slate-950"
               />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="run-end">{t('newRun.periodEnd')}</Label>
-              <input
-                id="run-end" type="date" value={shown.end}
-                onChange={(e) => setField('end', e.target.value)}
+              <DateField
+                id="run-end" value={shown.end}
+                onChange={(value) => setField('end', value)}
                 className="h-9 w-full rounded-md border border-slate-200 bg-white px-2 text-sm dark:border-slate-700 dark:bg-slate-950"
               />
             </div>
           </div>
           <div className="space-y-1.5">
             <Label htmlFor="run-paydate" help={t('newRun.payDateHint')}>{t('columns.payDate')}</Label>
-            <input
-              id="run-paydate" type="date" value={shown.payDate}
-              onChange={(e) => setField('payDate', e.target.value)}
+            <DateField
+              id="run-paydate" value={shown.payDate}
+              onChange={(value) => setField('payDate', value)}
               className="h-9 w-full rounded-md border border-slate-200 bg-white px-2 text-sm dark:border-slate-700 dark:bg-slate-950"
             />
           </div>

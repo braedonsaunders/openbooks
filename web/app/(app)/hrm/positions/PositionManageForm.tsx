@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { Button, Input, Label, Select, Textarea } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../../../lib/api-error'
+import { DateField } from '../../../../components/date-field'
 
 export interface PositionManageProps {
   positionId: string
@@ -95,7 +96,7 @@ export function PositionManageForm({ positionId, effectiveDate, title: initialTi
         </div>
         <div>
           <Label htmlFor="position-revise-date">{labels.effectiveDate}</Label>
-          <Input id="position-revise-date" type="date" value={revisionDate} required disabled={busy} onChange={(event) => setRevisionDate(event.target.value)} />
+          <DateField id="position-revise-date" value={revisionDate} required disabled={busy} onChange={(value) => setRevisionDate(value)} />
         </div>
         <div>
           <Label htmlFor="position-revise-reason">{labels.reason}</Label>
@@ -138,7 +139,7 @@ export function PositionManageForm({ positionId, effectiveDate, title: initialTi
       }}>
         <div>
           <Label htmlFor="position-close-date">{labels.effectiveDate}</Label>
-          <Input id="position-close-date" type="date" value={closeDate} required disabled={busy} onChange={(event) => setCloseDate(event.target.value)} />
+          <DateField id="position-close-date" value={closeDate} required disabled={busy} onChange={(value) => setCloseDate(value)} />
         </div>
         <div>
           <Label htmlFor="position-close-reason">{labels.reason}</Label>

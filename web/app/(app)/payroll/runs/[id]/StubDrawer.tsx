@@ -12,6 +12,7 @@ import { MoneyInput, moneyFieldError } from '../../../../../components/money-inp
 import { useDirtyClose } from '../../../../../lib/use-dirty-close'
 import { type RegisterBucket } from '../../../../../lib/payroll-register-buckets'
 import { add, cmp, neg, sum } from '@openbooks/engine/money'
+import { DateField } from '../../../../../components/date-field'
 
 /** One employee's stub — the house flyout: header facts, pay lines, the T4127
  * factor trace, and the variance flag, with the paystub PDF one click away.
@@ -364,10 +365,10 @@ export function StubDrawer({
                     <p className="mt-2 text-xs text-slate-500">{t('wizard.adjust.earnedDatesHelp')}</p>
                     <div className="mt-2 grid grid-cols-2 gap-2">
                       <label>{t('wizard.adjust.earnedFrom')}
-                        <input type="date" value={adjEarnedFrom} onChange={event => setAdjEarnedFrom(event.target.value)} className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 dark:border-slate-700 dark:bg-slate-900" />
+                        <DateField value={adjEarnedFrom} onChange={value => setAdjEarnedFrom(value)} className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 dark:border-slate-700 dark:bg-slate-900" />
                       </label>
                       <label>{t('wizard.adjust.earnedTo')}
-                        <input type="date" value={adjEarnedTo} onChange={event => setAdjEarnedTo(event.target.value)} className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 dark:border-slate-700 dark:bg-slate-900" />
+                        <DateField value={adjEarnedTo} onChange={value => setAdjEarnedTo(value)} className="mt-1 w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 dark:border-slate-700 dark:bg-slate-900" />
                       </label>
                     </div>
                   </details>

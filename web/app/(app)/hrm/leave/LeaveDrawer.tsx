@@ -12,6 +12,7 @@ import { promptDialog } from '../../../../lib/prompt'
 import { useAppAction } from '../../../../lib/use-app-action'
 import { useDirtyClose } from '../../../../lib/use-dirty-close'
 import { ActionError } from '@braedonsaunders/appkit-errors'
+import { DateField } from '@/components/date-field'
 
 /**
  * Leave filing and detail drawer. Opens blank for filing (employment, type,
@@ -740,11 +741,11 @@ function LeaveFileForm({
       <div className="grid grid-cols-2 gap-2">
         <div>
           <Label htmlFor="leave-starts">{t('leave.calendarFromLabel')}</Label>
-            <Input id="leave-starts" type="date" value={startsOn} onChange={(event) => markDirty(setStartsOn, event.target.value)} />
+            <DateField id="leave-starts" value={startsOn} onChange={(value) => markDirty(setStartsOn, value)} />
         </div>
         <div>
           <Label htmlFor="leave-ends">{t('leave.calendarToLabel')}</Label>
-            <Input id="leave-ends" type="date" value={endsOn} onChange={(event) => markDirty(setEndsOn, event.target.value)} />
+            <DateField id="leave-ends" value={endsOn} onChange={(value) => markDirty(setEndsOn, value)} />
         </div>
       </div>
       <div>
@@ -1037,7 +1038,7 @@ function LeaveRecordForm({
       </div>
       <div>
         <Label htmlFor="leave-record-date">{t('leave.calendarFromLabel')}</Label>
-        <Input id="leave-record-date" type="date" value={onDate} onChange={(event) => markDirty(setOnDate, event.target.value)} />
+        <DateField id="leave-record-date" value={onDate} onChange={(value) => markDirty(setOnDate, value)} />
       </div>
       <div>
         <Label htmlFor="leave-record-hours">{t('leave.fileHoursLabel')}</Label>

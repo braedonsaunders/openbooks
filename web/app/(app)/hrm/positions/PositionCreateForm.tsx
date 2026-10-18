@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl'
 import { Button, Input, Label, Select, Textarea, UrlDrawer } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../../../lib/api-error'
 import { confirmDialog } from '../../../../lib/confirm'
+import { DateField } from '../../../../components/date-field'
 
 export interface PositionCreateOption {
   value: string
@@ -174,7 +175,7 @@ export function PositionCreateForm({ basePath, effectiveDate, employers, employe
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="position-effective-from">{labels.effectiveFrom}</Label>
-          <Input id="position-effective-from" type="date" value={effectiveFrom} required disabled={busy} onChange={(event) => setEffectiveFrom(event.target.value)} />
+          <DateField id="position-effective-from" value={effectiveFrom} required disabled={busy} onChange={(value) => setEffectiveFrom(value)} />
         </div>
       </div>
       <div className="space-y-1.5">

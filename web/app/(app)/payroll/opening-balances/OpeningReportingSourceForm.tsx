@@ -9,6 +9,7 @@ import { readApiErrorMessage } from '../../../../lib/api-error'
 import type { readCanadianOpeningReportingSourceContext } from '@openbooks/engine/payroll/canada/opening-reporting-authority'
 import type { CanadianOpeningReportingAllocation } from '@openbooks/engine/payroll/canada/opening-reporting-source'
 import { canonicalNonNegativeDecimal, isZeroDecimal } from '@openbooks/engine/money/decimal'
+import { DateField } from '../../../../components/date-field'
 
 type Context = Awaited<ReturnType<typeof readCanadianOpeningReportingSourceContext>>
 type Draft = Omit<CanadianOpeningReportingAllocation, 'sourceOrdinal'> & { sourceOrdinal: string }
@@ -263,7 +264,7 @@ function OpeningReportingSourceBody({ employeePartyId, year, canQualify, annualD
           <div><FieldLabel htmlFor="reporting-source-rp">{t('rp')}</FieldLabel><Select id="reporting-source-rp" value={allocation.filingAccountId} disabled={disabled} onChange={event => update({ filingAccountId: event.target.value })}><option value="">{t('chooseRp')}</option>{context.filingAccounts.map(account => <option key={account.id} value={account.id}>{accountLabel(account.id)}</option>)}</Select></div>
           <div><FieldLabel htmlFor="reporting-source-province">{t('province')}</FieldLabel><Select id="reporting-source-province" value={allocation.province} disabled={disabled} onChange={event => update({ province: event.target.value })}><option value="">{t('chooseProvince')}</option>{PROVINCES.map(province => <option key={province} value={province}>{province}</option>)}</Select></div>
           <div><FieldLabel htmlFor="reporting-source-ordinal">{t('ordinal')}</FieldLabel><Input id="reporting-source-ordinal" value={allocation.sourceOrdinal} inputMode="numeric" disabled={disabled} onChange={event => update({ sourceOrdinal: event.target.value })} /></div>
-          <div><FieldLabel htmlFor="reporting-source-first-pay">{t('firstPay')}</FieldLabel><Input id="reporting-source-first-pay" type="date" min={context.original.coverageStart} max={context.original.coverageEnd} value={allocation.firstCoveredPayDate} disabled={disabled} onChange={event => update({ firstCoveredPayDate: event.target.value })} /></div>
+          <div><FieldLabel htmlFor="reporting-source-first-pay">{t('firstPay')}</FieldLabel><DateField id="reporting-source-first-pay" min={context.original.coverageStart} max={context.original.coverageEnd} value={allocation.firstCoveredPayDate} disabled={disabled} onChange={value => update({ firstCoveredPayDate: value })} /></div>
         </div>
         <RecordTabs label={t('amountSections')} active={section} onChange={setSection} tabs={(['annual','reportableBases','components','programBases','accountBases','suiStates'] as const).map(key => ({ key,label: t(key) }))} />
         {section === 'reportableBases' && <p className="text-sm text-slate-500">{t('reportableHelp')}</p>}

@@ -2,6 +2,7 @@
 
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
+import { DateField } from '../../../components/date-field'
 
 /** Snap an ISO date to its Sunday, the org's week start. */
 function sundayOf(iso: string): string {
@@ -21,13 +22,12 @@ export function TimesheetWeekJump({ basePath, employeeId }: { basePath: string; 
   const t = useTranslations('timesheets')
   const router = useRouter()
   return (
-    <input
-      type="date"
+    <DateField
       defaultValue=""
-      onChange={(e) => {
-        if (e.target.value) router.push(`${basePath}?timesheet=${employeeId}:${sundayOf(e.target.value)}` as never)
+      onChange={(value) => {
+        if (value) router.push(`${basePath}?timesheet=${employeeId}:${sundayOf(value)}` as never)
       }}
-      className="h-8 shrink-0 rounded-md border border-slate-200 bg-white px-2 text-sm dark:border-slate-700 dark:bg-slate-950"
+      className="h-8 w-36 shrink-0 rounded-md border border-slate-200 bg-white px-2 text-sm dark:border-slate-700 dark:bg-slate-950"
       aria-label={t('grid.weekJump')}
       title={t('grid.weekJump')}
     />

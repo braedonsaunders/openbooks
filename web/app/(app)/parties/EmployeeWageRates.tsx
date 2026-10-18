@@ -23,6 +23,7 @@ import {
   isTimePayRateBasis,
   type PayRateBasis,
 } from '@openbooks/engine/projects/pay-rate-basis'
+import { DateField } from '@/components/date-field'
 
 interface RateRow {
   id: string
@@ -398,11 +399,10 @@ export function EmployeeWageRates({ partyId }: { partyId: string }) {
           ) : null}
           <div>
             <Label htmlFor="employee-wage-effective-from">{t('effectiveFrom')}</Label>
-            <Input
+            <DateField
               id="employee-wage-effective-from"
-              type="date"
               value={effectiveFrom}
-              onChange={(event) => setEffectiveFrom(event.target.value)}
+              onChange={(value) => setEffectiveFrom(value)}
             />
           </div>
         </div>

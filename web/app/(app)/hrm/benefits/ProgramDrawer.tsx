@@ -21,6 +21,7 @@ import { AwardPortfolioTable, useEffectiveRangeLabel } from './PortfolioTables'
 import type { ProgramDetailDrawer } from '../../../../lib/hrm/benefits-workspace'
 import { CabinetFilePicker } from '../../../../components/cabinet-file-picker'
 import { RetainedPdfEvidence, type PdfEvidenceInput } from './RetainedPdfEvidence'
+import { DateField } from '../../../../components/date-field'
 
 type RetainedRowOption = { pointer: string; label: string; row: Record<string, unknown> }
 type RetainedFieldOption = { pointer: string; label: string; sample: string }
@@ -635,11 +636,11 @@ export function ProgramDrawer({
     <>
       <div className="flex items-center gap-1.5">
         <Label htmlFor="program-simulate-from" className="whitespace-nowrap text-xs text-slate-500 dark:text-slate-400">{t('portfolio.simulate.periodFrom')}</Label>
-        <Input id="program-simulate-from" type="date" className="w-40" value={simulateFrom} onChange={(e) => setSimulateFrom(e.target.value)} />
+        <DateField id="program-simulate-from" className="w-40" value={simulateFrom} onChange={(value) => setSimulateFrom(value)} />
       </div>
       <div className="flex items-center gap-1.5">
         <Label htmlFor="program-simulate-to" className="whitespace-nowrap text-xs text-slate-500 dark:text-slate-400">{t('portfolio.simulate.periodTo')}</Label>
-        <Input id="program-simulate-to" type="date" className="w-40" value={simulateTo} onChange={(e) => setSimulateTo(e.target.value)} />
+        <DateField id="program-simulate-to" className="w-40" value={simulateTo} onChange={(value) => setSimulateTo(value)} />
       </div>
       <Button variant="outline" className="ml-auto" onClick={simulate}>
         {t('portfolio.simulate.run')}
@@ -756,7 +757,7 @@ export function ProgramDrawer({
             </div>
             <div>
               <Label htmlFor="source-first-native-as-of">{t('sourceFirst.asOf')}</Label>
-              <Input id="source-first-native-as-of" type="date" value={sourceAsOf} required onChange={(event) => setSourceAsOf(event.target.value)} />
+              <DateField id="source-first-native-as-of" value={sourceAsOf} required onChange={(value) => setSourceAsOf(value)} />
               <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{t('sourceFirst.asOfHint')}</p>
             </div>
             <div>
@@ -1040,20 +1041,18 @@ export function ProgramDrawer({
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label htmlFor="program-member-from">{t('portfolio.builder.fields.effectiveFrom')}</Label>
-                  <Input
+                  <DateField
                     id="program-member-from"
-                    type="date"
                     value={member.effectiveFrom}
-                    onChange={(e) => setMember((c) => ({ ...c, effectiveFrom: e.target.value }))}
+                    onChange={(value) => setMember((c) => ({ ...c, effectiveFrom: value }))}
                   />
                 </div>
                 <div>
                   <Label htmlFor="program-member-to">{t('portfolio.builder.fields.effectiveTo')}</Label>
-                  <Input
+                  <DateField
                     id="program-member-to"
-                    type="date"
                     value={member.effectiveTo}
-                    onChange={(e) => setMember((c) => ({ ...c, effectiveTo: e.target.value }))}
+                    onChange={(value) => setMember((c) => ({ ...c, effectiveTo: value }))}
                   />
                 </div>
               </div>

@@ -7,6 +7,7 @@ import { Button, Input, Label, Select, Textarea } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../../../lib/api-error'
 import { promptDialog } from '../../../../lib/prompt'
 import { civilDateTimeToInstant } from '@openbooks/engine/platform/time-zone'
+import { DateField } from '../../../../components/date-field'
 
 /**
  * Recruiting action islands: small client forms posting through the same
@@ -801,7 +802,7 @@ export function OfferCreateIsland({
         </div>
         <div>
           <Label htmlFor={`${fieldPrefix}-start`}>{labels.start}</Label>
-          <Input id={`${fieldPrefix}-start`} type="date" value={start} onChange={(event) => setStart(event.target.value)} required />
+          <DateField id={`${fieldPrefix}-start`} value={start} onChange={(value) => setStart(value)} required />
         </div>
       </div>
       <div className="grid grid-cols-3 gap-2">
@@ -826,7 +827,7 @@ export function OfferCreateIsland({
       </div>
       <div>
         <Label htmlFor={`${fieldPrefix}-expires`}>{labels.expires}</Label>
-        <Input id={`${fieldPrefix}-expires`} type="date" value={expires} onChange={(event) => setExpires(event.target.value)} />
+        <DateField id={`${fieldPrefix}-expires`} value={expires} onChange={(value) => setExpires(value)} />
       </div>
       {error ? (
         <p role="alert" className="text-sm text-red-600 dark:text-red-400">

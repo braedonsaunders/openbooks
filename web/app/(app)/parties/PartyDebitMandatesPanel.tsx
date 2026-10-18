@@ -11,6 +11,7 @@ import { refusalMessageFromBody } from '@/lib/api-error'
 import { Badge, Button, Drawer, Input, Label, Select, Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@openbooks/ui'
 import { field } from './party-drawer-model'
 import { DrawerSublist, SublistAddButton, SublistEmpty, SublistLoadError, SublistLoading, SublistPager, useSublistRows } from '../../../components/drawer-sublist'
+import { DateField } from '@/components/date-field'
 
 const MANDATE_SCHEMES = ['nacha', 'sepa_core', 'sepa_b2b', 'custom'] as const
 const MANDATE_STATUSES = ['pending', 'active', 'suspended', 'revoked', 'expired'] as const
@@ -313,15 +314,15 @@ export function PartyDebitMandatesPanel({ partyId }: { partyId: string }) {
             <div className="grid gap-4 sm:grid-cols-3">
               <div className={field}>
                 <Label htmlFor="debit-mandate-signed-on">{t('fields.signedOn')}</Label>
-                <Input id="debit-mandate-signed-on" type="date" value={draft.signedOn} onChange={(event) => setDraft({ ...draft, signedOn: event.target.value })} />
+                <DateField id="debit-mandate-signed-on" value={draft.signedOn} onChange={(value) => setDraft({ ...draft, signedOn: value })} />
               </div>
               <div className={field}>
                 <Label htmlFor="debit-mandate-valid-from">{t('fields.validFrom')}</Label>
-                <Input id="debit-mandate-valid-from" type="date" value={draft.validFrom} onChange={(event) => setDraft({ ...draft, validFrom: event.target.value })} />
+                <DateField id="debit-mandate-valid-from" value={draft.validFrom} onChange={(value) => setDraft({ ...draft, validFrom: value })} />
               </div>
               <div className={field}>
                 <Label htmlFor="debit-mandate-expires-on">{t('fields.expiresOn')}</Label>
-                <Input id="debit-mandate-expires-on" type="date" value={draft.expiresOn} onChange={(event) => setDraft({ ...draft, expiresOn: event.target.value })} />
+                <DateField id="debit-mandate-expires-on" value={draft.expiresOn} onChange={(value) => setDraft({ ...draft, expiresOn: value })} />
               </div>
             </div>
           </div>

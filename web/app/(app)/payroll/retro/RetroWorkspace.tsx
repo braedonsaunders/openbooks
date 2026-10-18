@@ -11,7 +11,6 @@ import {
   Drawer,
   EmptyState,
   FieldHelp,
-  Input,
   Label,
   Select,
   cn,
@@ -26,6 +25,7 @@ import { useMoney } from '../../../../components/money-provider'
 import { compareDecimal } from '@openbooks/engine/money/decimal'
 import { readApiErrorMessage } from '../../../../lib/api-error'
 import { useHeaderAction } from '../_ui/use-header-action'
+import { DateField } from '../../../../components/date-field'
 
 /* ------------------------------------------------------------------ */
 /* Shapes (mirror engine/src/payroll/retro-store.ts)                   */
@@ -423,13 +423,12 @@ export function RetroWorkspace({
             >
               {text('columns.payDate', 'Pay date')}
             </Label>
-            <Input
+            <DateField
               id="retro-paydate"
-              type="date"
               value={payDate}
               disabled={busy}
-              onChange={(e) =>
-                changeScope({ scheduleId, payDate: e.target.value })
+              onChange={(value) =>
+                changeScope({ scheduleId, payDate: value })
               }
             />
           </div>

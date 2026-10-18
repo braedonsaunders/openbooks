@@ -462,8 +462,8 @@ test('historical status draft saves and reopens without losing the source or cha
     assert.deepEqual(requests, [{ url: '/api/hrm/change-requests', method: 'POST', body: { employmentId, payload } }])
     await act(async () => { root.render(render({ id: savedId, payload })); await sleep(50) })
     assert.equal((document.querySelector('#cr-source-reference') as HTMLInputElement).value, payload.historicalObservation.sourceReference)
-    assert.equal((document.querySelector('#cr-effective-from') as HTMLInputElement).value, '2020-01-03')
-    assert.equal((document.querySelector('#cr-effective-to') as HTMLInputElement).value, '2020-01-04')
+    assert.equal((document.querySelector('#cr-effective-from') as HTMLInputElement).value, '01/03/2020')
+    assert.equal((document.querySelector('#cr-effective-to') as HTMLInputElement).value, '01/04/2020')
     const unchangedSave = [...document.querySelectorAll('button')].find(b => b.textContent === hrmMessages.employment.changeRequests.saveChanges)!
     await act(async () => { unchangedSave.click(); await sleep(50) })
     assert.equal(saved, 2)

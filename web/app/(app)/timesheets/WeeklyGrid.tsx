@@ -38,6 +38,7 @@ import type {
   WeekPayload,
   WeekRow,
 } from '../../api/timesheets/_lib'
+import { DateField } from '@/components/date-field'
 
 // Day-of-week catalog keys, Sunday-first to match the grid columns.
 const DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const
@@ -929,14 +930,13 @@ export function WeeklyGrid({
           <Button size="sm" variant="ghost" onClick={() => go(employeeId, sundayOf(today))} disabled={!employeeId}>
             {t('grid.thisWeek')}
           </Button>
-          <input
-            type="date"
+          <DateField
             value={week}
             disabled={!employeeId}
-            onChange={(e) => {
-              if (e.target.value) go(employeeId, sundayOf(e.target.value))
+            onChange={(value) => {
+              if (value) go(employeeId, sundayOf(value))
             }}
-            className="h-8 shrink-0 rounded-md border border-slate-200 bg-white px-2 text-sm dark:border-slate-700 dark:bg-slate-950"
+            className="h-8 w-36 shrink-0 rounded-md border border-slate-200 bg-white px-2 text-sm dark:border-slate-700 dark:bg-slate-950"
             aria-label={t('grid.weekJump')}
             title={t('grid.weekJump')}
           />

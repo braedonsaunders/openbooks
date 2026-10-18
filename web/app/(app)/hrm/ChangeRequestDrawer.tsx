@@ -8,6 +8,7 @@ import { Button, Drawer, FieldHelp, Input, Label, SearchSelect, Select, Textarea
 import { readApiErrorMessage } from '../../../lib/api-error'
 import { useDirtyClose } from '../../../lib/use-dirty-close'
 import { useBusinessToday } from '../../../components/business-date-provider'
+import { DateField } from '../../../components/date-field'
 
 /**
  * Native employment change-request authoring. Opens from the Employment tab
@@ -714,25 +715,23 @@ export function ChangeRequestDrawer({
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="cr-effective-from">{t('employment.changeRequests.effectiveFromLabel')}</Label>
-              <input
+              <DateField
                 id="cr-effective-from"
-                type="date"
                 value={effectiveFrom}
                 disabled={busy}
                 required
-                onChange={(event) => event.target.value && setEffectiveFrom(event.target.value)}
+                onChange={(value) => value && setEffectiveFrom(value)}
                 className="w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
               />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="cr-effective-to">{t('employment.changeRequests.effectiveToLabel')}</Label>
-              <input
+              <DateField
                 id="cr-effective-to"
-                type="date"
                 required={kind === 'status_change' && historicalObservation}
                 value={effectiveTo}
                 disabled={busy}
-                onChange={(event) => setEffectiveTo(event.target.value)}
+                onChange={(value) => setEffectiveTo(value)}
                 className="w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
               />
               {!(kind === 'status_change' && historicalObservation) && <p className="text-xs text-slate-500 dark:text-slate-400">
@@ -864,23 +863,21 @@ export function ChangeRequestDrawer({
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="cr-assignment-from">{t('employment.changeRequests.effectiveFromLabel')}</Label>
-              <input
+              <DateField
                 id="cr-assignment-from"
-                type="date"
                 value={effectiveFrom}
                 disabled={busy}
-                onChange={(event) => setEffectiveFrom(event.target.value)}
+                onChange={(value) => setEffectiveFrom(value)}
                 className="w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
               />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="cr-assignment-to">{t('employment.changeRequests.effectiveToLabel')}</Label>
-              <input
+              <DateField
                 id="cr-assignment-to"
-                type="date"
                 value={effectiveTo}
                 disabled={busy}
-                onChange={(event) => setEffectiveTo(event.target.value)}
+                onChange={(value) => setEffectiveTo(value)}
                 className="w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
               />
               <p className="text-xs text-slate-500 dark:text-slate-400">
@@ -893,13 +890,12 @@ export function ChangeRequestDrawer({
         {kind === 'termination' ? (
           <div className="space-y-1.5">
             <Label htmlFor="cr-effective-date">{t('employment.changeRequests.effectiveDateLabel')}</Label>
-            <input
+            <DateField
               id="cr-effective-date"
-              type="date"
               value={effectiveDate}
               disabled={busy}
               required
-              onChange={(event) => event.target.value && setEffectiveDate(event.target.value)}
+              onChange={(value) => value && setEffectiveDate(value)}
               className="w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
             />
           </div>
@@ -967,23 +963,21 @@ export function ChangeRequestDrawer({
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="cr-position-from">{t('employment.changeRequests.effectiveFromLabel')}</Label>
-              <input
+              <DateField
                 id="cr-position-from"
-                type="date"
                 value={effectiveFrom}
                 disabled={busy}
-                onChange={(event) => setEffectiveFrom(event.target.value)}
+                onChange={(value) => setEffectiveFrom(value)}
                 className="w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
               />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="cr-position-to">{t('employment.changeRequests.effectiveToLabel')}</Label>
-              <input
+              <DateField
                 id="cr-position-to"
-                type="date"
                 value={effectiveTo}
                 disabled={busy}
-                onChange={(event) => setEffectiveTo(event.target.value)}
+                onChange={(value) => setEffectiveTo(value)}
                 className="w-full rounded-md border border-slate-300 bg-white px-2.5 py-1.5 text-sm text-slate-900 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
               />
               <p className="text-xs text-slate-500 dark:text-slate-400">

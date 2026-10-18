@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 import { Button, Drawer, Input, Label, Select } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../../../lib/api-error'
 import { useDirtyClose } from '../../../../lib/use-dirty-close'
+import { DateField } from '../../../../components/date-field'
 
 /**
  * New-window dialog, opened from the page header through the `window=new`
@@ -112,20 +113,19 @@ export function WindowDialog({
         <div className="grid grid-cols-2 gap-3">
           <div>
             <Label htmlFor="benefits-window-opens">{t('benefits.windowOpens')}</Label>
-            <Input id="benefits-window-opens" type="date" value={opensOn} onChange={(e) => setOpensOn(e.target.value)} />
+            <DateField id="benefits-window-opens" value={opensOn} onChange={(value) => setOpensOn(value)} />
           </div>
           <div>
             <Label htmlFor="benefits-window-closes">{t('benefits.windowCloses')}</Label>
-            <Input id="benefits-window-closes" type="date" value={closesOn} onChange={(e) => setClosesOn(e.target.value)} />
+            <DateField id="benefits-window-closes" value={closesOn} onChange={(value) => setClosesOn(value)} />
           </div>
         </div>
         <div>
           <Label htmlFor="benefits-window-year">{t('benefits.windowPlanYear')}</Label>
-          <Input
+          <DateField
             id="benefits-window-year"
-            type="date"
             value={planYearStartOn}
-            onChange={(e) => setPlanYearStartOn(e.target.value)}
+            onChange={(value) => setPlanYearStartOn(value)}
           />
         </div>
         <div>

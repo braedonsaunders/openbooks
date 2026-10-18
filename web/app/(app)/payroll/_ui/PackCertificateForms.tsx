@@ -7,6 +7,7 @@ import { Button } from '@openbooks/ui'
 import { readApiErrorMessage } from '../../../../lib/api-error'
 import { promptDialog } from '../../../../lib/prompt'
 import { MoneyInput, moneyFieldError } from '../../../../components/money-input'
+import { DateField } from '../../../../components/date-field'
 
 /**
  * Pack-declared certificate answers — the entry surface for every row-backed
@@ -367,12 +368,11 @@ export function CertificateForm(props: {
         ))}
         <label htmlFor={`cert-effective-${certificate.key}`} className="block text-sm">
           <span className="mb-1 block font-medium">{tp('effectiveFrom')}</span>
-          <input
+          <DateField
             id={`cert-effective-${certificate.key}`}
-            type="date"
             className="rounded border border-slate-300 bg-white px-2 py-1 dark:border-slate-600 dark:bg-slate-800"
             value={effectiveFrom}
-            onChange={(event) => setEffectiveFrom(event.target.value)}
+            onChange={(value) => setEffectiveFrom(value)}
           />
         </label>
       </div>
@@ -432,12 +432,11 @@ function FilingHistoryRow(props: {
         <div className="mt-1.5 flex flex-wrap items-center gap-2">
           <label className="flex items-center gap-1">
             <span className="text-slate-500 dark:text-slate-400">{tp('effectiveFrom')}</span>
-            <input
-              type="date"
+            <DateField
               aria-label={tp('effectiveFrom')}
-              className="rounded border border-slate-300 bg-white px-1 py-0.5 dark:border-slate-600 dark:bg-slate-800"
+              className="h-8 w-36 rounded border border-slate-300 bg-white px-1 py-0.5 dark:border-slate-600 dark:bg-slate-800"
               value={nextDate}
-              onChange={(event) => setNextDate(event.target.value)}
+              onChange={(value) => setNextDate(value)}
             />
           </label>
           <button

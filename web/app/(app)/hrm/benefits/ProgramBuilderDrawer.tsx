@@ -28,6 +28,7 @@ import {
   type ProgramEditSeed,
   type ProgramFamily,
 } from '../../../../lib/hrm/benefits-portfolio'
+import { DateField } from '../../../../components/date-field'
 
 /**
  * Program builder, opened from the page header through `program=new`
@@ -805,11 +806,10 @@ export function ProgramBuilderDrawer({
             <div className="grid grid-cols-2 gap-3">
               <div>
                 <Label htmlFor="program-builder-from">{t('portfolio.builder.fields.effectiveFrom')}</Label>
-                <Input
+                <DateField
                   id="program-builder-from"
-                  type="date"
                   value={draft.effectiveFrom}
-                  onChange={(e) => set('effectiveFrom', e.target.value)}
+                  onChange={(value) => set('effectiveFrom', value)}
                   aria-describedby={errors.effectiveFrom ? 'program-builder-effectiveFrom-error' : undefined}
                   aria-invalid={errors.effectiveFrom !== undefined}
                 />
@@ -817,11 +817,10 @@ export function ProgramBuilderDrawer({
               </div>
               <div>
                 <Label htmlFor="program-builder-to">{t('portfolio.builder.fields.effectiveTo')}</Label>
-                <Input
+                <DateField
                   id="program-builder-to"
-                  type="date"
                   value={draft.effectiveTo}
-                  onChange={(e) => set('effectiveTo', e.target.value)}
+                  onChange={(value) => set('effectiveTo', value)}
                   aria-describedby={errors.effectiveTo ? 'program-builder-effectiveTo-error' : undefined}
                   aria-invalid={errors.effectiveTo !== undefined}
                 />
@@ -1017,12 +1016,11 @@ export function ProgramBuilderDrawer({
             {activeEdit ? (
               <div>
                 <Label htmlFor="program-builder-changeEffectiveFrom">{t('portfolio.builder.fields.changeEffectiveFrom')}</Label>
-                <Input
+                <DateField
                   id="program-builder-changeEffectiveFrom"
-                  type="date"
                   className="w-44"
                   value={changeFrom}
-                  onChange={(e) => { setChangeFrom(e.target.value); setChangeFromError(undefined) }}
+                  onChange={(value) => { setChangeFrom(value); setChangeFromError(undefined) }}
                   aria-describedby={changeFromError ? 'program-builder-changeEffectiveFrom-error' : 'program-builder-changeEffectiveFrom-hint'}
                   aria-invalid={changeFromError ? true : undefined}
                   required

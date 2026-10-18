@@ -2,9 +2,10 @@
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
-import { Button, Input, Label, SearchSelect, Select } from '@openbooks/ui'
+import { Button, Label, SearchSelect, Select } from '@openbooks/ui'
 import { confirmDialog } from '../../../../lib/confirm'
 import { readApiErrorMessage } from '../../../../lib/api-error'
+import { DateField } from '../../../../components/date-field'
 
 type SubjectKind = 'project' | 'equipment' | 'position' | 'classification'
 
@@ -179,11 +180,11 @@ export function QualificationRequirementManager({ today, types, labels }: Requir
         </div>
         <div>
           <Label htmlFor="qualification-requirement-from">{labels.from}</Label>
-          <Input id="qualification-requirement-from" type="date" value={requiredFrom} disabled={busy} onChange={(event) => setRequiredFrom(event.target.value)} />
+          <DateField id="qualification-requirement-from" value={requiredFrom} disabled={busy} onChange={(value) => setRequiredFrom(value)} />
         </div>
         <div>
           <Label htmlFor="qualification-requirement-to">{labels.to}</Label>
-          <Input id="qualification-requirement-to" type="date" value={requiredTo} disabled={busy} onChange={(event) => setRequiredTo(event.target.value)} />
+          <DateField id="qualification-requirement-to" value={requiredTo} disabled={busy} onChange={(value) => setRequiredTo(value)} />
         </div>
         <div>
           <Label htmlFor="qualification-requirement-severity">{labels.severity}</Label>
