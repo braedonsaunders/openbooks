@@ -315,6 +315,16 @@ export const ACCOUNT_REFERENCE_RULES: Readonly<Record<string, AccountReferenceRu
   "project_revenue_accruals.revenue_account_id": config("Project revenue accruals (revenue)"),
   "withholding_enrollments.liability_account_id": config("Contractor withholding enrollments"),
   "mfg_subcontract_service.wip_account_id": config("Subcontract service work in process"),
+  "pos_registers.cash_account_id": config("Point-of-sale registers (cash)"),
+  "pos_registers.card_account_id": config("Point-of-sale registers (card)"),
+  "pos_registers.other_account_id": config("Point-of-sale registers (other tenders)"),
+  "pos_cash_reasons.account_id": config("Point-of-sale cash reasons"),
+  // An open shortfall trues up to the account it was charged to when stock arrives.
+  "inventory_provisional_costs.offset_account_id": retained("Inventory provisional costs (offset)", sql`r.remaining_quantity > 0`,
+    "Receive the short stock to settle its provisional cost before merging the account. Settled shortfalls keep their recorded account."),
+  "historical_translation_contributions.account_id": history("Historical translation contributions"),
+  "fx_revaluation_rate_evidence.account_id": history("Revaluation closing rate evidence"),
+  "expense_receipt_captures.confirmed_account_id": history("Confirmed receipt captures"),
 };
 
 /**
@@ -393,6 +403,8 @@ export async function discoverAccountReferenceColumns(executor: SqlExecutor): Pr
      where c.contype = 'f'
        and c.confrelid = 'public.accounts'::regclass
        and a.attname <> 'org_id'
+       -- The merge writes redirected references; a generated column is computed, never written.
+       and a.attgenerated = ''
      order by 1, 2`)).rows;
   return rows.map((row) => ({ table: row.table_name, column: row.column_name }));
 }

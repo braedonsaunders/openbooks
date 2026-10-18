@@ -527,7 +527,7 @@ async function planAccountMerge(
   for (const column of discovered) columns.set(`${column.table}.${column.column}`, column);
   const declared = (await tx.execute<{ table_name: string; column_name: string }>(sql`
     select table_name::text, column_name::text from information_schema.columns
-     where table_schema = 'public'
+     where table_schema = 'public' and is_generated = 'NEVER'
        and (table_name || '.' || column_name) in ${Object.keys(ACCOUNT_REFERENCE_RULES)}`)).rows;
   for (const row of declared) columns.set(`${row.table_name}.${row.column_name}`, { table: row.table_name, column: row.column_name });
 

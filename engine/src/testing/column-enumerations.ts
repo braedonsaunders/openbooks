@@ -74,6 +74,18 @@ export const COLUMN_ENUMERATIONS: readonly EnumerationRegistration[] = [
     ],
   },
   {
+    file: "engine/src/chart/account-merge.ts",
+    sites: [
+      { stance: "feeds-a-write", note: "declared account reference columns present in the schema; the merge redirects configuration through them" },
+    ],
+  },
+  {
+    file: "engine/src/chart/account-references.ts",
+    sites: [
+      { stance: "feeds-a-write", note: "foreign-key columns into accounts; the merge redirects configuration rows through them" },
+    ],
+  },
+  {
     file: "engine/src/crm/sales-readiness.ts",
     sites: [
       { stance: "presence-probe", note: "Sales rollout gate: the employee role flag exists" },
@@ -87,6 +99,12 @@ export const COLUMN_ENUMERATIONS: readonly EnumerationRegistration[] = [
     file: "engine/src/golden/scenario.ts",
     sites: [
       { stance: "presence-probe", note: "RLS census over tables that carry org_id" },
+    ],
+  },
+  {
+    file: "engine/src/hrm/benefits/transaction-policy.ts",
+    sites: [
+      { stance: "presence-probe", note: "asks whether the installed positions table carries the context fallback column before transaction programs run" },
     ],
   },
   {

@@ -191,7 +191,6 @@ const PENDING_TRANSITION_AUDIT = new Map(Object.entries({
   '0230_hrm_documents_surveys.sql': ['df9cb48c60420c4e498ae982eafbc9e1384723c0bf81b9c8f3eb773d5e105341'],
   '0231_field_time_capture.sql': ['0659e776d711c3820357441a167c89167b5aea1f4356d3bdc8596e319e117a68'],
   '0232_hrm_ai_rails.sql': ['046d0f6c2ab771a299af595919a19c28891a65624630b04d12743b2863b908cb', '83c3f217767bfac844e19d4a4f822944c0206bb70b305c773557f0c2de2d8248'],
-  '0236_jl_check_account_evidence_stamp.sql': ['7dd451656cd826e5274eef352a81e21c4443a1afadc058a617f9e3ca6f39bdb0'],
   '0244_item_pricing_hierarchy.sql': ['29c9e2fab9e292eb6cadbe8a2b9c3e7c5cef5d48a0d563020cf8eb8c54b72de1'],
 }))
 
