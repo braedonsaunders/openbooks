@@ -1,6 +1,7 @@
 import { captureFieldTicketLaborEvidence } from "../projects/field-ticket-labor-evidence.ts";
 import { recordProgress, reverseProgress } from "../projects/progress.ts";
 import { businessTodayInTx } from "../platform/business-date.ts";
+import { mondayOfIsoWeek } from "../platform/civil-date.ts";
 import { receiveInventory } from "../inventory/movements.ts";
 import { INDUSTRY_STOCK } from "./industry-detail.ts";
 import { sampleOperatingPolicy } from "./policy.ts";
@@ -9,8 +10,8 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { sealSecret } from "../platform/secrets.ts";
 import { createTrainingCourse } from "../hrm/training/store.ts";
-import { createShiftTemplate } from "../hrm/shifts/templates.ts";
-import { createAttendanceDevice, updateAttendanceDevice } from "../hrm/shifts/devices.ts";
+import { savePattern } from "../schedule-boards/pattern-store.ts";
+import { saveAttendanceDevice } from "../schedule-boards/attendance.ts";
 import { createCompensationPackage } from "../payroll/compensation-package-store.ts";
 import { moveConsignment } from "../inventory/consignment.ts";
 import { recordSupplyEvidence } from "../tax/cross-border-records.ts";
@@ -46,17 +47,29 @@ export async function installFeatureWorkflows(c: DemoContext): Promise<void> {
       qualificationTypeId: null, minimumAttendancePercent: 100, passingScore: 80, reason });
   }
   if (f.hrmShiftPlanning) {
-    const key = id("hrm_shift_templates");
-    if (!(await db.execute(sql`select id from hrm_shift_templates where org_id=${c.orgId} and id=${key}`)).rows.length) await createShiftTemplate({ ...actor,
-      id: key, subsidiaryId: c.subsidiaryId, normalWorkScheduleId: id("work_schedules"), code: "DEMO-CARE-TEAM", version: 1,
-      name: "Weekday care team", description: "Review staffing and attendance policy before publishing shifts.", effectiveFrom: c.date, effectiveTo: null,
-      timeZone: "America/New_York", slots: [1,2,3,4,5].map(position => ({ position, starts: "08:00", ends: "16:30", endDayOffset: 0 as const, plannedBreakSeconds: 1800, qualificationTypeIds: [] })), attendancePolicy: null, reason });
+    // A staged shift roster board and an inactive weekday pattern for the
+    // operator to review before assigning anyone.
+    const board = id("schedule_boards", "roster");
+    if (!(await db.execute(sql`select id from schedule_boards where org_id=${c.orgId} and id=${board}`)).rows.length) {
+      const inserted = await db.execute(sql`insert into schedule_boards (id, org_id, code, name, description, row_kind, board_type, subsidiary_id, grain, views, default_view,
+        time_zone, publish_policy, created_by, updated_by)
+        values (${board}, ${c.orgId}, 'DEMO-CARE-ROSTER', 'Care team roster', 'Synthetic shift roster; review staffing and attendance policy before publishing shifts.',
+        'people', 'shift_roster', ${c.subsidiaryId}, 'timed', '{timeline,grid,calendar}', 'timeline', 'America/New_York', 'staged', ${c.actorId}, ${c.actorId}) returning id`);
+      if (inserted.rows.length !== 1) throw new SampleCompanyError("The demonstration shift roster board could not be created.");
+    }
+    const key = id("schedule_patterns");
+    if (!(await db.execute(sql`select id from schedule_patterns where org_id=${c.orgId} and id=${key}`)).rows.length) await savePattern(actor, {
+      id: key, subsidiaryId: c.subsidiaryId, code: "DEMO-CARE-TEAM", name: "Weekday care team",
+      description: "Review staffing and attendance policy before activating and assigning the pattern.", timeZone: "America/New_York",
+      cycleDays: 7, cycleAnchor: mondayOfIsoWeek(c.date),
+      slots: [0, 1, 2, 3, 4].map(position => ({ position, starts: "08:00", ends: "16:30", breakMinutes: 30, qualificationTypeIds: [] })),
+      target: null, projectTaskId: null, departmentId: null, detail: null, horizonDays: 28, isActive: false, reason });
   }
   if (f.hrmAttendance) {
-    const key = id("hrm_attendance_devices");
-    if (!(await db.execute(sql`select id from hrm_attendance_devices where org_id=${c.orgId} and id=${key}`)).rows.length) {
-      const device = await createAttendanceDevice({ ...actor, id: key, subsidiaryId: c.subsidiaryId, code: "DEMO-CLINIC-CLOCK", name: "Clinic attendance import — disconnected", timeZone: "America/New_York", reason });
-      await updateAttendanceDevice({ ...actor, deviceId: key, expectedRevision: device.revision, name: device.name, isActive: false, reason });
+    const key = id("schedule_attendance_devices");
+    if (!(await db.execute(sql`select id from schedule_attendance_devices where org_id=${c.orgId} and id=${key}`)).rows.length) {
+      await saveAttendanceDevice(actor, { id: key, subsidiaryId: c.subsidiaryId, code: "DEMO-CLINIC-CLOCK", name: "Clinic attendance import — disconnected",
+        timeZone: "America/New_York", isActive: false, reason });
     }
   }
   if (f.compensationPackages) for (const [index, name] of ["Care team professional development", "Clinic travel allowance", "Practice performance award"].entries()) {

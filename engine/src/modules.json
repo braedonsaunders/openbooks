@@ -732,6 +732,7 @@
         "records",
         "sales",
         "sandbox",
+        "schedule-boards",
         "sim",
         "tax"
       ]
@@ -748,7 +749,7 @@
       ]
     },
     "schedule-boards": {
-      "description": "Unified scheduling boards: board definitions, booking targets, the people booking ledger and task production progress.",
+      "description": "Unified scheduling boards: the board-type registry, board definitions, booking targets, the booking ledger, shift roster patterns, shift requests and device attendance, and task production progress.",
       "dependsOn": [
         "delivery",
         "money",

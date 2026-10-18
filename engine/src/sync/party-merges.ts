@@ -67,10 +67,6 @@ const IMMUTABLE_PARTY_REFS: readonly (readonly [table: string, column: string])[
   ["payroll_period_openings", "employee_party_id"],
   ["payroll_employee_employer_assignments", "employee_party_id"],
   ["hrm_training_courses", "author_party_id"],
-  ["hrm_shift_templates", "author_party_id"],
-  ["hrm_shift_assignments", "author_party_id"],
-  ["hrm_shifts", "author_party_id"],
-  ["hrm_shift_requests", "author_party_id"],
   // Bookings name the person sent and the customer visited; a published
   // booking keeps both, so the history of who went where is never rewritten.
   ["schedule_entries", "worker_party_id"],
@@ -94,10 +90,6 @@ const IMMUTABLE_PARTY_REF_LABELS: Readonly<Record<string, string>> = {
   payroll_period_openings: "prior-provider payroll period balances",
   payroll_employee_employer_assignments: "dated payroll employer assignments",
   hrm_training_courses: "training course authorship evidence",
-  hrm_shift_templates: "shift template authorship evidence",
-  hrm_shift_assignments: "shift assignment authorship evidence",
-  hrm_shifts: "shift authorship evidence",
-  hrm_shift_requests: "shift request authorship evidence",
   schedule_entries: "booking history",
   schedule_patterns: "recurring shift pattern targets",
   schedule_pattern_assignments: "recurring shift assignments",

@@ -33,9 +33,9 @@ export const DEMO_FEATURE_EVIDENCE: Record<string, DemoFeatureEvidence> = {
   demandPlanning: configuration("demand_item_policies"),
   projectProgress: executed("projects", "project_tasks", "project_progress_entries"),
   unbilledRevenueAccrual: { ...workspace("projects", "time_entries"), limitation: "Draft work is ready for review; only approved eligible work can be accrued through the native revenue workflow." },
-  hrmTraining: configuration("hrm_training_courses"), hrmShiftPlanning: configuration("hrm_shift_templates"),
-  hrmAttendance: configuration("hrm_attendance_devices"),
-  hrmShiftClosing: { ...configuration("hrm_shift_templates", "hrm_attendance_devices"), limitation: "Draft rosters and a disconnected attendance device. Publish reviewed shifts and ingest actual synthetic clock evidence through the native workflow before closing a shift." },
+  hrmTraining: configuration("hrm_training_courses"), hrmShiftPlanning: configuration("schedule_boards", "schedule_patterns"),
+  hrmAttendance: configuration("schedule_attendance_devices"),
+  hrmShiftClosing: { ...configuration("schedule_patterns", "schedule_attendance_devices"), limitation: "A staged shift roster board with an inactive pattern and a disconnected attendance device. Assign the pattern, publish reviewed shifts and import synthetic check-ins through the native workflow before closing a shift." },
   compensationPackages: configuration("payroll_compensation_packages"),
   outboundWebhooks: { ...configuration("webhook_endpoints"), limitation: "Disabled endpoint with no subscribed events. Configure a reachable endpoint and rotate its secret through native setup before activation." },
 

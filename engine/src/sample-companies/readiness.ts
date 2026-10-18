@@ -32,8 +32,8 @@ export async function verifyNativeOperatingEvidence(c: DemoContext): Promise<str
   }
   const requirements: Array<{ table: string; keys: string[] }> = [];
   if (features.hrmTraining) requirements.push({ table: "hrm_training_courses", keys: ["course-0", "course-1", "course-2"] });
-  if (features.hrmShiftPlanning) requirements.push({ table: "hrm_shift_templates", keys: ["main"] });
-  if (features.hrmAttendance) requirements.push({ table: "hrm_attendance_devices", keys: ["main"] });
+  if (features.hrmShiftPlanning) requirements.push({ table: "schedule_boards", keys: ["roster"] }, { table: "schedule_patterns", keys: ["main"] });
+  if (features.hrmAttendance) requirements.push({ table: "schedule_attendance_devices", keys: ["main"] });
   if (features.compensationPackages) requirements.push({ table: "payroll_compensation_packages", keys: ["package-0", "package-1", "package-2"] });
   if (features.outboundWebhooks) requirements.push({ table: "webhook_endpoints", keys: ["main"] });
   for (const requirement of requirements) {

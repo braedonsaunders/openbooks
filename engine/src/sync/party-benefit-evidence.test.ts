@@ -49,10 +49,9 @@ test('recorded payroll subjects and approval authors refuse party merges before 
       ['payroll_period_openings', 'prior-provider payroll period balances'],
       ['payroll_employee_employer_assignments', 'dated payroll employer assignments'],
       ['hrm_training_courses', 'training course authorship evidence'],
-      ['hrm_shift_templates', 'shift template authorship evidence'],
-      ['hrm_shift_assignments', 'shift assignment authorship evidence'],
-      ['hrm_shifts', 'shift authorship evidence'],
-      ['hrm_shift_requests', 'shift request authorship evidence'],
+      ['schedule_pattern_assignments', 'recurring shift assignments'],
+      ['schedule_entry_requests', 'shift request history'],
+      ['schedule_attendance_observations', 'attendance observations'],
     ] as const) {
       protectedTable = table!;
       queries.length = 0;

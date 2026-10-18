@@ -219,22 +219,6 @@ export const EXCLUDE = new Set([
   "webhook_endpoints",
   "webhook_events",
   "webhook_deliveries",
-  // Rosters and attendance are environment-specific: production device
-  // identities, roster decisions and source evidence are never copied, and a
-  // sandbox establishes its own operational records.
-  "hrm_shift_templates",
-  "hrm_shift_assignments",
-  "hrm_shift_publications",
-  "hrm_shifts",
-  "hrm_shift_requests",
-  "hrm_attendance_devices",
-  "hrm_attendance_identities",
-  "hrm_attendance_batches",
-  "hrm_attendance_events",
-  "hrm_attendance_watermarks",
-  "hrm_attendance_observations",
-  "hrm_attendance_event_claims",
-  "hrm_attendance_observation_events",
   // Time-clock sources and their check-in evidence belong to the source
   // environment; a sandbox maps its own devices and imports its own check-ins.
   "schedule_attendance_devices",

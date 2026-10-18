@@ -42,8 +42,8 @@ export function sampleOperatorAuthorship(industryKey: string): SampleAuthorContr
   if (f.nonprofit) contracts.push({ table: "nonprofit_frameworks", actorColumns: ["set_by", "created_by", "updated_by"], requiresPerson: false });
   if (f.compensationPackages) contracts.push({ table: "payroll_compensation_packages", actorColumns: ["created_by", "updated_by"], requiresPerson: false });
   if (f.hrmTraining) contracts.push({ table: "hrm_training_courses", actorColumns: ["created_by", "updated_by"], requiresPerson: true });
-  if (f.hrmShiftPlanning) contracts.push({ table: "hrm_shift_templates", actorColumns: ["created_by", "updated_by"], requiresPerson: true });
-  if (f.hrmAttendance) contracts.push({ table: "hrm_attendance_devices", actorColumns: ["created_by", "updated_by"], requiresPerson: false });
+  if (f.hrmShiftPlanning) contracts.push({ table: "schedule_patterns", actorColumns: ["created_by", "updated_by"], requiresPerson: false });
+  if (f.hrmAttendance) contracts.push({ table: "schedule_attendance_devices", actorColumns: ["created_by", "updated_by"], requiresPerson: false });
   return contracts;
 }
 
@@ -51,7 +51,7 @@ export class SampleLocalAuthorRequiredError extends SampleCompanyError {
   readonly name = "SampleLocalAuthorRequiredError";
   readonly code = "SAMPLE_LOCAL_AUTHOR_REQUIRED";
   constructor(readonly industryKey: string, readonly requiredRecords: readonly SampleAuthorContract[]) {
-    super(`The ${industryKey} sample requires a local author for ${requiredRecords.map(record => record.table).join(", ")}. These native records reference users in their own company${requiredRecords.some(record => record.requiresPerson) ? " and training/roster authorship also requires a local person identity" : ""}. Select an active home-company user through the supported audited Users & Roles workflow, then review refresh-plan --industry ${industryKey} --actor UUID. A platform permission grant does not replace native record authorship; sample refresh never creates shadow users or changes grants.`);
+    super(`The ${industryKey} sample requires a local author for ${requiredRecords.map(record => record.table).join(", ")}. These native records reference users in their own company${requiredRecords.some(record => record.requiresPerson) ? " and training authorship also requires a local person identity" : ""}. Select an active home-company user through the supported audited Users & Roles workflow, then review refresh-plan --industry ${industryKey} --actor UUID. A platform permission grant does not replace native record authorship; sample refresh never creates shadow users or changes grants.`);
   }
 }
 

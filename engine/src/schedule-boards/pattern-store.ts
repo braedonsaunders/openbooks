@@ -101,7 +101,7 @@ async function requireQualificationTypes(orgId: string, slots: readonly PatternS
 
 /** Create or revise a pattern. Revisions change only bookings generated afterwards. */
 export async function savePattern(actor: ScheduleActor, input: PatternInput & { id?: string; expectedRevision?: number }): Promise<{ id: string; record: SchedulePattern }> {
-  if ((input.id === undefined) !== (input.expectedRevision === undefined)) {
+  if (input.expectedRevision !== undefined && input.id === undefined) {
     throw new ScheduleError("Name the pattern and its current revision to change it.", { status: 409, code: "schedule_stale", remedy: "Reload the pattern." });
   }
   const subsidiaryId = input.subsidiaryId === null ? null : requireId(input.subsidiaryId, "Legal entity");
@@ -147,7 +147,7 @@ export async function savePattern(actor: ScheduleActor, input: PatternInput & { 
       if (updated.length !== 1) throw new ScheduleError("Someone changed this pattern since it was loaded.", { status: 409, code: "schedule_stale", remedy: "Reload the pattern." });
       return { id, record: updated[0]! };
     }
-    const id = crypto.randomUUID();
+    const id = input.id === undefined ? crypto.randomUUID() : requireId(input.id, "Pattern key");
     const saved = (await db.execute<SchedulePattern>(sql`insert into schedule_patterns (id, org_id, subsidiary_id, code, name, description, time_zone, cycle_days, cycle_anchor, slots,
       target_kind, customer_party_id, project_id, project_task_id, location_id, schedule_code_id, department_id, detail, horizon_days, is_active, reason, created_by, updated_by)
       values (${id}, ${actor.orgId}, ${subsidiaryId}, ${code}, ${name}, ${description}, ${pattern.timeZone}, ${pattern.cycleDays}, ${pattern.cycleAnchor}, ${JSON.stringify(pattern.slots)}::jsonb,

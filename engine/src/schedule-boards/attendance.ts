@@ -101,7 +101,7 @@ export async function saveAttendanceDevice(actor: ScheduleActor, input: {
     }
     await attendanceAuthority(actor, "hrm.attendance.manage", subsidiaryId);
     if (!(await db.execute(sql`select id from subsidiaries where org_id = ${actor.orgId} and id = ${subsidiaryId} and is_active for share`)).rows.length) throw new ScopeNotFoundError();
-    const id = crypto.randomUUID();
+    const id = input.id === undefined ? crypto.randomUUID() : requireId(input.id, "Device key");
     const saved = (await db.execute<AttendanceDevice>(sql`insert into schedule_attendance_devices (id, org_id, subsidiary_id, code, name, time_zone, is_active, reason, request_hash, created_by, updated_by)
       values (${id}, ${actor.orgId}, ${subsidiaryId}, ${code}, ${name}, ${timeZone}, ${input.isActive}, ${reason}, ${hash({ subsidiaryId, code, name, timeZone, reason })}, ${actor.actorId}, ${actor.actorId})
       returning ${DEVICE_COLUMNS}`)).rows;

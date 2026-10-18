@@ -13,7 +13,7 @@ const PROTECTED_TABLES = [
   "accounts", "subsidiaries", "accounting_books", "fiscal_calendars", "accounting_periods", "period_locks",
   "parties", "customer_roles", "vendor_roles", "employee_roles", "role_assignments", "user_org_access",
   "pay_components", "entitlement_plans", "entitlement_plan_limits", "payroll_compensation_packages",
-  "hrm_training_courses", "hrm_shift_templates", "hrm_attendance_devices", "work_schedules",
+  "hrm_training_courses", "schedule_boards", "schedule_patterns", "schedule_attendance_devices", "work_schedules",
   "bank_statements", "bank_statement_lines", "reconciliations", "reconciliation_matches",
   "quote_subscription_terms", "quote_ramp_steps", "document_supply_evidence",
   "subscription_plans", "subscriptions", "usage_meters", "usage_rating_plans", "usage_rating_plan_versions",

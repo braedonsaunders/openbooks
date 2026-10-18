@@ -785,13 +785,6 @@ export const TENANT_RETIREMENT_GUARDS = [
     "patch": true
   },
   {
-    "name": "hrm_shift_guard",
-    "source": "0552_hrm_shift_attendance.sql",
-    "sha256": "d09d3c7edd691bc56b640f1214a04ebaa8d057e80bc148c32052499cf2b558f4",
-    "newSha256": "eda7e61078e4fd4373169cacde61600005ae5c91861580c4d5729e8b7e3959ff",
-    "patch": true
-  },
-  {
     "name": "hrm_talent_review_no_delete",
     "source": "0228_hrm_continuous_performance.sql",
     "sha256": "0fb8da368c72f0d2c87bdc44a1a5697440cdc82f5be92d5475e60e81684b54de",
@@ -2264,12 +2257,6 @@ export const TENANT_RETIREMENT_GUARD_ATTRIBUTES = [
   {
     "name": "hrm_scorecard_submitted_immutable",
     "config": []
-  },
-  {
-    "name": "hrm_shift_guard",
-    "config": [
-      "search_path=public,pg_catalog"
-    ]
   },
   {
     "name": "hrm_talent_review_no_delete",
@@ -4247,71 +4234,6 @@ export const TENANT_RETIREMENT_TRIGGER_CONTRACTS = [
     "table": "payroll_compensation_assignments",
     "trigger": "payroll_compensation_configuration",
     "function": "payroll_compensation_configuration_guard"
-  },
-  {
-    "table": "hrm_shift_templates",
-    "trigger": "hrm_shift_guard",
-    "function": "hrm_shift_guard"
-  },
-  {
-    "table": "hrm_shift_assignments",
-    "trigger": "hrm_shift_guard",
-    "function": "hrm_shift_guard"
-  },
-  {
-    "table": "hrm_shift_publications",
-    "trigger": "hrm_shift_guard",
-    "function": "hrm_shift_guard"
-  },
-  {
-    "table": "hrm_shifts",
-    "trigger": "hrm_shift_guard",
-    "function": "hrm_shift_guard"
-  },
-  {
-    "table": "hrm_shift_requests",
-    "trigger": "hrm_shift_guard",
-    "function": "hrm_shift_guard"
-  },
-  {
-    "table": "hrm_attendance_devices",
-    "trigger": "hrm_shift_guard",
-    "function": "hrm_shift_guard"
-  },
-  {
-    "table": "hrm_attendance_identities",
-    "trigger": "hrm_shift_guard",
-    "function": "hrm_shift_guard"
-  },
-  {
-    "table": "hrm_attendance_batches",
-    "trigger": "hrm_shift_guard",
-    "function": "hrm_shift_guard"
-  },
-  {
-    "table": "hrm_attendance_events",
-    "trigger": "hrm_shift_guard",
-    "function": "hrm_shift_guard"
-  },
-  {
-    "table": "hrm_attendance_watermarks",
-    "trigger": "hrm_shift_guard",
-    "function": "hrm_shift_guard"
-  },
-  {
-    "table": "hrm_attendance_observations",
-    "trigger": "hrm_shift_guard",
-    "function": "hrm_shift_guard"
-  },
-  {
-    "table": "hrm_attendance_event_claims",
-    "trigger": "hrm_shift_guard",
-    "function": "hrm_shift_guard"
-  },
-  {
-    "table": "hrm_attendance_observation_events",
-    "trigger": "hrm_shift_guard",
-    "function": "hrm_shift_guard"
   },
   {
     "table": "hrm_training_courses",
