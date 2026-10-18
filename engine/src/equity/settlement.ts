@@ -58,12 +58,15 @@ export async function accruedToDate(orgId: string, securityId: string): Promise<
   return toUnits(row?.runs ?? "0") + toUnits(row?.events ?? "0");
 }
 
-async function principalLine(orgId: string, security: SecurityRecord): Promise<{ accountId: string; currency: string; fxRate: string; units: bigint; txnUnits: bigint }> {
+/** The credit the issuance posted to the convertible instruments account of the policy in force on the issue date. */
+async function principalLine(orgId: string, subsidiaryId: string, security: SecurityRecord): Promise<{ accountId: string; currency: string; fxRate: string; units: bigint; txnUnits: bigint }> {
+  const issuedUnder = await resolveAccountPolicy(db, orgId, subsidiaryId, security.issueDate);
   const rows = (await db.execute<{ account_id: string; currency: string; fx_rate: string; amount: string; txn_amount: string }>(sql`
     select l.account_id, l.currency, l.fx_rate::text as fx_rate, l.amount::text as amount, l.txn_amount::text as txn_amount
       from equity_securities s
       join journal_lines l on l.org_id = s.org_id and l.entry_id = s.journal_entry_id
-     where s.org_id = ${orgId} and s.id = ${security.id} and l.amount < 0`)).rows;
+     where s.org_id = ${orgId} and s.id = ${security.id} and l.amount < 0
+       and l.account_id = ${issuedUnder.convertibleInstrumentsAccountId}`)).rows;
   if (rows.length !== 1) {
     throw new EquityError(`The issuance entry of ${security.securityNumber} does not identify its principal.`, {
       status: 409,
@@ -92,7 +95,7 @@ export async function settleConvertible(input: {
   const { security, on, functional } = input;
   const exponent = await currencyExponent(db, security.currency);
   const fxRate = await spotRate(db, input.orgId, security.currency, functional, on, functional);
-  const principal = await principalLine(input.orgId, security);
+  const principal = await principalLine(input.orgId, input.subsidiaryId, security);
   const legs: EquityLeg[] = [{
     accountId: principal.accountId,
     units: principal.units,

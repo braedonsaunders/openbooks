@@ -2883,7 +2883,7 @@
       "equity-account-policies": {
         "title": "Equity Accounts",
         "singular": "Equity account policy",
-        "description": "Per legal entity and effective date: the share capital, paid-in capital, treasury stock, stock compensation expense and convertible instruments accounts that equity transactions post to."
+        "description": "Per legal entity and effective date: the share capital, paid-in capital, treasury stock, stock compensation expense, convertible instruments, note interest and early-exercise deposit accounts that equity transactions post to."
       },
       "pos-registers": {
         "title": "Registers",
@@ -3928,6 +3928,9 @@
       "compensationExpenseAccountId": "Stock compensation expense account",
       "treasuryStockAccountId": "Treasury stock account",
       "convertibleInstrumentsAccountId": "Convertible instruments account",
+      "interestExpenseAccountId": "Convertible note interest expense account",
+      "accruedInterestAccountId": "Accrued note interest account",
+      "earlyExerciseDepositAccountId": "Early-exercise deposit account",
       "aggregation": "Aggregation",
       "addressLine1": "Address line 1",
       "addressLine2": "Address line 2",
@@ -4643,7 +4646,9 @@
     },
     "fieldHelp": {
       "apicShareBasedAccount": "Credited as stock compensation is recognized; reclassified to share capital when awards are exercised or settled.",
-      "convertibleInstrumentsAccount": "Carries SAFEs and convertible notes at their converting amount (notes including accrued interest) until they convert.",
+      "convertibleInstrumentsAccount": "Carries SAFEs and convertible notes at their principal until they convert, are repaid or are cancelled.",
+      "accruedInterestAccount": "Carries interest accrued on convertible notes until they convert, are repaid or are cancelled. It may be the convertible instruments account.",
+      "earlyExerciseDepositAccount": "Holds cash received for unvested shares bought by early exercise until the shares vest or are repurchased.",
       "posCashAccount": "The till's cash account. Cash sales, cash refunds, pay-ins, pay-outs and the closing over/short post here.",
       "posCardAccount": "Card payments settle into this clearing account. Leave blank if this register does not take cards.",
       "posOtherAccount": "Other payments, such as vouchers or cheques, settle into this account. Leave blank if this register does not take them.",

@@ -73,7 +73,8 @@
     "transferred": "Transferido",
     "converted": "Convertido",
     "void": "Anulado",
-    "not_issued": "Aún no emitido"
+    "not_issued": "Aún no emitido",
+    "repaid": "Reembolsado"
   },
   "eventKind": {
     "exercise": "Ejercicio",
@@ -84,7 +85,10 @@
     "repurchase": "Recompra",
     "transfer": "Transferencia",
     "convert": "Conversión",
-    "void": "Anulación"
+    "void": "Anulación",
+    "repay": "Reembolso",
+    "reverse": "Reversión",
+    "election_83b": "Elección 83(b)"
   },
   "optionType": {
     "iso": "Opción de incentivo (ISO)",
@@ -96,7 +100,10 @@
   },
   "interestBasis": {
     "simple": "Interés simple",
-    "compound_annual": "Compuesto anualmente"
+    "compound_annual": "Compuesto anualmente",
+    "compound_semiannual": "Compuesto semestralmente",
+    "compound_quarterly": "Compuesto trimestralmente",
+    "compound_monthly": "Compuesto mensualmente"
   },
   "frequency": {
     "monthly": "Mensual",
@@ -188,7 +195,16 @@
     "vestingFrequency": "Frecuencia de consolidación",
     "vestingMonths": "Plazo de consolidación (meses)",
     "vestingStart": "Inicio de consolidación",
-    "volatilityPercent": "Volatilidad (%)"
+    "volatilityPercent": "Volatilidad (%)",
+    "currency": "Moneda",
+    "earlyExercise": "Ejercicio anticipado",
+    "mfn": "Nación más favorecida",
+    "filedOn": "Fecha de presentación",
+    "fairMarketValuePerShare": "Valor justo de mercado por acción",
+    "amountRepaid": "Importe reembolsado",
+    "interestDayCount": "Base de cómputo de días",
+    "unvestedRepurchaseBasis": "Precio de recompra de acciones no consolidadas",
+    "conversionClass": "Se convierte en"
   },
   "capTable": {
     "by": {
@@ -218,7 +234,9 @@
       "rsus": "RSU",
       "warrants": "Warrants",
       "actions": "Acciones"
-    }
+    },
+    "exportTitle": "{entity} — tabla de capitalización",
+    "exportAsOf": "Al {date}"
   },
   "classActions": {
     "title": "Clase {code}",
@@ -228,9 +246,12 @@
     "split": "División",
     "currentAuthorized": "Actualmente {value} acciones",
     "currentConversionPrice": "Actualmente {value}",
-    "splitHelp": "Una división reexpresa cada tenencia, otorgamiento, reserva y precio de la clase desde su fecha. Debe tener una fecha posterior a la última actividad registrada de la clase.",
+    "splitHelp": "Una división reexpresa cada tenencia, otorgamiento, reserva y precio de la clase desde su fecha, y ajusta el precio de conversión de las clases preferentes que se convierten en ella. Debe tener una fecha posterior a la última actividad registrada de la clase y de esas clases preferentes.",
     "saved": "Guardado",
-    "failed": "El cambio no se guardó."
+    "failed": "El cambio no se guardó.",
+    "conversionClass": "Clase de conversión",
+    "conversionClassHelp": "La clase común en la que se convierten las acciones preferentes desde la fecha. Sus divisiones ajustan el precio de conversión cuando las condiciones de la clase así lo establecen.",
+    "splitAdjusted": "Precios de conversión ajustados: {classes}"
   },
   "securities": {
     "allKinds": "Todos",
@@ -289,7 +310,8 @@
     "sections": {
       "rounds": "Rondas",
       "convertibles": "Instrumentos convertibles",
-      "model": "Modelar una ronda"
+      "model": "Modelar una ronda",
+      "interest": "Intereses de notas"
     },
     "empty": "Aún no hay rondas de financiación.",
     "convertiblesEmpty": "No hay SAFE ni notas convertibles.",
@@ -344,7 +366,7 @@
     }
   },
   "waterfall": {
-    "description": "Distribuye un valor de salida sobre la tabla de capitalización a la fecha de corte: se reembolsan las notas, las preferencias se pagan por orden de prelación y el resto se reparte entre las acciones comunes, las preferentes participativas o que se convierten y los otorgamientos dentro del dinero. No se registra nada.",
+    "description": "Distribuye un valor de salida sobre la tabla de capitalización a la fecha de corte: se reembolsan las notas, las preferencias se pagan por orden de prelación, cada SAFE toma el mayor entre su importe en efectivo y su importe de conversión, y el resto se reparte entre las acciones comunes, las preferentes participativas o que se convierten, los SAFE que se convierten y los otorgamientos dentro del dinero. No se registra nada.",
     "exitValue": "Valor de salida",
     "unvested": "Otorgamientos no consolidados",
     "unvestedParticipate": "Participan",
@@ -367,8 +389,12 @@
       "total": "Total",
       "perShare": "Por acción",
       "payout": "Pago",
-      "percent": "Parte de la salida"
-    }
+      "percent": "Parte de la salida",
+      "safeShares": "Acciones de conversión"
+    },
+    "safes": "SAFE",
+    "safeConverts": "Toma su importe de conversión",
+    "safeCashOut": "Toma su importe de liquidación en efectivo"
   },
   "compensation": {
     "schedule": "Calendario",
@@ -390,8 +416,15 @@
       "period": "Esta ejecución",
       "through": "Hasta",
       "total": "Total",
-      "entry": "Asiento contable"
-    }
+      "entry": "Asiento contable",
+      "releasedShares": "Acciones restringidas liberadas",
+      "deposit": "Depósito liberado",
+      "reclass": "Valor en la fecha de otorgamiento",
+      "par": "Valor nominal"
+    },
+    "releases": "Liberaciones de acciones restringidas",
+    "releasesHelp": "Los depósitos de ejercicio anticipado pasan al capital social y al capital adicional pagado a medida que las acciones restringidas se consolidan; se contabilizan con la ejecución.",
+    "releasesEmpty": "Ninguna acción restringida se consolida hasta esta fecha."
   },
   "drawer": {
     "tabs": "Secciones del valor",
@@ -421,7 +454,21 @@
     "eventQuantity": "Cantidad",
     "eventAmount": "Importe",
     "eventEntry": "Asiento",
-    "eventReason": "Motivo"
+    "eventReason": "Motivo",
+    "issueRate": "medido a {rate}",
+    "mfnAdopted": "MFN · condiciones adoptadas",
+    "mfnOpen": "MFN · condiciones pactadas",
+    "interestPosted": "Intereses contabilizados",
+    "exercisable": "Ejercitable ahora",
+    "restrictedShares": "Acciones restringidas",
+    "releasedShares": "Liberadas a la fecha",
+    "depositHeld": "Depósito retenido",
+    "election83b": "Elección 83(b)",
+    "mfn": "Condiciones MFN",
+    "restrictedFrom": "Acciones restringidas de un ejercicio anticipado ({basis}) de",
+    "reversed": "Revertido",
+    "accrualEntry": "Devengo de intereses",
+    "reverse": "Revertir"
   },
   "events": {
     "saved": "{kind} registrado",
@@ -435,8 +482,16 @@
       "repurchase": "La empresa recompra acciones a tesorería por el importe pagado (requiere aprobación).",
       "transfer": "Las unidades consolidadas pasan a otro titular con un nuevo certificado.",
       "convert": "Los SAFE y las notas se convierten al precio de una ronda en su fecha de cierre; las acciones preferentes se convierten en comunes según la razón de conversión de la clase.",
-      "void": "Corrige un registro ingresado por error: su asiento se revierte en la fecha de anulación y se deshace el evento que lo generó (requiere aprobación)."
-    }
+      "void": "Corrige un registro ingresado por error: su asiento se revierte en la fecha de anulación y se deshace el evento que lo generó (requiere aprobación).",
+      "repay": "Reembolse un SAFE por su importe de compra, o una nota por su principal y los intereses devengados hasta la fecha, que se devengan primero. La prima o el descuento de una nota se contabiliza en gasto por intereses. Requiere aprobación.",
+      "election_83b": "Registre la fecha en que el titular presentó una elección 83(b) para estas acciones restringidas. La elección debe presentarse dentro de los 30 días siguientes a la fecha de emisión.",
+      "exerciseEarly": "Este otorgamiento admite el ejercicio anticipado: primero se ejercen las unidades consolidadas y luego los tramos no consolidados más próximos. Las acciones no consolidadas se emiten como acciones restringidas que la empresa puede recomprar hasta que se consoliden; su efectivo se mantiene como depósito y se libera al capital a medida que se consolidan.",
+      "repurchaseRestricted": "Las acciones restringidas no consolidadas se recompran según las condiciones del otorgamiento, liquidando su depósito. Ingrese el valor justo de mercado por acción cuando el otorgamiento fije el precio al menor entre el costo y el valor justo de mercado. Requiere aprobación.",
+      "cancelConvertible": "Cancele el SAFE o la nota sin pago: su principal y los intereses devengados pasan a capital adicional pagado. Requiere aprobación."
+    },
+    "reversed": "{kind} revertido",
+    "carryingHint": "Importe en libros a la fecha de referencia: {amount}",
+    "targetClassHint": "De forma predeterminada, la clase de conversión de la clase."
   },
   "new": {
     "open": "Nuevo",
@@ -455,7 +510,7 @@
       "rsu": "Las RSU se valoran al precio de la acción en la fecha de otorgamiento; su costo se contabiliza mediante la ejecución de compensación en acciones.",
       "warrant": "Los warrants tienen un precio de ejercicio; el efectivo pagado por el warrant se contabiliza en capital adicional pagado.",
       "safe": "El importe de compra se contabiliza en la cuenta de instrumentos convertibles hasta que el SAFE se convierte.",
-      "note": "El principal se contabiliza en la cuenta de instrumentos convertibles; los intereses se devengan sobre una base Actual/365 hasta la conversión."
+      "note": "El principal se contabiliza en la cuenta de instrumentos convertibles; los intereses se devengan según la base de cómputo de días de la nota mediante la ejecución de intereses hasta que se convierte, se reembolsa o se cancela."
     },
     "considerationHint": "De forma predeterminada, el precio por la cantidad.",
     "numberHint": "Déjelo en blanco para numerarlo automáticamente.",
@@ -476,6 +531,79 @@
     "planSaved": "Plan registrado",
     "roundHelp": "Registre una ronda cerrada y, a continuación, emita sus acciones y convierta sus SAFE y notas con base en ella.",
     "createRound": "Registrar ronda",
-    "roundSaved": "Ronda registrada"
+    "roundSaved": "Ronda registrada",
+    "mfn": "MFN: puede adoptar mejores condiciones de un instrumento posterior",
+    "earlyExercise": "Permite el ejercicio anticipado de unidades no consolidadas",
+    "currencyHint": "De forma predeterminada, la moneda de la entidad jurídica ({currency}); otra moneda se mide al tipo de cambio de la fecha de emisión.",
+    "roundCurrencyHint": "Emitido en la moneda de la ronda ({currency}).",
+    "conversionClassMissing": "Registre primero una clase común; las acciones preferentes se convierten en ella.",
+    "adjustsForSplits": "El precio de conversión se ajusta por divisiones de la clase de conversión"
+  },
+  "dayCount": {
+    "actual_365": "Actual/365",
+    "actual_360": "Actual/360",
+    "thirty_360": "30/360",
+    "actual_actual": "Actual/Actual (ISDA)"
+  },
+  "repurchaseBasis": {
+    "cost": "Acciones no consolidadas recompradas al costo",
+    "lower_of_cost_or_fmv": "Acciones no consolidadas recompradas al menor entre el costo y el valor justo de mercado",
+    "none": "No hay condiciones de recompra registradas"
+  },
+  "election83b": {
+    "filed": "83(b) presentada",
+    "open": "83(b) pendiente",
+    "missed": "83(b) no presentada",
+    "filedOn": "Presentada el {date}",
+    "due": "Vence el {date} · quedan {days} días",
+    "missedOn": "Plazo cerrado el {date}",
+    "deadline": "Plazo de 83(b): {date}"
+  },
+  "interest": {
+    "schedule": "Devengo",
+    "runs": "Ejecuciones contabilizadas",
+    "post": "Contabilizar intereses hasta el {date}",
+    "posted": "Intereses contabilizados hasta el {date}",
+    "replayed": "La ejecución de intereses hasta el {date} ya estaba contabilizada",
+    "failed": "La ejecución de intereses no se contabilizó.",
+    "lastRun": "Última ejecución hasta el {date}",
+    "noRuns": "Aún no hay ejecuciones de intereses contabilizadas",
+    "total": "Variación a contabilizar",
+    "empty": "Ninguna nota convertible devenga intereses hasta esta fecha.",
+    "runsEmpty": "Aún no hay ejecuciones de intereses contabilizadas.",
+    "columns": {
+      "cumulative": "Devengado a la fecha",
+      "previous": "Devengado previamente",
+      "period": "Esta ejecución",
+      "functional": "Esta ejecución (moneda funcional)"
+    }
+  },
+  "reversal": {
+    "title": "Revertir {kind} del {date}",
+    "help": "El asiento del evento se revierte en la fecha de reversión y sus unidades o su saldo se restituyen desde esa fecha; el historial anterior se mantiene. La actividad posterior que depende del evento debe revertirse primero. Requiere aprobación."
+  },
+  "mfn": {
+    "description": "Este SAFE puede adoptar las condiciones de un instrumento convertible emitido después de él, en su moneda, mientras esté en circulación: un tope cuando no tiene ninguno o tiene uno superior, un descuento cuando no tiene ninguno o tiene uno inferior, o la conversión post-money. El tope, el descuento y el tipo de SAFE del instrumento posterior se adoptan en conjunto desde la fecha de elección.",
+    "noCandidates": "Ningún instrumento posterior ofrece mejores condiciones al {date}.",
+    "none": "Ninguno",
+    "changes": "Frente a las condiciones vigentes",
+    "better": {
+      "cap": "Tope inferior",
+      "discount": "Descuento superior",
+      "post_money": "Post-money"
+    },
+    "worse": {
+      "cap": "Tope superior o sin tope",
+      "discount": "Descuento inferior o sin descuento",
+      "post_money": "Pre-money"
+    },
+    "adopt": "Adoptar",
+    "adoptHelp": "Registre la elección del titular de adoptar las condiciones de {number}. Las conversiones desde la fecha de elección las utilizan. Requiere aprobación.",
+    "electedOn": "Fecha de elección",
+    "record": "Registrar elección",
+    "elections": "Elecciones registradas",
+    "source": "Condiciones de",
+    "saved": "Elección MFN registrada",
+    "failed": "La elección no se registró."
   }
 }

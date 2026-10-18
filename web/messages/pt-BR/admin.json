@@ -2883,7 +2883,7 @@
       "equity-account-policies": {
         "title": "Contas de patrimônio",
         "singular": "Política de contas de patrimônio",
-        "description": "Por entidade legal e data de vigência: as contas de capital social, reserva de capital, ações em tesouraria, despesa de remuneração em ações e instrumentos conversíveis nas quais as transações de patrimônio são lançadas."
+        "description": "Por entidade legal e data de vigência: as contas de capital social, reserva de capital, ações em tesouraria, despesa de remuneração em ações, instrumentos conversíveis, juros de notas e depósitos de exercício antecipado nas quais as transações de patrimônio são lançadas."
       },
       "pos-registers": {
         "title": "Caixas",
@@ -3928,6 +3928,9 @@
       "compensationExpenseAccountId": "Conta de despesa de remuneração em ações",
       "treasuryStockAccountId": "Conta de ações em tesouraria",
       "convertibleInstrumentsAccountId": "Conta de instrumentos conversíveis",
+      "interestExpenseAccountId": "Conta de despesa de juros de notas conversíveis",
+      "accruedInterestAccountId": "Conta de juros acumulados de notas",
+      "earlyExerciseDepositAccountId": "Conta de depósitos de exercício antecipado",
       "aggregation": "Agregação",
       "addressLine1": "Endereço, linha 1",
       "addressLine2": "Endereço, linha 2",
@@ -4643,7 +4646,9 @@
     },
     "fieldHelp": {
       "apicShareBasedAccount": "Creditada à medida que a remuneração em ações é reconhecida; reclassificada para o capital social quando as outorgas são exercidas ou liquidadas.",
-      "convertibleInstrumentsAccount": "Mantém os SAFEs e as notas conversíveis pelo valor de conversão (notas incluindo juros acumulados) até a conversão.",
+      "convertibleInstrumentsAccount": "Mantém os SAFEs e as notas conversíveis pelo principal até que sejam convertidos, reembolsados ou cancelados.",
+      "accruedInterestAccount": "Mantém os juros acumulados sobre notas conversíveis até que sejam convertidas, reembolsadas ou canceladas. Pode ser a conta de instrumentos conversíveis.",
+      "earlyExerciseDepositAccount": "Mantém o dinheiro recebido por ações não adquiridas compradas por exercício antecipado até que as ações sejam adquiridas ou recompradas.",
       "posCashAccount": "A conta de dinheiro do caixa. Vendas e reembolsos em dinheiro, entradas, saídas e a diferença do fechamento são lançados aqui.",
       "posCardAccount": "Pagamentos com cartão são liquidados nesta conta transitória. Deixe em branco se este caixa não aceita cartões.",
       "posOtherAccount": "Outros pagamentos, como vales ou cheques, são liquidados nesta conta. Deixe em branco se este caixa não os aceita.",

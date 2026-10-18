@@ -2970,7 +2970,7 @@
       "equity-account-policies": {
         "title": "Eigenkapitalkonten",
         "singular": "Eigenkapital-Kontenrichtlinie",
-        "description": "Je Rechtseinheit und Gültigkeitsdatum: die Konten für gezeichnetes Kapital, Kapitalrücklage, eigene Anteile, Aufwand aus aktienbasierter Vergütung und Wandelinstrumente, auf die Eigenkapitalvorgänge gebucht werden."
+        "description": "Je Rechtseinheit und Gültigkeitsdatum: die Konten für gezeichnetes Kapital, Kapitalrücklage, eigene Anteile, Aufwand aus aktienbasierter Vergütung, Wandelinstrumente, Darlehenszinsen und Einlagen aus vorzeitiger Ausübung, auf die Eigenkapitalvorgänge gebucht werden."
       },
       "pos-registers": {
         "title": "Kassen",
@@ -4015,6 +4015,9 @@
       "compensationExpenseAccountId": "Konto Aufwand aktienbasierte Vergütung",
       "treasuryStockAccountId": "Konto eigene Anteile",
       "convertibleInstrumentsAccountId": "Konto Wandelinstrumente",
+      "interestExpenseAccountId": "Konto Zinsaufwand Wandeldarlehen",
+      "accruedInterestAccountId": "Konto aufgelaufene Darlehenszinsen",
+      "earlyExerciseDepositAccountId": "Konto Einlagen aus vorzeitiger Ausübung",
       "aggregation": "Aggregation",
       "addressLine1": "Adresszeile 1",
       "addressLine2": "Adresszeile 2",
@@ -4730,7 +4733,9 @@
     },
     "fieldHelp": {
       "apicShareBasedAccount": "Wird bei Erfassung der aktienbasierten Vergütung im Haben gebucht und bei Ausübung oder Abwicklung von Zuteilungen in das gezeichnete Kapital umgegliedert.",
-      "convertibleInstrumentsAccount": "Führt SAFEs und Wandeldarlehen mit ihrem Wandlungsbetrag (Darlehen einschließlich aufgelaufener Zinsen), bis sie gewandelt werden.",
+      "convertibleInstrumentsAccount": "Führt SAFEs und Wandeldarlehen mit ihrem Nennbetrag, bis sie gewandelt, zurückgezahlt oder storniert werden.",
+      "accruedInterestAccount": "Führt die auf Wandeldarlehen aufgelaufenen Zinsen, bis sie gewandelt, zurückgezahlt oder storniert werden. Es kann das Konto Wandelinstrumente sein.",
+      "earlyExerciseDepositAccount": "Hält Barmittel, die für durch vorzeitige Ausübung erworbene, nicht unverfallbare Anteile eingegangen sind, bis die Anteile unverfallbar werden oder zurückgekauft werden.",
       "posCashAccount": "Das Bargeldkonto der Kasse. Barverkäufe, Barerstattungen, Ein- und Auszahlungen sowie die Kassendifferenz beim Abschluss werden hier gebucht.",
       "posCardAccount": "Kartenzahlungen werden auf dieses Verrechnungskonto gebucht. Leer lassen, wenn diese Kasse keine Karten annimmt.",
       "posOtherAccount": "Sonstige Zahlungen wie Gutscheine oder Schecks werden auf dieses Konto gebucht. Leer lassen, wenn diese Kasse sie nicht annimmt.",

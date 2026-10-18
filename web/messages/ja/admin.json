@@ -2970,7 +2970,7 @@
       "equity-account-policies": {
         "title": "資本勘定",
         "singular": "資本勘定ポリシー",
-        "description": "法人および有効日ごとに、資本取引の転記先となる資本金、資本剰余金、自己株式、株式報酬費用、転換商品の各勘定を設定します。"
+        "description": "法人および有効日ごとに、資本取引の転記先となる資本金、資本剰余金、自己株式、株式報酬費用、転換商品、社債利息、早期行使預り金の各勘定を設定します。"
       },
       "pos-registers": {
         "title": "レジ",
@@ -4015,6 +4015,9 @@
       "compensationExpenseAccountId": "株式報酬費用勘定",
       "treasuryStockAccountId": "自己株式勘定",
       "convertibleInstrumentsAccountId": "転換商品勘定",
+      "interestExpenseAccountId": "転換社債支払利息勘定",
+      "accruedInterestAccountId": "未払社債利息勘定",
+      "earlyExerciseDepositAccountId": "早期行使預り金勘定",
       "aggregation": "集計方法",
       "addressLine1": "住所 1",
       "addressLine2": "住所 2",
@@ -4730,7 +4733,9 @@
     },
     "fieldHelp": {
       "apicShareBasedAccount": "株式報酬の認識に応じて貸方計上され、付与の行使または決済時に資本金へ振り替えられます。",
-      "convertibleInstrumentsAccount": "SAFE と転換社債を転換金額（社債は経過利息を含む）で転換まで計上します。",
+      "convertibleInstrumentsAccount": "SAFE と転換社債を、転換、返済または取消まで元本で計上します。",
+      "accruedInterestAccount": "転換社債に発生した利息を、転換、返済または取消まで計上します。転換商品勘定と同じ勘定でも構いません。",
+      "earlyExerciseDepositAccount": "早期行使により購入された未確定株式に対して受領した現金を、株式の権利確定または買戻しまで保持します。",
       "posCashAccount": "レジの現金勘定。現金売上、現金返金、入金、出金、締め時の過不足がここに計上されます。",
       "posCardAccount": "カード支払はこの仮勘定で決済されます。カードを受け付けない場合は空欄にします。",
       "posOtherAccount": "商品券や小切手などその他の支払はこの勘定で決済されます。受け付けない場合は空欄にします。",

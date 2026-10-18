@@ -73,7 +73,8 @@
     "transferred": "已转让",
     "converted": "已转换",
     "void": "已作废",
-    "not_issued": "尚未发行"
+    "not_issued": "尚未发行",
+    "repaid": "已偿还"
   },
   "eventKind": {
     "exercise": "行权",
@@ -84,7 +85,10 @@
     "repurchase": "回购",
     "transfer": "转让",
     "convert": "转换",
-    "void": "作废"
+    "void": "作废",
+    "repay": "偿还",
+    "reverse": "冲销",
+    "election_83b": "83(b) 选择"
   },
   "optionType": {
     "iso": "激励型（ISO）",
@@ -96,7 +100,10 @@
   },
   "interestBasis": {
     "simple": "单利",
-    "compound_annual": "按年复利"
+    "compound_annual": "按年复利",
+    "compound_semiannual": "按半年复利",
+    "compound_quarterly": "按季复利",
+    "compound_monthly": "按月复利"
   },
   "frequency": {
     "monthly": "每月",
@@ -188,7 +195,16 @@
     "vestingFrequency": "归属频率",
     "vestingMonths": "归属期（月）",
     "vestingStart": "归属开始日",
-    "volatilityPercent": "波动率（%）"
+    "volatilityPercent": "波动率（%）",
+    "currency": "币种",
+    "earlyExercise": "提前行权",
+    "mfn": "最惠条款",
+    "filedOn": "提交日期",
+    "fairMarketValuePerShare": "每股公允市场价值",
+    "amountRepaid": "已偿还金额",
+    "interestDayCount": "计息天数惯例",
+    "unvestedRepurchaseBasis": "未归属股份回购价格",
+    "conversionClass": "转换为"
   },
   "capTable": {
     "by": {
@@ -218,7 +234,9 @@
       "rsus": "RSU",
       "warrants": "认股权证",
       "actions": "操作"
-    }
+    },
+    "exportTitle": "{entity} — 股权结构表",
+    "exportAsOf": "截至 {date}"
   },
   "classActions": {
     "title": "类别 {code}",
@@ -228,9 +246,12 @@
     "split": "拆股",
     "currentAuthorized": "当前 {value} 股",
     "currentConversionPrice": "当前 {value}",
-    "splitHelp": "拆股将自其日期起重述该类别的所有持股、奖励、期权池和价格。拆股日期必须晚于该类别最近一次记录的活动。",
+    "splitHelp": "拆股将自其日期起重述该类别的所有持股、奖励、期权池和价格，并调整转换为该类别的优先股类别的转换价格。拆股日期必须晚于该类别及这些优先股类别最近一次记录的活动。",
     "saved": "已保存",
-    "failed": "更改未保存。"
+    "failed": "更改未保存。",
+    "conversionClass": "转换类别",
+    "conversionClassHelp": "优先股自该日期起转换为的普通股类别。当类别条款有此规定时，该类别的拆股将调整转换价格。",
+    "splitAdjusted": "已调整转换价格：{classes}"
   },
   "securities": {
     "allKinds": "全部",
@@ -289,7 +310,8 @@
     "sections": {
       "rounds": "融资轮次",
       "convertibles": "可转换工具",
-      "model": "融资轮次建模"
+      "model": "融资轮次建模",
+      "interest": "票据利息"
     },
     "empty": "尚无融资轮次。",
     "convertiblesEmpty": "没有 SAFE 或可转换票据。",
@@ -344,7 +366,7 @@
     }
   },
   "waterfall": {
-    "description": "以截至日期的股权结构表为基础分配退出价值：先偿还票据，再按清偿顺位支付优先清算权，其余部分由普通股、参与分配及转换的优先股以及价内奖励共享。不会记录任何内容。",
+    "description": "以截至日期的股权结构表为基础分配退出价值：先偿还票据，再按清偿顺位支付优先清算权，每份 SAFE 取现金兑付金额与转换金额中的较高者，其余部分由普通股、参与分配及转换的优先股、转换的 SAFE 以及价内奖励共享。不会记录任何内容。",
     "exitValue": "退出价值",
     "unvested": "未归属奖励",
     "unvestedParticipate": "参与分配",
@@ -367,8 +389,12 @@
       "total": "合计",
       "perShare": "每股",
       "payout": "支付额",
-      "percent": "占退出价值比例"
-    }
+      "percent": "占退出价值比例",
+      "safeShares": "转换股数"
+    },
+    "safes": "SAFE",
+    "safeConverts": "取转换金额",
+    "safeCashOut": "取现金兑付金额"
   },
   "compensation": {
     "schedule": "计划表",
@@ -390,8 +416,15 @@
       "period": "本次运行",
       "through": "截至",
       "total": "合计",
-      "entry": "会计分录"
-    }
+      "entry": "会计分录",
+      "releasedShares": "已解禁限制性股票",
+      "deposit": "已释放保证金",
+      "reclass": "授予日价值",
+      "par": "面值"
+    },
+    "releases": "限制性股票解禁",
+    "releasesHelp": "随着限制性股票归属，提前行权保证金转入股本和资本公积；其随运行过账。",
+    "releasesEmpty": "截至该日期没有归属的限制性股票。"
   },
   "drawer": {
     "tabs": "证券分区",
@@ -421,7 +454,21 @@
     "eventQuantity": "数量",
     "eventAmount": "金额",
     "eventEntry": "分录",
-    "eventReason": "原因"
+    "eventReason": "原因",
+    "issueRate": "按 {rate} 计量",
+    "mfnAdopted": "MFN · 已采用条款",
+    "mfnOpen": "MFN · 约定条款",
+    "interestPosted": "已过账利息",
+    "exercisable": "当前可行权",
+    "restrictedShares": "限制性股票",
+    "releasedShares": "累计已解禁",
+    "depositHeld": "持有的保证金",
+    "election83b": "83(b) 选择",
+    "mfn": "MFN 条款",
+    "restrictedFrom": "提前行权（{basis}）产生的限制性股票，来源：",
+    "reversed": "已冲销",
+    "accrualEntry": "利息计提",
+    "reverse": "冲销"
   },
   "events": {
     "saved": "已记录{kind}",
@@ -435,8 +482,16 @@
       "repurchase": "公司按已付金额回购股份作为库存股（需审批）。",
       "transfer": "已归属的单位以新凭证转让给另一持有人。",
       "convert": "SAFE 和票据在融资轮次的交割日按该轮价格转换；优先股按该类别的转换比例转换为普通股。",
-      "void": "更正错误录入的记录：其分录在作废日期冲销，生成该记录的事件也将撤销（需审批）。"
-    }
+      "void": "更正错误录入的记录：其分录在作废日期冲销，生成该记录的事件也将撤销（需审批）。",
+      "repay": "按购买金额偿还 SAFE，或按本金及截至该日期的应计利息偿还票据（先计提利息）。票据的溢价或折价过账至利息费用。需审批。",
+      "election_83b": "记录持有人就这些限制性股票提交 83(b) 选择的日期。该选择必须在发行日期后 30 天内提交。",
+      "exerciseEarly": "此授予允许提前行权：先行使已归属的单位，再行使最早的未归属批次。未归属股份作为限制性股票发行，公司可在其归属前回购；其现金作为保证金持有，并随归属转入资本。",
+      "repurchaseRestricted": "按授予条款回购未归属的限制性股票，并结清其保证金。当授予按成本与公允市场价值孰低定价时，请输入每股公允市场价值。需审批。",
+      "cancelConvertible": "无偿取消 SAFE 或票据：其本金和应计利息转入资本公积。需审批。"
+    },
+    "reversed": "已冲销{kind}",
+    "carryingHint": "截至基准日的账面金额：{amount}",
+    "targetClassHint": "默认为该类别的转换类别。"
   },
   "new": {
     "open": "新建",
@@ -455,7 +510,7 @@
       "rsu": "RSU 按授予日股价估值；其成本通过股权激励运行过账。",
       "warrant": "认股权证附有行权价格；为认股权证支付的现金过账至资本公积。",
       "safe": "购买金额过账至可转换工具科目，直至 SAFE 转换。",
-      "note": "本金过账至可转换工具科目；利息按 Actual/365 基准计提，直至转换。"
+      "note": "本金过账至可转换工具科目；利息通过利息运行按票据的计息天数惯例计提，直至转换、偿还或取消。"
     },
     "considerationHint": "默认为价格乘以数量。",
     "numberHint": "留空则自动编号。",
@@ -476,6 +531,79 @@
     "planSaved": "计划已记录",
     "roundHelp": "记录已交割的融资轮次，然后基于该轮发行股份并转换其 SAFE 和票据。",
     "createRound": "记录融资轮次",
-    "roundSaved": "融资轮次已记录"
+    "roundSaved": "融资轮次已记录",
+    "mfn": "MFN：可采用后续工具的更优条款",
+    "earlyExercise": "允许提前行使未归属的单位",
+    "currencyHint": "默认为法律实体的币种（{currency}）；其他币种按发行日汇率计量。",
+    "roundCurrencyHint": "以融资轮次的币种（{currency}）发行。",
+    "conversionClassMissing": "请先记录普通股类别；优先股将转换为该类别。",
+    "adjustsForSplits": "转换价格随转换类别的拆股调整"
+  },
+  "dayCount": {
+    "actual_365": "Actual/365",
+    "actual_360": "Actual/360",
+    "thirty_360": "30/360",
+    "actual_actual": "Actual/Actual (ISDA)"
+  },
+  "repurchaseBasis": {
+    "cost": "按成本回购未归属股份",
+    "lower_of_cost_or_fmv": "按成本与公允市场价值孰低回购未归属股份",
+    "none": "未记录回购条款"
+  },
+  "election83b": {
+    "filed": "83(b) 已提交",
+    "open": "83(b) 待提交",
+    "missed": "83(b) 已逾期",
+    "filedOn": "{date} 提交",
+    "due": "{date} 到期 · 剩余 {days} 天",
+    "missedOn": "期限已于 {date} 截止",
+    "deadline": "83(b) 截止日期 {date}"
+  },
+  "interest": {
+    "schedule": "计提",
+    "runs": "已过账的运行",
+    "post": "过账截至 {date} 的利息",
+    "posted": "已过账截至 {date} 的利息",
+    "replayed": "截至 {date} 的利息运行已过账",
+    "failed": "利息运行未过账。",
+    "lastRun": "上次运行截至 {date}",
+    "noRuns": "尚无已过账的利息运行",
+    "total": "待过账变动",
+    "empty": "截至该日期没有计提利息的可转换票据。",
+    "runsEmpty": "尚无已过账的利息运行。",
+    "columns": {
+      "cumulative": "累计已计提",
+      "previous": "此前已计提",
+      "period": "本次运行",
+      "functional": "本次运行（记账本位币）"
+    }
+  },
+  "reversal": {
+    "title": "冲销 {date} 的{kind}",
+    "help": "该事件的分录在冲销日期冲销，其单位或余额自该日期起恢复；此前的历史保持不变。依赖该事件的后续活动必须先冲销。需审批。"
+  },
+  "mfn": {
+    "description": "此 SAFE 在未转换期间，可采用其后以相同币种发行的可转换工具的条款：在没有估值上限或估值上限更高时采用其估值上限，在没有折扣或折扣更低时采用其折扣，或采用投后转换。后续工具的估值上限、折扣和 SAFE 类型自选择日期起一并采用。",
+    "noCandidates": "截至 {date}，没有后续工具提供更优条款。",
+    "none": "无",
+    "changes": "与现行条款相比",
+    "better": {
+      "cap": "更低的估值上限",
+      "discount": "更高的折扣",
+      "post_money": "投后"
+    },
+    "worse": {
+      "cap": "更高或无估值上限",
+      "discount": "更低或无折扣",
+      "post_money": "投前"
+    },
+    "adopt": "采用",
+    "adoptHelp": "记录持有人采用 {number} 条款的选择。自选择日期起的转换将使用这些条款。需审批。",
+    "electedOn": "选择日期",
+    "record": "记录选择",
+    "elections": "已记录的选择",
+    "source": "条款来源",
+    "saved": "已记录 MFN 选择",
+    "failed": "选择未记录。"
   }
 }

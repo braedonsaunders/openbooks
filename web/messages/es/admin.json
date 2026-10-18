@@ -2808,7 +2808,7 @@
       "equity-account-policies": {
         "title": "Cuentas de patrimonio",
         "singular": "Política de cuentas de patrimonio",
-        "description": "Por entidad jurídica y fecha de vigencia: las cuentas de capital social, prima de emisión, acciones propias, gasto por compensación en acciones e instrumentos convertibles en las que se contabilizan las operaciones de patrimonio."
+        "description": "Por entidad jurídica y fecha de vigencia: las cuentas de capital social, prima de emisión, acciones propias, gasto por compensación en acciones, instrumentos convertibles, intereses de notas y depósitos de ejercicio anticipado en las que se contabilizan las operaciones de patrimonio."
       },
       "pos-registers": {
         "title": "Cajas",
@@ -3853,6 +3853,9 @@
       "compensationExpenseAccountId": "Cuenta de gasto por compensación en acciones",
       "treasuryStockAccountId": "Cuenta de acciones propias",
       "convertibleInstrumentsAccountId": "Cuenta de instrumentos convertibles",
+      "interestExpenseAccountId": "Cuenta de gasto por intereses de notas convertibles",
+      "accruedInterestAccountId": "Cuenta de intereses devengados de notas",
+      "earlyExerciseDepositAccountId": "Cuenta de depósitos de ejercicio anticipado",
       "aggregation": "Agregación",
       "addressLine1": "Dirección, línea 1",
       "addressLine2": "Dirección, línea 2",
@@ -4568,7 +4571,9 @@
     },
     "fieldHelp": {
       "apicShareBasedAccount": "Se abona a medida que se reconoce la compensación en acciones; se reclasifica al capital social cuando se ejercen o liquidan las adjudicaciones.",
-      "convertibleInstrumentsAccount": "Registra los SAFE y las notas convertibles por su importe de conversión (las notas incluyen los intereses devengados) hasta su conversión.",
+      "convertibleInstrumentsAccount": "Registra los SAFE y las notas convertibles por su principal hasta que se convierten, se reembolsan o se cancelan.",
+      "accruedInterestAccount": "Registra los intereses devengados sobre notas convertibles hasta que se convierten, se reembolsan o se cancelan. Puede ser la cuenta de instrumentos convertibles.",
+      "earlyExerciseDepositAccount": "Mantiene el efectivo recibido por acciones no consolidadas adquiridas mediante ejercicio anticipado hasta que las acciones se consolidan o se recompran.",
       "posCashAccount": "La cuenta de efectivo de la caja. Aquí se contabilizan las ventas y reembolsos en efectivo, los ingresos y retiros y la diferencia del cierre.",
       "posCardAccount": "Los pagos con tarjeta se liquidan en esta cuenta puente. Déjela en blanco si esta caja no acepta tarjetas.",
       "posOtherAccount": "Otros pagos, como vales o cheques, se liquidan en esta cuenta. Déjela en blanco si esta caja no los acepta.",

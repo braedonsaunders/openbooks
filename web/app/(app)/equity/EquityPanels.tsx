@@ -8,7 +8,9 @@ import { toast } from 'sonner'
 import { Badge, Button, Drawer, Input, SearchSelect, Textarea } from '@openbooks/ui'
 import { RegisteredListTable } from '@/components/registered-list-table'
 import { useMoney } from '@/components/money-provider'
-import type { HolderRow, ClassRow, ConvertibleRow, RoundModelResult, WaterfallResult, CompensationRunResult } from '@openbooks/engine/equity'
+import type { HolderRow, ClassRow, ConvertibleRow, RoundModelResult, WaterfallResult, CompensationRunResult, InterestRunResult } from '@openbooks/engine/equity'
+import { capTableExportHref } from '@/lib/equity-cap-table-export'
+import { ExportMenu } from '../reports/ExportMenu'
 import type { CapTableViewData, CompensationViewData, SecuritiesViewData, StakeholdersViewData, StructureViewData, EquityContext } from './view'
 import {
   CELL, Field, HEAD, LINK, NUM_CELL, NUM_HEAD, PillTabs, STATUS_VARIANT, SegmentTabs, Stat,
@@ -63,7 +65,10 @@ export function EquityCapTablePanel({ view }: { view: CapTableViewData | null })
       {!view.hasAccountPolicy && <PolicyBanner href={view.accountsSetupHref} />}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <PillTabs tabs={view.byTabs} label={t('capTable.byLabel')} />
-        {view.reportHref && <Link href={view.reportHref} className={`text-xs ${LINK}`}>{t('capTable.report')}</Link>}
+        <div className="flex items-center gap-3">
+          {view.reportHref && <Link href={view.reportHref} className={`text-xs ${LINK}`}>{t('capTable.report')}</Link>}
+          <ExportMenu baseHref={capTableExportHref(view.context.subsidiaryId, view.context.asOf, view.by)} kind="cap-table" />
+        </div>
       </div>
       {view.by === 'class' ? (
         <RegisteredListTable
@@ -147,6 +152,7 @@ export function EquityCapTablePanel({ view }: { view: CapTableViewData | null })
           shareClass={classAction}
           code={classCodes.get(classAction.shareClassId) ?? classAction.code}
           context={view.context}
+          commonClasses={table.classes.filter((row) => row.kind === 'common' && row.shareClassId !== classAction.shareClassId).map((row) => ({ value: row.shareClassId, label: `${row.code} · ${row.name}` }))}
           onClose={() => setClassAction(null)}
         />
       )}
@@ -154,23 +160,40 @@ export function EquityCapTablePanel({ view }: { view: CapTableViewData | null })
   )
 }
 
-/** Approver actions on a class: amend the authorized shares or conversion price, or record a split. */
-function ClassActionDrawer({ shareClass, code, context, onClose }: { shareClass: ClassRow; code: string; context: EquityContext; onClose: () => void }) {
+/**
+ * Approver actions on a class: amend the authorized shares, the conversion
+ * price or the conversion class, or record a split. A split of a common
+ * class reports the preferred conversion prices it adjusted.
+ */
+function ClassActionDrawer({ shareClass, code, context, commonClasses, onClose }: {
+  shareClass: ClassRow
+  code: string
+  context: EquityContext
+  commonClasses: { value: string; label: string }[]
+  onClose: () => void
+}) {
   const t = useTranslations('equity')
   const router = useRouter()
-  const [mode, setMode] = useState<'authorized_shares' | 'conversion_price' | 'split'>('authorized_shares')
+  const [mode, setMode] = useState<'authorized_shares' | 'conversion_price' | 'conversion_class' | 'split'>('authorized_shares')
   const [busy, setBusy] = useState(false)
-  const [form, setForm] = useState({ effectiveOn: context.asOf, value: '', numerator: '', denominator: '', reason: '' })
+  const [form, setForm] = useState({ effectiveOn: context.asOf, value: '', numerator: '', denominator: '', reason: '', conversionShareClassId: '' })
   const set = (key: keyof typeof form) => (value: string) => setForm((current) => ({ ...current, [key]: value }))
   async function submit() {
     setBusy(true)
     try {
       if (mode === 'split') {
-        await postJson(`/api/equity/classes/${shareClass.shareClassId}/splits`, { effectiveOn: form.effectiveOn, ratioNumerator: form.numerator, ratioDenominator: form.denominator, reason: form.reason }, t('classActions.failed'))
+        const split = await postJson<{ adjustedClasses: { code: string; conversionPriceAfter: string | null }[] }>(
+          `/api/equity/classes/${shareClass.shareClassId}/splits`,
+          { effectiveOn: form.effectiveOn, ratioNumerator: form.numerator, ratioDenominator: form.denominator, reason: form.reason },
+          t('classActions.failed'),
+        )
+        if (split.adjustedClasses.length > 0) {
+          toast.success(t('classActions.splitAdjusted', { classes: split.adjustedClasses.map((row) => `${row.code} → ${priceText(row.conversionPriceAfter)}`).join(', ') }))
+        }
       } else {
         await postJson(`/api/equity/classes/${shareClass.shareClassId}/amendments`, {
           kind: mode, effectiveOn: form.effectiveOn, reason: form.reason,
-          ...(mode === 'authorized_shares' ? { authorizedShares: form.value } : { conversionPrice: form.value }),
+          ...(mode === 'authorized_shares' ? { authorizedShares: form.value } : mode === 'conversion_price' ? { conversionPrice: form.value } : { conversionShareClassId: form.conversionShareClassId }),
         }, t('classActions.failed'))
       }
       toast.success(t('classActions.saved'))
@@ -184,10 +207,14 @@ function ClassActionDrawer({ shareClass, code, context, onClose }: { shareClass:
   }
   const modes = [
     { key: 'authorized_shares' as const, label: t('classActions.authorized') },
-    ...(shareClass.kind === 'preferred' ? [{ key: 'conversion_price' as const, label: t('classActions.conversionPrice') }] : []),
+    ...(shareClass.kind === 'preferred' ? [
+      { key: 'conversion_price' as const, label: t('classActions.conversionPrice') },
+      { key: 'conversion_class' as const, label: t('classActions.conversionClass') },
+    ] : []),
     { key: 'split' as const, label: t('classActions.split') },
   ]
-  const ready = form.effectiveOn && form.reason.trim().length >= 5 && (mode === 'split' ? form.numerator && form.denominator : form.value)
+  const ready = form.effectiveOn && form.reason.trim().length >= 5
+    && (mode === 'split' ? form.numerator && form.denominator : mode === 'conversion_class' ? form.conversionShareClassId : form.value)
   return (
     <Drawer open onClose={onClose} title={t('classActions.title', { code })} description={t('classActions.description')}>
       <div className="space-y-4 p-4">
@@ -202,6 +229,11 @@ function ClassActionDrawer({ shareClass, code, context, onClose }: { shareClass:
           {mode === 'conversion_price' && (
             <Field label={t('fields.conversionPrice')} hint={t('classActions.currentConversionPrice', { value: priceText(shareClass.conversionPrice) })}>
               <Input inputMode="decimal" value={form.value} onChange={(e) => set('value')(e.target.value)} />
+            </Field>
+          )}
+          {mode === 'conversion_class' && (
+            <Field label={t('fields.conversionClass')} hint={t('classActions.conversionClassHelp')}>
+              <SearchSelect value={form.conversionShareClassId} options={commonClasses} onChange={(value) => set('conversionShareClassId')(value ?? '')} ariaLabel={t('fields.conversionClass')} />
             </Field>
           )}
           {mode === 'split' && (
@@ -255,7 +287,16 @@ export function EquitySecuritiesPanel({ view }: { view: SecuritiesViewData | nul
           { key: 'issued', header: <>{t('securities.columns.issued')}</>, headerClassName: HEAD, className: `${CELL} font-mono`, cell: (row) => <>{row.issueDate}</> },
           {
             key: 'status', header: <>{t('securities.columns.status')}</>, headerClassName: HEAD, className: CELL,
-            cell: (row) => <Badge variant={STATUS_VARIANT[row.status] ?? 'secondary'}>{t(`status.${row.status}`)}</Badge>,
+            cell: (row) => (
+              <span className="flex flex-wrap items-center gap-1">
+                <Badge variant={STATUS_VARIANT[row.status] ?? 'secondary'}>{t(`status.${row.status}`)}</Badge>
+                {row.election83b && row.election83b.state !== 'filed' && (
+                  <Badge variant={row.election83b.state === 'open' ? 'warning' : 'outline'} title={t('election83b.deadline', { date: row.election83b.deadline })}>
+                    {t(`election83b.${row.election83b.state}`)}
+                  </Badge>
+                )}
+              </span>
+            ),
           },
           {
             key: 'outstanding', header: <>{t('securities.columns.outstanding')}</>, headerClassName: NUM_HEAD, className: NUM_CELL,
@@ -373,10 +414,10 @@ function ReserveDrawer({ plan, context, onClose }: { plan: { id: string; code: s
   )
 }
 
-/** Rounds, the convertibles awaiting conversion, and the pro-forma round modeller — one body at a time. */
+/** Rounds, the convertibles awaiting conversion, note interest and the pro-forma round modeller — one body at a time. */
 export function EquityRoundsPanel({ view }: { view: StructureViewData | null }) {
   const t = useTranslations('equity')
-  const [section, setSection] = useState<'rounds' | 'convertibles' | 'model'>('rounds')
+  const [section, setSection] = useState<'rounds' | 'convertibles' | 'interest' | 'model'>('rounds')
   if (!view) return null
   return (
     <div className="space-y-4">
@@ -387,11 +428,13 @@ export function EquityRoundsPanel({ view }: { view: StructureViewData | null }) 
         tabs={[
           { key: 'rounds', label: t('rounds.sections.rounds') },
           { key: 'convertibles', label: t('rounds.sections.convertibles') },
+          { key: 'interest', label: t('rounds.sections.interest') },
           { key: 'model', label: t('rounds.sections.model') },
         ]}
       />
       {section === 'rounds' && <RoundsTable view={view} />}
       {section === 'convertibles' && <ConvertiblesTable view={view} />}
+      {section === 'interest' && <InterestRun view={view} />}
       {section === 'model' && <RoundModeller context={view.context} />}
     </div>
   )
@@ -437,7 +480,15 @@ function ConvertiblesTable({ view }: { view: StructureViewData }) {
           cell: (row: ConvertibleRow) => <Link className={`font-mono ${LINK}`} href={withParams(BASE, view.context.params, { view: 'securities', security: row.securityId })}>{row.securityNumber}</Link>,
           search: searchText,
         },
-        { key: 'kind', header: <>{t('securities.columns.kind')}</>, headerClassName: HEAD, className: CELL, cell: (row: ConvertibleRow) => <>{t(`kind.${row.kind}`)}{row.safeType ? ` · ${t(`safeType.${row.safeType}`)}` : ''}</> },
+        {
+          key: 'kind', header: <>{t('securities.columns.kind')}</>, headerClassName: HEAD, className: CELL,
+          cell: (row: ConvertibleRow) => (
+            <>
+              {t(`kind.${row.kind}`)}{row.safeType ? ` · ${t(`safeType.${row.safeType}`)}` : ''}
+              {row.mfn && <Badge variant={row.electionId ? 'secondary' : 'outline'} className="ml-2">{row.electionId ? t('drawer.mfnAdopted') : t('fields.mfn')}</Badge>}
+            </>
+          ),
+        },
         { key: 'holder', header: <>{t('securities.columns.holder')}</>, headerClassName: HEAD, className: CELL, cell: (row: ConvertibleRow) => <>{view.parties[row.holderPartyId] ?? '—'}</> },
         { key: 'status', header: <>{t('securities.columns.status')}</>, headerClassName: HEAD, className: CELL, cell: (row: ConvertibleRow) => <Badge variant={STATUS_VARIANT[row.status] ?? 'secondary'}>{t(`status.${row.status}`)}</Badge> },
         { key: 'principal', header: <>{t('rounds.columns.principal')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row: ConvertibleRow) => <>{money(row.principal, { currency: row.currency })}</> },
@@ -446,6 +497,93 @@ function ConvertiblesTable({ view }: { view: StructureViewData }) {
         { key: 'discount', header: <>{t('rounds.columns.discount')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row: ConvertibleRow) => <>{percentText(row.discountPercent)}</> },
       ]}
     />
+  )
+}
+
+/** Note interest through the as-of date, per note, and the runs already posted; approvers post the run. */
+function InterestRun({ view }: { view: StructureViewData }) {
+  const t = useTranslations('equity')
+  const { money } = useMoney()
+  const router = useRouter()
+  const [busy, setBusy] = useState(false)
+  const [section, setSection] = useState<'schedule' | 'runs'>('schedule')
+  const interest = view.interest
+  if (!interest) return null
+  const { context } = view
+  const preview = interest.preview
+  async function post() {
+    if (!preview) return
+    setBusy(true)
+    try {
+      const run = await postJson<InterestRunResult>('/api/equity/interest/runs', { subsidiaryId: context.subsidiaryId, throughDate: preview.throughDate }, t('interest.failed'))
+      toast.success(run.replayed ? t('interest.replayed', { date: run.throughDate }) : t('interest.posted', { date: run.throughDate }))
+      router.refresh()
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t('interest.failed'))
+    } finally {
+      setBusy(false)
+    }
+  }
+  const alreadyRun = preview ? interest.runs.some((run) => run.throughDate === preview.throughDate) : false
+  return (
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <SegmentTabs value={section} onChange={setSection} label={t('rounds.sections.interest')} tabs={[{ key: 'schedule', label: t('interest.schedule') }, { key: 'runs', label: t('interest.runs') }]} />
+        {context.canApprove && section === 'schedule' && preview && (
+          <Button onClick={post} disabled={busy || alreadyRun || (preview.lastRunThrough !== null && preview.throughDate < preview.lastRunThrough)}>
+            {t('interest.post', { date: preview.throughDate })}
+          </Button>
+        )}
+      </div>
+      {section === 'schedule' ? (
+        interest.refusal ? (
+          <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+            <p className="font-medium">{interest.refusal.message}</p>
+            <p>{interest.refusal.remedy}</p>
+          </div>
+        ) : preview && (
+          <>
+            <p className="text-sm text-slate-500 dark:text-slate-400">
+              {preview.lastRunThrough ? t('interest.lastRun', { date: preview.lastRunThrough }) : t('interest.noRuns')} · {t('interest.total')}: <strong>{money(preview.total, { currency: preview.currency })}</strong>
+            </p>
+            <RegisteredListTable
+              source="equity_interest_lines"
+              rows={preview.lines}
+              rowKey={(row) => row.securityId}
+              empty={t('interest.empty')}
+              columns={[
+                {
+                  key: 'security', header: <>{t('securities.columns.number')}</>, headerClassName: HEAD, className: CELL,
+                  cell: (row) => <Link className={`font-mono ${LINK}`} href={withParams(BASE, context.params, { view: 'securities', security: row.securityId })}>{row.securityNumber}</Link>,
+                  search: (row) => `${row.securityNumber} ${view.parties[row.holderPartyId] ?? ''}`,
+                },
+                { key: 'holder', header: <>{t('securities.columns.holder')}</>, headerClassName: HEAD, className: CELL, cell: (row) => <>{view.parties[row.holderPartyId] ?? '—'}</> },
+                { key: 'cumulative', header: <>{t('interest.columns.cumulative')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <>{money(row.cumulative, { currency: row.currency })}</> },
+                { key: 'previous', header: <>{t('interest.columns.previous')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <>{money(row.previous, { currency: row.currency })}</> },
+                { key: 'period', header: <>{t('interest.columns.period')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <strong>{money(row.period, { currency: row.currency })}</strong> },
+                { key: 'functional', header: <>{t('interest.columns.functional')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <>{money(row.functional, { currency: preview.currency })}</> },
+              ]}
+            />
+          </>
+        )
+      ) : (
+        <RegisteredListTable
+          source="equity_interest_runs"
+          rows={interest.runs}
+          rowKey={(row) => row.id}
+          empty={t('interest.runsEmpty')}
+          searchable={false}
+          columns={[
+            { key: 'through', header: <>{t('compensation.columns.through')}</>, headerClassName: HEAD, className: `${CELL} font-mono`, cell: (row) => <>{row.throughDate}</> },
+            { key: 'total', header: <>{t('compensation.columns.total')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <>{money(row.total, { currency: row.currency })}</> },
+            {
+              key: 'entry', header: <>{t('compensation.columns.entry')}</>, headerClassName: HEAD, className: `${CELL} font-mono`,
+              cell: (row) => row.journalEntryId ? <Link className={LINK} href={`/journal?entry=${row.journalEntryId}`}>{row.entryNumber ?? row.journalEntryId}</Link> : <>{t('compensation.noEntry')}</>,
+            },
+          ]}
+        />
+      )}
+    </div>
   )
 }
 
@@ -536,7 +674,7 @@ export function EquityWaterfallPanel({ view }: { view: { context: EquityContext 
   const { money } = useMoney()
   const [busy, setBusy] = useState(false)
   const [form, setForm] = useState({ exitValue: '', unvestedAwards: 'participate', changeOfControl: true, terminated: false })
-  const [section, setSection] = useState<'classes' | 'holders'>('classes')
+  const [section, setSection] = useState<'classes' | 'holders' | 'safes'>('classes')
   const [result, setResult] = useState<{ result: WaterfallResult; parties: Record<string, string>; classes: Record<string, string> } | null>(null)
   if (!view) return null
   const { context } = view
@@ -576,8 +714,31 @@ export function EquityWaterfallPanel({ view }: { view: { context: EquityContext 
             <Stat label={t('waterfall.pricePerShare')} value={priceText(r.pricePerCommonShare)} />
             <Stat label={t('waterfall.unallocated')} value={money(r.unallocated, { currency: context.currency })} />
           </section>
-          <SegmentTabs value={section} onChange={setSection} label={t('tabs.waterfall')} tabs={[{ key: 'classes', label: t('waterfall.byClass') }, { key: 'holders', label: t('waterfall.byHolder') }]} />
-          {section === 'classes' ? (
+          <SegmentTabs
+            value={section}
+            onChange={setSection}
+            label={t('tabs.waterfall')}
+            tabs={[
+              { key: 'classes', label: t('waterfall.byClass') },
+              { key: 'holders', label: t('waterfall.byHolder') },
+              ...(r.safes.length > 0 ? [{ key: 'safes' as const, label: t('waterfall.safes') }] : []),
+            ]}
+          />
+          {section === 'safes' ? (
+            <RegisteredListTable
+              source="equity_waterfall_safes"
+              rows={r.safes}
+              rowKey={(row) => row.securityId}
+              empty={t('waterfall.empty')}
+              searchable={false}
+              columns={[
+                { key: 'holder', header: <>{t('capTable.columns.holder')}</>, headerClassName: HEAD, className: CELL, cell: (row) => <>{result?.parties[row.holderPartyId] ?? row.holderPartyId}</> },
+                { key: 'election', header: <>{t('waterfall.columns.election')}</>, headerClassName: HEAD, className: CELL, cell: (row) => <>{row.converted ? t('waterfall.safeConverts') : t('waterfall.safeCashOut')}</> },
+                { key: 'shares', header: <>{t('waterfall.columns.safeShares')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <>{row.converted ? priceText(row.shares) : '—'}</> },
+                { key: 'amount', header: <>{t('waterfall.columns.payout')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <strong>{money(row.amount, { currency: context.currency })}</strong> },
+              ]}
+            />
+          ) : section === 'classes' ? (
             <RegisteredListTable
               source="equity_waterfall_classes"
               rows={r.classes}
@@ -617,7 +778,7 @@ export function EquityCompensationPanel({ view }: { view: CompensationViewData |
   const t = useTranslations('equity')
   const { money } = useMoney()
   const router = useRouter()
-  const [section, setSection] = useState<'schedule' | 'runs'>('schedule')
+  const [section, setSection] = useState<'schedule' | 'releases' | 'runs'>('schedule')
   const [busy, setBusy] = useState(false)
   if (!view) return null
   const { preview, context } = view
@@ -637,10 +798,19 @@ export function EquityCompensationPanel({ view }: { view: CompensationViewData |
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <SegmentTabs value={section} onChange={setSection} label={t('tabs.compensation')} tabs={[{ key: 'schedule', label: t('compensation.schedule') }, { key: 'runs', label: t('compensation.runs') }]} />
+        <SegmentTabs
+          value={section}
+          onChange={setSection}
+          label={t('tabs.compensation')}
+          tabs={[
+            { key: 'schedule', label: t('compensation.schedule') },
+            { key: 'releases', label: t('compensation.releases') },
+            { key: 'runs', label: t('compensation.runs') },
+          ]}
+        />
         <div className="flex items-center gap-3">
           {view.reportHref && <Link href={view.reportHref} className={`text-xs ${LINK}`}>{t('compensation.report')}</Link>}
-          {context.canApprove && section === 'schedule' && (
+          {context.canApprove && section !== 'runs' && (
             <Button onClick={post} disabled={busy || alreadyRun || (preview.lastRunThrough !== null && preview.throughDate < preview.lastRunThrough)}>
               {t('compensation.post', { date: preview.throughDate })}
             </Button>
@@ -668,6 +838,30 @@ export function EquityCompensationPanel({ view }: { view: CompensationViewData |
               { key: 'cumulative', header: <>{t('compensation.columns.cumulative')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <>{money(row.cumulative, { currency: preview.currency })}</> },
               { key: 'previous', header: <>{t('compensation.columns.previous')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <>{money(row.previous, { currency: preview.currency })}</> },
               { key: 'period', header: <>{t('compensation.columns.period')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <strong>{money(row.period, { currency: preview.currency })}</strong> },
+            ]}
+          />
+        </>
+      ) : section === 'releases' ? (
+        <>
+          <p className="text-sm text-slate-500 dark:text-slate-400">
+            {t('compensation.releasesHelp')} · {t('compensation.total')}: <strong>{money(preview.releaseTotal, { currency: preview.currency })}</strong>
+          </p>
+          <RegisteredListTable
+            source="equity_compensation_releases"
+            rows={preview.releases}
+            rowKey={(row) => row.securityId}
+            empty={t('compensation.releasesEmpty')}
+            columns={[
+              {
+                key: 'security', header: <>{t('securities.columns.number')}</>, headerClassName: HEAD, className: CELL,
+                cell: (row) => <Link className={`font-mono ${LINK}`} href={withParams(BASE, context.params, { view: 'securities', security: row.securityId })}>{row.securityNumber}</Link>,
+                search: (row) => `${row.securityNumber} ${view.parties[row.holderPartyId] ?? ''}`,
+              },
+              { key: 'holder', header: <>{t('securities.columns.holder')}</>, headerClassName: HEAD, className: CELL, cell: (row) => <>{view.parties[row.holderPartyId] ?? '—'}</> },
+              { key: 'shares', header: <>{t('compensation.columns.releasedShares')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <>{row.previousShares} → {row.shares}</> },
+              { key: 'deposit', header: <>{t('compensation.columns.deposit')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <>{money(row.deposit, { currency: preview.currency })}</> },
+              { key: 'reclass', header: <>{t('compensation.columns.reclass')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <>{money(row.reclass, { currency: preview.currency })}</> },
+              { key: 'par', header: <>{t('compensation.columns.par')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <>{money(row.par, { currency: preview.currency })}</> },
             ]}
           />
         </>

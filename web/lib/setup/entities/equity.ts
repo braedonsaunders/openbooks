@@ -4,6 +4,7 @@ import type { SetupEntity } from '../types'
 const EQUITY = ['equity'] as const
 const EXPENSE = ['cogs', 'expense', 'expense_other', 'expense_deferred'] as const
 const CONVERTIBLE = ['liability_current_other', 'liability_long_term', 'equity'] as const
+const LIABILITY = ['liability_current_other', 'liability_long_term'] as const
 
 export const EQUITY_ENTITIES: SetupEntity[] = [
   {
@@ -39,6 +40,11 @@ export const EQUITY_ENTITIES: SetupEntity[] = [
       { key: 'compensationExpenseAccountId', kind: 'ref', ref: 'accounts', required: true, refAccountTypes: EXPENSE },
       { key: 'treasuryStockAccountId', kind: 'ref', ref: 'accounts', required: true, refAccountTypes: EQUITY },
       { key: 'convertibleInstrumentsAccountId', kind: 'ref', ref: 'accounts', required: true, refAccountTypes: CONVERTIBLE, helpTextKey: 'fieldHelp.convertibleInstrumentsAccount' },
+      // Mapped by the legal entities that carry interest-bearing notes or
+      // early-exercisable options; a posting that needs one refuses until it is.
+      { key: 'interestExpenseAccountId', kind: 'ref', ref: 'accounts', refAccountTypes: EXPENSE },
+      { key: 'accruedInterestAccountId', kind: 'ref', ref: 'accounts', refAccountTypes: LIABILITY, helpTextKey: 'fieldHelp.accruedInterestAccount' },
+      { key: 'earlyExerciseDepositAccountId', kind: 'ref', ref: 'accounts', refAccountTypes: LIABILITY, helpTextKey: 'fieldHelp.earlyExerciseDepositAccount' },
       { key: 'reason', kind: 'textarea', required: true },
     ],
   },

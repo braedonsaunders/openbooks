@@ -107,6 +107,7 @@ export interface WaterfallInput {
 
 export interface WaterfallSafeRow {
   securityId: string;
+  holderPartyId: string;
   /** Whether the SAFE takes its conversion amount rather than its cash-out amount. */
   converted: boolean;
   shares: string;
@@ -397,7 +398,7 @@ export function runWaterfall(input: WaterfallInput): WaterfallResult {
     return `${negative ? "-" : ""}${digits.slice(0, -4)}.${digits.slice(-4)}`;
   };
   const payouts: WaterfallPayout[] = [];
-  const holderUnits = new Map<string, bigint>();
+  const securityUnits = new Map<string, bigint>();
   const holderTotals = new Map<string, bigint>();
   const classTotals = new Map<string, bigint>();
   let unallocatedUnits = 0n;
@@ -408,7 +409,7 @@ export function runWaterfall(input: WaterfallInput): WaterfallResult {
       return;
     }
     payouts.push({ ...line.payout, amount: toMoney(units) });
-    holderUnits.set(line.payout.securityId, (holderUnits.get(line.payout.securityId) ?? 0n) + units);
+    securityUnits.set(line.payout.securityId, (securityUnits.get(line.payout.securityId) ?? 0n) + units);
     holderTotals.set(line.payout.holderPartyId, (holderTotals.get(line.payout.holderPartyId) ?? 0n) + units);
     if (line.payout.kind === "share" && line.payout.shareClassId) {
       classTotals.set(line.payout.shareClassId, (classTotals.get(line.payout.shareClassId) ?? 0n) + units);
@@ -438,8 +439,11 @@ export function runWaterfall(input: WaterfallInput): WaterfallResult {
       .map(([holderPartyId, units]) => ({ holderPartyId, amount: toMoney(units), percent: exitUnits > 0n ? formatPercent(rational(units, exitUnits)) : "0.0000" })),
     safes: input.convertibles.filter((convertible) => convertible.kind === "safe").map((convertible) => {
       const shares = distribution.safeShares.get(convertible.securityId);
-      const units = holderUnits.get(convertible.securityId) ?? 0n;
-      return { securityId: convertible.securityId, converted: Boolean(shares), shares: shares ? formatPrice(shares) : "0.0000000000", amount: toMoney(units) };
+      const units = securityUnits.get(convertible.securityId) ?? 0n;
+      return {
+        securityId: convertible.securityId, holderPartyId: convertible.holderPartyId, converted: Boolean(shares),
+        shares: shares ? formatPrice(shares) : "0.0000000000", amount: toMoney(units),
+      };
     }),
     unallocated: toMoney(unallocatedUnits),
   };

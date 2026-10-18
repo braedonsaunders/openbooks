@@ -21,6 +21,7 @@ export const STATUS_VARIANT: Record<string, 'success' | 'secondary' | 'warning' 
   expired: 'warning',
   cancelled: 'warning',
   repurchased: 'outline',
+  repaid: 'secondary',
   void: 'destructive',
   not_issued: 'outline',
 }

@@ -888,6 +888,10 @@ const SOURCES = {
   equity_waterfall_holders: { route: '/equity', mode: 'loaded' },
   equity_compensation_lines: { route: '/equity', mode: 'loaded' },
   equity_compensation_runs: { route: '/equity', mode: 'loaded' },
+  equity_compensation_releases: { route: '/equity', mode: 'loaded' },
+  equity_interest_lines: { route: '/equity', mode: 'loaded' },
+  equity_interest_runs: { route: '/equity', mode: 'loaded' },
+  equity_waterfall_safes: { route: '/equity', mode: 'loaded' },
   time_clock_pairs: {
     route: '/time/clock',
     rowsField: 'rows',

@@ -345,7 +345,8 @@ export async function recordSecurityEvent(input: RecordEventInput): Promise<Reco
         }
         const price = kind === "exercise" ? restatePrice(book.splits, shareClass!.id, parsePrice(security.pricePerShare, "the exercise price"), security.issueDate, effectiveOn) : rational(0n);
         const cashTxn = ledgerUnits(multiplyRational(price, rational(units)), securityExponent);
-        const fxRate = cashTxn > 0n ? await rateOn(effectiveOn) : "1";
+        // The certificate is measured at the exercise or settlement date's rate, whether or not cash changes hands.
+        const fxRate = await rateOn(effectiveOn);
         const cash = functionalUnits(cashTxn, fxRate);
         const vestedUnits = schedule ? schedule.vestedOnIssue : units;
         const deposit = schedule ? cash - functionalUnits(ledgerUnits(multiplyRational(price, rational(vestedUnits)), securityExponent), fxRate) : 0n;

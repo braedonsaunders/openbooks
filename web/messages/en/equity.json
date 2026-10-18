@@ -73,7 +73,8 @@
     "transferred": "Transferred",
     "converted": "Converted",
     "void": "Void",
-    "not_issued": "Not yet issued"
+    "not_issued": "Not yet issued",
+    "repaid": "Repaid"
   },
   "eventKind": {
     "exercise": "Exercise",
@@ -84,7 +85,10 @@
     "repurchase": "Repurchase",
     "transfer": "Transfer",
     "convert": "Convert",
-    "void": "Void"
+    "void": "Void",
+    "repay": "Repay",
+    "reverse": "Reversal",
+    "election_83b": "83(b) election"
   },
   "optionType": {
     "iso": "Incentive (ISO)",
@@ -96,7 +100,10 @@
   },
   "interestBasis": {
     "simple": "Simple",
-    "compound_annual": "Compounded annually"
+    "compound_annual": "Compounded annually",
+    "compound_semiannual": "Compounded semiannually",
+    "compound_quarterly": "Compounded quarterly",
+    "compound_monthly": "Compounded monthly"
   },
   "frequency": {
     "monthly": "Monthly",
@@ -188,7 +195,16 @@
     "vestingFrequency": "Vesting frequency",
     "vestingMonths": "Vesting term (months)",
     "vestingStart": "Vesting start",
-    "volatilityPercent": "Volatility (%)"
+    "volatilityPercent": "Volatility (%)",
+    "currency": "Currency",
+    "earlyExercise": "Early exercise",
+    "mfn": "Most-favored nation",
+    "filedOn": "Filing date",
+    "fairMarketValuePerShare": "Fair market value per share",
+    "amountRepaid": "Amount repaid",
+    "interestDayCount": "Day count",
+    "unvestedRepurchaseBasis": "Unvested repurchase price",
+    "conversionClass": "Converts into"
   },
   "capTable": {
     "by": {
@@ -218,7 +234,9 @@
       "rsus": "RSUs",
       "warrants": "Warrants",
       "actions": "Actions"
-    }
+    },
+    "exportTitle": "{entity} — cap table",
+    "exportAsOf": "As of {date}"
   },
   "classActions": {
     "title": "Class {code}",
@@ -228,9 +246,12 @@
     "split": "Split",
     "currentAuthorized": "Currently {value} shares",
     "currentConversionPrice": "Currently {value}",
-    "splitHelp": "A split restates every holding, award, pool and price of the class from its date. It must be dated after the class's latest recorded activity.",
+    "splitHelp": "A split restates every holding, award, pool and price of the class from its date, and adjusts the conversion price of preferred classes that convert into it. It must be dated after the latest recorded activity of the class and of those preferred classes.",
     "saved": "Saved",
-    "failed": "The change was not saved."
+    "failed": "The change was not saved.",
+    "conversionClass": "Conversion class",
+    "conversionClassHelp": "The common class the preferred shares convert into from the date. Its splits adjust the conversion price when the class terms say so.",
+    "splitAdjusted": "Conversion prices adjusted: {classes}"
   },
   "securities": {
     "allKinds": "All",
@@ -289,7 +310,8 @@
     "sections": {
       "rounds": "Rounds",
       "convertibles": "Convertibles",
-      "model": "Model a round"
+      "model": "Model a round",
+      "interest": "Note interest"
     },
     "empty": "No financing rounds yet.",
     "convertiblesEmpty": "No SAFEs or convertible notes.",
@@ -344,7 +366,7 @@
     }
   },
   "waterfall": {
-    "description": "Distributes an exit value against the cap table on the as-of date: notes are repaid, preferences are paid by seniority, and the rest is shared by common, participating and converting preferred and in-the-money awards. Nothing is recorded.",
+    "description": "Distributes an exit value against the cap table on the as-of date: notes are repaid, preferences are paid by seniority, each SAFE takes the greater of its cash-out and conversion amounts, and the rest is shared by common, participating and converting preferred, converting SAFEs and in-the-money awards. Nothing is recorded.",
     "exitValue": "Exit value",
     "unvested": "Unvested awards",
     "unvestedParticipate": "Take part",
@@ -367,8 +389,12 @@
       "total": "Total",
       "perShare": "Per share",
       "payout": "Payout",
-      "percent": "Share of exit"
-    }
+      "percent": "Share of exit",
+      "safeShares": "Conversion shares"
+    },
+    "safes": "SAFEs",
+    "safeConverts": "Takes its conversion amount",
+    "safeCashOut": "Takes its cash-out amount"
   },
   "compensation": {
     "schedule": "Schedule",
@@ -390,8 +416,15 @@
       "period": "This run",
       "through": "Through",
       "total": "Total",
-      "entry": "Journal entry"
-    }
+      "entry": "Journal entry",
+      "releasedShares": "Restricted shares released",
+      "deposit": "Deposit released",
+      "reclass": "Grant-date value",
+      "par": "Par value"
+    },
+    "releases": "Restricted stock releases",
+    "releasesHelp": "Early-exercise deposits move to share capital and paid-in capital as restricted shares vest; they post with the run.",
+    "releasesEmpty": "No restricted shares vest through this date."
   },
   "drawer": {
     "tabs": "Security sections",
@@ -421,7 +454,21 @@
     "eventQuantity": "Quantity",
     "eventAmount": "Amount",
     "eventEntry": "Entry",
-    "eventReason": "Reason"
+    "eventReason": "Reason",
+    "issueRate": "measured at {rate}",
+    "mfnAdopted": "MFN · terms adopted",
+    "mfnOpen": "MFN · stated terms",
+    "interestPosted": "Interest posted",
+    "exercisable": "Exercisable now",
+    "restrictedShares": "Restricted shares",
+    "releasedShares": "Released to date",
+    "depositHeld": "Deposit held",
+    "election83b": "83(b) election",
+    "mfn": "MFN terms",
+    "restrictedFrom": "Restricted stock from an early exercise ({basis}) of",
+    "reversed": "Reversed",
+    "accrualEntry": "Interest accrual",
+    "reverse": "Reverse"
   },
   "events": {
     "saved": "{kind} recorded",
@@ -435,8 +482,16 @@
       "repurchase": "The company buys shares back into treasury at the amount paid (an approval).",
       "transfer": "Vested units move to another holder on a new certificate.",
       "convert": "SAFEs and notes convert at a round's price on its closing date; preferred shares convert into common at the class's conversion ratio.",
-      "void": "Corrects a record entered in error: its entry is reversed on the void date and the event that produced it is undone (an approval)."
-    }
+      "void": "Corrects a record entered in error: its entry is reversed on the void date and the event that produced it is undone (an approval).",
+      "repay": "Repay a SAFE at its purchase amount, or a note at its principal and the interest accrued to the date, which accrues first. A note's premium or discount posts to interest expense. This is an approval.",
+      "election_83b": "Record the date the holder filed an 83(b) election for these restricted shares. The election must be filed within 30 days of the issue date.",
+      "exerciseEarly": "This grant admits early exercise: vested units are exercised first, then the earliest unvested installments. Unvested shares are issued as restricted stock the company may repurchase until they vest; their cash is held as a deposit and released to capital as they vest.",
+      "repurchaseRestricted": "Unvested restricted shares are repurchased on the grant's terms, settling their deposit. Enter the fair market value per share when the grant prices at the lower of cost and fair market value. This is an approval.",
+      "cancelConvertible": "Cancel the SAFE or note without payment: its principal and accrued interest move to additional paid-in capital. This is an approval."
+    },
+    "reversed": "{kind} reversed",
+    "carryingHint": "Carrying amount on the as-of date: {amount}",
+    "targetClassHint": "Defaults to the class's conversion class."
   },
   "new": {
     "open": "New",
@@ -455,7 +510,7 @@
       "rsu": "RSUs are valued at the grant-date share price; their cost posts through the stock compensation run.",
       "warrant": "Warrants carry an exercise price; any cash paid for the warrant posts to additional paid-in capital.",
       "safe": "The purchase amount posts to the convertible instruments account until the SAFE converts.",
-      "note": "The principal posts to the convertible instruments account; interest accrues on an Actual/365 basis until conversion."
+      "note": "The principal posts to the convertible instruments account; interest accrues on the note's day count through the interest run until it converts, is repaid or is cancelled."
     },
     "considerationHint": "Defaults to the price times the quantity.",
     "numberHint": "Leave blank to number it automatically.",
@@ -476,6 +531,79 @@
     "planSaved": "Plan recorded",
     "roundHelp": "Record a closed round, then issue its shares and convert its SAFEs and notes against it.",
     "createRound": "Record round",
-    "roundSaved": "Round recorded"
+    "roundSaved": "Round recorded",
+    "mfn": "MFN: may adopt a later instrument's better terms",
+    "earlyExercise": "Allows early exercise of unvested units",
+    "currencyHint": "Defaults to the legal entity's currency ({currency}); another currency is measured at the issue-date rate.",
+    "roundCurrencyHint": "Issued in the round's currency ({currency}).",
+    "conversionClassMissing": "Record a common class first; preferred shares convert into it.",
+    "adjustsForSplits": "Conversion price adjusts for splits of the conversion class"
+  },
+  "dayCount": {
+    "actual_365": "Actual/365",
+    "actual_360": "Actual/360",
+    "thirty_360": "30/360",
+    "actual_actual": "Actual/Actual (ISDA)"
+  },
+  "repurchaseBasis": {
+    "cost": "Unvested shares repurchased at cost",
+    "lower_of_cost_or_fmv": "Unvested shares repurchased at the lower of cost and fair market value",
+    "none": "No repurchase terms recorded"
+  },
+  "election83b": {
+    "filed": "83(b) filed",
+    "open": "83(b) due",
+    "missed": "83(b) missed",
+    "filedOn": "Filed {date}",
+    "due": "Due {date} · {days} days left",
+    "missedOn": "Window closed {date}",
+    "deadline": "83(b) deadline {date}"
+  },
+  "interest": {
+    "schedule": "Accrual",
+    "runs": "Posted runs",
+    "post": "Post interest through {date}",
+    "posted": "Interest posted through {date}",
+    "replayed": "The interest run through {date} was already posted",
+    "failed": "The interest run was not posted.",
+    "lastRun": "Last run through {date}",
+    "noRuns": "No interest runs posted yet",
+    "total": "Change to post",
+    "empty": "No convertible note accrues interest through this date.",
+    "runsEmpty": "No interest runs posted yet.",
+    "columns": {
+      "cumulative": "Accrued to date",
+      "previous": "Previously accrued",
+      "period": "This run",
+      "functional": "This run (functional currency)"
+    }
+  },
+  "reversal": {
+    "title": "Reverse the {kind} of {date}",
+    "help": "The event's entry is reversed on the reversal date and its units or balance return from that date; history before it stands. Later activity that relies on the event must be reversed first. This is an approval."
+  },
+  "mfn": {
+    "description": "This SAFE may adopt the terms of a convertible instrument issued after it, in its currency, while it is outstanding: a cap where it has none or a lower one, a discount where it has none or a higher one, or post-money conversion. The later instrument's cap, discount and SAFE type are adopted together from the election date.",
+    "noCandidates": "No later instrument offers better terms as of {date}.",
+    "none": "None",
+    "changes": "Against the terms in force",
+    "better": {
+      "cap": "Lower cap",
+      "discount": "Higher discount",
+      "post_money": "Post-money"
+    },
+    "worse": {
+      "cap": "Higher or no cap",
+      "discount": "Lower or no discount",
+      "post_money": "Pre-money"
+    },
+    "adopt": "Adopt",
+    "adoptHelp": "Record the holder's election to adopt the terms of {number}. Conversions from the election date use them. This is an approval.",
+    "electedOn": "Election date",
+    "record": "Record election",
+    "elections": "Elections recorded",
+    "source": "Terms of",
+    "saved": "MFN election recorded",
+    "failed": "The election was not recorded."
   }
 }

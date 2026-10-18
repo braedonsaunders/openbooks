@@ -73,7 +73,8 @@
     "transferred": "Übertragen",
     "converted": "Gewandelt",
     "void": "Ungültig",
-    "not_issued": "Noch nicht ausgegeben"
+    "not_issued": "Noch nicht ausgegeben",
+    "repaid": "Zurückgezahlt"
   },
   "eventKind": {
     "exercise": "Ausübung",
@@ -84,7 +85,10 @@
     "repurchase": "Rückkauf",
     "transfer": "Übertragung",
     "convert": "Wandlung",
-    "void": "Ungültigerklärung"
+    "void": "Ungültigerklärung",
+    "repay": "Rückzahlung",
+    "reverse": "Rückabwicklung",
+    "election_83b": "83(b)-Wahl"
   },
   "optionType": {
     "iso": "Incentive-Option (ISO)",
@@ -96,7 +100,10 @@
   },
   "interestBasis": {
     "simple": "Einfach",
-    "compound_annual": "Jährlich verzinst"
+    "compound_annual": "Jährlich verzinst",
+    "compound_semiannual": "Halbjährlich verzinst",
+    "compound_quarterly": "Vierteljährlich verzinst",
+    "compound_monthly": "Monatlich verzinst"
   },
   "frequency": {
     "monthly": "Monatlich",
@@ -188,7 +195,16 @@
     "vestingFrequency": "Vesting-Intervall",
     "vestingMonths": "Vesting-Dauer (Monate)",
     "vestingStart": "Vesting-Beginn",
-    "volatilityPercent": "Volatilität (%)"
+    "volatilityPercent": "Volatilität (%)",
+    "currency": "Währung",
+    "earlyExercise": "Vorzeitige Ausübung",
+    "mfn": "Meistbegünstigung",
+    "filedOn": "Einreichungsdatum",
+    "fairMarketValuePerShare": "Verkehrswert je Anteil",
+    "amountRepaid": "Zurückgezahlter Betrag",
+    "interestDayCount": "Zinstagequotient",
+    "unvestedRepurchaseBasis": "Rückkaufpreis nicht unverfallbarer Anteile",
+    "conversionClass": "Wandelt in"
   },
   "capTable": {
     "by": {
@@ -218,7 +234,9 @@
       "rsus": "RSUs",
       "warrants": "Optionsscheine",
       "actions": "Aktionen"
-    }
+    },
+    "exportTitle": "{entity} — Kapitaltabelle",
+    "exportAsOf": "Stand {date}"
   },
   "classActions": {
     "title": "Klasse {code}",
@@ -228,9 +246,12 @@
     "split": "Aktiensplit",
     "currentAuthorized": "Derzeit {value} Anteile",
     "currentConversionPrice": "Derzeit {value}",
-    "splitHelp": "Ein Split stellt jeden Bestand, jede Zuteilung, jeden Pool und jeden Preis der Klasse ab seinem Datum neu dar. Er muss nach der zuletzt erfassten Aktivität der Klasse datiert sein.",
+    "splitHelp": "Ein Split stellt jeden Bestand, jede Zuteilung, jeden Pool und jeden Preis der Klasse ab seinem Datum neu dar und passt den Wandlungspreis der Vorzugsklassen an, die in sie gewandelt werden. Er muss nach der zuletzt erfassten Aktivität der Klasse und dieser Vorzugsklassen datiert sein.",
     "saved": "Gespeichert",
-    "failed": "Die Änderung wurde nicht gespeichert."
+    "failed": "Die Änderung wurde nicht gespeichert.",
+    "conversionClass": "Wandlungsklasse",
+    "conversionClassHelp": "Die Stammanteilsklasse, in die die Vorzugsanteile ab dem Datum gewandelt werden. Ihre Splits passen den Wandlungspreis an, wenn die Klassenbedingungen dies vorsehen.",
+    "splitAdjusted": "Wandlungspreise angepasst: {classes}"
   },
   "securities": {
     "allKinds": "Alle",
@@ -289,7 +310,8 @@
     "sections": {
       "rounds": "Runden",
       "convertibles": "Wandelinstrumente",
-      "model": "Runde modellieren"
+      "model": "Runde modellieren",
+      "interest": "Darlehenszinsen"
     },
     "empty": "Noch keine Finanzierungsrunden.",
     "convertiblesEmpty": "Keine SAFEs oder Wandeldarlehen.",
@@ -344,7 +366,7 @@
     }
   },
   "waterfall": {
-    "description": "Verteilt einen Exit-Wert anhand der Kapitaltabelle zum Stichtag: Wandeldarlehen werden zurückgezahlt, Präferenzen nach Rang bedient, und der Rest wird auf Stammanteile, partizipierende und wandelnde Vorzugsanteile sowie im Geld liegende Zuteilungen verteilt. Es wird nichts erfasst.",
+    "description": "Verteilt einen Exit-Wert anhand der Kapitaltabelle zum Stichtag: Wandeldarlehen werden zurückgezahlt, Präferenzen nach Rang bedient, jedes SAFE erhält den höheren Betrag aus Auszahlungs- und Wandlungsbetrag, und der Rest wird auf Stammanteile, partizipierende und wandelnde Vorzugsanteile, wandelnde SAFEs sowie im Geld liegende Zuteilungen verteilt. Es wird nichts erfasst.",
     "exitValue": "Exit-Wert",
     "unvested": "Nicht unverfallbare Zuteilungen",
     "unvestedParticipate": "Nehmen teil",
@@ -367,8 +389,12 @@
       "total": "Gesamt",
       "perShare": "Je Anteil",
       "payout": "Auszahlung",
-      "percent": "Anteil am Exit"
-    }
+      "percent": "Anteil am Exit",
+      "safeShares": "Wandlungsanteile"
+    },
+    "safes": "SAFEs",
+    "safeConverts": "Nimmt den Wandlungsbetrag",
+    "safeCashOut": "Nimmt den Auszahlungsbetrag"
   },
   "compensation": {
     "schedule": "Aufwandsplan",
@@ -390,8 +416,15 @@
       "period": "Dieser Lauf",
       "through": "Bis",
       "total": "Gesamt",
-      "entry": "Journalbuchung"
-    }
+      "entry": "Journalbuchung",
+      "releasedShares": "Freigegebene gesperrte Anteile",
+      "deposit": "Freigegebene Einlage",
+      "reclass": "Wert am Gewährungstag",
+      "par": "Nennwert"
+    },
+    "releases": "Freigaben gesperrter Anteile",
+    "releasesHelp": "Einlagen aus vorzeitiger Ausübung werden in das gezeichnete Kapital und die Kapitalrücklage umgebucht, sobald gesperrte Anteile unverfallbar werden; sie werden mit dem Lauf gebucht.",
+    "releasesEmpty": "Bis zu diesem Datum werden keine gesperrten Anteile unverfallbar."
   },
   "drawer": {
     "tabs": "Wertpapierabschnitte",
@@ -421,7 +454,21 @@
     "eventQuantity": "Menge",
     "eventAmount": "Betrag",
     "eventEntry": "Buchung",
-    "eventReason": "Grund"
+    "eventReason": "Grund",
+    "issueRate": "bewertet zu {rate}",
+    "mfnAdopted": "MFN · Bedingungen übernommen",
+    "mfnOpen": "MFN · vereinbarte Bedingungen",
+    "interestPosted": "Gebuchte Zinsen",
+    "exercisable": "Jetzt ausübbar",
+    "restrictedShares": "Gesperrte Anteile",
+    "releasedShares": "Bisher freigegeben",
+    "depositHeld": "Gehaltene Einlage",
+    "election83b": "83(b)-Wahl",
+    "mfn": "MFN-Bedingungen",
+    "restrictedFrom": "Gesperrte Anteile aus einer vorzeitigen Ausübung ({basis}) von",
+    "reversed": "Rückabgewickelt",
+    "accrualEntry": "Zinsabgrenzung",
+    "reverse": "Rückabwickeln"
   },
   "events": {
     "saved": "{kind} erfasst",
@@ -435,8 +482,16 @@
       "repurchase": "Das Unternehmen kauft Anteile zum gezahlten Betrag als eigene Anteile zurück (genehmigungspflichtig).",
       "transfer": "Unverfallbare Einheiten gehen auf einem neuen Zertifikat an einen anderen Inhaber über.",
       "convert": "SAFEs und Wandeldarlehen werden zum Preis einer Runde an deren Abschlussdatum gewandelt; Vorzugsanteile werden zum Wandlungsverhältnis der Klasse in Stammanteile gewandelt.",
-      "void": "Korrigiert einen irrtümlich erfassten Datensatz: Seine Buchung wird zum Ungültigkeitsdatum storniert und das Ereignis, das ihn erzeugt hat, wird rückgängig gemacht (genehmigungspflichtig)."
-    }
+      "void": "Korrigiert einen irrtümlich erfassten Datensatz: Seine Buchung wird zum Ungültigkeitsdatum storniert und das Ereignis, das ihn erzeugt hat, wird rückgängig gemacht (genehmigungspflichtig).",
+      "repay": "Einen SAFE zu seinem Kaufbetrag oder ein Wandeldarlehen zu seinem Nennbetrag zuzüglich der bis zum Datum aufgelaufenen Zinsen zurückzahlen; die Zinsen werden zuerst abgegrenzt. Ein Agio oder Disagio des Darlehens wird in den Zinsaufwand gebucht. Dies ist genehmigungspflichtig.",
+      "election_83b": "Das Datum erfassen, an dem der Inhaber eine 83(b)-Wahl für diese gesperrten Anteile eingereicht hat. Die Wahl muss innerhalb von 30 Tagen nach dem Ausgabedatum eingereicht werden.",
+      "exerciseEarly": "Diese Gewährung erlaubt die vorzeitige Ausübung: Zuerst werden unverfallbare Einheiten ausgeübt, dann die frühesten nicht unverfallbaren Tranchen. Nicht unverfallbare Anteile werden als gesperrte Anteile ausgegeben, die das Unternehmen bis zur Unverfallbarkeit zurückkaufen kann; ihre Barmittel werden als Einlage gehalten und mit Eintritt der Unverfallbarkeit in das Kapital freigegeben.",
+      "repurchaseRestricted": "Nicht unverfallbare gesperrte Anteile werden zu den Bedingungen der Gewährung zurückgekauft, wobei ihre Einlage ausgeglichen wird. Geben Sie den Verkehrswert je Anteil ein, wenn die Gewährung zum niedrigeren Wert aus Anschaffungskosten und Verkehrswert bepreist. Dies ist genehmigungspflichtig.",
+      "cancelConvertible": "Den SAFE oder das Wandeldarlehen ohne Zahlung stornieren: Nennbetrag und aufgelaufene Zinsen werden in die Kapitalrücklage umgebucht. Dies ist genehmigungspflichtig."
+    },
+    "reversed": "{kind} rückabgewickelt",
+    "carryingHint": "Buchwert zum Stichtag: {amount}",
+    "targetClassHint": "Standardmäßig die Wandlungsklasse der Klasse."
   },
   "new": {
     "open": "Neu",
@@ -455,7 +510,7 @@
       "rsu": "RSUs werden mit dem Anteilspreis am Gewährungstag bewertet; ihre Kosten werden über den Lauf der aktienbasierten Vergütung gebucht.",
       "warrant": "Optionsscheine haben einen Ausübungspreis; für den Optionsschein gezahlte Barmittel werden in die Kapitalrücklage gebucht.",
       "safe": "Der Kaufbetrag wird bis zur Wandlung des SAFE auf das Konto für Wandelinstrumente gebucht.",
-      "note": "Der Nennbetrag wird auf das Konto für Wandelinstrumente gebucht; Zinsen laufen bis zur Wandlung auf Basis Actual/365 auf."
+      "note": "Der Nennbetrag wird auf das Konto für Wandelinstrumente gebucht; Zinsen laufen nach dem Zinstagequotienten des Darlehens über den Zinslauf auf, bis es gewandelt, zurückgezahlt oder storniert wird."
     },
     "considerationHint": "Standardmäßig Preis mal Menge.",
     "numberHint": "Leer lassen, um automatisch zu nummerieren.",
@@ -476,6 +531,79 @@
     "planSaved": "Plan erfasst",
     "roundHelp": "Erfassen Sie eine abgeschlossene Runde und geben Sie dann deren Anteile aus und wandeln Sie ihre SAFEs und Wandeldarlehen auf sie.",
     "createRound": "Runde erfassen",
-    "roundSaved": "Runde erfasst"
+    "roundSaved": "Runde erfasst",
+    "mfn": "MFN: kann bessere Bedingungen eines späteren Instruments übernehmen",
+    "earlyExercise": "Erlaubt die vorzeitige Ausübung nicht unverfallbarer Einheiten",
+    "currencyHint": "Standardmäßig die Währung des Rechtsträgers ({currency}); eine andere Währung wird zum Kurs am Ausgabedatum bewertet.",
+    "roundCurrencyHint": "In der Währung der Runde ausgegeben ({currency}).",
+    "conversionClassMissing": "Erfassen Sie zuerst eine Stammanteilsklasse; Vorzugsanteile werden in sie gewandelt.",
+    "adjustsForSplits": "Der Wandlungspreis wird bei Splits der Wandlungsklasse angepasst"
+  },
+  "dayCount": {
+    "actual_365": "Actual/365",
+    "actual_360": "Actual/360",
+    "thirty_360": "30/360",
+    "actual_actual": "Actual/Actual (ISDA)"
+  },
+  "repurchaseBasis": {
+    "cost": "Nicht unverfallbare Anteile werden zu Anschaffungskosten zurückgekauft",
+    "lower_of_cost_or_fmv": "Nicht unverfallbare Anteile werden zum niedrigeren Wert aus Anschaffungskosten und Verkehrswert zurückgekauft",
+    "none": "Keine Rückkaufbedingungen erfasst"
+  },
+  "election83b": {
+    "filed": "83(b) eingereicht",
+    "open": "83(b) fällig",
+    "missed": "83(b) versäumt",
+    "filedOn": "Eingereicht am {date}",
+    "due": "Fällig am {date} · noch {days} Tage",
+    "missedOn": "Frist abgelaufen am {date}",
+    "deadline": "83(b)-Frist {date}"
+  },
+  "interest": {
+    "schedule": "Zinsabgrenzung",
+    "runs": "Gebuchte Läufe",
+    "post": "Zinsen bis {date} buchen",
+    "posted": "Zinsen bis {date} gebucht",
+    "replayed": "Der Zinslauf bis {date} wurde bereits gebucht",
+    "failed": "Der Zinslauf wurde nicht gebucht.",
+    "lastRun": "Letzter Lauf bis {date}",
+    "noRuns": "Noch keine Zinsläufe gebucht",
+    "total": "Zu buchende Änderung",
+    "empty": "Bis zu diesem Datum laufen für kein Wandeldarlehen Zinsen auf.",
+    "runsEmpty": "Noch keine Zinsläufe gebucht.",
+    "columns": {
+      "cumulative": "Bisher aufgelaufen",
+      "previous": "Zuvor aufgelaufen",
+      "period": "Dieser Lauf",
+      "functional": "Dieser Lauf (funktionale Währung)"
+    }
+  },
+  "reversal": {
+    "title": "{kind} vom {date} rückabwickeln",
+    "help": "Die Buchung des Ereignisses wird zum Rückabwicklungsdatum storniert, und seine Einheiten oder sein Saldo werden ab diesem Datum zurückgeführt; die Historie davor bleibt bestehen. Spätere Aktivitäten, die auf dem Ereignis beruhen, müssen zuerst rückabgewickelt werden. Dies ist genehmigungspflichtig."
+  },
+  "mfn": {
+    "description": "Dieser SAFE kann, solange er aussteht, die Bedingungen eines nach ihm in seiner Währung ausgegebenen Wandelinstruments übernehmen: eine Bewertungsobergrenze, wenn er keine oder eine höhere hat, einen Abschlag, wenn er keinen oder einen niedrigeren hat, oder die Post-Money-Wandlung. Bewertungsobergrenze, Abschlag und SAFE-Art des späteren Instruments werden ab dem Wahldatum gemeinsam übernommen.",
+    "noCandidates": "Zum {date} bietet kein späteres Instrument bessere Bedingungen.",
+    "none": "Keine",
+    "changes": "Gegenüber den geltenden Bedingungen",
+    "better": {
+      "cap": "Niedrigere Obergrenze",
+      "discount": "Höherer Abschlag",
+      "post_money": "Post-Money"
+    },
+    "worse": {
+      "cap": "Höhere oder keine Obergrenze",
+      "discount": "Niedrigerer oder kein Abschlag",
+      "post_money": "Pre-Money"
+    },
+    "adopt": "Übernehmen",
+    "adoptHelp": "Die Wahl des Inhabers erfassen, die Bedingungen von {number} zu übernehmen. Wandlungen ab dem Wahldatum verwenden sie. Dies ist genehmigungspflichtig.",
+    "electedOn": "Wahldatum",
+    "record": "Wahl erfassen",
+    "elections": "Erfasste Wahlen",
+    "source": "Bedingungen von",
+    "saved": "MFN-Wahl erfasst",
+    "failed": "Die Wahl wurde nicht erfasst."
   }
 }

@@ -92,17 +92,20 @@ function IssueSecurityForm({ data, onDone }: { data: NewRecordData; onDone: () =
   const [form, setForm] = useState({
     holderPartyId: '', issueDate: data.context.asOf, shareClassId: '', planId: '', roundId: '', quantity: '', pricePerShare: '',
     considerationAmount: '', considerationAccountId: '', securityNumber: '', expirationDate: '', optionType: 'iso', safeType: 'post_money',
-    valuationCap: '', discountPercent: '', interestRatePercent: '', interestBasis: 'simple', maturityDate: '',
+    valuationCap: '', discountPercent: '', interestRatePercent: '', interestBasis: 'simple', interestDayCount: 'actual_365', maturityDate: '',
+    currency: data.context.currency, unvestedRepurchaseBasis: 'lower_of_cost_or_fmv',
     vestingStart: data.context.asOf, vestingMonths: '48', cliffMonths: '12', vestingFrequency: 'monthly', acceleration: 'none', accelerationPercent: '100',
     sharePrice: '', volatilityPercent: '', riskFreeRatePercent: '', expectedTermYears: '', dividendYieldPercent: '0', attribution: 'straight_line', memo: '',
   })
   const set = (key: keyof typeof form) => (value: string) => setForm((current) => ({ ...current, [key]: value }))
+  const [flags, setFlags] = useState({ mfn: false, earlyExercise: false })
   const shareBased = kind === 'share' || kind === 'option' || kind === 'rsu' || kind === 'warrant'
   const convertible = kind === 'safe' || kind === 'note'
   const award = kind === 'option' || kind === 'rsu'
   const vests = kind === 'share' || award
   const plans = data.plans.filter((plan) => !form.shareClassId || plan.shareClassId === form.shareClassId)
   const rounds = data.rounds.filter((round) => !form.shareClassId || round.shareClassId === form.shareClassId)
+  const roundCurrency = (kind === 'share' || kind === 'warrant') && form.roundId ? data.rounds.find((round) => round.value === form.roundId)?.currency ?? null : null
   const ready = Boolean(form.holderPartyId && form.issueDate
     && (!shareBased || (form.shareClassId && /^\d+$/.test(form.quantity)))
     && (kind !== 'option' && kind !== 'warrant' || form.pricePerShare)
@@ -113,6 +116,7 @@ function IssueSecurityForm({ data, onDone }: { data: NewRecordData; onDone: () =
     const body: Record<string, unknown> = {
       subsidiaryId: data.context.subsidiaryId, kind, holderPartyId: form.holderPartyId, issueDate: form.issueDate,
       securityNumber: blank(form.securityNumber), memo: blank(form.memo), idempotencyKey: crypto.randomUUID(),
+      currency: roundCurrency ?? form.currency,
     }
     if (shareBased) Object.assign(body, { shareClassId: form.shareClassId, quantity: form.quantity })
     if (award && form.planId) body.planId = form.planId
@@ -121,10 +125,12 @@ function IssueSecurityForm({ data, onDone }: { data: NewRecordData; onDone: () =
     if (!award && blank(form.considerationAmount)) body.considerationAmount = blank(form.considerationAmount)
     if (!award && blank(form.considerationAccountId)) body.considerationAccountId = blank(form.considerationAccountId)
     if (kind === 'option') Object.assign(body, { optionType: form.optionType })
+    if (kind === 'option' && flags.earlyExercise) Object.assign(body, { earlyExercise: true, unvestedRepurchaseBasis: form.unvestedRepurchaseBasis })
+    if (kind === 'safe' && flags.mfn) body.mfn = true
     if ((kind === 'option' || kind === 'warrant') && blank(form.expirationDate)) body.expirationDate = blank(form.expirationDate)
     if (kind === 'safe') body.safeType = form.safeType
     if (convertible) Object.assign(body, { valuationCap: blank(form.valuationCap), discountPercent: blank(form.discountPercent) })
-    if (kind === 'note') Object.assign(body, { interestRatePercent: blank(form.interestRatePercent), interestBasis: form.interestBasis, maturityDate: blank(form.maturityDate) })
+    if (kind === 'note') Object.assign(body, { interestRatePercent: blank(form.interestRatePercent), interestBasis: form.interestBasis, interestDayCount: form.interestDayCount, maturityDate: blank(form.maturityDate) })
     if (vests && vesting === 'time') {
       Object.assign(body, {
         vestingStart: form.vestingStart, vestingMonths: Number.parseInt(form.vestingMonths, 10), cliffMonths: Number.parseInt(form.cliffMonths || '0', 10),
@@ -190,6 +196,9 @@ function IssueSecurityForm({ data, onDone }: { data: NewRecordData; onDone: () =
             </Field>
           </>
         )}
+        <Field label={t('fields.currency')} hint={roundCurrency ? t('new.roundCurrencyHint', { currency: roundCurrency }) : t('new.currencyHint', { currency: data.context.currency })}>
+          <SearchSelect value={roundCurrency ?? form.currency} options={data.currencies} onChange={(value) => set('currency')(value ?? data.context.currency)} ariaLabel={t('fields.currency')} disabled={roundCurrency !== null} />
+        </Field>
         {kind === 'option' && (
           <Field label={t('fields.optionType')}>
             <SearchSelect value={form.optionType} options={[{ value: 'iso', label: t('optionType.iso') }, { value: 'nso', label: t('optionType.nso') }]} onChange={(value) => set('optionType')(value ?? 'iso')} ariaLabel={t('fields.optionType')} />
@@ -203,6 +212,21 @@ function IssueSecurityForm({ data, onDone }: { data: NewRecordData; onDone: () =
             <SearchSelect value={form.safeType} options={[{ value: 'post_money', label: t('safeType.post_money') }, { value: 'pre_money', label: t('safeType.pre_money') }]} onChange={(value) => set('safeType')(value ?? 'post_money')} ariaLabel={t('fields.safeType')} />
           </Field>
         )}
+        {kind === 'safe' && (
+          <label className="flex items-center gap-2 self-end pb-2 text-sm">
+            <input type="checkbox" checked={flags.mfn} onChange={(e) => setFlags({ ...flags, mfn: e.target.checked })} />{t('new.mfn')}
+          </label>
+        )}
+        {kind === 'option' && (
+          <label className="flex items-center gap-2 self-end pb-2 text-sm">
+            <input type="checkbox" checked={flags.earlyExercise} onChange={(e) => setFlags({ ...flags, earlyExercise: e.target.checked })} />{t('new.earlyExercise')}
+          </label>
+        )}
+        {kind === 'option' && flags.earlyExercise && (
+          <Field label={t('fields.unvestedRepurchaseBasis')}>
+            <SearchSelect value={form.unvestedRepurchaseBasis} options={(['lower_of_cost_or_fmv', 'cost'] as const).map((value) => ({ value, label: t(`repurchaseBasis.${value}`) }))} onChange={(value) => set('unvestedRepurchaseBasis')(value ?? 'lower_of_cost_or_fmv')} ariaLabel={t('fields.unvestedRepurchaseBasis')} />
+          </Field>
+        )}
         {convertible && (
           <>
             <Field label={t('fields.valuationCap')}><Input inputMode="decimal" value={form.valuationCap} onChange={(e) => set('valuationCap')(e.target.value)} /></Field>
@@ -213,7 +237,10 @@ function IssueSecurityForm({ data, onDone }: { data: NewRecordData; onDone: () =
           <>
             <Field label={t('fields.interestRatePercent')}><Input inputMode="decimal" value={form.interestRatePercent} onChange={(e) => set('interestRatePercent')(e.target.value)} /></Field>
             <Field label={t('fields.interestBasis')}>
-              <SearchSelect value={form.interestBasis} options={[{ value: 'simple', label: t('interestBasis.simple') }, { value: 'compound_annual', label: t('interestBasis.compound_annual') }]} onChange={(value) => set('interestBasis')(value ?? 'simple')} ariaLabel={t('fields.interestBasis')} />
+              <SearchSelect value={form.interestBasis} options={(['simple', 'compound_annual', 'compound_semiannual', 'compound_quarterly', 'compound_monthly'] as const).map((value) => ({ value, label: t(`interestBasis.${value}`) }))} onChange={(value) => set('interestBasis')(value ?? 'simple')} ariaLabel={t('fields.interestBasis')} />
+            </Field>
+            <Field label={t('fields.interestDayCount')}>
+              <SearchSelect value={form.interestDayCount} options={(['actual_365', 'actual_360', 'thirty_360', 'actual_actual'] as const).map((value) => ({ value, label: t(`dayCount.${value}`) }))} onChange={(value) => set('interestDayCount')(value ?? 'actual_365')} ariaLabel={t('fields.interestDayCount')} />
             </Field>
             <Field label={t('fields.maturityDate')}><DateField value={form.maturityDate} onChange={(value) => set('maturityDate')(value)} /></Field>
           </>
@@ -273,10 +300,12 @@ function ShareClassForm({ data, onDone }: { data: NewRecordData; onDone: () => v
   const [form, setForm] = useState({
     code: '', name: '', kind: 'common', effectiveOn: data.context.asOf, authorizedShares: '', parValue: '0.0001', originalIssuePrice: '',
     conversionPrice: '', liquidationMultiple: '1', participation: 'none', participationCapMultiple: '', seniority: '0', antiDilution: 'none',
+    conversionShareClassId: data.commonClasses[0]?.value ?? '',
   })
+  const [adjustsForSplits, setAdjustsForSplits] = useState(true)
   const set = (key: keyof typeof form) => (value: string) => setForm((current) => ({ ...current, [key]: value }))
   const preferred = form.kind === 'preferred'
-  const ready = Boolean(form.code && form.name && form.effectiveOn && /^\d+$/.test(form.authorizedShares) && form.parValue && (!preferred || form.originalIssuePrice))
+  const ready = Boolean(form.code && form.name && form.effectiveOn && /^\d+$/.test(form.authorizedShares) && form.parValue && (!preferred || (form.originalIssuePrice && form.conversionShareClassId)))
   function create() {
     void submit('/api/equity/classes', {
       subsidiaryId: data.context.subsidiaryId, code: form.code, name: form.name, kind: form.kind, effectiveOn: form.effectiveOn,
@@ -285,6 +314,7 @@ function ShareClassForm({ data, onDone }: { data: NewRecordData; onDone: () => v
         originalIssuePrice: form.originalIssuePrice, conversionPrice: blank(form.conversionPrice), liquidationMultiple: blank(form.liquidationMultiple),
         participation: form.participation, participationCapMultiple: form.participation === 'capped' ? blank(form.participationCapMultiple) : null,
         seniority: Number.parseInt(form.seniority || '0', 10), antiDilution: form.antiDilution,
+        conversionShareClassId: form.conversionShareClassId, conversionAdjustsForSplits: adjustsForSplits,
       } : {}),
     }, t('new.classSaved'))
   }
@@ -314,6 +344,12 @@ function ShareClassForm({ data, onDone }: { data: NewRecordData; onDone: () => v
             <Field label={t('fields.antiDilution')}>
               <SearchSelect value={form.antiDilution} options={(['none', 'broad_based', 'narrow_based', 'full_ratchet'] as const).map((value) => ({ value, label: t(`antiDilution.${value}`) }))} onChange={(value) => set('antiDilution')(value ?? 'none')} ariaLabel={t('fields.antiDilution')} />
             </Field>
+            <Field label={t('fields.conversionClass')} hint={data.commonClasses.length === 0 ? t('new.conversionClassMissing') : undefined}>
+              <SearchSelect value={form.conversionShareClassId} options={data.commonClasses} onChange={(value) => set('conversionShareClassId')(value ?? '')} ariaLabel={t('fields.conversionClass')} />
+            </Field>
+            <label className="flex items-center gap-2 self-end pb-2 text-sm">
+              <input type="checkbox" checked={adjustsForSplits} onChange={(e) => setAdjustsForSplits(e.target.checked)} />{t('new.adjustsForSplits')}
+            </label>
           </>
         )}
       </div>
@@ -352,7 +388,7 @@ function PlanForm({ data, onDone }: { data: NewRecordData; onDone: () => void })
 function RoundForm({ data, onDone }: { data: NewRecordData; onDone: () => void }) {
   const t = useTranslations('equity')
   const { busy, submit } = useSubmit(onDone)
-  const [form, setForm] = useState({ name: '', shareClassId: '', closedOn: data.context.asOf, pricePerShare: '', preMoneyValuation: '' })
+  const [form, setForm] = useState({ name: '', shareClassId: '', closedOn: data.context.asOf, pricePerShare: '', preMoneyValuation: '', currency: data.context.currency })
   const ready = Boolean(form.name && form.shareClassId && form.closedOn && form.pricePerShare && form.preMoneyValuation)
   return (
     <div className="space-y-4">
@@ -365,6 +401,9 @@ function RoundForm({ data, onDone }: { data: NewRecordData; onDone: () => void }
         <Field label={t('fields.closedOn')}><DateField value={form.closedOn} onChange={(value) => setForm({ ...form, closedOn: value })} /></Field>
         <Field label={t('fields.pricePerShare')}><Input inputMode="decimal" value={form.pricePerShare} onChange={(e) => setForm({ ...form, pricePerShare: e.target.value })} /></Field>
         <Field label={t('fields.preMoneyValuation')}><Input inputMode="decimal" value={form.preMoneyValuation} onChange={(e) => setForm({ ...form, preMoneyValuation: e.target.value })} /></Field>
+        <Field label={t('fields.currency')} hint={t('new.currencyHint', { currency: data.context.currency })}>
+          <SearchSelect value={form.currency} options={data.currencies} onChange={(value) => setForm({ ...form, currency: value ?? data.context.currency })} ariaLabel={t('fields.currency')} />
+        </Field>
       </div>
       <Actions busy={busy} ready={ready} onCancel={onDone} onSubmit={() => void submit('/api/equity/rounds', { subsidiaryId: data.context.subsidiaryId, ...form }, t('new.roundSaved'))} label={t('new.createRound')} />
     </div>

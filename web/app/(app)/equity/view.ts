@@ -7,15 +7,19 @@ import {
   EquityError,
   listCompensationRuns,
   listEquityEntities,
+  listInterestRuns,
   listSecurities,
   listStakeholders,
   loadCapTableView,
   loadSecurityDetail,
   loadStructure,
   previewCompensationRun,
+  previewInterestRun,
   type CapTable,
   type CompensationPreview,
   type CompensationRunRow,
+  type InterestPreview,
+  type InterestRunRow,
   type SecurityDetail,
   type SecurityKind,
   type SecurityRow,
@@ -92,6 +96,12 @@ export interface StructureViewData {
   structure: StructureView
   convertibles: CapTable['convertibles']
   parties: Record<string, string>
+  /**
+   * Note interest through the as-of date and the runs already posted
+   * (rounds view). A named refusal of the preview (a missing exchange rate,
+   * say) is shown with its remedy instead of the schedule.
+   */
+  interest: { preview: InterestPreview | null; refusal: { message: string; remedy: string } | null; runs: InterestRunRow[] } | null
 }
 
 export interface CompensationViewData {
@@ -116,9 +126,12 @@ export interface NewRecordData {
   context: EquityContext
   holders: Option[]
   classes: (Option & { kind: string })[]
+  /** Common classes a preferred class can convert into. */
+  commonClasses: Option[]
   plans: (Option & { shareClassId: string })[]
-  rounds: (Option & { shareClassId: string; pricePerShare: string })[]
+  rounds: (Option & { shareClassId: string; pricePerShare: string; currency: string })[]
   considerationAccounts: Option[]
+  currencies: Option[]
 }
 
 export interface EquityPageData {
@@ -164,6 +177,11 @@ async function holderOptions(orgId: string, allowed: ReadonlySet<string> | null)
      where org_id = ${orgId} and is_active
      ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowed, { orgWideNull: true })}
      order by display_name limit 2000`)).rows.map((row) => ({ value: row.id, label: row.name }))
+}
+
+async function currencyOptions(): Promise<Option[]> {
+  return (await db.execute<{ code: string; name: string }>(sql`
+    select code, name from currencies order by code`)).rows.map((row) => ({ value: row.code, label: `${row.code} · ${row.name}` }))
 }
 
 async function considerationAccounts(orgId: string): Promise<Option[]> {
@@ -281,7 +299,17 @@ export async function loadEquity(sp: Record<string, string | string[] | undefine
     stakeholders = { context, table: listed.table, parties: listed.parties }
   }
   if (view === 'plans' || view === 'rounds') {
-    structure = { context, structure: await loadStructure(scope), convertibles: capView.table.convertibles, parties: capView.parties }
+    let interest: StructureViewData['interest'] = null
+    if (view === 'rounds') {
+      const runs = await listInterestRuns({ ...actor, subsidiaryId: entity.id })
+      try {
+        interest = { preview: await previewInterestRun({ ...actor, subsidiaryId: entity.id, throughDate: asOf }), refusal: null, runs }
+      } catch (error) {
+        if (!(error instanceof EquityError)) throw error
+        interest = { preview: null, refusal: { message: error.message, remedy: error.remedy }, runs }
+      }
+    }
+    structure = { context, structure: await loadStructure(scope), convertibles: capView.table.convertibles, parties: capView.parties, interest }
   }
   if (view === 'compensation') {
     const preview = await previewCompensationRun({ ...actor, subsidiaryId: entity.id, throughDate: asOf })
@@ -324,9 +352,11 @@ export async function loadEquity(sp: Record<string, string | string[] | undefine
       context,
       holders: await holderOptions(orgId, authz.allowedSubsidiaryIds),
       classes: structureView.classes.map((row) => ({ value: row.id, label: `${row.code} · ${row.name}`, kind: row.kind })),
+      commonClasses: structureView.classes.filter((row) => row.kind === 'common').map((row) => ({ value: row.id, label: `${row.code} · ${row.name}` })),
       plans: structureView.plans.map((row) => ({ value: row.id, label: `${row.code} · ${row.name}`, shareClassId: row.shareClassId })),
-      rounds: structureView.rounds.map((row) => ({ value: row.id, label: `${row.name} · ${row.closedOn}`, shareClassId: row.shareClassId, pricePerShare: row.pricePerShare })),
+      rounds: structureView.rounds.map((row) => ({ value: row.id, label: `${row.name} · ${row.closedOn}`, shareClassId: row.shareClassId, pricePerShare: row.pricePerShare, currency: row.currency })),
       considerationAccounts: await considerationAccounts(orgId),
+      currencies: await currencyOptions(),
     }
   }
 

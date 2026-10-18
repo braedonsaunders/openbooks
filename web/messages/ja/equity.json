@@ -73,7 +73,8 @@
     "transferred": "譲渡済",
     "converted": "転換済",
     "void": "無効",
-    "not_issued": "未発行"
+    "not_issued": "未発行",
+    "repaid": "返済済"
   },
   "eventKind": {
     "exercise": "行使",
@@ -84,7 +85,10 @@
     "repurchase": "買戻し",
     "transfer": "譲渡",
     "convert": "転換",
-    "void": "無効化"
+    "void": "無効化",
+    "repay": "返済",
+    "reverse": "逆仕訳",
+    "election_83b": "83(b) 選択"
   },
   "optionType": {
     "iso": "インセンティブ（ISO）",
@@ -96,7 +100,10 @@
   },
   "interestBasis": {
     "simple": "単利",
-    "compound_annual": "年複利"
+    "compound_annual": "年複利",
+    "compound_semiannual": "半年複利",
+    "compound_quarterly": "四半期複利",
+    "compound_monthly": "月複利"
   },
   "frequency": {
     "monthly": "毎月",
@@ -188,7 +195,16 @@
     "vestingFrequency": "権利確定頻度",
     "vestingMonths": "権利確定期間（月）",
     "vestingStart": "権利確定開始日",
-    "volatilityPercent": "ボラティリティ（%）"
+    "volatilityPercent": "ボラティリティ（%）",
+    "currency": "通貨",
+    "earlyExercise": "早期行使",
+    "mfn": "最恵待遇",
+    "filedOn": "提出日",
+    "fairMarketValuePerShare": "1株あたり公正市場価値",
+    "amountRepaid": "返済額",
+    "interestDayCount": "日数計算方法",
+    "unvestedRepurchaseBasis": "未確定株式の買戻価格",
+    "conversionClass": "転換先"
   },
   "capTable": {
     "by": {
@@ -218,7 +234,9 @@
       "rsus": "RSU",
       "warrants": "ワラント",
       "actions": "操作"
-    }
+    },
+    "exportTitle": "{entity} — 資本政策表",
+    "exportAsOf": "{date} 時点"
   },
   "classActions": {
     "title": "クラス {code}",
@@ -228,9 +246,12 @@
     "split": "株式分割",
     "currentAuthorized": "現在 {value} 株",
     "currentConversionPrice": "現在 {value}",
-    "splitHelp": "株式分割は、その日付以降のクラスのすべての保有株式、アワード、プール、価格を修正再表示します。日付はクラスで最後に記録された取引より後である必要があります。",
+    "splitHelp": "株式分割は、その日付以降のクラスのすべての保有株式、アワード、プール、価格を修正再表示し、このクラスに転換される優先株式クラスの転換価格を調整します。日付はクラスおよびそれらの優先株式クラスで最後に記録された取引より後である必要があります。",
     "saved": "保存しました",
-    "failed": "変更は保存されませんでした。"
+    "failed": "変更は保存されませんでした。",
+    "conversionClass": "転換先クラス",
+    "conversionClassHelp": "優先株式がその日付以降に転換される普通株式クラスです。クラス条件で定められている場合、このクラスの株式分割に応じて転換価格が調整されます。",
+    "splitAdjusted": "転換価格を調整しました：{classes}"
   },
   "securities": {
     "allKinds": "すべて",
@@ -289,7 +310,8 @@
     "sections": {
       "rounds": "ラウンド",
       "convertibles": "転換証券",
-      "model": "ラウンドをモデル化"
+      "model": "ラウンドをモデル化",
+      "interest": "ノート利息"
     },
     "empty": "資金調達ラウンドがまだありません。",
     "convertiblesEmpty": "SAFE またはコンバーティブルノートはありません。",
@@ -344,7 +366,7 @@
     }
   },
   "waterfall": {
-    "description": "基準日時点の資本政策表に対してエグジット価値を分配します。ノートが返済され、優先分配が優先順位に従って支払われ、残額は普通株式、参加型および転換する優先株式、イン・ザ・マネーのアワードで分配されます。記録は行われません。",
+    "description": "基準日時点の資本政策表に対してエグジット価値を分配します。ノートが返済され、優先分配が優先順位に従って支払われ、各 SAFE は現金償還額と転換金額のいずれか大きい方を受け取り、残額は普通株式、参加型および転換する優先株式、転換する SAFE、イン・ザ・マネーのアワードで分配されます。記録は行われません。",
     "exitValue": "エグジット価値",
     "unvested": "未確定アワード",
     "unvestedParticipate": "分配に参加",
@@ -367,8 +389,12 @@
       "total": "合計",
       "perShare": "1株あたり",
       "payout": "支払額",
-      "percent": "エグジットに占める割合"
-    }
+      "percent": "エグジットに占める割合",
+      "safeShares": "転換株式数"
+    },
+    "safes": "SAFE",
+    "safeConverts": "転換金額を受領",
+    "safeCashOut": "現金償還額を受領"
   },
   "compensation": {
     "schedule": "スケジュール",
@@ -390,8 +416,15 @@
       "period": "今回の実行",
       "through": "対象期間末",
       "total": "合計",
-      "entry": "仕訳"
-    }
+      "entry": "仕訳",
+      "releasedShares": "解除された譲渡制限株式",
+      "deposit": "解除された預り金",
+      "reclass": "付与日価値",
+      "par": "額面"
+    },
+    "releases": "譲渡制限株式の解除",
+    "releasesHelp": "早期行使の預り金は、譲渡制限株式の権利確定に応じて資本金と資本剰余金に振り替えられ、実行とともに転記されます。",
+    "releasesEmpty": "この日付までに権利確定する譲渡制限株式はありません。"
   },
   "drawer": {
     "tabs": "証券のセクション",
@@ -421,7 +454,21 @@
     "eventQuantity": "数量",
     "eventAmount": "金額",
     "eventEntry": "仕訳",
-    "eventReason": "理由"
+    "eventReason": "理由",
+    "issueRate": "{rate} で測定",
+    "mfnAdopted": "MFN · 条件採用済み",
+    "mfnOpen": "MFN · 当初条件",
+    "interestPosted": "転記済み利息",
+    "exercisable": "現在行使可能",
+    "restrictedShares": "譲渡制限株式",
+    "releasedShares": "累計解除数",
+    "depositHeld": "預り金残高",
+    "election83b": "83(b) 選択",
+    "mfn": "MFN 条件",
+    "restrictedFrom": "早期行使（{basis}）による譲渡制限株式。元の証券：",
+    "reversed": "逆仕訳済み",
+    "accrualEntry": "利息発生仕訳",
+    "reverse": "逆仕訳"
   },
   "events": {
     "saved": "{kind}を記録しました",
@@ -435,8 +482,16 @@
       "repurchase": "会社が支払額で株式を買い戻し、自己株式とします（承認が必要です）。",
       "transfer": "権利確定済みの単位を新しい株券で別の保有者に移転します。",
       "convert": "SAFE とノートはラウンドのクロージング日にそのラウンドの価格で転換されます。優先株式はクラスの転換比率で普通株式に転換されます。",
-      "void": "誤って入力された記録を訂正します。その仕訳は無効化日付で取り消され、それを作成したイベントも元に戻されます（承認が必要です）。"
-    }
+      "void": "誤って入力された記録を訂正します。その仕訳は無効化日付で取り消され、それを作成したイベントも元に戻されます（承認が必要です）。",
+      "repay": "SAFE を購入額で、またはノートを元本とその日付までの経過利息で返済します（利息を先に計上します）。ノートのプレミアムまたはディスカウントは支払利息に転記されます。承認が必要です。",
+      "election_83b": "保有者がこれらの譲渡制限株式について 83(b) 選択を提出した日付を記録します。選択は発行日から 30 日以内に提出する必要があります。",
+      "exerciseEarly": "このアワードは早期行使が可能です。権利確定済みの単位が先に行使され、次に最も早い未確定の分割分が行使されます。未確定株式は、権利確定まで会社が買い戻せる譲渡制限株式として発行されます。その現金は預り金として保持され、権利確定に応じて資本に振り替えられます。",
+      "repurchaseRestricted": "未確定の譲渡制限株式をアワードの条件で買い戻し、その預り金を精算します。アワードの価格が取得原価と公正市場価値のいずれか低い価額の場合は、1株あたり公正市場価値を入力してください。承認が必要です。",
+      "cancelConvertible": "SAFE またはノートを支払いなしで取り消します。元本と経過利息は資本剰余金に振り替えられます。承認が必要です。"
+    },
+    "reversed": "{kind}を逆仕訳しました",
+    "carryingHint": "基準日時点の帳簿価額：{amount}",
+    "targetClassHint": "既定ではクラスの転換先クラスです。"
   },
   "new": {
     "open": "新規",
@@ -455,7 +510,7 @@
       "rsu": "RSU は付与日株価で評価され、その費用は株式報酬の実行を通じて転記されます。",
       "warrant": "ワラントには行使価格があります。ワラントに対して支払われた現金は資本剰余金に転記されます。",
       "safe": "購入額は SAFE が転換されるまで転換証券勘定に転記されます。",
-      "note": "元本は転換証券勘定に転記されます。利息は転換まで Actual/365 ベースで発生します。"
+      "note": "元本は転換証券勘定に転記されます。利息は転換、返済、取消まで、利息の実行を通じてノートの日数計算方法に基づいて発生します。"
     },
     "considerationHint": "既定値は価格×数量です。",
     "numberHint": "空欄にすると自動で採番されます。",
@@ -476,6 +531,79 @@
     "planSaved": "プランを記録しました",
     "roundHelp": "クローズしたラウンドを記録し、そのラウンドに基づいて株式を発行し、SAFE とノートを転換します。",
     "createRound": "ラウンドを記録",
-    "roundSaved": "ラウンドを記録しました"
+    "roundSaved": "ラウンドを記録しました",
+    "mfn": "MFN：後続証券のより有利な条件を採用可能",
+    "earlyExercise": "未確定の単位の早期行使を許可",
+    "currencyHint": "既定では法人の通貨（{currency}）です。他の通貨は発行日のレートで測定されます。",
+    "roundCurrencyHint": "ラウンドの通貨（{currency}）で発行されます。",
+    "conversionClassMissing": "先に普通株式クラスを記録してください。優先株式はそのクラスに転換されます。",
+    "adjustsForSplits": "転換先クラスの株式分割に応じて転換価格を調整"
+  },
+  "dayCount": {
+    "actual_365": "Actual/365",
+    "actual_360": "Actual/360",
+    "thirty_360": "30/360",
+    "actual_actual": "Actual/Actual (ISDA)"
+  },
+  "repurchaseBasis": {
+    "cost": "未確定株式を取得原価で買戻し",
+    "lower_of_cost_or_fmv": "未確定株式を取得原価と公正市場価値のいずれか低い価額で買戻し",
+    "none": "買戻し条件の記録なし"
+  },
+  "election83b": {
+    "filed": "83(b) 提出済",
+    "open": "83(b) 提出期限前",
+    "missed": "83(b) 期限超過",
+    "filedOn": "{date} 提出",
+    "due": "期限 {date} · 残り {days} 日",
+    "missedOn": "{date} に期限終了",
+    "deadline": "83(b) 期限 {date}"
+  },
+  "interest": {
+    "schedule": "利息発生",
+    "runs": "転記済みの実行",
+    "post": "{date} までの利息を転記",
+    "posted": "{date} までの利息を転記しました",
+    "replayed": "{date} までの利息の実行はすでに転記されています",
+    "failed": "利息の実行は転記されませんでした。",
+    "lastRun": "前回の実行：{date} まで",
+    "noRuns": "転記済みの利息の実行はまだありません",
+    "total": "転記する変動額",
+    "empty": "この日付までに利息が発生するコンバーティブルノートはありません。",
+    "runsEmpty": "転記済みの利息の実行はまだありません。",
+    "columns": {
+      "cumulative": "累計発生額",
+      "previous": "前回までの発生額",
+      "period": "今回の実行",
+      "functional": "今回の実行（機能通貨）"
+    }
+  },
+  "reversal": {
+    "title": "{date} の{kind}を逆仕訳",
+    "help": "イベントの仕訳は逆仕訳日付で取り消され、その単位または残高はその日付から元に戻ります。それ以前の履歴はそのまま残ります。このイベントに依存する後続の取引を先に逆仕訳する必要があります。承認が必要です。"
+  },
+  "mfn": {
+    "description": "この SAFE は、未転換の間、その後に同じ通貨で発行された転換証券の条件を採用できます：キャップがない場合またはより低いキャップ、ディスカウントがない場合またはより高いディスカウント、あるいはポストマネーでの転換。後続証券のキャップ、ディスカウント、SAFE種別は選択日からまとめて採用されます。",
+    "noCandidates": "{date} 時点でより有利な条件を提示する後続証券はありません。",
+    "none": "なし",
+    "changes": "現行条件との比較",
+    "better": {
+      "cap": "より低いキャップ",
+      "discount": "より高いディスカウント",
+      "post_money": "ポストマネー"
+    },
+    "worse": {
+      "cap": "より高いキャップまたはキャップなし",
+      "discount": "より低いディスカウントまたはディスカウントなし",
+      "post_money": "プレマネー"
+    },
+    "adopt": "採用",
+    "adoptHelp": "{number} の条件を採用する保有者の選択を記録します。選択日以降の転換ではその条件が使用されます。承認が必要です。",
+    "electedOn": "選択日",
+    "record": "選択を記録",
+    "elections": "記録済みの選択",
+    "source": "条件の出所",
+    "saved": "MFN 選択を記録しました",
+    "failed": "選択は記録されませんでした。"
   }
 }
