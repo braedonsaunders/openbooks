@@ -13,13 +13,12 @@ registerHooks({ resolve(specifier, context, next) {
 const { sql } = await import('drizzle-orm');
 const { db, withBypassContext, withOrgContext } = await import('@openbooks/engine/platform/db');
 const { seedAdoption, seedRoeIssuanceFixture } = await import('@openbooks/engine/testing/payroll/filing-test-fixtures');
-const { dropScratchOrgReporting, seedPayrollSettings } = await import('@openbooks/engine/testing/fixtures');
+const { dropScratchOrgReporting, seedPayrollSettings, grantScratchPermissions } = await import('@openbooks/engine/testing/fixtures');
 const { GET, POST } = await import('../app/api/payroll/separations/subsequent-service/route');
 async function setup() {
   const f = await seedAdoption();
   await seedPayrollSettings(f.orgId, { features: { payroll: true } });
-  assert.equal((await db.execute(sql`insert into user_permission_overrides(org_id,user_id,permission,effect)
-    values(${f.orgId},${f.actorId},'payroll.read','grant'),(${f.orgId},${f.actorId},'payroll.run','grant') returning permission`)).rows.length, 2);
+  await grantScratchPermissions(f.orgId, f.actorId, ['payroll.read', 'payroll.run']);
   await seedRoeIssuanceFixture(f.orgId, f.employeeId);
   const events = (await db.execute<{id:string}>(sql`select id from payroll_roe_separation_events
     where org_id=${f.orgId} and employee_party_id=${f.employeeId}`)).rows;

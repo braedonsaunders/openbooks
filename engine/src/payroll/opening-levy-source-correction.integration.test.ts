@@ -3,7 +3,7 @@ import test from 'node:test';
 import { createHash, randomUUID } from 'node:crypto';
 import { sql } from 'drizzle-orm';
 import { db, withBypassContext, withOrgContext } from '../platform/db.ts';
-import { dropScratchOrgReporting, seedPayrollSettings } from '../testing/fixtures.ts';
+import { dropScratchOrgReporting, seedPayrollSettings, grantScratchPermissions } from '../testing/fixtures.ts';
 import { errorChainMatches } from '../testing/error-chain.ts';
 import { calculatedRun, seedAdoption, seedUsEinAccount, type AdoptionFixture } from './filing-test-fixtures.ts';
 import { saveOpeningBalances } from './opening-balances.ts';
@@ -30,8 +30,7 @@ const facts = { originalCountry: 'US', originalCurrency: 'USD', coverageStart: '
 async function setup(country: 'US' | 'CA' = 'US') {
   const f = await seedAdoption();
   await seedPayrollSettings(f.orgId, { features: { payroll: true } });
-  await db.execute(sql`insert into user_permission_overrides(org_id,user_id,permission,effect)
-    values(${f.orgId},${f.actorId},'payroll.read','grant'),(${f.orgId},${f.actorId},'payroll.run','grant')`);
+  await grantScratchPermissions(f.orgId, f.actorId, ['payroll.read', 'payroll.run']);
   if (country === 'US') await db.execute(sql`update subsidiaries set country='US',base_currency='USD' where org_id=${f.orgId} and id=${f.subsidiaryId}`);
   return f;
 }

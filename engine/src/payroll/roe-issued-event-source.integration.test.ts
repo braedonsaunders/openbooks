@@ -5,7 +5,7 @@ import { sql } from 'drizzle-orm';
 import { db, withBypassContext, withOrgContext } from '../platform/db.ts';
 import { sealSecret } from '../platform/secrets.ts';
 import { seedAdoption, seedRoeIssuanceFixture } from './filing-test-fixtures.ts';
-import { dropScratchOrgReporting, seedPayrollSettings, seedWorkerEmployment } from '../testing/fixtures.ts';
+import { dropScratchOrgReporting, seedPayrollSettings, seedWorkerEmployment, grantScratchPermissions } from '../testing/fixtures.ts';
 import { errorChainMatches } from '../testing/error-chain.ts';
 import { importRoePriorPeriod, type RoePriorPeriodInput } from './roe-history.ts';
 import { readRoeSeparationFacts, saveRoeSeparationFacts } from './roe-separation-facts.ts';
@@ -17,8 +17,7 @@ const DB=!!process.env.OPENBOOKS_DB_URL;
 async function setup(){
  const f=await seedAdoption();
  await seedPayrollSettings(f.orgId,{features:{payroll:true}});
- await db.execute(sql`insert into user_permission_overrides(org_id,user_id,permission,effect)
-  values(${f.orgId},${f.actorId},'payroll.read','grant'),(${f.orgId},${f.actorId},'payroll.run','grant')`);
+ await grantScratchPermissions(f.orgId, f.actorId, ['payroll.read', 'payroll.run']);
  const accountId=randomUUID();
  await db.execute(sql`insert into payroll_filing_accounts(id,org_id,subsidiary_id,country,program_type,account_number,name,is_active)
   values(${accountId},${f.orgId},${f.subsidiaryId},'CA','ca_rp','123456789RP0001','Original legal-employer account',true)`);

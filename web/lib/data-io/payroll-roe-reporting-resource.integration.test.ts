@@ -3,16 +3,14 @@ import test from 'node:test'
 import { createHash, randomUUID } from 'node:crypto'
 import { sql } from 'drizzle-orm'
 import { db, withBypassContext, withOrgContext } from '@openbooks/engine/platform/db'
-import { dropScratchOrgReporting, seedPayrollSettings } from '@openbooks/engine/testing/fixtures'
+import { dropScratchOrgReporting, seedPayrollSettings, grantScratchPermissions } from '@openbooks/engine/testing/fixtures'
 import { seedAdoption } from '@openbooks/engine/testing/payroll/filing-test-fixtures'
 import { payrollRoeReportingResource } from './payroll-roe-reporting-resource'
 
 async function fixture(){
   const f=await seedAdoption()
   await seedPayrollSettings(f.orgId,{features:{payroll:true}})
-  const grants=await db.execute(sql`insert into user_permission_overrides(org_id,user_id,permission,effect)
-    values(${f.orgId},${f.actorId},'payroll.read','grant'),(${f.orgId},${f.actorId},'payroll.run','grant') returning permission`)
-  assert.equal(grants.rows.length,2)
+  await grantScratchPermissions(f.orgId, f.actorId, ['payroll.read', 'payroll.run'])
   const filingAccountId=randomUUID(),folder=randomUUID(),file=randomUUID(),version=randomUUID()
   const bytes=Buffer.from('Original employee reporting periods and explicit insurance/hour facts')
   const hash=createHash('sha256').update(bytes).digest('hex')

@@ -3,7 +3,7 @@ import test from 'node:test'
 import { createHash, randomUUID } from 'node:crypto'
 import { sql } from 'drizzle-orm'
 import { db, withBypassContext, withOrgContext } from '@openbooks/engine/platform/db'
-import { dropScratchOrg, seedPayrollSettings } from '@openbooks/engine/testing/fixtures'
+import { dropScratchOrg, seedPayrollSettings, grantScratchPermissions } from '@openbooks/engine/testing/fixtures'
 import { importRoePriorPeriod } from '@openbooks/engine/payroll/roe-history'
 import { saveRoeSeparationFacts } from '@openbooks/engine/payroll/roe-separation-facts'
 import { saveRoeSubsequentService } from '@openbooks/engine/payroll/canada/roe-subsequent-service'
@@ -16,9 +16,7 @@ test('qualified ROE reporting sources refuse cabinet trash, replacement and purg
     try {
       await withOrgContext(f.orgId, async () => {
         await seedPayrollSettings(f.orgId, { features: { payroll: true } })
-        const permissions = await db.execute(sql`insert into user_permission_overrides(org_id,user_id,permission,effect)
-          values(${f.orgId},${f.actorId},'payroll.read','grant'),(${f.orgId},${f.actorId},'payroll.run','grant') returning permission`)
-        assert.equal(permissions.rows.length, 2)
+        await grantScratchPermissions(f.orgId, f.actorId, ['payroll.read', 'payroll.run'])
         const account = randomUUID(), folder = randomUUID(), file = randomUUID(), version = randomUUID()
         const bytes = Buffer.from('Original employee reporting period: insured earnings 80; insured hours 4')
         const hash = createHash('sha256').update(bytes).digest('hex')

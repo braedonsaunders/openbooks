@@ -5,7 +5,7 @@ import { sealSecret } from '../platform/secrets.ts';
 import { sql } from 'drizzle-orm';
 import { db, withBypassContext, withOrgContext } from '../platform/db.ts';
 import { seedAdoption, seedHiredEmployee, seedRoeIssuanceFixture } from './filing-test-fixtures.ts';
-import { dropScratchOrgReporting, seedPayrollSettings } from '../testing/fixtures.ts';
+import { dropScratchOrgReporting, seedPayrollSettings, grantScratchPermissions } from '../testing/fixtures.ts';
 import { errorChainMatches } from '../testing/error-chain.ts';
 import { createPayRun } from './run-lifecycle.ts';
 import { calculatePayRun } from './run-calculation.ts';
@@ -18,9 +18,7 @@ const DB=!!process.env.OPENBOOKS_DB_URL;
 async function setup() {
  const f=await seedAdoption({hiredOn:'1998-08-25'});
  await seedPayrollSettings(f.orgId,{features:{payroll:true}});
- const grants=await db.execute(sql`insert into user_permission_overrides(org_id,user_id,permission,effect)
-  values (${f.orgId},${f.actorId},'payroll.read','grant'),(${f.orgId},${f.actorId},'payroll.run','grant') returning permission`);
- assert.equal(grants.rows.length,2);
+ await grantScratchPermissions(f.orgId, f.actorId, ['payroll.read', 'payroll.run']);
  return f;
 }
 

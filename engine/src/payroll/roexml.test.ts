@@ -13,7 +13,7 @@ import { withSimClock } from "../platform/clock.ts";
 import { db } from "../platform/db.ts";
 import { buildRoeXml, isRoeReasonCode, renderRoeXml, validateRoeXml, type RoeRecordToFile } from "./canada/roexml.ts";
 import { sealSecret } from "../platform/secrets.ts";
-import { dropScratchOrgReporting, seedPayrollSettings } from "../testing/fixtures.ts";
+import { dropScratchOrgReporting, seedPayrollSettings, grantScratchPermissions } from "../testing/fixtures.ts";
 import type { RoeRecord } from "./yearend.ts";
 
 /**
@@ -132,8 +132,7 @@ test("ROE XML filenames stamp the org calendar day, not UTC today", { skip: !DB 
   const org={orgId:f.orgId};
   try {
     await seedPayrollSettings(f.orgId,{features:{payroll:true}});
-    await db.execute(sql`insert into user_permission_overrides(org_id,user_id,permission,effect)
-      values(${f.orgId},${f.actorId},'payroll.read','grant'),(${f.orgId},${f.actorId},'payroll.run','grant')`);
+    await grantScratchPermissions(f.orgId, f.actorId, ['payroll.read', 'payroll.run']);
     await db.execute(sql`update orgs set settings=jsonb_set(jsonb_set(settings,'{timeZone}','"Pacific/Auckland"'::jsonb),
       '{payroll,t4Transmitter}',${JSON.stringify(EMPLOYER)}::jsonb) where id=${f.orgId}`);
     const accountId=randomUUID();

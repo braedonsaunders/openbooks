@@ -10,7 +10,7 @@ import {randomUUID,createHash} from 'node:crypto';
 import {sql} from 'drizzle-orm';
 import {db,withBypassContext,withOrgContext} from '../../platform/db.ts';
 import {seedAdoption,calculatedRun} from '../filing-test-fixtures.ts';
-import {seedVacationTerms,seedPayrollSettings,seedWorkerEmployment,dropScratchOrgReporting} from '../../testing/fixtures.ts';
+import {seedVacationTerms,seedPayrollSettings,seedWorkerEmployment,dropScratchOrgReporting, grantScratchPermissions} from '../../testing/fixtures.ts';
 import {createPayRun,reresolveRunToSubsidiary} from '../run-lifecycle.ts';
 import {mutatePayRunAdjustment} from '../run-adjustments.ts';
 import {add,cmp} from '../../money/money.ts';
@@ -24,8 +24,7 @@ import {errorChainMatches} from '../../testing/error-chain.ts';
 const DB=!!process.env.OPENBOOKS_DB_URL;
 async function setup(){
  const f=await seedAdoption();await seedPayrollSettings(f.orgId,{features:{payroll:true}});
- await db.execute(sql`insert into user_permission_overrides(org_id,user_id,permission,effect)
-  values(${f.orgId},${f.actorId},'payroll.read','grant'),(${f.orgId},${f.actorId},'payroll.run','grant')`);
+ await grantScratchPermissions(f.orgId, f.actorId, ['payroll.read', 'payroll.run']);
  const other=randomUUID();await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country)
   values(${other},${f.orgId},${f.subsidiaryId},'Second legal employer','CAD','CA')`);
  const employmentB=await seedWorkerEmployment(f.orgId,f.employeeId,other);

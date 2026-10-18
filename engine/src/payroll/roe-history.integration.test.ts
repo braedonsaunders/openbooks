@@ -5,7 +5,7 @@ import { sql } from 'drizzle-orm';
 import { db, withBypassContext, withOrgContext } from '../platform/db.ts';
 import { sealSecret } from '../platform/secrets.ts';
 import { seedAdoption, seedRoeIssuanceFixture } from './filing-test-fixtures.ts';
-import { dropScratchOrgReporting, seedPayrollSettings } from '../testing/fixtures.ts';
+import { dropScratchOrgReporting, seedPayrollSettings, grantScratchPermissions } from '../testing/fixtures.ts';
 import { seedComponent } from '../testing/hrm-harness.ts';
 import { errorChainMatches } from '../testing/error-chain.ts';
 import { importRoePriorPeriod, qualifyRoeLine, withdrawRoeLineEvidence, readRoeHistoricalEvidence, applyRoeReportingImport, type RoePriorPeriodInput, type RoeReportingSource } from './roe-history.ts';
@@ -21,9 +21,7 @@ const DB=!!process.env.OPENBOOKS_DB_URL;
 async function setup(){
   const f=await seedAdoption({hiredOn:'1998-08-25'});
   await seedPayrollSettings(f.orgId,{features:{payroll:true}});
-  const grants=await db.execute(sql`insert into user_permission_overrides(org_id,user_id,permission,effect)
-    values(${f.orgId},${f.actorId},'payroll.read','grant'),(${f.orgId},${f.actorId},'payroll.run','grant') returning permission`);
-  assert.equal(grants.rows.length,2);
+  await grantScratchPermissions(f.orgId, f.actorId, ['payroll.read', 'payroll.run']);
   const filingAccountId=randomUUID();
   const account=await db.execute(sql`insert into payroll_filing_accounts
     (id,org_id,subsidiary_id,country,program_type,account_number,name,remitter_type,is_default,is_active,created_by,updated_by)
