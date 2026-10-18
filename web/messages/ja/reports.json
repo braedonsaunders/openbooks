@@ -76,7 +76,8 @@
       "aiGovernance": "AI ガバナンス",
       "other": "その他のレポート",
       "resourcing": "リソース計画",
-      "fixedAssets": "固定資産"
+      "fixedAssets": "固定資産",
+      "service": "フィールドサービス"
     },
     "customStudio": {
       "title": "カスタムレポートビルダー",
@@ -1235,6 +1236,26 @@
       "vendor_rebate_claims": {
         "label": "仕入先リベート請求",
         "description": "獲得済み請求、独立した承認、および標準の決済手段。"
+      },
+      "service_jobs_by_status": {
+        "label": "ステータス別サービス作業指示",
+        "description": "サービス作業指示ごとに1行で、ステータス、優先度、請求方法、顧客を表示します。未完了の作業指示はレポート日までの経過日数と経過日数区分を、完了した作業指示は要した日数を示します。"
+      },
+      "service_technician_utilization": {
+        "label": "技術者稼働率",
+        "description": "技術者と日付ごとに1行：有効な配車予約によるサービス訪問の予約時間と、サービス訪問に記録された作業時間を比較します。"
+      },
+      "service_first_time_fix": {
+        "label": "初回解決",
+        "description": "定期契約以外の完了したサービス作業指示ごとに1行：完了した訪問と完了できなかった訪問の数、および初回訪問で解決したかどうか（完了訪問がちょうど1回で、完了できなかった訪問がない）を示します。"
+      },
+      "service_quote_win_rate": {
+        "label": "サービス見積",
+        "description": "送付したサービス見積ごとに1行で、回答、見積金額、承諾金額（選択されたオプションと税を含む）を見積の通貨で表示します。"
+      },
+      "service_revenue_per_job": {
+        "label": "作業指示別サービス収益",
+        "description": "完了したサービス作業指示ごとに1行で、その作業指示を請求する計上済み請求書の収益（税抜）と金額を作業指示の通貨で表示します。"
       }
     },
     "columns": {
@@ -3128,6 +3149,84 @@
         "amount": "請求額",
         "settlement_on": "決済日",
         "document_id": "決済書類"
+      },
+      "service_jobs_by_status": {
+        "id": "作業指示キー",
+        "job_number": "作業指示",
+        "title": "件名",
+        "status": "ステータス",
+        "priority": "優先度",
+        "billing_mode": "請求方法",
+        "customer": "顧客",
+        "customer_id": "顧客キー",
+        "subsidiary": "子会社",
+        "recurring": "定期契約",
+        "created_on": "受付日",
+        "completed_on": "完了日",
+        "age_days": "経過日数",
+        "age_bucket": "経過日数区分",
+        "days_to_complete": "完了までの日数"
+      },
+      "service_technician_utilization": {
+        "work_date": "作業日",
+        "technician": "技術者",
+        "technician_id": "技術者キー",
+        "subsidiary": "子会社",
+        "booked_hours": "予約時間",
+        "worked_hours": "記録時間",
+        "booked_visits": "予約訪問数",
+        "worked_visits": "作業時間記録のある訪問数"
+      },
+      "service_first_time_fix": {
+        "id": "作業指示キー",
+        "job_number": "作業指示",
+        "title": "件名",
+        "status": "ステータス",
+        "priority": "優先度",
+        "billing_mode": "請求方法",
+        "customer": "顧客",
+        "customer_id": "顧客キー",
+        "subsidiary": "子会社",
+        "recurring": "定期契約",
+        "created_on": "受付日",
+        "completed_on": "完了日",
+        "completed_visits": "完了訪問数",
+        "unable_visits": "完了できなかった訪問数",
+        "first_time_fix": "初回訪問で解決"
+      },
+      "service_quote_win_rate": {
+        "id": "見積キー",
+        "quote_number": "見積書",
+        "status": "回答",
+        "sent_on": "送付日",
+        "decided_on": "回答日",
+        "customer": "顧客",
+        "subsidiary": "子会社",
+        "request_number": "サービス依頼",
+        "job_number": "作業指示",
+        "currency": "通貨",
+        "quoted_total": "見積金額",
+        "accepted_total": "承諾金額",
+        "document_id": "見積伝票キー"
+      },
+      "service_revenue_per_job": {
+        "id": "作業指示キー",
+        "job_number": "作業指示",
+        "title": "件名",
+        "status": "ステータス",
+        "priority": "優先度",
+        "billing_mode": "請求方法",
+        "customer": "顧客",
+        "customer_id": "顧客キー",
+        "subsidiary": "子会社",
+        "recurring": "定期契約",
+        "created_on": "受付日",
+        "completed_on": "完了日",
+        "currency": "通貨",
+        "invoiced_revenue": "請求済み収益",
+        "invoiced_total": "請求済み金額",
+        "invoice_count": "計上済み請求書",
+        "other_currency_invoices": "他通貨の請求書"
       }
     },
     "enumValues": {
@@ -3263,7 +3362,21 @@
       "due": "期日到来",
       "overdue": "期日超過",
       "linked": "紐付け済み",
-      "unlinked": "未紐付け"
+      "unlinked": "未紐付け",
+      "completed": "完了",
+      "low": "低",
+      "normal": "通常",
+      "high": "高",
+      "urgent": "緊急",
+      "per_job": "作業指示ごとに請求",
+      "per_visit": "訪問ごとに請求",
+      "not_billable": "請求対象外",
+      "sent": "送付済み",
+      "declined": "辞退",
+      "age_00_07": "0～7日",
+      "age_08_30": "8～30日",
+      "age_31_90": "31～90日",
+      "age_91_plus": "90日超"
     }
   },
   "operators": {
@@ -3541,6 +3654,26 @@
     "register-sales-by-register-and-cashier": {
       "name": "レジ別・担当者別の売上",
       "description": "転記済みのレジ販売、返金、純売上をレジ別・レジ担当者別に表示します。"
+    },
+    "service-jobs-by-status": {
+      "name": "ステータス・経過日数別サービス作業指示",
+      "description": "ステータス、未完了作業指示の経過日数、優先度別のサービス作業指示と、平均および最長の経過日数を表示します。"
+    },
+    "service-technician-utilization": {
+      "name": "技術者稼働率",
+      "description": "技術者と週ごとに、サービス訪問の予約時間と記録された作業時間を比較します。"
+    },
+    "service-first-time-fix": {
+      "name": "初回解決率",
+      "description": "初回訪問で解決した完了済みサービス作業指示を完了月別に表示します。"
+    },
+    "service-quote-win-rate": {
+      "name": "サービス見積の成約率",
+      "description": "月別に送付・承諾・辞退された見積と、承諾金額および成約率を表示します。"
+    },
+    "service-revenue-per-job": {
+      "name": "作業指示別サービス収益",
+      "description": "完了した請求対象の作業指示について、請求済み収益と作業指示あたりの平均収益を月と通貨別に表示します。"
     }
   },
   "generalLedger": {

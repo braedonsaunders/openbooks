@@ -76,7 +76,8 @@
       "aiGovernance": "Gobernanza de IA",
       "other": "Otros informes",
       "resourcing": "Recursos",
-      "fixedAssets": "Activos fijos"
+      "fixedAssets": "Activos fijos",
+      "service": "Servicio técnico"
     },
     "customStudio": {
       "title": "Constructor de informes",
@@ -1235,6 +1236,26 @@
       "vendor_rebate_claims": {
         "label": "Solicitudes de descuentos de proveedores",
         "description": "Derechos adquiridos, aprobaciones independientes e instrumentos de liquidación nativos."
+      },
+      "service_jobs_by_status": {
+        "label": "Trabajos de servicio por estado",
+        "description": "Una fila por trabajo de servicio con su estado, prioridad, facturación y cliente. Los trabajos abiertos muestran su antigüedad en días a la fecha del informe y su tramo de antigüedad; los completados muestran los días que tardaron."
+      },
+      "service_technician_utilization": {
+        "label": "Utilización de técnicos",
+        "description": "Una fila por técnico y día: horas reservadas en visitas de servicio según las asignaciones de despacho vigentes, frente a las horas de mano de obra registradas en esas visitas."
+      },
+      "service_first_time_fix": {
+        "label": "Resolución en la primera visita",
+        "description": "Una fila por trabajo de servicio completado fuera de contratos recurrentes: visitas completadas y sin poder completar, y si el trabajo se resolvió en la primera visita (exactamente una visita completada y ninguna sin completar)."
+      },
+      "service_quote_win_rate": {
+        "label": "Cotizaciones de servicio",
+        "description": "Una fila por cotización de servicio enviada con su decisión, el importe cotizado y el importe aceptado (con complementos seleccionados e impuestos), en la moneda de la cotización."
+      },
+      "service_revenue_per_job": {
+        "label": "Ingresos de servicio por trabajo",
+        "description": "Una fila por trabajo de servicio completado con los ingresos (antes de impuestos) y el importe de las facturas contabilizadas que lo facturan, en la moneda del trabajo."
       }
     },
     "columns": {
@@ -3128,6 +3149,84 @@
         "amount": "Importe solicitado",
         "settlement_on": "Fecha de liquidación",
         "document_id": "Documento de liquidación"
+      },
+      "service_jobs_by_status": {
+        "id": "Clave del trabajo",
+        "job_number": "Trabajo",
+        "title": "Título",
+        "status": "Estado",
+        "priority": "Prioridad",
+        "billing_mode": "Facturación",
+        "customer": "Cliente",
+        "customer_id": "Clave del cliente",
+        "subsidiary": "Subsidiaria",
+        "recurring": "Contrato recurrente",
+        "created_on": "Abierto el",
+        "completed_on": "Completado el",
+        "age_days": "Antigüedad (días)",
+        "age_bucket": "Tramo de antigüedad",
+        "days_to_complete": "Días hasta completar"
+      },
+      "service_technician_utilization": {
+        "work_date": "Fecha de trabajo",
+        "technician": "Técnico",
+        "technician_id": "Clave del técnico",
+        "subsidiary": "Subsidiaria",
+        "booked_hours": "Horas reservadas",
+        "worked_hours": "Horas registradas",
+        "booked_visits": "Visitas reservadas",
+        "worked_visits": "Visitas con tiempo registrado"
+      },
+      "service_first_time_fix": {
+        "id": "Clave del trabajo",
+        "job_number": "Trabajo",
+        "title": "Título",
+        "status": "Estado",
+        "priority": "Prioridad",
+        "billing_mode": "Facturación",
+        "customer": "Cliente",
+        "customer_id": "Clave del cliente",
+        "subsidiary": "Subsidiaria",
+        "recurring": "Contrato recurrente",
+        "created_on": "Abierto el",
+        "completed_on": "Completado el",
+        "completed_visits": "Visitas completadas",
+        "unable_visits": "Visitas sin poder completar",
+        "first_time_fix": "Resuelto en la primera visita"
+      },
+      "service_quote_win_rate": {
+        "id": "Clave de la cotización",
+        "quote_number": "Cotización",
+        "status": "Decisión",
+        "sent_on": "Enviada el",
+        "decided_on": "Decidida el",
+        "customer": "Cliente",
+        "subsidiary": "Subsidiaria",
+        "request_number": "Solicitud",
+        "job_number": "Trabajo",
+        "currency": "Moneda",
+        "quoted_total": "Importe cotizado",
+        "accepted_total": "Importe aceptado",
+        "document_id": "Clave del documento de cotización"
+      },
+      "service_revenue_per_job": {
+        "id": "Clave del trabajo",
+        "job_number": "Trabajo",
+        "title": "Título",
+        "status": "Estado",
+        "priority": "Prioridad",
+        "billing_mode": "Facturación",
+        "customer": "Cliente",
+        "customer_id": "Clave del cliente",
+        "subsidiary": "Subsidiaria",
+        "recurring": "Contrato recurrente",
+        "created_on": "Abierto el",
+        "completed_on": "Completado el",
+        "currency": "Moneda",
+        "invoiced_revenue": "Ingresos facturados",
+        "invoiced_total": "Importe facturado",
+        "invoice_count": "Facturas contabilizadas",
+        "other_currency_invoices": "Facturas en otra moneda"
       }
     },
     "enumValues": {
@@ -3263,7 +3362,21 @@
       "due": "Pendiente",
       "overdue": "Vencido",
       "linked": "Vinculado",
-      "unlinked": "Desvinculado"
+      "unlinked": "Desvinculado",
+      "completed": "Completado",
+      "low": "Baja",
+      "normal": "Media",
+      "high": "Alta",
+      "urgent": "Urgente",
+      "per_job": "Facturar por trabajo",
+      "per_visit": "Facturar por visita",
+      "not_billable": "No facturable",
+      "sent": "Enviada",
+      "declined": "Rechazada",
+      "age_00_07": "0–7 días",
+      "age_08_30": "8–30 días",
+      "age_31_90": "31–90 días",
+      "age_91_plus": "Más de 90 días"
     }
   },
   "operators": {
@@ -3521,6 +3634,26 @@
     "register-sales-by-register-and-cashier": {
       "name": "Ventas por caja y cajero",
       "description": "Ventas, reembolsos y ventas netas de caja contabilizados, por caja y cajero."
+    },
+    "service-jobs-by-status": {
+      "name": "Trabajos de servicio por estado y antigüedad",
+      "description": "Trabajos de servicio por estado, antigüedad de los abiertos y prioridad, con la antigüedad media y máxima en días."
+    },
+    "service-technician-utilization": {
+      "name": "Utilización de técnicos",
+      "description": "Horas reservadas en visitas de servicio frente a horas de mano de obra registradas, por técnico y semana."
+    },
+    "service-first-time-fix": {
+      "name": "Tasa de resolución en la primera visita",
+      "description": "Trabajos de servicio completados que se resolvieron en la primera visita, por mes de finalización."
+    },
+    "service-quote-win-rate": {
+      "name": "Tasa de aceptación de cotizaciones de servicio",
+      "description": "Cotizaciones enviadas, aceptadas y rechazadas por mes, con el valor aceptado y la tasa de aceptación."
+    },
+    "service-revenue-per-job": {
+      "name": "Ingresos de servicio por trabajo",
+      "description": "Ingresos facturados e ingreso medio por trabajo facturable completado, por mes y moneda."
     }
   },
   "generalLedger": {

@@ -76,7 +76,8 @@
       "aiGovernance": "Gouvernance de l’IA",
       "other": "Autres rapports",
       "resourcing": "Ressources",
-      "fixedAssets": "Immobilisations"
+      "fixedAssets": "Immobilisations",
+      "service": "Service à la clientèle"
     },
     "customStudio": {
       "title": "Constructeur de rapports",
@@ -1235,6 +1236,26 @@
       "vendor_rebate_claims": {
         "label": "Demandes de ristournes fournisseurs",
         "description": "Demandes acquises, approbations indépendantes et moyens de règlement natifs."
+      },
+      "service_jobs_by_status": {
+        "label": "Bons de travail par statut",
+        "description": "Une ligne par bon de travail avec son statut, sa priorité, sa facturation et son client. Les bons ouverts indiquent leur ancienneté en jours à la date du rapport et leur tranche d’ancienneté; les bons terminés indiquent le nombre de jours qu’ils ont pris."
+      },
+      "service_technician_utilization": {
+        "label": "Taux d’utilisation des techniciens",
+        "description": "Une ligne par technicien et par jour : les heures réservées sur des interventions selon les affectations de répartition en vigueur, comparées aux heures de main-d’œuvre saisies sur les interventions."
+      },
+      "service_first_time_fix": {
+        "label": "Résolution au premier passage",
+        "description": "Une ligne par bon de travail terminé hors contrats récurrents : interventions terminées et non réalisables, et résolution ou non au premier passage (exactement une intervention terminée et aucune non réalisable)."
+      },
+      "service_quote_win_rate": {
+        "label": "Soumissions de service",
+        "description": "Une ligne par soumission de service envoyée avec sa décision, le montant soumis et le montant accepté (options retenues et taxes comprises), dans la devise de la soumission."
+      },
+      "service_revenue_per_job": {
+        "label": "Revenu par bon de travail",
+        "description": "Une ligne par bon de travail terminé avec le revenu (avant taxes) et le montant des factures comptabilisées qui le facturent, dans la devise du bon."
       }
     },
     "columns": {
@@ -3128,6 +3149,84 @@
         "amount": "Montant demandé",
         "settlement_on": "Date de règlement",
         "document_id": "Document de règlement"
+      },
+      "service_jobs_by_status": {
+        "id": "Clé du bon de travail",
+        "job_number": "Bon de travail",
+        "title": "Titre",
+        "status": "Statut",
+        "priority": "Priorité",
+        "billing_mode": "Facturation",
+        "customer": "Client",
+        "customer_id": "Clé du client",
+        "subsidiary": "Filiale",
+        "recurring": "Contrat récurrent",
+        "created_on": "Ouvert le",
+        "completed_on": "Terminé le",
+        "age_days": "Ancienneté (jours)",
+        "age_bucket": "Tranche d’ancienneté",
+        "days_to_complete": "Jours avant achèvement"
+      },
+      "service_technician_utilization": {
+        "work_date": "Date du travail",
+        "technician": "Technicien",
+        "technician_id": "Clé du technicien",
+        "subsidiary": "Filiale",
+        "booked_hours": "Heures réservées",
+        "worked_hours": "Heures saisies",
+        "booked_visits": "Interventions réservées",
+        "worked_visits": "Interventions avec temps saisi"
+      },
+      "service_first_time_fix": {
+        "id": "Clé du bon de travail",
+        "job_number": "Bon de travail",
+        "title": "Titre",
+        "status": "Statut",
+        "priority": "Priorité",
+        "billing_mode": "Facturation",
+        "customer": "Client",
+        "customer_id": "Clé du client",
+        "subsidiary": "Filiale",
+        "recurring": "Contrat récurrent",
+        "created_on": "Ouvert le",
+        "completed_on": "Terminé le",
+        "completed_visits": "Interventions terminées",
+        "unable_visits": "Interventions non réalisables",
+        "first_time_fix": "Résolu au premier passage"
+      },
+      "service_quote_win_rate": {
+        "id": "Clé de la soumission",
+        "quote_number": "Soumission",
+        "status": "Décision",
+        "sent_on": "Envoyée le",
+        "decided_on": "Décidée le",
+        "customer": "Client",
+        "subsidiary": "Filiale",
+        "request_number": "Demande",
+        "job_number": "Bon de travail",
+        "currency": "Devise",
+        "quoted_total": "Montant soumis",
+        "accepted_total": "Montant accepté",
+        "document_id": "Clé de la pièce de soumission"
+      },
+      "service_revenue_per_job": {
+        "id": "Clé du bon de travail",
+        "job_number": "Bon de travail",
+        "title": "Titre",
+        "status": "Statut",
+        "priority": "Priorité",
+        "billing_mode": "Facturation",
+        "customer": "Client",
+        "customer_id": "Clé du client",
+        "subsidiary": "Filiale",
+        "recurring": "Contrat récurrent",
+        "created_on": "Ouvert le",
+        "completed_on": "Terminé le",
+        "currency": "Devise",
+        "invoiced_revenue": "Revenu facturé",
+        "invoiced_total": "Montant facturé",
+        "invoice_count": "Factures comptabilisées",
+        "other_currency_invoices": "Factures dans une autre devise"
       }
     },
     "enumValues": {
@@ -3263,7 +3362,21 @@
       "due": "À échéance",
       "overdue": "En retard",
       "linked": "Lié",
-      "unlinked": "Non lié"
+      "unlinked": "Non lié",
+      "completed": "Terminé",
+      "low": "Basse",
+      "normal": "Normale",
+      "high": "Haute",
+      "urgent": "Urgente",
+      "per_job": "Facturer par bon de travail",
+      "per_visit": "Facturer par intervention",
+      "not_billable": "Non facturable",
+      "sent": "Envoyée",
+      "declined": "Refusée",
+      "age_00_07": "0 à 7 jours",
+      "age_08_30": "8 à 30 jours",
+      "age_31_90": "31 à 90 jours",
+      "age_91_plus": "Plus de 90 jours"
     }
   },
   "operators": {
@@ -3521,6 +3634,26 @@
     "register-sales-by-register-and-cashier": {
       "name": "Ventes par caisse et caissier",
       "description": "Ventes, remboursements et ventes nettes en caisse comptabilisés, par caisse et par caissier."
+    },
+    "service-jobs-by-status": {
+      "name": "Bons de travail par statut et ancienneté",
+      "description": "Bons de travail par statut, ancienneté des bons ouverts et priorité, avec l’ancienneté moyenne et maximale en jours."
+    },
+    "service-technician-utilization": {
+      "name": "Taux d’utilisation des techniciens",
+      "description": "Heures d’intervention réservées comparées aux heures de main-d’œuvre saisies, par technicien et par semaine."
+    },
+    "service-first-time-fix": {
+      "name": "Taux de résolution au premier passage",
+      "description": "Bons de travail terminés résolus dès la première intervention, par mois d’achèvement."
+    },
+    "service-quote-win-rate": {
+      "name": "Taux d’acceptation des soumissions",
+      "description": "Soumissions envoyées, acceptées et refusées par mois, avec la valeur acceptée et le taux d’acceptation."
+    },
+    "service-revenue-per-job": {
+      "name": "Revenu par bon de travail",
+      "description": "Revenu facturé et revenu moyen par bon de travail facturable terminé, par mois et par devise."
     }
   },
   "generalLedger": {

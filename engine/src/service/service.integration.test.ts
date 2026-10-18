@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
-import { db, withBypassContext } from "../platform/db.ts";
+import { BUILT_IN_REPORT_DEFINITION_MAP, REPORT_ENTITY_MAP, runCustomQuery } from "@openbooks/reports";
+import { db, pool, withBypassContext, withOrgContext } from "../platform/db.ts";
 import { addCalendarDays } from "../platform/civil-date.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrgReporting, grantScratchPermissions, seedWorkerEmployment } from "../testing/fixtures.ts";
 import { ScopeNotFoundError } from "../organization/subsidiary-scope.ts";
@@ -13,12 +14,13 @@ import { postDocument } from "../ledger/posting-document.ts";
 import { controlDeps } from "../ledger/document-service.ts";
 import { applyBoardChanges } from "../schedule-boards/entries.ts";
 import { addAgreementVersion, createServiceAgreement, generateAgreementVisits } from "./agreements.ts";
-import { invoiceServiceWork } from "./billing.ts";
+import { invoiceServiceWork, serviceDepositCandidates } from "./billing.ts";
 import { completeVisit, recordVisitPart } from "./completion.ts";
 import { assignVisit, dispatchVisit, loadDispatchDay, moveVisitBooking } from "./dispatch.ts";
 import { ServiceError } from "./errors.ts";
 import { createServiceJob } from "./jobs.ts";
 import { getServiceVisit, listMyVisits } from "./reads.ts";
+import { createPortalServiceRequest, createServiceRequest, listPortalServiceRequests } from "./requests.ts";
 import { cancelVisit, setVisitFieldStatus } from "./visits.ts";
 
 const enabled = { skip: !process.env.OPENBOOKS_DB_URL };
@@ -184,6 +186,19 @@ test("a job is dispatched, worked, completed with a stock part and labor, and in
   assert.equal(issues, 1, "posting the invoice issued no further stock");
   const billed = (await withBypassContext(() => db.execute<{ billing: string }>(sql`select billing_status as billing from time_entries where service_visit_id = ${visitId}`))).rows;
   assert.deepEqual(billed, [{ billing: "billed" }]);
+
+  // The service reports run on the native report engine over the same records.
+  await withOrgContext(f.org.orgId, async () => {
+    const run = (slug: string) => runCustomQuery(pool, BUILT_IN_REPORT_DEFINITION_MAP[slug]!.query, { orgId: f.org.orgId, entityMap: REPORT_ENTITY_MAP, asOf: f.today });
+    for (const slug of ["service-jobs-by-status", "service-first-time-fix", "service-quote-win-rate", "service-revenue-per-job"]) await run(slug);
+    const utilization = await run("service-technician-utilization");
+    assert.equal(utilization.rowCount, 1, "one technician worked one week");
+    const group = utilization.groups[0]!;
+    const row = Object.fromEntries(group.rows[0]!.map((cell, index) => [group.columns[index], cell]));
+    assert.equal(row["Technician"], "Alex Tech");
+    assert.equal(Number(row["Booked hours"]), 1, "the one-hour booking counts as booked time");
+    assert.equal(Number(row["Recorded hours"]), 1.5, "the recorded labor counts as worked time");
+  });
 }));
 
 test("agreement generation is idempotent, keeps skipped occurrences and supersedes only unscheduled visits from a new version's date", enabled, async () => fixture(async (f) => {
@@ -277,4 +292,31 @@ test("one person is never double-booked across boards, and leave and qualificati
 
   await assert.rejects(assignVisit({ ...as(f, f.dispatcher), boardId: f.dispatchBoard, visitId: (await newJob(f)).visitId!, expectedRevision: 1, workerPartyId: f.techB, startsAt: at(f.today, "18:30") }),
     code("service_assignment_needs_override"), "a visit outside working hours needs an override reason");
+}));
+
+test("a portal request lands in the queue once, the customer sees only their own requests, and the board draws its working day", enabled, async () => fixture(async (f) => {
+  const portalLink = randomUUID();
+  await withBypassContext(async () => {
+    affected(await db.execute(sql`insert into customer_portal_links (id, org_id, party_id, contact_email, purpose, token_hash, expires_at)
+      values (${portalLink}, ${f.org.orgId}, ${f.org.customerId}, 'buyer@example.com', 'session', ${`hash-${portalLink}`}, now() + interval '1 hour')`), "portal session");
+  });
+  const key = randomUUID();
+  const asked = { orgId: f.org.orgId, partyId: f.org.customerId, linkId: portalLink, id: key, request: { title: "Thermostat keeps resetting", serviceAddressId: f.addressId, urgent: true } };
+  const first = await createPortalServiceRequest(asked);
+  assert.equal(first.source, "portal");
+  assert.equal(first.priority, "high", "an urgent portal request is taken at high priority");
+  assert.equal((await createPortalServiceRequest(asked)).id, first.id, "a resubmitted form returns the same request");
+  await assert.rejects(createPortalServiceRequest({ ...asked, request: { ...asked.request, title: "Something else" } }), code("service_key_reused"));
+  await createServiceRequest({ ...as(f, f.dispatcher), id: randomUUID(), input: { customerPartyId: f.org.customerId, title: "Annual inspection", priority: "normal" } });
+  const listed = await listPortalServiceRequests(f.org.orgId, f.org.customerId);
+  assert.deepEqual(listed.map((request) => request.title).sort(), ["Annual inspection", "Thermostat keeps resetting"]);
+  assert.deepEqual(await listPortalServiceRequests(f.org.orgId, f.techA), [], "another party sees none of the customer's requests");
+
+  const day = await loadDispatchDay({ ...as(f, f.dispatcher), boardId: f.dispatchBoard, date: f.today });
+  assert.deepEqual(day.displayWindow, day.workingWindow, "the board draws its own working day");
+  assert.equal(day.displayWindow.startsAt, at(f.today, "07:00"));
+
+  const { job } = await newJob(f);
+  assert.deepEqual(await serviceDepositCandidates({ ...as(f, f.dispatcher), jobId: job.id }), [], "no payment is held on account yet");
+  await assert.rejects(serviceDepositCandidates({ ...as(f, f.dispatcher2), jobId: job.id }), "listing deposits needs service management");
 }));

@@ -430,6 +430,125 @@ const FIXED_ASSET_REPORTS: BuiltInReportDefinition[] = [
   },
 ]
 
+/** Service dispatch analysis. Rates are formula measures over counted
+ *  components, so the engine divides exactly and names an empty denominator
+ *  instead of printing zero. */
+const SERVICE_BUILT_IN_REPORTS: BuiltInReportDefinition[] = [
+  {
+    slug: 'service-jobs-by-status',
+    name: 'Service jobs by status and age',
+    description: 'Service jobs by status, open-job age and priority, with average and oldest age in days.',
+    query: {
+      entity: 'service_jobs_by_status', mode: 'summarize', columns: [],
+      breakouts: [{ column: 'status' }, { column: 'age_bucket' }, { column: 'priority' }],
+      measures: [
+        { fn: 'count', key: 'jobs', label: 'Jobs' },
+        { fn: 'avg', column: 'age_days', key: 'average_age', label: 'Average age (days)' },
+        { fn: 'max', column: 'age_days', key: 'oldest_age', label: 'Oldest (days)' },
+      ],
+      filters: null, groupBy: null, limit: 1000,
+    },
+  },
+  {
+    slug: 'service-technician-utilization',
+    name: 'Technician utilization',
+    description: 'Booked service visit hours against recorded labor hours, by technician and week.',
+    query: {
+      entity: 'service_technician_utilization', mode: 'summarize', columns: [],
+      breakouts: [{ column: 'technician' }, { column: 'work_date', bin: 'week' }],
+      measures: [
+        { fn: 'sum', column: 'booked_hours', key: 'booked_hours', label: 'Booked hours' },
+        { fn: 'sum', column: 'worked_hours', key: 'worked_hours', label: 'Recorded hours' },
+        { fn: 'sum', column: 'booked_visits', key: 'booked_visits', label: 'Booked visits' },
+        {
+          fn: 'formula', key: 'recorded_to_booked', label: 'Recorded to booked', format: 'percent',
+          undefinedLabel: 'No booked hours',
+          guards: [{ measure: 'booked_hours', when: 'zero', label: 'No booked hours' }],
+          expr: { op: '/', left: { ref: 'worked_hours' }, right: { ref: 'booked_hours' } },
+        },
+      ],
+      filters: null, groupBy: null, limit: 1000,
+    },
+  },
+  {
+    slug: 'service-first-time-fix',
+    name: 'First-time fix rate',
+    description: 'Completed service jobs fixed on their first visit, by month of completion.',
+    query: {
+      entity: 'service_first_time_fix', mode: 'summarize', columns: [],
+      breakouts: [{ column: 'completed_on', bin: 'month' }],
+      measures: [
+        { fn: 'count', key: 'jobs', label: 'Completed jobs' },
+        {
+          fn: 'count', key: 'fixed', label: 'Fixed first time',
+          filter: { combinator: 'and', rules: [{ field: 'first_time_fix', op: 'is_true' }] },
+        },
+        { fn: 'avg', column: 'completed_visits', key: 'average_visits', label: 'Average visits per job' },
+        {
+          fn: 'formula', key: 'first_time_fix_rate', label: 'First-time fix rate', format: 'percent',
+          undefinedLabel: 'No completed jobs',
+          guards: [{ measure: 'jobs', when: 'zero', label: 'No completed jobs' }],
+          expr: { op: '/', left: { ref: 'fixed' }, right: { ref: 'jobs' } },
+        },
+      ],
+      filters: null, groupBy: null, limit: 1000,
+    },
+  },
+  {
+    slug: 'service-quote-win-rate',
+    name: 'Service quote win rate',
+    description: 'Quotes sent, accepted and declined by month, with accepted value and win rate.',
+    query: {
+      entity: 'service_quote_win_rate', mode: 'summarize', columns: [],
+      breakouts: [{ column: 'sent_on', bin: 'month' }, { column: 'currency' }],
+      measures: [
+        { fn: 'count', key: 'sent', label: 'Quotes sent' },
+        {
+          fn: 'count', key: 'accepted', label: 'Accepted',
+          filter: { combinator: 'and', rules: [{ field: 'status', op: 'eq', value: 'accepted' }] },
+        },
+        {
+          fn: 'count', key: 'declined', label: 'Declined',
+          filter: { combinator: 'and', rules: [{ field: 'status', op: 'eq', value: 'declined' }] },
+        },
+        {
+          fn: 'count', key: 'decided', hidden: true,
+          filter: { combinator: 'and', rules: [{ field: 'status', op: 'in', value: ['accepted', 'declined'] }] },
+        },
+        { fn: 'sum', column: 'accepted_total', key: 'accepted_value', label: 'Accepted value' },
+        {
+          fn: 'formula', key: 'win_rate', label: 'Win rate', format: 'percent',
+          undefinedLabel: 'No decided quotes',
+          guards: [{ measure: 'decided', when: 'zero', label: 'No decided quotes' }],
+          expr: { op: '/', left: { ref: 'accepted' }, right: { ref: 'decided' } },
+        },
+      ],
+      filters: null, groupBy: null, limit: 1000,
+    },
+  },
+  {
+    slug: 'service-revenue-per-job',
+    name: 'Service revenue per job',
+    description: 'Invoiced revenue and average revenue per completed billable job, by month and currency.',
+    query: {
+      entity: 'service_revenue_per_job', mode: 'summarize', columns: [],
+      breakouts: [{ column: 'completed_on', bin: 'month' }, { column: 'currency' }],
+      measures: [
+        { fn: 'count', key: 'jobs', label: 'Completed jobs' },
+        { fn: 'sum', column: 'invoiced_revenue', key: 'revenue', label: 'Invoiced revenue' },
+        {
+          fn: 'formula', key: 'revenue_per_job', label: 'Revenue per job', format: 'money',
+          undefinedLabel: 'No completed jobs',
+          guards: [{ measure: 'jobs', when: 'zero', label: 'No completed jobs' }],
+          expr: { op: '/', left: { ref: 'revenue' }, right: { ref: 'jobs' } },
+        },
+      ],
+      filters: { combinator: 'and', rules: [{ field: 'billing_mode', op: 'in', value: ['per_job', 'per_visit'] }] },
+      groupBy: null, limit: 1000,
+    },
+  },
+]
+
 export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
   ...FIXED_ASSET_REPORTS,
   ...PORTFOLIO_SUMMARY_REPORTS,
@@ -627,6 +746,7 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
       limit: 1000,
     },
   },
+  ...SERVICE_BUILT_IN_REPORTS,
   {
     slug: 'order-margin-by-channel',
     name: 'Order margin by channel',

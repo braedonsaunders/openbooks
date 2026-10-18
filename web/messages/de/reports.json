@@ -76,7 +76,8 @@
       "aiGovernance": "KI-Governance",
       "other": "Weitere Berichte",
       "resourcing": "Ressourcenplanung",
-      "fixedAssets": "Anlagevermögen"
+      "fixedAssets": "Anlagevermögen",
+      "service": "Kundendienst"
     },
     "customStudio": {
       "title": "Benutzerdefinierter Berichtsgenerator",
@@ -1235,6 +1236,26 @@
       "vendor_rebate_claims": {
         "label": "Lieferantenbonusansprüche",
         "description": "Verdiente Ansprüche, unabhängige Genehmigungen und systemeigene Abrechnungsbelege."
+      },
+      "service_jobs_by_status": {
+        "label": "Serviceaufträge nach Zustand",
+        "description": "Eine Zeile je Serviceauftrag mit Zustand, Priorität, Abrechnung und Kunde. Offene Aufträge zeigen ihr Alter in Tagen zum Berichtsdatum und ihre Altersklasse; abgeschlossene Aufträge zeigen ihre Dauer in Tagen."
+      },
+      "service_technician_utilization": {
+        "label": "Technikerauslastung",
+        "description": "Eine Zeile je Techniker und Tag: auf Serviceeinsätze gebuchte Stunden aus gültigen Disponierungen im Vergleich zu den auf Serviceeinsätzen erfassten Arbeitsstunden."
+      },
+      "service_first_time_fix": {
+        "label": "Erstlösungsquote",
+        "description": "Eine Zeile je abgeschlossenem Serviceauftrag außerhalb wiederkehrender Verträge: abgeschlossene und nicht abschließbare Einsätze und ob der Auftrag beim ersten Einsatz behoben wurde (genau ein abgeschlossener Einsatz und keiner nicht abschließbar)."
+      },
+      "service_quote_win_rate": {
+        "label": "Serviceangebote",
+        "description": "Eine Zeile je gesendetem Serviceangebot mit Entscheidung, Angebotssumme und angenommener Summe (einschließlich gewählter Zusatzleistungen und Steuern) in der Angebotswährung."
+      },
+      "service_revenue_per_job": {
+        "label": "Serviceumsatz je Auftrag",
+        "description": "Eine Zeile je abgeschlossenem Serviceauftrag mit Umsatz (vor Steuern) und Summe der gebuchten Rechnungen, die ihn abrechnen, in der Auftragswährung."
       }
     },
     "columns": {
@@ -3128,6 +3149,84 @@
         "amount": "Anspruchsbetrag",
         "settlement_on": "Abrechnungsdatum",
         "document_id": "Abrechnungsbeleg"
+      },
+      "service_jobs_by_status": {
+        "id": "Auftragsschlüssel",
+        "job_number": "Auftrag",
+        "title": "Titel",
+        "status": "Zustand",
+        "priority": "Priorität",
+        "billing_mode": "Abrechnung",
+        "customer": "Kunde",
+        "customer_id": "Kundenschlüssel",
+        "subsidiary": "Tochtergesellschaft",
+        "recurring": "Wiederkehrender Vertrag",
+        "created_on": "Eröffnet am",
+        "completed_on": "Abgeschlossen am",
+        "age_days": "Alter (Tage)",
+        "age_bucket": "Altersklasse",
+        "days_to_complete": "Tage bis Abschluss"
+      },
+      "service_technician_utilization": {
+        "work_date": "Arbeitstag",
+        "technician": "Techniker",
+        "technician_id": "Technikerschlüssel",
+        "subsidiary": "Tochtergesellschaft",
+        "booked_hours": "Gebuchte Stunden",
+        "worked_hours": "Erfasste Stunden",
+        "booked_visits": "Gebuchte Einsätze",
+        "worked_visits": "Einsätze mit erfasster Zeit"
+      },
+      "service_first_time_fix": {
+        "id": "Auftragsschlüssel",
+        "job_number": "Auftrag",
+        "title": "Titel",
+        "status": "Zustand",
+        "priority": "Priorität",
+        "billing_mode": "Abrechnung",
+        "customer": "Kunde",
+        "customer_id": "Kundenschlüssel",
+        "subsidiary": "Tochtergesellschaft",
+        "recurring": "Wiederkehrender Vertrag",
+        "created_on": "Eröffnet am",
+        "completed_on": "Abgeschlossen am",
+        "completed_visits": "Abgeschlossene Einsätze",
+        "unable_visits": "Nicht abschließbare Einsätze",
+        "first_time_fix": "Beim ersten Einsatz behoben"
+      },
+      "service_quote_win_rate": {
+        "id": "Angebotsschlüssel",
+        "quote_number": "Angebot",
+        "status": "Entscheidung",
+        "sent_on": "Gesendet am",
+        "decided_on": "Entschieden am",
+        "customer": "Kunde",
+        "subsidiary": "Tochtergesellschaft",
+        "request_number": "Anfrage",
+        "job_number": "Auftrag",
+        "currency": "Währung",
+        "quoted_total": "Angebotssumme",
+        "accepted_total": "Angenommene Summe",
+        "document_id": "Angebotsbelegschlüssel"
+      },
+      "service_revenue_per_job": {
+        "id": "Auftragsschlüssel",
+        "job_number": "Auftrag",
+        "title": "Titel",
+        "status": "Zustand",
+        "priority": "Priorität",
+        "billing_mode": "Abrechnung",
+        "customer": "Kunde",
+        "customer_id": "Kundenschlüssel",
+        "subsidiary": "Tochtergesellschaft",
+        "recurring": "Wiederkehrender Vertrag",
+        "created_on": "Eröffnet am",
+        "completed_on": "Abgeschlossen am",
+        "currency": "Währung",
+        "invoiced_revenue": "Fakturierter Umsatz",
+        "invoiced_total": "Fakturierte Summe",
+        "invoice_count": "Gebuchte Rechnungen",
+        "other_currency_invoices": "Rechnungen in anderer Währung"
       }
     },
     "enumValues": {
@@ -3263,7 +3362,21 @@
       "due": "Fällig",
       "overdue": "Überfällig",
       "linked": "Verknüpft",
-      "unlinked": "Nicht verknüpft"
+      "unlinked": "Nicht verknüpft",
+      "completed": "Abgeschlossen",
+      "low": "Niedrig",
+      "normal": "Mittel",
+      "high": "Hoch",
+      "urgent": "Dringend",
+      "per_job": "Abrechnung je Auftrag",
+      "per_visit": "Abrechnung je Einsatz",
+      "not_billable": "Nicht abrechenbar",
+      "sent": "Gesendet",
+      "declined": "Abgelehnt",
+      "age_00_07": "0–7 Tage",
+      "age_08_30": "8–30 Tage",
+      "age_31_90": "31–90 Tage",
+      "age_91_plus": "Über 90 Tage"
     }
   },
   "operators": {
@@ -3541,6 +3654,26 @@
     "register-sales-by-register-and-cashier": {
       "name": "Umsätze nach Kasse und Kassierer",
       "description": "Gebuchte Kassenverkäufe, Erstattungen und Nettoumsatz nach Kasse und Kassierer."
+    },
+    "service-jobs-by-status": {
+      "name": "Serviceaufträge nach Zustand und Alter",
+      "description": "Serviceaufträge nach Zustand, Alter offener Aufträge und Priorität, mit durchschnittlichem und höchstem Alter in Tagen."
+    },
+    "service-technician-utilization": {
+      "name": "Technikerauslastung",
+      "description": "Gebuchte Einsatzstunden im Vergleich zu erfassten Arbeitsstunden, nach Techniker und Woche."
+    },
+    "service-first-time-fix": {
+      "name": "Erstlösungsquote",
+      "description": "Abgeschlossene Serviceaufträge, die beim ersten Einsatz behoben wurden, nach Abschlussmonat."
+    },
+    "service-quote-win-rate": {
+      "name": "Annahmequote der Serviceangebote",
+      "description": "Gesendete, angenommene und abgelehnte Angebote nach Monat, mit angenommenem Wert und Annahmequote."
+    },
+    "service-revenue-per-job": {
+      "name": "Serviceumsatz je Auftrag",
+      "description": "Fakturierter Umsatz und Durchschnittsumsatz je abgeschlossenem abrechenbarem Auftrag, nach Monat und Währung."
     }
   },
   "generalLedger": {

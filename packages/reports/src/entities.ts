@@ -29,6 +29,7 @@ import { POS_REPORT_ENTITIES } from './pos-entities'
 import { FIXED_ASSET_REPORT_ENTITIES } from './fixed-asset-entities'
 import { RECOVERY_REPORT_ENTITIES } from './recovery-entities'
 import { BANKING_REPORT_ENTITIES } from './banking-entities'
+import { SERVICE_REPORT_ENTITIES } from './service-entities'
 
 export { BANKING_REPORT_ENTITIES } from './banking-entities'
 export { HRM_REPORT_ENTITIES } from './hrm-entities'
@@ -1655,6 +1656,9 @@ export const REPORT_ENTITIES: ReportEntity[] = [
   ...REBATE_REPORT_ENTITIES,
   ...BANKING_REPORT_ENTITIES,
   ...DEMAND_REPORT_ENTITIES,
+  // Service dispatch: job aging, technician utilization, first-time fix,
+  // quote win rate and revenue per job.
+  ...SERVICE_REPORT_ENTITIES,
   // HR-20 begin: field time capture (0231). Clock events carry geo FLAGS
   // (inside/outside/unavailable) — raw coordinates are worker location
   // and live only in field_clock_coordinates behind hrm.employment.read.

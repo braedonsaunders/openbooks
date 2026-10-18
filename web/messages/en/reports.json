@@ -76,7 +76,8 @@
       "aiGovernance": "AI governance",
       "other": "Other reports",
       "resourcing": "Resourcing",
-      "fixedAssets": "Fixed assets"
+      "fixedAssets": "Fixed assets",
+      "service": "Service"
     },
     "customStudio": {
       "title": "Custom report builder",
@@ -1235,6 +1236,26 @@
       "vendor_rebate_claims": {
         "label": "Vendor rebate claims",
         "description": "Earned claims, independent approvals and native settlement instruments."
+      },
+      "service_jobs_by_status": {
+        "label": "Service jobs by status",
+        "description": "One row per service job with its status, priority, billing and customer. Open jobs carry their age in days to the report date and an age bucket; completed jobs carry the days they took."
+      },
+      "service_technician_utilization": {
+        "label": "Technician utilization",
+        "description": "One row per technician and day: hours booked on service visits from live dispatch bookings, against labor hours recorded on service visits."
+      },
+      "service_first_time_fix": {
+        "label": "First-time fix",
+        "description": "One row per completed service job outside recurring agreements: completed and unable-to-complete service visits, and whether the job was fixed on its first visit (exactly one completed visit and none unable to complete)."
+      },
+      "service_quote_win_rate": {
+        "label": "Service quotes",
+        "description": "One row per sent service quote with its decision, quoted total and accepted total (including selected add-ons and tax), in the quote currency."
+      },
+      "service_revenue_per_job": {
+        "label": "Service revenue per job",
+        "description": "One row per completed service job with the revenue (before tax) and total of the posted invoices that bill it, in the job currency."
       }
     },
     "columns": {
@@ -3128,6 +3149,84 @@
         "amount": "Claim amount",
         "settlement_on": "Settled on",
         "document_id": "Settlement document"
+      },
+      "service_jobs_by_status": {
+        "id": "Job key",
+        "job_number": "Job",
+        "title": "Title",
+        "status": "Status",
+        "priority": "Priority",
+        "billing_mode": "Billing",
+        "customer": "Customer",
+        "customer_id": "Customer key",
+        "subsidiary": "Subsidiary",
+        "recurring": "Recurring agreement",
+        "created_on": "Opened on",
+        "completed_on": "Completed on",
+        "age_days": "Age (days)",
+        "age_bucket": "Age bucket",
+        "days_to_complete": "Days to complete"
+      },
+      "service_technician_utilization": {
+        "work_date": "Date",
+        "technician": "Technician",
+        "technician_id": "Technician key",
+        "subsidiary": "Subsidiary",
+        "booked_hours": "Booked hours",
+        "worked_hours": "Recorded hours",
+        "booked_visits": "Booked visits",
+        "worked_visits": "Visits with recorded time"
+      },
+      "service_first_time_fix": {
+        "id": "Job key",
+        "job_number": "Job",
+        "title": "Title",
+        "status": "Status",
+        "priority": "Priority",
+        "billing_mode": "Billing",
+        "customer": "Customer",
+        "customer_id": "Customer key",
+        "subsidiary": "Subsidiary",
+        "recurring": "Recurring agreement",
+        "created_on": "Opened on",
+        "completed_on": "Completed on",
+        "completed_visits": "Completed visits",
+        "unable_visits": "Unable-to-complete visits",
+        "first_time_fix": "Fixed first time"
+      },
+      "service_quote_win_rate": {
+        "id": "Quote key",
+        "quote_number": "Quote",
+        "status": "Decision",
+        "sent_on": "Sent on",
+        "decided_on": "Decided on",
+        "customer": "Customer",
+        "subsidiary": "Subsidiary",
+        "request_number": "Request",
+        "job_number": "Job",
+        "currency": "Currency",
+        "quoted_total": "Quoted total",
+        "accepted_total": "Accepted total",
+        "document_id": "Quote document key"
+      },
+      "service_revenue_per_job": {
+        "id": "Job key",
+        "job_number": "Job",
+        "title": "Title",
+        "status": "Status",
+        "priority": "Priority",
+        "billing_mode": "Billing",
+        "customer": "Customer",
+        "customer_id": "Customer key",
+        "subsidiary": "Subsidiary",
+        "recurring": "Recurring agreement",
+        "created_on": "Opened on",
+        "completed_on": "Completed on",
+        "currency": "Currency",
+        "invoiced_revenue": "Invoiced revenue",
+        "invoiced_total": "Invoiced total",
+        "invoice_count": "Posted invoices",
+        "other_currency_invoices": "Invoices in another currency"
       }
     },
     "enumValues": {
@@ -3263,7 +3362,21 @@
       "due": "Due",
       "overdue": "Overdue",
       "linked": "Linked",
-      "unlinked": "Unlinked"
+      "unlinked": "Unlinked",
+      "completed": "Completed",
+      "low": "Low",
+      "normal": "Normal",
+      "high": "High",
+      "urgent": "Urgent",
+      "per_job": "Invoice per job",
+      "per_visit": "Invoice per visit",
+      "not_billable": "Not billable",
+      "sent": "Sent",
+      "declined": "Declined",
+      "age_00_07": "0–7 days",
+      "age_08_30": "8–30 days",
+      "age_31_90": "31–90 days",
+      "age_91_plus": "Over 90 days"
     }
   },
   "operators": {
@@ -3541,6 +3654,26 @@
     "register-sales-by-register-and-cashier": {
       "name": "Sales by register and cashier",
       "description": "Posted register sales, refunds and net sales by register and cashier."
+    },
+    "service-jobs-by-status": {
+      "name": "Service jobs by status and age",
+      "description": "Service jobs by status, open-job age and priority, with average and oldest age in days."
+    },
+    "service-technician-utilization": {
+      "name": "Technician utilization",
+      "description": "Booked service visit hours against recorded labor hours, by technician and week."
+    },
+    "service-first-time-fix": {
+      "name": "First-time fix rate",
+      "description": "Completed service jobs fixed on their first visit, by month of completion."
+    },
+    "service-quote-win-rate": {
+      "name": "Service quote win rate",
+      "description": "Quotes sent, accepted and declined by month, with accepted value and win rate."
+    },
+    "service-revenue-per-job": {
+      "name": "Service revenue per job",
+      "description": "Invoiced revenue and average revenue per completed billable job, by month and currency."
     }
   },
   "generalLedger": {

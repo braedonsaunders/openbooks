@@ -76,7 +76,8 @@
       "aiGovernance": "AI 治理",
       "other": "其他报表",
       "resourcing": "资源规划",
-      "fixedAssets": "固定资产"
+      "fixedAssets": "固定资产",
+      "service": "现场服务"
     },
     "customStudio": {
       "title": "自定义报表构建器",
@@ -1235,6 +1236,26 @@
       "vendor_rebate_claims": {
         "label": "供应商返利申领",
         "description": "已获得申领、独立审批和系统原生结算工具。"
+      },
+      "service_jobs_by_status": {
+        "label": "按状态统计的服务工单",
+        "description": "每个服务工单一行，包含状态、优先级、计费方式和客户。未结工单显示截至报表日期的账龄天数及账龄区间；已完成工单显示所用天数。"
+      },
+      "service_technician_utilization": {
+        "label": "技术员利用率",
+        "description": "每位技术员每天一行：按有效派工预约计算的服务上门预约工时，与在服务上门中记录的人工工时对比。"
+      },
+      "service_first_time_fix": {
+        "label": "首次修复",
+        "description": "每个已完成且不属于周期性协议的服务工单一行：已完成和无法完成的服务上门次数，以及该工单是否在首次上门时修复（恰好一次已完成上门且没有无法完成的上门）。"
+      },
+      "service_quote_win_rate": {
+        "label": "服务报价",
+        "description": "每份已发送的服务报价一行，包含决定、报价金额和接受金额（含所选附加项和税费），以报价币种计。"
+      },
+      "service_revenue_per_job": {
+        "label": "每个服务工单的收入",
+        "description": "每个已完成服务工单一行，包含为其开票的已过账发票的收入（税前）和金额，以工单币种计。"
       }
     },
     "columns": {
@@ -3128,6 +3149,84 @@
         "amount": "申领金额",
         "settlement_on": "结算日期",
         "document_id": "结算单据"
+      },
+      "service_jobs_by_status": {
+        "id": "工单键",
+        "job_number": "工单",
+        "title": "标题",
+        "status": "状态",
+        "priority": "优先级",
+        "billing_mode": "计费方式",
+        "customer": "客户",
+        "customer_id": "客户键",
+        "subsidiary": "子公司",
+        "recurring": "周期性协议",
+        "created_on": "开立日期",
+        "completed_on": "完成日期",
+        "age_days": "账龄（天）",
+        "age_bucket": "账龄区间",
+        "days_to_complete": "完成天数"
+      },
+      "service_technician_utilization": {
+        "work_date": "工作日期",
+        "technician": "技术员",
+        "technician_id": "技术员键",
+        "subsidiary": "子公司",
+        "booked_hours": "预约工时",
+        "worked_hours": "记录工时",
+        "booked_visits": "预约上门次数",
+        "worked_visits": "有记录工时的上门次数"
+      },
+      "service_first_time_fix": {
+        "id": "工单键",
+        "job_number": "工单",
+        "title": "标题",
+        "status": "状态",
+        "priority": "优先级",
+        "billing_mode": "计费方式",
+        "customer": "客户",
+        "customer_id": "客户键",
+        "subsidiary": "子公司",
+        "recurring": "周期性协议",
+        "created_on": "开立日期",
+        "completed_on": "完成日期",
+        "completed_visits": "已完成上门次数",
+        "unable_visits": "无法完成的上门次数",
+        "first_time_fix": "首次上门修复"
+      },
+      "service_quote_win_rate": {
+        "id": "报价键",
+        "quote_number": "报价单",
+        "status": "决定",
+        "sent_on": "发送日期",
+        "decided_on": "决定日期",
+        "customer": "客户",
+        "subsidiary": "子公司",
+        "request_number": "服务请求",
+        "job_number": "工单",
+        "currency": "币种",
+        "quoted_total": "报价金额",
+        "accepted_total": "接受金额",
+        "document_id": "报价单据键"
+      },
+      "service_revenue_per_job": {
+        "id": "工单键",
+        "job_number": "工单",
+        "title": "标题",
+        "status": "状态",
+        "priority": "优先级",
+        "billing_mode": "计费方式",
+        "customer": "客户",
+        "customer_id": "客户键",
+        "subsidiary": "子公司",
+        "recurring": "周期性协议",
+        "created_on": "开立日期",
+        "completed_on": "完成日期",
+        "currency": "币种",
+        "invoiced_revenue": "已开票收入",
+        "invoiced_total": "已开票金额",
+        "invoice_count": "已过账发票",
+        "other_currency_invoices": "其他币种发票"
       }
     },
     "enumValues": {
@@ -3263,7 +3362,21 @@
       "due": "到期",
       "overdue": "逾期",
       "linked": "已关联",
-      "unlinked": "未关联"
+      "unlinked": "未关联",
+      "completed": "已完成",
+      "low": "低",
+      "normal": "普通",
+      "high": "高",
+      "urgent": "紧急",
+      "per_job": "按工单开票",
+      "per_visit": "按上门开票",
+      "not_billable": "不计费",
+      "sent": "已发送",
+      "declined": "已拒绝",
+      "age_00_07": "0–7 天",
+      "age_08_30": "8–30 天",
+      "age_31_90": "31–90 天",
+      "age_91_plus": "超过 90 天"
     }
   },
   "operators": {
@@ -3541,6 +3654,26 @@
     "register-sales-by-register-and-cashier": {
       "name": "按收银台和收银员的销售",
       "description": "按收银台和收银员列示已过账的收银销售、退款和净销售额。"
+    },
+    "service-jobs-by-status": {
+      "name": "按状态和账龄统计的服务工单",
+      "description": "按状态、未结工单账龄和优先级统计服务工单，并显示平均账龄和最长账龄（天）。"
+    },
+    "service-technician-utilization": {
+      "name": "技术员利用率",
+      "description": "按技术员和周比较服务上门的预约工时与记录的人工工时。"
+    },
+    "service-first-time-fix": {
+      "name": "首次修复率",
+      "description": "按完成月份统计首次上门即修复的已完成服务工单。"
+    },
+    "service-quote-win-rate": {
+      "name": "服务报价成交率",
+      "description": "按月统计已发送、已接受和已拒绝的报价，并显示接受金额和成交率。"
+    },
+    "service-revenue-per-job": {
+      "name": "每个服务工单的收入",
+      "description": "按月份和币种统计已开票收入及每个已完成可计费工单的平均收入。"
     }
   },
   "generalLedger": {

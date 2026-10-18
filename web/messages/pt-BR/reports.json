@@ -76,7 +76,8 @@
       "aiGovernance": "Governança de IA",
       "other": "Outros relatórios",
       "resourcing": "Alocação de recursos",
-      "fixedAssets": "Ativos imobilizados"
+      "fixedAssets": "Ativos imobilizados",
+      "service": "Assistência técnica"
     },
     "customStudio": {
       "title": "Construtor de relatórios personalizados",
@@ -1235,6 +1236,26 @@
       "vendor_rebate_claims": {
         "label": "Solicitações de bonificação de fornecedores",
         "description": "Direitos adquiridos, aprovações independentes e instrumentos nativos de liquidação."
+      },
+      "service_jobs_by_status": {
+        "label": "Serviços por situação",
+        "description": "Uma linha por serviço com situação, prioridade, faturamento e cliente. Serviços abertos mostram a idade em dias até a data do relatório e a faixa de idade; serviços concluídos mostram quantos dias levaram."
+      },
+      "service_technician_utilization": {
+        "label": "Utilização de técnicos",
+        "description": "Uma linha por técnico e dia: horas agendadas em visitas de serviço a partir dos agendamentos de despacho vigentes, comparadas às horas de mão de obra registradas nas visitas."
+      },
+      "service_first_time_fix": {
+        "label": "Resolução na primeira visita",
+        "description": "Uma linha por serviço concluído fora de contratos recorrentes: visitas concluídas e não concluídas, e se o serviço foi resolvido na primeira visita (exatamente uma visita concluída e nenhuma não concluída)."
+      },
+      "service_quote_win_rate": {
+        "label": "Orçamentos de serviço",
+        "description": "Uma linha por orçamento de serviço enviado com a decisão, o valor orçado e o valor aceito (com adicionais selecionados e impostos), na moeda do orçamento."
+      },
+      "service_revenue_per_job": {
+        "label": "Receita de serviço por serviço",
+        "description": "Uma linha por serviço concluído com a receita (antes de impostos) e o valor das faturas lançadas que o faturam, na moeda do serviço."
       }
     },
     "columns": {
@@ -3128,6 +3149,84 @@
         "amount": "Valor solicitado",
         "settlement_on": "Data de liquidação",
         "document_id": "Documento de liquidação"
+      },
+      "service_jobs_by_status": {
+        "id": "Chave do serviço",
+        "job_number": "Serviço",
+        "title": "Título",
+        "status": "Situação",
+        "priority": "Prioridade",
+        "billing_mode": "Faturamento",
+        "customer": "Cliente",
+        "customer_id": "Chave do cliente",
+        "subsidiary": "Subsidiária",
+        "recurring": "Contrato recorrente",
+        "created_on": "Aberto em",
+        "completed_on": "Concluído em",
+        "age_days": "Idade (dias)",
+        "age_bucket": "Faixa de idade",
+        "days_to_complete": "Dias até a conclusão"
+      },
+      "service_technician_utilization": {
+        "work_date": "Data do trabalho",
+        "technician": "Técnico",
+        "technician_id": "Chave do técnico",
+        "subsidiary": "Subsidiária",
+        "booked_hours": "Horas agendadas",
+        "worked_hours": "Horas registradas",
+        "booked_visits": "Visitas agendadas",
+        "worked_visits": "Visitas com tempo registrado"
+      },
+      "service_first_time_fix": {
+        "id": "Chave do serviço",
+        "job_number": "Serviço",
+        "title": "Título",
+        "status": "Situação",
+        "priority": "Prioridade",
+        "billing_mode": "Faturamento",
+        "customer": "Cliente",
+        "customer_id": "Chave do cliente",
+        "subsidiary": "Subsidiária",
+        "recurring": "Contrato recorrente",
+        "created_on": "Aberto em",
+        "completed_on": "Concluído em",
+        "completed_visits": "Visitas concluídas",
+        "unable_visits": "Visitas não concluídas",
+        "first_time_fix": "Resolvido na primeira visita"
+      },
+      "service_quote_win_rate": {
+        "id": "Chave do orçamento",
+        "quote_number": "Orçamento",
+        "status": "Decisão",
+        "sent_on": "Enviado em",
+        "decided_on": "Decidido em",
+        "customer": "Cliente",
+        "subsidiary": "Subsidiária",
+        "request_number": "Solicitação",
+        "job_number": "Serviço",
+        "currency": "Moeda",
+        "quoted_total": "Valor orçado",
+        "accepted_total": "Valor aceito",
+        "document_id": "Chave do documento do orçamento"
+      },
+      "service_revenue_per_job": {
+        "id": "Chave do serviço",
+        "job_number": "Serviço",
+        "title": "Título",
+        "status": "Situação",
+        "priority": "Prioridade",
+        "billing_mode": "Faturamento",
+        "customer": "Cliente",
+        "customer_id": "Chave do cliente",
+        "subsidiary": "Subsidiária",
+        "recurring": "Contrato recorrente",
+        "created_on": "Aberto em",
+        "completed_on": "Concluído em",
+        "currency": "Moeda",
+        "invoiced_revenue": "Receita faturada",
+        "invoiced_total": "Valor faturado",
+        "invoice_count": "Faturas lançadas",
+        "other_currency_invoices": "Faturas em outra moeda"
       }
     },
     "enumValues": {
@@ -3263,7 +3362,21 @@
       "due": "A vencer",
       "overdue": "Vencido",
       "linked": "Vinculado",
-      "unlinked": "Desvinculado"
+      "unlinked": "Desvinculado",
+      "completed": "Concluído",
+      "low": "Baixa",
+      "normal": "Média",
+      "high": "Alta",
+      "urgent": "Urgente",
+      "per_job": "Faturar por serviço",
+      "per_visit": "Faturar por visita",
+      "not_billable": "Não faturável",
+      "sent": "Enviado",
+      "declined": "Recusado",
+      "age_00_07": "0–7 dias",
+      "age_08_30": "8–30 dias",
+      "age_31_90": "31–90 dias",
+      "age_91_plus": "Mais de 90 dias"
     }
   },
   "operators": {
@@ -3541,6 +3654,26 @@
     "register-sales-by-register-and-cashier": {
       "name": "Vendas por caixa e operador",
       "description": "Vendas, reembolsos e vendas líquidas de caixa lançados, por caixa e por operador."
+    },
+    "service-jobs-by-status": {
+      "name": "Serviços por situação e idade",
+      "description": "Serviços por situação, idade dos abertos e prioridade, com a idade média e a maior idade em dias."
+    },
+    "service-technician-utilization": {
+      "name": "Utilização de técnicos",
+      "description": "Horas agendadas em visitas de serviço comparadas às horas de mão de obra registradas, por técnico e semana."
+    },
+    "service-first-time-fix": {
+      "name": "Taxa de resolução na primeira visita",
+      "description": "Serviços concluídos resolvidos na primeira visita, por mês de conclusão."
+    },
+    "service-quote-win-rate": {
+      "name": "Taxa de aceitação de orçamentos de serviço",
+      "description": "Orçamentos enviados, aceitos e recusados por mês, com o valor aceito e a taxa de aceitação."
+    },
+    "service-revenue-per-job": {
+      "name": "Receita por serviço",
+      "description": "Receita faturada e receita média por serviço faturável concluído, por mês e moeda."
     }
   },
   "generalLedger": {
