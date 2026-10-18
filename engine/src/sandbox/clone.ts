@@ -276,6 +276,23 @@ async function validateVendorRetainageSourcesForClone(opts: CloneOptions): Promi
  * `retainedTenantTables` = tenant-owned tables the clone deliberately does not
  * copy (the catalog EXCLUDE set): a real FK into one of them can never be
  * copied verbatim — the value would be a pointer at PRODUCTION's row. */
+/** Segment tables copied before every dimension-carrying table, in this order. */
+const EARLY_SEGMENT_TABLES = ["segment_definitions", "segment_values"];
+
+/**
+ * SEGMENT_DEFAULTS_RESTORE: each copied segment definition regains its
+ * source default, rebased, once its values exist in the sandbox.
+ */
+export function segmentDefaultsRestoreSql(opts: Pick<CloneOptions, "seed" | "sandboxOrgId" | "productionOrgId">): string {
+  const seed = assertUuid(opts.seed);
+  const sbx = assertUuid(opts.sandboxOrgId);
+  const prod = assertUuid(opts.productionOrgId);
+  return `update segment_definitions target set default_value_id = ob_rebase(source.default_value_id, '${seed}'::uuid)
+    from segment_definitions source
+   where source.org_id = '${prod}'::uuid and source.default_value_id is not null
+     and target.org_id = '${sbx}'::uuid and target.id = ob_rebase(source.id, '${seed}'::uuid)`;
+}
+
 export function generateCopySql(
   t: TableInfo,
   opts: CloneOptions,
@@ -405,6 +422,24 @@ export function generateCopySql(
       }
       exprs.push(`(select jsonb_agg(to_jsonb(ob_rebase(value::uuid,'${seed}'::uuid)::text) order by ord)
         from jsonb_array_elements_text("profile_ids") with ordinality member(value,ord))`);
+      continue;
+    }
+    // Custom-segment assignments name segment values by id; each value copies
+    // under its rebased identity, so every assignment of a source value is
+    // rebased with it (codes and other scalars carry over unchanged).
+    if (c.name === "extra_dims" && c.udtName === "jsonb" && t.name !== "segment_values") {
+      if (tableMask?.has(c.name)) throw new Error(`Custom-segment assignments ${t.name}.extra_dims require native identity rebasing; remove the whole-column masking policy.`);
+      exprs.push(`(case when "extra_dims" is null then null else coalesce((select jsonb_object_agg(dim.key, case
+          when jsonb_typeof(dim.value) = 'string' and exists (select 1 from segment_values value_row
+            where value_row.org_id = '${prod}'::uuid and value_row.id::text = dim.value #>> '{}')
+          then to_jsonb(ob_rebase((dim.value #>> '{}')::uuid, '${seed}'::uuid)::text) else dim.value end)
+        from jsonb_each("extra_dims") dim), '{}'::jsonb) end)`);
+      continue;
+    }
+    // A segment's default value is one of its own values, which copy after it;
+    // the default is restored once the values exist (see SEGMENT_DEFAULTS_RESTORE).
+    if (t.name === "segment_definitions" && c.name === "default_value_id") {
+      exprs.push("null::uuid");
       continue;
     }
     // Automatic delivery never follows copied people or activates in a new environment.
@@ -580,7 +615,7 @@ export function generateCopySql(
 
   // Immediate ownership and reversal guards require ancestors to exist already.
   // Heap/index order and UUID chronology cannot determine retained lineage.
-  const parentColumn = t.name === "subsidiaries" ? "parent_id"
+  const parentColumn = t.name === "subsidiaries" || t.name === "segment_values" ? "parent_id"
     : t.name === "fx_revaluation_rate_evidence" ? "supersedes_id"
     : ["project_financial_adjustments", "project_overhead_adjustments"].includes(t.name)
       ? "reverses_adjustment_id" : null;
@@ -648,6 +683,16 @@ export async function runClone(opts: CloneOptions): Promise<CloneResult> {
   const insOrder = insertionOrder(cat);
   const rank = new Map(insOrder.map((n, i) => [n, i]));
   selected = [...selected].sort((a, b) => (rank.get(a.name) ?? 1e9) - (rank.get(b.name) ?? 1e9));
+  // Custom-segment definitions and values copy right after the legal entities:
+  // every row carrying an extra dimension (documents, lines, journal lines,
+  // budgets, encumbrances, funds) is validated against them on INSERT, while
+  // their own deferrable references (authors) resolve at commit.
+  const earlySegments = selected.filter((t) => EARLY_SEGMENT_TABLES.includes(t.name));
+  if (earlySegments.length) {
+    const rest = selected.filter((t) => !EARLY_SEGMENT_TABLES.includes(t.name));
+    const after = rest.findIndex((t) => t.name === "subsidiaries");
+    selected = [...rest.slice(0, after + 1), ...earlySegments.sort((a, b) => EARLY_SEGMENT_TABLES.indexOf(a.name) - EARLY_SEGMENT_TABLES.indexOf(b.name)), ...rest.slice(after + 1)];
+  }
 
   const perTable: { table: string; rows: number }[] = [];
   let rowsCopied = 0;
@@ -728,6 +773,10 @@ export async function runClone(opts: CloneOptions): Promise<CloneResult> {
     // also requires the migration/amend flags above plus RLS bypass, which a
     // tenant transaction never holds.
     await db.execute(sql`select set_config('openbooks.clone', 'on', true)`);
+    // The clone authority is asserted under RLS bypass. This unit runs on the
+    // bypass pool, and its transaction starts with the bypass flag pinned off,
+    // so the clone declares it transaction-locally beside the flags above.
+    await db.execute(sql`select set_config('app.bypass_rls', 'on', true)`);
     for (const t of selected) {
       const stmt = generateCopySql(t, opts, rebaseSet, retainedTenantTables, masking, cutoff);
       if (!stmt) continue;
@@ -745,6 +794,9 @@ export async function runClone(opts: CloneOptions): Promise<CloneResult> {
       perTable.push({ table: t.name, rows: n });
       rowsCopied += n;
     }
+      if (perTable.some((row) => row.table === "segment_definitions") && perTable.some((row) => row.table === "segment_values")) {
+        await db.execute(sql.raw(segmentDefaultsRestoreSql(opts)));
+      }
       await rebaseClonedJsonReferences({
         ...opts,
         copiedTables: new Set(perTable.map((row) => row.table)),

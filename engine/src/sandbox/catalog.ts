@@ -88,6 +88,9 @@ const TRIGGER_INSERT_TABLE_PARENTS: Readonly<Record<string, readonly string[]>> 
     "users",
     "time_entries",
   ],
+  // The return line guard reads its return, line, source and scrap movements and location during INSERT.
+  rma_documents: ["documents"],
+  rma_lines: ["rma_documents", "document_lines", "documents", "inventory_movements", "stock_locations"],
   // The match guard reads its reconciliation, statement line and journal line during INSERT.
   reconciliation_matches: ["reconciliations", "bank_statement_lines", "journal_lines", "journal_entries"],
 };
@@ -509,16 +512,41 @@ export function deletionOrder(cat: Catalog): string[] {
     deps.set(n, new Set());
     indeg.set(n, 0);
   }
+  // Deleting a parent also deletes its ON DELETE CASCADE children, so a table
+  // that references such a child without cascading must go before the parent
+  // too. Map each table to every ancestor whose delete cascades into it.
+  const cascadeParents = new Map<string, Set<string>>();
+  for (const t of cat.tables) {
+    for (const [column, ref] of Object.entries(t.fks)) {
+      if (t.fkDeleteRules[column] !== "CASCADE" || ref === t.name || !inSet.has(ref)) continue;
+      if (!cascadeParents.has(t.name)) cascadeParents.set(t.name, new Set());
+      cascadeParents.get(t.name)!.add(ref);
+    }
+  }
+  const cascadeAncestors = (table: string): Set<string> => {
+    const found = new Set<string>();
+    const pending = [...(cascadeParents.get(table) ?? [])];
+    while (pending.length) {
+      const parent = pending.pop()!;
+      if (found.has(parent) || parent === table) continue;
+      found.add(parent);
+      pending.push(...(cascadeParents.get(parent) ?? []));
+    }
+    return found;
+  };
+  const addDependency = (child: string, parent: string) => {
+    if (child === parent || deps.get(child)!.has(parent)) return;
+    deps.get(child)!.add(parent);
+    indeg.set(parent, (indeg.get(parent) ?? 0) + 1);
+  };
   for (const t of cat.tables) {
     for (const [column, ref] of Object.entries(t.fks)) {
       const rule = t.fkDeleteRules[column];
       if (rule === "CASCADE" || rule === "SET NULL") continue;
       if (SANDBOX_CYCLE_BREAKERS[t.name]?.includes(column)) continue;
       if (ref === t.name || !inSet.has(ref)) continue;
-      if (!deps.get(t.name)!.has(ref)) {
-        deps.get(t.name)!.add(ref);
-        indeg.set(ref, (indeg.get(ref) ?? 0) + 1);
-      }
+      addDependency(t.name, ref);
+      for (const ancestor of cascadeAncestors(ref)) addDependency(t.name, ancestor);
     }
   }
   const queue = names.filter((n) => (indeg.get(n) ?? 0) === 0);

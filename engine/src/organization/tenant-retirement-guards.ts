@@ -1110,7 +1110,7 @@ export const TENANT_RETIREMENT_GUARDS = [
     "name": "nonprofit_frameworks_guard",
     "source": "0434_nonprofit_frameworks_and_releases.sql",
     "sha256": "7c3217b4eb202242a3827f5262e1512e703ec34e276d10ec8e8d44eb48892a96",
-    "newSha256": "a5aa0ab60f87473d1af9fb43a96567dfda2449160a3e24909c219c8e31a38120",
+    "newSha256": "550502ce39c94e0a304aedfee5e0060f4270326518d180e5c03e29e8dd9ec49c",
     "patch": true
   },
   {

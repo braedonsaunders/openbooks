@@ -449,6 +449,10 @@ async function wipeSandbox(sandboxOrgId: string, tableNames: Set<string>): Promi
     await db.execute(sql`select set_config('openbooks.migration', 'on', true)`);
     await db.execute(sql`select set_config('openbooks.amend', 'on', true)`);
     await db.execute(sql`select set_config('openbooks.sandbox_wipe', 'on', true)`);
+    // History guards admit an amendment only to a bypass session that says so:
+    // this unit runs on the bypass pool, so it declares that transaction-locally
+    // and the guards' amendment branch admits the whole-tenant wipe.
+    await db.execute(sql`select set_config('app.bypass_rls', 'on', true)`);
     // Park the sandbox's users inactive BEFORE their role assignments go:
     // role_assignments_active_user_guard (immediate here) forbids leaving an
     // ACTIVE user roleless, which every reset/delete of a sandbox that holds

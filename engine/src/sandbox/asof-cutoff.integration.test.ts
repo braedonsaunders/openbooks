@@ -38,22 +38,36 @@ async function addPeriod(
   return id;
 }
 
+/** A second legal entity that reports on the given calendar from its first
+ * period: each entity posts in its own calendar's periods. */
+async function entityOnCalendar(org: Org, calendarId: string, from: string): Promise<string> {
+  const id = randomUUID();
+  await db.execute(sql`
+    insert into subsidiaries (id, org_id, parent_id, name, base_currency, country)
+    values (${id}, ${org.orgId}, ${org.subsidiaryId}, 'Secondary calendar entity', 'CAD', 'CA')`);
+  await db.execute(sql`
+    insert into subsidiary_accounting_preferences (org_id, subsidiary_id, effective_from, fiscal_calendar_id, reason)
+    values (${org.orgId}, ${id}, ${from}, ${calendarId}, 'Entity reporting calendar assignment')`);
+  return id;
+}
+
 async function postEntry(
   org: Org,
-  opts: { number: string; date: string; periodId: string; status: "draft" | "posted" },
+  opts: { number: string; date: string; periodId: string; status: "draft" | "posted"; subsidiaryId?: string },
 ): Promise<string> {
   const entryId = randomUUID();
+  const subsidiaryId = opts.subsidiaryId ?? org.subsidiaryId;
   await db.execute(sql`
     insert into journal_entries
       (id, org_id, book_id, subsidiary_id, entry_number, posting_date, period_id, memo, status, origin)
-    values (${entryId}, ${org.orgId}, ${org.bookId}, ${org.subsidiaryId}, ${opts.number},
+    values (${entryId}, ${org.orgId}, ${org.bookId}, ${subsidiaryId}, ${opts.number},
             ${opts.date}, ${opts.periodId}, ${opts.number}, 'draft', 'manual')`);
   await db.execute(sql`
     insert into journal_lines
       (id, org_id, entry_id, line_number, account_id, subsidiary_id, amount, currency, txn_amount, fx_rate, party_id, is_open_item)
-    values (${randomUUID()}, ${org.orgId}, ${entryId}, 1, ${org.accounts.ar}, ${org.subsidiaryId},
+    values (${randomUUID()}, ${org.orgId}, ${entryId}, 1, ${org.accounts.ar}, ${subsidiaryId},
             100, 'CAD', 100, 1, ${org.customerId}, true),
-           (${randomUUID()}, ${org.orgId}, ${entryId}, 2, ${org.accounts.revenue}, ${org.subsidiaryId},
+           (${randomUUID()}, ${org.orgId}, ${entryId}, 2, ${org.accounts.revenue}, ${subsidiaryId},
             -100, 'CAD', -100, 1, null, false)`);
   if (opts.status === "posted") {
     await db.execute(sql`update journal_entries set status = 'posted', posted_at = now() where id = ${entryId} and org_id = ${org.orgId}`);
@@ -85,9 +99,10 @@ test("an as-of clone cuts by posting date across calendars, not by period ordina
     const b = await secondCalendar(org.orgId);
     const bJun = await addPeriod(org.orgId, b, 2026, 6, "SEC-2026-06", "2026-06-01", "2026-06-30");
     const bJul = await addPeriod(org.orgId, b, 2026, 7, "SEC-2026-07", "2026-07-01", "2026-08-31");
+    const bEntity = await entityOnCalendar(org, b, "2026-06-01");
     await postEntry(org, { number: "A-POSTED-JUL", date: "2026-07-15", periodId: org.periodId, status: "posted" });
-    await postEntry(org, { number: "B-POSTED-JUN", date: "2026-06-15", periodId: bJun, status: "posted" });
-    await postEntry(org, { number: "B-DRAFT-AUG", date: "2026-08-05", periodId: bJul, status: "draft" });
+    await postEntry(org, { number: "B-POSTED-JUN", date: "2026-06-15", periodId: bJun, status: "posted", subsidiaryId: bEntity });
+    await postEntry(org, { number: "B-DRAFT-AUG", date: "2026-08-05", periodId: bJul, status: "draft", subsidiaryId: bEntity });
 
     const created = await createSandbox({
       productionOrgId: org.orgId, name: sandboxName, tier: "as_of", masked: false, asOfPeriodId: org.periodId,
@@ -114,7 +129,8 @@ test("the as-of preflight refusal agrees exactly with the copy filter", { skip: 
   try {
     const b = await secondCalendar(org.orgId);
     const bJul = await addPeriod(org.orgId, b, 2026, 7, "SEC-2026-07", "2026-07-01", "2026-08-31");
-    await postEntry(org, { number: "B-POSTED-AUG", date: "2026-08-05", periodId: bJul, status: "posted" });
+    const bEntity = await entityOnCalendar(org, b, "2026-07-01");
+    await postEntry(org, { number: "B-POSTED-AUG", date: "2026-08-05", periodId: bJul, status: "posted", subsidiaryId: bEntity });
 
     await assert.rejects(
       createSandbox({
@@ -191,13 +207,15 @@ test("a settings change between the org read and the copy reaches the sandbox (S
   // Company Settings change when the provisional sandbox org row inserts —
   // after create's outer config read, before runClone's snapshot. The ready
   // sandbox must carry the snapshot's configuration, never the stale read.
+  // The provisional row inserts in the new sandbox's tenant scope, so the
+  // injected change runs with its owner's rights to reach the production row.
   const org = await createScratchOrg();
   const sandboxName = `Config race ${randomUUID()}`;
   const fault = `openbooks_sandbox_config_${randomUUID().replaceAll("-", "")}`;
   try {
     await postEntry(org, { number: "RACE-POSTED", date: "2026-07-15", periodId: org.periodId, status: "posted" });
     await db.execute(sql.raw(`
-      create function "${fault}"() returns trigger language plpgsql as $fn$
+      create function "${fault}"() returns trigger language plpgsql security definer set search_path = public, pg_catalog as $fn$
       begin
         if new.env_kind = 'sandbox' then
           update orgs

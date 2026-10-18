@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { test } from "node:test";
 import { sql } from "drizzle-orm";
 import { db, withBypassContext, withOrg } from "../platform/db.ts";
-import { createScratchOrg, dropScratchOrg } from "../testing/fixtures.ts";
+import { createScratchOrg, deleteBareOrg, dropScratchOrg } from "../testing/fixtures.ts";
 
 const DB = Boolean(process.env.OPENBOOKS_DB_URL);
 
@@ -79,8 +79,9 @@ test("sandbox RLS requires the sandbox org to belong to its production org", { s
   } finally {
     await withBypassContext(async () => {
       await db.execute(sql`delete from sandboxes where id in (${validSandboxId}, ${forgedSandboxId}, ${unownedOrgSandboxId})`);
-      await db.execute(sql`delete from orgs where id in (${ownerSandboxOrgId}, ${unrelatedSandboxOrgId})`);
     });
+    await deleteBareOrg(ownerSandboxOrgId);
+    await deleteBareOrg(unrelatedSandboxOrgId);
     await dropScratchOrg(owner.orgId);
     await dropScratchOrg(unrelated.orgId);
   }

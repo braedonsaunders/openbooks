@@ -10,6 +10,7 @@ import { laborCostRates } from "@openbooks/schema/src/labor-costing.ts";
 import { payrollVacationTerms } from "@openbooks/schema/src/payroll-service-credit.ts";
 import { db, pool, withBypassContext } from "../platform/db.ts";
 import { deleteSandbox } from "../sandbox/lifecycle.ts";
+import { deletionOrder, loadCatalog } from "../sandbox/catalog.ts";
 import { SIM_ORG_PREFIX } from "../sim/db-guard.ts";
 
 /**
@@ -990,6 +991,25 @@ export async function listOrgIdTables(): Promise<string[]> {
  * Rows still present for the org across every org_id table (plus the orgs row
  * itself), keyed by table name. Empty object = fully deleted.
  */
+/**
+ * Remove an organization row a test inserted directly, together with the
+ * built-in configuration an organization insert seeds (segments, rate types,
+ * the base price level, payroll compensation defaults), in the sandbox wipe's
+ * deletion order. For test-owned identities only.
+ */
+export async function deleteBareOrg(orgId: string): Promise<void> {
+  const seeded = await orgRowCounts(orgId);
+  const order = deletionOrder(await loadCatalog());
+  await withBypassContext(() => db.transaction(async (tx) => {
+    await tx.execute(sql`select set_config('openbooks.sandbox_wipe', 'on', true), set_config('openbooks.migration', 'on', true)`);
+    await tx.execute(sql`update orgs set env_kind = 'sandbox' where id = ${orgId}`);
+    for (const table of order) {
+      if (seeded[table]) await tx.execute(sql`delete from ${sql.identifier(table)} where org_id = ${orgId}`);
+    }
+    await tx.execute(sql`delete from orgs where id = ${orgId}`);
+  }));
+}
+
 export async function orgRowCounts(orgId: string): Promise<Record<string, number>> {
   // Escape any ambient pinned transaction (see dropScratchOrg): a verification
   // that reads through a caller's uncommitted transaction reports whatever the

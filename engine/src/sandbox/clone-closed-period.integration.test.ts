@@ -373,13 +373,16 @@ test("a sample company cuts from a closed-period template and numbering continue
     templateOrgId = promoted.templateOrgId;
 
     const memberUserId = await createScratchUser(memberOrg.orgId, "Sample requester", "admin");
+    // The promoted company is the prepared source: this proves the clone of
+    // its closed-period history and the numbering handoff, not the separate
+    // installation of industry demonstration scenarios onto a master.
     const created = await createSampleCompany({
       industryKey: "general_business",
       memberUserId,
       sourceOrgId: memberOrg.orgId,
       memberName: "Sample requester",
       features: {},
-    });
+    }, { prepareTemplate: async () => promoted });
     assert.equal(created.created, true);
     previewOrgId = created.orgId;
     assert.equal(promoted.coverage.postedEntries, 4);

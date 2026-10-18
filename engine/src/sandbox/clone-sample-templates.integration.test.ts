@@ -45,13 +45,19 @@ test("every simulator-provisioned sample company template clones with matching t
   const catalog = await loadCatalog();
   assert.ok(catalog.tables.length > 0, "sandbox catalog must contain tables to verify");
   const created: string[] = [];
+  let failure: unknown;
   try {
     for (const template of templates) {
+      // Templates are not production organizations: only sample provisioning
+      // clones them, through the sanctioned template-source authority.
       const sandbox = await createSandbox({
         productionOrgId: template.templateOrgId,
         name: `Clone coverage ${template.profileId}`,
         tier: "full",
         masked: false,
+        createdBy: null,
+        lifecycleAuthority: { systemReason: "sample company template provisioning" },
+        allowTemplateSource: true,
       });
       created.push(sandbox.sandboxId);
       for (const table of catalog.tables) {
@@ -66,13 +72,19 @@ test("every simulator-provisioned sample company template clones with matching t
         );
       }
     }
+  } catch (error) {
+    failure = error;
   } finally {
     const cleanupFailures: string[] = [];
+    const describe = (error: unknown): string => {
+      if (!(error instanceof Error)) return String(error);
+      return error.cause instanceof Error ? `${error.message} (${error.cause.message})` : error.message;
+    };
     for (const sandboxId of created.reverse()) {
       try {
         await deleteSandbox(sandboxId);
       } catch (error) {
-        cleanupFailures.push(`${sandboxId}: ${error instanceof Error ? error.message : String(error)}`);
+        cleanupFailures.push(`${sandboxId}: ${describe(error)}`);
       }
     }
     // Failed createSandbox attempts can leave a shell registered before the
@@ -85,9 +97,14 @@ test("every simulator-provisioned sample company template clones with matching t
         try {
           await deleteSandbox(shell.id);
         } catch (error) {
-          cleanupFailures.push(`${shell.id}: ${error instanceof Error ? error.message : String(error)}`);
+          cleanupFailures.push(`${shell.id}: ${describe(error)}`);
         }
       }
+    }
+    // A clone failure is the finding; cleanup trouble is reported beside it, never instead of it.
+    if (failure !== undefined) {
+      if (cleanupFailures.length) throw new AggregateError([failure, new Error(cleanupFailures.join("; "))], `clone coverage failed: ${describe(failure)}`);
+      throw failure;
     }
     assert.deepEqual(cleanupFailures, [], `sandbox cleanup must complete: ${cleanupFailures.join("; ")}`);
   }

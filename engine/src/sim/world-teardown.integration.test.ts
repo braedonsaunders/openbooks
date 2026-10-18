@@ -3,7 +3,7 @@ import { randomUUID } from "node:crypto";
 import { after, test } from "node:test";
 import { sql } from "drizzle-orm";
 import { db, pool, withBypass, withBypassContext } from "../platform/db.ts";
-import { createScratchOrg, dropScratchOrg, listOrgIdTables, orgRowCounts } from "../testing/fixtures.ts";
+import { createScratchOrg, deleteBareOrg, dropScratchOrg, listOrgIdTables, orgRowCounts } from "../testing/fixtures.ts";
 import { SIM_ORG_PREFIX } from "./db-guard.ts";
 import { professionalServices } from "./profiles/professional-services.ts";
 import { provisionOrg, resetOrg, wipeSimOrg } from "./world.ts";
@@ -85,14 +85,8 @@ test("both SIM entry points refuse missing tags, malformed tags, Scratch identit
       await assert.rejects(wipeSimOrg(orgId), /dropSimOrg refused/);
       assert.deepEqual(await snapshotOrg(orgId), before, "refusal precedes sandbox demotion or deletion");
     } finally {
-      // INSERT also seeds built-in segments. Clean only this test-owned
-      // identity with the sandbox cascade; never rename or retag a refusal.
-      await withBypass(async () => {
-        await db.execute(sql`set local openbooks.sandbox_wipe = 'on'`);
-        await db.execute(sql`update orgs set env_kind = 'sandbox' where id = ${orgId}`);
-        await db.execute(sql`delete from segment_definitions where org_id = ${orgId}`);
-        await db.execute(sql`delete from orgs where id = ${orgId}`);
-      });
+      // Clean only this test-owned identity; never rename or retag a refusal.
+      await deleteBareOrg(orgId);
     }
   }
 });
