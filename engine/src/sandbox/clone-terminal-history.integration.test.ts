@@ -17,7 +17,7 @@ import { HRM_CHANGE_REQUEST_SUBJECT_KIND } from "@openbooks/schema/src/hrm-chang
 import { decideGate } from "../flows/gates.ts";
 import { createSandbox, deleteSandbox } from "./lifecycle.ts";
 import { errorChainMatches } from "../testing/error-chain.ts";
-import { grantPermissions, linkPerson } from "../testing/hrm-harness.ts";
+import { grantPermissions, linkPerson, seedEmployment } from "../testing/hrm-harness.ts";
 import { installEngineSeams } from "../composition/install.ts";
 
 // Gate releases and post_document run through the installed engine
@@ -26,12 +26,10 @@ import { installEngineSeams } from "../composition/install.ts";
 installEngineSeams();
 
 /**
- * OM-13c: a source org holding terminal history — an applied HRM change
- * request and an applied financial change — could not be cloned. Both
- * BEFORE INSERT guards refused any row born outside draft, so the verbatim
- * copy died at stage=clone with P0001 (deterministic: "you can retry" was
- * wrong). The clone authority (0316, admitted in 0341) replays that history;
- * ordinary sessions keep every born-terminal refusal.
+ * A source org holding terminal history (an applied HRM change request and an
+ * applied financial change) clones verbatim. Both BEFORE INSERT guards refuse
+ * rows born outside draft in ordinary sessions; the clone authority replays
+ * that history, and ordinary sessions keep every born-terminal refusal.
  *
  * Proofs are read back from storage: the sandbox carries the exact applied
  * rows (id, status, digest, application evidence), and ordinary-session
@@ -62,16 +60,12 @@ async function seedAppliedChangeRequest(orgId: string, subsidiaryId: string): Pr
     mode: "any",
   });
 
-  const workerPartyId = randomUUID();
-  await db.execute(sql`
-    insert into parties (id, org_id, kind, display_name, is_active, custom)
-    values (${workerPartyId}, ${orgId}, 'person', 'Cloned Worker', true, '{}'::jsonb)
-  `);
-  const employmentId = randomUUID();
-  await db.execute(sql`
-    insert into worker_employments (id, org_id, worker_party_id, employer_subsidiary_id, revision)
-    values (${employmentId}, ${orgId}, ${workerPartyId}, ${subsidiaryId}, 1)
-  `);
+  // A hire records a person who already holds the employee role.
+  const { employmentId } = await seedEmployment(orgId, subsidiaryId, {
+    displayName: "Cloned Worker",
+    withVersion: false,
+    employeeRole: true,
+  });
 
   const draft = await createChangeRequestDraft({
     orgId,
@@ -105,7 +99,7 @@ async function seedAppliedFinancialChange(orgId: string, subsidiaryId: string, a
       (id, org_id, subsidiary_id, domain, subject_id, operation, effective_on,
        reason, idempotency_key, payload, before_state, status, submitted_by)
     values (${changeId}, ${orgId}, ${subsidiaryId}, 'lease', ${randomUUID()}, 'remeasure',
-            ${"2026-09-01"}, 'remeasure the cloned template lease', ${`clone-13c-${changeId}`},
+            ${"2026-09-01"}, 'remeasure the cloned template lease', ${`clone-history-${changeId}`},
             '{}'::jsonb, '{}'::jsonb, 'draft', ${actorId})
   `));
   await withBypass(() => db.execute(sql`
@@ -199,7 +193,7 @@ test("a full sandbox clones applied HRM and financial-change history verbatim", 
     // idempotency key (the row id is rebased).
     const clonedChange = (await db.execute<{ status: string }>(sql`
       select status from financial_changes
-       where org_id = ${created.sandboxOrgId} and idempotency_key = ${`clone-13c-${changeId}`}
+       where org_id = ${created.sandboxOrgId} and idempotency_key = ${`clone-history-${changeId}`}
     `)).rows[0];
     assert.ok(clonedChange, "the clone carries the applied financial change");
     assert.equal(clonedChange!.status, "applied");
@@ -231,7 +225,7 @@ test("a full sandbox clones applied HRM and financial-change history verbatim", 
           (org_id, subsidiary_id, domain, subject_id, operation, effective_on,
            reason, idempotency_key, payload, before_state, status, submitted_by)
         values (${org.orgId}, ${org.subsidiaryId}, 'lease', ${randomUUID()}, 'remeasure',
-                ${"2026-09-02"}, 'forged terminal insert probe', ${`probe-13c-${randomUUID()}`},
+                ${"2026-09-02"}, 'forged terminal insert probe', ${`probe-terminal-${randomUUID()}`},
                 '{}'::jsonb, '{}'::jsonb, 'approved', ${actor})
       `)),
       (error: unknown) => {
