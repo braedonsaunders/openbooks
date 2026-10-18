@@ -2,12 +2,18 @@ import assert from 'node:assert/strict'
 import test from 'node:test'
 import {
   applyDateEntryCommand,
+  calendarWeeks,
   dateEntryCommand,
   dateOrderForLocale,
+  entryDatePattern,
   expandTypedShortYear,
   firstDayOfWeekForLocale,
+  formatEntryDate,
+  isCompleteTypedDate,
   parseTypedDate,
   regionalViewerLocale,
+  shiftMonths,
+  startsMonthName,
   type DateEntryCommand,
 } from './date-entry'
 
@@ -171,6 +177,73 @@ test('impossible and unreadable text refuses rather than becoming another date',
   for (const text of ['tomorrow', '3/15/2026 10:00', '1/2/3/4', '$3/15', 'Mon Mar 15', '2026', '12345']) {
     assert.equal(parseTypedDate(text, en).ok, false, text)
   }
+})
+
+test('without a business date, relative entry refuses and absolute entry still reads', () => {
+  const unknown = { today: null, locale: 'en' }
+  assert.deepEqual(parseTypedDate('3/15', unknown), { ok: false, reason: 'needsYear' })
+  assert.deepEqual(parseTypedDate('3/15/26', unknown), { ok: false, reason: 'needsYear' })
+  assert.deepEqual(parseTypedDate('3/15/2026', unknown), { ok: true, iso: '2026-03-15' })
+  assert.deepEqual(parseTypedDate('15 March 2026', unknown), { ok: true, iso: '2026-03-15' })
+  assert.deepEqual(parseTypedDate('2/30/2026', unknown), { ok: false, reason: 'impossible' })
+  assert.equal(applyDateEntryCommand('today', '', { today: null, weekStartsOn: 7 }), null)
+  assert.equal(applyDateEntryCommand('nextDay', '', { today: null, weekStartsOn: 7 }), null)
+  assert.equal(applyDateEntryCommand('nextDay', '2026-03-15', { today: null, weekStartsOn: 7 }), '2026-03-16')
+})
+
+test('a typed date is complete only once it states its year', () => {
+  for (const text of ['3/15/2026', '3-15-26', '15 Mar 2026', '20260315', '031526', '2026-03-15']) {
+    assert.equal(isCompleteTypedDate(text, en), true, text)
+  }
+  for (const text of ['3-15', '3/15', 'Mar 15', '2/30/2026', '3-15-']) {
+    assert.equal(isCompleteTypedDate(text, en), false, text)
+  }
+})
+
+test('month-name prefixes are recognized in the viewer language and English', () => {
+  assert.equal(startsMonthName('ma', 'en'), true)
+  assert.equal(startsMonthName('Mä', 'de'), true)
+  assert.equal(startsMonthName('ju', 'fr'), true)
+  assert.equal(startsMonthName('mx', 'en'), false)
+  assert.equal(startsMonthName('m', 'en'), false, 'one letter is still a date key')
+  assert.equal(startsMonthName('m1', 'en'), false)
+})
+
+test('stored dates display in each viewer format and read back as the same day', () => {
+  const expected: Record<string, string> = {
+    en: '03/05/2026', 'en-GB': '05/03/2026', 'en-CA': '2026-03-05', de: '05.03.2026', es: '05/03/2026',
+    fr: '05/03/2026', 'pt-BR': '05/03/2026', ja: '2026/03/05', zh: '2026/03/05',
+  }
+  for (const [locale, shown] of Object.entries(expected)) {
+    assert.equal(formatEntryDate('2026-03-05', locale), shown, locale)
+    for (const iso of ['2026-03-05', '2024-02-29', '0026-12-31', '9999-12-31']) {
+      const text = formatEntryDate(iso, locale)
+      assert.deepEqual(parseTypedDate(text, { today: '2026-10-17', locale }), { ok: true, iso }, `${locale} ${text}`)
+    }
+  }
+  assert.equal(formatEntryDate('', 'en'), '')
+  assert.equal(formatEntryDate('not-a-date', 'en'), 'not-a-date', 'an unexpected value is shown, never reinterpreted')
+})
+
+test('entry patterns follow the locale order and separators', () => {
+  const symbols = { year: 'yyyy', month: 'mm', day: 'dd' }
+  assert.equal(entryDatePattern('en', symbols), 'mm/dd/yyyy')
+  assert.equal(entryDatePattern('en-GB', symbols), 'dd/mm/yyyy')
+  assert.equal(entryDatePattern('de', { year: 'JJJJ', month: 'MM', day: 'TT' }), 'TT.MM.JJJJ')
+  assert.equal(entryDatePattern('ja', symbols), 'yyyy/mm/dd')
+})
+
+test('calendar months show six whole weeks from the configured first weekday', () => {
+  const sunday = calendarWeeks('2026-10-01', 7)
+  assert.equal(sunday.length, 6)
+  assert.equal(sunday[0]![0], '2026-09-27')
+  assert.equal(sunday[5]![6], '2026-11-07')
+  const monday = calendarWeeks('2026-02-01', 1)
+  assert.equal(monday[0]![0], '2026-01-26')
+  assert.ok(monday.every((week) => week.length === 7))
+  assert.equal(calendarWeeks('0001-01-01', 7).length, 5, 'weeks before the supported calendar are omitted')
+  assert.equal(shiftMonths('2026-01-31', 1), '2026-02-28')
+  assert.equal(shiftMonths('9999-12-15', 1), null)
 })
 
 test('a typed short year expands to the nearest century, other years are left alone', () => {

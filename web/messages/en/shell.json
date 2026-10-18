@@ -307,6 +307,21 @@
     "incomplete": "This date is incomplete. Finish the day, month and year, or clear the field.",
     "checkYear": "Check the year: enter all four digits.",
     "pasteUnreadable": "“{text}” is not a date this field can read. Use a format such as 2026-03-15.",
-    "pasteImpossible": "“{text}” is not a real calendar date."
+    "pasteImpossible": "“{text}” is not a real calendar date.",
+    "typingHint": "Type a date the way you usually write it, such as 3/15/2026, 15 Mar 2026 or 2026-03-15. Without a year it means the business year; a two-digit year moves to the nearest century.",
+    "calendarKey": "Open the calendar",
+    "calendarHint": "In the calendar, arrow keys move by day and week, Page Up and Page Down by month (with Shift, by year), Home and End to the ends of the week, Enter chooses and Esc closes.",
+    "unreadable": "“{text}” is not a date this field can read. Enter a date such as {example}.",
+    "impossible": "“{text}” is not a real calendar date.",
+    "needsYear": "Enter the full year, such as {example}.",
+    "beforeMin": "Enter {min} or later.",
+    "afterMax": "Enter {max} or earlier.",
+    "openCalendar": "Choose a date from the calendar",
+    "calendar": "Calendar",
+    "previousMonth": "Previous month",
+    "nextMonth": "Next month",
+    "yearSymbol": "yyyy",
+    "monthSymbol": "mm",
+    "daySymbol": "dd"
   }
 }

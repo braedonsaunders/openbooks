@@ -14,3 +14,12 @@ export function useBusinessToday(): string {
   if (!today) throw new Error('useBusinessToday must be used inside BusinessDateProvider')
   return today
 }
+
+/**
+ * The org business day where a provider supplies one, or null. For shared
+ * controls that also render outside the application shell: they refuse
+ * business-date-relative entry instead of reading the browser clock.
+ */
+export function useOptionalBusinessToday(): string | null {
+  return useContext(BusinessDateContext)
+}

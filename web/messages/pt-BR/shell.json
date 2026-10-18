@@ -307,6 +307,21 @@
     "incomplete": "Esta data está incompleta. Complete o dia, o mês e o ano ou limpe o campo.",
     "checkYear": "Confira o ano: digite os quatro dígitos.",
     "pasteUnreadable": "“{text}” não é uma data que este campo consiga ler. Use um formato como 2026-03-15.",
-    "pasteImpossible": "“{text}” não é uma data real do calendário."
+    "pasteImpossible": "“{text}” não é uma data real do calendário.",
+    "typingHint": "Digite a data como você costuma escrever, por exemplo 15/03/2026, 15 mar 2026 ou 2026-03-15. Sem ano, vale o ano comercial; um ano de dois dígitos vai para o século mais próximo.",
+    "calendarKey": "Abrir o calendário",
+    "calendarHint": "No calendário, as setas movem um dia ou uma semana, Page Up e Page Down um mês (com Shift, um ano), Home e End para o início ou o fim da semana; Enter escolhe e Esc fecha.",
+    "unreadable": "“{text}” não é uma data que este campo consiga ler. Digite uma data como {example}.",
+    "impossible": "“{text}” não é uma data real do calendário.",
+    "needsYear": "Digite o ano completo, por exemplo {example}.",
+    "beforeMin": "Digite {min} ou uma data posterior.",
+    "afterMax": "Digite {max} ou uma data anterior.",
+    "openCalendar": "Escolher uma data no calendário",
+    "calendar": "Calendário",
+    "previousMonth": "Mês anterior",
+    "nextMonth": "Próximo mês",
+    "yearSymbol": "aaaa",
+    "monthSymbol": "mm",
+    "daySymbol": "dd"
   }
 }

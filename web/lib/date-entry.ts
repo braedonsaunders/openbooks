@@ -1,5 +1,6 @@
 import {
   addCalendarDays,
+  addMonthsClamped,
   addMonthsStart,
   calendarDaysBetween,
   civilDateFromParts,
@@ -27,8 +28,12 @@ export type DateOrder = 'mdy' | 'dmy' | 'ymd'
 export type IsoWeekday = 1 | 2 | 3 | 4 | 5 | 6 | 7
 
 export interface DateEntryContext {
-  /** Organization business date (YYYY-MM-DD). */
-  today: string
+  /**
+   * Organization business date (YYYY-MM-DD), or null where none is known.
+   * Without one, entry that is relative to it (a missing or two-digit year)
+   * refuses instead of guessing from the browser clock.
+   */
+  today: string | null
   /** Viewer locale used for date order and month names. */
   locale: string
   /** First day of the week for W/K. */
@@ -37,7 +42,10 @@ export interface DateEntryContext {
 
 export type TypedDateResult =
   | { ok: true; iso: string }
-  | { ok: false; reason: 'empty' | 'unrecognized' | 'impossible' }
+  | { ok: false; reason: 'empty' | 'unrecognized' | 'impossible' | 'needsYear' }
+
+/** A typed shape that reads only against a business date nobody supplied. */
+const NEEDS_YEAR = Symbol('needsYear')
 
 /**
  * The single-key commands a focused date field accepts. Letters are matched
@@ -91,7 +99,8 @@ function yearOf(iso: string): number {
  * empty or unreadable value starts from the business date. Period keys are
  * repeatable: pressing a "first day" key on a first day steps back one
  * period, and a "last day" key on a last day steps forward one period. A
- * step past the supported calendar (years 0001–9999) returns null.
+ * step past the supported calendar (years 0001–9999), or a step that needs
+ * a business date when none is known, returns null.
  */
 export function applyDateEntryCommand(
   command: DateEntryCommand,
@@ -99,6 +108,7 @@ export function applyDateEntryCommand(
   context: Pick<DateEntryContext, 'today' | 'weekStartsOn'>,
 ): string | null {
   const base = isIsoCalendarDate(current) ? current : context.today
+  if (base === null || (command === 'today' && context.today === null)) return null
   try {
     switch (command) {
       case 'nextDay':
@@ -106,7 +116,7 @@ export function applyDateEntryCommand(
       case 'previousDay':
         return addCalendarDays(base, -1)
       case 'today':
-        return context.today
+        return context.today ?? null
       case 'weekStart': {
         const start = startOfWeek(base, context.weekStartsOn)
         return start === base ? addCalendarDays(base, -7) : start
@@ -270,10 +280,13 @@ function yearlessDate(month: number, day: number, today: string): string | null 
   return current
 }
 
-function resolveYear(token: string | undefined, month: number, day: number, today: string): string | null {
-  if (token === undefined) return yearlessDate(month, day, today)
+type Resolved = string | null | undefined | typeof NEEDS_YEAR
+
+function resolveYear(token: string | undefined, month: number, day: number, today: string | null): string | null | typeof NEEDS_YEAR {
+  if (token === undefined) return today === null ? NEEDS_YEAR : yearlessDate(month, day, today)
   if (token.length === 3) return null
-  const year = token.length <= 2 ? expandShortYear(Number(token), yearOf(today)) : Number(token)
+  if (token.length <= 2 && today === null) return NEEDS_YEAR
+  const year = token.length <= 2 ? expandShortYear(Number(token), yearOf(today!)) : Number(token)
   return validDate(year, month, day)
 }
 
@@ -284,12 +297,13 @@ const ALLOWED = /^[\p{L}0-9\s/.\-,']+$/u
  * Read a typed date. Accepts ISO YYYY-MM-DD always; otherwise the viewer's
  * day/month/year order with `/`, `-`, `.`, spaces or CJK date markers as
  * separators, one- or two-digit years (nearest century to the business
- * year), a missing year (the business year, or the adjacent year across
- * a near year end), month
- * names in the viewer's language or English, and compact digit runs
- * (YYYYMMDD, or the locale order as 4, 6 or 8 digits). Text that names an
- * impossible date (February 30) or that cannot be read unambiguously
- * refuses; it is never normalized into a different day.
+ * year), a missing year (the business year, or the adjacent year across a
+ * near year end), month names in the viewer's language or English, and
+ * compact digit runs (YYYYMMDD, or the locale order as 4, 6 or 8 digits).
+ * Text that names an impossible date (February 30) or that cannot be read
+ * unambiguously refuses; it is never normalized into a different day.
+ * Without a business date, text that omits the century refuses with
+ * `needsYear`.
  */
 export function parseTypedDate(text: string, context: Pick<DateEntryContext, 'today' | 'locale'>): TypedDateResult {
   const trimmed = text.trim()
@@ -308,7 +322,7 @@ export function parseTypedDate(text: string, context: Pick<DateEntryContext, 'to
   const numeric = tokens.filter((token) => /^[0-9]+$/.test(token))
   if (named.length + numeric.length !== tokens.length) return { ok: false, reason: 'unrecognized' }
 
-  let resolved: string | null | undefined
+  let resolved: Resolved
   if (named.length === 1) {
     resolved = readWithMonthName(named[0]!, numeric, context)
   } else if (named.length > 1) {
@@ -322,11 +336,12 @@ export function parseTypedDate(text: string, context: Pick<DateEntryContext, 'to
   }
   if (resolved === undefined) return { ok: false, reason: 'unrecognized' }
   if (resolved === null) return { ok: false, reason: 'impossible' }
+  if (resolved === NEEDS_YEAR) return { ok: false, reason: 'needsYear' }
   return { ok: true, iso: resolved }
 }
 
 /** undefined: the shape is not a date. null: a date shape naming no real day. */
-function readNumeric(parts: string[], order: DateOrder, today: string): string | null | undefined {
+function readNumeric(parts: string[], order: DateOrder, today: string | null): Resolved {
   if (parts.some((part) => part.length > 4)) return undefined
   if (parts.length === 3 && parts[0]!.length >= 3) {
     if (parts[0]!.length !== 4) return undefined
@@ -342,7 +357,7 @@ function readNumeric(parts: string[], order: DateOrder, today: string): string |
   return resolveYear(year, month, day, today)
 }
 
-function readCompact(digits: string, order: DateOrder, today: string): string | null | undefined {
+function readCompact(digits: string, order: DateOrder, today: string | null): Resolved {
   if (digits.length === 8) {
     const basic = validDate(Number(digits.slice(0, 4)), Number(digits.slice(4, 6)), Number(digits.slice(6, 8)))
     if (basic || order === 'ymd') return basic
@@ -362,7 +377,7 @@ function readWithMonthName(
   name: string,
   numeric: string[],
   context: Pick<DateEntryContext, 'today' | 'locale'>,
-): string | null | undefined {
+): Resolved {
   const month = monthFromName(name, context.locale)
   if (month === null || numeric.length < 1 || numeric.length > 2) return undefined
   if (numeric.some((part) => part.length > 4 || part.length === 3)) return undefined
@@ -374,4 +389,112 @@ function readWithMonthName(
   const yearToken = yearIndex < 0 ? numeric[1] : numeric[yearIndex]
   if (dayToken === undefined || dayToken.length > 2) return undefined
   return resolveYear(yearToken, month, Number(dayToken), context.today)
+}
+
+/**
+ * Whether typed text is a whole date the way the viewer writes it: it reads
+ * as a real date and states its year (or is a compact digit run that does).
+ * A yearless "3-15" is still being typed — its next `-` is a separator, not
+ * the previous-day key.
+ */
+export function isCompleteTypedDate(text: string, context: Pick<DateEntryContext, 'today' | 'locale'>): boolean {
+  if (!parseTypedDate(text, context).ok) return false
+  const tokens = text.trim().split(SEPARATORS).filter(Boolean)
+  if (tokens.length === 1) return /^(?:\d{6}|\d{8}|\d{4}-\d{2}-\d{2})$/.test(tokens[0]!)
+  return tokens.length >= 3
+}
+
+/**
+ * Whether `text` is the start of a month name in the viewer's language or
+ * English ("ma" for March and May), so a field can tell a month being typed
+ * from a single-letter date key.
+ */
+export function startsMonthName(text: string, locale: string): boolean {
+  const folded = foldMonthName(text.trim())
+  if (folded.length < 2 || !/^\p{L}+$/u.test(folded)) return false
+  return monthNames(locale).some(([name]) => name.startsWith(folded))
+}
+
+const entryFormatCache = new Map<string, Intl.DateTimeFormat>()
+
+function entryFormat(locale: string): Intl.DateTimeFormat {
+  let format = entryFormatCache.get(locale)
+  if (!format) {
+    format = new Intl.DateTimeFormat(locale, { year: 'numeric', month: '2-digit', day: '2-digit', timeZone: 'UTC' })
+    entryFormatCache.set(locale, format)
+  }
+  return format
+}
+
+/** Directional marks some locales place around date fields. */
+const BIDI_MARKS = /[\u200e\u200f\u061c]/gu
+
+/**
+ * A stored date as the viewer types it: numeric, in the locale's order and
+ * separators, with a four-digit year so the text reads back as the same
+ * day (`10/17/2026`, `17.10.2026`, `2026/10/17`). Empty stays empty; a value
+ * that is not a calendar date is shown verbatim rather than reinterpreted.
+ */
+export function formatEntryDate(iso: string, locale: string): string {
+  if (iso === '') return ''
+  if (!isIsoCalendarDate(iso)) return iso
+  const [year, month, day] = [Number(iso.slice(0, 4)), Number(iso.slice(5, 7)), Number(iso.slice(8, 10))]
+  return entryFormat(locale)
+    .formatToParts(utcDateFromParts(year, month - 1, day))
+    .map((part) => (part.type === 'year' ? iso.slice(0, 4) : part.value))
+    .join('')
+    .replace(BIDI_MARKS, '')
+}
+
+/**
+ * The entry pattern for `locale` with the given field symbols, e.g.
+ * `mm/dd/yyyy` or `TT.MM.JJJJ`, for a field's placeholder.
+ */
+export function entryDatePattern(locale: string, symbols: { year: string; month: string; day: string }): string {
+  return entryFormat(locale)
+    .formatToParts(utcDateFromParts(2001, 9, 23))
+    .map((part) => (part.type === 'year' || part.type === 'month' || part.type === 'day' ? symbols[part.type] : part.value))
+    .join('')
+    .replace(BIDI_MARKS, '')
+}
+
+/** The same day `months` away, clamped to the target month's last day. */
+export function shiftMonths(iso: string, months: number): string | null {
+  try {
+    return addMonthsClamped(iso, months)
+  } catch (error) {
+    if (error instanceof RangeError) return null
+    throw error
+  }
+}
+
+/** A day `days` away, or null past the supported calendar. */
+export function shiftDays(iso: string, days: number): string | null {
+  try {
+    return addCalendarDays(iso, days)
+  } catch (error) {
+    if (error instanceof RangeError) return null
+    throw error
+  }
+}
+
+/**
+ * The six calendar weeks shown for a month: 42 consecutive days starting on
+ * the configured first day of the week on or before the 1st. Weeks that
+ * would fall outside the supported calendar are omitted.
+ */
+export function calendarWeeks(month: string, weekStartsOn: IsoWeekday): string[][] {
+  const first = startOfMonth(month)
+  const lead = (isoWeekdayOf(first) - weekStartsOn + 7) % 7
+  const weeks: string[][] = []
+  for (let week = 0; week < 6; week++) {
+    const days: string[] = []
+    for (let day = 0; day < 7; day++) {
+      const date = shiftDays(first, week * 7 + day - lead)
+      if (date === null) break
+      days.push(date)
+    }
+    if (days.length === 7) weeks.push(days)
+  }
+  return weeks
 }

@@ -307,6 +307,21 @@
     "incomplete": "日付が不完全です。年・月・日をすべて入力するか、フィールドを空にしてください。",
     "checkYear": "年を確認してください。4桁すべてを入力します。",
     "pasteUnreadable": "「{text}」はこのフィールドで読み取れる日付ではありません。2026-03-15 のような形式を使用してください。",
-    "pasteImpossible": "「{text}」は実在する日付ではありません。"
+    "pasteImpossible": "「{text}」は実在する日付ではありません。",
+    "typingHint": "普段どおりの書き方で日付を入力できます（例: 2026/3/15、2026年3月15日、2026-03-15）。年を省略すると業務日付の年になり、2桁の年は最も近い世紀に補完されます。",
+    "calendarKey": "カレンダーを開く",
+    "calendarHint": "カレンダーでは、矢印キーで1日または1週間、Page Up と Page Down で1か月（Shift を押すと1年）移動し、Home と End で週の初日と最終日に移動します。Enter で選択、Esc で閉じます。",
+    "unreadable": "「{text}」はこのフィールドで読み取れる日付ではありません。{example} のような日付を入力してください。",
+    "impossible": "「{text}」は実在する日付ではありません。",
+    "needsYear": "{example} のように年をすべて入力してください。",
+    "beforeMin": "{min} 以降の日付を入力してください。",
+    "afterMax": "{max} 以前の日付を入力してください。",
+    "openCalendar": "カレンダーから日付を選択",
+    "calendar": "カレンダー",
+    "previousMonth": "前の月",
+    "nextMonth": "次の月",
+    "yearSymbol": "yyyy",
+    "monthSymbol": "mm",
+    "daySymbol": "dd"
   }
 }

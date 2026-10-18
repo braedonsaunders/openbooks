@@ -3866,6 +3866,21 @@ const COGNATES = new Set<string>([
   'de:reports.catalog.columns.asset_proposals.status|Status',
   // “Item” is the Portuguese word for a catalog item.
   'pt-BR:admin.setup.options.capitalizationMatch.item|Item',
+  // Date-field placeholder symbols: the letters each locale's date forms use
+  // for year, month and day, spelled like English where the locale writes the
+  // same abbreviation (mm for mes/mois/mês, dd for día/dia, yyyy/mm/dd in
+  // Japanese and Chinese forms).
+  'es:shell.dateEntry.monthSymbol|mm',
+  'es:shell.dateEntry.daySymbol|dd',
+  'fr:shell.dateEntry.monthSymbol|mm',
+  'pt-BR:shell.dateEntry.monthSymbol|mm',
+  'pt-BR:shell.dateEntry.daySymbol|dd',
+  'ja:shell.dateEntry.yearSymbol|yyyy',
+  'ja:shell.dateEntry.monthSymbol|mm',
+  'ja:shell.dateEntry.daySymbol|dd',
+  'zh:shell.dateEntry.yearSymbol|yyyy',
+  'zh:shell.dateEntry.monthSymbol|mm',
+  'zh:shell.dateEntry.daySymbol|dd',
 ])
 // Official payment provider names and SFTP keep their shared spelling across locales.
 for (const locale of ['de', 'es', 'fr', 'ja', 'pt-BR', 'zh']) {

@@ -72,6 +72,7 @@ export function Popover({
   align = 'end',
   side = 'bottom',
   className,
+  label,
   children,
 }: {
   trigger: React.ReactElement
@@ -80,6 +81,8 @@ export function Popover({
   align?: 'start' | 'end'
   side?: 'top' | 'bottom' | 'left' | 'right'
   className?: string
+  /** Accessible name of the floating dialog, for panels without a visible heading. */
+  label?: string
   children: React.ReactNode
 }) {
   const triggerRef = React.useRef<HTMLDivElement>(null)
@@ -226,6 +229,7 @@ export function Popover({
                           : undefined,
                   }}
                   role="dialog"
+                  aria-label={label}
                 >
                   <PopoverRetentionContext.Provider value={retention}>
                     {children}

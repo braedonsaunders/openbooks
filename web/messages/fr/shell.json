@@ -307,6 +307,21 @@
     "incomplete": "Cette date est incomplète. Complétez le jour, le mois et l’année, ou videz le champ.",
     "checkYear": "Vérifiez l’année : saisissez les quatre chiffres.",
     "pasteUnreadable": "« {text} » n’est pas une date lisible par ce champ. Utilisez un format tel que 2026-03-15.",
-    "pasteImpossible": "« {text} » n’est pas une date réelle du calendrier."
+    "pasteImpossible": "« {text} » n’est pas une date réelle du calendrier.",
+    "typingHint": "Saisissez une date comme vous l’écrivez d’habitude, par exemple 15/03/2026, 15 mars 2026 ou 2026-03-15. Sans année, c’est l’année de l’entreprise ; une année à deux chiffres passe au siècle le plus proche.",
+    "calendarKey": "Ouvrir le calendrier",
+    "calendarHint": "Dans le calendrier, les flèches déplacent d’un jour ou d’une semaine, Page précédente et Page suivante d’un mois (avec Maj, d’un an), Début et Fin au début ou à la fin de la semaine ; Entrée choisit et Échap ferme.",
+    "unreadable": "« {text} » n’est pas une date que ce champ peut lire. Saisissez une date comme {example}.",
+    "impossible": "« {text} » n’est pas une date réelle du calendrier.",
+    "needsYear": "Saisissez l’année complète, par exemple {example}.",
+    "beforeMin": "Saisissez le {min} ou une date ultérieure.",
+    "afterMax": "Saisissez le {max} ou une date antérieure.",
+    "openCalendar": "Choisir une date dans le calendrier",
+    "calendar": "Calendrier",
+    "previousMonth": "Mois précédent",
+    "nextMonth": "Mois suivant",
+    "yearSymbol": "aaaa",
+    "monthSymbol": "mm",
+    "daySymbol": "jj"
   }
 }
