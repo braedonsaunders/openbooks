@@ -35,6 +35,8 @@ interface RouteState {
   auditInserts: number;
   databaseQueries: string[];
   transactionQueries: string[];
+  /** Lines of the draft as written, read back by persisted journal validation. */
+  storedLines: { accountId: string; amount: string }[];
 }
 
 const state: RouteState = {
@@ -50,6 +52,7 @@ const state: RouteState = {
   auditInserts: 0,
   databaseQueries: [],
   transactionQueries: [],
+  storedLines: [],
 };
 (globalThis as typeof globalThis & Record<symbol, unknown>)[stateKey] = state;
 
@@ -107,7 +110,32 @@ stubModules({
         if (text.includes('insert into document_lines')) return { rows: [{ id: 'journal-line' }] }
         if (text.includes('insert into audit_log')) {
           state.auditInserts++
-          return { rows: [] }
+          return { rows: [{ id: 'audit-event' }] }
+        }
+        // Segment dependency validation reads the draft it just wrote.
+        if (text.includes('select kind, document_date::text as "transactionDate" from documents')) {
+          return { rows: state.inserted ? [{ kind: 'journal', transactionDate: state.clockDate }] : [] }
+        }
+        // Persisted journal validation reads the draft, its lines and the currencies it names.
+        if (text.includes('from documents d join subsidiaries s')) {
+          return { rows: state.inserted ? [{ subsidiary_id: '${SUB_ID}', document_date: state.clockDate, posting_date: state.clockDate,
+            currency: 'USD', fx_rate: '1', journal_mode: 'monetary', journal_reverse_on: null, accounting_book_id: null, base_currency: 'USD' }] : [] }
+        }
+        if (text.includes('from document_lines l join documents d')) {
+          return { rows: state.storedLines.map((line, index) => ({ line_number: index + 1, account_id: line.accountId,
+            type: line.accountId === '${ACC_DEBIT}' ? 'asset_bank' : 'income', amount: line.amount, quantity: '1', unit: null,
+            subsidiary_id: '${SUB_ID}', journal_currency: null, journal_fx_rate: null, journal_eliminate: false, template: null, has_party: false })) }
+        }
+        if (text.includes('select count(*)::int as count from document_lines')) return { rows: [{ count: state.storedLines.length }] }
+        if (text.includes('select code from currencies')) return { rows: [{ code: 'USD' }] }
+        // The primary posting book measures this entity in its base currency.
+        if (text.includes('from accounting_books') && text.includes('is_primary')) return { rows: [{ id: 'primary-book' }] }
+        if (text.includes('public.accounting_book_currency(') && text.includes('from subsidiaries')) {
+          return { rows: [{ id: '${SUB_ID}', currency: 'USD' }] }
+        }
+        // The header-currency total is measured onto the draft it just wrote.
+        if (text.includes('update documents set subtotal')) {
+          return { rows: state.inserted ? [{ id: state.requestKey }] : [] }
         }
         if (isPriorRead(text)) {
           return { rows: state.inserted && state.orgMatch ? [{ id: state.requestKey }] : [] }
@@ -185,6 +213,7 @@ function reset(): void {
   state.auditInserts = 0;
   state.databaseQueries.length = 0;
   state.transactionQueries.length = 0;
+  state.storedLines = [];
 }
 
 const BALANCED = {
@@ -201,6 +230,10 @@ const BALANCED = {
 
 function post(key: string | null, body: Record<string, unknown>): Promise<Response> {
   state.requestKey = key;
+  if (!state.inserted) {
+    const lines = Array.isArray(body.lines) ? body.lines as { accountId: string; amount: string }[] : [];
+    state.storedLines = lines.map((line) => ({ accountId: line.accountId, amount: Number(line.amount).toFixed(4) }));
+  }
   const headers: Record<string, string> = { "content-type": "application/json" };
   if (key !== null) headers["Idempotency-Key"] = key;
   return POST(

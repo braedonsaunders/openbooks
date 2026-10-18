@@ -346,7 +346,8 @@ async function fakeExecute(query: unknown): Promise<{ rows: Array<Record<string,
         actor_id: row.actor_id,
         request_id: row.request_id ?? null,
       });
-      return { rows: [] };
+      // The audit writer confirms the one event it recorded.
+      return { rows: [{ id: `audit-${harnessState.audits.length}` }] };
     }
     if (t.includes("on conflict (id) do nothing") && harnessState.tables.get(table!)?.has(str(row.id))) {
       return { rows: [] };

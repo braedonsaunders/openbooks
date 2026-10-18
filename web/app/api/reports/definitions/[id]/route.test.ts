@@ -65,6 +65,8 @@ const mockSources = new Map<string, string>([
           if (text.includes('select') && text.includes('from report_definitions')) {
             return { rows: [{ updated_at: state.revision }] }
           }
+          // The audit writer confirms the one event it recorded.
+          if (text.includes('insert into audit_log')) return { rows: [{ id: 'audit-event' }] }
           return { rows: [] }
         },
         // PATCH/DELETE commit the mutation with its audit evidence in one

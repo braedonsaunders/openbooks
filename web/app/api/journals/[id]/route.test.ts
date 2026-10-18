@@ -232,14 +232,34 @@ test('PATCH saves lines and header atomically under an exact matching revision',
     text.includes('from documents') && text.includes('status') && !text.includes('updatedAt')
       ? { rows: [{ status: 'draft', subsidiaryId: null }] }
       : { rows: [{ updatedAt: storedRevision }] }
+  // Persisted journal validation reads back the balanced draft it wrote.
+  const savedLines = ['10.0000', '-10.0000']
   routeState.respondTxExecute = (text) => {
     if (text.includes('for update')) {
       return { rows: [{ status: 'draft', updatedAt: storedRevision, subsidiaryId: SUBSIDIARY_ID }] }
     }
+    if (text.includes('insert into document_lines')) return { rows: [{ id: 'journal-line' }] }
     if (text.includes('update documents')) {
-      assert.match(text, /greatest\(/, 'the token advances monotonically inside the lock')
-      storedRevision = NEXT_REVISION
+      if (text.includes('greatest(')) storedRevision = NEXT_REVISION
+      else assert.match(text, /set subtotal=/, 'only the measured total is written outside the revision advance')
+      return { rows: [{ id: JOURNAL_ID }] }
     }
+    if (text.includes('select kind, document_date::text as "transactionDate" from documents')) {
+      return { rows: [{ kind: 'journal', transactionDate: '2026-09-22' }] }
+    }
+    if (text.includes('from documents d join subsidiaries s')) {
+      return { rows: [{ subsidiary_id: SUBSIDIARY_ID, document_date: '2026-09-22', posting_date: '2026-09-22', currency: 'USD', fx_rate: '1',
+        journal_mode: 'monetary', journal_reverse_on: null, accounting_book_id: null, base_currency: 'USD' }] }
+    }
+    if (text.includes('from document_lines l join documents d')) {
+      return { rows: savedLines.map((amount, index) => ({ line_number: index + 1, account_id: ACCOUNT_ID, type: 'expense', amount, quantity: '1',
+        unit: null, subsidiary_id: SUBSIDIARY_ID, journal_currency: null, journal_fx_rate: null, journal_eliminate: false, template: null, has_party: false })) }
+    }
+    if (text.includes('select count(*)::int as count from document_lines')) return { rows: [{ count: savedLines.length }] }
+    if (text.includes('select code from currencies')) return { rows: [{ code: 'USD' }] }
+    if (text.includes('from accounting_books') && text.includes('is_primary')) return { rows: [{ id: 'primary-book' }] }
+    if (text.includes('public.accounting_book_currency(') && text.includes('from subsidiaries')) return { rows: [{ id: SUBSIDIARY_ID, currency: 'USD' }] }
+    if (text.includes('from subsidiaries')) return { rows: [{ id: SUBSIDIARY_ID, base_currency: 'USD', baseCurrency: 'USD' }] }
     return { rows: [] }
   }
 
@@ -248,7 +268,7 @@ test('PATCH saves lines and header atomically under an exact matching revision',
     expectedUpdatedAt: STORED_REVISION,
     lines: [
       { accountId: ACCOUNT_ID, amount: '10.00' },
-      { accountId: ACCOUNT_ID, amount: '-4.00' },
+      { accountId: ACCOUNT_ID, amount: '-10.00' },
     ],
   })
 

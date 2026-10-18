@@ -3,6 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
 import { NextResponse } from 'next/server'
+import { FinancialChangeConflictError } from '@openbooks/engine/platform/financial-changes'
 
 const state = {
   NextResponse,
@@ -92,7 +93,9 @@ test('historical proposal records the exact instruction without approving or app
 
 test('explicit historical apply preserves a native lifecycle refusal and later resolves its retained basis', async () => {
   state.calls = []
-  state.refusal = Object.assign(new Error('Obtain the Accounting event decision before applying.'), { name: 'FinancialChangeConflictError', status: 409 })
+  // The engine's own lifecycle refusal: the boundary maps typed refusals only,
+  // so a plain Error dressed with a status would rightly surface as a 500.
+  state.refusal = new FinancialChangeConflictError('Obtain the Accounting event decision before applying.')
   const context = { params: Promise.resolve({ changeId: state.changeId }) }
   const response = await APPLY(new Request('http://openbooks.test/apply', { method: 'POST' }), context)
   assert.equal(response.status, 409)

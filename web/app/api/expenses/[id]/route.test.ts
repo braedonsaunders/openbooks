@@ -90,6 +90,27 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
+    // Expense routes authorize through the expense-access gate, which reads
+    // the org-wide expense grants from authz; this caller holds them.
+    'mock:expense-authz',
+    `
+      const caller = () => ({
+        user: { orgId: 'org-1', id: 'user-1' },
+        permissions: new Set(['expenses.read', 'expenses.create']),
+        allowedSubsidiaryIds: null,
+      })
+      export function can(authz, permission) { return Boolean(authz?.permissions?.has(permission)) }
+      export async function getAuthz() { return caller() }
+      export async function guardPermission(permission) {
+        return caller().permissions.has(permission) ? caller() : new Response(null, { status: 403 })
+      }
+      export async function requirePermission(permission) {
+        if (!caller().permissions.has(permission)) throw new Error('forbidden')
+        return caller()
+      }
+    `,
+  ],
+  [
     'mock:transaction-audit',
     `
       const state = globalThis[Symbol.for('openbooks.expense-route-test')]
@@ -131,6 +152,9 @@ registerHooks({
     // Forward Next.js-style aliases to the real modules they point at.
     const mocked = mockUrls.get(specifier)
     if (mocked) return { url: mocked, shortCircuit: true }
+    if (specifier === './authz' && context.parentURL?.endsWith('/web/lib/expense-access.ts')) {
+      return { url: 'mock:expense-authz', shortCircuit: true }
+    }
     const resolved = nextResolve(specifier, context)
     if (resolved.url === DATABASE_MODULE_URL) return { url: 'mock:db', shortCircuit: true }
     return resolved
@@ -274,5 +298,11 @@ test('GET exposes the exact persisted revision so callers can fence their next s
   assert.equal(response.status, 200)
   const payload = (await response.json()) as { doc: { updated_at: string } }
   assert.equal(payload.doc.updated_at, STORED_REVISION)
-  assert.equal(routeState.calls.length, 0, 'the coherent loader token is never replaced by a later query')
+  // The route's native feature gate reads the organization's feature switches
+  // before authorizing; no direct query may read the report or its revision.
+  assert.deepEqual(
+    routeState.calls.filter((call) => !/^select settings->'features' as f from orgs where id = /.test(call.text.trim())),
+    [],
+    'the coherent loader token is never replaced by a later query',
+  )
 })

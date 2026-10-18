@@ -110,6 +110,14 @@ const mockSources = new Map<string, string>([
         state.scopeCalls.push(id)
         return { subsidiaryId: null }
       }
+      // The read gate is the catalog read grant through the same authz double;
+      // these prints are not expense reports, so every reader owns them.
+      const { guardPermission } = await import(import.meta.url.replace('mock=record-scope', 'mock=authz'))
+      export async function guardRecordTypeRead(recordType, readPermission) {
+        if (recordType === 'expense_report') throw new Error('expense report prints are covered by their own suite')
+        return guardPermission(readPermission)
+      }
+      export async function recordOwnedByReader() { return true }
     `,
   ],
   ['business-date', `export async function businessToday() { return '2026-09-05' }`],

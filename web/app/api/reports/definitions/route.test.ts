@@ -156,6 +156,8 @@ const mockSources = new Map<string, string>([
           state.rows.set(state.requestKey, row)
           return { rows: [responseRow(row)] }
         }
+        // The audit writer confirms the one event it recorded.
+        if (text.includes('insert into audit_log')) return { rows: [{ id: 'audit-event' }] }
         if (text.includes('from audit_log')) {
           const after = state.requestKey ? state.auditAfter.get(state.requestKey) : undefined
           return { rows: after ? [{ after }] : [] }
