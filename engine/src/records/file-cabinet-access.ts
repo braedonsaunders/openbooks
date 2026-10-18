@@ -232,6 +232,9 @@ function subsidiaryTargetVisibleSql(
                 where lw.org_id = ${orgId} and lw.id = ${idCol} and ${tableCol} = 'lien_waivers'
                   and (p.subsidiary_id is null or p.subsidiary_id = any(${fence}::uuid[]))
                   and (pj.id is null or pj.subsidiary_id is null or pj.subsidiary_id = any(${fence}::uuid[])))
+    or exists (select 1 from service_visits sv
+                where sv.org_id = ${orgId} and sv.id = ${idCol} and ${tableCol} = 'service_visits'
+                  and sv.subsidiary_id = any(${fence}::uuid[]))
   )`
 }
 

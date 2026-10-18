@@ -337,6 +337,7 @@ export async function loadWeek(
   production_consumed_operation_id: string | null
       overhead_journal_entry_id: string | null
       field_ticket_id: string | null
+      service_visit_id: string | null
       billing_status: 'unbilled' | 'billed'
       amends_entry_id: string | null
       corrects_entry_id: string | null
@@ -347,7 +348,7 @@ export async function loadWeek(
     select te.id, te.worked_on, te.hours, te.time_type_id, te.item_id, te.project_id, te.work_order_id, te.wo_operation_id,
            te.department_id, te.memo, te.is_billable, te.status, te.custom, te.rejection_reason,
            te.invoiced_by_line_id, te.payroll_batch_ref, te.cost_journal_entry_id,
-           te.overhead_journal_entry_id, te.production_consumed_operation_id, te.field_ticket_id, te.billing_status,
+           te.overhead_journal_entry_id, te.production_consumed_operation_id, te.field_ticket_id, te.service_visit_id, te.billing_status,
            te.amends_entry_id, te.corrects_entry_id,
            to_char(te.updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US"Z"') as entry_updated_at,
            ticket.document_number as field_ticket_number, ticket.status as field_ticket_status
@@ -384,6 +385,7 @@ export async function loadWeek(
       customKey(r.custom),
       r.amends_entry_id ?? '',
       r.corrects_entry_id ?? '',
+      r.service_visit_id ?? '',
     ].join('|')
     let row = byKey.get(key)
     if (!row) {
@@ -401,7 +403,7 @@ export async function loadWeek(
         entryStatuses: [],
         custom: r.custom ?? {},
         amendsEntryId: r.amends_entry_id,
-        immutable: r.status === 'approved' || r.status === 'submitted' || r.field_ticket_id != null
+        immutable: r.status === 'approved' || r.status === 'submitted' || r.field_ticket_id != null || r.service_visit_id != null
           || (r.amends_entry_id != null || r.corrects_entry_id != null),
       }
       byKey.set(key, row)
@@ -412,7 +414,7 @@ export async function loadWeek(
       row.hours[idx] = add(row.hours[idx] === '' ? '0' : row.hours[idx]!, String(r.hours))
     }
     row.entryStatuses.push(r.status)
-    if (r.status === 'approved' || r.status === 'submitted' || r.field_ticket_id != null
+    if (r.status === 'approved' || r.status === 'submitted' || r.field_ticket_id != null || r.service_visit_id != null
       || (r.amends_entry_id != null || r.corrects_entry_id != null)) {
       row.immutable = true
     }

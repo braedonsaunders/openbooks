@@ -88,6 +88,8 @@ export interface DispatchDay {
   readonly date: string;
   readonly timeZone: string;
   readonly workingWindow: { readonly startsAt: string; readonly endsAt: string } | null;
+  /** The span the board draws: the working day, or 06:00–20:00 local when the day has no single working window. */
+  readonly displayWindow: { readonly startsAt: string; readonly endsAt: string };
   readonly technicians: readonly DispatchTechnician[];
   readonly bookings: readonly DispatchBooking[];
   readonly queue: readonly DispatchVisitCard[];
@@ -123,6 +125,19 @@ function boardSubsidiaryFilter(orgId: string, board: ScheduleBoard): ReturnType<
   if (!board.subsidiaryId) return sql``;
   return sql` and v.subsidiary_id in (with recursive tree as (select id from subsidiaries where org_id = ${orgId} and id = ${board.subsidiaryId}
     union all select s.id from subsidiaries s join tree on s.parent_id = tree.id where s.org_id = ${orgId}) select id from tree)`;
+}
+
+/** 06:00–20:00 local on the date, taking the earlier instant of an ambiguous clock time. */
+function fallbackDisplayWindow(timeZone: string, date: string): { startsAt: string; endsAt: string } {
+  const at = (time: string) => {
+    const resolved = resolveLocalTime({ date, time }, timeZone);
+    if (resolved.kind === "ready" && resolved.choices.length) return resolved.choices[0]!.instant;
+    // A clock time skipped by a change still draws: an hour later always exists.
+    const later = resolveLocalTime({ date, time: `${String(Number(time.slice(0, 2)) + 1).padStart(2, "0")}:00` }, timeZone);
+    if (later.kind === "ready" && later.choices.length) return later.choices[0]!.instant;
+    throw new ServiceError("The board's time zone cannot place this day.", { code: "service_invalid_time", remedy: "Check the board's time zone in its settings." });
+  };
+  return { startsAt: at("06:00"), endsAt: at("20:00") };
 }
 
 /** The board's working day as instants in its time zone, or null when the day has no single instant (a clock change). */
@@ -224,10 +239,11 @@ export async function loadDispatchDay(actor: ServiceActor & { boardId: string; d
     const areas = (await db.execute<{ area: string }>(sql`select distinct coalesce(nullif(a.city, ''), nullif(a.region, '')) as area ${CARD_JOINS}
       where v.org_id = ${actor.orgId} and v.status = 'unscheduled' ${subsidiaryFilter(allowed)} and coalesce(nullif(a.city, ''), nullif(a.region, '')) is not null
       order by 1 limit 100`)).rows.map((row) => row.area);
+    const workingWindow = boardWorkingWindow(board, date);
     const qualificationTypes = (await db.execute<{ id: string; name: string }>(sql`select id, name from hrm_qualification_types
       where org_id = ${actor.orgId} and is_active order by name limit 300`)).rows;
     return {
-      board, date, timeZone: board.timeZone, workingWindow: boardWorkingWindow(board, date), technicians, bookings,
+      board, date, timeZone: board.timeZone, workingWindow, displayWindow: workingWindow ?? fallbackDisplayWindow(board.timeZone, date), technicians, bookings,
       queue: [...queue].sort((a, b) => priorityRank(a.priority) - priorityRank(b.priority)),
       areas, qualifications: qualificationTypes, canDispatch, readAt: new Date().toISOString(),
     };

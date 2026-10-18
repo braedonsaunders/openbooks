@@ -50,6 +50,7 @@ const PUBLIC_SEGMENT_ROOTS = [
   "/api/portal/request",
   "/api/portal/actions",
   "/api/portal/returns",
+  "/api/portal/service-requests",
   "/api/portal/invoices",
   "/api/payments/webhooks",
   // Carrier tracker deliveries (/api/shipping/webhooks): the aggregators

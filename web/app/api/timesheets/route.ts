@@ -483,6 +483,7 @@ const save = defineRoute({
           production_consumed_operation_id: string | null;
             overhead_journal_entry_id: string | null;
             field_ticket_id: string | null;
+            service_visit_id: string | null;
             billing_status: "unbilled" | "billed";
             amends_entry_id: string | null;
             corrects_entry_id: string | null;
@@ -491,7 +492,7 @@ const save = defineRoute({
       select id, worked_on, hours::text as hours, project_id, work_order_id, wo_operation_id, item_id,
              time_type_id, department_id, memo, is_billable, status, custom,
              invoiced_by_line_id, payroll_batch_ref, cost_journal_entry_id,
-             overhead_journal_entry_id, production_consumed_operation_id, field_ticket_id, billing_status,
+             overhead_journal_entry_id, production_consumed_operation_id, field_ticket_id, service_visit_id, billing_status,
              amends_entry_id, corrects_entry_id,
              exists (
                select 1 from time_entries contra
@@ -524,9 +525,10 @@ const save = defineRoute({
         }
         const replaceable = (row: (typeof stored)[number]): boolean => {
           if (row.amends_entry_id != null || row.corrects_entry_id != null || row.has_contra) return false;
-          // Crew capture owns ticket rows. A weekly aggregate must not delete
-          // their stable source identities, even after a time-only rejection.
-          if (row.field_ticket_id != null || row.invoiced_by_line_id != null || row.payroll_batch_ref != null
+          // Crew capture owns ticket rows and visit completion owns service
+          // labor. A weekly aggregate must not delete their stable source
+          // identities, even after a time-only rejection.
+          if (row.field_ticket_id != null || row.service_visit_id != null || row.invoiced_by_line_id != null || row.payroll_batch_ref != null
             || row.cost_journal_entry_id != null || row.production_consumed_operation_id != null
             || row.overhead_journal_entry_id != null || row.billing_status !== "unbilled") return false;
           if (row.status === "draft" || row.status === "rejected") return true;

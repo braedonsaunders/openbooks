@@ -204,3 +204,31 @@ export async function addAssessmentVisit(actor: ServiceActor & { requestId: stri
     return { request: next, visitId };
   }).catch((error: unknown) => { throw serviceDatabaseRefusal(error); });
 }
+
+export type PortalServiceRequest = {
+  readonly id: string;
+  readonly requestNumber: string;
+  readonly title: string;
+  readonly status: RequestStatus;
+  readonly preferredOn: string | null;
+  readonly createdAt: string;
+  /** The next booked visit's start, for the customer's own reference. */
+  readonly nextVisitAt: string | null;
+  readonly jobStatus: string | null;
+};
+
+/** The customer's own requests, newest first, as the portal shows them. */
+export async function listPortalServiceRequests(orgId: string, partyId: string): Promise<PortalServiceRequest[]> {
+  return withOrgTransaction(orgId, async () => {
+    await lockServiceFeature(orgId);
+    return (await db.execute<PortalServiceRequest>(sql`select r.id, r.request_number as "requestNumber", r.title, r.status, r.preferred_on::text as "preferredOn",
+        to_char(r.created_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as "createdAt",
+        (select to_char(min(e.starts_at) at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') from service_visits v
+           join schedule_entries e on e.org_id = v.org_id and e.service_visit_id = v.id and e.status = 'published'
+          where v.org_id = r.org_id and (v.request_id = r.id or v.job_id = j.id) and v.status in ('scheduled','dispatched','en_route') and e.ends_at > now()) as "nextVisitAt",
+        j.status as "jobStatus"
+      from service_requests r left join service_jobs j on j.org_id = r.org_id and j.request_id = r.id
+      where r.org_id = ${orgId} and r.customer_party_id = ${partyId}
+      order by r.created_at desc, r.id limit 100`)).rows;
+  }).catch((error: unknown) => { throw serviceDatabaseRefusal(error); });
+}

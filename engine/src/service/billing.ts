@@ -326,3 +326,38 @@ export async function applyServiceDeposits(actor: ServiceActor & { jobId: string
     after: { invoiceId: actor.invoiceDocumentId, applied: result.amount, applications: result.applicationIds }, reason: "Deposit applied to the job's invoice" }));
   return { applied: result.amount };
 }
+
+export interface ServiceDepositCandidate {
+  readonly paymentDocumentId: string;
+  readonly documentNumber: string | null;
+  readonly postingDate: string;
+  readonly open: string;
+  readonly currency: string;
+}
+
+/**
+ * The job customer's posted payments that still hold an amount on account
+ * and are not yet any job's deposit: what Record deposit may choose from.
+ */
+export async function serviceDepositCandidates(actor: ServiceActor & { jobId: string }): Promise<ServiceDepositCandidate[]> {
+  return withOrgTransaction(actor.orgId, async () => {
+    const job = await lockJob(actor.orgId, actor.jobId);
+    await serviceAuthority(actor, "service.manage", job.subsidiaryId);
+    const allowed = await lockActorCommandAuthority(db, actor.orgId, actor.actorId, job.subsidiaryId, "ar.read");
+    const taken = new Set((await db.execute<{ id: string }>(sql`select payment_document_id as id from service_job_deposits where org_id = ${actor.orgId}`)).rows.map((row) => row.id));
+    const subsidiaries = new Map((await db.execute<{ id: string; subsidiaryId: string | null }>(sql`select id, subsidiary_id as "subsidiaryId" from documents
+      where org_id = ${actor.orgId} and party_id = ${job.customerPartyId} and kind = 'customer_payment' and status = 'posted'`)).rows.map((row) => [row.id, row.subsidiaryId]));
+    const totals = new Map<string, ServiceDepositCandidate>();
+    for (const item of await creditItemsForParty(job.customerPartyId, "ar", actor.orgId, allowed, { includeUnappliedPayments: true })) {
+      if (!item.documentId || item.documentKind !== "customer_payment" || taken.has(item.documentId) || !subsidiaries.has(item.documentId)) continue;
+      const subsidiaryId = subsidiaries.get(item.documentId);
+      if (subsidiaryId && subsidiaryId !== job.subsidiaryId) continue;
+      const prior = totals.get(item.documentId);
+      totals.set(item.documentId, {
+        paymentDocumentId: item.documentId, documentNumber: item.documentNumber, postingDate: item.postingDate, currency: item.currency,
+        open: prior ? add(prior.open, item.transactionOpen) : add(item.transactionOpen, "0"),
+      });
+    }
+    return [...totals.values()].filter((candidate) => cmp(candidate.open, "0") > 0).sort((a, b) => a.postingDate.localeCompare(b.postingDate));
+  }).catch((error: unknown) => { throw serviceDatabaseRefusal(error); });
+}
