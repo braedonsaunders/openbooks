@@ -40,14 +40,18 @@ async function mountRoot(): Promise<() => Promise<void>> {
   }
 }
 
+// A previous prompt may still be playing its exit; the live dialog is the
+// one that is not exiting.
+const LIVE_DIALOG = '[role="dialog"]:not([data-overlay-exiting])'
+
 function field(): HTMLInputElement {
-  const input = document.querySelector<HTMLInputElement>('#prompt-input')
+  const input = document.querySelector<HTMLInputElement>(`${LIVE_DIALOG} #prompt-input`)
   assert.ok(input, 'the prompt exposes its reason field')
   return input
 }
 
 function confirmButton(): HTMLButtonElement {
-  const button = document.querySelector<HTMLButtonElement>('[role="dialog"] button[type="submit"]')
+  const button = document.querySelector<HTMLButtonElement>(`${LIVE_DIALOG} button[type="submit"]`)
   assert.ok(button, 'the dialog exposes its confirm button')
   return button
 }
