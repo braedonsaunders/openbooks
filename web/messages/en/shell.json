@@ -27,7 +27,9 @@
     "organizationWorkspaceDescription": "Modules for the current organization",
     "platformDescription": "Deployment-wide operator tools",
     "security": "Sign-in security",
-    "keyboardShortcuts": "Keyboard shortcuts"
+    "keyboardShortcuts": "Keyboard shortcuts",
+    "switchFailed": "The workspace could not be switched. Try again.",
+    "switchUnavailable": "You no longer have access to that workspace."
   },
   "sandboxBanner": {
     "sandbox": "Sandbox environment",
@@ -204,7 +206,10 @@
     "deniedDescription": "This area requires the {permission} permission.",
     "operatorDescription": "The platform console is reserved for platform operators. Your organization's settings live under Administration.",
     "backToDashboard": "Go to dashboard",
-    "backToSignIn": "Go to sign in"
+    "backToSignIn": "Go to sign in",
+    "updatedTitle": "OpenBooks has been updated",
+    "updatedDescription": "This page was loaded from an earlier version. Reload to continue with the current version.",
+    "reload": "Reload"
   },
   "feedback": {
     "launcherAria": "Report an issue",
@@ -317,5 +322,10 @@
     "yearSymbol": "yyyy",
     "monthSymbol": "mm",
     "daySymbol": "dd"
+  },
+  "workspaceSync": {
+    "title": "Workspace changed in another tab",
+    "description": "This tab still shows {name}, but your session now works in a different workspace. Reload to continue in the workspace you're using now.",
+    "reload": "Reload"
   }
 }

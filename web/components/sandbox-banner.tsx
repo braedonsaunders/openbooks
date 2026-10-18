@@ -1,16 +1,19 @@
 import { getTranslations } from "next-intl/server";
-import { exitSandbox } from "../lib/sandbox-session";
+import { SandboxExitButton } from "./sandbox-exit-button";
 
 /**
  * Persistent sandbox banner. Rendered by the app layout whenever the session is
  * inside a sandbox, so a user can never mistake a sandbox for production. The
- * exit button clears the env cookie via a server action.
+ * exit button switches back to the production organization the sandbox was
+ * cloned from.
  */
 export async function SandboxBanner({
   name,
+  productionOrgId,
   kind = "sandbox",
 }: {
   name?: string;
+  productionOrgId: string;
   kind?: "sandbox" | "preview";
 }) {
   // Sample companies are independent tenants, with no production sandbox to exit.
@@ -24,14 +27,7 @@ export async function SandboxBanner({
           ? t("withName", { environment, name })
           : t("withoutName", { environment })}
       </span>
-      <form action={exitSandbox}>
-        <button
-          type="submit"
-          className="rounded border border-amber-950/30 px-2 py-0.5 text-xs font-semibold hover:bg-amber-950/10"
-        >
-          {t("exit")}
-        </button>
-      </form>
+      <SandboxExitButton productionOrgId={productionOrgId} label={t("exit")} />
     </div>
   );
 }

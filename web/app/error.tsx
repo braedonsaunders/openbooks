@@ -2,10 +2,11 @@
 
 import { useEffect } from 'react'
 import Link from 'next/link'
-import { AlertTriangle } from 'lucide-react'
+import { AlertTriangle, RefreshCw } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { Button } from '@openbooks/ui'
 import { RouteStateView } from '@/components/route-state'
+import { isStaleDeploymentError } from '@/lib/stale-deployment'
 
 /**
  * Root route error boundary — the fail-closed surface for failures ABOVE the
@@ -34,6 +35,18 @@ export default function RootError({
   useEffect(() => {
     console.error(error)
   }, [error])
+
+  if (isStaleDeploymentError(error)) {
+    return (
+      <RouteStateView
+        state="error"
+        icon={<RefreshCw />}
+        title={t('updatedTitle')}
+        description={t('updatedDescription')}
+        action={<Button onClick={() => window.location.reload()}>{t('reload')}</Button>}
+      />
+    )
+  }
 
   return (
     <RouteStateView

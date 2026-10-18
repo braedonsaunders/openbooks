@@ -27,7 +27,9 @@
     "workspace": "ワークスペース",
     "production": "本番環境",
     "manageEnvironments": "環境を管理",
-    "keyboardShortcuts": "キーボードショートカット"
+    "keyboardShortcuts": "キーボードショートカット",
+    "switchFailed": "ワークスペースを切り替えられませんでした。もう一度お試しください。",
+    "switchUnavailable": "このワークスペースへのアクセス権がなくなりました。"
   },
   "sandboxBanner": {
     "sandbox": "サンドボックス環境",
@@ -204,7 +206,10 @@
     "notFoundTitle": "ページが見つかりません",
     "notFoundDescription": "お探しのページは存在しないか、アクセス権がありません。",
     "backToDashboard": "ダッシュボードへ移動",
-    "backToSignIn": "サインインへ移動"
+    "backToSignIn": "サインインへ移動",
+    "updatedTitle": "OpenBooks が更新されました",
+    "updatedDescription": "このページは以前のバージョンで読み込まれています。再読み込みして最新のバージョンで続行してください。",
+    "reload": "再読み込み"
   },
   "feedback": {
     "launcherAria": "問題を報告",
@@ -317,5 +322,10 @@
     "yearSymbol": "yyyy",
     "monthSymbol": "mm",
     "daySymbol": "dd"
+  },
+  "workspaceSync": {
+    "title": "別のタブでワークスペースが切り替えられました",
+    "description": "このタブには {name} が表示されたままですが、セッションは別のワークスペースで動作しています。再読み込みして、現在のワークスペースで続行してください。",
+    "reload": "再読み込み"
   }
 }

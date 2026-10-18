@@ -5,7 +5,6 @@ import { sql } from "drizzle-orm";
 import { db, withBypass } from "@openbooks/engine/platform/db";
 import { isUuid } from "../../../lib/list-params";
 import { lockSuperAdminActor, requireSuperAdmin } from "../../../lib/super-admin";
-import { enterOrg } from "../../../lib/sandbox-session";
 
 function assertUuid(value: string, label: string): void {
   if (!isUuid(value)) throw new Error(`${label} is invalid`);
@@ -58,16 +57,6 @@ async function auditPlatformMutation(input: {
       ${input.actorId}
     )
   `);
-}
-
-/** Enter an organization from the platform list after the shared access resolver validates it. */
-export async function enterOrganizationAction(
-  formData: FormData,
-): Promise<void> {
-  await requireSuperAdmin();
-  const orgId = String(formData.get("orgId") ?? "");
-  assertUuid(orgId, "Organization");
-  await enterOrg(orgId);
 }
 
 /** Grant or revoke the cross-tenant super-admin flag on a home identity. */

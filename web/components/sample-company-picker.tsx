@@ -5,7 +5,7 @@ import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Database, Sparkles } from 'lucide-react'
 import { Button, Card, Label, Select } from '@openbooks/ui'
-import { enterOrg } from '../lib/sandbox-session'
+import { switchWorkspace, WorkspaceSwitchError, workspaceSwitchMessageKey } from '../lib/workspace-switch'
 import { readApiErrorMessage } from '../lib/api-error'
 import { readSampleCompanyResponse, type SampleCompanyRefusal } from '../lib/sample-company-response'
 
@@ -29,6 +29,7 @@ export const SAMPLE_COMPANY_FAILURE_COPY: Record<string, string> = {
 
 export function SampleCompanyPicker() {
   const t = useTranslations('data')
+  const tSwitch = useTranslations('shell.accountMenu')
   const [sampleProfiles, setSampleProfiles] = useState<SampleCompanyProfile[]>([])
   const [sampleIndustry, setSampleIndustry] = useState('')
   const [sampleBusy, setSampleBusy] = useState(false)
@@ -108,16 +109,18 @@ export function SampleCompanyPicker() {
           profile.industryKey === industry ? { ...profile, existingOrgId: result.orgId } : profile))
         toast.success(result.created ? t('import.sample.created') : t('import.sample.ready'))
       }
-      await enterOrg(orgId)
+      await switchWorkspace(orgId)
       setSampleErrors((current) => {
         const next = { ...current }
         delete next[industry]
         return next
       })
     } catch (error) {
-      const refusal = { message: orgId && error instanceof Error ? error.message : undefined }
-      setSampleErrors((current) => current[industry] ? current : { ...current, [industry]: refusal })
-      toast.error(orgId && error instanceof Error ? error.message : t('import.sample.createFailed'))
+      const message = error instanceof WorkspaceSwitchError
+        ? tSwitch(workspaceSwitchMessageKey(error))
+        : orgId && error instanceof Error ? error.message : undefined
+      setSampleErrors((current) => current[industry] ? current : { ...current, [industry]: { message } })
+      toast.error(message ?? t('import.sample.createFailed'))
     } finally {
       inFlight.current = false
       setSampleBusy(false)

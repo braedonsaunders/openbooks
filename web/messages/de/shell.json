@@ -27,7 +27,9 @@
     "workspace": "Arbeitsbereich",
     "production": "Produktion",
     "manageEnvironments": "Umgebungen verwalten",
-    "keyboardShortcuts": "Tastenkürzel"
+    "keyboardShortcuts": "Tastenkürzel",
+    "switchFailed": "Der Arbeitsbereich konnte nicht gewechselt werden. Versuchen Sie es erneut.",
+    "switchUnavailable": "Sie haben keinen Zugriff mehr auf diesen Arbeitsbereich."
   },
   "sandboxBanner": {
     "sandbox": "Sandbox-Umgebung",
@@ -204,7 +206,10 @@
     "notFoundTitle": "Seite nicht gefunden",
     "notFoundDescription": "Die gesuchte Seite existiert nicht oder Sie haben keinen Zugriff darauf.",
     "backToDashboard": "Zum Dashboard",
-    "backToSignIn": "Zur Anmeldung"
+    "backToSignIn": "Zur Anmeldung",
+    "updatedTitle": "OpenBooks wurde aktualisiert",
+    "updatedDescription": "Diese Seite stammt aus einer früheren Version. Laden Sie sie neu, um mit der aktuellen Version fortzufahren.",
+    "reload": "Neu laden"
   },
   "feedback": {
     "launcherAria": "Problem melden",
@@ -317,5 +322,10 @@
     "yearSymbol": "JJJJ",
     "monthSymbol": "MM",
     "daySymbol": "TT"
+  },
+  "workspaceSync": {
+    "title": "Arbeitsbereich in einem anderen Tab gewechselt",
+    "description": "Dieser Tab zeigt noch {name}, Ihre Sitzung arbeitet aber inzwischen in einem anderen Arbeitsbereich. Laden Sie neu, um im aktuell verwendeten Arbeitsbereich fortzufahren.",
+    "reload": "Neu laden"
   }
 }

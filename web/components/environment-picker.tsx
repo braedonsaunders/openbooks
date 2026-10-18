@@ -2,15 +2,16 @@
 
 // The workspace switcher body — rendered inside the account menu. Lists every
 // production tenant the login can reach, each with its sandboxes, and switches
-// the active workspace via the enterOrg server action. Kept trigger-less so it
+// the active workspace through switchWorkspace. Kept trigger-less so it
 // composes into the existing account Popover rather than eating menu space.
 
 import { useTransition } from "react";
 import Link from "next/link";
 import { useTranslations } from "next-intl";
 import { Check, FlaskConical, Layers, Settings2, Sparkles } from "lucide-react";
+import { toast } from "sonner";
 import { Badge, cn } from "@openbooks/ui";
-import { enterOrg } from "../lib/sandbox-session";
+import { switchWorkspace, workspaceSwitchMessageKey } from "../lib/workspace-switch";
 import type { WorkspaceEnvironments } from "../lib/environments";
 
 export function EnvironmentPicker({
@@ -31,7 +32,9 @@ export function EnvironmentPicker({
   const go = (orgId: string) =>
     start(async () => {
       try {
-        await enterOrg(orgId);
+        await switchWorkspace(orgId);
+      } catch (error) {
+        toast.error(tPicker(workspaceSwitchMessageKey(error)));
       } finally {
         onNavigate?.();
       }

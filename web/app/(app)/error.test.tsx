@@ -32,3 +32,17 @@ test("the route error boundary renders without an id when the failure is client-
   assert.ok(html.includes(shell.routeState!.errorTitle!));
   assert.ok(!html.includes("Reference"));
 });
+
+test("a tab from an earlier deployment is offered a reload, not a retry of the stale page", () => {
+  for (const name of ["UnrecognizedActionError", "ChunkLoadError"]) {
+    const error = Object.assign(new Error("Server Action was not found on the server"), { name });
+    const html = renderToStaticMarkup(
+      <NextIntlClientProvider locale="en" messages={messages}>
+        <AppError error={error} reset={() => {}} />
+      </NextIntlClientProvider>,
+    );
+    assert.ok(html.includes(shell.routeState!.updatedTitle!), name);
+    assert.ok(html.includes(shell.routeState!.reload!), name);
+    assert.ok(!html.includes(common.actions!.retry!), `${name}: retry would re-render the stale page`);
+  }
+});

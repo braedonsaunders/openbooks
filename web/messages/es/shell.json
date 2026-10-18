@@ -27,7 +27,9 @@
     "workspace": "Espacio de trabajo",
     "production": "Producción",
     "manageEnvironments": "Gestionar entornos",
-    "keyboardShortcuts": "Atajos de teclado"
+    "keyboardShortcuts": "Atajos de teclado",
+    "switchFailed": "No se pudo cambiar de espacio de trabajo. Inténtalo de nuevo.",
+    "switchUnavailable": "Ya no tienes acceso a ese espacio de trabajo."
   },
   "sandboxBanner": {
     "sandbox": "Entorno de sandbox",
@@ -204,7 +206,10 @@
     "notFoundTitle": "Página no encontrada",
     "notFoundDescription": "La página que busca no existe o usted no tiene acceso a ella.",
     "backToDashboard": "Ir al panel",
-    "backToSignIn": "Ir al inicio de sesión"
+    "backToSignIn": "Ir al inicio de sesión",
+    "updatedTitle": "OpenBooks se ha actualizado",
+    "updatedDescription": "Esta página se cargó desde una versión anterior. Vuelve a cargarla para continuar con la versión actual.",
+    "reload": "Volver a cargar"
   },
   "feedback": {
     "launcherAria": "Informar de un problema",
@@ -317,5 +322,10 @@
     "yearSymbol": "aaaa",
     "monthSymbol": "mm",
     "daySymbol": "dd"
+  },
+  "workspaceSync": {
+    "title": "Espacio de trabajo cambiado en otra pestaña",
+    "description": "Esta pestaña todavía muestra {name}, pero tu sesión ahora trabaja en otro espacio de trabajo. Vuelve a cargarla para continuar en el espacio de trabajo que usas ahora.",
+    "reload": "Volver a cargar"
   }
 }

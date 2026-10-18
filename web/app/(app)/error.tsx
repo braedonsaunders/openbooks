@@ -2,10 +2,11 @@
 
 import { useEffect } from 'react'
 import Link from 'next/link'
-import { AlertTriangle } from 'lucide-react'
+import { AlertTriangle, RefreshCw } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { Button } from '@openbooks/ui'
 import { RouteStateView } from '@/components/route-state'
+import { isStaleDeploymentError } from '@/lib/stale-deployment'
 
 export default function AppError({
   error,
@@ -20,6 +21,18 @@ export default function AppError({
   useEffect(() => {
     console.error(error)
   }, [error])
+
+  if (isStaleDeploymentError(error)) {
+    return (
+      <RouteStateView
+        state="error"
+        icon={<RefreshCw />}
+        title={t('updatedTitle')}
+        description={t('updatedDescription')}
+        action={<Button onClick={() => window.location.reload()}>{t('reload')}</Button>}
+      />
+    )
+  }
 
   return (
     <RouteStateView

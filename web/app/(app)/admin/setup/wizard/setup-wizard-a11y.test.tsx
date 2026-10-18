@@ -47,7 +47,7 @@ stubModules({ navigation: "export function useRouter(){return globalThis.__wizar
 registerHooks({
   resolve(specifier, context, next) {
 
-    if (specifier.endsWith("sandbox-session")) return { shortCircuit: true, url: "data:text/javascript,export async function enterOrg(orgId,returnTo){globalThis.__wizardEnteredOrg={orgId,returnTo}}" };
+    if (specifier.endsWith("workspace-switch")) return { shortCircuit: true, url: "data:text/javascript,export async function switchWorkspace(orgId){globalThis.__wizardEnteredOrg=orgId};export function workspaceSwitchMessageKey(){return 'switchFailed'}" };
     if (specifier === "next/link") {
       return {
         shortCircuit: true,
@@ -499,10 +499,11 @@ test("optional industry data installs a separate workspace and offers direct ent
   const installation = requests.filter((request) => request.url === '/api/data/sample-companies');
   assert.equal(installation.length, 1);
   assert.deepEqual(installation[0]!.body, { industry: 'manufacturing' });
-  const enter = document.querySelector('form button[type="submit"]');
-  assert.ok(enter, 'completion offers the server-authorized workspace entry action');
-  assert.match(enter.textContent ?? '', /sample|demo|Explore/i);
-  assert.equal(buttonsNamed(enter.textContent!.trim()).length, 1, 'completion offers one demo entry action');
+  const entries = buttonsNamed('Explore a separate demo company');
+  assert.equal(entries.length, 1, 'completion offers one demo entry action');
+  const enter = entries[0]!;
+  await act(async () => { enter.dispatchEvent(new window.MouseEvent('click', { bubbles: true })); });
+  assert.equal((globalThis as { __wizardEnteredOrg?: string }).__wizardEnteredOrg, '00000000-0000-4000-8000-000000000003', 'entry switches to the installed sample workspace');
   assert.ok(buttonsNamed('Create your first invoice')[0], 'the live-company next action remains available');
 });
 

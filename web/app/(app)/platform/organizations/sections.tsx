@@ -1,13 +1,12 @@
-import { ExternalLink } from 'lucide-react'
-import { Badge, Button } from '@openbooks/ui'
-import { enterOrganizationAction } from '../actions'
+import { Badge } from '@openbooks/ui'
+import { OpenOrganizationButton } from './open-organization-button'
 
 /**
  * The composite cells in the organizations list.
  *
- * The workspace cell posts a SERVER ACTION with the org id. A form action is
- * authority, not presentation, so the spec passes the id and the binding lives
- * here — the same rule as the revoke control on cross-org access.
+ * The workspace cell switches through the workspace endpoint with the org id.
+ * Switching is authority, not presentation, so the spec passes the id and the
+ * binding lives here — the same rule as the revoke control on cross-org access.
  */
 
 export function OrgNameCell({ name, subtitle }: { name: string; subtitle: string }) {
@@ -58,11 +57,6 @@ export function OrgUsersCell({ active, total }: { active: string; total: string 
 
 export function OrgOpenCell({ orgId }: { orgId: string }) {
   return (
-    <form action={enterOrganizationAction}>
-      <input type="hidden" name="orgId" value={orgId} />
-      <Button type="submit" size="sm" variant="outline">
-        Open <ExternalLink size={14} />
-      </Button>
-    </form>
+    <OpenOrganizationButton orgId={orgId} />
   )
 }

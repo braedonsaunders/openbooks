@@ -8,7 +8,8 @@ import { bootJsdomEnvironment } from '../testing/jsdom-env.ts'
 // The banner is a server component, so next-intl/server is doubled with a
 // stub that reads the REAL catalog: the mock translator substitutes the
 // locale file's own values, and hardcoded English fails every assertion.
-// The sandbox-session server action is stubbed to keep the graph light.
+// The client exit button is stubbed to keep the graph light; it receives the
+// translated label and the production organization to return to.
 declare global {
   var __sbMessages: Record<string, Record<string, string>> | undefined;
 }
@@ -20,10 +21,10 @@ stubModules({ navigation: false, intl: 'export async function getTranslations(na
 
 registerHooks({
   resolve(specifier, context, next) {
-    if (specifier.endsWith("/sandbox-session")) {
+    if (specifier.endsWith("/sandbox-exit-button")) {
       return {
         shortCircuit: true,
-        url: "data:text/javascript,export async function exitSandbox(){}",
+        url: "data:text/javascript,export function SandboxExitButton(p){return globalThis.React.createElement('button',{type:'button','data-production-org':p.productionOrgId},p.label)}",
       };
     }
     return next(specifier, context);
@@ -42,7 +43,9 @@ const { SandboxBanner } = await import("./sandbox-banner");
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
 
-async function renderBanner(props: { name?: string; kind?: "sandbox" | "preview" }) {
+const PRODUCTION_ORG = "00000000-0000-4000-8000-0000000000aa";
+
+async function renderBanner(props: { name?: string; productionOrgId: string; kind?: "sandbox" | "preview" }) {
   const host = document.createElement("div");
   document.body.appendChild(host);
   const root = createRoot(host);
@@ -54,13 +57,18 @@ async function renderBanner(props: { name?: string; kind?: "sandbox" | "preview"
 }
 
 test("the sandbox banner warns and exits in the session locale", async () => {
-  const { host, root } = await renderBanner({ name: "QA-1", kind: "sandbox" });
+  const { host, root } = await renderBanner({ name: "QA-1", productionOrgId: PRODUCTION_ORG, kind: "sandbox" });
   try {
     const text = host.textContent ?? "";
     assert.match(text, /Sandbox-Umgebung/);
     assert.ok(text.includes("QA-1"), "the environment name itself must still render");
     assert.match(text, /E-Mails, Zahlungen und Integrationen sind deaktiviert/);
     assert.match(text, /Zur Produktion wechseln/);
+    assert.equal(
+      host.querySelector("button")?.getAttribute("data-production-org"),
+      PRODUCTION_ORG,
+      "exit returns to the production organization the sandbox was cloned from",
+    );
     for (const leaked of ["Sandbox environment", "are disabled", "Exit to production"]) {
       assert.ok(!text.includes(leaked), `English ${JSON.stringify(leaked)} must not leak into the German banner`);
     }
@@ -73,6 +81,6 @@ test("the sandbox banner warns and exits in the session locale", async () => {
 
 test("sample companies never render a sandbox warning or production exit", async () => {
   for (const name of [undefined, "SIM · Northstar Cloud"]) {
-    assert.equal(await SandboxBanner({ kind: "preview", name }), null);
+    assert.equal(await SandboxBanner({ kind: "preview", name, productionOrgId: PRODUCTION_ORG }), null);
   }
 });

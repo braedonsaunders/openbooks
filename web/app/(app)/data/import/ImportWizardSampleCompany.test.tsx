@@ -32,10 +32,18 @@ registerHooks({
         url: 'data:text/javascript,export const toast={success(m){globalThis.__sampleTestToasts.push({kind:"success",message:String(m)})},error(m){globalThis.__sampleTestToasts.push({kind:"error",message:String(m)})},info(m){globalThis.__sampleTestToasts.push({kind:"info",message:String(m)})}};export function Toaster(){return null}',
       }
     }
-    if (specifier.endsWith('lib/sandbox-session')) {
+    if (specifier.endsWith('lib/workspace-switch')) {
       return {
         shortCircuit: true,
-        url: 'data:text/javascript,export async function enterOrg(orgId){globalThis.__sampleTestEnteredOrgs.push(String(orgId));if(globalThis.__sampleTestEntryRefusal)throw new Error(globalThis.__sampleTestEntryRefusal)}',
+        url: 'data:text/javascript,' + encodeURIComponent(`
+          export class WorkspaceSwitchError extends Error { constructor(refusal) { super(refusal); this.refusal = refusal } }
+          export function workspaceSwitchMessageKey(error) {
+            return error instanceof WorkspaceSwitchError && error.refusal === 'workspace_unavailable' ? 'switchUnavailable' : 'switchFailed'
+          }
+          export async function switchWorkspace(orgId) {
+            globalThis.__sampleTestEnteredOrgs.push(String(orgId))
+            if (globalThis.__sampleTestEntryRefusal) throw new WorkspaceSwitchError(globalThis.__sampleTestEntryRefusal)
+          }`),
       }
     }
     return next(specifier, context)
@@ -300,12 +308,12 @@ test('a dropped connection releases loading and preserves unknown provisioning o
 test('a workspace entry refusal keeps the successful identity and never posts again', async (t) => {
   await mountWizard(t, true)
   script.postStatus = 200
-  globalThis.__sampleTestEntryRefusal = 'Workspace access is unavailable.'
+  globalThis.__sampleTestEntryRefusal = 'workspace_unavailable'
   await clickCreate()
   assert.equal(script.samplePosts, 1)
   assert.match(createButton().textContent ?? '', /Open sample company/)
   assert.equal(createButton().disabled, false)
-  assert.match(document.querySelector('[role="alert"]')?.textContent ?? '', /Workspace access is unavailable/)
+  assert.match(document.querySelector('[role="alert"]')?.textContent ?? '', /You no longer have access to that workspace/)
   globalThis.__sampleTestEntryRefusal = null
   await clickCreate()
   assert.equal(script.samplePosts, 1)

@@ -27,7 +27,9 @@
     "workspace": "工作区",
     "production": "生产环境",
     "manageEnvironments": "管理环境",
-    "keyboardShortcuts": "键盘快捷键"
+    "keyboardShortcuts": "键盘快捷键",
+    "switchFailed": "无法切换工作区，请重试。",
+    "switchUnavailable": "你已无权访问该工作区。"
   },
   "sandboxBanner": {
     "sandbox": "沙盒环境",
@@ -204,7 +206,10 @@
     "notFoundTitle": "页面未找到",
     "notFoundDescription": "所找页面不存在，或您无权访问。",
     "backToDashboard": "前往仪表板",
-    "backToSignIn": "前往登录"
+    "backToSignIn": "前往登录",
+    "updatedTitle": "OpenBooks 已更新",
+    "updatedDescription": "此页面由旧版本加载。请重新加载以继续使用当前版本。",
+    "reload": "重新加载"
   },
   "feedback": {
     "launcherAria": "反馈问题",
@@ -317,5 +322,10 @@
     "yearSymbol": "yyyy",
     "monthSymbol": "mm",
     "daySymbol": "dd"
+  },
+  "workspaceSync": {
+    "title": "已在其他标签页中切换工作区",
+    "description": "此标签页仍显示 {name}，但你的会话现在位于其他工作区。请重新加载，以在当前使用的工作区中继续。",
+    "reload": "重新加载"
   }
 }

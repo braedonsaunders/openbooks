@@ -28,10 +28,10 @@ registerHooks({
         url: "data:text/javascript,export const toast={success(){},error(){}};export function Toaster(){return null}",
       };
     }
-    if (specifier.endsWith("/lib/sandbox-session") || specifier.endsWith("/lib/sandbox-session.ts")) {
+    if (specifier.endsWith("/lib/workspace-switch") || specifier.endsWith("/lib/workspace-switch.ts")) {
       return {
         shortCircuit: true,
-        url: "data:text/javascript,export async function enterOrg(){}",
+        url: "data:text/javascript,export async function switchWorkspace(){};export function workspaceSwitchMessageKey(){return 'switchFailed'}",
       };
     }
     return next(specifier, context);

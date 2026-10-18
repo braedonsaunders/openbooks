@@ -44,7 +44,7 @@ import { cn } from '@openbooks/ui'
 import type { IndustryDef } from '@/lib/industries'
 import { countryOptions } from '@/lib/countries'
 import { currencyOptions } from '@/lib/iso-currencies'
-import { enterOrg } from '@/lib/sandbox-session'
+import { switchWorkspace, workspaceSwitchMessageKey } from '@/lib/workspace-switch'
 import { readApiErrorMessage, refusalMessageFromBody } from '@/lib/api-error'
 import { readSampleCompanyResponse, type SampleCompanyRefusal } from '@/lib/sample-company-response'
 import {
@@ -1665,6 +1665,7 @@ function DoneStep({ t, sampleOrgId, bookStart, actions, onNavigate }: {
   onNavigate: (href: string) => void
 }) {
   const tMigration = useTranslations('sync.migrationAssistant')
+  const tSwitch = useTranslations('shell.accountMenu')
   const destinations: Record<SetupLaunchAction, string> = {
     invoice: documentCreateHref('/ar/invoices', 'customer_invoice'),
     assistant: MIGRATION_WORKSPACE_HREF,
@@ -1710,11 +1711,15 @@ function DoneStep({ t, sampleOrgId, bookStart, actions, onNavigate }: {
         {t('done.description')}
       </motion.p>
       <div className="mt-6 flex w-full max-w-md flex-col gap-3">
-        {sampleOrgId && <form action={enterOrg.bind(null, sampleOrgId, '/')}>
-          <button type="submit" className="w-full rounded-lg border border-teal-600 bg-teal-600 px-4 py-3 text-sm font-medium text-white hover:bg-teal-700">
+        {sampleOrgId && (
+          <button
+            type="button"
+            onClick={() => switchWorkspace(sampleOrgId).catch((error) => toast.error(tSwitch(workspaceSwitchMessageKey(error))))}
+            className="w-full rounded-lg border border-teal-600 bg-teal-600 px-4 py-3 text-sm font-medium text-white hover:bg-teal-700"
+          >
             {t('done.actions.demo')}
           </button>
-        </form>}
+        )}
         {ordered.map((action, index) => (
           <button key={action} type="button" onClick={() => onNavigate(destinations[action])}
             className={cn('rounded-lg border px-4 py-3 text-sm font-medium', index === 0

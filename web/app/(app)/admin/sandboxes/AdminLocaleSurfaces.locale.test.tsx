@@ -15,8 +15,8 @@ registerHooks({
     if (specifier === './actions') {
       return { shortCircuit: true, url: 'data:text/javascript,export async function createSandboxAction(){};export async function deleteSandboxAction(){};export async function promoteSandboxAction(){return {changeSetId:"test"}};export async function refreshSandboxAction(){};export async function resetSandboxAction(){};export async function setScheduleAction(){}' }
     }
-    if (specifier === '../../../../lib/sandbox-session') {
-      return { shortCircuit: true, url: 'data:text/javascript,export async function enterOrg(){}' }
+    if (specifier === '../../../../lib/workspace-switch') {
+      return { shortCircuit: true, url: 'data:text/javascript,export async function switchWorkspace(){};export function workspaceSwitchMessageKey(){return "switchFailed"}' }
     }
     return next(specifier, context)
   },

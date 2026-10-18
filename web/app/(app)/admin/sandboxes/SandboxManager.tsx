@@ -17,7 +17,8 @@ import {
   resetSandboxAction,
   setScheduleAction,
 } from "./actions";
-import { enterOrg } from "../../../../lib/sandbox-session";
+import { toast } from "sonner";
+import { switchWorkspace, workspaceSwitchMessageKey } from "../../../../lib/workspace-switch";
 
 export type PeriodOption = {
   id: string;
@@ -57,6 +58,7 @@ export function SandboxManager({
 }) {
   const { dateTime, number } = useViewerFormat();
   const t = useTranslations("admin.sandboxManager");
+  const tSwitch = useTranslations("shell.accountMenu");
   const [name, setName] = useState("");
   const [tier, setTier] = useState("masked");
   const [asOfPeriodId, setAsOfPeriodId] = useState("");
@@ -120,7 +122,13 @@ export function SandboxManager({
             variant="default"
             size="sm"
             disabled={s.status !== "ready"}
-            onClick={() => start(async () => void (await enterOrg(s.orgId)))}
+            onClick={() => start(async () => {
+              try {
+                await switchWorkspace(s.orgId);
+              } catch (error) {
+                toast.error(tSwitch(workspaceSwitchMessageKey(error)));
+              }
+            })}
           >
             {t("enter")}
           </Button>

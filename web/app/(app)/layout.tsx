@@ -6,6 +6,7 @@ import { AppShell } from '../../components/app-shell'
 import { RouteTransition } from '../../components/route-transitions'
 import { NavigationCommit, NavigationPendingBoundary, PagePending } from '../../components/page-pending'
 import { SandboxBanner } from '../../components/sandbox-banner'
+import { WorkspaceSync } from '../../components/workspace-sync'
 import { ThemeProvider } from '../../components/theme-provider'
 import { NavigationProvider } from '../../components/navigation-provider'
 import { getAuthz, can } from '../../lib/authz'
@@ -121,8 +122,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           feedback={feedbackReady ? { appVersion: process.env.OPENBOOKS_VERSION || 'development' } : null}
           >
             {authz.user.envKind === 'sandbox' && (
-              <SandboxBanner name={authz.user.sandboxName} kind={authz.user.envKind} />
+              <SandboxBanner name={authz.user.sandboxName} productionOrgId={authz.user.productionOrgId} kind={authz.user.envKind} />
             )}
+            <WorkspaceSync orgId={authz.user.orgId} name={environments.currentName} />
             {/* Page content streams behind pending feedback so the shell
               (sidebar/header) paints before slow page loaders resolve.
               Every ModuleView page renders inside {children}, so this one
