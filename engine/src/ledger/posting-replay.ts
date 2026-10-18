@@ -12,6 +12,7 @@ import { resolveBillInventoryAccounts } from "../inventory/documents-purchasing.
 import { nextFreeEntryNumber } from "../records/entry-number.ts";
 import { reversalJournalLines } from "../records/reversal-journal-lines.ts";
 import { lockApplicationEvidence } from "../records/application-lock.ts";
+import { withNoChargeUnitsAccount } from "./posting-no-charge.ts";
 import { markEntryReversed, postEntry } from "../journal/post-entry.ts";
 import { authorizeConnectorReplay } from "../journal/replay-authorization.ts";
 import { transferCorrectionApplications } from "./posting-replay-applications.ts";
@@ -176,6 +177,7 @@ export async function regenerateGlImpactTx(
       throw error;
     }
   }
+  deps = await withNoChargeUnitsAccount(tx, doc, deps);
   if (doc.kind === "cash_sale" && deps.cashCloseout === undefined) {
     try {
       deps = {

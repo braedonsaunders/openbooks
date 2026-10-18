@@ -77,6 +77,23 @@ export function PaymentPanel(props: {
     other: t('tender.other'),
   }
 
+  if (totalUnits === 0n) {
+    // Nothing is due: the sale completes with no tender at all.
+    return (
+      <div className="flex h-full flex-col gap-4">
+        <div className="rounded-lg bg-slate-100 p-3 text-center dark:bg-slate-800">
+          <p className="text-sm text-slate-600 dark:text-slate-400">{t('totals.total')}</p>
+          <p className="text-3xl font-bold">{money(props.total)}</p>
+          <p className="mt-1 text-sm text-slate-600 dark:text-slate-400">{t('payment.noCharge')}</p>
+        </div>
+        <div className="mt-auto flex gap-2">
+          <Button variant="outline" size="lg" className="flex-1" disabled={props.busy} onClick={props.onCancel}>{t('actions.back')}</Button>
+          <Button size="lg" className="flex-1" disabled={props.busy} onClick={() => props.onComplete([])}>{t('payment.completeNoCharge')}</Button>
+        </div>
+      </div>
+    )
+  }
+
   return (
     <div className="flex h-full flex-col gap-4">
       <div className="grid grid-cols-2 gap-3 text-center">

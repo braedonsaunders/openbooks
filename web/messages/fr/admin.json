@@ -979,6 +979,10 @@
         "allowanceForDoubtfulAccounts": {
           "label": "Provision pour créances douteuses",
           "hint": "Compte de contrepartie des créances ; les pertes le débitent à la place de la charge lorsqu'il est défini"
+        },
+        "noChargeUnits": {
+          "label": "Unités sans frais",
+          "hint": "Compte statistique qui enregistre les quantités remises sans frais par une vente ou un remboursement au comptant entièrement remisé ou offert"
         }
       },
       "defaultsNote": "Ce sont les valeurs par défaut de toute l’entreprise. Chaque filiale peut les remplacer sur sa propre fiche ; les remplacements vides reprennent celles-ci.",

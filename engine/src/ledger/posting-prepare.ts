@@ -38,7 +38,7 @@ import { assertBillPostingAllowed, ComplianceError } from "../compliance/complia
 import { type KernelLine, type PostingDeps, PostingError, effectivePostingDate } from "../journal/posting-contracts.ts";
 import { resolveMarketplaceClearingForDocument, validateTaxControlAccounts } from "./posting-tax-policy.ts";
 import { RULES } from "./posting-rules.ts";
-import { assertFinalKernelBalance, assertCreditMemoDirection } from "../journal/posting-invariants.ts";
+import { assertFinalKernelBalance, assertCreditMemoDirection, retainedKernelLines } from "../journal/posting-invariants.ts";
 import { resolveDeferralAccounts, resolveTaxAccounts, resolveExpenseReceivableDeps, resolveOrgTaxAccounts, resolveTaxComponents, validateRequiredDimensions, resolveOpenItemAccounts } from "./posting-accounts.ts";
 import { resolveStoredValueLiabilityByLine, resolveStoreCreditLiability } from "../stored-value/posting-accounts.ts";
 import { resolveCashPostingTenders, TenderRefusal } from "../sales/document-tenders.ts";
@@ -50,6 +50,7 @@ import { documentControlChoice, resolveDocumentControlAccount } from "./posting-
 import { assertPartylessControlPolicy } from "./partyless-control-policy.ts";
 import { DocumentDefaultsError, resolveTermsDueDate } from "./document-defaults.ts";
 import { docKindConfig } from "../records/document-kinds.ts";
+import { withNoChargeUnitsAccount } from "./posting-no-charge.ts";
 
 import { postingEffectSubsidiaryId } from "./posting-dispatch.ts";
 import { AmortizationError } from "../amortization/errors.ts";
@@ -208,6 +209,7 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
       throw error;
     }
   }
+  deps = await withNoChargeUnitsAccount(db, doc, deps);
   // Daily close-out (cash_sale only): tips, processor fees and the counted
   // over/short from documents.custom.closeout, with its control accounts
   // resolved. A close-out on a refund refuses at the write boundary; this
@@ -611,11 +613,10 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
     try { await assertReceiptFundingPosting(db, effectiveDoc, options.audit?.actorId ?? null, postingLines.map(line => line.accountId)); }
     catch (error) { if (error instanceof PaymentError) throw new PostingError(error.message); throw error; }
   }
-  const kernelLines = (await normalizeJournalCurrencyLines(db,effectiveDoc,rule(effectiveDoc, postingLines, deps))).filter(
-    (l) => !isZero(l.amount) || (effectiveDoc.journalMode === "statistical" && !!l.quantity),
+  const kernelLines = retainedKernelLines(
+    await normalizeJournalCurrencyLines(db,effectiveDoc,rule(effectiveDoc, postingLines, deps)),
+    effectiveDoc.journalMode === "statistical",
   );
-  if (kernelLines.length < (effectiveDoc.journalMode === "statistical" ? 1 : 2))
-    throw new PostingError("posting produced fewer than 2 lines");
   const total = sumMoney(kernelLines.map((l) => l.balanceTxnAmount ?? l.amount));
   if (!isZero(total)) {
     throw new PostingError(

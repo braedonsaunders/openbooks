@@ -4,6 +4,33 @@ import { isZero, toUnits } from "../money/money.ts";
 import { sumMoney } from "../money/brands.ts";
 import { type Doc, PostingError } from "./posting-contracts.ts";
 /**
+ * A zero-money leg that records an exact measurement: a nonzero quantity of
+ * at most four decimal places with a unit. Statistical journals post only
+ * these; a cash document that settles exactly zero records its quantities
+ * this way. Every other zero-money leg carries nothing and is dropped.
+ */
+export function isMeasurementLeg(line: { amount: string; quantity?: string | null; unit?: string | null }): boolean {
+  const quantity = canonicalDecimal(canonicalDecimal(line.quantity, 8), 4);
+  return isZero(line.amount) && !!line.unit?.trim() && quantity !== null && toUnits(quantity) !== 0n;
+}
+
+/**
+ * The legs a projection posts: every leg that moves money, every measurement,
+ * and — in a statistical journal — every leg that states a quantity. Fewer
+ * than two legs are refused unless the one leg is a measurement.
+ */
+export function retainedKernelLines<T extends { amount: string; quantity?: string | null; unit?: string | null }>(
+  lines: readonly T[],
+  statistical: boolean,
+): T[] {
+  const kept = lines.filter((line) => !isZero(line.amount) || (statistical && !!line.quantity) || isMeasurementLeg(line));
+  const single = kept.length === 1 ? kept[0] : undefined;
+  if (kept.length < 2 && !(statistical && single) && !(single && isMeasurementLeg(single)))
+    throw new PostingError("posting produced fewer than 2 lines");
+  return kept;
+}
+
+/**
  * Application-layer proof immediately before a ledger write. PostgreSQL
  * repeats these assertions at the deferred-constraint boundary; keeping both
  * defenses independent turns a malformed projection into a readable posting

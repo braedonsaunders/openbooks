@@ -980,6 +980,10 @@
         "allowanceForDoubtfulAccounts": {
           "label": "坏账准备",
           "hint": "一个应收账款抵减科目；设置后，核销将计入该科目的借方而非坏账费用"
+        },
+        "noChargeUnits": {
+          "label": "免费提供数量",
+          "hint": "在现金销售或退款全额折扣或免费时，记录免费提供数量的统计科目"
         }
       },
       "partylessPolicy": {

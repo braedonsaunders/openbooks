@@ -56,7 +56,8 @@
     "orderDiscountSet": "Desconto da venda {value}",
     "clear": "Limpar venda",
     "pay": "Cobrar {amount}",
-    "pricing": "Calculando preços…"
+    "pricing": "Calculando preços…",
+    "completeNoCharge": "Concluir sem cobrança"
   },
   "totals": {
     "items": "Itens",
@@ -82,7 +83,9 @@
     "amount": "Valor",
     "exact": "Valor exato",
     "add": "Adicionar pagamento",
-    "complete": "Concluir venda"
+    "complete": "Concluir venda",
+    "noCharge": "Nada a pagar: a venda tem desconto total.",
+    "completeNoCharge": "Concluir sem cobrança"
   },
   "held": {
     "title": "Vendas em espera",
@@ -107,7 +110,9 @@
     "quantityFor": "Quantidade a reembolsar de {item}",
     "overLimit": "Uma linha pede para reembolsar mais do que resta sem reembolso no recibo.",
     "reason": "Motivo do reembolso",
-    "submit": "Reembolsar {amount}"
+    "submit": "Reembolsar {amount}",
+    "noCharge": "Estes itens foram vendidos sem cobrança, então o reembolso não devolve nada.",
+    "submitNoCharge": "Reembolsar sem cobrança"
   },
   "receipt": {
     "title": "Recibo",
@@ -124,7 +129,8 @@
     "emailPlaceholder": "E-mail (em branco usa o e-mail do cliente)",
     "email": "Enviar recibo por e-mail",
     "emailed": "Recibo enviado para {to}.",
-    "newSale": "Nova venda"
+    "newSale": "Nova venda",
+    "noCharge": "Sem cobrança"
   },
   "session": {
     "drawer": "Gaveta",
@@ -171,7 +177,9 @@
     "taken": "Recebido",
     "refunded": "Reembolsado",
     "payIns": "Suprimentos",
-    "payOuts": "Sangrias"
+    "payOuts": "Sangrias",
+    "noCharge": "Sem cobrança",
+    "noChargeCount": "{sales, plural, one {# venda} other {# vendas}} · {refunds, plural, one {# reembolso} other {# reembolsos}}"
   },
   "history": {
     "description": "Turnos de gaveta de todos os caixas das suas entidades legais. Abra um turno para ver o relatório X, ou o relatório Z depois de fechado.",

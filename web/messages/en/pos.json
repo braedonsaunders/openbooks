@@ -56,7 +56,8 @@
     "orderDiscountSet": "Sale discount {value}",
     "clear": "Clear sale",
     "pay": "Pay {amount}",
-    "pricing": "Pricing…"
+    "pricing": "Pricing…",
+    "completeNoCharge": "Complete at no charge"
   },
   "totals": {
     "items": "Items",
@@ -82,7 +83,9 @@
     "amount": "Amount",
     "exact": "Exact amount",
     "add": "Add payment",
-    "complete": "Complete sale"
+    "complete": "Complete sale",
+    "noCharge": "Nothing is due: the sale is discounted in full.",
+    "completeNoCharge": "Complete at no charge"
   },
   "held": {
     "title": "Held sales",
@@ -107,7 +110,9 @@
     "quantityFor": "Quantity to refund of {item}",
     "overLimit": "A line asks to refund more than remains unrefunded on the receipt.",
     "reason": "Reason for the refund",
-    "submit": "Refund {amount}"
+    "submit": "Refund {amount}",
+    "noCharge": "These lines were sold at no charge, so the refund pays nothing back.",
+    "submitNoCharge": "Refund at no charge"
   },
   "receipt": {
     "title": "Receipt",
@@ -124,7 +129,8 @@
     "emailPlaceholder": "Email address (blank uses the customer's email)",
     "email": "Email receipt",
     "emailed": "Receipt emailed to {to}.",
-    "newSale": "New sale"
+    "newSale": "New sale",
+    "noCharge": "No charge"
   },
   "session": {
     "drawer": "Drawer",
@@ -171,7 +177,9 @@
     "taken": "Taken",
     "refunded": "Refunded",
     "payIns": "Pay-ins",
-    "payOuts": "Pay-outs"
+    "payOuts": "Pay-outs",
+    "noCharge": "At no charge",
+    "noChargeCount": "{sales, plural, one {# sale} other {# sales}} · {refunds, plural, one {# refund} other {# refunds}}"
   },
   "history": {
     "description": "Drawer sessions for every register in your legal entities. Open a session for its X report, or its Z report once closed.",

@@ -1,6 +1,6 @@
 import { sql } from "drizzle-orm";
 import { db, type SqlExecutor } from "../platform/db.ts";
-import { fromUnits, toUnits } from "../money/money.ts";
+import { cmp, fromUnits, toUnits } from "../money/money.ts";
 import type { Money } from "../money/brands.ts";
 import type { CashPostingTender } from "../journal/posting-contracts.ts";
 import { lockAndCheckOrgFeature } from "../organization/org-feature-lock.ts";
@@ -126,6 +126,7 @@ type TenderParent = {
   kind: string;
   status: string;
   currency: string;
+  total: string;
   subsidiaryId: string | null;
   partyId: string | null;
   custom: unknown;
@@ -137,7 +138,7 @@ async function loadParent(
   documentId: string,
 ): Promise<TenderParent> {
   const rows = (await runner.execute<TenderParent>(sql`
-    select id, kind, status, currency, subsidiary_id as "subsidiaryId",
+    select id, kind, status, currency, total::text as total, subsidiary_id as "subsidiaryId",
            party_id as "partyId", custom
       from documents
      where org_id = ${orgId} and id = ${documentId}
@@ -343,7 +344,12 @@ export async function replaceDocumentTenders(
   orgId: string,
   documentId: string,
   inputs: TenderInput[],
-  options: { actorId?: string | null; allowedSubsidiaryIds?: ReadonlySet<string> | null },
+  options: {
+    actorId?: string | null;
+    allowedSubsidiaryIds?: ReadonlySet<string> | null;
+    /** The total the document carries once the caller's edit lands; defaults to the stored total. */
+    documentTotal?: string;
+  },
 ): Promise<DocumentTenderRow[]> {
   // Authority resolves once, before any tender lock: an explicit scope wins,
   // otherwise the actor's live grants through the canonical machinery. A
@@ -366,7 +372,9 @@ export async function replaceDocumentTenders(
   }
   checkParentForTenders(parent);
   const isSale = parent.kind === "cash_sale";
-  if (inputs.length === 0) {
+  // A document that settles exactly zero (discounted or comped in full) has
+  // nothing to tender; every other total needs its tenders.
+  if (inputs.length === 0 && cmp(options.documentTotal ?? parent.total, "0") !== 0) {
     throw refusal(
       `A ${parent.kind === "cash_sale" ? "cash sale" : "cash refund"} needs at least one tender — name the clearing or bank account and the amount.`,
       "invalid_input",

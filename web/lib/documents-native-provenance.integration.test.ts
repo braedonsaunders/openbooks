@@ -1590,7 +1590,7 @@ const consolidatedRows = [
               drawerLine(lines[0]!, { inventoryReturnSource: { movementId: issueMovementId } }),
             ]);
             assert.ok(refusal);
-            assert.match(refusal.message, /only a vendor credit or a customer credit can return stock/);
+            assert.match(refusal.message, /only a vendor credit, a customer credit or a cash refund can return stock/);
           } finally {
             await withBypassContext(() => dropScratchOrg(fx.org.orgId));
           }

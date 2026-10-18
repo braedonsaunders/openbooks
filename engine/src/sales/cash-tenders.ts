@@ -34,14 +34,18 @@ export type { CashPostingTender };
 
 /**
  * Refuse an empty tender set before any journal: a cash document with
- * nothing settled is an unfinished draft, never a partial post.
+ * nothing settled is an unfinished draft, never a partial post. The one
+ * exception is a document whose tenders must settle exactly zero — a sale
+ * discounted or comped in full, or the refund of one — which has nothing to
+ * tender; any nonzero amount due still needs its tenders.
  */
 export function assertCashTendersPresent(
   tenders: readonly CashPostingTender[],
+  amountToTender: string,
   documentNumber: string,
   kindLabel: string,
 ): void {
-  if (tenders.length === 0) {
+  if (tenders.length === 0 && cmp(amountToTender, "0") !== 0) {
     throw new PostingError(
       `${kindLabel} ${documentNumber} has no tenders — add at least one tender ` +
         `naming the clearing or bank account and the amount received`,

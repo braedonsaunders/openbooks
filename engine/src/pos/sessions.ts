@@ -186,6 +186,9 @@ export interface SessionSummary {
   register: { id: string; code: string; name: string };
   saleCount: number;
   refundCount: number;
+  /** Sales and refunds that settled exactly zero (discounted or comped in full); they carry no tenders. */
+  noChargeSaleCount: number;
+  noChargeRefundCount: number;
   salesTotalMinor: bigint;
   refundsTotalMinor: bigint;
   tenders: SessionTenderTotal[];
@@ -213,9 +216,11 @@ export async function readSessionSummary(
   const session = lockedSession ?? (await lockSession(runner, orgId, sessionId, "none", allowedSubsidiaryIds));
   const register = (await runner.execute<{ id: string; code: string; name: string; cash_account_id: string }>(sql`
     select id, code, name, cash_account_id from pos_registers where org_id = ${orgId} and id = ${session.registerId}`)).rows[0]!;
-  const totals = (await runner.execute<{ sale_count: number; refund_count: number; sales_total: string; refunds_total: string }>(sql`
+  const totals = (await runner.execute<{ sale_count: number; refund_count: number; no_charge_sale_count: number; no_charge_refund_count: number; sales_total: string; refunds_total: string }>(sql`
     select count(*) filter (where kind = 'sale')::int as sale_count,
            count(*) filter (where kind = 'refund')::int as refund_count,
+           count(*) filter (where kind = 'sale' and total_minor = 0)::int as no_charge_sale_count,
+           count(*) filter (where kind = 'refund' and total_minor = 0)::int as no_charge_refund_count,
            coalesce(sum(total_minor) filter (where kind = 'sale'), 0)::text as sales_total,
            coalesce(sum(total_minor) filter (where kind = 'refund'), 0)::text as refunds_total
       from pos_transactions where org_id = ${orgId} and session_id = ${session.id}`)).rows[0]!;
@@ -246,6 +251,8 @@ export async function readSessionSummary(
     register: { id: register.id, code: register.code, name: register.name },
     saleCount: Number(totals.sale_count),
     refundCount: Number(totals.refund_count),
+    noChargeSaleCount: Number(totals.no_charge_sale_count),
+    noChargeRefundCount: Number(totals.no_charge_refund_count),
     salesTotalMinor: BigInt(totals.sales_total),
     refundsTotalMinor: BigInt(totals.refunds_total),
     tenders: tenders.map((row) => ({ kind: row.kind, methodLabel: row.method_label, saleMinor: BigInt(row.sale_minor), refundMinor: BigInt(row.refund_minor) })),

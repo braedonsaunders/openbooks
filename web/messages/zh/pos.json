@@ -56,7 +56,8 @@
     "orderDiscountSet": "整单折扣 {value}",
     "clear": "清空销售",
     "pay": "收款 {amount}",
-    "pricing": "正在计算价格…"
+    "pricing": "正在计算价格…",
+    "completeNoCharge": "免费完成"
   },
   "totals": {
     "items": "商品",
@@ -82,7 +83,9 @@
     "amount": "金额",
     "exact": "正好金额",
     "add": "添加付款",
-    "complete": "完成销售"
+    "complete": "完成销售",
+    "noCharge": "无需付款：此销售已全额折扣。",
+    "completeNoCharge": "免费完成"
   },
   "held": {
     "title": "挂单",
@@ -107,7 +110,9 @@
     "quantityFor": "{item} 的退款数量",
     "overLimit": "有一行的退款数量超过了小票上尚未退款的数量。",
     "reason": "退款原因",
-    "submit": "退款 {amount}"
+    "submit": "退款 {amount}",
+    "noCharge": "这些行项目为免费售出，因此退款金额为零。",
+    "submitNoCharge": "免费退款"
   },
   "receipt": {
     "title": "小票",
@@ -124,7 +129,8 @@
     "emailPlaceholder": "电子邮件地址（留空则使用客户的电子邮件）",
     "email": "通过电子邮件发送小票",
     "emailed": "小票已发送至 {to}。",
-    "newSale": "新销售"
+    "newSale": "新销售",
+    "noCharge": "免费"
   },
   "session": {
     "drawer": "钱箱",
@@ -171,7 +177,9 @@
     "taken": "收取",
     "refunded": "已退款",
     "payIns": "存入",
-    "payOuts": "取出"
+    "payOuts": "取出",
+    "noCharge": "免费",
+    "noChargeCount": "销售 {sales} 笔 · 退款 {refunds} 笔"
   },
   "history": {
     "description": "您的法律实体中所有收银台的钱箱班次。打开班次可查看其 X 报表，关班后可查看 Z 报表。",

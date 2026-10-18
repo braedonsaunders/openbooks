@@ -56,7 +56,8 @@
     "orderDiscountSet": "Remise sur la vente {value}",
     "clear": "Vider la vente",
     "pay": "Encaisser {amount}",
-    "pricing": "Calcul des prix…"
+    "pricing": "Calcul des prix…",
+    "completeNoCharge": "Terminer sans frais"
   },
   "totals": {
     "items": "Articles",
@@ -82,7 +83,9 @@
     "amount": "Montant",
     "exact": "Montant exact",
     "add": "Ajouter un paiement",
-    "complete": "Terminer la vente"
+    "complete": "Terminer la vente",
+    "noCharge": "Rien à payer : la vente est entièrement remisée.",
+    "completeNoCharge": "Terminer sans frais"
   },
   "held": {
     "title": "Ventes en attente",
@@ -107,7 +110,9 @@
     "quantityFor": "Quantité à rembourser pour {item}",
     "overLimit": "Une ligne demande de rembourser plus que ce qui reste non remboursé sur le ticket.",
     "reason": "Motif du remboursement",
-    "submit": "Rembourser {amount}"
+    "submit": "Rembourser {amount}",
+    "noCharge": "Ces lignes ont été vendues sans frais : le remboursement ne rend rien.",
+    "submitNoCharge": "Rembourser sans frais"
   },
   "receipt": {
     "title": "Ticket",
@@ -124,7 +129,8 @@
     "emailPlaceholder": "Adresse e-mail (vide : e-mail du client)",
     "email": "Envoyer le ticket par e-mail",
     "emailed": "Ticket envoyé à {to}.",
-    "newSale": "Nouvelle vente"
+    "newSale": "Nouvelle vente",
+    "noCharge": "Sans frais"
   },
   "session": {
     "drawer": "Tiroir-caisse",
@@ -171,7 +177,9 @@
     "taken": "Encaissé",
     "refunded": "Remboursé",
     "payIns": "Entrées",
-    "payOuts": "Sorties"
+    "payOuts": "Sorties",
+    "noCharge": "Sans frais",
+    "noChargeCount": "{sales, plural, one {# vente} other {# ventes}} · {refunds, plural, one {# remboursement} other {# remboursements}}"
   },
   "history": {
     "description": "Services de tiroir de toutes les caisses de vos entités juridiques. Ouvrez un service pour son rapport X, ou son rapport Z une fois clôturé.",

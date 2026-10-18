@@ -34,7 +34,9 @@ export const posSaleBody = z.object({
   customerId: uuidId.nullable().optional(),
   lines: z.array(posSaleLineSchema).min(1).max(200),
   orderDiscount: posDiscountSchema.nullable().optional(),
-  payments: z.array(posPaymentSchema).min(1).max(10),
+  // Empty only for a sale that totals exactly zero; the engine refuses an
+  // empty list whenever anything is due.
+  payments: z.array(posPaymentSchema).max(10),
   expectedTotal: decimalText.nullable().optional(),
 }).strict()
 
@@ -42,7 +44,8 @@ export const posRefundBody = z.object({
   sessionId: uuidId,
   originalDocumentId: uuidId,
   lines: z.array(z.object({ lineNumber: z.number().int().min(1).max(100000), quantity: decimalText }).strict()).min(1).max(200),
-  payments: z.array(posPaymentSchema).min(1).max(10),
+  // Empty only for a refund that totals exactly zero, as on a sale.
+  payments: z.array(posPaymentSchema).max(10),
   reason: z.string().trim().max(500).nullable().optional(),
 }).strict()
 

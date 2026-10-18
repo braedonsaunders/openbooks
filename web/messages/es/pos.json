@@ -56,7 +56,8 @@
     "orderDiscountSet": "Descuento de la venta {value}",
     "clear": "Vaciar venta",
     "pay": "Cobrar {amount}",
-    "pricing": "Calculando precios…"
+    "pricing": "Calculando precios…",
+    "completeNoCharge": "Completar sin cargo"
   },
   "totals": {
     "items": "Artículos",
@@ -82,7 +83,9 @@
     "amount": "Importe",
     "exact": "Importe exacto",
     "add": "Agregar pago",
-    "complete": "Completar venta"
+    "complete": "Completar venta",
+    "noCharge": "No hay nada que pagar: la venta tiene un descuento total.",
+    "completeNoCharge": "Completar sin cargo"
   },
   "held": {
     "title": "Ventas en espera",
@@ -107,7 +110,9 @@
     "quantityFor": "Cantidad a reembolsar de {item}",
     "overLimit": "Una línea pide reembolsar más de lo que queda sin reembolsar en el recibo.",
     "reason": "Motivo del reembolso",
-    "submit": "Reembolsar {amount}"
+    "submit": "Reembolsar {amount}",
+    "noCharge": "Estas líneas se vendieron sin cargo, por lo que el reembolso no devuelve nada.",
+    "submitNoCharge": "Reembolsar sin cargo"
   },
   "receipt": {
     "title": "Recibo",
@@ -124,7 +129,8 @@
     "emailPlaceholder": "Correo electrónico (en blanco usa el correo del cliente)",
     "email": "Enviar recibo por correo",
     "emailed": "Recibo enviado a {to}.",
-    "newSale": "Nueva venta"
+    "newSale": "Nueva venta",
+    "noCharge": "Sin cargo"
   },
   "session": {
     "drawer": "Cajón",
@@ -171,7 +177,9 @@
     "taken": "Cobrado",
     "refunded": "Reembolsado",
     "payIns": "Entradas",
-    "payOuts": "Salidas"
+    "payOuts": "Salidas",
+    "noCharge": "Sin cargo",
+    "noChargeCount": "{sales, plural, one {# venta} other {# ventas}} · {refunds, plural, one {# reembolso} other {# reembolsos}}"
   },
   "history": {
     "description": "Turnos de cajón de todas las cajas de sus entidades legales. Abra un turno para ver su informe X, o su informe Z una vez cerrado.",

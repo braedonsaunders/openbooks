@@ -552,8 +552,9 @@ export function RegisterScreen(props: { registerId: string; canRefund: boolean; 
                     <Button variant="outline" disabled={lines.length === 0} onClick={() => void holdCurrent()}>{t('held.hold')}</Button>
                     <Button variant="ghost" disabled={lines.length === 0} onClick={resetSale}>{t('cart.clear')}</Button>
                   </div>
-                  <Button size="lg" className="h-16 w-full text-xl" disabled={!quoteCurrent || lines.length === 0 || busy} onClick={() => setPanel('pay')}>
-                    {quoteCurrent ? t('cart.pay', { amount: money(quote.total) }) : t('cart.pricing')}
+                  {/* A sale discounted or comped in full has nothing to tender: it completes directly, with no payment. */}
+                  <Button size="lg" className="h-16 w-full text-xl" disabled={!quoteCurrent || lines.length === 0 || busy} onClick={() => (quoteCurrent && cmp(quote.total, '0') === 0 ? void checkout([]) : setPanel('pay'))}>
+                    {quoteCurrent ? (cmp(quote.total, '0') === 0 ? t('cart.completeNoCharge') : t('cart.pay', { amount: money(quote.total) })) : t('cart.pricing')}
                   </Button>
                 </div>
               </>

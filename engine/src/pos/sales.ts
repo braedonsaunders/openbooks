@@ -322,8 +322,10 @@ function cleanReference(value: string | null | undefined, max: number): string |
  * Non-cash tenders apply their stated amounts; cash covers the remainder,
  * and on a sale the cash handed over beyond it is change. Every tender kind
  * must be accepted by the register (its settlement account configured).
+ * A total of exactly zero — a sale discounted or comped in full, or the
+ * refund of one — settles with no tenders at all, and takes no payment.
  */
-async function planTenders(
+export async function planTenders(
   runner: SqlExecutor,
   orgId: string,
   register: PosRegister,
@@ -331,7 +333,23 @@ async function planTenders(
   totalUnits: bigint,
   mode: "sale" | "refund",
 ): Promise<PlannedTenders> {
-  if (!Array.isArray(payments) || payments.length === 0) {
+  const list = Array.isArray(payments) ? payments : [];
+  if (totalUnits === 0n) {
+    // A refund paid back through one tender names no amount: the whole
+    // refund, which here is nothing, so that tender pays nothing out.
+    const wholeRefundOfNothing = mode === "refund" && list.length === 1
+      && (list[0]!.amount === undefined || list[0]!.amount === null || list[0]!.amount === "");
+    if (list.length > 0 && !wholeRefundOfNothing) {
+      throw posRefusal(
+        mode === "sale" ? "Nothing is due on this sale, so it takes no payment." : "Nothing is owed back on this refund, so it pays nothing out.",
+        "tender_mismatch",
+        422,
+        mode === "sale" ? "Remove the payments and complete the sale at no charge." : "Remove the refund payment and complete the refund at no charge.",
+      );
+    }
+    return { tenders: [], cashAppliedUnits: 0n, cashTenderedUnits: 0n, changeUnits: 0n };
+  }
+  if (list.length === 0) {
     throw posRefusal("Add a payment.", "tender_mismatch", 422, "Choose how the customer pays.");
   }
   if (payments.length > 10) {
@@ -651,6 +669,8 @@ type OriginalLine = {
   id: string;
   line_number: number;
   item_id: string | null;
+  stock_location_id: string | null;
+  issue_movement_id: string | null;
   account_id: string;
   description: string | null;
   quantity: string | null;
@@ -719,11 +739,19 @@ export async function completePosRefund(input: PosRefundInput): Promise<PosCompl
     if (!Array.isArray(input.lines) || input.lines.length === 0) {
       throw posRefusal("Choose at least one line to refund.", "invalid_input", 422, "Pick the items the customer is returning.");
     }
+    // Each stocked line's own issue movement is the return source: the
+    // refund restocks the units at the cost they left at, into the warehouse
+    // they left from.
     const originalLines = new Map((await db.execute<OriginalLine>(sql`
-      select id, line_number, item_id, account_id, description, quantity::text as quantity, unit_price::text as unit_price,
-             amount::text as amount, tax_amount::text as tax_amount, tax_overridden, tax_code_id, tax_group_id, location_id
-        from document_lines where org_id = ${input.orgId} and document_id = ${original.id}
-       order by line_number`)).rows.map((row) => [Number(row.line_number), row]));
+      select l.id, l.line_number, l.item_id, l.stock_location_id, l.account_id, l.description, l.quantity::text as quantity,
+             l.unit_price::text as unit_price, l.amount::text as amount, l.tax_amount::text as tax_amount, l.tax_overridden,
+             l.tax_code_id, l.tax_group_id, l.location_id,
+             (select m.id from inventory_movements m
+               where m.org_id = l.org_id and m.document_line_id = l.id and m.kind = 'issue' and m.status = 'posted'
+                 and not exists (select 1 from inventory_movements r where r.org_id = m.org_id and r.reverses_movement_id = m.id)
+               order by m.id limit 1) as issue_movement_id
+        from document_lines l where l.org_id = ${input.orgId} and l.document_id = ${original.id}
+       order by l.line_number`)).rows.map((row) => [Number(row.line_number), row]));
     const already = await refundedByLine(db, input.orgId, original.id);
     const seen = new Set<number>();
     const refundLines: Array<{ lineNumber: number; quantity: string }> = [];
@@ -761,6 +789,9 @@ export async function completePosRefund(input: PosRefundInput): Promise<PosCompl
         // The refund carries the sale's own tax, never a re-rating at today's rates.
         ...(taxed ? { taxOverridden: true, taxAmount: fromUnits(taxUnits) } : {}),
         locationId: source.location_id,
+        ...(source.issue_movement_id && source.stock_location_id
+          ? { stockLocationId: source.stock_location_id, inventoryReturnSource: { movementId: source.issue_movement_id } }
+          : {}),
       };
     });
     const documentDate = await businessToday(input.orgId);
@@ -799,12 +830,15 @@ export async function completePosRefund(input: PosRefundInput): Promise<PosCompl
       values (${input.orgId}, ${original.id}, ${created.id}, 'created_from', ${input.actorId}, ${input.actorId})
       -- The refund is linked to its sale once; a replay observes the existing edge.
       on conflict (org_id, from_document_id, to_document_id, link_type) do nothing`);
+    // The cash columns describe cash handed over at a sale and its change; a
+    // refund records none (the storage rule holds them at zero), and the cash
+    // it pays out is read from its own tender rows like every other tender.
     const inserted = await db.execute(sql`
       insert into pos_transactions
         (org_id, session_id, register_id, kind, document_id, refund_of_document_id, total_minor,
-         cash_applied_minor, pricing, created_by)
+         pricing, created_by)
       values (${input.orgId}, ${session.id}, ${register.id}, 'refund', ${created.id}, ${original.id},
-        ${totalUnits.toString()}::bigint, ${planned.cashAppliedUnits.toString()}::bigint,
+        ${totalUnits.toString()}::bigint,
         ${JSON.stringify({ refundLines, reason })}::jsonb, ${input.actorId})
       -- A same-key retry that raced this one already attributed the document; the existing row stands.
       on conflict (org_id, document_id) do nothing

@@ -224,6 +224,87 @@ test("a cash sale with no tenders is refused before any journal", { skip: !DB },
   }
 });
 
+async function configureNoChargeUnits(org: ScratchOrg): Promise<string> {
+  const unitsId = await withBypassContext(() => seedPostingAccount(org.orgId, "9100", "Units given at no charge", "statistical", org.subsidiaryId));
+  await withBypassContext(() => db.execute(sql`
+    update orgs set settings = jsonb_set(settings, '{controlAccounts,noChargeUnits}', to_jsonb(${unitsId}::text)) where id = ${org.orgId}`));
+  return unitsId;
+}
+
+test("a cash sale discounted to zero posts with no tenders: a statistical measurement and stock issued at cost", { skip: !DB }, async () => {
+  const org = await withBypassContext(() => createScratchOrg());
+  try {
+    const unitsId = await configureNoChargeUnits(org);
+    const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Comp Clerk", "admin"));
+    await withOrg(org.orgId, () =>
+      receiveInventory(org.orgId, actorId, {
+        itemId: org.items.fifo, stockLocationId: org.stockLocationId, quantity: "5", unitCost: "3",
+        subsidiaryId: org.subsidiaryId, offsetAccountId: org.accounts.clearing, date: org.date,
+      }),
+    );
+    const { id, lineIds } = await draftCashDocument(org, "cash_sale", "CS-COMP", [
+      { amount: "0.0000", itemId: org.items.fifo, quantity: "2", unitPrice: "10" },
+    ], null);
+    await withOrg(org.orgId, () => postDocument(id, control(org)));
+    const legs = (await db.execute<{ account_id: string; amount: string; quantity: string; unit: string }>(sql`
+      select l.account_id, l.amount::text as amount, l.quantity::text as quantity, l.unit
+        from journal_lines l join documents d on d.org_id = l.org_id and d.posted_entry_id = l.entry_id
+       where d.org_id = ${org.orgId} and d.id = ${id}`)).rows;
+    assert.deepEqual(legs.map((leg) => [leg.account_id, Number(leg.amount), Number(leg.quantity), leg.unit]), [[unitsId, 0, 2, "unit"]]);
+    const issue = (await db.execute<{ value: string }>(sql`
+      select total_value::text as value from inventory_movements
+       where org_id = ${org.orgId} and document_line_id = ${lineIds[0]} and kind = 'issue'`)).rows[0];
+    assert.equal(Math.abs(Number(issue?.value)), 6, "the comped units leave stock at their FIFO cost");
+
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId));
+  }
+});
+
+test("voiding a no-charge cash sale reverses its measurement", { skip: !DB }, async () => {
+  const org = await withBypassContext(() => createScratchOrg());
+  try {
+    const unitsId = await configureNoChargeUnits(org);
+    const actorId = await withBypassContext(() => createScratchUser(org.orgId, "Comp Void Clerk", "admin"));
+    const { id } = await draftCashDocument(org, "cash_sale", "CS-COMP-VOID", [{ amount: "0.0000", quantity: "3" }], null);
+    await withOrg(org.orgId, () => postDocument(id, control(org)));
+    const requested = await withOrg(org.orgId, () =>
+      requestDocumentVoid({ documentId: id, orgId: org.orgId, actorId, reason: "rang up in error", reversalDate: org.date, source: "api" }),
+    );
+    assert.equal(requested.status, "voided");
+    await withOrg(org.orgId, () => completeRequestedDocumentVoid(id, org.orgId, null));
+    const quantities = (await db.execute<{ quantity: string }>(sql`
+      select l.quantity::text as quantity from journal_lines l
+       where l.org_id = ${org.orgId} and l.account_id = ${unitsId}`)).rows;
+    assert.deepEqual(quantities.map((row) => Number(row.quantity)).sort(), [-3, 3]);
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId));
+  }
+});
+
+test("a zero-total cash sale that names a tender, or misses the statistical account, is refused before any journal", { skip: !DB }, async () => {
+  const org = await withBypassContext(() => createScratchOrg());
+  try {
+    const unconfigured = await draftCashDocument(org, "cash_sale", "CS-COMP-NOACCT", [{ amount: "0.0000", quantity: "1" }], null);
+    await assert.rejects(
+      withOrg(org.orgId, () => postDocument(unconfigured.id, control(org))),
+      (error: unknown) => error instanceof PostingError && /No-charge units account in Setup/.test(error.message),
+    );
+    assert.equal(await entryCount(unconfigured.id, org.orgId), 0);
+    await configureNoChargeUnits(org);
+    const tendered = await draftCashDocument(org, "cash_sale", "CS-COMP-TENDER", [{ amount: "0.0000", quantity: "1" }], [
+      { kind: "cash", accountId: org.accounts.bank, amount: "5.0000" },
+    ]);
+    await assert.rejects(
+      withOrg(org.orgId, () => postDocument(tendered.id, control(org))),
+      (error: unknown) => error instanceof PostingError && /tenders must sum to the document total/.test(error.message),
+    );
+    assert.equal(await entryCount(tendered.id, org.orgId), 0);
+  } finally {
+    await withBypassContext(() => dropScratchOrg(org.orgId));
+  }
+});
+
 test("a stocked cash sale issues inventory and a refund restocks at original cost", { skip: !DB }, async () => {
   const org = await withBypassContext(() => createScratchOrg());
   try {

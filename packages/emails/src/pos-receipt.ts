@@ -25,6 +25,8 @@ export function posReceiptEmail(args: PosReceiptEmail): EmailOut {
   const noun = args.kind === 'refund' ? 'refund receipt' : 'receipt'
   const subject = `Your ${noun} ${args.receiptNumber} — ${args.orgName}`
   const money = (value: string) => `${value} ${args.currency}`
+  // A receipt discounted or comped in full settles with no tender at all.
+  const noCharge = args.tenders.length === 0 && /^0+(\.0+)?$/.test(args.total.trim())
   const textLines = [
     greeting,
     '',
@@ -37,6 +39,7 @@ export function posReceiptEmail(args: PosReceiptEmail): EmailOut {
     `Tax  ${money(args.tax)}`,
     `Total  ${money(args.total)}`,
     ...args.tenders.map((tender) => `${tender.label}  ${money(tender.amount)}`),
+    ...(noCharge ? ['No charge'] : []),
     ...(args.change ? [`Change  ${money(args.change)}`] : []),
     ...(args.footer ? ['', args.footer] : []),
     '',
@@ -56,6 +59,7 @@ export function posReceiptEmail(args: PosReceiptEmail): EmailOut {
         ${row('Tax', money(args.tax))}
         ${row('Total', money(args.total), true)}
         ${args.tenders.map((tender) => row(tender.label, money(tender.amount))).join('')}
+        ${noCharge ? row('No charge', '') : ''}
         ${args.change ? row('Change', money(args.change)) : ''}
       </table>
       ${args.footer ? `<p style="white-space:pre-line">${esc(args.footer)}</p>` : ''}`,

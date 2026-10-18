@@ -56,7 +56,8 @@
     "orderDiscountSet": "販売値引 {value}",
     "clear": "販売をクリア",
     "pay": "{amount} を支払う",
-    "pricing": "価格を計算中…"
+    "pricing": "価格を計算中…",
+    "completeNoCharge": "無料で完了"
   },
   "totals": {
     "items": "品目",
@@ -82,7 +83,9 @@
     "amount": "金額",
     "exact": "ちょうどの金額",
     "add": "支払を追加",
-    "complete": "会計を完了"
+    "complete": "会計を完了",
+    "noCharge": "お支払いはありません。この販売は全額値引きされています。",
+    "completeNoCharge": "無料で完了"
   },
   "held": {
     "title": "保留中の販売",
@@ -107,7 +110,9 @@
     "quantityFor": "{item} の返金数量",
     "overLimit": "レシートの未返金数量を超えて返金しようとしている明細があります。",
     "reason": "返金理由",
-    "submit": "{amount} を返金"
+    "submit": "{amount} を返金",
+    "noCharge": "これらの明細は無料で販売されたため、返金額はありません。",
+    "submitNoCharge": "無料で返金"
   },
   "receipt": {
     "title": "レシート",
@@ -124,7 +129,8 @@
     "emailPlaceholder": "メールアドレス（空欄の場合は顧客のメールアドレス）",
     "email": "レシートをメール送信",
     "emailed": "レシートを {to} に送信しました。",
-    "newSale": "新しい販売"
+    "newSale": "新しい販売",
+    "noCharge": "無料"
   },
   "session": {
     "drawer": "ドロワー",
@@ -171,7 +177,9 @@
     "taken": "受領",
     "refunded": "返金",
     "payIns": "入金",
-    "payOuts": "出金"
+    "payOuts": "出金",
+    "noCharge": "無料",
+    "noChargeCount": "販売 {sales} 件 · 返金 {refunds} 件"
   },
   "history": {
     "description": "あなたの法人のすべてのレジのドロワーシフトです。シフトを開くと X レポート、締め後は Z レポートを表示します。",

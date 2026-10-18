@@ -190,6 +190,12 @@ export interface PostingDeps {
    */
   cashCloseout?: CashSaleCloseout | null;
   /**
+   * Statistical account a cash sale or refund that settles exactly zero
+   * records its quantities on (the No-charge units control account). Null
+   * when unconfigured; resolved only for a document with nothing to tender.
+   */
+  noChargeUnitsAccountId?: string | null;
+  /**
    * The internal billing treatment an internal_billing document posts
    * under: the rule version it names, both rule accounts, and the
    * providing legal entity. Resolved at the posting boundary.

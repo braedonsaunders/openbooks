@@ -644,6 +644,7 @@ function nativeReservationKind(custom: unknown): 'source-bound' | 'audit-only' |
 const RETURN_SIDE_BY_KIND: Record<string, ReturnSide> = {
   vendor_credit: 'purchase',
   customer_credit: 'sales',
+  cash_refund: 'sales',
 }
 
 /**
@@ -675,7 +676,7 @@ async function applyInventoryReturnSelections(
     const at = submitted.findIndex((line) => line.inventoryReturnSource !== undefined) + 1
     throw new DocumentEditError(
       422,
-      `Line ${at}: only a vendor credit or a customer credit can return stock — ` +
+      `Line ${at}: only a vendor credit, a customer credit or a cash refund can return stock — ` +
         `a ${kind} has no shipment or receipt to return against; nothing was changed`,
     )
   }
@@ -690,7 +691,9 @@ async function applyInventoryReturnSelections(
       prepared.custom = rest
       continue
     }
-    if (!partyId) {
+    // A walk-in cash refund names no customer and returns a walk-in cash
+    // sale's goods; every other return names the party that received them.
+    if (!partyId && kind !== 'cash_refund') {
       throw new DocumentEditError(
         422,
         `Line ${i + 1}: select the ${side === 'purchase' ? 'vendor' : 'customer'} before choosing what this credit returns; nothing was changed`,
@@ -721,7 +724,7 @@ async function applyInventoryReturnSelections(
         orgId,
         {
           side,
-          partyId,
+          partyId: partyId ?? null,
           itemId: prepared.itemId,
           stockLocationId: selection.sourceStockLocationId ?? prepared.stockLocationId,
           movementId: selection.movementId,
@@ -2687,7 +2690,11 @@ export async function applyDocumentEdit(
             tx as unknown as SqlExecutor, orgId, id, tenderInputs,
             // The edit's own authority flows through: an explicit scope wins,
             // otherwise the writer resolves the actor's live grants itself.
-            { actorId: userId, allowedSubsidiaryIds: ctx.allowedSubsidiaryIds },
+            {
+              actorId: userId,
+              allowedSubsidiaryIds: ctx.allowedSubsidiaryIds,
+              ...(totals?.total !== undefined ? { documentTotal: totals.total } : {}),
+            },
           )
         } catch (error) {
           if (error instanceof TenderRefusal) throw new DocumentEditError(error.status, error.message, undefined, error.remedy)

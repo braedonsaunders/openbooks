@@ -980,6 +980,10 @@
         "allowanceForDoubtfulAccounts": {
           "label": "Allowance for doubtful accounts",
           "hint": "Contra-receivable that write-offs debit instead of bad debt expense when it is set"
+        },
+        "noChargeUnits": {
+          "label": "No-charge units",
+          "hint": "Statistical account that records the quantities a cash sale or refund gives at no charge when it is discounted or comped in full"
         }
       },
       "partylessPolicy": {

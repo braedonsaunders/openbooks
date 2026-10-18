@@ -980,6 +980,10 @@
         "allowanceForDoubtfulAccounts": {
           "label": "Provisão para devedores duvidosos",
           "hint": "Conta redutora de contas a receber que as baixas debitam em vez da despesa, quando configurada"
+        },
+        "noChargeUnits": {
+          "label": "Unidades sem cobrança",
+          "hint": "Conta estatística que registra as quantidades entregues sem cobrança por uma venda ou reembolso à vista com desconto total ou cortesia"
         }
       },
       "partylessPolicy": {

@@ -121,6 +121,8 @@ export type PosSessionSummary = {
   register: { id: string; code: string; name: string }
   saleCount: number
   refundCount: number
+  noChargeSaleCount: number
+  noChargeRefundCount: number
   salesTotalMinor: string
   refundsTotalMinor: string
   tenders: Array<{ kind: string; methodLabel: string; saleMinor: string; refundMinor: string }>

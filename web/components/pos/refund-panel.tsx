@@ -64,6 +64,8 @@ export function RefundPanel(props: { context: PosRegisterContext; sessionId: str
     return raw !== '' && /^\d{1,9}(\.\d{1,4})?$/.test(raw) && cmp(raw, line.refundableQuantity) > 0
   })
 
+  const noCharge = selected.length > 0 && estimate === 0n
+
   async function submit() {
     if (!receipt || selected.length === 0) return
     setBusy(true)
@@ -73,6 +75,8 @@ export function RefundPanel(props: { context: PosRegisterContext; sessionId: str
         : tender === 'card' ? { kind: 'card' as const, reference: reference.trim() || null }
           : tender === 'stored_value' ? { kind: 'stored_value' as const, code: code.trim() }
             : { kind: 'other' as const }
+      // A refund of lines sold at no charge pays nothing back, so it carries no tender.
+      const payments = noCharge ? [] : [payment]
       const completion = await posRequest<PosCompletion>('/api/pos/refunds', {
         method: 'POST',
         idempotencyKey: requestKey,
@@ -80,7 +84,7 @@ export function RefundPanel(props: { context: PosRegisterContext; sessionId: str
           sessionId: props.sessionId,
           originalDocumentId: receipt.documentId,
           lines: selected.map(({ line, quantity }) => ({ lineNumber: line.lineNumber, quantity })),
-          payments: [payment],
+          payments,
           reason: reason.trim() || null,
         },
       }, t('errors.refund'))
@@ -125,13 +129,17 @@ export function RefundPanel(props: { context: PosRegisterContext; sessionId: str
             ))}
           </ul>
           {overLimit ? <p className="text-sm text-red-600">{t('refund.overLimit')}</p> : null}
-          <div className="flex flex-wrap gap-2" role="tablist">
-            {accepted.map((kind) => (
-              <Button key={kind} role="tab" aria-selected={tender === kind} variant={tender === kind ? 'default' : 'outline'} onClick={() => setTender(kind)}>{tenderLabel[kind]}</Button>
-            ))}
-          </div>
-          {tender === 'card' ? <Input placeholder={t('payment.reference')} value={reference} onChange={(event) => setReference(event.target.value)} /> : null}
-          {tender === 'stored_value' ? <Input placeholder={t('payment.cardCode')} value={code} onChange={(event) => setCode(event.target.value)} /> : null}
+          {noCharge ? <p className="text-sm text-slate-600 dark:text-slate-300">{t('refund.noCharge')}</p> : (
+            <>
+              <div className="flex flex-wrap gap-2" role="tablist">
+                {accepted.map((kind) => (
+                  <Button key={kind} role="tab" aria-selected={tender === kind} variant={tender === kind ? 'default' : 'outline'} onClick={() => setTender(kind)}>{tenderLabel[kind]}</Button>
+                ))}
+              </div>
+              {tender === 'card' ? <Input placeholder={t('payment.reference')} value={reference} onChange={(event) => setReference(event.target.value)} /> : null}
+              {tender === 'stored_value' ? <Input placeholder={t('payment.cardCode')} value={code} onChange={(event) => setCode(event.target.value)} /> : null}
+            </>
+          )}
           <div className="space-y-1">
             <Label htmlFor="pos-refund-reason">{t('refund.reason')}</Label>
             <Input id="pos-refund-reason" maxLength={500} value={reason} onChange={(event) => setReason(event.target.value)} />
@@ -140,8 +148,8 @@ export function RefundPanel(props: { context: PosRegisterContext; sessionId: str
       ) : <div className="flex-1" />}
       <div className="flex items-center gap-2">
         <Button variant="outline" size="lg" className="flex-1" disabled={busy} onClick={props.onCancel}>{t('actions.back')}</Button>
-        <Button size="lg" className="flex-1" disabled={busy || !receipt || selected.length === 0 || overLimit || (tender === 'stored_value' && code.trim() === '')} onClick={() => void submit()}>
-          {t('refund.submit', { amount: money(fromUnits(estimate)) })}
+        <Button size="lg" className="flex-1" disabled={busy || !receipt || selected.length === 0 || overLimit || (!noCharge && tender === 'stored_value' && code.trim() === '')} onClick={() => void submit()}>
+          {noCharge ? t('refund.submitNoCharge') : t('refund.submit', { amount: money(fromUnits(estimate)) })}
         </Button>
       </div>
     </div>

@@ -114,6 +114,10 @@ export const CONTROL_ACCOUNT_TYPE_POLICY = {
   // the organization provisions an allowance. Current-asset types only: it must
   // never enter the receivable open-item family, so no party is required.
   allowanceForDoubtfulAccounts: ["asset_current_other", "asset_other"],
+  // A cash sale discounted or comped in full, or the refund of one, moves no
+  // money: its journal records the quantities given at no charge as
+  // zero-money measurements, which only a statistical account may carry.
+  noChargeUnits: ["statistical"],
 } as const;
 
 export type ControlAccountRole = keyof typeof CONTROL_ACCOUNT_TYPE_POLICY;
@@ -163,6 +167,7 @@ export const CONTROL_ACCOUNT_ROLE_LABELS: Record<ControlAccountRole, string> = {
   cashOverShort: "Cash over/short",
   badDebtExpense: "Bad debt expense",
   allowanceForDoubtfulAccounts: "Allowance for doubtful accounts",
+  noChargeUnits: "No-charge units",
 };
 
 /** Operator-facing chart account-type names for control-account refusals. */
@@ -183,6 +188,7 @@ export const CONTROL_ACCOUNT_TYPE_LABELS: Readonly<Record<string, string>> = {
   expense: "Expense",
   expense_other: "Other expense",
   expense_deferred: "Deferred expense",
+  statistical: "Statistical",
 };
 
 function accountTypeLabel(type: string): string {

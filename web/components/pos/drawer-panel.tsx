@@ -26,6 +26,9 @@ export function SessionReport({ summary }: { summary: PosSessionSummary }) {
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
         <Stat label={t('report.sales', { count: summary.saleCount })} value={money(minor(summary.salesTotalMinor))} />
         <Stat label={t('report.refunds', { count: summary.refundCount })} value={money(minor(summary.refundsTotalMinor))} />
+        {summary.noChargeSaleCount + summary.noChargeRefundCount > 0 ? (
+          <Stat label={t('report.noCharge')} value={t('report.noChargeCount', { sales: summary.noChargeSaleCount, refunds: summary.noChargeRefundCount })} />
+        ) : null}
         <Stat label={t('report.float')} value={money(minor(summary.session.openingFloatMinor))} />
         <Stat label={t('report.expectedCash')} value={money(minor(summary.expectedCashMinor))} />
         {closed ? <Stat label={t('report.countedCash')} value={money(minor(summary.session.countedCashMinor))} /> : null}

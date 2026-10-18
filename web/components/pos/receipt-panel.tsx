@@ -55,6 +55,9 @@ export function ReceiptDocument({ receipt }: { receipt: PosReceipt }) {
               <TableCell className="px-0 py-1 text-right">{money(tender.amount)}</TableCell>
             </TableRow>
           ))}
+          {receipt.tenders.length === 0 && cmp(receipt.total, '0') === 0 ? (
+            <TableRow><TableCell className="px-0 py-1" colSpan={2}>{t('receipt.noCharge')}</TableCell></TableRow>
+          ) : null}
           {!refund && cmp(receipt.cashTendered, '0') > 0 ? (
             <TableRow><TableCell className="px-0 py-1">{t('receipt.cashTendered')}</TableCell><TableCell className="px-0 py-1 text-right">{money(receipt.cashTendered)}</TableCell></TableRow>
           ) : null}
@@ -83,6 +86,7 @@ function escPosLines(receipt: PosReceipt, money: (value: string) => string, t: R
   lines.push({ kind: 'pair', left: t('totals.tax'), right: money(receipt.tax) })
   lines.push({ kind: 'pair', left: t('totals.total'), right: money(receipt.total), bold: true })
   for (const tender of receipt.tenders) lines.push({ kind: 'pair', left: tender.methodLabel, right: money(tender.amount) })
+  if (receipt.tenders.length === 0 && cmp(receipt.total, '0') === 0) lines.push({ kind: 'text', text: t('receipt.noCharge'), align: 'center' })
   if (!refund && cmp(receipt.change, '0') > 0) lines.push({ kind: 'pair', left: t('receipt.change'), right: money(receipt.change), bold: true })
   if (receipt.register?.receiptFooter) {
     lines.push({ kind: 'feed' })

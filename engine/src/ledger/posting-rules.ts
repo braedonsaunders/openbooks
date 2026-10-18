@@ -1,8 +1,9 @@
 /** Pure document-to-ledger projection rules. Posting phases are coordinated by posting-document.ts. */
-import { add, cmp, isZero, neg, toUnits } from "../money/money.ts";
+import { abs, add, cmp, isZero, neg, toUnits } from "../money/money.ts";
+import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { addMoney, negMoney, parseMoney, sumMoney, ZERO_MONEY, type Money } from "../money/brands.ts";
 import { type Doc, type DocLine, type KernelLine, type PostingDeps, PostingError } from "../journal/posting-contracts.ts";
-import { assertCashTendersPresent, assertCloseoutTendersMatchTotal, assertTendersMatchTotal } from "../sales/cash-tenders.ts";
+import { assertCashTendersPresent, assertCloseoutTendersMatchTotal, assertTendersMatchTotal, expectedTenderedForCloseout } from "../sales/cash-tenders.ts";
 import { internalBillingKernelLines, InternalBillingPolicyError } from "./internal-billing-policy.ts";
 import { type RuleFn, resolvedLineAccount, cardRule, tenderMemo, dims, lineTotal, controlOverride, settlementOf, personalReceivableAmount, purchaseBaseAmount, purchaseTaxLines, salesTaxLines } from "./posting-rule-builders.ts";
 /**
@@ -17,6 +18,55 @@ export function controlLineIsOpenItem(
   openItemAccountIds?: ReadonlySet<string>,
 ): boolean {
   return partyId != null && openItemAccountIds?.has(accountId) === true;
+}
+
+/**
+ * A cash document with nothing to tender: lines that offset one another
+ * (a sale line and its discount line) post as they are; when every leg is
+ * zero the document records its quantities instead.
+ */
+function settledAtNoCharge(doc: Doc, lines: DocLine[], legs: KernelLine[], deps: PostingDeps, sign: "1" | "-1", kindLabel: string): KernelLine[] {
+  if (legs.some((leg) => !isZero(leg.amount))) return legs;
+  if (!deps.noChargeUnitsAccountId) {
+    throw new PostingError(
+      `${kindLabel} ${doc.documentNumber} settles exactly zero, so it records the quantities given at no charge on a statistical account — ` +
+        `set the No-charge units account in Setup → Company & Accounting → Control accounts, then post again`,
+    );
+  }
+  return noChargeMeasurementLegs(doc, lines, deps.noChargeUnitsAccountId, sign, kindLabel);
+}
+
+/**
+ * The journal of a cash document that settles exactly zero — a sale
+ * discounted or comped in full, or the refund of one. It moves no money, so
+ * each line is recorded as a zero-money measurement on the statistical
+ * No-charge units account: the quantity given (positive on a sale, negative
+ * on a refund) in the line's unit. The entry keeps the document's exact
+ * journal identity, and the cost of any stocked goods posts through
+ * inventory relief as on every sale.
+ */
+export function noChargeMeasurementLegs(doc: Doc, lines: DocLine[], statisticalAccountId: string, sign: "1" | "-1", kindLabel: string): KernelLine[] {
+  const legs: KernelLine[] = [];
+  for (const line of lines) {
+    const quantity = canonicalDecimal(canonicalDecimal(line.quantity, 8), 4);
+    if (quantity === null) {
+      throw new PostingError(`${kindLabel} ${doc.documentNumber} line ${line.lineNumber} quantity ${line.quantity} cannot be recorded at no charge — state the quantity with at most four decimal places`);
+    }
+    if (isZero(quantity)) continue;
+    legs.push({
+      accountId: statisticalAccountId,
+      amount: ZERO_MONEY,
+      quantity: sign === "1" ? quantity : canonicalDecimal(neg(quantity), 4)!,
+      unit: line.unit?.trim() || "unit",
+      memo: line.description ? `No charge — ${line.description}` : "No charge",
+      partyId: line.partyId ?? doc.partyId,
+      ...dims(doc, line),
+    });
+  }
+  if (legs.length === 0) {
+    throw new PostingError(`${kindLabel} ${doc.documentNumber} settles nothing and records no quantity — add the items sold, or delete the draft`);
+  }
+  return legs;
 }
 
 /** Marks a leg that defers its line through an amortization template. */
@@ -162,13 +212,22 @@ export const RULES: Record<string, RuleFn> = {
     const tax = salesTaxLines(doc, lines, deps, 1);
     const incomeAndTax = sumMoney([...income, ...tax].map((l) => l.amount));
     // Tenders arrive resolved from document_tenders (prepare/replay); an
-    // empty set refuses here rather than posting an unsettled sale.
+    // empty set refuses here rather than posting an unsettled sale, unless
+    // there is exactly nothing to tender.
     const tenders = deps.cashTenders ?? [];
-    assertCashTendersPresent(tenders, doc.documentNumber, "cash sale");
     // A close-out re-states the cross-foot explicitly: the till collects the
     // document total plus card tips, net of processor fees and the counted
     // over/short. Without one the tenders must match the total exactly.
     const closeout = deps.cashCloseout ?? null;
+    assertCashTendersPresent(
+      tenders,
+      closeout
+        ? expectedTenderedForCloseout(abs(incomeAndTax), closeout.tipsTotal, closeout.feeTotal, closeout.overShort)
+        : abs(incomeAndTax),
+      doc.documentNumber,
+      "cash sale",
+    );
+    if (tenders.length === 0) return settledAtNoCharge(doc, lines, [...income, ...tax], deps, "1", "cash sale");
     if (closeout) {
       assertCloseoutTendersMatchTotal(tenders, incomeAndTax, closeout, doc.documentNumber);
       if (cmp(closeout.tipsTotal, "0") !== 0 && !closeout.tipsPayableAccountId) {
@@ -744,7 +803,8 @@ export const RULES: Record<string, RuleFn> = {
     const tax = salesTaxLines(doc, lines, deps, -1);
     const incomeAndTax = sumMoney([...income, ...tax].map((l) => l.amount));
     const tenders = deps.cashTenders ?? [];
-    assertCashTendersPresent(tenders, doc.documentNumber, "cash refund");
+    assertCashTendersPresent(tenders, abs(incomeAndTax), doc.documentNumber, "cash refund");
+    if (tenders.length === 0) return settledAtNoCharge(doc, lines, [...income, ...tax], deps, "-1", "cash refund");
     assertTendersMatchTotal(tenders, incomeAndTax, doc.documentNumber, "cash refund");
     return [
       // Payout legs mirror the sale's tender legs: no party, never open items.

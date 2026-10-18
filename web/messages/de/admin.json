@@ -979,6 +979,10 @@
         "allowanceForDoubtfulAccounts": {
           "label": "Wertberichtigung auf Forderungen",
           "hint": "Gegenkonto zu den Forderungen; Ausbuchungen belasten es statt des Aufwandskontos, sofern es gesetzt ist"
+        },
+        "noChargeUnits": {
+          "label": "Kostenlos abgegebene Einheiten",
+          "hint": "Statistisches Konto, auf dem ein vollständig rabattierter oder kostenloser Barverkauf oder eine solche Erstattung die abgegebenen Mengen erfasst"
         }
       },
       "defaultsNote": "Dies sind die unternehmensweiten Standards. Jede Tochtergesellschaft kann sie in ihrem eigenen Datensatz überschreiben; leere Überschreibungen fallen auf diese zurück.",

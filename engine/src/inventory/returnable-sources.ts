@@ -66,7 +66,9 @@ const SIDE_RULES: Record<ReturnSide, SideRules> = {
     sourceKind: "issue",
     returnKind: "receipt",
     evidenceKey: "sourceIssueMovementId",
-    documentKinds: ["customer_invoice", SALES_FULFILLMENT_DOCUMENT_KIND],
+    // Stock leaves on an invoice, a paid-at-sale cash sale, or a shipment
+    // against the sales order: the same sources the return engine accepts.
+    documentKinds: ["customer_invoice", "cash_sale", SALES_FULFILLMENT_DOCUMENT_KIND],
   },
 };
 
@@ -258,7 +260,8 @@ export async function assertReturnSourceSelectable(
   orgId: string,
   selection: {
     side: ReturnSide;
-    partyId: string;
+    /** Null only for a walk-in cash refund returning a walk-in cash sale's goods. */
+    partyId: string | null;
     itemId: string;
     stockLocationId: string;
     movementId: string;
@@ -276,7 +279,9 @@ export async function assertReturnSourceSelectable(
        and movement.id = ${selection.movementId}
        and movement.kind = ${rules.sourceKind}
        and movement.status = 'posted'
-       and source_document.party_id = ${selection.partyId}
+       and ${selection.partyId === null
+         ? sql`source_document.party_id is null and source_document.kind = 'cash_sale'`
+         : sql`source_document.party_id = ${selection.partyId}`}
        and source_document.kind in ${rules.documentKinds}
        and movement.item_id = ${selection.itemId}
        and movement.stock_location_id = ${selection.stockLocationId}

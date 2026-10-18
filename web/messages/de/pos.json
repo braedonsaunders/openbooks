@@ -56,7 +56,8 @@
     "orderDiscountSet": "Verkaufsrabatt {value}",
     "clear": "Verkauf leeren",
     "pay": "{amount} bezahlen",
-    "pricing": "Preise werden berechnet…"
+    "pricing": "Preise werden berechnet…",
+    "completeNoCharge": "Kostenlos abschließen"
   },
   "totals": {
     "items": "Artikel",
@@ -82,7 +83,9 @@
     "amount": "Betrag",
     "exact": "Genauer Betrag",
     "add": "Zahlung hinzufügen",
-    "complete": "Verkauf abschließen"
+    "complete": "Verkauf abschließen",
+    "noCharge": "Nichts zu zahlen: Der Verkauf ist vollständig rabattiert.",
+    "completeNoCharge": "Kostenlos abschließen"
   },
   "held": {
     "title": "Geparkte Verkäufe",
@@ -107,7 +110,9 @@
     "quantityFor": "Zu erstattende Menge von {item}",
     "overLimit": "Eine Zeile soll mehr erstatten, als auf dem Beleg noch nicht erstattet ist.",
     "reason": "Grund der Erstattung",
-    "submit": "{amount} erstatten"
+    "submit": "{amount} erstatten",
+    "noCharge": "Diese Positionen wurden kostenlos verkauft, daher zahlt die Erstattung nichts zurück.",
+    "submitNoCharge": "Kostenlos erstatten"
   },
   "receipt": {
     "title": "Beleg",
@@ -124,7 +129,8 @@
     "emailPlaceholder": "E-Mail-Adresse (leer verwendet die E-Mail des Kunden)",
     "email": "Beleg per E-Mail senden",
     "emailed": "Beleg an {to} gesendet.",
-    "newSale": "Neuer Verkauf"
+    "newSale": "Neuer Verkauf",
+    "noCharge": "Kostenlos"
   },
   "session": {
     "drawer": "Schublade",
@@ -171,7 +177,9 @@
     "taken": "Eingenommen",
     "refunded": "Erstattet",
     "payIns": "Einlagen",
-    "payOuts": "Entnahmen"
+    "payOuts": "Entnahmen",
+    "noCharge": "Kostenlos",
+    "noChargeCount": "{sales, plural, one {# Verkauf} other {# Verkäufe}} · {refunds, plural, one {# Erstattung} other {# Erstattungen}}"
   },
   "history": {
     "description": "Schubladenschichten aller Kassen in Ihren Rechtseinheiten. Öffnen Sie eine Schicht für ihren X-Bericht oder nach dem Abschluss für ihren Z-Bericht.",

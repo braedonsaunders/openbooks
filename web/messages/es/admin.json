@@ -979,6 +979,10 @@
         "allowanceForDoubtfulAccounts": {
           "label": "Estimación para cuentas incobrables",
           "hint": "Cuenta correctora de cuentas por cobrar; las bajas la debitan en lugar del gasto por cuentas incobrables cuando está configurada"
+        },
+        "noChargeUnits": {
+          "label": "Unidades sin cargo",
+          "hint": "Cuenta estadística que registra las cantidades que una venta o un reembolso al contado entrega sin cargo cuando tiene un descuento total o es una cortesía"
         }
       },
       "defaultsNote": "Estos son los valores predeterminados de toda la empresa. Cada filial puede reemplazarlos en su propia ficha; los reemplazos vacíos vuelven a estos.",

@@ -1,6 +1,7 @@
 import { isZero, normalizeDecimal, sum, toUnits } from "../money/money.ts";
 import { type Doc, type DocLine, type KernelLine, type PostingDeps, PostingError } from "../journal/posting-contracts.ts";
 import { RULES } from "./posting-rules.ts";
+import { retainedKernelLines } from "../journal/posting-invariants.ts";
 export function glProjectionScopeUnchanged(
   existing: { periodId: string; postingDate: string },
   next: { periodId: string; postingDate: string },
@@ -21,9 +22,7 @@ export function buildProjection(
   const rule = RULES[doc.kind];
   if (!rule)
     throw new PostingError(`no posting rule for document kind "${doc.kind}"`);
-  const kl = rule(doc, lines, deps).filter((l) => !isZero(l.amount) || (doc.journalMode==="statistical" && !!l.quantity));
-  if (kl.length < (doc.journalMode==="statistical" ? 1 : 2))
-    throw new PostingError("posting produced fewer than 2 lines");
+  const kl = retainedKernelLines(rule(doc, lines, deps), doc.journalMode === "statistical");
   if (!options.deferCurrencyBalance && !isZero(sum(kl.map((l) => l.amount)))) {
     throw new PostingError(`posting rule for ${doc.kind} does not balance`);
   }
