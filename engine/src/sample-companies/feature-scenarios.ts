@@ -2,6 +2,7 @@ import { mul, sum } from "../money/money.ts";
 import { sampleCompanyFeatures, sampleRosterCopy } from "./features.ts";
 import { scenarioRecordId, type DemoContext } from "./scenarios.ts";
 import { INDUSTRY_OPERATIONS, type AddDemoRecord } from "./industry-operations.ts";
+import { CAP_TABLE_EMPLOYEES, storyDate } from "./cap-table-story.ts";
 
 /** Editable native configuration; regulated facts and external credentials are deliberately absent. */
 export function extendedFeatureRecords(c: DemoContext, add: AddDemoRecord): void {
@@ -95,9 +96,22 @@ export function extendedFeatureRecords(c: DemoContext, add: AddDemoRecord): void
       ["3101", "apic", "Additional paid-in capital", "equity"], ["3111", "apic-share-based", "Paid-in capital — share-based compensation", "equity"],
       ["3201", "treasury-stock", "Treasury stock", "equity"], ["2601", "convertible-instruments", "SAFEs and convertible instruments", "liability_current_other"],
       ["6411", "stock-compensation", "Stock-based compensation", "expense"],
+      ["6421", "note-interest", "Convertible note interest", "expense"],
+      ["2611", "accrued-note-interest", "Accrued convertible note interest", "liability_current_other"],
+      ["2621", "early-exercise-deposits", "Early-exercise deposits", "liability_current_other"],
     ] as const) add("accounts", { number, name, type, is_active: true }, key);
     for (const [key, name] of [["founder-1", "Avery Quinn"], ["founder-2", "Rowan Ellis"]] as const) add("parties", { kind: "person", display_name: name, is_active: true }, key);
-    add("parties", { kind: "company", display_name: "Northbridge Seed Partners", is_active: true }, "seed-investor");
+    for (const [key, kind, name] of [
+      ["seed-investor", "company", "Northbridge Seed Partners"], ["angel-investor", "person", "Priya Raman"],
+      ["note-investor", "company", "Cascade Angel Syndicate"], ["seed-lead", "company", "Granite Peak Ventures"],
+      ["series-a-lead", "company", "Meridian Growth Partners"], ["venture-lender", "company", "Harbor Bank Venture Lending"],
+    ] as const) add("parties", { kind, display_name: name, is_active: true }, key);
+    // Option and RSU holders are employees of the legal entity; one has left the company.
+    for (const [index, holder] of CAP_TABLE_EMPLOYEES.entries()) {
+      const party = add("parties", { kind: "person", display_name: holder.name, is_active: true }, holder.key);
+      add("employee_roles", { party_id: party, employee_number: `NSC-${1001 + index}`, job_title: holder.title, hired_on: storyDate(c.year, holder.hired),
+        ...(holder.left ? { terminated_on: storyDate(c.year, holder.left), is_active: false } : {}) }, holder.key);
+    }
   }
   if (f.serviceDispatch) serviceDispatchRecords(c, add);
   if (f.contractCosts) {

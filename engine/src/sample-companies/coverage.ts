@@ -94,7 +94,7 @@ export const DEMO_FEATURE_EVIDENCE: Record<string, DemoFeatureEvidence> = {
   expenseAmortizationAutoRun: { ...configuration("expense_amortization_schedules"), limitation: "Active schedules post their due amortization automatically each period; review a schedule before relying on automatic runs." },
   rebateManagement: { ...configuration("rebate_agreements"), limitation: "Draft supplier and customer agreements; an independent operator must approve each before posted purchases and sales accrue rebates." },
   serviceDispatch: { ...executed("service_requests", "service_quotes", "service_jobs", "service_visits", "service_visit_parts", "service_agreements", "service_billings"), limitation: "Customer arrival and on-my-way notices are off until an email sender is configured; the synthetic customer's quote acceptance and site signatures are illustrative." },
-  equity: { ...executed("equity_share_classes", "equity_plans", "equity_securities"), limitation: "Synthetic founders and investor; board approvals, securities filings and valuations must be reviewed before granting awards." },
+  equity: { ...executed("equity_share_classes", "equity_class_amendments", "equity_plans", "equity_plan_reserve_changes", "equity_financing_rounds", "equity_securities", "equity_security_events", "equity_security_amendments", "equity_account_policies", "equity_compensation_runs", "equity_interest_runs", "equity_position_movements"), limitation: "Synthetic founders, employees, investors and lender; board consents, 409A valuations, 83(b) filings and securities filings are illustrative and must be reviewed before relying on the cap table." },
 };
 
 export function demoFeatureEvidence(industryKey: string): Record<string, DemoFeatureEvidence> {

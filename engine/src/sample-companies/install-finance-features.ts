@@ -2,15 +2,13 @@ import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { activateSchedule, createManualSchedule } from "../amortization/schedules.ts";
 import { validateTemplateWrite } from "../amortization/templates.ts";
-import { recordEquityAccountPolicy } from "../equity/account-policy.ts";
-import { issueSecurity } from "../equity/securities.ts";
-import { createPlan, createShareClass } from "../equity/structure.ts";
 import { createScriptJournal } from "../ledger/journal-writes.ts";
 import { fromUnits, toUnits } from "../money/money.ts";
 import { createBookCurrencyVersion } from "../multibook/settings.ts";
 import { registerSetupRefusal } from "../pos/registers.ts";
 import { validateRebateTerms, type RebateTerms } from "../revenue/rebate-math.ts";
 import { sampleCompanyFeatures } from "./features.ts";
+import { installCapTable } from "./install-cap-table.ts";
 import { scenarioRecordId, type DemoContext } from "./scenarios.ts";
 import { SampleCompanyError } from "./provisioning-failures.ts";
 
@@ -92,45 +90,4 @@ async function installPrepaidInsurance(c: DemoContext): Promise<void> {
     memo, reason: REASON,
   });
   await activateSchedule({ orgId: c.orgId, actorId: c.actorId, scheduleId: schedule.scheduleId, reason: "Release the prepaid premium monthly from the current period" });
-}
-
-/**
- * A venture-backed cap table: common and Series Seed preferred classes, an
- * option pool, the founders' restricted common purchase and a post-money SAFE.
- */
-async function installCapTable(c: DemoContext): Promise<void> {
-  // Member companies keep the cap table their source carried. A master gains
-  // any missing structure; recorded issuances replay by their request keys.
-  if (c.memberSample) return;
-  const account = (key: string) => scenarioRecordId(c, "accounts", key);
-  const command = { orgId: c.orgId, actorId: c.actorId, subsidiaryId: c.subsidiaryId };
-  const issueDate = c.operationDate ?? c.date;
-  const policies = await db.execute(sql`select id from equity_account_policies where org_id = ${c.orgId} and subsidiary_id = ${c.subsidiaryId}`);
-  if (!policies.rows.length) {
-    const policy = await recordEquityAccountPolicy({
-      ...command, effectiveFrom: `${c.year}-01-01`, commonStockAccountId: account("common-stock"), preferredStockAccountId: account("preferred-stock"),
-      apicAccountId: account("apic"), apicShareBasedAccountId: account("apic-share-based"), compensationExpenseAccountId: account("stock-compensation"),
-      treasuryStockAccountId: account("treasury-stock"), convertibleInstrumentsAccountId: account("convertible-instruments"),
-      reason: "Equity accounts for the legal entity's cap table",
-    });
-    if (policy.status !== "applied") throw new SampleCompanyError("The equity account policy needs approval; review the Equity action Flow before preparing the demonstration.");
-  }
-  const classId = async (code: string) => (await db.execute<{ id: string }>(sql`
-    select id from equity_share_classes where org_id = ${c.orgId} and subsidiary_id = ${c.subsidiaryId} and code = ${code}`)).rows[0]?.id;
-  const common = await classId("CS") ?? (await createShareClass({ ...command, code: "CS", name: "Common Stock", kind: "common",
-    effectiveOn: `${c.year}-01-01`, authorizedShares: "15000000", parValue: "0.0001" })).id;
-  if (!await classId("SEED")) await createShareClass({ ...command, code: "SEED", name: "Series Seed Preferred", kind: "preferred",
-    effectiveOn: `${c.year}-01-01`, authorizedShares: "3000000", parValue: "0.0001", originalIssuePrice: "1.2500", liquidationMultiple: "1",
-    participation: "none", seniority: 1, antiDilution: "broad_based", conversionShareClassId: common });
-  const plans = await db.execute(sql`select id from equity_plans where org_id = ${c.orgId} and subsidiary_id = ${c.subsidiaryId} and code = 'EIP'`);
-  if (!plans.rows.length) await createPlan({ ...command, code: "EIP", name: "Equity Incentive Plan", shareClassId: common,
-    effectiveOn: `${c.year}-01-01`, reservedShares: "1500000", recycleForfeited: true, recycleExpired: true, recycleRepurchased: false });
-  for (const founder of ["founder-1", "founder-2"]) {
-    await issueSecurity({ ...command, kind: "share", holderPartyId: scenarioRecordId(c, "parties", founder), issueDate, shareClassId: common,
-      quantity: "4000000", pricePerShare: "0.0001", considerationAccountId: account("financing-bank"),
-      memo: "Founder common stock purchase", idempotencyKey: `industry-demo:${c.orgId}:equity:${founder}` });
-  }
-  await issueSecurity({ ...command, kind: "safe", holderPartyId: scenarioRecordId(c, "parties", "seed-investor"), issueDate,
-    considerationAmount: "500000", considerationAccountId: account("financing-bank"), safeType: "post_money", valuationCap: "10000000",
-    memo: "Post-money SAFE ahead of the Series Seed", idempotencyKey: `industry-demo:${c.orgId}:equity:seed-safe` });
 }

@@ -25,7 +25,7 @@ export function sampleOperatorPermissions(industryKey: string): string[] {
     ...(f.hrmAttendance ? ["hrm.attendance.manage"] : []),
     ...(f.compensationPackages ? ["payroll.manage"] : []),
     ...(f.expenseAmortization ? ["amortization.manage"] : []),
-    ...(f.equity ? ["equity.manage"] : []),
+    ...(f.equity ? ["equity.manage", "periods.manage"] : []),
     ...(f.serviceDispatch ? ["service.manage", "service.dispatch", "estimates.create", "estimates.issue", "hrm.certifications.manage"] : [])];
 }
 

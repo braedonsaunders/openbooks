@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { verifySampleOperatingHistory } from "./readiness.ts";
-import { cmp } from "../money/money.ts";
+import { cmp, fromUnits, toUnits } from "../money/money.ts";
 import { installEngineSeams } from "../composition/install.ts";
 import { db, withOrgContext, withBypass } from "../platform/db.ts";
 import { provisionOrg, wipeSimOrg } from "../sim/world.ts";
@@ -13,6 +13,10 @@ import { DEMO_DATA_VERSION, installDemoScenarios, verifyDemoScenarios } from "./
 import { SampleLocalAuthorRequiredError } from "./operator.ts";
 import { demoRecordId } from "./scenarios.ts";
 import { retireSampleFixtureCompanies } from "./retirement-test-fixtures.ts";
+import { buildCapTable, holdingState } from "../equity/cap-table.ts";
+import { loadEquityBook } from "../equity/store.ts";
+import { businessToday } from "../platform/business-date.ts";
+import { addMonthsClamped, endOfMonth } from "../platform/civil-date.ts";
 
 const enabled = { skip: !process.env.OPENBOOKS_DB_URL };
 installEngineSeams();
@@ -85,10 +89,26 @@ for (const profile of SAMPLE_COMPANY_PROFILES) test(`${profile.companyName}: nat
              (select count(*)::int from journal_entries where org_id=${world.orgId}) as entries,
              (select count(*)::int from documents where org_id=${world.orgId}) as documents
     `)).rows[0]);
+    if (profile.industryKey === "it_software_saas") await assertNorthstarCapTable(world.orgId);
     const before = await snapshot();
     assert.ok(before, "installation snapshot must return its counts");
     assert.equal((await installDemoScenarios(world.orgId, profile.industryKey)).inserted, 0);
     assert.deepEqual(await snapshot(), before, "a retry must neither post again nor claim another material change");
+    if (profile.industryKey === "it_software_saas") {
+      // A full reinstallation replays every cap table command by its recorded identity: nothing is issued or posted twice.
+      const equity = () => withOrgContext(world.orgId, async () => (await db.execute(sql`
+        select (select count(*)::int from equity_securities where org_id=${world.orgId}) as securities,
+               (select count(*)::int from equity_security_events where org_id=${world.orgId}) as events,
+               (select count(*)::int from equity_compensation_runs where org_id=${world.orgId}) as runs,
+               (select count(*)::int from journal_entries where org_id=${world.orgId} and origin='equity') as journals
+      `)).rows[0]);
+      const recorded = await equity();
+      await withOrgContext(world.orgId, () => db.execute(sql`update orgs set settings=jsonb_set(settings,'{features,equity}','false'::jsonb) where id=${world.orgId}`));
+      assert.equal((await verifyDemoScenarios(world.orgId, profile.industryKey)).ready, false);
+      await installDemoScenarios(world.orgId, profile.industryKey);
+      assert.deepEqual(await equity(), recorded, "the cap table history replays without a second issuance, event, run or journal");
+      assert.equal((await verifyDemoScenarios(world.orgId, profile.industryKey)).ready, true);
+    }
     if (profile.industryKey === "general_business") {
       await withOrgContext(world.orgId, async () => {
         await db.execute(sql`update orgs set env_kind='sandbox', settings=jsonb_set(settings,'{features,crm}','false'::jsonb) where id=${world.orgId}`);
@@ -186,3 +206,83 @@ test("demo preparation extends fully closed history without reopening it", enabl
     });
   } finally { await cleanupInstalledWorld(world.orgId); }
 });
+
+/** The Northstar Cloud cap table: three years of financing, awards and runs, recorded natively and balanced on the ledger. */
+async function assertNorthstarCapTable(orgId: string): Promise<void> {
+  const today = await businessToday(orgId);
+  const year = Number(today.slice(0, 4));
+  await withOrgContext(orgId, async () => {
+    const subsidiaryId = (await db.execute<{ id: string }>(sql`select id from subsidiaries where org_id=${orgId} and parent_id is null`)).rows[0]!.id;
+    const counts = (await db.execute<Record<string, number>>(sql`
+      select (select count(*)::int from equity_share_classes where org_id=${orgId}) as classes,
+             (select count(*)::int from equity_class_amendments where org_id=${orgId}) as amendments,
+             (select count(*)::int from equity_plans where org_id=${orgId}) as plans,
+             (select count(*)::int from equity_plan_reserve_changes where org_id=${orgId}) as "reserveChanges",
+             (select count(*)::int from equity_financing_rounds where org_id=${orgId}) as rounds,
+             (select count(*)::int from equity_account_policies where org_id=${orgId}) as policies,
+             (select count(*)::int from equity_securities where org_id=${orgId} and kind='option') as options,
+             (select count(*)::int from equity_securities where org_id=${orgId} and kind='rsu') as rsus,
+             (select count(*)::int from equity_securities where org_id=${orgId} and kind in ('safe','note')) as convertibles,
+             (select count(*)::int from equity_securities where org_id=${orgId} and kind='warrant') as warrants,
+             (select count(*)::int from equity_securities where org_id=${orgId} and kind='share') as certificates,
+             (select count(*)::int from equity_security_amendments where org_id=${orgId}) as "mfnElections",
+             (select count(*)::int from equity_interest_runs where org_id=${orgId}) as "interestRuns",
+             (select count(*)::int from equity_position_movements where org_id=${orgId}) > 0 as positions
+    `)).rows[0]!;
+    assert.deepEqual(counts, {
+      classes: 3, amendments: 1, plans: 1, reserveChanges: 2, rounds: 2, policies: 2, options: 13, rsus: 2, convertibles: 3, warrants: 1,
+      certificates: 11, mfnElections: 1, interestRuns: 5, positions: true,
+    }, "founders, round investors, conversions and exercises each hold a certificate; every award and instrument is recorded once");
+    const events = (await db.execute<{ kind: string; n: number }>(sql`select kind, count(*)::int as n from equity_security_events where org_id=${orgId} group by kind order by kind`)).rows;
+    assert.deepEqual(Object.fromEntries(events.map((row) => [row.kind, row.n])), { convert: 3, election_83b: 3, exercise: 2, expire: 1, forfeit: 2, reverse: 1 });
+
+    // Every month-end from the first grant through the business day carries a stock compensation run.
+    let expectedRuns = 0;
+    for (let monthEnd = `${year - 3}-07-31`; monthEnd <= today; monthEnd = endOfMonth(addMonthsClamped(`${monthEnd.slice(0, 7)}-01`, 1))) expectedRuns++;
+    const runs = (await db.execute<{ through_date: string; total_amount: string; journal_entry_id: string | null }>(sql`
+      select through_date::text as through_date, total_amount::text as total_amount, journal_entry_id from equity_compensation_runs where org_id=${orgId} order by through_date`)).rows;
+    assert.equal(runs.length, expectedRuns);
+    assert.ok(runs.every((run) => run.journal_entry_id !== null), "every monthly run recognizes cost through the ledger");
+
+    // The years before the operating ledger carry the equity history and are closed once it is recorded.
+    const history = (await db.execute<{ periods: number; open: number }>(sql`
+      select count(*)::int as periods, count(*) filter (where not exists (select 1 from period_locks l where l.org_id=p.org_id and l.period_id=p.id and l.module='gl' and l.state='closed'))::int as open
+        from accounting_periods p where p.org_id=${orgId} and p.fiscal_year between ${year - 3} and ${year - 1}`)).rows[0]!;
+    assert.ok(history.periods >= 36);
+    assert.equal(history.open, 0, "the pre-operating years are closed after their history is posted");
+
+    // Equity journals balance, and the ledger agrees with the cap table's money.
+    const unbalanced = await db.execute(sql`
+      select e.id from journal_entries e join journal_lines l on l.org_id=e.org_id and l.entry_id=e.id
+       where e.org_id=${orgId} and e.origin='equity' group by e.id having sum(l.amount) <> 0`);
+    assert.equal(unbalanced.rows.length, 0, "every equity journal balances");
+    const balance = async (key: string) => (await db.execute<{ amount: string }>(sql`
+      select coalesce(sum(amount),0)::text as amount from journal_lines where org_id=${orgId} and account_id=${demoRecordId(orgId, "accounts", key)}`)).rows[0]!.amount;
+    // Founders 810, SAFEs 1,250,000, note 500,000, Series Seed 3,600,000, Series A 14,000,000, exercises 34,560 + 3,000.
+    assert.equal(cmp(await balance("financing-bank"), "19388370.00"), 0, "the financing account holds every cash consideration");
+    assert.equal(cmp(await balance("convertible-instruments"), "0"), 0, "the SAFEs and the note are relieved on conversion");
+    assert.equal(cmp(await balance("accrued-note-interest"), "0"), 0, "the note's accrued interest converts with its principal");
+    assert.equal(cmp(await balance("note-interest"), "0"), 1, "note interest is expensed through the interest runs and the conversion");
+    const recognized = runs.reduce((sum, run) => sum + toUnits(run.total_amount), 0n);
+    const expense = toUnits(await balance("stock-compensation"));
+    assert.equal(expense, recognized, "stock compensation expense is exactly what the runs recognized");
+
+    const book = await loadEquityBook(db, orgId, subsidiaryId);
+    const table = buildCapTable(book, today);
+    const classes = Object.fromEntries(table.classes.map((row) => [row.code, row]));
+    assert.equal(classes.SERIESA!.outstanding, "4375000");
+    assert.ok(BigInt(classes.SEED!.outstanding) > 5_000_000n, "the Series Seed carries its new money and the converted SAFEs and note");
+    assert.equal(classes.CS!.authorized, "30000000");
+    assert.ok(table.convertibles.every((row) => row.status === "converted"));
+    const holder = (key: string) => table.holders.find((row) => row.holderPartyId === demoRecordId(orgId, "parties", key));
+    assert.equal(holder("founder-1")?.sharesByClass[classes.CS!.shareClassId], "4500000");
+    const option = (key: string) => table.holdings.find((row) => row.kind === "option" && row.holderPartyId === demoRecordId(orgId, "parties", key));
+    assert.equal(option("equity-holder-liam")?.outstanding, "0", "the departed employee's options were forfeited and expired");
+    assert.equal(option("equity-holder-sofia")?.outstanding, "144000", "the reversed forfeiture restores every unit");
+
+    // The early-exercise deposit still on the ledger is exactly the unvested restricted shares at cost as of the latest run.
+    const certificate = book.securities.find((security) => security.kind === "share" && security.holderPartyId === demoRecordId(orgId, "parties", "equity-holder-maya"))!;
+    const unvested = holdingState(book, certificate, runs.at(-1)!.through_date).unvested;
+    assert.equal(cmp(await balance("early-exercise-deposits"), fromUnits(-(unvested * toUnits("0.12")))), 0);
+  });
+}
