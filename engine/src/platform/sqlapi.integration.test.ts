@@ -353,8 +353,17 @@ test('shared payroll-bearing relations and their schema need actual payroll auth
     for (const relation of ['journal_entries', 'journal_lines', 'documents', 'document_lines', 'time_entries', 'labor_cost_rates', 'field_ticket_labor_lines', 'hrm_benefit_program_revisions']) {
       const reader = `with private_rows as (select * from ${relation}) select count(*) as n from private_rows`
       await assert.rejects(runUserSql(reader, { orgId: org.orgId }), /payroll.read/, relation)
-      assert.equal((await runUserSql(reader, { orgId: org.orgId, payrollRead: true })).rowCount, 1)
+      assert.equal((await runUserSql(reader, { orgId: org.orgId, payrollRead: true, expenseRead: true })).rowCount, 1)
     }
+    // The document relations also carry every employee's expense reports.
+    for (const relation of ['documents', 'document_lines', 'document_line_tax_components', 'document_links']) {
+      const reader = `with private_rows as (select * from ${relation}) select count(*) as n from private_rows`
+      await assert.rejects(runUserSql(reader, { orgId: org.orgId, payrollRead: true }), /expenses\.read/, relation)
+    }
+    const payrollCatalog = new Set((await listSchema(org.orgId, { payrollRead: true })).map(table => table.name))
+    assert.equal(payrollCatalog.has('documents'), false, 'expense-bearing relations are not listed without expense read')
+    assert.ok(payrollCatalog.has('journal_lines'))
+    assert.ok(new Set((await listSchema(org.orgId, { payrollRead: true, expenseRead: true })).map(table => table.name)).has('documents'))
     const publicCatalog = new Set((await listSchema(org.orgId)).map(table => table.name))
     const authorizedCatalog = new Set((await listSchema(org.orgId, { payrollRead: true })).map(table => table.name))
     assert.ok(publicCatalog.has('accounts'))

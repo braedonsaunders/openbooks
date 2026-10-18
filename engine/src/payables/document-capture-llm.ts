@@ -299,6 +299,22 @@ export async function testLlmDocumentProvider(input: {
     if (answer?.ok !== true) return { ok: false, message: "The model answered, but not with the JSON document capture needs — choose a vision model" };
     return { ok: true, message: "Connected — the model reads document images" };
   } catch (error) {
-    return { ok: false, message: error instanceof Error ? error.message.slice(0, 180) : "Connection failed" };
+    return { ok: false, message: error instanceof Error ? redactKey(error.message, input.config.apiKey).slice(0, 180) : "Connection failed" };
   }
+}
+
+/** A provider message never carries the key it was sent, whole or in part. */
+function redactKey(message: string, apiKey: string): string {
+  const key = apiKey.trim();
+  if (key.length < 8) return message;
+  let redacted = message.split(key).join("[key]");
+  // Providers echo a key's prefix or suffix ("sk-…abcd"); remove any run of
+  // eight or more of its characters.
+  for (let length = Math.min(key.length - 1, 40); length >= 8; length -= 1) {
+    for (let start = 0; start + length <= key.length; start += 1) {
+      const piece = key.slice(start, start + length);
+      if (redacted.includes(piece)) redacted = redacted.split(piece).join("[key]");
+    }
+  }
+  return redacted;
 }

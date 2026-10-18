@@ -228,6 +228,12 @@ export type ReportEntity = {
    *  sensitive data like payroll wages. Enforced at run time and filtered
    *  from the builder catalog. */
   requiredPermission?: string
+  /** The entity's rows include expense reports (column keys naming the
+   *  document kind and the report's employee). Every execution must state
+   *  the reader's expense authority: expense report rows reach only an
+   *  org-wide expense reader, or a self-service reader for their own
+   *  reports; an execution that states none reads none. */
+  expenseRows?: { kindColumn: string; employeeColumn: string }
   /** Optional-feature gate (Company Settings → Features). When the feature is
    *  off the entity disappears from the catalog and every execution path
    *  refuses it — same contract as setup-registry `featureKey`. */
@@ -390,6 +396,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
     // Header money is denominated in the transaction currency: aggregating it
     // needs a Currency breakout or a single-currency filter.
     currencyColumn: 'currency',
+    expenseRows: { kindColumn: 'kind', employeeColumn: 'party_id' },
     columns: [
       { key: 'kind', label: 'Type', kind: 'enum', expr: 'd.kind', options: TRANSACTION_KINDS },
       { key: 'document_number', label: 'Document #', kind: 'text', expr: 'd.document_number' },
@@ -444,12 +451,14 @@ export const REPORT_ENTITIES: ReportEntity[] = [
     // transaction currency: aggregating it needs a Currency breakout or a
     // single-currency filter.
     currencyColumn: 'currency',
+    expenseRows: { kindColumn: 'kind', employeeColumn: 'party_id' },
     columns: [
       { key: 'kind', label: 'Type', kind: 'enum', expr: 'd.kind', options: TRANSACTION_KINDS },
       { key: 'document_number', label: 'Document #', kind: 'text', expr: 'd.document_number' },
       { key: 'document_date', label: 'Document date', kind: 'date', expr: 'd.document_date' },
       { key: 'status', label: 'Status', kind: 'enum', expr: 'd.status', options: TRANSACTION_STATUSES },
       { key: 'party_name', label: 'Party', kind: 'text', expr: 'p.display_name' },
+      { key: 'party_id', label: 'Party (id)', kind: 'uuid', expr: 'd.party_id' },
       { key: 'line_number', label: 'Line #', kind: 'number', expr: 'dl.line_number' },
       { key: 'item_name', label: 'Item', kind: 'text', expr: 'it.name' },
       { key: 'family_code', label: 'Family code', kind: 'text', expr: 'fam.code' },
@@ -565,6 +574,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
     // fiscal filter on an otherwise unfiltered recall.
     defaultPeriodField: null,
     pagination: { defaultPageSize: 100, maxPageSize: 500 },
+    expenseRows: { kindColumn: 'document_kind', employeeColumn: 'document_party_id' },
     columns: [
       { key: 'lot_number', label: 'Lot #', kind: 'text', expr: 'lot.lot_number' },
       { key: 'expires_on', label: 'Expiry', kind: 'date', expr: 'lot.expires_on' },
@@ -587,6 +597,7 @@ export const REPORT_ENTITIES: ReportEntity[] = [
       { key: 'status', label: 'Posting status', kind: 'enum', expr: 'im.status', options: ['pending', 'posted'] },
       { key: 'document_number', label: 'Transaction #', kind: 'text', expr: 'd.document_number' },
       { key: 'document_kind', label: 'Transaction type', kind: 'enum', expr: 'd.kind', options: TRANSACTION_KINDS },
+      { key: 'document_party_id', label: 'Party (id)', kind: 'uuid', expr: 'd.party_id' },
       { key: 'document_date', label: 'Transaction date', kind: 'date', expr: 'd.document_date' },
       { key: 'party_name', label: 'Party', kind: 'text', expr: 'p.display_name' },
       { key: 'memo', label: 'Memo', kind: 'text', expr: 'im.memo' },

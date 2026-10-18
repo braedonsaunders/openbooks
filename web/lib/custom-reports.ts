@@ -1,4 +1,5 @@
 import 'server-only'
+import { reportExpenseAccess } from './expense-access'
 import { reportEntityCatalog, validateCatalogReportQuery } from './custom-record-report-catalog'
 import { requireReportAuthz, snapshotReportAuthorization, withReportAuthz } from './report-execution-context'
 import { canRunReportEntity } from './report-authz'
@@ -736,12 +737,14 @@ async function prepareReportExecution(
   if (featureKey && !(await isFeatureEnabled(orgId, featureKey))) {
     throw new ReportQueryValidationError(`${featureKey} feature is disabled`)
   }
-  const [resolved, startMonth, asOf, runLabels, allowedBookIds] = await Promise.all([
+  const [resolved, startMonth, asOf, runLabels, allowedBookIds, expenseAccess] = await Promise.all([
     resolvePeriodPresets(query, orgId),
     fiscalStartMonth(),
     businessToday(orgId),
     labels ? Promise.resolve(labels) : reportRunLabels(),
     resolveCustomReportBookScope(orgId, query),
+    // Expense report rows reach only the reader's expense authority.
+    reportExpenseAccess(authz),
   ])
   return {
     query: resolved,
@@ -750,6 +753,7 @@ async function prepareReportExecution(
       entityMap,
       allowedSubsidiaryIds: authz.allowedSubsidiaryIds === null ? null : [...authz.allowedSubsidiaryIds],
       allowedBookIds,
+      expenseAccess,
       fiscalStartMonth: startMonth,
       asOf,
       labels: runLabels,

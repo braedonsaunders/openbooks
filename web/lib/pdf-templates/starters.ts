@@ -10,7 +10,7 @@
  * statement PDF style.
  */
 
-import type { PdfRecordTypeMeta } from './catalog'
+import { hasForeignLines, type PdfRecordTypeMeta } from './catalog'
 
 const INK = '#0f172a'
 const MUTED = '#64748b'
@@ -64,6 +64,12 @@ function documentStarter(meta: PdfRecordTypeMeta, accent: string): StarterTempla
   const hasDue = meta.fields.some((f) => f.key === 'due_date')
   const hasReference = meta.fields.some((f) => f.key === 'reference_number')
   const hasFiscalIdentity = meta.fields.some((f) => f.key === 'seller_address')
+  // A line spent in another currency prints its original amount and rate
+  // under the description; lines in the document currency print nothing more.
+  const foreignLines = hasForeignLines(meta)
+  const foreignDescriptionCell =
+    `<td style="padding:8px 10px;font-size:11.5px;color:${INK};border-bottom:1px solid ${RULE};vertical-align:top;">{{description}}` +
+    `<div data-if="original_currency" style="font-size:9.5px;color:${MUTED};padding-top:3px;">Spent {{original_amount}} · {{fx_rate}} · {{fx_basis}}</div></td>`
 
   const metaCells = [
     metaCell('Date', 'document_date'),
@@ -124,7 +130,7 @@ function documentStarter(meta: PdfRecordTypeMeta, accent: string): StarterTempla
         `</tbody></table>`
       : `<table style="width:100%;border-collapse:collapse;margin:0 0 14px;"><tbody>` +
         `<tr>${th('Item / customer part #')}${th('Description')}${th('Qty', 'right', '52px')}${th('Rate', 'right', '76px')}${th('Amount', 'right', '92px')}</tr>` +
-        `<tr data-each="lines"><td style="padding:8px 10px;font-size:11.5px;color:${INK};border-bottom:1px solid ${RULE};vertical-align:top;">{{item_name}}<div data-if="customer_sku" style="font-size:9.5px;color:${MUTED};padding-top:3px;">Customer part #: {{customer_sku}}</div></td>${td('description')}${hasFiscalIdentity ? td('quantity', 'right').replace('{{quantity}}', '{{quantity}} {{unit}}') : td('quantity', 'right')}${td('unit_price', 'right')}${td('amount', 'right')}</tr>` +
+        `<tr data-each="lines"><td style="padding:8px 10px;font-size:11.5px;color:${INK};border-bottom:1px solid ${RULE};vertical-align:top;">{{item_name}}<div data-if="customer_sku" style="font-size:9.5px;color:${MUTED};padding-top:3px;">Customer part #: {{customer_sku}}</div></td>${foreignLines ? foreignDescriptionCell : td('description')}${hasFiscalIdentity ? td('quantity', 'right').replace('{{quantity}}', '{{quantity}} {{unit}}') : td('quantity', 'right')}${td('unit_price', 'right')}${td('amount', 'right')}</tr>` +
         `</tbody></table>`) +
     (hasFiscalIdentity ? `<div data-if="seller_address" style="font-size:10px;color:${MUTED};margin:0 0 8px;">Currency: {{currency}}</div>` +
       `<table data-if="vat_breakdown" style="width:100%;border-collapse:collapse;margin:0 0 14px;"><tbody>` +

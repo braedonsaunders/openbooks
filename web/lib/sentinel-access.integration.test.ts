@@ -39,14 +39,16 @@ const { executeAssistantTool } = await import("./assistant/registry");
 const { GET: drilldown } = await import("../app/api/analytics/sentinel/benford/route");
 
 for (const boundary of ["service", "page", "assistant", "drilldown"] as const) {
-  for (const mode of ["restricted", "empty", "no audit grant", "all"] as const) {
+  for (const mode of ["restricted", "empty", "no audit grant", "no expense grant", "all"] as const) {
     test(`Sentinel access ${boundary}: ${mode}`, { skip: !process.env.OPENBOOKS_DB_URL }, async () => {
       const org = await withBypassContext(() => createScratchOrg());
       try {
         const actor = await withBypassContext(() => createScratchUser(org.orgId, "Forensic reviewer", "forensic_reviewer"));
-        const restriction = mode === "all" || mode === "no audit grant" ? { mode: "all" }
+        const restriction = mode === "all" || mode === "no audit grant" || mode === "no expense grant" ? { mode: "all" }
           : { mode: "list", subsidiaryIds: mode === "empty" ? [] : [org.subsidiaryId] };
-        const permissions = ["reports.read", "assistant.use", ...(mode === "no audit grant" ? [] : ["admin.audit.read"])];
+        // Sentinel's spend evidence includes every employee's expense reports.
+        const permissions = ["reports.read", "assistant.use", ...(mode === "no audit grant" ? [] : ["admin.audit.read"]),
+          ...(mode === "no expense grant" ? [] : ["expenses.read"])];
         await withBypassContext(() => db.execute(sql`update app_roles set permissions=${JSON.stringify(permissions)}::jsonb, subsidiary_restriction=${JSON.stringify(restriction)}::jsonb
           where org_id=${org.orgId} and key='forensic_reviewer'`));
         state.user = { id: actor, orgId: org.orgId, name: "Forensic reviewer", email: "forensics@scratch.test", roles: [], isSuperAdmin: false,
@@ -110,7 +112,7 @@ for (const boundary of ["service", "page", "assistant", "drilldown"] as const) {
               assert.equal(response.status, 403, `drilldown must refuse ${mode}`);
               const data = await response.json() as { error: string; message: string };
               assert.equal(data.error, "forbidden");
-              assert.ok(data.message.includes("admin.audit.read") || data.message.includes("unrestricted subsidiary access"),
+              assert.ok(data.message.includes(mode === "no expense grant" ? "expenses.read" : mode === "no audit grant" ? "admin.audit.read" : "unrestricted subsidiary access"),
                 `refusal must name the missing requirement, got: ${data.message}`);
             }
           }

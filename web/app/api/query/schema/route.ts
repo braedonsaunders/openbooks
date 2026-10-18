@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { can } from '@/lib/authz'
+import { expenseScope } from '@/lib/expense-access'
 import { listSchema } from "@openbooks/engine/platform/sqlapi";
 import { defineRoute } from '@/lib/api/route'
 import { hasUnrestrictedQueryScope } from "../../../../lib/query-console-access";
@@ -16,7 +17,7 @@ export const GET = defineRoute({
     );
   }
   try {
-    const tables = await listSchema(gate.user.orgId, { payrollRead: can(gate, 'payroll.read') });
+    const tables = await listSchema(gate.user.orgId, { payrollRead: can(gate, 'payroll.read'), expenseRead: expenseScope(gate, 'read') === 'all' });
     return NextResponse.json({ tables });
   } catch (error) {
     console.error("[query-console] schema discovery failed", error);

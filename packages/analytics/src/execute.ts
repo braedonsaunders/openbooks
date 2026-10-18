@@ -8,7 +8,7 @@
 // SERVER ONLY — imports node-postgres. Never import from a client bundle; the
 // client renderer takes a QueryResult, not the pool.
 
-import { REPORT_ENTITY_MAP, evaluateFormulaMeasures, parseDenominationCounts, resolveDenominations, type ReportEntity, type ReportMeasure } from '@openbooks/reports'
+import { REPORT_ENTITY_MAP, evaluateFormulaMeasures, parseDenominationCounts, resolveDenominations, type ReportEntity, type ReportExpenseAccess, type ReportMeasure } from '@openbooks/reports'
 import { compileInsightQuery, INSIGHT_MAX_ROWS, type InsightLabelResolver } from './compile'
 import { validateInsightQuery } from './validate'
 import type { InsightDenominationBasis, InsightQuery, QueryResult } from './types'
@@ -109,10 +109,12 @@ export async function runInsightQuery(
   entityMap: Record<string, ReportEntity> = REPORT_ENTITY_MAP,
   /** Organization-configured fiscal-year start month. */
   fiscalStartMonth = 1,
+  /** The reader's expense authority; required for sources whose rows include expense reports. */
+  expenseAccess?: ReportExpenseAccess,
 ): Promise<QueryResult> {
   if (allowedSubsidiaryIds === undefined) throw new Error('Insights requires an explicit subsidiary authorization scope')
   const validatedQuery = validateInsightQuery(query)
-  const compiled = compileInsightQuery(validatedQuery, orgId, labels ?? {}, asOf, allowedSubsidiaryIds, allowedBookIds, entityMap, fiscalStartMonth)
+  const compiled = compileInsightQuery(validatedQuery, orgId, labels ?? {}, asOf, allowedSubsidiaryIds, allowedBookIds, entityMap, fiscalStartMonth, expenseAccess)
   // Fetch one extra row to detect truncation at the cap.
   const capped = Math.min(compiled.limit, INSIGHT_MAX_ROWS)
   const sentinelLimit = capped + 1

@@ -70,7 +70,7 @@ export function AiSettingsForm({ specs, initial }: { specs: ProviderSpecLite[]; 
   const [documentCapture, setDocumentCapture] = useState(initial.documentCapture)
   const [documentCaptureKey, setDocumentCaptureKey] = useState('')
   const [testingCapture, startCaptureTest] = useTransition()
-  const [captureTestResult, setCaptureTestResult] = useState<{ ok: boolean; code: 'connected' | 'failed' | 'missing' | 'missingAi' } | null>(null)
+  const [captureTestResult, setCaptureTestResult] = useState<{ ok: boolean; code: 'connected' | 'failed' | 'missing' | 'missingAi'; message?: string } | null>(null)
 
   const [models, setModels] = useState<ModelListItem[]>([])
   const [modelsError, setModelsError] = useState<string | null>(null)
@@ -261,7 +261,15 @@ export function AiSettingsForm({ specs, initial }: { specs: ProviderSpecLite[]; 
           method: 'POST',
           headers: { 'content-type': 'application/json' },
           body: JSON.stringify(documentCapture.provider === 'llm_vision'
-            ? { provider: 'llm_vision', ...(documentCapture.model.trim() ? { model: documentCapture.model.trim() } : {}) }
+            ? {
+                provider: 'llm_vision',
+                // The provider section as typed: an unsaved key is tested, never stored.
+                aiProvider: provider,
+                ...(apiKey.trim() ? { aiApiKey: apiKey.trim() } : {}),
+                aiBaseUrl: baseUrl,
+                ...(modelSmart.trim() ? { aiModelSmart: modelSmart.trim() } : {}),
+                ...(documentCapture.model.trim() ? { model: documentCapture.model.trim() } : {}),
+              }
             : {
                 provider: 'azure_document_intelligence',
                 endpoint: documentCapture.endpoint,
@@ -269,7 +277,7 @@ export function AiSettingsForm({ specs, initial }: { specs: ProviderSpecLite[]; 
                 apiKey: documentCaptureKey || undefined,
               }),
         })
-        setCaptureTestResult((await response.json()) as { ok: boolean; code: 'connected' | 'failed' | 'missing' | 'missingAi' })
+        setCaptureTestResult((await response.json()) as { ok: boolean; code: 'connected' | 'failed' | 'missing' | 'missingAi'; message?: string })
       } catch {
         setCaptureTestResult({ ok: false, code: 'failed' })
       }
@@ -491,7 +499,7 @@ export function AiSettingsForm({ specs, initial }: { specs: ProviderSpecLite[]; 
             {captureTestResult ? (
               <div className={cn('flex items-start gap-2 rounded-md border p-2.5 text-sm', captureTestResult.ok ? 'border-teal-200 bg-teal-50 text-teal-800 dark:border-teal-800/60 dark:bg-teal-950/50 dark:text-teal-200' : 'border-red-200 bg-red-50 text-red-700 dark:border-red-900 dark:bg-red-950/50 dark:text-red-300')}>
                 {captureTestResult.ok ? <CheckCircle2 size={15} className="mt-px shrink-0" /> : <XCircle size={15} className="mt-px shrink-0" />}
-                <span>{t(`documentCapture.testResult.${captureTestResult.code}`)}</span>
+                <span>{t(`documentCapture.testResult.${captureTestResult.code}`)}{!captureTestResult.ok && captureTestResult.message ? ` ${captureTestResult.message}` : null}</span>
               </div>
             ) : null}
           </div>

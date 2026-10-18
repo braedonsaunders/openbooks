@@ -36,6 +36,13 @@ export interface UserSqlOptions {
    * caller that does not decide never reads payroll.
    */
   payrollRead?: boolean;
+  /**
+   * The caller reads every expense report (org-wide expenses.read). The
+   * document relations that carry expense reports are refused by name
+   * otherwise. Defaults to false, so a caller that does not decide never reads
+   * another employee's expenses.
+   */
+  expenseRead?: boolean;
 }
 
 /**
@@ -57,6 +64,23 @@ const PAYROLL_SHARED_RELATIONS = new Set([
 export function isPayrollRelation(table: string): boolean {
   return /^(?:payroll_|employee_pay|pay_(?!application))/.test(table)
     || PAYROLL_SHARED_RELATIONS.has(table);
+}
+
+/**
+ * Relations that hold expense report documents beside every other document
+ * kind. Raw SQL cannot be narrowed to the reader's own reports, so these need
+ * org-wide expense read; governed reports narrow them row by row instead.
+ */
+const EXPENSE_RELATIONS = new Set(["documents", "document_lines", "document_line_tax_components", "document_links"]);
+
+export function isExpenseRelation(table: string): boolean {
+  return EXPENSE_RELATIONS.has(table);
+}
+
+/** Relations a caller may not read or list, given its payroll and expense authority. */
+function refusedRelation(table: string, options: { payrollRead?: boolean; expenseRead?: boolean }): boolean {
+  return (options.payrollRead !== true && isPayrollRelation(table))
+    || (options.expenseRead !== true && isExpenseRelation(table));
 }
 
 /** Every base relation a plan reads, from EXPLAIN (FORMAT JSON). */
@@ -530,20 +554,28 @@ export async function runUserSql(sqlText: string, opts: UserSqlOptions): Promise
   try {
     await prepareQueryContext(client, opts.orgId);
     await beginGovernedReadTransaction(client, opts.orgId, timeoutMs);
-    if (opts.payrollRead !== true) {
+    if (opts.payrollRead !== true || opts.expenseRead !== true) {
       // PostgreSQL resolves what the statement reads — views expanded — before
-      // anything runs; a plan that touches payroll is refused by name.
+      // anything runs; a plan that touches payroll or expenses is refused by name.
       const explained = await client.query<{ "QUERY PLAN": unknown }>({
         text: `explain (verbose, format json) ${wrapped}`,
         values: [maxRows + 1, maxBytes],
       });
       const plan = explained.rows[0]?.["QUERY PLAN"];
       if (plan === undefined) throw new UserSqlRefusal("query refused: the relations it reads could not be determined");
-      const payroll = [...planRelations(plan)].filter(isPayrollRelation).sort();
+      const relations = [...planRelations(plan)];
+      const payroll = opts.payrollRead === true ? [] : relations.filter(isPayrollRelation).sort();
       if (payroll.length > 0) {
         throw new UserSqlRefusal(
           `payroll data requires the payroll.read permission: this query reads ${payroll.join(", ")}. `
             + "Use financial reports for masked totals, or ask an administrator for payroll.read to query raw payroll-bearing relations.",
+        );
+      }
+      const expenses = opts.expenseRead === true ? [] : relations.filter(isExpenseRelation).sort();
+      if (expenses.length > 0) {
+        throw new UserSqlRefusal(
+          `expense reports require the expenses.read permission: this query reads ${expenses.join(", ")}. `
+            + "Use reports, which show the expense reports you may read, or ask an administrator for expenses.read to query raw document relations.",
         );
       }
     }
@@ -608,7 +640,7 @@ export interface SchemaTable {
  * inside a READ ONLY transaction, so it lists exactly what a user could
  * actually query — nothing they lack privileges on leaks through.
  */
-export async function listSchema(orgId: string, options: { payrollRead?: boolean } = {}): Promise<SchemaTable[]> {
+export async function listSchema(orgId: string, options: { payrollRead?: boolean; expenseRead?: boolean } = {}): Promise<SchemaTable[]> {
   const client = await connectGovernedReadClient();
   try {
     await prepareQueryContext(client, orgId);
@@ -663,7 +695,7 @@ export async function listSchema(orgId: string, options: { payrollRead?: boolean
 
     const byTable = new Map<string, SchemaTable>();
     for (const row of res.rows) {
-      if (options.payrollRead !== true && isPayrollRelation(row.table_name)) continue;
+      if (refusedRelation(row.table_name, options)) continue;
       let table = byTable.get(row.table_name);
       if (!table) {
         table = {

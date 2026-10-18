@@ -9,6 +9,8 @@ export interface AnalyticsDashboardDefinition {
   icon: string
   titleKey: string
   permission?: string
+  /** Further grants the dashboard's evidence needs in full, beyond its permission. */
+  alsoRequires?: readonly string[]
   feature?: string
   industries: string[]
   unrestricted?: boolean
@@ -28,8 +30,10 @@ export const ANALYTICS_DASHBOARDS: readonly AnalyticsDashboardDefinition[] = [
   { slug: 'spend-velocity', group: 'risk', icon: 'Zap', titleKey: 'spendVelocity', permission: 'ap.read', industries: [] },
   // Whole-company forensics: cross-entity baselines, identity matches and
   // retained audit snapshots cannot be partially shown, so the dashboard needs
-  // the audit grant AND unrestricted subsidiary scope.
-  { slug: 'sentinel', group: 'risk', icon: 'ShieldAlert', titleKey: 'sentinel', permission: 'admin.audit.read', industries: [], unrestricted: true },
+  // the audit grant AND unrestricted subsidiary scope. Its spend evidence
+  // includes every employee's expense reports, so it needs org-wide expense
+  // read as well rather than silently dropping them.
+  { slug: 'sentinel', group: 'risk', icon: 'ShieldAlert', titleKey: 'sentinel', permission: 'admin.audit.read', alsoRequires: ['expenses.read'], industries: [], unrestricted: true },
 ]
 /**
  * The grant half of a dashboard's availability, as data: reports.read, the
@@ -46,6 +50,9 @@ export function analyticsDashboardDenied(
 ): string | null {
   if (!permissionSetCovers(grants.permissions, 'reports.read')) return 'reports.read'
   if (dashboard.permission && !permissionSetCovers(grants.permissions, dashboard.permission)) return dashboard.permission
+  for (const permission of dashboard.alsoRequires ?? []) {
+    if (!permissionSetCovers(grants.permissions, permission)) return permission
+  }
   if (dashboard.unrestricted && grants.allowedSubsidiaryIds !== null) return 'unrestricted subsidiary access'
   return null
 }

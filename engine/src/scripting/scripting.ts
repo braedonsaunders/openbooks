@@ -17,6 +17,7 @@ import { listSchema, runUserSql } from "../platform/sqlapi.ts";
 import type { ScriptJournalResult } from "../journal/script-journal-contract.ts";
 import { installedScriptJournalWriter } from "./journal-writer.ts";
 import { actorHasPermission, actorIdentity, actorPrincipal } from "../organization/actor-permissions.ts";
+import { grantsConferring } from "../organization/permissions.ts";
 import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
 import { orgFeatureEnabled } from "../organization/org-feature-lock.ts";
 import { PAYMENT_SYSTEM_CUSTOM_FIELD_SET } from "../platform/payment-system-fields.ts";
@@ -301,6 +302,24 @@ export async function scriptPayrollRead(
 ): Promise<boolean> {
   const authority = scriptAuthority(ctx, runAsUserId);
   return authority !== null && (await actorHasPermission(db, ctx.org.id, authority.userId, "payroll.read"));
+}
+
+/**
+ * Whether the accountable user may read the document relations that carry
+ * expense reports through ob.query / ob.search: org-wide expense read
+ * (expenses.read or a grant conferring it over everyone's reports). Raw SQL
+ * cannot be narrowed to the user's own reports, so self-service is not enough.
+ */
+export async function scriptExpenseRead(
+  ctx: Pick<ScriptContext, "org" | "user">,
+  runAsUserId?: string | null,
+): Promise<boolean> {
+  const authority = scriptAuthority(ctx, runAsUserId);
+  if (authority === null) return false;
+  for (const grant of grantsConferring("expenses.read", "all")) {
+    if (await actorHasPermission(db, ctx.org.id, authority.userId, grant)) return true;
+  }
+  return false;
 }
 
 /** Host calls a script source plainly reaches for: catalog reads and ledger writes. */
@@ -804,6 +823,7 @@ export async function runScript(
     // on first use so ob.search loops do not re-read roles per statement.
     let queryRefusal: Promise<string | null> | undefined;
     let payrollRead: Promise<boolean> | undefined;
+    let expenseRead: Promise<boolean> | undefined;
     const queryFn = vm.newAsyncifiedFunction("__query", async (sqlH) => {
       if (!queryAllowed) {
         // A SELECT-only role still exposes now()/random() and mutable data.
@@ -832,6 +852,7 @@ export async function runScript(
           const result = await runUserSql(sqlText, {
             orgId: ctx.org.id,
             payrollRead: await (payrollRead ??= scriptPayrollRead(ctx, opts.runAsUserId)),
+            expenseRead: await (expenseRead ??= scriptExpenseRead(ctx, opts.runAsUserId)),
             maxRows: 5_000,
             timeoutMs: Math.min(5_000, Math.max(1, deadline - Date.now())),
           });
@@ -881,13 +902,17 @@ export async function runScript(
           const refusal = await queryRefusal;
           if (refusal) return { kind: "refused" as const, refusal };
           searchSchema ??= new Map(
-            (await listSchema(ctx.org.id, { payrollRead: await (payrollRead ??= scriptPayrollRead(ctx, opts.runAsUserId)) })).map((t) => [t.name, t.columns.map((c) => c.name)]),
+            (await listSchema(ctx.org.id, {
+              payrollRead: await (payrollRead ??= scriptPayrollRead(ctx, opts.runAsUserId)),
+              expenseRead: await (expenseRead ??= scriptExpenseRead(ctx, opts.runAsUserId)),
+            })).map((t) => [t.name, t.columns.map((c) => c.name)]),
           );
           const columns = searchSchema.get(table);
           if (!columns) return { kind: "refused" as const, refusal: unknownSearchTableRefusal(table) };
           const result = await runUserSql(buildGovernedSearchSql(table, filters, columns), {
             orgId: ctx.org.id,
             payrollRead: await (payrollRead ??= scriptPayrollRead(ctx, opts.runAsUserId)),
+            expenseRead: await (expenseRead ??= scriptExpenseRead(ctx, opts.runAsUserId)),
             maxRows: 5_000,
             timeoutMs: Math.min(5_000, Math.max(1, deadline - Date.now())),
           });

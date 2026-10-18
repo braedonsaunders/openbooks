@@ -10,7 +10,7 @@ import {
   validateCadenceInput,
 } from '@openbooks/reports'
 import { loadReportDefinition } from '../../../../../lib/custom-reports'
-import { canAccessReportArtifact, canAccessReportDefinition } from '../../../../../lib/report-execution-context'
+import { canAccessReportDefinition, reportArtifactAccessDetail } from '../../../../../lib/report-execution-context'
 import { isUuid } from '../../../../../lib/list-params'
 import { notFound } from "@/lib/api/responses";
 const PATCHBodySchema1 = z.object({
@@ -86,7 +86,12 @@ export const PATCH = defineRoute({
         if (!existing) return notFound("record")
         const def = await loadReportDefinition(user.orgId, existing.definition_id)
         if (!def || !(await canAccessReportDefinition(gate, def))) return NextResponse.json({ error: 'report access denied' }, { status: 403 })
-        if (existing.authorization_snapshot != null && !(await canAccessReportArtifact(gate, existing.authorization_snapshot))) return NextResponse.json({ error: 'original report scope access denied' }, { status: 403 })
+        if (existing.authorization_snapshot != null) {
+          const access = await reportArtifactAccessDetail(gate, existing.authorization_snapshot)
+          if (!access.ok) return NextResponse.json({ error: access.missingPermissions.length > 0
+            ? `this schedule's authorized report content requires ${access.missingPermissions.join(', ')}`
+            : 'original report scope access denied' }, { status: 403 })
+        }
 
         // Re-validate the whole cadence (falling back to the locked stored values)
         // so a partial edit never yields an inconsistent day pair.
@@ -172,7 +177,12 @@ export const DELETE = defineRoute({
         if (!existing) return notFound("record")
         const def = await loadReportDefinition(user.orgId, existing.definition_id)
         if (!def || !(await canAccessReportDefinition(gate, def))) return NextResponse.json({ error: 'report access denied' }, { status: 403 })
-        if (existing.authorization_snapshot != null && !(await canAccessReportArtifact(gate, existing.authorization_snapshot))) return NextResponse.json({ error: 'original report scope access denied' }, { status: 403 })
+        if (existing.authorization_snapshot != null) {
+          const access = await reportArtifactAccessDetail(gate, existing.authorization_snapshot)
+          if (!access.ok) return NextResponse.json({ error: access.missingPermissions.length > 0
+            ? `this schedule's authorized report content requires ${access.missingPermissions.join(', ')}`
+            : 'original report scope access denied' }, { status: 403 })
+        }
 
         await db.execute(sql`
           delete from report_schedules where id = ${id} and org_id = ${user.orgId}

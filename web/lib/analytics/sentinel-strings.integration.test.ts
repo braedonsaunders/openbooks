@@ -54,7 +54,7 @@ test('sentinel flag reasons render in the request locale', { skip: !process.env.
       assert.equal((await analyticsConfig(org.orgId, 'sentinel')).duplicateMinAmount, '1.0000')
     })
     const user: SessionUser = { id: actor, orgId: org.orgId, name: 'Forensic reviewer', email: 'forensics@scratch.test', roles: [], isSuperAdmin: false, envKind: 'production', productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: actor }
-    const authz: Authz = { user, permissions: new Set(['reports.read', 'admin.audit.read']), allowedSubsidiaryIds: null }
+    const authz: Authz = { user, permissions: new Set(['reports.read', 'admin.audit.read', 'expenses.read']), allowedSubsidiaryIds: null }
     await withOrgContext(org.orgId, async () => {
       const P = { from: '2026-07-01', to: '2026-07-31', label: 'July 2026' }
       const fr = await sentinelData(org.orgId, P, authz, sentinelStrings(catalogTranslator('fr'), 'fr'))

@@ -28,6 +28,7 @@ import {
   insightLabelResolver,
 } from "../../../../lib/insight-labels";
 import { businessToday } from "@openbooks/engine/platform/business-date/module";
+import { reportExpenseAccess } from "@/lib/expense-access";
 import { fiscalStartMonth } from "@/lib/fiscal";
 import { normalizeQuery } from "../_lib";
 // Legacy callers still send allowedSubsidiaryIds in the body. It is accepted
@@ -118,11 +119,14 @@ export const POST = defineRoute({
       // restricted reader's ledger sources arrive pre-collapsed per
       // (entry, account, currency) before any caller filter, dimension, sort,
       // or limit, so no card can isolate one employee's pay.
-      const [labels, today, catalog, startMonth] = await withAuthzContext(gate, () => Promise.all([
+      // Expense report rows reach only an expense reader (own reports under
+      // self-service), whatever the card asks for.
+      const [labels, today, catalog, startMonth, expenseAccess] = await withAuthzContext(gate, () => Promise.all([
         insightLabelResolver(),
         businessToday(gate.user.orgId),
         reportEntityCatalog(gate),
         fiscalStartMonth(gate.user.orgId),
+        reportExpenseAccess(gate),
       ]));
       const result = await runInsightQuery(
         pool,
@@ -136,6 +140,7 @@ export const POST = defineRoute({
         allowedBookIds,
         catalog,
         startMonth,
+        expenseAccess,
       );
       return NextResponse.json(result);
     } catch (e) {

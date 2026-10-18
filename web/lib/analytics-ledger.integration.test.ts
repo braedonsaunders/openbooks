@@ -81,11 +81,11 @@ for (const view of ['vendor total', 'vendor months', 'spend accounts', 'spend ve
             assert.equal(data.summary.totalCost, '100.0000');
             assert.equal(data.summary.totalGrossProfit, '100.0000');
           } else {
-            const data = await spendVelocityData(org.orgId, period, null);
+            const data = await spendVelocityData(org.orgId, period, null, undefined, { expenseAccess: { scope: 'all' } });
             if (view === 'spend accounts') assert.equal(data.summary.totalSpend, '100.0000');
             if (view === 'spend vendors') assert.equal(data.vendorVelocity.find(row => row.id === org.vendorId)?.totalSpend, '100.0000');
             if (view === 'spend revenue') assert.equal(data.revenue.totalRevenue, '200.0000');
-            if (view === 'spend categories') assert.equal(data.expenseAnalysis.categories.find(row => row.categoryId === org.accounts.cogs)?.currentAmount, '100.0000');
+            if (view === 'spend categories') assert.equal(data.expenseAnalysis?.categories.find(row => row.categoryId === org.accounts.cogs)?.currentAmount, '100.0000');
             if (view === 'spend comparison') assert.equal(data.periodComparison.summary.currentTotal, '100.0000');
           }
         });
@@ -219,11 +219,22 @@ for(const scenario of ['posted control','draft report','foreign currency','secon
       }
       });
       await withOrgContext(org.orgId,async()=>{
-        const data=await spendVelocityData(org.orgId,{from:'2026-07-01',to:'2026-07-31',label:'Spend review'},null);
+        const data=await spendVelocityData(org.orgId,{from:'2026-07-01',to:'2026-07-31',label:'Spend review'},null,undefined,{expenseAccess:{scope:'all'}});
         assert.equal(data.summary.expensesTotal,`${base}.0000`,'primary ledger control');
-        const spender=data.expenseAnalysis.topSpenders.find(row=>row.employeeId === employee);assert.ok(spender);
+        const spender=data.expenseAnalysis?.topSpenders.find(row=>row.employeeId === employee);assert.ok(spender);
         assert.equal(spender.totalSpend,`${base}.0000`);
         assert.equal(spender.reportCount,1);
+        if(scenario === 'posted control'){
+          // Who spent what needs org-wide expense read; the spend aggregates do not change.
+          assert.ok(data.vendorVelocity.some(row=>row.id === employee));
+          for(const expenseAccess of [undefined,{scope:'own' as const,partyId:employee}]){
+            const restricted=await spendVelocityData(org.orgId,{from:'2026-07-01',to:'2026-07-31',label:'Spend review'},null,undefined,{expenseAccess});
+            assert.equal(restricted.expenseAnalysis,null,'no per-employee analysis without org-wide expense read');
+            assert.equal(restricted.summary.expensesTotal,data.summary.expensesTotal);
+            assert.equal(restricted.summary.totalSpend,data.summary.totalSpend);
+            assert.equal(restricted.vendorVelocity.some(row=>row.id === employee),false,'the employee is not listed among spend parties');
+          }
+        }
       });
     }finally{await dropScratchOrg(org.orgId);}
   });
@@ -600,7 +611,7 @@ const { loadCustomerIntelligence } = await import('../app/(app)/analytics/custom
 const { loadVendorPerformance } = await import('../app/(app)/analytics/vendor-performance/view');
 const { loadSpendVelocity } = await import('../app/(app)/analytics/spend-velocity/view');
 const { executeAssistantTool } = await import('./assistant/registry');
-type Summary = { kpis?: { totalRevenue: string | number }; totals?: { spend: string }; summary?: { totalSpend: string }; commitmentCliff?: { summary: { totalPO: string; totalSO: string } }; expenseAnalysis?: { topSpenders: { totalSpend: string }[] | { items: { totalSpend: string }[] } } };
+type Summary = { kpis?: { totalRevenue: string | number }; totals?: { spend: string }; summary?: { totalSpend: string }; commitmentCliff?: { summary: { totalPO: string; totalSO: string } }; expenseAnalysis?: { topSpenders: { totalSpend: string }[] | { items: { totalSpend: string }[] } } | null };
 
 for (const surface of ['customer', 'vendor', 'spend'] as const) {
   for (const boundary of ['service', 'page', 'assistant'] as const) {
@@ -611,7 +622,7 @@ for (const surface of ['customer', 'vendor', 'spend'] as const) {
           const actor = await withBypass(() => createScratchUser(org.orgId, 'Analytics reviewer', 'analytics_reviewer'));
           await withBypass(async () => {
             const restriction = mode === 'all' ? { mode: 'all' } : { mode: 'list', subsidiaryIds: mode === 'empty' ? [] : [org.subsidiaryId] };
-            await db.execute(sql`update app_roles set permissions='["reports.read","assistant.use"]'::jsonb,subsidiary_restriction=${JSON.stringify(restriction)}::jsonb where org_id=${org.orgId} and key='analytics_reviewer'`);
+            await db.execute(sql`update app_roles set permissions='["reports.read","assistant.use","ap.read","expenses.read"]'::jsonb,subsidiary_restriction=${JSON.stringify(restriction)}::jsonb where org_id=${org.orgId} and key='analytics_reviewer'`);
             state.user = { id: actor, orgId: org.orgId, name: 'Analytics reviewer', email: 'analytics@scratch.test', roles: [], isSuperAdmin: false, envKind: 'production', productionOrgId: org.orgId, homeOrgId: org.orgId, homeUserId: actor };
             const hidden = randomUUID();
             await db.execute(sql`insert into subsidiaries(id,org_id,parent_id,name,base_currency,country) values (${hidden},${org.orgId},${org.subsidiaryId},'Private entity','CAD','CA')`);
@@ -651,7 +662,7 @@ for (const surface of ['customer', 'vendor', 'spend'] as const) {
             if (boundary === 'service') {
               data = surface === 'customer' ? await customerData(period, org.orgId, authz.allowedSubsidiaryIds)
                 : surface === 'vendor' ? await vendorData(period, org.orgId, authz.allowedSubsidiaryIds)
-                : await spendVelocityData(org.orgId, period, authz.allowedSubsidiaryIds);
+                : await spendVelocityData(org.orgId, period, authz.allowedSubsidiaryIds, undefined, { expenseAccess: { scope: 'all' } });
               if (surface === 'customer') {
                 const total = data.kpis?.totalRevenue;
                 assert.ok(total !== undefined, 'the customer loader carries its period total for the leak share');

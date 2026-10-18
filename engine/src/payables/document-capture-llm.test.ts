@@ -167,3 +167,15 @@ test("an unconfident required invoice field blocks review", async () => {
   assert.ok(validateNormalizedCapture(result.normalized, "0.9000").some((issue) => issue.code === "required_field" && issue.field === "invoiceNumber"));
   assert.ok(result.evidence.some((field) => field.fieldKey === "invoiceNumber" && field.rawValue === "INV-1O42"), "the reading is kept as evidence");
 });
+
+test("the live provider test never echoes the key it was sent", async () => {
+  const key = "sk-proj-0123456789abcdefSECRET";
+  const result = await testLlmDocumentProvider({
+    config: { provider: "openai", apiKey: key, model: "gpt-4o", baseUrl: null },
+    fetchImpl: async () => Response.json({ error: { message: `Incorrect API key provided: ${key}. Also ${key.slice(0, 12)}…${key.slice(-8)}` } }, { status: 401 }),
+  });
+  assert.equal(result.ok, false);
+  assert.match(result.message, /Incorrect API key provided/);
+  assert.ok(!result.message.includes(key), "the whole key is never shown");
+  assert.ok(!result.message.includes(key.slice(0, 12)) && !result.message.includes(key.slice(-8)), "nor a recognizable part of it");
+});

@@ -101,7 +101,9 @@ test('Insights requires scope before connecting and releases the read transactio
   assert.deepEqual(calls[1]!.params, ['org-1'])
   const execution = calls.find(({ text }) => text.startsWith('select * from'))!
   assert.match(execution.text, /d\.subsidiary_id = ANY\(\$2::uuid\[\]\)/)
-  assert.deepEqual(execution.params, ['org-1', ['sub-1']])
+  // A caller that states no expense authority reads no expense report rows.
+  assert.match(execution.text, /d\.kind IS DISTINCT FROM \$3/)
+  assert.deepEqual(execution.params, ['org-1', ['sub-1'], 'expense_report'])
   assert.equal(calls.at(-1)?.text, 'rollback')
   assert.equal(released, true)
 })

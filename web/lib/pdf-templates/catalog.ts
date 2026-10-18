@@ -118,6 +118,25 @@ const LINE_FIELDS: PdfMergeField[] = [
 
 const LINES_COLLECTION: PdfCollection = { key: 'lines', label: 'Line items', fields: LINE_FIELDS }
 
+/**
+ * Lines that may be spent in another currency than their document (expense
+ * reports): the original currency and amount, the rate that converted them
+ * and how that rate was obtained. Every field is empty on a line in the
+ * document currency, so a template shows the block only where it applies.
+ */
+export const FOREIGN_LINE_FIELDS: PdfMergeField[] = [
+  { key: 'original_currency', label: 'Original currency', sample: 'EUR' },
+  { key: 'original_amount', label: 'Original amount', sample: '€100.00' },
+  { key: 'fx_rate', label: 'Exchange rate', sample: '1 EUR = 1.4823 CAD' },
+  { key: 'fx_basis', label: 'Rate basis', sample: 'Dated rate of Sep 25, 2026' },
+]
+const FOREIGN_LINES_COLLECTION: PdfCollection = { ...LINES_COLLECTION, fields: [...LINE_FIELDS, ...FOREIGN_LINE_FIELDS] }
+
+/** True when a record type's lines carry the original-currency fields. */
+export function hasForeignLines(meta: PdfRecordTypeMeta): boolean {
+  return meta.collections.some((collection) => collection.key === 'lines' && collection.fields.some((field) => field.key === 'original_currency'))
+}
+
 /** Documents that bill work state when it was completed and each line's work period. */
 const WORK_COMPLETED_FIELD: PdfMergeField = { key: 'work_completed_on', label: 'Work completed', sample: 'Jul 31, 2026' }
 const WORK_LINES_COLLECTION: PdfCollection = {
@@ -159,6 +178,8 @@ function docType(meta: {
   extraFields?: PdfMergeField[]
   groupedLines?: boolean
   workPeriod?: boolean
+  /** Lines may carry an original currency (expense reports). */
+  foreignLines?: boolean
 }): PdfRecordTypeMeta {
   const invoiceFiscal = meta.key === 'customer_invoice' || meta.key === 'customer_credit'
   return {
@@ -178,7 +199,7 @@ function docType(meta: {
       ...(meta.hasDue ? DUE_FIELDS : []),
       ...DOC_COMMON.slice(4),
     ],
-    collections: [meta.workPeriod ? WORK_LINES_COLLECTION : LINES_COLLECTION, ...(meta.groupedLines ? [LINE_GROUPS_COLLECTION] : []), ...(invoiceFiscal ? [INVOICE_VAT_COLLECTION] : [])],
+    collections: [meta.workPeriod ? WORK_LINES_COLLECTION : meta.foreignLines ? FOREIGN_LINES_COLLECTION : LINES_COLLECTION, ...(meta.groupedLines ? [LINE_GROUPS_COLLECTION] : []), ...(invoiceFiscal ? [INVOICE_VAT_COLLECTION] : [])],
   }
 }
 
@@ -572,7 +593,7 @@ export const PDF_RECORD_TYPES: PdfRecordTypeMeta[] = [
   docType({ key: 'vendor_credit', docTitle: 'Vendor Credit', partyHeading: 'Vendor', readPermission: 'ap.read', hasParty: true, hasDue: true, hasReference: true }),
   docType({ key: 'vendor_payment', docTitle: 'Payment Remittance', partyHeading: 'Paid to', readPermission: 'ap.read', hasParty: true, hasDue: false, hasReference: true }),
   docType({ key: 'customer_payment', docTitle: 'Payment Receipt', partyHeading: 'Received from', readPermission: 'ar.read', hasParty: true, hasDue: false, hasReference: true }),
-  docType({ key: 'expense_report', docTitle: 'Expense Report', partyHeading: 'Employee', readPermission: 'expenses.read', hasParty: true, hasDue: false, hasReference: true }),
+  docType({ key: 'expense_report', docTitle: 'Expense Report', partyHeading: 'Employee', readPermission: 'expenses.read', hasParty: true, hasDue: false, hasReference: true, foreignLines: true }),
   docType({ key: 'check', docTitle: 'Check', partyHeading: null, readPermission: 'ap.read', hasParty: false, hasDue: false, hasReference: true }),
   docType({ key: 'card_charge', docTitle: 'Card Charge', partyHeading: null, readPermission: 'ap.read', hasParty: false, hasDue: false, hasReference: false }),
   docType({ key: 'card_refund', docTitle: 'Card Refund', partyHeading: null, readPermission: 'ap.read', hasParty: false, hasDue: false, hasReference: false }),

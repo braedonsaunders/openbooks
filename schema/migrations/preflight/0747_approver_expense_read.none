@@ -1,0 +1,1 @@
+Data-only grant and description refresh on built-in roles: every statement adds a read grant or rewrites display text and refuses nothing, so there is no precondition to probe.

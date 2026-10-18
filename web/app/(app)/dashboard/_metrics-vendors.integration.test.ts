@@ -22,6 +22,8 @@ test('vendor widget metrics equal the vendor dashboard figures', { skip: !DB }, 
   try {
     const window = { from: '2026-07-01', to: '2026-07-31', label: 'July 2026' }
     const ctx = {
+      // A reader without expense read: the widgets match the dashboard read without it.
+      authz: { user: { orgId: org.orgId, id: org.orgId, roles: [], isSuperAdmin: false }, permissions: new Set(['reports.read', 'ap.read']), allowedSubsidiaryIds: null },
       orgId: org.orgId,
       allowedSubsidiaryIds: null,
       period: async () => window,
@@ -131,6 +133,8 @@ test('unmeasurable annuals refuse by name instead of annualising blindly', { ski
     })
     const window = { from: '2026-02-01', to: '2026-07-31', label: 'Feb–Jul 2026' }
     const ctx = {
+      // A reader without expense read: the widgets match the dashboard read without it.
+      authz: { user: { orgId: org.orgId, id: org.orgId, roles: [], isSuperAdmin: false }, permissions: new Set(['reports.read', 'ap.read']), allowedSubsidiaryIds: null },
       orgId: org.orgId,
       allowedSubsidiaryIds: null,
       period: async () => window,

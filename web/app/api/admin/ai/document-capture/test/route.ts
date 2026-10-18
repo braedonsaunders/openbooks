@@ -3,12 +3,17 @@ import { defineRoute } from "@/lib/api/route";
 
 import { NextResponse } from 'next/server'
 import { getDocumentCaptureTestConfig, getLlmCaptureTestConfig } from '@openbooks/engine/payables/ap-capture-config'
-import { testAzureDocumentProvider } from '@openbooks/engine/payables/ap-capture'
+import { DocumentEndpointError, testAzureDocumentProvider } from '@openbooks/engine/payables/ap-capture'
 import { testLlmDocumentProvider } from '@openbooks/engine/payables/document-capture-llm'
 
 
 const requestBodySchema = z.object({
   provider: z.enum(['azure_document_intelligence', 'llm_vision']).optional(),
+  // The AI provider section as typed, so the AI model is tested before it is saved.
+  aiProvider: z.string().trim().min(1).max(40).optional(),
+  aiApiKey: z.string().min(1).max(4000).optional(),
+  aiBaseUrl: z.string().max(2000).optional(),
+  aiModelSmart: z.string().trim().max(200).optional(),
   apiKey: z.string().min(1).optional(), endpoint: z.string().url().optional(), model: z.string().trim().min(1).max(200).optional(),
 }).refine((body) => Object.keys(body).length > 0, { message: "At least one field must be provided." });
 
@@ -28,14 +33,24 @@ export const POST = defineRoute({
 
 
 
-    // The AI model provider is tested with the organization's AI key and the
-    // capture model (or its smart model); Azure with the form's or stored key.
+    // The AI model provider is tested with the key, provider, base URL and
+    // models as typed (blank fields fall back to the saved settings), and
+    // Azure with the form's or stored key. Nothing typed is stored.
     if (body.provider === 'llm_vision') {
       let llm: Awaited<ReturnType<typeof getLlmCaptureTestConfig>>
       try {
-        llm = await getLlmCaptureTestConfig(gate.user.orgId, { model: body.model })
+        llm = await getLlmCaptureTestConfig(gate.user.orgId, {
+          provider: body.aiProvider,
+          apiKey: body.aiApiKey,
+          baseUrl: body.aiBaseUrl,
+          modelSmart: body.aiModelSmart,
+          model: body.model,
+        })
       } catch (error) {
-        return NextResponse.json({ ok: false, code: 'failed', message: error instanceof Error ? error.message : undefined })
+        // An unusable base URL names its own fault; the key itself is never
+        // part of the answer. Anything else answers through the shared mapping.
+        if (error instanceof DocumentEndpointError) return NextResponse.json({ ok: false, code: 'failed', message: error.message.slice(0, 180) })
+        throw error
       }
       if (!llm) return NextResponse.json({ ok: false, code: 'missingAi' })
       const result = await testLlmDocumentProvider({ config: llm })

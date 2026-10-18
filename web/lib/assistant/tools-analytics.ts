@@ -14,6 +14,8 @@ import { utilizationData } from "../analytics/utilization-data";
 import { spendVelocityData } from "../analytics/spend-velocity-data";
 import { sentinelData } from "../analytics/sentinel-data";
 import { sentinelAccessDenied } from "../analytics/sentinel-access";
+import { ANALYTICS_DASHBOARD_MAP, analyticsDashboardDenied } from "../analytics/dashboard-catalog";
+import { reportExpenseAccess } from "../expense-access";
 import { healthStrings } from "../analytics/health-strings";
 import { customerStrings } from "../analytics/customer-strings";
 import { vendorStrings } from "../analytics/vendor-strings";
@@ -560,14 +562,18 @@ const spendVelocityTool: AssistantToolDef = {
   description:
     "Spend Velocity dashboard for a period: spend growth, anomalies, seasonal trends, creep, concentration, zombie subscriptions, period comparison. Lists capped. Read-only.",
   category: "read",
-  gate: { mode: "anyOf", perms: ["reports.read"] },
+  gate: { mode: "allOf", perms: ["reports.read", "ap.read"] },
   inputSchema: periodInput,
   execute: async (raw, authz): Promise<ToolResult> => {
     const period = await resolveToolRange(authz.user.orgId, raw as PeriodArgs);
     if ("error" in period) return { ok: false, error: period.error };
     const { locale, translate } = await requestAnalyticsStrings();
     const strings = spendVelocityStrings(translate, locale);
-    const r = await withOrg(authz.user.orgId, () => spendVelocityData(authz.user.orgId, period, authz.allowedSubsidiaryIds, strings));
+    // The dashboard's own rule (Spend Velocity reads payables).
+    const denied = analyticsDashboardDenied(authz, ANALYTICS_DASHBOARD_MAP["spend-velocity"]!);
+    if (denied !== null) return { ok: false, error: `Spend Velocity requires ${denied}.` };
+    const expenseAccess = await reportExpenseAccess(authz);
+    const r = await withOrg(authz.user.orgId, () => spendVelocityData(authz.user.orgId, period, authz.allowedSubsidiaryIds, strings, { expenseAccess }));
     const slimVelocity = (v: (typeof r.accountVelocity)[number]) => ({
       id: v.id,
       name: v.name,
@@ -641,12 +647,13 @@ const spendVelocityTool: AssistantToolDef = {
             50,
           ),
         },
-        expenseAnalysis: {
+        // Who spent what on expense reports needs org-wide expense read.
+        expenseAnalysis: r.expenseAnalysis ? {
           summary: r.expenseAnalysis.summary,
           topSpenders: capList(r.expenseAnalysis.topSpenders, 25),
           categories: capList(r.expenseAnalysis.categories, 25),
           monthlyTrends: capList(r.expenseAnalysis.monthlyTrends, 24),
-        },
+        } : { omitted: "Expense report analysis requires the expenses.read permission." },
         href: "/analytics/spend-velocity",
       },
     };
@@ -662,7 +669,7 @@ const sentinelTool: AssistantToolDef = {
   description:
     "Ledger forensics for a period: Benford conformity, duplicate payments, threshold-trap/weekend postings, outliers, sequential runs, ghost vendors, audit-trail changes, vendor risk rollup. Lists capped at 50. Read-only.",
   category: "read",
-  gate: { mode: "allOf", perms: ["reports.read", "admin.audit.read"] },
+  gate: { mode: "allOf", perms: ["reports.read", "admin.audit.read", "expenses.read"] },
   inputSchema: periodInput,
   execute: async (raw, authz): Promise<ToolResult> => {
     if (sentinelAccessDenied(authz) !== null) return { ok: false, error: "forbidden" };

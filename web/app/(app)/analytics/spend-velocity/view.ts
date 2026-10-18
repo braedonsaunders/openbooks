@@ -6,6 +6,7 @@ import { can, requirePermission } from '../../../../lib/authz'
 import { resolvePeriod } from '../../../../lib/periods'
 import { parseReportQuery } from '../../../../lib/report-filters'
 import { spendVelocityData } from '../../../../lib/analytics/spend-velocity-data'
+import { reportExpenseAccess } from '../../../../lib/expense-access'
 import { analyticsFiscalPeriodPicker } from '../../../../lib/analytics/fiscal-period-options'
 import { spendVelocityStrings } from '../../../../lib/analytics/spend-velocity-strings'
 import type { SpendVelocityView } from './SpendVelocityView'
@@ -53,7 +54,8 @@ export async function loadSpendVelocity(sp: Record<string, string | undefined>):
   // statements use. Direct loader callers keep the English default.
   const [tc, locale, picker] = await Promise.all([getTranslations('analytics'), getLocale(), analyticsFiscalPeriodPicker(authz.user.orgId)])
   const strings = spendVelocityStrings((key, values) => tc(key, values), locale)
-  const data = await spendVelocityData(authz.user.orgId, { from: period.from, to: period.to, label: period.label }, authz.allowedSubsidiaryIds, strings)
+  const data = await spendVelocityData(authz.user.orgId, { from: period.from, to: period.to, label: period.label }, authz.allowedSubsidiaryIds, strings,
+    { expenseAccess: await reportExpenseAccess(authz) })
 
   return {
     title: t('title'),

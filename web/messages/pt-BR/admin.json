@@ -470,14 +470,14 @@
       "admin": "Acesso total a tudo, incluindo usuários, funções, navegação e configurações da empresa.",
       "controller": "Responsável pelos livros: razão geral, contas a pagar e a receber, compras, aprovações, fechamento de períodos, relatórios e log de auditoria. Não pode gerenciar usuários nem funções.",
       "accountant": "Contabilidade do dia a dia: lança e contabiliza lançamentos, contas a pagar e faturas, paga e recebe, cria relatórios e revisa as conciliações bancárias e de cartões. Não pode aprovar, fechar períodos, conciliar bancos nem gerenciar usuários.",
-      "production": "Gerencia cadastros de manufatura e o trabalho de chão de fábrica, e lança movimentações de estoque. Não pode estornar lançamentos de estoque nem ver o razão geral.",
-      "approver": "Analisa e decide solicitações de aprovação, com acesso de leitura ao razão geral, aos razões auxiliares e aos relatórios. Não pode lançar, contabilizar nem pagar transações.",
+      "production": "Gerencia cadastros de manufatura e o trabalho de chão de fábrica, e lança movimentações de estoque. Envia os próprios relatórios de despesas. Não pode estornar lançamentos de estoque nem ver o razão geral.",
+      "approver": "Analisa e decide solicitações de aprovação, com acesso de leitura ao razão geral, aos razões auxiliares e aos relatórios. Consulta relatórios de despesas para revisão. Não pode lançar, contabilizar nem pagar transações.",
       "viewer": "Acesso somente leitura ao razão geral, razões auxiliares, relatórios e insights. Não pode criar, alterar, contabilizar nem pagar transações.",
-      "sales_manager": "Lidera a equipe de vendas: contas, atividades, oportunidades, cotas e previsões, e prepara rascunhos de faturas e vendas à vista. Não pode contabilizar, receber pagamentos nem ver o razão geral.",
-      "sales_rep": "Trabalha as contas, atividades, oportunidades e previsões pessoais atribuídas, e prepara rascunhos de faturas e vendas à vista. Não pode contabilizar, receber pagamentos nem ver o razão geral.",
-      "buyer": "Emite pedidos de compra e recebe as mercadorias correspondentes, com acesso de leitura a fornecedores, itens e contas a pagar. Não pode contabilizar nem pagar contas, lançar estoque, nem ver banco ou o razão geral.",
-      "cashier": "Registra, contabiliza e reembolsa vendas à vista no caixa e consulta saldos de vale-presente. Não pode ver faturas, banco nem o razão geral.",
-      "project_coordinator": "Registra o próprio tempo, acompanha projetos e prepara rascunhos de faturas para aprovação. Não pode ver o tempo dos colegas, contabilizar faturas, receber ou fazer pagamentos, nem ver banco ou o razão geral."
+      "sales_manager": "Lidera a equipe de vendas: contas, atividades, oportunidades, cotas e previsões, e prepara rascunhos de faturas e vendas à vista. Envia os próprios relatórios de despesas. Não pode contabilizar, receber pagamentos nem ver o razão geral.",
+      "sales_rep": "Trabalha as contas, atividades, oportunidades e previsões pessoais atribuídas, e prepara rascunhos de faturas e vendas à vista. Envia os próprios relatórios de despesas. Não pode contabilizar, receber pagamentos nem ver o razão geral.",
+      "buyer": "Emite pedidos de compra e recebe as mercadorias correspondentes, com acesso de leitura a fornecedores, itens e contas a pagar. Envia os próprios relatórios de despesas. Não pode contabilizar nem pagar contas, lançar estoque, nem ver banco ou o razão geral.",
+      "cashier": "Registra, contabiliza e reembolsa vendas à vista no caixa e consulta saldos de vale-presente. Envia os próprios relatórios de despesas. Não pode ver faturas, banco nem o razão geral.",
+      "project_coordinator": "Registra o próprio tempo, acompanha projetos e prepara rascunhos de faturas para aprovação. Envia os próprios relatórios de despesas. Não pode ver o tempo dos colegas, contabilizar faturas, receber ou fazer pagamentos, nem ver banco ou o razão geral."
     }
   },
   "scripts": {

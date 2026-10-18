@@ -15,6 +15,8 @@ import { add, mulDecimal } from "@openbooks/engine/money";
 import { serializeLedgerDecimal } from "./ledger-decimal";
 import type { SQL } from "drizzle-orm";
 import { notFound } from "@/lib/api/responses";
+import { reportExpenseAccess } from "@/lib/expense-access";
+import { EXPENSE_RESTRICTED_PARTY_LABEL, expenseDocumentScope, hiddenExpenseLeg } from "@/lib/expense-report-scope";
 
 
 export const runtime = "nodejs";
@@ -96,6 +98,13 @@ export const GET = defineRoute({
     // payroll settlement); NULL-safe so ordinary legs never fall out of both
     // arms of the collapse below.
     const collapseLeg = sql`(coalesce(d.kind, '') = 'pay_run' or coalesce(e.origin, '') = 'payroll') and l.party_id is not null`;
+    // Expense reports follow expense read, not report read: in an account
+    // drill a leg of a report the reader may not read collapses the same way
+    // (per entry, amount kept, no employee, memo or report reference); in a
+    // party drill the report is left out.
+    const expenseAccess = await reportExpenseAccess(gate);
+    const hiddenExpense = hiddenExpenseLeg(expenseAccess, sql`d.kind`, sql`d.party_id`);
+    const expensesHidden = expenseAccess.scope !== 'all';
 
     const url = new URL(req.url);
     const account = url.searchParams.get("account");
@@ -153,7 +162,7 @@ export const GET = defineRoute({
     // can return a pre-collapse per-employee row. The arm keeps the summed
     // amount (summaries below aggregate the same legs, so everything ties)
     // but names no employee and shows no per-employee memo.
-    const detailLegFilter = canSeePayroll ? sql`` : sql` and not (${collapseLeg})`;
+    const detailLegFilter = sql`${canSeePayroll ? sql`` : sql` and not (${collapseLeg})`}${expensesHidden ? sql` and not (${hiddenExpense})` : sql``}`;
     const detailCollapseArm = canSeePayroll ? sql`` : sql`
         union all
         (select max(e.posting_date)::text as date, e.id as entry_id, sum(l.amount) as amount,
@@ -164,11 +173,22 @@ export const GET = defineRoute({
         ${accountWindow}
           and (${collapseLeg})
         group by e.id)`;
-    // Restricted party summaries bucket payroll legs under the restricted label
-    // instead of printing employee names; amounts aggregate as usual.
-    const partyName = canSeePayroll
+    const expenseCollapseArm = expensesHidden ? sql`
+        union all
+        (select max(e.posting_date)::text as date, e.id as entry_id, sum(l.amount) as amount,
+          max(sub.base_currency) as func,
+          null::uuid as doc_id, null::text as doc_kind, null::text as doc_number,
+          ${EXPENSE_RESTRICTED_PARTY_LABEL} as party_name,
+          '' as memo
+        ${accountWindow}
+          and (${hiddenExpense})${canSeePayroll ? sql`` : sql` and not (${collapseLeg})`}
+        group by e.id)` : sql``;
+    // Restricted party summaries bucket payroll legs, and legs of expense
+    // reports the reader may not read, under their restricted labels instead
+    // of printing employee names; amounts aggregate as usual.
+    const partyName = canSeePayroll && !expensesHidden
       ? sql`coalesce(p.display_name, 'No party')`
-      : sql`case when ${collapseLeg} then ${PAYROLL_RESTRICTED_PARTY_LABEL} else coalesce(p.display_name, 'No party') end`;
+      : sql`case${canSeePayroll ? sql`` : sql` when ${collapseLeg} then ${PAYROLL_RESTRICTED_PARTY_LABEL}`}${expensesHidden ? sql` when ${hiddenExpense} then ${EXPENSE_RESTRICTED_PARTY_LABEL}` : sql``} else coalesce(p.display_name, 'No party') end`;
     if (account) {
       const [detail, monthly, byParty, agg] = await Promise.all([
         (analyticsQuery(sql`
@@ -181,6 +201,7 @@ export const GET = defineRoute({
             ${accountWindow}
               ${detailLegFilter})
             ${detailCollapseArm}
+            ${expenseCollapseArm}
           ) u
           order by date desc, abs(amount) desc
           limit 1000
@@ -276,18 +297,19 @@ export const GET = defineRoute({
     const docFunc = sql`coalesce(sub.base_currency, o.base_currency)`;
     const docLeg = sql`round(abs(d.total) * d.fx_rate, 4)`;
     const docDate = sql`coalesce(d.document_date, d.posting_date)`;
+    const expenseScope = expenseDocumentScope(expenseAccess, sql`d.kind`, sql`d.party_id`);
     const docEvents = sql`
       select d.id as document_id, ${docDate}::date as event_date, 1::int as direction
         from documents d
        where d.org_id = ${user.orgId} and d.party_id = ${party} and d.status in ('posted', 'voided')
-         and ${docDate}::date between ${from}::date and ${to}::date ${docScope}
+         and ${docDate}::date between ${from}::date and ${to}::date ${docScope} ${expenseScope}
       union all
       select d.id as document_id, coalesce(reversal_entry.posting_date::date, d.voided_at::date) as event_date, -1::int as direction
         from documents d
         left join journal_entries reversal_entry on reversal_entry.id = d.reversal_entry_id and reversal_entry.org_id = d.org_id
        where d.org_id = ${user.orgId} and d.party_id = ${party} and d.status = 'voided'
          and d.voided_at is not null
-         and coalesce(reversal_entry.posting_date::date, d.voided_at::date) between ${from}::date and ${to}::date ${docScope}
+         and coalesce(reversal_entry.posting_date::date, d.voided_at::date) between ${from}::date and ${to}::date ${docScope} ${expenseScope}
     `;
     const [detail, monthly, byKind, agg] = await Promise.all([
       (analyticsQuery(sql`
@@ -302,6 +324,7 @@ export const GET = defineRoute({
           and ${docDate} >= ${from}
           and ${docDate} <= ${to}
           ${docScope}
+          ${expenseScope}
           ${srcEntryScope}
           ${postedDoc}
         order by ${docDate} desc, ${docLeg} desc

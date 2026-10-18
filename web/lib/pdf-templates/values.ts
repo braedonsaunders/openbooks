@@ -12,7 +12,7 @@ import { createMoneyFormatter, type MoneyFormatter } from '../money-format'
 import { resolveLocale } from '../locale'
 import { subsidiaryVisibleFilter } from '../subsidiaries'
 import { isFeatureEnabled } from '../features'
-import { PDF_RECORD_TYPE_BY_KEY, type PdfMergeField, type PdfRecordTypeMeta } from './catalog'
+import { hasForeignLines, PDF_RECORD_TYPE_BY_KEY, type PdfMergeField, type PdfRecordTypeMeta } from './catalog'
 import { orgIdentityMergeValues, type OrgIdentityRow } from './org-identity'
 import { loadFieldTicket } from '../field-tickets'
 import { buildPayStubStatement, toStatementLine, type StatementRow } from './pay-stub-statement'
@@ -172,13 +172,16 @@ async function loadDocumentValues(
   const format = createMoneyFormatter(locale, String(doc.currency ?? org.base_currency))
   const { money } = format
   const customerPartNumbersEnabled = await isFeatureEnabled(orgId, 'customerPartNumbers')
+  const foreignLines = hasForeignLines(meta)
 
   const lines = (await db.execute<Record<string, unknown>>(sql`
     select l.line_number, l.description, l.quantity, l.unit, l.unit_price, l.amount, l.tax_amount,
            l.service_party_id, sp.display_name as service_party_name,
            coalesce(nullif(trim(concat(acc.number, ' ', acc.name)), ''), acc.name) as account_name,
            i.name as item_name, cir.customer_sku,
-           l.work_from::text as work_from, l.work_to::text as work_to
+           l.work_from::text as work_from, l.work_to::text as work_to,
+           l.original_currency, l.original_amount::text as original_amount,
+           l.original_fx_rate::text as original_fx_rate, l.original_fx_evidence
       from document_lines l
       left join accounts acc on acc.id = l.account_id and acc.org_id = l.org_id
       left join items i on i.id = l.item_id and i.org_id = l.org_id
@@ -240,6 +243,7 @@ async function loadDocumentValues(
       service_party_name: l.service_party_name ?? '',
       work_from: fmtDate(l.work_from, locale),
       work_to: fmtDate(l.work_to, locale),
+      ...(foreignLines ? foreignLineValues(l, String(doc.currency ?? org.base_currency), money, locale) : {}),
     }
     const servicePartyId = l.service_party_id as string | null
     if (servicePartyId) {
@@ -1019,4 +1023,33 @@ export async function customMergeFields(recordType: string, orgId: string): Prom
      order by sort_order, label
   `))
   return r.rows.map((d) => ({ key: `cf_${d.key}`, label: d.label, sample: d.label }))
+}
+
+/**
+ * The original-currency merge values of one document line: empty for a line
+ * in the document currency, so a template's conditional block prints nothing
+ * for it; otherwise the original amount in its own currency, the rate that
+ * converted it and how that rate was obtained.
+ */
+export function foreignLineValues(
+  line: Record<string, unknown>,
+  documentCurrency: string,
+  money: MoneyFormatter['money'],
+  locale: string,
+): { original_currency: string; original_amount: string; fx_rate: string; fx_basis: string } {
+  const currency = typeof line.original_currency === 'string' ? line.original_currency : ''
+  if (!currency) return { original_currency: '', original_amount: '', fx_rate: '', fx_basis: '' }
+  const evidence = (line.original_fx_evidence && typeof line.original_fx_evidence === 'object' ? line.original_fx_evidence : {}) as Record<string, unknown>
+  const rate = canonicalDecimal(String(line.original_fx_rate ?? ''), 10) ?? String(line.original_fx_rate ?? '')
+  const basis = evidence.method === 'billed_amount'
+    ? `Billed ${money(String(evidence.billedAmount ?? '0'))}`
+    : evidence.method === 'override'
+      ? `Explicit rate: ${String(evidence.reason ?? '')}`
+      : `Dated rate of ${fmtDate(evidence.observationDate ?? evidence.rateDate, locale)}`
+  return {
+    original_currency: currency,
+    original_amount: money(String(line.original_amount ?? '0'), { currency }),
+    fx_rate: `1 ${currency} = ${rate} ${documentCurrency}`,
+    fx_basis: basis,
+  }
 }

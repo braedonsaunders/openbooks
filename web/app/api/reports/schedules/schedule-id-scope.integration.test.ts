@@ -124,8 +124,15 @@ test("hour/active PATCH keeps a restricted authorization_snapshot when the edito
       `);
     });
     gate.user = { orgId: oid, id: editorId };
-    gate.permissions = ["reports.schedule", "reports.read"];
     gate.allowedSubsidiaryIds = null;
+    // The pinned documents report predates recording which expense reports it
+    // holds, so it is treated as holding all of them: an editor (who could
+    // redirect its delivery) needs org-wide expense read.
+    gate.permissions = ["reports.schedule", "reports.read"];
+    const refused = await PATCH(json("PATCH", { hour: 9, reason: "move delivery" }), params(scheduleId));
+    assert.equal(refused.status, 403);
+    assert.deepEqual(await refused.json(), { error: "this schedule's authorized report content requires expenses.read" });
+    gate.permissions = ["reports.schedule", "reports.read", "expenses.read"];
 
     for (const [body, label] of [
       [{ hour: 8, reason: "shift delivery hour" }, "hour"],

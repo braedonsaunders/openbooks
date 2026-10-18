@@ -55,6 +55,7 @@ function ledgerMask(column: ReportEntityColumn): string | null {
 function transactionMask(column: ReportEntityColumn): string | null {
   if (column.key === 'party_name') return `'${PAYROLL_RESTRICTED_PARTY_LABEL}'`
   if (column.key === 'employee_name') return `'${PAYROLL_RESTRICTED_PARTY_LABEL}'`
+  if (column.key === 'party_id') return 'NULL'
   // Line descriptions can carry per-employee references; the collapsed row
   // keeps none of them.
   if (column.key === 'description') return 'NULL'

@@ -1419,13 +1419,13 @@ export const BUILT_IN_ROLES: Record<
   production: {
     name: "Production",
     description:
-      "Manages manufacturing masters and shop-floor work, and posts inventory movements. Cannot reverse inventory postings or see the ledger.",
+      "Manages manufacturing masters and shop-floor work, and posts inventory movements. Files their own expense reports. Cannot reverse inventory postings or see the ledger.",
     permissions: ["manufacturing.read", "manufacturing.manage", "items.read", "items.post", "time.self", "time.clock", "expenses.self", "hrm.self.read", "hrm.self.request", "hrm.leave.request"],
   },
   approver: {
     name: "Approver",
     description:
-      "Reviews and decides approval requests, including period reopen requests, with read access to the ledger, subledgers and reports. Cannot enter, post or pay transactions.",
+      "Reviews and decides approval requests, including period reopen requests, with read access to the ledger, subledgers and reports. Reads expense reports for review. Cannot enter, post or pay transactions.",
     permissions: [
       "gl.read",
       "close.read",
@@ -1473,6 +1473,9 @@ export const BUILT_IN_ROLES: Record<
       "compliance.waive",
       "time.read",
       "time.approve",
+      // Reviewing expense reports reads them like every other subledger;
+      // posting and paying them stay with accounts payable.
+      "expenses.read",
       // HR-20 begin: self clock-in rides every employee role.
       "time.clock",
       // HR-20 end
@@ -1496,7 +1499,7 @@ export const BUILT_IN_ROLES: Record<
   sales_manager: {
     name: "Sales Manager",
     description:
-      "Runs the sales team: accounts, activities, opportunities, quotas and forecasts, and drafts invoices and cash sales. Cannot post, collect payments or see the ledger.",
+      "Runs the sales team: accounts, activities, opportunities, quotas and forecasts, and drafts invoices and cash sales. Files their own expense reports. Cannot post, collect payments or see the ledger.",
     permissions: [
       "crm.accounts.read", "crm.accounts.create", "crm.accounts.manage", "crm.accounts.assign",
       "crm.activities.read", "crm.activities.manage",
@@ -1518,7 +1521,7 @@ export const BUILT_IN_ROLES: Record<
   sales_rep: {
     name: "Sales Representative",
     description:
-      "Works assigned accounts, activities, opportunities and personal forecasts, and drafts invoices and cash sales. Cannot post, collect payments or see the ledger.",
+      "Works assigned accounts, activities, opportunities and personal forecasts, and drafts invoices and cash sales. Files their own expense reports. Cannot post, collect payments or see the ledger.",
     permissions: [
       "crm.accounts.read", "crm.accounts.create", "crm.accounts.manage",
       "crm.activities.read", "crm.activities.manage",
@@ -1543,7 +1546,7 @@ export const BUILT_IN_ROLES: Record<
   buyer: {
     name: "Buyer",
     description:
-      "Raises purchase orders and receives goods against them, with read access to vendors, items and payables. Cannot post or pay bills, post inventory, or see banking or the ledger.",
+      "Raises purchase orders and receives goods against them, with read access to vendors, items and payables. Files their own expense reports. Cannot post or pay bills, post inventory, or see banking or the ledger.",
     permissions: [
       "purchase_orders.read", "purchase_orders.create", "goods_receipts.create",
       "ap.read", "parties.read", "items.read", "reports.read",
@@ -1556,7 +1559,7 @@ export const BUILT_IN_ROLES: Record<
   cashier: {
     name: "Cashier",
     description:
-      "Rings up, posts and refunds cash sales at the till and the register, opens and closes the register drawer, drops till cash to the bank, and looks up gift card balances. Cannot override prices, see invoices, banking or the ledger.",
+      "Rings up, posts and refunds cash sales at the till and the register, opens and closes the register drawer, drops till cash to the bank, and looks up gift card balances. Files their own expense reports. Cannot override prices, see invoices, banking or the ledger.",
     permissions: [
       "cash_sales.read", "cash_sales.create", "cash_sales.post", "cash_sales.deposit",
       "pos.sell", "pos.refund", "pos.drawer",
@@ -1570,7 +1573,7 @@ export const BUILT_IN_ROLES: Record<
   project_coordinator: {
     name: "Project Coordinator",
     description:
-      "Logs their own time, follows projects and drafts customer invoices for approval. Cannot see coworkers' time, post invoices, take or make payments, or see banking or the ledger.",
+      "Logs their own time, follows projects and drafts customer invoices for approval. Files their own expense reports. Cannot see coworkers' time, post invoices, take or make payments, or see banking or the ledger.",
     permissions: [
       "projects.read", "time.self", "time.clock", "expenses.self",
       "ar.read", "ar.create", "estimates.read", "estimates.create", "estimates.issue", "usage.read", "usage.manage", "usage.bill",

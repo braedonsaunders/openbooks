@@ -519,6 +519,9 @@ test("employee roles file their own expense reports through expenses.self, never
     assert.equal(holds(role, "ap.post"), false, `${role} does not post expense reports`);
   }
   assert.equal(holds("controller", "expenses.read"), true, "the controller keeps org-wide expense review");
+  assert.equal(holds("approver", "expenses.read"), true, "the approver opens the expense reports it decides");
+  assert.equal(holds("approver", "expenses.create"), false, "the approver cannot enter expense reports");
+  assert.equal(holds("approver", "ap.post"), false, "the approver cannot post them");
   assert.deepEqual(grantsConferring("expenses.read", "all"), ["expenses.read"], "only the read grant reads everyone's reports");
   assert.deepEqual(grantsConferring("expenses.create", "all"), ["expenses.create"]);
   assert.deepEqual(grantsConferring("expenses.read", "own"), ["expenses.self"], "self-service reads the holder's reports");

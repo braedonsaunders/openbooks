@@ -262,6 +262,7 @@ export async function runCustomQuery(
     page: opts.page,
     allowedSubsidiaryIds: opts.allowedSubsidiaryIds,
     allowedBookIds: opts.allowedBookIds,
+    expenseAccess: opts.expenseAccess,
   })
   const labels = opts.labels ?? {}
   const { rows: rawRows } = await client.query(compiled.text, compiled.values)

@@ -14,6 +14,7 @@ import {
   type ExpenseAuthority,
 } from '@openbooks/engine/records/expense-access'
 import { can, getAuthz, guardPermission, requirePermission, type Authz } from './authz'
+import type { ReportExpenseAccess } from '@openbooks/reports'
 import { resolveAuthzByUserId } from './authz-core'
 
 export type { ExpenseAccess, ExpenseAuthority }
@@ -106,6 +107,16 @@ export async function expenseListOwnerFilter(orgId: string, userId: string): Pro
   const access = authz ? await expenseAccess(authz, 'read') : null
   if (!access) return sql`false`
   return access.scope === 'all' ? null : expenseOwnerPredicate(access, sql`d.party_id`)
+}
+
+/**
+ * The reader's expense authority for report, Insights and analytics
+ * execution: every expense report, only their own, or none. Reports never
+ * widen it: an org-wide report grant reads no expense report without an
+ * expense grant.
+ */
+export async function reportExpenseAccess(authz: Authz, executor: SqlExecutor = db): Promise<ReportExpenseAccess> {
+  return (await expenseAccess(authz, 'read', executor)) ?? { scope: 'none' }
 }
 
 export { ExpenseSelfServiceRefusal, expenseAccessAllows }

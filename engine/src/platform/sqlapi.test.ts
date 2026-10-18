@@ -139,6 +139,7 @@ const hooks = registerHooks({
 
 const {
   ensureReadRole,
+  isExpenseRelation,
   listSchema,
   runUserSql,
   USER_SQL_MAX_RESULT_BYTES,
@@ -260,9 +261,33 @@ test("payroll relations need payroll.read, however the query reaches them", asyn
 
   harness.reset();
   harness.planRelations = ["pay_stubs"];
-  const granted = await runUserSql("select 42 as answer", { orgId: "00000000-0000-4000-8000-000000000001", payrollRead: true });
+  const granted = await runUserSql("select 42 as answer", { orgId: "00000000-0000-4000-8000-000000000001", payrollRead: true, expenseRead: true });
   assert.equal(granted.rowCount, 2);
   assert.equal(harness.queries.some(({ text }) => text.startsWith("explain")), false);
+});
+
+test("document relations carry every employee's expense reports, so raw SQL over them needs org-wide expense read", async () => {
+  for (const relation of ["documents", "document_lines", "document_line_tax_components", "document_links"]) {
+    harness.reset();
+    harness.planRelations = ["accounts", relation];
+    await assert.rejects(
+      runUserSql("select * from v", { orgId: "00000000-0000-4000-8000-000000000001", payrollRead: true }),
+      (error: unknown) => error instanceof UserSqlRefusal && error.status === 403
+        && new RegExp(`expense reports require the expenses\\.read permission: this query reads ${relation}\\.`).test(error.message),
+    );
+    assert.equal(harness.queries.some(({ text }) => text.includes("__ob_row_bytes") && !text.startsWith("explain")), false, `${relation} never runs`);
+  }
+
+  harness.reset();
+  harness.planRelations = ["documents"];
+  const granted = await runUserSql("select 42 as answer", { orgId: "00000000-0000-4000-8000-000000000001", payrollRead: true, expenseRead: true });
+  assert.equal(granted.rowCount, 2);
+
+  // Relations that hold no expense report stay open to a payroll reader.
+  harness.reset();
+  harness.planRelations = ["accounts", "pay_stubs"];
+  assert.equal((await runUserSql("select 42 as answer", { orgId: "00000000-0000-4000-8000-000000000001", payrollRead: true })).rowCount, 2);
+  assert.equal(isExpenseRelation("expense_fx_policies"), false, "expense policy configuration is not an expense report");
 });
 
 test("query validation still sees statements after a dollar-quote closer hidden in a comment", () => {

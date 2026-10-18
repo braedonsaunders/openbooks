@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { runUserSql, UserSqlRefusal, validateUserSql } from "@openbooks/engine/platform/sqlapi";
 import { defineRoute } from '@/lib/api/route'
 import { can } from '@/lib/authz'
+import { expenseScope } from '@/lib/expense-access'
 import { hasUnrestrictedQueryScope } from "../../../lib/query-console-access";
 
 const queryBody = z.object({
@@ -47,6 +48,8 @@ export const POST = defineRoute({
       timeoutMs: 30_000,
       // Payroll relations follow the payroll pages and report entities.
       payrollRead: can(gate, 'payroll.read'),
+      // Raw document relations carry every employee's expense reports.
+      expenseRead: expenseScope(gate, 'read') === 'all',
     });
     return NextResponse.json(result);
   } catch (e) {

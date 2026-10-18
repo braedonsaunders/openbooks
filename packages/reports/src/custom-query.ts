@@ -89,9 +89,19 @@ export type CompiledReportQuery = {
   countText?: string
 }
 
+/**
+ * The reader's authority over expense report rows: every report (`all`),
+ * only the reports whose employee is the person linked to their login
+ * (`own`; a login linked to no person reads none), or none at all.
+ */
+export type ReportExpenseAccess = { scope: 'all' } | { scope: 'own'; partyId: string | null } | { scope: 'none' }
+
 export type CompileCustomQueryOpts = {
   /** Server-owned allowlist; an empty array grants no entity rows. */
   allowedSubsidiaryIds?: readonly string[] | null;
+  /** The reader's expense authority over entities declaring `expenseRows`;
+   *  omitted, no expense report row is read. */
+  expenseAccess?: ReportExpenseAccess;
   /** Server-owned accounting-book allowlist for book-scoped entities (the
    *  executor resolves the single active primary by default). null/undefined
    *  leaves the entity unclamped for explicit cross-book analysis; an empty
@@ -147,6 +157,31 @@ export function compileSubsidiaryScope(
   if (!scope) return null
   const predicate = `${scope.column} = ANY(${bind([...allowedSubsidiaryIds])}::uuid[])`
   return scope.sharedNull ? `(${scope.column} IS NULL OR ${predicate})` : predicate
+}
+
+/**
+ * Shared server-owned expense row policy for reports and Insights: on an
+ * entity whose rows include expense reports, a reader without org-wide
+ * expense authority sees none of them, or only their own. An execution that
+ * does not state the reader's authority reads none of them.
+ */
+export function compileExpenseRowScope(
+  entity: ReportEntity,
+  access: ReportExpenseAccess | undefined,
+  bind: (value: unknown) => string,
+): string | null {
+  const declared = entity.expenseRows
+  if (!declared) return null
+  // An execution that does not state the reader's authority reads no
+  // expense report rows at all.
+  const reach = access ?? { scope: 'none' as const }
+  if (reach.scope === 'all') return null
+  const kind = entityColumn(entity, declared.kindColumn)
+  const employee = entityColumn(entity, declared.employeeColumn)
+  if (!kind || !employee) throw new Error(`Report entity ${entity.key} declares expense rows over columns it does not carry`)
+  const notExpense = `${kind.expr} IS DISTINCT FROM ${bind('expense_report')}`
+  if (reach.scope === 'none' || reach.partyId === null) return `(${notExpense})`
+  return `(${notExpense} OR ${employee.expr} = ${bind(reach.partyId)}::uuid)`
 }
 
 /** Shared server-owned accounting-book policy for reports. Only entities
@@ -587,6 +622,8 @@ function implicitWhere(entity: ReportEntity, orgId: string, params: SqlParams, o
   if (subsidiary) parts.push(subsidiary)
   const book = compileBookScope(entity, opts.allowedBookIds, (value) => params.add(value))
   if (book) parts.push(book)
+  const expense = compileExpenseRowScope(entity, opts.expenseAccess, (value) => params.add(value))
+  if (expense) parts.push(expense)
   if (entity.baseFilter) {
     const base = compileRuleGroup(entity, entity.baseFilter, params, opts)
     if (base) parts.push(base)

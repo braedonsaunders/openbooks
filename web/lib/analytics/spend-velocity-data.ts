@@ -4,7 +4,8 @@ import { statementBookExpr } from "../gl-summary";
 import { flowRates } from "../fx-presentation";
 import { add, cmp, div, mulDecimal, neg } from "@openbooks/engine/money/money";
 import { sql } from "drizzle-orm";
-import type { FiscalPeriod } from "@openbooks/reports";
+import type { FiscalPeriod, ReportExpenseAccess } from "@openbooks/reports";
+import { expenseDocumentScope } from "../expense-report-scope";
 import { analyticsQuery } from "./query";
 import { analyticsSection } from "./read-context";
 import { analyticsConfig, ANALYTICS_CONFIG, type ConfigValuesOf } from "./config";
@@ -196,12 +197,13 @@ export interface SpendVelocityData {
     summary: { currentTotal: string; priorTotal: string; twoBackTotal: string; projectedTotal: string; changePct: number | null; priorLabel: string; twoBackLabel: string };
     accounts: { accountId: string; accountName: string; currentAmount: string; priorAmount: string; twoBackAmount: string; changePct: number | null; projectedAmount: string; isNew: boolean; monthlyTrend: number[]; velocity: number | null; acceleration: number | null; trend: string }[];
   };
+  /** Per-employee expense analysis, or null for a reader without org-wide expense read. */
   expenseAnalysis: {
     summary: { expenseReportTotal: string; vendorBillTotal: string; topSpenderCount: number; categoryIncreaseTotal: string };
     topSpenders: { employeeId: string; employeeName: string; totalSpend: string; priorSpend: string; reportCount: number; changePct: number | null }[];
     categories: { categoryId: string; categoryName: string; currentAmount: string; priorAmount: string; changePct: number | null }[];
     monthlyTrends: { month: string; expenseAmount: string; billAmount: string }[];
-  };
+  } | null;
 }
 
 // ---- CAGR velocity engine (stable) ---------------------------------
@@ -472,7 +474,18 @@ export async function spendVelocityData(
   period: { from: string; to: string; label: string },
   allowed: ReadonlySet<string> | null,
   strings: SpendVelocityStrings = spendVelocityStrings(englishCatalogMessage, "en"),
+  options: {
+    /** The reader's expense read (reportExpenseAccess). Unstated reads no individual expense report. */
+    expenseAccess?: ReportExpenseAccess;
+  } = {},
 ): Promise<SpendVelocityData> {
+  // Expense reports are spend in every aggregate, but who spent what follows
+  // expense read: the per-employee analysis and the expense reports in the
+  // per-party breakdown need org-wide read. A self-service reader's own
+  // reports are not singled out, so the result depends only on the reader's
+  // grants and scope (the analytics cache shares it on exactly those).
+  const employeeAnalysis = options.expenseAccess?.scope === "all";
+  const expenseAccess: ReportExpenseAccess = employeeAnalysis ? { scope: "all" } : { scope: "none" };
   const { money } = await getMoneyFormatter(orgId)
   const { from, to } = period;
   const C = await analyticsConfig(orgId, "spendVelocity");
@@ -574,6 +587,7 @@ export async function spendVelocityData(
           ${fiscalBucketLabel(sql`e.posting_date`, buckets.useFiscal)} as bucket_label,
           d.id as doc_id, l.amount, sub.base_currency as func, l.posting_date
         ${spendBaseWithSubs(from, to, sql`e.posting_date`)} and d.party_id is not null
+          ${expenseDocumentScope(expenseAccess, sql`d.kind`, sql`d.party_id`)}
       ), counts as (
         select vendor_id, bucket, count(distinct doc_id) as transaction_count
         from spend group by vendor_id, bucket
@@ -626,7 +640,7 @@ export async function spendVelocityData(
     // (Drill-down detail is fetched per entity on click via /api/analytics/drill.)
     // 7. Top spenders use the same primary-book base-currency actuals as
     // the expense summary; draft headers and transaction totals are not GL spend.
-    (analyticsSection('spend-velocity', []) ? analyticsQuery<SpenderRow>(sql`
+    (employeeAnalysis && analyticsSection('spend-velocity', []) ? analyticsQuery<SpenderRow>(sql`
       select d.party_id as employee_id,
         coalesce((select p.display_name from parties p where p.id = d.party_id and p.org_id = d.org_id), 'Unknown') as employee_name,
         sub.base_currency as func,
@@ -641,7 +655,7 @@ export async function spendVelocityData(
       group by 1, 2, sub.base_currency
     `) : Promise.resolve({ rows: [] as SpenderRow[] })),
     // 8. Expense categories (accounts on expense reports + bills), current vs prior.
-    (analyticsSection('spend-velocity', []) ? analyticsQuery<ExpenseCategoryRow>(sql`
+    (employeeAnalysis && analyticsSection('spend-velocity', []) ? analyticsQuery<ExpenseCategoryRow>(sql`
       select l.account_id as category_id, a.name as category_name,
         sub.base_currency as func,
         sum(l.amount) filter (where e.posting_date >= ${from}) as current_amount,
@@ -1288,7 +1302,7 @@ export async function spendVelocityData(
   }).filter((c) => cmp(c.currentAmount, ZERO) > 0 || cmp(c.priorAmount, ZERO) > 0)
     .sort((a, b) => cmp(b.currentAmount, a.currentAmount))
     .slice(0, 50);
-  const expenseAnalysis = {
+  const expenseAnalysis = employeeAnalysis ? {
     summary: {
       expenseReportTotal,
       vendorBillTotal: billsTotal,
@@ -1298,7 +1312,7 @@ export async function spendVelocityData(
     topSpenders,
     categories: expCategories,
     monthlyTrends: typeBuckets.map((b) => ({ month: b, expenseAmount: typeMonthly.get(b)!.expense, billAmount: typeMonthly.get(b)!.bill })),
-  };
+  } : null;
 
   // ---- summary + health score ---------------------------------------------------
   // Averages run over measurable accounts only: unmeasurable histories

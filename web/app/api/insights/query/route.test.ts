@@ -28,7 +28,8 @@ const mocks = new Map([
   ['@/lib/custom-record-report-catalog', `${prefix} export async function reportEntityCatalog(){state.observe('catalog');return {}}`],
   ['@/lib/features', `${prefix} export async function isFeatureEnabled(){state.observe('feature');return true}`],
   ['@/lib/insight-books', `${prefix} export class InsightBookScopeError extends Error{}; export async function resolveInsightBookScope(){state.observe('book');return ['primary-book']}`],
-  ['@openbooks/analytics/server', `${prefix} export class InsightDenominationError extends Error{}; export async function runInsightQuery(pool,query,orgId,subsidiaries,labels,today,books){state.observe('execution');return {orgId,subsidiaries,books,label:labels.count(),today}}`],
+  ['@/lib/expense-access', `${prefix} export async function reportExpenseAccess(authz){state.observe('expenses');return authz.permissions.has('expenses.read')?{scope:'all'}:{scope:'none'}}`],
+  ['@openbooks/analytics/server', `${prefix} export class InsightDenominationError extends Error{}; export async function runInsightQuery(pool,query,orgId,subsidiaries,labels,today,books,catalog,startMonth,expenseAccess){state.observe('execution');return {orgId,subsidiaries,books,label:labels.count(),today,expenseAccess}}`],
 ])
 registerHooks({
   resolve(specifier, context, next) {
@@ -53,7 +54,9 @@ test('concurrent query preparations use their verified tenants and execution ret
     ['company-a', ['company-a-entity'], ['primary-book']],
     ['company-b', ['company-b-entity'], ['primary-book']],
   ])
-  for (const phase of ['labels:insights', 'labels:reports', 'date', 'fiscal', 'catalog']) {
+  // A reader without expense read executes with no expense report rows.
+  assert.deepEqual(values.map(v => v.expenseAccess), [{ scope: 'none' }, { scope: 'none' }])
+  for (const phase of ['labels:insights', 'labels:reports', 'date', 'fiscal', 'catalog', 'expenses']) {
     assert.deepEqual(observations.filter(o => o.phase === phase).map(o => o.orgId).sort(), ['company-a', 'company-b'])
   }
   for (const o of observations.filter(o => ['book', 'execution'].includes(o.phase))) assert.equal(o.orgId, undefined)

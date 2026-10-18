@@ -5,6 +5,8 @@ import { db, withBypassContext } from '@openbooks/engine/platform/db'
 import { getAuthz, resolveUserAuthz, can, type Authz } from './authz'
 import { canRunReportEntity, canRunReportStatement, reportEntityPermission } from './report-authz'
 import type { SessionUser } from './auth'
+import { REPORT_ENTITY_MAP } from '@openbooks/reports'
+import { expenseScope } from './expense-access'
 
 const execution = new AsyncLocalStorage<Authz>()
 export const withReportAuthz = <T>(authz: Authz, action: () => T): T => execution.run(authz, action)
@@ -29,6 +31,12 @@ export type ReportAuthorization = {
    * of re-rendering per viewer. Absent on artifacts rendered before the
    * field existed: those keep the definition-level gate only. */
   requiredPermissions?: string[]
+  /** Which expense report rows the content includes, for a query over an
+   * entity whose rows include expense reports: every report, the reports of
+   * one user's linked person, or none. A download needs the same reach: an
+   * org-wide expense reader, or that same user. Absent on such an artifact
+   * (rendered before recording), it is treated as including every report. */
+  expenseRows?: ReportArtifactExpenseRows
   definition: {
     report_type: 'query' | 'statement'
     query: unknown
@@ -39,14 +47,39 @@ export type ReportAuthorization = {
   }
 }
 
+export type ReportArtifactExpenseRows = { scope: 'all' } | { scope: 'own'; userId: string } | { scope: 'none' }
+
+/** True when a query definition reads an entity whose rows include expense reports. */
+function queryIncludesExpenseRows(query: unknown): boolean {
+  const key = query && typeof query === 'object' ? (query as { entity?: unknown }).entity : undefined
+  return typeof key === 'string' && Boolean(REPORT_ENTITY_MAP[key]?.expenseRows)
+}
+
+/** The expense report rows a reader's run of this query includes, or undefined when it reads no such entity. */
+export function artifactExpenseRows(authz: Authz, query: unknown): ReportArtifactExpenseRows | undefined {
+  if (!queryIncludesExpenseRows(query)) return undefined
+  const scope = expenseScope(authz, 'read')
+  return scope === 'all' ? { scope: 'all' } : scope === 'own' ? { scope: 'own', userId: authz.user.id } : { scope: 'none' }
+}
+
+/** True when content with `content` expense reach stays within the `recorded` evidence (absent evidence covers every report). */
+export function expenseRowsWithin(content: ReportArtifactExpenseRows | undefined, recorded: ReportArtifactExpenseRows | undefined): boolean {
+  if (!content || content.scope === 'none') return true
+  const evidence = recorded ?? { scope: 'all' }
+  if (evidence.scope === 'all') return true
+  return content.scope === 'own' && evidence.scope === 'own' && content.userId === evidence.userId
+}
+
 export function snapshotReportAuthorization(authz: Authz, definition: ReportAuthorization['definition']): ReportAuthorization {
   // Query definitions name their entity permission up front (a payroll
   // register snapshot carries payroll.read from creation). Statement content
   // is data-dependent, so the render stamps requiredPermissions later.
   const entityPermission = definition.report_type === 'query' ? reportEntityPermission(definition.query) : null
+  const expenseRows = definition.report_type === 'query' ? artifactExpenseRows(authz, definition.query) : undefined
   return { version: 1, userId: authz.user.id,
     allowedSubsidiaryIds: authz.allowedSubsidiaryIds === null ? null : [...authz.allowedSubsidiaryIds].sort(),
     ...(entityPermission ? { requiredPermissions: [entityPermission] } : {}),
+    ...(expenseRows ? { expenseRows } : {}),
     definition }
 }
 
@@ -60,7 +93,12 @@ export async function canAccessReportDefinition(authz: Authz, def: ReportAuthori
  * original scope. A narrower reader cannot safely consume unfiltered bytes. */
 export type ReportArtifactAccess = { ok: true; missingPermissions: [] } | { ok: false; missingPermissions: string[] }
 
-export async function reportArtifactAccessDetail(authz: Authz, raw: unknown): Promise<ReportArtifactAccess> {
+/**
+ * `expenseReach: false` is for re-authorizing the principal of a background
+ * render: that render's expense rows are clamped by the principal's current
+ * expense read, so only readers of the stored output need the recorded reach.
+ */
+export async function reportArtifactAccessDetail(authz: Authz, raw: unknown, options: { expenseReach?: boolean } = {}): Promise<ReportArtifactAccess> {
   if (!raw || typeof raw !== 'object') return { ok: false, missingPermissions: [] }
   const snapshot = raw as ReportAuthorization
   if (snapshot.version !== 1 || !snapshot.definition ||
@@ -68,6 +106,14 @@ export async function reportArtifactAccessDetail(authz: Authz, raw: unknown): Pr
   if (authz.allowedSubsidiaryIds !== null && (snapshot.allowedSubsidiaryIds === null ||
       !snapshot.allowedSubsidiaryIds.every((id) => authz.allowedSubsidiaryIds!.has(id)))) return { ok: false, missingPermissions: [] }
   if (!(await canAccessReportDefinition(authz, snapshot.definition))) return { ok: false, missingPermissions: [] }
+  // Stored expense report rows reach only a reader with the same expense reach.
+  if (options.expenseReach !== false && snapshot.definition.report_type === 'query' && queryIncludesExpenseRows(snapshot.definition.query)) {
+    const contained: ReportArtifactExpenseRows = snapshot.expenseRows ?? { scope: 'all' }
+    const reach = expenseScope(authz, 'read')
+    const readable = contained.scope === 'none' || reach === 'all'
+      || (contained.scope === 'own' && reach === 'own' && contained.userId === authz.user.id)
+    if (!readable) return { ok: false, missingPermissions: ['expenses.read'] }
+  }
   // Render-time content permissions: a malformed record fails closed with no
   // names to give; an absent one predates recording (definition gate only).
   if (snapshot.requiredPermissions === undefined) return { ok: true, missingPermissions: [] }
@@ -150,7 +196,7 @@ function narrowToSnapshotScope(current: Authz, snapshot: ReportAuthorization): A
 export async function scheduledReportAuthz(orgId: string, snapshot: ReportAuthorization): Promise<Authz> {
   const user = await loadReportPrincipal(orgId, snapshot)
   const current = await resolveUserAuthz(user)
-  if (!can(current, 'reports.schedule') || !(await canAccessReportArtifact(current, snapshot))) {
+  if (!can(current, 'reports.schedule') || !(await reportArtifactAccessDetail(current, snapshot, { expenseReach: false })).ok) {
     throw new Error('Report execution permission was revoked')
   }
   return narrowToSnapshotScope(current, snapshot)
@@ -176,7 +222,7 @@ export async function closePackageReportAuthz(
   if (!can(current, sendPermission)) {
     throw new Error(`Close package sender no longer holds ${sendPermission} — re-send the package`)
   }
-  if (!(await canAccessReportArtifact(current, snapshot))) {
+  if (!(await reportArtifactAccessDetail(current, snapshot, { expenseReach: false })).ok) {
     throw new Error('Report execution permission was revoked')
   }
   return narrowToSnapshotScope(current, snapshot)

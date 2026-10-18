@@ -470,14 +470,14 @@
       "admin": "Full access to everything, including users, roles, navigation and company settings.",
       "controller": "Owns the books: ledger, payables, receivables, purchasing, approvals, period close, reporting and the audit log. Cannot manage users or roles.",
       "accountant": "Day-to-day bookkeeping: enters and posts journals, bills and invoices, pays and receives, builds reports and reviews bank and card reconciliations. Cannot approve, close periods, reconcile banks or manage users.",
-      "production": "Manages manufacturing masters and shop-floor work, and posts inventory movements. Cannot reverse inventory postings or see the ledger.",
-      "approver": "Reviews and decides approval requests, with read access to the ledger, subledgers and reports. Cannot enter, post or pay transactions.",
+      "production": "Manages manufacturing masters and shop-floor work, and posts inventory movements. Files their own expense reports. Cannot reverse inventory postings or see the ledger.",
+      "approver": "Reviews and decides approval requests, with read access to the ledger, subledgers and reports. Reads expense reports for review. Cannot enter, post or pay transactions.",
       "viewer": "Read-only access to the ledger, subledgers, reports and insights. Cannot create, change, post or pay transactions.",
-      "sales_manager": "Runs the sales team: accounts, activities, opportunities, quotas and forecasts, and drafts invoices and cash sales. Cannot post, collect payments or see the ledger.",
-      "sales_rep": "Works assigned accounts, activities, opportunities and personal forecasts, and drafts invoices and cash sales. Cannot post, collect payments or see the ledger.",
-      "buyer": "Raises purchase orders and receives goods against them, with read access to vendors, items and payables. Cannot post or pay bills, post inventory, or see banking or the ledger.",
-      "cashier": "Rings up, posts and refunds cash sales at the till and looks up gift card balances. Cannot see invoices, banking or the ledger.",
-      "project_coordinator": "Logs their own time, follows projects and drafts customer invoices for approval. Cannot see coworkers' time, post invoices, take or make payments, or see banking or the ledger."
+      "sales_manager": "Runs the sales team: accounts, activities, opportunities, quotas and forecasts, and drafts invoices and cash sales. Files their own expense reports. Cannot post, collect payments or see the ledger.",
+      "sales_rep": "Works assigned accounts, activities, opportunities and personal forecasts, and drafts invoices and cash sales. Files their own expense reports. Cannot post, collect payments or see the ledger.",
+      "buyer": "Raises purchase orders and receives goods against them, with read access to vendors, items and payables. Files their own expense reports. Cannot post or pay bills, post inventory, or see banking or the ledger.",
+      "cashier": "Rings up, posts and refunds cash sales at the till and looks up gift card balances. Files their own expense reports. Cannot see invoices, banking or the ledger.",
+      "project_coordinator": "Logs their own time, follows projects and drafts customer invoices for approval. Files their own expense reports. Cannot see coworkers' time, post invoices, take or make payments, or see banking or the ledger."
     }
   },
   "scripts": {

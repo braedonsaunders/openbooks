@@ -118,3 +118,58 @@ test('schedule snapshots record the entity permission for query definitions', ()
   })
   assert.equal(statement.requiredPermissions, undefined)
 })
+
+function documentsSnapshot(extra: Record<string, unknown> = {}) {
+  return {
+    version: 1,
+    userId: 'owner-1',
+    allowedSubsidiaryIds: null,
+    definition: { report_type: 'query' as const, query: { entity: 'documents' }, statement: null, name: 'Documents', slug: 'documents', kind: 'custom' },
+    ...extra,
+  }
+}
+
+const selfService = (id: string) => ({ ...reader(['reports.read', 'expenses.self']), user: { ...reader([]).user, id, homeUserId: id } })
+
+test('a stored report over expense-bearing rows records the expense reports it holds', () => {
+  const definition = documentsSnapshot().definition
+  assert.deepEqual(snapshotReportAuthorization(reader(['reports.read', 'expenses.read']), definition).expenseRows, { scope: 'all' })
+  assert.deepEqual(snapshotReportAuthorization(selfService('user-7'), definition).expenseRows, { scope: 'own', userId: 'user-7' })
+  assert.deepEqual(snapshotReportAuthorization(reportsOnly(), definition).expenseRows, { scope: 'none' })
+  // Entities without expense report rows record nothing.
+  assert.equal(snapshotReportAuthorization(reader(['reports.read', 'expenses.read']), { ...definition, query: { entity: 'accounts' } }).expenseRows, undefined)
+})
+
+test('stored expense report rows reach only readers with the same expense reach', async () => {
+  const everyReport = documentsSnapshot({ expenseRows: { scope: 'all' } })
+  assert.deepEqual(await reportArtifactAccessDetail(reportsOnly(), everyReport), { ok: false, missingPermissions: ['expenses.read'] })
+  assert.deepEqual(await reportArtifactAccessDetail(selfService('user-7'), everyReport), { ok: false, missingPermissions: ['expenses.read'] })
+  assert.deepEqual(await reportArtifactAccessDetail(reader(['reports.read', 'expenses.read']), everyReport), { ok: true, missingPermissions: [] })
+
+  const ownReports = documentsSnapshot({ expenseRows: { scope: 'own', userId: 'user-7' } })
+  assert.equal(await canAccessReportArtifact(selfService('user-7'), ownReports), true, 'the self-service author reads their own run')
+  assert.equal(await canAccessReportArtifact(selfService('user-8'), ownReports), false, "another employee's reports stay with them")
+  assert.equal(await canAccessReportArtifact(reportsOnly(), ownReports), false)
+  assert.equal(await canAccessReportArtifact(reader(['reports.read', 'expenses.read']), ownReports), true)
+
+  const noReports = documentsSnapshot({ expenseRows: { scope: 'none' } })
+  assert.equal(await canAccessReportArtifact(reportsOnly(), noReports), true, 'output that excluded expense reports stays open to report readers')
+})
+
+test('an expense-bearing artifact with no recorded reach is treated as holding every report', async () => {
+  assert.deepEqual(await reportArtifactAccessDetail(reportsOnly(), documentsSnapshot()), { ok: false, missingPermissions: ['expenses.read'] })
+  assert.equal(await canAccessReportArtifact(reader(['reports.read', 'expenses.read']), documentsSnapshot()), true)
+  // The principal behind a background render is re-authorized without it:
+  // that render's rows are clamped by the principal's current expense read.
+  assert.deepEqual(await reportArtifactAccessDetail(reportsOnly(), documentsSnapshot(), { expenseReach: false }), { ok: true, missingPermissions: [] })
+})
+
+test('a render whose expense reach exceeds its recorded authorization is not delivered', async () => {
+  const { expenseRowsWithin } = await import('./report-execution-context.ts')
+  assert.equal(expenseRowsWithin(undefined, { scope: 'none' }), true, 'content without expense rows')
+  assert.equal(expenseRowsWithin({ scope: 'none' }, { scope: 'own', userId: 'user-7' }), true)
+  assert.equal(expenseRowsWithin({ scope: 'own', userId: 'user-7' }, { scope: 'own', userId: 'user-7' }), true)
+  assert.equal(expenseRowsWithin({ scope: 'all' }, { scope: 'own', userId: 'user-7' }), false)
+  assert.equal(expenseRowsWithin({ scope: 'own', userId: 'user-7' }, { scope: 'none' }), false)
+  assert.equal(expenseRowsWithin({ scope: 'all' }, undefined), true, 'evidence that predates recording covers every report')
+})

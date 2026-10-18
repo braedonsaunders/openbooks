@@ -109,14 +109,23 @@ async function readStored(orgId: string): Promise<{ globalEnabled: boolean; ai: 
 /** The AI provider and model document capture reads with, before its key is unsealed. */
 function llmTarget(ai: StoredAi, captureModel: string): { provider: AiProvider; model: string; baseUrl: string | null } | null {
   if (!isAiProvider(ai.provider) || !ai.keyEncrypted) return null;
-  const provider = ai.provider;
-  const model = captureModel || ai.modelSmart?.trim() || defaultModel(provider, "smart");
+  return llmTargetFor(ai.provider, ai.modelSmart, ai.baseUrl, captureModel);
+}
+
+/** The reading target for one provider: a vision-capable provider, its endpoint and the model that reads. */
+function llmTargetFor(
+  provider: AiProvider,
+  modelSmart: string | undefined,
+  baseUrl: string | undefined,
+  captureModel: string,
+): { provider: AiProvider; model: string; baseUrl: string | null } | null {
+  const model = captureModel || modelSmart?.trim() || defaultModel(provider, "smart");
   if (!model) return null;
   const spec = providerSpec(provider);
   if (spec.vision.length === 0) return null;
-  const baseUrl = spec.kind === "openai-compatible" ? ai.baseUrl?.trim() || spec.baseUrl : null;
-  if (spec.kind === "openai-compatible" && !baseUrl) return null;
-  return { provider, model, baseUrl };
+  const endpoint = spec.kind === "openai-compatible" ? baseUrl?.trim() || spec.baseUrl : null;
+  if (spec.kind === "openai-compatible" && !endpoint) return null;
+  return { provider, model, baseUrl: endpoint };
 }
 
 /** Re-verify an organization-configured AI endpoint before its key travels there. */
@@ -157,15 +166,39 @@ export async function getDocumentCaptureTestConfig(
   return { endpoint, model, apiKey };
 }
 
-/** The AI model configuration an administrator is testing for document capture, or null without a usable provider. */
-export async function getLlmCaptureTestConfig(orgId: string, override: { model?: string }, lookup?: AddressLookup): Promise<LlmVisionConfig | null> {
+/**
+ * The AI model configuration an administrator is testing for document
+ * capture, or null without a usable provider. The form's provider, key, base
+ * URL and models apply as typed, before they are saved; a field left blank
+ * falls back to the stored setting only for the stored provider, so a key
+ * saved for one provider never travels to another. A typed base URL passes
+ * the same validation and public-address check as a saved one.
+ */
+export async function getLlmCaptureTestConfig(
+  orgId: string,
+  override: { provider?: string; apiKey?: string; baseUrl?: string; modelSmart?: string; model?: string },
+  lookup?: AddressLookup,
+): Promise<LlmVisionConfig | null> {
   const { ai, capture } = await readStored(orgId);
   const settings = normalizeStoredDocumentCapture(capture);
-  const target = llmTarget(ai, override.model?.trim() || (settings.provider === "llm_vision" ? settings.model : ""));
+  const provider = isAiProvider(override.provider) ? override.provider : isAiProvider(ai.provider) ? ai.provider : null;
+  if (!provider) return null;
+  const sameProvider = provider === ai.provider;
+  const typedKey = override.apiKey?.trim() ?? "";
+  const apiKey = typedKey
+    || (sameProvider && ai.keyEncrypted ? unsealSecret(ai.keyEncrypted, { orgId, purpose: "assistant.ai.key" }) ?? "" : "");
+  if (!apiKey) return null;
+  const typedBaseUrl = override.baseUrl === undefined ? undefined : override.baseUrl.trim();
+  const storedBaseUrl = sameProvider ? ai.baseUrl?.trim() || "" : "";
+  const target = llmTargetFor(
+    provider,
+    override.modelSmart?.trim() || (sameProvider ? ai.modelSmart : undefined),
+    typedBaseUrl ?? storedBaseUrl,
+    override.model?.trim() || (settings.provider === "llm_vision" && sameProvider ? settings.model : ""),
+  );
   if (!target) return null;
-  await verifyLlmEndpoint(target, isOrgControlledAiEndpoint(target.provider, ai.baseUrl), lookup);
-  const apiKey = unsealSecret(ai.keyEncrypted!, { orgId, purpose: "assistant.ai.key" });
-  return apiKey ? { ...target, apiKey } : null;
+  await verifyLlmEndpoint(target, isOrgControlledAiEndpoint(target.provider, typedBaseUrl ?? storedBaseUrl), lookup);
+  return { ...target, apiKey };
 }
 
 export async function getDocumentCaptureSettings(orgId: string): Promise<DocumentCaptureSettings> {

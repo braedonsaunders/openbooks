@@ -4,6 +4,7 @@ import { cmp } from '@openbooks/engine/money'
 import type { DashboardWidgetContext, WidgetValue } from './_metrics-context'
 import { vendorData } from '@/lib/analytics/vendor-data'
 import { spendVelocityData } from '@/lib/analytics/spend-velocity-data'
+import { reportExpenseAccess } from '@/lib/expense-access'
 import { concentrationBand, type ConcentrationBand } from '@/lib/analytics/vendor-concentration'
 import { englishCatalogMessage, type CatalogMessageFn } from '@/lib/analytics/catalog-strings'
 
@@ -136,7 +137,7 @@ export async function loadVendorWidgetMetrics(
   }
   if (wantsSpend) {
     // The dashboard's own loader: same scope, same window, same figures.
-    const data = await spendVelocityData(ctx.orgId, window, ctx.allowedSubsidiaryIds)
+    const data = await spendVelocityData(ctx.orgId, window, ctx.allowedSubsidiaryIds, undefined, { expenseAccess: await reportExpenseAccess(ctx.authz) })
     if (need('vendorPeriodLabel')) out.vendorPeriodLabel = data.period.label
     if (need('spendSavingsPotential')) {
       // An unknown savings figure refuses by name instead of reading $0.

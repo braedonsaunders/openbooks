@@ -142,7 +142,7 @@ test('every inventory lot movement join is pinned to the base organization', () 
     columns: ['lot_number'],
     filters: null,
     limit: 10,
-  }, '00000000-0000-4000-8000-000000000001')
+  }, '00000000-0000-4000-8000-000000000001', { expenseAccess: { scope: 'all' } })
   assert.match(compiled.text, /WHERE im\.org_id = \$1/)
   assert.deepEqual(compiled.values, ['00000000-0000-4000-8000-000000000001'])
 })

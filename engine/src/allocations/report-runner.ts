@@ -23,6 +23,7 @@ import { featureEnabled, type FeatureState } from "../organization/feature-regis
 import { add, normalizeDecimal } from "../money/money.ts";
 import { actorHasPermission } from "../organization/actor-permissions.ts";
 import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
+import { resolveExpenseAccess } from "../records/expense-access.ts";
 import { ensureReportDefinitions } from "../reports/ensure-report-definitions.ts";
 import { DriverAdminError } from "./driver-admin.ts";
 import {
@@ -122,6 +123,8 @@ export async function runDriverReport(input: ReportDriverRunInput): Promise<Repo
     asOf: input.to,
     allowedSubsidiaryIds: subsidiaryIds === null ? null : [...subsidiaryIds],
     allowedBookIds: await resolveBookScope(orgId, query),
+    // An allocation base measures only the expense reports the actor may read.
+    expenseAccess: (await resolveExpenseAccess(db, orgId, actorId, "read")) ?? { scope: "none" },
   });
   const { rows } = await pool.query(compiled.text, compiled.values);
   if (rows.length >= compiled.limit) {

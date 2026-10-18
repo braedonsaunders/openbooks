@@ -151,6 +151,7 @@ stubModules({
       export async function loadReportDefinition() { return { report_type: 'query', query: { entity: 'documents' } } }
       export async function canAccessReportDefinition() { return true }
       export async function canAccessReportArtifact() { return true }
+      export async function reportArtifactAccessDetail() { return { ok: true, missingPermissions: [] } }
       export function snapshotReportAuthorization() {
         return { version: 1, userId: '${USER_ID}', allowedSubsidiaryIds: null }
       }
@@ -162,6 +163,7 @@ stubModules({
       export async function loadReportDefinition() { return { report_type: 'query', query: { entity: 'documents' } } }
       export async function canAccessReportDefinition() { return true }
       export async function canAccessReportArtifact() { return true }
+      export async function reportArtifactAccessDetail() { return { ok: true, missingPermissions: [] } }
       export function snapshotReportAuthorization() {
         return { version: 1, userId: '${USER_ID}', allowedSubsidiaryIds: null }
       }
@@ -173,6 +175,7 @@ stubModules({
       export async function loadReportDefinition() { return { report_type: 'query', query: { entity: 'documents' } } }
       export async function canAccessReportDefinition() { return true }
       export async function canAccessReportArtifact() { return true }
+      export async function reportArtifactAccessDetail() { return { ok: true, missingPermissions: [] } }
       export function snapshotReportAuthorization() {
         return { version: 1, userId: '${USER_ID}', allowedSubsidiaryIds: null }
       }

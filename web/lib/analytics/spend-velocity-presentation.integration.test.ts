@@ -178,7 +178,7 @@ test('period comparison reports unknown change when the prior window has no hist
       await db.execute(sql`update documents set status='posted', posted_entry_id=${entryId}, posting_period_id=${org.periodId} where id=${docId}`)
     })
     await pinClock('2026-07-15', async () => {
-      const data = await spendVelocityData(org.orgId, P, null)
+      const data = await spendVelocityData(org.orgId, P, null, undefined, { expenseAccess: { scope: 'all' } })
       const row = data.periodComparison.accounts.find((a) => Number(a.currentAmount) > 0)
       assert.ok(row, 'expected one spend row in the current window')
       assert.equal(row.priorAmount, "0")
@@ -192,7 +192,7 @@ test('period comparison reports unknown change when the prior window has no hist
       assert.equal(trend.priorYearAmount, "0")
       assert.equal(trend.yoyChange, null)
       assert.equal(trend.velocity, null)
-      assert.equal(data.expenseAnalysis.summary.expenseReportTotal, "0")
+      assert.equal(data.expenseAnalysis?.summary.expenseReportTotal, "0")
     })
   } finally {
     await withBypass(() => dropScratchOrg(org.orgId))

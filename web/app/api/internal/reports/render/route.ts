@@ -1,4 +1,4 @@
-import { closePackageReportAuthz, scheduledReportAuthz, withReportAuthz, type ReportAuthorization } from '../../../../../lib/report-execution-context'
+import { closePackageReportAuthz, scheduledReportAuthz, withReportAuthz, expenseRowsWithin, type ReportAuthorization } from '../../../../../lib/report-execution-context'
 import { can } from '../../../../../lib/authz'
 import { NextResponse } from 'next/server'
 import { sql } from 'drizzle-orm'
@@ -121,6 +121,12 @@ export async function GET(req: Request) {
     const contentPermissions = data.requiredPermissions ?? []
     if (!contentPermissions.every((permission) => can(authz, permission))) {
       throw new Error('Report execution permission was revoked')
+    }
+    // Expense report rows the run's evidence does not cover (the principal
+    // gained org-wide expense read after authorizing the schedule) would let a
+    // download reach rows the recorded authorization never vouched for.
+    if (!expenseRowsWithin(data.expenseRows, authorization_snapshot.expenseRows)) {
+      throw new Error('Report expense access changed since the schedule was authorized; create a new schedule for this report to authorize its current expense access')
     }
     // The stamp is the single write-once transition the run evidence
     // trigger admits (0340): recording the content-derived key on a run

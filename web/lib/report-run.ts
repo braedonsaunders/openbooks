@@ -67,7 +67,7 @@ import {
 import { isReportUuidParam, resolveAgingCurrencyParams, type ReportQuery } from './report-filters'
 import { isFeatureEnabled } from './features'
 import { can } from './authz'
-import { requireReportAuthz, canAccessReportDefinition, type ReportAuthorization } from './report-execution-context'
+import { requireReportAuthz, canAccessReportDefinition, artifactExpenseRows, type ReportAuthorization, type ReportArtifactExpenseRows } from './report-execution-context'
 import { resolveSubsidiaryView } from './consolidation'
 import { resolvePeriod } from './periods'
 import { reportEntityPermission, statementKindPermission, STATEMENT_KIND_FEATURE } from './report-authz'
@@ -665,7 +665,7 @@ export async function resolveDefinitionToExportData(
   p: URLSearchParams,
   ctx: ResolveReportCtx,
   options: { extraFilters?: ReportRuleGroup | null } = {},
-): Promise<ExportData & { requiredPermissions: string[] }> {
+): Promise<ExportData & { requiredPermissions: string[]; expenseRows?: ReportArtifactExpenseRows }> {
   const { row, authz } = await loadAuthorizedDefinition(orgId, id)
 
   if (row.report_type === 'statement') {
@@ -697,10 +697,11 @@ export async function resolveDefinitionToExportData(
   // they never inherit the interactive page or the engine's legacy 10k cap.
   const result = await executeReportAllPages(orgId, query)
   const entityPermission = reportEntityPermission(query)
+  const expenseRows = artifactExpenseRows(authz, query)
   return { ...runResultToExportData(result, {
     title,
     dateRangeLabel,
-  }), requiredPermissions: entityPermission ? [entityPermission] : [] }
+  }), requiredPermissions: entityPermission ? [entityPermission] : [], ...(expenseRows ? { expenseRows } : {}) }
 }
 
 /**

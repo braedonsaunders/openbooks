@@ -167,6 +167,7 @@ const mockSources = new Map<string, string>([
       export const PDF_RECORD_TYPE_BY_KEY = {
         pay_stub: { key: 'pay_stub', docKind: null, docTitle: 'Pay Stub' },
       }
+      export function hasForeignLines() { return false }
     `,
   ],
   [

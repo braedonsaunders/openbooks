@@ -8,7 +8,7 @@
 // no query can escape its org. Output is a single SELECT ready for the read-only
 // executor.
 
-import { REPORT_AGG_FNS, REPORT_ENTITY_MAP, SqlParams, averageSql, buildDenominationCensus, compileCustomQuery, compileSubsidiaryScope, compileBookScope, customQueryReferencesBook, bindReportFromAsOf, compileRuleGroup, isBaseMoneyMeasure, isMoneyBlendingMeasure, isTxnCurrencyMeasure, reportBaseCurrencyPin, reportBookPin, reportTxnCurrencyPin, resolvePreset, type ReportBreakout, type ReportCustomQuery, type ReportEntity, type ReportMeasure, type ReportRule, type ReportRuleGroup } from '@openbooks/reports'
+import { REPORT_AGG_FNS, REPORT_ENTITY_MAP, SqlParams, averageSql, buildDenominationCensus, compileCustomQuery, compileSubsidiaryScope, compileBookScope, compileExpenseRowScope, customQueryReferencesBook, bindReportFromAsOf, compileRuleGroup, isBaseMoneyMeasure, isMoneyBlendingMeasure, isTxnCurrencyMeasure, reportBaseCurrencyPin, reportBookPin, reportTxnCurrencyPin, resolvePreset, type ReportBreakout, type ReportCustomQuery, type ReportEntity, type ReportExpenseAccess, type ReportMeasure, type ReportRule, type ReportRuleGroup } from '@openbooks/reports'
 import { sourceFromEntity } from './catalog'
 import { buildSource, sourceField, type AnalyticsField, type AnalyticsSource } from './semantic'
 import type {
@@ -383,6 +383,7 @@ function compileReportMeasures(
   allowedSubsidiaryIds: readonly string[] | null,
   allowedBookIds: readonly string[] | null | undefined,
   fiscalStartMonth: number,
+  expenseAccess: ReportExpenseAccess | undefined,
 ): CompiledQuery {
   const source = buildSource(sourceFromEntity(entity))
   const dimensions = query.dimensions ?? []
@@ -419,6 +420,7 @@ function compileReportMeasures(
     allowedBookIds,
     asOf,
     fiscalStartMonth,
+    expenseAccess,
   })
   const innerLimit = `LIMIT ${compiled.limit}`
   if (!compiled.text.endsWith(innerLimit)) throw new Error('report compiler is missing its aggregate row limit')
@@ -573,12 +575,14 @@ export function compileInsightQuery(
    *  limit. Defaults to the authored catalog (full detail). */
   entityMap: Record<string, ReportEntity> = REPORT_ENTITY_MAP,
   fiscalStartMonth = 1,
+  /** The reader's expense authority; required for sources whose rows include expense reports. */
+  expenseAccess?: ReportExpenseAccess,
 ): CompiledQuery {
   const entity = entityMap[query.source]
   if (!entity || entity.key !== query.source)
     throw new InsightCompileError('unknown_source', `unknown source "${query.source}"`, query.source)
   if (hasReportMeasureShape(query)) {
-    return compileReportMeasures(query, entity, orgId, labels, asOf, allowedSubsidiaryIds, allowedBookIds, fiscalStartMonth)
+    return compileReportMeasures(query, entity, orgId, labels, asOf, allowedSubsidiaryIds, allowedBookIds, fiscalStartMonth, expenseAccess)
   }
   const source = buildSource(sourceFromEntity(entity))
   const fieldLabel = (f: AnalyticsField) => labels.field?.(source.key, f) ?? f.label
@@ -589,6 +593,8 @@ export function compileInsightQuery(
   if (subsidiary) wheres.push(subsidiary)
   const book = compileBookScope(entity, allowedBookIds, (value) => bind(ctx, value))
   if (book) wheres.push(book)
+  const expense = compileExpenseRowScope(entity, expenseAccess, (value) => bind(ctx, value))
+  if (expense) wheres.push(expense)
   const base = compileBaseFilter(ctx)
   if (base) wheres.push(base)
   for (const f of query.filters ?? []) wheres.push(compileFilter(ctx, f))
