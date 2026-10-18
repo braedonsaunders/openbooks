@@ -52,7 +52,7 @@
       "statementBatchesTitle": "Envíos de extractos",
       "statementBatchesDescription": "Envíe extractos a todos los clientes con saldo y siga cada envío hasta su entrega.",
       "intercompanyReconciliationTitle": "Conciliación intercompañía",
-      "intercompanyReconciliationDescription": "Los saldos de cada par intercompañía por moneda en los libros de ambas entidades y la diferencia pendiente de conciliar.",
+      "intercompanyReconciliationDescription": "Saldos de cada par intercompañía por moneda en ambos libros y la diferencia pendiente.",
       "bookDifferencesTitle": "Diferencias entre libros",
       "bookDifferencesDescription": "Cada cuenta del libro principal junto a un libro secundario, con la diferencia",
       "statisticalJournalTitle": "Asiento estadístico",
@@ -1186,11 +1186,11 @@
       },
       "prepaid_amortization_plan": {
         "label": "Plan de amortización de gastos anticipados",
-        "description": "Cada período previsto y amortizado de los calendarios, por mes, cuenta y calendario."
+        "description": "Períodos previstos y amortizados de gastos anticipados, por mes, cuenta y calendario."
       },
       "prepaid_amortization_reconciliation": {
         "label": "Conciliación de gastos anticipados",
-        "description": "Movimientos de las cuentas de diferimiento en el libro mayor junto a los calendarios que los explican; sumados hasta una fecha, la diferencia es cero cuando coinciden."
+        "description": "Movimientos de las cuentas de diferimiento en el libro mayor junto a sus calendarios, con la diferencia a una fecha."
       },
       "fixed_asset_register": {
         "label": "Registro de activos fijos por libro",
@@ -3508,18 +3508,18 @@
     },
     "prepaid-expense-waterfall": {
       "name": "Cascada de gastos anticipados",
-      "description": "Gastos anticipados y diferidos amortizados y previstos por mes, cuenta de diferimiento y moneda."
+      "description": "Gastos anticipados amortizados y previstos por mes, cuenta de diferimiento y moneda."
     },
     "prepaid-expense-reconciliation": {
       "name": "Conciliación de gastos anticipados",
-      "description": "Saldos de las cuentas de diferimiento en el libro mayor frente al saldo pendiente de sus calendarios, por cuenta, subsidiaria, libro y moneda."
+      "description": "Saldos de diferimiento del libro mayor frente al saldo pendiente de los calendarios, por cuenta y libro."
     },
     "register-z-report-history": {
       "name": "Historial de informes Z de caja",
       "description": "Turnos de caja cerrados con ventas, reembolsos, efectivo esperado y contado, y sobrante o faltante."
     },
     "register-sales-by-register-and-cashier": {
-      "name": "Ventas de caja por caja y cajero",
+      "name": "Ventas por caja y cajero",
       "description": "Ventas, reembolsos y ventas netas de caja contabilizados, por caja y cajero."
     }
   },

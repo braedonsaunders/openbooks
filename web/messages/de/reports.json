@@ -52,7 +52,7 @@
       "statementBatchesTitle": "Sammelversand",
       "statementBatchesDescription": "Kontoauszüge an alle Kunden mit Saldo senden und jeden Versand nachverfolgen.",
       "intercompanyReconciliationTitle": "Konzernabstimmung",
-      "intercompanyReconciliationDescription": "Die Salden jedes konzerninternen Paars nach Währung in den Hauptbüchern beider Gesellschaften und die noch abzustimmende Differenz.",
+      "intercompanyReconciliationDescription": "Salden jedes konzerninternen Paars nach Währung in beiden Hauptbüchern und die offene Differenz.",
       "bookDifferencesTitle": "Buchdifferenzen",
       "bookDifferencesDescription": "Jedes Konto im Hauptbuch neben einem Nebenbuch, mit der Differenz",
       "statisticalJournalTitle": "Statistisches Journal",
@@ -1186,11 +1186,11 @@
       },
       "prepaid_amortization_plan": {
         "label": "Auflösungsplan der Rechnungsabgrenzung",
-        "description": "Jede geplante und aufgelöste Periode der Abgrenzungspläne je Monat, Konto und Plan."
+        "description": "Geplante und aufgelöste Abgrenzungsperioden je Monat, Konto und Plan."
       },
       "prepaid_amortization_reconciliation": {
         "label": "Abstimmung der aktiven Rechnungsabgrenzung",
-        "description": "Bewegungen der Abgrenzungskonten im Hauptbuch neben den Plänen, die sie erklären; bis zu einem Datum summiert ist die Differenz null, wenn beide übereinstimmen."
+        "description": "Bewegungen der Abgrenzungskonten im Hauptbuch neben ihren Plänen, mit der Differenz zu einem Datum."
       },
       "fixed_asset_register": {
         "label": "Anlagenregister je Buch",
@@ -3532,14 +3532,14 @@
     },
     "prepaid-expense-reconciliation": {
       "name": "Abstimmung der aktiven Rechnungsabgrenzung",
-      "description": "Salden der Abgrenzungskonten im Hauptbuch gegenüber dem nicht aufgelösten Saldo ihrer Pläne, je Konto, Tochtergesellschaft, Buch und Währung."
+      "description": "Abgrenzungssalden im Hauptbuch gegenüber dem nicht aufgelösten Saldo der Pläne, je Konto und Buch."
     },
     "register-z-report-history": {
       "name": "Verlauf der Z-Berichte",
       "description": "Abgeschlossene Kassenschichten mit Verkäufen, Erstattungen, erwartetem und gezähltem Bargeld sowie Kassendifferenz."
     },
     "register-sales-by-register-and-cashier": {
-      "name": "Kassenumsätze nach Kasse und Kassierer",
+      "name": "Umsätze nach Kasse und Kassierer",
       "description": "Gebuchte Kassenverkäufe, Erstattungen und Nettoumsatz nach Kasse und Kassierer."
     }
   },

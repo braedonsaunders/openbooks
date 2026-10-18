@@ -24,7 +24,7 @@ export const AMORTIZATION_REPORT_ENTITIES: ReportEntity[] = [
     ...shared,
     key: 'prepaid_amortization_plan',
     label: 'Prepaid expense amortization plan',
-    description: 'Every scheduled and amortized period of prepaid and deferred expense schedules, by month, account and schedule.',
+    description: 'Scheduled and amortized prepaid expense periods by month, account and schedule.',
     from: `expense_amortization_schedule_lines l
       join expense_amortization_schedules s on s.org_id = l.org_id and s.id = l.schedule_id
       join accounts deferral on deferral.org_id = s.org_id and deferral.id = s.deferral_account_id
@@ -59,7 +59,7 @@ export const AMORTIZATION_REPORT_ENTITIES: ReportEntity[] = [
     ...shared,
     key: 'prepaid_amortization_reconciliation',
     label: 'Prepaid expense reconciliation',
-    description: 'Deferral account movements in the general ledger beside the schedules that account for them, by book, subsidiary, currency and account; summed through a date, the difference is zero when the ledger and the schedules agree.',
+    description: 'Deferral account ledger movements beside their schedules, with the difference to a date.',
     from: `(
         select e.org_id, s.book_id, s.subsidiary_id, s.currency, s.deferral_account_id as account_id,
                e.effective_on as moved_on, 'schedule'::text as source, 0::numeric as ledger_amount,

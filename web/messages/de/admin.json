@@ -4462,6 +4462,7 @@
       "ratePer100": "Satz / 100",
       "lodgingOffset": "Unterkunftsabzug",
       "payComponentId": "Lohnkomponente",
+      "workerCompGroupId": "Unfallversicherungsgruppe",
       "scheduleId": "Tafel",
       "ratioJourney": "Geselle",
       "ratioApprentice": "Azubi",

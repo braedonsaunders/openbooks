@@ -4462,6 +4462,7 @@
       "ratePer100": "率 / 100",
       "lodgingOffset": "宿泊控除",
       "payComponentId": "給与コンポーネント",
+      "workerCompGroupId": "労災保険グループ",
       "scheduleId": "賃金表",
       "ratioJourney": "熟練",
       "ratioApprentice": "見習い",

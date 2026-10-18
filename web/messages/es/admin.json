@@ -4300,6 +4300,7 @@
       "ratePer100": "Tasa / 100",
       "lodgingOffset": "Descuento alojamiento",
       "payComponentId": "Componente salarial",
+      "workerCompGroupId": "Grupo de compensación laboral",
       "scheduleId": "Tabla",
       "ratioJourney": "Oficial",
       "ratioApprentice": "Aprendiz",

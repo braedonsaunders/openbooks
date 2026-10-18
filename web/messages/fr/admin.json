@@ -4300,6 +4300,7 @@
       "ratePer100": "Taux / 100",
       "lodgingOffset": "Déduction logement",
       "payComponentId": "Composante de paie",
+      "workerCompGroupId": "Groupe accidents du travail",
       "scheduleId": "Grille",
       "ratioJourney": "Compagnon",
       "ratioApprentice": "Apprenti",

@@ -4375,6 +4375,7 @@
       "ratePer100": "Rate / 100",
       "lodgingOffset": "Lodging offset",
       "payComponentId": "Pay component",
+      "workerCompGroupId": "Worker comp group",
       "scheduleId": "Schedule",
       "ratioJourney": "Journey",
       "ratioApprentice": "Apprentice",

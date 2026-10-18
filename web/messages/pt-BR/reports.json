@@ -1186,11 +1186,11 @@
       },
       "prepaid_amortization_plan": {
         "label": "Plano de apropriação de despesas antecipadas",
-        "description": "Cada período previsto e apropriado dos cronogramas, por mês, conta e cronograma."
+        "description": "Períodos previstos e apropriados de despesas antecipadas, por mês, conta e cronograma."
       },
       "prepaid_amortization_reconciliation": {
         "label": "Conciliação de despesas antecipadas",
-        "description": "Movimentos das contas de diferimento no razão geral ao lado dos cronogramas que os explicam; somados até uma data, a diferença é zero quando conferem."
+        "description": "Movimentos das contas de diferimento no razão geral ao lado de seus cronogramas, com a diferença em uma data."
       },
       "fixed_asset_register": {
         "label": "Registro de ativos imobilizados por livro",
@@ -3528,18 +3528,18 @@
     },
     "prepaid-expense-waterfall": {
       "name": "Cascata de despesas antecipadas",
-      "description": "Despesas antecipadas e diferidas apropriadas e previstas por mês, conta de diferimento e moeda."
+      "description": "Despesas antecipadas apropriadas e previstas por mês, conta de diferimento e moeda."
     },
     "prepaid-expense-reconciliation": {
       "name": "Conciliação de despesas antecipadas",
-      "description": "Saldos das contas de diferimento no razão geral frente ao saldo a apropriar dos cronogramas, por conta, subsidiária, livro e moeda."
+      "description": "Saldos de diferimento no razão frente ao saldo a apropriar dos cronogramas, por conta e livro."
     },
     "register-z-report-history": {
       "name": "Histórico de relatórios Z do caixa",
       "description": "Turnos de caixa fechados com vendas, reembolsos, dinheiro esperado e contado, e sobra ou falta."
     },
     "register-sales-by-register-and-cashier": {
-      "name": "Vendas de caixa por caixa e operador",
+      "name": "Vendas por caixa e operador",
       "description": "Vendas, reembolsos e vendas líquidas de caixa lançados, por caixa e por operador."
     }
   },

@@ -4375,6 +4375,7 @@
       "ratePer100": "Taxa / 100",
       "lodgingOffset": "Desconto hospedagem",
       "payComponentId": "Componente salarial",
+      "workerCompGroupId": "Grupo de seguro acidentário",
       "scheduleId": "Tabela",
       "ratioJourney": "Oficial",
       "ratioApprentice": "Aprendiz",

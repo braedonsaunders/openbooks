@@ -1186,11 +1186,11 @@
       },
       "prepaid_amortization_plan": {
         "label": "前払費用の配分計画",
-        "description": "配分スケジュールの予定期間と配分済み期間を月・勘定・スケジュール別に一覧します。"
+        "description": "前払費用の予定期間と配分済み期間を月・勘定・スケジュール別に一覧します。"
       },
       "prepaid_amortization_reconciliation": {
         "label": "前払費用の照合",
-        "description": "総勘定元帳の繰延勘定の動きと、それを説明するスケジュールを並べます。日付までの合計が一致すれば差額はゼロです。"
+        "description": "総勘定元帳の繰延勘定の動きをスケジュールと並べ、日付時点の差額を示します。"
       },
       "fixed_asset_register": {
         "label": "帳簿別固定資産台帳",
@@ -3528,18 +3528,18 @@
     },
     "prepaid-expense-waterfall": {
       "name": "前払費用ウォーターフォール",
-      "description": "月・繰延勘定・通貨別の配分済みおよび予定の前払・繰延費用。"
+      "description": "月・繰延勘定・通貨別の配分済みおよび予定の前払費用。"
     },
     "prepaid-expense-reconciliation": {
       "name": "前払費用の照合",
-      "description": "総勘定元帳の繰延勘定残高とスケジュールの未配分残高を、勘定・子会社・帳簿・通貨別に比較します。"
+      "description": "総勘定元帳の繰延残高とスケジュールの未配分残高を勘定・帳簿別に比較します。"
     },
     "register-z-report-history": {
       "name": "レジ Z レポート履歴",
       "description": "締め済みのレジシフトの販売、返金、予定現金、実際の現金、過不足。"
     },
     "register-sales-by-register-and-cashier": {
-      "name": "レジ別・担当者別のレジ売上",
+      "name": "レジ別・担当者別の売上",
       "description": "転記済みのレジ販売、返金、純売上をレジ別・レジ担当者別に表示します。"
     }
   },

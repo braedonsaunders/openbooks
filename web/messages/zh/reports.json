@@ -1186,11 +1186,11 @@
       },
       "prepaid_amortization_plan": {
         "label": "预付费用摊销计划",
-        "description": "按月份、科目和摊销计划列示每个计划及已摊销期间。"
+        "description": "按月份、科目和摊销计划列示预付费用的计划及已摊销期间。"
       },
       "prepaid_amortization_reconciliation": {
         "label": "预付费用对账",
-        "description": "将总账中递延科目的变动与解释这些变动的摊销计划并列；累计至某日时二者一致则差额为零。"
+        "description": "将总账中递延科目的变动与其摊销计划并列，并列示截至某日的差额。"
       },
       "fixed_asset_register": {
         "label": "按账簿列示的固定资产登记簿",
@@ -3528,18 +3528,18 @@
     },
     "prepaid-expense-waterfall": {
       "name": "预付费用瀑布表",
-      "description": "按月份、递延科目和币种列示的已摊销及计划摊销的预付和递延费用。"
+      "description": "按月份、递延科目和币种列示的已摊销及计划摊销的预付费用。"
     },
     "prepaid-expense-reconciliation": {
       "name": "预付费用对账",
-      "description": "按科目、子公司、账簿和币种比较总账中递延科目余额与其摊销计划的未摊销余额。"
+      "description": "按科目和账簿比较总账递延余额与摊销计划的未摊销余额。"
     },
     "register-z-report-history": {
       "name": "收银 Z 报表历史",
       "description": "已关班收银班次的销售、退款、预期现金、清点现金和长短款。"
     },
     "register-sales-by-register-and-cashier": {
-      "name": "按收银台和收银员的收银销售",
+      "name": "按收银台和收银员的销售",
       "description": "按收银台和收银员列示已过账的收银销售、退款和净销售额。"
     }
   },

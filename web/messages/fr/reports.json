@@ -52,7 +52,7 @@
       "statementBatchesTitle": "Envois de relevés",
       "statementBatchesDescription": "Envoyez les relevés à tous les clients avec un solde, puis suivez chaque envoi jusqu’à sa livraison.",
       "intercompanyReconciliationTitle": "Rapprochement intercompagnies",
-      "intercompanyReconciliationDescription": "Soldes de chaque paire intercompagnies par devise dans les livres des deux entités et écart restant à rapprocher.",
+      "intercompanyReconciliationDescription": "Soldes de chaque paire intercompagnies par devise dans les deux livres et écart restant.",
       "bookDifferencesTitle": "Écarts entre livres",
       "bookDifferencesDescription": "Chaque compte du livre principal à côté d’un livre secondaire, avec l’écart",
       "statisticalJournalTitle": "Journal statistique",
@@ -1186,11 +1186,11 @@
       },
       "prepaid_amortization_plan": {
         "label": "Plan d’étalement des charges constatées d’avance",
-        "description": "Chaque période prévue et étalée des échéanciers, par mois, compte et échéancier."
+        "description": "Périodes prévues et étalées des charges constatées d’avance, par mois, compte et échéancier."
       },
       "prepaid_amortization_reconciliation": {
         "label": "Rapprochement des charges constatées d’avance",
-        "description": "Mouvements des comptes de régularisation au grand livre à côté des échéanciers qui les expliquent ; cumulés à une date, l’écart est nul lorsqu’ils concordent."
+        "description": "Mouvements des comptes de régularisation au grand livre à côté de leurs échéanciers, avec l’écart à une date."
       },
       "fixed_asset_register": {
         "label": "Registre des immobilisations par livre",
@@ -3512,14 +3512,14 @@
     },
     "prepaid-expense-reconciliation": {
       "name": "Rapprochement des charges constatées d’avance",
-      "description": "Soldes des comptes de régularisation au grand livre face au restant à étaler de leurs échéanciers, par compte, filiale, livre et devise."
+      "description": "Soldes des comptes de régularisation face au restant à étaler des échéanciers, par compte et livre."
     },
     "register-z-report-history": {
       "name": "Historique des rapports Z de caisse",
       "description": "Services de caisse clôturés avec ventes, remboursements, espèces attendues et comptées, et excédent ou manque."
     },
     "register-sales-by-register-and-cashier": {
-      "name": "Ventes en caisse par caisse et caissier",
+      "name": "Ventes par caisse et caissier",
       "description": "Ventes, remboursements et ventes nettes en caisse comptabilisés, par caisse et par caissier."
     }
   },

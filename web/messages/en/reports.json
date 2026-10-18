@@ -52,7 +52,7 @@
       "statementBatchesTitle": "Statement batches",
       "statementBatchesDescription": "Send statements to every customer with a balance, then follow each batch to delivered.",
       "intercompanyReconciliationTitle": "Intercompany reconciliation",
-      "intercompanyReconciliationDescription": "Each intercompany pair's balances by currency in both entities' ledgers and the difference left to reconcile.",
+      "intercompanyReconciliationDescription": "Intercompany pair balances in both entities' ledgers by currency and the open difference.",
       "bookDifferencesTitle": "Book Differences",
       "bookDifferencesDescription": "Each account in the primary book beside a secondary book, with the difference",
       "statisticalJournalTitle": "Statistical Journal",
@@ -1186,11 +1186,11 @@
       },
       "prepaid_amortization_plan": {
         "label": "Prepaid expense amortization plan",
-        "description": "Every scheduled and amortized period of prepaid and deferred expense schedules, by month, account and schedule."
+        "description": "Scheduled and amortized prepaid expense periods by month, account and schedule."
       },
       "prepaid_amortization_reconciliation": {
         "label": "Prepaid expense reconciliation",
-        "description": "Deferral account movements in the general ledger beside the schedules that account for them; summed through a date, the difference is zero when they agree."
+        "description": "Deferral account ledger movements beside their schedules, with the difference to a date."
       },
       "fixed_asset_register": {
         "label": "Fixed asset register by book",
@@ -3528,18 +3528,18 @@
     },
     "prepaid-expense-waterfall": {
       "name": "Prepaid expense waterfall",
-      "description": "Amortized and scheduled prepaid and deferred expense by month, deferral account and currency."
+      "description": "Amortized and scheduled prepaid expense by month, deferral account and currency."
     },
     "prepaid-expense-reconciliation": {
       "name": "Prepaid expense reconciliation",
-      "description": "Deferral account balances in the general ledger against the unamortized balance of their schedules, by account, subsidiary, book and currency."
+      "description": "Deferral ledger balances against unamortized schedule balances, by account and book."
     },
     "register-z-report-history": {
       "name": "Register Z report history",
       "description": "Closed register sessions with sales, refunds, expected and counted cash and over/short."
     },
     "register-sales-by-register-and-cashier": {
-      "name": "Register sales by register and cashier",
+      "name": "Sales by register and cashier",
       "description": "Posted register sales, refunds and net sales by register and cashier."
     }
   },
