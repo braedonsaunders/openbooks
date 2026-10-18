@@ -33,7 +33,9 @@
  *          `type="date"` (or a `type={…}` expression naming 'date'), a DOM
  *          `.type = 'date'` or `setAttribute('type', 'date')`, or a local
  *          input helper handed 'date' for the `type={type}` it renders.
- *          Date entry
+ *          The embedded scheduling surface renders native date inputs unless
+ *          its host supplies one, so a `<SchedulingProvider>` without a
+ *          `components` prop counts as one too. Date entry
  *          renders DateField (web/components/date-field.tsx), which reads
  *          dates typed in the viewer's format, carries the date keys and
  *          the calendar, and submits ISO values in forms.
@@ -249,6 +251,18 @@ const NATIVE_DATE_PATTERNS = [
   /setAttribute\(\s*["'`]type["'`]\s*,\s*["'`]date["'`]\s*\)/g,
 ];
 
+/** A JSX opening tag from its `<` to the `>` that closes it outside any `{…}` expression. */
+function openingTag(code, start) {
+  let depth = 0;
+  for (let i = start; i < code.length; i++) {
+    const ch = code[i];
+    if (ch === "{") depth++;
+    else if (ch === "}") depth--;
+    else if (ch === ">" && depth === 0) return code.slice(start, i + 1);
+  }
+  return code.slice(start);
+}
+
 /**
  * Native date inputs in one file. Reads comment-blanked source (the value
  * is a string literal), so prose about `<input type="date">` never counts.
@@ -261,6 +275,15 @@ export function scanNativeDateInputs(path, text) {
     let match;
     while ((match = pattern.exec(code))) {
       violations.push({ rule: "native-date-input", path, line: lineOf(code, match.index + (match[0].length - match[0].trimStart().length)) });
+    }
+  }
+  // The scheduling surface's dates fall back to the native input unless the
+  // provider hands it DateField through `components`.
+  const provider = /<SchedulingProvider(?=[\s/>])/g;
+  let providerMatch;
+  while ((providerMatch = provider.exec(code))) {
+    if (!/\scomponents\s*=/.test(openingTag(code, providerMatch.index))) {
+      violations.push({ rule: "native-date-input", path, line: lineOf(code, providerMatch.index) });
     }
   }
   // A local field helper (`field(name, label, type = "text")`) that renders

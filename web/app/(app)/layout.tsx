@@ -21,7 +21,6 @@ import { orgFeatureState, featureEnabled } from '../../lib/features'
 import { isFeedbackReady } from '../../lib/feedback/config'
 import { businessToday } from '@openbooks/engine/platform/business-date/module'
 import { BusinessDateProvider } from '../../components/business-date-provider'
-import { DateEntryKeyboard } from '../../components/date-entry-keyboard'
 import { MoneyProvider } from '../../components/money-provider'
 import { OnboardingWizard } from '../../components/onboarding-wizard'
 
@@ -85,10 +84,6 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <MoneyProvider currency={org.base_currency}>
       <BusinessDateProvider today={today}>
-      {/* Product date entry is DateField; this gives the native date inputs
-        that embedded third-party surfaces render (the scheduling task editor
-        and filters) the same keys and forgiving paste. */}
-      <DateEntryKeyboard />
       <ThemeProvider>
         <NavigationProvider>
           <ViewTabsProvider groups={localNavigation.groups} preferences={localNavigation.preferences} ownership={localNavigation.ownership} managed>

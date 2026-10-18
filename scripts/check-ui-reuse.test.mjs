@@ -158,11 +158,21 @@ test('native date inputs fire in every spelling and name their line', () => {
     ['native-date-input:2'],
     'a local helper handed the date type renders a native date input',
   )
+  assert.deepEqual(
+    sites('export const A = () => (\n  <SchedulingProvider labels={labels} locale={locale}>\n    <ScheduleWorkspace data={data} />\n  </SchedulingProvider>\n)'),
+    ['native-date-input:2'],
+    'a scheduling surface left on its native date inputs',
+  )
 })
 
 test('the shared date field, date-typed data and prose stay clean', () => {
   const sites = (text) => scanNativeDateInputs('web/components/a.tsx', text)
   assert.deepEqual(sites('import { DateField } from "./date-field"\nexport const A = () => <DateField value={v} onChange={set} />'), [])
+  assert.deepEqual(
+    sites('const components = { DateInput: DateField }\nexport const A = () => <SchedulingProvider labels={{ a: { b: 1 } }} components={components}><ScheduleWorkspace /></SchedulingProvider>'),
+    [],
+    'a scheduling surface handed DateField',
+  )
   assert.deepEqual(sites("const column = { key: 'workFrom', type: 'date', width: '130px' }"), [], 'a grid column type is data, not an input')
   assert.deepEqual(sites('// replaces a bare <input type="date"> with the shared field\nexport const A = 1'), [])
   assert.deepEqual(sites('export const A = () => <input type="datetime-local" /><Input type="time" />'), [], 'date-time and time inputs are out of scope')

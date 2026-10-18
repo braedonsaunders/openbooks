@@ -6,7 +6,6 @@ import {
   dateEntryCommand,
   dateOrderForLocale,
   entryDatePattern,
-  expandTypedShortYear,
   firstDayOfWeekForLocale,
   formatEntryDate,
   isCompleteTypedDate,
@@ -244,12 +243,4 @@ test('calendar months show six whole weeks from the configured first weekday', (
   assert.equal(calendarWeeks('0001-01-01', 7).length, 5, 'weeks before the supported calendar are omitted')
   assert.equal(shiftMonths('2026-01-31', 1), '2026-02-28')
   assert.equal(shiftMonths('9999-12-15', 1), null)
-})
-
-test('a typed short year expands to the nearest century, other years are left alone', () => {
-  assert.equal(expandTypedShortYear('0026-03-15', '2026-10-17'), '2026-03-15')
-  assert.equal(expandTypedShortYear('0090-03-15', '2026-10-17'), '1990-03-15')
-  assert.equal(expandTypedShortYear('0024-02-29', '2026-10-17'), '2024-02-29')
-  assert.equal(expandTypedShortYear('2026-03-15', '2026-10-17'), null)
-  assert.equal(expandTypedShortYear('0202-03-15', '2026-10-17'), null)
 })

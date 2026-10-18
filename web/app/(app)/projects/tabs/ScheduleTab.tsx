@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import Link from 'next/link'
 import { Button, Select } from '@openbooks/ui'
+import { DateField } from '@/components/date-field'
 import { SchedulingAlert } from '@/components/scheduling/SchedulingAlert'
 import { promptDialog } from '@/lib/prompt'
 import { readApiErrorMessage } from '@/lib/api-error'
@@ -15,7 +16,15 @@ import {
   ScheduleWorkspace,
   SchedulingProvider,
   type ScheduleAdapter,
+  type SchedulingComponents,
 } from '@braedonsaunders/appkit-scheduling/react'
+
+/**
+ * Every date the plan edits (task dates in the editor, the filter window)
+ * renders as the product's DateField, so it takes typed entry in the
+ * viewer's format, the date keys and the calendar like every other screen.
+ */
+const schedulingComponents: SchedulingComponents = { DateInput: DateField }
 
 /**
  * The project Schedule tab.
@@ -246,7 +255,11 @@ export function ScheduleTab({
         <SchedulingAlert message={t('schedule.readOnly')} tone="info" />
       ) : null}
       {!boardCode ? (
-        <SchedulingProvider labels={labels} locale={locale}>
+        <SchedulingProvider
+          labels={labels}
+          locale={locale}
+          components={schedulingComponents}
+        >
           <ScheduleWorkspace
             data={data}
             adapter={adapter}

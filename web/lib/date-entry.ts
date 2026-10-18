@@ -242,19 +242,6 @@ function expandShortYear(year: number, businessYear: number): number {
   return expanded
 }
 
-/**
- * A date whose year was typed with one or two digits, moved to the century
- * nearest the business year (`0026-03-15` becomes `2026-03-15`). Returns null
- * when the year already has four significant digits or the date does not
- * exist in the expanded year (`0000`, or February 29 in a common year).
- */
-export function expandTypedShortYear(iso: string, today: string): string | null {
-  if (!/^\d{4}-\d{2}-\d{2}$/.test(iso)) return null
-  const year = Number(iso.slice(0, 4))
-  if (year >= 100) return null
-  return validDate(expandShortYear(year, yearOf(today)), Number(iso.slice(5, 7)), Number(iso.slice(8, 10)))
-}
-
 function validDate(year: number, month: number, day: number): string | null {
   if (!Number.isSafeInteger(year) || year < 1 || year > 9999) return null
   if (!Number.isSafeInteger(month) || month < 1 || month > 12) return null
