@@ -78,6 +78,12 @@ export const SAMPLE_COMPANY_PROFILES = [
     companyName: "Northshore Family Health",
     focus: ["clinical services", "third-party payers", "supplies", "practice margin"],
   },
+  {
+    industryKey: "field_service",
+    profileId: "field-service",
+    companyName: "Ridgeway Heating & Cooling",
+    focus: ["service requests and dispatch", "technician utilization", "maintenance agreements", "parts and job margin"],
+  },
 ] as const satisfies readonly SampleCompanyProfile[];
 
 export const SAMPLE_COMPANY_BY_INDUSTRY = new Map<string, (typeof SAMPLE_COMPANY_PROFILES)[number]>(

@@ -16,6 +16,7 @@ export const SAMPLE_OPERATING_POLICIES: Record<string, SampleOperatingPolicy> = 
   nonprofit: { ...standard },
   manufacturing: { ...standard, vendorBills: 60, customerInvoices: 36, postedVendorBills: 48, postedCustomerInvoices: 24 },
   healthcare_practice: { ...standard, vendorBills: 42, customerInvoices: 30, postedVendorBills: 30, postedCustomerInvoices: 24 },
+  field_service: { ...standard, vendorBills: 48, customerInvoices: 36, postedVendorBills: 36, postedCustomerInvoices: 24 },
 };
 export function sampleOperatingPolicy(industryKey: string): SampleOperatingPolicy {
   const policy = SAMPLE_OPERATING_POLICIES[industryKey];

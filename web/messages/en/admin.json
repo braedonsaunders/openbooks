@@ -6749,6 +6749,11 @@
           "description": "Light and discrete manufacturing. BOMs, raw materials, WIP, finished goods, and overhead.",
           "keywords": "manufacturer, production, factory, fabrication, food production, food, beverage, coffee roaster, roastery, coffee, bakery, brewery, winery, distillery, craft, maker, assembly, processing"
         },
+        "field_service": {
+          "title": "Field Service & Home Services",
+          "description": "HVAC, plumbing, electrical and appliance service companies. Service requests, quotes, dispatched visits, maintenance agreements, van stock and per-visit invoicing.",
+          "keywords": "HVAC, heating, cooling, furnace, air conditioning, plumbing, plumber, electrician, electrical service, appliance repair, field service, home services, maintenance, service technician, dispatch, pest control, locksmith, garage door"
+        },
         "healthcare_practice": {
           "title": "Healthcare Practice",
           "description": "Medical and dental practices. Patient AR, medical supplies, and equipment.",

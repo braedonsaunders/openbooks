@@ -1,4 +1,5 @@
-import { sampleCompanyFeatures } from "./features.ts";
+import { mul, sum } from "../money/money.ts";
+import { sampleCompanyFeatures, sampleRosterCopy } from "./features.ts";
 import { scenarioRecordId, type DemoContext } from "./scenarios.ts";
 import { INDUSTRY_OPERATIONS, type AddDemoRecord } from "./industry-operations.ts";
 
@@ -11,7 +12,7 @@ export function extendedFeatureRecords(c: DemoContext, add: AddDemoRecord): void
   const card = add("accounts", { number: "2198", name: "Operations purchasing card", type: "liability_card", subsidiary_id: c.subsidiaryId, currency_restriction: c.currency, reconcilable: true, is_active: true }, "operations-card");
   add("payment_cards", { holder_party_id: c.employeeId, liability_account_id: card, label: "Operations purchasing card — synthetic", last_four: "0000", network: "demo", is_active: true });
   if (f.hrmTraining || f.hrmShiftPlanning) {
-    const schedule = add("work_schedules", { name: "Demonstration weekday care team", employee_party_id: c.employeeId, pattern: "cycle", cycle_days: 7, cycle_anchor: "2026-01-04", effective_from: c.date });
+    const schedule = add("work_schedules", { name: sampleRosterCopy(c.industryKey).scheduleName, employee_party_id: c.employeeId, pattern: "cycle", cycle_days: 7, cycle_anchor: "2026-01-04", effective_from: c.date });
     for (let n = 0; n < 7; n++) add("work_schedule_days", { schedule_id: schedule, day_index: n, hours: n > 0 && n < 6 ? "8.00" : "0.00" }, `weekday-${n}`);
   }
   if (f.consignment) add("stock_locations", { location_id: id("locations"), code: "DEMO-CONSIGN", kind: "warehouse", inventory_ownership: "vendor", owner_party_id: id("parties", "operations-vendor-1") }, "consignment");
@@ -98,8 +99,56 @@ export function extendedFeatureRecords(c: DemoContext, add: AddDemoRecord): void
     for (const [key, name] of [["founder-1", "Avery Quinn"], ["founder-2", "Rowan Ellis"]] as const) add("parties", { kind: "person", display_name: name, is_active: true }, key);
     add("parties", { kind: "company", display_name: "Northbridge Seed Partners", is_active: true }, "seed-investor");
   }
+  if (f.serviceDispatch) serviceDispatchRecords(c, add);
   if (f.contractCosts) {
     const asset = add("accounts", { number: "1898", name: "Deferred customer acquisition costs", type: "asset_other", is_active: true }, "contract-cost");
     add("contract_cost_policies", { effective_from: c.date, capitalize_commissions: true, capitalize_fulfilment: false, practical_expedient: true, basis: "contract_term", customer_life_source: "manual", asset_account_id: asset, amortization_expense_account_id: c.accounts.expense });
+  }
+}
+
+/** The technicians, sites, qualifications and estimates a field-service desk works from. */
+export const SERVICE_TECHNICIANS = [
+  { key: "technician-1", name: "Marcus Reyes", title: "Lead HVAC service technician", number: "DEMO-TECH-001", licensed: true },
+  { key: "technician-2", name: "Priya Nair", title: "HVAC service technician", number: "DEMO-TECH-002", licensed: true },
+  { key: "technician-3", name: "Caleb Morgan", title: "Refrigeration technician", number: "DEMO-TECH-003", licensed: false },
+] as const;
+
+export const SERVICE_SITES = [
+  { customer: 1, label: "Clubhouse mechanical room", line1: "48 Maplewood Drive", city: "Redbrook", postal: "12401" },
+  { customer: 2, label: "Main Street clinic", line1: "210 Main Street", city: "Redbrook", postal: "12402" },
+  { customer: 3, label: "Cedar Lane apartments", line1: "17 Cedar Lane", city: "Westfield", postal: "12406" },
+  { customer: 4, label: "Fellowship hall", line1: "5 Hillcrest Road", city: "Westfield", postal: "12407" },
+] as const;
+
+function serviceDispatchRecords(c: DemoContext, add: AddDemoRecord): void {
+  const id = (table: string, key = "main") => scenarioRecordId(c, table, key);
+  for (const site of SERVICE_SITES) {
+    add("addresses", { party_id: id("parties", `operations-customer-${site.customer}`), label: site.label, line1: site.line1, city: site.city,
+      region: "NY", postal_code: site.postal, country: "US" }, `service-site-${site.customer}`);
+  }
+  const gas = add("hrm_qualification_types", { code: "DEMO-GAS-FITTER", name: "Gas fitter licence", category: "license", issuing_body: "Synthetic state licensing board", validity_months: 36 }, "gas-fitter");
+  const refrigerant = add("hrm_qualification_types", { code: "DEMO-EPA-608", name: "Refrigerant handling certification", category: "certification", issuing_body: "Synthetic certification program" }, "refrigerant");
+  for (const technician of SERVICE_TECHNICIANS) {
+    const party = add("parties", { kind: "person", display_name: technician.name, subsidiary_id: c.subsidiaryId, is_active: true }, technician.key);
+    add("employee_roles", { party_id: party, employee_number: technician.number, job_title: technician.title, hired_on: `${c.year - 3}-03-01` }, technician.key);
+    const employment = add("worker_employments", { worker_party_id: party, employer_subsidiary_id: c.subsidiaryId, employment_number: technician.number,
+      service_start: `${c.year - 3}-03-01`, service_start_provenance: "documented" }, technician.key);
+    add("worker_employment_versions", { employment_id: employment, version_no: 1, status: "active", effective_from: `${c.year - 3}-03-01` }, technician.key);
+    add("hrm_worker_qualifications", { employment_id: employment, type_id: refrigerant, identifier: `${technician.number}-608`, issued_on: `${c.year - 3}-04-15`,
+      notes: "Synthetic certification; evidence is reviewed before verification." }, `${technician.key}-refrigerant`);
+    if (technician.licensed) add("hrm_worker_qualifications", { employment_id: employment, type_id: gas, identifier: `${technician.number}-GAS`, issued_on: `${c.year - 2}-01-10`,
+      expires_on: `${c.year + 1}-01-09`, notes: "Synthetic licence; evidence is reviewed before verification." }, `${technician.key}-gas`);
+  }
+  add("items", { code: "DEMO-SVC-LABOUR", name: "Service technician labour", kind: "service", unit: "hour", income_account_id: c.accounts.revenue,
+    expense_account_id: c.accounts.expense, default_rate: "125.00", show_on_timesheet: true }, "service-labour");
+  for (const [key, customer, number, memo, lines] of [
+    ["service-estimate-rooftop", 2, "DEMO-EST-101", "Rooftop unit replacement for the Main Street clinic", [["operations-service-3", "Remove the failed rooftop unit and install a 5-ton high-efficiency replacement", "1.00", "9800.00"], ["operations-service-4", "Add a whole-building air purification module", "1.00", "1450.00"]]],
+    ["service-estimate-ductless", 3, "DEMO-EST-102", "Ductless heat pump for the Cedar Lane community room", [["operations-service-3", "Supply and install a 24,000 BTU ductless heat pump", "1.00", "6400.00"], ["operations-service-2", "First-year maintenance visit", "1.00", "275.00"]]],
+  ] as const) {
+    const amount = sum(lines.map(([, , quantity, unitPrice]) => mul(quantity, unitPrice)));
+    const document = add("documents", { kind: "quote", document_number: number, party_id: id("parties", `operations-customer-${customer}`), subsidiary_id: c.subsidiaryId,
+      document_date: c.date, currency: c.currency, memo, subtotal: amount, total: amount }, key);
+    lines.forEach(([item, description, quantity, unitPrice], index) => add("document_lines", { document_id: document, line_number: index + 1, item_id: id("items", item),
+      account_id: c.accounts.revenue, description, quantity, unit_price: unitPrice, amount: mul(quantity, unitPrice), subsidiary_id: c.subsidiaryId }, `${key}-${index + 1}`));
   }
 }

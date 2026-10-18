@@ -23,7 +23,10 @@ export function sampleOperatorPermissions(industryKey: string): string[] {
     ...(f.hrmTraining ? ["hrm.certifications.manage"] : []),
     ...(f.hrmShiftPlanning ? ["hrm.shifts.manage"] : []),
     ...(f.hrmAttendance ? ["hrm.attendance.manage"] : []),
-    ...(f.compensationPackages ? ["payroll.manage"] : [])];
+    ...(f.compensationPackages ? ["payroll.manage"] : []),
+    ...(f.expenseAmortization ? ["amortization.manage"] : []),
+    ...(f.equity ? ["equity.manage"] : []),
+    ...(f.serviceDispatch ? ["service.manage", "service.dispatch", "estimates.create", "estimates.issue", "hrm.certifications.manage"] : [])];
 }
 
 export interface SampleAuthorContract {
@@ -44,6 +47,9 @@ export function sampleOperatorAuthorship(industryKey: string): SampleAuthorContr
   if (f.hrmTraining) contracts.push({ table: "hrm_training_courses", actorColumns: ["created_by", "updated_by"], requiresPerson: true });
   if (f.hrmShiftPlanning) contracts.push({ table: "schedule_patterns", actorColumns: ["created_by", "updated_by"], requiresPerson: false });
   if (f.hrmAttendance) contracts.push({ table: "schedule_attendance_devices", actorColumns: ["created_by", "updated_by"], requiresPerson: false });
+  if (f.expenseAmortization) contracts.push({ table: "expense_amortization_templates", actorColumns: ["created_by", "updated_by"], requiresPerson: false });
+  if (f.equity) contracts.push({ table: "equity_share_classes", actorColumns: ["created_by", "updated_by"], requiresPerson: false });
+  if (f.serviceDispatch) contracts.push({ table: "service_requests", actorColumns: ["created_by", "updated_by"], requiresPerson: false });
   return contracts;
 }
 

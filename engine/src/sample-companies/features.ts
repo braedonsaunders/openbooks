@@ -15,8 +15,27 @@ export const DEMO_FEATURES_BY_INDUSTRY: Record<string, readonly string[]> = {
   property_management: ["propertyManagement", "fixedAssets", "multiSubsidiary", "revenueRecognition", "onlinePayments"],
   nonprofit: ["nonprofit", "fundAccounting", "grantManagement", "pledges", "encumbrances", "functionalExpenses", "form990", "budgets", "allocations", "allocationsAtEntry", "allocationsAtPosting"],
   manufacturing: ["inventory", "orders", "warehousing", "manufacturing", "manufacturingMrp", "fixedAssets", "equipment", "assetComponents", "assetProposals", "constructionInProgress", "assetMaintenance", "assetInsurance"],
+  field_service: ["serviceDispatch", "hrmShiftPlanning", "hrm", "hrmCertifications", "timeTracking", "inventory", "orders", "equipment", "fixedAssets", "crm"],
   healthcare_practice: ["hrmTraining", "hrmShiftPlanning", "hrmAttendance", "hrmShiftClosing", "compensationPackages", "hrm", "hrmCertifications", "hrmDocuments", "payroll", "inventory", "fixedAssets", "crm"],
 };
+
+/** The staged shift roster each workforce demo names in its own trade's terms. */
+export interface SampleRosterCopy {
+  boardCode: string; boardName: string; patternCode: string; patternName: string; scheduleName: string;
+}
+const CARE_TEAM_ROSTER: SampleRosterCopy = {
+  boardCode: "DEMO-CARE-ROSTER", boardName: "Care team roster", patternCode: "DEMO-CARE-TEAM", patternName: "Weekday care team",
+  scheduleName: "Demonstration weekday care team",
+};
+const ROSTER_COPY: Record<string, SampleRosterCopy> = {
+  field_service: {
+    boardCode: "DEMO-TECH-ROSTER", boardName: "Technician shift roster", patternCode: "DEMO-TECH-CREW", patternName: "Weekday technician crew",
+    scheduleName: "Demonstration weekday technician crew",
+  },
+};
+export function sampleRosterCopy(industryKey: string): SampleRosterCopy {
+  return ROSTER_COPY[industryKey] ?? CARE_TEAM_ROSTER;
+}
 
 /** Explicit demo overrides; dependency closure uses the authoritative registry. */
 export function sampleCompanyFeatures(industryKey: string): Record<string, boolean> {

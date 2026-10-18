@@ -6,6 +6,7 @@ export const INDUSTRY_STOCK: Record<string, readonly string[]> = {
   wholesale_distribution: ["Galvanized mounting bracket", "Industrial safety gloves", "Weatherproof cable gland", "Maintenance fastener assortment"],
   manufacturing: ["Aluminium housing blank", "Precision bearing insert", "Protective enclosure", "Control panel mounting plate"],
   healthcare_practice: ["Sterile dressing pack", "Examination glove carton", "Diagnostic sample container", "Patient-care supply kit"],
+  field_service: ["Hot surface igniter", "Flame sensor", "MERV 11 furnace filter", "Dual run capacitor 45/5 µF"],
   general_business: ["Facilities consumables kit", "Office replenishment carton", "Storage bin set", "Cleaning supply pack"],
 };
 

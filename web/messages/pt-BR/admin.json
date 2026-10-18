@@ -6749,6 +6749,11 @@
           "description": "Manufatura leve e discreta. BOMs, matérias-primas, WIP, produtos acabados e indiretos.",
           "keywords": "fabricante, produção, fábrica, fabricação, produção de alimentos, alimentos, bebidas, torrefação, torrefadora, café, padaria, cervejaria, vinícola, destilaria, artesanal, montagem, processamento"
         },
+        "field_service": {
+          "title": "Serviços de campo e residenciais",
+          "description": "Empresas de climatização, encanamento, elétrica e assistência técnica de eletrodomésticos. Solicitações de serviço, orçamentos, visitas despachadas, contratos de manutenção, estoque no veículo e faturamento por visita.",
+          "keywords": "HVAC, climatização, ar-condicionado, aquecimento, encanamento, encanador, eletricista, serviço elétrico, assistência técnica, conserto de eletrodomésticos, serviço de campo, manutenção, técnico, despacho, dedetização, chaveiro"
+        },
         "healthcare_practice": {
           "title": "Clínica de saúde",
           "description": "Clínicas médicas e odontológicas. Contas a receber de pacientes, material médico e equipamentos.",

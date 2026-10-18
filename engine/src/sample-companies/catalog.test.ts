@@ -15,6 +15,7 @@ const setupIndustries = [
   "nonprofit",
   "manufacturing",
   "healthcare_practice",
+  "field_service",
 ];
 
 test("sample catalog covers every setup industry exactly once", () => {

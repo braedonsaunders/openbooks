@@ -37,7 +37,7 @@ for (const profile of SAMPLE_COMPANY_PROFILES) test(`${profile.companyName}: nat
       await withBypass(() => db.execute(sql`update users set is_super_admin=true where org_id=${home.orgId} and id=${actorId}`));
       actorOptions = { actorId };
     }
-    if (["construction_contractor", "general_business", "nonprofit", "healthcare_practice"].includes(profile.industryKey)) {
+    if (["construction_contractor", "general_business", "nonprofit", "healthcare_practice", "it_software_saas", "field_service"].includes(profile.industryKey)) {
       const home = await withBypass(() => createScratchOrg());
       try {
         const foreignActor = await withBypass(() => createScratchUser(home.orgId, "Explicit platform author", "operator"));

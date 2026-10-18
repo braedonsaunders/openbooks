@@ -6,6 +6,7 @@ import { saasCompany } from "./saas.ts";
 import {
   accountingFirm,
   engineeringArchitecture,
+  fieldService,
   generalBusiness,
   healthcarePractice,
   manufacturing,
@@ -30,6 +31,7 @@ export const PROFILES: Record<string, Profile> = {
   [nonprofit.id]: nonprofit,
   [manufacturing.id]: manufacturing,
   [healthcarePractice.id]: healthcarePractice,
+  [fieldService.id]: fieldService,
 };
 
 export function getProfile(id: string): Profile {

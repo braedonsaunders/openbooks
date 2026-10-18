@@ -295,3 +295,32 @@ export const healthcarePractice = serviceProfile({
     ["Medical Liability Association", ["insurance"], 2_500, 15_000],
   ]),
 });
+
+export const fieldService = serviceProfile({
+  id: "field-service",
+  name: "Ridgeway Heating & Cooling",
+  industry: "field_service",
+  economics: { laborPctOfRevenue: "0.38", cogsPctOfRevenue: "0.24" },
+  utilization: 0.72,
+  customers: customers(
+    ["Maplewood Townhome Association", "Brightside Dental Offices", "Cedar Lane Property Group", "Residential Service Customers"],
+    ["revenueService"],
+    [450, 18_000],
+    30,
+  ),
+  workforce: [
+    { name: "Tomás Alvarez (Installation Lead)", costRate: "44.00", billRate: "130.00" },
+    { name: "Owen Patel (Installation Technician)", costRate: "36.00", billRate: "110.00" },
+    { name: "Jenna Brooks (Apprentice Technician)", costRate: "24.00", billRate: "85.00" },
+    { name: "Lena Fischer (Comfort Advisor)", costRate: "34.00", billRate: "95.00" },
+    { name: "Dana Whitfield (Service Coordinator)", costRate: "30.00", billRate: "70.00" },
+  ],
+  vendors: vendors([
+    ["Northern Comfort HVAC Supply", ["materials"], 2_500, 24_000],
+    ["Allied Refrigerant & Controls", ["materials"], 800, 9_000],
+    ["Fleetline Vehicle Leasing", ["equipmentRental"], 3_200, 3_200],
+    ["Ridgeway Industrial Park", ["rent"], 5_500, 5_500],
+    ["Tradesman Mutual Insurance", ["insurance"], 1_800, 9_500],
+    ["FieldOps Software", ["office"], 600, 2_400],
+  ]),
+});

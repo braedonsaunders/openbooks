@@ -76,6 +76,20 @@ export async function verifyNativeOperatingEvidence(c: DemoContext): Promise<str
       and p.project_id in (${sql.join([1,2,3].map(n => sql`${scenarioRecordId(c,"projects",`operations-project-${n}`)}::uuid`), sql`, `)})`)).rows[0];
     if (progress?.projects !== 3 || !progress.corrected) missing.push("three task-budgeted project progress examples including a native correction");
   }
+  if (features.serviceDispatch) {
+    const ids = (table: string, keys: string[]) => sql.join(keys.map(key => sql`${scenarioRecordId(c, table, key)}::uuid`), sql`, `);
+    const desk = (await db.execute<{ requests: number; jobs: number; agreements: number; posted: number; accepted: number }>(sql`select
+      (select count(*)::int from service_requests where org_id=${c.orgId} and id in (${ids("service_requests", ["no-heat", "rooftop", "thermostat"])})) as requests,
+      (select count(*)::int from service_jobs where org_id=${c.orgId} and id in (${ids("service_jobs", ["no-heat", "tune-up", "rooftop"])})) as jobs,
+      (select count(*)::int from service_agreements where org_id=${c.orgId} and id=${scenarioRecordId(c, "service_agreements", "seasonal")}) as agreements,
+      (select count(*)::int from service_billings b join documents d on d.org_id=b.org_id and d.id=b.invoice_document_id
+        where b.org_id=${c.orgId} and b.job_id=${scenarioRecordId(c, "service_jobs", "no-heat")} and b.released_at is null and (${c.memberSample} or d.status='posted')) as posted,
+      (select count(*)::int from service_quotes where org_id=${c.orgId} and quote_document_id=${scenarioRecordId(c, "documents", "service-estimate-rooftop")}
+        and status='accepted' and job_id=${scenarioRecordId(c, "service_jobs", "rooftop")}) as accepted`)).rows[0];
+    if (desk?.requests !== 3 || desk.jobs !== 3 || desk.agreements !== 1 || desk.posted !== 1 || desk.accepted !== 1) {
+      missing.push("service requests, jobs, an accepted quote converted to a job, a maintenance agreement and a posted visit invoice through the native service commands");
+    }
+  }
   if (features.crossBorderTax) {
     const evidence = (await db.execute<{ count: number }>(sql`select count(distinct document_id)::int as count from document_supply_evidence where org_id=${c.orgId}
       and document_id in (${sql.join([1,2,3].map(offset => sampleOperatingPolicy(c.industryKey).postedCustomerInvoices + offset).map(n => sql`${scenarioRecordId(c,"documents",`operations-customer_invoice-${n}`)}::uuid`), sql`, `)})`)).rows[0];

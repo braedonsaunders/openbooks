@@ -6739,6 +6739,11 @@
           "description": "Fabrication légère et discrète. Nomenclatures, matières premières, encours, produits finis et frais généraux.",
           "keywords": "fabricant, production, usine, fabrication, production alimentaire, alimentation, boissons, torréfacteur, torréfaction, café, boulangerie, brasserie, domaine viticole, distillerie, artisanal, assemblage, transformation"
         },
+        "field_service": {
+          "title": "Services techniques à domicile",
+          "description": "Entreprises de chauffage, climatisation, plomberie, électricité et dépannage d'appareils. Demandes d'intervention, devis, visites planifiées, contrats d'entretien, stock véhicule et facturation par visite.",
+          "keywords": "CVC, chauffage, climatisation, plomberie, plombier, électricien, dépannage électrique, réparation d'appareils, service sur site, intervention, entretien, technicien, répartition, dératisation, serrurier"
+        },
         "healthcare_practice": {
           "title": "Cabinet de santé",
           "description": "Cabinets médicaux et dentaires. Créances patients, fournitures médicales et équipement.",

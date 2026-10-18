@@ -6739,6 +6739,11 @@
           "description": "Manufactura ligera y discreta. Listas de materiales, materias primas, trabajo en curso, productos terminados y costos indirectos.",
           "keywords": "fabricante, producción, fábrica, fabricación, producción de alimentos, alimentos, bebidas, tostador de café, tostaduría, café, panadería, cervecería, bodega, destilería, artesanal, ensamblaje, procesamiento"
         },
+        "field_service": {
+          "title": "Servicio técnico y hogar",
+          "description": "Empresas de climatización, fontanería, electricidad y reparación de electrodomésticos. Solicitudes de servicio, presupuestos, visitas despachadas, contratos de mantenimiento, stock en furgoneta y facturación por visita.",
+          "keywords": "HVAC, calefacción, aire acondicionado, climatización, fontanería, fontanero, electricista, servicio eléctrico, reparación de electrodomésticos, servicio técnico, servicio de campo, mantenimiento, técnico, despacho, control de plagas, cerrajero"
+        },
         "healthcare_practice": {
           "title": "Clínica",
           "description": "Clínicas médicas y dentales. Cuentas por cobrar de pacientes, insumos médicos y equipos.",

@@ -17,7 +17,7 @@ import { moveConsignment } from "../inventory/consignment.ts";
 import { recordSupplyEvidence } from "../tax/cross-border-records.ts";
 import { saveQuoteTerm } from "../billing/quote-to-cash.ts";
 import { ensureFiling } from "../compliance/information-returns.ts";
-import { sampleCompanyFeatures } from "./features.ts";
+import { sampleCompanyFeatures, sampleRosterCopy } from "./features.ts";
 import { scenarioRecordId, type DemoContext } from "./scenarios.ts";
 import { SampleCompanyError } from "./provisioning-failures.ts";
 
@@ -50,17 +50,18 @@ export async function installFeatureWorkflows(c: DemoContext): Promise<void> {
   if (f.hrmShiftPlanning) {
     // A staged shift roster board and an inactive weekday pattern for the
     // operator to review before assigning anyone.
+    const roster = sampleRosterCopy(c.industryKey);
     const board = id("schedule_boards", "roster");
     if (!(await db.execute(sql`select id from schedule_boards where org_id=${c.orgId} and id=${board}`)).rows.length) {
       const inserted = await db.execute(sql`insert into schedule_boards (id, org_id, code, name, description, row_kind, board_type, subsidiary_id, grain, views, default_view,
         time_zone, publish_policy, created_by, updated_by)
-        values (${board}, ${c.orgId}, 'DEMO-CARE-ROSTER', 'Care team roster', 'Synthetic shift roster; review staffing and attendance policy before publishing shifts.',
+        values (${board}, ${c.orgId}, ${roster.boardCode}, ${roster.boardName}, 'Synthetic shift roster; review staffing and attendance policy before publishing shifts.',
         'people', 'shift_roster', ${c.subsidiaryId}, 'timed', '{timeline,grid,calendar}', 'timeline', 'America/New_York', 'staged', ${c.actorId}, ${c.actorId}) returning id`);
       if (inserted.rows.length !== 1) throw new SampleCompanyError("The demonstration shift roster board could not be created.");
     }
     const key = id("schedule_patterns");
     if (!(await db.execute(sql`select id from schedule_patterns where org_id=${c.orgId} and id=${key}`)).rows.length) await savePattern(actor, {
-      id: key, subsidiaryId: c.subsidiaryId, code: "DEMO-CARE-TEAM", name: "Weekday care team",
+      id: key, subsidiaryId: c.subsidiaryId, code: roster.patternCode, name: roster.patternName,
       description: "Review staffing and attendance policy before activating and assigning the pattern.", timeZone: "America/New_York",
       cycleDays: 7, cycleAnchor: mondayOfIsoWeek(c.date),
       slots: [0, 1, 2, 3, 4].map(position => ({ position, starts: "08:00", ends: "16:30", breakMinutes: 30, qualificationTypeIds: [] })),

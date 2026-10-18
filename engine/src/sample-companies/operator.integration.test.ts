@@ -21,8 +21,13 @@ test("sample operator selection is explicit and canonical", () => {
 
 test("native local authorship is required only for the industries that write tenant-owned author records", () => {
   const local = SAMPLE_COMPANY_PROFILES.filter(profile => sampleOperatorAuthorship(profile.industryKey).length).map(profile => profile.industryKey).sort();
-  assert.deepEqual(local, ["construction_contractor", "general_business", "healthcare_practice", "nonprofit"]);
-  assert.deepEqual(sampleOperatorAuthorship("general_business"), [{ table: "einvoice_settings", actorColumns: ["created_by", "updated_by"], requiresPerson: false }]);
+  assert.deepEqual(local, ["construction_contractor", "field_service", "general_business", "healthcare_practice", "it_software_saas", "nonprofit"]);
+  assert.deepEqual(sampleOperatorAuthorship("general_business"), [
+    { table: "einvoice_settings", actorColumns: ["created_by", "updated_by"], requiresPerson: false },
+    { table: "expense_amortization_templates", actorColumns: ["created_by", "updated_by"], requiresPerson: false },
+  ]);
+  assert.deepEqual(sampleOperatorAuthorship("it_software_saas"), [{ table: "equity_share_classes", actorColumns: ["created_by", "updated_by"], requiresPerson: false }]);
+  assert.ok(sampleOperatorAuthorship("field_service").some(contract => contract.table === "service_requests"));
   assert.deepEqual(SAMPLE_COMPANY_PROFILES.filter(profile => sampleCompanyFeatures(profile.industryKey).fieldTickets).map(profile => profile.industryKey), ["construction_contractor"]);
   assert.deepEqual(sampleOperatorAuthorship("construction_contractor"), [{ table: "field_ticket_labor_snapshots", actorColumns: ["captured_by", "superseded_by"], requiresPerson: false }]);
   assert.ok(sampleOperatorAuthorship("nonprofit").some(contract => contract.actorColumns.includes("set_by")));

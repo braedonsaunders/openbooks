@@ -6791,6 +6791,11 @@
           "title": "Allgemeines Unternehmen",
           "keywords": "Einzelhandel, Laden, Geschäft, Boutique, Café, Restaurant, Bar, Bäckerei, Gastronomie, Gastgewerbe, Salon, Fitness, E-Commerce, Onlineshop, Kleinunternehmen, Einzelunternehmer, Freiberufler, Sonstiges"
         },
+        "field_service": {
+          "title": "Außendienst & Haustechnik",
+          "description": "Heizungs-, Klima-, Sanitär-, Elektro- und Gerätedienstleister. Serviceanfragen, Angebote, disponierte Einsätze, Wartungsverträge, Fahrzeuglager und Abrechnung pro Einsatz.",
+          "keywords": "HVAC, Heizung, Klima, Kältetechnik, Sanitär, Installateur, Elektriker, Elektroservice, Gerätereparatur, Außendienst, Haustechnik, Wartung, Servicetechniker, Disposition, Schädlingsbekämpfung, Schlüsseldienst"
+        },
         "healthcare_practice": {
           "description": "Arzt- und Zahnarztpraxen. Patientenforderungen, medizinische Verbrauchsmaterialien und Geräte.",
           "title": "Arztpraxis",

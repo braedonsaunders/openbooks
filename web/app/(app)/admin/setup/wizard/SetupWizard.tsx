@@ -38,6 +38,7 @@ import {
   Users,
   Wallet,
   Warehouse,
+  Wrench,
 } from 'lucide-react'
 import { cn } from '@openbooks/ui'
 import type { IndustryDef } from '@/lib/industries'
@@ -97,6 +98,7 @@ const INDUSTRY_ICONS: Record<string, typeof Building2> = {
   property_management: Home,
   nonprofit: HeartHandshake,
   manufacturing: Factory,
+  field_service: Wrench,
   healthcare_practice: Stethoscope,
 }
 

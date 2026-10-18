@@ -6,6 +6,7 @@ import { verifyNativeOperatingEvidence } from "./readiness.ts";
 import { installOperatingPayments } from "./install-payments.ts";
 import { installFeatureWorkflows } from "./install-feature-workflows.ts";
 import { installFinanceFeatures } from "./install-finance-features.ts";
+import { installServiceDispatch } from "./install-service-dispatch.ts";
 import { installOperatingBanking } from "./install-banking.ts";
 import { installOperatingDocuments, verifyOperatingDocuments } from "./install-operations.ts";
 import { isDeepStrictEqual } from "node:util";
@@ -384,6 +385,7 @@ export async function installDemoScenarios(orgId: string, industryKey: string, o
     await installOperatingDocuments(c, insertedDraftIds);
     await installFeatureWorkflows(c);
     await installFinanceFeatures(c);
+    await installServiceDispatch(c);
     await installOperatingReturns(c);
     await installOperatingPayments(c);
     await installOperatingBanking(c);
