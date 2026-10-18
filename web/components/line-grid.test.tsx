@@ -467,3 +467,72 @@ test("real and zero tax amounts keep their established display", async (t) => {
   assert.ok(!zero.host.textContent?.includes("—"), "an untaxed line keeps its empty cell");
   assert.ok(!zero.host.textContent?.includes("0.00"), "an untaxed line keeps zero suppressed");
 });
+
+interface DatedRow extends Record<string, unknown> {
+  clientKey: string;
+  workFrom: string;
+}
+
+const dated: { rows: DatedRow[] } = { rows: [] };
+
+function DatedProbe({ initial }: { initial: DatedRow[] }) {
+  const [rows, setRows] = useState(initial);
+  const { BusinessDateProvider } = businessDate;
+  return (
+    <NextIntlClientProvider locale="en" messages={messages} timeZone="UTC">
+      <BusinessDateProvider today="2026-10-17">
+        <LineGrid<DatedRow>
+          columns={[{ key: "workFrom", label: "Work from", width: "130px", type: "date" }]}
+          rows={rows}
+          getRowKey={(row) => row.clientKey}
+          cloneRow={(row) => ({ ...row, clientKey: `copy-${row.clientKey}` })}
+          onRowsChange={(next) => {
+            dated.rows = next;
+            setRows(next);
+          }}
+          emptyRow={() => ({ clientKey: `new-${dated.rows.length}`, workFrom: "" })}
+        />
+      </BusinessDateProvider>
+    </NextIntlClientProvider>
+  );
+}
+
+const businessDate = await import("./business-date-provider");
+
+test("date columns read typed dates and keys, and keep the grid's row commands", async (t) => {
+  dated.rows = [{ clientKey: "a", workFrom: "2026-01-05" }, { clientKey: "b", workFrom: "" }];
+  const host = document.createElement("div");
+  document.body.appendChild(host);
+  const root = createRoot(host);
+  await act(async () => {
+    root.render(<DatedProbe initial={dated.rows} />);
+    await tick();
+  });
+  t.after(async () => {
+    await act(async () => root.unmount());
+    host.remove();
+  });
+  const first = cellInput(host, 0, 0);
+  assert.equal(first.value, "01/05/2026", "a stored date shows in the viewer format");
+  assert.ok(first.getAttribute("aria-labelledby"), "the date cell is named by its column and line");
+
+  const second = cellInput(host, 1, 0);
+  await typeInto(second, "3/15");
+  await blur(second);
+  assert.equal(dated.rows[1]!.workFrom, "2026-03-15", "a yearless entry reads in the business year");
+  await act(async () => second.focus());
+  await keydown(second, { key: "+" });
+  assert.equal(dated.rows[1]!.workFrom, "2026-03-16");
+
+  await typeInto(second, "2/30/2026");
+  await keydown(second, { key: "Enter" });
+  assert.equal(dated.rows.length, 2, "a refused date keeps focus instead of adding a line");
+  assert.equal(dated.rows[1]!.workFrom, "", "the refused text reports no date");
+  assert.equal(cellInput(host, 1, 0).getAttribute("aria-invalid"), "true");
+
+  await typeInto(second, "4/1/2026");
+  const cell = host.querySelector('div[data-lg-row="1"][data-lg-col="0"]')!;
+  await keydown(cell, { key: "ArrowUp", altKey: true });
+  await blur(second);
+  assert.deepEqual(dated.rows.map((row) => [row.clientKey, row.workFrom]), [["b", "2026-04-01"], ["a", "2026-01-05"]], "Alt+Up moves the line with its typed date");
+});

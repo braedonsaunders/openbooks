@@ -11,6 +11,7 @@ import { useAppAction } from "../lib/use-app-action";
 import { decimalCmp } from "../lib/statement-format";
 import { moneyFieldError } from "./money-input";
 import type { InvoiceWriteOffDrawer } from "../lib/invoice-write-off-drawer";
+import { DateField } from './date-field'
 
 /**
  * Write off the open balance of a posted customer invoice. The engine posts a
@@ -131,7 +132,7 @@ export function InvoiceWriteOffPanel({ documentId, currency, openBalance }: Invo
             </label>
             <label className="space-y-1 text-xs font-medium text-slate-600 dark:text-slate-300">
               {t("date")}
-              <Input type="date" className="h-8" value={date} onChange={(e) => setDate(e.target.value)} />
+              <DateField className="h-8" value={date} onChange={(value) => setDate(value)} />
             </label>
           </div>
           <label className="block space-y-1 text-xs font-medium text-slate-600 dark:text-slate-300">

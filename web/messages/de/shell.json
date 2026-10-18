@@ -299,7 +299,6 @@
       "yearEnd": "Letzter Tag des Jahres"
     },
     "repeatHint": "Drücken Sie eine Taste für den ersten oder letzten Tag erneut, um eine weitere Woche, einen Monat oder ein Jahr weiterzugehen.",
-    "pasteHint": "Fügen Sie ein Datum in Ihrem gewohnten Format ein, etwa 15. März 2026. Eine zweistellig eingegebene Jahreszahl wird beim Verlassen des Felds dem nächstgelegenen Jahrhundert zugeordnet.",
     "changed": "Datum auf {date} gesetzt",
     "outsideCalendar": "Dieses Datum liegt außerhalb des unterstützten Kalenders.",
     "outsideAllowed": "Dieses Datum liegt außerhalb des für dieses Feld zulässigen Bereichs.",

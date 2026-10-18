@@ -14,9 +14,12 @@ const messages = (await import('../messages/en')).default
 const { ZonedDateTimeControl } = await import('./zoned-date-time-control')
 
 async function edit(input: HTMLInputElement, value: string) {
-  await act(() => {
+  await act(async () => {
     Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!.call(input, value)
     input.dispatchEvent(new Event('input', { bubbles: true }))
+    // The date field settles typed text when the entry is finished.
+    input.dispatchEvent(new Event('change', { bubbles: true }))
+    await Promise.resolve()
   })
 }
 
@@ -50,7 +53,7 @@ test('local-time control keeps gaps unsaved and repeated hours require an explic
       </NextIntlClientProvider>,
     ),
   )
-  const date = host.querySelector('input[type=date]') as HTMLInputElement
+  const date = host.querySelector('input[data-date-field]') as HTMLInputElement
   const time = host.querySelector('input[type=time]') as HTMLInputElement
   await edit(date, '2026-03-08')
   await edit(time, '02:30')

@@ -104,7 +104,7 @@ export function customFieldColumns<Row extends Record<string, unknown>>(
         case 'currency':
           return { ...base, width: '110px', type: 'amount' as const, align: 'right' as const }
         case 'date':
-          return { ...base, width: '130px', type: 'text' as const, placeholder: 'YYYY-MM-DD' }
+          return { ...base, width: '130px', type: 'date' as const }
         case 'boolean':
           return { ...base, width: '70px', type: 'text' as const }
         case 'reference':

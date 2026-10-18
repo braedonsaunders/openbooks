@@ -8,6 +8,7 @@ import { toast } from 'sonner'
 import { Button, FieldLabel, Input, Select } from '@openbooks/ui'
 import Link from 'next/link'
 import { isUuid } from '@openbooks/engine/platform/identifiers'
+import { DateField } from './date-field'
 
 export interface CashDepositAccountOption {
   value: string
@@ -234,7 +235,7 @@ export function CashDepositSection({
             </div>
             <div>
               <FieldLabel fieldName={t('tenders.depositDate')}>{t('tenders.depositDate')}</FieldLabel>
-              <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+              <DateField value={date} onChange={(value) => setDate(value)} />
             </div>
             <div>
               <FieldLabel fieldName={t('tenders.depositBank')}>{t('tenders.depositBank')}</FieldLabel>
@@ -266,7 +267,7 @@ export function CashDepositSection({
           {mode === 'till' ? (
             <div className="max-w-xs">
               <FieldLabel fieldName={t('tenders.tillCoversThrough')}>{t('tenders.tillCoversThrough')}</FieldLabel>
-              <Input type="date" value={cutoff} max={date} onChange={(e) => setCoversThrough(e.target.value || null)} />
+              <DateField value={cutoff} max={date} onChange={(value) => setCoversThrough(value || null)} />
             </div>
           ) : null}
           {mode === 'till' && tillWindow ? (

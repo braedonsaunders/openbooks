@@ -11,6 +11,7 @@ import {
   operatorsForField,
   valueShapeFor,
 } from '../../lib/conditions'
+import { DateField } from '../date-field'
 
 /**
  * Reusable, catalog-driven nested and/or condition builder. Given a field
@@ -218,10 +219,16 @@ function ConditionRow({
             onChange={(e) => onChange({ ...condition, value: [Number(range[0] ?? 0), Number(e.target.value)] })}
           />
         </div>
+      ) : shape === 'date' ? (
+        <DateField
+          className="h-8 w-44"
+          value={typeof condition.value === 'string' ? condition.value : ''}
+          onChange={(next) => onChange({ ...condition, value: next })}
+        />
       ) : (
         <Input
           className={cn('h-8 w-44', shape === 'number' && 'w-32 text-right tabular-nums')}
-          type={shape === 'date' ? 'date' : shape === 'number' ? 'number' : 'text'}
+          type={shape === 'number' ? 'number' : 'text'}
           inputMode={shape === 'number' ? 'decimal' : undefined}
           placeholder={field?.placeholder ?? labels.valuePlaceholder}
           value={typeof condition.value === 'string' || typeof condition.value === 'number' ? String(condition.value) : ''}

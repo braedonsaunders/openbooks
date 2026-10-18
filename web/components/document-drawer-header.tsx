@@ -6,6 +6,7 @@ import { postedCorrectionFieldClass } from '@openbooks/engine/ledger/posted-corr
 import { type HeaderFieldPlacement, customFieldDefKey, isCustomFieldKey } from '@openbooks/customization'
 import type { Opt } from './document-drawer-types'
 import type { DocumentDrawerColumnsScope } from './document-drawer-columns'
+import { DateField } from './date-field'
 
 /** Header field rendering shared by the form-layout and fallback headers. */
 export function useDocumentDrawerHeader(scope: DocumentDrawerColumnsScope) {
@@ -188,7 +189,7 @@ export function useDocumentDrawerHeader(scope: DocumentDrawerColumnsScope) {
           <>
             <FieldLabel fieldName={label}>{label}</FieldLabel>
             {isEditable ? (
-              <Input type="date" value={documentDate} onChange={(e) => setDocumentDate(e.target.value)} />
+              <DateField value={documentDate} onChange={(value) => setDocumentDate(value)} />
             ) : (<p className="text-sm">{doc.document_date}</p>)}
           </>
         )
@@ -198,7 +199,7 @@ export function useDocumentDrawerHeader(scope: DocumentDrawerColumnsScope) {
             <FieldLabel fieldName={label}>{label}</FieldLabel>
             {isEditable ? (
               <>
-                <Input type="date" value={dueDate} onChange={(e) => editDueDate(e.target.value)} />
+                <DateField value={dueDate} onChange={(value) => editDueDate(value)} />
                 {noTermsHint ? (
                   <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                     {tCommon('documentDefaults.noPaymentTerms', { name: noTermsHint })}
@@ -239,7 +240,7 @@ export function useDocumentDrawerHeader(scope: DocumentDrawerColumnsScope) {
             <FieldLabel fieldName={label}>{label}</FieldLabel>
             {canOfferPostingDate ? (
               <>
-                <Input type="date" value={postingDate} onChange={(e) => setPostingDate(e.target.value)} />
+                <DateField value={postingDate} onChange={(value) => setPostingDate(value)} />
                 {!postingDate && /^\d{4}-\d{2}-\d{2}$/.test(documentDate) && !isPosted ? (
                   <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                     {tCommon('documentDefaults.postingDateFallback', { date: documentDate })}
@@ -255,7 +256,7 @@ export function useDocumentDrawerHeader(scope: DocumentDrawerColumnsScope) {
           <>
             <FieldLabel fieldName={label}>{label}</FieldLabel>
             {isEditable ? (
-              <Input type="date" value={expectedPayDate} onChange={(e) => setExpectedPayDate(e.target.value)} />
+              <DateField value={expectedPayDate} onChange={(value) => setExpectedPayDate(value)} />
             ) : (<p className="text-sm">{doc.expected_pay_date ?? '—'}</p>)}
           </>
         )
@@ -265,7 +266,7 @@ export function useDocumentDrawerHeader(scope: DocumentDrawerColumnsScope) {
           <>
             <FieldLabel fieldName={label}>{label}</FieldLabel>
             {isEditable ? (
-              <Input type="date" value={workCompletedOn} onChange={(e) => setWorkCompletedOn(e.target.value)} />
+              <DateField value={workCompletedOn} onChange={(value) => setWorkCompletedOn(value)} />
             ) : (<p className="text-sm">{doc.work_completed_on ?? '—'}</p>)}
           </>
         )

@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl'
 import { Button, FieldLabel, Input, SearchSelect, Select } from '@openbooks/ui'
 import { CashTendersSection, parseTenderDrafts, type CloseoutDraft, type TenderDraft } from './cash-tenders-section'
 import { normalizeMoney, sum } from '@openbooks/engine/money/money'
+import { DateField } from './date-field'
 
 export interface DailySummaryOption {
   value: string
@@ -127,7 +128,7 @@ export function CashDailySummaryForm({
       <div className="grid grid-cols-[160px_1fr] items-end gap-2">
         <div>
           <FieldLabel fieldName={t('dailySummary.date')}>{t('dailySummary.date')}</FieldLabel>
-          <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+          <DateField value={date} onChange={(value) => setDate(value)} />
         </div>
         {subsidiaries ? (
           <div>

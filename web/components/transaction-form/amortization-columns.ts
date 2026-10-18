@@ -13,7 +13,7 @@ export function amortizationLineColumns<Row extends Record<string, unknown>>(
       width: '180px', type: 'select',
       options: [{ value: '', label: translate('lineNoTemplate') }, ...templates.map(template => ({ value: template.id, label: template.label }))],
     },
-    { key: 'amortizationStartOn', label: translate('lineServiceStart'), width: '130px', type: 'text', placeholder: 'YYYY-MM-DD', isCellEditable: hasTemplate },
-    { key: 'amortizationEndOn', label: translate('lineServiceEnd'), width: '130px', type: 'text', placeholder: 'YYYY-MM-DD', isCellEditable: hasTemplate },
+    { key: 'amortizationStartOn', label: translate('lineServiceStart'), width: '130px', type: 'date', isCellEditable: hasTemplate },
+    { key: 'amortizationEndOn', label: translate('lineServiceEnd'), width: '130px', type: 'date', isCellEditable: hasTemplate },
   ]
 }

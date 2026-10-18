@@ -295,10 +295,10 @@ test('the header owns search/settings and timeline zoom while More exposes exact
   const menu = document.querySelector('[data-schedule-window-menu]')!
   assert.ok(menu)
   assert.equal(menu.children.length, 4)
-  assert.equal(menu.querySelectorAll('input[type="date"]').length, 1)
+  assert.equal(menu.querySelectorAll('input[data-date-field]').length, 1)
   assert.equal(menu.querySelectorAll('select').length, 2)
-  assert.equal(menu.querySelectorAll('input:not([type="date"])').length, 0)
-  assert.equal(menu.children[0]!.tagName, 'INPUT')
+  assert.equal(menu.querySelectorAll('input:not([data-date-field])').length, 0)
+  assert.ok(menu.children[0]!.querySelector('input[data-date-field]'), 'the window start date comes first')
   assert.equal(menu.children[1]!.tagName, 'BUTTON')
   assert.ok(menu.children[2]!.querySelector('select'))
   assert.ok(menu.children[3]!.querySelector('select'))

@@ -28,6 +28,7 @@ import {
 } from '../lib/line-grid-decimal'
 import type { DistributionMenuKey, GroupHeaderModel, RowDistributionChip } from './allocations/distribution-groups'
 import { useShortcuts } from './shortcuts/shortcut-provider'
+import { DateField, useTypedDateResolver } from './date-field'
 
 export interface LineGridOption {
   value: string
@@ -45,7 +46,7 @@ export interface LineGridColumn<Row extends Record<string, unknown>> {
   help?: React.ReactNode
   /** CSS grid track, e.g. 'minmax(180px,2fr)' or '110px'. */
   width: string
-  type: 'text' | 'amount' | 'decimal' | 'select' | 'search-select' | 'readonly' | 'tax'
+  type: 'text' | 'date' | 'amount' | 'decimal' | 'select' | 'search-select' | 'readonly' | 'tax'
   /** Maximum exact scale for non-money decimal cells such as quantity/rate. */
   decimalScale?: number
   align?: 'left' | 'right'
@@ -141,6 +142,53 @@ function DecimalCell<Row extends Record<string, unknown>>({
   inputBase,
   onChange,
   rowKey,
+/**
+ * A date cell. Typed text settles on blur or Enter like every date field;
+ * until then it is published as a draft, so a reorder or delete applies the
+ * date the operator typed to this line (by identity) before rows move.
+ */
+function DateCell<Row extends Record<string, unknown>>({
+  value,
+  placeholder,
+  onChange,
+  rowKey,
+  colKey,
+  registerDraft,
+  ariaLabelledBy,
+}: {
+  value: string
+  placeholder?: string
+  onChange: (value: string) => void
+  rowKey: string
+  colKey: string
+  registerDraft: (rowKey: string, colKey: string, apply: LineGridDraftApplier<Row> | null) => void
+  ariaLabelledBy: string
+}) {
+  const resolveTypedDate = useTypedDateResolver()
+  const [pending, setPending] = useState<string | null>(null)
+  useEffect(() => {
+    if (pending === null) {
+      registerDraft(rowKey, colKey, null)
+      return
+    }
+    const date = resolveTypedDate(pending)
+    registerDraft(rowKey, colKey, (row) => applyRowFields(row, { [colKey]: date }))
+    return () => {
+      registerDraft(rowKey, colKey, null)
+    }
+  }, [pending, rowKey, colKey, registerDraft, resolveTypedDate])
+  return (
+    <DateField
+      appearance="cell"
+      aria-labelledby={ariaLabelledBy}
+      value={value}
+      placeholder={placeholder}
+      onPendingTextChange={setPending}
+      onChange={onChange}
+    />
+  )
+}
+
   colKey,
   registerDraft,
   ariaLabelledBy,
@@ -1048,6 +1096,16 @@ function RowCells<Row extends Record<string, unknown>>({
                 className="w-full border-0 bg-transparent shadow-none"
               >
                 {(c.optionsFor?.(row, i) ?? c.options ?? []).map((o) => (
+            ) : c.type === 'date' ? (
+              <DateCell<Row>
+                value={typeof value === 'string' ? value : ''}
+                placeholder={c.placeholder}
+                onChange={(next) => commitCell(rowKey, c.key, next)}
+                rowKey={rowKey}
+                colKey={c.key}
+                registerDraft={registerDraft}
+                ariaLabelledBy={ariaLabelledBy}
+              />
                   <option key={o.value} value={o.value}>
                     {o.label}
                   </option>

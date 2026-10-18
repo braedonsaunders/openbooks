@@ -8,6 +8,7 @@ import { useTranslations } from 'next-intl'
 import { cn, Popover, SearchSelect } from '@openbooks/ui'
 import { mergeHref } from '@/lib/list-params'
 import { menuArrowKeys } from './menu-a11y'
+import { DateField } from './date-field'
 
 type FilterOption = { value: string; label: string; count?: number }
 
@@ -303,13 +304,12 @@ export function DateParamFilter({
   return (
     <label className="inline-flex h-8 items-center gap-2 rounded-md border border-slate-200 bg-white px-2.5 text-sm text-slate-700 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-200">
       <span className="text-slate-500 dark:text-slate-400">{label}</span>
-      <input
-        type="date"
+      <DateField
         value={value}
         max={max}
-        onChange={(event) => onChange(event.target.value)}
+        onChange={(value) => onChange(value)}
         aria-label={label}
-        className="appearance-none border-0 bg-transparent p-0 text-sm tabular-nums outline-none [color-scheme:light] dark:[color-scheme:dark] [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-60"
+        className="h-7 w-32 border-0 bg-transparent p-0 text-sm focus:ring-0 focus-visible:ring-0 dark:bg-transparent"
       />
     </label>
   )

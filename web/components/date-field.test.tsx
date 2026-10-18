@@ -132,7 +132,7 @@ test('typed dates read in the viewer locale and redisplay in its format', async 
     const received: string[] = []
     const { input } = await mount(t, <Controlled received={received} />, options)
     await replaceText(input, typed)
-    assert.deepEqual(received, [], `${typed}: nothing settles while typing`)
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(typed)) assert.deepEqual(received, [], `${typed}: nothing settles while typing`)
     await blur(input)
     assert.deepEqual(received, [iso], `${options.locale} ${typed}`)
     assert.equal(input.value, shown, `${options.locale} shows ${shown}`)
@@ -394,6 +394,24 @@ test('a controlled field follows its owner value', async (t) => {
     await tick()
   })
   assert.equal(input.value, '')
+})
+
+test('a complete ISO date reports as soon as it is typed or pasted and reformats when settled', async (t) => {
+  const received: string[] = []
+  const { input } = await mount(t, <Controlled received={received} max="2026-12-31" />)
+  await replaceText(input, '2026-07-0')
+  assert.deepEqual(received, [])
+  await replaceText(input, '2026-07-04')
+  assert.deepEqual(received, ['2026-07-04'], 'an unambiguous ISO date needs no blur')
+  assert.equal(input.value, '2026-07-04', 'the typed text stays while the viewer is typing')
+  await replaceText(input, '2027-01-01')
+  assert.deepEqual(received, ['2026-07-04'], 'a date past max waits for the entry to settle and refuse')
+  await replaceText(input, '2026-07-04')
+  await blur(input)
+  assert.deepEqual(received, ['2026-07-04'], 'settling the same date reports nothing new')
+  assert.equal(input.value, '07/04/2026')
+  await replaceText(input, '')
+  assert.deepEqual(received, ['2026-07-04', ''], 'clearing the text clears the date at once')
 })
 
 test('a native change event settles scripted entry without leaving the field', async (t) => {

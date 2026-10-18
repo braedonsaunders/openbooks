@@ -28,6 +28,7 @@ import {
 import { useMoney } from './money-provider'
 import { ReadOnlyValue } from './read-only-value'
 import { readApiErrorMessage } from '@/lib/api-error'
+import { DateField } from './date-field'
 
 // --- /api/forms/options cache ------------------------------------------------
 
@@ -618,13 +619,12 @@ function FieldInput({
       )
     case 'date':
       return (
-        <Input
-          type="date"
+        <DateField
           value={typeof value === 'string' ? value : ''}
           disabled={disabled}
           aria-invalid={invalid || undefined}
           className={invalidClass}
-          onChange={(e) => onCommit(e.target.value === '' ? undefined : e.target.value)}
+          onChange={(value) => onCommit(value === '' ? undefined : value)}
         />
       )
     case 'datetime':

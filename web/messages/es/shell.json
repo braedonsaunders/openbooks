@@ -299,7 +299,6 @@
       "yearEnd": "Último día del año"
     },
     "repeatHint": "Vuelva a pulsar una tecla de primer o último día para avanzar una semana, un mes o un año más.",
-    "pasteHint": "Pegue una fecha en su formato habitual, por ejemplo 15 mar 2026. Un año escrito con dos dígitos pasa al siglo más cercano al salir del campo.",
     "changed": "Fecha establecida en {date}",
     "outsideCalendar": "Esa fecha está fuera del calendario admitido.",
     "outsideAllowed": "Esa fecha está fuera del intervalo que admite este campo.",

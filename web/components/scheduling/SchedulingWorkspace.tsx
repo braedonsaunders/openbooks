@@ -30,6 +30,7 @@ import { publish, SchedulingRequestError } from './api'
 import { addDays, viewRange, type BoardEntry, type BoardWindow, type GroupBy, targetHue } from './model'
 import { useBoard } from './use-board'
 import type { ScheduleBoard } from '@openbooks/engine/schedule-boards/boards'
+import { DateField } from '../date-field'
 
 export interface BoardSummary {
   readonly id: string
@@ -248,7 +249,7 @@ function BoardShell(props: SchedulingWorkspaceProps & { board: ScheduleBoard; on
           {people ? <Button variant="ghost" size="sm" className="h-8 px-2" disabled={!controller.canRedo} onClick={()=>void controller.redo()} aria-label={t('toolbar.redo')}><Redo2 className="h-4 w-4" /></Button> : null}
           {people ? <Popover open={moreOpen} onOpenChange={setMoreOpen} align="end" className="w-72 max-w-[calc(100vw-2rem)]" trigger={<Button variant="outline" size="sm" className="h-8 px-2" onClick={() => setMoreOpen((value) => !value)} aria-label={t('toolbar.more')} aria-expanded={moreOpen}><MoreHorizontal className="h-4 w-4" /></Button>}>
             <div className="grid grid-cols-2 gap-2 p-3" data-schedule-window-menu>
-              <Input type="date" value={anchor} onChange={event=>{if(event.target.value)setAnchor(event.target.value)}} className="h-8 min-w-0 w-full text-xs" aria-label={t('toolbar.date')} />
+              <DateField value={anchor} onChange={value=>{if(value)setAnchor(value)}} className="h-8 min-w-0 w-full text-xs" aria-label={t('toolbar.date')} />
               <Button variant="outline" size="sm" className="h-8 w-full" onClick={()=>setAnchor(props.today)}>{t('toolbar.today')}</Button>
               <Select value={String(rangeDays)} disabled={view==='calendar'} onChange={event=>setRangeDays(Number(event.target.value))} className="h-8 min-w-0 w-full text-xs" aria-label={t('toolbar.range')}>{rangeOptions.map(days=><option key={days} value={days}>{t('toolbar.days',{count:days})}</option>)}</Select>
               <Select value={groupBy} onChange={event=>setGroupBy(event.target.value as GroupBy)} className="h-8 min-w-0 w-full text-xs" aria-label={t('toolbar.groupBy')}>{(['none','department','trade','jobTitle'] as const).map(option=><option key={option} value={option}>{t(`groupBy.${option}`)}</option>)}</Select>

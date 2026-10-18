@@ -58,8 +58,12 @@ function writeValue(input: HTMLInputElement, iso: string): boolean {
 }
 
 /**
- * Keyboard grammar for every native date field in the application, installed
- * once in the shell. A focused date field accepts:
+ * Keyboard grammar for native date inputs, installed once in the shell.
+ * Product date entry renders DateField (and a static check refuses native
+ * date inputs in product code); this behaviour covers the native inputs that
+ * embedded third-party surfaces render, such as the scheduling package's
+ * task editor and filters, so every date control accepts the same keys. A
+ * focused native date input accepts:
  *
  * - `+`/`=` and `-` for the next and previous day; T for the business date;
  *   W/K, M/H and Y/R for the first/last day of the week, month and year

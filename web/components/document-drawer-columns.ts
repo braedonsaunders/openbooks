@@ -261,8 +261,8 @@ export function useDocumentDrawerColumns(scope: DocumentDrawerCommandsScope) {
         key: 'taxProfileId', width: '110px', type: 'select',
         options: [{ value: '', label: nativeGoods ? tCommon('nativeGoodsTax.automatic') : t('drawer.noTax') }, ...taxProfiles.map((profile) => ({ value: profile.value, label: profile.code ?? '' }))],
       },
-      work_from: { key: 'workFrom', width: '130px', type: 'text', placeholder: 'YYYY-MM-DD' },
-      work_to: { key: 'workTo', width: '130px', type: 'text', placeholder: 'YYYY-MM-DD' },
+      work_from: { key: 'workFrom', width: '130px', type: 'date' },
+      work_to: { key: 'workTo', width: '130px', type: 'date' },
       // Withholding line fields stay out of the layout registry without a
       // registration: a saved form layout cannot resurrect columns the grid
       // itself refuses to offer.

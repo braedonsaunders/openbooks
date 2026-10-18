@@ -7,6 +7,7 @@ import { useViewerFormat } from '@/lib/viewer-format'
 import { Button, Input, Label, Select } from '@openbooks/ui'
 import { Field } from '@/components/field'
 import { readApiErrorMessage, refusalMessageFromBody } from '../../lib/api-error'
+import { DateField } from '../date-field'
 
 export interface CrewLine {
   id?: string
@@ -439,7 +440,7 @@ function CrewCreateForm({
           </Select>
         </Field>
         <Field label={t('field.workedOnLabel')}>
-          <Input type="date" value={workedOn} onChange={(event) => setWorkedOn(event.target.value)} />
+          <DateField value={workedOn} onChange={(value) => setWorkedOn(value)} />
         </Field>
         <Field label={t('field.memo')}>
           <Input value={notes} onChange={(event) => setNotes(event.target.value)} placeholder={t('field.memoPlaceholder')} />

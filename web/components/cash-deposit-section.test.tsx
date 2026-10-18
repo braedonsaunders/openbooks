@@ -110,7 +110,7 @@ function setInput(host: HTMLElement, label: string, value: string) {
 
 function slipInput(host: HTMLElement): HTMLInputElement {
   const inputs = [...host.querySelectorAll("input")].filter(
-    (node) => node.getAttribute("type") !== "date" && node.getAttribute("type") !== "checkbox",
+    (node) => !node.hasAttribute("data-date-field") && node.getAttribute("type") !== "hidden" && node.getAttribute("type") !== "checkbox",
   );
   assert.equal(inputs.length, 2, "amount and slip inputs must render");
   return inputs[1] as HTMLInputElement;

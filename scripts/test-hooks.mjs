@@ -118,6 +118,15 @@ process.on('warning', (warning) => {
   }
 })
 
+// Under Node the browser's preferred languages follow the host locale. Every
+// test process sees en-US, so controls that refine the viewer locale by the
+// browser region (date fields read and show dates in that regional format)
+// render identically on every machine. A test that needs another region
+// redefines the property.
+if (globalThis.navigator) {
+  Object.defineProperty(globalThis.navigator, 'languages', { value: Object.freeze(['en-US']), configurable: true, writable: true })
+}
+
 // Per-file registration receipt. scripts/test-suite.mjs also loads this
 // module as a test reporter (`--test-reporter ./scripts/test-hooks.mjs`)
 // so every shard accounts for its own files.

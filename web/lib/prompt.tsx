@@ -9,12 +9,16 @@
 //
 // Resolves to the trimmed string on confirm, or null on cancel/empty — mirroring
 // the confirmDialog store pattern so there's no context wiring at call sites.
+// `kind: 'date'` asks for a date through the shared date field and resolves to
+// its ISO YYYY-MM-DD value.
 
 import * as React from 'react'
 import { createPortal } from 'react-dom'
 import { AnimatePresence, motion } from 'framer-motion'
 import { useTranslations } from 'next-intl'
 import { Button, Input, Label, OverlayExit, Textarea } from '@openbooks/ui'
+import { BusinessDateProvider } from '../components/business-date-provider'
+import { DateField } from '../components/date-field'
 
 type PromptOptions = {
   title: string
@@ -33,6 +37,14 @@ type PromptOptions = {
    * offers an explicit default option — or null on cancel/dismiss.
    */
   options?: { value: string; label: string }[]
+  /** `date` renders the shared date field; the prompt resolves to ISO YYYY-MM-DD. */
+  kind?: 'text' | 'date'
+  /**
+   * The organization business date for a date prompt, so relative entry (a
+   * missing year, the T key) reads against it. The prompt is mounted outside
+   * the application shell's business-date context, so the caller passes it.
+   */
+  businessToday?: string
 }
 
 type Request = PromptOptions & { id: number; resolve: (value: string | null) => void }
@@ -123,6 +135,10 @@ export function PromptRoot() {
       settle(value)
       return
     }
+    if (req?.kind === 'date') {
+      settle(value === '' ? null : value)
+      return
+    }
     // The submitted text is what is visibly in the field: the live element
     // wins over lagging state, so a programmatic fill submitted by keyboard
     // resolves its text instead of cancelling as empty.
@@ -200,6 +216,15 @@ export function PromptRoot() {
                       </option>
                     ))}
                   </select>
+                ) : req.kind === 'date' ? (
+                  <PromptDate
+                    businessToday={req.businessToday}
+                    inputRef={inputRef as React.Ref<HTMLInputElement>}
+                    value={value}
+                    placeholder={req.placeholder}
+                    onChange={setValue}
+                    onEscape={() => settle(null)}
+                  />
                 ) : req.multiline ? (
                   <Textarea id="prompt-input" rows={8} ref={inputRef as React.Ref<HTMLTextAreaElement>} value={value} placeholder={req.placeholder} required aria-required="true" onChange={(e) => setValue(e.target.value)} onFocus={syncFromElement} onBlur={syncFromElement} onKeyDown={(e) => { if (e.key === 'Escape') settle(null) }} />
                 ) : (
@@ -236,4 +261,36 @@ export function PromptRoot() {
     </AnimatePresence>,
     document.body,
   )
+}
+
+function PromptDate({
+  businessToday,
+  inputRef,
+  value,
+  placeholder,
+  onChange,
+  onEscape,
+}: {
+  businessToday?: string
+  inputRef: React.Ref<HTMLInputElement>
+  value: string
+  placeholder?: string
+  onChange: (value: string) => void
+  onEscape: () => void
+}) {
+  const field = (
+    <DateField
+      id="prompt-input"
+      ref={inputRef}
+      value={value}
+      placeholder={placeholder}
+      required
+      aria-required="true"
+      onChange={onChange}
+      onKeyDown={(e) => {
+        if (e.key === 'Escape') onEscape()
+      }}
+    />
+  )
+  return businessToday ? <BusinessDateProvider today={businessToday}>{field}</BusinessDateProvider> : field
 }

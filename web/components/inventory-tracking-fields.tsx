@@ -4,6 +4,7 @@ import { useTranslations } from "next-intl";
 import { Button, Label, SearchSelect, Skeleton } from "@openbooks/ui";
 import { readApiErrorMessage } from "@/lib/api-error";
 import { promptDialog } from "@/lib/prompt";
+import { useOptionalBusinessToday } from "./business-date-provider";
 
 /** Create (or find) a lot or serial through the inventory endpoint; refusals carry the server's message. */
 async function ensureTrackingIdentifier(body: Record<string, unknown>, fallback: string): Promise<{ id: string }> {
@@ -43,6 +44,7 @@ export function InventoryTrackingFields({
   registerIdentifier?: (kind:"lot"|"serial",number:string,expiresOn:string|null)=>Promise<{id:string}>;
 }) {
   const t = useTranslations("inventory.controls");
+  const businessToday = useOptionalBusinessToday();
   const [search, setSearch] = useState(""),
     [revision, setRevision] = useState(0),
     [error, setError] = useState<string | null>(null);
@@ -105,7 +107,8 @@ export function InventoryTrackingFields({
         ? await promptDialog({
             title: t("expiry"),
             message: t("expiryOptional"),
-            placeholder: "YYYY-MM-DD",
+            kind: "date",
+            businessToday: businessToday ?? undefined,
           })
         : null;
       if (!mounted.current||currentKey.current!==identity) return;

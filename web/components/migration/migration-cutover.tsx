@@ -16,6 +16,7 @@ import { MIGRATION_ASSISTANT_HREF } from '@/lib/migration/links'
 import { deriveCutoverSteps, type CutoverStep } from '@/lib/migration/cutover-steps'
 import { goLiveBlockers, isConnectorPath, MIGRATION_PATHS, type CutoverCheck, type MigrationPath, type MigrationPlan } from '@/lib/migration/plan-model'
 import type { MigrationJourney } from '@/lib/migration/journey'
+import { DateField } from '../date-field'
 
 export interface CutoverAccountChoice {
   id: string
@@ -251,7 +252,7 @@ function PlanCard({ plan, accounts, goLiveAt, onSaved, onError }: {
         </label>
         <label className="block text-xs font-medium text-slate-700 dark:text-slate-300">
           {t('cutover.setup.cutoverDate')}
-          <input type="date" value={cutoverDate} disabled={frozen} onChange={(event) => setCutoverDate(event.target.value)}
+          <DateField value={cutoverDate} disabled={frozen} onChange={(value) => setCutoverDate(value)}
             className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-950" />
           <span className="mt-0.5 block font-normal text-slate-500 dark:text-slate-400">{t('cutover.setup.cutoverDateHint')}</span>
         </label>
@@ -504,7 +505,7 @@ function OpeningCard({ journey, accounts, canDraftOpening, canImport, onChanged,
         </div>
         <label className="block text-xs font-medium text-slate-700 dark:text-slate-300">
           {t('cutover.opening.documentDate')}
-          <input type="date" value={effectiveDate} onChange={(event) => setDocumentDate(event.target.value)}
+          <DateField value={effectiveDate} onChange={(value) => setDocumentDate(value)}
             className="mt-1 block w-full rounded-md border border-slate-300 bg-white px-2 py-1.5 text-sm dark:border-slate-700 dark:bg-slate-950" />
           <span className="mt-0.5 block font-normal text-slate-500 dark:text-slate-400">{t('cutover.opening.documentDateHint')}</span>
         </label>

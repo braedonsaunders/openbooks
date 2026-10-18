@@ -55,6 +55,13 @@ export interface DateFieldProps extends NativeInputProps {
   openTo?: string
   /** `cell` renders a borderless control that fills a grid cell. */
   appearance?: 'field' | 'cell'
+  /**
+   * The text being typed and not yet settled, or null once the field shows
+   * its settled date again. For owners that must apply an unfinished entry
+   * before a structural edit (a grid moving or removing rows); read it with
+   * `useTypedDateResolver`.
+   */
+  onPendingTextChange?: (text: string | null) => void
 }
 
 type FieldError =
@@ -62,6 +69,20 @@ type FieldError =
   | { kind: 'beforeMin' | 'afterMax' }
 
 type Resolution = { ok: true; iso: string } | { ok: false; error: FieldError }
+
+/** Read typed text as the field does: '' for cleared text, else one real date in range. */
+function resolveTypedText(text: string, context: { today: string | null; locale: string; min: string | null; max: string | null }): Resolution {
+  const trimmed = text.trim()
+  if (trimmed === '') return { ok: true, iso: '' }
+  const parsed = parseTypedDate(trimmed, { today: context.today, locale: context.locale })
+  if (!parsed.ok) {
+    const kind = parsed.reason === 'impossible' ? 'impossible' : parsed.reason === 'needsYear' ? 'needsYear' : 'unreadable'
+    return { ok: false, error: { kind, text: trimmed } }
+  }
+  if (context.min && parsed.iso < context.min) return { ok: false, error: { kind: 'beforeMin' } }
+  if (context.max && parsed.iso > context.max) return { ok: false, error: { kind: 'afterMax' } }
+  return { ok: true, iso: parsed.iso }
+}
 
 /**
  * Width, margin and placement utilities size the whole field (text box and
@@ -101,6 +122,21 @@ function useEntryLocale(): string {
   )
 }
 
+/**
+ * The date a field's unsettled text stands for, read exactly as the field
+ * will settle it: ISO, or '' when cleared or refused.
+ */
+export function useTypedDateResolver({ min, max }: { min?: string; max?: string } = {}): (text: string) => string {
+  const locale = useEntryLocale()
+  const today = useOptionalBusinessToday()
+  const minIso = isoOrNull(min)
+  const maxIso = isoOrNull(max)
+  return React.useCallback((text: string) => {
+    const result = resolveTypedText(text, { today, locale, min: minIso, max: maxIso })
+    return result.ok ? result.iso : ''
+  }, [today, locale, minIso, maxIso])
+}
+
 function isoOrNull(value: string | undefined): string | null {
   return value && isIsoCalendarDate(value) ? value : null
 }
@@ -109,7 +145,8 @@ function isoOrNull(value: string | undefined): string | null {
  * The one date control. The viewer types a date the way they write it —
  * their locale's order and separators, month names, ordinals, a missing or
  * two-digit year read against the organization's business date — and it
- * settles on blur or Enter. Text that is not exactly one real date in the
+ * settles on blur or Enter (cleared text and a complete ISO date report as
+ * soon as they are typed or pasted). Text that is not exactly one real date in the
  * allowed range stays on screen, is marked invalid with the reason, blocks
  * native form submission and reports '' to the owner; it is never replaced
  * by a different day.
@@ -132,6 +169,7 @@ export const DateField = React.forwardRef<HTMLInputElement, DateFieldProps>(func
     form,
     openTo,
     appearance = 'field',
+    onPendingTextChange,
     className,
     disabled,
     readOnly,
@@ -161,10 +199,16 @@ export const DateField = React.forwardRef<HTMLInputElement, DateFieldProps>(func
   // entry, a month name being typed): when the owner passes it back, the
   // text stays instead of being replaced by the formatted value.
   const [keptTextValue, setKeptTextValue] = React.useState<string | null>(null)
+  // Typed text not yet settled. The ref answers synchronously inside event
+  // handlers; the state tells an owner through onPendingTextChange.
+  const dirtyRef = React.useRef(false)
+  const [pendingText, setPendingText] = React.useState<string | null>(null)
   const [seenValue, setSeenValue] = React.useState(value)
   if (seenValue !== value) {
     setSeenValue(value)
+    // A new date from the owner replaces whatever was being typed.
     if (value !== keptTextValue) {
+      setPendingText(null)
       setDraft(null)
       setError(null)
     }
@@ -174,7 +218,14 @@ export const DateField = React.forwardRef<HTMLInputElement, DateFieldProps>(func
   const [announcement, setAnnouncement] = React.useState('')
 
   const inputRef = React.useRef<HTMLInputElement | null>(null)
-  const dirtyRef = React.useRef(false)
+  function markTyped(text: string) {
+    dirtyRef.current = true
+    setPendingText(text)
+  }
+  function markSettled() {
+    dirtyRef.current = false
+    setPendingText(null)
+  }
   const letterCommandRef = React.useRef<{ before: string; letter: string } | null>(null)
   const announceTimer = React.useRef<number | undefined>(undefined)
   const errorId = React.useId()
@@ -216,6 +267,19 @@ export const DateField = React.forwardRef<HTMLInputElement, DateFieldProps>(func
 
   React.useEffect(() => () => window.clearTimeout(announceTimer.current), [])
 
+  // Typing replaced by the owner's new date leaves nothing to settle.
+  React.useLayoutEffect(() => {
+    if (pendingText === null) dirtyRef.current = false
+  }, [pendingText])
+
+  const onPendingTextChangeRef = React.useRef(onPendingTextChange)
+  React.useLayoutEffect(() => {
+    onPendingTextChangeRef.current = onPendingTextChange
+  })
+  React.useEffect(() => {
+    onPendingTextChangeRef.current?.(pendingText)
+  }, [pendingText])
+
   function announce(text: string) {
     // Clearing first makes a repeated message speak again.
     setAnnouncement('')
@@ -229,21 +293,12 @@ export const DateField = React.forwardRef<HTMLInputElement, DateFieldProps>(func
   }
 
   function resolve(text: string): Resolution {
-    const trimmed = text.trim()
-    if (trimmed === '') return { ok: true, iso: '' }
-    const parsed = parseTypedDate(trimmed, { today, locale })
-    if (!parsed.ok) {
-      const kind = parsed.reason === 'impossible' ? 'impossible' : parsed.reason === 'needsYear' ? 'needsYear' : 'unreadable'
-      return { ok: false, error: { kind, text: trimmed } }
-    }
-    if (minIso && parsed.iso < minIso) return { ok: false, error: { kind: 'beforeMin' } }
-    if (maxIso && parsed.iso > maxIso) return { ok: false, error: { kind: 'afterMax' } }
-    return { ok: true, iso: parsed.iso }
+    return resolveTypedText(text, { today, locale, min: minIso, max: maxIso })
   }
 
   /** Settle typed text. Returns whether it was accepted. */
   function settle(text: string): boolean {
-    dirtyRef.current = false
+    markSettled()
     const result = resolve(text)
     if (result.ok) {
       setDraft(null)
@@ -262,7 +317,7 @@ export const DateField = React.forwardRef<HTMLInputElement, DateFieldProps>(func
 
   /** Move to a date chosen by a key or the calendar. */
   function choose(iso: string) {
-    dirtyRef.current = false
+    markSettled()
     setDraft(null)
     setError(null)
     emit(iso)
@@ -295,7 +350,7 @@ export const DateField = React.forwardRef<HTMLInputElement, DateFieldProps>(func
     const owner = inputRef.current?.form
     if (!owner || controlled) return
     function onReset() {
-      dirtyRef.current = false
+      markSettled()
       setUncontrolledValue(defaultValue ?? '')
       setDraft(null)
       setError(null)
@@ -341,7 +396,7 @@ export const DateField = React.forwardRef<HTMLInputElement, DateFieldProps>(func
       event.preventDefault()
       setKeptTextValue(letterCommand.before)
       emit(letterCommand.before)
-      dirtyRef.current = true
+      markTyped(letterCommand.letter + event.key)
       setDraft(letterCommand.letter + event.key)
       return
     }
@@ -350,12 +405,13 @@ export const DateField = React.forwardRef<HTMLInputElement, DateFieldProps>(func
       // again; it does not also close the drawer or dialog behind the field.
       event.preventDefault()
       event.stopPropagation()
-      dirtyRef.current = false
+      markSettled()
       setDraft(null)
       setError(null)
       return
     }
-    if (event.altKey && event.key === 'ArrowDown') {
+    // In a grid cell Alt+Arrow keys belong to the grid (they move rows).
+    if (event.altKey && event.key === 'ArrowDown' && appearance !== 'cell') {
       event.preventDefault()
       if (dirtyRef.current) settle(display)
       if (calendarAnchor !== null) setOpen(true)
@@ -368,8 +424,10 @@ export const DateField = React.forwardRef<HTMLInputElement, DateFieldProps>(func
           accepted = settle(display)
         })
         if (!accepted) {
-          // A refused entry never submits the form it sits in.
+          // A refused entry never submits the form it sits in, and focus
+          // stays on it rather than moving on with a grid or form.
           event.preventDefault()
+          event.stopPropagation()
           return
         }
       }
@@ -410,7 +468,7 @@ export const DateField = React.forwardRef<HTMLInputElement, DateFieldProps>(func
   const describedByIds = [describedBy, message ? errorId : null].filter(Boolean).join(' ') || undefined
 
   const field = (
-    <span className={cn('relative block w-full', cell && 'h-full', layout)}>
+    <span className={cn('relative block w-full', layout)}>
       <Input
         {...inputProps}
         ref={setRefs}
@@ -426,17 +484,28 @@ export const DateField = React.forwardRef<HTMLInputElement, DateFieldProps>(func
         spellCheck={false}
         aria-invalid={invalid || undefined}
         aria-describedby={describedByIds}
-        aria-keyshortcuts={editable ? 'Alt+ArrowDown' : undefined}
+        aria-keyshortcuts={editable && !cell ? 'Alt+ArrowDown' : undefined}
         onChange={(event) => {
-          dirtyRef.current = true
+          const text = event.target.value
+          markTyped(text)
           letterCommandRef.current = null
-          setDraft(event.target.value)
+          setDraft(text)
+          // Cleared text, or a complete ISO date typed or pasted, cannot grow
+          // into another date, so it reports at once; the text keeps its
+          // typed form until the entry settles.
+          const typed = text.trim()
+          const unambiguous = typed === '' || (isIsoCalendarDate(typed) && (!minIso || typed >= minIso) && (!maxIso || typed <= maxIso))
+          if (typed !== value && unambiguous) {
+            setError(null)
+            setKeptTextValue(typed)
+            emit(typed)
+          }
         }}
         onKeyDown={handleKeyDown}
         onBlur={handleBlur}
         className={cn(
           'tabular-nums',
-          cell && 'h-full rounded-none border-0 bg-transparent px-2.5 py-1 shadow-none focus:ring-0 focus-visible:ring-0 dark:bg-transparent',
+          cell && 'h-8 rounded-sm border-0 bg-transparent px-1.5 py-1 shadow-none focus:ring-2 focus:ring-teal-500/60 focus-visible:ring-2 dark:bg-transparent',
           control,
           !readOnly && (cell ? 'pr-7' : 'pr-8'),
         )}
@@ -509,6 +578,8 @@ export const DateField = React.forwardRef<HTMLInputElement, DateFieldProps>(func
     </Popover>
   )
 })
+
+DateField.displayName = 'DateField'
 
 function clampDate(iso: string | null, min: string | null, max: string | null): string | null {
   if (iso === null) return null

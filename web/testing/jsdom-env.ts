@@ -94,6 +94,20 @@ export async function bootJsdomEnvironment(
   (globalThis as Record<string, unknown>).IS_REACT_ACT_ENVIRONMENT = true;
 }
 
+/** The text control of the shared DateField. */
+export const DATE_FIELD_INPUT = "input[data-date-field]";
+
+/**
+ * Enter text into a DateField and settle it the way finishing an entry does:
+ * the field reads the text in the viewer's format and reports its ISO date
+ * on the next microtask (await inside `act`).
+ */
+export function enterJsdomDate(input: HTMLInputElement, text: string): void {
+  const realm = input.ownerDocument.defaultView!;
+  setJsdomInput(input, text);
+  input.dispatchEvent(new realm.Event("change", { bubbles: true }));
+}
+
 /** Dispatch through the element's realm so React observes the browser's native value setter. */
 export function setJsdomInput(input: HTMLInputElement, value: string): void {
   const realm = input.ownerDocument.defaultView!;

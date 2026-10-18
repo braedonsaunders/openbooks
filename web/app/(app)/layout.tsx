@@ -84,8 +84,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   return (
     <MoneyProvider currency={org.base_currency}>
       <BusinessDateProvider today={today}>
-      {/* Date-field keys and forgiving paste for every date input, read
-        against the organization's business date. */}
+      {/* Product date entry is DateField; this gives the native date inputs
+        that embedded third-party surfaces render (the scheduling task editor
+        and filters) the same keys and forgiving paste. */}
       <DateEntryKeyboard />
       <ThemeProvider>
         <NavigationProvider>

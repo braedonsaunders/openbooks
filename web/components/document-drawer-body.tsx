@@ -14,6 +14,7 @@ import { DocumentFxRateField } from './document-drawer-fx-rate'
 import { lineText, type LineRow } from './document-drawer-types'
 import { emptyLine } from './document-drawer-lines'
 import type { DocumentDrawerHeaderScope } from './document-drawer-header'
+import { DateField } from './date-field'
 
 /** The record body: refusals, banners, header fields, and the line grid. */
 export function renderDocumentDrawerBody(scope: DocumentDrawerHeaderScope) {
@@ -269,7 +270,7 @@ export function renderDocumentDrawerBody(scope: DocumentDrawerHeaderScope) {
             <div className={field}>
               <FieldLabel fieldName={t('drawer.dateLabel')}>{t('drawer.dateLabel')}</FieldLabel>
               {editable ? (
-                <Input type="date" value={documentDate} onChange={(e) => setDocumentDate(e.target.value)} />
+                <DateField value={documentDate} onChange={(value) => setDocumentDate(value)} />
               ) : (
                 <p className="text-sm">{doc.document_date}</p>
               )}
@@ -279,7 +280,7 @@ export function renderDocumentDrawerBody(scope: DocumentDrawerHeaderScope) {
                 <FieldLabel fieldName={t('drawer.dueDate')}>{t('drawer.dueDate')}</FieldLabel>
                 {editable ? (
                   <>
-                    <Input type="date" value={dueDate} onChange={(e) => editDueDate(e.target.value)} />
+                    <DateField value={dueDate} onChange={(value) => editDueDate(value)} />
                     {noTermsHint ? (
                       <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">
                         {tCommon('documentDefaults.noPaymentTerms', { name: noTermsHint })}

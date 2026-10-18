@@ -165,6 +165,6 @@ test("a draft invoice edit still offers the posting date", async (t) => {
   await clickEdit();
   const cell = postingDateCell();
   assert.ok(cell, "the posting date field must render on a draft");
-  const input = cell.querySelector('input[type="date"]') as HTMLInputElement | null;
+  const input = cell.querySelector('input[data-date-field]') as HTMLInputElement | null;
   assert.ok(input, "drafts keep the posting-date input");
 });

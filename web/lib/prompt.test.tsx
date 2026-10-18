@@ -197,3 +197,32 @@ test('submitting a programmatically filled field resolves its text, never a sile
     await unmount()
   }
 })
+
+test('a date prompt reads the typed date against the business date and resolves ISO', async () => {
+  const unmount = await mountRoot()
+  try {
+    const pending = promptDialog({ title: 'Correct start', label: 'Start date', kind: 'date', initialValue: '2026-02-01', businessToday: '2026-10-17' })
+    await act(async () => {
+      await tick()
+    })
+    const input = field()
+    assert.equal(input.getAttribute('data-date-field'), '', 'the prompt renders the shared date field')
+    assert.equal(input.value, '02/01/2026', 'the initial date shows in the viewer format')
+    assert.equal(input.required, true)
+    await act(async () => {
+      input.focus()
+      const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!
+      setter.call(input, '3/15')
+      input.dispatchEvent(new window.Event('input', { bubbles: true }))
+      await tick()
+    })
+    await act(async () => {
+      input.dispatchEvent(new window.KeyboardEvent('keydown', { key: 'Enter', bubbles: true, cancelable: true }))
+      input.closest('form')!.requestSubmit()
+      await tick()
+    })
+    assert.equal(await pending, '2026-03-15', 'Enter settles the yearless date in the business year and submits it')
+  } finally {
+    await unmount()
+  }
+})

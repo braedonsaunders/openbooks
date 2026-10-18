@@ -27,7 +27,7 @@ function isLabelElement(type: unknown): boolean {
 }
 
 function isControlElement(type: unknown): boolean {
-  return ['input', 'textarea', 'select', 'Input', 'Textarea', 'Select', 'SearchSelect'].includes(elementName(type))
+  return ['input', 'textarea', 'select', 'Input', 'Textarea', 'DateField', 'Select', 'SearchSelect'].includes(elementName(type))
 }
 
 function isButtonControl(type: unknown): boolean {
@@ -35,7 +35,7 @@ function isButtonControl(type: unknown): boolean {
 }
 
 function isNativeLabelTarget(type: unknown): boolean {
-  return ['input', 'textarea', 'select', 'Input', 'Textarea'].includes(elementName(type))
+  return ['input', 'textarea', 'select', 'Input', 'Textarea', 'DateField'].includes(elementName(type))
 }
 
 export interface FieldProps {

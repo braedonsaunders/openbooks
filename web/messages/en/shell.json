@@ -299,7 +299,6 @@
       "yearEnd": "Last day of the year"
     },
     "repeatHint": "Press a first-day or last-day key again to move one more week, month or year.",
-    "pasteHint": "Paste a date in your usual format, such as 15 Mar 2026. A two-digit year you type moves to the nearest century when you leave the field.",
     "changed": "Date set to {date}",
     "outsideCalendar": "That date is outside the supported calendar.",
     "outsideAllowed": "That date is outside the range this field allows.",

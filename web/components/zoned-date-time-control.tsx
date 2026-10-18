@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
 import { Input, Label, Select } from '@openbooks/ui'
 import { localTimeFields, resolveLocalTime, type LocalTime } from '@/lib/zoned-date-time'
+import { DateField } from './date-field'
 
 /** Shared date/time control preserves instants and refuses unresolved daylight-saving choices. */
 export function ZonedDateTimeControl({
@@ -60,12 +61,11 @@ export function ZonedDateTimeControl({
       <div className="grid grid-cols-2 gap-2">
         <div className="space-y-1">
           <Label>{t('date')}</Label>
-          <Input
+          <DateField
             aria-label={`${label} · ${t('date')}`}
-            type="date"
             disabled={!zone}
             value={local.date}
-            onChange={(event) => change({ ...local, date: event.target.value })}
+            onChange={(value) => change({ ...local, date: value })}
           />
         </div>
         <div className="space-y-1">

@@ -1,12 +1,15 @@
 'use client'
 
-// Reusable from/to date-range filter for server-rendered list pages. Writes ISO
-// dates (YYYY-MM-DD) to URL params (default `from`/`to`) via router.replace,
-// preserving every other param and resetting pagination. Consume server-side as
-// `col >= from::date` and `col < to::date + interval '1 day'` (end-inclusive).
+// Reusable from/to date-range filter for server-rendered list pages. Two shared
+// date fields bound to each other (From never after To; an empty bound's
+// calendar opens on the other bound's month) write ISO dates (YYYY-MM-DD) to
+// URL params (default `from`/`to`) via router.replace, preserving every other
+// param and resetting pagination. Consume server-side as `col >= from::date`
+// and `col < to::date + interval '1 day'` (end-inclusive).
 
 import { useRouter, usePathname, useSearchParams } from 'next/navigation'
 import { X } from 'lucide-react'
+import { DateField } from './date-field'
 
 export function DateRangeFilter({
   fromKey = 'from',
@@ -58,25 +61,25 @@ export function DateRangeFilter({
   }
 
   const inputCls =
-    'h-8 rounded-md border border-slate-200 bg-white px-2 text-sm text-slate-700 [color-scheme:light] focus:border-teal-500 focus:outline-none focus:ring-1 focus:ring-teal-500/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200 dark:[color-scheme:dark]'
+    'h-8 w-36 rounded-md border border-slate-200 bg-white px-2 text-sm text-slate-700 focus:ring-1 focus:ring-teal-500/30 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200'
 
   return (
     <div className="flex items-center gap-1.5">
-      <input
-        type="date"
+      <DateField
         aria-label={fromLabel}
         value={from}
         max={to || undefined}
-        onChange={(e) => set(fromKey, e.target.value)}
+        openTo={to || undefined}
+        onChange={(value) => set(fromKey, value)}
         className={inputCls}
       />
       <span className="text-slate-400 dark:text-slate-500">–</span>
-      <input
-        type="date"
+      <DateField
         aria-label={toLabel}
         value={to}
         min={from || undefined}
-        onChange={(e) => set(toKey, e.target.value)}
+        openTo={from || undefined}
+        onChange={(value) => set(toKey, value)}
         className={inputCls}
       />
       {clearable && (rawFrom || rawTo) && (

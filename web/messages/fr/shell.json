@@ -299,7 +299,6 @@
       "yearEnd": "Dernier jour de l’année"
     },
     "repeatHint": "Appuyez de nouveau sur une touche de premier ou de dernier jour pour avancer d’une semaine, d’un mois ou d’une année de plus.",
-    "pasteHint": "Collez une date dans votre format habituel, par exemple 15 mars 2026. Une année saisie sur deux chiffres passe au siècle le plus proche lorsque vous quittez le champ.",
     "changed": "Date définie au {date}",
     "outsideCalendar": "Cette date est hors du calendrier pris en charge.",
     "outsideAllowed": "Cette date est hors de la plage autorisée pour ce champ.",

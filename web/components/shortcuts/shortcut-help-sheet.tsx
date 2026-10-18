@@ -42,8 +42,8 @@ function Group({ title, children }: { title: string; children: React.ReactNode }
 
 /**
  * The keyboard reference: the commands available where focus stood when it
- * opened, grouped by scope, then the date-field keys every date input
- * accepts. Key caps follow the viewer's platform.
+ * opened, grouped by scope, then the keys every date field accepts and how
+ * typed dates and the calendar work. Key caps follow the viewer's platform.
  */
 export function ShortcutHelpSheet({
   open,
@@ -80,9 +80,13 @@ export function ShortcutHelpSheet({
               <KeyCaps keys={entry.keys.slice(0, 1).map((key) => key.toUpperCase())} />
             </Row>
           ))}
+          <Row label={tDate('calendarKey')}>
+            <KeyCaps keys={[apple ? '⌥' : 'Alt', '↓']} />
+          </Row>
         </Group>
         <p className="text-xs leading-relaxed text-slate-500 dark:text-slate-400">{tDate('repeatHint')}</p>
-        <p className="text-xs leading-relaxed text-slate-500 dark:text-slate-400">{tDate('pasteHint')}</p>
+        <p className="text-xs leading-relaxed text-slate-500 dark:text-slate-400">{tDate('typingHint')}</p>
+        <p className="text-xs leading-relaxed text-slate-500 dark:text-slate-400">{tDate('calendarHint')}</p>
       </div>
     </Drawer>
   )

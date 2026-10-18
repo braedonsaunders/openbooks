@@ -7,6 +7,7 @@ import { FieldLabel, Input, Select, Textarea } from '@openbooks/ui'
 import { SearchSelect } from '@openbooks/ui'
 import type { CustomFieldDefClient } from './custom-field-inputs'
 import { readApiErrorMessage } from '../lib/api-error'
+import { DateField } from './date-field'
 
 /**
  * One custom field's control (edit) or display (view). Extracted from
@@ -128,11 +129,19 @@ export function CustomFieldInput({
           value={(value as string) ?? ''}
           onChange={onChange}
         />
+      ) : def.fieldType === 'date' ? (
+        <DateField
+          id={inputId}
+          aria-label={hideLabel ? def.label : undefined}
+          placeholder={def.config.placeholder}
+          value={(value as string) ?? ''}
+          onChange={(next) => onChange(next)}
+        />
       ) : (
         <Input
           id={inputId}
           aria-label={hideLabel ? def.label : undefined}
-          type={def.fieldType === 'date' ? 'date' : 'text'}
+          type="text"
           inputMode={def.fieldType === 'number' || def.fieldType === 'currency' ? 'decimal' : undefined}
           className={def.fieldType === 'number' || def.fieldType === 'currency' ? 'text-right tabular-nums' : undefined}
           placeholder={def.config.placeholder}
