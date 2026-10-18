@@ -71,6 +71,7 @@ const FINANCE_SUBJECT_KINDS = new Set([
   'outbound_payment_run',
   'inbound_payment_run',
   'equity_action',
+  'intercompany_netting_run',
 ])
 
 export const FLOW_SUBJECT_GROUPS = [
