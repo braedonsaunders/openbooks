@@ -24,7 +24,7 @@ const APP_SEGMENT = 'app/(app)'
 // before being listed here.
 // A factory route (`defineRoute`) names its feature key and the factory
 // answers 404 while that feature is off.
-const GATE = /defineRoute\(\{[\s\S]*?\bfeature:\s*(['"])[A-Za-z]+\1|requireFeatureEnabled\(|guardFeaturePermission\(|isFeatureEnabled\(|requireFlowsSession\(|requireFlowsRecordReader\(|authorizeTimeWorkspace\(|requireProjectsFeature\(|guardProjectsFeature\(|requireProjectSchedulingFeature\(|guardProjectSchedulingFeature\(|guardPreBillingFeature\(|guardPropertyManagementFeature\(|guardSubcontractsFeature\(|guardComplianceFeature\(|guardLienWaiverFeature\(|guardInformationReturnsFeature\(|requireInformationReturnsFeature\(|gateDocuments\(|gateSurveys\(|gateExports\(|meritCycleGate\(/
+const GATE = /defineRoute\(\{[\s\S]*?\bfeature:\s*(['"])[A-Za-z]+\1|requireFeatureEnabled\(|guardFeaturePermission\(|isFeatureEnabled\(|requireFlowsSession\(|requireFlowsRecordReader\(|authorizeTimeWorkspace\(|requireProjectsFeature\(|guardProjectsFeature\(|requireProjectSchedulingFeature\(|guardProjectSchedulingFeature\(|guardPreBillingFeature\(|guardPropertyManagementFeature\(|guardSubcontractsFeature\(|guardComplianceFeature\(|guardLienWaiverFeature\(|guardInformationReturnsFeature\(|requireInformationReturnsFeature\(|gateDocuments\(|gateSurveys\(|gateExports\(|meritCycleGate\(|requireServiceArea\(/
 
 const read = readingPagePairs((path: string) => readFileSync(new URL(path, WEB), 'utf8'))
 const exists = (path: string) => existsSync(new URL(path, WEB))

@@ -20,7 +20,7 @@ import { SourceRecordDrawer } from './SourceRecord'
 import type { BoardSourceRecord } from '@openbooks/engine/schedule-boards/source-history'
 import { CalendarView } from './CalendarView'
 import { NewBoardDrawer, type ScopeOptions } from './NewBoardDrawer'
-import { RosterDrawer, rosterTabs, type RosterAccess } from './RosterDrawer'
+import { RosterDrawer, rosterTabs, type RosterAccess, type RosterTab } from './RosterDrawer'
 import { PeopleGrid } from './PeopleGrid'
 import { TargetsView } from './TargetsView'
 import { TaskBoard, type TaskBoardProject } from './TaskBoard'
@@ -70,6 +70,8 @@ export interface SchedulingWorkspaceProps {
   readonly serviceEnabled?: boolean
   /** Roster tools the organization's features and the actor's permissions allow, for boards whose type declares them. */
   readonly roster: RosterAccess & { readonly closing: boolean }
+  /** A shared shift-request link opens the board's roster on its requests. */
+  readonly initialRosterTab?: RosterTab | null
 }
 
 
@@ -127,7 +129,7 @@ function BoardShell(props: SchedulingWorkspaceProps & { board: ScheduleBoard; on
   const [downloadOpen, setDownloadOpen] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
   const [displayOpen,setDisplayOpen]=useState(false)
-  const [rosterOpen, setRosterOpen] = useState(false)
+  const [rosterOpen, setRosterOpen] = useState(Boolean(props.initialRosterTab))
   const [openVisitId, setOpenVisitId] = useState<string | null>(null)
   const range = useMemo(() => viewRange(view, anchor, rangeDays, board.weekStartsOn), [anchor, board.weekStartsOn, rangeDays, view])
   const people = board.rowKind !== 'tasks'
@@ -347,7 +349,7 @@ function BoardShell(props: SchedulingWorkspaceProps & { board: ScheduleBoard; on
       {window && openEntry && !openSourceRecord ? (
         <BookingDrawer entry={window.entries.find((entry) => entry.id === openEntry.id) ?? openEntry} window={window} controller={controller} roster={props.roster} onClose={() => setOpenEntry(null)} />
       ) : null}
-      {rosterOpen && window && roster.length ? <RosterDrawer board={board} window={window} controller={controller} range={range} today={props.today} access={props.roster} initialTab={roster[0]!} onClose={() => setRosterOpen(false)} /> : null}
+      {rosterOpen && window && roster.length ? <RosterDrawer board={board} window={window} controller={controller} range={range} today={props.today} access={props.roster} initialTab={props.initialRosterTab && roster.includes(props.initialRosterTab) ? props.initialRosterTab : roster[0]!} onClose={() => setRosterOpen(false)} /> : null}
       {downloadOpen && window ? <DownloadScheduleDrawer window={window} onClose={()=>setDownloadOpen(false)} /> : null}
       {emailOpen && window ? <EmailScheduleDrawer window={window} onClose={()=>setEmailOpen(false)} /> : null}
       {props.newBoard}

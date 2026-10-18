@@ -14,7 +14,7 @@ import { loadBoardWindow, type BoardWindow } from '@openbooks/engine/schedule-bo
 import { can, getAuthz } from '../../../lib/authz'
 import { isFeatureEnabled } from '../../../lib/features'
 import { accessDeniedHref } from '../../../lib/gate-targets'
-import { pickString } from '../../../lib/list-params'
+import { isUuid, pickString } from '../../../lib/list-params'
 import { viewRange } from '../../../components/scheduling/model'
 import type { SchedulingWorkspaceProps } from '../../../components/scheduling/SchedulingWorkspace'
 
@@ -66,7 +66,13 @@ export async function loadSchedulingPage(searchParams: Record<string, string | s
   const usable = boards.filter((board, index) => (board.rowKind === 'people'
     ? (boardHasCapability(board, 'dispatch') ? canDispatchBoards : canPeople)
     : board.rowKind === 'resources' ? resourceVisibility[index] : canTasks))
-  const requested = pickString(searchParams.board)
+  // A shift-request link names the request; it opens that request's board
+  // with the roster on its requests, when the caller can read the board.
+  const requestId = pickString(searchParams.request)
+  const requestBoardId = requestId && isUuid(requestId) && !pickString(searchParams.board)
+    ? (await db.execute<{ boardId: string }>(sql`select board_id as "boardId" from schedule_entry_requests where org_id = ${orgId} and id = ${requestId}`)).rows[0]?.boardId
+    : undefined
+  const requested = pickString(searchParams.board) ?? requestBoardId
   const requestedProjectId = pickString(searchParams.project)
   if(!contextProjectId&&(requested||requestedProjectId)) {
     if(requested&&!usable.some(b=>b.id===requested||b.code===requested)) {
@@ -147,7 +153,8 @@ export async function loadSchedulingPage(searchParams: Record<string, string | s
     if (!(error instanceof ScheduleError)) throw error
     refusal = { message: error.message, remedy: error.remedy ?? null }
   }
-  return { ...base, refusal, board, view, anchor, from, through, rangeDays, initialWindow, projects: [], selectedProjectId: null, settingsHref }
+  const initialRosterTab = requestBoardId && board.id === requestBoardId && boardHasCapability(board, 'shift_requests') ? 'requests' as const : null
+  return { ...base, refusal, board, view, anchor, from, through, rangeDays, initialWindow, projects: [], selectedProjectId: null, settingsHref, initialRosterTab }
 }
 
 /** Device attendance and formal closing as the roster tools see them; the services enforce both again. */

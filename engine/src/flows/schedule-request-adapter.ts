@@ -101,7 +101,7 @@ export const scheduleRequestsFlowAdapter: FlowSubjectAdapter = defineTableSubjec
   },
 
   deepLink(subjectId: string): string {
-    return `/scheduling/requests?request=${subjectId}`;
+    return `/scheduling?request=${subjectId}`;
   },
 
   async getStatus(subjectId: string): Promise<string | null> {
