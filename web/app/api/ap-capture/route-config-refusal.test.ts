@@ -61,8 +61,12 @@ const { createScratchOrg, dropScratchOrg } = await import(
   "@openbooks/engine/testing/fixtures"
 );
 
+// The configuration is read once a validated upload needs document capture,
+// so each request carries one well-formed PDF bill.
 function postRequest(): Request {
-  return new Request("http://openbooks.test/api/ap-capture", { method: "POST" });
+  const form = new FormData();
+  form.append("files", new File([Buffer.from("%PDF-1.4\n1 0 obj\n<<>>\nendobj\n%%EOF\n")], "bill.pdf", { type: "application/pdf" }));
+  return new Request("http://openbooks.test/api/ap-capture", { method: "POST", body: form });
 }
 
 test("an unconfigured org is refused as not-configured", { skip: !DB }, async () => {

@@ -106,7 +106,10 @@ const selfUrl = new URL(import.meta.url).href
 
 const _hooks = registerHooks({
   resolve(specifier, context, nextResolve) {
+    // The engine's attachment-target loader reads through its own relative
+    // database import, so that edge is served the same double.
     const mocked = mockUrls.get(specifier)
+      ?? (specifier === '../platform/db.ts' && context.parentURL?.endsWith('/engine/src/records/file-attachment-target.ts') ? 'mock:db' : undefined)
     // File-URL serving: the double re-exports the real permission map (opaque mock: URLs cannot resolve it).
     if (mocked === 'mock:file-cabinet') return { url: `${selfUrl}?mock=file-cabinet`, shortCircuit: true }
     if (mocked) return { url: mocked, shortCircuit: true }
