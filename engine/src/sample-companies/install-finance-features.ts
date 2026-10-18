@@ -66,14 +66,15 @@ async function installTaxBook(c: DemoContext, bookId: string): Promise<void> {
 async function installPrepaidInsurance(c: DemoContext): Promise<void> {
   const templateId = scenarioRecordId(c, "expense_amortization_templates", "annual-policy");
   const memo = "Annual general liability policy";
+  // Member companies keep the schedules their source carried; a master gains a missing one.
+  if (c.memberSample) return;
   if ((await db.execute(sql`select id from expense_amortization_schedules where org_id = ${c.orgId} and template_id = ${templateId} and memo = ${memo}`)).rows.length) return;
-  if (c.preserveExisting) return;
   const template = (await db.execute<Record<string, unknown>>(sql`select * from expense_amortization_templates where org_id = ${c.orgId} and id = ${templateId}`)).rows[0];
   if (!template) throw new SampleCompanyError("The demonstration amortization template could not be read back.");
   const refusal = await validateTemplateWrite(db, c.orgId, {}, template);
   if (refusal) throw new SampleCompanyError(`The demonstration amortization template is not usable: ${refusal}`);
   const operationDate = c.operationDate ?? c.date;
-  if (operationDate.slice(0, 4) !== String(c.year)) throw new SampleCompanyError("The prepaid insurance demonstration needs an open period in its policy year.");
+  const policyYear = operationDate.slice(0, 4);
   const elapsedMonths = BigInt(Number(operationDate.slice(5, 7)) - 1);
   const released = fromUnits((toUnits(ANNUAL_PREMIUM) * elapsedMonths) / 12n);
   const unamortized = fromUnits(toUnits(ANNUAL_PREMIUM) - toUnits(released));
@@ -87,7 +88,7 @@ async function installPrepaidInsurance(c: DemoContext): Promise<void> {
   if (!journal.entryId || journal.approvalPending) throw new SampleCompanyError("Demo preparation cannot approve its own journals. Review the master’s journal approval routing in Flows before retrying preparation.");
   const schedule = await createManualSchedule({
     orgId: c.orgId, actorId: c.actorId, templateId, subsidiaryId: c.subsidiaryId, totalAmount: ANNUAL_PREMIUM,
-    openingAmortizedAmount: released, serviceStartOn: `${c.year}-01-01`, amortizeFromPeriod: `${operationDate.slice(0, 7)}-01`,
+    openingAmortizedAmount: released, serviceStartOn: `${policyYear}-01-01`, amortizeFromPeriod: `${operationDate.slice(0, 7)}-01`,
     memo, reason: REASON,
   });
   await activateSchedule({ orgId: c.orgId, actorId: c.actorId, scheduleId: schedule.scheduleId, reason: "Release the prepaid premium monthly from the current period" });
@@ -98,8 +99,9 @@ async function installPrepaidInsurance(c: DemoContext): Promise<void> {
  * option pool, the founders' restricted common purchase and a post-money SAFE.
  */
 async function installCapTable(c: DemoContext): Promise<void> {
-  // Refreshes and member companies keep the cap table they already hold.
-  if (c.preserveExisting) return;
+  // Member companies keep the cap table their source carried. A master gains
+  // any missing structure; recorded issuances replay by their request keys.
+  if (c.memberSample) return;
   const account = (key: string) => scenarioRecordId(c, "accounts", key);
   const command = { orgId: c.orgId, actorId: c.actorId, subsidiaryId: c.subsidiaryId };
   const issueDate = c.operationDate ?? c.date;

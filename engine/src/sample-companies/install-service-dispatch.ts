@@ -31,8 +31,9 @@ import { SampleCompanyError } from "./provisioning-failures.ts";
  */
 export async function installServiceDispatch(c: DemoContext): Promise<void> {
   if (!sampleCompanyFeatures(c.industryKey).serviceDispatch) return;
-  // Refreshes and member companies keep the service history they already hold.
-  if (c.preserveExisting) return;
+  // Member companies keep the service history their source carried; a master
+  // without the service day gains it once.
+  if (c.memberSample) return;
   const id = (table: string, key = "main") => scenarioRecordId(c, table, key);
   const actor = { orgId: c.orgId, actorId: c.actorId };
   if ((await db.execute(sql`select id from service_requests where org_id = ${c.orgId} and id = ${id("service_requests", "no-heat")}`)).rows.length) return;
