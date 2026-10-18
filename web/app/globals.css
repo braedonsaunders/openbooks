@@ -743,3 +743,20 @@
     animation-delay: 0s !important;
   }
 }
+
+/* Switching workspaces in the sidebar: the panel's pages arrive from the side
+   of the rail the reader moved toward and settle quickly. */
+.nav-panel-switch {
+  animation: 240ms var(--route-ease-out) both nav-panel-in;
+}
+.nav-panel-switch[data-direction="up"] {
+  --nav-panel-from: -8px;
+}
+@keyframes nav-panel-in {
+  from { opacity: 0; transform: translateY(var(--nav-panel-from, 8px)); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .nav-panel-switch {
+    animation: none;
+  }
+}

@@ -7,7 +7,7 @@
 // choice is persisted in a cookie so the server can render the correct width
 // on the next load (no width flash).
 
-import { useCallback, useRef, useState } from 'react'
+import { useCallback, useLayoutEffect, useRef, useState } from 'react'
 import Link from 'next/link'
 import { useTranslations } from 'next-intl'
 import { ChevronDown, ChevronRight, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
@@ -55,6 +55,19 @@ export function AppSidebar({
 
   useScrollActiveIntoView(panelRef, `${selected?.id}|${activeHref}`, !collapsed)
 
+  // Which way the reader moved along the rail, so the panel's pages arrive
+  // from that side. Derived during render; null until the first switch, so
+  // the initial paint does not animate.
+  const [shown, setShown] = useState<{ id: string | undefined; direction: 'up' | 'down' | null }>(() => ({
+    id: selected?.id,
+    direction: null,
+  }))
+  if (shown.id !== selected?.id) {
+    const from = navGroups.findIndex((group) => group.id === shown.id)
+    const to = navGroups.findIndex((group) => group.id === selected?.id)
+    setShown({ id: selected?.id, direction: from >= 0 && to < from ? 'up' : 'down' })
+  }
+
   const toggle = useCallback(() => {
     setCollapsed((c) => {
       const next = !c
@@ -86,11 +99,15 @@ export function AppSidebar({
         <div className="flex h-14 shrink-0 items-center justify-center">
           <BrandHomeLink mark />
         </div>
-        <nav aria-label={t('workspaces')} className="flex min-h-0 flex-1 flex-col px-1 pb-2">
-          <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto pt-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <nav aria-label={t('workspaces')} className="relative flex min-h-0 flex-1 flex-col px-1 pb-2">
+          <RailSelectionChip groupId={collapsed ? null : (selected?.id ?? null)} />
+          <div
+            data-rail-scroll
+            className="relative flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto pt-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          >
             {navGroups.filter((group) => !FOOT_GROUP_IDS.has(group.id)).map(rail)}
           </div>
-          <div className="mx-2 mt-1 flex flex-col gap-1 border-t border-slate-200 pt-2 dark:border-slate-800">
+          <div className="relative mx-2 mt-1 flex flex-col gap-1 border-t border-slate-200 pt-2 dark:border-slate-800">
             {footGroups.map(rail)}
           </div>
           <button
@@ -122,40 +139,100 @@ export function AppSidebar({
               collapsed ? '-translate-x-3 opacity-0' : 'translate-x-0 opacity-100',
             )}
           >
-            <div className="flex h-14 shrink-0 items-center px-3">
-              {selected.groupHref ? (
-                <Link
-                  href={selected.groupHref as never}
-                  prefetch
-                  aria-current={activeHref === selected.groupHref ? 'page' : undefined}
-                  data-walkthrough={`nav:${selected.groupHref}`}
-                  className={cn(
-                    'group/home flex min-w-0 flex-1 items-center gap-1 rounded-md px-2 py-1 text-[15px] font-semibold tracking-tight transition-colors',
-                    'focus-visible:ring-2 focus-visible:ring-teal-500/40 focus-visible:outline-none',
-                    activeHref === selected.groupHref
-                      ? 'bg-teal-50 text-teal-900 dark:bg-teal-950/50 dark:text-teal-100'
-                      : 'text-slate-900 hover:bg-slate-100 dark:text-slate-100 dark:hover:bg-slate-800',
-                  )}
-                >
-                  <span className="truncate">{selected.label}</span>
-                  <ChevronRight
-                    size={14}
-                    className="shrink-0 text-slate-400 opacity-0 transition-opacity group-hover/home:opacity-100 dark:text-slate-500"
-                  />
-                </Link>
-              ) : (
-                <h2 className="min-w-0 flex-1 truncate px-2 text-[15px] font-semibold tracking-tight text-slate-900 dark:text-slate-100">
-                  {selected.label}
-                </h2>
-              )}
+            <div
+              key={selected.id}
+              data-direction={shown.direction ?? undefined}
+              className={cn('flex min-h-0 flex-1 flex-col', shown.direction && 'nav-panel-switch')}
+            >
+              <div className="flex h-14 shrink-0 items-center px-3">
+                {selected.groupHref ? (
+                  <Link
+                    href={selected.groupHref as never}
+                    prefetch
+                    aria-current={activeHref === selected.groupHref ? 'page' : undefined}
+                    data-walkthrough={`nav:${selected.groupHref}`}
+                    className={cn(
+                      'group/home flex min-w-0 flex-1 items-center gap-1 rounded-md px-2 py-1 text-[15px] font-semibold tracking-tight transition-colors',
+                      'focus-visible:ring-2 focus-visible:ring-teal-500/40 focus-visible:outline-none',
+                      activeHref === selected.groupHref
+                        ? 'bg-teal-50 text-teal-900 dark:bg-teal-950/50 dark:text-teal-100'
+                        : 'text-slate-900 hover:bg-slate-100 dark:text-slate-100 dark:hover:bg-slate-800',
+                    )}
+                  >
+                    <span className="truncate">{selected.label}</span>
+                    <ChevronRight
+                      size={14}
+                      className="shrink-0 text-slate-400 opacity-0 transition-opacity group-hover/home:opacity-100 dark:text-slate-500"
+                    />
+                  </Link>
+                ) : (
+                  <h2 className="min-w-0 flex-1 truncate px-2 text-[15px] font-semibold tracking-tight text-slate-900 dark:text-slate-100">
+                    {selected.label}
+                  </h2>
+                )}
+              </div>
+              <nav ref={panelRef} aria-label={selected.label} className="app-scroll flex-1 overflow-y-auto px-2 pb-3">
+                <PanelItems groupId={selected.id} items={selected.items} activeHref={activeHref} />
+              </nav>
             </div>
-            <nav ref={panelRef} aria-label={selected.label} className="app-scroll flex-1 overflow-y-auto px-2 pb-3">
-              <PanelItems key={selected.id} groupId={selected.id} items={selected.items} activeHref={activeHref} />
-            </nav>
           </div>
         ) : null}
       </div>
     </aside>
+  )
+}
+
+/**
+ * The raised chip marking the workspace shown in the panel. One element glides
+ * between tiles rather than each tile toggling its own, so switching reads as
+ * a single motion. Placement is written straight to the element (no render),
+ * and the glide is enabled only after the first placement so the page never
+ * opens with the chip flying in from the corner.
+ */
+function RailSelectionChip({ groupId }: { groupId: string | null }) {
+  const chipRef = useRef<HTMLSpanElement>(null)
+  useLayoutEffect(() => {
+    // The rail is this chip's parent; read it from the DOM, since a parent's
+    // ref is not yet attached when a child's layout effect first runs.
+    const chip = chipRef.current
+    const rail = chip?.parentElement
+    if (!rail || !chip) return
+    const place = () => {
+      const tile = groupId ? rail.querySelector<HTMLElement>(`[data-rail-chip="${CSS.escape(groupId)}"]`) : null
+      if (!tile) {
+        chip.style.opacity = '0'
+        return
+      }
+      const railBox = rail.getBoundingClientRect()
+      const tileBox = tile.getBoundingClientRect()
+      chip.style.width = `${tileBox.width}px`
+      chip.style.height = `${tileBox.height}px`
+      chip.style.transform = `translate(${tileBox.left - railBox.left}px, ${tileBox.top - railBox.top}px)`
+      chip.style.opacity = '1'
+    }
+    place()
+    const frame = window.requestAnimationFrame(() => {
+      chip.dataset.ready = 'true'
+    })
+    const list = rail.querySelector('[data-rail-scroll]')
+    list?.addEventListener('scroll', place, { passive: true })
+    const observer = new ResizeObserver(place)
+    observer.observe(rail)
+    return () => {
+      window.cancelAnimationFrame(frame)
+      list?.removeEventListener('scroll', place)
+      observer.disconnect()
+    }
+  }, [groupId])
+  return (
+    <span
+      ref={chipRef}
+      aria-hidden
+      className={cn(
+        'pointer-events-none absolute top-0 left-0 rounded-lg bg-white opacity-0 shadow-sm ring-1 ring-slate-200 dark:bg-slate-800 dark:ring-slate-700',
+        'data-[ready=true]:transition-[transform,opacity] data-[ready=true]:duration-300 data-[ready=true]:ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none!',
+      )}
+    />
   )
 }
 
@@ -191,13 +268,17 @@ function RailWorkspace({
       className="group/rail flex w-full flex-col items-center gap-1 rounded-lg pt-1 pb-1 focus-visible:ring-2 focus-visible:ring-teal-500/40 focus-visible:outline-none"
     >
       <span
+        data-rail-chip={group.id}
         className={cn(
-          'grid h-8 w-10 place-items-center rounded-lg transition-all duration-150',
+          'grid h-8 w-10 place-items-center rounded-lg transition-[background-color,color,box-shadow,scale] duration-200 group-active/rail:scale-95',
           active
             ? 'bg-teal-700 text-white shadow-sm shadow-teal-900/20 dark:bg-teal-500 dark:text-slate-950'
-            : raised
-              ? 'bg-white text-slate-900 shadow-sm ring-1 ring-slate-200 dark:bg-slate-800 dark:text-slate-100 dark:ring-slate-700'
-              : 'text-slate-500 group-hover/rail:bg-slate-200/70 group-hover/rail:text-slate-800 dark:text-slate-400 dark:group-hover/rail:bg-slate-800 dark:group-hover/rail:text-slate-100',
+            : selected
+              ? // The rail's gliding chip sits beneath this tile.
+                'text-slate-900 dark:text-slate-100'
+              : raised
+                ? 'bg-white text-slate-900 shadow-sm ring-1 ring-slate-200 dark:bg-slate-800 dark:text-slate-100 dark:ring-slate-700'
+                : 'text-slate-500 group-hover/rail:bg-slate-200/70 group-hover/rail:text-slate-800 dark:text-slate-400 dark:group-hover/rail:bg-slate-800 dark:group-hover/rail:text-slate-100',
         )}
       >
         <NavIcon iconKey={group.iconKey} size={17} />
