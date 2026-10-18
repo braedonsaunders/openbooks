@@ -109,3 +109,32 @@ test("payouts round to the currency's minor unit and always sum to the exit valu
 test("a negative exit refuses", () => {
   assert.throws(() => runWaterfall({ exitValue: rational(-1n), classes: [], awards: [], convertibles: [], minorUnitScale: 2 }), EquityError);
 });
+
+test("a capped SAFE takes the greater of its cash-out amount and its conversion amount", () => {
+  const safe: WaterfallConvertible = {
+    securityId: "safe", holderPartyId: "angel", kind: "safe", amount: parseMoney("1000000", "amount"), cap: parseMoney("10000000", "cap"), postMoney: true,
+  };
+  // Converting, the post-money SAFE owns 1,000,000 / 10,000,000 of a 10,000,000-share liquidity capitalization.
+  const low = run("5000000", [common(9_000_000n)], [], [safe]);
+  assert.equal(amountOf(low, "angel"), "1000000.0000", "below the cap the cash-out amount pays more");
+  assert.equal(low.safes[0]!.converted, false);
+  assert.equal(amountOf(low, "founder"), "4000000.0000");
+  const high = run("50000000", [common(9_000_000n)], [], [safe]);
+  assert.equal(amountOf(high, "angel"), "5000000.0000", "above the cap the conversion amount pays more");
+  assert.equal(high.safes[0]!.converted, true);
+  assert.equal(high.safes[0]!.shares, "1000000.0000000000");
+  assert.equal(amountOf(high, "founder"), "45000000.0000");
+  const uncapped = run("50000000", [common(9_000_000n)], [], [{ ...safe, cap: null }]);
+  assert.equal(amountOf(uncapped, "angel"), "1000000.0000", "an uncapped SAFE has no liquidity price and takes its cash-out amount");
+  assert.deepEqual(total(high), rational(50_000_000n), "the payouts sum to the exit value");
+});
+
+test("a pre-money SAFE converting at liquidity prices its shares on the capitalization before it", () => {
+  const safe: WaterfallConvertible = {
+    securityId: "safe", holderPartyId: "angel", kind: "safe", amount: parseMoney("1000000", "amount"), cap: parseMoney("9000000", "cap"), postMoney: false,
+  };
+  // Liquidity price 9,000,000 / 9,000,000 = 1.00: 1,000,000 shares beside the founder's 9,000,000.
+  const result = run("100000000", [common(9_000_000n)], [], [safe]);
+  assert.equal(amountOf(result, "angel"), "10000000.0000");
+  assert.equal(amountOf(result, "founder"), "90000000.0000");
+});

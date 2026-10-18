@@ -5,6 +5,12 @@
  *    accounts; the compensation expense account is an expense account; the
  *    convertible instruments account is a liability or equity account (SAFEs
  *    and notes are classified by their terms);
+ *  - the convertible note interest expense account is an expense account,
+ *    the accrued interest account a liability account (it may be the
+ *    convertible instruments account itself) and the early-exercise deposit
+ *    account a liability account; these three are mapped by the legal
+ *    entities that need them, and a posting that needs an unmapped one
+ *    refuses with this Setup remedy;
  *  - every account is an active posting account of the organization;
  *  - a version may not take effect on or before the legal entity's latest
  *    equity posting, so a new version never reinterprets posted history.
@@ -26,14 +32,29 @@ export const EQUITY_POLICY_ACCOUNT_FIELDS: readonly { key: string; label: string
   { key: "convertibleInstrumentsAccountId", label: "convertible instruments", types: [...LIABILITY_TYPES, ...EQUITY_TYPES] },
 ];
 
+/** Accrued interest and deposits are other current or long-term liabilities, never payables or card balances. */
+const ACCRUAL_TYPES = ["liability_current_other", "liability_long_term"];
+
+/** Accounts a version maps when the legal entity carries interest-bearing notes or early-exercisable options. */
+export const EQUITY_POLICY_OPTIONAL_ACCOUNT_FIELDS: readonly { key: string; label: string; types: readonly string[] }[] = [
+  { key: "interestExpenseAccountId", label: "convertible note interest expense", types: PNL_COST_TYPES },
+  { key: "accruedInterestAccountId", label: "accrued convertible note interest", types: ACCRUAL_TYPES },
+  { key: "earlyExerciseDepositAccountId", label: "early-exercise deposit", types: ACCRUAL_TYPES },
+];
+
 /** The refusal for a proposed policy version, or null when it is valid. */
 export async function equityAccountPolicyRefusal(runner: SqlExecutor, orgId: string, body: Record<string, unknown>): Promise<string | null> {
   const subsidiaryId = body.subsidiaryId;
   if (typeof subsidiaryId !== "string" || !isUuid(subsidiaryId)) return "Choose the legal entity the policy applies to.";
   const effectiveFrom = body.effectiveFrom;
   if (typeof effectiveFrom !== "string" || !isIsoCalendarDate(effectiveFrom)) return "Enter the date the policy takes effect as YYYY-MM-DD.";
-  for (const field of EQUITY_POLICY_ACCOUNT_FIELDS) {
+  const fields = [
+    ...EQUITY_POLICY_ACCOUNT_FIELDS.map((field) => ({ ...field, required: true })),
+    ...EQUITY_POLICY_OPTIONAL_ACCOUNT_FIELDS.map((field) => ({ ...field, required: false })),
+  ];
+  for (const field of fields) {
     const accountId = body[field.key];
+    if (!field.required && (accountId === undefined || accountId === null || accountId === "")) continue;
     if (typeof accountId !== "string" || !isUuid(accountId)) return `Choose the ${field.label} account.`;
     const row = (await runner.execute<{ type: string; is_active: boolean; is_summary: boolean }>(sql`
       select type, is_active, is_summary from accounts where org_id = ${orgId} and id = ${accountId}`)).rows[0];

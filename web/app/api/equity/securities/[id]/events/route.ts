@@ -19,12 +19,15 @@ const eventBody = z.discriminatedUnion('kind', [
   z.object({ kind: z.literal('cancel'), quantity: wholeShares, ...common }),
   z.object({ kind: z.literal('transfer'), quantity: wholeShares, transfereePartyId: uuidId, ...common }),
   z.object({ kind: z.literal('convert'), quantity: wholeShares.nullable().optional(), roundId: uuidId.nullable().optional(), targetShareClassId: uuidId.nullable().optional(), ...common }),
+  z.object({ kind: z.literal('election_83b'), ...common }),
 ])
 
 /**
- * Record award and share activity: exercise, settlement, forfeiture, expiry,
- * cancellation, transfer or conversion. Exercises, settlements and
- * conversions write the resulting certificate and post their entry.
+ * Record award and share activity: exercise (including early exercise of
+ * unvested options), settlement, forfeiture, expiry, cancellation of an
+ * award, transfer, conversion and a restricted holder's 83(b) election.
+ * Exercises, settlements and conversions write the resulting certificate
+ * and post their entry.
  */
 export const POST = defineRoute({
   permission: 'equity.manage',

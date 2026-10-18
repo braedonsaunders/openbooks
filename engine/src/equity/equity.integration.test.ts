@@ -1,102 +1,23 @@
 import assert from "node:assert/strict";
-import { randomUUID } from "node:crypto";
 import test from "node:test";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
+import { dropScratchOrgReporting } from "../testing/fixtures.ts";
 import {
-  createScratchOrg,
-  createScratchUser,
-  dropScratchOrgReporting,
-  seedPostingAccount,
-  type ScratchOrg,
-} from "../testing/fixtures.ts";
+  accountBalance,
+  entryLines,
+  equityRefusal as refusal,
+  setEquityFeature as setFeature,
+  setupEquityWorld as setupWorld,
+} from "../testing/equity-world.ts";
 import { postCompensationRun, previewCompensationRun } from "./compensation-run.ts";
-import { EquityError } from "./errors.ts";
+import type { EquityError } from "./errors.ts";
 import { recordSecurityEvent } from "./events.ts";
 import { loadCapTableView, loadSecurityDetail } from "./read-model.ts";
 import { issueSecurity } from "./securities.ts";
-import { createPlan, createShareClass } from "./structure.ts";
+import { createPlan } from "./structure.ts";
 
 const DB = !!process.env.OPENBOOKS_DB_URL;
-
-interface World {
-  org: ScratchOrg;
-  managerId: string;
-  approverId: string;
-  outsiderId: string;
-  holderId: string;
-  accounts: { common: string; preferred: string; apic: string; apicShareBased: string; expense: string; treasury: string; convertible: string };
-  commonClassId: string;
-}
-
-async function setFeature(orgId: string, key: string, on: boolean): Promise<void> {
-  const updated = await db.execute(sql`
-    update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), ${`{features,${key}}`}::text[], ${on ? "true" : "false"}::jsonb, true)
-     where id = ${orgId} returning id`);
-  assert.equal(updated.rows.length, 1, `feature ${key} written`);
-}
-
-async function grant(orgId: string, roleKey: string, permissions: string[]): Promise<void> {
-  const updated = await db.execute(sql`
-    update app_roles set permissions = ${JSON.stringify(permissions)}::jsonb where org_id = ${orgId} and key = ${roleKey} returning id`);
-  assert.equal(updated.rows.length, 1, `role ${roleKey} granted`);
-}
-
-async function seedPolicy(w: Omit<World, "commonClassId">, effectiveFrom: string): Promise<void> {
-  const a = w.accounts;
-  await db.execute(sql`
-    insert into equity_account_policies (org_id, subsidiary_id, effective_from, common_stock_account_id, preferred_stock_account_id,
-      apic_account_id, apic_share_based_account_id, compensation_expense_account_id, treasury_stock_account_id,
-      convertible_instruments_account_id, reason, created_by, updated_by)
-    values (${w.org.orgId}, ${w.org.subsidiaryId}, ${effectiveFrom}, ${a.common}, ${a.preferred}, ${a.apic}, ${a.apicShareBased},
-      ${a.expense}, ${a.treasury}, ${a.convertible}, 'Initial equity accounts', ${w.approverId}, ${w.approverId})`);
-}
-
-async function setupWorld(options: { policy?: boolean } = {}): Promise<World> {
-  const org = await createScratchOrg();
-  const managerId = await createScratchUser(org.orgId, "Equity Manager", "equity_manager");
-  await grant(org.orgId, "equity_manager", ["equity.read", "equity.manage"]);
-  const approverId = await createScratchUser(org.orgId, "Equity Approver", "equity_approver");
-  await grant(org.orgId, "equity_approver", ["equity.read", "equity.approve"]);
-  const outsiderId = await createScratchUser(org.orgId, "Equity Outsider", "equity_outsider");
-  await grant(org.orgId, "equity_outsider", ["gl.read"]);
-  await setFeature(org.orgId, "equity", true);
-  const holderId = randomUUID();
-  await db.execute(sql`insert into parties (id, org_id, kind, display_name) values (${holderId}, ${org.orgId}, 'person', 'Founder One')`);
-  const accounts = {
-    common: await seedPostingAccount(org.orgId, "3010", "Common Stock", "equity"),
-    preferred: await seedPostingAccount(org.orgId, "3020", "Preferred Stock", "equity"),
-    apic: await seedPostingAccount(org.orgId, "3100", "Additional Paid-in Capital", "equity"),
-    apicShareBased: await seedPostingAccount(org.orgId, "3110", "Paid-in Capital - Share-based", "equity"),
-    expense: await seedPostingAccount(org.orgId, "6400", "Stock Compensation Expense", "expense"),
-    treasury: await seedPostingAccount(org.orgId, "3200", "Treasury Stock", "equity"),
-    convertible: await seedPostingAccount(org.orgId, "2600", "Convertible Instruments", "liability_current_other"),
-  };
-  const base = { org, managerId, approverId, outsiderId, holderId, accounts };
-  if (options.policy !== false) await seedPolicy(base, "2026-01-01");
-  const commonClass = await createShareClass({
-    orgId: org.orgId, actorId: managerId, subsidiaryId: org.subsidiaryId, code: "CS", name: "Common Stock", kind: "common",
-    effectiveOn: "2026-01-01", authorizedShares: "10000000", parValue: "0.0001",
-  });
-  return { ...base, commonClassId: commonClass.id };
-}
-
-function refusal(code: string) {
-  return (error: unknown) => error instanceof EquityError && error.code === code;
-}
-
-async function entryLines(orgId: string, entryId: string): Promise<{ account_id: string; amount: string }[]> {
-  return (await db.execute<{ account_id: string; amount: string }>(sql`
-    select account_id, amount::text as amount from journal_lines where org_id = ${orgId} and entry_id = ${entryId} order by line_number`)).rows;
-}
-
-async function accountBalance(orgId: string, accountId: string): Promise<string> {
-  const row = (await db.execute<{ balance: string }>(sql`
-    select coalesce(sum(jl.amount), 0)::numeric(19,4)::text as balance
-      from journal_lines jl join journal_entries je on je.org_id = jl.org_id and je.id = jl.entry_id
-     where jl.org_id = ${orgId} and jl.account_id = ${accountId} and je.status in ('posted', 'reversed')`)).rows[0];
-  return row?.balance ?? "0.0000";
-}
 
 test("shares issued for cash post a balanced equity entry: cash, share capital at par and APIC", { skip: !DB }, async () => {
   const w = await setupWorld();

@@ -9,18 +9,36 @@ import { sql } from "drizzle-orm";
 import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
 import { db, withOrgTransaction } from "../platform/db.ts";
 import { isUuid } from "../platform/uuid.ts";
-import { buildCapTable, convertibleState, holdingState, planPool, authorizedShares, vestingTermsOf, type CapTable, type HoldingState } from "./cap-table.ts";
+import {
+  authorizedShares,
+  buildCapTable,
+  conversionClassOf,
+  conversionPrice,
+  convertibleState,
+  eventCeiling,
+  holdingState,
+  planPool,
+  reversedEvents,
+  vestingTermsOf,
+  type CapTable,
+  type HoldingState,
+} from "./cap-table.ts";
 import { cumulativeCompensation, isCompensatory, totalCompensation } from "./compensation.ts";
 import { EquityError } from "./errors.ts";
 import { assertEquityReadable, currencyExponent, loadLegalEntity, requireEquityReader, type LegalEntity } from "./internal.ts";
-import { modelRoundFromBook, waterfallFromBook, type ExitScenario, type RoundScenario } from "./models.ts";
-import { formatPrice, ledgerUnits, parsePrice } from "./quantities.ts";
+import { spotRate } from "./fx.ts";
+import { mfnCandidates, type MfnCandidate } from "./mfn.ts";
+import { modelCurrencies, modelRoundFromBook, waterfallFromBook, type ExitScenario, type ModelRates, type RoundScenario } from "./models.ts";
+import { instrumentBalance } from "./posting.ts";
+import { floorShares, formatPrice, ledgerUnits, parsePrice } from "./quantities.ts";
+import { earlyExerciseSource, election83bStatus, releasedUnits, restrictedPortion, type Election83b } from "./restricted-stock.ts";
+import { accruedToDate } from "./settlement.ts";
 import { toUnits } from "../money/money.ts";
 import type { RoundModelResult } from "./round-model.ts";
 import { formatLedger } from "./securities.ts";
 import { restatePrice } from "./splits.ts";
 import { EVENT_COLUMNS, loadEquityBook, SECURITY_COLUMNS, securityFromRow } from "./store.ts";
-import type { EquityBook, SecurityKind } from "./types.ts";
+import { REVERSIBLE_EVENT_KINDS, type EquityBook, type SecurityKind } from "./types.ts";
 import { vestingInstallments } from "./vesting.ts";
 import type { WaterfallResult } from "./waterfall.ts";
 
@@ -101,6 +119,8 @@ export interface SecurityRow {
   price: string | null;
   principal: string | null;
   currency: string;
+  /** Restricted stock's 83(b) election standing (null when none is called for). */
+  election83b: Election83b | null;
 }
 
 /** Securities of a legal entity with their state as of a date. */
@@ -133,6 +153,7 @@ export async function listSecurities(input: ReadInput & { subsidiaryId: string; 
         price: holding?.exercisePrice ?? security.pricePerShare,
         principal: convertible?.principal ?? null,
         currency: security.currency,
+        election83b: election83bStatus(book, security, input.asOf),
       };
     }).sort((a, b) => (a.issueDate < b.issueDate ? 1 : a.issueDate > b.issueDate ? -1 : a.securityNumber < b.securityNumber ? -1 : 1));
     return { entity, rows };
@@ -149,13 +170,36 @@ export interface SecurityDetail {
   round: { id: string; name: string } | null;
   /** Whole-share counts travel as decimal strings: bigints do not serialize. */
   state: { status: HoldingState["status"]; outstanding: string; vestedAvailable: string; unvested: string; consumed: Record<string, string> } | null;
-  convertible: ReturnType<typeof convertibleState> extends infer T ? Omit<T & object, "security"> | null : null;
+  convertible: {
+    status: string; principal: string; accruedInterest: string; convertingAmount: string; endedOn: string | null; convertedOn: string | null;
+    resultingSecurityId: string | null; valuationCap: string | null; discountPercent: string | null; safeType: string | null; electionId: string | null;
+  } | null;
   vesting: { date: string; quantity: string; cumulative: string }[];
   compensation: { total: string; recognized: string; posted: string } | null;
   events: Record<string, unknown>[];
   source: { id: string; securityNumber: string } | null;
   resulting: { id: string; securityNumber: string; holderName: string }[];
   exercisePrice: string | null;
+  /** An MFN SAFE: later instruments whose better terms the holder may adopt, and the elections recorded. */
+  mfn: {
+    candidates: MfnCandidate[];
+    elections: { id: string; effectiveOn: string; sourceSecurityId: string; sourceSecurityNumber: string; valuationCap: string | null; discountPercent: string | null; safeType: string }[];
+  } | null;
+  /** Interest a note carries on the ledger (posted accruals, in its currency) beside what has accrued to the date. */
+  interest: { posted: string; accrued: string } | null;
+  /** An option that admits early exercise: units exercisable now, vested or not, and the unvested repurchase basis. */
+  earlyExercise: { exercisable: string; vested: string; repurchaseBasis: string | null } | null;
+  /** Restricted stock bought by early exercise: its source option, repurchase basis and deposit standing. */
+  restricted: {
+    sourceSecurityId: string;
+    sourceSecurityNumber: string;
+    repurchaseBasis: string | null;
+    vestedOnIssue: string;
+    restrictedShares: string;
+    releasedShares: string;
+    depositHeld: string;
+  } | null;
+  election83b: Election83b | null;
 }
 
 /** One security with its state, schedule, cost and history. */
@@ -174,10 +218,28 @@ export async function loadSecurityDetail(input: ReadInput & { securityId: string
     const round = security.roundId ? book.rounds.find((row) => row.id === security.roundId) ?? null : null;
     const state = security.quantity !== null ? holdingState(book, security, input.asOf) : null;
     const convertible = security.kind === "safe" || security.kind === "note" ? convertibleState(book, security, input.asOf) : null;
+    const reversed = reversedEvents(book, "9999-12-31");
+    const reversalOf = new Map(book.events.filter((event) => event.kind === "reverse" && event.reversesEventId).map((event) => [event.reversesEventId!, event.id]));
+    const numberOf = new Map(book.securities.map((row) => [row.id, row.securityNumber]));
+    const source83b = earlyExerciseSource(book, security);
+    let restricted: SecurityDetail["restricted"] = null;
+    if (source83b) {
+      const portion = restrictedPortion(security);
+      const held = await instrumentBalance(db, input.orgId, subsidiaryId, security.id, "deposit");
+      restricted = {
+        sourceSecurityId: source83b.id,
+        sourceSecurityNumber: source83b.securityNumber,
+        repurchaseBasis: source83b.unvestedRepurchaseBasis,
+        vestedOnIssue: portion.vestedOnIssue.toString(),
+        restrictedShares: portion.restricted.toString(),
+        releasedShares: floorShares(releasedUnits(book, security, input.asOf)).toString(),
+        depositHeld: formatLedger(-held.reduce((sum, group) => sum + group.units, 0n)),
+      };
+    }
     const eventRows = (await db.execute<Record<string, unknown>>(sql`
       select ${EVENT_COLUMNS} from equity_security_events where org_id = ${input.orgId} and security_id = ${input.securityId}
        order by effective_on, created_at, id`)).rows;
-    const entryIds = [...eventRows.flatMap((row) => [row.journal_entry_id, row.reversal_entry_id]), raw.journal_entry_id].filter((id): id is string => typeof id === "string");
+    const entryIds = [...eventRows.flatMap((row) => [row.journal_entry_id, row.reversal_entry_id, row.interest_accrual_entry_id]), raw.journal_entry_id].filter((id): id is string => typeof id === "string");
     const entries = entryIds.length === 0 ? [] : (await db.execute<{ id: string; entry_number: string; status: string }>(sql`
       select id, entry_number, status from journal_entries where org_id = ${input.orgId} and id = any(${`{${entryIds.join(",")}}`}::uuid[])`)).rows;
     const entryNumbers = new Map(entries.map((row) => [row.id, row.entry_number]));
@@ -209,19 +271,40 @@ export async function loadSecurityDetail(input: ReadInput & { securityId: string
         status: state.status, outstanding: state.outstanding.toString(), vestedAvailable: state.vestedAvailable.toString(), unvested: state.unvested.toString(),
         consumed: Object.fromEntries(Object.entries(state.consumed).map(([key, value]) => [key, value.toString()])),
       } : null,
-      convertible: convertible ? { status: convertible.status, principal: convertible.principal, accruedInterest: convertible.accruedInterest, convertingAmount: convertible.convertingAmount, convertedOn: convertible.convertedOn, resultingSecurityId: convertible.resultingSecurityId } : null,
+      convertible: convertible ? {
+        status: convertible.status, principal: convertible.principal, accruedInterest: convertible.accruedInterest, convertingAmount: convertible.convertingAmount,
+        endedOn: convertible.endedOn, convertedOn: convertible.convertedOn, resultingSecurityId: convertible.resultingSecurityId,
+        valuationCap: convertible.terms.valuationCap, discountPercent: convertible.terms.discountPercent, safeType: convertible.terms.safeType, electionId: convertible.electionId,
+      } : null,
       vesting: security.quantity !== null ? vestingInstallments(vestingTermsOf(security)).map((row) => ({ date: row.date, quantity: row.quantity.toString(), cumulative: row.cumulative.toString() })) : [],
       compensation,
       events: eventRows.map((row) => ({
         ...row,
         journal_entry_number: typeof row.journal_entry_id === "string" ? entryNumbers.get(row.journal_entry_id) ?? null : null,
         reversal_entry_number: typeof row.reversal_entry_id === "string" ? entryNumbers.get(row.reversal_entry_id) ?? null : null,
+        reversed_by_event_id: reversalOf.get(String(row.id)) ?? null,
+        reversible: (REVERSIBLE_EVENT_KINDS as readonly string[]).includes(String(row.kind)) && !reversed.has(String(row.id)),
       })),
       source: source ? { id: source.id, securityNumber: source.securityNumber } : null,
       resulting: resulting.map((row) => ({ id: row.id, securityNumber: row.securityNumber, holderName: names[row.holderPartyId] ?? "" })),
       exercisePrice: (security.kind === "option" || security.kind === "warrant") && security.pricePerShare && shareClass
         ? formatPrice(restatePrice(book.splits, shareClass.id, parsePrice(security.pricePerShare, "the exercise price"), security.issueDate, input.asOf))
         : null,
+      mfn: security.kind === "safe" && security.mfn ? {
+        candidates: mfnCandidates(book, security, input.asOf),
+        elections: book.securityAmendments.filter((row) => row.securityId === security.id).map((row) => ({
+          id: row.id, effectiveOn: row.effectiveOn, sourceSecurityId: row.sourceSecurityId, sourceSecurityNumber: numberOf.get(row.sourceSecurityId) ?? "",
+          valuationCap: row.valuationCap, discountPercent: row.discountPercent, safeType: row.safeType,
+        })),
+      } : null,
+      interest: security.kind === "note" ? { posted: formatLedger(await accruedToDate(input.orgId, security.id)), accrued: convertible?.accruedInterest ?? "0.0000" } : null,
+      earlyExercise: security.kind === "option" && security.earlyExercise && state ? {
+        exercisable: eventCeiling(book, security, state.exact.outstanding, input.asOf).toString(),
+        vested: state.vestedAvailable.toString(),
+        repurchaseBasis: security.unvestedRepurchaseBasis,
+      } : null,
+      restricted,
+      election83b: election83bStatus(book, security, input.asOf),
     };
   });
 }
@@ -234,10 +317,14 @@ export interface StructureView {
 }
 
 function classRow(book: EquityBook, shareClass: EquityBook["classes"][number], asOf: string) {
+  const price = conversionPrice(book, shareClass, asOf);
   return {
     ...shareClass,
     initialAuthorizedShares: shareClass.initialAuthorizedShares.toString(),
     authorized: authorizedShares(book, shareClass, asOf).toString(),
+    /** The common class the class converts into on the date, and its conversion price then. */
+    conversionClassId: conversionClassOf(book, shareClass, asOf),
+    currentConversionPrice: price ? formatPrice(price) : null,
     amendments: book.amendments.filter((row) => row.shareClassId === shareClass.id).map((row) => ({ ...row, authorizedShares: row.authorizedShares?.toString() ?? null })),
     splits: book.splits.filter((row) => row.shareClassId === shareClass.id).map((row) => ({ id: row.id, effectiveOn: row.effectiveOn, ratio: `${row.ratioNumerator}:${row.ratioDenominator}` })),
   };
@@ -285,11 +372,20 @@ export async function listStakeholders(input: ReadInput & { subsidiaryId: string
   });
 }
 
+/** Rates of every outstanding instrument currency into the functional currency on the model date; a missing rate refuses. */
+async function modelRates(orgId: string, entity: LegalEntity, book: EquityBook, asOf: string): Promise<ModelRates> {
+  const rates = new Map<string, string>([[entity.currency, "1"]]);
+  for (const currency of modelCurrencies(book, asOf)) {
+    if (!rates.has(currency)) rates.set(currency, await spotRate(db, orgId, currency, entity.currency, asOf, entity.currency));
+  }
+  return rates;
+}
+
 /** A pro-forma round against the legal entity's cap table. */
 export async function modelEntityRound(input: ReadInput & { subsidiaryId: string } & RoundScenario): Promise<{ entity: LegalEntity; result: RoundModelResult; parties: Record<string, string> }> {
   return snapshot(input.orgId, async () => {
     const { entity, book } = await entityBook(input);
-    const result = modelRoundFromBook(book, input);
+    const result = modelRoundFromBook(book, input, await modelRates(input.orgId, entity, book, input.asOf));
     return { entity, result, parties: await partyNames(input.orgId, result.dilution.filter((row) => row.kind === "holder").map((row) => row.key)) };
   });
 }
@@ -299,7 +395,7 @@ export async function runEntityWaterfall(input: ReadInput & { subsidiaryId: stri
   return snapshot(input.orgId, async () => {
     const { entity, book } = await entityBook(input);
     const minorUnitScale = await currencyExponent(db, entity.currency);
-    const result = waterfallFromBook(book, { ...input, minorUnitScale });
+    const result = waterfallFromBook(book, { ...input, minorUnitScale }, await modelRates(input.orgId, entity, book, input.asOf));
     return {
       entity,
       result,

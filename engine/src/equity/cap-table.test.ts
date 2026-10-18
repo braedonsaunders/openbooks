@@ -9,11 +9,13 @@ const COMMON: ShareClassRecord = {
   id: "c-common", code: "CS", name: "Common", kind: "common", effectiveOn: "2023-01-01", initialAuthorizedShares: 20_000_000n,
   parValue: "0.0001", originalIssuePrice: null, initialConversionPrice: null, liquidationMultiple: null,
   participation: "none", participationCapMultiple: null, seniority: 0, antiDilution: "none",
+  conversionShareClassId: null, conversionAdjustsForSplits: true,
 };
 const SERIES_A: ShareClassRecord = {
   id: "c-a", code: "A", name: "Series A Preferred", kind: "preferred", effectiveOn: "2024-01-01", initialAuthorizedShares: 3_000_000n,
   parValue: "0.0001", originalIssuePrice: "2.0000000000", initialConversionPrice: "2.0000000000", liquidationMultiple: "1.0000",
   participation: "none", participationCapMultiple: null, seniority: 1, antiDilution: "broad_based",
+  conversionShareClassId: "c-common", conversionAdjustsForSplits: true,
 };
 const PLAN: PlanRecord = {
   id: "p-2023", code: "EIP", name: "Equity incentive plan", shareClassId: COMMON.id, effectiveOn: "2023-01-01",
@@ -27,13 +29,13 @@ function security(overrides: Partial<SecurityRecord> & Pick<SecurityRecord, "id"
     vestingStart: null, vestingMonths: null, cliffMonths: null, vestingFrequency: null, vestingTranches: null,
     acceleration: "none", accelerationPercent: null, expirationDate: null, optionType: null, earlyExercise: false,
     safeType: null, valuationCap: null, discountPercent: null, interestRatePercent: null, interestBasis: null, maturityDate: null,
-    fairValuePerUnit: null, expenseAttribution: null,
+    fairValuePerUnit: null, expenseAttribution: null, interestDayCount: null, mfn: false, unvestedRepurchaseBasis: null, fxRate: "1",
     ...overrides,
   };
 }
 
 function event(overrides: Partial<SecurityEventRecord> & Pick<SecurityEventRecord, "id" | "securityId" | "kind" | "effectiveOn">): SecurityEventRecord {
-  return { quantity: null, pricePerShare: null, amount: null, resultingSecurityId: null, roundId: null, ...overrides };
+  return { quantity: null, pricePerShare: null, amount: null, resultingSecurityId: null, roundId: null, reversesEventId: null, ...overrides };
 }
 
 function book(overrides: Partial<EquityBook> = {}): EquityBook {
@@ -49,6 +51,7 @@ function book(overrides: Partial<EquityBook> = {}): EquityBook {
       }),
     ],
     events: [],
+    securityAmendments: [],
     ...overrides,
   };
 }
@@ -142,7 +145,7 @@ test("a reverse split rounds each holding down to whole shares once", () => {
 });
 
 test("a conversion price amendment changes the as-converted count of preferred shares", () => {
-  const amendment = { id: "am-1", shareClassId: SERIES_A.id, kind: "conversion_price" as const, effectiveOn: "2024-05-01", authorizedShares: null, conversionPrice: "1.6000000000", reason: "Down round adjustment" };
+  const amendment = { id: "am-1", shareClassId: SERIES_A.id, kind: "conversion_price" as const, effectiveOn: "2024-05-01", authorizedShares: null, conversionShareClassId: null, conversionPrice: "1.6000000000", reason: "Down round adjustment" };
   const current = book({ amendments: [amendment] });
   assert.equal(formatPrice(conversionRatio(current, SERIES_A, "2024-05-01")), "1.2500000000");
   const table = buildCapTable(current, "2024-05-01");
@@ -167,7 +170,7 @@ test("committed shares of a class include outstanding awards and the unallocated
 test("convertibles report principal and accrued interest beside the table", () => {
   const note = security({
     id: "n-1", kind: "note", holderPartyId: "angel", shareClassId: null, quantity: null, considerationAmount: "100000.0000",
-    issueDate: "2024-01-01", interestRatePercent: "8.0000", interestBasis: "simple", valuationCap: "8000000.0000", discountPercent: "20.0000",
+    issueDate: "2024-01-01", interestRatePercent: "8.0000", interestBasis: "simple", interestDayCount: "actual_365", valuationCap: "8000000.0000", discountPercent: "20.0000",
   });
   const table = buildCapTable(book({ securities: [...book().securities, note] }), "2024-12-31");
   const row = table.convertibles[0]!;

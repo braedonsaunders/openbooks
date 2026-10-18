@@ -9,15 +9,26 @@
  * cumulative cost. Runs are sequential per legal entity: each run's date
  * follows the last one, and a run for a date already run returns that run
  * instead of posting again. A run with no change records a zero total and
- * posts nothing. Posting a run is an approval (equity.approve).
+ * posts nothing. Posting a run is an approval (equity.approve). An award
+ * stated in a foreign currency is expensed at its grant-date rate.
+ *
+ * The run also releases early-exercise deposits as restricted shares vest
+ * (see restricted-stock.ts): for each certificate it measures the
+ * cumulative deposit, grant-date value and par of its vested restricted
+ * units and posts the change since its previous release line, in a second
+ * entry: Dr early-exercise deposit, Dr paid-in capital (share-based)
+ * / Cr share capital at par, Cr APIC. A voided certificate's releases
+ * reverse in the next run.
  */
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "../platform/db.ts";
 import { cumulativeCompensation, isCompensatory } from "./compensation.ts";
 import { EquityError } from "./errors.ts";
 import { assertEquityReadable, currencyExponent, loadLegalEntity, requireEquityReader, writeEquityAudit } from "./internal.ts";
-import { postEquityEntry, resolveAccountPolicy } from "./posting.ts";
+import { restate } from "./fx.ts";
+import { instrumentBalance, postEquityEntry, requirePolicyAccount, resolveAccountPolicy, type EquityLeg } from "./posting.ts";
 import { ledgerUnits } from "./quantities.ts";
+import { earlyExerciseSource, measureRelease } from "./restricted-stock.ts";
 import { formatLedger, newEquityId } from "./securities.ts";
 import { loadEquityBook } from "./store.ts";
 import { inEquityCommand, requireDate, type EquityCommand } from "./structure.ts";
@@ -34,6 +45,19 @@ export interface CompensationLine {
   period: string;
 }
 
+export interface ReleaseLine {
+  securityId: string;
+  securityNumber: string;
+  holderPartyId: string;
+  /** Restricted shares released to date. */
+  shares: string;
+  previousShares: string;
+  /** Functional amounts released by this run. */
+  deposit: string;
+  reclass: string;
+  par: string;
+}
+
 export interface CompensationPreview {
   subsidiaryId: string;
   throughDate: string;
@@ -41,6 +65,9 @@ export interface CompensationPreview {
   lastRunThrough: string | null;
   total: string;
   lines: CompensationLine[];
+  /** Early-exercise deposits the run would release to equity. */
+  releaseTotal: string;
+  releases: ReleaseLine[];
 }
 
 type PreviousLine = {
@@ -71,7 +98,7 @@ function measure(book: EquityBook, throughDate: string, exponent: number, previo
   let total = 0n;
   for (const security of book.securities) {
     if (!isCompensatory(security) || security.issueDate > throughDate) continue;
-    const cumulative = ledgerUnits(cumulativeCompensation(book, security, throughDate), exponent);
+    const cumulative = ledgerUnits(restate(cumulativeCompensation(book, security, throughDate), security.fxRate), exponent);
     const before = previous.get(security.id) ?? 0n;
     const period = cumulative - before;
     if (cumulative === 0n && before === 0n) continue;
@@ -80,6 +107,54 @@ function measure(book: EquityBook, throughDate: string, exponent: number, previo
       securityId: security.id, securityNumber: security.securityNumber, holderPartyId: security.holderPartyId, kind: security.kind as "option" | "rsu",
       cumulative: formatLedger(cumulative), previous: formatLedger(before), period: formatLedger(period),
       units: { cumulative, previous: before, period },
+    });
+  }
+  return { lines, total };
+}
+
+interface PreviousRelease {
+  shares: bigint;
+  deposit: bigint;
+  reclass: bigint;
+  par: bigint;
+}
+
+/** The latest recorded release of every restricted certificate. */
+async function previousReleases(orgId: string, subsidiaryId: string): Promise<Map<string, PreviousRelease>> {
+  const rows = (await db.execute<{ security_id: string; cumulative_shares: string; cumulative_deposit: string; cumulative_reclass: string; cumulative_par: string }>(sql`
+    select distinct on (l.security_id) l.security_id, l.cumulative_shares::text as cumulative_shares, l.cumulative_deposit::text as cumulative_deposit,
+           l.cumulative_reclass::text as cumulative_reclass, l.cumulative_par::text as cumulative_par
+      from equity_compensation_run_releases l
+      join equity_compensation_runs r on r.org_id = l.org_id and r.id = l.run_id
+     where l.org_id = ${orgId} and l.subsidiary_id = ${subsidiaryId}
+     order by l.security_id, r.through_date desc`)).rows;
+  return new Map(rows.map((row) => [row.security_id, {
+    shares: BigInt(row.cumulative_shares), deposit: toUnits(row.cumulative_deposit), reclass: toUnits(row.cumulative_reclass), par: toUnits(row.cumulative_par),
+  }]));
+}
+
+type MeasuredRelease = ReleaseLine & { shareClassKind: "common" | "preferred"; units: { cumulative: PreviousRelease; previous: PreviousRelease; period: Omit<PreviousRelease, "shares"> } };
+
+async function measureReleases(book: EquityBook, throughDate: string, functionalExponent: number, previous: ReadonlyMap<string, PreviousRelease>): Promise<{ lines: MeasuredRelease[]; total: bigint }> {
+  const lines: MeasuredRelease[] = [];
+  let total = 0n;
+  for (const security of book.securities) {
+    if (security.issueDate > throughDate) continue;
+    const option = earlyExerciseSource(book, security);
+    if (!option) continue;
+    const shareClass = book.classes.find((row) => row.id === security.shareClassId)!;
+    const exponent = await currencyExponent(db, security.currency);
+    const measured = measureRelease(book, security, option, shareClass, throughDate, { certificate: exponent, functional: functionalExponent });
+    const before = previous.get(security.id) ?? { shares: 0n, deposit: 0n, reclass: 0n, par: 0n };
+    const period = { deposit: measured.deposit - before.deposit, reclass: measured.reclass - before.reclass, par: measured.par - before.par };
+    if (period.deposit === 0n && period.reclass === 0n && period.par === 0n && measured.shares === before.shares) continue;
+    total += period.deposit + period.reclass;
+    lines.push({
+      securityId: security.id, securityNumber: security.securityNumber, holderPartyId: security.holderPartyId,
+      shares: measured.shares.toString(), previousShares: before.shares.toString(),
+      deposit: formatLedger(period.deposit), reclass: formatLedger(period.reclass), par: formatLedger(period.par),
+      shareClassKind: shareClass.kind,
+      units: { cumulative: { shares: measured.shares, deposit: measured.deposit, reclass: measured.reclass, par: measured.par }, previous: before, period },
     });
   }
   return { lines, total };
@@ -96,9 +171,12 @@ export async function previewCompensationRun(input: { orgId: string; actorId: st
     const book = await loadEquityBook(db, input.orgId, input.subsidiaryId);
     const last = await lastRun(input.orgId, input.subsidiaryId);
     const { lines, total } = measure(book, throughDate, exponent, await previousCumulative(input.orgId, input.subsidiaryId));
+    const releases = await measureReleases(book, throughDate, exponent, await previousReleases(input.orgId, input.subsidiaryId));
     return {
       subsidiaryId: input.subsidiaryId, throughDate, currency: entity.currency, lastRunThrough: last?.through_date ?? null,
       total: formatLedger(total), lines: lines.map(({ units: _units, ...line }) => line),
+      releaseTotal: formatLedger(releases.total),
+      releases: releases.lines.map(({ units: _units, shareClassKind: _kind, ...line }) => line),
     };
   }, { isolationLevel: "REPEATABLE READ", readOnly: true });
 }
@@ -109,6 +187,9 @@ export interface CompensationRunResult {
   total: string;
   journalEntryId: string | null;
   lines: number;
+  releaseAmount: string;
+  releaseJournalEntryId: string | null;
+  releases: number;
   replayed: boolean;
 }
 
@@ -116,13 +197,17 @@ export interface CompensationRunResult {
 export async function postCompensationRun(input: EquityCommand & { subsidiaryId: string; throughDate: string }): Promise<CompensationRunResult> {
   const throughDate = requireDate(input.throughDate, "throughDate", "The run date");
   return inEquityCommand(input, "equity.approve", async ({ book, currency, entityName }) => {
-    const existing = (await db.execute<{ id: string; total_amount: string; journal_entry_id: string | null; lines: number }>(sql`
-      select r.id, r.total_amount::text as total_amount, r.journal_entry_id,
-             (select count(*)::int from equity_compensation_run_lines l where l.org_id = r.org_id and l.run_id = r.id) as lines
+    const existing = (await db.execute<{ id: string; total_amount: string; journal_entry_id: string | null; lines: number; release_amount: string; release_journal_entry_id: string | null; releases: number }>(sql`
+      select r.id, r.total_amount::text as total_amount, r.journal_entry_id, r.release_amount::text as release_amount, r.release_journal_entry_id,
+             (select count(*)::int from equity_compensation_run_lines l where l.org_id = r.org_id and l.run_id = r.id) as lines,
+             (select count(*)::int from equity_compensation_run_releases l where l.org_id = r.org_id and l.run_id = r.id) as releases
         from equity_compensation_runs r
        where r.org_id = ${input.orgId} and r.subsidiary_id = ${input.subsidiaryId} and r.through_date = ${throughDate}::date`)).rows[0];
     if (existing) {
-      return { runId: existing.id, throughDate, total: existing.total_amount, journalEntryId: existing.journal_entry_id, lines: existing.lines, replayed: true };
+      return {
+        runId: existing.id, throughDate, total: existing.total_amount, journalEntryId: existing.journal_entry_id, lines: existing.lines,
+        releaseAmount: existing.release_amount, releaseJournalEntryId: existing.release_journal_entry_id, releases: existing.releases, replayed: true,
+      };
     }
     const last = await lastRun(input.orgId, input.subsidiaryId);
     if (last && throughDate < last.through_date) {
@@ -150,9 +235,33 @@ export async function postCompensationRun(input: EquityCommand & { subsidiaryId:
         ],
       });
     }
+    const releases = await measureReleases(book, throughDate, exponent, await previousReleases(input.orgId, input.subsidiaryId));
+    let releaseJournalEntryId: string | null = null;
+    if (releases.lines.some((line) => line.units.period.deposit !== 0n || line.units.period.reclass !== 0n || line.units.period.par !== 0n)) {
+      const policy = await resolveAccountPolicy(db, input.orgId, input.subsidiaryId, throughDate);
+      const legs: EquityLeg[] = [];
+      for (const line of releases.lines) {
+        const { period } = line.units;
+        const held = await instrumentBalance(db, input.orgId, input.subsidiaryId, line.securityId, "deposit");
+        const depositAccount = held.length === 1 ? held[0]!.accountId : requirePolicyAccount(policy, "earlyExerciseDepositAccountId");
+        legs.push(
+          { accountId: depositAccount, units: period.deposit, balance: { securityId: line.securityId, role: "deposit" } },
+          { accountId: policy.apicShareBasedAccountId, units: period.reclass },
+          { accountId: line.shareClassKind === "preferred" ? policy.preferredStockAccountId : policy.commonStockAccountId, units: -period.par },
+          { accountId: policy.apicAccountId, units: -(period.deposit + period.reclass - period.par) },
+        );
+      }
+      releaseJournalEntryId = await postEquityEntry(db, {
+        orgId: input.orgId, subsidiaryId: input.subsidiaryId, currency, postingDate: throughDate,
+        entryNumberBase: `EQ-RSR-${throughDate}`, memo: `Restricted stock released through ${throughDate} (${entityName})`,
+        idempotencyKey: `equity:compensation-run:${input.subsidiaryId}:${throughDate}:release`, actorId: input.actorId,
+        auditAction: "equity.release", auditChanges: { runId, throughDate }, legs,
+      });
+    }
     const inserted = (await db.execute<{ id: string }>(sql`
-      insert into equity_compensation_runs (id, org_id, subsidiary_id, through_date, currency, total_amount, journal_entry_id, created_by)
-      values (${runId}, ${input.orgId}, ${input.subsidiaryId}, ${throughDate}::date, ${currency}, ${formatLedger(total)}::numeric, ${journalEntryId}, ${input.actorId})
+      insert into equity_compensation_runs (id, org_id, subsidiary_id, through_date, currency, total_amount, journal_entry_id, release_amount, release_journal_entry_id, created_by)
+      values (${runId}, ${input.orgId}, ${input.subsidiaryId}, ${throughDate}::date, ${currency}, ${formatLedger(total)}::numeric, ${journalEntryId},
+        ${formatLedger(releases.total)}::numeric, ${releaseJournalEntryId}, ${input.actorId})
       returning id`)).rows;
     if (inserted.length !== 1) throw new EquityError("The compensation run was not saved.", { status: 409, code: "equity_write_failed", remedy: "Try again." });
     const recorded = lines.filter((line) => line.units.period !== 0n || line.units.cumulative !== 0n);
@@ -167,10 +276,31 @@ export async function postCompensationRun(input: EquityCommand & { subsidiaryId:
         throw new EquityError("The compensation run lines were not stored completely; nothing was saved.", { status: 409, code: "equity_write_failed", remedy: "Try again." });
       }
     }
+    if (releases.lines.length > 0) {
+      const values = releases.lines.map((line) => sql`(${input.orgId}, ${input.subsidiaryId}, ${runId}, ${line.securityId},
+        ${line.units.cumulative.shares.toString()}::bigint, ${line.units.previous.shares.toString()}::bigint,
+        ${formatLedger(line.units.cumulative.deposit)}::numeric, ${formatLedger(line.units.period.deposit)}::numeric,
+        ${formatLedger(line.units.cumulative.reclass)}::numeric, ${formatLedger(line.units.period.reclass)}::numeric,
+        ${formatLedger(line.units.cumulative.par)}::numeric, ${formatLedger(line.units.period.par)}::numeric)`);
+      const written = (await db.execute<{ id: string }>(sql`
+        insert into equity_compensation_run_releases (org_id, subsidiary_id, run_id, security_id, cumulative_shares, previous_shares,
+          cumulative_deposit, period_deposit, cumulative_reclass, period_reclass, cumulative_par, period_par)
+        values ${sql.join(values, sql`, `)}
+        returning id`)).rows;
+      if (written.length !== releases.lines.length) {
+        throw new EquityError("The restricted stock releases were not stored completely; nothing was saved.", { status: 409, code: "equity_write_failed", remedy: "Try again." });
+      }
+    }
     await writeEquityAudit(db, {
       orgId: input.orgId, table: "equity_compensation_runs", rowId: runId, action: "equity.compensation.run", actorId: input.actorId,
-      changes: { before: { lastRunThrough: last?.through_date ?? null }, after: { throughDate, total: formatLedger(total), lines: recorded.length, journalEntryId } },
+      changes: {
+        before: { lastRunThrough: last?.through_date ?? null },
+        after: { throughDate, total: formatLedger(total), lines: recorded.length, journalEntryId, releaseAmount: formatLedger(releases.total), releases: releases.lines.length, releaseJournalEntryId },
+      },
     });
-    return { runId, throughDate, total: formatLedger(total), journalEntryId, lines: recorded.length, replayed: false };
+    return {
+      runId, throughDate, total: formatLedger(total), journalEntryId, lines: recorded.length,
+      releaseAmount: formatLedger(releases.total), releaseJournalEntryId, releases: releases.lines.length, replayed: false,
+    };
   });
 }

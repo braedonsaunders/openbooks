@@ -3,9 +3,10 @@
  * converts at, and the shares it becomes at a priced round.
  *
  * - A SAFE converts its purchase amount. A note converts principal plus
- *   interest accrued to the conversion date, on an Actual/365 day count:
- *   simple interest on principal, or interest compounded on each issue
- *   anniversary with simple interest for the part year since the last one.
+ *   interest accrued to the conversion date on its own day count and
+ *   compounding (see interest.ts).
+ * - An MFN SAFE converts on the terms its holder adopted from a later
+ *   instrument, from the election date (see mfn.ts).
  * - The conversion price is the lowest of the round price, the cap price
  *   and the discounted round price. A pre-money SAFE (and a note) divides its
  *   cap by the pre-round fully diluted capitalization; a post-money SAFE
@@ -15,8 +16,8 @@
  *   and the shares are the converted amount divided by that recorded price,
  *   rounded down, so every conversion is reproducible from its stored row.
  */
-import { addMonthsClamped, calendarDaysBetween } from "../platform/civil-date.ts";
 import { EquityError } from "./errors.ts";
+import { noteInterest } from "./interest.ts";
 import {
   addRational,
   compareRational,
@@ -35,12 +36,10 @@ import {
   ZERO,
   type Rational,
 } from "./quantities.ts";
-import type { InterestBasis, SafeType, SecurityKind } from "./types.ts";
-import { completedMonths } from "./vesting.ts";
+import type { DayCount, InterestBasis, SafeType, SecurityKind } from "./types.ts";
 
 /** Converting post-money claims at or above this share of the company have no meaningful solution. */
 export const MAX_POST_MONEY_CLAIM: Rational = rational(95n, 100n);
-const DAYS_PER_YEAR = 365n;
 
 export interface ConvertibleTerms {
   id: string;
@@ -52,31 +51,15 @@ export interface ConvertibleTerms {
   discountPercent: string | null;
   interestRatePercent: string | null;
   interestBasis: InterestBasis | null;
+  interestDayCount: DayCount | null;
+  /** The currency the principal, cap and interest are stated in. */
+  currency: string;
 }
 
 /** Interest accrued on a note from its issue date to `asOf` (exact). Zero for a SAFE. */
 export function accruedInterest(terms: ConvertibleTerms, asOf: string): Rational {
-  if (terms.kind !== "note" || asOf <= terms.issueDate) return ZERO;
-  const principal = parseMoney(terms.principal, "the note principal");
-  const rate = parsePercent(terms.interestRatePercent ?? "", "the note interest rate");
-  if (terms.interestBasis === "simple") {
-    const days = BigInt(calendarDaysBetween(terms.issueDate, asOf));
-    return multiplyRational(principal, multiplyRational(rate, rational(days, DAYS_PER_YEAR)));
-  }
-  if (terms.interestBasis !== "compound_annual") {
-    throw new EquityError("The note has no interest basis.", {
-      code: "equity_note_terms_missing",
-      remedy: "Record the note's interest basis (simple or compounded annually).",
-    });
-  }
-  const years = Math.floor(completedMonths(terms.issueDate, asOf) / 12);
-  const anniversary = addMonthsClamped(terms.issueDate, years * 12);
-  const days = BigInt(calendarDaysBetween(anniversary, asOf));
-  let value = principal;
-  const growth = addRational(ONE, rate);
-  for (let year = 0; year < years; year += 1) value = multiplyRational(value, growth);
-  value = multiplyRational(value, addRational(ONE, multiplyRational(rate, rational(days, DAYS_PER_YEAR))));
-  return subtractRational(value, principal);
+  if (terms.kind !== "note") return ZERO;
+  return noteInterest(terms, asOf);
 }
 
 /** The amount that converts on `asOf`: purchase amount, or principal plus accrued interest. */
@@ -86,8 +69,13 @@ export function convertingAmount(terms: ConvertibleTerms, asOf: string): Rationa
 
 export interface ConvertingInstrument {
   terms: ConvertibleTerms;
-  /** Amount converting at the round (exact). */
+  /** Amount converting at the round (exact), in the currency the round is priced in. */
   amount: Rational;
+  /**
+   * The valuation cap restated into the round's pricing currency, when the
+   * instrument is stated in another currency (absent: the stated cap).
+   */
+  cap?: Rational | null;
 }
 
 export interface ConversionResult {
@@ -102,8 +90,9 @@ export interface ConversionResult {
 
 const isPostMoney = (terms: ConvertibleTerms): boolean => terms.kind === "safe" && terms.safeType === "post_money";
 
-function capOf(terms: ConvertibleTerms): Rational | null {
-  return terms.valuationCap ? parseMoney(terms.valuationCap, "the valuation cap") : null;
+function capOf(instrument: ConvertingInstrument): Rational | null {
+  if (instrument.cap !== undefined) return instrument.cap;
+  return instrument.terms.valuationCap ? parseMoney(instrument.terms.valuationCap, "the valuation cap") : null;
 }
 
 function discountedPrice(terms: ConvertibleTerms, roundPrice: Rational): Rational | null {
@@ -114,8 +103,8 @@ function discountedPrice(terms: ConvertibleTerms, roundPrice: Rational): Rationa
 /** Combined ownership the capped post-money SAFEs promise (amount / cap, summed). */
 export function postMoneyClaim(instruments: readonly ConvertingInstrument[]): Rational {
   return sumRational(instruments
-    .filter((instrument) => isPostMoney(instrument.terms) && capOf(instrument.terms))
-    .map((instrument) => divideRational(instrument.amount, capOf(instrument.terms)!)));
+    .filter((instrument) => isPostMoney(instrument.terms) && capOf(instrument))
+    .map((instrument) => divideRational(instrument.amount, capOf(instrument)!)));
 }
 
 /** The lower of the round price and the discounted price: the price before any cap. */
@@ -151,17 +140,17 @@ export function companyCapitalization(
     let fixed = ZERO;
     let bindingClaim = ZERO;
     for (const instrument of instruments) {
-      const cap = capOf(instrument.terms);
+      const cap = capOf(instrument);
       if (isPostMoney(instrument.terms) && cap && binding.has(instrument.terms.id)) {
         bindingClaim = addRational(bindingClaim, divideRational(instrument.amount, cap));
       } else {
-        fixed = addRational(fixed, divideRational(instrument.amount, preRoundPrice(instrument.terms, roundPrice, preRound)));
+        fixed = addRational(fixed, divideRational(instrument.amount, preRoundPrice(instrument, roundPrice, preRound)));
       }
     }
     const capitalization = divideRational(addRational(preRound, fixed), subtractRational(ONE, bindingClaim));
     let grew = false;
     for (const instrument of instruments) {
-      const cap = capOf(instrument.terms);
+      const cap = capOf(instrument);
       if (!isPostMoney(instrument.terms) || !cap || binding.has(instrument.terms.id)) continue;
       if (compareRational(divideRational(cap, capitalization), uncappedPrice(instrument.terms, roundPrice)) <= 0) {
         binding.add(instrument.terms.id);
@@ -187,9 +176,10 @@ export function exactConversionShares(
 }
 
 /** Price of an instrument whose cap (if any) divides by the pre-round capitalization or does not bind. */
-function preRoundPrice(terms: ConvertibleTerms, roundPrice: Rational, preRound: Rational): Rational {
+function preRoundPrice(instrument: ConvertingInstrument, roundPrice: Rational, preRound: Rational): Rational {
+  const { terms } = instrument;
   const price = uncappedPrice(terms, roundPrice);
-  const cap = capOf(terms);
+  const cap = capOf(instrument);
   if (!cap || isPostMoney(terms) || preRound.numerator === 0n) return price;
   return minRational(price, divideRational(cap, preRound));
 }
@@ -222,7 +212,7 @@ export function convertAtRound(
   const preRound = rational(preRoundFullyDiluted);
   const conversions = instruments.map((instrument): ConversionResult => {
     const { terms } = instrument;
-    const cap = capOf(terms);
+    const cap = capOf(instrument);
     const discounted = discountedPrice(terms, roundPrice);
     const capPrice = cap
       ? isPostMoney(terms)

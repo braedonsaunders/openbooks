@@ -20,6 +20,10 @@ export const TENANT_TABLE_POLICIES = {
   "equity_account_policies": "clone:catalog-uuid-rebase",
   "equity_compensation_runs": "clone:catalog-uuid-rebase",
   "equity_compensation_run_lines": "clone:catalog-uuid-rebase",
+  "equity_compensation_run_releases": "clone:catalog-uuid-rebase",
+  "equity_security_amendments": "clone:catalog-uuid-rebase",
+  "equity_interest_runs": "clone:catalog-uuid-rebase",
+  "equity_interest_run_lines": "clone:catalog-uuid-rebase",
   "payroll_us_filing_account_employer_lineage": "clone:catalog-uuid-rebase",
   // Closing rate quotes price the copied ledger, so they copy with rebased
   // identities (masked copies redact the authored source and reason).

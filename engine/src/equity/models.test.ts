@@ -7,6 +7,7 @@ const COMMON: ShareClassRecord = {
   id: "c-common", code: "CS", name: "Common", kind: "common", effectiveOn: "2024-01-01", initialAuthorizedShares: 20_000_000n,
   parValue: "0.0001", originalIssuePrice: null, initialConversionPrice: null, liquidationMultiple: null,
   participation: "none", participationCapMultiple: null, seniority: 0, antiDilution: "none",
+  conversionShareClassId: null, conversionAdjustsForSplits: true,
 };
 
 function security(overrides: Partial<SecurityRecord> & Pick<SecurityRecord, "id" | "kind" | "holderPartyId">): SecurityRecord {
@@ -16,13 +17,15 @@ function security(overrides: Partial<SecurityRecord> & Pick<SecurityRecord, "id"
     vestingStart: null, vestingMonths: null, cliffMonths: null, vestingFrequency: null, vestingTranches: null,
     acceleration: "none", accelerationPercent: null, expirationDate: null, optionType: null, earlyExercise: false,
     safeType: null, valuationCap: null, discountPercent: null, interestRatePercent: null, interestBasis: null, maturityDate: null,
-    fairValuePerUnit: null, expenseAttribution: null,
+    fairValuePerUnit: null, expenseAttribution: null, interestDayCount: null, mfn: false, unvestedRepurchaseBasis: null, fxRate: "1",
     ...overrides,
   };
 }
 
+const USD = new Map([["USD", "1"]]);
+
 function book(securities: SecurityRecord[]): EquityBook {
-  return { classes: [COMMON], amendments: [], splits: [], plans: [], reserveChanges: [], rounds: [], securities, events: [] };
+  return { classes: [COMMON], amendments: [], splits: [], plans: [], reserveChanges: [], rounds: [], securities, events: [], securityAmendments: [] };
 }
 
 const founder = security({ id: "s-founder", kind: "share", holderPartyId: "founder", quantity: 900_000n });
@@ -35,9 +38,9 @@ const option = security({
 test("cancelling unvested awards at exit keeps only vested units unless the acceleration clause fires", () => {
   const scenario = { asOf: "2025-01-01", exitValue: "1000000", unvestedAwards: "cancel" as const, terminated: false, minorUnitScale: 2 };
   // One year in: 25,000 of the 100,000 options are vested; they share 1,000,000 with 900,000 common shares.
-  const plain = waterfallFromBook(book([founder, option]), { ...scenario, changeOfControl: false });
+  const plain = waterfallFromBook(book([founder, option]), { ...scenario, changeOfControl: false }, USD);
   assert.equal(plain.holders.find((row) => row.holderPartyId === "employee")?.amount, "27027.0300");
-  const accelerated = waterfallFromBook(book([founder, option]), { ...scenario, changeOfControl: true });
+  const accelerated = waterfallFromBook(book([founder, option]), { ...scenario, changeOfControl: true }, USD);
   assert.equal(accelerated.holders.find((row) => row.holderPartyId === "employee")?.amount, "100000.0000");
   assert.equal(accelerated.holders.find((row) => row.holderPartyId === "founder")?.amount, "900000.0000");
 });
@@ -45,7 +48,7 @@ test("cancelling unvested awards at exit keeps only vested units unless the acce
 test("every outstanding award takes part when unvested awards participate", () => {
   const result = waterfallFromBook(book([founder, option]), {
     asOf: "2025-01-01", exitValue: "1000000", unvestedAwards: "participate", changeOfControl: false, terminated: false, minorUnitScale: 2,
-  });
+  }, USD);
   assert.equal(result.holders.find((row) => row.holderPartyId === "employee")?.amount, "100000.0000");
 });
 
@@ -55,9 +58,9 @@ test("the round model reads the book on its date and converts the SAFEs outstand
     issueDate: "2024-06-01", safeType: "post_money", valuationCap: "5000000.0000",
   });
   const current = book([founder, option, safe]);
-  const before = modelRoundFromBook(current, { asOf: "2024-05-31", preMoneyValuation: "10000000", investment: "2000000", targetPoolPercent: null });
+  const before = modelRoundFromBook(current, { asOf: "2024-05-31", preMoneyValuation: "10000000", investment: "2000000", targetPoolPercent: null }, USD);
   assert.equal(before.conversions.length, 0, "the SAFE was not yet issued");
-  const after = modelRoundFromBook(current, { asOf: "2024-06-30", preMoneyValuation: "10000000", investment: "2000000", targetPoolPercent: null });
+  const after = modelRoundFromBook(current, { asOf: "2024-06-30", preMoneyValuation: "10000000", investment: "2000000", targetPoolPercent: null }, USD);
   assert.equal(after.conversions.length, 1);
   assert.equal(after.conversions[0]!.pricedBy, "cap");
   // A post-money cap of 5,000,000 for 500,000 promises 10% of the capitalization including its own shares.

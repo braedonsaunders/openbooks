@@ -7,6 +7,7 @@ import type {
   FinancingRoundRecord,
   PlanRecord,
   ReserveChangeRecord,
+  SecurityAmendmentRecord,
   SecurityEventRecord,
   SecurityRecord,
   ShareClassRecord,
@@ -28,6 +29,7 @@ export function shareClassFromRow(row: Row): ShareClassRecord {
     parValue: str(row, "par_value"), originalIssuePrice: opt(row, "original_issue_price"), initialConversionPrice: opt(row, "initial_conversion_price"),
     liquidationMultiple: opt(row, "liquidation_multiple"), participation: str(row, "participation") as ShareClassRecord["participation"],
     participationCapMultiple: opt(row, "participation_cap_multiple"), seniority: Number(row.seniority), antiDilution: str(row, "anti_dilution") as ShareClassRecord["antiDilution"],
+    conversionShareClassId: opt(row, "conversion_share_class_id"), conversionAdjustsForSplits: row.conversion_adjusts_for_splits !== false,
   };
 }
 
@@ -43,8 +45,11 @@ export function securityFromRow(row: Row): SecurityRecord {
     expirationDate: opt(row, "expiration_date"), optionType: opt(row, "option_type") as SecurityRecord["optionType"], earlyExercise: row.early_exercise === true,
     safeType: opt(row, "safe_type") as SecurityRecord["safeType"], valuationCap: opt(row, "valuation_cap"), discountPercent: opt(row, "discount_percent"),
     interestRatePercent: opt(row, "interest_rate_percent"), interestBasis: opt(row, "interest_basis") as SecurityRecord["interestBasis"],
+    interestDayCount: opt(row, "interest_day_count") as SecurityRecord["interestDayCount"],
     maturityDate: opt(row, "maturity_date"), fairValuePerUnit: opt(row, "fair_value_per_unit"),
     expenseAttribution: opt(row, "expense_attribution") as SecurityRecord["expenseAttribution"],
+    mfn: row.mfn === true, unvestedRepurchaseBasis: opt(row, "unvested_repurchase_basis") as SecurityRecord["unvestedRepurchaseBasis"],
+    fxRate: opt(row, "fx_rate") ?? "1",
   };
 }
 
@@ -52,7 +57,7 @@ export function eventFromRow(row: Row): SecurityEventRecord {
   return {
     id: str(row, "id"), securityId: str(row, "security_id"), kind: str(row, "kind") as SecurityEventRecord["kind"], effectiveOn: str(row, "effective_on"),
     quantity: big(opt(row, "quantity")), pricePerShare: opt(row, "price_per_share"), amount: opt(row, "amount"),
-    resultingSecurityId: opt(row, "resulting_security_id"), roundId: opt(row, "round_id"),
+    resultingSecurityId: opt(row, "resulting_security_id"), roundId: opt(row, "round_id"), reversesEventId: opt(row, "reverses_event_id"),
   };
 }
 
@@ -65,11 +70,14 @@ export const SECURITY_COLUMNS = sql`id, security_number, kind, holder_party_id, 
   maturity_date::text as maturity_date, valuation_method, valuation_share_price::text as valuation_share_price,
   volatility_percent::text as volatility_percent, risk_free_rate_percent::text as risk_free_rate_percent,
   expected_term_years::text as expected_term_years, dividend_yield_percent::text as dividend_yield_percent,
-  fair_value_per_unit::text as fair_value_per_unit, expense_attribution, memo, journal_entry_id, created_at, created_by, subsidiary_id`;
+  fair_value_per_unit::text as fair_value_per_unit, expense_attribution, memo, journal_entry_id, created_at, created_by, subsidiary_id,
+  interest_day_count, mfn, unvested_repurchase_basis, fx_rate::text as fx_rate`;
 
 export const EVENT_COLUMNS = sql`id, security_id, kind, effective_on::text as effective_on, quantity::text as quantity,
   price_per_share::text as price_per_share, amount::text as amount, resulting_security_id, round_id, consideration_account_id,
-  journal_entry_id, reversal_entry_id, reason, created_at, created_by`;
+  journal_entry_id, reversal_entry_id, reason, created_at, created_by, reverses_event_id, interest_amount::text as interest_amount,
+  interest_accrued_amount::text as interest_accrued_amount, interest_accrued_functional::text as interest_accrued_functional,
+  interest_accrual_entry_id, deposit_amount::text as deposit_amount, fair_market_value::text as fair_market_value, fx_rate::text as fx_rate`;
 
 /** Everything recorded for one legal entity, in recording order. */
 export async function loadEquityBook(runner: SqlExecutor, orgId: string, subsidiaryId: string): Promise<EquityBook> {
@@ -78,14 +86,16 @@ export async function loadEquityBook(runner: SqlExecutor, orgId: string, subsidi
     select id, code, name, kind, effective_on::text as effective_on, initial_authorized_shares::text as initial_authorized_shares,
            par_value::text as par_value, original_issue_price::text as original_issue_price,
            initial_conversion_price::text as initial_conversion_price, liquidation_multiple::text as liquidation_multiple,
-           participation, participation_cap_multiple::text as participation_cap_multiple, seniority, anti_dilution
+           participation, participation_cap_multiple::text as participation_cap_multiple, seniority, anti_dilution,
+           conversion_share_class_id, conversion_adjusts_for_splits
       from equity_share_classes where ${scope} order by created_at, id`)).rows.map(shareClassFromRow);
   const amendments = (await runner.execute<Row>(sql`
     select id, share_class_id, kind, effective_on::text as effective_on, authorized_shares::text as authorized_shares,
-           conversion_price::text as conversion_price, reason
+           conversion_price::text as conversion_price, conversion_share_class_id, reason
       from equity_class_amendments where ${scope} order by created_at, id`)).rows.map((row): ClassAmendmentRecord => ({
     id: str(row, "id"), shareClassId: str(row, "share_class_id"), kind: str(row, "kind") as ClassAmendmentRecord["kind"],
-    effectiveOn: str(row, "effective_on"), authorizedShares: big(opt(row, "authorized_shares")), conversionPrice: opt(row, "conversion_price"), reason: str(row, "reason"),
+    effectiveOn: str(row, "effective_on"), authorizedShares: big(opt(row, "authorized_shares")), conversionPrice: opt(row, "conversion_price"),
+    conversionShareClassId: opt(row, "conversion_share_class_id"), reason: str(row, "reason"),
   }));
   const splits = (await runner.execute<Row>(sql`
     select id, share_class_id, effective_on::text as effective_on, ratio_numerator::text as ratio_numerator, ratio_denominator::text as ratio_denominator
@@ -117,5 +127,13 @@ export async function loadEquityBook(runner: SqlExecutor, orgId: string, subsidi
     select ${SECURITY_COLUMNS} from equity_securities where ${scope} order by created_at, id`)).rows.map(securityFromRow);
   const events = (await runner.execute<Row>(sql`
     select ${EVENT_COLUMNS} from equity_security_events where ${scope} order by created_at, id`)).rows.map(eventFromRow);
-  return { classes, amendments, splits, plans, reserveChanges, rounds, securities, events };
+  const securityAmendments = (await runner.execute<Row>(sql`
+    select id, security_id, kind, effective_on::text as effective_on, source_security_id, valuation_cap::text as valuation_cap,
+           discount_percent::text as discount_percent, safe_type
+      from equity_security_amendments where ${scope} order by effective_on, created_at, id`)).rows.map((row): SecurityAmendmentRecord => ({
+    id: str(row, "id"), securityId: str(row, "security_id"), kind: "mfn_election", effectiveOn: str(row, "effective_on"),
+    sourceSecurityId: str(row, "source_security_id"), valuationCap: opt(row, "valuation_cap"), discountPercent: opt(row, "discount_percent"),
+    safeType: str(row, "safe_type") as SecurityAmendmentRecord["safeType"],
+  }));
+  return { classes, amendments, splits, plans, reserveChanges, rounds, securities, events, securityAmendments };
 }

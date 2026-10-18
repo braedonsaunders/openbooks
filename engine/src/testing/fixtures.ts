@@ -1109,7 +1109,11 @@ const GUARDED_EVIDENCE: { table: string; trigger: string }[] = [
   { table: "project_loss_policies", trigger: "project_loss_policies_immutable" },
   // Equity history leaves child-first: runs and events before securities,
   // securities before rounds and plans, everything before its share class.
+  { table: "equity_compensation_run_releases", trigger: "equity_compensation_run_releases_immutable" },
   { table: "equity_compensation_run_lines", trigger: "equity_compensation_run_lines_immutable" },
+  { table: "equity_interest_run_lines", trigger: "equity_interest_run_lines_immutable" },
+  { table: "equity_interest_runs", trigger: "equity_interest_runs_immutable" },
+  { table: "equity_security_amendments", trigger: "equity_security_amendments_immutable" },
   { table: "equity_compensation_runs", trigger: "equity_compensation_runs_immutable" },
   { table: "equity_security_events", trigger: "equity_security_events_immutable" },
   { table: "equity_securities", trigger: "equity_securities_immutable" },

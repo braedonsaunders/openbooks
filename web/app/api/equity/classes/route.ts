@@ -22,6 +22,8 @@ const body = z.object({
   participationCapMultiple: optionalDecimal,
   seniority: z.number().int().min(0).max(1000).optional(),
   antiDilution: z.enum(['none', 'broad_based', 'narrow_based', 'full_ratchet']).optional(),
+  conversionShareClassId: uuidId.nullable().optional(),
+  conversionAdjustsForSplits: z.boolean().optional(),
 })
 
 /** Record a share class of a legal entity. */

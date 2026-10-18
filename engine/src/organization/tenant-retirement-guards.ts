@@ -2958,6 +2958,26 @@ export const TENANT_RETIREMENT_TRIGGER_CONTRACTS = [
     "function": "financial_policy_version_immutable"
   },
   {
+    "table": "equity_security_amendments",
+    "trigger": "equity_security_amendments_immutable",
+    "function": "equity_record_immutable"
+  },
+  {
+    "table": "equity_interest_runs",
+    "trigger": "equity_interest_runs_immutable",
+    "function": "equity_record_immutable"
+  },
+  {
+    "table": "equity_interest_run_lines",
+    "trigger": "equity_interest_run_lines_immutable",
+    "function": "equity_record_immutable"
+  },
+  {
+    "table": "equity_compensation_run_releases",
+    "trigger": "equity_compensation_run_releases_immutable",
+    "function": "equity_record_immutable"
+  },
+  {
     "table": "field_ticket_source_certifications",
     "trigger": "field_ticket_source_certification_guard",
     "function": "field_ticket_source_certification_guard"

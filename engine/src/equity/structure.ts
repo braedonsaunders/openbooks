@@ -10,15 +10,24 @@
  * after state and the reason. Recording a class, plan or round is a
  * bookkeeping duty (equity.manage); amending a class, changing a plan
  * reserve and recording a split are approvals (equity.approve).
+ *
+ * A preferred class names the common class it converts into and whether its
+ * conversion price adjusts for that class's splits. A split of a common
+ * class therefore adjusts every preferred class that converts into it under
+ * adjusting terms; the split refuses while a preferred class has not named
+ * its conversion class, so no conversion price is left to guesswork, and it
+ * must postdate the adjusted classes' activity as well as its own class's.
  */
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "../platform/db.ts";
 import { isIsoCalendarDate } from "../platform/civil-date.ts";
 import { isUuid } from "../platform/uuid.ts";
-import { authorizedShares, classCommitted, planPool } from "./cap-table.ts";
+import { authorizedShares, classCommitted, conversionClassOf, conversionPrice, planPool } from "./cap-table.ts";
 import { EquityError } from "./errors.ts";
+import { spotRate } from "./fx.ts";
 import {
   assertEquityFeature,
+  currencyExponent,
   loadLegalEntity,
   lockEquityEntity,
   requireEquityAuthority,
@@ -26,7 +35,7 @@ import {
   writeEquityAudit,
   type EquityPermission,
 } from "./internal.ts";
-import { compareRational, parseDecimal, parsePrice, parseShares, PERCENT_SCALE, rational } from "./quantities.ts";
+import { compareRational, formatPrice, parseDecimal, parsePrice, parseShares, PERCENT_SCALE, rational } from "./quantities.ts";
 import { validateSplitRatio } from "./splits.ts";
 import { loadEquityBook } from "./store.ts";
 import type { AntiDilution, EquityBook, Participation, ShareClassKind } from "./types.ts";
@@ -138,6 +147,10 @@ export interface CreateShareClassInput extends EquityCommand {
   participationCapMultiple?: string | null;
   seniority?: number;
   antiDilution?: AntiDilution;
+  /** The common class a preferred class converts into. */
+  conversionShareClassId?: string | null;
+  /** Whether the conversion price adjusts for splits of the conversion class (default: yes). */
+  conversionAdjustsForSplits?: boolean;
 }
 
 export async function createShareClass(input: CreateShareClassInput): Promise<{ id: string }> {
@@ -173,22 +186,36 @@ export async function createShareClass(input: CreateShareClassInput): Promise<{ 
       cap = input.participationCapMultiple!.trim();
     }
   }
+  const adjustsForSplits = kind === "preferred" ? input.conversionAdjustsForSplits !== false : true;
   return inEquityCommand(input, "equity.manage", async ({ book }) => {
     if (book.classes.some((row) => row.code.toLowerCase() === code.toLowerCase())) {
       throw new EquityError(`Class code ${code} is already used by this legal entity.`, { status: 409, code: "equity_class_code_taken", remedy: "Choose a different class code.", field: "code" });
     }
+    let conversionClassId: string | null = null;
+    if (kind === "preferred") {
+      const target = book.classes.find((row) => row.id === input.conversionShareClassId);
+      if (!target || target.kind !== "common") {
+        throw new EquityError("Choose the common class the preferred shares convert into.", { code: "equity_class_terms_invalid", remedy: "Choose a common class of the legal entity (record it first if needed).", field: "conversionShareClassId" });
+      }
+      if (target.effectiveOn > effectiveOn) {
+        throw new EquityError(`Class ${target.code} is not effective until ${target.effectiveOn}.`, { code: "equity_date_invalid", remedy: `Date the class on or after ${target.effectiveOn}, or choose another conversion class.`, field: "conversionShareClassId" });
+      }
+      conversionClassId = target.id;
+    } else if (input.conversionShareClassId) {
+      throw new EquityError("Only a preferred class converts into another class.", { code: "equity_class_terms_invalid", remedy: "Clear the conversion class.", field: "conversionShareClassId" });
+    }
     const row = (await db.execute<{ id: string }>(sql`
       insert into equity_share_classes (org_id, subsidiary_id, code, name, kind, effective_on, initial_authorized_shares, par_value,
         original_issue_price, initial_conversion_price, liquidation_multiple, participation, participation_cap_multiple, seniority,
-        anti_dilution, created_by)
+        anti_dilution, conversion_share_class_id, conversion_adjusts_for_splits, created_by)
       values (${input.orgId}, ${input.subsidiaryId}, ${code}, ${name}, ${kind}, ${effectiveOn}::date, ${authorized.toString()}::bigint,
         ${input.parValue.trim()}::numeric, ${originalIssuePrice}::numeric, ${conversionPrice}::numeric, ${multiple}::numeric,
-        ${participation}, ${cap}::numeric, ${seniority}, ${antiDilution}, ${input.actorId})
+        ${participation}, ${cap}::numeric, ${seniority}, ${antiDilution}, ${conversionClassId}, ${adjustsForSplits}, ${input.actorId})
       returning id`)).rows[0];
     if (!row) throw new EquityError("The share class was not saved.", { status: 409, code: "equity_write_failed", remedy: "Try again." });
     await writeEquityAudit(db, {
       orgId: input.orgId, table: "equity_share_classes", rowId: row.id, action: "equity.class.create", actorId: input.actorId,
-      changes: { before: null, after: { code, name, kind, effectiveOn, authorizedShares: authorized, parValue: input.parValue, originalIssuePrice, conversionPrice, liquidationMultiple: multiple, participation, participationCapMultiple: cap, seniority, antiDilution } },
+      changes: { before: null, after: { code, name, kind, effectiveOn, authorizedShares: authorized, parValue: input.parValue, originalIssuePrice, conversionPrice, liquidationMultiple: multiple, participation, participationCapMultiple: cap, seniority, antiDilution, conversionShareClassId: conversionClassId, conversionAdjustsForSplits: adjustsForSplits } },
     });
     return { id: row.id };
   });
@@ -205,14 +232,16 @@ async function classEntity(orgId: string, shareClassId: string): Promise<string>
 
 export interface AmendShareClassInput extends EquityCommand {
   shareClassId: string;
-  kind: "authorized_shares" | "conversion_price";
+  kind: "authorized_shares" | "conversion_price" | "conversion_class";
   effectiveOn: string;
   authorizedShares?: string | null;
   conversionPrice?: string | null;
+  /** The common class a preferred class converts into from the date. */
+  conversionShareClassId?: string | null;
   reason: string;
 }
 
-/** Amend a class's authorized shares or conversion price from a date (an approval). */
+/** Amend a class's authorized shares, conversion price or conversion class from a date (an approval). */
 export async function amendShareClass(input: AmendShareClassInput): Promise<{ id: string }> {
   const effectiveOn = requireDate(input.effectiveOn, "effectiveOn", "The effective date");
   const reason = requireReason(input.reason, "the class amendment");
@@ -224,6 +253,7 @@ export async function amendShareClass(input: AmendShareClassInput): Promise<{ id
     }
     let authorized: bigint | null = null;
     let conversion: string | null = null;
+    let conversionClassId: string | null = null;
     let before: Record<string, unknown>;
     if (input.kind === "authorized_shares") {
       authorized = parseShares(input.authorizedShares ?? "", "the authorized shares");
@@ -234,24 +264,40 @@ export async function amendShareClass(input: AmendShareClassInput): Promise<{ id
       const price = parsePrice(input.conversionPrice ?? "", "the conversion price");
       if (price.numerator <= 0n) throw new EquityError("The conversion price must be greater than zero.", { code: "equity_class_terms_invalid", remedy: "Enter the new conversion price.", field: "conversionPrice" });
       conversion = input.conversionPrice!.trim();
-      before = { conversionPrice: shareClass.initialConversionPrice };
+      const current = conversionPrice(book, shareClass, effectiveOn);
+      before = { conversionPrice: current ? formatPrice(current) : null };
+    } else if (input.kind === "conversion_class") {
+      if (shareClass.kind !== "preferred") throw new EquityError("Only a preferred class converts into another class.", { code: "equity_class_terms_invalid", remedy: "Amend the authorized shares instead.", field: "kind" });
+      const target = book.classes.find((row) => row.id === input.conversionShareClassId);
+      if (!target || target.kind !== "common") throw new EquityError("Choose the common class the preferred shares convert into.", { code: "equity_class_terms_invalid", remedy: "Choose a common class of the legal entity.", field: "conversionShareClassId" });
+      if (target.effectiveOn > effectiveOn) throw new EquityError(`Class ${target.code} is not effective until ${target.effectiveOn}.`, { code: "equity_date_invalid", remedy: `Date the amendment on or after ${target.effectiveOn}.`, field: "effectiveOn" });
+      const current = conversionClassOf(book, shareClass, effectiveOn);
+      if (current === target.id) throw new EquityError(`Class ${shareClass.code} already converts into ${target.code}.`, { status: 409, code: "equity_amendment_unchanged", remedy: "Choose a different conversion class.", field: "conversionShareClassId" });
+      const laterSplit = book.splits.find((split) => split.effectiveOn >= effectiveOn && (split.shareClassId === target.id || split.shareClassId === current));
+      if (laterSplit) {
+        throw new EquityError(`A split of the conversion class is recorded on ${laterSplit.effectiveOn}; changing the conversion class before it would reinterpret it.`, { status: 409, code: "equity_amendment_backdated", remedy: `Date the amendment after ${laterSplit.effectiveOn}.`, field: "effectiveOn" });
+      }
+      conversionClassId = target.id;
+      before = { conversionShareClassId: current };
     } else {
-      throw new EquityError("Choose what the amendment changes.", { code: "equity_amendment_invalid", remedy: "Amend the authorized shares or the conversion price.", field: "kind" });
+      throw new EquityError("Choose what the amendment changes.", { code: "equity_amendment_invalid", remedy: "Amend the authorized shares, the conversion price or the conversion class.", field: "kind" });
     }
     const amended: EquityBook = {
       ...book,
-      amendments: [...book.amendments, { id: "pending", shareClassId: shareClass.id, kind: input.kind, effectiveOn, authorizedShares: authorized, conversionPrice: conversion, reason }],
+      amendments: [...book.amendments, { id: "pending", shareClassId: shareClass.id, kind: input.kind, effectiveOn, authorizedShares: authorized, conversionPrice: conversion, conversionShareClassId: conversionClassId, reason }],
     };
     if (input.kind === "authorized_shares") assertWithinAuthorized(amended, shareClass.id, effectiveOn);
     const row = (await db.execute<{ id: string }>(sql`
-      insert into equity_class_amendments (org_id, subsidiary_id, share_class_id, kind, effective_on, authorized_shares, conversion_price, reason, created_by)
+      insert into equity_class_amendments (org_id, subsidiary_id, share_class_id, kind, effective_on, authorized_shares, conversion_price,
+        conversion_share_class_id, reason, created_by)
       values (${input.orgId}, ${subsidiaryId}, ${shareClass.id}, ${input.kind}, ${effectiveOn}::date, ${authorized?.toString() ?? null}::bigint,
-        ${conversion}::numeric, ${reason}, ${input.actorId})
+        ${conversion}::numeric, ${conversionClassId}, ${reason}, ${input.actorId})
       returning id`)).rows[0];
     if (!row) throw new EquityError("The amendment was not saved.", { status: 409, code: "equity_write_failed", remedy: "Try again." });
+    const after = input.kind === "authorized_shares" ? { authorizedShares: authorized } : input.kind === "conversion_price" ? { conversionPrice: conversion } : { conversionShareClassId: conversionClassId };
     await writeEquityAudit(db, {
       orgId: input.orgId, table: "equity_share_classes", rowId: shareClass.id, action: "equity.class.amend", actorId: input.actorId,
-      changes: { amendmentId: row.id, kind: input.kind, effectiveOn, before, after: input.kind === "authorized_shares" ? { authorizedShares: authorized } : { conversionPrice: conversion }, reason },
+      changes: { amendmentId: row.id, kind: input.kind, effectiveOn, before, after, reason },
     });
     return { id: row.id };
   });
@@ -270,7 +316,7 @@ export interface RecordSplitInput extends EquityCommand {
  * activity of the class, so quantities already recorded keep the terms they
  * were stated in.
  */
-export async function recordSplit(input: RecordSplitInput): Promise<{ id: string }> {
+export async function recordSplit(input: RecordSplitInput): Promise<{ id: string; adjustedClasses: { shareClassId: string; code: string; conversionPriceBefore: string | null; conversionPriceAfter: string | null }[] }> {
   const effectiveOn = requireDate(input.effectiveOn, "effectiveOn", "The effective date");
   const reason = requireReason(input.reason, "the split");
   const numerator = parseShares(input.ratioNumerator, "the new share count");
@@ -288,6 +334,35 @@ export async function recordSplit(input: RecordSplitInput): Promise<{ id: string
         field: "effectiveOn",
       });
     }
+    // A common split adjusts the conversion price of every preferred class converting into it under adjusting terms.
+    const adjusted: { id: string; code: string; before: string | null; after: string | null }[] = [];
+    if (shareClass.kind === "common") {
+      const preferred = book.classes.filter((row) => row.kind === "preferred" && row.effectiveOn <= effectiveOn);
+      const unnamed = preferred.filter((row) => conversionClassOf(book, row, effectiveOn) === null);
+      if (unnamed.length > 0) {
+        throw new EquityError(`Preferred ${unnamed.map((row) => row.code).join(", ")} ${unnamed.length === 1 ? "does" : "do"} not name the common class ${unnamed.length === 1 ? "it converts" : "they convert"} into, so the split's effect on ${unnamed.length === 1 ? "its" : "their"} conversion price is unknown.`, {
+          status: 409,
+          code: "equity_conversion_class_missing",
+          remedy: "Record each preferred class's conversion class (Cap table → Amend → Conversion class, an approval), then record the split.",
+        });
+      }
+      const pendingSplit: EquityBook = { ...book, splits: [...book.splits, { id: "pending", shareClassId: shareClass.id, effectiveOn, ratioNumerator: numerator, ratioDenominator: denominator }] };
+      for (const row of preferred) {
+        if (!row.conversionAdjustsForSplits || conversionClassOf(book, row, effectiveOn) !== shareClass.id) continue;
+        const activity = latestClassActivity(book, row.id);
+        if (activity !== null && effectiveOn <= activity) {
+          throw new EquityError(`Class ${row.code} converts into ${shareClass.code} and has activity recorded through ${activity}; the split adjusts its conversion price, so it must be dated after that.`, {
+            status: 409,
+            code: "equity_split_backdated",
+            remedy: `Date the split after ${activity}.`,
+            field: "effectiveOn",
+          });
+        }
+        const beforePrice = conversionPrice(book, row, effectiveOn);
+        const afterPrice = conversionPrice(pendingSplit, row, effectiveOn);
+        adjusted.push({ id: row.id, code: row.code, before: beforePrice ? formatPrice(beforePrice) : null, after: afterPrice ? formatPrice(afterPrice) : null });
+      }
+    }
     const row = (await db.execute<{ id: string }>(sql`
       insert into equity_splits (org_id, subsidiary_id, share_class_id, effective_on, ratio_numerator, ratio_denominator, reason, created_by)
       values (${input.orgId}, ${subsidiaryId}, ${shareClass.id}, ${effectiveOn}::date, ${numerator.toString()}::bigint,
@@ -296,9 +371,15 @@ export async function recordSplit(input: RecordSplitInput): Promise<{ id: string
     if (!row) throw new EquityError("The split was not saved.", { status: 409, code: "equity_write_failed", remedy: "Try again." });
     await writeEquityAudit(db, {
       orgId: input.orgId, table: "equity_splits", rowId: row.id, action: "equity.split.record", actorId: input.actorId,
-      changes: { before: null, after: { shareClassId: shareClass.id, effectiveOn, ratio: `${numerator}:${denominator}` }, reason },
+      changes: { before: null, after: { shareClassId: shareClass.id, effectiveOn, ratio: `${numerator}:${denominator}` }, adjustedConversionPrices: adjusted, reason },
     });
-    return { id: row.id };
+    for (const entry of adjusted) {
+      await writeEquityAudit(db, {
+        orgId: input.orgId, table: "equity_share_classes", rowId: entry.id, action: "equity.class.split_adjustment", actorId: input.actorId,
+        changes: { splitId: row.id, splitClassId: shareClass.id, effectiveOn, before: { conversionPrice: entry.before }, after: { conversionPrice: entry.after }, reason },
+      });
+    }
+    return { id: row.id, adjustedClasses: adjusted.map((entry) => ({ shareClassId: entry.id, code: entry.code, conversionPriceBefore: entry.before, conversionPriceAfter: entry.after })) };
   });
 }
 
@@ -394,6 +475,8 @@ export interface CreateRoundInput extends EquityCommand {
   closedOn: string;
   pricePerShare: string;
   preMoneyValuation: string;
+  /** The currency the round is priced in (default: the legal entity's functional currency). */
+  currency?: string | null;
 }
 
 /** Record a closed financing round; its shares are then issued against it. */
@@ -404,7 +487,12 @@ export async function createRound(input: CreateRoundInput): Promise<{ id: string
   const pre = parseDecimal(input.preMoneyValuation, "the pre-money valuation", 4);
   if (price.numerator <= 0n) throw new EquityError("The price per share must be greater than zero.", { code: "equity_round_terms_invalid", remedy: "Enter the round price per share.", field: "pricePerShare" });
   if (compareRational(pre, rational(0n)) <= 0) throw new EquityError("The pre-money valuation must be greater than zero.", { code: "equity_round_terms_invalid", remedy: "Enter the pre-money valuation.", field: "preMoneyValuation" });
-  return inEquityCommand(input, "equity.manage", async ({ book, currency }) => {
+  return inEquityCommand(input, "equity.manage", async ({ book, currency: functional }) => {
+    const requested = typeof input.currency === "string" && input.currency.trim() !== "" ? input.currency.trim().toUpperCase() : null;
+    if (requested && !/^[A-Z]{3}$/.test(requested)) throw new EquityError("Choose the currency the round is priced in.", { code: "equity_currency_unknown", remedy: "Enter a three-letter ISO currency code.", field: "currency" });
+    const currency = requested ?? functional;
+    await currencyExponent(db, currency);
+    if (currency !== functional) await spotRate(db, input.orgId, currency, functional, closedOn, functional);
     const shareClass = book.classes.find((row) => row.id === input.shareClassId);
     if (!shareClass) throw new EquityError("The share class does not exist for this legal entity.", { status: 404, code: "equity_class_unknown", remedy: "Choose a share class of the legal entity.", field: "shareClassId" });
     if (closedOn < shareClass.effectiveOn) throw new EquityError("A round cannot close before its share class is effective.", { code: "equity_date_invalid", remedy: `Date the round on or after ${shareClass.effectiveOn}.`, field: "closedOn" });

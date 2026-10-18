@@ -13,7 +13,10 @@ export type SecurityKind = "share" | "option" | "rsu" | "warrant" | "safe" | "no
 export type VestingFrequency = "monthly" | "quarterly" | "annual";
 export type Acceleration = "none" | "single" | "double";
 export type SafeType = "pre_money" | "post_money";
-export type InterestBasis = "simple" | "compound_annual";
+export type InterestBasis = "simple" | "compound_annual" | "compound_semiannual" | "compound_quarterly" | "compound_monthly";
+/** How a note counts the days of an accrual period. */
+export type DayCount = "actual_365" | "actual_360" | "thirty_360" | "actual_actual";
+export type RepurchaseBasis = "cost" | "lower_of_cost_or_fmv";
 export type ExpenseAttribution = "straight_line" | "graded";
 export type SecurityEventKind =
   | "exercise"
@@ -24,12 +27,20 @@ export type SecurityEventKind =
   | "repurchase"
   | "transfer"
   | "convert"
-  | "void";
+  | "void"
+  | "repay"
+  | "reverse"
+  | "election_83b";
+
+export const INTEREST_BASES: readonly InterestBasis[] = ["simple", "compound_annual", "compound_semiannual", "compound_quarterly", "compound_monthly"];
+export const DAY_COUNTS: readonly DayCount[] = ["actual_365", "actual_360", "thirty_360", "actual_actual"];
 
 export const SECURITY_KINDS: readonly SecurityKind[] = ["share", "option", "rsu", "warrant", "safe", "note"];
 export const SECURITY_EVENT_KINDS: readonly SecurityEventKind[] = [
-  "exercise", "settle", "forfeit", "expire", "cancel", "repurchase", "transfer", "convert", "void",
+  "exercise", "settle", "forfeit", "expire", "cancel", "repurchase", "transfer", "convert", "void", "repay", "reverse", "election_83b",
 ];
+/** Events a governed reversal may undo. */
+export const REVERSIBLE_EVENT_KINDS: readonly SecurityEventKind[] = ["forfeit", "expire", "cancel", "repurchase", "repay", "election_83b"];
 /** Kinds that carry a share count and an underlying class. */
 export const SHARE_BASED_KINDS: readonly SecurityKind[] = ["share", "option", "rsu", "warrant"];
 /** Awards that convert into shares on exercise or settlement. */
@@ -52,15 +63,20 @@ export interface ShareClassRecord {
   participationCapMultiple: string | null;
   seniority: number;
   antiDilution: AntiDilution;
+  /** The common class a preferred class converts into, when recorded on the class. */
+  conversionShareClassId: string | null;
+  /** Whether the conversion price adjusts for splits of the conversion class. */
+  conversionAdjustsForSplits: boolean;
 }
 
 export interface ClassAmendmentRecord {
   id: string;
   shareClassId: string;
-  kind: "authorized_shares" | "conversion_price";
+  kind: "authorized_shares" | "conversion_price" | "conversion_class";
   effectiveOn: string;
   authorizedShares: bigint | null;
   conversionPrice: string | null;
+  conversionShareClassId: string | null;
   reason: string;
 }
 
@@ -125,9 +141,14 @@ export interface SecurityRecord {
   discountPercent: string | null;
   interestRatePercent: string | null;
   interestBasis: InterestBasis | null;
+  interestDayCount: DayCount | null;
   maturityDate: string | null;
   fairValuePerUnit: string | null;
   expenseAttribution: ExpenseAttribution | null;
+  mfn: boolean;
+  unvestedRepurchaseBasis: RepurchaseBasis | null;
+  /** Functional-currency units per unit of the security's currency on its issue date. */
+  fxRate: string;
 }
 
 export interface SecurityEventRecord {
@@ -140,6 +161,20 @@ export interface SecurityEventRecord {
   amount: string | null;
   resultingSecurityId: string | null;
   roundId: string | null;
+  /** The event a reversal undoes. */
+  reversesEventId: string | null;
+}
+
+/** A SAFE holder's MFN election: the later instrument's terms adopted from a date. */
+export interface SecurityAmendmentRecord {
+  id: string;
+  securityId: string;
+  kind: "mfn_election";
+  effectiveOn: string;
+  sourceSecurityId: string;
+  valuationCap: string | null;
+  discountPercent: string | null;
+  safeType: SafeType;
 }
 
 export interface FinancingRoundRecord {
@@ -162,8 +197,9 @@ export interface EquityBook {
   rounds: readonly FinancingRoundRecord[];
   securities: readonly SecurityRecord[];
   events: readonly SecurityEventRecord[];
+  securityAmendments: readonly SecurityAmendmentRecord[];
 }
 
 export const EMPTY_EQUITY_BOOK: EquityBook = {
-  classes: [], amendments: [], splits: [], plans: [], reserveChanges: [], rounds: [], securities: [], events: [],
+  classes: [], amendments: [], splits: [], plans: [], reserveChanges: [], rounds: [], securities: [], events: [], securityAmendments: [],
 };

@@ -9,14 +9,15 @@ export const runtime = 'nodejs'
 
 const params = z.object({ id: uuidId })
 const body = z.object({
-  kind: z.enum(['authorized_shares', 'conversion_price']),
+  kind: z.enum(['authorized_shares', 'conversion_price', 'conversion_class']),
   effectiveOn: isoDate(),
   authorizedShares: wholeShares.nullable().optional(),
   conversionPrice: optionalDecimal,
+  conversionShareClassId: uuidId.nullable().optional(),
   reason,
 })
 
-/** Amend a class's authorized shares or conversion price from a date (an approval). */
+/** Amend a class's authorized shares, conversion price or conversion class from a date (an approval). */
 export const POST = defineRoute({
   permission: 'equity.approve',
   feature: 'equity',

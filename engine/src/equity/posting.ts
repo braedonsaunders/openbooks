@@ -3,8 +3,9 @@
  * entries posted through the journal kernel with origin `equity`, and the
  * governed reversal that corrects them.
  *
- * Every entry posts in the organization's primary book, in the legal
- * entity's functional currency, into the period covering its date, with an
+ * Every entry posts in the organization's primary book, measured in the legal
+ * entity's functional currency (a leg in another currency carries its
+ * transaction amount and rate), into the period covering its date, with an
  * exactly-once idempotency key: a retried command returns the entry it
  * already posted instead of posting twice. Closed periods, inactive
  * accounts and other ledger refusals reach the operator with their remedy.
@@ -12,10 +13,11 @@
 import { sql } from "drizzle-orm";
 import { markEntryReversed, postEntry } from "../journal/post-entry.ts";
 import { PostingError } from "../journal/posting-contracts.ts";
-import { fromUnits } from "../money/money.ts";
+import { fromUnits, toUnits } from "../money/money.ts";
 import { CloseError } from "../periods/period-policy.ts";
 import { resolveCoveringPeriod } from "../periods/period-resolution.ts";
 import type { SqlExecutor } from "../platform/db.ts";
+import { loadControlAccountsForRoles } from "../records/control-accounts.ts";
 import { nextFreeEntryNumber } from "../records/entry-number.ts";
 import { EQUITY_ACCOUNTS_REMEDY, EquityError } from "./errors.ts";
 
@@ -31,6 +33,43 @@ export interface EquityAccountPolicy {
   compensationExpenseAccountId: string;
   treasuryStockAccountId: string;
   convertibleInstrumentsAccountId: string;
+  /** Convertible note interest; versions recorded before these accounts existed carry none. */
+  interestExpenseAccountId: string | null;
+  accruedInterestAccountId: string | null;
+  /** Cash received for unvested shares bought by early exercise. */
+  earlyExerciseDepositAccountId: string | null;
+}
+
+type OptionalPolicyAccount = "interestExpenseAccountId" | "accruedInterestAccountId" | "earlyExerciseDepositAccountId";
+
+const OPTIONAL_ACCOUNT_LABELS: Record<OptionalPolicyAccount, string> = {
+  interestExpenseAccountId: "convertible note interest expense",
+  accruedInterestAccountId: "accrued convertible note interest",
+  earlyExerciseDepositAccountId: "early-exercise deposit",
+};
+
+/** An account the posting needs that the policy version in force does not map refuses with the Setup remedy. */
+export function requirePolicyAccount(policy: EquityAccountPolicy, key: OptionalPolicyAccount): string {
+  const accountId = policy[key];
+  if (!accountId) {
+    throw new EquityError(`The equity account policy in force from ${policy.effectiveFrom} does not map the ${OPTIONAL_ACCOUNT_LABELS[key]} account.`, {
+      code: "equity_account_policy_incomplete",
+      remedy: `Add an equity account policy version that maps the ${OPTIONAL_ACCOUNT_LABELS[key]} account, effective on or before the transaction date (Setup → Equity accounts).`,
+    });
+  }
+  return accountId;
+}
+
+/** The organization's realized FX gain/loss control account, for settlements of foreign-currency instruments. */
+export async function realizedFxAccount(runner: SqlExecutor, orgId: string): Promise<string> {
+  const accounts = await loadControlAccountsForRoles(runner, orgId, ["fxRealizedGainLoss"]);
+  if (!accounts.fxRealizedGainLoss) {
+    throw new EquityError("The realized FX gain/loss account is not configured.", {
+      code: "equity_fx_account_missing",
+      remedy: "Map the realized FX gain/loss account in Setup → Company & Accounting → Control accounts, then try again.",
+    });
+  }
+  return accounts.fxRealizedGainLoss;
 }
 
 /** The policy version in force on `on` for the legal entity; none refuses with the remedy. */
@@ -38,9 +77,11 @@ export async function resolveAccountPolicy(runner: SqlExecutor, orgId: string, s
   const row = (await runner.execute<{
     id: string; effective_from: string; common_stock_account_id: string; preferred_stock_account_id: string; apic_account_id: string;
     apic_share_based_account_id: string; compensation_expense_account_id: string; treasury_stock_account_id: string; convertible_instruments_account_id: string;
+    interest_expense_account_id: string | null; accrued_interest_account_id: string | null; early_exercise_deposit_account_id: string | null;
   }>(sql`
     select id, effective_from::text as effective_from, common_stock_account_id, preferred_stock_account_id, apic_account_id,
-           apic_share_based_account_id, compensation_expense_account_id, treasury_stock_account_id, convertible_instruments_account_id
+           apic_share_based_account_id, compensation_expense_account_id, treasury_stock_account_id, convertible_instruments_account_id,
+           interest_expense_account_id, accrued_interest_account_id, early_exercise_deposit_account_id
       from equity_account_policies
      where org_id = ${orgId} and subsidiary_id = ${subsidiaryId} and effective_from <= ${on}::date
      order by effective_from desc
@@ -61,7 +102,16 @@ export async function resolveAccountPolicy(runner: SqlExecutor, orgId: string, s
     compensationExpenseAccountId: row.compensation_expense_account_id,
     treasuryStockAccountId: row.treasury_stock_account_id,
     convertibleInstrumentsAccountId: row.convertible_instruments_account_id,
+    interestExpenseAccountId: row.interest_expense_account_id,
+    accruedInterestAccountId: row.accrued_interest_account_id,
+    earlyExerciseDepositAccountId: row.early_exercise_deposit_account_id,
   };
+}
+
+/** Whether an account is classified as equity (an equity-classified convertible is never remeasured for exchange rates). */
+export async function isEquityAccount(runner: SqlExecutor, orgId: string, accountId: string): Promise<boolean> {
+  const row = (await runner.execute<{ type: string }>(sql`select type from accounts where org_id = ${orgId} and id = ${accountId}`)).rows[0];
+  return row?.type === "equity";
 }
 
 /** Accounts a consideration (cash received or paid) may settle through. */
@@ -90,9 +140,54 @@ export async function requireConsiderationAccount(runner: SqlExecutor, orgId: st
 
 export interface EquityLeg {
   accountId: string;
-  /** Signed ledger units: positive debits, negative credits. */
+  /** Signed functional-currency ledger units: positive debits, negative credits. */
   units: bigint;
   memo?: string;
+  /** A leg stated in another currency: its currency, signed transaction units and rate. */
+  foreign?: { currency: string; txnUnits: bigint; fxRate: string };
+  /** The instrument balance the leg carries (accrued interest, an early-exercise deposit), read back at settlement. */
+  balance?: { securityId: string; role: InstrumentBalanceRole };
+}
+
+/** Instrument balances the ledger carries per security, identified on their journal lines. */
+export type InstrumentBalanceRole = "interest" | "deposit";
+
+export interface InstrumentBalanceGroup {
+  accountId: string;
+  currency: string;
+  fxRate: string;
+  /** Signed functional and transaction ledger units. */
+  units: bigint;
+  txnUnits: bigint;
+}
+
+/**
+ * The balance a security carries on the ledger in one role, grouped by
+ * account, currency and rate: every posted equity line identified with the
+ * security and role, reversals included, so a settlement relieves exactly
+ * what was accrued, on the accounts it sits on.
+ */
+export async function instrumentBalance(
+  runner: SqlExecutor,
+  orgId: string,
+  subsidiaryId: string,
+  securityId: string,
+  role: InstrumentBalanceRole,
+): Promise<InstrumentBalanceGroup[]> {
+  const rows = (await runner.execute<{ account_id: string; currency: string; fx_rate: string; amount: string; txn_amount: string }>(sql`
+    with entries as materialized (
+      select id from journal_entries
+       where org_id = ${orgId} and subsidiary_id = ${subsidiaryId} and origin = ${EQUITY_JOURNAL_ORIGIN} and status in ('posted', 'reversed')
+    )
+    select l.account_id, l.currency, l.fx_rate::text as fx_rate, sum(l.amount)::text as amount, sum(l.txn_amount)::text as txn_amount
+      from entries e
+      join journal_lines l on l.org_id = ${orgId} and l.entry_id = e.id
+     where l.custom->>'equitySecurityId' = ${securityId} and l.custom->>'equityRole' = ${role}
+     group by l.account_id, l.currency, l.fx_rate
+     order by l.account_id, l.currency, l.fx_rate`)).rows;
+  return rows
+    .map((row) => ({ accountId: row.account_id, currency: row.currency, fxRate: row.fx_rate, units: toUnits(row.amount), txnUnits: toUnits(row.txn_amount) }))
+    .filter((group) => group.units !== 0n || group.txnUnits !== 0n);
 }
 
 function refusal(error: unknown, what: string): never {
@@ -172,7 +267,15 @@ export async function postEquityEntry(
       actorId: input.actorId,
       auditAction: input.auditAction,
       auditChanges: input.auditChanges,
-      lines: legs.map((leg) => ({ accountId: leg.accountId, amount: fromUnits(leg.units), currency: input.currency, memo: leg.memo ?? input.memo })),
+      lines: legs.map((leg) => {
+        const custom = leg.balance ? { custom: { equitySecurityId: leg.balance.securityId, equityRole: leg.balance.role } } : {};
+        return leg.foreign && leg.foreign.currency !== input.currency
+          ? {
+            accountId: leg.accountId, amount: fromUnits(leg.units), currency: leg.foreign.currency,
+            txnAmount: fromUnits(leg.foreign.txnUnits), fxRate: leg.foreign.fxRate, memo: leg.memo ?? input.memo, ...custom,
+          }
+          : { accountId: leg.accountId, amount: fromUnits(leg.units), currency: input.currency, memo: leg.memo ?? input.memo, ...custom };
+      }),
     });
     return posted.entryId;
   } catch (error) {
@@ -200,8 +303,8 @@ export async function reverseEquityEntry(
   if (header.status !== "posted") {
     throw new EquityError(`Entry ${header.entry_number} is not a posted entry and cannot be reversed.`, { status: 409, code: "equity_entry_not_posted", remedy: "Reload the record; it may already be reversed." });
   }
-  const lines = (await runner.execute<{ account_id: string; amount: string; currency: string; txn_amount: string; fx_rate: string; line_number: number }>(sql`
-    select account_id, amount::text as amount, currency, txn_amount::text as txn_amount, fx_rate::text as fx_rate, line_number
+  const lines = (await runner.execute<{ account_id: string; amount: string; currency: string; txn_amount: string; fx_rate: string; line_number: number; custom: Record<string, unknown> | null }>(sql`
+    select account_id, amount::text as amount, currency, txn_amount::text as txn_amount, fx_rate::text as fx_rate, line_number, custom
       from journal_lines where org_id = ${input.orgId} and entry_id = ${input.entryId}
      order by line_number`)).rows;
   const bookId = await primaryBook(runner, input.orgId);
@@ -228,6 +331,10 @@ export async function reverseEquityEntry(
         txnAmount: negate(line.txn_amount),
         fxRate: line.fx_rate,
         memo: input.memo,
+        // Instrument balances follow their reversal, so the security's ledger balance nets.
+        ...(line.custom && typeof line.custom.equitySecurityId === "string"
+          ? { custom: { equitySecurityId: line.custom.equitySecurityId, equityRole: line.custom.equityRole } }
+          : {}),
       })),
     });
     await markEntryReversed(runner, { orgId: input.orgId, entryId: input.entryId, actorId: input.actorId });

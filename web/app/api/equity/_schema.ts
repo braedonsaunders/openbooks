@@ -14,6 +14,7 @@ export const signedDecimalText = z.string().trim().regex(/^-?\d{1,18}(\.\d{1,10}
 export const optionalDecimal = decimalText.nullable().optional()
 export const reason = z.string().trim().min(5).max(2000)
 export const idempotencyKey = z.string().trim().min(8).max(200).nullable().optional()
+export const currencyCode = z.string().trim().regex(/^[A-Za-z]{3}$/, 'must be a three-letter currency code')
 
 export const entityQuery = z.object({ subsidiaryId: uuidId, asOf: isoDate() })
 
@@ -56,11 +57,15 @@ export const issueSecurityBody = z.object({
   expirationDate: isoDate().nullable().optional(),
   optionType: z.enum(['iso', 'nso']).nullable().optional(),
   earlyExercise: z.boolean().optional(),
+  unvestedRepurchaseBasis: z.enum(['cost', 'lower_of_cost_or_fmv']).nullable().optional(),
   safeType: z.enum(['pre_money', 'post_money']).nullable().optional(),
+  mfn: z.boolean().optional(),
   valuationCap: optionalDecimal,
   discountPercent: optionalDecimal,
   interestRatePercent: optionalDecimal,
-  interestBasis: z.enum(['simple', 'compound_annual']).nullable().optional(),
+  interestBasis: z.enum(['simple', 'compound_annual', 'compound_semiannual', 'compound_quarterly', 'compound_monthly']).nullable().optional(),
+  interestDayCount: z.enum(['actual_365', 'actual_360', 'thirty_360', 'actual_actual']).nullable().optional(),
+  currency: currencyCode.nullable().optional(),
   maturityDate: isoDate().nullable().optional(),
   valuation: z.object({
     sharePrice: decimalText,

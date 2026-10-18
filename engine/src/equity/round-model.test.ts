@@ -9,7 +9,7 @@ import { modelRound, type RoundModelInput } from "./round-model.ts";
 function terms(overrides: Partial<ConvertibleTerms> & Pick<ConvertibleTerms, "id">): ConvertibleTerms {
   return {
     kind: "safe", issueDate: "2024-01-01", principal: "1000000.0000", safeType: "pre_money", valuationCap: null,
-    discountPercent: null, interestRatePercent: null, interestBasis: null, ...overrides,
+    discountPercent: null, interestRatePercent: null, interestBasis: null, interestDayCount: null, currency: "USD", ...overrides,
   };
 }
 const instrument = (t: ConvertibleTerms): ConvertingInstrument => ({ terms: t, amount: parseMoney(t.principal, "principal") });
@@ -24,7 +24,7 @@ function model(overrides: Partial<RoundModelInput> = {}) {
 }
 
 test("a note accrues simple interest on Actual/365 and compound interest on each anniversary", () => {
-  const simple = terms({ id: "n", kind: "note", safeType: null, principal: "100000.0000", interestRatePercent: "8", interestBasis: "simple" });
+  const simple = terms({ id: "n", kind: "note", safeType: null, principal: "100000.0000", interestRatePercent: "8", interestBasis: "simple", interestDayCount: "actual_365" });
   assert.equal(formatMoney(accruedInterest(simple, "2024-07-01")), "3989.0411");
   const compound = { ...simple, interestBasis: "compound_annual" as const };
   // Two full years at 8% then 182 days: 100000 × 1.08² × (1 + 0.08 × 182/365) − 100000.

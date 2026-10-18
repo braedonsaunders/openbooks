@@ -14,18 +14,25 @@ const approvalBody = z.discriminatedUnion('kind', [
     kind: z.literal('repurchase'),
     effectiveOn: isoDate(),
     quantity: wholeShares,
-    amount: decimalText,
+    amount: decimalText.nullable().optional(),
+    fairMarketValuePerShare: decimalText.nullable().optional(),
     considerationAccountId: uuidId.nullable().optional(),
     reason,
     idempotencyKey,
   }),
   z.object({ kind: z.literal('void'), effectiveOn: isoDate(), reason, idempotencyKey }),
+  z.object({ kind: z.literal('reverse'), effectiveOn: isoDate(), reversesEventId: uuidId, reason, idempotencyKey }),
+  z.object({ kind: z.literal('repay'), effectiveOn: isoDate(), amount: decimalText, considerationAccountId: uuidId, reason: reason.nullable().optional(), idempotencyKey }),
+  z.object({ kind: z.literal('cancel'), effectiveOn: isoDate(), reason, idempotencyKey }),
 ])
 
 /**
- * Governed corrections and buybacks (equity.approve): a repurchase into
- * treasury, or a void that reverses the security's entry on the void date
- * and undoes the event that produced it.
+ * Governed corrections, buybacks and settlements (equity.approve): a
+ * repurchase into treasury (unvested early-exercised shares at the grant's
+ * repurchase price), the repayment or cancellation of a SAFE or note, a void
+ * that reverses the security's entry and undoes the event that produced it,
+ * or the reversal of one forfeiture, expiry, cancellation, repurchase,
+ * repayment or 83(b) election recorded in error.
  */
 export const POST = defineRoute({
   permission: 'equity.approve',

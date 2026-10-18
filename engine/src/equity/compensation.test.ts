@@ -13,16 +13,16 @@ function award(overrides: Partial<SecurityRecord> = {}): SecurityRecord {
     vestingStart: "2024-01-01", vestingMonths: 48, cliffMonths: 12, vestingFrequency: "monthly", vestingTranches: null,
     acceleration: "none", accelerationPercent: null, expirationDate: "2034-01-01", optionType: "iso", earlyExercise: false,
     safeType: null, valuationCap: null, discountPercent: null, interestRatePercent: null, interestBasis: null, maturityDate: null,
-    fairValuePerUnit: "1.0000000000", expenseAttribution: "straight_line",
+    fairValuePerUnit: "1.0000000000", expenseAttribution: "straight_line", interestDayCount: null, mfn: false, unvestedRepurchaseBasis: null, fxRate: "1",
     ...overrides,
   };
 }
 
 const event = (overrides: Partial<SecurityEventRecord> & Pick<SecurityEventRecord, "kind" | "effectiveOn">): SecurityEventRecord =>
-  ({ id: `e-${overrides.kind}-${overrides.effectiveOn}`, securityId: "o-1", quantity: null, pricePerShare: null, amount: null, resultingSecurityId: null, roundId: null, ...overrides });
+  ({ id: `e-${overrides.kind}-${overrides.effectiveOn}`, securityId: "o-1", quantity: null, pricePerShare: null, amount: null, resultingSecurityId: null, roundId: null, reversesEventId: null, ...overrides });
 
 const cost = (security: SecurityRecord, through: string, events: SecurityEventRecord[] = [], splits: SplitRecord[] = []) =>
-  formatMoney(cumulativeCompensation({ events, splits }, security, through));
+  formatMoney(cumulativeCompensation({ events, splits, securities: [security] }, security, through));
 
 test("straight-line cost accrues by day but never trails the value already vested", () => {
   const security = award();
@@ -59,7 +59,7 @@ test("forfeiting unvested units reverses the cost recognized for them", () => {
   const forfeit = [event({ kind: "forfeit", effectiveOn: "2025-07-15", quantity: 3000n })];
   // Vested by then: 18 months = 1,800 units; the 3,000 unvested units leave the award.
   assert.equal(cost(security, "2025-07-15", forfeit), "1800.0000");
-  assert.equal(formatMoney(totalCompensation({ events: forfeit, splits: [] }, security, "2025-07-15")), "1800.0000");
+  assert.equal(formatMoney(totalCompensation({ events: forfeit, splits: [], securities: [security] }, security, "2025-07-15")), "1800.0000");
 });
 
 test("cancelling unvested units without replacement recognizes their remaining cost at once", () => {

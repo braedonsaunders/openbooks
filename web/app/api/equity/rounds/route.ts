@@ -3,7 +3,7 @@ import { z } from 'zod'
 import { createRound } from '@openbooks/engine/equity'
 import { defineRoute } from '@/lib/api/route'
 import { isoDate, uuidId } from '@/lib/api/json'
-import { decimalText } from '../_schema'
+import { currencyCode, decimalText } from '../_schema'
 
 export const runtime = 'nodejs'
 
@@ -14,6 +14,7 @@ const body = z.object({
   closedOn: isoDate(),
   pricePerShare: decimalText,
   preMoneyValuation: decimalText,
+  currency: currencyCode.nullable().optional(),
 })
 
 /** Record a closed financing round; its shares and conversions are then recorded against it. */

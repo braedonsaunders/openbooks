@@ -1,6 +1,10 @@
 /**
  * Scenario models read from the recorded book: the pro-forma round and the
  * exit waterfall, both on the cap table as it stands on the model date.
+ * SAFEs and notes take part on the terms in force on that date (an MFN
+ * election's adopted terms included); an instrument stated in another
+ * currency is restated into the legal entity's functional currency at the
+ * model date's rate, which the caller resolves.
  */
 import {
   buildCapTable,
@@ -8,13 +12,13 @@ import {
   conversionPrice,
   conversionRatio,
   convertibleState,
-  convertibleTerms,
   holdingState,
   originalIssuePrice,
   vestingTermsOf,
 } from "./cap-table.ts";
 import { convertingAmount, type ConvertingInstrument } from "./convertibles.ts";
 import { EquityError } from "./errors.ts";
+import { restate } from "./fx.ts";
 import { parseDecimal, parseMoney, parsePrice, PERCENT_SCALE, rational, type Rational } from "./quantities.ts";
 import { modelRound, type ProtectedClass, type RoundModelResult } from "./round-model.ts";
 import { restatePrice } from "./splits.ts";
@@ -29,22 +33,45 @@ export interface RoundScenario {
   targetPoolPercent: string | null;
 }
 
-/** Outstanding SAFEs and notes on the model date, with the amounts that would convert. */
-function outstandingConvertibles(book: EquityBook, asOf: string): { instrument: ConvertingInstrument; holderPartyId: string }[] {
-  return book.securities
+/** Units of the functional currency per unit of each instrument currency on the model date. */
+export type ModelRates = ReadonlyMap<string, string>;
+
+/** Currencies of the SAFEs and notes outstanding on the model date (the rates a model needs). */
+export function modelCurrencies(book: EquityBook, asOf: string): string[] {
+  return [...new Set(book.securities
     .filter((security) => (security.kind === "safe" || security.kind === "note") && security.issueDate <= asOf)
     .filter((security) => convertibleState(book, security, asOf).status === "outstanding")
-    .map((security) => {
-      const terms = convertibleTerms(security);
-      return { instrument: { terms, amount: convertingAmount(terms, asOf) }, holderPartyId: security.holderPartyId };
+    .map((security) => security.currency))];
+}
+
+/** Outstanding SAFEs and notes on the model date, with the amounts that would convert, in the functional currency. */
+function outstandingConvertibles(book: EquityBook, asOf: string, rates: ModelRates): { instrument: ConvertingInstrument; holderPartyId: string }[] {
+  return book.securities
+    .filter((security) => (security.kind === "safe" || security.kind === "note") && security.issueDate <= asOf)
+    .map((security) => ({ security, state: convertibleState(book, security, asOf) }))
+    .filter(({ state }) => state.status === "outstanding")
+    .map(({ security, state }) => {
+      const rate = rates.get(security.currency);
+      if (rate === undefined) {
+        throw new EquityError(`No ${security.currency} rate was resolved for ${security.securityNumber}.`, { code: "equity_fx_rate_missing", remedy: "Record the exchange rate for the model date (Setup → Exchange Rates)." });
+      }
+      const terms = state.terms;
+      return {
+        instrument: {
+          terms,
+          amount: restate(convertingAmount(terms, asOf), rate),
+          cap: terms.valuationCap ? restate(parseMoney(terms.valuationCap, "the valuation cap"), rate) : null,
+        },
+        holderPartyId: security.holderPartyId,
+      };
     });
 }
 
 /** Model a priced round against the book as of the scenario date. */
-export function modelRoundFromBook(book: EquityBook, scenario: RoundScenario): RoundModelResult {
+export function modelRoundFromBook(book: EquityBook, scenario: RoundScenario, rates: ModelRates): RoundModelResult {
   const table = buildCapTable(book, scenario.asOf);
   const counts = capitalizationCounts(table);
-  const convertibles = outstandingConvertibles(book, scenario.asOf);
+  const convertibles = outstandingConvertibles(book, scenario.asOf, rates);
   const protectedClasses: ProtectedClass[] = book.classes
     .filter((shareClass) => shareClass.kind === "preferred" && shareClass.antiDilution !== "none" && shareClass.effectiveOn <= scenario.asOf)
     .map((shareClass) => ({
@@ -81,7 +108,7 @@ export interface ExitScenario {
 }
 
 /** Run the exit waterfall against the book as of the scenario date. */
-export function waterfallFromBook(book: EquityBook, scenario: ExitScenario): WaterfallResult {
+export function waterfallFromBook(book: EquityBook, scenario: ExitScenario, rates: ModelRates): WaterfallResult {
   const { asOf } = scenario;
   const classes: WaterfallClass[] = [];
   const holdingsByClass = new Map<string, { securityId: string; holderPartyId: string; shares: bigint }[]>();
@@ -122,11 +149,13 @@ export function waterfallFromBook(book: EquityBook, scenario: ExitScenario): Wat
       holdings: holdingsByClass.get(shareClass.id) ?? [],
     });
   }
-  const convertibles: WaterfallConvertible[] = outstandingConvertibles(book, asOf).map(({ instrument, holderPartyId }) => ({
+  const convertibles: WaterfallConvertible[] = outstandingConvertibles(book, asOf, rates).map(({ instrument, holderPartyId }) => ({
     securityId: instrument.terms.id,
     holderPartyId,
     kind: instrument.terms.kind,
     amount: instrument.amount,
+    cap: instrument.terms.kind === "safe" ? instrument.cap ?? null : null,
+    postMoney: instrument.terms.kind === "safe" && instrument.terms.safeType === "post_money",
   }));
   let exitValue: Rational;
   try {

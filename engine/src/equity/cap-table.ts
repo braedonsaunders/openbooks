@@ -9,8 +9,13 @@
  * once (see splits.ts). Vesting is measured in issue units:
  *  - forfeitures remove unvested units from the end of the schedule;
  *  - exercises, settlements, expirations and transfers consume vested units;
+ *    an option that admits early exercise may also be exercised before it
+ *    vests, consuming its earliest unvested units, so the units it keeps
+ *    vest only after the exercised ones;
  *  - cancellations and repurchases take unvested units first, then vested;
- *  - a void removes the security from its void date onward.
+ *  - a void removes the security from its void date onward;
+ *  - a governed reversal undoes one forfeiture, expiry, cancellation,
+ *    repurchase or repayment from the reversal date onward.
  *
  * Ownership is stated on two bases. Outstanding counts issued shares, with
  * preferred shares as converted into common at the class's original issue
@@ -18,6 +23,11 @@
  * RSUs and warrants (as converted) and the unallocated plan pools. SAFEs and
  * notes are reported beside the table with their converting amounts; they
  * take shares only when they convert.
+ *
+ * A preferred class's conversion price adjusts for splits of the common
+ * class it converts into when its terms say so: from each such split's date
+ * the price is divided by the split ratio, so the as-converted count follows
+ * the common shares.
  */
 import { EquityError } from "./errors.ts";
 import { accruedInterest, type ConvertibleTerms } from "./convertibles.ts";
@@ -43,6 +53,7 @@ import { restatePrice, restateShares, splitFactor } from "./splits.ts";
 import type {
   EquityBook,
   PlanRecord,
+  SecurityEventKind,
   SecurityEventRecord,
   SecurityRecord,
   ShareClassRecord,
@@ -62,6 +73,11 @@ export type HoldingStatus =
   | "void"
   | "not_issued";
 
+/** Event kinds that change what a security holds; reversals and 83(b) elections do not. */
+const HOLDING_EVENT_KINDS: ReadonlySet<SecurityEventKind> = new Set<SecurityEventKind>([
+  "exercise", "settle", "forfeit", "expire", "cancel", "repurchase", "transfer", "convert", "void", "repay",
+]);
+
 /** A share-based security's state on a date, in issue units (exact) and restated whole shares. */
 export interface HoldingState {
   security: SecurityRecord;
@@ -75,7 +91,7 @@ export interface HoldingState {
   /** Restated whole shares consumed by each event kind to date. */
   consumed: Record<"exercise" | "settle" | "forfeit" | "expire" | "cancel" | "repurchase" | "transfer" | "convert", bigint>;
   /** Exact issue units, for the event checks. */
-  exact: { outstanding: Rational; vestedAvailable: Rational; unvested: Rational };
+  exact: { outstanding: Rational; vestedAvailable: Rational; unvested: Rational; removedUnvested: Rational };
 }
 
 export function vestingTermsOf(security: SecurityRecord): VestingTerms {
@@ -95,17 +111,27 @@ export function voidedSecurities(book: Pick<EquityBook, "events">, asOf: string)
   return new Set(book.events.filter((event) => event.kind === "void" && event.effectiveOn <= asOf).map((event) => event.securityId));
 }
 
+/** Events undone by a governed reversal effective on or before `asOf`. */
+export function reversedEvents(book: Pick<EquityBook, "events">, asOf: string): Set<string> {
+  return new Set(book.events
+    .filter((event) => event.kind === "reverse" && event.reversesEventId !== null && event.effectiveOn <= asOf)
+    .map((event) => event.reversesEventId!));
+}
+
 /**
- * Events of one security on or before `asOf`, in date then recording order.
- * An exercise, settlement, transfer or conversion whose resulting security
- * was voided is undone from the void date: voiding the certificate an event
- * produced is how that event is corrected.
+ * Events of one security that change what it holds, on or before `asOf`, in
+ * date then recording order. An exercise, settlement, transfer or conversion
+ * whose resulting security was voided is undone from the void date: voiding
+ * the certificate an event produced is how that event is corrected. An event
+ * a governed reversal undid is likewise gone from the reversal date.
  */
 export function eventsOf(book: Pick<EquityBook, "events">, securityId: string, asOf: string): SecurityEventRecord[] {
   const voided = voidedSecurities(book, asOf);
+  const reversed = reversedEvents(book, asOf);
   return book.events
     .map((event, index) => ({ event, index }))
     .filter(({ event }) => event.securityId === securityId && event.effectiveOn <= asOf
+      && HOLDING_EVENT_KINDS.has(event.kind) && !reversed.has(event.id)
       && !(event.resultingSecurityId !== null && voided.has(event.resultingSecurityId)))
     .sort((a, b) => (a.event.effectiveOn < b.event.effectiveOn ? -1 : a.event.effectiveOn > b.event.effectiveOn ? 1 : a.index - b.index))
     .map(({ event }) => event);
@@ -129,7 +155,7 @@ export function holdingState(book: Pick<EquityBook, "events" | "splits">, securi
   if (asOf < security.issueDate) {
     return {
       security, status: "not_issued", factor, outstanding: 0n, vestedAvailable: 0n, unvested: 0n, consumed: EMPTY_CONSUMED(),
-      exact: { outstanding: ZERO, vestedAvailable: ZERO, unvested: ZERO },
+      exact: { outstanding: ZERO, vestedAvailable: ZERO, unvested: ZERO, removedUnvested: ZERO },
     };
   }
   const terms = vestingTermsOf(security);
@@ -147,6 +173,10 @@ export function holdingState(book: Pick<EquityBook, "events" | "splits">, securi
     const sched = scheduled ? rational(scheduledVested(terms, date)) : total;
     return minRational(sched, live);
   };
+  // Units exercised early sit ahead of the vesting line: nothing is vested
+  // and available until the schedule passes them.
+  const availableOf = (vested: Rational): Rational => (compareRational(vested, vestedUsed) > 0 ? subtractRational(vested, vestedUsed) : ZERO);
+  const earlyExercise = security.kind === "option" && security.earlyExercise;
   for (const event of eventsOf(book, security.id, asOf)) {
     if (event.kind === "void") {
       voided = true;
@@ -158,8 +188,8 @@ export function holdingState(book: Pick<EquityBook, "events" | "splits">, securi
     const issueUnits = divideRational(rational(event.quantity), splitFactor(book.splits, classId, security.issueDate, event.effectiveOn));
     const live = subtractRational(total, tailRemoved);
     const vested = vestedAt(event.effectiveOn);
-    const vestedAvailable = subtractRational(vested, vestedUsed);
-    const unvested = subtractRational(live, vested);
+    const vestedAvailable = availableOf(vested);
+    const unvested = subtractRational(subtractRational(live, vestedUsed), vestedAvailable);
     const over = (available: Rational): void => {
       if (compareRational(issueUnits, available) > 0) {
         throw new EquityError(`The ${event.kind} of ${event.quantity} on ${event.effectiveOn} exceeds what ${security.securityNumber} held.`, {
@@ -171,6 +201,9 @@ export function holdingState(book: Pick<EquityBook, "events" | "splits">, securi
     };
     switch (event.kind) {
       case "exercise":
+        over(earlyExercise ? subtractRational(live, vestedUsed) : vestedAvailable);
+        vestedUsed = addRational(vestedUsed, issueUnits);
+        break;
       case "settle":
       case "expire":
       case "transfer":
@@ -191,8 +224,9 @@ export function holdingState(book: Pick<EquityBook, "events" | "splits">, securi
         break;
       }
     }
-    consumedExact[event.kind] = addRational(consumedExact[event.kind], issueUnits);
-    lastReducing = ({ exercise: "exercised", settle: "settled", forfeit: "forfeited", expire: "expired", cancel: "cancelled", repurchase: "repurchased", transfer: "transferred", convert: "converted" } as const)[event.kind];
+    const kind = event.kind as keyof HoldingState["consumed"];
+    consumedExact[kind] = addRational(consumedExact[kind], issueUnits);
+    lastReducing = ({ exercise: "exercised", settle: "settled", forfeit: "forfeited", expire: "expired", cancel: "cancelled", repurchase: "repurchased", transfer: "transferred", convert: "converted" } as const)[kind];
   }
   const restate = (units: Rational): bigint => floorShares(multiplyRational(units, factor));
   const consumed = EMPTY_CONSUMED();
@@ -200,13 +234,13 @@ export function holdingState(book: Pick<EquityBook, "events" | "splits">, securi
   if (voided) {
     return {
       security, status: "void", factor, outstanding: 0n, vestedAvailable: 0n, unvested: 0n, consumed,
-      exact: { outstanding: ZERO, vestedAvailable: ZERO, unvested: ZERO },
+      exact: { outstanding: ZERO, vestedAvailable: ZERO, unvested: ZERO, removedUnvested: tailRemoved },
     };
   }
   const live = subtractRational(total, tailRemoved);
   const vested = vestedAt(asOf);
   const exactOutstanding = subtractRational(live, vestedUsed);
-  const exactVestedAvailable = subtractRational(vested, vestedUsed);
+  const exactVestedAvailable = availableOf(vested);
   const outstanding = restate(exactOutstanding);
   const restatedVested = restate(exactVestedAvailable);
   const vestedAvailable = restatedVested < outstanding ? restatedVested : outstanding;
@@ -218,7 +252,12 @@ export function holdingState(book: Pick<EquityBook, "events" | "splits">, securi
     vestedAvailable,
     unvested: outstanding - vestedAvailable,
     consumed,
-    exact: { outstanding: exactOutstanding, vestedAvailable: exactVestedAvailable, unvested: subtractRational(live, vested) },
+    exact: {
+      outstanding: exactOutstanding,
+      vestedAvailable: exactVestedAvailable,
+      unvested: subtractRational(exactOutstanding, exactVestedAvailable),
+      removedUnvested: tailRemoved,
+    },
   };
 }
 
@@ -246,7 +285,43 @@ export function authorizedShares(book: Pick<EquityBook, "amendments" | "splits">
   return restateShares(book.splits, shareClass.id, base, statedOn, asOf);
 }
 
-/** A preferred class's conversion price on `asOf` (exact), restated through its splits. */
+/** The common class a preferred class converts into on `on`: the latest conversion-class amendment, else the class's own term. */
+export function conversionClassOf(book: Pick<EquityBook, "amendments">, shareClass: ShareClassRecord, on: string): string | null {
+  if (shareClass.kind !== "preferred") return null;
+  let classId = shareClass.conversionShareClassId;
+  let statedOn = shareClass.effectiveOn;
+  for (const amendment of book.amendments) {
+    if (amendment.shareClassId !== shareClass.id || amendment.kind !== "conversion_class" || amendment.effectiveOn > on) continue;
+    if (amendment.effectiveOn >= statedOn && amendment.conversionShareClassId) {
+      classId = amendment.conversionShareClassId;
+      statedOn = amendment.effectiveOn;
+    }
+  }
+  return classId;
+}
+
+/**
+ * Product of the ratios of the conversion-class splits that adjust a
+ * preferred class's conversion price after `after` and on or before
+ * `through`: each split counts when, on its date, the class converts into
+ * the split class and its terms adjust for splits.
+ */
+export function conversionSplitFactor(book: Pick<EquityBook, "amendments" | "splits">, shareClass: ShareClassRecord, after: string, through: string): Rational {
+  if (shareClass.kind !== "preferred" || !shareClass.conversionAdjustsForSplits) return ONE;
+  let factor = ONE;
+  for (const split of book.splits) {
+    if (split.effectiveOn <= after || split.effectiveOn > through || split.shareClassId === shareClass.id) continue;
+    if (conversionClassOf(book, shareClass, split.effectiveOn) !== split.shareClassId) continue;
+    factor = multiplyRational(factor, rational(split.ratioNumerator, split.ratioDenominator));
+  }
+  return factor;
+}
+
+/**
+ * A preferred class's conversion price on `asOf` (exact): the latest
+ * amendment, restated through the class's own splits and divided by every
+ * adjusting split of its conversion class since it was stated.
+ */
 export function conversionPrice(book: Pick<EquityBook, "amendments" | "splits">, shareClass: ShareClassRecord, asOf: string): Rational | null {
   if (shareClass.kind !== "preferred" || !shareClass.initialConversionPrice) return null;
   let price = parsePrice(shareClass.initialConversionPrice, "the conversion price");
@@ -258,7 +333,7 @@ export function conversionPrice(book: Pick<EquityBook, "amendments" | "splits">,
       statedOn = amendment.effectiveOn;
     }
   }
-  return restatePrice(book.splits, shareClass.id, price, statedOn, asOf);
+  return divideRational(restatePrice(book.splits, shareClass.id, price, statedOn, asOf), conversionSplitFactor(book, shareClass, statedOn, asOf));
 }
 
 /** Original issue price of a preferred class on `asOf`, restated through its splits. */
@@ -328,13 +403,14 @@ export function planPool(book: EquityBook, plan: PlanRecord, asOf: string): Plan
     if (security.sourceSecurityId && awards.has(security.sourceSecurityId) && security.kind === "share") fromAward.add(security.id);
   }
   let returned = ZERO;
+  const reversed = reversedEvents(book, asOf);
   const voidedAwards = new Set<string>();
   for (const event of book.events) {
     if (event.effectiveOn > asOf) continue;
     if (event.kind === "void" && awards.has(event.securityId)) voidedAwards.add(event.securityId);
   }
   for (const event of book.events) {
-    if (event.effectiveOn > asOf || event.quantity === null) continue;
+    if (event.effectiveOn > asOf || event.quantity === null || reversed.has(event.id)) continue;
     const award = awards.has(event.securityId) && !voidedAwards.has(event.securityId);
     const certificate = fromAward.has(event.securityId);
     if (!award && !certificate) continue;
@@ -356,16 +432,25 @@ export function planPool(book: EquityBook, plan: PlanRecord, asOf: string): Plan
   };
 }
 
+export type ConvertibleStatus = "outstanding" | "converted" | "repaid" | "cancelled" | "void" | "not_issued";
+
 export interface ConvertibleState {
   security: SecurityRecord;
-  status: "outstanding" | "converted" | "void" | "not_issued";
+  status: ConvertibleStatus;
   principal: string;
   accruedInterest: string;
   convertingAmount: string;
+  /** The date the instrument converted, was repaid, cancelled or voided. */
+  endedOn: string | null;
   convertedOn: string | null;
   resultingSecurityId: string | null;
+  /** The terms in force on the date: the stated terms, or those an MFN election adopted. */
+  terms: ConvertibleTerms;
+  /** The MFN election the terms come from, if any. */
+  electionId: string | null;
 }
 
+/** A SAFE's or note's terms as issued. */
 export function convertibleTerms(security: SecurityRecord): ConvertibleTerms {
   if (security.kind !== "safe" && security.kind !== "note") {
     throw new EquityError(`Security ${security.securityNumber} is not a convertible instrument.`, { code: "equity_not_convertible", remedy: "Choose a SAFE or a convertible note." });
@@ -380,26 +465,65 @@ export function convertibleTerms(security: SecurityRecord): ConvertibleTerms {
     discountPercent: security.discountPercent,
     interestRatePercent: security.interestRatePercent,
     interestBasis: security.interestBasis,
+    interestDayCount: security.interestDayCount,
+    currency: security.currency,
   };
 }
 
-export function convertibleState(book: Pick<EquityBook, "events">, security: SecurityRecord, asOf: string): ConvertibleState {
+/**
+ * The terms in force on `asOf`: an MFN SAFE carries the cap, discount and
+ * SAFE type of its latest election effective by then; otherwise the terms
+ * as issued.
+ */
+export function effectiveConvertibleTerms(
+  book: Pick<EquityBook, "securityAmendments">,
+  security: SecurityRecord,
+  asOf: string,
+): { terms: ConvertibleTerms; electionId: string | null } {
   const terms = convertibleTerms(security);
+  let election: EquityBook["securityAmendments"][number] | null = null;
+  for (const amendment of book.securityAmendments) {
+    if (amendment.securityId !== security.id || amendment.kind !== "mfn_election" || amendment.effectiveOn > asOf) continue;
+    if (!election || amendment.effectiveOn >= election.effectiveOn) election = amendment;
+  }
+  if (!election) return { terms, electionId: null };
+  return {
+    terms: { ...terms, valuationCap: election.valuationCap, discountPercent: election.discountPercent, safeType: election.safeType },
+    electionId: election.id,
+  };
+}
+
+/** Event kinds that end a SAFE or note. */
+const CONVERTIBLE_ENDINGS: Readonly<Partial<Record<SecurityEventKind, ConvertibleStatus>>> = {
+  void: "void",
+  convert: "converted",
+  repay: "repaid",
+  cancel: "cancelled",
+};
+
+export function convertibleState(book: Pick<EquityBook, "events" | "securityAmendments">, security: SecurityRecord, asOf: string): ConvertibleState {
+  const { terms, electionId } = effectiveConvertibleTerms(book, security, asOf);
   const principal = parseMoney(terms.principal, "the principal");
   if (asOf < security.issueDate) {
-    return { security, status: "not_issued", principal: formatMoney(principal), accruedInterest: "0.0000", convertingAmount: formatMoney(principal), convertedOn: null, resultingSecurityId: null };
+    return {
+      security, status: "not_issued", principal: formatMoney(principal), accruedInterest: "0.0000", convertingAmount: formatMoney(principal),
+      endedOn: null, convertedOn: null, resultingSecurityId: null, terms, electionId,
+    };
   }
-  const ended = eventsOf(book, security.id, asOf).find((event) => event.kind === "void" || event.kind === "convert");
+  const ended = eventsOf(book, security.id, asOf).find((event) => CONVERTIBLE_ENDINGS[event.kind] !== undefined);
   const until = ended?.effectiveOn ?? asOf;
   const interest = accruedInterest(terms, until);
   return {
     security,
-    status: ended ? (ended.kind === "void" ? "void" : "converted") : "outstanding",
+    status: ended ? CONVERTIBLE_ENDINGS[ended.kind]! : "outstanding",
     principal: formatMoney(principal),
     accruedInterest: formatMoney(interest),
     convertingAmount: formatMoney(addRational(principal, interest)),
+    endedOn: ended?.effectiveOn ?? null,
     convertedOn: ended?.kind === "convert" ? ended.effectiveOn : null,
     resultingSecurityId: ended?.kind === "convert" ? ended.resultingSecurityId : null,
+    terms,
+    electionId,
   };
 }
 
@@ -474,9 +598,12 @@ export interface ConvertibleRow {
   principal: string;
   accruedInterest: string;
   convertingAmount: string;
+  /** Terms in force on the as-of date (an MFN election's adopted terms when one applies). */
   valuationCap: string | null;
   discountPercent: string | null;
   safeType: SecurityRecord["safeType"];
+  mfn: boolean;
+  electionId: string | null;
   currency: string;
 }
 
@@ -549,7 +676,8 @@ export function buildCapTable(book: EquityBook, asOf: string): CapTable {
       convertibles.push({
         securityId: security.id, securityNumber: security.securityNumber, kind: security.kind, holderPartyId: security.holderPartyId,
         status: state.status, principal: state.principal, accruedInterest: state.accruedInterest, convertingAmount: state.convertingAmount,
-        valuationCap: security.valuationCap, discountPercent: security.discountPercent, safeType: security.safeType, currency: security.currency,
+        valuationCap: state.terms.valuationCap, discountPercent: state.terms.discountPercent, safeType: state.terms.safeType,
+        mfn: security.mfn, electionId: state.electionId, currency: security.currency,
       });
       continue;
     }
