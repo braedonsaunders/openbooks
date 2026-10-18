@@ -241,6 +241,14 @@
       "title": "前払費用の配分が未記帳です",
       "message": "{count, plural, one {期日到来の配分期間 # 件が未記帳です。} other {期日到来の配分期間 # 件が未記帳です。}}"
     },
+    "equity-compensation-unposted": {
+      "title": "株式報酬が転記されていません",
+      "message": "{count} 件の法人で期末までの株式報酬が転記されていません。"
+    },
+    "equity-interest-unaccrued": {
+      "title": "ノート利息が計上されていません",
+      "message": "{count} 件の法人で期末までの転換社債の利息が計上されていません。"
+    },
     "balancing-segment-residual": {
       "title": "貸借均衡セグメントの残額",
       "message": "{count} 件のセグメント値に元帳残額があります。締め処理の前に割り当てと有効な相殺方針を確認してください。"
@@ -469,6 +477,14 @@
     "prepaid-amortized": {
       "title": "前払費用を配分",
       "description": "期間末日までに終わる有効な配分スケジュールの期間をすべて記帳します。"
+    },
+    "equity-compensation-posted": {
+      "title": "株式報酬を転記",
+      "description": "付与のある各法人について、期末までの株式報酬の実行を転記します：株式に基づく報酬費用と譲渡制限株式の解除。"
+    },
+    "equity-interest-accrued": {
+      "title": "転換社債の利息を計上",
+      "description": "転換社債のある各法人について、期末までのノート利息の実行を転記します。"
     },
     "asset-capitalization-reviewed": {
       "title": "資産計上の確認",

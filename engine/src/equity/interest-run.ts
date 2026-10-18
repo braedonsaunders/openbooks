@@ -162,6 +162,23 @@ export async function previewInterestRun(input: { orgId: string; actorId: string
   }, { isolationLevel: "REPEATABLE READ", readOnly: true });
 }
 
+/**
+ * The change a note interest run through the date would accrue, in the
+ * functional currency, measured exactly as the run measures it. It reads
+ * within the caller's organization transaction and checks no actor, for the
+ * close checklist and the equity overview. A missing exchange rate refuses
+ * as the run itself would.
+ */
+export async function interestRunChange(orgId: string, subsidiaryId: string, throughDate: string): Promise<{ lastRunThrough: string | null; total: string; lines: number; currency: string }> {
+  return withOrgTransaction(orgId, async () => {
+    const entity = await loadLegalEntity(db, orgId, subsidiaryId);
+    const book = await loadEquityBook(db, orgId, subsidiaryId);
+    const last = await lastRun(orgId, subsidiaryId);
+    const { lines, total } = await measure(orgId, subsidiaryId, book, throughDate, entity.currency, null);
+    return { lastRunThrough: last?.through_date ?? null, total: formatLedger(total), lines: lines.length, currency: entity.currency };
+  });
+}
+
 export interface InterestRunResult {
   runId: string;
   throughDate: string;

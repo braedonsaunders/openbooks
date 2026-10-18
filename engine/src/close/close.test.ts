@@ -235,6 +235,11 @@ test("an explicitly disabled feature stays off in the close context even when it
   assert.equal(ctx.assetCapitalization, false, "no capitalization review without proposals or construction in progress");
   assert.equal(defaultCloseStepEnabled("asset-capitalization-reviewed", ctx), false);
   assert.equal(defaultCloseStepEnabled("asset-capitalization-reviewed", { ...ctx, assetCapitalization: true }), true);
+  assert.equal(ctx.equity, false, "Equity & cap table is off unless switched on");
+  for (const key of ["equity-compensation-posted", "equity-interest-accrued"]) {
+    assert.equal(defaultCloseStepEnabled(key, ctx), false, `${key} needs Equity & cap table`);
+    assert.equal(defaultCloseStepEnabled(key, { ...ctx, equity: true }), true, `${key} is a period task while equity is on`);
+  }
 });
 
 function errorChainMatches(error: unknown, pattern: RegExp): boolean {

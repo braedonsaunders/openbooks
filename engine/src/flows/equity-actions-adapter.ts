@@ -124,10 +124,13 @@ function deepLinkFor(request: Pick<RequestRow, "action" | "subject_id" | "subsid
       return `${base}&view=securities&security=${request.subject_id}`;
     case "reserve_change":
       return `${base}&view=plans`;
+    case "class_amendment":
+    case "split":
+      return `${base}&view=classes`;
     case "compensation_run":
       return `${base}&view=compensation`;
     case "interest_run":
-      return `${base}&view=rounds`;
+      return `${base}&view=compensation&run=interest`;
     case "account_policy":
       return "/admin/setup/equity-account-policies";
     default:

@@ -241,6 +241,14 @@
       "title": "预付费用摊销尚未过账",
       "message": "{count, plural, one {有 # 个到期摊销期间尚未过账。} other {有 # 个到期摊销期间尚未过账。}}"
     },
+    "equity-compensation-unposted": {
+      "title": "股权激励尚未过账",
+      "message": "{count} 个法律实体截至期末的股权激励尚未过账。"
+    },
+    "equity-interest-unaccrued": {
+      "title": "票据利息尚未计提",
+      "message": "{count} 个法律实体截至期末的可转换票据利息尚未计提。"
+    },
     "balancing-segment-residual": {
       "title": "平衡分段残额",
       "message": "{count} 个分段值存在总账残额。关闭期间前请检查分段分配和有效清算政策。"
@@ -469,6 +477,14 @@
     "prepaid-amortized": {
       "title": "摊销预付费用",
       "description": "过账生效摊销计划中在期间末日前结束的每个摊销期间。"
+    },
+    "equity-compensation-posted": {
+      "title": "过账股权激励",
+      "description": "为每个有股权授予的法律实体过账截至期末的股权激励运行：股份支付费用和限制性股票解禁。"
+    },
+    "equity-interest-accrued": {
+      "title": "计提可转换票据利息",
+      "description": "为每个有可转换票据的法律实体过账截至期末的票据利息运行。"
     },
     "asset-capitalization-reviewed": {
       "title": "审核资产资本化",

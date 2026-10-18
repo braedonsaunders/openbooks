@@ -112,16 +112,29 @@ export interface WaterfallSafeRow {
   converted: boolean;
   shares: string;
   amount: string;
+  /** The SAFE's cash-out amount (its purchase amount). */
+  cashOutAmount: string;
+  /** What the other choice would pay it, given the others' choices (null for an uncapped SAFE, which only cashes out). */
+  alternativeAmount: string | null;
 }
 
 export interface WaterfallClassRow {
   shareClassId: string;
   code: string;
+  kind: ShareClassKind;
+  seniority: number;
+  participationMode: Participation;
   converted: boolean;
   preference: string;
   participation: string;
   total: string;
   perShare: string;
+  /** The liquidation preference the class holds: its multiple times its original issue price per outstanding share. */
+  preferenceEntitlement: string;
+  /** A capped participating class's cap, preference included (null otherwise). */
+  participationCap: string | null;
+  /** What the other choice (convert, or keep the preference) would pay the class, given the others' choices; null for a class with no choice. */
+  alternativeTotal: string | null;
 }
 
 export interface WaterfallPayout {
@@ -370,6 +383,15 @@ export function runWaterfall(input: WaterfallInput): WaterfallResult {
       remedy: "Review the classes' preferences, participation caps and seniority, or model a different exit value.",
     });
   }
+  // What each elector's other choice would pay it, holding the others' settled choices.
+  const alternatives = new Map<string, Rational>();
+  for (const candidate of candidates) {
+    const toggled = new Set(converting);
+    if (toggled.has(candidate.id)) toggled.delete(candidate.id);
+    else toggled.add(candidate.id);
+    const alternative = distribute(input, afterNotes, toggled, notesPaid);
+    if (alternative) alternatives.set(candidate.id, electorTotal(alternative, candidate.id, candidate.safe));
+  }
   // Exact lines: holdings by class, awards net of exercise price, convertibles, unallocated.
   const lines: { payout: WaterfallPayout | null; exact: Rational }[] = [];
   for (const shareClass of input.classes) {
@@ -419,14 +441,22 @@ export function runWaterfall(input: WaterfallInput): WaterfallResult {
   const classes: WaterfallClassRow[] = input.classes.map((shareClass) => {
     const shares = sharesOf(shareClass);
     const units = classTotals.get(shareClass.shareClassId) ?? 0n;
+    const cap = capOf(shareClass);
+    const alternative = alternatives.get(shareClass.shareClassId);
     return {
       shareClassId: shareClass.shareClassId,
       code: shareClass.code,
+      kind: shareClass.kind,
+      seniority: shareClass.seniority,
+      participationMode: shareClass.participation,
       converted: converting.has(shareClass.shareClassId),
       preference: toMoney(quantize(distribution.classPreference.get(shareClass.shareClassId) ?? ZERO, input.minorUnitScale, "half_up")),
       participation: toMoney(quantize(distribution.classParticipation.get(shareClass.shareClassId) ?? ZERO, input.minorUnitScale, "half_up")),
       total: toMoney(units),
       perShare: shares > 0n ? formatPrice(divideRational(classTotal(distribution, shareClass.shareClassId), rational(shares))) : "0.0000000000",
+      preferenceEntitlement: toMoney(quantize(preferenceOf(shareClass), input.minorUnitScale, "half_up")),
+      participationCap: cap ? toMoney(quantize(cap, input.minorUnitScale, "half_up")) : null,
+      alternativeTotal: alternative ? toMoney(quantize(alternative, input.minorUnitScale, "half_up")) : null,
     };
   });
   return {
@@ -440,9 +470,12 @@ export function runWaterfall(input: WaterfallInput): WaterfallResult {
     safes: input.convertibles.filter((convertible) => convertible.kind === "safe").map((convertible) => {
       const shares = distribution.safeShares.get(convertible.securityId);
       const units = securityUnits.get(convertible.securityId) ?? 0n;
+      const alternative = alternatives.get(convertible.securityId);
       return {
         securityId: convertible.securityId, holderPartyId: convertible.holderPartyId, converted: Boolean(shares),
         shares: shares ? formatPrice(shares) : "0.0000000000", amount: toMoney(units),
+        cashOutAmount: toMoney(quantize(convertible.amount, input.minorUnitScale, "half_up")),
+        alternativeAmount: alternative ? toMoney(quantize(alternative, input.minorUnitScale, "half_up")) : null,
       };
     }),
     unallocated: toMoney(unallocatedUnits),

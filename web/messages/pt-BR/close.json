@@ -241,6 +241,14 @@
       "title": "A apropriação de despesas antecipadas não foi lançada",
       "message": "{count, plural, one {# período de apropriação vencido não foi lançado.} other {# períodos de apropriação vencidos não foram lançados.}}"
     },
+    "equity-compensation-unposted": {
+      "title": "A remuneração em ações não está contabilizada",
+      "message": "{count, plural, one {# entidade tem remuneração em ações não contabilizada até o fim do período.} other {# entidades têm remuneração em ações não contabilizada até o fim do período.}}"
+    },
+    "equity-interest-unaccrued": {
+      "title": "Os juros das notas não estão apropriados",
+      "message": "{count, plural, one {# entidade tem juros de notas conversíveis não apropriados até o fim do período.} other {# entidades têm juros de notas conversíveis não apropriados até o fim do período.}}"
+    },
     "balancing-segment-residual": {
       "title": "Saldos residuais de segmentos",
       "message": "{count} valores de segmentos mantêm saldo residual. Revise as atribuições e a política de compensação antes do fechamento."
@@ -469,6 +477,14 @@
     "prepaid-amortized": {
       "title": "Apropriar despesas antecipadas",
       "description": "Lançar cada período de apropriação dos cronogramas ativos que termina até o fim do período."
+    },
+    "equity-compensation-posted": {
+      "title": "Contabilizar a remuneração em ações",
+      "description": "Contabilizar a execução de remuneração em ações até o fim do período para cada entidade com outorgas: despesa de pagamento baseado em ações e liberações de ações restritas."
+    },
+    "equity-interest-accrued": {
+      "title": "Apropriar juros de notas conversíveis",
+      "description": "Contabilizar a execução de juros das notas até o fim do período para cada entidade com notas conversíveis."
     },
     "asset-capitalization-reviewed": {
       "title": "Revisar a capitalização de ativos",

@@ -28,9 +28,9 @@ import { EquityError } from "./errors.ts";
 import { assertEquityReadable, currencyExponent, loadLegalEntity, requireEquityReader, type LegalEntity } from "./internal.ts";
 import { spotRate } from "./fx.ts";
 import { mfnCandidates, type MfnCandidate } from "./mfn.ts";
-import { modelCurrencies, modelRoundFromBook, waterfallFromBook, type ExitScenario, type ModelRates, type RoundScenario } from "./models.ts";
+import { modelCurrencies, modelRoundFromBook, waterfallCurveFromBook, waterfallFromBook, type ExitScenario, type ModelRates, type RoundScenario } from "./models.ts";
 import { instrumentBalance } from "./posting.ts";
-import { floorShares, formatPrice, ledgerUnits, parsePrice } from "./quantities.ts";
+import { floorShares, formatMoney, formatPrice, ledgerUnits, parseMoney, parsePrice, rational } from "./quantities.ts";
 import { earlyExerciseSource, election83bStatus, releasedUnits, restrictedPortion, type Election83b } from "./restricted-stock.ts";
 import { accruedToDate } from "./settlement.ts";
 import { toUnits } from "../money/money.ts";
@@ -399,6 +399,44 @@ export async function runEntityWaterfall(input: ReadInput & { subsidiaryId: stri
     return {
       entity,
       result,
+      parties: await partyNames(input.orgId, result.holders.map((row) => row.holderPartyId)),
+      classes: Object.fromEntries(book.classes.map((row) => [row.id, row.code])),
+    };
+  });
+}
+
+/** Exit values the scenario curve samples, from zero to twice the scenario's exit value. */
+const CURVE_POINTS = 17;
+const CURVE_SPAN = rational(2n);
+
+export interface WaterfallScenario {
+  entity: LegalEntity;
+  /** The exit value before fees, and the fees taken from it; `result.exitValue` is what holders share. */
+  grossExitValue: string;
+  transactionFees: string;
+  result: WaterfallResult;
+  /** The distribution at evenly spaced exit values from zero to twice the scenario's, the same fees taken from each. */
+  curve: { exitValue: string; result: WaterfallResult }[];
+  parties: Record<string, string>;
+  classes: Record<string, string>;
+}
+
+/** The exit waterfall with its curve across exit values, in one snapshot of the legal entity's cap table. */
+export async function runEntityWaterfallScenario(input: ReadInput & { subsidiaryId: string } & Omit<ExitScenario, "minorUnitScale">): Promise<WaterfallScenario> {
+  return snapshot(input.orgId, async () => {
+    const { entity, book } = await entityBook(input);
+    const minorUnitScale = await currencyExponent(db, entity.currency);
+    const rates = await modelRates(input.orgId, entity, book, input.asOf);
+    const scenario = { ...input, minorUnitScale };
+    const result = waterfallFromBook(book, scenario, rates);
+    const curve = waterfallCurveFromBook(book, scenario, rates, CURVE_POINTS, CURVE_SPAN);
+    const gross = formatMoney(parseMoney(input.exitValue, "the exit value"));
+    return {
+      entity,
+      grossExitValue: gross,
+      transactionFees: input.transactionFees ? formatMoney(parseMoney(input.transactionFees, "the transaction fees")) : "0.0000",
+      result,
+      curve,
       parties: await partyNames(input.orgId, result.holders.map((row) => row.holderPartyId)),
       classes: Object.fromEntries(book.classes.map((row) => [row.id, row.code])),
     };

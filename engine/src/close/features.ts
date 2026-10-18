@@ -18,6 +18,8 @@ export type DefaultCloseFeatureContext = {
   periodEndJournals: boolean;
   multiBookAccounting?: boolean;
   expenseAmortization: boolean;
+  /** Equity & cap table: stock compensation and note interest runs post at period end. */
+  equity?: boolean;
 };
 
 /**
@@ -54,6 +56,7 @@ export async function defaultCloseFeatureContext(
     periodEndJournals: featureEnabled(features, "periodEndJournals"),
     multiBookAccounting: featureEnabled(features, "multiBookAccounting"),
     expenseAmortization: featureEnabled(features, "expenseAmortization"),
+    equity: featureEnabled(features, "equity"),
   };
 }
 
@@ -74,6 +77,7 @@ export function defaultCloseStepEnabled(
   if (key === "period-end-journals") return features.periodEndJournals;
   if (key === "book-replication-complete") return features.multiBookAccounting === true;
   if (key === "prepaid-amortized") return features.expenseAmortization;
+  if (key === "equity-compensation-posted" || key === "equity-interest-accrued") return features.equity === true;
   if (["fx-ready", "fx-revalued"].includes(key)) return features.multiCurrency;
   if (["intercompany-balanced", "consolidation"].includes(key)) return features.multiSubsidiary;
   return true;

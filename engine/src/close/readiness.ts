@@ -15,6 +15,7 @@ import { periodEndJournalCloseCheck, type PeriodEndCloseCheck } from "./period-e
 import { excludePeriodEndJournals } from "../records/period-end-origins.ts";
 import { bookReplicationReadiness } from "../journal/book-replication.ts";
 import { dueUnpostedAmortization } from "../amortization/reconciliation.ts";
+import { closeEquityPostings } from "../equity/period-postings.ts";
 import { closeBankStatementScope, closeEntityScope } from "./close-scope.ts";
 const nonPostingKindList = () => sql.join(NON_POSTING_DOCUMENT_KINDS.map((k) => sql`${k}`), sql`, `);
 
@@ -515,6 +516,18 @@ export async function readinessChecks(
       })
     : { lines: 0, schedules: 0 };
 
+  // Equity runs are current when no legal entity in scope with equity
+  // records has a stock compensation or note interest change due through
+  // period end. Only runs that carry the steps pay for the measurement.
+  const equityTasks = (
+    await db.execute<{ key: string }>(sql`
+      select key from close_run_tasks
+       where run_id = ${runId} and org_id = ${orgId} and key in ('equity-compensation-posted', 'equity-interest-accrued')`)
+  ).rows.map((row) => row.key);
+  const equityDue = equityTasks.length > 0
+    ? await closeEquityPostings(orgId, { through: ctx.ends_on, subsidiaryIds: scoped ? subsidiaryIds : [] })
+    : { compensation: [], interest: [] };
+
   const threshold = variancePolicy.rows[0] ?? {
     amount: "10000.0000",
     percent: 20,
@@ -693,6 +706,26 @@ export async function readinessChecks(
       message: "close.diagnostics.prepaid-amortization-unposted.message",
       count: prepaidDue.lines,
       details: prepaidDue.lines > 0 ? { schedules: prepaidDue.schedules } : undefined,
+    },
+    {
+      code: "equity-compensation-unposted",
+      taskKey: "equity-compensation-posted",
+      category: "gl",
+      severity: "error",
+      title: "close.diagnostics.equity-compensation-unposted.title",
+      message: "close.diagnostics.equity-compensation-unposted.message",
+      count: equityTasks.includes("equity-compensation-posted") ? equityDue.compensation.length : 0,
+      details: equityDue.compensation.length > 0 ? { entities: equityDue.compensation } : undefined,
+    },
+    {
+      code: "equity-interest-unaccrued",
+      taskKey: "equity-interest-accrued",
+      category: "gl",
+      severity: "error",
+      title: "close.diagnostics.equity-interest-unaccrued.title",
+      message: "close.diagnostics.equity-interest-unaccrued.message",
+      count: equityTasks.includes("equity-interest-accrued") ? equityDue.interest.length : 0,
+      details: equityDue.interest.length > 0 ? { entities: equityDue.interest } : undefined,
     },
     {
       code: "fx-missing",

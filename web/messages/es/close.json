@@ -241,6 +241,14 @@
       "title": "La amortización de gastos anticipados no está contabilizada",
       "message": "{count, plural, one {# período de amortización vencido no está contabilizado.} other {# períodos de amortización vencidos no están contabilizados.}}"
     },
+    "equity-compensation-unposted": {
+      "title": "La compensación en acciones no está contabilizada",
+      "message": "{count, plural, one {# entidad tiene compensación en acciones sin contabilizar hasta el cierre del período.} other {# entidades tienen compensación en acciones sin contabilizar hasta el cierre del período.}}"
+    },
+    "equity-interest-unaccrued": {
+      "title": "Los intereses de notas no están devengados",
+      "message": "{count, plural, one {# entidad tiene intereses de notas convertibles sin devengar hasta el cierre del período.} other {# entidades tienen intereses de notas convertibles sin devengar hasta el cierre del período.}}"
+    },
     "balancing-segment-residual": {
       "title": "Saldos residuales de segmentos",
       "message": "{count} valores de segmentos conservan un saldo residual. Revise las asignaciones y la política de compensación antes del cierre."
@@ -469,6 +477,14 @@
     "prepaid-amortized": {
       "title": "Amortizar gastos anticipados",
       "description": "Contabilizar cada período de amortización de los calendarios activos que termina antes del cierre del período."
+    },
+    "equity-compensation-posted": {
+      "title": "Contabilizar la compensación en acciones",
+      "description": "Contabilizar la ejecución de compensación en acciones hasta el cierre del período para cada entidad con concesiones: gasto por pagos basados en acciones y liberaciones de acciones restringidas."
+    },
+    "equity-interest-accrued": {
+      "title": "Devengar intereses de notas convertibles",
+      "description": "Contabilizar la ejecución de intereses de notas hasta el cierre del período para cada entidad con notas convertibles."
     },
     "asset-capitalization-reviewed": {
       "title": "Revisar la capitalización de activos",

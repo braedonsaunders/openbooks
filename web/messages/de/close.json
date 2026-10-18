@@ -241,6 +241,14 @@
       "title": "Auflösung der Rechnungsabgrenzung ist nicht gebucht",
       "message": "{count, plural, one {# fällige Auflösungsperiode ist nicht gebucht.} other {# fällige Auflösungsperioden sind nicht gebucht.}}"
     },
+    "equity-compensation-unposted": {
+      "title": "Aktienvergütung ist nicht gebucht",
+      "message": "{count, plural, one {# Gesellschaft hat bis zum Periodenende nicht gebuchte Aktienvergütung.} other {# Gesellschaften haben bis zum Periodenende nicht gebuchte Aktienvergütung.}}"
+    },
+    "equity-interest-unaccrued": {
+      "title": "Darlehenszinsen sind nicht abgegrenzt",
+      "message": "{count, plural, one {# Gesellschaft hat bis zum Periodenende nicht abgegrenzte Zinsen auf Wandeldarlehen.} other {# Gesellschaften haben bis zum Periodenende nicht abgegrenzte Zinsen auf Wandeldarlehen.}}"
+    },
     "balancing-segment-residual": {
       "title": "Restbeträge ausgleichspflichtiger Segmente",
       "message": "{count} Segmentwerte weisen einen Restbetrag auf. Prüfen Sie Zuordnungen und Verrechnungsrichtlinien vor dem Abschluss."
@@ -469,6 +477,14 @@
     "prepaid-amortized": {
       "title": "Aktive Rechnungsabgrenzung auflösen",
       "description": "Jede bis zum Periodenende fällige Auflösungsperiode aktiver Abgrenzungspläne buchen."
+    },
+    "equity-compensation-posted": {
+      "title": "Aktienvergütung buchen",
+      "description": "Den Lauf der Aktienvergütung bis zum Periodenende für jede Gesellschaft mit Zuteilungen buchen: Aufwand aus anteilsbasierter Vergütung und Freigaben gesperrter Anteile."
+    },
+    "equity-interest-accrued": {
+      "title": "Zinsen auf Wandeldarlehen abgrenzen",
+      "description": "Den Zinslauf bis zum Periodenende für jede Gesellschaft mit Wandeldarlehen buchen."
     },
     "asset-capitalization-reviewed": {
       "title": "Aktivierung von Anlagen prüfen",

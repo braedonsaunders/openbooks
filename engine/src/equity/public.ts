@@ -68,13 +68,25 @@ export {
   listStakeholders,
   modelEntityRound,
   runEntityWaterfall,
+  runEntityWaterfallScenario,
   listCompensationRuns,
+  type WaterfallScenario,
   type CapTableView,
   type SecurityRow,
   type SecurityDetail,
   type StructureView,
   type CompensationRunRow,
 } from "./read-model.ts";
+export {
+  loadEquityOverview,
+  EQUITY_ATTENTION_DAYS,
+  EQUITY_EXPIRY_DAYS,
+  type EquityOverview,
+  type EquityAttention,
+  type EquityActivity,
+  type OwnershipSlice,
+} from "./overview.ts";
+export type { EquityPostingDue, EquityPostingsDue } from "./period-postings.ts";
 export type { CapTable, ClassRow, HolderRow, PlanRow, HoldingRow, ConvertibleRow } from "./cap-table.ts";
 export type { RoundModelResult, RoundModelDilutionRow } from "./round-model.ts";
 export type { WaterfallResult, WaterfallClassRow, WaterfallPayout, WaterfallSafeRow } from "./waterfall.ts";

@@ -19,12 +19,12 @@ import {
 import { convertingAmount, type ConvertingInstrument } from "./convertibles.ts";
 import { EquityError } from "./errors.ts";
 import { restate } from "./fx.ts";
-import { parseDecimal, parseMoney, parsePrice, PERCENT_SCALE, rational, type Rational } from "./quantities.ts";
+import { compareRational, formatMoney, multiplyRational, parseDecimal, parseMoney, parsePrice, PERCENT_SCALE, rational, subtractRational, type Rational } from "./quantities.ts";
 import { modelRound, type ProtectedClass, type RoundModelResult } from "./round-model.ts";
 import { restatePrice } from "./splits.ts";
 import type { EquityBook } from "./types.ts";
 import { acceleratedVested, hasVestingSchedule } from "./vesting.ts";
-import { runWaterfall, type WaterfallAward, type WaterfallClass, type WaterfallConvertible, type WaterfallResult } from "./waterfall.ts";
+import { runWaterfall, type WaterfallAward, type WaterfallClass, type WaterfallConvertible, type WaterfallInput, type WaterfallResult } from "./waterfall.ts";
 
 export interface RoundScenario {
   asOf: string;
@@ -100,6 +100,8 @@ export function modelRoundFromBook(book: EquityBook, scenario: RoundScenario, ra
 export interface ExitScenario {
   asOf: string;
   exitValue: string;
+  /** Transaction fees and expenses paid from the exit value before any holder (none when absent). */
+  transactionFees?: string | null;
   /** Unvested awards take part, or only vested units (after any acceleration) do. */
   unvestedAwards: "participate" | "cancel";
   changeOfControl: boolean;
@@ -107,8 +109,8 @@ export interface ExitScenario {
   minorUnitScale: number;
 }
 
-/** Run the exit waterfall against the book as of the scenario date. */
-export function waterfallFromBook(book: EquityBook, scenario: ExitScenario, rates: ModelRates): WaterfallResult {
+/** The holders, awards and convertibles taking part in an exit as of the scenario date. */
+function waterfallParticipants(book: EquityBook, scenario: Omit<ExitScenario, "exitValue" | "minorUnitScale">, rates: ModelRates): Pick<WaterfallInput, "classes" | "awards" | "convertibles"> {
   const { asOf } = scenario;
   const classes: WaterfallClass[] = [];
   const holdingsByClass = new Map<string, { securityId: string; holderPartyId: string; shares: bigint }[]>();
@@ -157,11 +159,57 @@ export function waterfallFromBook(book: EquityBook, scenario: ExitScenario, rate
     cap: instrument.terms.kind === "safe" ? instrument.cap ?? null : null,
     postMoney: instrument.terms.kind === "safe" && instrument.terms.safeType === "post_money",
   }));
-  let exitValue: Rational;
+  return { classes, awards, convertibles };
+}
+
+function scenarioMoney(value: string, field: "exitValue" | "transactionFees"): Rational {
   try {
-    exitValue = parseMoney(scenario.exitValue, "the exit value");
+    return parseMoney(value, field === "exitValue" ? "the exit value" : "the transaction fees");
   } catch (error) {
-    throw new EquityError("The exit value must be a decimal amount with at most four places.", { code: "equity_waterfall_invalid", remedy: "Enter the exit value, such as 25000000.", field: "exitValue", cause: error });
+    throw new EquityError(
+      field === "exitValue" ? "The exit value must be a decimal amount with at most four places." : "The transaction fees must be a decimal amount with at most four places.",
+      { code: "equity_waterfall_invalid", remedy: field === "exitValue" ? "Enter the exit value, such as 25000000." : "Enter the fees paid from the exit, such as 750000, or leave them blank.", field, cause: error },
+    );
   }
-  return runWaterfall({ exitValue, classes, awards, convertibles, minorUnitScale: scenario.minorUnitScale });
+}
+
+/** The proceeds an exit leaves for holders: the exit value less the transaction fees, which cannot exceed it. */
+export function netExitProceeds(exitValue: string, transactionFees: string | null | undefined): Rational {
+  const gross = scenarioMoney(exitValue, "exitValue");
+  if (!transactionFees) return gross;
+  const fees = scenarioMoney(transactionFees, "transactionFees");
+  if (compareRational(fees, rational(0n)) < 0) {
+    throw new EquityError("The transaction fees cannot be negative.", { code: "equity_waterfall_invalid", remedy: "Enter the fees paid from the exit, or leave them blank.", field: "transactionFees" });
+  }
+  if (compareRational(fees, gross) > 0) {
+    throw new EquityError("The transaction fees exceed the exit value.", { code: "equity_waterfall_invalid", remedy: "Enter fees no greater than the exit value.", field: "transactionFees" });
+  }
+  return subtractRational(gross, fees);
+}
+
+/** Run the exit waterfall against the book as of the scenario date, on the exit value net of transaction fees. */
+export function waterfallFromBook(book: EquityBook, scenario: ExitScenario, rates: ModelRates): WaterfallResult {
+  const exitValue = netExitProceeds(scenario.exitValue, scenario.transactionFees);
+  return runWaterfall({ exitValue, ...waterfallParticipants(book, scenario, rates), minorUnitScale: scenario.minorUnitScale });
+}
+
+/**
+ * The waterfall at evenly spaced exit values from zero to `span` times the
+ * scenario's exit value, the same fees taken from each (an exit below the
+ * fees leaves nothing): how each class's proceeds move with the exit, and
+ * where preferred classes switch between preference and conversion.
+ */
+export function waterfallCurveFromBook(book: EquityBook, scenario: ExitScenario, rates: ModelRates, points: number, span: Rational): { exitValue: string; result: WaterfallResult }[] {
+  const gross = scenarioMoney(scenario.exitValue, "exitValue");
+  netExitProceeds(scenario.exitValue, scenario.transactionFees);
+  const fees = scenario.transactionFees ? scenarioMoney(scenario.transactionFees, "transactionFees") : rational(0n);
+  const participants = waterfallParticipants(book, scenario, rates);
+  const steps = Math.max(1, Math.trunc(points) - 1);
+  const out: { exitValue: string; result: WaterfallResult }[] = [];
+  for (let step = 0; step <= steps; step += 1) {
+    const exit = multiplyRational(gross, multiplyRational(span, rational(BigInt(step), BigInt(steps))));
+    const net = compareRational(exit, fees) > 0 ? subtractRational(exit, fees) : rational(0n);
+    out.push({ exitValue: formatMoney(exit), result: runWaterfall({ exitValue: net, ...participants, minorUnitScale: scenario.minorUnitScale }) });
+  }
+  return out;
 }

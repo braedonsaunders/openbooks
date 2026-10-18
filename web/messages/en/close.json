@@ -241,6 +241,14 @@
       "title": "Prepaid amortization remains unposted",
       "message": "{count, plural, one {# amortization period is due and unposted.} other {# amortization periods are due and unposted.}}"
     },
+    "equity-compensation-unposted": {
+      "title": "Stock compensation is not posted",
+      "message": "{count, plural, one {# legal entity has stock compensation not posted through period end.} other {# legal entities have stock compensation not posted through period end.}}"
+    },
+    "equity-interest-unaccrued": {
+      "title": "Note interest is not accrued",
+      "message": "{count, plural, one {# legal entity has convertible note interest not accrued through period end.} other {# legal entities have convertible note interest not accrued through period end.}}"
+    },
     "balancing-segment-residual": {
       "title": "Balancing segment residuals",
       "message": "{count} balancing segment values retain a ledger residual. Review the segment assignment and effective clearing policy before closing."
@@ -469,6 +477,14 @@
     "prepaid-amortized": {
       "title": "Amortize prepaid expenses",
       "description": "Post every amortization period of active prepaid and deferred expense schedules that ends by period end."
+    },
+    "equity-compensation-posted": {
+      "title": "Post stock compensation",
+      "description": "Post the stock compensation run through period end for every legal entity with equity awards: share-based payment expense and restricted stock releases."
+    },
+    "equity-interest-accrued": {
+      "title": "Accrue convertible note interest",
+      "description": "Post the note interest run through period end for every legal entity with convertible notes."
     },
     "asset-capitalization-reviewed": {
       "title": "Review asset capitalization",

@@ -183,6 +183,25 @@ export async function previewCompensationRun(input: { orgId: string; actorId: st
   }, { isolationLevel: "REPEATABLE READ", readOnly: true });
 }
 
+/**
+ * The change a stock compensation run through the date would post: the
+ * expense and the restricted stock releases, measured exactly as the run
+ * measures them. It reads within the caller's organization transaction and
+ * checks no actor, for the close checklist and the equity overview, which
+ * ask whether the run is current rather than what it would post per award.
+ */
+export async function compensationRunChange(orgId: string, subsidiaryId: string, throughDate: string): Promise<{ lastRunThrough: string | null; expense: string; releaseLines: number; currency: string }> {
+  return withOrgTransaction(orgId, async () => {
+    const entity = await loadLegalEntity(db, orgId, subsidiaryId);
+    const exponent = await currencyExponent(db, entity.currency);
+    const book = await loadEquityBook(db, orgId, subsidiaryId);
+    const last = await lastRun(orgId, subsidiaryId);
+    const { total } = measure(book, throughDate, exponent, await previousCumulative(orgId, subsidiaryId));
+    const releases = await measureReleases(book, throughDate, exponent, await previousReleases(orgId, subsidiaryId));
+    return { lastRunThrough: last?.through_date ?? null, expense: formatLedger(total), releaseLines: releases.lines.length, currency: entity.currency };
+  });
+}
+
 export interface CompensationRunResult {
   runId: string;
   throughDate: string;

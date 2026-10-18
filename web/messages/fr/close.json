@@ -241,6 +241,14 @@
       "title": "L’étalement des charges constatées d’avance n’est pas comptabilisé",
       "message": "{count, plural, one {# période d’étalement échue n’est pas comptabilisée.} other {# périodes d’étalement échues ne sont pas comptabilisées.}}"
     },
+    "equity-compensation-unposted": {
+      "title": "La rémunération en actions n’est pas comptabilisée",
+      "message": "{count, plural, one {# entité a une rémunération en actions non comptabilisée jusqu’à la fin de période.} other {# entités ont une rémunération en actions non comptabilisée jusqu’à la fin de période.}}"
+    },
+    "equity-interest-unaccrued": {
+      "title": "Les intérêts des obligations ne sont pas constatés",
+      "message": "{count, plural, one {# entité a des intérêts d’obligations convertibles non constatés jusqu’à la fin de période.} other {# entités ont des intérêts d’obligations convertibles non constatés jusqu’à la fin de période.}}"
+    },
     "balancing-segment-residual": {
       "title": "Soldes résiduels des segments équilibrés",
       "message": "{count} valeurs de segments équilibrés conservent un solde résiduel. Vérifiez les affectations et la politique de compensation avant la clôture."
@@ -469,6 +477,14 @@
     "prepaid-amortized": {
       "title": "Étaler les charges constatées d’avance",
       "description": "Comptabiliser chaque période d’étalement des échéanciers actifs qui se termine avant la fin de la période."
+    },
+    "equity-compensation-posted": {
+      "title": "Comptabiliser la rémunération en actions",
+      "description": "Comptabiliser le traitement de rémunération en actions jusqu’à la fin de période pour chaque entité ayant des attributions : charge de paiement fondé sur des actions et libérations d’actions restreintes."
+    },
+    "equity-interest-accrued": {
+      "title": "Constater les intérêts des obligations convertibles",
+      "description": "Comptabiliser le traitement des intérêts jusqu’à la fin de période pour chaque entité ayant des obligations convertibles."
     },
     "asset-capitalization-reviewed": {
       "title": "Contrôler l’immobilisation des actifs",
