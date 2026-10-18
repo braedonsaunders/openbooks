@@ -2,8 +2,7 @@ import assert from "node:assert/strict";
 import { registerHooks } from "node:module";
 import test from "node:test";
 
-// ID-class follow-up to the enterOrg hardening (ID4): every sandbox admin
-// action binds its sandbox/change-set id straight into SQL, so a malformed
+// Every sandbox admin action binds its sandbox/change-set id straight into SQL, so a malformed
 // id escapes as a raw Postgres uuid throw instead of failing closed with a
 // domain error. Auth is stubbed to a sandbox manager; the guards must fire
 // before any database round-trip, so these run without a database.
