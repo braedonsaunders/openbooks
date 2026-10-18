@@ -136,7 +136,7 @@ export async function loadStatement(
   let st: Awaited<ReturnType<typeof partnerStatement>> | null = null
   let currencyBasisBlocked: CurrencyBasisNotice | null = null
   try {
-    subView = await reportSubsidiaryView(q.subsidiaryId, period.to)
+    subView = await reportSubsidiaryView(q.subsidiaryId, period.to, selectedBook.id)
     st = await partnerStatement(partyId, authz.user.orgId, {
       bookId: selectedBook.id,
       from: period.from,

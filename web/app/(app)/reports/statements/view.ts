@@ -109,7 +109,7 @@ export async function loadStatementPicker(
   let all: Awaited<ReturnType<typeof partnerBalances>> = []
   let currencyBasisBlocked: CurrencyBasisNotice | null = null
   try {
-    subView = await reportSubsidiaryView(subsidiaryParam, asOf)
+    subView = await reportSubsidiaryView(subsidiaryParam, asOf, selectedBook.id)
     all = await partnerBalances('receivable', authz.user.orgId, asOf, selectedBook.id, {
       subsidiaryIds: subView.subsidiary?.ids,
     }, can(authz, 'payroll.read'))

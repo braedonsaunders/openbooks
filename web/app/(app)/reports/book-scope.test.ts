@@ -68,7 +68,11 @@ for (const file of viewsUsingBookPicker()) {
         node.expression.getText(tree) !== 'Promise.all'
       ) {
         const args = node.arguments.map((arg) => arg.getText(tree)).join(',');
-        if (/selectedBook\??\.id/.test(args)) reads++;
+        // The subsidiary view resolves the selected entity's translation basis
+        // in the selected book before the reader runs; it is not the reader.
+        if (node.expression.getText(tree) === 'reportSubsidiaryView') {
+          assert.match(args, /selectedBook\??\.id/, 'the subsidiary view resolves in the selected book');
+        } else if (/selectedBook\??\.id/.test(args)) reads++;
       }
       if (ts.isObjectLiteralExpression(node)) {
         const properties = node.properties.filter(ts.isPropertyAssignment);
