@@ -36,7 +36,7 @@ function sqlText(query: unknown): string {
 await bootJsdomEnvironment({ url: "http://localhost:4800/", matchMediaMatches: false });
 
 stubModules({ intl: true, navigation: {}, authz: false, features: false, extra: {
-    'next-intl': 'export function useTranslations() { const t = (key) => key; t.has = () => true; return t }',
+    'next-intl': 'export function useTranslations() { const t = (key) => key; t.has = () => true; return t } export function useLocale() { return "en" }',
   } });
 
 const hooks = registerHooks({

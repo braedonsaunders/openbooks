@@ -85,6 +85,7 @@ const mockSources = new Map<string, string>([
       export const registerRequestOrgResolver = () => {}
       export const ambientTenantOrgId = () => '${ORG_ID}'
       export const withBypassContext = (fn) => fn()
+      export function pinnedTransactionExecutor() { return undefined }
       export const db = {
         execute: async (query) => {
           state.queries.push(sqlText(query))

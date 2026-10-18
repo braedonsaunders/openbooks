@@ -58,6 +58,7 @@ stubModules({
       export const db = { execute: async () => ({ rows: [] }) }
     `,
     "drizzle-orm": `
+      export * from ${JSON.stringify(import.meta.resolve('drizzle-orm'))}
       export function sql() { return {} }
     `,
     "@openbooks/engine/payroll/packs": `

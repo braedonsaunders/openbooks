@@ -1239,6 +1239,7 @@ const poolMockSources = new Map<string, string>([
     // The pool-saturated script fixture represents an unrestricted caller
     // with sql.execute; keep its authorization reads on the same fake db as
     // the script runtime instead of accidentally importing the real pool.
+    export async function actorPrincipal(_db, orgId, actorId) { return orgId === '${ORG_ID}' && actorId === '${USER_ID}' ? { id: actorId, orgId, name: 'Script caller', email: 'script-caller@example.test', isActive: true, isSuperAdmin: false } : undefined }
     export async function actorIdentity(_db, orgId, actorId) { return orgId === '${ORG_ID}' && actorId === '${USER_ID}' ? { isActive: true, isSuperAdmin: false } : null }
     export async function actorHasPermission() { return true }
     export async function actorAllowedSubsidiaryIds() { return null }

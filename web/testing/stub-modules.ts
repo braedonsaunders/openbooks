@@ -169,6 +169,12 @@ export function withPlatformDbTestSurface(source: string): string {
     ["registerRequestOrgResolver", `export function registerRequestOrgResolver() {}`],
     ["orgContext", `export const orgContext = { getStore: () => undefined, run: (store, fn) => fn() }`],
     ["withTransactionSavepoint", `export async function withTransactionSavepoint(runner, name, work) { return work(runner) }`],
+    // No pooled transaction is pinned to a double's context: callers read through its db.
+    ["pinnedTransactionExecutor", `export function pinnedTransactionExecutor() { return undefined }`],
+    // The compatibility entry point runs tenant work through the double's own transaction when it has one.
+    ["withOrg", hasExport("withOrgTransaction")
+      ? `export async function withOrg(orgId, fn) { return orgId === null ? fn() : withOrgTransaction(orgId, () => fn()) }`
+      : `export async function withOrg(orgId, fn) { return fn() }`],
   ];
   const additions = sharedExports
     .filter(([name]) => !hasExport(name))

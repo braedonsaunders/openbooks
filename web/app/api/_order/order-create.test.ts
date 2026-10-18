@@ -329,6 +329,7 @@ const mockDb = `
     state.lastParams.push(seen.params)
     return respond(query)
   }
+  export function pinnedTransactionExecutor() { return undefined }
   export const db = {
     execute,
     // Atomicity the route depends on: a mid-save refusal (FK 23503,

@@ -24,7 +24,7 @@ const ASSET_A = "00000000-0000-4000-8000-00000000a011";
 const ASSET_B = "00000000-0000-4000-8000-00000000a012";
 const EXPENSE_ID = "00000000-0000-4000-8000-00000000e011";
 const ACCUM_ID = "00000000-0000-4000-8000-00000000e012";
-const SUBSIDIARY_ID = "00000000-0000-4000-8000-00000000s011";
+const SUBSIDIARY_ID = "00000000-0000-4000-8000-0000000005a1";
 const CATEGORY_ID = "00000000-0000-4000-8000-00000000c011";
 const LINE_A = "00000000-0000-4000-8000-000000001011";
 const LINE_B = "00000000-0000-4000-8000-000000001012";
@@ -323,6 +323,7 @@ const mockDb = `
     state.queries.push(inspect(query).text)
     return respond(query)
   }
+  export function pinnedTransactionExecutor() { return undefined }
   export const db = {
     execute,
     transaction: async (work) => work({ execute }),

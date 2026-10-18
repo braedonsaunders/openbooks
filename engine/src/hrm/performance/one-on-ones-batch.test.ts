@@ -59,6 +59,8 @@ const hooks = registerHooks({
       export const db = globalThis.employmentBatchBoundary;
       export const withOrgTransaction = async (_org, work) => work(db);
       export const withBypassContext = async work => work();
+      export const orgContext = { getStore: () => undefined, run: (_store, work) => work() };
+      export const pinnedTransactionExecutor = () => undefined;
     ` };
     return next(url, context);
   },

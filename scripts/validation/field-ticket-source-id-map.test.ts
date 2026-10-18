@@ -61,7 +61,7 @@ const hooks = registerHooks({
               return { rows: [] };
             },
           };
-          export const withOrg = async (_orgId, fn) => fn();
+          export const withOrgTransaction = async (_orgId, fn) => fn(db);
         `)}`,
       };
     }

@@ -103,7 +103,8 @@ stubModules({
           state.inserted = true
           return { rows: [{ id: state.requestKey }] }
         }
-        if (text.includes('insert into document_lines')) return { rows: [] }
+        // Each line insert reports the one row it wrote.
+        if (text.includes('insert into document_lines')) return { rows: [{ id: 'journal-line' }] }
         if (text.includes('insert into audit_log')) {
           state.auditInserts++
           return { rows: [] }
@@ -144,11 +145,15 @@ stubModules({
     "../../../lib/authz": `export async function guardPermission() {
        return { user: { orgId: '${ORG_ID}', id: '${USER_ID}' }, allowedSubsidiaryIds: null }
      }
-     export function subsidiariesInScope() { return true }`,
+     export function subsidiariesInScope() { return true }
+     // The caller holds the journal grant only, never book-specific posting.
+     export function can() { return false }`,
     "@/lib/authz": `export async function guardPermission() {
        return { user: { orgId: '${ORG_ID}', id: '${USER_ID}' }, allowedSubsidiaryIds: null }
      }
-     export function subsidiariesInScope() { return true }`,
+     export function subsidiariesInScope() { return true }
+     // The caller holds the journal grant only, never book-specific posting.
+     export function can() { return false }`,
     "../../../lib/journals": `const state = globalThis[Symbol.for('openbooks.journals-route-test')]
      export async function loadJournalDoc(id, orgId) {
        if (!state.inserted || id !== state.requestKey) return null

@@ -91,6 +91,7 @@ const mockDb = `
   async function execute(query) {
     return respond(query)
   }
+  export function pinnedTransactionExecutor() { return undefined }
   export const db = {
     execute,
     transaction: async (work) => work({ execute }),

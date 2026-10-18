@@ -15,6 +15,7 @@ const dbStub = `const fail = () => { ${bomb} };
 export const ambientTenantOrgId = (...args) => fail();
 export const assertSafeRuntimeDatabaseRole = (...args) => fail();
 export const currentRequestOrgResolver = (...args) => fail();
+export function pinnedTransactionExecutor() { return undefined }
 export const db = new Proxy({}, { get() { ${bomb} } });
 export const env = new Proxy({}, { get() { ${bomb} } });
 export const inDbTransaction = (...args) => fail();

@@ -13,11 +13,13 @@ const state = {
   errors: [] as { error: unknown; safeStatus?: number }[],
 }
 ;(globalThis as Record<symbol, unknown>)[Symbol.for('openbooks.levy-source-route-test')] = state
+// The allocation requirement is pure country-pack policy, so the double serves the real rule.
+const levySourceAuthorityUrl = new URL('../../../../../../engine/src/payroll/opening-levy-source-authority.ts', import.meta.url).href
 stubModules({ extra: {
   '@/lib/api/route': `const s=globalThis[Symbol.for('openbooks.levy-source-route-test')];export function defineRoute(o){s.options.push(o);return o.handler}`,
   '@/lib/api/error-response': `const s=globalThis[Symbol.for('openbooks.levy-source-route-test')];export function apiErrorResponse(error,o){s.errors.push({error,safeStatus:o.safeStatus});return Response.json({error:error.message},{status:o.safeStatus??500})}`,
   '@openbooks/engine/payroll/opening-levy-source-correction': `const s=globalThis[Symbol.for('openbooks.levy-source-route-test')];export async function correctOpeningLevySourceAuthority(i){s.corrections.push(i);if(s.refusal)throw s.refusal;return {id:'corrected',openingBalanceId:i.openingBalanceId}}`,
-  '@openbooks/engine/payroll/opening-levy-source-authority': `const s=globalThis[Symbol.for('openbooks.levy-source-route-test')];export async function readOpeningLevySourceContext(i){s.reads.push(i);return {record:null,allocations:[],eins:[],suiAccounts:[],openingSuiStates:[],openingSuiAccountIds:[]}}export async function qualifyOpeningLevySourceAuthority(i){s.writes.push(i);if(s.refusal)throw s.refusal;return {id:'qualified',openingBalanceId:i.openingBalanceId}}`,
+  '@openbooks/engine/payroll/opening-levy-source-authority': `export { openingLevySourceRequiresAllocations } from '${levySourceAuthorityUrl}';const s=globalThis[Symbol.for('openbooks.levy-source-route-test')];export async function readOpeningLevySourceContext(i){s.reads.push(i);return {record:null,allocations:[],eins:[],suiAccounts:[],openingSuiStates:[],openingSuiAccountIds:[]}}export async function qualifyOpeningLevySourceAuthority(i){s.writes.push(i);if(s.refusal)throw s.refusal;return {id:'qualified',openingBalanceId:i.openingBalanceId}}`,
 } })
 const route = await import('./route')
 const schema = state.options.find(option => option.permission === 'payroll.run')!.body!
