@@ -11,6 +11,7 @@ import { orgFeatureEnabled } from '@openbooks/engine/organization/features'
 import { captureContentMatchesMime } from '@openbooks/engine/payables/ap-capture'
 import { EInvoiceParseError } from '@openbooks/engine/einvoice/parse'
 import { getDocumentCaptureRuntimeConfig, type DocumentCaptureRuntimeConfig } from '@openbooks/engine/payables/ap-capture-config'
+import { assertLlmReadable, LlmCaptureError } from '@openbooks/engine/payables/document-capture-llm'
 import '../../../lib/authz';
 import { createFile, deleteFile, ensureApCaptureRoot } from '../../../lib/file-cabinet'
 import { enqueueStorageCleanupStandalone, fileCabinetObjectKey } from '../../../lib/file-storage'
@@ -66,6 +67,20 @@ export const POST = defineRoute({
         return apiErrorResponse(error);
       }
       if (!captureConfig) return NextResponse.json({ error: 'capture_not_configured' }, { status: 409 });
+      if (captureConfig.provider === 'llm_vision') {
+        // The AI model provider reads only the formats its API accepts;
+        // refuse the others before anything is stored or queued.
+        for (const upload of prepared.filter((entry) => !entry.native)) {
+          try {
+            assertLlmReadable(captureConfig.llm.provider, upload.file.type);
+          } catch (error) {
+            if (error instanceof LlmCaptureError) {
+              return NextResponse.json({ error: `${upload.filename}: ${error.message}`, code: error.code, filename: upload.filename }, { status: 422 });
+            }
+            throw error;
+          }
+        }
+      }
     }
     const folderId = await ensureApCaptureRoot(gate.user.orgId, gate.user.id)
     const created: string[] = []

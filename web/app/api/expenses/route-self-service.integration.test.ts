@@ -216,3 +216,32 @@ test('org-wide expense grants keep working with every employee\'s reports', asyn
     await teardown(fixture)
   }
 })
+
+test('a receipt in a format the AI model provider cannot read is refused before it is attached', async () => {
+  const fixture = await setup()
+  try {
+    const { sealSecret } = await import('@openbooks/engine/platform/secrets')
+    await withBypassContext(() => db.execute(sql`
+      update orgs set settings = coalesce(settings, '{}'::jsonb) || jsonb_build_object('ai', ${JSON.stringify({
+        enabled: true,
+        provider: 'openrouter',
+        modelSmart: 'openai/gpt-4o',
+        keyEncrypted: sealSecret('sk-or-test', { orgId: fixture.org.orgId, purpose: 'assistant.ai.key' }),
+        documentCapture: { enabled: true, provider: 'llm_vision', model: '', confidenceThreshold: '0.8000' },
+      })}::jsonb)
+       where id = ${fixture.org.orgId}`))
+    fixture.as(fixture.actor, ['expenses.self'])
+    const scan = new FormData()
+    scan.append('files', new File([new TextEncoder().encode('%PDF-1.7\n')], 'hotel.pdf', { type: 'application/pdf' }))
+    const res = await receiptsRoute.POST(new Request(`http://openbooks.test/api/expenses/${fixture.ownReport}/receipts`, { method: 'POST', body: scan }), params(fixture.ownReport))
+    assert.equal(res.status, 422)
+    const refusal = (await res.json()) as { code: string; error: string }
+    assert.equal(refusal.code, 'llm_vision_format')
+    assert.match(refusal.error, /hotel\.pdf: OpenRouter — any model, one key reads JPEG, PNG documents/)
+    const stored = await withBypassContext(async () => (await db.execute<{ n: number }>(sql`
+      select count(*)::int as n from expense_receipt_captures where org_id = ${fixture.org.orgId}`)).rows[0]!.n)
+    assert.equal(stored, 0, 'nothing is attached or registered')
+  } finally {
+    await teardown(fixture)
+  }
+})
