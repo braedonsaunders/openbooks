@@ -1333,7 +1333,10 @@
       "notIncluded": "No incluido en el archivo",
       "included": "Incluido en el archivo — motivo {code}",
       "commentRequired": "Se requiere un comentario para este código de motivo.",
-      "selectionLimit": "No seleccione más de {maxSelection} empleados para esta declaración"
+      "selectionLimit": "No seleccione más de {maxSelection} empleados para esta declaración",
+      "record": "Registrar como emitido",
+      "recordHelp": "Registre el ROE de este empleado como emitido una vez enviado a ROE Web.",
+      "recorded": "Registrado como emitido."
     },
     "lifecycle": {
       "title": "Estado de la declaración",
@@ -1404,7 +1407,10 @@
       "firstWorked": "Primer día trabajado en este período de empleo",
       "employer": "Empleador legal: {name}",
       "importHistory": "Importar evidencia del registro de empleo",
-      "importHistoryHelp": "Use el importador compartido para períodos históricos o evidencia de líneas de ingresos conservadas. Se requieren bases y horas asegurables documentadas; no se presume que los períodos faltantes sean nulos."
+      "importHistoryHelp": "Use el importador compartido para períodos históricos o evidencia de líneas de ingresos conservadas. Se requieren bases y horas asegurables documentadas; no se presume que los períodos faltantes sean nulos.",
+      "proposed": "Las fechas se proponen a partir de los registros de este empleo y de los recibos de nómina confirmados. Revíselas y guarde para preparar el registro de empleo.",
+      "noEvent": "No hay fechas de separación registradas para este empleo. Ingréselas desde los documentos de separación originales para preparar el registro de empleo.",
+      "proposedReason": "Registrado a partir de los registros de empleo y nómina"
     },
     "subsequentService": {
       "title": "Regreso al trabajo tras esta interrupción",
@@ -1426,7 +1432,8 @@
       "loadFailed": "No se pudieron cargar las pruebas del regreso al trabajo",
       "saveFailed": "No se pudieron guardar las pruebas del regreso al trabajo",
       "loading": "Cargando pruebas del regreso al trabajo"
-    }
+    },
+    "filingsLabel": "Declaraciones"
   },
   "separations": {
     "title": "Bajas",

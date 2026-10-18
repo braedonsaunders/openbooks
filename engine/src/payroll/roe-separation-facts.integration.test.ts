@@ -13,7 +13,7 @@ import { commitPayRun } from './run-commit.ts';
 import { mutatePayRunAdjustment } from './run-adjustments.ts';
 import { roeRecord } from './yearend.ts';
 import { recordFilingIssue } from './yearend-amendments.ts';
-import { readRoeSeparationFacts, saveRoeSeparationFacts } from './roe-separation-facts.ts';
+import { readRoeSeparationFacts, readRoeSeparationFactsContext, saveRoeSeparationFacts } from './roe-separation-facts.ts';
 const DB=!!process.env.OPENBOOKS_DB_URL;
 async function setup() {
  const f=await seedAdoption({hiredOn:'1998-08-25'});
@@ -119,6 +119,39 @@ test('native separation facts preserve source and audit, confirm explicitly and 
   assert.equal((await db.execute<{n:number}>(sql`select count(*)::int n from audit_log where org_id=${f.orgId} and table_name='payroll_roe_separation_events' and row_id=${draft.id}`)).rows[0]!.n,2);
   await assert.rejects(saveRoeSeparationFacts({...scope,...declaration,interruptionOn:'2026-05-10',expectedId:draft.id,expectedUpdatedAt:draft.updatedAt}),/Separation facts changed/);
   assert.deepEqual(await readRoeSeparationFacts(scope),confirmed);
+ });}finally{await withBypassContext(()=>dropScratchOrgReporting(f.orgId));}
+});
+
+test('a new separation event is proposed from the employment and committed payroll, and nothing is stored until saved', {skip:!DB},async()=>{
+ const f=await withBypassContext(setup);
+ try{await withOrgContext(f.orgId,async()=>{
+  const scope={orgId:f.orgId,actorId:f.actorId,employeePartyId:f.employeeId,employmentId:f.employmentId,subsidiaryId:f.subsidiaryId,allowedSubsidiaryIds:null};
+  const terminated=await db.execute(sql`update employee_roles set terminated_on='2026-05-06'
+   where org_id=${f.orgId} and party_id=${f.employeeId} returning party_id`);
+  assert.equal(terminated.rows.length,1);
+  const run=await createPayRun({orgId:f.orgId,actorId:f.actorId,payScheduleId:f.scheduleId,
+   periodStart:'2026-04-26',periodEnd:'2026-05-09',payDate:'2026-05-13'});
+  assert.deepEqual((await calculatePayRun({orgId:f.orgId,actorId:f.actorId,documentId:run.documentId})).errors,[]);
+  await commitPayRun({orgId:f.orgId,actorId:f.actorId,documentId:run.documentId});
+  const context=await readRoeSeparationFactsContext(scope);
+  assert.equal(context.record,null);
+  assert.ok(context.proposal);
+  const serviceStart=(await db.execute<{start:string|null}>(sql`select coalesce(employment.service_start,role.hired_on)::text as start
+   from worker_employments employment join employee_roles role on role.org_id=employment.org_id and role.party_id=employment.worker_party_id
+   where employment.org_id=${f.orgId} and employment.id=${f.employmentId}`)).rows[0]!.start;
+  assert.equal(context.proposal.firstDayWorked,serviceStart);
+  // Terminated inside the final period: the last insurable day is the termination, never the period end.
+  assert.equal(context.proposal.interruptionOn,'2026-05-06');
+  assert.equal(context.proposal.lastInsurableEarningsOn,'2026-05-06');
+  assert.match(context.proposal.sourceReference,/termination 2026-05-06; committed pay stubs through the period ending 2026-05-09/);
+  assert.equal((await db.execute<{n:number}>(sql`select count(*)::int n from payroll_roe_separation_events where org_id=${f.orgId}`)).rows[0]!.n,0,'a proposal is never stored');
+  const saved=await saveRoeSeparationFacts({...scope,firstDayWorked:context.proposal.firstDayWorked,
+   interruptionOn:context.proposal.interruptionOn!,lastInsurableEarningsOn:context.proposal.lastInsurableEarningsOn!,salaryContinuanceEndOn:null,
+   sourceReference:context.proposal.sourceReference,reason:'Recorded from the employment and payroll records',
+   status:'confirmed',expectedId:null,expectedUpdatedAt:null});
+  const after=await readRoeSeparationFactsContext(scope);
+  assert.equal(after.record?.id,saved.id);
+  assert.equal(after.proposal,null,'a recorded event is read back, not re-proposed');
  });}finally{await withBypassContext(()=>dropScratchOrgReporting(f.orgId));}
 });
 

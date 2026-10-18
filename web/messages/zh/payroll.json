@@ -1333,7 +1333,10 @@
       "notIncluded": "未纳入文件",
       "included": "已纳入文件——原因 {code}",
       "commentRequired": "该原因代码必须填写备注。",
-      "selectionLimit": "此申报选择的员工不得超过 {maxSelection} 名"
+      "selectionLimit": "此申报选择的员工不得超过 {maxSelection} 名",
+      "record": "记录为已签发",
+      "recordHelp": "提交至 ROE Web 后，将该员工的 ROE 记录为已签发。",
+      "recorded": "已记录为已签发。"
     },
     "lifecycle": {
       "title": "申报状态",
@@ -1404,7 +1407,10 @@
       "firstWorked": "本次雇佣期间的首个工作日",
       "employer": "法定雇主：{name}",
       "importHistory": "导入就业记录申报依据",
-      "importHistoryHelp": "使用统一导入工具导入历史期间或已保留收入行的依据。可保收入和工时须有原始依据；缺失期间不会自动视为零收入期间。"
+      "importHistoryHelp": "使用统一导入工具导入历史期间或已保留收入行的依据。可保收入和工时须有原始依据；缺失期间不会自动视为零收入期间。",
+      "proposed": "日期根据该雇佣记录和已确认的工资单提议。请核对后保存以准备雇佣记录。",
+      "noEvent": "该雇佣没有已登记的离职日期。请根据原始离职文件输入以准备雇佣记录。",
+      "proposedReason": "根据雇佣和工资记录登记"
     },
     "subsequentService": {
       "title": "此次中断后的复工",
@@ -1426,7 +1432,8 @@
       "loadFailed": "无法加载复工证据",
       "saveFailed": "无法保存复工证据",
       "loading": "正在加载复工证据"
-    }
+    },
+    "filingsLabel": "申报"
   },
   "separations": {
     "title": "离职",

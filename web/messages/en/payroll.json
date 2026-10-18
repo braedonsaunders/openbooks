@@ -1333,7 +1333,10 @@
       "notIncluded": "Not included in the file",
       "included": "Included in the file — reason {code}",
       "commentRequired": "A comment is required for this reason code.",
-      "selectionLimit": "Select no more than {maxSelection} employees for this filing"
+      "selectionLimit": "Select no more than {maxSelection} employees for this filing",
+      "record": "Record as issued",
+      "recordHelp": "Record this employee’s ROE as issued once it is submitted to ROE Web.",
+      "recorded": "Recorded as issued."
     },
     "lifecycle": {
       "title": "Filing status",
@@ -1404,7 +1407,10 @@
       "firstWorked": "First day worked in this employment spell",
       "employer": "Legal employer: {name}",
       "importHistory": "Import ROE reporting evidence",
-      "importHistoryHelp": "Use the shared importer for historical periods or retained earning-line evidence. Source-qualified insurance and hours are required; missing periods are not assumed to be nil."
+      "importHistoryHelp": "Use the shared importer for historical periods or retained earning-line evidence. Source-qualified insurance and hours are required; missing periods are not assumed to be nil.",
+      "proposed": "Dates are proposed from this employment’s records and committed pay stubs. Review them and save to prepare the Record of Employment.",
+      "noEvent": "No separation dates are on file for this employment. Enter them from the original separation documents to prepare the Record of Employment.",
+      "proposedReason": "Recorded from the employment and payroll records"
     },
     "subsequentService": {
       "title": "Return to work after this interruption",
@@ -1426,7 +1432,8 @@
       "loadFailed": "Return-to-work evidence could not be loaded",
       "saveFailed": "Return-to-work evidence could not be saved",
       "loading": "Loading return-to-work evidence"
-    }
+    },
+    "filingsLabel": "Filings"
   },
   "separations": {
     "title": "Separations",

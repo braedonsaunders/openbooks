@@ -1333,7 +1333,10 @@
       "notIncluded": "Non inclus dans le fichier",
       "included": "Inclus dans le fichier — motif {code}",
       "commentRequired": "Un commentaire est exigé pour ce code de motif.",
-      "selectionLimit": "Ne sélectionnez pas plus de {maxSelection} employés pour cette déclaration"
+      "selectionLimit": "Ne sélectionnez pas plus de {maxSelection} employés pour cette déclaration",
+      "record": "Enregistrer comme émis",
+      "recordHelp": "Enregistrez le RE de cet employé comme émis une fois soumis à RE Web.",
+      "recorded": "Enregistré comme émis."
     },
     "lifecycle": {
       "title": "État de la déclaration",
@@ -1404,7 +1407,10 @@
       "firstWorked": "Premier jour travaillé de cette période d’emploi",
       "employer": "Employeur légal : {name}",
       "importHistory": "Importer les preuves du relevé d’emploi",
-      "importHistoryHelp": "Utilisez l’importateur commun pour les périodes historiques ou les preuves des lignes de rémunération conservées. Les montants et heures assurables doivent être justifiés; une période manquante n’est pas présumée nulle."
+      "importHistoryHelp": "Utilisez l’importateur commun pour les périodes historiques ou les preuves des lignes de rémunération conservées. Les montants et heures assurables doivent être justifiés; une période manquante n’est pas présumée nulle.",
+      "proposed": "Les dates sont proposées à partir des dossiers de cet emploi et des talons de paie validés. Vérifiez-les et enregistrez pour préparer le relevé d’emploi.",
+      "noEvent": "Aucune date de cessation n’est consignée pour cet emploi. Saisissez-les à partir des documents de cessation originaux pour préparer le relevé d’emploi.",
+      "proposedReason": "Consigné à partir des dossiers d’emploi et de paie"
     },
     "subsequentService": {
       "title": "Retour au travail après cette interruption",
@@ -1426,7 +1432,8 @@
       "loadFailed": "Impossible de charger les preuves du retour au travail",
       "saveFailed": "Impossible d’enregistrer les preuves du retour au travail",
       "loading": "Chargement des preuves du retour au travail"
-    }
+    },
+    "filingsLabel": "Déclarations"
   },
   "separations": {
     "title": "Départs",

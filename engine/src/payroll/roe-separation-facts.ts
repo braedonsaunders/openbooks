@@ -65,7 +65,57 @@ export async function authorizeRoeReportingEmployee(input: RoeEmployeeScope, per
   return { employmentId: employee[0]!.employment_id, subsidiaryId: employee[0]!.subsidiary_id, employerName: employee[0]!.employer_name };
 }
 
-export async function readRoeSeparationFactsContext(input: RoeEmployeeScope): Promise<{ employee: RoeSeparationEmployee; record: RoeSeparationFacts | null }> {
+/**
+ * Dates an operator reviews before declaring a new separation event, read from
+ * the employment's own records: service start (or hire date, or the first
+ * committed pay period), the recorded termination, and the last committed
+ * Canadian pay period up to that termination. Nothing is stored until the
+ * employer saves them; a date the records do not hold stays null.
+ */
+export type RoeSeparationProposal = {
+  firstDayWorked: string | null; interruptionOn: string | null;
+  lastInsurableEarningsOn: string | null; sourceReference: string;
+};
+async function proposeRoeSeparationFacts(orgId: string, employeePartyId: string, employee: RoeSeparationEmployee): Promise<RoeSeparationProposal | null> {
+  const row = (await db.execute<{ serviceStart: string | null; hiredOn: string | null; terminatedOn: string | null;
+    firstPeriodStart: string | null; lastPeriodEnd: string | null; lastPayDate: string | null }>(sql`
+    with spell as (
+      select employment.service_start, role.hired_on,
+        coalesce(role.terminated_on, (select v.effective_from from worker_employment_versions v
+          where v.org_id=employment.org_id and v.employment_id=employment.id and v.status='terminated'
+            and v.recorded_until is null order by v.effective_from desc limit 1)) as terminated_on
+      from worker_employments employment
+      left join employee_roles role on role.org_id=employment.org_id and role.party_id=employment.worker_party_id
+      where employment.org_id=${orgId} and employment.id=${employee.employmentId}
+        and employment.worker_party_id=${employeePartyId} and employment.employer_subsidiary_id=${employee.subsidiaryId}
+    ), stubs as (
+      select r.period_start, r.period_end, s.pay_date from pay_stubs s
+      join pay_runs r on r.org_id=s.org_id and r.document_id=s.pay_run_document_id and r.run_status='committed'
+      join documents d on d.org_id=r.org_id and d.id=r.document_id and d.subsidiary_id=${employee.subsidiaryId}
+      cross join spell
+      where s.org_id=${orgId} and s.employee_party_id=${employeePartyId} and s.employment_id=${employee.employmentId}
+        and s.currency_code='CAD' and (spell.terminated_on is null or r.period_start<=spell.terminated_on)
+    )
+    select spell.service_start::text as "serviceStart", spell.hired_on::text as "hiredOn", spell.terminated_on::text as "terminatedOn",
+      (select min(period_start)::text from stubs) as "firstPeriodStart", (select max(period_end)::text from stubs) as "lastPeriodEnd",
+      (select max(pay_date)::text from stubs) as "lastPayDate"
+    from spell`)).rows[0];
+  if (!row) return null;
+  const firstDayWorked = row.serviceStart ?? row.hiredOn ?? row.firstPeriodStart;
+  const lastInsurableEarningsOn = row.lastPeriodEnd && row.terminatedOn && row.terminatedOn < row.lastPeriodEnd
+    ? row.terminatedOn : row.lastPeriodEnd ?? row.terminatedOn;
+  const interruptionOn = row.terminatedOn ?? lastInsurableEarningsOn;
+  const sources = [
+    row.serviceStart ? `service start ${row.serviceStart}` : row.hiredOn ? `hire date ${row.hiredOn}`
+      : row.firstPeriodStart ? `first committed pay period starting ${row.firstPeriodStart}` : null,
+    row.terminatedOn ? `termination ${row.terminatedOn}` : null,
+    row.lastPeriodEnd ? `committed pay stubs through the period ending ${row.lastPeriodEnd} (paid ${row.lastPayDate})` : null,
+  ].filter(Boolean);
+  if (!sources.length) return null;
+  return { firstDayWorked, interruptionOn, lastInsurableEarningsOn, sourceReference: `Employment and payroll records: ${sources.join('; ')}` };
+}
+
+export async function readRoeSeparationFactsContext(input: RoeEmployeeScope): Promise<{ employee: RoeSeparationEmployee; record: RoeSeparationFacts | null; proposal: RoeSeparationProposal | null }> {
   return withOrgTransaction(input.orgId, async () => {
     let record:StoredFacts|null=null;
     if(input.newEvent && input.eventId) throw new PayrollError('Choose an existing event or start a new separation event');
@@ -77,16 +127,17 @@ export async function readRoeSeparationFactsContext(input: RoeEmployeeScope): Pr
       const scope={...input,employmentId:event.employmentId,subsidiaryId:event.subsidiaryId};
       const employee=await authorizeRoeReportingEmployee(scope,'payroll.read');
       record=(await db.execute<StoredFacts>(sql`select ${COLUMNS} from payroll_roe_separation_events where org_id=${input.orgId} and id=${event.id}`)).rows[0]??null;
-      return {employee,record:record?await withSource(record):null};
+      return {employee,record:record?await withSource(record):null,proposal:null};
     }
     const employee=await authorizeRoeReportingEmployee(input,'payroll.read');
-    if(input.newEvent) return {employee,record:null};
+    if(input.newEvent) return {employee,record:null,proposal:null};
     const records=(await db.execute<StoredFacts>(sql`select ${COLUMNS} from payroll_roe_separation_events
       where org_id=${input.orgId} and employee_party_id=${input.employeePartyId} and status in ('draft','confirmed','issued')
       order by interruption_on,id limit 2`)).rows;
     if(records.length>1)throw new PayrollError('Select the exact separation event to review its facts');
     record=records[0]??null;
-    return { employee, record: record ? await withSource(record) : null };
+    if(record) return { employee, record: await withSource(record), proposal: null };
+    return { employee, record: null, proposal: await proposeRoeSeparationFacts(input.orgId, input.employeePartyId, employee) };
   });
 }
 

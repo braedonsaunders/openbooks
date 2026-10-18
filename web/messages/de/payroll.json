@@ -1333,7 +1333,10 @@
       "notIncluded": "Nicht in der Datei enthalten",
       "included": "In der Datei enthalten — Grund {code}",
       "commentRequired": "Für diesen Grundcode ist ein Kommentar erforderlich.",
-      "selectionLimit": "Wählen Sie für diese Meldung höchstens {maxSelection} Mitarbeiter aus"
+      "selectionLimit": "Wählen Sie für diese Meldung höchstens {maxSelection} Mitarbeiter aus",
+      "record": "Als ausgestellt erfassen",
+      "recordHelp": "Erfassen Sie das ROE dieses Mitarbeiters als ausgestellt, sobald es an ROE Web übermittelt wurde.",
+      "recorded": "Als ausgestellt erfasst."
     },
     "lifecycle": {
       "title": "Meldungsstatus",
@@ -1404,7 +1407,10 @@
       "firstWorked": "Erster Arbeitstag in diesem Beschäftigungszeitraum",
       "employer": "Rechtlicher Arbeitgeber: {name}",
       "importHistory": "Nachweise für den Beschäftigungsnachweis importieren",
-      "importHistoryHelp": "Nutzen Sie den gemeinsamen Import für frühere Perioden oder Belege gespeicherter Verdienstzeilen. Versicherbare Beträge und Stunden benötigen Quellnachweise; fehlende Perioden gelten nicht automatisch als Nullperioden."
+      "importHistoryHelp": "Nutzen Sie den gemeinsamen Import für frühere Perioden oder Belege gespeicherter Verdienstzeilen. Versicherbare Beträge und Stunden benötigen Quellnachweise; fehlende Perioden gelten nicht automatisch als Nullperioden.",
+      "proposed": "Die Daten werden aus den Unterlagen dieses Beschäftigungsverhältnisses und den gebuchten Lohnabrechnungen vorgeschlagen. Prüfen und speichern Sie sie, um den Beschäftigungsnachweis vorzubereiten.",
+      "noEvent": "Für dieses Beschäftigungsverhältnis sind keine Austrittsdaten hinterlegt. Erfassen Sie sie aus den ursprünglichen Austrittsunterlagen, um den Beschäftigungsnachweis vorzubereiten.",
+      "proposedReason": "Aus den Beschäftigungs- und Lohnunterlagen erfasst"
     },
     "subsequentService": {
       "title": "Rückkehr zur Arbeit nach dieser Unterbrechung",
@@ -1426,7 +1432,8 @@
       "loadFailed": "Rückkehrnachweise konnten nicht geladen werden",
       "saveFailed": "Rückkehrnachweise konnten nicht gespeichert werden",
       "loading": "Rückkehrnachweise werden geladen"
-    }
+    },
+    "filingsLabel": "Meldungen"
   },
   "separations": {
     "title": "Austritte",

@@ -1333,7 +1333,10 @@
       "notIncluded": "Fora do arquivo",
       "included": "No arquivo — motivo {code}",
       "commentRequired": "Comentário obrigatório para este código de motivo.",
-      "selectionLimit": "Não selecione mais de {maxSelection} funcionários para esta declaração"
+      "selectionLimit": "Não selecione mais de {maxSelection} funcionários para esta declaração",
+      "record": "Registrar como emitido",
+      "recordHelp": "Registre o ROE deste funcionário como emitido após enviá-lo ao ROE Web.",
+      "recorded": "Registrado como emitido."
     },
     "lifecycle": {
       "title": "Situação da declaração",
@@ -1404,7 +1407,10 @@
       "firstWorked": "Primeiro dia trabalhado neste período de emprego",
       "employer": "Empregador legal: {name}",
       "importHistory": "Importar evidências do registro de emprego",
-      "importHistoryHelp": "Use o importador compartilhado para períodos históricos ou evidências das linhas de remuneração preservadas. Valores e horas seguráveis exigem comprovação; períodos ausentes não são considerados nulos automaticamente."
+      "importHistoryHelp": "Use o importador compartilhado para períodos históricos ou evidências das linhas de remuneração preservadas. Valores e horas seguráveis exigem comprovação; períodos ausentes não são considerados nulos automaticamente.",
+      "proposed": "As datas são propostas a partir dos registros deste vínculo e dos holerites confirmados. Revise-as e salve para preparar o registro de emprego.",
+      "noEvent": "Não há datas de desligamento registradas para este vínculo. Informe-as a partir dos documentos originais de desligamento para preparar o registro de emprego.",
+      "proposedReason": "Registrado a partir dos registros de emprego e folha de pagamento"
     },
     "subsequentService": {
       "title": "Retorno ao trabalho após esta interrupção",
@@ -1426,7 +1432,8 @@
       "loadFailed": "Não foi possível carregar as evidências do retorno ao trabalho",
       "saveFailed": "Não foi possível salvar as evidências do retorno ao trabalho",
       "loading": "Carregando evidências do retorno ao trabalho"
-    }
+    },
+    "filingsLabel": "Declarações"
   },
   "separations": {
     "title": "Desligamentos",

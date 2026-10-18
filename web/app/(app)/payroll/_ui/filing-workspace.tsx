@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useId, useMemo, useState } from 'react'
 import Link from 'next/link'
 import { useRouter } from 'next/navigation'
 import { useLocale, useTranslations } from 'next-intl'
@@ -13,15 +13,17 @@ import {
   Card,
   Drawer,
   EmptyState,
+  FieldHelp,
   FieldLabel,
   Input,
   Select,
   Skeleton,
-  cn,
 } from '@openbooks/ui'
 import type { YearEndFilingSection } from '@openbooks/engine/payroll/yearend'
 import type { PayrollFilingSlipData } from '@openbooks/engine/payroll/filing-registry'
 import { RoeSeparationFactsForm } from './roe-separation-facts'
+import { parseRoeEventRow } from '@openbooks/engine/payroll/roe-event-row'
+import { RecordTabs } from '../../../../components/module-home/record-tabs'
 import { PagedTable, type PagedColumn } from '../../../../components/paged-table'
 import { useMoney } from '../../../../components/money-provider'
 import { readApiErrorMessage } from '../../../../lib/api-error'
@@ -129,6 +131,13 @@ export function useFilingIssues(year: number) {
       .join(',')
   }
 
+  /** One employee's declaration, for recording that employee's own issue. */
+  const rowSelection = (section: YearEndFilingSection, row: FilingRow): string => {
+    const reason = section.issue ? reasons[keyFor(section, row)] : undefined
+    if (!section.issue || !reason) return ''
+    return [String(row[section.issue.idColumn] ?? ''), reason, encodeURIComponent(comments[keyFor(section, row)] ?? '')].join(':')
+  }
+
   const issueSelectionCount = (section: YearEndFilingSection): number => {
     if (!section.issue) return 0
     return section.data.rows.filter((row) => reasons[keyFor(section, row)]).length
@@ -190,6 +199,12 @@ export function useFilingIssues(year: number) {
     comments,
     issueKey: keyFor,
     issueSelection,
+    rowSelection,
+    clearRow: (section: YearEndFilingSection, row: FilingRow) => {
+      const key = keyFor(section, row)
+      setReasons(({ [key]: _reason, ...rest }) => rest)
+      setComments(({ [key]: _comment, ...rest }) => rest)
+    },
     clearSection: (section:YearEndFilingSection)=>{
       const prefix=`${section.country}:${section.key}:${year}:`
       setReasons(previous=>Object.fromEntries(Object.entries(previous).filter(([key])=>!key.startsWith(prefix))))
@@ -262,7 +277,6 @@ export function FilingWorkspace({
   const t = useTranslations('payroll.filings')
   const router = useRouter()
   const locale = useLocale()
-  const { money } = useMoney()
   // The selected year stays selectable even when the offered list moved on
   // (a bookmarked ?year=): the list itself is derived once, server-side.
   const options = years.includes(year) ? years : [...years, year].sort((a, b) => b - a)
@@ -273,6 +287,7 @@ export function FilingWorkspace({
   const selected = sections.find((s) => sectionKey(s) === selectedKey) ?? defaultSection
 
   const issues = useFilingIssues(year)
+  const panelId = useId()
   const [openRow, setOpenRow] = useState<FilingRow | null>(null)
   // One lifecycle fetch per selected filing — the correction review is a
   // per-row recompute and is not worth doing for filings nobody is looking at.
@@ -303,18 +318,48 @@ export function FilingWorkspace({
     return <EmptyState title={emptyTitle} />
   }
 
+  // Tabs name the filing; the country joins the label only when the surface
+  // spans more than one pack.
+  const multiCountry = new Set(sections.map((section) => section.country)).size > 1
+  const groupHelp = (section: YearEndFilingSection) => groups.find((group) => group.sections.includes(section))?.help
+  const replaceOpenRow = (row: FilingRow) => {
+    setOpenRow(row)
+    router.refresh()
+  }
+
   return (
     <div className="space-y-4">
-      <div className="flex items-end gap-2">
-        <div>
-          <FieldLabel htmlFor="filing-tax-year" containerClassName="mb-1">
+      {/* One row: the pack-declared filings as sub-tabs, the tax year at the
+          far end. Each filing is a peer concept, so the tab replaces the body. */}
+      <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2 border-b border-slate-200 dark:border-slate-800">
+        <RecordTabs
+          label={t('filingsLabel')}
+          active={selected ? sectionKey(selected) : ''}
+          panelId={panelId}
+          className="min-w-0 max-w-full"
+          onChange={(key) => {
+            setOpenRow(null)
+            setSelectedKey(key)
+          }}
+          tabs={sections.map((section) => ({
+            key: sectionKey(section),
+            label: <>
+              {section.label}
+              {multiCountry && <span className="ms-1 text-slate-400">· {countryName(section.country, locale)}</span>}
+              {!section.installed && <Badge variant="outline" className="ms-2">{t('notInstalled')}</Badge>}
+            </>,
+            count: section.data.rows.length,
+          }))}
+        />
+        <div className="flex items-center gap-2 pb-2">
+          <FieldLabel htmlFor="filing-tax-year" containerClassName="mb-0">
             {t('yearLabel')}
           </FieldLabel>
           <Select
             id="filing-tax-year"
             value={String(year)}
             onChange={(e) => router.push(`${path}?year=${e.target.value}` as never)}
-            className="w-32"
+            className="w-28"
           >
             {options.map((y) => (
               <option key={y} value={y}>{y}</option>
@@ -323,86 +368,44 @@ export function FilingWorkspace({
         </div>
       </div>
 
-      {/* The filing registry enumeration: one card per pack-declared filing,
-          under the surface's headed cadence groups. */}
-      {groups.filter((group) => group.sections.length > 0).map((group) => (
-        <section key={group.key} className="space-y-2">
-          {group.label && (
-            <FieldLabel
-              help={group.help}
-              fieldName={group.label}
-              className="text-sm font-semibold text-slate-800 dark:text-slate-100"
-            >
-              {group.label}
-            </FieldLabel>
-          )}
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {group.sections.map((section) => {
-              const key = sectionKey(section)
-              const active = selected != null && sectionKey(selected) === key
-              const headlineTotal = section.data.totals?.find((total) => total.money)
-              return (
-                <Card
-                  key={key}
-                  onClick={() => {
-                    setOpenRow(null)
-                    setSelectedKey(key)
-                  }}
-                  className={cn(
-                    'p-4',
-                    active && 'border-teal-500 ring-1 ring-teal-500 dark:border-teal-400 dark:ring-teal-400',
-                  )}
-                  aria-pressed={active}
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="text-sm font-semibold text-slate-900 dark:text-slate-100">
-                      {section.label}
-                    </div>
-                    <Badge variant="outline">{countryName(section.country, locale)}</Badge>
-                  </div>
-                  <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500 dark:text-slate-400">
-                    <span>{t('rowCount', { count: section.data.rows.length })}</span>
-                    {headlineTotal && section.data.rows.length > 0 && (
-                      <span className="tabular-nums">
-                        {headlineTotal.label}: <span className="font-medium text-slate-700 dark:text-slate-200">{money(headlineTotal.value)}</span>
-                      </span>
-                    )}
-                    {!section.installed && <Badge variant="outline">{t('notInstalled')}</Badge>}
-                  </div>
-                </Card>
-              )
-            })}
-          </div>
-        </section>
-      ))}
-
-      {selected && (
-        <FilingSection
-          key={sectionKey(selected)}
-          section={selected}
-          year={year}
-          issues={issues}
-          onOpenRow={(row) => setOpenRow(row)}
-          lifecycle={showLifecycle ? lifecycle.state : null}
-          reviewByRow={lifecycle.reviewByRow}
-          lifecycleBusy={issueBusy}
-          lifecycleError={issueError}
-          onRecordOriginal={(note) => void recordOriginal(selected, note)}
-          canFile={canFile}
-        />
-      )}
+      <div id={panelId} role="tabpanel">
+        {selected && (
+          <FilingSection
+            key={sectionKey(selected)}
+            section={selected}
+            year={year}
+            issues={issues}
+            help={groupHelp(selected)}
+            onOpenRow={(row) => setOpenRow(row)}
+            lifecycle={showLifecycle ? lifecycle.state : null}
+            reviewByRow={lifecycle.reviewByRow}
+            lifecycleBusy={issueBusy}
+            lifecycleError={issueError}
+            // A whole-return filing is recorded from its table; an event
+            // filing (the ROE) is recorded per employee from that employee's
+            // drawer, where the subject of the act is visible.
+            onRecordOriginal={amendments && !selected.additionalSelectedOriginals
+              ? (note) => void recordOriginal(selected, note) : undefined}
+            canFile={canFile}
+          />
+        )}
+      </div>
 
       {selected && openRow && (
         <SlipDrawer
           section={selected}
-          row={openRow}
+          row={selected.data.rows.find((row) => row[selected.data.rowKey] === openRow[selected.data.rowKey]) ?? openRow}
           year={year}
           issues={issues}
           lifecycle={
             showLifecycle && lifecycle.state.status === 'ready' ? lifecycle.state.lifecycle : null
           }
           review={lifecycle.reviewByRow.get(String(openRow[selected.data.rowKey] ?? '')) ?? null}
-          onIssued={() => lifecycle.refresh()}
+          onIssued={() => {
+            lifecycle.refresh()
+            router.refresh()
+          }}
+          onRowReplaced={replaceOpenRow}
           onClose={() => setOpenRow(null)}
           canFile={canFile}
         />
@@ -416,6 +419,7 @@ export function FilingSection({
   section,
   year,
   issues,
+  help: surfaceHelp,
   onOpenRow,
   lifecycle = null,
   reviewByRow,
@@ -427,6 +431,8 @@ export function FilingSection({
   section: YearEndFilingSection
   year: number
   issues: FilingIssues
+  /** The surface's own context for this filing (its cadence group's help). */
+  help?: React.ReactNode
   onOpenRow: (row: FilingRow) => void
   /** Null on surfaces that do not carry the amendment lifecycle. */
   lifecycle?: ReturnType<typeof useFilingLifecycle>['state'] | null
@@ -491,36 +497,35 @@ export function FilingSection({
     })
   }
 
-  // Contextual help — the pack's declared description and transmission note —
-  // lives in the house `?` field-help popover, never as loose page prose.
-  const help = (section.description || section.download?.note) ? (
-    <>
+  // Contextual help — the surface's cadence note, the pack's declared
+  // description and transmission note — lives in the house `?` field-help
+  // popover on the table toolbar, never as loose page prose. The tab above
+  // already names the filing, so the body carries no second title.
+  const help = (surfaceHelp || section.description || section.download?.note) ? (
+    <div className="space-y-2">
+      {surfaceHelp && <p>{surfaceHelp}</p>}
       {section.description && <p>{section.description}</p>}
-      {section.download?.note && <p className={section.description ? 'mt-2' : undefined}>{section.download.note}</p>}
-    </>
+      {section.download?.note && <p>{section.download.note}</p>}
+    </div>
   ) : undefined
+  const toolbar = (
+    <div className="flex items-center gap-2">
+      {help && <FieldHelp help={help} buttonLabel={section.label} />}
+      {canFile && section.download && section.data.rows.length > 0 && (
+        <Button
+          variant="outline"
+          disabled={downloadBusy || (section.issue != null && issueSelection.length === 0)}
+          onClick={() => void issues.downloadFile(section)}
+        >
+          <FileDown size={14} aria-hidden />
+          {section.download.label}
+        </Button>
+      )}
+    </div>
+  )
 
   return (
-    <section className="rounded-xl border border-slate-200 bg-white p-4 dark:border-slate-800 dark:bg-slate-900">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <FieldLabel
-          help={help}
-          fieldName={section.label}
-          className="text-base font-semibold text-slate-900 dark:text-slate-100"
-        >
-          {section.label}
-        </FieldLabel>
-        {canFile && section.download && section.data.rows.length > 0 && (
-          <Button
-            variant="outline"
-            disabled={downloadBusy || (section.issue != null && issueSelection.length === 0)}
-            onClick={() => void issues.downloadFile(section)}
-          >
-            <FileDown size={14} aria-hidden />
-            {section.download.label}
-          </Button>
-        )}
-      </div>
+    <section aria-label={section.label}>
 
       {downloadError && (
         <Alert variant="destructive" className="mb-3">
@@ -566,6 +571,7 @@ export function FilingSection({
             empty={<EmptyState title={section.emptyText ?? t('emptyDefault')} />}
             rowKey={(row) => String(row[section.data.rowKey] ?? '')}
             onRowClick={section.hasSlip ? onOpenRow : undefined}
+            toolbarAfter={toolbar}
           />
 
           {section.data.totals && section.data.rows.length > 0 && (
@@ -605,6 +611,7 @@ export function SlipDrawer({
   lifecycle = null,
   review = null,
   onIssued,
+  onRowReplaced,
   onClose,
   canFile,
 }: {
@@ -616,6 +623,12 @@ export function SlipDrawer({
   lifecycle?: FilingLifecycle | null
   review?: FilingRowReview | null
   onIssued?: () => void
+  /**
+   * The row's identity changed under the open drawer (an employee's first
+   * separation event was just recorded): the host keeps the drawer on the
+   * replacement row instead of closing it.
+   */
+  onRowReplaced?: (row: FilingRow) => void
   onClose: () => void
   /** Whether the operator may file (payroll.run) — gates any correction. */
   canFile: boolean
@@ -631,8 +644,15 @@ export function SlipDrawer({
     + `&filing=${encodeURIComponent(section.key)}&year=${year}&row=${encodeURIComponent(rowId)}`
     + (format === 'pdf' ? '&format=pdf' : '')
 
+  const isRoe = section.country === 'CA' && section.key === 'roe'
+  // An ROE is assembled from its separation event; until the employer records
+  // one, the drawer is the facts form alone and no slip is requested.
+  const awaitingFacts = isRoe && parseRoeEventRow(rowId)?.eventId == null
   const [state, setState] = useState<SlipState>({ status: 'loading' })
   const [factsRevision, setFactsRevision] = useState(0)
+  const [recordBusy, setRecordBusy] = useState(false)
+  const [issuedRevision, setIssuedRevision] = useState(0)
+  const [recordMessage, setRecordMessage] = useState<{ tone: 'warning' | 'success'; text: string } | null>(null)
   // Reset the slip while reloading, during render (same committed values, no
   // extra render). Keyed on the fetch inputs below.
   const [prevSlipInputs, setPrevSlipInputs] = useState(() => ({
@@ -646,6 +666,7 @@ export function SlipDrawer({
     setState({ status: 'loading' })
   }
   useEffect(() => {
+    if (awaitingFacts) return
     let alive = true
     void fetchFilingSlip(slipHref('json'))
       .then((result) => {
@@ -659,7 +680,7 @@ export function SlipDrawer({
       alive = false
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [section.country, section.key, year, rowId, factsRevision])
+  }, [section.country, section.key, year, rowId, factsRevision, awaitingFacts])
 
   // The facsimile body is the shared pure renderer — identical markup to the
   // PDF the footer button downloads.
@@ -671,6 +692,26 @@ export function SlipDrawer({
 
   const title = String(row[section.data.columns[0]?.key ?? section.data.rowKey] ?? '')
   const commentRequired = section.issue?.reasonCodes.find((r) => r.code === reason)?.commentRequired === true
+  // Event filings are recorded one employee at a time, here, where the
+  // subject of the statutory act is the drawer's own employee.
+  const recordable = canFile && section.issue != null && section.additionalSelectedOriginals === true
+    && (review === null || review.status === 'unfiled')
+  async function recordIssued() {
+    setRecordMessage(null)
+    setRecordBusy(true)
+    try {
+      const fileRefusal = await recordFilingOriginal(section, year, '', { [section.issue!.param]: issues.rowSelection(section, row) })
+      issues.clearRow(section, row)
+      setRecordMessage(fileRefusal ? { tone: 'warning', text: fileRefusal } : { tone: 'success', text: t('issue.recorded') })
+      setFactsRevision((value) => value + 1)
+      setIssuedRevision((value) => value + 1)
+      onIssued?.()
+    } catch (e) {
+      setRecordMessage({ tone: 'warning', text: (e as Error).message })
+    } finally {
+      setRecordBusy(false)
+    }
+  }
 
   return (
     <Drawer
@@ -696,13 +737,17 @@ export function SlipDrawer({
       }
     >
       <div className="space-y-5">
-        {section.country === 'CA' && section.key === 'roe' && <RoeSeparationFactsForm
-          key={rowId} employeePartyId={rowId} canEdit={canFile}
+        {isRoe && <RoeSeparationFactsForm
+          key={`${rowId}:${issuedRevision}`} employeePartyId={rowId} canEdit={canFile}
           onSaved={(savedRowId) => {
-            if(savedRowId!==rowId){onClose();router.refresh();return}
+            if (savedRowId !== rowId) {
+              if (onRowReplaced) onRowReplaced({ ...row, [section.data.rowKey]: savedRowId })
+              else { onClose(); router.refresh() }
+              return
+            }
             setState({ status: 'loading' }); setFactsRevision(value => value + 1)
           }} />}
-        {state.status === 'loading' && (
+        {!awaitingFacts && state.status === 'loading' && (
           <div className="space-y-3">
             <Skeleton className="h-6 w-2/3" />
             <Skeleton className="h-40 w-full" />
@@ -710,13 +755,13 @@ export function SlipDrawer({
           </div>
         )}
 
-        {state.status === 'error' && (
+        {!awaitingFacts && state.status === 'error' && (
           <Alert variant="warning">
             <AlertDescription>{state.message}</AlertDescription>
           </Alert>
         )}
 
-        {state.status === 'ready' && (
+        {!awaitingFacts && state.status === 'ready' && (
           <>
             <dl className="grid grid-cols-2 gap-x-6 gap-y-2 text-sm sm:grid-cols-3">
               {state.slip.headerFields.map((field) => (
@@ -794,6 +839,23 @@ export function SlipDrawer({
                     {t('issue.commentRequired')}
                   </p>
                 )}
+                {recordable && (
+                  <div className="flex flex-wrap items-center justify-between gap-2 border-t border-slate-200 pt-2 dark:border-slate-800">
+                    <p className="text-xs text-slate-500 dark:text-slate-400">{t('issue.recordHelp')}</p>
+                    <Button
+                      variant="outline"
+                      disabled={recordBusy || reason === '' || (commentRequired && comment.trim() === '')}
+                      onClick={() => void recordIssued()}
+                    >
+                      {t('issue.record')}
+                    </Button>
+                  </div>
+                )}
+                {recordMessage && (
+                  <Alert variant={recordMessage.tone}>
+                    <AlertDescription>{recordMessage.text}</AlertDescription>
+                  </Alert>
+                )}
               </div>
             )}
 
@@ -829,6 +891,7 @@ export function SeparationIssuePanel({
 }) {
   const t = useTranslations('payroll.separations')
   const tFilings = useTranslations('payroll.filings')
+  const router = useRouter()
   const issues = useFilingIssues(year)
   const [open, setOpen] = useState<{ section: YearEndFilingSection; row: FilingRow } | null>(null)
 
@@ -934,6 +997,11 @@ export function SeparationIssuePanel({
           row={open.row}
           year={year}
           issues={issues}
+          onIssued={() => router.refresh()}
+          onRowReplaced={(row) => {
+            setOpen((current) => current && { ...current, row })
+            router.refresh()
+          }}
           onClose={() => setOpen(null)}
           canFile={canFile}
         />
