@@ -3,6 +3,7 @@ import test from 'node:test'
 import React, { act } from 'react'
 import { bootJsdomEnvironment } from '../../../testing/jsdom-env'
 import { stubModules } from '../../../testing/stub-modules'
+import type { CapTable } from '@openbooks/engine/equity'
 
 await bootJsdomEnvironment({ url: 'http://localhost/equity', matchMediaMatches: false })
 Object.assign(globalThis, { React })
@@ -106,7 +107,7 @@ test('the ownership hero and activity render populated and empty compositions', 
 const COMMON = 'c0000000-0000-4000-8000-000000000001'
 const HOLDER = 'b0000000-0000-4000-8000-000000000001'
 const EMPLOYEE = 'b0000000-0000-4000-8000-000000000002'
-const capTable = {
+const capTable: CapTable = {
   asOf: '2026-12-15',
   classes: [{
     shareClassId: COMMON, code: 'CS', name: 'Common', kind: 'common' as const, seniority: 0, authorized: '10000000', outstanding: '4000000', asConvertedOutstanding: '4000000',
