@@ -75,7 +75,7 @@ test("reversalJournalLines keeps elimination and currency-adjustment flags on th
         lineNumber: 1, accountId: ACCOUNT_ID, subsidiaryId: SUBSIDIARY_ID, amount: "40.0000", currency: "CAD",
         txnAmount: "40.0000", fxRate: "1", partyId: null, departmentId: null, projectId: null, locationId: null,
         classId: null, equipmentUnitId: null, extraDims: {}, paymentCardId: null, taxCodeId: null, memo: null,
-        eliminate: true, isCurrencyAdjustment: true,
+        quantity: null, unit: null, custom: {}, eliminate: true, isCurrencyAdjustment: true,
       },
     ],
     { entryId: ENTRY_ID, orgId: ORG_ID },
