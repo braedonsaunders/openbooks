@@ -88,6 +88,12 @@ export const DEMO_FEATURE_EVIDENCE: Record<string, DemoFeatureEvidence> = {
   accountMerges: { ...workspace("accounts"), limitation: "No accounts are merged in the demonstration; preview a merge from an account to see its consequences before executing one." },
   accountingContexts: { ...workspace("accounts"), limitation: "No statutory context is installed; create a context and its localized account numbers before running reports under it." },
   segmentDependencies: { ...workspace("segment_definitions"), limitation: "No dependency rules are installed; segment values remain freely combinable until a rule is created." },
+  posRegister: { ...configuration("pos_registers"), limitation: "Open a drawer session with a counted float before ringing up sales; card tenders settle to a clearing account until a card processor is configured." },
+  multiBookAccounting: { ...configuration("accounting_book_currencies"), limitation: "The income tax basis book takes book-specific adjustments only; record its adjusting journals and account mappings before reporting from it." },
+  expenseAmortization: executed("expense_amortization_templates", "expense_amortization_schedules", "expense_amortization_schedule_lines"),
+  expenseAmortizationAutoRun: { ...configuration("expense_amortization_schedules"), limitation: "Active schedules post their due amortization automatically each period; review a schedule before relying on automatic runs." },
+  rebateManagement: { ...configuration("rebate_agreements"), limitation: "Draft supplier and customer agreements; an independent operator must approve each before posted purchases and sales accrue rebates." },
+  equity: { ...executed("equity_share_classes", "equity_plans", "equity_securities"), limitation: "Synthetic founders and investor; board approvals, securities filings and valuations must be reviewed before granting awards." },
 };
 
 export function demoFeatureEvidence(industryKey: string): Record<string, DemoFeatureEvidence> {

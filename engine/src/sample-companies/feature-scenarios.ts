@@ -1,6 +1,6 @@
 import { sampleCompanyFeatures } from "./features.ts";
 import { scenarioRecordId, type DemoContext } from "./scenarios.ts";
-import type { AddDemoRecord } from "./industry-operations.ts";
+import { INDUSTRY_OPERATIONS, type AddDemoRecord } from "./industry-operations.ts";
 
 /** Editable native configuration; regulated facts and external credentials are deliberately absent. */
 export function extendedFeatureRecords(c: DemoContext, add: AddDemoRecord): void {
@@ -50,6 +50,54 @@ export function extendedFeatureRecords(c: DemoContext, add: AddDemoRecord): void
   if (f.autopay) for (let n = 1; n <= 3; n++) add("autopay_enrollments", { party_id: id("parties", `operations-customer-${n}`), status: "paused", charge_on_issue: false }, `customer-${n}`);
   if (f.customerPortal) add("customer_portal_settings", { effective_from: c.date, portal_name: `${c.companyName} customer centre`, sections: { invoices: true, paymentMethods: false, subscriptions: true, usage: true, orders: true, returns: false, giftCards: false }, return_window_days: 30 });
   if (f.revenueContracts) for (let n = 1; n <= 3; n++) add("revenue_contracts", { customer_id: id("parties", `operations-customer-${n}`), contract_number: `DEMO-RC-${n}`, subsidiary_id: c.subsidiaryId, currency: c.currency, starts_on: c.date, ends_on: `${c.year + 1}-12-31`, total_transaction_price: ["28800.00", "48000.00", "96000.00"][n - 1]!, memo: "Draft platform and support agreement; review obligations and allocation before activation." }, `contract-${n}`);
+  if (f.rebateManagement) {
+    const receivable = add("accounts", { number: "1396", name: "Vendor rebates receivable", type: "asset_current_other", is_active: true }, "rebate-receivable");
+    const payable = add("accounts", { number: "2396", name: "Customer rebates payable", type: "liability_current_other", is_active: true }, "rebate-payable");
+    const allowances = add("accounts", { number: "4396", name: "Customer volume rebates", type: "income", is_active: true }, "rebate-allowances");
+    const differences = add("accounts", { number: "7396", name: "Rebate settlement exchange differences", type: "expense_other", is_active: true }, "rebate-differences");
+    const reason = "Draft volume terms awaiting independent commercial approval";
+    add("rebate_agreements", { code: "DEMO-SUPPLIER-VOLUME", name: `${INDUSTRY_OPERATIONS[c.industryKey]!.vendors[0]} annual purchase volume rebate`, status: "draft",
+      subsidiary_id: c.subsidiaryId, side: "vendor", activity: "purchase", party_id: id("parties", "operations-vendor-1"), currency: c.currency,
+      effective_from: `${c.year}-01-01`, effective_to: `${c.year}-12-31`, method: "percent", tier_basis: "amount",
+      tiers: [{ threshold: "0", rate: "1.5" }, { threshold: "50000", rate: "2.5" }, { threshold: "150000", rate: "4" }],
+      stacking: "best", selection_group: "supplier-volume", accrual_account_id: receivable, offset_account_id: c.accounts.expense,
+      fx_account_id: differences, tax_treatment: "outside_scope", reason }, "supplier-volume");
+    add("rebate_agreements", { code: "DEMO-CUSTOMER-GROWTH", name: `${INDUSTRY_OPERATIONS[c.industryKey]!.customers[0]} growth rebate`, status: "draft",
+      subsidiary_id: c.subsidiaryId, side: "customer", activity: "sale", party_id: id("parties", "operations-customer-1"), currency: c.currency,
+      effective_from: `${c.year}-01-01`, effective_to: `${c.year}-12-31`, method: "percent", tier_basis: "amount",
+      tiers: [{ threshold: "25000", rate: "1" }, { threshold: "75000", rate: "2" }],
+      stacking: "best", selection_group: "customer-growth", accrual_account_id: payable, offset_account_id: allowances,
+      fx_account_id: differences, tax_treatment: "outside_scope", reason }, "customer-growth");
+  }
+  if (f.posRegister) {
+    const drawer = add("accounts", { number: "1092", name: "Trade counter cash drawer", type: "asset_current_other", subsidiary_id: c.subsidiaryId, currency_restriction: c.currency, is_active: true }, "pos-drawer");
+    const cards = add("accounts", { number: "1093", name: "Card settlements clearing", type: "asset_current_other", subsidiary_id: c.subsidiaryId, currency_restriction: c.currency, is_active: true }, "pos-card-clearing");
+    const walkIn = add("parties", { kind: "company", display_name: "Counter sales customer", is_active: true }, "pos-walk-in");
+    add("customer_roles", { party_id: walkIn }, "pos-walk-in");
+    add("pos_registers", { code: "DEMO-COUNTER-1", name: "Trade counter register", subsidiary_id: c.subsidiaryId, location_id: id("locations"),
+      default_customer_id: walkIn, cash_account_id: drawer, card_account_id: cards, accepts_stored_value: f.storedValue === true,
+      receipt_header: `${c.companyName}\nTrade counter`, receipt_footer: "Keep this receipt for returns within 30 days.",
+      denominations: ["100", "50", "20", "10", "5", "1", "0.25", "0.10", "0.05"], is_active: true });
+  }
+  if (f.multiBookAccounting) add("accounting_books", { code: "DEMO-TAX", name: "Income tax basis book", is_primary: false, posts_gl: true, is_active: true }, "tax-book");
+  if (f.expenseAmortization) {
+    const prepaid = add("accounts", { number: "1291", name: "Prepaid insurance", type: "asset_current_other", is_active: true }, "prepaid-insurance");
+    const insurance = add("accounts", { number: "6491", name: "Insurance premiums", type: "expense", is_active: true }, "insurance-expense");
+    add("expense_amortization_templates", { code: "DEMO-ANNUAL-POLICY", name: "Annual policy over twelve months", description: "Releases a prepaid annual premium to expense in equal monthly amounts.",
+      effective_from: `${c.year}-01-01`, method: "straight_line", term_source: "template", period_count: 12, deferral_account_id: prepaid,
+      destination_account_id: insurance, period_offset: 0, is_active: true }, "annual-policy");
+  }
+  if (f.equity) {
+    add("accounts", { number: "1091", name: "Financing proceeds account", type: "asset_bank", subsidiary_id: c.subsidiaryId, currency_restriction: c.currency, reconcilable: true, is_active: true }, "financing-bank");
+    for (const [number, key, name, type] of [
+      ["3011", "common-stock", "Common stock", "equity"], ["3021", "preferred-stock", "Preferred stock", "equity"],
+      ["3101", "apic", "Additional paid-in capital", "equity"], ["3111", "apic-share-based", "Paid-in capital — share-based compensation", "equity"],
+      ["3201", "treasury-stock", "Treasury stock", "equity"], ["2601", "convertible-instruments", "SAFEs and convertible instruments", "liability_current_other"],
+      ["6411", "stock-compensation", "Stock-based compensation", "expense"],
+    ] as const) add("accounts", { number, name, type, is_active: true }, key);
+    for (const [key, name] of [["founder-1", "Avery Quinn"], ["founder-2", "Rowan Ellis"]] as const) add("parties", { kind: "person", display_name: name, is_active: true }, key);
+    add("parties", { kind: "company", display_name: "Northbridge Seed Partners", is_active: true }, "seed-investor");
+  }
   if (f.contractCosts) {
     const asset = add("accounts", { number: "1898", name: "Deferred customer acquisition costs", type: "asset_other", is_active: true }, "contract-cost");
     add("contract_cost_policies", { effective_from: c.date, capitalize_commissions: true, capitalize_fulfilment: false, practical_expedient: true, basis: "contract_term", customer_life_source: "manual", asset_account_id: asset, amortization_expense_account_id: c.accounts.expense });
