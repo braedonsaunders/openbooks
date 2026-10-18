@@ -604,7 +604,7 @@ test(
             throw new Error("simulated finalize outage");
           },
         }),
-        /setup did not finish/,
+        /Company readiness is unconfirmed/,
       );
       const partials = await sampleOrgsFor(fixture.memberUserId);
       assert.equal(partials.length, 1);
