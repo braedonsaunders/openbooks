@@ -178,6 +178,8 @@ export const EXCLUDE = new Set([
   // goes with them.
   "schedule_distributions",
   "schedule_distribution_recipients",
+  // Governed publication decisions are approval workflow state of the source environment.
+  "schedule_publications",
   "scheduler_outbox",
   "scheduler_outbox_terminal_audit",
   // Time-bound controller replay grants are evidence of the source org, not

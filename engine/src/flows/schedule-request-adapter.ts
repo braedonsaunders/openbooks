@@ -11,7 +11,8 @@ import { defineTableSubjectAdapter } from "./table-subject-adapter.ts";
  *
  * Approval is optional: an organization that authors a Shift request Flow
  * with approval gates routes every request awaiting a decision through it;
- * without one, a scheduler decides directly. The Flow decides only — the
+ * without one, the request is applied when submitted and records that no
+ * approval applied. The Flow decides only — the
  * outcome (release, new times, an exchange of shifts) is applied by the
  * scheduling service through the registered release handler, inside the
  * gate decision's transaction, so the booking ledger's guards and the
@@ -54,7 +55,7 @@ export const scheduleRequestSubjectProfile: FlowSubjectProfile = {
 
 type RequestRow = {
   id: string; status: string; kind: string; board_id: string; board_code: string; board_name: string; worker_name: string;
-  counterpart_name: string | null; shift_date: string; reason: string; created_by: string;
+  counterpart_name: string | null; shift_date: string; reason: string; created_by: string; counterpart_responded_by: string | null;
 };
 
 async function loadRequest(subjectId: string): Promise<RequestRow | null> {
@@ -62,7 +63,7 @@ async function loadRequest(subjectId: string): Promise<RequestRow | null> {
   if (!orgId) throw new Error("Shift requests require a native tenant context.");
   return (await db.execute<RequestRow>(sql`
     select r.id, r.status, r.kind, r.board_id, b.code as board_code, b.name as board_name, w.display_name as worker_name,
-           cp.display_name as counterpart_name, e.starts_on::text as shift_date, r.reason, r.created_by
+           cp.display_name as counterpart_name, e.starts_on::text as shift_date, r.reason, r.created_by, r.counterpart_responded_by
       from schedule_entry_requests r
       join schedule_boards b on b.org_id = r.org_id and b.id = r.board_id
       join schedule_entries e on e.org_id = r.org_id and e.id = r.entry_id
@@ -87,7 +88,9 @@ export const scheduleRequestsFlowAdapter: FlowSubjectAdapter = defineTableSubjec
         id: row.id, status: row.status, kind: row.kind, boardId: row.board_id, boardCode: row.board_code, boardName: row.board_name,
         workerName: row.worker_name, counterpartName: row.counterpart_name, shiftDate: row.shift_date, reason: row.reason, createdBy: row.created_by,
       },
-      submitterUserId: row.created_by,
+      // The colleague who accepted a swap submits it; neither they nor the
+      // requester may decide it.
+      submitterUserId: row.counterpart_responded_by ?? row.created_by,
       makerUserId: row.created_by,
     };
   },

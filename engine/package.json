@@ -337,6 +337,7 @@
     "./schedule-boards/pattern-store": "./src/schedule-boards/pattern-store.ts",
     "./schedule-boards/patterns": "./src/schedule-boards/patterns.ts",
     "./schedule-boards/progress": "./src/schedule-boards/progress.ts",
+    "./schedule-boards/publications": "./src/schedule-boards/publications.ts",
     "./schedule-boards/resource-recipients": "./src/schedule-boards/resource-recipients.ts",
     "./schedule-boards/requests": "./src/schedule-boards/requests.ts",
     "./schedule-boards/source-history": "./src/schedule-boards/source-history.ts",

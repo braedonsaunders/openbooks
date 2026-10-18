@@ -84,6 +84,8 @@ export const TENANT_TABLE_POLICIES = {
   "schedule_pattern_assignments": "clone:catalog-uuid-rebase",
   "schedule_pattern_exceptions": "clone:catalog-uuid-rebase",
   "schedule_entry_requests": "clone:catalog-uuid-rebase",
+  // Publication decisions are the source environment's approval workflow.
+  "schedule_publications": "skip:no-copy",
   "schedule_attendance_policies": "clone:catalog-uuid-rebase",
   // Time-clock devices, their identities and source check-in evidence are
   // environment-specific; a sandbox establishes its own attendance sources.

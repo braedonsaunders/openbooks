@@ -3,17 +3,18 @@
  * published future booking from My schedule.
  *
  * A swap first needs the named colleague's acceptance. A request awaiting a
- * decision is routed through an optional Shift request Flow when the
- * organization configured one; otherwise a scheduler with approval
- * permission decides it directly. While a Flow's approval gates are open the
- * Flow owns the decision. The decider must be independent of the people the
- * request involves.
+ * decision is submitted to any enabled Shift request Flow. Approval is
+ * optional and owned by Flows: when a Flow raises an approval gate, the
+ * request waits and the gate's decision applies or declines it; who may
+ * decide, including separation from the people the request involves, is the
+ * Flow's policy. When no Flow gates it, the request is applied at once and
+ * records that no approval applied.
  *
- * Approval applies the outcome in the same transaction: the booking is
- * released, replaced with the requested times, or exchanged with the
- * colleague's booking. The booking ledger's guards check availability,
+ * Applying a request changes the bookings in the same transaction: the
+ * booking is released, replaced with the requested times, or exchanged with
+ * the colleague's booking. The booking ledger's guards check availability,
  * recorded leave, required qualifications and double booking, so a request
- * that would conflict is refused and stays pending for another decision.
+ * that would conflict is refused and nothing changes.
  */
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "../platform/db.ts";
@@ -60,6 +61,7 @@ export type ShiftRequest = {
   readonly status: ShiftRequestStatus;
   readonly flowRunId: string | null;
   readonly flowGated: boolean;
+  readonly releasedWithoutApproval: boolean;
   readonly reason: string;
   readonly decisionReason: string | null;
   readonly decidedByName: string | null;
@@ -76,7 +78,7 @@ const REQUEST_COLUMNS = sql`r.id, r.board_id as "boardId", b.name as "boardName"
   ${INSTANT(sql`r.proposed_starts_at`)} as "proposedStartsAt", ${INSTANT(sql`r.proposed_ends_at`)} as "proposedEndsAt", r.proposed_break_minutes as "proposedBreakMinutes",
   r.counterpart_entry_id as "counterpartEntryId", r.counterpart_entry_revision as "counterpartEntryRevision", r.counterpart_party_id as "counterpartPartyId", cp.display_name as "counterpartName",
   ${INSTANT(sql`ce.starts_at`)} as "counterpartStartsAt", ${INSTANT(sql`ce.ends_at`)} as "counterpartEndsAt",
-  r.status, r.flow_run_id as "flowRunId",
+  r.status, r.flow_run_id as "flowRunId", r.released_without_approval as "releasedWithoutApproval",
   exists (select 1 from flow_gates g where g.org_id = r.org_id and g.subject_kind = ${SHIFT_REQUEST_SUBJECT_KIND} and g.subject_id = r.id and g.status in ('pending', 'escalated')) as "flowGated",
   r.reason, r.decision_reason as "decisionReason", du.name as "decidedByName", ${INSTANT(sql`r.created_at`)} as "createdAt", r.created_by as "createdBy", r.revision`;
 
@@ -165,7 +167,7 @@ export interface ShiftRequestInput {
 }
 
 /** Request a release, change or swap of the caller's own published booking. */
-export async function createOwnShiftRequest(actor: ScheduleActor & ShiftRequestInput): Promise<ShiftRequest> {
+export async function createOwnShiftRequest(actor: ScheduleActor & ShiftRequestInput): Promise<ShiftRequestDecision> {
   const id = requireId(actor.id, "Request key"), entryId = requireId(actor.entryId, "Booking"), reason = reasonText(actor.reason);
   if (!["release", "change", "swap"].includes(actor.kind)) throw new ScheduleError("Choose to release, change or swap the shift.", { code: "schedule_invalid" });
   if (actor.kind !== "change" && actor.change) throw new ScheduleError("Only a change request names new times.", { code: "schedule_invalid" });
@@ -181,7 +183,8 @@ export async function createOwnShiftRequest(actor: ScheduleActor & ShiftRequestI
       if (existing.requestHash !== requestHash || existing.createdBy !== actor.actorId) {
         throw new ScheduleError("This request key was already used for a different request.", { status: 409, code: "schedule_key_reused", remedy: "Reload your schedule; the existing request is preserved." });
       }
-      return readRequest(actor.orgId, id);
+      const replayed = await readRequest(actor.orgId, id);
+      return { request: replayed, notices: [], boardName: replayed.boardName };
     }
     const entry = await lockEntry(actor.orgId, entryId);
     requestable(entry, party, actor.expectedRevision, "The shift");
@@ -224,27 +227,38 @@ export async function createOwnShiftRequest(actor: ScheduleActor & ShiftRequestI
       ${counterpart?.id ?? null}, ${counterpart?.revision ?? null}, ${counterpart?.workerPartyId ?? null},
       ${actor.kind === "swap" ? "awaiting_counterpart" : "pending"}, ${reason}, ${requestHash}, ${actor.actorId}, ${actor.actorId}) returning id`)).rows;
     if (inserted.length !== 1) throw new ScheduleError("The request was not saved.", { code: "schedule_not_saved", remedy: "Reload your schedule and try again." });
-    if (actor.kind !== "swap") await submitForDecision(actor, id);
-    return readRequest(actor.orgId, id);
+    if (actor.kind !== "swap") return submitForDecision(actor, id);
+    const request = await readRequest(actor.orgId, id);
+    return { request, notices: [], boardName: request.boardName };
   }).catch((error: unknown) => { throw scheduleDatabaseRefusal(error); });
 }
 
-/** Route a request that awaits a decision through an optional Flow. */
-async function submitForDecision(actor: ScheduleActor, id: string): Promise<void> {
+export const NO_APPROVAL_APPLIED = "No approval Flow applied; applied when submitted.";
+
+/**
+ * Submit a request that awaits a decision to any enabled Shift request Flow.
+ * A gating Flow owns the decision; without one the request is applied now
+ * by its submitter and records that no approval applied.
+ */
+async function submitForDecision(actor: ScheduleActor, id: string): Promise<ShiftRequestDecision> {
   const routed = await route(actor, id);
   if (routed.failed) {
     throw new ScheduleError("The shift request approval Flow could not start.", { code: "schedule_request_flow_failed",
       remedy: routed.error ? `Ask an administrator to review the Shift request Flow: ${routed.error}` : "Ask an administrator to review the Shift request Flow." });
   }
-  if (routed.gated && routed.runId) {
+  if (routed.gated) {
     const updated = (await db.execute(sql`update schedule_entry_requests set flow_run_id = ${routed.runId}, revision = revision + 1, updated_at = now(), updated_by = ${actor.actorId}
       where org_id = ${actor.orgId} and id = ${id} and status = 'pending' returning id`)).rows;
     if (updated.length !== 1) throw new ScheduleError("The request changed while it was routed for approval.", { status: 409, code: "schedule_stale", remedy: "Reload your schedule." });
+    const request = await readRequest(actor.orgId, id);
+    return { request, notices: [], boardName: request.boardName };
   }
+  const request = await lockRequest(actor.orgId, id);
+  return decide(actor, await getBoard(actor, request.boardId), request, "approve", NO_APPROVAL_APPLIED, "released");
 }
 
 /** The colleague named in a swap accepts or declines it. */
-export async function respondToSwap(actor: ScheduleActor & { requestId: string; expectedRevision: number; accept: boolean; reason: string }): Promise<ShiftRequest> {
+export async function respondToSwap(actor: ScheduleActor & { requestId: string; expectedRevision: number; accept: boolean; reason: string }): Promise<ShiftRequestDecision> {
   const reason = reasonText(actor.reason, "A reply");
   return withOrgTransaction(actor.orgId, async () => {
     const party = await selfServiceParty(actor);
@@ -259,8 +273,9 @@ export async function respondToSwap(actor: ScheduleActor & { requestId: string; 
       : sql`update schedule_entry_requests set status = 'declined', decided_by = ${actor.actorId}, decided_at = now(), decision_reason = ${reason},
           revision = revision + 1, updated_at = now(), updated_by = ${actor.actorId} where org_id = ${actor.orgId} and id = ${request.id} and revision = ${request.revision} returning id`)).rows;
     if (updated.length !== 1) throw new ScheduleError("This swap changed while you answered.", { status: 409, code: "schedule_stale", remedy: "Reload your schedule." });
-    if (actor.accept) await submitForDecision(actor, request.id);
-    return readRequest(actor.orgId, request.id);
+    if (actor.accept) return submitForDecision(actor, request.id);
+    const declined = await readRequest(actor.orgId, request.id);
+    return { request: declined, notices: [], boardName: declined.boardName };
   }).catch((error: unknown) => { throw scheduleDatabaseRefusal(error); });
 }
 
@@ -295,26 +310,6 @@ export interface ShiftRequestDecision {
   readonly boardName: string;
 }
 
-/** A scheduler approves or declines a request directly when no Flow owns it. */
-export async function decideShiftRequest(actor: ScheduleActor & { requestId: string; expectedRevision: number; decision: "approve" | "decline"; reason: string }): Promise<ShiftRequestDecision> {
-  const reason = reasonText(actor.reason, "A decision reason");
-  return withOrgTransaction(actor.orgId, async () => {
-    const request = await lockRequest(actor.orgId, actor.requestId);
-    const board = await getBoard(actor, request.boardId);
-    const allowed = await boardAuthority(actor, board, "publish");
-    if (allowed !== null) {
-      const visible = (await db.execute(sql`select 1 from schedule_entry_requests r where r.org_id = ${actor.orgId} and r.id = ${request.id}
-        ${subsidiaryVisibleFilter(sql`r.subsidiary_id`, allowed)}`)).rows.length;
-      if (!visible) throw new ScopeNotFoundError();
-    }
-    if (request.revision !== actor.expectedRevision) throw new ScheduleError("This request changed since it was loaded.", { status: 409, code: "schedule_stale", remedy: "Reload the requests." });
-    if (request.flowGated) {
-      throw new ScheduleError("This request is owned by its approval Flow.", { status: 409, code: "schedule_request_flow_owned", remedy: "Decide it through the Flow's approval in Approvals." });
-    }
-    return decide(actor, board, request, actor.decision, reason);
-  }).catch((error: unknown) => { throw scheduleDatabaseRefusal(error); });
-}
-
 /** A Flow's approval gates resolved: apply the decision as the gate's decider. */
 export async function releaseShiftRequestApproval(input: { orgId: string; actorId: string; requestId: string; outcome: "approved" | "rejected"; comment?: string | null }): Promise<void> {
   const actor = { orgId: input.orgId, actorId: input.actorId };
@@ -324,10 +319,10 @@ export async function releaseShiftRequestApproval(input: { orgId: string; actorI
   }
   const board = await getBoard(actor, request.boardId);
   const reason = input.comment?.trim() || (input.outcome === "approved" ? "Approved through the shift request Flow" : "Declined through the shift request Flow");
-  await decide(actor, board, request, input.outcome === "approved" ? "approve" : "decline", reason);
+  await decide(actor, board, request, input.outcome === "approved" ? "approve" : "decline", reason, "flow");
 }
 
-async function decide(actor: ScheduleActor, board: ScheduleBoard, request: ShiftRequest, decision: "approve" | "decline", reason: string): Promise<ShiftRequestDecision> {
+async function decide(actor: ScheduleActor, board: ScheduleBoard, request: ShiftRequest, decision: "approve" | "decline", reason: string, mode: "flow" | "released"): Promise<ShiftRequestDecision> {
   if (request.status !== "pending") throw new ScheduleError("This request is not waiting for a decision.", { status: 409, code: "schedule_stale", remedy: "Reload the requests." });
   if (decision !== "approve" && decision !== "decline") throw new ScheduleError("Choose to approve or decline the request.", { code: "schedule_invalid" });
   const notices: ScheduleNotice[] = [];
@@ -342,7 +337,8 @@ async function decide(actor: ScheduleActor, board: ScheduleBoard, request: Shift
     }
   }
   const updated = (await db.execute(sql`update schedule_entry_requests set status = ${decision === "approve" ? "approved" : "declined"},
-    decided_by = ${actor.actorId}, decided_at = now(), decision_reason = ${reason}, revision = revision + 1, updated_at = now(), updated_by = ${actor.actorId}
+    decided_by = ${mode === "flow" ? actor.actorId : null}, released_without_approval = ${mode === "released"}, decided_at = now(), decision_reason = ${reason},
+    revision = revision + 1, updated_at = now(), updated_by = ${actor.actorId}
     where org_id = ${actor.orgId} and id = ${request.id} and status = 'pending' and revision = ${request.revision} returning id`)).rows;
   if (updated.length !== 1) throw new ScheduleError("This request changed while it was decided.", { status: 409, code: "schedule_stale", remedy: "Reload the requests." });
   if (decision === "approve") {

@@ -40,6 +40,7 @@ const DOCUMENTS_SUBJECT_KINDS = new Set([
 ])
 const PEOPLE_SUBJECT_KINDS = new Set([
   'schedule_entry_request',
+  'schedule_publication',
   'timesheet_week',
   'hrm_employment_change_request',
   'hrm_leave_request',

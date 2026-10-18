@@ -1416,16 +1416,16 @@ export const TENANT_RETIREMENT_GUARDS = [
   },
   {
     "name": "schedule_entries_guard",
-    "source": "0737_unified_scheduling_patterns_requests_attendance.sql",
-    "sha256": "44e76a50bd4ac02f66911d259e4074be5dc7c8e5e55f3445ac54cd32bdcecd6e",
-    "newSha256": "44e76a50bd4ac02f66911d259e4074be5dc7c8e5e55f3445ac54cd32bdcecd6e",
+    "source": "0746_scheduling_approvals_through_flows.sql",
+    "sha256": "923039e51ebe0e9561e664173f46a159f9ae7ef499e9c9c11280b34764fca505",
+    "newSha256": "923039e51ebe0e9561e664173f46a159f9ae7ef499e9c9c11280b34764fca505",
     "patch": false
   },
   {
     "name": "schedule_roster_guard",
-    "source": "0737_unified_scheduling_patterns_requests_attendance.sql",
-    "sha256": "4eea52941c99f015a5ac2bc20ba5885b80273ed945a767a27e4b56219f02126f",
-    "newSha256": "4eea52941c99f015a5ac2bc20ba5885b80273ed945a767a27e4b56219f02126f",
+    "source": "0746_scheduling_approvals_through_flows.sql",
+    "sha256": "850df2047ff512fe4b5602ee1a483653f510e5b25e86c348fe21d63182435a38",
+    "newSha256": "850df2047ff512fe4b5602ee1a483653f510e5b25e86c348fe21d63182435a38",
     "patch": false
   },
   {
@@ -4417,6 +4417,11 @@ export const TENANT_RETIREMENT_TRIGGER_CONTRACTS = [
   },
   {
     "table": "schedule_entry_requests",
+    "trigger": "schedule_roster_guard",
+    "function": "schedule_roster_guard"
+  },
+  {
+    "table": "schedule_publications",
     "trigger": "schedule_roster_guard",
     "function": "schedule_roster_guard"
   },

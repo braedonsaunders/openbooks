@@ -257,6 +257,8 @@ export const scheduleEntryRequests = pgTable("schedule_entry_requests", {
   counterpartPartyId: uuid("counterpart_party_id"), counterpartRespondedBy: uuid("counterpart_responded_by"),
   counterpartRespondedAt: timestamp("counterpart_responded_at", { withTimezone: true }),
   status: text("status", { enum: SCHEDULE_REQUEST_STATUSES }).notNull(), flowRunId: uuid("flow_run_id"),
+  /** No approval Flow gated the request, so it was applied when submitted. */
+  releasedWithoutApproval: boolean("released_without_approval").notNull().default(false),
   decidedBy: uuid("decided_by"), decidedAt: timestamp("decided_at", { withTimezone: true }), decisionReason: text("decision_reason"),
   reason: text("reason").notNull(), requestHash: text("request_hash").notNull(), revision: integer("revision").notNull().default(1),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(), createdBy: uuid("created_by").notNull(),
@@ -346,3 +348,16 @@ export const scheduleAttendanceObservationEvents = pgTable("schedule_attendance_
   reason: text("reason").notNull(), requestHash: text("request_hash").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(), createdBy: uuid("created_by").notNull(),
 }, (t) => [uniqueIndex("schedule_attendance_observation_events_org_id_id_key").on(t.orgId, t.id)]);
+
+/** A governed board's publication of its unpublished changes, decided through any configured approval Flow. */
+export const schedulePublications = pgTable("schedule_publications", {
+  id: id(), orgId: orgRef(), boardId: uuid("board_id").notNull(), subsidiaryId: uuid("subsidiary_id"),
+  fromDate: date("from_date").notNull(), throughDate: date("through_date").notNull(),
+  entryIds: uuid("entry_ids").array().notNull(), entryRevisions: integer("entry_revisions").array().notNull(),
+  status: text("status", { enum: ["pending", "approved", "declined", "withdrawn"] }).notNull().default("pending"),
+  flowRunId: uuid("flow_run_id"), releasedWithoutApproval: boolean("released_without_approval").notNull().default(false),
+  decidedBy: uuid("decided_by"), decidedAt: timestamp("decided_at", { withTimezone: true }), decisionReason: text("decision_reason"),
+  reason: text("reason").notNull(), requestHash: text("request_hash").notNull(), revision: integer("revision").notNull().default(1),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(), createdBy: uuid("created_by").notNull(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(), updatedBy: uuid("updated_by").notNull(),
+}, (t) => [uniqueIndex("schedule_publications_org_id_id_key").on(t.orgId, t.id)]);

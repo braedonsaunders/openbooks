@@ -9,9 +9,10 @@ import { ScopeNotFoundError } from "../organization/subsidiary-scope.ts";
 import { installEngineSeams } from "../composition/install.ts";
 import { decideGate } from "../flows/gates.ts";
 import { applyBoardChanges, publishBoard } from "./entries.ts";
+import { publishScheduleBoard } from "./publications.ts";
 import { ScheduleError } from "./errors.ts";
 import { closeAssignment, createAssignment, generateAssignment, listBoardAssignments, recordPatternException, revokePatternException, savePattern, type PatternInput } from "./pattern-store.ts";
-import { createOwnShiftRequest, decideShiftRequest, listBoardShiftRequests, listSwapCandidates, respondToSwap, withdrawOwnShiftRequest } from "./requests.ts";
+import { createOwnShiftRequest, listBoardShiftRequests, listSwapCandidates, respondToSwap, withdrawOwnShiftRequest } from "./requests.ts";
 
 const enabled = { skip: !process.env.OPENBOOKS_DB_URL };
 /** A refusal raised by a database guard arrives as the cause of the query error. */
@@ -154,34 +155,67 @@ test("pattern generation is idempotent, keeps manual changes and honours omissio
   assert.equal(omitted.generation.removed, 1);
 }));
 
-test("governed bookings publish only through an independent approver and change only through revisions", enabled, async () => fixture(async (f) => {
-  const scheduler = as(f, f.scheduler), approver = as(f, f.approver);
+const gate = async (f: Fixture, subjectKind: string, subjectId: string) => (await withBypassContext(() => db.execute<{ id: string }>(sql`select id from flow_gates
+  where org_id = ${f.org.orgId} and subject_kind = ${subjectKind} and subject_id = ${subjectId} and status = 'pending'`))).rows[0]?.id;
+const decide = (f: Fixture, gateId: string, userId: string, decision: "approved" | "rejected", comment: string) =>
+  withOrgContext(f.org.orgId, () => decideGate({ gateId, decision, userId, comment }));
+
+test("without a Flow a governed publication applies at once, records that no approval applied and keeps published history immutable", enabled, async () => fixture(async (f) => {
+  const scheduler = as(f, f.scheduler);
   const pattern = await savePattern(scheduler, daily(f, "ICU", { horizonDays: 3 }));
   const key = randomUUID();
   const start = addCalendarDays(f.today, 1);
   const created = await createAssignment({ ...scheduler, id: key, boardId: f.governed, patternId: pattern.id, workerPartyId: f.ana, effectiveFrom: start, effectiveTo: null, reason: "ICU rotation" });
   assert.equal(created.generation.created, 2);
   assert.ok((await live(f, key)).every((row) => row.status === "draft" && row.governed));
-  await assert.rejects(publishBoard({ ...scheduler, boardId: f.governed, from: start, through: addCalendarDays(start, 7) }), /independent approver/);
-  await assert.rejects(publishBoard({ ...as(f, f.anaUser), boardId: f.governed, from: start, through: addCalendarDays(start, 7) }), (error: unknown) => error instanceof ScopeNotFoundError,
-    "a scheduled employee without approval permission cannot publish");
-  const published = await publishBoard({ ...approver, boardId: f.governed, from: start, through: addCalendarDays(start, 7) });
-  assert.equal(published.published, 2);
+  await assert.rejects(publishScheduleBoard({ ...as(f, f.anaUser), boardId: f.governed, from: start, through: addCalendarDays(start, 7) }), (error: unknown) => error instanceof ScopeNotFoundError,
+    "publishing still needs the publish permission");
+  const published = await publishScheduleBoard({ ...scheduler, boardId: f.governed, from: start, through: addCalendarDays(start, 7) });
+  assert.deepEqual([published.published, published.pending], [2, false]);
+  const record = (await withBypassContext(() => db.execute<{ status: string; released: boolean; decidedBy: string | null; reason: string }>(sql`select status,
+    released_without_approval as released, decided_by as "decidedBy", decision_reason as reason from schedule_publications where org_id = ${f.org.orgId} and id = ${published.publicationId}`))).rows[0];
+  assert.deepEqual(record, { status: "approved", released: true, decidedBy: null, reason: "No approval Flow applied; released when submitted." });
+  await assert.rejects(publishBoard({ ...scheduler, boardId: f.governed, from: start, through: start }), (error: unknown) => error instanceof ScheduleError && error.code === "schedule_governed_board");
   const [first] = await live(f, key);
-  // Notes and removals are revisions an independent approver publishes.
+  // A governed booking's notes and removal are revisions that are published.
   const notes = await applyBoardChanges({ ...scheduler, boardId: f.governed, changes: [{ op: "update", id: first!.id, expectedRevision: first!.revision, fields: { notes: "Bring badge" } }] });
   assert.ok(notes.results[0]?.ok && notes.results[0].replacedId === first!.id, "a governed booking's notes change through a revision");
   await assert.rejects(withBypassContext(() => db.execute(sql`update schedule_entries set notes = 'direct', revision = revision + 1, updated_by = ${f.scheduler} where org_id = ${f.org.orgId} and id = ${first!.id}`)), refused(/immutable history/));
   await applyBoardChanges({ ...scheduler, boardId: f.governed, changes: [{ op: "cancel", id: notes.results[0]!.ok ? notes.results[0]!.entry!.id : "", expectedRevision: 1 }] });
   const removal = await applyBoardChanges({ ...scheduler, boardId: f.governed, changes: [{ op: "cancel", id: first!.id, expectedRevision: first!.revision }] });
   assert.ok(removal.results[0]?.ok && removal.results[0].entry?.removesPredecessor, "removing a governed booking records a removal revision");
-  assert.equal((await live(f, key)).find((row) => row.id === first!.id)?.status, "published", "the booking stays published until the removal is approved");
-  await publishBoard({ ...approver, boardId: f.governed, from: start, through: start });
+  assert.equal((await live(f, key)).find((row) => row.id === first!.id)?.status, "published", "the booking stays published until the removal is published");
+  await publishScheduleBoard({ ...scheduler, boardId: f.governed, from: start, through: start });
   assert.ok(!(await live(f, key)).some((row) => row.id === first!.id));
 }));
 
-test("employees request releases, changes and swaps; approval applies the outcome atomically", enabled, async () => fixture(async (f) => {
-  const scheduler = as(f, f.scheduler), approver = as(f, f.approver), ana = as(f, f.anaUser), ben = as(f, f.benUser);
+test("a Schedule publication Flow owns governed publishing: the changes wait, the submitter cannot decide, and the decider publishes exactly what was submitted", enabled, async () => fixture(async (f) => {
+  const scheduler = as(f, f.scheduler);
+  await withBypassContext(() => seedApprovalFlow(f.org.orgId, { subjectKind: "schedule_publication", assignees: [{ type: "user", userId: f.approver }, { type: "user", userId: f.scheduler }], mode: "any" }));
+  const pattern = await savePattern(scheduler, daily(f, "ICU", { horizonDays: 3 }));
+  const key = randomUUID();
+  const start = addCalendarDays(f.today, 1);
+  await createAssignment({ ...scheduler, id: key, boardId: f.governed, patternId: pattern.id, workerPartyId: f.ana, effectiveFrom: start, effectiveTo: null, reason: "ICU rotation" });
+  const first = await publishScheduleBoard({ ...scheduler, boardId: f.governed, from: start, through: addCalendarDays(start, 7) });
+  assert.deepEqual([first.pending, first.published], [true, 0]);
+  await assert.rejects(publishScheduleBoard({ ...scheduler, boardId: f.governed, from: start, through: addCalendarDays(start, 7) }), /awaiting its approval/);
+  const [draft] = await live(f, key);
+  const edit = await applyBoardChanges({ ...scheduler, boardId: f.governed, changes: [{ op: "update", id: draft!.id, expectedRevision: draft!.revision, fields: { notes: "late change" } }] });
+  assert.equal(edit.results[0]?.ok, false, "a submitted change cannot be edited while its publication waits");
+  const pendingGate = (await gate(f, "schedule_publication", first.publicationId!))!;
+  await assert.rejects(decide(f, pendingGate, f.scheduler, "approved", "Mine"), "the submitter may not decide their own publication");
+  await decide(f, pendingGate, f.approver, "rejected", "Staffing too thin");
+  assert.ok((await live(f, key)).every((row) => row.status === "draft"), "a declined publication publishes nothing");
+  const second = await publishScheduleBoard({ ...scheduler, boardId: f.governed, from: start, through: addCalendarDays(start, 7) });
+  await decide(f, (await gate(f, "schedule_publication", second.publicationId!))!, f.approver, "approved", "Covered");
+  assert.ok((await live(f, key)).every((row) => row.status === "published"));
+  const decided = (await withBypassContext(() => db.execute<{ decidedBy: string; released: boolean }>(sql`select decided_by as "decidedBy", released_without_approval as released
+    from schedule_publications where org_id = ${f.org.orgId} and id = ${second.publicationId}`))).rows[0];
+  assert.deepEqual(decided, { decidedBy: f.approver, released: false });
+}));
+
+test("without a Flow employee releases, changes and swaps apply when submitted and record that no approval applied", enabled, async () => fixture(async (f) => {
+  const scheduler = as(f, f.scheduler), ana = as(f, f.anaUser), ben = as(f, f.benUser);
   const start = addCalendarDays(f.today, 2);
   const book = async (workerPartyId: string, onDate: string, starts: string, ends: string) => {
     const id = randomUUID();
@@ -192,58 +226,45 @@ test("employees request releases, changes and swaps; approval applies the outcom
   const anaShift = await book(f.ana, start, "09:00", "17:00");
   const benShift = await book(f.ben, addCalendarDays(start, 1), "07:00", "15:00");
   const anaLater = await book(f.ana, addCalendarDays(start, 3), "09:00", "17:00");
-
-  // A change request; the requester cannot decide it and a colleague cannot see it as theirs.
-  const change = await createOwnShiftRequest({ ...ana, id: randomUUID(), entryId: anaShift, expectedRevision: 1, kind: "change", change: { starts: "11:00", ends: "19:00", breakMinutes: 30 }, reason: "Appointment" });
-  assert.equal(change.status, "pending");
+  const anaRelease = await book(f.ana, addCalendarDays(start, 5), "09:00", "17:00");
   await assert.rejects(createOwnShiftRequest({ ...ben, id: randomUUID(), entryId: anaShift, expectedRevision: 1, kind: "release", reason: "Not mine" }), (error: unknown) => error instanceof ScopeNotFoundError);
-  await assert.rejects(createOwnShiftRequest({ ...ana, id: randomUUID(), entryId: anaShift, expectedRevision: 1, kind: "release", reason: "Twice" }), /open request/);
-  await assert.rejects(decideShiftRequest({ ...ana, requestId: change.id, expectedRevision: change.revision, decision: "approve", reason: "Mine" }), (error: unknown) => error instanceof ScopeNotFoundError);
-  // Two approvers decide at once: one applies the change, the other is refused.
-  const outcomes = await Promise.allSettled([
-    decideShiftRequest({ ...approver, requestId: change.id, expectedRevision: change.revision, decision: "approve", reason: "Covered" }),
-    decideShiftRequest({ ...scheduler, requestId: change.id, expectedRevision: change.revision, decision: "approve", reason: "Covered" }),
-  ]);
-  assert.equal(outcomes.filter((outcome) => outcome.status === "fulfilled").length, 1);
+  const change = await createOwnShiftRequest({ ...ana, id: randomUUID(), entryId: anaShift, expectedRevision: 1, kind: "change", change: { starts: "11:00", ends: "19:00", breakMinutes: 30 }, reason: "Appointment" });
+  assert.deepEqual([change.request.status, change.request.releasedWithoutApproval, change.request.decisionReason], ["approved", true, "No approval Flow applied; applied when submitted."]);
   const changed = await withBypassContext(() => db.execute<{ startsAt: string; origin: string | null }>(sql`select to_char(starts_at at time zone 'UTC', 'HH24:MI') as "startsAt", origin_request_id as origin
     from schedule_entries where org_id = ${f.org.orgId} and supersedes_id = ${anaShift} and status = 'published'`));
-  assert.deepEqual(changed.rows, [{ startsAt: "11:00", origin: change.id }]);
-
-  // A swap needs the colleague's acceptance, then a decision.
+  assert.deepEqual(changed.rows, [{ startsAt: "11:00", origin: change.request.id }]);
+  const released = await createOwnShiftRequest({ ...ana, id: randomUUID(), entryId: anaRelease, expectedRevision: 1, kind: "release", reason: "Sick child" });
+  assert.equal(released.request.status, "approved");
+  assert.equal((await withBypassContext(() => db.execute<{ status: string }>(sql`select status from schedule_entries where org_id = ${f.org.orgId} and id = ${anaRelease}`))).rows[0]?.status, "cancelled");
+  // A swap waits for the colleague and applies when they accept.
   const candidates = await listSwapCandidates({ ...ana, entryId: anaLater });
   assert.ok(candidates.some((candidate) => candidate.entryId === benShift));
   const swap = await createOwnShiftRequest({ ...ana, id: randomUUID(), entryId: anaLater, expectedRevision: 1, kind: "swap", counterpartEntryId: benShift, counterpartRevision: 1, reason: "Trade days" });
-  assert.equal(swap.status, "awaiting_counterpart");
-  await assert.rejects(decideShiftRequest({ ...approver, requestId: swap.id, expectedRevision: swap.revision, decision: "approve", reason: "Early" }), /not waiting for a decision/);
-  const accepted = await respondToSwap({ ...ben, requestId: swap.id, expectedRevision: swap.revision, accept: true, reason: "Happy to" });
-  assert.equal(accepted.status, "pending");
-  await decideShiftRequest({ ...approver, requestId: swap.id, expectedRevision: accepted.revision, decision: "approve", reason: "Fine" });
+  assert.equal(swap.request.status, "awaiting_counterpart");
+  const accepted = await respondToSwap({ ...ben, requestId: swap.request.id, expectedRevision: swap.request.revision, accept: true, reason: "Happy to" });
+  assert.equal(accepted.request.status, "approved");
   const exchanged = await withBypassContext(() => db.execute<{ worker: string; supersedes: string }>(sql`select worker_party_id as worker, supersedes_id as supersedes from schedule_entries
-    where org_id = ${f.org.orgId} and origin_request_id = ${swap.id} and status = 'published' order by supersedes_id`));
+    where org_id = ${f.org.orgId} and origin_request_id = ${swap.request.id} and status = 'published' order by supersedes_id`));
   assert.deepEqual(new Map(exchanged.rows.map((row) => [row.supersedes, row.worker])), new Map([[anaLater, f.ben], [benShift, f.ana]]));
-
-  // A release can be withdrawn while it waits; the board lists only open requests by default.
-  const [anaNow] = (await withBypassContext(() => db.execute<{ id: string; revision: number }>(sql`select id, revision from schedule_entries where org_id = ${f.org.orgId}
-    and supersedes_id = ${anaShift} and status = 'published'`))).rows;
-  const release = await createOwnShiftRequest({ ...ana, id: randomUUID(), entryId: anaNow!.id, expectedRevision: anaNow!.revision, kind: "release", reason: "Sick child" });
-  assert.deepEqual((await listBoardShiftRequests({ ...scheduler, boardId: f.roster })).map((request) => request.id), [release.id]);
-  const withdrawn = await withdrawOwnShiftRequest({ ...ana, requestId: release.id, expectedRevision: release.revision });
-  assert.equal(withdrawn.status, "withdrawn");
 }));
 
-test("an optional Shift request Flow owns the decision while its gate is open", enabled, async () => fixture(async (f) => {
+test("a Shift request Flow owns the decision: the requester cannot decide, concurrent decisions apply once", enabled, async () => fixture(async (f) => {
   const scheduler = as(f, f.scheduler), ana = as(f, f.anaUser);
-  await withBypassContext(() => seedApprovalFlow(f.org.orgId, { subjectKind: "schedule_entry_request", assignees: [{ type: "user", userId: f.approver }], mode: "any" }));
+  await withBypassContext(() => seedApprovalFlow(f.org.orgId, { subjectKind: "schedule_entry_request", assignees: [{ type: "user", userId: f.approver }, { type: "user", userId: f.scheduler }, { type: "user", userId: f.anaUser }], mode: "any" }));
   const id = randomUUID();
   await applyBoardChanges({ ...scheduler, boardId: f.roster, changes: [{ op: "create", id, workerPartyId: f.ana, onDate: addCalendarDays(f.today, 2), target: null, span: { mode: "timed", starts: "09:00", ends: "17:00", breakMinutes: 30 } }] });
-  const request = await createOwnShiftRequest({ ...ana, id: randomUUID(), entryId: id, expectedRevision: 1, kind: "release", reason: "Course" });
-  assert.equal(request.flowGated, true);
-  await assert.rejects(decideShiftRequest({ ...scheduler, requestId: request.id, expectedRevision: request.revision, decision: "approve", reason: "Direct" }), /owned by its approval Flow/);
-  const gate = (await withBypassContext(() => db.execute<{ id: string }>(sql`select id from flow_gates where org_id = ${f.org.orgId} and subject_kind = 'schedule_entry_request' and subject_id = ${request.id}`))).rows[0]!;
-  await withOrgContext(f.org.orgId, () => decideGate({ gateId: gate.id, decision: "approved", userId: f.approver, comment: "Enjoy the course" }));
-  const status = await withBypassContext(() => db.execute<{ request: string; entry: string }>(sql`select r.status as request, e.status as entry from schedule_entry_requests r
-    join schedule_entries e on e.org_id = r.org_id and e.id = r.entry_id where r.org_id = ${f.org.orgId} and r.id = ${request.id}`));
-  assert.deepEqual(status.rows[0], { request: "approved", entry: "cancelled" });
+  const submitted = await createOwnShiftRequest({ ...ana, id: randomUUID(), entryId: id, expectedRevision: 1, kind: "release", reason: "Course" });
+  assert.deepEqual([submitted.request.status, submitted.request.flowGated], ["pending", true]);
+  await assert.rejects(withdrawOwnShiftRequest({ ...ana, requestId: submitted.request.id, expectedRevision: submitted.request.revision }), /with its approval Flow/);
+  const pendingGate = (await gate(f, "schedule_entry_request", submitted.request.id))!;
+  await assert.rejects(decide(f, pendingGate, f.anaUser, "approved", "Mine"), "the requester may not decide their own request");
+  const outcomes = await Promise.allSettled([decide(f, pendingGate, f.approver, "approved", "Enjoy the course"), decide(f, pendingGate, f.scheduler, "approved", "Fine")]);
+  assert.equal(outcomes.filter((outcome) => outcome.status === "fulfilled").length, 1, "one decision resolves the gate");
+  const status = await withBypassContext(() => db.execute<{ request: string; entry: string; released: boolean }>(sql`select r.status as request, e.status as entry,
+    r.released_without_approval as released from schedule_entry_requests r join schedule_entries e on e.org_id = r.org_id and e.id = r.entry_id
+    where r.org_id = ${f.org.orgId} and r.id = ${submitted.request.id}`));
+  assert.deepEqual(status.rows[0], { request: "approved", entry: "cancelled", released: false });
+  assert.deepEqual((await listBoardShiftRequests({ ...scheduler, boardId: f.roster, status: "open" })).map((request) => request.id), []);
 }));
 
 test("roster records stay inside their organization", enabled, async () => fixture(async (f) => {

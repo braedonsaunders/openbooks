@@ -21,7 +21,13 @@ for (const f of files) {
   for (const m of sql.matchAll(/CREATE TABLE (?:IF NOT EXISTS )?(?:public\.)?"?([a-z0-9_]+)"?\s*\(([\s\S]*?)\n\);/gi)) tables.set(m[1], /\borg_id\b/.test(m[2]))
   for (const m of sql.matchAll(/ALTER TABLE (?:IF EXISTS )?(?:ONLY )?(?:public\.)?"?([a-z0-9_]+)"? RENAME TO "?([a-z0-9_]+)"?/gi)) { if (tables.has(m[1])) { tables.set(m[2], tables.get(m[1])); tables.delete(m[1]) } }
   for (const m of sql.matchAll(/ALTER TABLE (?:IF EXISTS )?(?:ONLY )?(?:public\.)?"?([a-z0-9_]+)"? ADD COLUMN (?:IF NOT EXISTS )?org_id\b/gi)) if (tables.has(m[1])) tables.set(m[1], true)
-  for (const m of sql.matchAll(/DROP TABLE (?:IF EXISTS )?(?:public\.)?"?([a-z0-9_]+)"?/gi)) tables.delete(m[1])
+  // One DROP TABLE may name several tables, as tables that reference one another leave together.
+  for (const m of sql.matchAll(/DROP TABLE (?:IF EXISTS )?([^;]+);/gi)) {
+    for (const name of m[1].split(',')) {
+      const table = name.trim().match(/^(?:public\.)?"?([a-z0-9_]+)"?/i)
+      if (table) tables.delete(table[1])
+    }
+  }
 }
 const policy = new Set([...readFileSync(join(root, 'engine/src/sandbox/tenant-table-policies.ts'), 'utf8').matchAll(/^\s+"([a-z0-9_]+)":\s*"/gm)].map((m) => m[1]))
 const missing = [...tables].filter(([t, org]) => org && !policy.has(t)).map(([t]) => t).sort()

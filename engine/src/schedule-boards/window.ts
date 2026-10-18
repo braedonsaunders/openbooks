@@ -128,6 +128,8 @@ export interface BoardWindow {
   readonly absences: readonly BoardAbsence[];
   readonly codes: readonly BoardCode[];
   readonly sourceRecords?: readonly BoardSourceRecord[];
+  /** A governed board's publication awaiting its approval decision. */
+  readonly pendingPublication: { readonly id: string; readonly createdAt: string; readonly flowGated: boolean; readonly entryIds: readonly string[] } | null;
   readonly canManage: boolean;
   readonly canPublish: boolean;
 }
@@ -316,5 +318,8 @@ async function readBoardWindow(actor: ScheduleActor & { boardId: string; from: s
   });
 
   const sourceRecords = board.rowKind === 'people' ? await readBoardSourceHistory(actor, board.id, from, through) : [];
-  return { board, from, through, days, calendarNotice, rows, entries, sourceRecords, replaced, absences, codes, canManage, canPublish };
+  const pending = board.publishPolicy === "governed" ? (await db.execute<NonNullable<BoardWindow["pendingPublication"]>>(sql`select id,
+      to_char(created_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as "createdAt", flow_run_id is not null as "flowGated", entry_ids::text[] as "entryIds"
+    from schedule_publications where org_id = ${orgId} and board_id = ${board.id} and status = 'pending'`)).rows[0] ?? null : null;
+  return { board, from, through, days, calendarNotice, rows, entries, sourceRecords, replaced, absences, codes, pendingPublication: pending, canManage, canPublish };
 }

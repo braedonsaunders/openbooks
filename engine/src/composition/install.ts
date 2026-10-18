@@ -9,6 +9,7 @@ import {
 } from "../flows/schedule-distribution-hook.ts";
 import {registerScheduleDistributionHooks} from '../schedule-boards/distribution-hooks.ts';
 import { registerShiftRequestRouting, releaseShiftRequestApproval, SHIFT_REQUEST_SUBJECT_KIND } from "../schedule-boards/requests.ts";
+import { registerSchedulePublicationRouting, releasePublicationApproval, SCHEDULE_PUBLICATION_SUBJECT_KIND } from "../schedule-boards/publications.ts";
 import {
   deliverAutomaticSchedule,
   enqueueReviewedSchedule,
@@ -140,10 +141,11 @@ export function installEngineSeams(): void {
       return {message:error instanceof Error?error.message:'The schedule report could not be prepared.',remedy:'Review the board recipient/sharing and email settings, then explicitly preview/send the report. The bookings remain saved.'};
     }
   });
-  // Shift requests awaiting a decision route through an optional Flow; a
-  // gated Flow owns the decision and releases it through the scheduling service.
-  registerShiftRequestRouting(async (actor, requestId) => {
-    const result = await runRecordFlows({ kind: "on_submit", occurrenceKey: `schedule-request:${requestId}:on_submit` }, SHIFT_REQUEST_SUBJECT_KIND, requestId,
+  // Shift requests and governed schedule publications submit to optional
+  // Flows; a gating Flow owns the decision and releases it through the
+  // scheduling service, otherwise the submission applies at once.
+  const submitToFlows = (subjectKind: string) => async (actor: { orgId: string; actorId: string }, subjectId: string) => {
+    const result = await runRecordFlows({ kind: "on_submit", occurrenceKey: `${subjectKind}:${subjectId}:on_submit` }, subjectKind, subjectId,
       { orgId: actor.orgId, userId: actor.actorId });
     const failedRun = result.runs.find((run) => run.status === "failed");
     return {
@@ -152,10 +154,16 @@ export function installEngineSeams(): void {
       failed: result.failed || Boolean(failedRun),
       error: result.error ?? failedRun?.error ?? null,
     };
-  });
+  };
+  registerShiftRequestRouting(submitToFlows(SHIFT_REQUEST_SUBJECT_KIND));
+  registerSchedulePublicationRouting(submitToFlows(SCHEDULE_PUBLICATION_SUBJECT_KIND));
   registerFlowApprovalReleaseHandler(SHIFT_REQUEST_SUBJECT_KIND, async ({ subjectId, outcome, comment, ctx }) => {
     if (!ctx.userId) throw new Error("Shift request decisions need the deciding user.");
     await releaseShiftRequestApproval({ orgId: ctx.orgId, actorId: ctx.userId, requestId: subjectId, outcome, comment });
+  });
+  registerFlowApprovalReleaseHandler(SCHEDULE_PUBLICATION_SUBJECT_KIND, async ({ subjectId, outcome, comment, ctx }) => {
+    if (!ctx.userId) throw new Error("Schedule publication decisions need the deciding user.");
+    await releasePublicationApproval({ orgId: ctx.orgId, actorId: ctx.userId, publicationId: subjectId, outcome, comment });
   });
   registerScriptJournalWriter(createScriptJournal);
   registerFlowApprovalReleaseHandler(CHECKLIST_STEP_SUBJECT_KIND, releaseChecklistStepApproval);

@@ -538,6 +538,92 @@ export interface PublishFailure {
  * nothing: if any booking cannot publish (leave, a double booking), nothing
  * is published and every blocking booking is listed with its reason.
  */
+export type PublishableDraft = StoredEntry & { personName: string };
+
+/** The board's unpublished changes in a window (or the named drafts), locked for publication. */
+export async function lockPublishableDrafts(actor: ScheduleActor, board: ScheduleBoard, scope: { from: string; through: string } | { ids: readonly string[] }): Promise<PublishableDraft[]> {
+  const filter = "ids" in scope
+    ? sql`id = any(${`{${scope.ids.join(",")}}`}::uuid[])`
+    : sql`starts_on between ${scope.from} and ${scope.through}`;
+  return (await db.execute<PublishableDraft>(sql`select ${STORED_COLUMNS},
+      coalesce((select display_name from parties p where p.org_id = schedule_entries.org_id and p.id = schedule_entries.worker_party_id),
+      (select name from equipment_units u where u.org_id = schedule_entries.org_id and u.id = schedule_entries.equipment_unit_id),
+      (select name from locations l where l.org_id = schedule_entries.org_id and l.id = schedule_entries.resource_location_id)) as "personName"
+    from schedule_entries where org_id = ${actor.orgId} and board_id = ${board.id} and status = 'draft' and ${filter}
+    order by starts_at, id for update`)).rows;
+}
+
+/**
+ * Publish locked drafts, all or nothing: if any draft cannot publish (leave,
+ * a double booking, a missing qualification), nothing is published and every
+ * blocking draft is listed with its reason. Replacements cancel the booking
+ * they replace; removal revisions cancel the booking they remove.
+ */
+export async function publishDrafts(actor: ScheduleActor, board: ScheduleBoard, drafts: readonly PublishableDraft[], publishReason: string, window: { from: string; through: string }): Promise<{ published: number; notices: ScheduleNotice[]; distributionRefusals: { message: string; remedy: string }[] }> {
+  const failures: PublishFailure[] = [];
+  for (const draft of drafts) {
+    try {
+      await withTransactionSavepoint(db, async () => {
+        if (draft.supersedesId) {
+          const prior = (await db.execute<StoredEntry>(sql`select ${STORED_COLUMNS} from schedule_entries
+            where org_id = ${actor.orgId} and id = ${draft.supersedesId} for update`)).rows[0];
+          if (prior?.status === "published") {
+            await setStatus(actor, prior, "cancelled", publishReason);
+            if (prior.patternAssignmentId && (draft.removesPredecessor || draft.patternAssignmentId !== prior.patternAssignmentId)) {
+              await recordPatternOmission(actor, prior, publishReason);
+            }
+          }
+        }
+        // A removal revision is applied by the cancellation above; it is
+        // closed as history rather than published as a booking.
+        const updated = draft.removesPredecessor
+          ? (await db.execute(sql`update schedule_entries set status = 'cancelled', reason = ${publishReason}, revision = revision + 1, updated_at = now(), updated_by = ${actor.actorId}
+              where org_id = ${actor.orgId} and id = ${draft.id} and revision = ${draft.revision} returning id`)).rows
+          : (await db.execute(sql`update schedule_entries set status = 'published', published_by = ${actor.actorId}, published_at = now(),
+              reason = ${publishReason}, revision = revision + 1, updated_at = now(), updated_by = ${actor.actorId}
+              where org_id = ${actor.orgId} and id = ${draft.id} and revision = ${draft.revision} returning id`)).rows;
+        if (updated.length !== 1) throw new ScheduleError("A booking changed during publication.", { status: 409, code: "schedule_stale" });
+      });
+    } catch (error) {
+      const refusal = scheduleDatabaseRefusal(error, { personName: draft.personName });
+      if (!(refusal instanceof ScheduleError)) throw refusal;
+      failures.push({ entryId: draft.id, personName: draft.personName, date: draft.startsOn, error: refusal.message });
+    }
+  }
+  if (failures.length) {
+    const listed = failures.slice(0, 5).map((failure) => `${failure.personName} on ${failure.date}: ${failure.error}`).join(" ");
+    throw Object.assign(new ScheduleError(`${failures.length} of ${drafts.length} changes cannot be published. ${listed}`, {
+      code: "schedule_publish_blocked",
+      remedy: "Resolve the listed bookings, then publish again. Nothing was published.",
+    }), { failures });
+  }
+  const notices: ScheduleNotice[] = [];
+  if (board.notifyAssignees) {
+    for (const draft of drafts) {
+      if (draft.removesPredecessor) {
+        const prior = await readEntry(actor.orgId, draft.supersedesId!);
+        if (prior.workerPartyId) notices.push(noticeFor(prior, "removed"));
+        continue;
+      }
+      const entry = await readEntry(actor.orgId, draft.id);
+      if (!entry.workerPartyId) continue;
+      notices.push(noticeFor(entry, draft.supersedesId ? "changed" : "booked"));
+      if (draft.supersedesId) {
+        const prior = await readEntry(actor.orgId, draft.supersedesId);
+        if (prior.workerPartyId && prior.workerPartyId !== entry.workerPartyId) notices.push(noticeFor(prior, "removed"));
+      }
+    }
+  }
+  const refusal = await scheduleBoardLifecycle({ actor, boardId: board.id, from: window.from, through: window.through, subjectIds: drafts.map((d) => d.subjectId),
+    event: "after_post", occurrence: drafts.map((d) => `${d.id}:${d.revision + 1}`).sort().join(",") });
+  return { published: drafts.length, notices, distributionRefusals: refusal ? [refusal] : [] };
+}
+
+/**
+ * Publish a staged board's drafts in a window, all or nothing. Governed
+ * boards publish through their publication (see publications.ts), which
+ * routes through any configured approval Flow.
+ */
 export async function publishBoard(actor: ScheduleActor & { boardId: string; from: string; through: string; reason?: string | null }): Promise<{ published: number; notices: ScheduleNotice[]; boardName: string; distributionRefusals: {message:string;remedy:string}[] }> {
   const from = requireDate(actor.from, "Publish from");
   const through = requireDate(actor.through, "Publish through");
@@ -546,72 +632,12 @@ export async function publishBoard(actor: ScheduleActor & { boardId: string; fro
     const board = await getBoard(actor, actor.boardId);
     if (board.rowKind === "tasks") throw new ScheduleError("This board schedules project tasks.", { code: "schedule_wrong_board" });
     if (board.publishPolicy === "live") throw new ScheduleError("This board publishes each booking as it is made.", { code: "schedule_live_board" });
+    if (board.publishPolicy === "governed") throw new ScheduleError("This board publishes through its governed publication.", { code: "schedule_governed_board", remedy: "Publish the board from Scheduling, which records the publication for any configured approval." });
     await boardAuthority(actor, board, "publish");
     await db.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`schedule-publish:${actor.orgId}:${board.id}`}, 0))`);
-    const drafts = (await db.execute<StoredEntry & { personName: string }>(sql`select ${STORED_COLUMNS},
-        coalesce((select display_name from parties p where p.org_id = schedule_entries.org_id and p.id = schedule_entries.worker_party_id),
-        (select name from equipment_units u where u.org_id = schedule_entries.org_id and u.id = schedule_entries.equipment_unit_id),
-        (select name from locations l where l.org_id = schedule_entries.org_id and l.id = schedule_entries.resource_location_id)) as "personName"
-      from schedule_entries where org_id = ${actor.orgId} and board_id = ${board.id} and status = 'draft'
-        and starts_on between ${from} and ${through}
-      order by starts_at, id for update`)).rows;
+    const drafts = await lockPublishableDrafts(actor, board, { from, through });
     if (drafts.length === 0) throw new ScheduleError("There are no unpublished changes in these dates.", { code: "schedule_nothing_to_publish" });
-    const failures: PublishFailure[] = [];
-    const publishReason = reason ?? `Published ${board.name}`;
-    for (const draft of drafts) {
-      try {
-        await withTransactionSavepoint(db, async () => {
-          if (draft.supersedesId) {
-            const prior = (await db.execute<StoredEntry>(sql`select ${STORED_COLUMNS} from schedule_entries
-              where org_id = ${actor.orgId} and id = ${draft.supersedesId} for update`)).rows[0];
-            if (prior?.status === "published") {
-              await setStatus(actor, prior, "cancelled", publishReason);
-              if (prior.patternAssignmentId && (draft.removesPredecessor || draft.patternAssignmentId !== prior.patternAssignmentId)) {
-                await recordPatternOmission(actor, prior, publishReason);
-              }
-            }
-          }
-          // A removal revision is applied by the cancellation above; it is
-          // closed as history rather than published as a booking.
-          const updated = draft.removesPredecessor
-            ? (await db.execute(sql`update schedule_entries set status = 'cancelled', reason = ${publishReason}, revision = revision + 1, updated_at = now(), updated_by = ${actor.actorId}
-                where org_id = ${actor.orgId} and id = ${draft.id} and revision = ${draft.revision} returning id`)).rows
-            : (await db.execute(sql`update schedule_entries set status = 'published', published_by = ${actor.actorId}, published_at = now(),
-                reason = ${publishReason}, revision = revision + 1, updated_at = now(), updated_by = ${actor.actorId}
-                where org_id = ${actor.orgId} and id = ${draft.id} and revision = ${draft.revision} returning id`)).rows;
-          if (updated.length !== 1) throw new ScheduleError("A booking changed during publication.", { status: 409, code: "schedule_stale" });
-        });
-      } catch (error) {
-        const refusal = scheduleDatabaseRefusal(error, { personName: draft.personName });
-        if (!(refusal instanceof ScheduleError)) throw refusal;
-        failures.push({ entryId: draft.id, personName: draft.personName, date: draft.startsOn, error: refusal.message });
-      }
-    }
-    if (failures.length) {
-      const listed = failures.slice(0, 5).map((failure) => `${failure.personName} on ${failure.date}: ${failure.error}`).join(" ");
-      throw Object.assign(new ScheduleError(`${failures.length} of ${drafts.length} changes cannot be published. ${listed}`, {
-        code: "schedule_publish_blocked",
-        remedy: "Resolve the listed bookings, then publish again. Nothing was published.",
-      }), { failures });
-    }
-    const notices: ScheduleNotice[] = [];
-    if (board.notifyAssignees) {
-      for (const draft of drafts) {
-        if (draft.removesPredecessor) {
-          const prior = await readEntry(actor.orgId, draft.supersedesId!);
-          if (prior.workerPartyId) notices.push(noticeFor(prior, "removed"));
-          continue;
-        }
-        const entry = await readEntry(actor.orgId, draft.id);
-        if (!entry.workerPartyId) continue;
-        notices.push(noticeFor(entry, draft.supersedesId ? "changed" : "booked"));
-        if (draft.supersedesId) {
-          const prior = await readEntry(actor.orgId, draft.supersedesId);
-          if (prior.workerPartyId && prior.workerPartyId !== entry.workerPartyId) notices.push(noticeFor(prior, "removed"));
-        }
-      }
-    }
-    const refusal=await scheduleBoardLifecycle({actor,boardId:board.id,from,through,subjectIds:drafts.map(d=>d.subjectId),event:'after_post',occurrence:drafts.map(d=>`${d.id}:${d.revision+1}`).sort().join(',')});
-    return { published: drafts.length, notices, boardName: board.name, distributionRefusals:refusal?[refusal]:[] };
+    const result = await publishDrafts(actor, board, drafts, reason ?? `Published ${board.name}`, { from, through });
+    return { ...result, boardName: board.name };
   }).catch((error: unknown) => { throw scheduleDatabaseRefusal(error); });
 }
