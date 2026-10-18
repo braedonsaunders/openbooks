@@ -3762,5 +3762,34 @@
     "reason": "Motif",
     "allocated": "Numéros d’audit attribués",
     "failed": "Échec de l’attribution des numéros d’audit"
+  },
+  "attendanceExceptions": {
+    "title": "Écarts de présence",
+    "description": "Quarts terminés avec une absence, un retard, un départ anticipé, une longue pause ou un appareil pas encore synchronisé.",
+    "hubDescription": "Absences, retards, départs anticipés et longues pauses des plannings de quarts.",
+    "range": "Du {from} au {to}",
+    "note": "Les observations comparent les quarts publiés aux pointages selon la politique de présence du tableau en vigueur à la date du quart. Les heures se lisent dans le fuseau horaire de chaque quart.",
+    "search": "Rechercher une personne ou un tableau…",
+    "allBoards": "Tous les plannings de quarts",
+    "allKinds": "Tous les écarts",
+    "empty": "Aucun écart de présence ne correspond à ces filtres.",
+    "closed": "Clôturé",
+    "columns": {
+      "date": "Date du quart",
+      "person": "Personne",
+      "board": "Tableau",
+      "scheduled": "Prévu",
+      "firstIn": "Première entrée",
+      "lastOut": "Dernière sortie",
+      "exceptions": "Écart",
+      "closed": "Contrôle"
+    },
+    "kinds": {
+      "absent": "Absence",
+      "late": "Retard",
+      "left_early": "Parti tôt",
+      "over_break": "Pause plus longue que prévu",
+      "waiting_for_sync": "En attente de l’appareil"
+    }
   }
 }

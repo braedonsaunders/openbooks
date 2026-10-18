@@ -3762,5 +3762,34 @@
     "reason": "Begründung",
     "allocated": "Prüfnummern zugewiesen",
     "failed": "Zuweisung der Prüfnummern fehlgeschlagen"
+  },
+  "attendanceExceptions": {
+    "title": "Anwesenheitsabweichungen",
+    "description": "Beendete Schichten mit Abwesenheit, Verspätung, frühem Gehen, langer Pause oder noch nicht synchronisiertem Gerät.",
+    "hubDescription": "Abwesenheiten, Verspätungen, frühes Gehen und lange Pausen in Schichtplänen.",
+    "range": "{from} bis {to}",
+    "note": "Die Auswertung vergleicht veröffentlichte Schichten mit Gerätestempelungen nach der Anwesenheitsrichtlinie, die am Schichtdatum für die Plantafel galt. Zeiten gelten in der Zeitzone der jeweiligen Schicht.",
+    "search": "Person oder Plantafel suchen…",
+    "allBoards": "Alle Schichtpläne",
+    "allKinds": "Alle Abweichungen",
+    "empty": "Keine Anwesenheitsabweichungen entsprechen diesen Filtern.",
+    "closed": "Abgeschlossen",
+    "columns": {
+      "date": "Datum",
+      "person": "Mitarbeitende",
+      "board": "Plantafel",
+      "scheduled": "Geplant",
+      "firstIn": "Erstes Kommen",
+      "lastOut": "Letztes Gehen",
+      "exceptions": "Abweichung",
+      "closed": "Prüfung"
+    },
+    "kinds": {
+      "absent": "Abwesend",
+      "late": "Verspätet",
+      "left_early": "Früher gegangen",
+      "over_break": "Pause länger als geplant",
+      "waiting_for_sync": "Wartet auf Gerät"
+    }
   }
 }

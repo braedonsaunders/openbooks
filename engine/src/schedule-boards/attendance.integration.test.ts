@@ -6,7 +6,7 @@ import { db, withBypassContext } from "../platform/db.ts";
 import { addCalendarDays } from "../platform/civil-date.ts";
 import { createScratchOrg, createScratchUser, dropScratchOrgReporting } from "../testing/fixtures.ts";
 import { ScopeNotFoundError } from "../organization/subsidiary-scope.ts";
-import { addAttendancePolicy, admitAttendanceBatch, attendanceExceptions, closeShift, processBoardAttendance, saveAttendanceDevice, saveAttendanceIdentity, type SourceCheckIn } from "./attendance.ts";
+import { addAttendancePolicy, admitAttendanceBatch, attendanceExceptions, closeShift, listAttendanceDevices, processBoardAttendance, saveAttendanceDevice, saveAttendanceIdentity, type SourceCheckIn } from "./attendance.ts";
 import { applyBoardChanges } from "./entries.ts";
 import { ScheduleError } from "./errors.ts";
 import { loadBoardWindow } from "./window.ts";
@@ -124,6 +124,8 @@ test("an unmapped worker or a missing policy is refused with its remedy, and dev
     });
     await assert.rejects(admitAttendanceBatch({ orgId: other.orgId, actorId: stranger, id: randomUUID(), deviceId: device, completeThrough: null, sourceEvidence: { source: "export" }, events: [], reason: "Probe" }),
       (error: unknown) => error instanceof ScopeNotFoundError);
+    assert.deepEqual((await listAttendanceDevices(actor(f))).map((row) => row.id), [device], "the import picker lists the organization's active device");
+    assert.deepEqual(await listAttendanceDevices({ orgId: other.orgId, actorId: stranger }), [], "another organization never sees the device");
   } finally {
     await dropScratchOrgReporting(other.orgId);
   }

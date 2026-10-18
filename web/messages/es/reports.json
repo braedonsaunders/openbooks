@@ -3762,5 +3762,34 @@
     "reason": "Motivo",
     "allocated": "Números de auditoría asignados",
     "failed": "Error al asignar números de auditoría"
+  },
+  "attendanceExceptions": {
+    "title": "Excepciones de asistencia",
+    "description": "Turnos terminados con ausencia, retraso, salida anticipada, pausa larga o un dispositivo aún sin sincronizar.",
+    "hubDescription": "Ausencias, retrasos, salidas anticipadas y pausas largas en cuadrantes de turnos.",
+    "range": "Del {from} al {to}",
+    "note": "Las observaciones comparan turnos publicados con fichajes de dispositivo según la política de asistencia vigente en la fecha del turno para cada tablero. Las horas se leen en la zona horaria de cada turno.",
+    "search": "Buscar persona o tablero…",
+    "allBoards": "Todos los cuadrantes",
+    "allKinds": "Todas las excepciones",
+    "empty": "Ninguna excepción de asistencia coincide con estos filtros.",
+    "closed": "Cerrado",
+    "columns": {
+      "date": "Fecha",
+      "person": "Persona",
+      "board": "Tablero",
+      "scheduled": "Programado",
+      "firstIn": "Primera entrada",
+      "lastOut": "Última salida",
+      "exceptions": "Excepción",
+      "closed": "Revisión"
+    },
+    "kinds": {
+      "absent": "Ausente",
+      "late": "Retraso",
+      "left_early": "Salió antes",
+      "over_break": "Pausa mayor que la prevista",
+      "waiting_for_sync": "Esperando dispositivo"
+    }
   }
 }

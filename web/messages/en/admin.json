@@ -2889,6 +2889,26 @@
           "reason": "Change reason"
     },
     "entities": {
+      "schedule-patterns": {
+        "title": "Shift patterns",
+        "singularTitle": "Shift pattern",
+        "description": "Repeating cycles of shifts by local clock time, assigned to people on shift roster boards to book their shifts."
+      },
+      "schedule-attendance-devices": {
+        "title": "Attendance devices",
+        "singularTitle": "Attendance device",
+        "description": "Time clocks and other check-in sources of a legal entity, each with a fixed code and time zone."
+      },
+      "schedule-attendance-identities": {
+        "title": "Device identities",
+        "singularTitle": "Device identity",
+        "description": "Which person a device's worker identifier stands for, over a dated window."
+      },
+      "schedule-attendance-policies": {
+        "title": "Attendance policies",
+        "singularTitle": "Attendance policy",
+        "description": "Effective-dated check-in windows and grace minutes for observing attendance on a shift roster board."
+      },
       "equity-account-policies": {
         "title": "Equity Accounts",
         "singular": "Equity account policy",
@@ -3931,6 +3951,29 @@
       "expense-fx-policies": {"title": "Expense FX Policies", "description": "Whether a foreign-currency expense line may convert at an explicit exchange rate with a reason instead of the dated rate."}
     },
     "fields": {
+      "boardType": "Board type",
+      "governedFrom": "Governed from",
+      "captureBeforeMinutes": "Check-ins before start (minutes)",
+      "captureAfterMinutes": "Check-ins after end (minutes)",
+      "lateGraceMinutes": "Late grace (minutes)",
+      "earlyGraceMinutes": "Early leave grace (minutes)",
+      "breakGraceMinutes": "Break grace (minutes)",
+      "cycleDays": "Cycle length (days)",
+      "cycleAnchor": "Cycle starts on",
+      "slots": "Shifts",
+      "horizonDays": "Book ahead (days)",
+      "targetKind": "Book to",
+      "scheduleCodeId": "Schedule code",
+      "detail": "Detail",
+      "sourceWorkerId": "Device worker ID",
+      "workerPartyId": "Person",
+      "deviceId": "Device",
+      "schedulePatternAddSlot": "Add shift",
+      "schedulePatternSlotDay": "Cycle day (0 is the first)",
+      "schedulePatternSlotStarts": "Starts",
+      "schedulePatternSlotEnds": "Ends",
+      "schedulePatternSlotBreak": "Break (minutes)",
+      "schedulePatternSlotQualifications": "Required qualifications",
       "allowRateOverride": "Allow explicit exchange rates",
       "commonStockAccountId": "Common stock account",
       "preferredStockAccountId": "Preferred stock account",
@@ -4656,6 +4699,22 @@
       "denominations": "Cash denominations"
     },
     "fieldHelp": {
+      "scheduleBoardType": "A managed shift roster adds recurring shift patterns, employee shift requests, governed publication and device attendance. The type is fixed once the board exists.",
+      "scheduleBoardGovernedFrom": "Bookings starting on or after this date publish only through a governed publication and are kept as history once published. Earlier bookings keep the board's earlier rules.",
+      "scheduleAttendanceEffectiveFrom": "The first shift date this version applies to. Earlier shifts keep the version that applied to them.",
+      "scheduleAttendanceCapture": "How long before a shift starts, and after it ends, a check-in still counts toward that shift.",
+      "scheduleAttendanceGrace": "Minutes after the start a clock-in is still on time, and before the end a clock-out is not an early leave.",
+      "scheduleAttendanceBreakGrace": "Minutes beyond the planned break before a break counts as over plan.",
+      "scheduleAttendanceDeviceCode": "The code check-in imports use for this device. It cannot change once registered.",
+      "scheduleAttendanceDeviceTimeZone": "The time zone of the device's clock, such as America/Toronto. It cannot change; register a new device for a changed source.",
+      "scheduleAttendanceSourceWorker": "The worker identifier exactly as the device exports it, such as a badge number.",
+      "scheduleAttendanceIdentityEnd": "The first date the identifier no longer stands for this person. Leave empty while it still does.",
+      "schedulePatternSubsidiary": "Limit the pattern to boards of one legal entity, or leave empty to offer it on every roster board.",
+      "schedulePatternCycleDays": "How many days the pattern runs before it repeats, such as 7 for a weekly rota or 14 for a two-week rotation.",
+      "schedulePatternCycleAnchor": "The date that is day 0 of the cycle.",
+      "schedulePatternSlots": "Each shift names its day in the cycle and its local start and end times. A shift that ends at or before its start ends the next day.",
+      "schedulePatternHorizon": "How many days ahead the pattern's bookings are generated and kept current.",
+      "schedulePatternTarget": "Where the generated bookings go. Leave empty to book shifts without a destination.",
       "apicShareBasedAccount": "Credited as stock compensation is recognized; reclassified to share capital when awards are exercised or settled.",
       "convertibleInstrumentsAccount": "Carries SAFEs and convertible notes at their principal until they convert, are repaid or are cancelled.",
       "accruedInterestAccount": "Carries interest accrued on convertible notes until they convert, are repaid or are cancelled. It may be the convertible instruments account.",
@@ -4827,7 +4886,7 @@
       "scheduleBoardWeekStartsOn": "The first day of each week shown: 0 is Sunday, 1 is Monday, through 6 for Saturday.",
       "scheduleBoardGrain": "Whole days book each person for the board's working day; hourly shifts book start and end times.",
       "scheduleBoardDayStarts": "The working day used for whole-day bookings, as a 24-hour time such as 07:00.",
-      "scheduleBoardPublishPolicy": "Live boards publish each booking as it is made. Staged boards collect changes until someone with approval rights publishes them.",
+      "scheduleBoardPublishPolicy": "Live boards publish each booking as it is made. Staged boards collect changes until someone with approval rights publishes them. Governed boards, available on managed shift rosters, publish through a recorded publication that an approval Flow can decide and keep published bookings as history.",
       "scheduleBoardPrefillTimesheets": "Published bookings on this board appear on each person's weekly timesheet as scheduled time they can add with one click, then confirm or correct.",
       "scheduleBoardPrefillCrewTime": "Published project bookings on this board offer the foreman's crew sheet for that project and day its booked crew and hours, added with one click.",
       "scheduleBoardPrefillFieldTickets": "Published project bookings on this board offer that project's field ticket its booked crew and hours for the ticket period, added with one click.",
@@ -4876,6 +4935,16 @@
       "taxRateEffectiveTo": "Last transaction date covered by this rate, including that date. Leave blank for no end date. If the next rate starts July 1, end this rate June 30."
     },
     "options": {
+      "scheduleBoardType": {
+        "people": "People board",
+        "shift_roster": "Managed shift roster"
+      },
+      "schedulePatternTarget": {
+        "customer": "Customer",
+        "project": "Project",
+        "location": "Location",
+        "code": "Schedule code"
+      },
       "posCashDirection": {
         "payIn": "Pay in",
         "payOut": "Pay out"
@@ -5602,6 +5671,7 @@
         "progress": "Progress"
       },
       "schedulePublishPolicy": {
+        "governed": "Governed publication",
         "live": "Live",
         "staged": "Publish together"
       },
@@ -6705,6 +6775,11 @@
     },
     "filterAll": "All",
     "sections": {
+      "schedulePatternIdentity": "Pattern",
+      "schedulePatternCycle": "Cycle",
+      "schedulePatternCycleHelp": "Shift times are local clock times in the pattern's time zone; clock changes are resolved for each date.",
+      "schedulePatternBooking": "Booking",
+      "schedulePatternChange": "Change",
       "address": "Address",
       "deductionProtection": "Deduction protection",
       "basisCaps": "Basis caps",
@@ -8462,11 +8537,11 @@
     },
     "hrmAttendance": {
       "title": "Device attendance",
-      "description": "Optional device identities, source check-ins and synchronization completeness. Check-in collection does not require shift planning."
+      "description": "Optional time-clock devices, worker identities and check-in imports, observed on managed shift rosters as late, early, absent and break exceptions. Collecting check-ins does not require Scheduling."
     },
     "hrmShiftClosing": {
       "title": "Formal shift closing",
-      "description": "Optional review and closing of completed shifts against current attendance evidence. Requires Shift planning and Device attendance; publishing shifts does not require closing."
+      "description": "Optional review and closing of completed roster shifts against current attendance evidence. Requires Scheduling and Device attendance; publishing shifts does not require closing."
     },
     "hrmCertifications": {
       "title": "Certifications and licenses",

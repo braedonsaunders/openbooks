@@ -24,6 +24,7 @@ import {
   Scale,
   Sparkles,
   Target,
+  Timer,
   Users,
   Wallet,
   Waves,
@@ -40,6 +41,7 @@ import {
 } from '../../../components/route-transitions'
 
 const ICONS: Record<string, typeof FileText> = {
+  Timer,
   Users,
   FileText,
   Scale,

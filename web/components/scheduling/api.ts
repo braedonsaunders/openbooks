@@ -4,6 +4,11 @@ import type { BoardChange, BoardTarget, BoardWindow, ChangeResult } from './mode
 import { refusalMessageFromBody } from '../../lib/api-error'
 import type { ProjectProgress } from '@openbooks/engine/schedule-boards/progress'
 import type { ProjectTaskOption } from '@openbooks/engine/schedule-boards/targets'
+import type { GenerationSummary, PatternAssignment, SchedulePattern } from '@openbooks/engine/schedule-boards/pattern-store'
+import type { ShiftRequest, SwapCandidate } from '@openbooks/engine/schedule-boards/requests'
+import type { AttendanceBatch, AttendanceDevice, AttendanceOutcome, SourceCheckIn } from '@openbooks/engine/schedule-boards/attendance'
+
+export type { GenerationSummary, PatternAssignment, SchedulePattern, ShiftRequest, SwapCandidate, AttendanceBatch, AttendanceDevice, AttendanceOutcome, SourceCheckIn }
 
 /** A refusal as the server worded it, with its supported remedy. */
 export class SchedulingRequestError extends Error {
@@ -46,7 +51,7 @@ export function saveChanges(boardId: string, changes: readonly BoardChange[], fa
   return request(`${base(boardId)}/changes`, { method: 'POST', body: JSON.stringify({ changes, reason: reason ?? null }) }, fallback)
 }
 
-export function publish(boardId: string, from: string, through: string, fallback: string): Promise<{ published: number;distributionRefusals?:{message:string;remedy:string}[] }> {
+export function publish(boardId: string, from: string, through: string, fallback: string): Promise<{ published: number; pending: boolean; publicationId: string | null; distributionRefusals?:{message:string;remedy:string}[] }> {
   return request(`${base(boardId)}/publish`, { method: 'POST', body: JSON.stringify({ from, through }) }, fallback)
 }
 
@@ -60,4 +65,72 @@ export function projectTasks(boardId: string, projectId: string, fallback: strin
 
 export function projectProgress(boardId: string, projectId: string, fallback: string): Promise<ProjectProgress> {
   return request(`${base(boardId)}/progress?projectId=${encodeURIComponent(projectId)}`, undefined, fallback)
+}
+
+const json = (method: string, body: unknown): RequestInit => ({ method, body: JSON.stringify(body) })
+
+export function boardAssignments(boardId: string, fallback: string): Promise<{ assignments: PatternAssignment[]; patterns: SchedulePattern[] }> {
+  return request(`${base(boardId)}/assignments`, undefined, fallback)
+}
+
+export function assignPattern(boardId: string, body: { id: string; patternId: string; workerPartyId: string; effectiveFrom: string; effectiveTo: string | null; reason: string }, fallback: string): Promise<{ assignment: PatternAssignment; generation: GenerationSummary }> {
+  return request(`${base(boardId)}/assignments`, json('POST', body), fallback)
+}
+
+const assignment = (id: string) => `/api/scheduling/assignments/${encodeURIComponent(id)}`
+
+export function closeAssignment(id: string, body: { action: 'end' | 'cancel'; expectedRevision: number; effectiveTo?: string; reason: string }, fallback: string): Promise<{ assignment: PatternAssignment; generation: GenerationSummary }> {
+  return request(assignment(id), json('PATCH', body), fallback)
+}
+
+export function generateAssignment(id: string, fallback: string): Promise<GenerationSummary> {
+  return request(`${assignment(id)}/generate`, json('POST', {}), fallback)
+}
+
+export type PatternExceptionBody =
+  | { kind: 'omit'; occursOn: string; slotIndex: number; reason: string }
+  | { kind: 'select_instant'; occursOn: string; slotIndex: number; startsAt: string; endsAt: string; reason: string }
+
+export function recordPatternException(id: string, body: PatternExceptionBody, fallback: string): Promise<{ assignment: PatternAssignment; generation: GenerationSummary }> {
+  return request(`${assignment(id)}/exceptions`, json('POST', body), fallback)
+}
+
+export function revokePatternException(id: string, reason: string, fallback: string): Promise<{ assignment: PatternAssignment; generation: GenerationSummary }> {
+  return request(`/api/scheduling/pattern-exceptions/${encodeURIComponent(id)}/revoke`, json('POST', { reason }), fallback)
+}
+
+export function boardShiftRequests(boardId: string, status: 'open' | 'all', fallback: string): Promise<{ requests: ShiftRequest[] }> {
+  return request(`${base(boardId)}/requests?status=${status}`, undefined, fallback)
+}
+
+export function processAttendance(boardId: string, from: string, through: string, fallback: string): Promise<{ outcomes: AttendanceOutcome[] }> {
+  return request(`${base(boardId)}/attendance`, json('POST', { from, through }), fallback)
+}
+
+export function attendanceDevices(fallback: string): Promise<{ devices: AttendanceDevice[] }> {
+  return request('/api/scheduling/attendance/devices', undefined, fallback)
+}
+
+export function admitCheckIns(deviceId: string, body: { id: string; completeThrough: string | null; sourceEvidence: Record<string, unknown>; reason: string; events: SourceCheckIn[] }, fallback: string): Promise<{ batch: AttendanceBatch; outcomes: AttendanceOutcome[] }> {
+  return request(`/api/scheduling/attendance/devices/${encodeURIComponent(deviceId)}/batches`, json('POST', body), fallback)
+}
+
+export function closeShift(boardId: string, entryId: string, expectedRevision: number, reason: string, fallback: string): Promise<{ closed: true }> {
+  return request(`${base(boardId)}/entries/${encodeURIComponent(entryId)}/close`, json('POST', { expectedRevision, reason }), fallback)
+}
+
+export function ownShiftRequests(fallback: string): Promise<{ requests: ShiftRequest[] }> {
+  return request('/api/me/schedule/requests', undefined, fallback)
+}
+
+export function submitOwnShiftRequest(body: { id: string; entryId: string; expectedRevision: number; kind: 'release' | 'change' | 'swap'; change?: { starts: string; ends: string; breakMinutes: number } | null; counterpartEntryId?: string | null; counterpartRevision?: number | null; reason: string }, fallback: string): Promise<{ request: ShiftRequest }> {
+  return request('/api/me/schedule/requests', json('POST', body), fallback)
+}
+
+export function actOnOwnShiftRequest(id: string, body: { action: 'withdraw' | 'accept' | 'decline'; expectedRevision: number; reason?: string }, fallback: string): Promise<{ request: ShiftRequest }> {
+  return request(`/api/me/schedule/requests/${encodeURIComponent(id)}`, json('POST', body), fallback)
+}
+
+export function swapCandidates(entryId: string, fallback: string): Promise<{ candidates: SwapCandidate[] }> {
+  return request(`/api/me/schedule/swap-candidates?entryId=${encodeURIComponent(entryId)}`, undefined, fallback)
 }

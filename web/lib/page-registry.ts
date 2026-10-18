@@ -2656,6 +2656,18 @@ export const PAGE_REGISTRY: Readonly<Record<string, PageRegistryEntry>> = {
       }
     },
   },
+  '/reports/attendance-exceptions': {
+    route: '/reports/attendance-exceptions',
+    segments: [],
+    searchParams: true,
+    module: async () => {
+      const m = await import('../app/(app)/reports/attendance-exceptions/view')
+      return {
+        load: (input) => m.loadAttendanceExceptionsReport(input.searchParams ?? {}),
+        spec: (data) => m.attendanceExceptionsSpec(data as never),
+      }
+    },
+  },
   '/reports/availability': {
     route: '/reports/availability',
     segments: [],

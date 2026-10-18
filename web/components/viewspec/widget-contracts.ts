@@ -545,7 +545,7 @@ export const WIDGET_CONTRACTS: Readonly<Record<string, WidgetContract>> = {
   'saved-view-header': { props: ['backHref', 'backLabel', 'canEdit', 'labels', 'name', 'scope', 'scopeLabel', 'subtitle', 'viewId'] },
   'saved-view-meta': { props: ['lastUpdated', 'rowsRange', 'typeLabel'] },
   'schedule-report': { props: ['definitionId', 'historyHref', 'statementParams'] },
-  'scheduling-my-schedule': { props: ['entries', 'from', 'refusal', 'through', 'today'] },
+  'scheduling-my-schedule': { props: ['entries', 'from', 'personPartyId', 'refusal', 'requestableEntryIds', 'through', 'today'] },
   'scheduling-workspace': { props: [], open: true },
   'script-drawer': { props: ['customTypes', 'runs', 'script'] },
   'search-input': { props: ['className', 'pageParamKey', 'paramKey', 'placeholder'] },

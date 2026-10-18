@@ -12,6 +12,7 @@ import { applyBoardChanges, publishBoard } from "./entries.ts";
 import { publishScheduleBoard } from "./publications.ts";
 import { ScheduleError } from "./errors.ts";
 import { closeAssignment, createAssignment, generateAssignment, listBoardAssignments, recordPatternException, revokePatternException, savePattern, type PatternInput } from "./pattern-store.ts";
+import { loadMySchedule } from "./mine.ts";
 import { createOwnShiftRequest, listBoardShiftRequests, listSwapCandidates, respondToSwap, withdrawOwnShiftRequest } from "./requests.ts";
 
 const enabled = { skip: !process.env.OPENBOOKS_DB_URL };
@@ -227,12 +228,23 @@ test("without a Flow employee releases, changes and swaps apply when submitted a
   const benShift = await book(f.ben, addCalendarDays(start, 1), "07:00", "15:00");
   const anaLater = await book(f.ana, addCalendarDays(start, 3), "09:00", "17:00");
   const anaRelease = await book(f.ana, addCalendarDays(start, 5), "09:00", "17:00");
+  const fieldDay = randomUUID();
+  assert.equal((await applyBoardChanges({ ...scheduler, boardId: f.people, changes: [{ op: "create", id: fieldDay, workerPartyId: f.ana, onDate: addCalendarDays(start, 6), target: null,
+    span: { mode: "timed", starts: "09:00", ends: "17:00", breakMinutes: 30 } }] })).results[0]?.ok, true);
+  // My schedule offers requests only on boards whose type takes them.
+  const mine = await loadMySchedule({ ...ana, from: f.today, through: addCalendarDays(start, 7) });
+  assert.deepEqual(new Set(mine.requestableEntryIds), new Set([anaShift, anaLater, anaRelease]));
+  assert.ok(mine.entries.some((entry) => entry.id === fieldDay), "the people-board booking still shows on My schedule");
+  await assert.rejects(createOwnShiftRequest({ ...ana, id: randomUUID(), entryId: fieldDay, expectedRevision: 1, kind: "release", reason: "Not a roster" }),
+    refused(/cannot be requested/));
   await assert.rejects(createOwnShiftRequest({ ...ben, id: randomUUID(), entryId: anaShift, expectedRevision: 1, kind: "release", reason: "Not mine" }), (error: unknown) => error instanceof ScopeNotFoundError);
   const change = await createOwnShiftRequest({ ...ana, id: randomUUID(), entryId: anaShift, expectedRevision: 1, kind: "change", change: { starts: "11:00", ends: "19:00", breakMinutes: 30 }, reason: "Appointment" });
   assert.deepEqual([change.request.status, change.request.releasedWithoutApproval, change.request.decisionReason], ["approved", true, "No approval Flow applied; applied when submitted."]);
   const changed = await withBypassContext(() => db.execute<{ startsAt: string; origin: string | null }>(sql`select to_char(starts_at at time zone 'UTC', 'HH24:MI') as "startsAt", origin_request_id as origin
     from schedule_entries where org_id = ${f.org.orgId} and supersedes_id = ${anaShift} and status = 'published'`));
   assert.deepEqual(changed.rows, [{ startsAt: "11:00", origin: change.request.id }]);
+  const afterChange = await loadMySchedule({ ...ana, from: f.today, through: addCalendarDays(start, 7) });
+  assert.ok(!afterChange.requestableEntryIds.includes(anaShift) && afterChange.entries.every((entry) => entry.id !== anaShift), "the replaced shift is no longer offered");
   const released = await createOwnShiftRequest({ ...ana, id: randomUUID(), entryId: anaRelease, expectedRevision: 1, kind: "release", reason: "Sick child" });
   assert.equal(released.request.status, "approved");
   assert.equal((await withBypassContext(() => db.execute<{ status: string }>(sql`select status from schedule_entries where org_id = ${f.org.orgId} and id = ${anaRelease}`))).rows[0]?.status, "cancelled");

@@ -6,7 +6,7 @@ import { addCalendarDays, businessToday } from '@openbooks/engine/platform/busin
 import { ScheduleError } from '@openbooks/engine/schedule-boards/errors'
 import { loadMySchedule } from '@openbooks/engine/schedule-boards/mine'
 import type { BoardEntry } from '@openbooks/engine/schedule-boards/window'
-import { getAuthz } from '@/lib/authz'
+import { can, getAuthz } from '@/lib/authz'
 import { meTabs } from '@/lib/hrm/self-service'
 import { isIsoCalendarDate } from '@openbooks/engine/platform/iso-date'
 
@@ -19,6 +19,9 @@ export interface MyScheduleData {
   from: string
   through: string
   entries: readonly BoardEntry[]
+  /** Bookings the person may ask to release, change or swap, when they may file requests. */
+  requestableEntryIds: readonly string[]
+  personPartyId: string | null
   refusal: { message: string; remedy: string | null } | null
 }
 
@@ -36,10 +39,11 @@ export async function loadMySchedulePage(searchParams: Record<string, string | s
   const tabs = await meTabs(authz, '/me/schedule')
   try {
     const schedule = await loadMySchedule({ orgId: authz.user.orgId, actorId: authz.user.id, from, through })
-    return { title: t('mine.title'), description: t('mine.description'), tabs, today, from, through, entries: schedule.entries, refusal: null }
+    return { title: t('mine.title'), description: t('mine.description'), tabs, today, from, through, entries: schedule.entries,
+      requestableEntryIds: can(authz, 'hrm.self.request') ? schedule.requestableEntryIds : [], personPartyId: schedule.personPartyId, refusal: null }
   } catch (error) {
     if (error instanceof ScheduleError) {
-      return { title: t('mine.title'), description: t('mine.description'), tabs, today, from, through, entries: [], refusal: { message: error.message, remedy: error.remedy ?? null } }
+      return { title: t('mine.title'), description: t('mine.description'), tabs, today, from, through, entries: [], requestableEntryIds: [], personPartyId: null, refusal: { message: error.message, remedy: error.remedy ?? null } }
     }
     if ((error as { status?: number }).status === 404) notFound()
     throw error
@@ -67,6 +71,8 @@ export function myScheduleSpec(data: MyScheduleData): PageSpec {
         from: data.from,
         through: data.through,
         entries: data.entries,
+        requestableEntryIds: data.requestableEntryIds,
+        personPartyId: data.personPartyId,
         refusal: data.refusal,
       }),
     ],

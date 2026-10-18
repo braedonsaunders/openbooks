@@ -2976,6 +2976,26 @@
           "reason": "変更理由"
     },
     "entities": {
+      "schedule-patterns": {
+        "title": "シフトパターン",
+        "singularTitle": "シフトパターン",
+        "description": "現地時刻で繰り返すシフトのサイクル。シフト表の担当者に割り当ててシフトを予約します。"
+      },
+      "schedule-attendance-devices": {
+        "title": "勤怠端末",
+        "singularTitle": "勤怠端末",
+        "description": "法人のタイムレコーダーなどの打刻元。コードとタイムゾーンは固定です。"
+      },
+      "schedule-attendance-identities": {
+        "title": "端末識別情報",
+        "singularTitle": "端末識別情報",
+        "description": "端末の従業員識別子が、日付で区切られた期間にどの担当者を指すか。"
+      },
+      "schedule-attendance-policies": {
+        "title": "勤怠ポリシー",
+        "singularTitle": "勤怠ポリシー",
+        "description": "シフト表で勤怠を判定するための、適用日付きの打刻受付時間と猶予時間。"
+      },
       "equity-account-policies": {
         "title": "資本勘定",
         "singular": "資本勘定ポリシー",
@@ -4018,6 +4038,29 @@
       "expense-fx-policies": {"title": "経費の為替方針", "description": "外貨建ての経費明細を、日付の為替レートではなく理由付きの指定レートで換算できるかどうか。"}
     },
     "fields": {
+      "boardType": "ボードの種類",
+      "governedFrom": "統制開始日",
+      "captureBeforeMinutes": "開始前の打刻受付（分）",
+      "captureAfterMinutes": "終了後の打刻受付（分）",
+      "lateGraceMinutes": "遅刻の猶予（分）",
+      "earlyGraceMinutes": "早退の猶予（分）",
+      "breakGraceMinutes": "休憩の猶予（分）",
+      "cycleDays": "サイクル日数",
+      "cycleAnchor": "サイクル開始日",
+      "slots": "シフト",
+      "horizonDays": "先行予約（日）",
+      "targetKind": "予約先",
+      "scheduleCodeId": "スケジュールコード",
+      "detail": "詳細",
+      "sourceWorkerId": "端末の従業員 ID",
+      "workerPartyId": "担当者",
+      "deviceId": "端末",
+      "schedulePatternAddSlot": "シフトを追加",
+      "schedulePatternSlotDay": "サイクル日（0 が初日）",
+      "schedulePatternSlotStarts": "開始",
+      "schedulePatternSlotEnds": "終了",
+      "schedulePatternSlotBreak": "休憩（分）",
+      "schedulePatternSlotQualifications": "必要な資格",
       "allowRateOverride": "指定為替レートを許可",
       "commonStockAccountId": "普通株式勘定",
       "preferredStockAccountId": "優先株式勘定",
@@ -4743,6 +4786,22 @@
       "denominations": "現金の金種"
     },
     "fieldHelp": {
+      "scheduleBoardType": "管理型シフト表では、繰り返しシフトパターン、従業員のシフト申請、統制公開、端末による勤怠が使えます。種類はボード作成後に変更できません。",
+      "scheduleBoardGovernedFrom": "この日以降に始まる予約は統制公開を通じてのみ公開され、公開後は履歴として保持されます。それ以前の予約はボードの従来のルールのままです。",
+      "scheduleAttendanceEffectiveFrom": "このバージョンが適用される最初のシフト日。それ以前のシフトには当時のバージョンが適用されます。",
+      "scheduleAttendanceCapture": "シフト開始前および終了後、どれだけの時間の打刻をそのシフトの打刻とみなすか。",
+      "scheduleAttendanceGrace": "開始後この分数内の出勤は遅刻とせず、終了前この分数内の退勤は早退としません。",
+      "scheduleAttendanceBreakGrace": "予定の休憩をこの分数超えると休憩超過とみなします。",
+      "scheduleAttendanceDeviceCode": "打刻の取り込みでこの端末を示すコード。登録後は変更できません。",
+      "scheduleAttendanceDeviceTimeZone": "端末の時計のタイムゾーン（例：Asia/Tokyo）。変更できません。打刻元が変わった場合は新しい端末を登録してください。",
+      "scheduleAttendanceSourceWorker": "端末がエクスポートするとおりの従業員識別子（社員証番号など）。",
+      "scheduleAttendanceIdentityEnd": "識別子がこの担当者を指さなくなる最初の日付。まだ指している間は空欄にします。",
+      "schedulePatternSubsidiary": "パターンを 1 つの法人のボードに限定します。空欄にするとすべてのシフト表で使えます。",
+      "schedulePatternCycleDays": "パターンが繰り返すまでの日数。週単位なら 7、2 週間ローテーションなら 14 など。",
+      "schedulePatternCycleAnchor": "サイクルの 0 日目となる日付。",
+      "schedulePatternSlots": "各シフトにサイクル内の日と現地の開始・終了時刻を指定します。終了時刻が開始時刻以前のシフトは翌日に終わります。",
+      "schedulePatternHorizon": "パターンの予約を何日先まで生成し最新に保つか。",
+      "schedulePatternTarget": "生成された予約の行き先。空欄にすると行き先なしのシフトを予約します。",
       "apicShareBasedAccount": "株式報酬の認識に応じて貸方計上され、付与の行使または決済時に資本金へ振り替えられます。",
       "convertibleInstrumentsAccount": "SAFE と転換社債を、転換、返済または取消まで元本で計上します。",
       "accruedInterestAccount": "転換社債に発生した利息を、転換、返済または取消まで計上します。転換商品勘定と同じ勘定でも構いません。",
@@ -4914,7 +4973,7 @@
       "scheduleBoardWeekStartsOn": "表示する各週の最初の曜日: 0 は日曜日、1 は月曜日、6 は土曜日です。",
       "scheduleBoardGrain": "終日では、各人をボードの勤務時間帯で割り当てます。時間単位のシフトでは、開始時刻と終了時刻を割り当てます。",
       "scheduleBoardDayStarts": "終日の割り当てに使う勤務時間帯（07:00 のような24時間表記）。",
-      "scheduleBoardPublishPolicy": "即時公開のボードは、割り当てを作成するたびに公開します。一括公開のボードは、承認権限を持つユーザーが公開するまで変更をまとめて保持します。",
+      "scheduleBoardPublishPolicy": "即時公開のボードは、割り当てを作成するたびに公開します。一括公開のボードは、承認権限を持つユーザーが公開するまで変更をまとめて保持します。統制公開のボード（管理型シフト表で利用可能）は、承認フローで判断できる公開記録を通じて公開し、公開済みの予約を履歴として保持します。",
       "scheduleBoardPrefillTimesheets": "このボードで公開された割り当ては、各人の週次タイムシートに予定時間として表示され、ワンクリックで追加してから確認・修正できます。",
       "scheduleBoardPrefillCrewTime": "このボードで公開されたプロジェクトの割り当ては、そのプロジェクトと日付の職長のクルー作業時間シートに、割り当てられたクルーと時間を候補として表示し、ワンクリックで追加できます。",
       "scheduleBoardPrefillFieldTickets": "このボードで公開されたプロジェクトの割り当ては、そのプロジェクトのフィールドチケットに、チケット期間に割り当てられたクルーと時間を候補として表示し、ワンクリックで追加できます。",
@@ -4963,6 +5022,16 @@
       "taxRateEffectiveTo": "この税率が適用される最後の取引日です。この日も含みます。終了日がない場合は空欄にします。次の税率が7月1日から始まる場合、この税率の終了日は6月30日にします。"
     },
     "options": {
+      "scheduleBoardType": {
+        "people": "人員ボード",
+        "shift_roster": "管理型シフト表"
+      },
+      "schedulePatternTarget": {
+        "customer": "顧客",
+        "project": "プロジェクト",
+        "location": "拠点",
+        "code": "スケジュールコード"
+      },
       "posCashDirection": {
         "payIn": "入金",
         "payOut": "出金"
@@ -5689,6 +5758,7 @@
         "progress": "進捗"
       },
       "schedulePublishPolicy": {
+        "governed": "統制公開",
         "live": "即時公開",
         "staged": "一括公開"
       },
@@ -6777,6 +6847,11 @@
     },
     "filterAll": "すべて",
     "sections": {
+      "schedulePatternIdentity": "パターン",
+      "schedulePatternCycle": "サイクル",
+      "schedulePatternCycleHelp": "シフト時刻はパターンのタイムゾーンでの現地時刻です。時刻の切り替えは日付ごとに解決されます。",
+      "schedulePatternBooking": "予約",
+      "schedulePatternChange": "変更",
       "address": "住所",
       "basisCaps": "基準上限",
       "deductionProtection": "控除保護",
@@ -8462,11 +8537,11 @@
     },
     "hrmAttendance": {
       "title": "端末による勤怠記録",
-      "description": "任意の端末識別情報、打刻記録、同期の完全性の記録。打刻の収集にシフト計画は不要です。"
+      "description": "任意のタイムレコーダー、従業員識別情報、打刻の取り込み。管理型シフト表で遅刻・早退・欠勤・休憩超過として判定されます。打刻の収集にスケジュール管理は不要です。"
     },
     "hrmShiftClosing": {
       "title": "正式なシフト終了処理",
-      "description": "最新の勤怠証拠に基づく終了済みシフトの確認と終了処理を任意で利用できます。シフト計画と端末による勤怠記録が必要です。シフト公開に終了処理は不要です。"
+      "description": "最新の勤怠証拠に基づき、終了したシフト表のシフトを任意で確認・締め処理します。スケジュール管理と端末による勤怠記録が必要です。シフト公開に締め処理は不要です。"
     },
     "hrmCertifications": {
       "title": "認定・免許",

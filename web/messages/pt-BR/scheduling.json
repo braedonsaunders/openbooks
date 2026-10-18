@@ -82,7 +82,9 @@
     "unassigned": "Sem destino",
     "draft": "Ainda não publicado",
     "elsewhere": "Alocado em {board}",
-    "leave": "{type}: {hours} horas de ausência"
+    "leave": "{type}: {hours} horas de ausência",
+    "removal": "Remoção aguardando publicação",
+    "closed": "Encerrado"
   },
   "picker": {
     "placeholder": "Digite um código, cliente, projeto ou local",
@@ -132,7 +134,13 @@
     "pending": "{count, plural, one {# alteração não publicada} other {# alterações não publicadas}} para {people, plural, one {# linha} other {# linhas}}",
     "explain": "As reservas publicadas ficam visíveis para a equipe.",
     "action": "Publicar",
-    "discard": "Descartar alterações"
+    "discard": "Descartar alterações",
+    "submit": "Enviar para publicação",
+    "submitted": "{count, plural, one {Uma alteração enviada para publicação.} other {# alterações enviadas para publicação.}}",
+    "governedExplain": "Quadro controlado: publicar registra uma publicação. Quando um fluxo de aprovação se aplica, as alterações são publicadas após a aprovação.",
+    "awaiting": "{count, plural, one {# alteração aguarda} other {# alterações aguardam}} a decisão sobre a publicação.",
+    "awaitingFlow": "Um fluxo de aprovação decide esta publicação em Aprovações. Até lá, as alterações enviadas ficam bloqueadas.",
+    "openApprovals": "Abrir Aprovações"
   },
   "drawer": {
     "title": "Alocação",
@@ -159,7 +167,21 @@
     "booked": "{hours} alocadas após o intervalo.",
     "repeat": "Alocar também em",
     "notes": "Observações",
-    "notesPlaceholder": "O que a equipe precisa saber"
+    "notesPlaceholder": "O que a equipe precisa saber",
+    "removalDraft": "Este rascunho remove a alocação publicada quando sua publicação for aplicada.",
+    "awaitingApproval": "Esta alteração está em uma publicação aguardando decisão e não pode ser editada.",
+    "governed": "Publicado sob publicação controlada. Alterações criam uma nova revisão que é publicada na próxima publicação.",
+    "closedOn": "Encerrado em {date}. Um turno encerrado não pode mudar.",
+    "openRequest": {
+      "awaiting_counterpart": "Uma solicitação ({kind}) aguarda a resposta do colega.",
+      "pending": "Uma solicitação ({kind}) aguarda aprovação."
+    },
+    "attendance": "Presença",
+    "noAttendance": "A presença deste turno ainda não foi observada.",
+    "close": "Encerrar turno",
+    "closeTitle": "Encerrar este turno",
+    "closeExplain": "O encerramento registra a presença do turno como revisada. Um turno encerrado não pode mudar depois.",
+    "closed": "O turno foi encerrado."
   },
   "targets": {
     "where": "Destino",
@@ -228,6 +250,10 @@
       "resources": {
         "title": "Equipamentos e locais",
         "description": "Reserve equipamentos ou locais compartilhados por dia ou hora entre projetos."
+      },
+      "roster": {
+        "title": "Escala de turnos gerenciada",
+        "description": "Padrões de turnos recorrentes, solicitações de turno dos funcionários, aprovação opcional da publicação e presença por relógio de ponto com avisos de atraso, saída antecipada e ausência."
       }
     },
     "name": "Nome",
@@ -282,7 +308,35 @@
     "title": "Minha programação",
     "description": "Onde e quando você está alocado, conforme publicado pelos seus programadores.",
     "summary": "{days, plural, one {# dia alocado} other {# dias alocados}} · {hours}",
-    "empty": "Não há nada alocado para você de {from} a {through}."
+    "empty": "Não há nada alocado para você de {from} a {through}.",
+    "request": {
+      "open": "Solicitar alteração",
+      "title": "Solicitar uma alteração de turno",
+      "submit": "Enviar solicitação",
+      "explain": "Se houver um fluxo de aprovação configurado, ele decide a solicitação; caso contrário, ela é aplicada assim que você a envia.",
+      "kind": "Solicitação",
+      "changeExplain": "Pedir outro horário no mesmo dia.",
+      "swapExplain": "Oferecer uma troca com o turno de um colega. O colega aceita primeiro.",
+      "releaseExplain": "Pedir para ser retirado deste turno.",
+      "noCandidates": "Nenhum colega tem um turno publicado neste quadro nas próximas duas semanas para trocar.",
+      "swapWith": "Turno do colega",
+      "pickShift": "Escolha um turno",
+      "applied": "Sua solicitação foi aplicada à programação.",
+      "offered": "Sua oferta de troca foi enviada para {name}.",
+      "submitted": "Sua solicitação aguarda aprovação."
+    },
+    "requests": {
+      "title": "Solicitações de turno",
+      "empty": "Você não tem solicitações de turno.",
+      "offer": "{name} oferece uma troca",
+      "offers": "{count, plural, one {Um colega pediu para trocar turnos com você.} other {# colegas pediram para trocar turnos com você.}}",
+      "review": "Revisar",
+      "accept": "Aceitar",
+      "decline": "Recusar",
+      "withdraw": "Retirar",
+      "acceptTitle": "Aceitar a troca",
+      "declineTitle": "Recusar a troca"
+    }
   },
   "source": {
     "explanation": "Os dados importados são somente leitura. Preservam a data e as instruções sem criar horas trabalhadas, alterar o status do funcionário ou reservar disponibilidade.",
@@ -401,6 +455,133 @@
       "linkAddress": "Endereço do link",
       "apply": "Aplicar link",
       "invalid": "Use no máximo 4000 caracteres e links seguros."
+    }
+  },
+  "roster": {
+    "title": "Escala",
+    "reason": "Motivo",
+    "tabs": {
+      "recurring": "Turnos recorrentes",
+      "requests": "Solicitações de turno",
+      "attendance": "Presença"
+    },
+    "recurring": {
+      "explain": "Atribua um padrão de turnos a uma pessoa para alocar seus turnos automaticamente. Alocações alteradas manualmente são mantidas; turnos iniciados nunca são alterados.",
+      "assign": "Atribuir padrão",
+      "noPatterns": "Nenhum padrão de turnos ativo se aplica a este quadro.",
+      "noPatternsRemedy": "Adicione um em Configuração → Padrões de turnos, para a entidade legal deste quadro ou para todas.",
+      "person": "Pessoa",
+      "pickPerson": "Escolha uma pessoa",
+      "pattern": "Padrão",
+      "pickPattern": "Escolha um padrão",
+      "from": "De",
+      "to": "Até (opcional)",
+      "empty": "Ninguém neste quadro tem ainda um padrão de turnos recorrente.",
+      "window": "De {from} a {to}",
+      "openWindow": "A partir de {from}",
+      "status": {
+        "active": "Ativo",
+        "ended": "Encerrado",
+        "cancelled": "Cancelado"
+      },
+      "generatedThrough": "Alocado até {date}",
+      "generated": "Gerado até {through}: {created} adicionados, {revised} atualizados, {removed} removidos, {kept} mantidos por alteração manual.",
+      "generate": "Gerar",
+      "omit": "Pular um dia",
+      "end": "Encerrar",
+      "cancel": "Cancelar",
+      "endTitle": "Encerrar o padrão de {name}",
+      "endExplain": "Escolha a primeira data em que o padrão deixa de alocar. As alocações futuras a partir dessa data são removidas.",
+      "cancelTitle": "Cancelar o padrão de {name}",
+      "cancelExplain": "A atribuição para e suas alocações futuras são removidas. Turnos iniciados e passados permanecem como estão.",
+      "omitTitle": "Pular uma ocorrência",
+      "omitExplain": "Escolha a data que o padrão não deve alocar.",
+      "slot": "Turno",
+      "slotLabel": "Dia {day} do ciclo: {starts}–{ends}",
+      "chooseTitle": "Usar estes horários",
+      "starts": "Horário de início",
+      "ends": "Horário de término",
+      "useTimes": "Usar estes horários",
+      "omitted": "{date} pulado",
+      "selected": "{date}: das {starts} às {ends}",
+      "revoke": "Restaurar",
+      "revokeTitle": "Restaurar a ocorrência"
+    },
+    "requests": {
+      "explain": "Os funcionários pedem para liberar, alterar ou trocar seus turnos publicados em Minha programação. Um fluxo de aprovação configurado decide em Aprovações; sem ele, as solicitações são aplicadas ao serem enviadas.",
+      "show": "Mostrar",
+      "open": "Abertas",
+      "all": "Recentes",
+      "empty": "Nenhuma solicitação de turno para mostrar.",
+      "kinds": {
+        "release": "Liberar",
+        "change": "Alterar",
+        "swap": "Trocar"
+      },
+      "status": {
+        "awaiting_counterpart": "Aguardando o colega",
+        "pending": "Aguardando aprovação",
+        "approved": "Aplicada",
+        "declined": "Recusada",
+        "withdrawn": "Retirada"
+      },
+      "proposed": "Solicitado: {span}",
+      "swapWith": "Troca com {name}: {span}",
+      "noApproval": "Nenhum fluxo de aprovação aplicado; aplicada ao ser enviada.",
+      "decidedBy": "Decidida por {name}",
+      "openApprovals": "Abrir em Aprovações"
+    },
+    "attendance": {
+      "observeTitle": "Observar presença",
+      "observeExplain": "Compara os turnos publicados de {from} a {through} com os registros de ponto recebidos até agora.",
+      "observe": "Observar presença",
+      "report": "Exceções de presença",
+      "summary": "{present} presentes, {absent} ausentes, {waiting} aguardando um dispositivo, {refused} não observados.",
+      "importTitle": "Importar registros de ponto",
+      "importExplain": "Envie uma exportação do dispositivo em CSV com as colunas source_event_id, source_worker_id, kind (clock_in, clock_out, break_start, break_end ou void), occurred_at com seu deslocamento UTC e, opcionalmente, source_version. Cada coluna é mantida como evidência.",
+      "noDevices": "Nenhum dispositivo de presença ativo está registrado para suas entidades legais.",
+      "noDevicesRemedy": "Registre um em Configuração → Dispositivos de presença e mapeie seus identificadores de trabalhador.",
+      "device": "Dispositivo",
+      "file": "Arquivo CSV",
+      "completeThrough": "Completo até (opcional)",
+      "completeThroughHelp": "O instante, com seu deslocamento, até o qual o dispositivo enviou todos os registros; o relógio do dispositivo está em {zone}. Deixe vazio se a exportação puder ser parcial.",
+      "badWatermark": "O horário de completude precisa de data, hora e deslocamento UTC.",
+      "parsed": "{count} registros lidos, {problems} linhas recusadas.",
+      "admit": "Importar registros de ponto",
+      "admitted": "{count} registros importados; {replayed} já estavam registrados.",
+      "csv": {
+        "empty": "O arquivo não tem linhas de registro de ponto.",
+        "missingColumn": "O cabeçalho não tem a coluna {column}.",
+        "duplicate": "A linha {line} repete o evento e a versão da linha {first}.",
+        "kind": "A linha {line} tem um tipo diferente de clock_in, clock_out, break_start, break_end ou void.",
+        "time": "A linha {line} precisa de occurred_at como data e hora com seu deslocamento UTC.",
+        "version": "A linha {line} precisa de source_version como número inteiro de pelo menos 1.",
+        "blank": "A linha {line} não tem source_event_id ou source_worker_id.",
+        "columns": "A linha {line} tem um número de colunas diferente do cabeçalho.",
+        "remedy": "Corrija a exportação e escolha o arquivo novamente; nada foi importado."
+      }
+    }
+  },
+  "attendance": {
+    "status": {
+      "waiting_for_sync": "Aguardando dispositivo",
+      "absent": "Ausente",
+      "present": "Presente",
+      "voided": "Anulado"
+    },
+    "flags": {
+      "absent": "Ausente",
+      "late": "Chegou atrasado",
+      "leftEarly": "Saiu mais cedo",
+      "overBreak": "Intervalo maior que o previsto",
+      "waiting": "Aguardando registros do dispositivo"
+    },
+    "short": {
+      "absent": "Ausente",
+      "late": "Atraso",
+      "leftEarly": "Cedo",
+      "overBreak": "Intervalo",
+      "waiting": "Sinc."
     }
   }
 }

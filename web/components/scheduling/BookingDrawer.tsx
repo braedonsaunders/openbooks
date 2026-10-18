@@ -4,9 +4,12 @@ import { useIdentityState } from '@/lib/use-identity-state'
 
 import { useEffect, useMemo, useState } from 'react'
 import { useLocale, useTranslations } from 'next-intl'
-import { CalendarClock, Repeat2, Trash2 } from 'lucide-react'
+import { CalendarClock, Lock, Repeat2, Timer, Trash2 } from 'lucide-react'
 import { Button, Drawer, Input, Select, Textarea, cn } from '@openbooks/ui'
-import { projectTasks } from './api'
+import { boardHasCapability } from '@openbooks/engine/schedule-boards/board-types'
+import { promptDialog } from '../../lib/prompt'
+import { closeShift, projectTasks, SchedulingRequestError } from './api'
+import { AttendanceBadges } from './BookingChip'
 import { TargetPicker } from './TargetPicker'
 import { CHIP_COLORS, chipStyle } from './BookingChip'
 import { entryTemplate, formatMinutes, targetHue, type BoardChange, type BoardEntry, type BoardTarget, type SpanInput } from './model'
@@ -21,16 +24,20 @@ export function BookingDrawer({
   entry,
   window: board,
   controller,
+  roster,
   onClose,
 }: {
   entry: BoardEntry | null
   window: BoardWindow
   controller: BoardController
+  /** Device attendance and formal closing, when the organization and actor have them. */
+  roster?: { readonly attendance: boolean; readonly closing: boolean }
   onClose: () => void
 }) {
   const t = useTranslations('scheduling')
   const locale = useLocale()
-  const editable = Boolean(entry && entry.boardId === board.board.id && board.canManage)
+  const editable = Boolean(entry && entry.boardId === board.board.id && board.canManage && !entry.closedAt && !entry.removesPredecessor
+    && !board.pendingPublication?.entryIds.includes(entry.id))
   const draftIdentity = [entry, board.board.dayStarts, board.board.dayEnds, board.board.dayBreakMinutes]
   const [target, setTarget] = useIdentityState<BoardTarget | null>(draftIdentity, entry?.target ?? null)
   const [taskId, setTaskId] = useIdentityState<string>(draftIdentity, entry?.projectTaskId ?? '')
@@ -89,6 +96,25 @@ export function BookingDrawer({
     if (results && results.every((result) => result.ok)) onClose()
   }
 
+  const showAttendance = Boolean(roster?.attendance && boardHasCapability(board.board, 'attendance'))
+  const closable = Boolean(roster?.closing && boardHasCapability(board.board, 'closing') && board.canManage && entry.boardId === board.board.id
+    && entry.status === 'published' && !entry.closedAt && entry.attendance && (entry.attendance.status === 'present' || entry.attendance.status === 'absent')
+    && Date.parse(entry.endsAt) <= Date.now())
+
+  async function close() {
+    if (!entry) return
+    const reason = await promptDialog({ title: t('drawer.closeTitle'), message: t('drawer.closeExplain'), label: t('roster.reason'), multiline: true })
+    if (!reason) return
+    setSaving(true)
+    try {
+      await closeShift(board.board.id, entry.id, entry.revision, reason, t('errors.save'))
+      controller.notify('success', t('drawer.closed'))
+      await controller.reload()
+    } catch (error) {
+      controller.notify('error', error instanceof Error ? error.message : t('errors.save'), error instanceof SchedulingRequestError ? error.remedy : null)
+    } finally { setSaving(false) }
+  }
+
   async function remove() {
     if (!entry) return
     setSaving(true)
@@ -123,7 +149,26 @@ export function BookingDrawer({
           </p>
         ) : null}
         {entry.status === 'draft' ? (
-          <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950/40 dark:text-amber-200">{t('drawer.draft')}</p>
+          <p className="rounded-lg bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:bg-amber-950/40 dark:text-amber-200">{entry.removesPredecessor ? t('drawer.removalDraft') : board.pendingPublication?.entryIds.includes(entry.id) ? t('drawer.awaitingApproval') : t('drawer.draft')}</p>
+        ) : null}
+        {entry.status === 'published' && entry.governed && !entry.closedAt ? (
+          <p className="rounded-lg bg-slate-100 px-3 py-2 text-xs text-slate-600 dark:bg-slate-900 dark:text-slate-300">{t('drawer.governed')}</p>
+        ) : null}
+        {entry.closedAt ? (
+          <p className="flex items-center gap-1.5 rounded-lg bg-slate-100 px-3 py-2 text-xs text-slate-600 dark:bg-slate-900 dark:text-slate-300"><Lock className="h-3.5 w-3.5" />{t('drawer.closedOn', { date: new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(entry.closedAt)) })}</p>
+        ) : null}
+        {entry.openRequest ? (
+          <p className="rounded-lg bg-sky-50 px-3 py-2 text-xs text-sky-800 dark:bg-sky-950/40 dark:text-sky-200">{t(`drawer.openRequest.${entry.openRequest.status}`, { kind: t(`roster.requests.kinds.${entry.openRequest.kind}`) })}</p>
+        ) : null}
+        {showAttendance ? (
+          <section className="space-y-2">
+            <h3 className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-slate-500"><Timer className="h-3.5 w-3.5" />{t('drawer.attendance')}</h3>
+            {entry.attendance ? <div className="flex flex-wrap items-center gap-2 text-xs">
+              <span className="font-medium text-slate-700 dark:text-slate-200">{t(`attendance.status.${entry.attendance.status}`)}</span>
+              <AttendanceBadges attendance={entry.attendance} />
+            </div> : <p className="text-xs text-slate-500">{t('drawer.noAttendance')}</p>}
+            {closable ? <Button variant="outline" size="sm" onClick={() => void close()} disabled={saving}><Lock className="mr-1.5 h-3.5 w-3.5" />{t('drawer.close')}</Button> : null}
+          </section>
         ) : null}
 
         <section className="space-y-2">

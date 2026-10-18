@@ -99,7 +99,7 @@ The source manifest assigns every available registry key to at least one company
 | Construction | Contractor evidence workspace with jurisdiction limits; budgeted project progress and correction; work awaiting approval for unbilled-revenue accrual |
 | Software and SaaS | Cross-border supply-location evidence; valued subscription quotes; consolidated billing relationships; historical billing-import draft; paused autopay; portal content settings; draft revenue contracts; contract-cost policy |
 | Wholesale | Native supplier-owned consignment receipts; item families and variants; package presets; demand policies; disconnected storefront |
-| Healthcare | Training-course drafts; recurring shift definition; disconnected attendance device; shift-closing prerequisites; compensation package configuration |
+| Healthcare | Training-course drafts; staged managed shift roster with an inactive recurring shift pattern; inactive attendance device; shift-closing prerequisites; compensation package configuration |
 
 `mode` describes the type of demonstration. `stage` distinguishes draft records, configuration, executed native workflows, workspace evidence and unsupported execution. A workflow draft does not prove execution. The inspection output separately reports each feature's enabled flag, actual table counts, expected stage and verified execution flag. Preserving member refresh never certifies an operator-modified workflow as executed merely because its inherited record remains present.
 

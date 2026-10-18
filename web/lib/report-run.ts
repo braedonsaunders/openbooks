@@ -5,6 +5,8 @@ import { payrollSupportReportData } from './payroll-support-report'
 import { PayrollSupportReportRefusal } from './payroll-support-report-contract'
 import { trueCostExportData } from './analytics/true-cost-report'
 import { earnedValueExportData } from './earned-value-report'
+import { attendanceExceptionsExportData } from './attendance-exceptions-report'
+import { ScheduleError } from '@openbooks/engine/schedule-boards/errors'
 import { bookDifferenceSelection, bookDifferencesExportData, BookDifferenceSelectionError } from './book-differences-report'
 import { projectBudgetExportData } from './project-budget-report'
 import { sql } from 'drizzle-orm'
@@ -106,6 +108,7 @@ export const REPORT_KINDS = [
   'project-profitability',
   'project-budget-vs-actual',
   'earned-value',
+  'attendance-exceptions',
   'book-differences',
   'true-cost',
   'availability',
@@ -161,6 +164,8 @@ export function statementPageHref(statement: { kind?: string; params?: Record<st
       return '/reports/project-budget-vs-actual'
     case 'earned-value':
       return '/reports/earned-value'
+    case 'attendance-exceptions':
+      return '/reports/attendance-exceptions'
     case 'book-differences':
       return '/reports/book-differences'
     case 'true-cost':
@@ -287,6 +292,16 @@ export async function resolveReport(kind: ReportKind, p: URLSearchParams, ctx: R
   if (kind === 'earned-value') {
     if (!can(authz, 'projects.read')) throw new ReportResolutionError('this report needs permission to read projects')
     return { render: 'data', data: await earnedValueExportData(authz, p, period) }
+  }
+  // Attendance exceptions read device attendance of roster shifts; they take
+  // the attendance read grant and the reader's legal-entity scope.
+  if (kind === 'attendance-exceptions') {
+    if (!can(authz, 'hrm.attendance.read')) throw new ReportResolutionError('this report needs permission to read attendance')
+    try { return { render: 'data', data: await attendanceExceptionsExportData(authz, p, period), requiredPermissions: ['hrm.attendance.read'] } }
+    catch (error) {
+      if (error instanceof ScheduleError) throw new ReportResolutionError(error.remedy ? `${error.message} ${error.remedy}` : error.message)
+      throw error
+    }
   }
   // Budget vs actual reads one project's budgets and job cost, within the
   // reader's legal-entity scope.

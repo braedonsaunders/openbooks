@@ -82,7 +82,9 @@
     "unassigned": "无去向",
     "draft": "尚未发布",
     "elsewhere": "已在{board}中安排",
-    "leave": "{type}：休假 {hours} 小时"
+    "leave": "{type}：休假 {hours} 小时",
+    "removal": "移除等待发布",
+    "closed": "已关闭"
   },
   "picker": {
     "placeholder": "输入代码、客户、项目或地点",
@@ -132,7 +134,13 @@
     "pending": "{people} 行有 {count} 项未发布更改",
     "explain": "发布的预订对团队可见。",
     "action": "发布",
-    "discard": "放弃更改"
+    "discard": "放弃更改",
+    "submit": "提交发布",
+    "submitted": "已提交 {count} 项更改等待发布。",
+    "governedExplain": "受控排程板：发布会生成一条发布记录。若适用审批流程，更改将在批准后发布。",
+    "awaiting": "{count} 项更改正在等待发布决定。",
+    "awaitingFlow": "审批流程将在审批中决定此次发布。在此之前，已提交的更改保持锁定。",
+    "openApprovals": "打开审批"
   },
   "drawer": {
     "title": "安排",
@@ -159,7 +167,21 @@
     "booked": "扣除休息后安排 {hours}。",
     "repeat": "同时安排在",
     "notes": "备注",
-    "notesPlaceholder": "班组需要了解的事项"
+    "notesPlaceholder": "班组需要了解的事项",
+    "removalDraft": "此草稿将在其发布生效后移除已发布的安排。",
+    "awaitingApproval": "此更改属于正在等待决定的发布，无法编辑。",
+    "governed": "已通过受控发布发布。更改会生成新的修订，并随下一次发布一起发布。",
+    "closedOn": "已于 {date} 关闭。已关闭的班次不能更改。",
+    "openRequest": {
+      "awaiting_counterpart": "一项{kind}申请正在等待同事回复。",
+      "pending": "一项{kind}申请正在等待审批。"
+    },
+    "attendance": "考勤",
+    "noAttendance": "尚未判定此班次的考勤。",
+    "close": "关闭班次",
+    "closeTitle": "关闭此班次",
+    "closeExplain": "关闭会将此班次的考勤记录为已审核。关闭后班次不能再更改。",
+    "closed": "班次已关闭。"
   },
   "targets": {
     "where": "目标",
@@ -228,6 +250,10 @@
       "resources": {
         "title": "设备和地点",
         "description": "按天或小时跨项目预订共享设备或地点。"
+      },
+      "roster": {
+        "title": "受管班次表",
+        "description": "循环班次模式、员工班次申请、可选的发布审批，以及带迟到、早退和缺勤标记的打卡考勤。"
       }
     },
     "name": "名称",
@@ -282,7 +308,35 @@
     "title": "我的排程",
     "description": "排程人员发布的您的安排地点和时间。",
     "summary": "{days, plural, other {已安排 # 天}} · {hours}",
-    "empty": "{from} 至 {through} 期间没有为您安排任何内容。"
+    "empty": "{from} 至 {through} 期间没有为您安排任何内容。",
+    "request": {
+      "open": "申请更改",
+      "title": "申请更改班次",
+      "submit": "发送申请",
+      "explain": "若配置了审批流程，则由其决定申请；否则发送后立即生效。",
+      "kind": "申请",
+      "changeExplain": "申请同一天的其他时间。",
+      "swapExplain": "提议与同事的班次调换。需同事先接受。",
+      "releaseExplain": "申请不再担任此班次。",
+      "noCandidates": "两周内此排程板上没有可调换的同事已发布班次。",
+      "swapWith": "同事的班次",
+      "pickShift": "选择班次",
+      "applied": "您的申请已应用到排程。",
+      "offered": "您的调换提议已发送给 {name}。",
+      "submitted": "您的申请正在等待审批。"
+    },
+    "requests": {
+      "title": "班次申请",
+      "empty": "您没有班次申请。",
+      "offer": "{name} 提议调换",
+      "offers": "有 {count} 位同事请求与您调换班次。",
+      "review": "查看",
+      "accept": "接受",
+      "decline": "拒绝",
+      "withdraw": "撤回",
+      "acceptTitle": "接受调换",
+      "declineTitle": "拒绝调换"
+    }
   },
   "source": {
     "explanation": "导入的排程记录为只读。它保留原始日期和指示，不生成工时、不修改员工状态，也不占用新的可用时段。",
@@ -401,6 +455,133 @@
       "linkAddress": "链接地址",
       "apply": "应用链接",
       "invalid": "请使用不超过4000个字符和安全链接。"
+    }
+  },
+  "roster": {
+    "title": "班次表",
+    "reason": "原因",
+    "tabs": {
+      "recurring": "循环班次",
+      "requests": "班次申请",
+      "attendance": "考勤"
+    },
+    "recurring": {
+      "explain": "为人员分配班次模式即可自动安排其班次。手动更改的安排会保留；已开始的班次不会被改动。",
+      "assign": "分配模式",
+      "noPatterns": "没有适用于此排程板的有效班次模式。",
+      "noPatternsRemedy": "请在设置 → 班次模式中为此排程板的法律实体或所有法律实体添加一个。",
+      "person": "人员",
+      "pickPerson": "选择人员",
+      "pattern": "模式",
+      "pickPattern": "选择模式",
+      "from": "开始日期",
+      "to": "截止日期（可选）",
+      "empty": "此排程板上还没有人分配循环班次模式。",
+      "window": "{from} 至 {to}",
+      "openWindow": "自 {from} 起",
+      "status": {
+        "active": "有效",
+        "ended": "已结束",
+        "cancelled": "已取消"
+      },
+      "generatedThrough": "已安排至 {date}",
+      "generated": "已生成至 {through}：新增 {created} 个，更新 {revised} 个，移除 {removed} 个，因手动更改保留 {kept} 个。",
+      "generate": "生成",
+      "omit": "跳过一天",
+      "end": "结束",
+      "cancel": "取消",
+      "endTitle": "结束 {name} 的模式",
+      "endExplain": "选择模式不再安排的第一个日期。自该日期起的后续安排将被移除。",
+      "cancelTitle": "取消 {name} 的模式",
+      "cancelExplain": "分配停止，后续安排将被移除。已开始和过去的班次保持不变。",
+      "omitTitle": "跳过一次",
+      "omitExplain": "选择模式不应安排的日期。",
+      "slot": "班次",
+      "slotLabel": "周期第 {day} 天：{starts}–{ends}",
+      "chooseTitle": "使用这些时间",
+      "starts": "开始时间",
+      "ends": "结束时间",
+      "useTimes": "使用这些时间",
+      "omitted": "已跳过 {date}",
+      "selected": "{date}：{starts} 至 {ends}",
+      "revoke": "恢复",
+      "revokeTitle": "恢复该次安排"
+    },
+    "requests": {
+      "explain": "员工在“我的排程”中申请释放、更改或调换已发布的班次。若配置了审批流程，则在审批中决定；否则提交时即生效。",
+      "show": "显示",
+      "open": "未完成",
+      "all": "最近",
+      "empty": "没有可显示的班次申请。",
+      "kinds": {
+        "release": "释放",
+        "change": "更改",
+        "swap": "调换"
+      },
+      "status": {
+        "awaiting_counterpart": "等待同事回复",
+        "pending": "等待审批",
+        "approved": "已生效",
+        "declined": "已拒绝",
+        "withdrawn": "已撤回"
+      },
+      "proposed": "申请：{span}",
+      "swapWith": "与 {name} 调换：{span}",
+      "noApproval": "未应用审批流程；提交时即生效。",
+      "decidedBy": "由 {name} 决定",
+      "openApprovals": "在审批中打开"
+    },
+    "attendance": {
+      "observeTitle": "判定考勤",
+      "observeExplain": "将 {from} 至 {through} 的已发布班次与目前收到的设备打卡进行比对。",
+      "observe": "判定考勤",
+      "report": "考勤异常",
+      "summary": "出勤 {present} 个，缺勤 {absent} 个，等待设备 {waiting} 个，未判定 {refused} 个。",
+      "importTitle": "导入打卡记录",
+      "importExplain": "上传 CSV 格式的设备导出文件，列为 source_event_id、source_worker_id、kind（clock_in、clock_out、break_start、break_end 或 void）、带 UTC 偏移的 occurred_at，以及可选的 source_version。每一列都会作为证据保留。",
+      "noDevices": "您的法律实体没有已登记的有效考勤设备。",
+      "noDevicesRemedy": "请在设置 → 考勤设备中登记一台，并映射其员工标识。",
+      "device": "设备",
+      "file": "CSV 文件",
+      "completeThrough": "完整截至（可选）",
+      "completeThroughHelp": "设备已发送全部打卡记录的截止时刻（含偏移）；设备时钟位于 {zone}。若导出可能不完整，请留空。",
+      "badWatermark": "完整截止时间需要日期、时间和 UTC 偏移。",
+      "parsed": "已读取 {count} 条打卡记录，拒绝 {problems} 行。",
+      "admit": "导入打卡记录",
+      "admitted": "已导入 {count} 条打卡记录；其中 {replayed} 条此前已记录。",
+      "csv": {
+        "empty": "文件中没有打卡记录行。",
+        "missingColumn": "表头缺少 {column} 列。",
+        "duplicate": "第 {line} 行重复了第 {first} 行的事件和版本。",
+        "kind": "第 {line} 行的 kind 不是 clock_in、clock_out、break_start、break_end 或 void。",
+        "time": "第 {line} 行的 occurred_at 需要是带 UTC 偏移的日期和时间。",
+        "version": "第 {line} 行的 source_version 需要是不小于 1 的整数。",
+        "blank": "第 {line} 行缺少 source_event_id 或 source_worker_id。",
+        "columns": "第 {line} 行的列数与表头不同。",
+        "remedy": "请修正导出文件后重新选择；未导入任何内容。"
+      }
+    }
+  },
+  "attendance": {
+    "status": {
+      "waiting_for_sync": "等待设备",
+      "absent": "缺勤",
+      "present": "出勤",
+      "voided": "已作废"
+    },
+    "flags": {
+      "absent": "缺勤",
+      "late": "迟到",
+      "leftEarly": "早退",
+      "overBreak": "休息超出计划",
+      "waiting": "等待设备打卡"
+    },
+    "short": {
+      "absent": "缺勤",
+      "late": "迟到",
+      "leftEarly": "早退",
+      "overBreak": "休息",
+      "waiting": "同步"
     }
   }
 }

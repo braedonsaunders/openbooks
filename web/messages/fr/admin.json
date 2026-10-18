@@ -2814,6 +2814,26 @@
           "reason": "Motif du changement"
     },
     "entities": {
+      "schedule-patterns": {
+        "title": "Modèles de quarts",
+        "singularTitle": "Modèle de quarts",
+        "description": "Cycles répétitifs de quarts en heure locale, attribués aux personnes des plannings de quarts pour planifier leurs quarts."
+      },
+      "schedule-attendance-devices": {
+        "title": "Appareils de présence",
+        "singularTitle": "Appareil de présence",
+        "description": "Pointeuses et autres sources de pointage d’une entité juridique, chacune avec un code et un fuseau horaire fixes."
+      },
+      "schedule-attendance-identities": {
+        "title": "Identités d’appareil",
+        "singularTitle": "Identité d’appareil",
+        "description": "La personne que désigne l’identifiant de travailleur d’un appareil, sur une période datée."
+      },
+      "schedule-attendance-policies": {
+        "title": "Politiques de présence",
+        "singularTitle": "Politique de présence",
+        "description": "Fenêtres de pointage et minutes de tolérance datées pour observer la présence sur un planning de quarts."
+      },
       "equity-account-policies": {
         "title": "Comptes de capitaux propres",
         "singular": "Politique de comptes de capitaux propres",
@@ -3856,6 +3876,29 @@
       "expense-fx-policies": {"title": "Politiques de change des frais", "description": "Indique si une ligne de frais en devise peut être convertie à un taux de change explicite motivé plutôt qu’au taux daté."}
     },
     "fields": {
+      "boardType": "Type de tableau",
+      "governedFrom": "Encadré à partir du",
+      "captureBeforeMinutes": "Pointages avant le début (minutes)",
+      "captureAfterMinutes": "Pointages après la fin (minutes)",
+      "lateGraceMinutes": "Tolérance de retard (minutes)",
+      "earlyGraceMinutes": "Tolérance de départ anticipé (minutes)",
+      "breakGraceMinutes": "Tolérance de pause (minutes)",
+      "cycleDays": "Durée du cycle (jours)",
+      "cycleAnchor": "Le cycle commence le",
+      "slots": "Quarts",
+      "horizonDays": "Planifier à l’avance (jours)",
+      "targetKind": "Affecter à",
+      "scheduleCodeId": "Code de planification",
+      "detail": "Détail",
+      "sourceWorkerId": "Identifiant de travailleur de l’appareil",
+      "workerPartyId": "Personne",
+      "deviceId": "Appareil",
+      "schedulePatternAddSlot": "Ajouter un quart",
+      "schedulePatternSlotDay": "Jour du cycle (0 est le premier)",
+      "schedulePatternSlotStarts": "Début",
+      "schedulePatternSlotEnds": "Fin",
+      "schedulePatternSlotBreak": "Pause (minutes)",
+      "schedulePatternSlotQualifications": "Qualifications requises",
       "allowRateOverride": "Autoriser les taux de change explicites",
       "commonStockAccountId": "Compte des actions ordinaires",
       "preferredStockAccountId": "Compte des actions privilégiées",
@@ -4581,6 +4624,22 @@
       "denominations": "Coupures d'espèces"
     },
     "fieldHelp": {
+      "scheduleBoardType": "Un planning de quarts géré ajoute les modèles de quarts récurrents, les demandes de quarts des employés, la publication encadrée et la présence par appareil. Le type est fixé dès la création du tableau.",
+      "scheduleBoardGovernedFrom": "Les affectations commençant à cette date ou après ne sont publiées que par une publication encadrée et sont conservées comme historique une fois publiées. Les affectations antérieures gardent les règles précédentes du tableau.",
+      "scheduleAttendanceEffectiveFrom": "La première date de quart à laquelle cette version s’applique. Les quarts antérieurs gardent la version qui s’appliquait à eux.",
+      "scheduleAttendanceCapture": "Combien de temps avant le début d’un quart, et après sa fin, un pointage compte encore pour ce quart.",
+      "scheduleAttendanceGrace": "Minutes après le début pendant lesquelles une entrée reste à l’heure, et avant la fin pendant lesquelles une sortie n’est pas un départ anticipé.",
+      "scheduleAttendanceBreakGrace": "Minutes au-delà de la pause prévue avant qu’une pause soit jugée trop longue.",
+      "scheduleAttendanceDeviceCode": "Le code utilisé par les imports de pointages pour cet appareil. Il ne peut plus changer une fois enregistré.",
+      "scheduleAttendanceDeviceTimeZone": "Le fuseau horaire de l’horloge de l’appareil, par exemple Europe/Paris. Il ne peut pas changer ; enregistrez un nouvel appareil pour une source modifiée.",
+      "scheduleAttendanceSourceWorker": "L’identifiant de travailleur exactement tel que l’appareil l’exporte, par exemple un numéro de badge.",
+      "scheduleAttendanceIdentityEnd": "La première date à laquelle l’identifiant ne désigne plus cette personne. Laissez vide tant qu’il la désigne.",
+      "schedulePatternSubsidiary": "Limite le modèle aux tableaux d’une entité juridique ; laissez vide pour le proposer sur chaque planning de quarts.",
+      "schedulePatternCycleDays": "Le nombre de jours que dure le modèle avant de se répéter, par exemple 7 pour une rotation hebdomadaire ou 14 pour une rotation sur deux semaines.",
+      "schedulePatternCycleAnchor": "La date qui est le jour 0 du cycle.",
+      "schedulePatternSlots": "Chaque quart indique son jour dans le cycle et ses heures locales de début et de fin. Un quart qui se termine à son heure de début ou avant se termine le lendemain.",
+      "schedulePatternHorizon": "Le nombre de jours à l’avance pour lesquels les affectations du modèle sont générées et tenues à jour.",
+      "schedulePatternTarget": "La destination des affectations générées. Laissez vide pour planifier des quarts sans destination.",
       "apicShareBasedAccount": "Crédité à mesure que la rémunération en actions est comptabilisée ; reclassé en capital social lors de l’exercice ou du règlement des attributions.",
       "convertibleInstrumentsAccount": "Porte les SAFE et les billets convertibles à leur principal jusqu’à leur conversion, leur remboursement ou leur annulation.",
       "accruedInterestAccount": "Porte les intérêts courus sur les billets convertibles jusqu’à leur conversion, leur remboursement ou leur annulation. Il peut s’agir du compte des instruments convertibles.",
@@ -4752,7 +4811,7 @@
       "scheduleBoardWeekStartsOn": "Le premier jour de chaque semaine affichée : 0 pour dimanche, 1 pour lundi, jusqu’à 6 pour samedi.",
       "scheduleBoardGrain": "Les journées entières affectent chaque personne pour la journée de travail du tableau ; les quarts horaires affectent des heures de début et de fin.",
       "scheduleBoardDayStarts": "La journée de travail utilisée pour les affectations à la journée, au format 24 heures, par exemple 07:00.",
-      "scheduleBoardPublishPolicy": "Les tableaux en direct publient chaque affectation dès sa création. Les tableaux à publication groupée regroupent les modifications jusqu’à ce qu’une personne disposant des droits d’approbation les publie.",
+      "scheduleBoardPublishPolicy": "Les tableaux en direct publient chaque affectation dès sa création. Les tableaux à publication groupée regroupent les modifications jusqu’à ce qu’une personne disposant des droits d’approbation les publie. Les tableaux encadrés, disponibles sur les plannings de quarts gérés, publient par une publication enregistrée qu’un flux d’approbation peut décider et conservent les affectations publiées comme historique.",
       "scheduleBoardPrefillTimesheets": "Les affectations publiées sur ce tableau apparaissent dans la feuille de temps hebdomadaire de chaque personne comme du temps planifié qu’elle peut ajouter en un clic, puis confirmer ou corriger.",
       "scheduleBoardPrefillCrewTime": "Les affectations de projet publiées sur ce tableau proposent, sur la feuille de temps d’équipe du contremaître pour ce projet et ce jour, l’équipe et les heures affectées, ajoutées en un clic.",
       "scheduleBoardPrefillFieldTickets": "Les affectations de projet publiées sur ce tableau proposent, sur le bon de régie de ce projet, l’équipe et les heures affectées pour la période du bon, ajoutées en un clic.",
@@ -4801,6 +4860,16 @@
       "taxRateEffectiveTo": "Dernière date de transaction couverte par ce taux, cette date incluse. Laissez vide pour ne pas définir de date de fin. Si le taux suivant commence le 1er juillet, terminez ce taux le 30 juin."
     },
     "options": {
+      "scheduleBoardType": {
+        "people": "Tableau de personnes",
+        "shift_roster": "Planning de quarts géré"
+      },
+      "schedulePatternTarget": {
+        "customer": "Client",
+        "project": "Projet",
+        "location": "Emplacement",
+        "code": "Code de planification"
+      },
       "posCashDirection": {
         "payIn": "Entrée",
         "payOut": "Sortie"
@@ -5527,6 +5596,7 @@
         "progress": "Avancement"
       },
       "schedulePublishPolicy": {
+        "governed": "Publication encadrée",
         "live": "En direct",
         "staged": "Publier ensemble"
       },
@@ -6777,6 +6847,11 @@
     },
     "filterAll": "Tous",
     "sections": {
+      "schedulePatternIdentity": "Modèle",
+      "schedulePatternCycle": "Cycle de rotation",
+      "schedulePatternCycleHelp": "Les heures des quarts sont des heures locales dans le fuseau du modèle ; les changements d’heure sont résolus pour chaque date.",
+      "schedulePatternBooking": "Affectation",
+      "schedulePatternChange": "Modification",
       "address": "Adresse postale",
       "basisCaps": "Plafonds d’assiette",
       "deductionProtection": "Protection des retenues",
@@ -8462,11 +8537,11 @@
     },
     "hrmAttendance": {
       "title": "Présence par appareil",
-      "description": "Identités des appareils, pointages et suivi de la synchronisation facultatifs. La collecte des pointages ne nécessite pas la planification des quarts."
+      "description": "Pointeuses, identités des travailleurs et imports de pointages facultatifs, observés sur les plannings de quarts gérés comme retards, départs anticipés, absences et pauses trop longues. La collecte des pointages ne nécessite pas la Planification."
     },
     "hrmShiftClosing": {
       "title": "Clôture formelle des quarts",
-      "description": "Contrôle et clôture facultatifs des quarts terminés selon les preuves de présence actuelles. Nécessite Planification des quarts et Présence par appareil. La publication ne nécessite pas de clôture."
+      "description": "Contrôle et clôture facultatifs des quarts terminés du planning selon les preuves de présence actuelles. Nécessite Planification et Présence par appareil. La publication ne nécessite pas de clôture."
     },
     "hrmCertifications": {
       "title": "Certifications et licences",

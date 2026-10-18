@@ -82,7 +82,9 @@
     "unassigned": "Kein Ziel",
     "draft": "Noch nicht veröffentlicht",
     "elsewhere": "Eingeplant auf {board}",
-    "leave": "{type}: {hours} Stunden Abwesenheit"
+    "leave": "{type}: {hours} Stunden Abwesenheit",
+    "removal": "Entfernung wartet auf Veröffentlichung",
+    "closed": "Abgeschlossen"
   },
   "picker": {
     "placeholder": "Code, Kunde, Projekt oder Standort eingeben",
@@ -132,7 +134,13 @@
     "pending": "{count, plural, one {# unveröffentlichte Änderung} other {# unveröffentlichte Änderungen}} für {people, plural, one {# Zeile} other {# Zeilen}}",
     "explain": "Veröffentlichte Buchungen sind für das Team sichtbar.",
     "action": "Veröffentlichen",
-    "discard": "Änderungen verwerfen"
+    "discard": "Änderungen verwerfen",
+    "submit": "Zur Veröffentlichung einreichen",
+    "submitted": "{count, plural, one {Eine Änderung zur Veröffentlichung eingereicht.} other {# Änderungen zur Veröffentlichung eingereicht.}}",
+    "governedExplain": "Gesteuerte Plantafel: Beim Veröffentlichen entsteht eine Veröffentlichung. Gilt ein Freigabe-Flow, werden die Änderungen nach der Freigabe veröffentlicht.",
+    "awaiting": "{count, plural, one {# Änderung wartet} other {# Änderungen warten}} auf die Entscheidung über die Veröffentlichung.",
+    "awaitingFlow": "Ein Freigabe-Flow entscheidet diese Veröffentlichung unter Freigaben. Bis dahin bleiben die eingereichten Änderungen gesperrt.",
+    "openApprovals": "Freigaben öffnen"
   },
   "drawer": {
     "title": "Einplanung",
@@ -159,7 +167,21 @@
     "booked": "{hours} nach Abzug der Pause eingeplant.",
     "repeat": "Auch einplanen am",
     "notes": "Notizen",
-    "notesPlaceholder": "Was die Kolonne wissen muss"
+    "notesPlaceholder": "Was die Kolonne wissen muss",
+    "removalDraft": "Dieser Entwurf entfernt die veröffentlichte Einplanung, sobald seine Veröffentlichung übernommen ist.",
+    "awaitingApproval": "Diese Änderung gehört zu einer Veröffentlichung, die auf ihre Entscheidung wartet, und kann nicht bearbeitet werden.",
+    "governed": "Unter gesteuerter Veröffentlichung veröffentlicht. Änderungen erzeugen eine neue Revision, die mit der nächsten Veröffentlichung erscheint.",
+    "closedOn": "Am {date} abgeschlossen. Eine abgeschlossene Schicht kann sich nicht mehr ändern.",
+    "openRequest": {
+      "awaiting_counterpart": "Eine Anfrage ({kind}) wartet auf die Antwort der Kollegin oder des Kollegen.",
+      "pending": "Eine Anfrage ({kind}) wartet auf Freigabe."
+    },
+    "attendance": "Anwesenheit",
+    "noAttendance": "Die Anwesenheit dieser Schicht wurde noch nicht ausgewertet.",
+    "close": "Schicht abschließen",
+    "closeTitle": "Diese Schicht abschließen",
+    "closeExplain": "Der Abschluss hält die Anwesenheit der Schicht als geprüft fest. Eine abgeschlossene Schicht kann sich danach nicht mehr ändern.",
+    "closed": "Die Schicht wurde abgeschlossen."
   },
   "targets": {
     "where": "Ziel",
@@ -228,6 +250,10 @@
       "resources": {
         "title": "Geräte und Standorte",
         "description": "Gemeinsame Geräte oder Standorte projektübergreifend tage- oder stundenweise reservieren."
+      },
+      "roster": {
+        "title": "Verwalteter Schichtplan",
+        "description": "Wiederkehrende Schichtmuster, Schichtanfragen der Mitarbeitenden, optionale Freigabe der Veröffentlichung und Stempeluhr-Anwesenheit mit Hinweisen auf Verspätung, frühes Gehen und Abwesenheit."
       }
     },
     "name": "Bezeichnung",
@@ -282,7 +308,35 @@
     "title": "Mein Einsatzplan",
     "description": "Wo und wann Sie eingeplant sind, wie von Ihren Disponenten veröffentlicht.",
     "summary": "{days, plural, one {# Tag eingeplant} other {# Tage eingeplant}} · {hours}",
-    "empty": "Vom {from} bis {through} ist für Sie nichts eingeplant."
+    "empty": "Vom {from} bis {through} ist für Sie nichts eingeplant.",
+    "request": {
+      "open": "Änderung beantragen",
+      "title": "Schichtänderung beantragen",
+      "submit": "Anfrage senden",
+      "explain": "Ist ein Freigabe-Flow eingerichtet, entscheidet er über die Anfrage; sonst gilt sie, sobald Sie sie senden.",
+      "kind": "Anfrage",
+      "changeExplain": "Andere Zeiten am selben Tag beantragen.",
+      "swapExplain": "Einen Tausch mit der Schicht einer Kollegin oder eines Kollegen anbieten. Diese Person stimmt zuerst zu.",
+      "releaseExplain": "Beantragen, von dieser Schicht genommen zu werden.",
+      "noCandidates": "Innerhalb von zwei Wochen hat niemand eine veröffentlichte Schicht auf dieser Plantafel, die getauscht werden könnte.",
+      "swapWith": "Schicht der Kollegin oder des Kollegen",
+      "pickShift": "Schicht auswählen",
+      "applied": "Ihre Anfrage wurde in den Plan übernommen.",
+      "offered": "Ihr Tauschangebot wurde an {name} gesendet.",
+      "submitted": "Ihre Anfrage wartet auf Freigabe."
+    },
+    "requests": {
+      "title": "Schichtanfragen",
+      "empty": "Sie haben keine Schichtanfragen.",
+      "offer": "{name} bietet einen Tausch an",
+      "offers": "{count, plural, one {Eine Kollegin oder ein Kollege möchte Schichten mit Ihnen tauschen.} other {# Kolleginnen und Kollegen möchten Schichten mit Ihnen tauschen.}}",
+      "review": "Prüfen",
+      "accept": "Annehmen",
+      "decline": "Ablehnen",
+      "withdraw": "Zurückziehen",
+      "acceptTitle": "Tausch annehmen",
+      "declineTitle": "Tausch ablehnen"
+    }
   },
   "source": {
     "explanation": "Importierte Planungsdaten sind schreibgeschützt. Datum und Anweisungen bleiben erhalten, ohne Arbeitszeit, Mitarbeiterstatus oder neue Verfügbarkeit zu ändern.",
@@ -401,6 +455,133 @@
       "linkAddress": "Linkadresse",
       "apply": "Link anwenden",
       "invalid": "Verwenden Sie höchstens 4000 Zeichen und sichere Links."
+    }
+  },
+  "roster": {
+    "title": "Schichtplan",
+    "reason": "Begründung",
+    "tabs": {
+      "recurring": "Wiederkehrende Schichten",
+      "requests": "Schichtanfragen",
+      "attendance": "Anwesenheit"
+    },
+    "recurring": {
+      "explain": "Weisen Sie einer Person ein Schichtmuster zu, um ihre Schichten automatisch einzuplanen. Von Hand geänderte Einplanungen bleiben erhalten; begonnene Schichten werden nie verändert.",
+      "assign": "Muster zuweisen",
+      "noPatterns": "Für diese Plantafel gilt kein aktives Schichtmuster.",
+      "noPatternsRemedy": "Legen Sie eines unter Einrichtung → Schichtmuster an, für die Gesellschaft dieser Plantafel oder für alle Gesellschaften.",
+      "person": "Mitarbeitende",
+      "pickPerson": "Person auswählen",
+      "pattern": "Muster",
+      "pickPattern": "Muster auswählen",
+      "from": "Ab",
+      "to": "Bis (optional)",
+      "empty": "Auf dieser Plantafel hat noch niemand ein wiederkehrendes Schichtmuster.",
+      "window": "{from} bis {to}",
+      "openWindow": "Ab {from}",
+      "status": {
+        "active": "Aktiv",
+        "ended": "Beendet",
+        "cancelled": "Storniert"
+      },
+      "generatedThrough": "Eingeplant bis {date}",
+      "generated": "Erzeugt bis {through}: {created} hinzugefügt, {revised} aktualisiert, {removed} entfernt, {kept} als Handänderung beibehalten.",
+      "generate": "Erzeugen",
+      "omit": "Tag auslassen",
+      "end": "Beenden",
+      "cancel": "Stornieren",
+      "endTitle": "Muster von {name} beenden",
+      "endExplain": "Wählen Sie das erste Datum, an dem das Muster nicht mehr einplant. Künftige Einplanungen ab diesem Datum werden entfernt.",
+      "cancelTitle": "Muster von {name} stornieren",
+      "cancelExplain": "Die Zuweisung endet und ihre künftigen Einplanungen werden entfernt. Begonnene und vergangene Schichten bleiben unverändert.",
+      "omitTitle": "Termin auslassen",
+      "omitExplain": "Wählen Sie das Datum, an dem das Muster nicht einplanen soll.",
+      "slot": "Schicht",
+      "slotLabel": "Zyklustag {day}: {starts}–{ends}",
+      "chooseTitle": "Diese Zeiten verwenden",
+      "starts": "Beginnzeit",
+      "ends": "Endzeit",
+      "useTimes": "Diese Zeiten verwenden",
+      "omitted": "{date} ausgelassen",
+      "selected": "{date}: {starts} bis {ends}",
+      "revoke": "Wiederherstellen",
+      "revokeTitle": "Termin wiederherstellen"
+    },
+    "requests": {
+      "explain": "Mitarbeitende beantragen unter Mein Einsatzplan, veröffentlichte Schichten abzugeben, zu ändern oder zu tauschen. Ein eingerichteter Freigabe-Flow entscheidet sie unter Freigaben; ohne Flow gelten sie beim Absenden.",
+      "show": "Anzeigen",
+      "open": "Offen",
+      "all": "Neueste",
+      "empty": "Keine Schichtanfragen vorhanden.",
+      "kinds": {
+        "release": "Abgeben",
+        "change": "Ändern",
+        "swap": "Tauschen"
+      },
+      "status": {
+        "awaiting_counterpart": "Wartet auf Kollegin oder Kollegen",
+        "pending": "Wartet auf Freigabe",
+        "approved": "Übernommen",
+        "declined": "Abgelehnt",
+        "withdrawn": "Zurückgezogen"
+      },
+      "proposed": "Beantragt: {span}",
+      "swapWith": "Tausch mit {name}: {span}",
+      "noApproval": "Kein Freigabe-Flow angewendet; beim Absenden übernommen.",
+      "decidedBy": "Entschieden von {name}",
+      "openApprovals": "Unter Freigaben öffnen"
+    },
+    "attendance": {
+      "observeTitle": "Anwesenheit auswerten",
+      "observeExplain": "Vergleicht veröffentlichte Schichten vom {from} bis {through} mit den bisher eingegangenen Gerätestempelungen.",
+      "observe": "Anwesenheit auswerten",
+      "report": "Anwesenheitsabweichungen",
+      "summary": "{present} anwesend, {absent} abwesend, {waiting} warten auf ein Gerät, {refused} nicht ausgewertet.",
+      "importTitle": "Stempelungen importieren",
+      "importExplain": "Laden Sie einen Geräteexport als CSV mit den Spalten source_event_id, source_worker_id, kind (clock_in, clock_out, break_start, break_end oder void), occurred_at mit UTC-Versatz und optional source_version hoch. Jede Spalte bleibt als Nachweis erhalten.",
+      "noDevices": "Für Ihre Gesellschaften ist kein aktives Anwesenheitsgerät registriert.",
+      "noDevicesRemedy": "Registrieren Sie eines unter Einrichtung → Anwesenheitsgeräte und ordnen Sie seine Mitarbeiterkennungen zu.",
+      "device": "Gerät",
+      "file": "CSV-Datei",
+      "completeThrough": "Vollständig bis (optional)",
+      "completeThroughHelp": "Der Zeitpunkt mit Versatz, bis zu dem das Gerät alle Stempelungen gesendet hat; die Geräteuhr läuft in {zone}. Leer lassen, wenn der Export unvollständig sein kann.",
+      "badWatermark": "Der Vollständigkeitszeitpunkt braucht Datum, Uhrzeit und UTC-Versatz.",
+      "parsed": "{count} Stempelungen gelesen, {problems} Zeilen abgelehnt.",
+      "admit": "Stempelungen importieren",
+      "admitted": "{count} Stempelungen importiert; {replayed} waren bereits erfasst.",
+      "csv": {
+        "empty": "Die Datei enthält keine Stempelzeilen.",
+        "missingColumn": "Der Kopfzeile fehlt die Spalte {column}.",
+        "duplicate": "Zeile {line} wiederholt Ereignis und Version aus Zeile {first}.",
+        "kind": "Zeile {line} hat eine andere Art als clock_in, clock_out, break_start, break_end oder void.",
+        "time": "Zeile {line} braucht occurred_at als Datum und Uhrzeit mit UTC-Versatz.",
+        "version": "Zeile {line} braucht source_version als ganze Zahl ab 1.",
+        "blank": "Zeile {line} hat keine source_event_id oder source_worker_id.",
+        "columns": "Zeile {line} hat eine andere Spaltenzahl als die Kopfzeile.",
+        "remedy": "Korrigieren Sie den Export und wählen Sie die Datei erneut; nichts wurde importiert."
+      }
+    }
+  },
+  "attendance": {
+    "status": {
+      "waiting_for_sync": "Wartet auf Gerät",
+      "absent": "Abwesend",
+      "present": "Anwesend",
+      "voided": "Aufgehoben"
+    },
+    "flags": {
+      "absent": "Abwesend",
+      "late": "Verspätet gekommen",
+      "leftEarly": "Früher gegangen",
+      "overBreak": "Pause länger als geplant",
+      "waiting": "Wartet auf Gerätestempelungen"
+    },
+    "short": {
+      "absent": "Fehlt",
+      "late": "Spät",
+      "leftEarly": "Früh",
+      "overBreak": "Pause",
+      "waiting": "Abgl."
     }
   }
 }

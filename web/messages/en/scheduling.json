@@ -82,7 +82,9 @@
     "unassigned": "No target",
     "draft": "Not yet published",
     "elsewhere": "Booked on {board}",
-    "leave": "{type}: {hours} hours of leave"
+    "leave": "{type}: {hours} hours of leave",
+    "removal": "Removal waiting for publication",
+    "closed": "Closed"
   },
   "picker": {
     "placeholder": "Type a code, customer, project or location",
@@ -132,7 +134,13 @@
     "pending": "{count, plural, one {# unpublished change} other {# unpublished changes}} for {people, plural, one {# row} other {# rows}}",
     "explain": "Planned bookings; published changes are visible to the team.",
     "action": "Publish",
-    "discard": "Discard changes"
+    "discard": "Discard changes",
+    "submit": "Submit for publication",
+    "submitted": "{count, plural, one {Submitted a change for publication.} other {Submitted # changes for publication.}}",
+    "governedExplain": "Governed board: publishing records a publication. When an approval Flow applies, the changes publish once it is approved.",
+    "awaiting": "{count, plural, one {# change is} other {# changes are}} waiting for a publication decision.",
+    "awaitingFlow": "An approval Flow decides this publication in Approvals. The submitted changes stay locked until then.",
+    "openApprovals": "Open Approvals"
   },
   "drawer": {
     "title": "Booking",
@@ -159,7 +167,21 @@
     "booked": "{hours} booked after the break.",
     "repeat": "Also book on",
     "notes": "Notes",
-    "notesPlaceholder": "What the crew needs to know"
+    "notesPlaceholder": "What the crew needs to know",
+    "removalDraft": "This draft removes the published booking once its publication is applied.",
+    "awaitingApproval": "This change is in a publication waiting for its decision and cannot be edited.",
+    "governed": "Published under governed publication. Changes create a new revision that publishes through the next publication.",
+    "closedOn": "Closed on {date}. A closed shift cannot change.",
+    "openRequest": {
+      "awaiting_counterpart": "A {kind} request is waiting for the colleague's answer.",
+      "pending": "A {kind} request is waiting for approval."
+    },
+    "attendance": "Attendance",
+    "noAttendance": "Attendance has not been observed for this shift yet.",
+    "close": "Close shift",
+    "closeTitle": "Close this shift",
+    "closeExplain": "Closing records the shift's attendance as reviewed. A closed shift cannot change afterwards.",
+    "closed": "The shift was closed."
   },
   "targets": {
     "where": "Target",
@@ -228,6 +250,10 @@
       "resources": {
         "title": "Equipment and locations",
         "description": "Reserve shared equipment units or locations by day or hour across projects."
+      },
+      "roster": {
+        "title": "Managed shift roster",
+        "description": "Recurring shift patterns, employee shift requests, optional approval of publishing and time-clock attendance with late, early and absent badges."
       }
     },
     "name": "Name",
@@ -282,7 +308,35 @@
     "title": "My schedule",
     "description": "Where you are booked and when, as published by your schedulers.",
     "summary": "{days, plural, one {# day booked} other {# days booked}} · {hours}",
-    "empty": "Nothing is booked for you from {from} to {through}."
+    "empty": "Nothing is booked for you from {from} to {through}.",
+    "request": {
+      "open": "Request change",
+      "title": "Request a shift change",
+      "submit": "Send request",
+      "explain": "Your scheduler's approval Flow decides the request when one is configured; otherwise it applies as soon as you send it.",
+      "kind": "Request",
+      "changeExplain": "Ask for different hours on the same day.",
+      "swapExplain": "Offer to trade with a colleague's shift. The colleague accepts first.",
+      "releaseExplain": "Ask to be taken off this shift.",
+      "noCandidates": "No colleague has a published shift on this board within two weeks to swap with.",
+      "swapWith": "Colleague's shift",
+      "pickShift": "Choose a shift",
+      "applied": "Your request was applied to the schedule.",
+      "offered": "Your swap offer was sent to {name}.",
+      "submitted": "Your request is waiting for approval."
+    },
+    "requests": {
+      "title": "Shift requests",
+      "empty": "You have no shift requests.",
+      "offer": "{name} offers a swap",
+      "offers": "{count, plural, one {A colleague asked to swap shifts with you.} other {# colleagues asked to swap shifts with you.}}",
+      "review": "Review",
+      "accept": "Accept",
+      "decline": "Decline",
+      "withdraw": "Withdraw",
+      "acceptTitle": "Accept the swap",
+      "declineTitle": "Decline the swap"
+    }
   },
   "source": {
     "explanation": "Imported scheduling evidence is read-only. It preserves the source date and instructions without creating worked time, changing employee status, or reserving new availability.",
@@ -401,6 +455,133 @@
       "linkAddress": "Link address",
       "apply": "Apply link",
       "invalid": "Use at most 4000 characters and safe links."
+    }
+  },
+  "roster": {
+    "title": "Roster",
+    "reason": "Reason",
+    "tabs": {
+      "recurring": "Recurring shifts",
+      "requests": "Shift requests",
+      "attendance": "Attendance"
+    },
+    "recurring": {
+      "explain": "Assign a shift pattern to a person to book their shifts automatically. Bookings you change by hand are kept; started shifts are never touched.",
+      "assign": "Assign pattern",
+      "noPatterns": "No active shift patterns apply to this board.",
+      "noPatternsRemedy": "Add one in Setup → Shift patterns, for this board's legal entity or for every legal entity.",
+      "person": "Person",
+      "pickPerson": "Choose a person",
+      "pattern": "Pattern",
+      "pickPattern": "Choose a pattern",
+      "from": "From",
+      "to": "Through (optional)",
+      "empty": "Nobody on this board has a recurring shift pattern yet.",
+      "window": "{from} to {to}",
+      "openWindow": "From {from}",
+      "status": {
+        "active": "Active",
+        "ended": "Ended",
+        "cancelled": "Cancelled"
+      },
+      "generatedThrough": "Booked through {date}",
+      "generated": "Generated through {through}: {created} added, {revised} updated, {removed} removed, {kept} kept as changed by hand.",
+      "generate": "Generate",
+      "omit": "Skip a day",
+      "end": "End",
+      "cancel": "Cancel",
+      "endTitle": "End {name}'s pattern",
+      "endExplain": "Choose the first date the pattern no longer books. Its future bookings from that date are removed.",
+      "cancelTitle": "Cancel {name}'s pattern",
+      "cancelExplain": "The assignment stops and its future bookings are removed. Started and past shifts stay as they are.",
+      "omitTitle": "Skip an occurrence",
+      "omitExplain": "Choose the date the pattern should not book.",
+      "slot": "Shift",
+      "slotLabel": "Cycle day {day}: {starts}–{ends}",
+      "chooseTitle": "Use these times",
+      "starts": "Start time",
+      "ends": "End time",
+      "useTimes": "Use these times",
+      "omitted": "Skipped {date}",
+      "selected": "{date}: {starts} to {ends}",
+      "revoke": "Restore",
+      "revokeTitle": "Restore the occurrence"
+    },
+    "requests": {
+      "explain": "Employees ask to release, change or swap their published shifts from My schedule. A configured approval Flow decides them in Approvals; without one they apply when submitted.",
+      "show": "Show",
+      "open": "Open",
+      "all": "Recent",
+      "empty": "No shift requests to show.",
+      "kinds": {
+        "release": "Release",
+        "change": "Change",
+        "swap": "Swap"
+      },
+      "status": {
+        "awaiting_counterpart": "Waiting for colleague",
+        "pending": "Waiting for approval",
+        "approved": "Applied",
+        "declined": "Declined",
+        "withdrawn": "Withdrawn"
+      },
+      "proposed": "Requested: {span}",
+      "swapWith": "Swap with {name}: {span}",
+      "noApproval": "No approval Flow applied; applied when submitted.",
+      "decidedBy": "Decided by {name}",
+      "openApprovals": "Open in Approvals"
+    },
+    "attendance": {
+      "observeTitle": "Observe attendance",
+      "observeExplain": "Compare published shifts from {from} to {through} with the device check-ins received so far.",
+      "observe": "Observe attendance",
+      "report": "Attendance exceptions",
+      "summary": "{present} present, {absent} absent, {waiting} waiting for a device, {refused} not observed.",
+      "importTitle": "Import check-ins",
+      "importExplain": "Upload a device export as CSV with the columns source_event_id, source_worker_id, kind (clock_in, clock_out, break_start, break_end or void), occurred_at with its UTC offset, and optionally source_version. Every column is kept as evidence.",
+      "noDevices": "No active attendance devices are registered for your legal entities.",
+      "noDevicesRemedy": "Register one in Setup → Attendance devices and map its worker identifiers.",
+      "device": "Device",
+      "file": "CSV file",
+      "completeThrough": "Complete through (optional)",
+      "completeThroughHelp": "The instant up to which the device has sent every check-in, with its offset; the device clock is in {zone}. Leave empty when the export may be partial.",
+      "badWatermark": "The completeness time needs a date, a time and a UTC offset.",
+      "parsed": "{count} check-ins read, {problems} lines refused.",
+      "admit": "Import check-ins",
+      "admitted": "Imported {count} check-ins; {replayed} were already recorded.",
+      "csv": {
+        "empty": "The file has no check-in rows.",
+        "missingColumn": "The header has no {column} column.",
+        "duplicate": "Line {line} repeats the event and version on line {first}.",
+        "kind": "Line {line} has a kind other than clock_in, clock_out, break_start, break_end or void.",
+        "time": "Line {line} needs occurred_at as a date and time with its UTC offset.",
+        "version": "Line {line} needs source_version as a whole number of at least 1.",
+        "blank": "Line {line} has no source_event_id or source_worker_id.",
+        "columns": "Line {line} has a different number of columns than the header.",
+        "remedy": "Correct the export and choose the file again; nothing was imported."
+      }
+    }
+  },
+  "attendance": {
+    "status": {
+      "waiting_for_sync": "Waiting for device",
+      "absent": "Absent",
+      "present": "Present",
+      "voided": "Voided"
+    },
+    "flags": {
+      "absent": "Absent",
+      "late": "Arrived late",
+      "leftEarly": "Left early",
+      "overBreak": "Break over plan",
+      "waiting": "Waiting for device check-ins"
+    },
+    "short": {
+      "absent": "Absent",
+      "late": "Late",
+      "leftEarly": "Early",
+      "overBreak": "Break",
+      "waiting": "Sync"
     }
   }
 }

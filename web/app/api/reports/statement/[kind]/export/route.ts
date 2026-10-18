@@ -65,6 +65,10 @@ export const GET = defineRoute({
     if (!can(gate, 'projects.read')) return NextResponse.json({ error: 'you do not have access to this data' }, { status: 403 })
     if (!(await isFeatureEnabled(gate.user.orgId, 'projectProgress'))) return notFound('record')
   }
+  if (kind === 'attendance-exceptions') {
+    if (!can(gate, 'hrm.attendance.read')) return NextResponse.json({ error: 'you do not have access to this data' }, { status: 403 })
+    for (const feature of ['hrm', 'hrmShiftPlanning', 'hrmAttendance']) if (!(await isFeatureEnabled(gate.user.orgId, feature))) return notFound('record')
+  }
   if (kind === 'book-differences' && !(await isFeatureEnabled(gate.user.orgId, 'multiBookAccounting'))) {
     return notFound('record')
   }

@@ -2,9 +2,34 @@
 
 import type { CSSProperties, DragEvent, MouseEvent } from 'react'
 import { useTranslations } from 'next-intl'
-import { Lock, MessageSquareText } from 'lucide-react'
+import { ArrowLeftRight, Lock, MessageSquareText } from 'lucide-react'
 import { cn } from '@openbooks/ui'
 import { targetHue, targetShortLabel, type BoardAbsence, type BoardEntry } from './model'
+import type { BoardAttendance } from '@openbooks/engine/schedule-boards/window'
+
+/** The attendance exceptions an observation found, worded for a badge. */
+export function attendanceFlags(attendance: BoardAttendance | null | undefined): ('absent' | 'late' | 'leftEarly' | 'overBreak' | 'waiting')[] {
+  if (!attendance || attendance.status === 'voided') return []
+  if (attendance.status === 'absent') return ['absent']
+  if (attendance.status === 'waiting_for_sync') return ['waiting']
+  return [...(attendance.late ? ['late' as const] : []), ...(attendance.leftEarly ? ['leftEarly' as const] : []), ...(attendance.overBreak ? ['overBreak' as const] : [])]
+}
+
+const FLAG_TONES = {
+  absent: 'bg-red-600 text-white', late: 'bg-amber-500 text-white', leftEarly: 'bg-amber-500 text-white', overBreak: 'bg-amber-500 text-white',
+  waiting: 'bg-slate-400 text-white dark:bg-slate-600',
+} as const
+
+/** Late, early, absent and break badges for a booking's attendance. */
+export function AttendanceBadges({ attendance, compact = false }: { attendance: BoardAttendance | null | undefined; compact?: boolean }) {
+  const t = useTranslations('scheduling')
+  const flags = attendanceFlags(attendance)
+  if (!flags.length) return null
+  return <span className="inline-flex shrink-0 items-center gap-0.5">
+    {flags.map((flag) => <span key={flag} title={t(`attendance.flags.${flag}`)} aria-label={t(`attendance.flags.${flag}`)}
+      className={cn('rounded px-1 text-[9px] font-bold uppercase leading-[14px]', FLAG_TONES[flag])}>{compact ? t(`attendance.short.${flag}`).slice(0, 1) : t(`attendance.short.${flag}`)}</span>)}
+  </span>
+}
 
 /** Hue-driven chip colours that hold in light and dark themes. */
 export function chipStyle(hue: number, color?: string | null): CSSProperties {
@@ -51,7 +76,10 @@ export function BookingChip({
     entry.detail,
     time,
     elsewhere ? t('chip.elsewhere', { board: entry.boardName }) : null,
-    draft ? t('chip.draft') : null,
+    draft ? (entry.removesPredecessor ? t('chip.removal') : t('chip.draft')) : null,
+    entry.closedAt ? t('chip.closed') : null,
+    entry.openRequest ? t(`drawer.openRequest.${entry.openRequest.status}`, { kind: t(`roster.requests.kinds.${entry.openRequest.kind}`) }) : null,
+    ...attendanceFlags(entry.attendance).map((flag) => t(`attendance.flags.${flag}`)),
     entry.notes,
   ].filter(Boolean).join('\n')
 
@@ -73,12 +101,12 @@ export function BookingChip({
         draft && 'border-dashed',
         elsewhere && 'cursor-default border-dotted opacity-70 saturate-50',
         !elsewhere && draggable && 'cursor-grab active:cursor-grabbing',
-        replaced && 'opacity-40 line-through',
+        (replaced || entry.removesPredecessor) && 'opacity-40 line-through',
         dimmed && 'opacity-25',
       )}
     >
       {draft ? <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-amber-500" aria-label={t('chip.draft')} /> : null}
-      {elsewhere ? <Lock className="h-3 w-3 shrink-0 opacity-70" aria-hidden /> : null}
+      {elsewhere || entry.closedAt ? <Lock className="h-3 w-3 shrink-0 opacity-70" aria-hidden /> : null}
       <span className="min-w-0 truncate">
         <span className="font-semibold">{label}</span>
         {entry.detail ? <span className="font-normal opacity-80">/{entry.detail}</span> : null}
@@ -87,7 +115,9 @@ export function BookingChip({
         ) : null}
       </span>
       {compact && time ? <span className="ml-auto shrink-0 text-[10px] font-normal opacity-75">{entry.startClock}</span> : null}
-      {entry.notes ? <MessageSquareText className="ml-auto h-3 w-3 shrink-0 opacity-60" aria-hidden /> : null}
+      {entry.openRequest ? <ArrowLeftRight className="ml-auto h-3 w-3 shrink-0 text-sky-700 dark:text-sky-300" aria-label={t(`roster.requests.kinds.${entry.openRequest.kind}`)} /> : null}
+      <AttendanceBadges attendance={entry.attendance} compact={compact} />
+      {entry.notes ? <MessageSquareText className={cn('h-3 w-3 shrink-0 opacity-60', !entry.openRequest && 'ml-auto')} aria-hidden /> : null}
     </div>
   )
 }

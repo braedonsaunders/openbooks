@@ -3762,5 +3762,34 @@
     "reason": "Reason",
     "allocated": "Audit numbers assigned",
     "failed": "Audit number allocation failed"
+  },
+  "attendanceExceptions": {
+    "title": "Attendance exceptions",
+    "description": "Ended roster shifts with an absence, a late arrival, an early leave, a long break or a device not yet synchronized.",
+    "hubDescription": "Absences, late arrivals, early leaves and long breaks on shift rosters.",
+    "range": "{from} to {to}",
+    "note": "Observations compare published shifts with device check-ins under each board's attendance policy in effect on the shift date. Times read in each shift's time zone.",
+    "search": "Search person or board…",
+    "allBoards": "All roster boards",
+    "allKinds": "Every exception",
+    "empty": "No attendance exceptions match these filters.",
+    "closed": "Closed",
+    "columns": {
+      "date": "Date",
+      "person": "Person",
+      "board": "Board",
+      "scheduled": "Scheduled",
+      "firstIn": "First in",
+      "lastOut": "Last out",
+      "exceptions": "Exception",
+      "closed": "Review"
+    },
+    "kinds": {
+      "absent": "Absent",
+      "late": "Late",
+      "left_early": "Left early",
+      "over_break": "Break over plan",
+      "waiting_for_sync": "Waiting for device"
+    }
   }
 }

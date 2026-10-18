@@ -74,6 +74,15 @@ async function lockDevice(actor: ScheduleActor, id: string, permission: Attendan
   return row;
 }
 
+/** The active devices whose check-ins the actor may import, in code order. */
+export async function listAttendanceDevices(actor: ScheduleActor): Promise<AttendanceDevice[]> {
+  return withOrgTransaction(actor.orgId, async () => {
+    const allowed = await attendanceAuthority(actor, "hrm.attendance.manage", null);
+    return (await db.execute<AttendanceDevice>(sql`select ${DEVICE_COLUMNS} from schedule_attendance_devices
+      where org_id = ${actor.orgId} and is_active ${subsidiaryVisibleFilter(sql`subsidiary_id`, allowed)} order by code, id`)).rows;
+  }).catch((error: unknown) => { throw scheduleDatabaseRefusal(error); });
+}
+
 /** Register a device, or rename and (de)activate an existing one. */
 export async function saveAttendanceDevice(actor: ScheduleActor, input: {
   id?: string; expectedRevision?: number; subsidiaryId: string; code: string; name: string; timeZone: string; isActive: boolean; reason: string;

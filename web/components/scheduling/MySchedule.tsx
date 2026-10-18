@@ -1,26 +1,40 @@
 'use client'
 
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { useLocale, useTranslations } from 'next-intl'
-import { CalendarDays, ChevronLeft, ChevronRight, Clock, MapPin, MessageSquareText } from 'lucide-react'
+import { ArrowLeftRight, CalendarDays, ChevronLeft, ChevronRight, Clock, MapPin, MessageSquareText } from 'lucide-react'
 import { Button, cn } from '@openbooks/ui'
 import { CHIP_COLORS, chipStyle } from './BookingChip'
 import { addDays, formatMinutes, targetHue, type BoardEntry } from './model'
+import { OwnRequestsDrawer, ShiftRequestDrawer, useOwnShiftRequests } from './MyShiftRequests'
+import { SchedulingAlert } from './SchedulingAlert'
 
 /**
  * The person's own schedule as an agenda: every day in the next four weeks
  * that has a booking, today first, with where to be, the hours and the
- * notes the scheduler left.
+ * notes the scheduler left. On a shift roster the person can ask to
+ * release, change or swap a future shift and answer colleagues' swaps.
  */
-export function MySchedule({ today, from, through, entries, refusal }: {
+export function MySchedule({ today, from, through, entries, refusal, requestableEntryIds = [], personPartyId = null }: {
   today: string
   from: string
   through: string
   entries: readonly BoardEntry[]
   refusal: { message: string; remedy: string | null } | null
+  requestableEntryIds?: readonly string[]
+  personPartyId?: string | null
 }) {
   const t = useTranslations('scheduling')
+  const router = useRouter()
+  const [requesting, setRequesting] = useState<BoardEntry | null>(null)
+  const [requestsOpen, setRequestsOpen] = useState(false)
+  const [notice, setNotice] = useState<string | null>(null)
+  const requestable = useMemo(() => new Set(requestableEntryIds), [requestableEntryIds])
+  const own = useOwnShiftRequests(Boolean(personPartyId))
+  const offers = own.requests?.filter((request) => request.counterpartPartyId === personPartyId && request.status === 'awaiting_counterpart').length ?? 0
+  const open = own.requests?.filter((request) => request.status === 'pending' || request.status === 'awaiting_counterpart').length ?? 0
   const locale = useLocale()
   const days = useMemo(() => {
     const map = new Map<string, BoardEntry[]>()
@@ -54,7 +68,14 @@ export function MySchedule({ today, from, through, entries, refusal }: {
           <Link href={`/me/schedule?from=${addDays(from, 28)}`} aria-label={t('toolbar.next')}><ChevronRight className="h-4 w-4" /></Link>
         </Button>
         <span className="ml-2 text-sm text-slate-600 dark:text-slate-300">{t('mine.summary', { days: days.length, hours: formatMinutes(totalMinutes) })}</span>
+        {personPartyId && own.requests?.length ? <Button variant="outline" size="sm" className="ml-auto" onClick={() => setRequestsOpen(true)}>
+          <ArrowLeftRight className="mr-1.5 h-4 w-4" />{t('mine.requests.title')}{open ? <span className="ml-1.5 rounded-full bg-slate-100 px-1.5 text-xs tabular-nums dark:bg-slate-800">{open}</span> : null}
+        </Button> : null}
       </div>
+      {offers ? <SchedulingAlert tone="warning" message={t('mine.requests.offers', { count: offers })}>
+        <Button size="sm" className="h-7 px-2 text-xs" onClick={() => setRequestsOpen(true)}>{t('mine.requests.review')}</Button>
+      </SchedulingAlert> : null}
+      {notice ? <SchedulingAlert tone="info" message={notice} /> : null}
       {days.length === 0 ? (
         <div className="flex flex-col items-center rounded-xl border border-dashed border-slate-300 p-12 text-center dark:border-slate-700">
           <CalendarDays className="h-8 w-8 text-slate-300" />
@@ -88,7 +109,9 @@ export function MySchedule({ today, from, through, entries, refusal }: {
                           <MessageSquareText className="mt-0.5 h-3.5 w-3.5 shrink-0" />{entry.notes}
                         </p>
                       ) : null}
+                      {entry.openRequest ? <p className="text-xs text-sky-700 dark:text-sky-300">{t(`drawer.openRequest.${entry.openRequest.status}`, { kind: t(`roster.requests.kinds.${entry.openRequest.kind}`) })}</p> : null}
                     </div>
+                    {requestable.has(entry.id) ? <Button variant="ghost" size="sm" className="h-8 shrink-0 px-2 text-xs" onClick={() => { setNotice(null); setRequesting(entry) }}>{t('mine.request.open')}</Button> : null}
                   </li>
                 ))}
               </ul>
@@ -96,6 +119,13 @@ export function MySchedule({ today, from, through, entries, refusal }: {
           ))}
         </ol>
       )}
+      {requesting ? <ShiftRequestDrawer entry={requesting} onClose={() => setRequesting(null)} onSubmitted={(request) => {
+        setRequesting(null)
+        setNotice(request.status === 'approved' ? t('mine.request.applied') : request.status === 'awaiting_counterpart' ? t('mine.request.offered', { name: request.counterpartName ?? '' }) : t('mine.request.submitted'))
+        void own.reload()
+        router.refresh()
+      }} /> : null}
+      {requestsOpen && personPartyId ? <OwnRequestsDrawer personPartyId={personPartyId} requests={own.requests} problem={own.problem} onChanged={async () => { await own.reload(); router.refresh() }} onClose={() => setRequestsOpen(false)} /> : null}
     </div>
   )
 }

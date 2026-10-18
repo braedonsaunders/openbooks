@@ -82,7 +82,9 @@
     "unassigned": "Aucune destination",
     "draft": "Pas encore publié",
     "elsewhere": "Affecté sur {board}",
-    "leave": "{type} : {hours} heures d’absence"
+    "leave": "{type} : {hours} heures d’absence",
+    "removal": "Retrait en attente de publication",
+    "closed": "Clôturé"
   },
   "picker": {
     "placeholder": "Saisissez un code, un client, un projet ou un emplacement",
@@ -132,7 +134,13 @@
     "pending": "{count, plural, one {# modification non publiée} other {# modifications non publiées}} pour {people, plural, one {# ligne} other {# lignes}}",
     "explain": "Les réservations publiées sont visibles par l’équipe.",
     "action": "Publier",
-    "discard": "Abandonner les modifications"
+    "discard": "Abandonner les modifications",
+    "submit": "Soumettre pour publication",
+    "submitted": "{count, plural, one {Une modification soumise pour publication.} other {# modifications soumises pour publication.}}",
+    "governedExplain": "Tableau encadré : publier enregistre une publication. Si un flux d’approbation s’applique, les modifications sont publiées une fois approuvées.",
+    "awaiting": "{count, plural, one {# modification attend} other {# modifications attendent}} la décision de publication.",
+    "awaitingFlow": "Un flux d’approbation décide cette publication dans Approbations. D’ici là, les modifications soumises restent verrouillées.",
+    "openApprovals": "Ouvrir Approbations"
   },
   "drawer": {
     "title": "Affectation",
@@ -159,7 +167,21 @@
     "booked": "{hours} affectées après la pause.",
     "repeat": "Affecter aussi le",
     "notes": "Remarques",
-    "notesPlaceholder": "Ce que l’équipe doit savoir"
+    "notesPlaceholder": "Ce que l’équipe doit savoir",
+    "removalDraft": "Ce brouillon retire l’affectation publiée une fois sa publication appliquée.",
+    "awaitingApproval": "Cette modification fait partie d’une publication en attente de décision et ne peut pas être modifiée.",
+    "governed": "Publié sous publication encadrée. Les modifications créent une nouvelle révision publiée avec la publication suivante.",
+    "closedOn": "Clôturé le {date}. Un quart clôturé ne peut plus changer.",
+    "openRequest": {
+      "awaiting_counterpart": "Une demande ({kind}) attend la réponse du collègue.",
+      "pending": "Une demande ({kind}) attend une approbation."
+    },
+    "attendance": "Présence",
+    "noAttendance": "La présence de ce quart n’a pas encore été observée.",
+    "close": "Clôturer le quart",
+    "closeTitle": "Clôturer ce quart",
+    "closeExplain": "La clôture enregistre la présence du quart comme contrôlée. Un quart clôturé ne peut plus changer ensuite.",
+    "closed": "Le quart a été clôturé."
   },
   "targets": {
     "where": "Destination",
@@ -228,6 +250,10 @@
       "resources": {
         "title": "Équipements et lieux",
         "description": "Réservez des équipements ou des lieux partagés par jour ou par heure entre projets."
+      },
+      "roster": {
+        "title": "Planning de quarts géré",
+        "description": "Modèles de quarts récurrents, demandes de quarts des employés, approbation facultative de la publication et présence par pointeuse avec repères de retard, de départ anticipé et d’absence."
       }
     },
     "name": "Nom",
@@ -282,7 +308,35 @@
     "title": "Mon planning",
     "description": "Où et quand vous êtes affecté, tel que publié par vos planificateurs.",
     "summary": "{days, plural, one {# jour affecté} other {# jours affectés}} · {hours}",
-    "empty": "Aucune affectation pour vous du {from} au {through}."
+    "empty": "Aucune affectation pour vous du {from} au {through}.",
+    "request": {
+      "open": "Demander un changement",
+      "title": "Demander un changement de quart",
+      "submit": "Envoyer la demande",
+      "explain": "Si un flux d’approbation est configuré, il décide la demande ; sinon, elle s’applique dès l’envoi.",
+      "kind": "Demande",
+      "changeExplain": "Demander d’autres horaires le même jour.",
+      "swapExplain": "Proposer un échange avec le quart d’un collègue. Le collègue accepte d’abord.",
+      "releaseExplain": "Demander à être retiré de ce quart.",
+      "noCandidates": "Aucun collègue n’a de quart publié sur ce tableau dans les deux semaines pour un échange.",
+      "swapWith": "Quart du collègue",
+      "pickShift": "Choisir un quart",
+      "applied": "Votre demande a été appliquée au planning.",
+      "offered": "Votre proposition d’échange a été envoyée à {name}.",
+      "submitted": "Votre demande attend une approbation."
+    },
+    "requests": {
+      "title": "Demandes de quarts",
+      "empty": "Vous n’avez aucune demande de quart.",
+      "offer": "{name} propose un échange",
+      "offers": "{count, plural, one {Un collègue vous propose d’échanger des quarts.} other {# collègues vous proposent d’échanger des quarts.}}",
+      "review": "Examiner",
+      "accept": "Accepter",
+      "decline": "Refuser",
+      "withdraw": "Retirer",
+      "acceptTitle": "Accepter l’échange",
+      "declineTitle": "Refuser l’échange"
+    }
   },
   "source": {
     "explanation": "Les données de planification importées sont en lecture seule. Elles conservent la date et les instructions sans créer de temps travaillé, modifier le statut du salarié ni réserver de disponibilité.",
@@ -401,6 +455,133 @@
       "linkAddress": "Adresse du lien",
       "apply": "Appliquer le lien",
       "invalid": "Utilisez au plus 4000 caractères et des liens sûrs."
+    }
+  },
+  "roster": {
+    "title": "Planning de quarts",
+    "reason": "Motif",
+    "tabs": {
+      "recurring": "Quarts récurrents",
+      "requests": "Demandes de quarts",
+      "attendance": "Présence"
+    },
+    "recurring": {
+      "explain": "Attribuez un modèle de quarts à une personne pour planifier ses quarts automatiquement. Les affectations modifiées à la main sont conservées ; les quarts commencés ne sont jamais touchés.",
+      "assign": "Attribuer un modèle",
+      "noPatterns": "Aucun modèle de quarts actif ne s’applique à ce tableau.",
+      "noPatternsRemedy": "Ajoutez-en un dans Paramétrage → Modèles de quarts, pour l’entité juridique de ce tableau ou pour toutes.",
+      "person": "Personne",
+      "pickPerson": "Choisir une personne",
+      "pattern": "Modèle",
+      "pickPattern": "Choisir un modèle",
+      "from": "Du",
+      "to": "Au (facultatif)",
+      "empty": "Personne sur ce tableau n’a encore de modèle de quarts récurrent.",
+      "window": "Du {from} au {to}",
+      "openWindow": "À partir du {from}",
+      "status": {
+        "active": "Actif",
+        "ended": "Terminé",
+        "cancelled": "Annulé"
+      },
+      "generatedThrough": "Planifié jusqu’au {date}",
+      "generated": "Généré jusqu’au {through} : {created} ajoutés, {revised} mis à jour, {removed} retirés, {kept} conservés car modifiés à la main.",
+      "generate": "Générer",
+      "omit": "Sauter un jour",
+      "end": "Terminer",
+      "cancel": "Annuler",
+      "endTitle": "Terminer le modèle de {name}",
+      "endExplain": "Choisissez la première date à laquelle le modèle ne planifie plus. Ses affectations futures à partir de cette date sont retirées.",
+      "cancelTitle": "Annuler le modèle de {name}",
+      "cancelExplain": "L’attribution s’arrête et ses affectations futures sont retirées. Les quarts commencés et passés restent inchangés.",
+      "omitTitle": "Sauter une occurrence",
+      "omitExplain": "Choisissez la date que le modèle ne doit pas planifier.",
+      "slot": "Quart",
+      "slotLabel": "Jour {day} du cycle : {starts}–{ends}",
+      "chooseTitle": "Utiliser ces heures",
+      "starts": "Heure de début",
+      "ends": "Heure de fin",
+      "useTimes": "Utiliser ces heures",
+      "omitted": "{date} sauté",
+      "selected": "{date} : de {starts} à {ends}",
+      "revoke": "Rétablir",
+      "revokeTitle": "Rétablir l’occurrence"
+    },
+    "requests": {
+      "explain": "Les employés demandent à céder, modifier ou échanger leurs quarts publiés depuis Mon planning. Un flux d’approbation configuré les décide dans Approbations ; sans flux, elles s’appliquent à l’envoi.",
+      "show": "Afficher",
+      "open": "Ouvertes",
+      "all": "Récentes",
+      "empty": "Aucune demande de quart à afficher.",
+      "kinds": {
+        "release": "Céder",
+        "change": "Modifier",
+        "swap": "Échanger"
+      },
+      "status": {
+        "awaiting_counterpart": "En attente du collègue",
+        "pending": "En attente d’approbation",
+        "approved": "Appliquée",
+        "declined": "Refusée",
+        "withdrawn": "Retirée"
+      },
+      "proposed": "Demandé : {span}",
+      "swapWith": "Échange avec {name} : {span}",
+      "noApproval": "Aucun flux d’approbation appliqué ; appliquée à l’envoi.",
+      "decidedBy": "Décidée par {name}",
+      "openApprovals": "Ouvrir dans Approbations"
+    },
+    "attendance": {
+      "observeTitle": "Observer la présence",
+      "observeExplain": "Compare les quarts publiés du {from} au {through} avec les pointages reçus jusqu’ici.",
+      "observe": "Observer la présence",
+      "report": "Écarts de présence",
+      "summary": "{present} présents, {absent} absents, {waiting} en attente d’un appareil, {refused} non observés.",
+      "importTitle": "Importer des pointages",
+      "importExplain": "Téléversez un export d’appareil en CSV avec les colonnes source_event_id, source_worker_id, kind (clock_in, clock_out, break_start, break_end ou void), occurred_at avec son décalage UTC et, en option, source_version. Chaque colonne est conservée comme preuve.",
+      "noDevices": "Aucun appareil de présence actif n’est enregistré pour vos entités juridiques.",
+      "noDevicesRemedy": "Enregistrez-en un dans Paramétrage → Appareils de présence et associez ses identifiants de travailleur.",
+      "device": "Appareil",
+      "file": "Fichier CSV",
+      "completeThrough": "Complet jusqu’au (facultatif)",
+      "completeThroughHelp": "L’instant, avec son décalage, jusqu’auquel l’appareil a envoyé tous les pointages ; l’horloge de l’appareil est en {zone}. Laissez vide si l’export peut être partiel.",
+      "badWatermark": "L’heure de complétude doit comporter une date, une heure et un décalage UTC.",
+      "parsed": "{count} pointages lus, {problems} lignes refusées.",
+      "admit": "Importer des pointages",
+      "admitted": "{count} pointages importés ; {replayed} étaient déjà enregistrés.",
+      "csv": {
+        "empty": "Le fichier ne contient aucune ligne de pointage.",
+        "missingColumn": "L’en-tête n’a pas de colonne {column}.",
+        "duplicate": "La ligne {line} répète l’événement et la version de la ligne {first}.",
+        "kind": "La ligne {line} a un type autre que clock_in, clock_out, break_start, break_end ou void.",
+        "time": "La ligne {line} doit donner occurred_at sous forme de date et d’heure avec son décalage UTC.",
+        "version": "La ligne {line} doit donner source_version sous forme d’entier d’au moins 1.",
+        "blank": "La ligne {line} n’a pas de source_event_id ou de source_worker_id.",
+        "columns": "La ligne {line} n’a pas le même nombre de colonnes que l’en-tête.",
+        "remedy": "Corrigez l’export et choisissez à nouveau le fichier ; rien n’a été importé."
+      }
+    }
+  },
+  "attendance": {
+    "status": {
+      "waiting_for_sync": "En attente de l’appareil",
+      "absent": "Absence",
+      "present": "Présent",
+      "voided": "Annulé"
+    },
+    "flags": {
+      "absent": "Absence constatée",
+      "late": "Arrivé en retard",
+      "leftEarly": "Parti tôt",
+      "overBreak": "Pause plus longue que prévu",
+      "waiting": "En attente des pointages de l’appareil"
+    },
+    "short": {
+      "absent": "Abs.",
+      "late": "Retard",
+      "leftEarly": "Tôt",
+      "overBreak": "Pause",
+      "waiting": "Synchro"
     }
   }
 }

@@ -85,3 +85,43 @@ test('saved hour-column and whole-board sharing settings reopen through the nati
   const evidence=await withOrgTransaction(org.orgId,()=>db.execute<{actor_id:string;changes:{after:{show_hours_column:boolean}}}>(sql`select actor_id,changes from audit_log where table_name='schedule_boards' and row_id=${id} and action='update'`));assert.equal(evidence.rows.length,1);assert.equal(evidence.rows[0]!.actor_id,actorId);
  } finally {await dropScratchOrgReporting(org.orgId)}
 });
+
+test('board types come from the registry: governed publication needs a managed roster and a start date, and a board keeps its type', enabled, async () => {
+  const org = await withBypassContext(() => createScratchOrg())
+  try {
+    const actorId = await withBypassContext(async () => {
+      const id = (await seedFlowActors(org.orgId)).adminId
+      await db.execute(sql`update app_roles set permissions='["admin.setup.manage","hrm.shifts.read"]'::jsonb where org_id=${org.orgId} and key='admin'`)
+      await db.execute(sql`update orgs set settings=jsonb_set(settings,'{features}',coalesce(settings->'features','{}'::jsonb)||'{"hrm":true,"hrmShiftPlanning":true}'::jsonb) where id=${org.orgId}`)
+      return id
+    })
+    const actor = { orgId: org.orgId, id: actorId, permissions: ['admin.setup.manage'], allowedSubsidiaryIds: null }
+    const base = { rowKind: 'people', views: ['timeline', 'grid'], defaultView: 'timeline', grain: 'timed', rangeDays: 14, timeZone: 'America/Toronto', dayPolicyKnown: false }
+    const create = (values: Record<string, unknown>) => withOrgTransaction(org.orgId, () => createSetupRecord(actor, 'schedule-boards', { ...base, ...values }, { requestId: randomUUID() }))
+
+    const peopleGoverned = await create({ code: 'CREW', name: 'Crew', boardType: 'people', publishPolicy: 'governed', governedFrom: '2026-11-01' })
+    assert.equal(peopleGoverned.status, 400, 'a people board offers only live and staged publishing')
+    assert.match(String(peopleGoverned.body.error), /publishPolicy/)
+    const undated = await create({ code: 'ROSTER', name: 'Roster', boardType: 'shift_roster', publishPolicy: 'governed' })
+    assert.equal(undated.status, 400)
+    const foreignView = await create({ code: 'ROSTER', name: 'Roster', boardType: 'shift_roster', views: ['gantt'], defaultView: 'gantt' })
+    assert.equal(foreignView.status, 400)
+
+    const roster = await create({ code: 'ROSTER', name: 'Roster', boardType: 'shift_roster', publishPolicy: 'governed', governedFrom: '2026-11-01' })
+    assert.equal(roster.status, 200, JSON.stringify(roster.body))
+    const plain = await create({ code: 'PLAIN', name: 'Plain people board' })
+    assert.equal(plain.status, 200, JSON.stringify(plain.body))
+    const boards = await listBoards({ orgId: org.orgId, actorId })
+    const saved = boards.find(board => board.id === String(roster.body.id))!
+    assert.deepEqual([saved.boardType, saved.publishPolicy, saved.governedFrom], ['shift_roster', 'governed', '2026-11-01'])
+    assert.equal(boards.find(board => board.id === String(plain.body.id))!.boardType, 'people', 'a board created without a type takes its row kind\'s standard type')
+
+    const { updateSetupRecord } = await import('./write')
+    // Setup never writes a field locked on edit, and the database refuses a changed type from any writer.
+    const retyped = await withOrgTransaction(org.orgId, () => updateSetupRecord(actor, 'schedule-boards', { id: String(plain.body.id), name: 'Renamed people board', boardType: 'shift_roster' }))
+    assert.equal(retyped.status, 200, JSON.stringify(retyped.body))
+    const reread = (await listBoards({ orgId: org.orgId, actorId })).find(board => board.id === String(plain.body.id))!
+    assert.deepEqual([reread.name, reread.boardType], ['Renamed people board', 'people'])
+    await assert.rejects(withOrgTransaction(org.orgId, () => db.execute(sql`update schedule_boards set board_type = 'shift_roster' where org_id = ${org.orgId} and id = ${String(plain.body.id)}`)))
+  } finally { await dropScratchOrgReporting(org.orgId) }
+})

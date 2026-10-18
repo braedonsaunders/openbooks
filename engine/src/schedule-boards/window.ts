@@ -71,7 +71,7 @@ export interface BoardEntry {
   readonly supersedesId: string | null;
   readonly updatedAt: string;
   readonly updatedByName: string | null;
-  /** Published only through an independent approver; changes only through approved revisions. */
+  /** Under the board's governed publication: published through a publication, changed only by a revision or an applied shift request. */
   readonly governed: boolean;
   /** A draft revision removing the governed booking it supersedes. */
   readonly removesPredecessor: boolean;

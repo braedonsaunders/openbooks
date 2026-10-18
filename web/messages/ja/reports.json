@@ -3762,5 +3762,34 @@
     "reason": "理由",
     "allocated": "監査番号を割り当てました",
     "failed": "監査番号の割り当てに失敗しました"
+  },
+  "attendanceExceptions": {
+    "title": "勤怠例外",
+    "description": "欠勤、遅刻、早退、長い休憩、または端末が未同期の終了済みシフト。",
+    "hubDescription": "シフト表の欠勤・遅刻・早退・長い休憩。",
+    "range": "{from}～{to}",
+    "note": "判定は、シフト日に有効な各ボードの勤怠ポリシーに従い、公開済みシフトと端末の打刻を照合したものです。時刻は各シフトのタイムゾーンで表示されます。",
+    "search": "担当者またはボードを検索…",
+    "allBoards": "すべてのシフト表",
+    "allKinds": "すべての例外",
+    "empty": "この条件に一致する勤怠例外はありません。",
+    "closed": "締め済み",
+    "columns": {
+      "date": "日付",
+      "person": "担当者",
+      "board": "ボード",
+      "scheduled": "予定",
+      "firstIn": "最初の出勤",
+      "lastOut": "最後の退勤",
+      "exceptions": "例外",
+      "closed": "確認"
+    },
+    "kinds": {
+      "absent": "欠勤",
+      "late": "遅刻",
+      "left_early": "早退",
+      "over_break": "休憩が予定超過",
+      "waiting_for_sync": "端末待ち"
+    }
   }
 }

@@ -2,8 +2,9 @@
  * Scheduling board types: the registry every board type is declared in.
  *
  * A type names the row kind its boards schedule, the capabilities they
- * offer, the features those capabilities need, its views and defaults, the
- * publication policies it allows and the board settings sections it shows.
+ * offer (and through them the features they need), its views and defaults,
+ * and the publication policies it allows. Board creation, the Setup board
+ * form and its validation read these declarations.
  * The database mirrors each type's row kind and capabilities in
  * openbooks_schedule_board_types and refuses a capability on a board whose
  * type does not declare it. Adding a type adds an entry here, a registry row
@@ -41,39 +42,28 @@ export interface ScheduleBoardTypeDefinition {
   readonly defaultGrain: "day" | "timed";
   readonly publishPolicies: readonly SchedulePublishPolicy[];
   readonly defaultPublishPolicy: SchedulePublishPolicy;
-  /** Board settings sections (Setup form section keys) shown for the type. */
-  readonly settingsSections: readonly string[];
-  /** Message keys under the `scheduling.boardTypes.<key>` namespace. */
-  readonly labelKey: string;
-  readonly descriptionKey: string;
 }
 
 const PEOPLE_VIEWS = ["grid", "targets", "timeline", "calendar"] as const;
-const STANDARD_SETTINGS = ["identity", "scope", "display", "booking", "automation"] as const;
 
 export const SCHEDULE_BOARD_TYPES: readonly ScheduleBoardTypeDefinition[] = [
   {
     key: "people", rowKind: "people", capabilities: ["bookings"], views: PEOPLE_VIEWS, defaultViews: PEOPLE_VIEWS, defaultView: "grid", defaultGrain: "day",
-    publishPolicies: ["live", "staged"], defaultPublishPolicy: "live", settingsSections: STANDARD_SETTINGS,
-    labelKey: "boardTypes.people.label", descriptionKey: "boardTypes.people.description",
+    publishPolicies: ["live", "staged"], defaultPublishPolicy: "live",
   },
   {
     key: "tasks", rowKind: "tasks", capabilities: [], views: ["gantt", "progress"], defaultViews: ["gantt", "progress"], defaultView: "gantt", defaultGrain: "day",
-    publishPolicies: ["live"], defaultPublishPolicy: "live", settingsSections: ["identity", "scope", "display"],
-    labelKey: "boardTypes.tasks.label", descriptionKey: "boardTypes.tasks.description",
+    publishPolicies: ["live", "staged"], defaultPublishPolicy: "live",
   },
   {
     key: "resources", rowKind: "resources", capabilities: ["bookings"], views: PEOPLE_VIEWS, defaultViews: PEOPLE_VIEWS, defaultView: "grid", defaultGrain: "day",
-    publishPolicies: ["live", "staged"], defaultPublishPolicy: "live", settingsSections: ["identity", "scope", "display", "booking"],
-    labelKey: "boardTypes.resources.label", descriptionKey: "boardTypes.resources.description",
+    publishPolicies: ["live", "staged"], defaultPublishPolicy: "live",
   },
   {
     key: "shift_roster", rowKind: "people",
     capabilities: ["bookings", "patterns", "shift_requests", "governed_publication", "attendance", "closing"],
     views: PEOPLE_VIEWS, defaultViews: ["timeline", "grid", "calendar"], defaultView: "timeline", defaultGrain: "timed",
     publishPolicies: ["live", "staged", "governed"], defaultPublishPolicy: "staged",
-    settingsSections: [...STANDARD_SETTINGS, "roster"],
-    labelKey: "boardTypes.shift_roster.label", descriptionKey: "boardTypes.shift_roster.description",
   },
 ];
 

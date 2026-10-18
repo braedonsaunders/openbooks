@@ -264,6 +264,7 @@ test('the header owns search/settings and timeline zoom while More exposes exact
       tasksEnabled={false}
       resourcesEnabled={false}
       equipmentEnabled={false}
+      roster={{ attendance: false, manageAttendance: false, closing: false }}
     />,
   )
   assert.equal(
@@ -349,6 +350,7 @@ test('the visible hour-column preference saves through its typed native boundary
     tasksEnabled: false,
     resourcesEnabled: false,
     equipmentEnabled: false,
+    roster: { attendance: false, manageAttendance: false, closing: false },
   }
   const host = await mount(
     t,
@@ -384,4 +386,50 @@ test('the visible hour-column preference saves through its typed native boundary
     />,
   )
   assert.equal(reopened.querySelectorAll('[class*="right-0"]').length, 0)
+})
+
+test('a managed shift roster adds its Roster tools, attendance badges and publication wait while a people board shows none of them', async (t) => {
+  const { SchedulingWorkspace } = await import('./SchedulingWorkspace')
+  const people = scheduleWindow()
+  const draft = { ...people.entries[1]!, id: 'aa010000-0000-4000-8000-000000000009', status: 'draft' as const }
+  const roster = {
+    ...people,
+    board: { ...people.board, boardType: 'shift_roster', publishPolicy: 'governed' as const, governedFrom: people.from },
+    entries: [{ ...people.entries[0]!, governed: true, attendance: { status: 'present' as const, late: true, leftEarly: false, overBreak: false } }, draft],
+    pendingPublication: { id: 'aa010000-0000-4000-8000-000000000010', createdAt: `${people.from}T12:00:00Z`, flowGated: true, entryIds: [draft.id] },
+    canManage: true,
+  }
+  const originalFetch = globalThis.fetch
+  const fetched: string[] = []
+  globalThis.fetch = async (input) => {
+    fetched.push(String(input))
+    return Response.json(String(input).endsWith('/assignments') ? { assignments: [], patterns: [] } : roster)
+  }
+  t.after(() => { globalThis.fetch = originalFetch })
+  const props = {
+    boards: [people.board], view: 'grid', anchor: people.from, from: people.from, through: people.through, rangeDays: 1, today: people.from,
+    refusal: null, projects: [], selectedProjectId: null, canManageProjects: false, canConfigure: false, timeZone: people.board.timeZone,
+    settingsHref: null, scope: { subsidiaries: [], departments: [], locations: [], projects: [] },
+    peopleEnabled: true, tasksEnabled: false, resourcesEnabled: false, equipmentEnabled: false,
+    roster: { attendance: true, manageAttendance: false, closing: false },
+  }
+  const rosterLabel = messages.scheduling.roster.title
+  const plain = await mount(t, <SchedulingWorkspace {...props} board={people.board} initialWindow={people} />)
+  assert.equal(plain.querySelector(`[aria-label="${rosterLabel}"]`), null, 'a people board keeps its toolbar')
+  assert.equal(plain.textContent?.includes(messages.scheduling.attendance.short.late), false)
+
+  const host = await mount(t, <SchedulingWorkspace {...props} board={roster.board as typeof people.board} initialWindow={roster as typeof people} />)
+  assert.ok(host.textContent?.includes(messages.scheduling.attendance.short.late), 'the late arrival shows on the booking')
+  assert.ok(host.textContent?.includes('1 change is waiting for a publication decision.'))
+  assert.ok(host.querySelector('a[href="/approvals"]'), 'a Flow-gated publication links to Approvals')
+  assert.equal([...host.querySelectorAll('button')].some((button) => button.textContent?.includes(messages.scheduling.publish.submit)), false,
+    'no second publication is offered while one waits')
+  const open = host.querySelector(`[aria-label="${rosterLabel}"]`) as HTMLButtonElement
+  assert.ok(open)
+  await act(async () => open.click())
+  await act(async () => { await new Promise((resolve) => setTimeout(resolve, 0)) })
+  assert.ok(fetched.some((url) => url.endsWith(`/api/scheduling/boards/${people.board.id}/assignments`)))
+  assert.ok(document.body.textContent?.includes(messages.scheduling.roster.recurring.noPatterns))
+  const tabs = [...document.querySelectorAll('nav[aria-label] button')].map((button) => button.textContent)
+  assert.deepEqual(tabs, [messages.scheduling.roster.tabs.recurring, messages.scheduling.roster.tabs.requests, messages.scheduling.roster.tabs.attendance])
 })

@@ -2976,6 +2976,26 @@
           "reason": "Änderungsgrund"
     },
     "entities": {
+      "schedule-patterns": {
+        "title": "Schichtmuster",
+        "singularTitle": "Schichtmuster",
+        "description": "Wiederkehrende Schichtzyklen nach lokaler Uhrzeit, die Personen auf Schichtplänen zugewiesen werden, um ihre Schichten einzuplanen."
+      },
+      "schedule-attendance-devices": {
+        "title": "Anwesenheitsgeräte",
+        "singularTitle": "Anwesenheitsgerät",
+        "description": "Stempeluhren und andere Stempelquellen einer Gesellschaft, jeweils mit festem Code und fester Zeitzone."
+      },
+      "schedule-attendance-identities": {
+        "title": "Gerätekennungen",
+        "singularTitle": "Gerätekennung",
+        "description": "Für welche Person die Mitarbeiterkennung eines Geräts in einem datierten Zeitraum steht."
+      },
+      "schedule-attendance-policies": {
+        "title": "Anwesenheitsrichtlinien",
+        "singularTitle": "Anwesenheitsrichtlinie",
+        "description": "Datierte Stempelfenster und Toleranzminuten für die Anwesenheitsauswertung auf einem Schichtplan."
+      },
       "equity-account-policies": {
         "title": "Eigenkapitalkonten",
         "singular": "Eigenkapital-Kontenrichtlinie",
@@ -4018,6 +4038,29 @@
       "expense-fx-policies": {"title": "Währungsrichtlinien für Spesen", "description": "Ob eine Spesenposition in Fremdwährung statt zum datierten Kurs zu einem expliziten, begründeten Wechselkurs umgerechnet werden darf."}
     },
     "fields": {
+      "boardType": "Art der Plantafel",
+      "governedFrom": "Gesteuert ab",
+      "captureBeforeMinutes": "Stempelungen vor Beginn (Minuten)",
+      "captureAfterMinutes": "Stempelungen nach Ende (Minuten)",
+      "lateGraceMinutes": "Toleranz Verspätung (Minuten)",
+      "earlyGraceMinutes": "Toleranz frühes Gehen (Minuten)",
+      "breakGraceMinutes": "Toleranz Pause (Minuten)",
+      "cycleDays": "Zykluslänge (Tage)",
+      "cycleAnchor": "Zyklus beginnt am",
+      "slots": "Schichten",
+      "horizonDays": "Vorausplanen (Tage)",
+      "targetKind": "Einplanen auf",
+      "scheduleCodeId": "Plancode",
+      "detail": "Zusatzangabe",
+      "sourceWorkerId": "Mitarbeiterkennung im Gerät",
+      "workerPartyId": "Mitarbeitende",
+      "deviceId": "Gerät",
+      "schedulePatternAddSlot": "Schicht hinzufügen",
+      "schedulePatternSlotDay": "Zyklustag (0 ist der erste)",
+      "schedulePatternSlotStarts": "Beginn",
+      "schedulePatternSlotEnds": "Ende",
+      "schedulePatternSlotBreak": "Pause (Minuten)",
+      "schedulePatternSlotQualifications": "Erforderliche Qualifikationen",
       "allowRateOverride": "Explizite Wechselkurse zulassen",
       "commonStockAccountId": "Konto Stammaktien",
       "preferredStockAccountId": "Konto Vorzugsaktien",
@@ -4743,6 +4786,22 @@
       "denominations": "Bargeldstückelung"
     },
     "fieldHelp": {
+      "scheduleBoardType": "Ein verwalteter Schichtplan ergänzt wiederkehrende Schichtmuster, Schichtanfragen der Mitarbeitenden, gesteuerte Veröffentlichung und gerätegestützte Anwesenheit. Die Art steht fest, sobald die Plantafel existiert.",
+      "scheduleBoardGovernedFrom": "Einplanungen ab diesem Datum werden nur über eine gesteuerte Veröffentlichung veröffentlicht und danach als Verlauf aufbewahrt. Frühere Einplanungen behalten die bisherigen Regeln der Plantafel.",
+      "scheduleAttendanceEffectiveFrom": "Das erste Schichtdatum, für das diese Version gilt. Frühere Schichten behalten die Version, die für sie galt.",
+      "scheduleAttendanceCapture": "Wie lange vor Schichtbeginn und nach Schichtende eine Stempelung noch zu dieser Schicht zählt.",
+      "scheduleAttendanceGrace": "Minuten nach Beginn, in denen ein Kommen noch pünktlich ist, und vor Ende, in denen ein Gehen nicht als frühes Gehen gilt.",
+      "scheduleAttendanceBreakGrace": "Minuten über der geplanten Pause, bevor eine Pause als zu lang gilt.",
+      "scheduleAttendanceDeviceCode": "Der Code, mit dem Stempelimporte dieses Gerät benennen. Er ist nach der Registrierung unveränderlich.",
+      "scheduleAttendanceDeviceTimeZone": "Die Zeitzone der Geräteuhr, etwa Europe/Berlin. Sie ist unveränderlich; registrieren Sie für eine geänderte Quelle ein neues Gerät.",
+      "scheduleAttendanceSourceWorker": "Die Mitarbeiterkennung genau so, wie das Gerät sie exportiert, etwa eine Ausweisnummer.",
+      "scheduleAttendanceIdentityEnd": "Das erste Datum, an dem die Kennung nicht mehr für diese Person steht. Leer lassen, solange sie es noch tut.",
+      "schedulePatternSubsidiary": "Beschränkt das Muster auf Plantafeln einer Gesellschaft; leer lassen, um es auf jedem Schichtplan anzubieten.",
+      "schedulePatternCycleDays": "Wie viele Tage das Muster läuft, bevor es sich wiederholt, etwa 7 für einen Wochenplan oder 14 für einen Zweiwochenwechsel.",
+      "schedulePatternCycleAnchor": "Das Datum, das Tag 0 des Zyklus ist.",
+      "schedulePatternSlots": "Jede Schicht nennt ihren Zyklustag und ihre lokale Beginn- und Endzeit. Endet eine Schicht zur oder vor ihrer Beginnzeit, endet sie am Folgetag.",
+      "schedulePatternHorizon": "Wie viele Tage im Voraus die Einplanungen des Musters erzeugt und aktuell gehalten werden.",
+      "schedulePatternTarget": "Wohin die erzeugten Einplanungen gehen. Leer lassen, um Schichten ohne Ziel einzuplanen.",
       "apicShareBasedAccount": "Wird bei Erfassung der aktienbasierten Vergütung im Haben gebucht und bei Ausübung oder Abwicklung von Zuteilungen in das gezeichnete Kapital umgegliedert.",
       "convertibleInstrumentsAccount": "Führt SAFEs und Wandeldarlehen mit ihrem Nennbetrag, bis sie gewandelt, zurückgezahlt oder storniert werden.",
       "accruedInterestAccount": "Führt die auf Wandeldarlehen aufgelaufenen Zinsen, bis sie gewandelt, zurückgezahlt oder storniert werden. Es kann das Konto Wandelinstrumente sein.",
@@ -4914,7 +4973,7 @@
       "scheduleBoardWeekStartsOn": "Der erste angezeigte Tag jeder Woche: 0 ist Sonntag, 1 ist Montag, bis 6 für Samstag.",
       "scheduleBoardGrain": "Ganze Tage planen jede Person für den Arbeitstag der Plantafel ein; Stundenschichten planen Beginn- und Endzeiten ein.",
       "scheduleBoardDayStarts": "Der Arbeitstag für ganztägige Einplanungen, als 24-Stunden-Uhrzeit wie 07:00.",
-      "scheduleBoardPublishPolicy": "Plantafeln mit sofortiger Veröffentlichung veröffentlichen jede Einplanung, sobald sie erfolgt. Plantafeln mit gemeinsamer Veröffentlichung sammeln Änderungen, bis jemand mit Freigaberechten sie veröffentlicht.",
+      "scheduleBoardPublishPolicy": "Plantafeln mit sofortiger Veröffentlichung veröffentlichen jede Einplanung, sobald sie erfolgt. Plantafeln mit gemeinsamer Veröffentlichung sammeln Änderungen, bis jemand mit Freigaberechten sie veröffentlicht. Gesteuerte Plantafeln, verfügbar auf verwalteten Schichtplänen, veröffentlichen über eine erfasste Veröffentlichung, die ein Freigabe-Flow entscheiden kann, und bewahren veröffentlichte Einplanungen als Verlauf auf.",
       "scheduleBoardPrefillTimesheets": "Veröffentlichte Einplanungen auf dieser Plantafel erscheinen im Wochenstundenzettel jeder Person als geplante Zeit, die sie mit einem Klick übernehmen und dann bestätigen oder korrigieren kann.",
       "scheduleBoardPrefillCrewTime": "Veröffentlichte Projekteinplanungen auf dieser Plantafel schlagen im Teamzeitbogen des Vorarbeiters für dieses Projekt und diesen Tag die eingeplante Kolonne und ihre Stunden vor, die sich mit einem Klick übernehmen lassen.",
       "scheduleBoardPrefillFieldTickets": "Veröffentlichte Projekteinplanungen auf dieser Plantafel schlagen im Regiebericht dieses Projekts die eingeplante Kolonne und ihre Stunden für den Berichtszeitraum vor, die sich mit einem Klick übernehmen lassen.",
@@ -4963,6 +5022,16 @@
       "taxRateEffectiveTo": "Letztes von diesem Steuersatz abgedecktes Transaktionsdatum, einschließlich dieses Tages. Ohne Enddatum leer lassen. Beginnt der nächste Satz am 1. Juli, endet dieser Satz am 30. Juni."
     },
     "options": {
+      "scheduleBoardType": {
+        "people": "Personen-Plantafel",
+        "shift_roster": "Verwalteter Schichtplan"
+      },
+      "schedulePatternTarget": {
+        "customer": "Kunde",
+        "project": "Projekt",
+        "location": "Standort",
+        "code": "Plancode"
+      },
       "posCashDirection": {
         "payIn": "Einzahlung",
         "payOut": "Auszahlung"
@@ -5689,6 +5758,7 @@
         "progress": "Fortschritt"
       },
       "schedulePublishPolicy": {
+        "governed": "Gesteuerte Veröffentlichung",
         "live": "Sofort",
         "staged": "Gemeinsam veröffentlichen"
       },
@@ -6777,6 +6847,11 @@
     },
     "filterAll": "Alle",
     "sections": {
+      "schedulePatternIdentity": "Muster",
+      "schedulePatternCycle": "Zyklus",
+      "schedulePatternCycleHelp": "Schichtzeiten sind lokale Uhrzeiten in der Zeitzone des Musters; Zeitumstellungen werden für jedes Datum aufgelöst.",
+      "schedulePatternBooking": "Einplanung",
+      "schedulePatternChange": "Änderung",
       "address": "Anschrift",
       "basisCaps": "Bemessungsdeckel",
       "deductionProtection": "Abzugsschutz",
@@ -8462,11 +8537,11 @@
     },
     "hrmAttendance": {
       "title": "Gerätegestützte Anwesenheit",
-      "description": "Optionale Gerätekennungen, Zeitstempel und Nachweise der vollständigen Synchronisierung. Die Erfassung benötigt keine Schichtplanung."
+      "description": "Optionale Stempeluhren, Mitarbeiterkennungen und Stempelimporte, auf verwalteten Schichtplänen als Verspätung, frühes Gehen, Abwesenheit und Pausenabweichung ausgewertet. Die Erfassung benötigt keine Einsatzplanung."
     },
     "hrmShiftClosing": {
       "title": "Formeller Schichtabschluss",
-      "description": "Optionale Prüfung und Abschluss beendeter Schichten anhand aktueller Anwesenheitsnachweise. Erfordert Schichtplanung und Gerätegestützte Anwesenheit; die Veröffentlichung benötigt keinen Abschluss."
+      "description": "Optionale Prüfung und Abschluss beendeter Schichtplan-Schichten anhand aktueller Anwesenheitsnachweise. Erfordert Einsatzplanung und Gerätegestützte Anwesenheit; die Veröffentlichung benötigt keinen Abschluss."
     },
     "hrmCertifications": {
       "title": "Zertifizierungen und Lizenzen",

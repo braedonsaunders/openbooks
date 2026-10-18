@@ -1,4 +1,5 @@
-/** Setup-registry scheduling entities (Workforce group): boards and booking codes. */
+/** Setup-registry scheduling entities (Workforce group): boards, booking codes, shift patterns and attendance devices. */
+import { SCHEDULE_BOARD_TYPES, boardTypesFor } from '@openbooks/engine/schedule-boards/board-types'
 import type { SetupEntity, SetupOption } from '../types'
 
 const ROW_KINDS: SetupOption[] = [
@@ -21,6 +22,18 @@ const VIEWS: SetupOption[] = [
 const PUBLISH_POLICIES: SetupOption[] = [
   { value: 'live', labelKey: 'options.schedulePublishPolicy.live' },
   { value: 'staged', labelKey: 'options.schedulePublishPolicy.staged' },
+]
+// The board-type registry decides which types schedule people and which
+// publication policies each type allows; task and resource boards keep the
+// standard type of their row kind.
+const PEOPLE_BOARD_TYPES: SetupOption[] = boardTypesFor('people').map((type) => ({ value: type.key, labelKey: `options.scheduleBoardType.${type.key}` }))
+const PUBLISH_POLICIES_BY_TYPE: Record<string, SetupOption[]> = Object.fromEntries(SCHEDULE_BOARD_TYPES.map((type) =>
+  [type.key, type.publishPolicies.map((policy) => ({ value: policy, labelKey: `options.schedulePublishPolicy.${policy}` }))]))
+const PATTERN_TARGET_KINDS: SetupOption[] = [
+  { value: 'customer', labelKey: 'options.schedulePatternTarget.customer' },
+  { value: 'project', labelKey: 'options.schedulePatternTarget.project' },
+  { value: 'location', labelKey: 'options.schedulePatternTarget.location' },
+  { value: 'code', labelKey: 'options.schedulePatternTarget.code' },
 ]
 const CODE_CATEGORIES: SetupOption[] = [
   { value: 'work', labelKey: 'options.scheduleCodeCategory.work' },
@@ -145,6 +158,7 @@ export const SCHEDULING_ENTITIES: SetupEntity[] = [
           'name',
           'description',
           'rowKind',
+          'boardType',
           'resourceKind',
           'sortOrder',
           'isActive',
@@ -182,6 +196,7 @@ export const SCHEDULING_ENTITIES: SetupEntity[] = [
           'dayEnds',
           'dayBreakMinutes',
           'publishPolicy',
+          'governedFrom',
         ],
       },
       {
@@ -451,6 +466,16 @@ export const SCHEDULING_ENTITIES: SetupEntity[] = [
         helpTextKey: 'fieldHelp.scheduleBoardRowKind',
       },
       {
+        key: 'boardType',
+        kind: 'select',
+        options: PEOPLE_BOARD_TYPES,
+        lockedOnEdit: true,
+        defaultValue: 'people',
+        showWhen: { field: 'rowKind', in: ['people'] },
+        omitWhenHidden: true,
+        helpTextKey: 'fieldHelp.scheduleBoardType',
+      },
+      {
         key: 'resourceKind',
         kind: 'select',
         required: true,
@@ -643,9 +668,18 @@ export const SCHEDULING_ENTITIES: SetupEntity[] = [
         key: 'publishPolicy',
         kind: 'select',
         options: PUBLISH_POLICIES,
+        scopedOptions: { scopeField: 'boardType', byValue: PUBLISH_POLICIES_BY_TYPE },
         required: true,
         defaultValue: 'live',
         helpTextKey: 'fieldHelp.scheduleBoardPublishPolicy',
+      },
+      {
+        key: 'governedFrom',
+        kind: 'date',
+        required: true,
+        showWhen: { field: 'publishPolicy', in: ['governed'] },
+        clearWhenHidden: true,
+        helpTextKey: 'fieldHelp.scheduleBoardGovernedFrom',
       },
       {
         key: 'prefillTimesheets',
@@ -677,6 +711,188 @@ export const SCHEDULING_ENTITIES: SetupEntity[] = [
       },
       { key: 'sortOrder', kind: 'integer', defaultValue: 0 },
       { key: 'isActive', kind: 'boolean', defaultValue: true },
+    ],
+  },
+  {
+    // Effective-dated attendance capture and grace bounds of a shift roster
+    // board. Versions are immutable; a change is a new version from a date.
+    key: 'schedule-attendance-policies',
+    table: 'schedule_attendance_policies',
+    rehomed: true,
+    parentRecords: [{ entityKey: 'schedule-boards', fieldKey: 'boardId', showWhen: { field: 'boardType', in: ['shift_roster'] } }],
+    groupKey: 'workforce',
+    iconKey: 'timer',
+    orgScoped: true,
+    featureKey: 'hrmAttendance',
+    writePermission: 'hrm.attendance.manage',
+    hasActive: false,
+    allowUpdate: false,
+    allowDelete: false,
+    orderBy: 'effective_from desc, id',
+    importVia: 'none',
+    singularTitleKey: 'entities.schedule-attendance-policies.singularTitle',
+    mutationPath: '/api/scheduling/attendance/policies',
+    mutationCreateKeys: ['boardId', 'effectiveFrom', 'captureBeforeMinutes', 'captureAfterMinutes', 'lateGraceMinutes', 'earlyGraceMinutes', 'breakGraceMinutes', 'reason'],
+    columns: [
+      { key: 'effectiveFrom', kind: 'date' },
+      { key: 'captureBeforeMinutes', kind: 'number' },
+      { key: 'captureAfterMinutes', kind: 'number' },
+      { key: 'lateGraceMinutes', kind: 'number' },
+      { key: 'earlyGraceMinutes', kind: 'number' },
+      { key: 'breakGraceMinutes', kind: 'number' },
+    ],
+    fields: [
+      { key: 'boardId', kind: 'ref', ref: 'schedule-boards', required: true, lockedOnEdit: true },
+      { key: 'effectiveFrom', kind: 'date', required: true, helpTextKey: 'fieldHelp.scheduleAttendanceEffectiveFrom' },
+      { key: 'captureBeforeMinutes', kind: 'integer', required: true, min: 0, max: 720, defaultValue: 60, helpTextKey: 'fieldHelp.scheduleAttendanceCapture' },
+      { key: 'captureAfterMinutes', kind: 'integer', required: true, min: 0, max: 720, defaultValue: 60 },
+      { key: 'lateGraceMinutes', kind: 'integer', required: true, min: 0, max: 720, defaultValue: 5, helpTextKey: 'fieldHelp.scheduleAttendanceGrace' },
+      { key: 'earlyGraceMinutes', kind: 'integer', required: true, min: 0, max: 720, defaultValue: 5 },
+      { key: 'breakGraceMinutes', kind: 'integer', required: true, min: 0, max: 720, defaultValue: 10, helpTextKey: 'fieldHelp.scheduleAttendanceBreakGrace' },
+      { key: 'reason', kind: 'textarea', required: true },
+    ],
+  },
+  {
+    // Recurring shift patterns: a repeating cycle of local clock-time slots,
+    // assigned to people on shift roster boards. Editing a pattern changes
+    // only bookings generated afterwards.
+    key: 'schedule-patterns',
+    table: 'schedule_patterns',
+    singularTitleKey: 'entities.schedule-patterns.singularTitle',
+    groupKey: 'workforce',
+    iconKey: 'calendar',
+    orgScoped: true,
+    actorCols: true,
+    naturalKey: 'code',
+    orderBy: 'code, id',
+    hasActive: true,
+    allowDelete: false,
+    featureKey: 'hrmShiftPlanning',
+    writePermission: 'hrm.shifts.manage',
+    importVia: 'none',
+    docSlug: 'scheduling',
+    mutationPath: '/api/scheduling/patterns',
+    mutationCreateKeys: ['subsidiaryId', 'code', 'name', 'description', 'timeZone', 'cycleDays', 'cycleAnchor', 'slots', 'targetKind', 'customerPartyId', 'projectId',
+      'locationId', 'scheduleCodeId', 'departmentId', 'detail', 'horizonDays', 'isActive', 'reason'],
+    mutationUpdateKeys: ['subsidiaryId', 'code', 'name', 'description', 'timeZone', 'cycleDays', 'cycleAnchor', 'slots', 'targetKind', 'customerPartyId', 'projectId',
+      'locationId', 'scheduleCodeId', 'departmentId', 'detail', 'horizonDays', 'isActive', 'reason', 'expectedRevision'],
+    mutationRevision: { requestKey: 'expectedRevision', rowColumn: 'revision' },
+    formSections: [
+      { titleKey: 'sections.schedulePatternIdentity', fields: ['subsidiaryId', 'code', 'name', 'description', 'isActive'] },
+      { titleKey: 'sections.schedulePatternCycle', descriptionKey: 'sections.schedulePatternCycleHelp', fields: ['timeZone', 'cycleDays', 'cycleAnchor', 'slots', 'horizonDays'] },
+      { titleKey: 'sections.schedulePatternBooking', fields: ['targetKind', 'customerPartyId', 'projectId', 'locationId', 'scheduleCodeId', 'departmentId', 'detail'] },
+      { titleKey: 'sections.schedulePatternChange', fields: ['reason'] },
+    ],
+    columns: [
+      { key: 'code', kind: 'code' },
+      { key: 'name', kind: 'text' },
+      { key: 'cycleDays', kind: 'number' },
+      { key: 'timeZone', kind: 'text' },
+      { key: 'isActive', kind: 'badge-active' },
+    ],
+    fields: [
+      { key: 'subsidiaryId', kind: 'ref', ref: 'subsidiaries', lockedOnEdit: true, helpTextKey: 'fieldHelp.schedulePatternSubsidiary' },
+      { key: 'code', kind: 'text', required: true, lockedOnEdit: true },
+      { key: 'name', kind: 'text', required: true },
+      { key: 'description', kind: 'textarea' },
+      { key: 'timeZone', kind: 'timeZone', required: true },
+      { key: 'cycleDays', kind: 'integer', required: true, min: 1, max: 366, defaultValue: 7, helpTextKey: 'fieldHelp.schedulePatternCycleDays' },
+      { key: 'cycleAnchor', kind: 'date', required: true, helpTextKey: 'fieldHelp.schedulePatternCycleAnchor' },
+      {
+        key: 'slots', kind: 'objectArray', required: true, fullWidth: true, helpTextKey: 'fieldHelp.schedulePatternSlots', addLabelKey: 'fields.schedulePatternAddSlot',
+        fields: [
+          { key: 'position', labelKey: 'fields.schedulePatternSlotDay', kind: 'integer', required: true, min: 0, max: 365, defaultValue: 0 },
+          { key: 'starts', labelKey: 'fields.schedulePatternSlotStarts', kind: 'text', required: true, defaultValue: '09:00' },
+          { key: 'ends', labelKey: 'fields.schedulePatternSlotEnds', kind: 'text', required: true, defaultValue: '17:00' },
+          { key: 'breakMinutes', labelKey: 'fields.schedulePatternSlotBreak', kind: 'integer', required: true, min: 0, max: 240, defaultValue: 30 },
+          { key: 'qualificationTypeIds', labelKey: 'fields.schedulePatternSlotQualifications', kind: 'multiref', ref: 'qualification-types' },
+        ],
+      },
+      { key: 'horizonDays', kind: 'integer', required: true, min: 1, max: 366, defaultValue: 28, helpTextKey: 'fieldHelp.schedulePatternHorizon' },
+      { key: 'targetKind', kind: 'select', options: PATTERN_TARGET_KINDS, helpTextKey: 'fieldHelp.schedulePatternTarget' },
+      { key: 'customerPartyId', kind: 'ref', ref: 'customers', showWhen: { field: 'targetKind', in: ['customer'] }, clearWhenHidden: true },
+      { key: 'projectId', kind: 'ref', ref: 'projects', showWhen: { field: 'targetKind', in: ['project'] }, clearWhenHidden: true },
+      { key: 'locationId', kind: 'ref', ref: 'locations', showWhen: { field: 'targetKind', in: ['location'] }, clearWhenHidden: true },
+      { key: 'scheduleCodeId', kind: 'ref', ref: 'schedule-codes', showWhen: { field: 'targetKind', in: ['code'] }, clearWhenHidden: true },
+      { key: 'departmentId', kind: 'ref', ref: 'departments' },
+      { key: 'detail', kind: 'text' },
+      { key: 'isActive', kind: 'boolean', defaultValue: true },
+      { key: 'reason', kind: 'textarea', required: true, resetOnEdit: true },
+    ],
+  },
+  {
+    // Time-clock sources of a legal entity. The code, legal entity and source
+    // time zone are fixed; a changed source is a new device.
+    key: 'schedule-attendance-devices',
+    table: 'schedule_attendance_devices',
+    singularTitleKey: 'entities.schedule-attendance-devices.singularTitle',
+    groupKey: 'workforce',
+    iconKey: 'server',
+    orgScoped: true,
+    actorCols: true,
+    naturalKey: 'code',
+    orderBy: 'code, id',
+    hasActive: true,
+    allowDelete: false,
+    featureKey: 'hrmAttendance',
+    writePermission: 'hrm.attendance.manage',
+    importVia: 'none',
+    docSlug: 'scheduling',
+    mutationPath: '/api/scheduling/attendance/devices',
+    mutationCreateKeys: ['subsidiaryId', 'code', 'name', 'timeZone', 'isActive', 'reason'],
+    mutationUpdateKeys: ['subsidiaryId', 'code', 'name', 'timeZone', 'isActive', 'reason', 'expectedRevision'],
+    mutationRevision: { requestKey: 'expectedRevision', rowColumn: 'revision' },
+    columns: [
+      { key: 'code', kind: 'code' },
+      { key: 'name', kind: 'text' },
+      { key: 'subsidiaryId', kind: 'ref', ref: 'subsidiaries' },
+      { key: 'timeZone', kind: 'text' },
+      { key: 'isActive', kind: 'badge-active' },
+    ],
+    fields: [
+      { key: 'subsidiaryId', kind: 'ref', ref: 'subsidiaries', required: true, lockedOnEdit: true, legalEntity: true },
+      { key: 'code', kind: 'text', required: true, lockedOnEdit: true, helpTextKey: 'fieldHelp.scheduleAttendanceDeviceCode' },
+      { key: 'name', kind: 'text', required: true },
+      { key: 'timeZone', kind: 'timeZone', required: true, lockedOnEdit: true, helpTextKey: 'fieldHelp.scheduleAttendanceDeviceTimeZone' },
+      { key: 'isActive', kind: 'boolean', defaultValue: true },
+      { key: 'reason', kind: 'textarea', required: true, resetOnEdit: true },
+    ],
+  },
+  {
+    // A device's source worker identifier mapped to one person over a
+    // half-open date window. Editing ends the mapping; every other fact is fixed.
+    key: 'schedule-attendance-identities',
+    table: 'schedule_attendance_identities',
+    rehomed: true,
+    parentRecords: [{ entityKey: 'schedule-attendance-devices', fieldKey: 'deviceId' }],
+    singularTitleKey: 'entities.schedule-attendance-identities.singularTitle',
+    groupKey: 'workforce',
+    iconKey: 'users',
+    orgScoped: true,
+    actorCols: true,
+    orderBy: 'source_worker_id, effective_from',
+    hasActive: false,
+    allowDelete: false,
+    featureKey: 'hrmAttendance',
+    writePermission: 'hrm.attendance.manage',
+    importVia: 'none',
+    mutationPath: '/api/scheduling/attendance/identities',
+    mutationCreateKeys: ['deviceId', 'sourceWorkerId', 'workerPartyId', 'effectiveFrom', 'effectiveTo', 'reason'],
+    mutationUpdateKeys: ['deviceId', 'sourceWorkerId', 'workerPartyId', 'effectiveFrom', 'effectiveTo', 'reason', 'expectedRevision'],
+    mutationRevision: { requestKey: 'expectedRevision', rowColumn: 'revision' },
+    columns: [
+      { key: 'sourceWorkerId', kind: 'code' },
+      { key: 'workerPartyId', kind: 'ref', ref: 'employees' },
+      { key: 'effectiveFrom', kind: 'date' },
+      { key: 'effectiveTo', kind: 'date' },
+    ],
+    fields: [
+      { key: 'deviceId', kind: 'ref', ref: 'schedule-attendance-devices', required: true, lockedOnEdit: true },
+      { key: 'sourceWorkerId', kind: 'text', required: true, lockedOnEdit: true, helpTextKey: 'fieldHelp.scheduleAttendanceSourceWorker' },
+      { key: 'workerPartyId', kind: 'ref', ref: 'employees', required: true, lockedOnEdit: true },
+      { key: 'effectiveFrom', kind: 'date', required: true, lockedOnEdit: true },
+      { key: 'effectiveTo', kind: 'date', helpTextKey: 'fieldHelp.scheduleAttendanceIdentityEnd' },
+      { key: 'reason', kind: 'textarea', required: true, resetOnEdit: true },
     ],
   },
   {

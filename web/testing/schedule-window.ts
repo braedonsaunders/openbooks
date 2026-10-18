@@ -27,6 +27,8 @@ export function scheduleWindow(
     dayEnds: '15:30',
     dayBreakMinutes: 30,
     publishPolicy: 'live',
+    boardType: 'people',
+    governedFrom: null,
     isActive: true,
     projectId: null,
   }
@@ -71,6 +73,13 @@ export function scheduleWindow(
     supersedesId: null,
     updatedAt: `${from}T10:00:00Z`,
     updatedByName: 'Scheduler',
+    governed: false,
+    removesPredecessor: false,
+    patternAssignmentId: null,
+    patternOverride: false,
+    closedAt: null,
+    attendance: null,
+    openRequest: null,
   })
   return {
     board,
@@ -95,6 +104,7 @@ export function scheduleWindow(
     replaced: [],
     absences: [],
     codes: [],
+    pendingPublication: null,
     canManage: false,
     canPublish: false,
   } as unknown as BoardWindow

@@ -3762,5 +3762,34 @@
     "reason": "原因",
     "allocated": "已分配审计编号",
     "failed": "审计编号分配失败"
+  },
+  "attendanceExceptions": {
+    "title": "考勤异常",
+    "description": "存在缺勤、迟到、早退、休息过长或设备尚未同步的已结束班次。",
+    "hubDescription": "班次表中的缺勤、迟到、早退和休息过长。",
+    "range": "{from} 至 {to}",
+    "note": "判定依据班次日期时各排程板生效的考勤政策，将已发布班次与设备打卡进行比对。时间按各班次的时区显示。",
+    "search": "搜索人员或排程板…",
+    "allBoards": "所有班次表",
+    "allKinds": "所有异常",
+    "empty": "没有符合这些筛选条件的考勤异常。",
+    "closed": "已关闭",
+    "columns": {
+      "date": "日期",
+      "person": "人员",
+      "board": "排程板",
+      "scheduled": "计划",
+      "firstIn": "首次上班",
+      "lastOut": "最后下班",
+      "exceptions": "异常",
+      "closed": "审核"
+    },
+    "kinds": {
+      "absent": "缺勤",
+      "late": "迟到",
+      "left_early": "早退",
+      "over_break": "休息超出计划",
+      "waiting_for_sync": "等待设备"
+    }
   }
 }

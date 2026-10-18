@@ -100,6 +100,7 @@ export async function loadSchedulingPage(searchParams: Record<string, string | s
     tasksEnabled: false,
     resourcesEnabled: kinds.resources,
     equipmentEnabled: kinds.resources && can(authz, 'assets.read') && await isFeatureEnabled(orgId, 'equipment'),
+    roster: await rosterAccess(orgId, authz),
   }
   if (!board) {
     return { ...base, board: null, view: 'grid', anchor: today, from: today, through: today, rangeDays: 14, initialWindow: null, projects: [], selectedProjectId: null, settingsHref: null }
@@ -141,6 +142,13 @@ export async function loadSchedulingPage(searchParams: Record<string, string | s
   return { ...base, refusal, board, view, anchor, from, through, rangeDays, initialWindow, projects: [], selectedProjectId: null, settingsHref }
 }
 
+/** Device attendance and formal closing as the roster tools see them; the services enforce both again. */
+async function rosterAccess(orgId: string, authz: NonNullable<Awaited<ReturnType<typeof getAuthz>>>): Promise<SchedulingPageData['roster']> {
+  const [hrm, attendance, closing] = await Promise.all([isFeatureEnabled(orgId, 'hrm'), isFeatureEnabled(orgId, 'hrmAttendance'), isFeatureEnabled(orgId, 'hrmShiftClosing')])
+  const observed = hrm && attendance && can(authz, 'hrm.attendance.read')
+  return { attendance: observed, manageAttendance: observed && can(authz, 'hrm.attendance.manage'), closing: observed && closing && can(authz, 'hrm.shifts.manage') }
+}
+
 export async function schedulingTitle(): Promise<string> {
   return (await getTranslations('scheduling'))('title')
 }
@@ -176,6 +184,7 @@ export function schedulingSpec(data: SchedulingPageData): PageSpec {
         tasksEnabled: data.tasksEnabled,
         resourcesEnabled: data.resourcesEnabled,
         equipmentEnabled: data.equipmentEnabled,
+        roster: data.roster,
       }),
     ],
   })

@@ -61,6 +61,7 @@ export async function reportsHubFor(
   const tw = await getTranslations('warehouse')
   const tp = await getTranslations('payroll.supportReport')
   const tev = await getTranslations('reports.earnedValue')
+  const tae = await getTranslations('reports.attendanceExceptions')
   const canCreate = !!authz && (can(authz, 'reports.create') || can(authz, '*'))
 
   const orgId = authz?.user.orgId
@@ -112,6 +113,10 @@ export async function reportsHubFor(
   // Projects → Progress tracking gates the Earned value report.
   const progressEnabled = projectsEnabled && authz && can(authz, 'projects.read')
     ? await isFeatureEnabled(authz.user.orgId, 'projectProgress')
+    : false
+  // Device attendance on shift rosters gates the Attendance exceptions report.
+  const attendanceVisible = hrmEnabled && authz && can(authz, 'hrm.attendance.read')
+    ? (await Promise.all([isFeatureEnabled(authz.user.orgId, 'hrmAttendance'), isFeatureEnabled(authz.user.orgId, 'hrmShiftPlanning')])).every(Boolean)
     : false
 
   // Hide definitions over permission-gated or feature-off entities from
@@ -345,11 +350,14 @@ export async function reportsHubFor(
         ...definitionCards(payrollDefinitions, 'HandCoins', t('hub.cards.payrollDescription')),
       ],
     } satisfies HubGroup] : []),
-    ...(hrmDefinitions.length > 0 ? [{
+    ...(hrmDefinitions.length > 0 || attendanceVisible ? [{
       key: 'hrm',
       label: t('hub.groups.hrm'),
       accent: 'teal',
-      cards: definitionCards(hrmDefinitions, 'Users', t('hub.cards.hrmDescription')),
+      cards: [
+        ...(attendanceVisible ? [{ href: '/reports/attendance-exceptions', title: tae('title'), desc: tae('hubDescription'), icon: 'Timer', form: 'list' as const }] : []),
+        ...definitionCards(hrmDefinitions, 'Users', t('hub.cards.hrmDescription')),
+      ],
     } satisfies HubGroup] : []),
     ...(fixedAssetDefinitions.length > 0 ? [{
       key: 'fixedAssets',
@@ -383,6 +391,7 @@ export async function reportsHubFor(
           savedReportPathVisible(s.path, {
             projects: projectsEnabled,
             projectProgress: progressEnabled,
+            hrmAttendance: attendanceVisible,
             budgets: budgetsEnabled,
             orders: ordersEnabled,
             inventory: inventoryEnabled,

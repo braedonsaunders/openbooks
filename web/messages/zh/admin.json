@@ -2889,6 +2889,26 @@
           "reason": "变更原因"
     },
     "entities": {
+      "schedule-patterns": {
+        "title": "班次模式",
+        "singularTitle": "班次模式",
+        "description": "按当地时钟时间循环的班次周期，分配给班次表上的人员以安排其班次。"
+      },
+      "schedule-attendance-devices": {
+        "title": "考勤设备",
+        "singularTitle": "考勤设备",
+        "description": "法律实体的打卡机及其他打卡来源，各自具有固定的代码和时区。"
+      },
+      "schedule-attendance-identities": {
+        "title": "设备身份",
+        "singularTitle": "设备身份",
+        "description": "设备的员工标识在某一日期区间内代表哪位人员。"
+      },
+      "schedule-attendance-policies": {
+        "title": "考勤政策",
+        "singularTitle": "考勤政策",
+        "description": "按生效日期设定的打卡窗口和宽限分钟数，用于判定班次表上的考勤。"
+      },
       "equity-account-policies": {
         "title": "权益科目",
         "singular": "权益科目策略",
@@ -3931,6 +3951,29 @@
       "expense-fx-policies": {"title": "费用汇率政策", "description": "外币费用行是否可以使用附理由的指定汇率，而不是按日期的汇率进行换算。"}
     },
     "fields": {
+      "boardType": "排程板类型",
+      "governedFrom": "受控起始日",
+      "captureBeforeMinutes": "开始前打卡（分钟）",
+      "captureAfterMinutes": "结束后打卡（分钟）",
+      "lateGraceMinutes": "迟到宽限（分钟）",
+      "earlyGraceMinutes": "早退宽限（分钟）",
+      "breakGraceMinutes": "休息宽限（分钟）",
+      "cycleDays": "周期长度（天）",
+      "cycleAnchor": "周期开始日期",
+      "slots": "班次",
+      "horizonDays": "提前安排（天）",
+      "targetKind": "安排到",
+      "scheduleCodeId": "排程代码",
+      "detail": "详情",
+      "sourceWorkerId": "设备员工 ID",
+      "workerPartyId": "人员",
+      "deviceId": "设备",
+      "schedulePatternAddSlot": "添加班次",
+      "schedulePatternSlotDay": "周期日（0 为第一天）",
+      "schedulePatternSlotStarts": "开始",
+      "schedulePatternSlotEnds": "结束",
+      "schedulePatternSlotBreak": "休息（分钟）",
+      "schedulePatternSlotQualifications": "所需资质",
       "allowRateOverride": "允许指定汇率",
       "commonStockAccountId": "普通股科目",
       "preferredStockAccountId": "优先股科目",
@@ -4656,6 +4699,22 @@
       "denominations": "现金面额"
     },
     "fieldHelp": {
+      "scheduleBoardType": "受管班次表增加循环班次模式、员工班次申请、受控发布和设备考勤。排程板创建后类型不可更改。",
+      "scheduleBoardGovernedFrom": "在此日期或之后开始的安排只能通过受控发布进行发布，发布后作为历史保留。较早的安排沿用排程板之前的规则。",
+      "scheduleAttendanceEffectiveFrom": "此版本适用的第一个班次日期。较早的班次沿用当时适用的版本。",
+      "scheduleAttendanceCapture": "在班次开始前和结束后多长时间内的打卡仍计入该班次。",
+      "scheduleAttendanceGrace": "开始后多少分钟内上班打卡仍算准时，结束前多少分钟内下班打卡不算早退。",
+      "scheduleAttendanceBreakGrace": "超出计划休息多少分钟后算作休息超时。",
+      "scheduleAttendanceDeviceCode": "打卡导入用于标识此设备的代码。登记后不可更改。",
+      "scheduleAttendanceDeviceTimeZone": "设备时钟所在时区，例如 Asia/Shanghai。不可更改；来源变更时请登记新设备。",
+      "scheduleAttendanceSourceWorker": "与设备导出完全一致的员工标识，例如工牌号。",
+      "scheduleAttendanceIdentityEnd": "该标识不再代表此人员的第一个日期。仍代表时请留空。",
+      "schedulePatternSubsidiary": "将模式限制在某一法律实体的排程板上；留空则在所有班次表上提供。",
+      "schedulePatternCycleDays": "模式重复前持续的天数，例如每周轮班为 7，两周轮换为 14。",
+      "schedulePatternCycleAnchor": "作为周期第 0 天的日期。",
+      "schedulePatternSlots": "每个班次注明其在周期中的日期以及当地开始和结束时间。结束时间不晚于开始时间的班次在次日结束。",
+      "schedulePatternHorizon": "提前多少天生成并保持更新模式的安排。",
+      "schedulePatternTarget": "生成的安排去向。留空则安排无目标的班次。",
       "apicShareBasedAccount": "确认股权激励时贷记；授予被行权或结算时转入股本。",
       "convertibleInstrumentsAccount": "按本金核算 SAFE 和可转换票据，直至转换、偿还或取消。",
       "accruedInterestAccount": "核算可转换票据的应计利息，直至转换、偿还或取消。可以与可转换工具科目相同。",
@@ -4827,7 +4886,7 @@
       "scheduleBoardWeekStartsOn": "每周显示的第一天：0 为周日，1 为周一，依此类推，6 为周六。",
       "scheduleBoardGrain": "全天模式按排程板的工作日安排每个人；按小时班次模式安排开始和结束时间。",
       "scheduleBoardDayStarts": "全天安排所使用的工作时间，采用 24 小时制，如 07:00。",
-      "scheduleBoardPublishPolicy": "即时发布的排程板会在每项安排创建时立即发布。集中发布的排程板会汇总更改，直到拥有审批权限的人员发布。",
+      "scheduleBoardPublishPolicy": "即时发布的排程板会在每项安排创建时立即发布。集中发布的排程板会汇总更改，直到拥有审批权限的人员发布。受控发布的排程板（适用于受管班次表）通过可由审批流程决定的发布记录进行发布，并将已发布的安排作为历史保留。",
       "scheduleBoardPrefillTimesheets": "此排程板上已发布的安排会作为计划时间显示在每个人的周工时表上，可一键添加，然后确认或更正。",
       "scheduleBoardPrefillCrewTime": "此排程板上已发布的项目安排会在工头该项目当天的班组工时表中提供已安排的班组和工时，可一键添加。",
       "scheduleBoardPrefillFieldTickets": "此排程板上已发布的项目安排会在该项目的现场工单中提供工单期间已安排的班组和工时，可一键添加。",
@@ -4876,6 +4935,16 @@
       "taxRateEffectiveTo": "此税率适用的最后一个交易日期，包含当天。不设结束日期时请留空。如果下一税率从7月1日开始，此税率应于6月30日结束。"
     },
     "options": {
+      "scheduleBoardType": {
+        "people": "人员排程板",
+        "shift_roster": "受管班次表"
+      },
+      "schedulePatternTarget": {
+        "customer": "客户",
+        "project": "项目",
+        "location": "地点",
+        "code": "排程代码"
+      },
       "posCashDirection": {
         "payIn": "存入",
         "payOut": "取出"
@@ -5602,6 +5671,7 @@
         "progress": "进度"
       },
       "schedulePublishPolicy": {
+        "governed": "受控发布",
         "live": "即时发布",
         "staged": "集中发布"
       },
@@ -6705,6 +6775,11 @@
     },
     "filterAll": "全部",
     "sections": {
+      "schedulePatternIdentity": "模式",
+      "schedulePatternCycle": "周期",
+      "schedulePatternCycleHelp": "班次时间为模式时区的当地时钟时间；时钟调整会按每个日期解析。",
+      "schedulePatternBooking": "安排",
+      "schedulePatternChange": "变更",
       "address": "地址",
       "deductionProtection": "扣款保护",
       "basisCaps": "基数上限",
@@ -8462,11 +8537,11 @@
     },
     "hrmAttendance": {
       "title": "设备考勤",
-      "description": "可选的设备身份、打卡记录和同步完整性记录。采集打卡记录无需排班计划。"
+      "description": "可选的打卡机、员工身份和打卡导入，在受管班次表上判定为迟到、早退、缺勤和休息超时。采集打卡记录无需排程。"
     },
     "hrmShiftClosing": {
       "title": "正式班次关闭",
-      "description": "可选：根据最新考勤证据审核并关闭已结束班次。需要排班计划和设备考勤；发布班次无需关闭班次。"
+      "description": "可选：根据最新考勤证据审核并关闭已结束的班次表班次。需要排程和设备考勤；发布班次无需关闭班次。"
     },
     "hrmCertifications": {
       "title": "认证与执照",

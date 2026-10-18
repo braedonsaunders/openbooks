@@ -8,7 +8,7 @@ import { useRouter } from 'next/navigation'
 import { useLocale, useTranslations } from 'next-intl'
 import {
   CalendarRange, ChevronLeft, ChevronRight, Plus, Redo2, Rows3, Rows4,
-  Send, Settings2, MoreHorizontal, Undo2, X, ZoomIn, ZoomOut, Columns3, Mail,
+  Send, Settings2, MoreHorizontal, Undo2, X, ZoomIn, ZoomOut, Columns3, Mail, CalendarCheck,
 } from 'lucide-react'
 import { Button, Input, Select, Popover, cn } from '@openbooks/ui'
 import { SchedulingAlert } from './SchedulingAlert'
@@ -20,6 +20,7 @@ import { SourceRecordDrawer } from './SourceRecord'
 import type { BoardSourceRecord } from '@openbooks/engine/schedule-boards/source-history'
 import { CalendarView } from './CalendarView'
 import { NewBoardDrawer, type ScopeOptions } from './NewBoardDrawer'
+import { RosterDrawer, rosterTabs, type RosterAccess } from './RosterDrawer'
 import { PeopleGrid } from './PeopleGrid'
 import { TargetsView } from './TargetsView'
 import { TaskBoard, type TaskBoardProject } from './TaskBoard'
@@ -63,6 +64,8 @@ export interface SchedulingWorkspaceProps {
   readonly tasksEnabled: boolean
   readonly resourcesEnabled: boolean
   readonly equipmentEnabled: boolean
+  /** Roster tools the organization's features and the actor's permissions allow, for boards whose type declares them. */
+  readonly roster: RosterAccess & { readonly closing: boolean }
 }
 
 
@@ -120,6 +123,7 @@ function BoardShell(props: SchedulingWorkspaceProps & { board: ScheduleBoard; on
   const [downloadOpen, setDownloadOpen] = useState(false)
   const [moreOpen, setMoreOpen] = useState(false)
   const [displayOpen,setDisplayOpen]=useState(false)
+  const [rosterOpen, setRosterOpen] = useState(false)
   const range = useMemo(() => viewRange(view, anchor, rangeDays, board.weekStartsOn), [anchor, board.weekStartsOn, rangeDays, view])
   const people = board.rowKind !== 'tasks'
   const controller = useBoard(board.id, people ? props.initialWindow : null, range, people)
@@ -155,7 +159,11 @@ function BoardShell(props: SchedulingWorkspaceProps & { board: ScheduleBoard; on
     return `${format.format(new Date(`${range.from}T00:00:00Z`))} – ${format.format(new Date(`${range.through}T00:00:00Z`))}, ${year.format(new Date(`${range.through}T00:00:00Z`))}`
   }, [anchor, locale, range.from, range.through, view])
 
+  const roster = people ? rosterTabs(board, props.roster) : []
+  const pendingPublication = window?.pendingPublication ?? null
   const drafts = useMemo(() => window?.entries.filter((entry) => entry.status === 'draft' && entry.boardId === board.id) ?? [], [board.id, window])
+  // Drafts submitted in a governed publication stay locked until its decision.
+  const stagedDrafts = useMemo(() => drafts.filter((entry) => !pendingPublication?.entryIds.includes(entry.id)), [drafts, pendingPublication])
   const legend = useMemo(() => window ? boardLegend(window) : [], [window])
   const settingsParams = new URLSearchParams({ board: board.code, view, boardRow: board.id })
   if (people) { settingsParams.set('from', anchor); settingsParams.set('days', String(rangeDays)) }
@@ -181,7 +189,7 @@ function BoardShell(props: SchedulingWorkspaceProps & { board: ScheduleBoard; on
     setPublishing(true)
     try {
       const result = await publish(board.id, range.from, range.through, t('errors.publish'))
-      controller.notify('success', t('notices.published', { count: result.published }))
+      controller.notify('success', result.pending ? t('publish.submitted', { count: result.published }) : t('notices.published', { count: result.published }))
       for(const refusal of result.distributionRefusals??[])controller.notify('error',`Bookings published; schedule email not queued: ${refusal.message}`,refusal.remedy)
       await controller.reload()
     } catch (error) {
@@ -202,7 +210,7 @@ function BoardShell(props: SchedulingWorkspaceProps & { board: ScheduleBoard; on
   }
 
   async function discardDrafts() {
-    await controller.run(drafts.map((entry) => ({ op: 'cancel' as const, id: entry.id, expectedRevision: entry.revision })), t('history.discard', { count: drafts.length }))
+    await controller.run(stagedDrafts.map((entry) => ({ op: 'cancel' as const, id: entry.id, expectedRevision: entry.revision })), t('history.discard', { count: stagedDrafts.length }))
   }
 
   const rangeOptions = [...new Set([1, 3, 7, 14, 28, board.rangeDays])].sort((a, b) => a - b)
@@ -238,6 +246,7 @@ function BoardShell(props: SchedulingWorkspaceProps & { board: ScheduleBoard; on
           </Button> : null}
           {!props.contextProjectId && props.canConfigure ? <Button asChild variant="ghost" size="sm" className="h-8 px-2" title={t('toolbar.manageBoards')}><Link href="/scheduling/boards" aria-label={t('toolbar.manageBoards')}><Rows3 className="h-4 w-4" /></Link></Button> : null}
           {props.canConfigure ? <Button variant="outline" size="sm" className="h-8 gap-1 px-2 text-xs" onClick={props.onNewBoard} aria-label={t('toolbar.newBoard')} title={t('toolbar.newBoard')}><Plus className="h-4 w-4" /><span className="hidden xl:inline">{t('toolbar.newBoard')}</span></Button> : null}
+          {window && roster.length ? <Button variant="outline" size="sm" className="h-8 gap-1 px-2 text-xs" onClick={() => setRosterOpen(true)} aria-label={t('roster.title')} title={t('roster.title')}><CalendarCheck className="h-4 w-4" /><span className="hidden xl:inline">{t('roster.title')}</span></Button> : null}
           {window?.canManage ? <Button variant="ghost" size="sm" className="h-8 px-2" onClick={()=>setEmailOpen(true)} aria-label={t('toolbar.email')}><Mail className="h-4 w-4" /></Button> : null}
           {people && view==='grid' ? <Popover open={displayOpen} onOpenChange={setDisplayOpen} align="end" className="w-64" trigger={<Button variant="ghost" size="sm" className="h-8 px-2" aria-label={t('toolbar.display')} aria-expanded={displayOpen} onClick={()=>setDisplayOpen(v=>!v)}><Columns3 className="h-4 w-4" /></Button>}>
             <div className="space-y-3 p-3 text-xs">
@@ -263,10 +272,15 @@ function BoardShell(props: SchedulingWorkspaceProps & { board: ScheduleBoard; on
       {props.refusal ? (
         <SchedulingAlert message={props.refusal.message} remedy={props.refusal.remedy} />
       ) : null}
-      {people && board.publishPolicy === 'staged' && drafts.length ? (
-        <SchedulingAlert tone="warning" message={t('publish.pending', { count: drafts.length, people: new Set(drafts.map((entry) => entry.subjectId)).size })} remedy={t('publish.explain')}>
+      {people && pendingPublication ? (
+        <SchedulingAlert tone="info" message={t('publish.awaiting', { count: pendingPublication.entryIds.length })} remedy={pendingPublication.flowGated ? t('publish.awaitingFlow') : null}>
+          {pendingPublication.flowGated ? <Button asChild variant="ghost" size="sm" className="h-7 px-2 text-xs"><Link href="/approvals">{t('publish.openApprovals')}</Link></Button> : null}
+        </SchedulingAlert>
+      ) : null}
+      {people && board.publishPolicy !== 'live' && stagedDrafts.length ? (
+        <SchedulingAlert tone="warning" message={t('publish.pending', { count: stagedDrafts.length, people: new Set(stagedDrafts.map((entry) => entry.subjectId)).size })} remedy={board.publishPolicy === 'governed' ? t('publish.governedExplain') : t('publish.explain')}>
           {window?.canManage ? <Button variant="ghost" size="sm" className="h-7 px-2 text-xs" onClick={() => void discardDrafts()}>{t('publish.discard')}</Button> : null}
-          {window?.canPublish ? <Button size="sm" className="h-7 px-2 text-xs" onClick={() => void publishDrafts()} disabled={publishing}><Send className="mr-1 h-3.5 w-3.5" />{t('publish.action')}</Button> : null}
+          {window?.canPublish && !pendingPublication ? <Button size="sm" className="h-7 px-2 text-xs" onClick={() => void publishDrafts()} disabled={publishing}><Send className="mr-1 h-3.5 w-3.5" />{board.publishPolicy === 'governed' ? t('publish.submit') : t('publish.action')}</Button> : null}
         </SchedulingAlert>
       ) : null}
       {people && view === 'grid' && legend.length ? (
@@ -321,8 +335,9 @@ function BoardShell(props: SchedulingWorkspaceProps & { board: ScheduleBoard; on
         workerName={window.rows.find(r => r.subjectId === openSourceRecord.workerPartyId)?.name ?? t('drawer.title')}
         onSelect={setOpenSourceRecord} onClose={() => setOpenSourceRecord(null)} /> : null}
       {window && openEntry && !openSourceRecord ? (
-        <BookingDrawer entry={window.entries.find((entry) => entry.id === openEntry.id) ?? openEntry} window={window} controller={controller} onClose={() => setOpenEntry(null)} />
+        <BookingDrawer entry={window.entries.find((entry) => entry.id === openEntry.id) ?? openEntry} window={window} controller={controller} roster={props.roster} onClose={() => setOpenEntry(null)} />
       ) : null}
+      {rosterOpen && window && roster.length ? <RosterDrawer board={board} window={window} controller={controller} range={range} today={props.today} access={props.roster} initialTab={roster[0]!} onClose={() => setRosterOpen(false)} /> : null}
       {downloadOpen && window ? <DownloadScheduleDrawer window={window} onClose={()=>setDownloadOpen(false)} /> : null}
       {emailOpen && window ? <EmailScheduleDrawer window={window} onClose={()=>setEmailOpen(false)} /> : null}
       {props.newBoard}

@@ -2,10 +2,9 @@ import "server-only";
 import { automaticScheduleDeliverySchema } from "@openbooks/forms-core";
 import { sql } from 'drizzle-orm'
 import { lockAndCheckOrgFeature } from '@openbooks/engine/organization/org-feature-lock'
+import { scheduleBoardType } from '@openbooks/engine/schedule-boards/board-types'
 import type { SetupEntityValidationHook } from './types'
 
-const PEOPLE_VIEWS = new Set(['grid', 'targets', 'timeline', 'calendar'])
-const TASK_VIEWS = new Set(['gantt', 'progress'])
 const RANGE_DAYS = new Set([1, 3, 7, 14, 21, 28, 35, 42])
 
 function list(value: unknown): string[] | null {
@@ -30,7 +29,8 @@ export const validateScheduleBoardWrite: SetupEntityValidationHook = async ({ bo
           Record<string, unknown>
         >(sql`select row_kind as "rowKind", views, default_view as "defaultView",
       resource_kind as "resourceKind", department_id as "departmentId", location_id as "locationId", range_days as "rangeDays", prefill_timesheets as "prefillTimesheets", prefill_crew_time as "prefillCrewTime",
-      prefill_field_tickets as "prefillFieldTickets", notify_assignees as "notifyAssignees", subsidiary_id as "subsidiaryId", distribution_visibility as "distributionVisibility",time_zone as "timeZone",automatic_delivery_policy as "automaticDeliveryPolicy"
+      prefill_field_tickets as "prefillFieldTickets", notify_assignees as "notifyAssignees", subsidiary_id as "subsidiaryId", distribution_visibility as "distributionVisibility",time_zone as "timeZone",automatic_delivery_policy as "automaticDeliveryPolicy",
+      board_type as "boardType", publish_policy as "publishPolicy", governed_from::text as "governedFrom"
       from schedule_boards where org_id = ${orgId} and id = ${rowId}`)
       ).rows[0] ?? {};
   }
@@ -95,9 +95,15 @@ export const validateScheduleBoardWrite: SetupEntityValidationHook = async ({ bo
     !(await lockAndCheckOrgFeature(executor, orgId, "equipment"))
   )
     return "Enable Equipment in Company Settings → Features before configuring an equipment board.";
+  // The board's registered type decides its publication policies and capabilities.
+  const boardType = scheduleBoardType(String(merged.boardType ?? rowKind))
+  if (!boardType || boardType.rowKind !== rowKind) return 'Choose a board type that schedules this kind of row.'
+  const publishPolicy = String(merged.publishPolicy ?? 'live') as 'live' | 'staged' | 'governed'
+  if (!boardType.publishPolicies.includes(publishPolicy)) return 'Governed publication is available on managed shift roster boards; choose live or staged publishing for this board.'
+  if (publishPolicy === 'governed' && !merged.governedFrom) return 'Choose the first booking date that governed publication covers.'
   if (merged.distributionVisibility === 'board' && !merged.subsidiaryId) return 'Choose a legal entity before allowing whole-board schedule reports.'
   const views = list(merged.views) ?? []
-  const allowedViews = rowKind === 'tasks' ? TASK_VIEWS : PEOPLE_VIEWS
+  const allowedViews = new Set(boardType.views)
   const foreign = views.filter((view) => !allowedViews.has(view))
   if (views.length === 0) return 'Choose at least one view for the board.'
   if (foreign.length) return `${foreign.join(', ')} ${foreign.length === 1 ? 'is' : 'are'} not available on a ${rowKind === 'tasks' ? 'task' : rowKind === 'resources' ? 'resource' : 'people'} board.`

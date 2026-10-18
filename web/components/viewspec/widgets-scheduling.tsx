@@ -18,6 +18,8 @@ export const SCHEDULING_WIDGETS = {
       through={props.through as ComponentProps<typeof MySchedule>['through']}
       today={props.today as ComponentProps<typeof MySchedule>['today']}
       refusal={props.refusal as ComponentProps<typeof MySchedule>['refusal']}
+      requestableEntryIds={props.requestableEntryIds as ComponentProps<typeof MySchedule>['requestableEntryIds']}
+      personPartyId={props.personPartyId as ComponentProps<typeof MySchedule>['personPartyId']}
     />
   ),
 } satisfies Record<string, WidgetRenderer>

@@ -3762,5 +3762,34 @@
     "reason": "Motivo",
     "allocated": "Números de auditoria atribuídos",
     "failed": "Falha ao atribuir números de auditoria"
+  },
+  "attendanceExceptions": {
+    "title": "Exceções de presença",
+    "description": "Turnos encerrados com ausência, atraso, saída antecipada, intervalo longo ou um dispositivo ainda não sincronizado.",
+    "hubDescription": "Ausências, atrasos, saídas antecipadas e intervalos longos em escalas de turnos.",
+    "range": "De {from} a {to}",
+    "note": "As observações comparam turnos publicados com registros de ponto conforme a política de presença do quadro vigente na data do turno. Os horários são lidos no fuso horário de cada turno.",
+    "search": "Buscar pessoa ou quadro…",
+    "allBoards": "Todas as escalas",
+    "allKinds": "Todas as exceções",
+    "empty": "Nenhuma exceção de presença corresponde a estes filtros.",
+    "closed": "Encerrado",
+    "columns": {
+      "date": "Data",
+      "person": "Pessoa",
+      "board": "Quadro",
+      "scheduled": "Programado",
+      "firstIn": "Primeira entrada",
+      "lastOut": "Última saída",
+      "exceptions": "Exceção",
+      "closed": "Revisão"
+    },
+    "kinds": {
+      "absent": "Ausente",
+      "late": "Atraso",
+      "left_early": "Saiu mais cedo",
+      "over_break": "Intervalo maior que o previsto",
+      "waiting_for_sync": "Aguardando dispositivo"
+    }
   }
 }

@@ -3,9 +3,10 @@
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
-import { CalendarDays, Clock3, Factory, ChartGantt, Boxes } from 'lucide-react'
+import { CalendarDays, CalendarCheck, Clock3, Factory, ChartGantt, Boxes } from 'lucide-react'
 import { Button, Drawer, Input, Select, cn } from '@openbooks/ui'
 import { refusalMessageFromBody } from '../../lib/api-error'
+import { scheduleBoardType } from '@openbooks/engine/schedule-boards/board-types'
 
 export interface ScopeOptions {
   readonly subsidiaries: readonly { id: string; name: string }[]
@@ -14,20 +15,29 @@ export interface ScopeOptions {
   readonly projects: readonly { id: string; name: string }[]
 }
 
-type PresetKey = 'dispatch' | 'shifts' | 'continuous' | 'projects' | 'resources'
+type PresetKey = 'dispatch' | 'shifts' | 'continuous' | 'roster' | 'projects' | 'resources'
+
+/** A board type's registered defaults (views, grain, publication) as preset settings. */
+function typeDefaults(key: string): Record<string, unknown> {
+  const type = scheduleBoardType(key)
+  if (!type) throw new Error(`Unknown board type ${key}`)
+  return { rowKind: type.rowKind, boardType: type.key, grain: type.defaultGrain, views: [...type.defaultViews], defaultView: type.defaultView, publishPolicy: type.defaultPublishPolicy }
+}
 
 /**
- * Starting points for the common ways companies schedule. Each preset only
- * fills the board settings; every value stays editable in Setup.
+ * Starting points for the common ways companies schedule. Each preset names
+ * a registered board type and only fills the board settings; every value
+ * stays editable in Setup.
  */
 const PRESETS: Record<PresetKey, Record<string, unknown>> = {
   dispatch: { rowKind: 'people', grain: 'day', views: ['grid', 'targets', 'calendar', 'timeline'], defaultView: 'grid', rangeDays: 14, publishPolicy: 'live', dayStarts: '07:00', dayEnds: '15:30', dayBreakMinutes: 30 },
   shifts: { rowKind: 'people', grain: 'timed', views: ['timeline', 'grid', 'calendar'], defaultView: 'timeline', rangeDays: 7, publishPolicy: 'staged', dayStarts: '09:00', dayEnds: '17:00', dayBreakMinutes: 30 },
   continuous: { rowKind: 'people', grain: 'timed', views: ['grid', 'timeline', 'calendar'], defaultView: 'grid', rangeDays: 28, publishPolicy: 'staged', dayStarts: '07:00', dayEnds: '19:00', dayBreakMinutes: 60 },
+  roster: { ...typeDefaults('shift_roster'), rangeDays: 14, dayStarts: '08:00', dayEnds: '16:30', dayBreakMinutes: 30 },
   resources: { rowKind: 'resources', resourceKind: 'equipment', grain: 'day', views: ['grid', 'targets', 'timeline', 'calendar'], defaultView: 'grid', rangeDays: 14, publishPolicy: 'staged', dayStarts: '07:00', dayEnds: '15:30', dayBreakMinutes: 30 },
   projects: { rowKind: 'tasks', grain: 'day', views: ['gantt', 'progress'], defaultView: 'gantt', rangeDays: 14, publishPolicy: 'live', dayStarts: '07:00', dayEnds: '15:30', dayBreakMinutes: 30 },
 }
-const ICONS = { dispatch: CalendarDays, shifts: Clock3, continuous: Factory, projects: ChartGantt, resources: Boxes } as const
+const ICONS = { dispatch: CalendarDays, shifts: Clock3, continuous: Factory, roster: CalendarCheck, projects: ChartGantt, resources: Boxes } as const
 
 function codeFrom(name: string): string {
   return name.toUpperCase().replace(/[^A-Z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40) || 'BOARD'

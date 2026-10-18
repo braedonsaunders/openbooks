@@ -82,7 +82,9 @@
     "unassigned": "作業先なし",
     "draft": "未公開",
     "elsewhere": "{board}で割り当て済み",
-    "leave": "{type}: 休暇{hours}時間"
+    "leave": "{type}: 休暇{hours}時間",
+    "removal": "削除は公開待ち",
+    "closed": "締め済み"
   },
   "picker": {
     "placeholder": "コード、顧客、プロジェクト、拠点を入力",
@@ -132,7 +134,13 @@
     "pending": "{people} 行の未公開変更 {count} 件",
     "explain": "公開された予約はチームに表示されます。",
     "action": "公開",
-    "discard": "変更を破棄"
+    "discard": "変更を破棄",
+    "submit": "公開を申請",
+    "submitted": "変更 {count} 件を公開に申請しました。",
+    "governedExplain": "統制ボード：公開すると公開記録が作成されます。承認フローが適用される場合、承認後に変更が公開されます。",
+    "awaiting": "変更 {count} 件が公開の判断を待っています。",
+    "awaitingFlow": "この公開は承認画面で承認フローにより判断されます。それまで申請した変更はロックされます。",
+    "openApprovals": "承認画面を開く"
   },
   "drawer": {
     "title": "割り当て",
@@ -159,7 +167,21 @@
     "booked": "休憩を除いて{hours}を割り当てます。",
     "repeat": "次の日にも割り当て",
     "notes": "メモ",
-    "notesPlaceholder": "クルーへの伝達事項"
+    "notesPlaceholder": "クルーへの伝達事項",
+    "removalDraft": "この下書きは、公開が適用されると公開済みの予約を削除します。",
+    "awaitingApproval": "この変更は判断待ちの公開に含まれているため、編集できません。",
+    "governed": "統制公開で公開済みです。変更すると新しいリビジョンが作成され、次の公開で公開されます。",
+    "closedOn": "{date} に締め済み。締め済みのシフトは変更できません。",
+    "openRequest": {
+      "awaiting_counterpart": "{kind} の申請が同僚の回答を待っています。",
+      "pending": "{kind} の申請が承認を待っています。"
+    },
+    "attendance": "勤怠",
+    "noAttendance": "このシフトの勤怠はまだ判定されていません。",
+    "close": "シフトを締める",
+    "closeTitle": "このシフトを締める",
+    "closeExplain": "締め処理により、シフトの勤怠が確認済みとして記録されます。締め済みのシフトは以後変更できません。",
+    "closed": "シフトを締めました。"
   },
   "targets": {
     "where": "割当先",
@@ -228,6 +250,10 @@
       "resources": {
         "title": "設備と場所",
         "description": "共有設備や場所をプロジェクト間で日単位または時間単位で予約します。"
+      },
+      "roster": {
+        "title": "管理型シフト表",
+        "description": "繰り返しシフトパターン、従業員のシフト申請、任意の公開承認、遅刻・早退・欠勤バッジ付きのタイムレコーダー勤怠。"
       }
     },
     "name": "名前",
@@ -282,7 +308,35 @@
     "title": "マイスケジュール",
     "description": "担当者が公開した、あなたの割り当て先と日時です。",
     "summary": "{days, plural, other {#日割り当て}} · {hours}",
-    "empty": "{from}から{through}までの割り当てはありません。"
+    "empty": "{from}から{through}までの割り当てはありません。",
+    "request": {
+      "open": "変更を申請",
+      "title": "シフト変更を申請",
+      "submit": "申請を送信",
+      "explain": "承認フローが設定されていればそのフローが申請を判断し、なければ送信と同時に適用されます。",
+      "kind": "申請",
+      "changeExplain": "同じ日の別の時間を申請します。",
+      "swapExplain": "同僚のシフトとの交換を提案します。先に同僚が承諾します。",
+      "releaseExplain": "このシフトから外れることを申請します。",
+      "noCandidates": "2 週間以内にこのボードで交換できる同僚の公開済みシフトはありません。",
+      "swapWith": "同僚のシフト",
+      "pickShift": "シフトを選択",
+      "applied": "申請はスケジュールに適用されました。",
+      "offered": "交換の提案を {name} に送信しました。",
+      "submitted": "申請は承認待ちです。"
+    },
+    "requests": {
+      "title": "シフト申請",
+      "empty": "シフト申請はありません。",
+      "offer": "{name} から交換の提案",
+      "offers": "同僚 {count} 人からシフト交換の依頼があります。",
+      "review": "確認",
+      "accept": "承諾",
+      "decline": "辞退",
+      "withdraw": "取り下げ",
+      "acceptTitle": "交換を承諾",
+      "declineTitle": "交換を辞退"
+    }
   },
   "source": {
     "explanation": "取り込んだ予定の記録は読み取り専用です。元の日付と指示を保持し、勤務時間、従業員の状態、新たな予約枠を作成しません。",
@@ -401,6 +455,133 @@
       "linkAddress": "リンク先",
       "apply": "リンクを適用",
       "invalid": "4000文字以内で安全なリンクを使用してください。"
+    }
+  },
+  "roster": {
+    "title": "シフト表",
+    "reason": "理由",
+    "tabs": {
+      "recurring": "繰り返しシフト",
+      "requests": "シフト申請",
+      "attendance": "勤怠"
+    },
+    "recurring": {
+      "explain": "シフトパターンを担当者に割り当てると、シフトが自動で予約されます。手動で変更した予約は保持され、開始済みのシフトは変更されません。",
+      "assign": "パターンを割り当て",
+      "noPatterns": "このボードに適用される有効なシフトパターンがありません。",
+      "noPatternsRemedy": "設定 → シフトパターンで、このボードの法人またはすべての法人向けに追加してください。",
+      "person": "担当者",
+      "pickPerson": "担当者を選択",
+      "pattern": "パターン",
+      "pickPattern": "パターンを選択",
+      "from": "開始日",
+      "to": "終了日（任意）",
+      "empty": "このボードには繰り返しシフトパターンを持つ担当者がまだいません。",
+      "window": "{from}～{to}",
+      "openWindow": "{from} から",
+      "status": {
+        "active": "有効",
+        "ended": "終了",
+        "cancelled": "取消"
+      },
+      "generatedThrough": "{date} まで予約済み",
+      "generated": "{through} まで生成：追加 {created} 件、更新 {revised} 件、削除 {removed} 件、手動変更のため保持 {kept} 件。",
+      "generate": "生成",
+      "omit": "日をスキップ",
+      "end": "終了",
+      "cancel": "取消",
+      "endTitle": "{name} のパターンを終了",
+      "endExplain": "パターンが予約しなくなる最初の日付を選択してください。その日以降の予約は削除されます。",
+      "cancelTitle": "{name} のパターンを取消",
+      "cancelExplain": "割り当てが停止し、今後の予約は削除されます。開始済みおよび過去のシフトはそのまま残ります。",
+      "omitTitle": "回をスキップ",
+      "omitExplain": "パターンで予約しない日付を選択してください。",
+      "slot": "シフト",
+      "slotLabel": "サイクル {day} 日目：{starts}～{ends}",
+      "chooseTitle": "この時刻を使用",
+      "starts": "開始時刻",
+      "ends": "終了時刻",
+      "useTimes": "この時刻を使用",
+      "omitted": "{date} をスキップ",
+      "selected": "{date}：{starts}～{ends}",
+      "revoke": "元に戻す",
+      "revokeTitle": "回を元に戻す"
+    },
+    "requests": {
+      "explain": "従業員はマイスケジュールから、公開済みシフトの手放し・変更・交換を申請します。承認フローが設定されていれば承認画面で判断され、なければ送信時に適用されます。",
+      "show": "表示",
+      "open": "未完了",
+      "all": "最近",
+      "empty": "表示するシフト申請はありません。",
+      "kinds": {
+        "release": "手放す",
+        "change": "変更",
+        "swap": "交換"
+      },
+      "status": {
+        "awaiting_counterpart": "同僚の回答待ち",
+        "pending": "承認待ち",
+        "approved": "適用済み",
+        "declined": "却下",
+        "withdrawn": "取下げ"
+      },
+      "proposed": "申請内容：{span}",
+      "swapWith": "{name} と交換：{span}",
+      "noApproval": "承認フローは適用されず、送信時に適用されました。",
+      "decidedBy": "{name} が判断",
+      "openApprovals": "承認画面で開く"
+    },
+    "attendance": {
+      "observeTitle": "勤怠を判定",
+      "observeExplain": "{from}～{through} の公開済みシフトを、これまでに受信した端末の打刻と照合します。",
+      "observe": "勤怠を判定",
+      "report": "勤怠例外",
+      "summary": "出勤 {present} 件、欠勤 {absent} 件、端末待ち {waiting} 件、未判定 {refused} 件。",
+      "importTitle": "打刻を取り込む",
+      "importExplain": "端末のエクスポートを CSV でアップロードします。列は source_event_id、source_worker_id、kind（clock_in、clock_out、break_start、break_end、void）、UTC オフセット付きの occurred_at、任意の source_version です。すべての列が証拠として保持されます。",
+      "noDevices": "あなたの法人に登録された有効な勤怠端末はありません。",
+      "noDevicesRemedy": "設定 → 勤怠端末で登録し、従業員識別子を対応付けてください。",
+      "device": "端末",
+      "file": "CSV ファイル",
+      "completeThrough": "受信完了時点（任意）",
+      "completeThroughHelp": "端末がすべての打刻を送信し終えた時点をオフセット付きで入力します。端末の時計は {zone} です。エクスポートが部分的な可能性がある場合は空欄にしてください。",
+      "badWatermark": "受信完了時点には日付、時刻、UTC オフセットが必要です。",
+      "parsed": "打刻 {count} 件を読み込み、{problems} 行を拒否しました。",
+      "admit": "打刻を取り込む",
+      "admitted": "打刻 {count} 件を取り込みました。うち {replayed} 件は記録済みでした。",
+      "csv": {
+        "empty": "ファイルに打刻行がありません。",
+        "missingColumn": "ヘッダーに {column} 列がありません。",
+        "duplicate": "{line} 行目は {first} 行目のイベントとバージョンを繰り返しています。",
+        "kind": "{line} 行目の kind が clock_in、clock_out、break_start、break_end、void のいずれでもありません。",
+        "time": "{line} 行目の occurred_at には UTC オフセット付きの日時が必要です。",
+        "version": "{line} 行目の source_version には 1 以上の整数が必要です。",
+        "blank": "{line} 行目に source_event_id または source_worker_id がありません。",
+        "columns": "{line} 行目の列数がヘッダーと異なります。",
+        "remedy": "エクスポートを修正してファイルを選び直してください。何も取り込まれていません。"
+      }
+    }
+  },
+  "attendance": {
+    "status": {
+      "waiting_for_sync": "端末待ち",
+      "absent": "欠勤",
+      "present": "出勤",
+      "voided": "無効"
+    },
+    "flags": {
+      "absent": "欠勤",
+      "late": "遅刻",
+      "leftEarly": "早退",
+      "overBreak": "休憩が予定超過",
+      "waiting": "端末の打刻待ち"
+    },
+    "short": {
+      "absent": "欠勤",
+      "late": "遅刻",
+      "leftEarly": "早退",
+      "overBreak": "休憩",
+      "waiting": "同期"
     }
   }
 }

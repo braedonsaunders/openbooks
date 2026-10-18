@@ -2889,6 +2889,26 @@
           "reason": "Motivo da alteração"
     },
     "entities": {
+      "schedule-patterns": {
+        "title": "Padrões de turnos",
+        "singularTitle": "Padrão de turnos",
+        "description": "Ciclos repetitivos de turnos em horário local, atribuídos a pessoas em escalas de turnos para alocar seus turnos."
+      },
+      "schedule-attendance-devices": {
+        "title": "Dispositivos de presença",
+        "singularTitle": "Dispositivo de presença",
+        "description": "Relógios de ponto e outras fontes de registro de uma entidade legal, cada um com código e fuso horário fixos."
+      },
+      "schedule-attendance-identities": {
+        "title": "Identidades de dispositivo",
+        "singularTitle": "Identidade de dispositivo",
+        "description": "A qual pessoa o identificador de trabalhador de um dispositivo corresponde, em um período datado."
+      },
+      "schedule-attendance-policies": {
+        "title": "Políticas de presença",
+        "singularTitle": "Política de presença",
+        "description": "Janelas de registro e minutos de tolerância com data de vigência para observar a presença em uma escala de turnos."
+      },
       "equity-account-policies": {
         "title": "Contas de patrimônio",
         "singular": "Política de contas de patrimônio",
@@ -3931,6 +3951,29 @@
       "expense-fx-policies": {"title": "Políticas de câmbio de despesas", "description": "Se uma linha de despesa em moeda estrangeira pode ser convertida por uma taxa de câmbio explícita com justificativa em vez da taxa datada."}
     },
     "fields": {
+      "boardType": "Tipo de quadro",
+      "governedFrom": "Controlado a partir de",
+      "captureBeforeMinutes": "Registros antes do início (minutos)",
+      "captureAfterMinutes": "Registros após o término (minutos)",
+      "lateGraceMinutes": "Tolerância de atraso (minutos)",
+      "earlyGraceMinutes": "Tolerância de saída antecipada (minutos)",
+      "breakGraceMinutes": "Tolerância de intervalo (minutos)",
+      "cycleDays": "Duração do ciclo (dias)",
+      "cycleAnchor": "O ciclo começa em",
+      "slots": "Turnos",
+      "horizonDays": "Alocar com antecedência (dias)",
+      "targetKind": "Alocar em",
+      "scheduleCodeId": "Código de programação",
+      "detail": "Detalhe",
+      "sourceWorkerId": "ID do trabalhador no dispositivo",
+      "workerPartyId": "Pessoa",
+      "deviceId": "Dispositivo",
+      "schedulePatternAddSlot": "Adicionar turno",
+      "schedulePatternSlotDay": "Dia do ciclo (0 é o primeiro)",
+      "schedulePatternSlotStarts": "Início",
+      "schedulePatternSlotEnds": "Término",
+      "schedulePatternSlotBreak": "Intervalo (minutos)",
+      "schedulePatternSlotQualifications": "Qualificações exigidas",
       "allowRateOverride": "Permitir taxas de câmbio explícitas",
       "commonStockAccountId": "Conta de ações ordinárias",
       "preferredStockAccountId": "Conta de ações preferenciais",
@@ -4656,6 +4699,22 @@
       "denominations": "Cédulas e moedas"
     },
     "fieldHelp": {
+      "scheduleBoardType": "Uma escala de turnos gerenciada adiciona padrões de turnos recorrentes, solicitações de turno dos funcionários, publicação controlada e presença por dispositivo. O tipo fica fixo depois que o quadro existe.",
+      "scheduleBoardGovernedFrom": "Alocações que começam nesta data ou depois só são publicadas por uma publicação controlada e ficam como histórico depois de publicadas. As anteriores mantêm as regras anteriores do quadro.",
+      "scheduleAttendanceEffectiveFrom": "A primeira data de turno à qual esta versão se aplica. Turnos anteriores mantêm a versão que se aplicava a eles.",
+      "scheduleAttendanceCapture": "Quanto tempo antes do início de um turno, e depois do término, um registro ainda conta para esse turno.",
+      "scheduleAttendanceGrace": "Minutos após o início em que uma entrada ainda é pontual, e antes do término em que uma saída não é antecipada.",
+      "scheduleAttendanceBreakGrace": "Minutos além do intervalo previsto antes que um intervalo conte como excedido.",
+      "scheduleAttendanceDeviceCode": "O código que as importações de registros usam para este dispositivo. Não pode mudar depois de registrado.",
+      "scheduleAttendanceDeviceTimeZone": "O fuso horário do relógio do dispositivo, como America/Sao_Paulo. Não pode mudar; registre um novo dispositivo para uma fonte diferente.",
+      "scheduleAttendanceSourceWorker": "O identificador do trabalhador exatamente como o dispositivo o exporta, como um número de crachá.",
+      "scheduleAttendanceIdentityEnd": "A primeira data em que o identificador deixa de corresponder a esta pessoa. Deixe vazio enquanto ainda corresponder.",
+      "schedulePatternSubsidiary": "Limita o padrão aos quadros de uma entidade legal; deixe vazio para oferecê-lo em todas as escalas.",
+      "schedulePatternCycleDays": "Quantos dias o padrão dura antes de se repetir, como 7 para uma escala semanal ou 14 para um revezamento quinzenal.",
+      "schedulePatternCycleAnchor": "A data que é o dia 0 do ciclo.",
+      "schedulePatternSlots": "Cada turno informa seu dia no ciclo e seus horários locais de início e término. Um turno que termina no horário de início ou antes termina no dia seguinte.",
+      "schedulePatternHorizon": "Com quantos dias de antecedência as alocações do padrão são geradas e mantidas atualizadas.",
+      "schedulePatternTarget": "Para onde vão as alocações geradas. Deixe vazio para alocar turnos sem destino.",
       "apicShareBasedAccount": "Creditada à medida que a remuneração em ações é reconhecida; reclassificada para o capital social quando as outorgas são exercidas ou liquidadas.",
       "convertibleInstrumentsAccount": "Mantém os SAFEs e as notas conversíveis pelo principal até que sejam convertidos, reembolsados ou cancelados.",
       "accruedInterestAccount": "Mantém os juros acumulados sobre notas conversíveis até que sejam convertidas, reembolsadas ou canceladas. Pode ser a conta de instrumentos conversíveis.",
@@ -4827,7 +4886,7 @@
       "scheduleBoardWeekStartsOn": "O primeiro dia de cada semana exibida: 0 é domingo, 1 é segunda-feira, até 6 para sábado.",
       "scheduleBoardGrain": "Dias inteiros alocam cada pessoa durante o expediente do quadro; turnos por hora alocam horários de início e término.",
       "scheduleBoardDayStarts": "O expediente usado nas alocações de dia inteiro, no formato de 24 horas, como 07:00.",
-      "scheduleBoardPublishPolicy": "Quadros de publicação imediata publicam cada alocação assim que ela é feita. Quadros de publicação em conjunto acumulam as alterações até que alguém com permissão de aprovação as publique.",
+      "scheduleBoardPublishPolicy": "Quadros de publicação imediata publicam cada alocação assim que ela é feita. Quadros de publicação em conjunto acumulam as alterações até que alguém com permissão de aprovação as publique. Quadros controlados, disponíveis em escalas de turnos gerenciadas, publicam por meio de uma publicação registrada que um fluxo de aprovação pode decidir e mantêm as alocações publicadas como histórico.",
       "scheduleBoardPrefillTimesheets": "As alocações publicadas neste quadro aparecem na folha de horas semanal de cada pessoa como tempo programado, que ela pode adicionar com um clique e depois confirmar ou corrigir.",
       "scheduleBoardPrefillCrewTime": "As alocações de projeto publicadas neste quadro oferecem à folha de horas da equipe do encarregado, para aquele projeto e dia, a equipe e as horas alocadas, adicionadas com um clique.",
       "scheduleBoardPrefillFieldTickets": "As alocações de projeto publicadas neste quadro oferecem ao boletim de campo daquele projeto a equipe e as horas alocadas para o período do boletim, adicionadas com um clique.",
@@ -4876,6 +4935,16 @@
       "taxRateEffectiveTo": "Última data de transação abrangida por esta alíquota, incluindo essa data. Deixe em branco para não definir uma data final. Se a próxima alíquota começar em 1º de julho, encerre esta em 30 de junho."
     },
     "options": {
+      "scheduleBoardType": {
+        "people": "Quadro de pessoas",
+        "shift_roster": "Escala de turnos gerenciada"
+      },
+      "schedulePatternTarget": {
+        "customer": "Cliente",
+        "project": "Projeto",
+        "location": "Local",
+        "code": "Código de programação"
+      },
       "posCashDirection": {
         "payIn": "Entrada",
         "payOut": "Saída"
@@ -5602,6 +5671,7 @@
         "progress": "Andamento"
       },
       "schedulePublishPolicy": {
+        "governed": "Publicação controlada",
         "live": "Imediata",
         "staged": "Publicar em conjunto"
       },
@@ -6705,6 +6775,11 @@
     },
     "filterAll": "Todos",
     "sections": {
+      "schedulePatternIdentity": "Padrão",
+      "schedulePatternCycle": "Ciclo",
+      "schedulePatternCycleHelp": "Os horários dos turnos são horários locais no fuso do padrão; mudanças de horário são resolvidas para cada data.",
+      "schedulePatternBooking": "Alocação",
+      "schedulePatternChange": "Alteração",
       "address": "Endereço",
       "deductionProtection": "Proteção de descontos",
       "basisCaps": "Tetos da base",
@@ -8462,11 +8537,11 @@
     },
     "hrmAttendance": {
       "title": "Presença por dispositivo",
-      "description": "Identidades de dispositivos, registros de ponto e acompanhamento da sincronização opcionais. Coletar registros não exige planejamento de turnos."
+      "description": "Relógios de ponto, identidades de trabalhadores e importações de registros opcionais, observados em escalas de turnos gerenciadas como atrasos, saídas antecipadas, ausências e intervalos excedidos. Coletar registros não exige Programação."
     },
     "hrmShiftClosing": {
       "title": "Encerramento formal de turnos",
-      "description": "Revisão e encerramento opcionais de turnos concluídos com evidências atuais de presença. Exige Planejamento de turnos e Presença por dispositivo; publicar turnos não exige encerramento."
+      "description": "Revisão e encerramento opcionais de turnos concluídos da escala com evidências atuais de presença. Exige Programação e Presença por dispositivo; publicar turnos não exige encerramento."
     },
     "hrmCertifications": {
       "title": "Certificações e licenças",
