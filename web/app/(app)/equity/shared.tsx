@@ -3,6 +3,8 @@
 import type { ReactNode } from 'react'
 import Link from 'next/link'
 import { useLocale, useTranslations } from 'next-intl'
+import { AlertTriangle } from 'lucide-react'
+import { Button, EmptyState } from '@openbooks/ui'
 import type { PendingRequest } from '@openbooks/engine/equity'
 import { readApiErrorMessage } from '@/lib/api-error'
 
@@ -11,6 +13,8 @@ export const HEAD = 'px-4 py-2 font-medium'
 export const NUM_HEAD = `${HEAD} text-right`
 export const NUM_CELL = `${CELL} text-right tabular-nums`
 export const LINK = 'font-medium text-teal-700 hover:underline dark:text-teal-300'
+/** A totals row after a table's records, the house totals composition. */
+export const TOTAL_ROW = 'border-t-2 border-slate-200 bg-slate-50 font-semibold dark:border-slate-700 dark:bg-slate-950/40'
 
 export const STATUS_VARIANT: Record<string, 'success' | 'secondary' | 'warning' | 'outline' | 'destructive'> = {
   outstanding: 'success',
@@ -76,27 +80,7 @@ export function Stat({ label, value }: { label: string; value: ReactNode }) {
   )
 }
 
-/** Peer sub-views of one tab: links that replace the body, one active at a time. */
-export function PillTabs({ tabs, label }: { tabs: { href: string; label: string; active: boolean }[]; label: string }) {
-  return (
-    <nav className="flex flex-wrap gap-1" aria-label={label}>
-      {tabs.map((tab) => (
-        <Link
-          key={tab.href}
-          href={tab.href}
-          aria-current={tab.active ? 'page' : undefined}
-          className={tab.active
-            ? 'rounded-md bg-slate-900 px-2.5 py-1 text-xs font-medium text-white dark:bg-slate-100 dark:text-slate-900'
-            : 'rounded-md px-2.5 py-1 text-xs font-medium text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800'}
-        >
-          {tab.label}
-        </Link>
-      ))}
-    </nav>
-  )
-}
-
-/** Local peer sub-views (no URL): buttons that replace the body. */
+/** A form's alternative modes inside a drawer: buttons that switch which fields show. */
 export function SegmentTabs<T extends string>({ value, onChange, tabs, label }: { value: T; onChange: (value: T) => void; tabs: { key: T; label: string }[]; label: string }) {
   return (
     <div className="flex flex-wrap gap-1" role="tablist" aria-label={label}>
@@ -163,4 +147,33 @@ export function PendingActions({ pending, filter }: { pending: readonly PendingR
       </ul>
     </section>
   )
+}
+
+/** A named refusal in place of the body it blocks: the message, its remedy and, when one exists, the place to fix it. */
+export function Refusal({ refusal, action }: { refusal: { message: string; remedy: string }; action?: { href: string; label: string } | null }) {
+  return (
+    <EmptyState
+      icon={<AlertTriangle />}
+      title={refusal.message}
+      description={refusal.remedy}
+      action={action ? <Button asChild variant="outline"><Link href={action.href}>{action.label}</Link></Button> : undefined}
+    />
+  )
+}
+
+/** The legal entity has no equity account policy in force, so nothing posts until one is set up. */
+export function PolicyBanner({ href }: { href: string }) {
+  const t = useTranslations('equity')
+  return (
+    <div className="rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
+      {t('policy.missing')}{' '}
+      <Link href={href} className="font-medium underline">{t('policy.setup')}</Link>
+    </div>
+  )
+}
+
+/** A report a view links to, in the toolbar's trailing actions. */
+export function OpenReport({ href, label }: { href: string | null; label: string }) {
+  if (!href) return null
+  return <Button asChild variant="outline" size="sm"><Link href={href}>{label}</Link></Button>
 }

@@ -4,51 +4,38 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { Button, Drawer, Input, SearchSelect, Textarea } from '@openbooks/ui'
+import { Button, Input, SearchSelect, Textarea, UrlDrawer } from '@openbooks/ui'
 import type { NewRecordData } from './view'
 import { Field, SegmentTabs, postJson, withParams } from './shared'
+import { readApiErrorMessage } from '@/lib/api-error'
 import { DateField } from '../../../components/date-field'
 
-type Section = 'security' | 'class' | 'plan' | 'round'
 type Kind = 'share' | 'option' | 'rsu' | 'warrant' | 'safe' | 'note'
 
 const blank = (value: string): string | null => (value.trim() === '' ? null : value.trim())
 
 /**
- * The page's one New action: issue a security, or record a share class, a
- * plan or a round. Each form posts to its native command, which validates
- * against the legal entity's history and posts any cash to the ledger.
+ * The view's New action opens here (`?new=<record>`): issue a security, or
+ * record a share class, a plan, a round or a stakeholder. Each form posts to
+ * its native command, which validates against the legal entity's history and
+ * posts any cash to the ledger. A new stakeholder is a party; the form then
+ * continues to issue the holder's first security.
  */
-export function NewRecordButton({ data }: { data: NewRecordData | null }) {
+export function NewRecordDrawer({ data }: { data: NewRecordData | null }) {
   const t = useTranslations('equity')
-  const [open, setOpen] = useState(false)
-  const [section, setSection] = useState<Section>('security')
+  const router = useRouter()
   if (!data) return null
+  const done = () => router.push(data.closeHref as never)
   return (
-    <>
-      <Button onClick={() => setOpen(true)}>{t('new.open')}</Button>
-      {open && (
-        <Drawer open size="xl" onClose={() => setOpen(false)} title={t('new.title')} description={t('new.description')}>
-          <div className="space-y-4 p-4">
-            <SegmentTabs
-              value={section}
-              onChange={setSection}
-              label={t('new.title')}
-              tabs={[
-                { key: 'security', label: t('new.sections.security') },
-                { key: 'class', label: t('new.sections.class') },
-                { key: 'plan', label: t('new.sections.plan') },
-                { key: 'round', label: t('new.sections.round') },
-              ]}
-            />
-            {section === 'security' && <IssueSecurityForm data={data} onDone={() => setOpen(false)} />}
-            {section === 'class' && <ShareClassForm data={data} onDone={() => setOpen(false)} />}
-            {section === 'plan' && <PlanForm data={data} onDone={() => setOpen(false)} />}
-            {section === 'round' && <RoundForm data={data} onDone={() => setOpen(false)} />}
-          </div>
-        </Drawer>
-      )}
-    </>
+    <UrlDrawer open openKey={data.kind} size="xl" closeHref={data.closeHref} title={t(`new.actions.${data.kind}`)} description={t(`new.descriptions.${data.kind}`)}>
+      <div className="space-y-4 p-4">
+        {data.kind === 'security' && <IssueSecurityForm data={data} onDone={done} />}
+        {data.kind === 'class' && <ShareClassForm data={data} onDone={done} />}
+        {data.kind === 'plan' && <PlanForm data={data} onDone={done} />}
+        {data.kind === 'round' && <RoundForm data={data} onDone={done} />}
+        {data.kind === 'stakeholder' && <StakeholderForm data={data} onDone={done} />}
+      </div>
+    </UrlDrawer>
   )
 }
 
@@ -61,10 +48,12 @@ function useSubmit(onDone: () => void) {
     try {
       const result = await postJson<T>(url, body, t('new.failed'))
       toast.success(saved)
-      onDone()
       const href = next?.(result)
-      if (href) router.push(href)
-      else router.refresh()
+      if (href) router.push(href as never)
+      else {
+        onDone()
+        router.refresh()
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t('new.failed'))
     } finally {
@@ -87,10 +76,10 @@ function Actions({ busy, ready, onCancel, onSubmit, label }: { busy: boolean; re
 function IssueSecurityForm({ data, onDone }: { data: NewRecordData; onDone: () => void }) {
   const t = useTranslations('equity')
   const { busy, submit } = useSubmit(onDone)
-  const [kind, setKind] = useState<Kind>('share')
+  const [kind, setKind] = useState<Kind>(data.securityKind ?? 'share')
   const [vesting, setVesting] = useState<'none' | 'time'>('none')
   const [form, setForm] = useState({
-    holderPartyId: '', issueDate: data.context.asOf, shareClassId: '', planId: '', roundId: '', quantity: '', pricePerShare: '',
+    holderPartyId: data.holderPartyId ?? '', issueDate: data.context.asOf, shareClassId: '', planId: '', roundId: '', quantity: '', pricePerShare: '',
     considerationAmount: '', considerationAccountId: '', securityNumber: '', expirationDate: '', optionType: 'iso', safeType: 'post_money',
     valuationCap: '', discountPercent: '', interestRatePercent: '', interestBasis: 'simple', interestDayCount: 'actual_365', maturityDate: '',
     currency: data.context.currency, unvestedRepurchaseBasis: 'lower_of_cost_or_fmv',
@@ -406,6 +395,50 @@ function RoundForm({ data, onDone }: { data: NewRecordData; onDone: () => void }
         </Field>
       </div>
       <Actions busy={busy} ready={ready} onCancel={onDone} onSubmit={() => void submit('/api/equity/rounds', { subsidiaryId: data.context.subsidiaryId, ...form }, t('new.roundSaved'))} label={t('new.createRound')} />
+    </div>
+  )
+}
+
+/**
+ * A stakeholder is a party: a person or a company. Saving creates the party
+ * and continues to issue the holder's first security, which puts them on the
+ * cap table.
+ */
+function StakeholderForm({ data, onDone }: { data: NewRecordData; onDone: () => void }) {
+  const t = useTranslations('equity')
+  const router = useRouter()
+  const [busy, setBusy] = useState(false)
+  const [form, setForm] = useState({ kind: 'person', displayName: '', email: '' })
+  const ready = form.displayName.trim().length > 0
+  async function create() {
+    setBusy(true)
+    const id = crypto.randomUUID()
+    try {
+      const res = await fetch('/api/parties', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'Idempotency-Key': id },
+        body: JSON.stringify({ kind: form.kind, displayName: form.displayName.trim(), email: blank(form.email) }),
+      })
+      if (!res.ok) throw new Error(await readApiErrorMessage(res, t('new.failed')))
+      toast.success(t('new.stakeholderSaved', { name: form.displayName.trim() }))
+      router.push(withParams('/equity', data.context.params, { new: 'security', newHolder: id }) as never)
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : t('new.failed'))
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <div className="space-y-4">
+      <p className="text-sm text-slate-500 dark:text-slate-400">{t('new.stakeholderHelp')}</p>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label={t('fields.partyKind')}>
+          <SearchSelect value={form.kind} options={[{ value: 'person', label: t('partyKind.person') }, { value: 'company', label: t('partyKind.company') }]} onChange={(value) => setForm({ ...form, kind: value ?? 'person' })} ariaLabel={t('fields.partyKind')} />
+        </Field>
+        <Field label={t('fields.name')}><Input value={form.displayName} onChange={(e) => setForm({ ...form, displayName: e.target.value })} /></Field>
+        <Field label={t('stakeholders.columns.email')}><Input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></Field>
+      </div>
+      <Actions busy={busy} ready={ready} onCancel={onDone} onSubmit={() => void create()} label={t('new.createStakeholder')} />
     </div>
   )
 }

@@ -8,24 +8,18 @@
     "securities": "Titres",
     "stakeholders": "Porteurs",
     "plans": "Plans",
-    "rounds": "Levées et instruments convertibles",
+    "rounds": "Levées",
     "waterfall": "Cascade de liquidation",
-    "compensation": "Rémunération en actions"
+    "compensation": "Rémunération en actions",
+    "overview": "Vue d’ensemble",
+    "classes": "Catégories d’actions"
   },
   "entity": {
-    "label": "Entité juridique",
-    "asOf": "Au"
+    "label": "Entité juridique"
   },
   "empty": {
     "noEntities": "Aucune entité juridique à afficher",
     "noEntitiesDescription": "Les capitaux propres sont enregistrés par entité juridique. Vous devez avoir accès à une entité juridique active dotée d’une devise de base (Paramètres de l’entreprise → Filiales)."
-  },
-  "kpi": {
-    "fullyDiluted": "Actions entièrement diluées",
-    "outstanding": "Actions en circulation",
-    "poolAvailable": "Réserve disponible",
-    "holders": "Porteurs",
-    "convertibles": "Instruments convertibles en cours"
   },
   "policy": {
     "missing": "Aucune politique de comptes de capitaux propres n’est en vigueur pour cette entité juridique ; les émissions, exercices et la rémunération en actions ne peuvent donc pas être comptabilisés.",
@@ -204,17 +198,16 @@
     "amountRepaid": "Montant remboursé",
     "interestDayCount": "Convention de décompte des jours",
     "unvestedRepurchaseBasis": "Prix de rachat des actions non acquises",
-    "conversionClass": "Convertit en"
+    "conversionClass": "Convertit en",
+    "partyKind": "Type de tiers"
   },
   "capTable": {
     "by": {
       "class": "Par catégorie",
       "holder": "Par porteur"
     },
-    "byLabel": "Vue de la table de capitalisation",
     "report": "Ouvrir le registre des titres",
-    "asOfReport": "Rapport de capitalisation au {date}",
-    "emptyClasses": "Aucune catégorie d’actions pour l’instant. Utilisez Nouveau pour enregistrer la première catégorie de l’entité juridique.",
+    "emptyClasses": "Aucune catégorie d’actions. Enregistrez la première catégorie de l’entité sous Catégories d’actions.",
     "emptyHolders": "Aucun porteur pour l’instant. Émettez des actions ou des attributions pour inscrire des porteurs à la table de capitalisation.",
     "amend": "Modifier",
     "totalOutstanding": "En circulation",
@@ -234,10 +227,21 @@
       "options": "Options",
       "rsus": "RSU",
       "warrants": "Bons de souscription",
-      "actions": "Actions"
+      "actions": "Actions",
+      "optionOutstanding": "Options en circulation",
+      "rsuOutstanding": "RSU en circulation",
+      "warrantOutstanding": "Bons en circulation",
+      "vested": "Acquis",
+      "unvested": "Non acquis"
     },
     "exportTitle": "{entity} — table de capitalisation",
-    "exportAsOf": "Au {date}"
+    "exportAsOf": "Au {date}",
+    "filters": {
+      "view": "Vue",
+      "instrument": "Type d’instrument",
+      "allInstruments": "Tous les instruments"
+    },
+    "openAsOfReport": "Rapport de la table de capitalisation"
   },
   "classActions": {
     "title": "Catégorie {code}",
@@ -255,9 +259,6 @@
     "splitAdjusted": "Prix de conversion ajustés : {classes}"
   },
   "securities": {
-    "allKinds": "Tous",
-    "kindFilter": "Type de titre",
-    "clearHolder": "Affichage de {name} · afficher tous les porteurs",
     "empty": "Aucun titre ne correspond.",
     "columns": {
       "number": "Numéro",
@@ -269,6 +270,14 @@
       "outstanding": "En circulation",
       "vested": "Acquis",
       "price": "Prix"
+    },
+    "filters": {
+      "kind": "Nature",
+      "allKinds": "Toutes les natures",
+      "status": "Statut",
+      "allStatuses": "Tous les statuts",
+      "holder": "Porteur",
+      "allHolders": "Tous les porteurs"
     }
   },
   "stakeholders": {
@@ -284,7 +293,7 @@
     }
   },
   "plans": {
-    "empty": "Aucun plan d’actionnariat pour l’instant. Utilisez Nouveau pour enregistrer un plan et sa réserve.",
+    "empty": "Aucun plan d’actions. Utilisez Nouveau plan pour enregistrer un plan et sa réserve.",
     "changeReserve": "Modifier la réserve",
     "reserveTitle": "Modifier la réserve de {code}",
     "reserveDescription": "Une modification de réserve prend effet à sa date. Une réduction ne peut pas faire passer la réserve non attribuée sous zéro à une date ultérieure.",
@@ -304,18 +313,12 @@
       "used": "Attribuées, net",
       "returned": "Revenues",
       "available": "Disponibles",
-      "recycling": "Recyclage"
+      "recycling": "Recyclage",
+      "effective": "En vigueur le"
     }
   },
   "rounds": {
-    "sections": {
-      "rounds": "Levées",
-      "convertibles": "Instruments convertibles",
-      "model": "Modéliser une levée",
-      "interest": "Intérêts des obligations"
-    },
     "empty": "Aucune levée de fonds pour l’instant.",
-    "convertiblesEmpty": "Aucun SAFE ni aucune obligation convertible.",
     "columns": {
       "name": "Levée",
       "class": "Catégorie",
@@ -327,8 +330,10 @@
       "principal": "Capital",
       "interest": "Intérêts courus",
       "cap": "Plafond de valorisation",
-      "discount": "Décote"
-    }
+      "discount": "Décote",
+      "postMoney": "Valorisation post-money"
+    },
+    "model": "Modéliser une levée"
   },
   "model": {
     "description": "Fixe le prix d’une levée selon la méthode pré-money à partir de la table de capitalisation à la date retenue : les SAFE et obligations en circulation sont convertis, les catégories protégées reçoivent leurs actions anti-dilution et la réserve est complétée jusqu’à sa cible au sein de la valorisation pré-money. Rien n’est enregistré.",
@@ -364,17 +369,16 @@
       "pricedBy": "Prix déterminé par",
       "price": "Prix de conversion",
       "shares": "Actions"
-    }
+    },
+    "prompt": "Saisissez une valorisation pré-money et les fonds levés pour valoriser la levée sur la table de capitalisation à la date de référence."
   },
   "waterfall": {
-    "description": "Répartit une valeur de sortie selon la table de capitalisation à la date retenue : les obligations sont remboursées, les préférences sont payées par rang, chaque SAFE reçoit le plus élevé de son montant en numéraire et de son montant de conversion, et le solde est partagé entre les actions ordinaires, les actions de préférence participatives ou converties, les SAFE convertis et les attributions dans la monnaie. Rien n’est enregistré.",
     "exitValue": "Valeur de sortie",
     "unvested": "Attributions non acquises",
     "unvestedParticipate": "Participent",
     "unvestedCancel": "Annulées (seules les acquises et accélérées comptent)",
     "changeOfControl": "Changement de contrôle",
     "terminated": "Fin de service des porteurs",
-    "run": "Calculer la cascade",
     "failed": "La cascade n’a pas pu être calculée.",
     "pricePerShare": "Par action ordinaire",
     "unallocated": "Non attribué",
@@ -391,17 +395,65 @@
       "perShare": "Par action",
       "payout": "Versement",
       "percent": "Part de la sortie",
-      "safeShares": "Actions de conversion"
+      "recipient": "Bénéficiaire"
     },
-    "safes": "SAFE",
-    "safeConverts": "Prend son montant de conversion",
-    "safeCashOut": "Prend son montant de remboursement en numéraire"
+    "fees": "Frais de transaction",
+    "presets": "Valeurs de sortie à partir de la valorisation post-money de {round}",
+    "assumptions": "Hypothèses",
+    "assumptionsHelp": "Les hypothèses sur les attributions s’appliquent aux options et RSU soumises à un calendrier d’acquisition.",
+    "updating": "Mise à jour…",
+    "retry": "Vérifiez les données et réessayez.",
+    "promptTitle": "Saisissez une valeur de sortie",
+    "prompt": "Saisissez une valeur de sortie, ou choisissez un multiple de la dernière valorisation post-money, pour voir la répartition du produit.",
+    "promptNoRound": "Aucune levée valorisée en {currency} ne sert encore de référence. Saisissez une valeur de sortie pour voir la répartition du produit.",
+    "tiles": {
+      "proceeds": "Produit pour les porteurs",
+      "proceedsSub": "Sortie de {exit} moins {fees} de frais",
+      "noFees": "Aucuns frais de transaction",
+      "priceSub": "Porteurs ordinaires et convertissants",
+      "preferred": "Aux actions de préférence",
+      "common": "Aux ordinaires et attributions",
+      "ofProceeds": "{percent} % du produit"
+    },
+    "cascadeTitle": "Cascade des paiements",
+    "cascadeHint": "Dans l’ordre de paiement du produit",
+    "steps": {
+      "exit": "Valeur de sortie",
+      "fees": "Frais",
+      "notes": "Obligations",
+      "preference": "Préférence {code}",
+      "safe_cash_out": "Remboursements de SAFE",
+      "participation": "Participation {code}",
+      "safe_conversion": "SAFE convertis",
+      "awards": "Attributions",
+      "unallocated": "Non attribué"
+    },
+    "decisionsTitle": "Décisions de conversion",
+    "noDecisions": "Aucune catégorie de préférence ni SAFE plafonné n’a de choix à faire.",
+    "decisions": {
+      "converts": "Convertit en actions ordinaires pour {amount} ; conserver sa préférence de {entitlement} rapporterait {alternative}.",
+      "converts_only": "Convertit en actions ordinaires pour {amount}, plus que sa préférence de {entitlement}.",
+      "keeps_preference": "Exerce sa préférence de {entitlement} ; convertir rapporterait {alternative}.",
+      "keeps_preference_only": "Exerce sa préférence de {entitlement}.",
+      "participates": "Exerce sa préférence de {entitlement} et partage le reste après conversion : {amount} au total.",
+      "participates_capped": "Exerce sa préférence et participe jusqu’à son plafond de {cap} : {amount} au total ; convertir rapporterait {alternative}.",
+      "participates_capped_only": "Exerce sa préférence et participe jusqu’à son plafond de {cap} : {amount} au total.",
+      "safe_converts": "Convertit pour {amount} ; le remboursement rapporterait {alternative}.",
+      "safe_converts_only": "Convertit pour {amount}, plus que son montant de remboursement de {entitlement}.",
+      "safe_cash_out": "Reçoit son montant de remboursement de {entitlement} ; convertir rapporterait {alternative}.",
+      "safe_cash_out_only": "Reçoit son montant de remboursement de {entitlement}."
+    },
+    "curveTitle": "Produit selon la valeur de sortie",
+    "curveHint": "De zéro au double de cette sortie",
+    "payoutsBy": "Paiements",
+    "recipients": {
+      "awards": "Options, RSU et bons de souscription",
+      "notes": "Obligations convertibles",
+      "unallocated": "Non attribué"
+    }
   },
   "compensation": {
-    "schedule": "Échéancier",
-    "runs": "Traitements comptabilisés",
     "report": "Ouvrir le rapport d’échéancier des charges",
-    "post": "Comptabiliser le traitement jusqu’au {date}",
     "posted": "Rémunération en actions comptabilisée jusqu’au {date}",
     "replayed": "Le traitement jusqu’au {date} était déjà comptabilisé",
     "failed": "Le traitement de la rémunération en actions n’a pas été comptabilisé.",
@@ -424,7 +476,6 @@
       "par": "Valeur nominale"
     },
     "releases": "Libérations d’actions restreintes",
-    "releasesHelp": "Les dépôts d’exercice anticipé passent au capital social et en prime d’émission à mesure que les actions restreintes sont acquises ; ils sont comptabilisés avec le traitement.",
     "releasesEmpty": "Aucune action restreinte n’est acquise jusqu’à cette date."
   },
   "drawer": {
@@ -495,16 +546,7 @@
     "targetClassHint": "Par défaut, la catégorie de conversion de la catégorie."
   },
   "new": {
-    "open": "Nouveau",
-    "title": "Nouvel enregistrement de capitaux propres",
-    "description": "Émettez un titre ou enregistrez une catégorie d’actions, un plan ou une levée pour l’entité juridique sélectionnée.",
     "failed": "L’enregistrement n’a pas été sauvegardé.",
-    "sections": {
-      "security": "Titre",
-      "class": "Catégorie d’actions",
-      "plan": "Plan",
-      "round": "Levée"
-    },
     "kindHelp": {
       "share": "Pour les actions émises contre numéraire, la contrepartie est comptabilisée en capital social à la valeur nominale et le surplus en prime d’émission.",
       "option": "Les options sont évaluées à l’attribution selon Black-Scholes ; leur coût est comptabilisé par le traitement de rémunération en actions.",
@@ -538,7 +580,24 @@
     "currencyHint": "Par défaut, la devise de l’entité juridique ({currency}) ; une autre devise est évaluée au cours de la date d’émission.",
     "roundCurrencyHint": "Émis dans la devise de la levée ({currency}).",
     "conversionClassMissing": "Enregistrez d’abord une catégorie ordinaire ; les actions de préférence sont converties en elle.",
-    "adjustsForSplits": "Le prix de conversion est ajusté en fonction des divisions de la catégorie de conversion"
+    "adjustsForSplits": "Le prix de conversion est ajusté en fonction des divisions de la catégorie de conversion",
+    "actions": {
+      "security": "Nouveau titre",
+      "class": "Nouvelle catégorie d’actions",
+      "plan": "Nouveau plan",
+      "round": "Nouvelle levée",
+      "stakeholder": "Nouveau porteur"
+    },
+    "descriptions": {
+      "security": "Émettre des actions, une option, une RSU, un bon de souscription, un SAFE ou une obligation convertible au profit d’un porteur de l’entité.",
+      "class": "Enregistrer une catégorie d’actions ordinaires ou de préférence avec ses actions autorisées et ses conditions.",
+      "plan": "Enregistrer un plan d’intéressement en actions et les actions qu’il réserve.",
+      "round": "Enregistrer une levée de fonds valorisée ; ses actions sont émises aux investisseurs sous forme de titres.",
+      "stakeholder": "Ajouter une personne ou une société qui détient, ou détiendra, des titres de l’entité."
+    },
+    "createStakeholder": "Créer et émettre un titre",
+    "stakeholderHelp": "Un porteur est une personne ou une société de votre annuaire. Après l’enregistrement, émettez son premier titre pour l’inscrire à la table de capitalisation.",
+    "stakeholderSaved": "{name} ajouté. Émettez son premier titre."
   },
   "dayCount": {
     "actual_365": "Actual/365",
@@ -561,15 +620,9 @@
     "deadline": "Date limite 83(b) : {date}"
   },
   "interest": {
-    "schedule": "Intérêts courus",
-    "runs": "Traitements comptabilisés",
-    "post": "Comptabiliser les intérêts jusqu’au {date}",
     "posted": "Intérêts comptabilisés jusqu’au {date}",
     "replayed": "Le traitement des intérêts jusqu’au {date} était déjà comptabilisé",
     "failed": "Le traitement des intérêts n’a pas été comptabilisé.",
-    "lastRun": "Dernier traitement jusqu’au {date}",
-    "noRuns": "Aucun traitement des intérêts comptabilisé pour l’instant",
-    "total": "Variation à comptabiliser",
     "empty": "Aucune obligation convertible ne porte d’intérêts courus jusqu’à cette date.",
     "runsEmpty": "Aucun traitement des intérêts comptabilisé pour l’instant.",
     "columns": {
@@ -627,5 +680,110 @@
       "interest_run": "Calcul des intérêts d’obligations",
       "account_policy": "Version de la politique de comptes"
     }
+  },
+  "classes": {
+    "empty": "Aucune catégorie d’actions. Utilisez Nouvelle catégorie d’actions pour enregistrer la première catégorie de l’entité.",
+    "columns": {
+      "kind": "Nature",
+      "seniority": "Rang",
+      "par": "Valeur nominale",
+      "issuePrice": "Prix d’émission initial",
+      "conversionPrice": "Prix de conversion",
+      "preference": "Préférence de liquidation"
+    }
+  },
+  "overview": {
+    "tiles": {
+      "fullyDiluted": "Entièrement dilué",
+      "fullyDilutedSub": "{outstanding} en circulation après conversion",
+      "pool": "Réserve disponible",
+      "poolSub": "{percent} du capital entièrement dilué",
+      "noPool": "Aucune réserve de plan",
+      "price": "Prix par action",
+      "noRound": "Aucune levée valorisée",
+      "raised": "Total levé",
+      "raisedSub": "Levées valorisées {priced} · SAFE et obligations {convertible}",
+      "raisedOther": "En outre {amount}",
+      "noRaise": "Aucune levée à ce jour",
+      "compensation": "Rémunération en actions de l’exercice",
+      "compensationSub": "Comptabilisée depuis le {date}"
+    },
+    "ownership": {
+      "title": "Répartition du capital",
+      "hint": "Entièrement dilué · {date}",
+      "pool": "Réserve disponible",
+      "empty": "Aucune action ni attribution en circulation à cette date."
+    },
+    "round": {
+      "title": "Dernière levée valorisée",
+      "postMoney": "Post-money",
+      "preMoney": "Pré-money",
+      "raised": "Montant levé",
+      "cta": "Modéliser la prochaine levée"
+    },
+    "attention": {
+      "title": "À traiter",
+      "allClear": "Rien à traiter.",
+      "cliff": "{holder} · {number} atteint son cliff le {date} : {quantity} unités sont acquises",
+      "election83b": "{holder} · le choix 83(b) pour {number} est dû le {date} ({days, plural, one {# jour restant} other {# jours restants}})",
+      "restrictedDeposit": "{holder} · {shares} actions issues d’un exercice anticipé de {number} ne sont pas acquises ; le dépôt est conservé jusqu’à leur acquisition",
+      "departed": "{holder} est parti le {date} et détient encore {units} unités d’options et de RSU ; enregistrez les déchéances et les expirations",
+      "expiring": "{holder} · {number} expire le {date} avec {quantity} unités en circulation",
+      "compensationDue": "La rémunération en actions n’est pas comptabilisée jusqu’au {date} : {amount} à comptabiliser",
+      "compensationRefused": "La rémunération en actions jusqu’au {date} ne peut pas être évaluée : {message}",
+      "interestDue": "Les intérêts des obligations ne sont pas courus jusqu’au {date} : {amount} à comptabiliser",
+      "interestRefused": "Les intérêts des obligations jusqu’au {date} ne peuvent pas être évalués : {message}",
+      "pending": "{count, plural, one {# opération sur capital attend une approbation} other {# opérations sur capital attendent une approbation}}",
+      "policyMissing": "Aucune règle de comptes de capitaux propres n’est en vigueur au {date} ; rien ne peut être comptabilisé avant sa configuration"
+    },
+    "activity": {
+      "title": "Activité récente",
+      "empty": "Aucune activité sur le capital enregistrée.",
+      "issue": "{kind} {number} émis à {holder}",
+      "round": "{name} clôturée à {price} par action",
+      "shares": "{quantity} actions"
+    },
+    "directory": {
+      "title": "Accès rapides",
+      "holders": "porteurs",
+      "convertibles": "convertibles en cours",
+      "due": "À faire",
+      "current": "À jour",
+      "through": "Jusqu’au {date}",
+      "capTableReport": "Rapport de la table de capitalisation",
+      "registerReport": "Registre des titres",
+      "compensationReport": "Échéancier de la rémunération en actions",
+      "accounts": "Comptes de capitaux propres"
+    }
+  },
+  "runs": {
+    "filters": {
+      "run": "Traitement",
+      "period": "Période",
+      "lines": "Lignes"
+    },
+    "kinds": {
+      "compensation": "Rémunération en actions",
+      "interest": "Intérêts des obligations"
+    },
+    "lines": {
+      "expense": "Charge"
+    },
+    "history": "Historique des traitements",
+    "historyTitle": {
+      "compensation": "Traitements de rémunération en actions",
+      "interest": "Traitements des intérêts des obligations"
+    },
+    "historyDescription": "Traitements comptabilisés pour l’entité, du plus récent au plus ancien, avec leurs écritures.",
+    "postCompensation": "Comptabiliser la rémunération en actions de {period}",
+    "postInterest": "Comptabiliser les intérêts des obligations de {period}",
+    "through": "Jusqu’au {date}",
+    "alreadyPosted": "Comptabilisé pour cette période",
+    "backdated": "Les traitements sont comptabilisés jusqu’au {date} ; choisissez une période ultérieure",
+    "closeTask": "Ce traitement est une tâche de la clôture de période.",
+    "openClose": "Ouvrir la clôture",
+    "noPeriods": "Aucune période comptable",
+    "noPeriodsRemedy": "Les traitements comptabilisent jusqu’à la fin d’une période comptable. Générez les périodes du calendrier fiscal pour traiter la rémunération en actions et les intérêts des obligations.",
+    "setUpPeriods": "Configurer les périodes"
   }
 }

@@ -249,6 +249,18 @@ export const LOCAL_NAVIGATION: LocalNavigationSet[] = [
     { href: '/nonprofit/encumbrances', iconKey: 'scale', ns: 'nonprofit', key: 'encumbrances.title', permission: 'encumbrances.read', feature: 'encumbrances' },
     { href: '/nonprofit/setup', iconKey: 'settings', ns: 'nonprofit', key: 'setup.title', permission: 'funds.read' },
   ] },
+  // Equity & cap table, one legal entity at a time: the overview, the daily
+  // working views, and the structure records one step away in More. The
+  // as-of date travels between views with the legal entity.
+  { id: 'equity', label: 'Equity & Cap Table', feature: 'equity', tabs: [
+    { href: '/equity', iconKey: 'gauge', ns: 'equity', key: 'tabs.overview', permission: 'equity.read', carry: ['asOf', 'asOfPeriod'] },
+    ...(['captable', 'securities', 'rounds', 'waterfall', 'compensation'] as const).map((view) => ({
+      href: `/equity?view=${view}`, ns: 'equity', key: `tabs.${view}`, permission: 'equity.read', carry: ['asOf', 'asOfPeriod'],
+    })),
+    ...(['classes', 'plans', 'stakeholders'] as const).map((view) => ({
+      href: `/equity?view=${view}`, ns: 'equity', key: `tabs.${view}`, permission: 'equity.read', carry: ['asOf', 'asOfPeriod'], secondary: true,
+    })),
+  ] },
   { id: 'assets', label: 'Fixed Assets', tabs: [
     { href: '/assets', ns: 'nav', key: 'modules.assets', permission: 'assets.read', feature: 'fixedAssets' },
     { href: '/assets?tab=tax-depreciation', ns: 'nav', key: 'modules.tax-depreciation', permission: 'assets.read', feature: 'fixedAssets' },

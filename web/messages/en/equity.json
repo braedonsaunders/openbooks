@@ -8,24 +8,18 @@
     "securities": "Securities",
     "stakeholders": "Stakeholders",
     "plans": "Plans",
-    "rounds": "Rounds & convertibles",
+    "rounds": "Rounds",
     "waterfall": "Waterfall",
-    "compensation": "Stock compensation"
+    "compensation": "Stock comp",
+    "overview": "Overview",
+    "classes": "Share classes"
   },
   "entity": {
-    "label": "Legal entity",
-    "asOf": "As of"
+    "label": "Legal entity"
   },
   "empty": {
     "noEntities": "No legal entity to show",
     "noEntitiesDescription": "Equity is recorded per legal entity. You need access to an active legal entity with a base currency (Company Settings → Subsidiaries)."
-  },
-  "kpi": {
-    "fullyDiluted": "Fully diluted shares",
-    "outstanding": "Outstanding shares",
-    "poolAvailable": "Pool available",
-    "holders": "Holders",
-    "convertibles": "Open convertibles"
   },
   "policy": {
     "missing": "No equity account policy is in force for this legal entity, so issuances, exercises and stock compensation cannot post.",
@@ -204,17 +198,16 @@
     "amountRepaid": "Amount repaid",
     "interestDayCount": "Day count",
     "unvestedRepurchaseBasis": "Unvested repurchase price",
-    "conversionClass": "Converts into"
+    "conversionClass": "Converts into",
+    "partyKind": "Party type"
   },
   "capTable": {
     "by": {
       "class": "By class",
       "holder": "By holder"
     },
-    "byLabel": "Cap table view",
     "report": "Open the securities register",
-    "asOfReport": "Cap table report as of {date}",
-    "emptyClasses": "No share classes yet. Use New to record the legal entity's first class.",
+    "emptyClasses": "No share classes yet. Record the legal entity's first class under Share classes.",
     "emptyHolders": "No holders yet. Issue shares or awards to put holders on the cap table.",
     "amend": "Amend",
     "totalOutstanding": "Outstanding",
@@ -234,10 +227,21 @@
       "options": "Options",
       "rsus": "RSUs",
       "warrants": "Warrants",
-      "actions": "Actions"
+      "actions": "Actions",
+      "optionOutstanding": "Options outstanding",
+      "rsuOutstanding": "RSUs outstanding",
+      "warrantOutstanding": "Warrants outstanding",
+      "vested": "Vested",
+      "unvested": "Unvested"
     },
     "exportTitle": "{entity} — cap table",
-    "exportAsOf": "As of {date}"
+    "exportAsOf": "As of {date}",
+    "filters": {
+      "view": "View",
+      "instrument": "Instrument",
+      "allInstruments": "All instruments"
+    },
+    "openAsOfReport": "Cap table report"
   },
   "classActions": {
     "title": "Class {code}",
@@ -255,9 +259,6 @@
     "splitAdjusted": "Conversion prices adjusted: {classes}"
   },
   "securities": {
-    "allKinds": "All",
-    "kindFilter": "Security kind",
-    "clearHolder": "Showing {name} · show all holders",
     "empty": "No securities match.",
     "columns": {
       "number": "Number",
@@ -269,6 +270,14 @@
       "outstanding": "Outstanding",
       "vested": "Vested",
       "price": "Price"
+    },
+    "filters": {
+      "kind": "Type",
+      "allKinds": "All types",
+      "status": "Status",
+      "allStatuses": "All statuses",
+      "holder": "Holder",
+      "allHolders": "All holders"
     }
   },
   "stakeholders": {
@@ -284,7 +293,7 @@
     }
   },
   "plans": {
-    "empty": "No equity plans yet. Use New to record a plan and its reserve.",
+    "empty": "No equity plans yet. Use New plan to record a plan and its reserve.",
     "changeReserve": "Change reserve",
     "reserveTitle": "Change the reserve of {code}",
     "reserveDescription": "A reserve change takes effect from its date. A reduction cannot take the unallocated pool below zero on any later date.",
@@ -304,18 +313,12 @@
       "used": "Granted, net",
       "returned": "Returned",
       "available": "Available",
-      "recycling": "Recycling"
+      "recycling": "Recycling",
+      "effective": "Effective"
     }
   },
   "rounds": {
-    "sections": {
-      "rounds": "Rounds",
-      "convertibles": "Convertibles",
-      "model": "Model a round",
-      "interest": "Note interest"
-    },
     "empty": "No financing rounds yet.",
-    "convertiblesEmpty": "No SAFEs or convertible notes.",
     "columns": {
       "name": "Round",
       "class": "Class",
@@ -327,8 +330,10 @@
       "principal": "Principal",
       "interest": "Accrued interest",
       "cap": "Valuation cap",
-      "discount": "Discount"
-    }
+      "discount": "Discount",
+      "postMoney": "Post-money"
+    },
+    "model": "Model a round"
   },
   "model": {
     "description": "Prices a round on the pre-money method against the cap table on the as-of date: outstanding SAFEs and notes convert, protected classes take their anti-dilution shares, and the pool is topped up to its target inside the pre-money. Nothing is recorded.",
@@ -364,17 +369,16 @@
       "pricedBy": "Priced by",
       "price": "Conversion price",
       "shares": "Shares"
-    }
+    },
+    "prompt": "Enter a pre-money valuation and the new money to price the round against the cap table on the as-of date."
   },
   "waterfall": {
-    "description": "Distributes an exit value against the cap table on the as-of date: notes are repaid, preferences are paid by seniority, each SAFE takes the greater of its cash-out and conversion amounts, and the rest is shared by common, participating and converting preferred, converting SAFEs and in-the-money awards. Nothing is recorded.",
     "exitValue": "Exit value",
     "unvested": "Unvested awards",
     "unvestedParticipate": "Take part",
     "unvestedCancel": "Cancelled (vested and accelerated only)",
     "changeOfControl": "Change of control",
     "terminated": "Holders' service ends",
-    "run": "Run waterfall",
     "failed": "The waterfall could not be run.",
     "pricePerShare": "Per common share",
     "unallocated": "Unallocated",
@@ -391,17 +395,65 @@
       "perShare": "Per share",
       "payout": "Payout",
       "percent": "Share of exit",
-      "safeShares": "Conversion shares"
+      "recipient": "Recipient"
     },
-    "safes": "SAFEs",
-    "safeConverts": "Takes its conversion amount",
-    "safeCashOut": "Takes its cash-out amount"
+    "fees": "Transaction fees",
+    "presets": "Exit values from the {round} post-money valuation",
+    "assumptions": "Assumptions",
+    "assumptionsHelp": "Award assumptions apply to options and RSUs with a vesting schedule.",
+    "updating": "Updating…",
+    "retry": "Check the inputs and try again.",
+    "promptTitle": "Enter an exit value",
+    "prompt": "Enter an exit value, or pick a multiple of the latest post-money valuation, to see how the proceeds flow.",
+    "promptNoRound": "No priced round in {currency} anchors the presets yet. Enter an exit value to see how the proceeds flow.",
+    "tiles": {
+      "proceeds": "Proceeds to holders",
+      "proceedsSub": "{exit} exit less {fees} fees",
+      "noFees": "No transaction fees",
+      "priceSub": "Common and converting holders",
+      "preferred": "To preferred",
+      "common": "To common and awards",
+      "ofProceeds": "{percent}% of proceeds"
+    },
+    "cascadeTitle": "Payment cascade",
+    "cascadeHint": "In the order proceeds are paid",
+    "steps": {
+      "exit": "Exit value",
+      "fees": "Fees",
+      "notes": "Notes",
+      "preference": "{code} preference",
+      "safe_cash_out": "SAFE cash-outs",
+      "participation": "{code} participation",
+      "safe_conversion": "Converting SAFEs",
+      "awards": "Awards",
+      "unallocated": "Unallocated"
+    },
+    "decisionsTitle": "Conversion decisions",
+    "noDecisions": "No preferred class or capped SAFE has a choice to make.",
+    "decisions": {
+      "converts": "Converts to common for {amount}; keeping its {entitlement} preference would pay {alternative}.",
+      "converts_only": "Converts to common for {amount}, more than its {entitlement} preference.",
+      "keeps_preference": "Takes its {entitlement} preference; converting would pay {alternative}.",
+      "keeps_preference_only": "Takes its {entitlement} preference.",
+      "participates": "Takes its {entitlement} preference and shares the rest as converted: {amount} in all.",
+      "participates_capped": "Takes its preference and participates up to its {cap} cap: {amount} in all; converting would pay {alternative}.",
+      "participates_capped_only": "Takes its preference and participates up to its {cap} cap: {amount} in all.",
+      "safe_converts": "Converts for {amount}; cashing out would pay {alternative}.",
+      "safe_converts_only": "Converts for {amount}, more than its {entitlement} cash-out amount.",
+      "safe_cash_out": "Takes its {entitlement} cash-out amount; converting would pay {alternative}.",
+      "safe_cash_out_only": "Takes its {entitlement} cash-out amount."
+    },
+    "curveTitle": "Proceeds across exit values",
+    "curveHint": "From zero to twice this exit",
+    "payoutsBy": "Payouts",
+    "recipients": {
+      "awards": "Options, RSUs and warrants",
+      "notes": "Convertible notes",
+      "unallocated": "Unallocated"
+    }
   },
   "compensation": {
-    "schedule": "Schedule",
-    "runs": "Posted runs",
     "report": "Open the expense schedule report",
-    "post": "Post run through {date}",
     "posted": "Stock compensation posted through {date}",
     "replayed": "The run through {date} was already posted",
     "failed": "The stock compensation run was not posted.",
@@ -424,7 +476,6 @@
       "par": "Par value"
     },
     "releases": "Restricted stock releases",
-    "releasesHelp": "Early-exercise deposits move to share capital and paid-in capital as restricted shares vest; they post with the run.",
     "releasesEmpty": "No restricted shares vest through this date."
   },
   "drawer": {
@@ -495,16 +546,7 @@
     "targetClassHint": "Defaults to the class's conversion class."
   },
   "new": {
-    "open": "New",
-    "title": "New equity record",
-    "description": "Issue a security, or record a share class, a plan or a round for the selected legal entity.",
     "failed": "The record was not saved.",
-    "sections": {
-      "security": "Security",
-      "class": "Share class",
-      "plan": "Plan",
-      "round": "Round"
-    },
     "kindHelp": {
       "share": "Shares issued for cash post the consideration to share capital at par and additional paid-in capital.",
       "option": "Options are valued at grant with Black-Scholes; their cost posts through the stock compensation run.",
@@ -538,7 +580,24 @@
     "currencyHint": "Defaults to the legal entity's currency ({currency}); another currency is measured at the issue-date rate.",
     "roundCurrencyHint": "Issued in the round's currency ({currency}).",
     "conversionClassMissing": "Record a common class first; preferred shares convert into it.",
-    "adjustsForSplits": "Conversion price adjusts for splits of the conversion class"
+    "adjustsForSplits": "Conversion price adjusts for splits of the conversion class",
+    "actions": {
+      "security": "New security",
+      "class": "New share class",
+      "plan": "New plan",
+      "round": "New round",
+      "stakeholder": "New stakeholder"
+    },
+    "descriptions": {
+      "security": "Issue shares, an option, an RSU, a warrant, a SAFE or a convertible note to a holder of the legal entity.",
+      "class": "Record a common or preferred share class with its authorized shares and terms.",
+      "plan": "Record an equity incentive plan and the shares it reserves.",
+      "round": "Record a priced financing round; its shares are issued to investors as securities.",
+      "stakeholder": "Add a person or company who holds, or will hold, the legal entity's securities."
+    },
+    "createStakeholder": "Create and issue a security",
+    "stakeholderHelp": "A stakeholder is a person or company in your directory. After saving, issue their first security to put them on the cap table.",
+    "stakeholderSaved": "{name} added. Issue their first security."
   },
   "dayCount": {
     "actual_365": "Actual/365",
@@ -561,15 +620,9 @@
     "deadline": "83(b) deadline {date}"
   },
   "interest": {
-    "schedule": "Accrual",
-    "runs": "Posted runs",
-    "post": "Post interest through {date}",
     "posted": "Interest posted through {date}",
     "replayed": "The interest run through {date} was already posted",
     "failed": "The interest run was not posted.",
-    "lastRun": "Last run through {date}",
-    "noRuns": "No interest runs posted yet",
-    "total": "Change to post",
     "empty": "No convertible note accrues interest through this date.",
     "runsEmpty": "No interest runs posted yet.",
     "columns": {
@@ -627,5 +680,110 @@
       "interest_run": "Note interest run",
       "account_policy": "Account policy version"
     }
+  },
+  "classes": {
+    "empty": "No share classes yet. Use New share class to record the legal entity's first class.",
+    "columns": {
+      "kind": "Kind",
+      "seniority": "Seniority",
+      "par": "Par value",
+      "issuePrice": "Original issue price",
+      "conversionPrice": "Conversion price",
+      "preference": "Liquidation preference"
+    }
+  },
+  "overview": {
+    "tiles": {
+      "fullyDiluted": "Fully diluted",
+      "fullyDilutedSub": "{outstanding} outstanding as converted",
+      "pool": "Pool available",
+      "poolSub": "{percent} of fully diluted",
+      "noPool": "No plan reserve",
+      "price": "Price per share",
+      "noRound": "No priced round yet",
+      "raised": "Total raised",
+      "raisedSub": "Priced rounds {priced} · SAFEs and notes {convertible}",
+      "raisedOther": "Also {amount}",
+      "noRaise": "Nothing raised yet",
+      "compensation": "Stock comp this year",
+      "compensationSub": "Posted since {date}"
+    },
+    "ownership": {
+      "title": "Ownership",
+      "hint": "Fully diluted · {date}",
+      "pool": "Available pool",
+      "empty": "No shares or awards are outstanding on this date."
+    },
+    "round": {
+      "title": "Latest priced round",
+      "postMoney": "Post-money",
+      "preMoney": "Pre-money",
+      "raised": "Raised",
+      "cta": "Model the next round"
+    },
+    "attention": {
+      "title": "Needs attention",
+      "allClear": "Nothing needs attention.",
+      "cliff": "{holder} · {number} reaches its cliff on {date}: {quantity} units vest",
+      "election83b": "{holder} · the 83(b) election for {number} is due by {date} ({days, plural, one {# day} other {# days}} left)",
+      "restrictedDeposit": "{holder} · {shares} early-exercised shares of {number} are unvested; the deposit is held until they vest",
+      "departed": "{holder} left on {date} and still holds {units} option and RSU units; record the forfeitures and expirations",
+      "expiring": "{holder} · {number} expires on {date} with {quantity} units outstanding",
+      "compensationDue": "Stock compensation is not posted through {date}: {amount} to post",
+      "compensationRefused": "Stock compensation through {date} cannot be measured: {message}",
+      "interestDue": "Note interest is not accrued through {date}: {amount} to post",
+      "interestRefused": "Note interest through {date} cannot be measured: {message}",
+      "pending": "{count, plural, one {# equity action awaits approval} other {# equity actions await approval}}",
+      "policyMissing": "No equity account policy is in force on {date}; nothing can post until one is set up"
+    },
+    "activity": {
+      "title": "Recent activity",
+      "empty": "No equity activity recorded yet.",
+      "issue": "{kind} {number} issued to {holder}",
+      "round": "{name} closed at {price} per share",
+      "shares": "{quantity} shares"
+    },
+    "directory": {
+      "title": "Quick links",
+      "holders": "holders",
+      "convertibles": "open convertibles",
+      "due": "Due",
+      "current": "Current",
+      "through": "Through {date}",
+      "capTableReport": "Cap table report",
+      "registerReport": "Securities register",
+      "compensationReport": "Stock compensation schedule",
+      "accounts": "Equity accounts"
+    }
+  },
+  "runs": {
+    "filters": {
+      "run": "Run",
+      "period": "Period",
+      "lines": "Lines"
+    },
+    "kinds": {
+      "compensation": "Stock compensation",
+      "interest": "Note interest"
+    },
+    "lines": {
+      "expense": "Expense"
+    },
+    "history": "Run history",
+    "historyTitle": {
+      "compensation": "Stock compensation runs",
+      "interest": "Note interest runs"
+    },
+    "historyDescription": "Runs posted for the legal entity, latest first, with the journal entries they posted.",
+    "postCompensation": "Post stock compensation for {period}",
+    "postInterest": "Post note interest for {period}",
+    "through": "Through {date}",
+    "alreadyPosted": "Posted for this period",
+    "backdated": "Runs are posted through {date}; choose a later period",
+    "closeTask": "This run is a period close task.",
+    "openClose": "Open close",
+    "noPeriods": "No accounting periods",
+    "noPeriodsRemedy": "Runs post through the end of an accounting period. Generate the fiscal calendar's periods to run stock compensation and note interest.",
+    "setUpPeriods": "Set up periods"
   }
 }

@@ -880,6 +880,7 @@ const SOURCES = {
   equity_securities: { route: '/equity', mode: 'loaded' },
   equity_stakeholders: { route: '/equity', mode: 'loaded' },
   equity_plans: { route: '/equity', mode: 'loaded' },
+  equity_share_classes: { route: '/equity', mode: 'loaded' },
   equity_rounds: { route: '/equity', mode: 'loaded' },
   equity_convertibles: { route: '/equity', mode: 'loaded' },
   equity_round_model: { route: '/equity', mode: 'loaded' },

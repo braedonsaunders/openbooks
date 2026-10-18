@@ -8,24 +8,18 @@
     "securities": "Wertpapiere",
     "stakeholders": "Anteilseigner",
     "plans": "Pläne",
-    "rounds": "Runden & Wandelinstrumente",
+    "rounds": "Finanzierungsrunden",
     "waterfall": "Erlösverteilung",
-    "compensation": "Aktienbasierte Vergütung"
+    "compensation": "Aktienvergütung",
+    "overview": "Übersicht",
+    "classes": "Anteilsklassen"
   },
   "entity": {
-    "label": "Rechtsträger",
-    "asOf": "Stichtag"
+    "label": "Rechtsträger"
   },
   "empty": {
     "noEntities": "Kein Rechtsträger zum Anzeigen",
     "noEntitiesDescription": "Eigenkapital wird je Rechtsträger erfasst. Sie benötigen Zugriff auf einen aktiven Rechtsträger mit einer Basiswährung (Unternehmenseinstellungen → Tochtergesellschaften)."
-  },
-  "kpi": {
-    "fullyDiluted": "Anteile (voll verwässert)",
-    "outstanding": "Ausstehende Anteile",
-    "poolAvailable": "Verfügbarer Pool",
-    "holders": "Inhaber",
-    "convertibles": "Offene Wandelinstrumente"
   },
   "policy": {
     "missing": "Für diesen Rechtsträger ist keine Eigenkapital-Kontenrichtlinie in Kraft, daher können Ausgaben, Ausübungen und aktienbasierte Vergütung nicht gebucht werden.",
@@ -204,17 +198,16 @@
     "amountRepaid": "Zurückgezahlter Betrag",
     "interestDayCount": "Zinstagequotient",
     "unvestedRepurchaseBasis": "Rückkaufpreis nicht unverfallbarer Anteile",
-    "conversionClass": "Wandelt in"
+    "conversionClass": "Wandelt in",
+    "partyKind": "Art des Beteiligten"
   },
   "capTable": {
     "by": {
       "class": "Nach Klasse",
       "holder": "Nach Inhaber"
     },
-    "byLabel": "Ansicht der Kapitaltabelle",
     "report": "Wertpapierregister öffnen",
-    "asOfReport": "Cap-Table-Bericht zum {date}",
-    "emptyClasses": "Noch keine Anteilsklassen. Erfassen Sie über „Neu“ die erste Klasse des Rechtsträgers.",
+    "emptyClasses": "Noch keine Anteilsklassen. Erfassen Sie die erste Klasse der Gesellschaft unter Anteilsklassen.",
     "emptyHolders": "Noch keine Inhaber. Geben Sie Anteile oder Zuteilungen aus, um Inhaber in die Kapitaltabelle aufzunehmen.",
     "amend": "Ändern",
     "totalOutstanding": "Ausstehend",
@@ -234,10 +227,21 @@
       "options": "Optionen",
       "rsus": "RSUs",
       "warrants": "Optionsscheine",
-      "actions": "Aktionen"
+      "actions": "Aktionen",
+      "optionOutstanding": "Ausstehende Optionen",
+      "rsuOutstanding": "Ausstehende RSUs",
+      "warrantOutstanding": "Ausstehende Optionsscheine",
+      "vested": "Unverfallbar",
+      "unvested": "Verfallbar"
     },
     "exportTitle": "{entity} — Kapitaltabelle",
-    "exportAsOf": "Stand {date}"
+    "exportAsOf": "Stand {date}",
+    "filters": {
+      "view": "Ansicht",
+      "instrument": "Instrumentart",
+      "allInstruments": "Alle Instrumente"
+    },
+    "openAsOfReport": "Bericht zur Kapitaltabelle"
   },
   "classActions": {
     "title": "Klasse {code}",
@@ -255,9 +259,6 @@
     "splitAdjusted": "Wandlungspreise angepasst: {classes}"
   },
   "securities": {
-    "allKinds": "Alle",
-    "kindFilter": "Wertpapierart",
-    "clearHolder": "Angezeigt: {name} · alle Inhaber anzeigen",
     "empty": "Keine passenden Wertpapiere.",
     "columns": {
       "number": "Nummer",
@@ -269,6 +270,14 @@
       "outstanding": "Ausstehend",
       "vested": "Unverfallbar",
       "price": "Preis"
+    },
+    "filters": {
+      "kind": "Art",
+      "allKinds": "Alle Arten",
+      "status": "Stand",
+      "allStatuses": "Alle Stände",
+      "holder": "Inhaber",
+      "allHolders": "Alle Inhaber"
     }
   },
   "stakeholders": {
@@ -284,7 +293,7 @@
     }
   },
   "plans": {
-    "empty": "Noch keine Beteiligungspläne. Erfassen Sie über „Neu“ einen Plan und seine Reserve.",
+    "empty": "Noch keine Beteiligungspläne. Erfassen Sie mit „Neuer Plan“ einen Plan und seine Reserve.",
     "changeReserve": "Reserve ändern",
     "reserveTitle": "Reserve von {code} ändern",
     "reserveDescription": "Eine Änderung der Reserve gilt ab ihrem Datum. Eine Verringerung darf den nicht zugeteilten Pool zu keinem späteren Datum unter null bringen.",
@@ -304,18 +313,12 @@
       "used": "Gewährt, netto",
       "returned": "Zurückgeflossen",
       "available": "Verfügbar",
-      "recycling": "Rückfluss"
+      "recycling": "Rückfluss",
+      "effective": "Gültig ab"
     }
   },
   "rounds": {
-    "sections": {
-      "rounds": "Runden",
-      "convertibles": "Wandelinstrumente",
-      "model": "Runde modellieren",
-      "interest": "Darlehenszinsen"
-    },
     "empty": "Noch keine Finanzierungsrunden.",
-    "convertiblesEmpty": "Keine SAFEs oder Wandeldarlehen.",
     "columns": {
       "name": "Runde",
       "class": "Klasse",
@@ -327,8 +330,10 @@
       "principal": "Nennbetrag",
       "interest": "Aufgelaufene Zinsen",
       "cap": "Bewertungsobergrenze",
-      "discount": "Abschlag"
-    }
+      "discount": "Abschlag",
+      "postMoney": "Post-Money-Bewertung"
+    },
+    "model": "Runde modellieren"
   },
   "model": {
     "description": "Bepreist eine Runde nach der Pre-Money-Methode anhand der Kapitaltabelle zum Stichtag: Ausstehende SAFEs und Wandeldarlehen werden gewandelt, geschützte Klassen erhalten ihre Verwässerungsschutzanteile und der Pool wird innerhalb der Pre-Money-Bewertung auf sein Ziel aufgefüllt. Es wird nichts erfasst.",
@@ -364,17 +369,16 @@
       "pricedBy": "Bepreist nach",
       "price": "Wandlungspreis",
       "shares": "Anteile"
-    }
+    },
+    "prompt": "Geben Sie eine Pre-Money-Bewertung und das neue Kapital ein, um die Runde gegen die Kapitaltabelle zum Stichtag zu bepreisen."
   },
   "waterfall": {
-    "description": "Verteilt einen Exit-Wert anhand der Kapitaltabelle zum Stichtag: Wandeldarlehen werden zurückgezahlt, Präferenzen nach Rang bedient, jedes SAFE erhält den höheren Betrag aus Auszahlungs- und Wandlungsbetrag, und der Rest wird auf Stammanteile, partizipierende und wandelnde Vorzugsanteile, wandelnde SAFEs sowie im Geld liegende Zuteilungen verteilt. Es wird nichts erfasst.",
     "exitValue": "Exit-Wert",
     "unvested": "Nicht unverfallbare Zuteilungen",
     "unvestedParticipate": "Nehmen teil",
     "unvestedCancel": "Storniert (nur unverfallbare und beschleunigte)",
     "changeOfControl": "Kontrollwechsel",
     "terminated": "Tätigkeit der Inhaber endet",
-    "run": "Erlösverteilung berechnen",
     "failed": "Die Erlösverteilung konnte nicht berechnet werden.",
     "pricePerShare": "Je Stammanteil",
     "unallocated": "Nicht zugeteilt",
@@ -391,17 +395,65 @@
       "perShare": "Je Anteil",
       "payout": "Auszahlung",
       "percent": "Anteil am Exit",
-      "safeShares": "Wandlungsanteile"
+      "recipient": "Empfänger"
     },
-    "safes": "SAFEs",
-    "safeConverts": "Nimmt den Wandlungsbetrag",
-    "safeCashOut": "Nimmt den Auszahlungsbetrag"
+    "fees": "Transaktionskosten",
+    "presets": "Exit-Werte aus der Post-Money-Bewertung von {round}",
+    "assumptions": "Annahmen",
+    "assumptionsHelp": "Annahmen zu Zuteilungen gelten für Optionen und RSUs mit Vesting-Plan.",
+    "updating": "Wird aktualisiert…",
+    "retry": "Prüfen Sie die Eingaben und versuchen Sie es erneut.",
+    "promptTitle": "Exit-Wert eingeben",
+    "prompt": "Geben Sie einen Exit-Wert ein oder wählen Sie ein Vielfaches der letzten Post-Money-Bewertung, um die Verteilung der Erlöse zu sehen.",
+    "promptNoRound": "Noch keine bepreiste Runde in {currency} liefert die Vorgaben. Geben Sie einen Exit-Wert ein, um die Verteilung der Erlöse zu sehen.",
+    "tiles": {
+      "proceeds": "Erlös für Inhaber",
+      "proceedsSub": "Exit {exit} abzüglich Kosten {fees}",
+      "noFees": "Keine Transaktionskosten",
+      "priceSub": "Stamm- und wandelnde Inhaber",
+      "preferred": "An Vorzugsanteile",
+      "common": "An Stammanteile und Zuteilungen",
+      "ofProceeds": "{percent} % des Erlöses"
+    },
+    "cascadeTitle": "Zahlungskaskade",
+    "cascadeHint": "In der Reihenfolge der Auszahlung",
+    "steps": {
+      "exit": "Exit-Wert",
+      "fees": "Kosten",
+      "notes": "Darlehen",
+      "preference": "Präferenz {code}",
+      "safe_cash_out": "SAFE-Auszahlungen",
+      "participation": "Teilnahme {code}",
+      "safe_conversion": "Wandelnde SAFEs",
+      "awards": "Zuteilungen",
+      "unallocated": "Nicht zugeteilt"
+    },
+    "decisionsTitle": "Wandlungsentscheidungen",
+    "noDecisions": "Keine Vorzugsklasse und kein gedeckelter SAFE hat eine Wahl zu treffen.",
+    "decisions": {
+      "converts": "Wandelt für {amount} in Stammanteile; die Präferenz von {entitlement} brächte {alternative}.",
+      "converts_only": "Wandelt für {amount} in Stammanteile, mehr als die Präferenz von {entitlement}.",
+      "keeps_preference": "Nimmt die Präferenz von {entitlement}; die Wandlung brächte {alternative}.",
+      "keeps_preference_only": "Nimmt die Präferenz von {entitlement}.",
+      "participates": "Nimmt die Präferenz von {entitlement} und teilt den Rest gewandelt: insgesamt {amount}.",
+      "participates_capped": "Nimmt die Präferenz und nimmt bis zur Obergrenze von {cap} teil: insgesamt {amount}; die Wandlung brächte {alternative}.",
+      "participates_capped_only": "Nimmt die Präferenz und nimmt bis zur Obergrenze von {cap} teil: insgesamt {amount}.",
+      "safe_converts": "Wandelt für {amount}; die Auszahlung brächte {alternative}.",
+      "safe_converts_only": "Wandelt für {amount}, mehr als der Auszahlungsbetrag von {entitlement}.",
+      "safe_cash_out": "Nimmt den Auszahlungsbetrag von {entitlement}; die Wandlung brächte {alternative}.",
+      "safe_cash_out_only": "Nimmt den Auszahlungsbetrag von {entitlement}."
+    },
+    "curveTitle": "Erlöse über Exit-Werte",
+    "curveHint": "Von null bis zum Doppelten dieses Exits",
+    "payoutsBy": "Auszahlungen",
+    "recipients": {
+      "awards": "Optionen, RSUs und Optionsscheine",
+      "notes": "Wandeldarlehen",
+      "unallocated": "Nicht zugeteilt"
+    }
   },
   "compensation": {
-    "schedule": "Aufwandsplan",
-    "runs": "Gebuchte Läufe",
     "report": "Bericht zum Aufwandsplan öffnen",
-    "post": "Lauf bis {date} buchen",
     "posted": "Aktienbasierte Vergütung bis {date} gebucht",
     "replayed": "Der Lauf bis {date} wurde bereits gebucht",
     "failed": "Der Lauf der aktienbasierten Vergütung wurde nicht gebucht.",
@@ -424,7 +476,6 @@
       "par": "Nennwert"
     },
     "releases": "Freigaben gesperrter Anteile",
-    "releasesHelp": "Einlagen aus vorzeitiger Ausübung werden in das gezeichnete Kapital und die Kapitalrücklage umgebucht, sobald gesperrte Anteile unverfallbar werden; sie werden mit dem Lauf gebucht.",
     "releasesEmpty": "Bis zu diesem Datum werden keine gesperrten Anteile unverfallbar."
   },
   "drawer": {
@@ -495,16 +546,7 @@
     "targetClassHint": "Standardmäßig die Wandlungsklasse der Klasse."
   },
   "new": {
-    "open": "Neu",
-    "title": "Neuer Eigenkapitaldatensatz",
-    "description": "Geben Sie ein Wertpapier aus oder erfassen Sie eine Anteilsklasse, einen Plan oder eine Runde für den ausgewählten Rechtsträger.",
     "failed": "Der Datensatz wurde nicht gespeichert.",
-    "sections": {
-      "security": "Wertpapier",
-      "class": "Anteilsklasse",
-      "plan": "Plan",
-      "round": "Runde"
-    },
     "kindHelp": {
       "share": "Bei gegen Bareinlage ausgegebenen Anteilen wird die Gegenleistung zum Nennwert in das gezeichnete Kapital und darüber hinaus in die Kapitalrücklage gebucht.",
       "option": "Optionen werden bei Gewährung mit Black-Scholes bewertet; ihre Kosten werden über den Lauf der aktienbasierten Vergütung gebucht.",
@@ -538,7 +580,24 @@
     "currencyHint": "Standardmäßig die Währung des Rechtsträgers ({currency}); eine andere Währung wird zum Kurs am Ausgabedatum bewertet.",
     "roundCurrencyHint": "In der Währung der Runde ausgegeben ({currency}).",
     "conversionClassMissing": "Erfassen Sie zuerst eine Stammanteilsklasse; Vorzugsanteile werden in sie gewandelt.",
-    "adjustsForSplits": "Der Wandlungspreis wird bei Splits der Wandlungsklasse angepasst"
+    "adjustsForSplits": "Der Wandlungspreis wird bei Splits der Wandlungsklasse angepasst",
+    "actions": {
+      "security": "Neues Wertpapier",
+      "class": "Neue Anteilsklasse",
+      "plan": "Neuer Plan",
+      "round": "Neue Runde",
+      "stakeholder": "Neuer Anteilseigner"
+    },
+    "descriptions": {
+      "security": "Anteile, eine Option, eine RSU, einen Optionsschein, einen SAFE oder ein Wandeldarlehen an einen Inhaber der Gesellschaft ausgeben.",
+      "class": "Eine Stamm- oder Vorzugsanteilsklasse mit ihren genehmigten Anteilen und Bedingungen erfassen.",
+      "plan": "Einen Mitarbeiterbeteiligungsplan und die dafür reservierten Anteile erfassen.",
+      "round": "Eine bepreiste Finanzierungsrunde erfassen; ihre Anteile werden als Wertpapiere an Investoren ausgegeben.",
+      "stakeholder": "Eine Person oder ein Unternehmen hinzufügen, das Wertpapiere der Gesellschaft hält oder halten wird."
+    },
+    "createStakeholder": "Anlegen und Wertpapier ausgeben",
+    "stakeholderHelp": "Ein Anteilseigner ist eine Person oder ein Unternehmen in Ihrem Verzeichnis. Geben Sie nach dem Speichern das erste Wertpapier aus, um ihn in die Kapitaltabelle aufzunehmen.",
+    "stakeholderSaved": "{name} hinzugefügt. Geben Sie das erste Wertpapier aus."
   },
   "dayCount": {
     "actual_365": "Actual/365",
@@ -561,15 +620,9 @@
     "deadline": "83(b)-Frist {date}"
   },
   "interest": {
-    "schedule": "Zinsabgrenzung",
-    "runs": "Gebuchte Läufe",
-    "post": "Zinsen bis {date} buchen",
     "posted": "Zinsen bis {date} gebucht",
     "replayed": "Der Zinslauf bis {date} wurde bereits gebucht",
     "failed": "Der Zinslauf wurde nicht gebucht.",
-    "lastRun": "Letzter Lauf bis {date}",
-    "noRuns": "Noch keine Zinsläufe gebucht",
-    "total": "Zu buchende Änderung",
     "empty": "Bis zu diesem Datum laufen für kein Wandeldarlehen Zinsen auf.",
     "runsEmpty": "Noch keine Zinsläufe gebucht.",
     "columns": {
@@ -627,5 +680,110 @@
       "interest_run": "Zinslauf für Wandeldarlehen",
       "account_policy": "Version der Kontenrichtlinie"
     }
+  },
+  "classes": {
+    "empty": "Noch keine Anteilsklassen. Erfassen Sie mit „Neue Anteilsklasse“ die erste Klasse der Gesellschaft.",
+    "columns": {
+      "kind": "Art",
+      "seniority": "Rang",
+      "par": "Nennwert",
+      "issuePrice": "Ursprünglicher Ausgabepreis",
+      "conversionPrice": "Wandlungspreis",
+      "preference": "Liquidationspräferenz"
+    }
+  },
+  "overview": {
+    "tiles": {
+      "fullyDiluted": "Voll verwässert",
+      "fullyDilutedSub": "{outstanding} ausstehend (gewandelt)",
+      "pool": "Verfügbarer Pool",
+      "poolSub": "{percent} der voll verwässerten Anteile",
+      "noPool": "Keine Planreserve",
+      "price": "Preis je Anteil",
+      "noRound": "Noch keine bepreiste Runde",
+      "raised": "Insgesamt eingeworben",
+      "raisedSub": "Bepreiste Runden {priced} · SAFEs und Darlehen {convertible}",
+      "raisedOther": "Zusätzlich {amount}",
+      "noRaise": "Noch nichts eingeworben",
+      "compensation": "Aktienvergütung im Jahr",
+      "compensationSub": "Gebucht seit {date}"
+    },
+    "ownership": {
+      "title": "Beteiligungsverhältnisse",
+      "hint": "Voll verwässert · {date}",
+      "pool": "Verfügbarer Pool",
+      "empty": "Zu diesem Datum sind keine Anteile oder Zuteilungen ausstehend."
+    },
+    "round": {
+      "title": "Letzte bepreiste Runde",
+      "postMoney": "Post-Money",
+      "preMoney": "Pre-Money",
+      "raised": "Eingeworben",
+      "cta": "Nächste Runde modellieren"
+    },
+    "attention": {
+      "title": "Handlungsbedarf",
+      "allClear": "Kein Handlungsbedarf.",
+      "cliff": "{holder} · {number} erreicht am {date} den Cliff: {quantity} Einheiten werden unverfallbar",
+      "election83b": "{holder} · die 83(b)-Wahl für {number} ist bis {date} fällig (noch {days, plural, one {# Tag} other {# Tage}})",
+      "restrictedDeposit": "{holder} · {shares} vorzeitig ausgeübte Anteile von {number} sind verfallbar; die Einlage wird bis zur Unverfallbarkeit gehalten",
+      "departed": "{holder} ist am {date} ausgeschieden und hält noch {units} Options- und RSU-Einheiten; erfassen Sie Verfall und Ablauf",
+      "expiring": "{holder} · {number} läuft am {date} mit {quantity} ausstehenden Einheiten ab",
+      "compensationDue": "Die Aktienvergütung ist bis {date} nicht gebucht: {amount} zu buchen",
+      "compensationRefused": "Die Aktienvergütung bis {date} kann nicht bemessen werden: {message}",
+      "interestDue": "Darlehenszinsen sind bis {date} nicht abgegrenzt: {amount} zu buchen",
+      "interestRefused": "Die Darlehenszinsen bis {date} können nicht bemessen werden: {message}",
+      "pending": "{count, plural, one {# Eigenkapitalvorgang wartet auf Genehmigung} other {# Eigenkapitalvorgänge warten auf Genehmigung}}",
+      "policyMissing": "Zum {date} gilt keine Kontenregel für Eigenkapital; bis eine eingerichtet ist, kann nichts gebucht werden"
+    },
+    "activity": {
+      "title": "Letzte Aktivität",
+      "empty": "Noch keine Eigenkapitalaktivität erfasst.",
+      "issue": "{kind} {number} an {holder} ausgegeben",
+      "round": "{name} abgeschlossen zu {price} je Anteil",
+      "shares": "{quantity} Anteile"
+    },
+    "directory": {
+      "title": "Schnellzugriff",
+      "holders": "Inhaber",
+      "convertibles": "offene Wandelinstrumente",
+      "due": "Fällig",
+      "current": "Aktuell",
+      "through": "Bis {date}",
+      "capTableReport": "Bericht zur Kapitaltabelle",
+      "registerReport": "Wertpapierregister",
+      "compensationReport": "Plan der Aktienvergütung",
+      "accounts": "Eigenkapitalkonten"
+    }
+  },
+  "runs": {
+    "filters": {
+      "run": "Lauf",
+      "period": "Periode",
+      "lines": "Zeilen"
+    },
+    "kinds": {
+      "compensation": "Aktienvergütung",
+      "interest": "Darlehenszinsen"
+    },
+    "lines": {
+      "expense": "Aufwand"
+    },
+    "history": "Laufhistorie",
+    "historyTitle": {
+      "compensation": "Läufe der Aktienvergütung",
+      "interest": "Läufe der Darlehenszinsen"
+    },
+    "historyDescription": "Für die Gesellschaft gebuchte Läufe, neueste zuerst, mit den gebuchten Journalbuchungen.",
+    "postCompensation": "Aktienvergütung für {period} buchen",
+    "postInterest": "Darlehenszinsen für {period} buchen",
+    "through": "Bis {date}",
+    "alreadyPosted": "Für diese Periode gebucht",
+    "backdated": "Läufe sind bis {date} gebucht; wählen Sie eine spätere Periode",
+    "closeTask": "Dieser Lauf ist eine Aufgabe des Periodenabschlusses.",
+    "openClose": "Abschluss öffnen",
+    "noPeriods": "Keine Buchungsperioden",
+    "noPeriodsRemedy": "Läufe buchen bis zum Ende einer Buchungsperiode. Erzeugen Sie die Perioden des Geschäftsjahreskalenders, um Aktienvergütung und Darlehenszinsen zu buchen.",
+    "setUpPeriods": "Perioden einrichten"
   }
 }

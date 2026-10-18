@@ -19,8 +19,10 @@ import {
   Scale,
   TrendingDown,
   Gauge,
+  History,
   Landmark,
   ListChecks,
+  PieChart,
   ScrollText,
   ShieldCheck,
   Target,
@@ -68,6 +70,8 @@ const HOME_ICONS: Record<string, LucideIcon> = {
   flag: Flag,
   scale: Scale,
   'trending-down': TrendingDown,
+  'pie-chart': PieChart,
+  history: History,
 }
 
 export function HomeStatTile({

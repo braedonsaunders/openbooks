@@ -227,11 +227,18 @@ export function GroupedBar({
 export function Waterfall({
   steps,
   height = 240,
+  magnitudeLabels = false,
 }: {
   steps: { label: string; amount: number; kind: 'start' | 'deduct' | 'subtotal' | 'total' }[]
   height?: number
+  /** Label each deduction by its size rather than its sign: a payout cascade
+   *  reads "$4.0M to Series A", not a negative amount. */
+  magnitudeLabels?: boolean
 }) {
-  const money = useChartMoney()
+  const chartMoney = useChartMoney()
+  const money: MoneyLabel = magnitudeLabels
+    ? (value) => chartMoney(typeof value === 'number' ? Math.abs(value) : value.replace(/^-/, ''))
+    : chartMoney
   // Compute running base for floating bars.
   let running = 0
   const base: number[] = []
