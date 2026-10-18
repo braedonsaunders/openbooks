@@ -305,7 +305,7 @@ export const NAV_MODULES: NavModule[] = [
     requiredPermission: 'items.read',
   },
   {
-    key: 'rebates', href: '/rebates', label: 'Rebates', iconKey: 'coins', group: 'accounting', subgroup: 'revenue-accounting', requiredPermission: 'documents.read', featureKey: 'rebateManagement',
+    key: 'rebates', href: '/rebates', label: 'Rebates', iconKey: 'percent', group: 'accounting', subgroup: 'revenue-accounting', requiredPermission: 'documents.read', featureKey: 'rebateManagement',
   },
   {
     key: 'revenue',
@@ -722,7 +722,7 @@ export const NAV_MODULES: NavModule[] = [
     group: 'accounting', subgroup: 'assets', requiredPermission: 'assets.read', featureKey: 'assetProposals',
   },
   {
-    key: 'asset-construction', href: '/assets/construction', label: 'Construction in Progress', iconKey: 'building',
+    key: 'asset-construction', href: '/assets/construction', label: 'Construction in Progress', iconKey: 'construction',
     group: 'accounting', subgroup: 'assets', requiredPermission: 'assets.read', featureKey: 'constructionInProgress',
   },
   {
