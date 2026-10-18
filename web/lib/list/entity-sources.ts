@@ -387,6 +387,12 @@ const provisionStatus = sql`case when review.id is null then 'unassessed'
   when review.result->>'recognized'='true' then 'recognized' else 'contingent' end`
 
 const SERVICE_DRAWER_PARAMS = ['request', 'job', 'visit', 'agreement', 'new'] as const
+/** Badge tone for a service list's coded columns other than its status. */
+function serviceCodeVariant(value: unknown, column: string): 'destructive' | 'warning' | 'secondary' | 'outline' | null {
+  if (column === 'priority') return value === 'urgent' ? 'destructive' : value === 'high' ? 'warning' : value === 'low' ? 'outline' : 'secondary'
+  if (column === 'status' || column === 'stage') return null
+  return value === 'pending' ? 'warning' : 'secondary'
+}
 
 const SOURCES: Record<string, EntityListSource> = {
   webhook_endpoint: {
@@ -1332,7 +1338,7 @@ const SOURCES: Record<string, EntityListSource> = {
     quickFilters: [{ paramKey: 'status', filterKey: 'status' }, { paramKey: 'priority', filterKey: 'priority' }],
     where: serviceRequestWhere, drawerParam: 'request', basePath: '/service/requests',
     overlayDrawer: true, exclusiveDrawerParams: SERVICE_DRAWER_PARAMS,
-    statusVariant: (row) => row.status === 'converted' ? 'success' : row.status === 'quoted' ? 'warning' : row.status === 'declined' || row.status === 'cancelled' ? 'outline' : 'default',
+    statusVariant: (row, value, column) => serviceCodeVariant(value, column) ?? (row.status === 'converted' ? 'success' : row.status === 'quoted' ? 'warning' : row.status === 'declined' || row.status === 'cancelled' ? 'outline' : 'default'),
   },
   service_job: {
     recordType: 'service_job', table: 'service_jobs', alias: 'sj', readPermission: 'service.read',
@@ -1341,9 +1347,9 @@ const SOURCES: Record<string, EntityListSource> = {
     quickFilters: [{ paramKey: 'status', filterKey: 'status' }, { paramKey: 'priority', filterKey: 'priority' }],
     where: serviceJobWhere, drawerParam: 'job', basePath: '/service/jobs',
     overlayDrawer: true, exclusiveDrawerParams: SERVICE_DRAWER_PARAMS,
-    statusVariant: (row, value, column) => column === 'stage'
+    statusVariant: (row, value, column) => serviceCodeVariant(value, column) ?? (column === 'stage'
       ? (value === 'to_invoice' ? 'warning' : value === 'in_progress' ? 'default' : value === 'completed' ? 'success' : 'secondary')
-      : row.status === 'completed' ? 'success' : row.status === 'cancelled' ? 'outline' : 'default',
+      : row.status === 'completed' ? 'success' : row.status === 'cancelled' ? 'outline' : 'default'),
   },
   service_visit: {
     recordType: 'service_visit', table: 'service_visits', alias: 'sv', readPermission: 'service.read',
@@ -1352,7 +1358,7 @@ const SOURCES: Record<string, EntityListSource> = {
     quickFilters: [{ paramKey: 'status', filterKey: 'status' }, { paramKey: 'priority', filterKey: 'priority' }],
     where: serviceVisitWhere, drawerParam: 'visit', basePath: '/service/visits',
     overlayDrawer: true, exclusiveDrawerParams: SERVICE_DRAWER_PARAMS,
-    statusVariant: (row) => row.status === 'completed' ? 'success' : row.status === 'unable_to_complete' ? 'destructive' : row.status === 'en_route' || row.status === 'on_site' ? 'warning' : row.status === 'cancelled' || row.status === 'unscheduled' ? 'outline' : 'default',
+    statusVariant: (row, value, column) => serviceCodeVariant(value, column) ?? (row.status === 'completed' ? 'success' : row.status === 'unable_to_complete' ? 'destructive' : row.status === 'en_route' || row.status === 'on_site' ? 'warning' : row.status === 'cancelled' || row.status === 'unscheduled' ? 'outline' : 'default'),
   },
   service_agreement: {
     recordType: 'service_agreement', table: 'service_agreements', alias: 'sa', readPermission: 'service.read',
@@ -1361,7 +1367,7 @@ const SOURCES: Record<string, EntityListSource> = {
     quickFilters: [{ paramKey: 'status', filterKey: 'status' }],
     where: serviceAgreementWhere, drawerParam: 'agreement', basePath: '/service/agreements',
     overlayDrawer: true, exclusiveDrawerParams: SERVICE_DRAWER_PARAMS,
-    statusVariant: (row) => row.status === 'active' ? 'success' : 'outline',
+    statusVariant: (row, value, column) => serviceCodeVariant(value, column) ?? (row.status === 'active' ? 'success' : 'outline'),
   },
   timesheet_week: {
     recordType: 'timesheet_week',
