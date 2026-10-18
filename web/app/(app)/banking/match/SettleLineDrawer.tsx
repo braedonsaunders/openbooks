@@ -4,10 +4,11 @@ import { useEffect, useMemo, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { RotateCcw } from 'lucide-react'
-import { sum, toUnits } from '@openbooks/engine/money/money'
-import type { MatchReason } from '@openbooks/engine/banking/match-scoring'
+import { fromUnits, sum, toUnits } from '@openbooks/engine/money/money'
+import type { MatchReason, ProposalSettlement } from '@openbooks/engine/banking/match-scoring'
+import { allocateOldestFirst, settlementOrder } from '@openbooks/engine/payments/statement-settlement'
 import {
-  Button, Drawer, EmptyState, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, cn,
+  Button, Drawer, EmptyState, Input, Label, SearchSelect, Table, TableBody, TableCell, TableHead, TableHeader, TableRow, Textarea, cn,
 } from '@openbooks/ui'
 import { useMoney } from '@/components/money-provider'
 import { readApiErrorMessage } from '@/lib/api-error'
@@ -17,10 +18,12 @@ interface CandidateDocument {
   openLineId: string
   partyId: string
   partyName: string | null
+  subsidiaryId: string | null
   documentNumber: string | null
   entryNumber: string
   documentKind: string | null
   dueDate: string | null
+  postingDate: string
   transactionOpen: string
   reasons: MatchReason[]
 }
@@ -30,7 +33,18 @@ interface Proposal {
   partyId: string
   partyName: string | null
   total: string
+  settlement: ProposalSettlement
+  applied: Record<string, string>
+  onAccount: string
   reasons: MatchReason[]
+}
+
+interface ExchangeRateBasis {
+  functionalCurrency: string
+  rate: string | null
+  rateDate: string
+  unavailable: string | null
+  manualRateAllowed: boolean
 }
 
 interface Candidates {
@@ -39,6 +53,49 @@ interface Candidates {
   currency: string
   proposals: Proposal[]
   documents: CandidateDocument[]
+  exchangeRates: Record<string, ExchangeRateBasis>
+  canWriteOff: boolean
+}
+
+/** The operator's settlement of the line: what each document receives, a write-off, and a manual rate. */
+interface SettlementDraft {
+  openLineIds: string[]
+  applied: Record<string, string>
+  writeOff: boolean
+  writeOffReason: string
+  discountAccountId: string
+  manualRate: boolean
+  rate: string
+  rateSource: string
+  rateReason: string
+}
+
+const AMOUNT_PATTERN = /^\d{1,13}(\.\d{1,4})?$/
+const RATE_PATTERN = /^\d{1,9}(\.\d{1,10})?$/
+
+/** Exact settlement arithmetic for the review: per-document validity, the applied total, cash on account and the write-off. */
+function summarize(candidates: Candidates, docs: CandidateDocument[], draft: SettlementDraft) {
+  const line = toUnits(candidates.amount)
+  let applied = 0n
+  let shortfall = 0n
+  let invalid = false
+  const rows = settlementOrder(docs.map((doc) => ({ openLineId: doc.openLineId, open: doc.transactionOpen, dueDate: doc.dueDate, postingDate: doc.postingDate, label: doc.documentNumber ?? doc.entryNumber })))
+    .map((ordered) => {
+      const doc = docs.find((candidate) => candidate.openLineId === ordered.openLineId)!
+      const raw = (draft.applied[doc.openLineId] ?? '').trim()
+      const units = AMOUNT_PATTERN.test(raw) ? toUnits(raw) : null
+      const open = toUnits(doc.transactionOpen)
+      const rowInvalid = units === null || units <= 0n || units > open
+      if (rowInvalid) invalid = true
+      else {
+        applied += units
+        shortfall += open - units
+      }
+      return { doc, raw, invalid: rowInvalid, remaining: units === null || rowInvalid ? null : open - units }
+    })
+  const overApplied = applied > line
+  const onAccount = overApplied ? 0n : line - applied
+  return { rows, applied, onAccount, shortfall, invalid, overApplied, conflict: draft.writeOff && onAccount > 0n }
 }
 
 type LoadState =
@@ -78,11 +135,13 @@ export interface SettleLine {
  * the line id), so every line starts from a fresh selection.
  */
 export function SettleLineDrawer({
-  line, reconciliationId, currency, onClose, onRecorded,
+  line, reconciliationId, currency, discountAccounts = [], onClose, onRecorded,
 }: {
   line: SettleLine
   reconciliationId: string
   currency: string
+  /** Posting accounts a bill payment may write a short-paid difference off to. */
+  discountAccounts?: { id: string; label: string }[]
   onClose: () => void
   onRecorded: () => void
 }) {
@@ -92,8 +151,9 @@ export function SettleLineDrawer({
   const { money: formatMoney } = useMoney(currency)
   const money = (value: string) => formatMoney(value, { maximumFractionDigits: 4 })
   const [state, setState] = useState<LoadState>({ status: 'loading' })
-  const [view, setView] = useState<'proposals' | 'documents'>('proposals')
+  const [view, setView] = useState<'proposals' | 'documents' | 'settle'>('proposals')
   const [selected, setSelected] = useState<ReadonlySet<string>>(new Set())
+  const [draft, setDraft] = useState<SettlementDraft | null>(null)
   const [busy, setBusy] = useState(false)
   const [recordError, setRecordError] = useState<string | null>(null)
   const lineId = line.id
@@ -123,7 +183,29 @@ export function SettleLineDrawer({
   const selectionSettles = candidates !== null && selectedDocs.length > 0 && selectionParties.size === 1
     && toUnits(selectedTotal) === toUnits(candidates.amount)
 
-  async function record(openLineIds: string[]) {
+  /** Open the settlement review for a set of documents, with the cash applied oldest first unless a proposal states it. */
+  function review(openLineIds: string[], applied?: Record<string, string>) {
+    if (!candidates) return
+    const docs = openLineIds.map((id) => documentsById.get(id)).filter((doc): doc is CandidateDocument => !!doc)
+    const allocation = applied ?? allocateOldestFirst(candidates.amount, docs.map((doc) => ({
+      openLineId: doc.openLineId, open: doc.transactionOpen, dueDate: doc.dueDate, postingDate: doc.postingDate, label: doc.documentNumber ?? doc.entryNumber,
+    })))
+    setRecordError(null)
+    setDraft({
+      openLineIds: docs.map((doc) => doc.openLineId),
+      applied: Object.fromEntries(docs.map((doc) => [doc.openLineId, fromUnits(toUnits(allocation[doc.openLineId] ?? '0'))])),
+      writeOff: false,
+      writeOffReason: '',
+      discountAccountId: '',
+      manualRate: false,
+      rate: '',
+      rateSource: '',
+      rateReason: '',
+    })
+    setView('settle')
+  }
+
+  async function record(openLineIds: string[], settlement?: SettlementDraft) {
     if (!candidates) return
     setBusy(true)
     setRecordError(null)
@@ -136,7 +218,20 @@ export function SettleLineDrawer({
       const res = await fetch(`/api/banking/statement-lines/${line.id}/record-payment`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ reconciliationId, openLineIds, expectedOpen }),
+        body: JSON.stringify({
+          reconciliationId,
+          openLineIds,
+          expectedOpen,
+          ...(settlement ? {
+            applied: Object.fromEntries(openLineIds.map((id) => [id, settlement.applied[id] ?? ''])),
+            writeOff: settlement.writeOff
+              ? { reason: settlement.writeOffReason.trim(), ...(candidates.side === 'ap' ? { discountAccountId: settlement.discountAccountId || null } : {}) }
+              : null,
+            exchangeRate: settlement.manualRate
+              ? { rate: settlement.rate.trim(), source: settlement.rateSource.trim(), reason: settlement.rateReason.trim() }
+              : null,
+          } : {}),
+        }),
       })
       if (!res.ok) {
         const message = await readApiErrorMessage(res, tBanking('errors.requestFailed'))
@@ -144,8 +239,12 @@ export function SettleLineDrawer({
         toast.error(message)
         return
       }
-      const result = await res.json().catch(() => null) as { documentNumber?: string; effectsError?: string | null } | null
+      const result = await res.json().catch(() => null) as { documentNumber?: string; onAccount?: string; writeOffTotal?: string; effectsError?: string | null } | null
       toast.success(t('recordedToast', { number: result?.documentNumber ?? '' }))
+      if (result?.onAccount && toUnits(result.onAccount) > 0n) {
+        toast.info(candidates.side === 'ar' ? t('settlement.onAccountCustomerToast', { amount: money(result.onAccount) }) : t('settlement.onAccountVendorToast', { amount: money(result.onAccount) }))
+      }
+      if (result?.writeOffTotal && toUnits(result.writeOffTotal) > 0n) toast.info(t('settlement.writtenOffToast', { amount: money(result.writeOffTotal) }))
       if (result?.effectsError) toast.error(t('effectsPending', { reason: result.effectsError }))
       onRecorded()
     } catch {
@@ -159,6 +258,22 @@ export function SettleLineDrawer({
 
   const docLabel = (doc: CandidateDocument) => doc.documentNumber ?? doc.entryNumber
   const sideTitle = candidates?.side === 'ap' ? t('titleBills') : t('titleInvoices')
+  const draftDocs = draft ? draft.openLineIds.map((id) => documentsById.get(id)).filter((doc): doc is CandidateDocument => !!doc) : []
+  const summary = candidates && draft ? summarize(candidates, draftDocs, draft) : null
+  const draftSubsidiary = draftDocs[0]?.subsidiaryId ?? null
+  const fx = candidates && draftSubsidiary ? candidates.exchangeRates[draftSubsidiary] ?? null : null
+  // The native rate evidence: a positive rate (at most nine whole digits and
+  // ten decimals), a named source and a reason of at least eight characters.
+  const rateValid = !draft?.manualRate || (RATE_PATTERN.test(draft.rate.trim()) && !/^0+(\.0+)?$/.test(draft.rate.trim())
+    && draft.rateSource.trim().length > 0 && draft.rateReason.trim().length >= 8)
+  const writeOffValid = !draft?.writeOff || (draft.writeOffReason.trim().length > 0 && (candidates?.side !== 'ap' || draft.discountAccountId !== ''))
+  const settlementReady = !!summary && !summary.invalid && !summary.overApplied && !summary.conflict && rateValid && writeOffValid
+    && (!fx || fx.rate !== null || !!draft?.manualRate)
+    && (!draft?.writeOff || summary.shortfall > 0n)
+  const updateDraft = (patch: Partial<SettlementDraft>) => {
+    setRecordError(null)
+    setDraft((current) => (current ? { ...current, ...patch } : current))
+  }
   const tabClass = (active: boolean) => cn(
     'rounded-md px-3 py-1.5 text-sm font-medium transition-colors',
     active ? 'bg-teal-50 text-teal-800 dark:bg-teal-950/50 dark:text-teal-200' : 'text-slate-600 hover:bg-slate-100 dark:text-slate-300 dark:hover:bg-slate-800',
@@ -179,10 +294,25 @@ export function SettleLineDrawer({
           <button type="button" role="tab" aria-selected={view === 'documents'} className={tabClass(view === 'documents')} onClick={() => setView('documents')}>
             {t('tabs.documents')} <span className="ml-1 text-xs text-slate-400">{candidates.documents.length}</span>
           </button>
+          {draft ? (
+            <button type="button" role="tab" aria-selected={view === 'settle'} className={tabClass(view === 'settle')} onClick={() => setView('settle')}>
+              {t('tabs.settlement')}
+            </button>
+          ) : null}
         </div>
       ) : undefined}
-      headerActions={view === 'documents' && candidates ? (
-        <Button disabled={busy || !selectionSettles} onClick={() => record([...selected])}>
+      headerActions={candidates && view === 'documents' ? (
+        selectionSettles ? (
+          <Button disabled={busy} onClick={() => record([...selected])}>
+            {busy ? tCommon('actions.saving') : t('recordAndMatch')}
+          </Button>
+        ) : (
+          <Button disabled={busy || selectedDocs.length === 0 || selectionParties.size !== 1} onClick={() => review([...selected])}>
+            {t('settlement.review')}
+          </Button>
+        )
+      ) : candidates && view === 'settle' && draft ? (
+        <Button disabled={busy || !settlementReady} onClick={() => record(draft.openLineIds, draft)}>
           {busy ? tCommon('actions.saving') : t('recordAndMatch')}
         </Button>
       ) : undefined}
@@ -227,9 +357,16 @@ export function SettleLineDrawer({
                           return doc ? <div key={id}>{docLabel(doc)} <span className="text-slate-400">{money(doc.transactionOpen)}</span></div> : null
                         })}
                       </TableCell>
-                      <TableCell><MatchReasonBadges reasons={proposal.reasons} /></TableCell>
-                      <TableCell className="text-right">
-                        <Button size="sm" disabled={busy} onClick={() => record(proposal.openLineIds)}>{t('recordAndMatch')}</Button>
+                      <TableCell><MatchReasonBadges reasons={proposal.reasons} formatAmount={money} /></TableCell>
+                      <TableCell className="whitespace-nowrap text-right">
+                        {proposal.settlement === 'exact' ? (
+                          <span className="inline-flex gap-1">
+                            <Button size="sm" variant="ghost" disabled={busy} onClick={() => review(proposal.openLineIds, proposal.applied)}>{t('settlement.reviewShort')}</Button>
+                            <Button size="sm" disabled={busy} onClick={() => record(proposal.openLineIds)}>{t('recordAndMatch')}</Button>
+                          </span>
+                        ) : (
+                          <Button size="sm" disabled={busy} onClick={() => review(proposal.openLineIds, proposal.applied)}>{t('settlement.review')}</Button>
+                        )}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -277,7 +414,7 @@ export function SettleLineDrawer({
                         <TableCell className="max-w-[10rem] truncate">{doc.partyName ?? '—'}</TableCell>
                         <TableCell className="whitespace-nowrap">{doc.dueDate ?? '—'}</TableCell>
                         <TableCell className="text-right tabular-nums">{money(doc.transactionOpen)}</TableCell>
-                        <TableCell><MatchReasonBadges reasons={doc.reasons} /></TableCell>
+                        <TableCell><MatchReasonBadges reasons={doc.reasons} formatAmount={money} /></TableCell>
                       </TableRow>
                     )
                   })}
@@ -285,6 +422,119 @@ export function SettleLineDrawer({
               </Table>
             </>
           )
+        ) : null}
+        {candidates && view === 'settle' && draft && summary ? (
+          <div className="space-y-4">
+            <p className="text-xs text-slate-500 dark:text-slate-400">{t('settlement.hint')}</p>
+            <Table>
+              <TableHeader><TableRow>
+                <TableHead>{t('columns.document')}</TableHead>
+                <TableHead>{t('columns.due')}</TableHead>
+                <TableHead className="text-right">{t('columns.open')}</TableHead>
+                <TableHead className="w-36 text-right">{t('settlement.apply')}</TableHead>
+                <TableHead className="text-right">{t('settlement.remaining')}</TableHead>
+              </TableRow></TableHeader>
+              <TableBody>
+                {summary.rows.map((row) => (
+                  <TableRow key={row.doc.openLineId}>
+                    <TableCell className="font-mono text-[13px]">{docLabel(row.doc)}</TableCell>
+                    <TableCell className="whitespace-nowrap">{row.doc.dueDate ?? '—'}</TableCell>
+                    <TableCell className="text-right tabular-nums">{money(row.doc.transactionOpen)}</TableCell>
+                    <TableCell className="text-right">
+                      <Input
+                        inputMode="decimal"
+                        className={cn('h-8 text-right tabular-nums', row.invalid && 'border-red-400')}
+                        aria-label={t('settlement.applyAria', { document: docLabel(row.doc) })}
+                        aria-invalid={row.invalid}
+                        value={row.raw}
+                        onChange={(event) => updateDraft({ applied: { ...draft.applied, [row.doc.openLineId]: event.target.value } })}
+                      />
+                    </TableCell>
+                    <TableCell className="text-right tabular-nums">
+                      {row.remaining === null ? '—' : money(fromUnits(draft.writeOff ? 0n : row.remaining))}
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+            {summary.invalid ? <p role="alert" className="text-sm text-red-700 dark:text-red-300">{t('settlement.invalidAmount')}</p> : null}
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm tabular-nums sm:grid-cols-4">
+              <div><dt className="text-xs text-slate-500">{t('settlement.lineAmount')}</dt><dd>{money(candidates.amount)}</dd></div>
+              <div><dt className="text-xs text-slate-500">{t('settlement.appliedTotal')}</dt><dd>{money(fromUnits(summary.applied))}</dd></div>
+              <div><dt className="text-xs text-slate-500">{candidates.side === 'ar' ? t('settlement.onAccountCustomer') : t('settlement.onAccountVendor')}</dt><dd>{money(fromUnits(summary.onAccount))}</dd></div>
+              <div><dt className="text-xs text-slate-500">{t('settlement.writtenOff')}</dt><dd>{money(fromUnits(draft.writeOff ? summary.shortfall : 0n))}</dd></div>
+            </dl>
+            {summary.overApplied ? <p role="alert" className="text-sm text-red-700 dark:text-red-300">{t('settlement.overApplied', { amount: money(candidates.amount) })}</p> : null}
+            {!summary.overApplied && summary.onAccount > 0n ? (
+              <p className="text-sm text-slate-600 dark:text-slate-300">
+                {candidates.side === 'ar' ? t('settlement.onAccountCustomerNote', { amount: money(fromUnits(summary.onAccount)) }) : t('settlement.onAccountVendorNote', { amount: money(fromUnits(summary.onAccount)) })}
+              </p>
+            ) : null}
+            {summary.shortfall > 0n && candidates.canWriteOff ? (
+              <div className="space-y-2 rounded-md border border-slate-200 p-3 dark:border-slate-800">
+                <label className="flex items-center gap-2 text-sm font-medium">
+                  <input type="checkbox" className="accent-teal-700" checked={draft.writeOff} onChange={(event) => updateDraft({ writeOff: event.target.checked })} />
+                  {t('settlement.writeOffToggle', { amount: money(fromUnits(summary.shortfall)) })}
+                </label>
+                <p className="text-xs text-slate-500 dark:text-slate-400">{candidates.side === 'ar' ? t('settlement.writeOffCustomerHint') : t('settlement.writeOffVendorHint')}</p>
+                {draft.writeOff ? (
+                  <div className="space-y-2">
+                    {candidates.side === 'ap' ? (
+                      <div className="space-y-1">
+                        <Label>{t('settlement.writeOffAccount')}</Label>
+                        <SearchSelect
+                          options={discountAccounts.map((account) => ({ value: account.id, label: account.label }))}
+                          value={draft.discountAccountId}
+                          onChange={(value) => updateDraft({ discountAccountId: value ?? '' })}
+                          placeholder={t('settlement.writeOffAccountPlaceholder')}
+                        />
+                      </div>
+                    ) : null}
+                    <div className="space-y-1">
+                      <Label htmlFor="settle-write-off-reason">{t('settlement.writeOffReason')}</Label>
+                      <Textarea id="settle-write-off-reason" rows={2} maxLength={500} value={draft.writeOffReason} onChange={(event) => updateDraft({ writeOffReason: event.target.value })} />
+                    </div>
+                    {summary.conflict ? <p role="alert" className="text-sm text-red-700 dark:text-red-300">{t('settlement.writeOffConflict')}</p> : null}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+            {fx ? (
+              <div className="space-y-2 rounded-md border border-slate-200 p-3 dark:border-slate-800">
+                <p className="text-sm font-medium">{t('settlement.exchangeRateTitle', { from: candidates.currency, to: fx.functionalCurrency })}</p>
+                {fx.rate !== null ? (
+                  <p className="text-sm text-slate-600 dark:text-slate-300">{t('settlement.evidencedRate', { rate: fx.rate, date: fx.rateDate })}</p>
+                ) : (
+                  <p className="text-sm text-amber-700 dark:text-amber-300">{fx.unavailable ?? t('settlement.noEvidencedRate')}</p>
+                )}
+                {fx.manualRateAllowed ? (
+                  <label className="flex items-center gap-2 text-sm">
+                    <input type="checkbox" className="accent-teal-700" checked={draft.manualRate} onChange={(event) => updateDraft({ manualRate: event.target.checked })} />
+                    {t('settlement.manualRateToggle')}
+                  </label>
+                ) : fx.rate === null ? (
+                  <p className="text-xs text-slate-500 dark:text-slate-400">{t('settlement.manualRateUnavailable')}</p>
+                ) : null}
+                {draft.manualRate ? (
+                  <div className="grid gap-2 sm:grid-cols-3">
+                    <div className="space-y-1">
+                      <Label htmlFor="settle-rate">{t('settlement.rate', { from: candidates.currency, to: fx.functionalCurrency })}</Label>
+                      <Input id="settle-rate" inputMode="decimal" value={draft.rate} onChange={(event) => updateDraft({ rate: event.target.value })} />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="settle-rate-source">{t('settlement.rateSource')}</Label>
+                      <Input id="settle-rate-source" maxLength={120} value={draft.rateSource} onChange={(event) => updateDraft({ rateSource: event.target.value })} />
+                    </div>
+                    <div className="space-y-1 sm:col-span-3">
+                      <Label htmlFor="settle-rate-reason">{t('settlement.rateReason')}</Label>
+                      <Input id="settle-rate-reason" maxLength={500} value={draft.rateReason} onChange={(event) => updateDraft({ rateReason: event.target.value })} />
+                    </div>
+                    {!rateValid ? <p className="text-xs text-red-700 sm:col-span-3 dark:text-red-300">{t('settlement.rateInvalid')}</p> : null}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
         ) : null}
         {candidates ? <p className="text-xs text-slate-500 dark:text-slate-400">{t('recordHint')}</p> : null}
       </div>

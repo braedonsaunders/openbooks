@@ -1,4 +1,5 @@
 import 'server-only'
+import { randomUUID } from 'node:crypto'
 import { sql } from 'drizzle-orm'
 import { db, withOrgTransaction } from '@openbooks/engine/platform/db'
 import { fromUnits, toUnits } from '@openbooks/engine/money/money'
@@ -16,12 +17,25 @@ import { createPaymentDocument, subsidiaryFunctionalCurrency, updateDraftPayment
 import { postPaymentWithApplications } from '@openbooks/engine/payments/payment-posting'
 import { sameCurrencyAllocation } from '@openbooks/engine/payments/settlement-policy'
 import type { PaymentKind } from '@openbooks/engine/payments/payment-contracts'
+import {
+  resolvePaymentCurrencyBasis,
+  runInvoiceWriteOffFlows,
+  writeOffInvoiceInTransaction,
+  type InvoiceWriteOffOutcome,
+} from '@openbooks/engine/payments/documents'
+import {
+  planStatementSettlement,
+  StatementSettlementError,
+  type StatementSettlementPlan,
+} from '@openbooks/engine/payments/statement-settlement'
+import { PaymentError } from '@openbooks/engine/payments-core/payment-errors'
 import { submitAndReleaseIfUngated } from '@openbooks/engine/flows/module'
 import { runPostDocumentEffects } from '@openbooks/engine/ledger/posting-dispatch'
 import { lockLedgerSetupFence } from '@openbooks/engine/organization/ledger-setup'
 import { ScopeNotFoundError, subsidiaryScopeAllows } from '@openbooks/engine/organization/scope'
 import { can, resolveAuthzByUserId } from './authz'
 import { bankLegAmountInGlTerms } from './banking-rules'
+import { isFeatureEnabled } from './features'
 
 /**
  * Settling a bank line against the open invoices or bills it pays.
@@ -29,15 +43,28 @@ import { bankLegAmountInGlTerms } from './banking-rules'
  * An unmatched statement line whose amount equals the open balance of one
  * customer invoice (money in) or vendor bill (money out) — or of several
  * documents of one party on one control account — is proposed with the
- * reasons behind each proposal. "Record payment and match" then records the
- * native customer receipt or vendor bill payment through the same draft,
- * approval-routing and posting services the Receipts and Payments drawers
- * use, funded from the line's own account on the line's date, and matches
- * the payment's bank line to the statement line. Payment and match commit in
- * one transaction under the statement line's lock: a concurrent attempt
- * waits, then finds the line matched and creates nothing, and any refusal
- * (closed period, approval routing, changed balances, permission) rolls
- * back the payment with the match.
+ * reasons behind each proposal; so are, on document evidence, part payments
+ * of a larger balance and overpayments of a smaller one. "Record payment and
+ * match" then records the native customer receipt or vendor bill payment
+ * through the same draft, approval-routing and posting services the Receipts
+ * and Payments drawers use, funded from the line's own account on the line's
+ * date, and matches the payment's bank line to the statement line.
+ *
+ * The operator decides how the line settles: the cash applied to each
+ * document (oldest first by default), any cash left over (kept on account:
+ * a customer's unapplied credit or a vendor prepayment), and whether a
+ * short-paid remainder is written off — through the governed invoice
+ * write-off on the customer side, or as a payment discount to a chosen
+ * account on the vendor side. A line in a currency other than the legal
+ * entity's functional currency is measured at the organization's evidenced
+ * exchange rate, or at a rate the operator enters with its source and
+ * reason; realized exchange differences post through the native settlement.
+ *
+ * Payment, write-offs and match commit in one transaction under the
+ * statement line's lock: a concurrent attempt waits, then finds the line
+ * matched and creates nothing, and any refusal (closed period, approval
+ * routing, changed balances, permission, missing configuration) rolls back
+ * the payment with the match.
  */
 
 /** Open items considered for one line: earliest due first, at most this many. */
@@ -143,20 +170,61 @@ function permissionRefusal(side: SettlementSide): SettlementMatchRefusal {
     : new SettlementMatchRefusal('missing permission: ap.pay — recording a vendor bill payment needs ap.pay', 403, 'Ask a user with Pay bills access to record it, or match an existing payment from the ledger list.')
 }
 
+/** How a line in a foreign currency is measured in one legal entity's functional currency. */
+export interface SettlementExchangeRate {
+  functionalCurrency: string
+  /** The organization's evidenced rate on the line's date, or null when none is recorded. */
+  rate: string | null
+  rateDate: string
+  /** Why no evidenced rate is available, when `rate` is null. */
+  unavailable: string | null
+  /** Whether the operator may enter a rate (Multi-currency is on). */
+  manualRateAllowed: boolean
+}
+
 export interface OpenDocumentCandidates {
   side: SettlementSide
-  /** Positive amount the documents must total, in `currency`. */
+  /** Positive statement amount, in `currency`. */
   amount: string
   currency: string
   proposals: OpenDocumentProposal[]
   documents: (RankedOpenDocument & { documentKind: string | null; postingDate: string })[]
+  /** Exchange-rate basis per legal entity, for entities whose functional currency differs from the line's. */
+  exchangeRates: Record<string, SettlementExchangeRate>
+  /** Whether the viewer may write off a short-paid remainder (ar.post on receipts; ap.pay already covers a bill payment's discount). */
+  canWriteOff: boolean
+}
+
+async function exchangeRateBasis(orgId: string, subsidiaryId: string, currency: string, onDate: string): Promise<{ fxRate: string; evidence: unknown }> {
+  try {
+    return await resolvePaymentCurrencyBasis(orgId, subsidiaryId, currency, onDate)
+  } catch (error) {
+    if (error instanceof PaymentError) {
+      throw new SettlementMatchRefusal(error.message, 422, 'Record the dated rate in Setup → Exchange rates, or enter the rate this line was converted at with its source and reason.')
+    }
+    throw error
+  }
+}
+
+async function exchangeRateFor(orgId: string, subsidiaryId: string, currency: string, onDate: string): Promise<SettlementExchangeRate | null> {
+  const functionalCurrency = await subsidiaryFunctionalCurrency(db, orgId, subsidiaryId)
+  if (!functionalCurrency || functionalCurrency === currency) return null
+  const manualRateAllowed = await isFeatureEnabled(orgId, 'multiCurrency')
+  try {
+    const basis = await resolvePaymentCurrencyBasis(orgId, subsidiaryId, currency, onDate)
+    return { functionalCurrency, rate: basis.fxRate, rateDate: onDate, unavailable: null, manualRateAllowed }
+  } catch (error) {
+    if (!(error instanceof PaymentError)) throw error
+    return { functionalCurrency, rate: null, rateDate: onDate, unavailable: error.message, manualRateAllowed }
+  }
 }
 
 /**
  * Proposals for one unmatched line: open invoices (money in) or bills
  * (money out) in the line's currency, inside the bank account's legal entity
- * and the caller's scope, ranked with reasons. Disclosing open items needs
- * the matching payment permission, exactly as the open-items list does.
+ * and the caller's scope, ranked with reasons — exact settlements first, then
+ * evidenced part payments and overpayments. Disclosing open items needs the
+ * matching payment permission, exactly as the open-items list does.
  */
 export async function listOpenDocumentCandidates(
   orgId: string,
@@ -171,7 +239,7 @@ export async function listOpenDocumentCandidates(
     orgId,
     side: line.side,
     currency: line.currency,
-    maxTransactionAmount: line.magnitude,
+    targetTransactionAmount: line.magnitude,
     subsidiaryId: line.accountSubsidiaryId,
     allowedSubsidiaryIds: scope,
     limit: SETTLEMENT_CANDIDATE_LIMIT,
@@ -192,6 +260,11 @@ export async function listOpenDocumentCandidates(
       transactionOpen: item.transactionOpen,
     })),
   )
+  const exchangeRates: Record<string, SettlementExchangeRate> = {}
+  for (const subsidiaryId of new Set(ranked.documents.map((doc) => doc.subsidiaryId).filter((id): id is string => !!id))) {
+    const basis = await exchangeRateFor(orgId, subsidiaryId, line.currency, line.postedOn)
+    if (basis) exchangeRates[subsidiaryId] = basis
+  }
   return {
     side: line.side,
     amount: line.magnitude,
@@ -202,16 +275,28 @@ export async function listOpenDocumentCandidates(
       documentKind: byLine.get(doc.openLineId)?.documentKind ?? null,
       postingDate: byLine.get(doc.openLineId)?.postingDate ?? '',
     })),
+    exchangeRates,
+    canWriteOff: line.side === 'ar' ? can(viewer, 'ar.post') : true,
   }
 }
 
 export interface RecordPaymentMatchInput {
   statementLineId: string
   reconciliationId: string
-  /** Open journal lines of the invoices or bills to settle in full. */
+  /** Open journal lines of the invoices or bills the line settles. */
   openLineIds: string[]
   /** The open balance the operator saw for each line; a change refuses. */
   expectedOpen: Record<string, string>
+  /**
+   * Cash applied to each selected document. Absent settles every selected
+   * document in full, which the statement amount must then equal exactly.
+   * Cash beyond the applications stays on account for the party.
+   */
+  applied?: Record<string, string> | null
+  /** Write off each selected document's short-paid remainder, with the reason (and, on a bill payment, the discount account). */
+  writeOff?: { reason: string; discountAccountId?: string | null } | null
+  /** A rate the operator enters for a foreign-currency line, overriding the evidenced rate. */
+  exchangeRate?: { rate: string; source: string; reason: string } | null
 }
 
 export interface RecordPaymentMatchResult {
@@ -219,6 +304,12 @@ export interface RecordPaymentMatchResult {
   documentNumber: string
   kind: PaymentKind
   totals: ReconciliationTotals
+  /** Cash kept on account for the party (unapplied credit or vendor prepayment). */
+  onAccount: string
+  /** Short-paid balances written off, in total. */
+  writeOffTotal: string
+  /** Credit memos the customer-side write-offs were recorded as. */
+  writeOffDocuments: string[]
   /** Set when the committed payment's follow-up effects need a retry from the payment. */
   effectsError: string | null
 }
@@ -241,14 +332,26 @@ export async function recordPaymentAndMatch(
   if (openLineIds.length > MAX_SETTLED_DOCUMENTS) {
     throw new SettlementMatchRefusal(`Select at most ${MAX_SETTLED_DOCUMENTS} documents for one payment`, 422, 'Record the payment from Receipts or Payments to settle more documents at once.')
   }
+  const writeOffReason = input.writeOff ? input.writeOff.reason.trim() : null
+  if (input.writeOff && !writeOffReason) {
+    throw new SettlementMatchRefusal('A write-off needs a reason', 422, 'State why the short-paid balance is written off.')
+  }
   const preflight = await loadSettlementLine(orgId, input.statementLineId, input.reconciliationId, scope)
   const permission = paymentPermissionFor(preflight.side)
   // Re-resolved per request, never a cached grant: a revocation fails closed.
   const actor = await resolveAuthzByUserId(orgId, userId)
   if (actor === null || !can(actor, permission)) throw permissionRefusal(preflight.side)
+  // A customer-side write-off posts a credit memo, which needs ar.post as on
+  // the invoice write-off action; a bill payment's discount is part of the
+  // payment ap.pay already covers.
+  if (input.writeOff && preflight.side === 'ar' && !can(actor, 'ar.post')) {
+    throw new SettlementMatchRefusal('missing permission: ar.post — writing off a short-paid invoice balance posts a credit memo, which needs ar.post', 403, 'Ask a user who can post customer credits to record it, or record the receipt without the write-off.')
+  }
   const kind: PaymentKind = preflight.side === 'ar' ? 'customer_payment' : 'vendor_payment'
 
   let recorded: { id: string; documentNumber: string } | null = null
+  let plan: StatementSettlementPlan | null = null
+  const writeOffs: InvoiceWriteOffOutcome[] = []
   const totals = await withOrgTransaction(orgId, async () => {
     await db.execute(sql`select id from orgs where id = ${orgId} for no key update`)
     await lockLedgerSetupFence(db, orgId, 'shared')
@@ -264,27 +367,51 @@ export async function recordPaymentAndMatch(
           if (line.side !== preflight.side || toUnits(line.magnitude) !== toUnits(preflight.magnitude)) {
             throw new SettlementMatchRefusal('This statement line changed while the payment was being prepared', 409, 'Refresh Match Bank Data and review the proposals again.')
           }
-          const allocations = await settleableAllocations(orgId, line, openLineIds, input.expectedOpen, scope)
+          const settlement = await settleableAllocations(orgId, line, openLineIds, input, scope)
+          plan = settlement.plan
           const payment = await createPaymentDocument({
             orgId,
             kind,
             createdBy: userId,
             allowedSubsidiaryIds: scope,
-            partyId: allocations.partyId,
+            partyId: settlement.partyId,
             bankAccountId: line.accountId,
             documentDate: line.postedOn,
             memo: line.description,
-            subsidiaryId: allocations.subsidiaryId,
+            subsidiaryId: settlement.subsidiaryId,
             currency: line.currency,
+            ...(settlement.currencyBasis ? { currencyBasis: settlement.currencyBasis } : {}),
           })
           recorded = payment
-          await updateDraftPayment(
-            payment.id,
-            { allocations: allocations.allocations, referenceNumber: line.counterpartyRef },
-            userId,
-            orgId,
-            { allowedSubsidiaryIds: scope },
-          )
+          try {
+            await updateDraftPayment(
+              payment.id,
+              {
+                allocations: settlement.allocations,
+                referenceNumber: line.counterpartyRef,
+                onAccountAmount: settlement.plan.onAccount,
+                ...(settlement.discount ? { discountAmount: settlement.discount.amount, discountAccountId: settlement.discount.accountId } : {}),
+                ...(settlement.explicitFx ? { explicitFx: settlement.explicitFx } : {}),
+              },
+              userId,
+              orgId,
+              { allowedSubsidiaryIds: scope },
+            )
+          } catch (error) {
+            if (error instanceof PaymentError) throw new SettlementMatchRefusal(error.message, 422, 'Review the settlement amounts, account and exchange rate, then record it again.')
+            throw error
+          }
+          // The bank leg must move exactly the statement amount: a payment
+          // that withholds contractor tax pays less than it settles.
+          const saved = (await db.execute<{ total: string }>(sql`
+            select total::text as total from documents where org_id = ${orgId} and id = ${payment.id}`)).rows[0]
+          if (!saved || toUnits(saved.total) !== toUnits(line.magnitude)) {
+            throw new SettlementMatchRefusal(
+              `The payment would move ${saved ? fromUnits(toUnits(saved.total)) : 'nothing'} through the bank, not the statement line's ${line.magnitude}; nothing was recorded`,
+              422,
+              'Record the payment from Payments, where its withholding is shown, and match its bank line to this statement line.',
+            )
+          }
           const submission = await submitAndReleaseIfUngated(kind, payment.id, userId)
           if (submission.flowError) {
             throw new SettlementMatchRefusal(`The payment’s approval could not be routed: ${submission.flowError}`, 422, 'Fix the approval flow in Setup, or record the payment from Receipts or Payments.')
@@ -298,13 +425,31 @@ export async function recordPaymentAndMatch(
                 : 'Record the payment from Payments; once it is approved and posted, match its bank line to this statement line.',
             )
           }
-          const { entryId } = await postPaymentWithApplications(payment.id, allocations.allocations, userId, 'ui', { deferEffects: true })
+          const { entryId } = await postPaymentWithApplications(payment.id, settlement.allocations, userId, 'ui', { deferEffects: true })
           const bankLines = (await db.execute<{ id: string }>(sql`
             select id from journal_lines
              where org_id = ${orgId} and entry_id = ${entryId} and account_id = ${line.accountId}
           `)).rows
           if (bankLines.length !== 1) {
             throw new SettlementMatchRefusal('The recorded payment did not post exactly one line to this bank account, so it cannot be matched to the statement line; nothing was recorded', 422, 'Record the payment from Receipts or Payments and match it manually.')
+          }
+          // A customer's short-paid remainder is written off through the
+          // governed invoice write-off, after the receipt applied its cash.
+          for (const doc of settlement.writeOffDocuments) {
+            try {
+              writeOffs.push(await writeOffInvoiceInTransaction(orgId, userId, {
+                invoiceId: doc.documentId,
+                amount: doc.amount,
+                date: line.postedOn,
+                reason: writeOffReason!,
+                idempotencyKey: randomUUID(),
+              }, scope))
+            } catch (error) {
+              if (error instanceof PaymentError) {
+                throw new SettlementMatchRefusal(`${doc.label} cannot be written off: ${error.message}`, 422, 'Record the receipt without the write-off, or correct the cause and record it again.')
+              }
+              throw error
+            }
           }
           await db.execute(sql`
             insert into audit_log (org_id, table_name, row_id, action, changes, actor_id)
@@ -315,7 +460,20 @@ export async function recordPaymentAndMatch(
               paymentKind: kind,
               amount: line.magnitude,
               currency: line.currency,
-              openLineIds: allocations.allocations.map((allocation) => allocation.openLineId),
+              openLineIds: settlement.allocations.map((allocation) => allocation.openLineId),
+              applied: Object.fromEntries(settlement.plan.documents.map((doc) => [doc.openLineId, doc.applied])),
+              onAccount: settlement.plan.onAccount,
+              writeOff: input.writeOff
+                ? {
+                    total: settlement.plan.writeOffTotal,
+                    reason: writeOffReason,
+                    creditMemoIds: writeOffs.map((outcome) => outcome.result.creditMemoId),
+                    discountAccountId: settlement.discount?.accountId ?? null,
+                  }
+                : null,
+              exchangeRate: settlement.explicitFx
+                ? { rate: settlement.explicitFx.rate, source: settlement.explicitFx.source, reason: settlement.explicitFx.reason }
+                : settlement.currencyBasis ? { rate: settlement.currencyBasis.fxRate, source: 'exchange_rates' } : null,
               journalLineId: bankLines[0]!.id,
             })}::jsonb, ${userId})
           `)
@@ -326,7 +484,8 @@ export async function recordPaymentAndMatch(
     )
   })
   const payment = recorded as { id: string; documentNumber: string } | null
-  if (!payment) throw new Error('payment was not recorded')
+  const settled = plan as StatementSettlementPlan | null
+  if (!payment || !settled) throw new Error('payment was not recorded')
   // Effects run after commit, as on the Receipts and Payments drawers. The
   // payment and match are durable either way; a failure is reported so the
   // operator can retry the effects from the payment record.
@@ -336,20 +495,33 @@ export async function recordPaymentAndMatch(
   } catch (error) {
     effectsError = error instanceof Error ? error.message : String(error)
   }
-  return { paymentId: payment.id, documentNumber: payment.documentNumber, kind, totals, effectsError }
+  for (const outcome of writeOffs) await runInvoiceWriteOffFlows(orgId, userId, outcome)
+  return {
+    paymentId: payment.id,
+    documentNumber: payment.documentNumber,
+    kind,
+    totals,
+    onAccount: settled.onAccount,
+    writeOffTotal: settled.writeOffTotal,
+    writeOffDocuments: writeOffs.map((outcome) => outcome.result.creditMemoNumber),
+    effectsError,
+  }
 }
 
 /**
- * Validate the selection against live open items and build full-settlement
- * allocations: one party, one legal entity, one control account, the line's
- * currency, nothing reserved by a payment run, every open balance exactly
- * what the operator saw, and the total exactly the statement amount.
+ * Validate the selection against live open items and build the settlement:
+ * one party, one legal entity, one control account, the line's currency,
+ * nothing reserved by a payment run, every open balance exactly what the
+ * operator saw, and the operator's allocation (or, absent one, every
+ * document in full, equal to the statement amount exactly). A foreign
+ * currency line carries its exchange-rate evidence; a write-off names how
+ * each side records it.
  */
 async function settleableAllocations(
   orgId: string,
   line: SettlementLine,
   openLineIds: readonly string[],
-  expectedOpen: Record<string, string>,
+  input: RecordPaymentMatchInput,
   scope: ReadonlySet<string> | null,
 ) {
   const owners = (await db.execute<{ id: string; party_id: string | null; subsidiary_id: string | null }>(sql`
@@ -373,19 +545,32 @@ async function settleableAllocations(
     throw new SettlementMatchRefusal('These documents belong to a different legal entity than the bank account', 422, 'Settle them from a bank account of their own subsidiary, or record an intercompany transfer.')
   }
   const functionalCurrency = await subsidiaryFunctionalCurrency(db, orgId, subsidiaryId)
+  if (!functionalCurrency) {
+    throw new SettlementMatchRefusal('The legal entity of these documents has no functional currency', 422, 'Set the subsidiary’s base currency in Setup, then record the payment again.')
+  }
+  // A foreign line is measured at the operator's entered rate, else at the
+  // organization's evidenced rate on the line's date; with neither it refuses.
+  let explicitFx: { rate: string; source: string; reason: string; fromCurrency: string; toCurrency: string; rateDate: string } | null = null
+  let currencyBasis: { fxRate: string; evidence: unknown } | null = null
   if (functionalCurrency !== line.currency) {
-    throw new SettlementMatchRefusal(
-      `This ${line.currency} line settles in a legal entity whose functional currency is ${functionalCurrency ?? 'unavailable'}, which needs a settlement exchange rate`,
-      422,
-      line.side === 'ar'
-        ? 'Record the receipt from Receipts with its exchange rate, then match its bank line to this statement line.'
-        : 'Record the payment from Payments with its exchange rate, then match its bank line to this statement line.',
-    )
+    if (input.exchangeRate) {
+      explicitFx = {
+        rate: input.exchangeRate.rate,
+        source: input.exchangeRate.source,
+        reason: input.exchangeRate.reason,
+        fromCurrency: line.currency,
+        toCurrency: functionalCurrency,
+        rateDate: line.postedOn,
+      }
+    } else {
+      currencyBasis = await exchangeRateBasis(orgId, subsidiaryId, line.currency, line.postedOn)
+    }
+  } else if (input.exchangeRate) {
+    throw new SettlementMatchRefusal(`This ${line.currency} line is in the legal entity’s functional currency, so it takes no exchange rate`, 422, 'Remove the exchange rate and record the payment again.')
   }
   const live = new Map((await openItemsForParty(partyId, line.side, orgId, new Set([subsidiaryId]))).map((item) => [item.lineId, item]))
-  const allocations = []
   const accountIds = new Set<string>()
-  let total = 0n
+  const documents = []
   for (const openLineId of openLineIds) {
     const item = live.get(openLineId)
     if (!item) {
@@ -398,7 +583,7 @@ async function settleableAllocations(
     if (item.currency !== line.currency) {
       throw new SettlementMatchRefusal(`${label} is in ${item.currency}, but the statement line is in ${line.currency}`, 422, 'Select documents in the line’s currency.')
     }
-    const expected = expectedOpen[openLineId]
+    const expected = input.expectedOpen[openLineId]
     if (expected === undefined || toUnits(expected) !== toUnits(item.transactionOpen)) {
       throw new SettlementMatchRefusal(
         `${label}'s open balance is now ${fromUnits(toUnits(item.transactionOpen))}${expected === undefined ? '' : `, not ${fromUnits(toUnits(expected))}`}`,
@@ -407,20 +592,70 @@ async function settleableAllocations(
       )
     }
     accountIds.add(item.accountId)
-    total += toUnits(item.transactionOpen)
-    allocations.push(sameCurrencyAllocation(openLineId, fromUnits(toUnits(item.transactionOpen))))
+    documents.push({ item, label, open: fromUnits(toUnits(item.transactionOpen)) })
   }
   if (accountIds.size !== 1) {
     throw new SettlementMatchRefusal('One payment settles documents on a single receivable or payable account', 422, 'Select documents on one control account, or record separate payments.')
   }
-  if (total !== toUnits(line.magnitude)) {
-    throw new SettlementMatchRefusal(
-      `The selected documents total ${fromUnits(total)}; the statement line is ${line.magnitude}`,
-      422,
-      'Select documents whose open balances add up to the statement amount exactly, or record the payment from Receipts or Payments for a partial settlement.',
-    )
+  const fullSettlement = input.applied === undefined || input.applied === null
+  if (fullSettlement) {
+    const total = documents.reduce((sum, doc) => sum + toUnits(doc.open), 0n)
+    if (total !== toUnits(line.magnitude)) {
+      throw new SettlementMatchRefusal(
+        `The selected documents total ${fromUnits(total)}; the statement line is ${line.magnitude}`,
+        422,
+        'Select documents whose open balances add up to the statement amount, or review the settlement to pay part of a balance or keep the rest on account.',
+      )
+    }
   }
-  return { partyId, subsidiaryId, allocations }
+  let plan: StatementSettlementPlan
+  try {
+    plan = planStatementSettlement({
+      lineAmount: line.magnitude,
+      documents: documents.map((doc) => ({ openLineId: doc.item.lineId, open: doc.open, dueDate: doc.item.dueDate, postingDate: doc.item.postingDate, label: doc.label })),
+      applied: fullSettlement ? Object.fromEntries(documents.map((doc) => [doc.item.lineId, doc.open])) : input.applied!,
+      writeOff: !!input.writeOff,
+    })
+  } catch (error) {
+    if (error instanceof StatementSettlementError) throw new SettlementMatchRefusal(error.message, 422, error.remedy)
+    throw error
+  }
+  const byLine = new Map(documents.map((doc) => [doc.item.lineId, doc]))
+  // A bill payment records the written-off remainder as its discount: each
+  // bill is settled in full, the bank pays the cash, and the discount
+  // account takes the difference. A receipt applies only its cash; the
+  // invoice write-off clears the rest after posting.
+  let discount: { amount: string; accountId: string } | null = null
+  const writeOffDocuments: { documentId: string; amount: string; label: string }[] = []
+  if (input.writeOff && toUnits(plan.writeOffTotal) > 0n) {
+    if (line.side === 'ap') {
+      const accountId = input.writeOff.discountAccountId ?? null
+      if (!accountId) {
+        throw new SettlementMatchRefusal('Choose the account the short-paid difference is written off to', 422, 'Pick a discount or write-off account, then record the payment again.')
+      }
+      discount = { amount: plan.writeOffTotal, accountId }
+    } else {
+      for (const planned of plan.documents) {
+        if (toUnits(planned.writeOff) === 0n) continue
+        const doc = byLine.get(planned.openLineId)!
+        if (doc.item.documentKind !== 'customer_invoice' || !doc.item.documentId) {
+          throw new SettlementMatchRefusal(`${doc.label} is not a customer invoice, so its short-paid balance cannot be written off here`, 422, 'Apply the full amount to it, or leave its remainder open.')
+        }
+        // The invoice write-off states amounts to two decimal places; a
+        // remainder finer than that cannot be written off exactly.
+        const units = toUnits(planned.writeOff)
+        if (units % 100n !== 0n) {
+          throw new SettlementMatchRefusal(`${doc.label}'s remainder of ${planned.writeOff} has more than two decimal places, so it cannot be written off exactly`, 422, 'Apply an amount with at most two decimal places so the remainder can be written off.')
+        }
+        writeOffDocuments.push({ documentId: doc.item.documentId, amount: fromUnits(units).slice(0, -2), label: doc.label })
+      }
+    }
+  }
+  const allocations = plan.documents.map((planned) => sameCurrencyAllocation(
+    planned.openLineId,
+    discount ? fromUnits(toUnits(planned.applied) + toUnits(planned.writeOff)) : planned.applied,
+  ))
+  return { partyId, subsidiaryId, allocations, plan, discount, writeOffDocuments, explicitFx, currencyBasis }
 }
 
 // ---------------------------------------------------------------------------

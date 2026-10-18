@@ -5,7 +5,10 @@ export { receiptFundingAccountOptions, receiptFundingSubsidiaryOptions, loadProc
 export { resolvePaymentCurrencyBasis } from "./payment-currency.ts";
 export {
   InvoiceWriteOffConflictError,
+  runInvoiceWriteOffFlows,
   writeOffInvoice,
+  writeOffInvoiceInTransaction,
   type InvoiceWriteOffInput,
+  type InvoiceWriteOffOutcome,
   type InvoiceWriteOffResult,
 } from "./invoice-write-off.ts";

@@ -286,14 +286,15 @@ export async function postPaymentWithApplications(
         "this payment applies credits but moves no cash — apply the credit directly from the credit memo instead of through a payment",
       );
     }
-    // A customer receipt may post with no applications when it carries an
-    // on-account amount: the whole receipt then lands as an open AR credit.
-    // Anything else with no applications records nothing and is refused.
+    // A payment may post with no applications when it carries an on-account
+    // amount: the whole receipt then lands as an open AR credit, the whole
+    // vendor payment as an open AP prepayment. Anything else with no
+    // applications records nothing and is refused.
     if (allocs.length === 0 && toUnits(custom.onAccountAmount ?? "0") <= 0n) {
       throw new PaymentError(
         doc.kind === "customer_payment"
           ? "select at least one open item to apply, or enter the amount received so the receipt posts as an on-account credit"
-          : "select at least one open item to apply",
+          : "select at least one open item to apply, or enter the amount paid so the payment posts as a vendor prepayment",
       );
     }
     validateAllocationInputs(allocs);
@@ -363,16 +364,15 @@ export async function postPaymentWithApplications(
     const discountAmount = custom.discountAmount ?? "0";
     const feeAmount = (custom as { feeAmount?: string }).feeAmount ?? "0";
     // Fail closed on a stored on-account remainder the draft boundary never
-    // admitted: only a non-negative customer-receipt residual may widen the
-    // receipt beyond its applications.
+    // admitted: only a non-negative residual may widen the payment beyond
+    // its applications.
     const onAccountAmount = custom.onAccountAmount ?? "0";
     const onAccountUnits = toUnits(onAccountAmount);
     if (onAccountUnits < 0n) throw new PaymentError("on-account amount cannot be negative");
-    if (onAccountUnits > 0n && doc.kind !== "customer_payment") throw new PaymentError("on-account residuals only apply to customer receipts");
     // Applications settle the invoice portion: cash + early-payment discount
     // (vendor side) − acceptance surcharge fee (customer side) = applications
-    // + on-account remainder (a customer receipt may collect more than is
-    // still open; the excess stays on the receipt as an AR credit).
+    // + on-account remainder (a payment may move more than is still open;
+    // the excess stays on the payment as an AR credit or AP prepayment).
     // Contractor withholding is the vendor side's second settlement leg:
     // the payable is relieved by cash, discount and the tax deducted.
     const withholdingAmount = typeof (custom as { withholdingAmount?: unknown }).withholdingAmount === "string"

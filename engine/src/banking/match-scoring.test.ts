@@ -287,3 +287,46 @@ test("stored reasons parse defensively", () => {
     [{ code: "exact_amount" }, { code: "date_lag", days: 2 }],
   );
 });
+
+test("a referenced document larger than the line is proposed as a part payment after every exact settlement", () => {
+  const ranked = rankOpenDocuments(
+    { postedOn: "2026-10-10", amount: "100.00", description: "ACME SUPPLY INV1042" },
+    [
+      doc({ openLineId: "big", transactionOpen: "250.0000" }),
+      doc({ openLineId: "exact", partyId: "party-globex", partyName: "Globex", documentNumber: "G-7", transactionOpen: "100.0000", dueDate: null }),
+    ],
+  );
+  assert.deepEqual(ranked.proposals.map((p) => [p.openLineIds, p.settlement]), [[["exact"], "exact"], [["big"], "partial"]]);
+  const partial = ranked.proposals[1]!;
+  assert.deepEqual(partial.applied, { big: "100.0000" });
+  assert.equal(partial.onAccount, "0.0000");
+  assert.deepEqual(partial.reasons[0], { code: "partial_open_balance", remaining: "150.0000" });
+  assert.ok(partial.reasons.some((reason) => reason.code === "shared_reference"));
+});
+
+test("a larger balance with no document evidence is never proposed on amount alone", () => {
+  const ranked = rankOpenDocuments(
+    { postedOn: "2026-10-10", amount: "100.00", description: "WIRE 88812" },
+    [doc({ openLineId: "big", partyName: "Acme Supply", documentNumber: "INV-1042", transactionOpen: "250.0000" })],
+  );
+  assert.deepEqual(ranked.proposals, []);
+  assert.deepEqual(ranked.documents.map((entry) => entry.openLineId), ["big"], "it stays selectable under all documents");
+});
+
+test("a referenced document smaller than the line is proposed as an overpayment that keeps the rest on account", () => {
+  const ranked = rankOpenDocuments(
+    { postedOn: "2026-10-10", amount: "260.00", description: "INV1042" },
+    [doc({ openLineId: "inv", transactionOpen: "250.0000" })],
+  );
+  assert.equal(ranked.proposals.length, 1);
+  assert.equal(ranked.proposals[0]!.settlement, "overpayment");
+  assert.deepEqual(ranked.proposals[0]!.applied, { inv: "250.0000" });
+  assert.equal(ranked.proposals[0]!.onAccount, "10.0000");
+  assert.deepEqual(ranked.proposals[0]!.reasons[0], { code: "on_account_remainder", remainder: "10.0000" });
+  // Far more than the document it names is paying something else.
+  assert.deepEqual(rankOpenDocuments({ postedOn: "2026-10-10", amount: "600.00", description: "INV1042" }, [doc({ openLineId: "inv" })]).proposals, []);
+});
+
+test("stored part-payment and overpayment reasons parse", () => {
+  assert.deepEqual(parseStoredMatchReasons([{ code: "partial_open_balance", remaining: "1.0000" }, { code: "on_account_remainder", remainder: "2.0000" }]).map((reason) => reason.code), ["partial_open_balance", "on_account_remainder"]);
+});

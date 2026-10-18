@@ -207,7 +207,7 @@ async function selectOpenItemRows(
   tenantId: string,
   side: OpenItemSide,
   filter: ReturnType<typeof sql>,
-  opts: { paymentDocumentId?: string | null; limit?: number } = {},
+  opts: { paymentDocumentId?: string | null; limit?: number; priority?: ReturnType<typeof sql> } = {},
 ): Promise<OpenItemRow[]> {
   const bookId = await paymentBookId(tenantId);
   const signFilter = side === "ap" ? sql`jl.amount < 0` : sql`jl.amount > 0`;
@@ -248,7 +248,7 @@ async function selectOpenItemRows(
          limit 1
       ) reservation on true
      where ${orgFilter} jl.is_open_item and ${signFilter} and ${filter}
-     order by jl.due_date nulls last, je.posting_date, je.entry_number, jl.id
+     order by ${opts.priority ? sql`${opts.priority}, ` : sql``}jl.due_date nulls last, je.posting_date, je.entry_number, jl.id
      ${opts.limit !== undefined ? sql`limit ${opts.limit}` : sql``}
   `)).rows;
 }
@@ -308,18 +308,20 @@ export interface SettlementOpenItem extends OpenItem {
 }
 
 /**
- * Open items of any party that a single receipt or payment of `maxAmount`
- * could settle, for matching a bank line to the documents it pays: same
+ * Open items of any party that a receipt or payment of `targetTransactionAmount`
+ * may settle, for matching a bank line to the documents it pays: same
  * transaction currency, inside the caller's scope and (when given) one legal
- * entity, with a remaining transaction balance above zero and at most the
- * amount. Items reserved by a payment run are excluded — that run pays them.
- * Bounded by `limit`, earliest due first.
+ * entity, with a remaining transaction balance above zero. Items reserved by
+ * a payment run are excluded — that run pays them. Bounded by `limit`: items
+ * whose balance equals the amount first, then those at or below it (which
+ * combine into an exact or overpaying settlement), then larger balances the
+ * line can pay in part; earliest due first within each.
  */
 export async function openItemsForSettlement(opts: {
   orgId: string;
   side: OpenItemSide;
   currency: string;
-  maxTransactionAmount: string;
+  targetTransactionAmount: string;
   subsidiaryId: string | null;
   allowedSubsidiaryIds: ReadonlySet<string> | null;
   limit: number;
@@ -329,11 +331,16 @@ export async function openItemsForSettlement(opts: {
     opts.side,
     sql`jl.party_id is not null and jl.currency = ${opts.currency}
       and abs(jl.txn_amount) - coalesce(ap.transaction_applied, 0) > 0
-      and abs(jl.txn_amount) - coalesce(ap.transaction_applied, 0) <= ${opts.maxTransactionAmount}::numeric
       and reservation.run_id is null
       ${opts.subsidiaryId ? sql`and jl.subsidiary_id = ${opts.subsidiaryId}` : sql``}
       ${paymentSubsidiaryScope(sql`jl.subsidiary_id`, opts.allowedSubsidiaryIds)}`,
-    { limit: opts.limit },
+    {
+      limit: opts.limit,
+      priority: sql`case
+        when abs(jl.txn_amount) - coalesce(ap.transaction_applied, 0) = ${opts.targetTransactionAmount}::numeric then 0
+        when abs(jl.txn_amount) - coalesce(ap.transaction_applied, 0) < ${opts.targetTransactionAmount}::numeric then 1
+        else 2 end`,
+    },
   );
   return rows
     .map((row) => ({ ...openItemFromRow(row), partyId: row.party_id, partyName: row.party_name, subsidiaryId: row.subsidiary_id }))

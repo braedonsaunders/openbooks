@@ -86,6 +86,12 @@ export async function createPaymentDocument(opts: {
   subsidiaryId?: string | null;
   currency?: string;
   fxRate?: string;
+  /**
+   * The organization's evidenced exchange rate for a foreign payment
+   * currency (resolvePaymentCurrencyBasis): the draft carries the rate and
+   * its evidence, and every later save re-resolves it for the saved date.
+   */
+  currencyBasis?: { fxRate: string; evidence: unknown };
 }): Promise<{ id: string; documentNumber: string }> {
   const [org] = await db.select().from(schema.orgs).where(eq(schema.orgs.id, opts.orgId));
   if (!org) throw new PaymentError("org not found");
@@ -99,7 +105,9 @@ export async function createPaymentDocument(opts: {
   if (!resolved.ok) throw new PaymentError(resolved.error);
   const subsidiaryId = resolved.subsidiaryId;
   const documentNumber = await nextNumber(opts.orgId, opts.kind, NUMBER_PREFIX[opts.kind]);
-  const fxRate = persistPaymentFxRate(opts.fxRate ?? "1");
+  const fxRate = persistPaymentFxRate(opts.currencyBasis?.fxRate ?? opts.fxRate ?? "1");
+  const baseCustom: Record<string, unknown> = opts.bankAccountId ? { bankAccountId: opts.bankAccountId, allocations: [] } : { allocations: [] };
+  if (opts.currencyBasis) baseCustom.paymentCurrencyEvidence = opts.currencyBasis.evidence;
   const [doc] = await db
     .insert(schema.documents)
     .values({
@@ -115,7 +123,7 @@ export async function createPaymentDocument(opts: {
       subtotal: "0",
       taxTotal: "0",
       total: "0",
-      custom: opts.bankAccountId ? { bankAccountId: opts.bankAccountId, allocations: [] } : { allocations: [] },
+      custom: baseCustom,
       createdBy: opts.createdBy,
     })
     .returning({ id: schema.documents.id, documentNumber: schema.documents.documentNumber });
@@ -286,14 +294,14 @@ export async function updateDraftPayment(
     if (feeUnits < 0n) throw new PaymentError("fee amount cannot be negative");
     if (feeUnits > 0n && doc.kind !== "customer_payment") throw new PaymentError("fees only apply to customer receipts");
     if (feeUnits > 0n && !feeIncomeAccountId) throw new PaymentError("a fee income account is required for a surcharge");
-    // Collected cash above the applications stays on the receipt as an
-    // on-account AR credit instead of being dropped: the bank line carries
-    // the full collected amount while the applications settle only what is
-    // still open. Vendor overpayments have no such representation and are
-    // refused here, like surcharges on the vendor side.
+    // Cash above the applications stays on the payment as an on-account
+    // balance instead of being dropped: the bank line carries the full
+    // amount while the applications settle only what is still open. On a
+    // receipt it is an unapplied AR credit of the customer; on a vendor
+    // payment it is an unapplied AP debit — a prepayment of the vendor —
+    // that later bills consume like any other open AP debit.
     const onAccountUnits = persistPaymentMoney(onAccountAmount, "on-account amount");
     if (onAccountUnits < 0n) throw new PaymentError("on-account amount cannot be negative");
-    if (onAccountUnits > 0n && doc.kind !== "customer_payment") throw new PaymentError("on-account residuals only apply to customer receipts");
 
     // Stored-value tenders split the receipt total between bank and the
     // liability: codes resolve to accounts here for early, named refusals,

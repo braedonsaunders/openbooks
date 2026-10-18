@@ -706,6 +706,7 @@ export function MatchWorkspace({
           line={settleLine}
           reconciliationId={session.id}
           currency={session.currency}
+          discountAccounts={offsetAccounts}
           onClose={() => setSettleLine(null)}
           onRecorded={() => { setSettleLine(null); router.refresh() }}
         />

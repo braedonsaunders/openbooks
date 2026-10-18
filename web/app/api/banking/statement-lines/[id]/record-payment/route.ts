@@ -15,14 +15,30 @@ const recordPaymentBody = z.object({
   openLineIds: z.array(uuidId).min(1).max(20),
   /** The open balance shown for each selected line; a change since refuses. */
   expectedOpen: z.record(z.string(), exactMoney()),
-})
+  /** Cash applied to each selected line; absent settles every line in full. */
+  applied: z.record(z.string(), exactMoney()).nullable().optional(),
+  /** Write off each selected document's short-paid remainder. */
+  writeOff: z.object({
+    reason: z.string().trim().min(1, 'a reason is required: state why the short-paid balance is written off').max(500),
+    discountAccountId: uuidId.nullable().optional(),
+  }).strict().nullable().optional(),
+  /** The rate a foreign-currency line was converted at, with its source and reason. */
+  exchangeRate: z.object({
+    rate: z.string().trim().min(1).max(40),
+    source: z.string().trim().min(1).max(120),
+    reason: z.string().trim().min(1).max(500),
+  }).strict().nullable().optional(),
+}).strict()
 
 /**
  * "Record payment and match": records the customer receipt or vendor bill
- * payment an unmatched bank line represents, settling the selected open
- * documents in full through the native payment services, and matches its
- * bank line to the statement line in the same transaction. Posting the
- * payment additionally requires ar.pay or ap.pay for the line's direction.
+ * payment an unmatched bank line represents through the native payment
+ * services — settling the selected open documents in full or in part,
+ * keeping any excess on account, optionally writing off a short-paid
+ * remainder, and measuring a foreign-currency line at its evidenced rate —
+ * and matches its bank line to the statement line in the same transaction.
+ * Posting the payment additionally requires ar.pay or ap.pay for the line's
+ * direction; a customer-side write-off also requires ar.post.
  */
 export const POST = defineRoute({
   permission: 'banking.reconcile',
@@ -40,6 +56,9 @@ export const POST = defineRoute({
           reconciliationId: body.reconciliationId,
           openLineIds: body.openLineIds,
           expectedOpen: body.expectedOpen,
+          applied: body.applied ?? null,
+          writeOff: body.writeOff ?? null,
+          exchangeRate: body.exchangeRate ?? null,
         },
         authz.allowedSubsidiaryIds,
       )

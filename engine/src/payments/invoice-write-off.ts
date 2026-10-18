@@ -184,12 +184,35 @@ export async function writeOffInvoice(
   input: InvoiceWriteOffInput,
   allowedSubsidiaryIds: ReadonlySet<string> | null,
 ): Promise<InvoiceWriteOffResult> {
+  const outcome = await withOrgTransaction(orgId, () => writeOffInvoiceInTransaction(orgId, userId, input, allowedSubsidiaryIds));
+  await runInvoiceWriteOffFlows(orgId, userId, outcome);
+  return outcome.result;
+}
+
+/** A write-off recorded inside the caller's transaction, with what its record flows need after commit. */
+export interface InvoiceWriteOffOutcome {
+  created: Awaited<ReturnType<typeof createDocument>>;
+  result: InvoiceWriteOffResult;
+}
+
+/**
+ * The write-off itself, inside the caller's open organization transaction, so
+ * a caller that settles the same invoice with cash (bank matching) commits
+ * the receipt and the write-off of its short-paid remainder as one unit. The
+ * caller runs `runInvoiceWriteOffFlows` once that transaction commits.
+ */
+export async function writeOffInvoiceInTransaction(
+  orgId: string,
+  userId: string,
+  input: InvoiceWriteOffInput,
+  allowedSubsidiaryIds: ReadonlySet<string> | null,
+): Promise<InvoiceWriteOffOutcome> {
   if (!isUuid(input.idempotencyKey)) {
     throw new PaymentError("an Idempotency-Key with a UUID is required, so a retried write-off cannot post twice");
   }
   const reason = normalizeInvoiceWriteOffReason(input.reason);
   const amount = normalizeInvoiceWriteOffAmount(input.amount);
-  const outcome = await withOrgTransaction(orgId, async () => {
+  return withOrgTransaction(orgId, async () => {
     // The key lock createDocument takes for the same key. Taking it first makes
     // a concurrent retry wait for this write-off to commit, then observe the
     // posted credit and replay, instead of reading a stale open balance.
@@ -358,14 +381,16 @@ export async function writeOffInvoice(
       } satisfies InvoiceWriteOffResult,
     };
   });
+}
 
-  // Record flows fire only after the write-off commits (the createDocument
-  // contract), and only for a write-off this request created.
-  if (outcome.created.status === "created") {
-    await runRecordFlows({ kind: "on_create", source: "ui" }, "customer_credit", outcome.created.id, { orgId, userId });
-    if (outcome.created.deferredUpdate) {
-      await runRecordFlows(outcome.created.deferredUpdate, "customer_credit", outcome.created.id, { orgId, userId });
-    }
+/**
+ * Record flows fire only after the write-off commits (the createDocument
+ * contract), and only for a write-off this request created.
+ */
+export async function runInvoiceWriteOffFlows(orgId: string, userId: string, outcome: InvoiceWriteOffOutcome): Promise<void> {
+  if (outcome.created.status !== "created") return;
+  await runRecordFlows({ kind: "on_create", source: "ui" }, "customer_credit", outcome.created.id, { orgId, userId });
+  if (outcome.created.deferredUpdate) {
+    await runRecordFlows(outcome.created.deferredUpdate, "customer_credit", outcome.created.id, { orgId, userId });
   }
-  return outcome.result;
 }

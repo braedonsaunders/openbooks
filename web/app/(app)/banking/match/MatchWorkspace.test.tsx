@@ -515,18 +515,41 @@ const candidatesBody = {
     partyId: 'party-1',
     partyName: 'T05 Supplies',
     total: '25.0000',
+    settlement: 'exact',
+    applied: { 'ol-1': '25.0000' },
+    onAccount: '0.0000',
     reasons: [{ code: 'exact_open_balance' }, { code: 'shared_reference', reference: 'BILL-7' }],
   }],
   documents: [{
-    openLineId: 'ol-1', partyId: 'party-1', partyName: 'T05 Supplies', documentNumber: 'BILL-7', entryNumber: 'JE-7',
-    documentKind: 'vendor_bill', dueDate: '2026-06-10', transactionOpen: '25.0000', reasons: [{ code: 'exact_open_balance' }],
+    openLineId: 'ol-1', partyId: 'party-1', partyName: 'T05 Supplies', subsidiaryId: 'sub-1', documentNumber: 'BILL-7', entryNumber: 'JE-7',
+    documentKind: 'vendor_bill', dueDate: '2026-06-10', postingDate: '2026-06-01', transactionOpen: '25.0000', reasons: [{ code: 'exact_open_balance' }],
+  }],
+  exchangeRates: {},
+  canWriteOff: true,
+}
+
+const partialCandidatesBody = {
+  ...candidatesBody,
+  proposals: [{
+    openLineIds: ['ol-2'],
+    partyId: 'party-1',
+    partyName: 'T05 Supplies',
+    total: '25.0000',
+    settlement: 'partial',
+    applied: { 'ol-2': '25.0000' },
+    onAccount: '0.0000',
+    reasons: [{ code: 'partial_open_balance', remaining: '15.0000' }, { code: 'shared_reference', reference: 'BILL-8' }],
+  }],
+  documents: [{
+    openLineId: 'ol-2', partyId: 'party-1', partyName: 'T05 Supplies', subsidiaryId: 'sub-1', documentNumber: 'BILL-8', entryNumber: 'JE-8',
+    documentKind: 'vendor_bill', dueDate: '2026-06-10', postingDate: '2026-06-01', transactionOpen: '40.0000', reasons: [],
   }],
 }
 
-async function openSettleDrawer(t: TestContext, recordPayment: (url: string, body?: string) => Response): Promise<HTMLElement> {
+async function openSettleDrawer(t: TestContext, recordPayment: (url: string, body?: string) => Response, body: unknown = candidatesBody): Promise<HTMLElement> {
   await mountWorkspace(t, scriptedFetch({
     '/rules/preview': () => Response.json({ matches: [] }),
-    '/open-documents': () => Response.json(candidatesBody),
+    '/open-documents': () => Response.json(body),
     '/record-payment': recordPayment,
   }), { ...data, canRecordPayments: true })
   const open = [...document.querySelectorAll('button[title]')].find((b) => b.getAttribute('title') === 'Open invoices or bills')
@@ -539,7 +562,7 @@ async function openSettleDrawer(t: TestContext, recordPayment: (url: string, bod
   const dialog = dialogs[dialogs.length - 1] as HTMLElement
   assert.ok(dialog, 'the drawer opens')
   assert.ok((dialog.textContent ?? '').includes('Open vendor bills'), 'money out proposes vendor bills')
-  assert.ok((dialog.textContent ?? '').includes('Reference BILL-7'), 'the proposal shows its reasons')
+  assert.ok(/Reference BILL-\d/.test(dialog.textContent ?? ''), 'the proposal shows its reasons')
   return dialog
 }
 
@@ -573,4 +596,39 @@ test('a refused record payment keeps the reason and remedy inline in the drawer'
   assert.ok(alert, 'the refusal persists inline')
   assert.ok((alert.textContent ?? '').includes('is closed'), JSON.stringify(alert.textContent))
   assert.ok(script.toasts.some((toast) => toast.kind === 'error'), 'the refusal also toasts')
+})
+
+test('a part payment opens the settlement review, and the reviewed amounts are what is recorded', async (t) => {
+  let posted: Record<string, unknown> | null = null
+  const dialog = await openSettleDrawer(t, (_url, body) => {
+    posted = JSON.parse(body ?? 'null')
+    return Response.json({ ok: true, documentNumber: 'PAY-0043', onAccount: '5.0000', writeOffTotal: '0.0000', effectsError: null })
+  }, partialCandidatesBody)
+  assert.ok((dialog.textContent ?? '').includes('15.00 stays open'), 'the part payment states what stays open')
+  const review = [...dialog.querySelectorAll('button')].find((b) => (b.textContent ?? '').trim() === 'Review settlement')
+  assert.ok(review, 'a part payment is reviewed before it is recorded')
+  await act(async () => {
+    review.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
+    for (let i = 0; i < 4; i++) await tick()
+  })
+  const amount = dialog.querySelector('input[aria-label="Amount applied to BILL-8"]') as HTMLInputElement | null
+  assert.ok(amount, 'each document takes an editable amount')
+  assert.equal(amount.value, '25.0000')
+  await act(async () => {
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!
+    setter.call(amount, '20.00')
+    amount.dispatchEvent(new window.Event('input', { bubbles: true }))
+    for (let i = 0; i < 2; i++) await tick()
+  })
+  assert.ok((dialog.textContent ?? '').includes('stays with the vendor as a prepayment'), 'cash the bill does not take stays on account')
+  await clickRecord(dialog)
+  assert.deepEqual(posted, {
+    reconciliationId: 'rec-1',
+    openLineIds: ['ol-2'],
+    expectedOpen: { 'ol-2': '40.0000' },
+    applied: { 'ol-2': '20.00' },
+    writeOff: null,
+    exchangeRate: null,
+  })
+  assert.ok(script.toasts.some((toast) => toast.message.includes('vendor prepayment')), JSON.stringify(script.toasts))
 })

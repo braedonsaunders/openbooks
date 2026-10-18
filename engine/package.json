@@ -659,6 +659,7 @@
     "./payments/run-posting": "./src/payments/run-posting.ts",
     "./payments/run-readiness": "./src/payments/run-readiness.ts",
     "./payments/settlement-policy": "./src/payments/settlement-policy.ts",
+    "./payments/statement-settlement": "./src/payments/statement-settlement.ts",
     "./payroll/anomaly-finalize-gate": "./src/payroll/anomaly-finalize-gate.ts",
     "./payroll/approval": "./src/payroll/approval.ts",
     "./payroll/bank-file-artifact": "./src/payroll/bank-file-artifact.ts",

@@ -30,6 +30,10 @@ export type MatchReason =
   | { code: "exact_open_balance" }
   /** Several open documents of one party sum exactly to the statement amount. */
   | { code: "combined_open_balance"; count: number }
+  /** The line pays part of one document's open balance; `remaining` stays open on it. */
+  | { code: "partial_open_balance"; remaining: string }
+  /** The line exceeds the documents it settles in full; `remainder` stays on account for the party. */
+  | { code: "on_account_remainder"; remainder: string }
   /** Statement date minus the document due date; positive means paid after the due date. */
   | { code: "due_date"; days: number }
   /** A confirmed match with the same payee words used this offset account. */
@@ -45,6 +49,8 @@ export const MATCH_REASON_CODES: readonly MatchReasonCode[] = [
   "prior_party",
   "exact_open_balance",
   "combined_open_balance",
+  "partial_open_balance",
+  "on_account_remainder",
   "due_date",
   "history_payee",
 ];
@@ -80,6 +86,9 @@ const LEDGER_POINTS = {
 const DOCUMENT_POINTS = {
   exactOpenBalance: 60,
   combinedOpenBalance: 45,
+  /** A part payment or overpayment is proposed only on document evidence, never on amount alone. */
+  partialOpenBalance: 10,
+  onAccountRemainder: 10,
   reference: 25,
   counterpartyFirst: 10,
   counterpartyEach: 5,
@@ -354,11 +363,24 @@ export interface RankedOpenDocument extends OpenDocumentFacts {
   reasons: MatchReason[];
 }
 
+/**
+ * How a proposal settles the line: exactly; in part (the line is smaller
+ * than the document, which stays open for the rest); or with an overpayment
+ * (every document is paid in full and the rest stays on account).
+ */
+export type ProposalSettlement = "exact" | "partial" | "overpayment";
+
 export interface OpenDocumentProposal {
   openLineIds: string[];
   partyId: string;
   partyName: string | null;
+  /** The statement amount the proposal settles. */
   total: string;
+  settlement: ProposalSettlement;
+  /** Cash applied to each document, by open line id. */
+  applied: Record<string, string>;
+  /** Cash left on account for the party. */
+  onAccount: string;
   score: number;
   reasons: MatchReason[];
 }
@@ -416,10 +438,11 @@ function exactSubsets(items: readonly RankedOpenDocument[], target: bigint, maxS
 /**
  * Rank open documents against one statement line. `documents` lists every
  * open item the caller may settle with the line (same currency, side, scope,
- * not reserved by a payment run), each scored on its own; `proposals` are the
- * settlements that clear the line exactly — one document whose open balance
- * equals the amount, or several documents of one party on one control
- * account summing to it.
+ * not reserved by a payment run), each scored on its own; `proposals` are
+ * the settlements offered: first those that clear the line exactly — one
+ * document whose open balance equals the amount, or several documents of one
+ * party on one control account summing to it — then, on document evidence,
+ * part payments of a larger balance and overpayments of a smaller one.
  */
 export function rankOpenDocuments(
   line: SettlementLineFacts,
@@ -465,9 +488,61 @@ export function rankOpenDocuments(
       partyId: doc.partyId,
       partyName: doc.partyName,
       total: fromUnits(target),
+      settlement: "exact" as const,
+      applied: { [doc.openLineId]: fromUnits(target) },
+      onAccount: fromUnits(0n),
       score: doc.score,
       reasons: doc.reasons,
     }));
+
+  // Part payments and overpayments are proposed only where the document
+  // itself points at the line — a shared reference, or (for a part payment)
+  // the payee's words — so a larger or smaller balance is never offered on
+  // amount alone. An overpayment is proposed only up to twice the balance:
+  // a line far larger than the document it names is paying something else.
+  for (const doc of documents) {
+    const open = toUnits(doc.transactionOpen);
+    const { reference, shared, due } = evidence.get(doc.openLineId)!;
+    const evidenceReasons: MatchReason[] = [];
+    let evidencePoints = 0;
+    if (reference) {
+      evidencePoints += DOCUMENT_POINTS.reference;
+      evidenceReasons.push({ code: "shared_reference", reference });
+    }
+    if (shared.length > 0) {
+      evidencePoints += counterpartyPoints(shared.length, DOCUMENT_POINTS);
+      evidenceReasons.push({ code: "shared_counterparty", tokens: shared });
+    }
+    if (due.reason) {
+      evidencePoints += due.points;
+      evidenceReasons.push(due.reason);
+    }
+    if (open > target && (reference || shared.length > 0)) {
+      proposals.push({
+        openLineIds: [doc.openLineId],
+        partyId: doc.partyId,
+        partyName: doc.partyName,
+        total: fromUnits(target),
+        settlement: "partial",
+        applied: { [doc.openLineId]: fromUnits(target) },
+        onAccount: fromUnits(0n),
+        score: DOCUMENT_POINTS.partialOpenBalance + evidencePoints,
+        reasons: [{ code: "partial_open_balance", remaining: fromUnits(open - target) }, ...evidenceReasons],
+      });
+    } else if (open < target && reference && target - open <= open) {
+      proposals.push({
+        openLineIds: [doc.openLineId],
+        partyId: doc.partyId,
+        partyName: doc.partyName,
+        total: fromUnits(target),
+        settlement: "overpayment",
+        applied: { [doc.openLineId]: fromUnits(open) },
+        onAccount: fromUnits(target - open),
+        score: DOCUMENT_POINTS.onAccountRemainder + evidencePoints,
+        reasons: [{ code: "on_account_remainder", remainder: fromUnits(target - open) }, ...evidenceReasons],
+      });
+    }
+  }
 
   const groups = new Map<string, RankedOpenDocument[]>();
   for (const doc of documents) {
@@ -506,6 +581,9 @@ export function rankOpenDocuments(
         partyId: ordered[0]!.partyId,
         partyName: ordered[0]!.partyName,
         total: fromUnits(target),
+        settlement: "exact",
+        applied: Object.fromEntries(ordered.map((doc) => [doc.openLineId, fromUnits(toUnits(doc.transactionOpen))])),
+        onAccount: fromUnits(0n),
         score,
         reasons,
       });
@@ -515,7 +593,10 @@ export function rankOpenDocuments(
   const firstDue = (proposal: OpenDocumentProposal) => proposal.openLineIds
     .map((id) => documents.find((doc) => doc.openLineId === id)?.dueDate ?? "9999-12-31")
     .sort()[0]!;
-  proposals.sort((a, b) => b.score - a.score
+  // An exact settlement always ranks above a part payment or overpayment.
+  const exactFirst = (proposal: OpenDocumentProposal) => (proposal.settlement === "exact" ? 0 : 1);
+  proposals.sort((a, b) => exactFirst(a) - exactFirst(b)
+    || b.score - a.score
     || a.openLineIds.length - b.openLineIds.length
     || firstDue(a).localeCompare(firstDue(b))
     || a.openLineIds.join(",").localeCompare(b.openLineIds.join(",")));
