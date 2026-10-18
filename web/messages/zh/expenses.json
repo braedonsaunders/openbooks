@@ -150,7 +150,8 @@
       "currency": "币种",
       "taxCode": "税码",
       "account": "费用科目",
-      "description": "摘要"
+      "description": "摘要",
+      "taxIn": "税额（{currency}）"
     },
     "noTaxCode": "无税码",
     "readAs": "收据读取值:{value}",
@@ -184,16 +185,49 @@
       "nonPositiveTotal": "合计 {value} 不是正数金额。",
       "amountOutOfRange": "{field}过大,无法记录。",
       "currencyUnread": "收据未注明币种,请确认金额以 {currency} 计。",
-      "currencyMismatch": "此收据以 {actual} 计,但报销单以 {currency} 计。请将其记录在该币种的报销单上,或按 {currency} 实际扣款金额手动添加明细。",
       "currencyConflict": "收据金额显示不同币种({actual}),请确认实际扣款币种。",
       "invalidCurrency": "“{actual}”不是有效的币种代码。",
       "duplicateFile": "此收据文件已在 {report} 上扫描过。除非是另一笔费用,否则请丢弃。",
-      "duplicateReceipt": "{report} 上已有商户、日期和合计相同的收据。除非是另一笔费用,否则请丢弃。"
+      "duplicateReceipt": "{report} 上已有商户、日期和合计相同的收据。除非是另一笔费用,否则请丢弃。",
+      "foreignCurrency": "此收据为 {actual}。该行按日期汇率或您账单上收取的 {currency} 金额换算为 {currency}。",
+      "duplicateElsewhere": "另一位员工的费用报告中已有类似收据。除非这是另一笔费用，否则请将其丢弃。"
     },
     "toasts": {
       "added": "已从收据添加明细。请检查后保存报销单。",
       "discarded": "收据已丢弃。",
       "actionFailed": "收据操作失败。"
-    }
+    },
+    "foreignTitle": "以 {currency} 支付，换算为 {reportCurrency}"
+  },
+  "currency": {
+    "column": "币种",
+    "edit": "编辑",
+    "change": "其他币种",
+    "panelTitle": "第 {line} 行的币种",
+    "remove": "使用 {currency}",
+    "done": "完成",
+    "amountIn": "金额（{currency}）",
+    "taxIn": "收据上的税额（{currency}）",
+    "taxHint": "留空则按税码以 {currency} 计算税额。",
+    "domestic": "此行为报告币种 {currency}。",
+    "start": "以其他币种录入",
+    "currency": "支付币种",
+    "expenseDate": "费用日期",
+    "method": "换算依据",
+    "methods": {
+      "rate_table": "日期汇率",
+      "billed_amount": "以 {currency} 收取的金额",
+      "override": "指定汇率"
+    },
+    "billedAmount": "收取金额（{currency}）",
+    "billedHint": "您的信用卡或银行对账单上的金额，汇率由其推算。",
+    "rate": "汇率（1 {from} 折合 {to}）",
+    "reason": "汇率理由",
+    "reasonPlaceholder": "例如：银行对该笔消费的换汇通知",
+    "converted": "按 1 {from} = {rate} {to} 换算为 {amount}。",
+    "convertedWithTax": "按 1 {from} = {rate} {to} 换算为 {amount}，另加税额 {tax}。",
+    "conversionPending": "请输入金额及换算方式以查看换算后的金额。",
+    "rateSource": "{date} 的汇率（{rateType}）。",
+    "quoteFailed": "无法加载汇率。请重试。"
   }
 }

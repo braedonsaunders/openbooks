@@ -150,7 +150,8 @@
       "currency": "Devise",
       "taxCode": "Code de taxe",
       "account": "Compte de charge",
-      "description": "Libellé"
+      "description": "Libellé",
+      "taxIn": "Taxe ({currency})"
     },
     "noTaxCode": "Aucun code de taxe",
     "readAs": "Le reçu indique {value}",
@@ -184,16 +185,49 @@
       "nonPositiveTotal": "Le total {value} n'est pas un montant positif.",
       "amountOutOfRange": "{field} est trop élevé pour être enregistré.",
       "currencyUnread": "Le reçu n'indique pas de devise. Confirmez que le montant est en {currency}.",
-      "currencyMismatch": "Ce reçu est en {actual} mais la note est en {currency}. Enregistrez-le sur une note dans cette devise, ou ajoutez la ligne manuellement avec le montant débité en {currency}.",
       "currencyConflict": "Les montants du reçu affichent des devises différentes ({actual}). Confirmez la devise débitée.",
       "invalidCurrency": "« {actual} » n'est pas un code de devise valide.",
       "duplicateFile": "Ce fichier de reçu a déjà été numérisé sur {report}. Écartez-le sauf s'il s'agit d'une dépense distincte.",
-      "duplicateReceipt": "Un reçu avec le même commerçant, la même date et le même total figure déjà sur {report}. Écartez-le sauf s'il s'agit d'une dépense distincte."
+      "duplicateReceipt": "Un reçu avec le même commerçant, la même date et le même total figure déjà sur {report}. Écartez-le sauf s'il s'agit d'une dépense distincte.",
+      "foreignCurrency": "Ce reçu est en {actual}. Sa ligne est convertie en {currency} au taux de change daté, ou au montant en {currency} facturé sur votre relevé.",
+      "duplicateElsewhere": "Un reçu semblable figure déjà sur la note de frais d’un autre employé. Écartez-le sauf s’il s’agit d’une dépense distincte."
     },
     "toasts": {
       "added": "Ligne ajoutée depuis le reçu. Vérifiez-la puis enregistrez la note.",
       "discarded": "Reçu écarté.",
       "actionFailed": "L'action sur le reçu a échoué."
-    }
+    },
+    "foreignTitle": "Dépensé en {currency}, converti en {reportCurrency}"
+  },
+  "currency": {
+    "column": "Devise",
+    "edit": "Modifier",
+    "change": "Autre devise",
+    "panelTitle": "Devise de la ligne {line}",
+    "remove": "Utiliser {currency}",
+    "done": "Terminé",
+    "amountIn": "Montant ({currency})",
+    "taxIn": "Taxe du reçu ({currency})",
+    "taxHint": "Laissez vide pour calculer la taxe en {currency} à partir du code de taxe.",
+    "domestic": "Cette ligne est en {currency}, la devise de la note.",
+    "start": "Saisir dans une autre devise",
+    "currency": "Devise de la dépense",
+    "expenseDate": "Date de la dépense",
+    "method": "Convertie au",
+    "methods": {
+      "rate_table": "Taux de change daté",
+      "billed_amount": "Montant facturé en {currency}",
+      "override": "Taux explicite"
+    },
+    "billedAmount": "Montant facturé ({currency})",
+    "billedHint": "Le montant de votre relevé de carte ou de banque. Le taux de change en est déduit.",
+    "rate": "Taux (1 {from} en {to})",
+    "reason": "Motif du taux",
+    "reasonPlaceholder": "Par exemple, l’avis de conversion de la banque pour l’achat",
+    "converted": "Converti en {amount} à 1 {from} = {rate} {to}.",
+    "convertedWithTax": "Converti en {amount} plus {tax} de taxe à 1 {from} = {rate} {to}.",
+    "conversionPending": "Saisissez le montant et son mode de conversion pour voir le montant converti.",
+    "rateSource": "Taux du {date} ({rateType}).",
+    "quoteFailed": "Le taux de change n’a pas pu être chargé. Réessayez."
   }
 }

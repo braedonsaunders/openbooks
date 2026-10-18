@@ -19,6 +19,17 @@ import {
   type CaptureIssue,
 } from "./document-capture-azure.ts";
 
+import {
+  extractJsonObject,
+  llmEvidence,
+  llmMoney,
+  llmOverallConfidence,
+  readLlmField,
+  requestLlmVision,
+  type LlmField,
+  type LlmVisionConfig,
+} from "./document-capture-llm.ts";
+
 export type { AddressLookup, CaptureEvidence, CaptureIssue };
 export {
   AZURE_DOCUMENT_INTELLIGENCE_API_VERSION,
@@ -286,6 +297,134 @@ export function validateNormalizedCapture(
     }
   }
   return issues;
+}
+
+/**
+ * The invoice reading contract an AI model answers. Values are copied as
+ * printed; nothing is computed, inferred or defaulted.
+ */
+export const INVOICE_LLM_PROMPT = [
+  "You read one vendor invoice or bill. Answer with ONLY a JSON object: no prose, no code fences.",
+  "Every header field is an object {\"value\": ..., \"confidence\": number from 0 to 1} giving your confidence that the value is exactly what the document prints.",
+  "Use null for any value that is not visible or not legible. Never guess, infer, compute or default a value.",
+  "Use exactly these keys:",
+  "{",
+  '  "vendorName": {"value": string|null, "confidence": number},',
+  '  "vendorTaxId": {"value": string|null, "confidence": number},',
+  '  "invoiceNumber": {"value": string|null, "confidence": number},',
+  '  "invoiceDate": {"value": "YYYY-MM-DD"|null, "confidence": number},',
+  '  "dueDate": {"value": "YYYY-MM-DD"|null, "confidence": number},',
+  '  "purchaseOrderNumber": {"value": string|null, "confidence": number},',
+  '  "currency": {"value": string|null, "confidence": number},',
+  '  "subtotal": {"value": string|null, "confidence": number},',
+  '  "taxTotal": {"value": string|null, "confidence": number},',
+  '  "total": {"value": string|null, "confidence": number},',
+  '  "memo": {"value": string|null, "confidence": number},',
+  '  "lines": [{"description": string|null, "productCode": string|null, "quantity": string|null, "unit": string|null, "unitPrice": string|null, "amount": string|null, "taxAmount": string|null, "confidence": number}]',
+  "}",
+  "Dates are set only when the printed date has exactly one reading. currency is the ISO 4217 code only when the document prints it.",
+  "Amounts and quantities are strings with the digits as printed, using a dot as the decimal point and no currency symbols or thousands separators.",
+  "List at most 200 lines.",
+].join("\n");
+
+const LLM_HEADER_FIELDS = [
+  "vendorName", "vendorTaxId", "invoiceNumber", "invoiceDate", "dueDate", "purchaseOrderNumber",
+  "currency", "subtotal", "taxTotal", "total", "memo",
+] as const satisfies readonly (keyof Omit<NormalizedCapture, "lines">)[];
+const LLM_MONEY_FIELDS = new Set<string>(["subtotal", "taxTotal", "total"]);
+
+/**
+ * Translate an AI model's invoice answer into the stable capture contract.
+ * A header field read below the organization's confidence threshold stays
+ * blank (its reading kept as evidence) and is flagged, so required fields
+ * block until a reviewer confirms them; nothing is filled from a guess.
+ */
+export function normalizeLlmInvoice(answer: Record<string, unknown>, confidenceThreshold: string): {
+  normalized: NormalizedCapture;
+  evidence: CaptureEvidence[];
+  overallConfidence: string | null;
+  issues: CaptureIssue[];
+} {
+  if (!("total" in answer) && !("vendorName" in answer) && !("lines" in answer)) {
+    throw new Error("The AI model's answer was not an invoice reading — retry the capture");
+  }
+  const evidence: CaptureEvidence[] = [];
+  const issues: CaptureIssue[] = [];
+  const header: Record<string, string | null> = {};
+  const fields: Record<string, LlmField> = {};
+  for (const key of LLM_HEADER_FIELDS) {
+    const field = readLlmField(answer[key]);
+    fields[key] = field;
+    const reading = LLM_MONEY_FIELDS.has(key) ? llmMoney(field) : null;
+    let value = reading ? (reading.canonical ?? reading.supplied) : field.value;
+    if (key === "currency" && value) value = value.toUpperCase();
+    if (field.value !== null) evidence.push(llmEvidence(key, field, value));
+    const confident = field.confidence !== null && cmp(field.confidence, confidenceThreshold) >= 0;
+    if (value !== null && !confident) {
+      issues.push({ code: "low_confidence", severity: "warning", field: key, ...(field.confidence !== null ? { actual: field.confidence } : {}), expected: confidenceThreshold });
+      value = null;
+    }
+    header[key] = value;
+  }
+  const lines: CaptureLine[] = [];
+  for (const entry of (Array.isArray(answer.lines) ? answer.lines : []).slice(0, 200)) {
+    const line = entry && typeof entry === "object" && !Array.isArray(entry) ? entry as Record<string, unknown> : {};
+    const index = lines.length;
+    const confidence = readLlmField({ value: null, confidence: line.confidence }).confidence;
+    const text = (key: string) => typeof line[key] === "string" ? (line[key] as string).trim() || null : null;
+    const money = (key: string) => {
+      const field = readLlmField({ value: line[key], confidence: line.confidence });
+      const reading = llmMoney(field);
+      const value = reading.canonical ?? reading.supplied;
+      if (field.value !== null) evidence.push(llmEvidence(`lines.${key}`, field, value, index));
+      return { canonical: reading.canonical, value };
+    };
+    const description = text("description") ?? "";
+    const productCode = text("productCode");
+    const quantity = money("quantity");
+    const unitPrice = money("unitPrice");
+    const amount = money("amount");
+    const tax = money("taxAmount");
+    if (!description && !productCode && amount.value === null) continue;
+    if (description) evidence.push(llmEvidence("lines.description", { value: description, confidence, raw: description }, description, index));
+    // An absent quantity reads as one unit and an absent tax as none, exactly
+    // as for any provider; refused text is preserved for the reviewer.
+    const quantityValue = quantity.value ?? "1.0000";
+    const quantityForMath = quantity.canonical ?? (quantity.value === null ? "1.0000" : null);
+    const amountValue = amount.value
+      ?? (unitPrice.canonical && quantityForMath ? exactProduct(quantityForMath, unitPrice.canonical) : null);
+    lines.push({
+      description,
+      productCode,
+      quantity: quantityValue,
+      unit: text("unit"),
+      unitPrice: unitPrice.value ?? amountValue ?? "0.0000",
+      amount: amountValue ?? "0.0000",
+      taxAmount: tax.value ?? "0.0000",
+      confidence,
+    });
+  }
+  return {
+    normalized: { ...(header as Omit<NormalizedCapture, "lines">), lines },
+    evidence,
+    overallConfidence: llmOverallConfidence([fields.vendorName!, fields.invoiceNumber!, fields.total!]),
+    issues,
+  };
+}
+
+/** Read one invoice through the organization's AI model and normalize the answer. */
+export async function extractLlmInvoice(input: {
+  config: LlmVisionConfig;
+  confidenceThreshold: string;
+  contentType: string;
+  bytes: Uint8Array;
+  fetchImpl?: typeof fetch;
+  lookup?: AddressLookup;
+}): Promise<{ raw: { answer: string }; normalized: NormalizedCapture; evidence: CaptureEvidence[]; overallConfidence: string | null; issues: CaptureIssue[] }> {
+  const answer = await requestLlmVision({ ...input, prompt: INVOICE_LLM_PROMPT });
+  const parsed = extractJsonObject(answer);
+  if (!parsed) throw new Error("The AI model did not answer with an invoice reading — retry the capture");
+  return { raw: { answer }, ...normalizeLlmInvoice(parsed, input.confidenceThreshold) };
 }
 
 /** Production Azure REST adapter: submit bytes, poll asynchronously, retain raw evidence. */

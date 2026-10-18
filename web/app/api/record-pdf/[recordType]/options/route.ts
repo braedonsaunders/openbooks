@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { guardPermission } from "../../../../../lib/authz";
+import { guardRecordTypeRead } from "../../lib";
 import { isDocKindEnabled } from "../../../../../lib/documents.ts";
 import { PDF_RECORD_TYPE_BY_KEY } from "../../../../../lib/pdf-templates/catalog";
 import { listPdfTemplates } from "../../../../../lib/pdf-templates/store";
@@ -18,7 +18,7 @@ async function listRecordPdfOptions(
   const { recordType } = await params;
   const meta = PDF_RECORD_TYPE_BY_KEY[recordType];
   if (!meta) return NextResponse.json({ error: "unknown record type" }, { status: 400 });
-  const gate = await guardPermission(meta.readPermission);
+  const gate = await guardRecordTypeRead(recordType, meta.readPermission);
   if (gate instanceof NextResponse) return gate;
   if (!(await isDocKindEnabled(gate.user.orgId, meta.docKind ?? meta.key))) {
     return notFound("record");
@@ -36,7 +36,7 @@ export const GET = defineRoute({
     const recordType = (params as { recordType?: string } | undefined)?.recordType ?? ''
     const meta = PDF_RECORD_TYPE_BY_KEY[recordType]
     if (!meta) return NextResponse.json({ error: 'unknown record type' }, { status: 400 })
-    return guardPermission(meta.readPermission)
+    return guardRecordTypeRead(recordType, meta.readPermission)
   },
   feature: { none: 'Record-type availability is enforced by the document-kind gate in the PDF options handler.' },
   params: z.object({ recordType: z.string() }),

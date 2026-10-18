@@ -13,6 +13,8 @@ import { findUnownedCustomReferences, loadFieldDefs, validateCustomValues } from
 import { canonicalDecimal } from './exact-decimal'
 import { segmentRegistry, validateExtraDims } from './segments'
 import { isUuid } from './list-params'
+import { ExpenseFxInputError, parseExpenseLineForeign } from '@openbooks/engine/payables/expense-line-currency'
+import { ExpenseFxRefusal, resolveExpenseLineCurrency, type ResolvedExpenseLineCurrency } from '@openbooks/engine/payables/expense-line-currency-service'
 
 /**
  * Shared expense-report edit validation + persistence for the draft PATCH
@@ -41,6 +43,13 @@ export interface ExpenseEditBody {
     /** Who fronted the money (0171). Required on every submitted line: history
      * may be honestly unclassified (NULL), but a newly written line states it. */
     settlementType?: string | null
+    /**
+     * A line spent in another currency than the report: the original
+     * currency, amounts and expense date, and how they convert. The server
+     * converts; the submitted `amount` and `taxAmount` of such a line are
+     * replaced by the converted figures.
+     */
+    foreignCurrency?: unknown
   })[]
 }
 
@@ -73,6 +82,8 @@ export interface PreparedExpenseLine {
   projectId: string | null
   extraDims: Record<string, string | null>
   custom: Record<string, unknown>
+  /** The original currency, amounts, rate and evidence of a foreign-currency line. */
+  foreign: ResolvedExpenseLineCurrency | null
 }
 
 export interface PreparedExpenseEdit {
@@ -106,6 +117,8 @@ export async function prepareExpenseEdit(
      * org-only check.
      */
     reportSubsidiaryId?: string | null
+    /** The report's currency: foreign-currency lines convert into it. */
+    reportCurrency: string
   },
 ): Promise<PreparedExpenseEdit> {
   const { orgId } = ctx
@@ -252,7 +265,43 @@ export async function prepareExpenseEdit(
   let totals: PreparedExpenseEdit['totals'] = null
   let preparedLines: PreparedExpenseLine[] | null = null
   if (body.lines) {
-    const valid = validateEditableDocumentLines(body.lines)
+    // Foreign-currency lines convert first: the converted amounts are the
+    // line's amount and (for a tax the receipt states) its overridden tax,
+    // so every rule below reads the report-currency figures.
+    const foreignByLine = new Map<number, ResolvedExpenseLineCurrency>()
+    const lines: NonNullable<ExpenseEditBody['lines']> = []
+    // In line order, so the first refused line is the one named.
+    for (const [i, line] of body.lines.entries()) lines.push(await (async () => {
+      if (line.foreignCurrency === undefined || line.foreignCurrency === null) return line
+      const computedTax = Boolean(line.taxCodeId || line.taxGroupId)
+      try {
+        const foreign = parseExpenseLineForeign(line.foreignCurrency, i + 1, ctx.reportCurrency)
+        if (foreign.taxAmount !== null && !computedTax) {
+          throw new DocumentEditError(422, `Line ${i + 1}: a receipt tax needs the line's tax code — choose the tax code or clear the tax`)
+        }
+        const resolved = await resolveExpenseLineCurrency(db, {
+          orgId,
+          subsidiaryId: ctx.reportSubsidiaryId ?? null,
+          reportCurrency: ctx.reportCurrency,
+          lineNumber: i + 1,
+          foreign,
+          computedTax,
+        })
+        foreignByLine.set(i, resolved)
+        return {
+          ...line,
+          amount: resolved.amount,
+          taxOverridden: resolved.taxAmount !== null,
+          taxAmount: resolved.taxAmount,
+        }
+      } catch (error) {
+        if (error instanceof ExpenseFxInputError || error instanceof ExpenseFxRefusal) {
+          throw new DocumentEditError(error.status, `${error.message} — ${error.remedy}`)
+        }
+        throw error
+      }
+    })())
+    const valid = validateEditableDocumentLines(lines)
     const exactLines: typeof valid = []
     for (let i = 0; i < valid.length; i++) {
       const line = valid[i]!
@@ -309,7 +358,7 @@ export async function prepareExpenseEdit(
       // Tax totals preserve input order; native instructions remain on the
       // validated source line rather than the tax computation's narrower result.
       const source = exactLines[i]!
-      const settlementType = body.lines[i]!.settlementType
+      const settlementType = lines[i]!.settlementType
       // Settlement is required on every newly written line (0171): NULL is an
       // honest state for pre-migration history, never for a line this API
       // writes. Fail closed with the line number, like every other line gate.
@@ -363,6 +412,7 @@ export async function prepareExpenseEdit(
         projectId: source.projectId ?? null,
         extraDims: lineDims.cleaned,
         custom: lv.cleaned,
+        foreign: foreignByLine.get(i) ?? null,
       })
     }
   }
@@ -401,11 +451,14 @@ export async function persistExpenseEdit(
         insert into document_lines (org_id, document_id, line_number, account_id, description,
                                     quantity, unit_price, amount, tax_code_id, tax_group_id, tax_input_amount,
                                     tax_amount, tax_overridden, settlement_type,
-                                    department_id, project_id, extra_dims, custom, amortization_template_id, amortization_start_on, amortization_end_on)
+                                    department_id, project_id, extra_dims, custom, amortization_template_id, amortization_start_on, amortization_end_on,
+                                    original_currency, original_amount, original_tax_amount, original_fx_rate, original_fx_evidence)
         values (${orgId}, ${docId}, ${i + 1}, ${l.accountId}, ${l.description},
                 '1', ${l.amount}, ${l.amount}, ${l.taxCodeId}, ${l.taxGroupId}, ${l.taxInputAmount},
                 ${l.taxAmount}, ${l.taxOverridden}, ${l.settlementType},
-                ${l.departmentId}, ${l.projectId}, ${JSON.stringify(l.extraDims)}::jsonb, ${JSON.stringify(l.custom)}, ${l.amortizationTemplateId}, ${l.amortizationStartOn}, ${l.amortizationEndOn})
+                ${l.departmentId}, ${l.projectId}, ${JSON.stringify(l.extraDims)}::jsonb, ${JSON.stringify(l.custom)}, ${l.amortizationTemplateId}, ${l.amortizationStartOn}, ${l.amortizationEndOn},
+                ${l.foreign?.currency ?? null}, ${l.foreign?.originalAmount ?? null}, ${l.foreign?.originalTaxAmount ?? null},
+                ${l.foreign?.rate ?? null}, ${l.foreign ? JSON.stringify(l.foreign.evidence) : null}::jsonb)
         returning id
       `))
       if (inserted.rows.length !== 1) throw new DocumentEditError(409, `Line ${i + 1} could not be saved`)
@@ -561,11 +614,13 @@ export async function createExpenseCorrectionDraft(
       if (source.status !== 'posted') {
         throw new DocumentEditError(422, 'only a posted expense report can create a correcting replacement')
       }
+      if (!source.currency) throw new DocumentEditError(422, 'the posted expense report has no currency to correct in')
       const prepared = await prepareExpenseEdit(body, {
         orgId: ctx.orgId,
         existingCustom: source.custom,
         existingDocumentDate: source.documentDate,
         existingPaymentCardId: source.paymentCardId,
+        reportCurrency: source.currency,
       })
       const documentNumber = await nextDocumentNumber(ctx.orgId, 'expense_report', 'EXP-')
       const created = (await tx.execute<{ id: string }>(sql`
@@ -606,8 +661,16 @@ export async function createExpenseCorrectionDraft(
         projectId: string | null
         extraDims: unknown
         custom: unknown
+        originalCurrency: string | null
+        originalAmount: string | null
+        originalTaxAmount: string | null
+        originalFxRate: string | null
+        originalFxEvidence: unknown
       }>(sql`
         select line_number as "lineNumber", account_id as "accountId", description,
+               original_currency as "originalCurrency", original_amount::text as "originalAmount",
+               original_tax_amount::text as "originalTaxAmount", original_fx_rate::text as "originalFxRate",
+               original_fx_evidence as "originalFxEvidence",
                amortization_template_id as "amortizationTemplateId", amortization_start_on::text as "amortizationStartOn", amortization_end_on::text as "amortizationEndOn",
                quantity::text as "quantity", unit_price::text as "unitPrice", amount::text as "amount",
                tax_code_id as "taxCodeId", tax_group_id as "taxGroupId",
@@ -625,13 +688,16 @@ export async function createExpenseCorrectionDraft(
             (org_id, document_id, line_number, account_id, description,
              quantity, unit_price, amount, tax_code_id, tax_group_id, tax_input_amount,
              tax_amount, tax_overridden, settlement_type, department_id, project_id, extra_dims, custom,
-             amortization_template_id, amortization_start_on, amortization_end_on)
+             amortization_template_id, amortization_start_on, amortization_end_on,
+             original_currency, original_amount, original_tax_amount, original_fx_rate, original_fx_evidence)
           values (${ctx.orgId}, ${created.id}, ${line.lineNumber}, ${line.accountId}, ${line.description},
                   ${line.quantity}, ${line.unitPrice}, ${line.amount}, ${line.taxCodeId}, ${line.taxGroupId},
                   ${line.taxInputAmount}, ${line.taxAmount}, ${line.taxOverridden}, ${line.settlementType},
                   ${line.departmentId}, ${line.projectId},
                   ${JSON.stringify(line.extraDims ?? {})}::jsonb, ${JSON.stringify(line.custom ?? {})}::jsonb,
-                  ${line.amortizationTemplateId}, ${line.amortizationStartOn}, ${line.amortizationEndOn})
+                  ${line.amortizationTemplateId}, ${line.amortizationStartOn}, ${line.amortizationEndOn},
+                  ${line.originalCurrency}, ${line.originalAmount}, ${line.originalTaxAmount}, ${line.originalFxRate},
+                  ${line.originalFxEvidence === null ? null : JSON.stringify(line.originalFxEvidence)}::jsonb)
           returning id
         `)).rows[0]
         if (!inserted) throw new Error(`correction line ${line.lineNumber} disappeared during initialization`)

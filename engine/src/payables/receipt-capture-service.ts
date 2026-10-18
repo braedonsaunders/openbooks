@@ -4,8 +4,9 @@ import { businessToday } from "../platform/business-date.ts";
 import { isIsoCalendarDate } from "../platform/iso-date.ts";
 import { add, cmp } from "../money/money.ts";
 import { subsidiaryScopeAllows } from "../organization/subsidiary-scope.ts";
-import { AZURE_DOCUMENT_INTELLIGENCE_API_VERSION, type AddressLookup, type CaptureEvidence, type CaptureIssue } from "./document-capture-azure.ts";
-import { getDocumentCaptureRuntimeConfig } from "./ap-capture-config.ts";
+import { ALL_EXPENSE_REPORTS, expenseAccessAllows, type ExpenseAccess } from "../records/expense-access.ts";
+import { type AddressLookup, type CaptureEvidence, type CaptureIssue } from "./document-capture-azure.ts";
+import { getDocumentCaptureRuntimeConfig, type DocumentCaptureRuntimeConfig } from "./ap-capture-config.ts";
 import { loadCaptureSourceBlob } from "./capture-source.ts";
 import { resolveVendorParty } from "./vendor-resolution.ts";
 import {
@@ -13,6 +14,7 @@ import {
   DEFAULT_RECEIPT_MODEL,
   draftExpenseLineFromReceipt,
   extractAzureReceipt,
+  extractLlmReceipt,
   receiptDuplicateIssues,
   receiptMerchantKey,
   validateNormalizedReceipt,
@@ -57,14 +59,24 @@ export type ReceiptReport = {
   documentNumber: string | null;
 };
 
+type ReceiptReportInput = {
+  orgId: string;
+  documentId: string;
+  allowedSubsidiaryIds: ReadonlySet<string> | null;
+  /** Whose reports the caller reaches; omitted for the organization's own background work. */
+  access?: ExpenseAccess;
+  forUpdate?: boolean;
+};
+
 /**
  * The expense report a receipt operation acts on, locked when `forUpdate`.
- * A missing or out-of-scope report reads as not found; a report past draft
- * refuses with the correction remedy.
+ * A missing, out-of-scope or other employee's report (under self-service
+ * access) reads as not found; a report past draft refuses with the
+ * correction remedy.
  */
 export async function requireEditableReceiptReport(
   executor: SqlExecutor,
-  input: { orgId: string; documentId: string; allowedSubsidiaryIds: ReadonlySet<string> | null; forUpdate?: boolean },
+  input: ReceiptReportInput,
 ): Promise<ReceiptReport> {
   const report = await loadReceiptReport(executor, input);
   if (report.status !== "draft") {
@@ -79,7 +91,7 @@ export async function requireEditableReceiptReport(
 
 export async function loadReceiptReport(
   executor: SqlExecutor,
-  input: { orgId: string; documentId: string; allowedSubsidiaryIds: ReadonlySet<string> | null; forUpdate?: boolean },
+  input: ReceiptReportInput,
 ): Promise<ReceiptReport> {
   const row = (await executor.execute<ReceiptReport>(sql`
     select id, status, currency, party_id as "partyId", subsidiary_id as "subsidiaryId",
@@ -88,24 +100,40 @@ export async function loadReceiptReport(
      where org_id = ${input.orgId} and id = ${input.documentId} and kind = 'expense_report'
      ${input.forUpdate ? sql`for update` : sql``}
   `)).rows[0];
-  if (!row || !subsidiaryScopeAllows(input.allowedSubsidiaryIds, row.subsidiaryId)) {
+  if (!row || !subsidiaryScopeAllows(input.allowedSubsidiaryIds, row.subsidiaryId)
+    || !expenseAccessAllows(input.access ?? ALL_EXPENSE_REPORTS, row.partyId)) {
     throw new ReceiptCaptureRefusal(404, "not_found", "Expense report not found");
   }
   return row;
 }
 
+/** The provider, model and protocol a receipt is read with under a capture configuration. */
+export function receiptReader(config: DocumentCaptureRuntimeConfig): { provider: string; model: string; apiVersion: string } {
+  return config.provider === "llm_vision"
+    ? { provider: config.provider, model: config.model, apiVersion: config.apiVersion }
+    : { provider: config.provider, model: DEFAULT_RECEIPT_MODEL, apiVersion: config.apiVersion };
+}
+
 /** Register an uploaded receipt as an extracting capture on its report. */
 export async function registerReceiptCapture(
   executor: SqlExecutor,
-  input: { orgId: string; documentId: string; fileId: string; contentHash: string; originalFilename: string; actorId: string },
+  input: {
+    orgId: string;
+    documentId: string;
+    fileId: string;
+    contentHash: string;
+    originalFilename: string;
+    actorId: string;
+    reader: { provider: string; model: string; apiVersion: string };
+  },
 ): Promise<{ id: string; attempt: number }> {
   const inserted = (await executor.execute<{ id: string; attempts: number }>(sql`
     insert into expense_receipt_captures
       (org_id, document_id, file_id, content_hash, original_filename, status, attempts,
        provider, model, api_version, created_by, updated_by)
     values (${input.orgId}, ${input.documentId}, ${input.fileId}, ${input.contentHash}, ${input.originalFilename},
-            'extracting', 1, 'azure_document_intelligence', ${DEFAULT_RECEIPT_MODEL},
-            ${AZURE_DOCUMENT_INTELLIGENCE_API_VERSION}, ${input.actorId}, ${input.actorId})
+            'extracting', 1, ${input.reader.provider}, ${input.reader.model},
+            ${input.reader.apiVersion}, ${input.actorId}, ${input.actorId})
     returning id, attempts
   `)).rows[0];
   if (!inserted) throw new Error("Receipt capture did not persist");
@@ -238,16 +266,15 @@ export async function reviewReceiptReading(
     merchantPartyId,
     suggestedAccount,
   });
-  const foreignReadings = receipt.currencyReadings.filter((code) => code !== context.report.currency);
-  if (foreignReadings.length > 0) {
+  if (draft.currency.value !== null && draft.currencyMatchesReport === false) {
     issues.push({
-      code: "currency_mismatch",
-      severity: "blocking",
+      code: "foreign_currency",
+      severity: "warning",
       field: "currency",
-      actual: receipt.currencyReadings.join(", "),
+      actual: draft.currency.value,
       expected: context.report.currency,
-      message: `This receipt is in ${receipt.currencyReadings.join(", ")} but the report is in ${context.report.currency} — `
-        + `record it on a ${foreignReadings[0]} expense report, or add the line by hand with the ${context.report.currency} amount charged and keep the receipt attached`,
+      message: `This receipt is in ${draft.currency.value}; the line converts into ${context.report.currency} at the dated exchange rate `
+        + `for the receipt date, or at the ${context.report.currency} amount your card statement billed`,
     });
   }
   issues.push(...receiptDuplicateIssues(await findReceiptDuplicates({
@@ -290,14 +317,23 @@ export async function extractReceiptCapture(input: {
     const settings = await getDocumentCaptureRuntimeConfig(input.orgId, input.lookup);
     if (!settings) throw new Error(NOT_CONFIGURED);
     const blob = await loadCaptureSourceBlob(input.orgId, capture.file_id);
-    const extracted = await extractAzureReceipt({
-      endpoint: settings.endpoint,
-      apiKey: settings.apiKey,
-      contentType: blob.contentType,
-      bytes: blob.bytes,
-      fetchImpl: input.fetchImpl,
-      lookup: input.lookup,
-    });
+    const reader = receiptReader(settings);
+    const extracted = settings.provider === "llm_vision"
+      ? await extractLlmReceipt({
+          config: settings.llm,
+          contentType: blob.contentType,
+          bytes: blob.bytes,
+          fetchImpl: input.fetchImpl,
+          lookup: input.lookup,
+        })
+      : await extractAzureReceipt({
+          endpoint: settings.endpoint,
+          apiKey: settings.apiKey,
+          contentType: blob.contentType,
+          bytes: blob.bytes,
+          fetchImpl: input.fetchImpl,
+          lookup: input.lookup,
+        });
     const review = await reviewReceiptReading({
       orgId: input.orgId,
       captureId: input.captureId,
@@ -309,6 +345,7 @@ export async function extractReceiptCapture(input: {
     const finalized = await db.execute<{ id: string }>(sql`
       update expense_receipt_captures
          set status = 'extracted',
+             provider = ${reader.provider}, model = ${reader.model}, api_version = ${reader.apiVersion},
              normalized = ${JSON.stringify(extracted.normalized)}::jsonb,
              evidence = ${JSON.stringify(extracted.evidence satisfies CaptureEvidence[])}::jsonb,
              issues = ${JSON.stringify(review.issues)}::jsonb,
@@ -417,14 +454,25 @@ export type ReceiptLineConfirmation = {
   merchantPartyId: string | null;
 };
 
-export type ConfirmedLineFacts = { accountId: string; amount: string; taxAmount: string };
+export type ConfirmedLineFacts = {
+  accountId: string;
+  /** Report-currency amounts as saved. */
+  amount: string;
+  taxAmount: string;
+  /** The line's original currency and amounts when it was spent in another currency. */
+  originalCurrency: string | null;
+  originalAmount: string | null;
+  originalTaxAmount: string | null;
+};
 
 /**
  * Confirm receipt captures against the lines saved in the same transaction.
- * Each capture must be an unconfirmed reading on this report, each line can
- * carry one receipt, and a receipt read in another currency than the report
- * is refused. The confirmation records the reviewer's merchant and date and
- * the saved line's account and amounts.
+ * Each capture must be an unconfirmed reading on this report and each line
+ * can carry one receipt. The line's currency must be the currency the
+ * receipt was read in: a receipt in another currency than the report backs
+ * a foreign-currency line in that currency. The confirmation records the
+ * reviewer's merchant and date, the saved line's account and amounts, and
+ * the receipt's own currency and total for duplicate detection.
  */
 export async function confirmReceiptLines(
   executor: SqlExecutor,
@@ -492,20 +540,26 @@ export async function confirmReceiptLines(
         `Receipt ${capture.original_filename} is ${capture.status} and cannot confirm a line — reload the report and add the line again`,
       );
     }
-    const foreign = (capture.currency_readings ?? []).filter((code) => code !== input.reportCurrency);
-    if (foreign.length > 0) {
+    const line = input.lines[confirmation.lineIndex]!;
+    const lineCurrency = line.originalCurrency ?? input.reportCurrency;
+    const otherReadings = (capture.currency_readings ?? []).filter((code) => code !== lineCurrency);
+    if (otherReadings.length > 0) {
       throw new ReceiptCaptureRefusal(
         422,
         "currency_mismatch",
-        `Receipt ${capture.original_filename} is in ${foreign.join(", ")} but the report is in ${input.reportCurrency} — `
-          + `record it on a ${foreign[0]} expense report, or add the line by hand with the ${input.reportCurrency} amount charged`,
+        `Receipt ${capture.original_filename} is in ${otherReadings.join(", ")} but its line is in ${lineCurrency} — `
+          + `enter the line in ${otherReadings[0]} so it converts into ${input.reportCurrency}, then save`,
       );
     }
     if (confirmation.merchantPartyId && !vendors.has(confirmation.merchantPartyId)) {
       throw new ReceiptCaptureRefusal(404, "vendor_not_found", "The matched vendor was not found among active vendors — clear the vendor match and save");
     }
-    const line = input.lines[confirmation.lineIndex]!;
     const merchantName = confirmation.merchantName.trim();
+    // The receipt's own total identifies it for duplicate detection: the
+    // original amounts for a foreign-currency line, the saved amounts otherwise.
+    const receiptTotal = line.originalCurrency !== null && line.originalAmount !== null
+      ? add(line.originalAmount, line.originalTaxAmount ?? "0")
+      : add(line.amount, line.taxAmount);
     const confirmed = await executor.execute<{ id: string }>(sql`
       update expense_receipt_captures
          set status = 'confirmed',
@@ -517,7 +571,8 @@ export async function confirmReceiptLines(
              merchant_key = ${receiptMerchantKey(merchantName)},
              merchant_party_id = ${confirmation.merchantPartyId},
              transaction_date = ${confirmation.transactionDate}::date,
-             total = ${add(line.amount, line.taxAmount)}::numeric,
+             currency = ${lineCurrency},
+             total = ${receiptTotal}::numeric,
              confirmed_by = ${input.actorId}, confirmed_at = now(),
              updated_by = ${input.actorId}, updated_at = now()
        where org_id = ${input.orgId} and id = ${confirmation.captureId}
@@ -537,6 +592,10 @@ export async function confirmReceiptLines(
                   accountId: line.accountId,
                   amount: line.amount,
                   taxAmount: line.taxAmount,
+                  currency: lineCurrency,
+                  ...(line.originalCurrency !== null
+                    ? { originalAmount: line.originalAmount, originalTaxAmount: line.originalTaxAmount }
+                    : {}),
                   merchantName,
                   merchantPartyId: confirmation.merchantPartyId,
                   transactionDate: confirmation.transactionDate,
@@ -575,8 +634,43 @@ export type ReceiptCaptureView = {
   createdAt: string;
 };
 
+/**
+ * Duplicate warnings name the other report they match. A self-service reader
+ * sees that name only for their own reports; a match on another employee's
+ * report still warns, without disclosing which report it is.
+ */
+async function redactForeignDuplicates(orgId: string, access: ExpenseAccess, views: ReceiptCaptureView[]): Promise<ReceiptCaptureView[]> {
+  if (access.scope === "all") return views;
+  const named = [...new Set(views.flatMap((view) => view.issues)
+    .filter((issue) => issue.code === "possible_duplicate" && issue.detail)
+    .map((issue) => issue.detail!))];
+  if (named.length === 0) return views;
+  const own = access.partyId === null ? new Set<string>() : new Set((await db.execute<{ number: string | null; id: string }>(sql`
+    select document_number as number, id::text as id from documents
+     where org_id = ${orgId} and kind = 'expense_report' and party_id = ${access.partyId}
+       and (document_number in (${sql.join(named.map((value) => sql`${value}`), sql`, `)})
+            or id::text in (${sql.join(named.map((value) => sql`${value}`), sql`, `)}))
+  `)).rows.flatMap((row) => [row.id, ...(row.number ? [row.number] : [])]));
+  return views.map((view) => ({
+    ...view,
+    issues: view.issues.map((issue) => issue.code !== "possible_duplicate" || !issue.detail || own.has(issue.detail)
+      ? issue
+      : {
+          code: issue.code,
+          severity: issue.severity,
+          ...(issue.cause ? { cause: issue.cause } : {}),
+          message: "A receipt like this one is already on another employee's expense report — discard it unless this is a separate expense",
+        }),
+  }));
+}
+
 /** Every non-discarded capture on one report, oldest first. */
-export async function listReceiptCaptures(orgId: string, documentId: string, now = new Date()): Promise<ReceiptCaptureView[]> {
+export async function listReceiptCaptures(
+  orgId: string,
+  documentId: string,
+  now = new Date(),
+  access: ExpenseAccess = ALL_EXPENSE_REPORTS,
+): Promise<ReceiptCaptureView[]> {
   const cutoff = new Date(now.getTime() - RECEIPT_EXTRACTION_STALE_MS).toISOString();
   const rows = (await db.execute<{
     id: string; document_id: string; file_id: string | null; content_type: string | null; original_filename: string;
@@ -598,7 +692,7 @@ export async function listReceiptCaptures(orgId: string, documentId: string, now
      where c.org_id = ${orgId} and c.document_id = ${documentId} and c.status <> 'discarded'
      order by c.created_at, c.id
   `)).rows;
-  return rows.map((row) => ({
+  return redactForeignDuplicates(orgId, access, rows.map((row) => ({
     id: row.id,
     documentId: row.document_id,
     fileId: row.file_id,
@@ -625,5 +719,5 @@ export async function listReceiptCaptures(orgId: string, documentId: string, now
         }
       : null,
     createdAt: row.created_at,
-  }));
+  })));
 }

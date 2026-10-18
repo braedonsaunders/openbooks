@@ -12,7 +12,7 @@ import {
   runRecordFlows,
 } from '@openbooks/engine/flows/module'
 import { can, guardSubsidiaryScope, type Authz } from '../../../../lib/authz'
-import { canReadFlowSubject, manualButtonPermission } from '../../../../lib/flow-subject-authz'
+import { canReadSubjectRecord, holdsSubjectGrant, manualButtonPermission } from '../../../../lib/flow-subject-authz'
 import { loadFlowSubjectSubsidiary, requireFlowsRecordReader } from '../_lib'
 import { isUuid } from '../../../../lib/list-params'
 
@@ -55,7 +55,7 @@ async function availableButtons(
 
   // Domain read before anything about the record is disclosed: without the
   // subject kind's read grant the record answers exactly as if missing.
-  if (!canReadFlowSubject(authz, subjectKind)) {
+  if (!(await canReadSubjectRecord(authz, subjectKind, subjectId))) {
     return NextResponse.json({ error: 'record not found' }, { status: 404 })
   }
   // Manual flows can mutate their subject. Resolve its legal entity before
@@ -130,7 +130,7 @@ async function availableButtons(
         subjectKind,
         planAutomation(graph, { kind: 'manual', buttonId: td.buttonId }, evalCtx),
       )
-      if (!required || !can(authz, required)) continue
+      if (!required || !(await holdsSubjectGrant(authz, subjectKind, subjectId, required))) continue
       seen.add(td.buttonId)
       buttons.push({ buttonId: td.buttonId, label: td.label, confirm: td.confirm })
     }

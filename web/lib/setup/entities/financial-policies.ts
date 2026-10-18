@@ -34,6 +34,13 @@ export const FINANCIAL_POLICY_ENTITIES: SetupEntity[] = [
     fields: [{ key: 'subsidiaryId', kind: 'ref', ref: 'subsidiaries', required: true }, { key: 'effectiveFrom', kind: 'date', required: true },
       { key: 'resetRule', kind: 'select', required: true, options: ['period','fiscal_year','never'].map(value => ({ value, labelKey: `options.auditNumberReset.${value}` })) },
       { key: 'prefix', kind: 'text', required: true, defaultValue: 'GL' }, { key: 'reason', kind: 'textarea', required: true }] },
+  // Foreign-currency expense lines convert at the dated exchange rate. A
+  // version allowing overrides lets the operator record an explicit rate
+  // with its reason instead; with no version the override is refused.
+  { ...version, key: 'expense-fx-policies', table: 'expense_fx_policies', groupKey: 'currency', featureKey: 'expenses',
+    columns: [{ key: 'effectiveFrom', kind: 'date' }, { key: 'allowRateOverride', kind: 'boolean' }],
+    fields: [{ key: 'effectiveFrom', kind: 'date', required: true }, { key: 'allowRateOverride', kind: 'boolean', defaultValue: false },
+      { key: 'reason', kind: 'textarea', required: true }] },
   // Loss contracts: whether close flags projects forecasting a loss without a
   // loss assessment in the period, and whether that finding blocks the close.
   { ...version, key: 'project-loss-policies', table: 'project_loss_policies', groupKey: 'projects', featureKey: 'projects',

@@ -12,7 +12,8 @@ import {
   widgetBlock,
   type PageSpec,
 } from '@braedonsaunders/appkit-viewspec'
-import { can, requirePermission } from '../../../../lib/authz'
+import { can } from '../../../../lib/authz'
+import { expenseAccess, expenseAccessAllows, requireExpensePermission } from '../../../../lib/expense-access'
 import { subsidiaryVisibleFilter } from '../../../../lib/subsidiaries'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { isUuid, pickString } from '../../../../lib/list-params'
@@ -90,9 +91,13 @@ export async function loadExpenseReports(
 ): Promise<ExpenseReportsData> {
   const t = await getTranslations('expenses')
   const tCommon = await getTranslations('common')
-  const authz = await requirePermission('expenses.read')
+  const authz = await requireExpensePermission('read')
   await requireFeatureEnabled(authz.user.orgId, 'expenses')
-  const canSubmit = can(authz, 'expenses.create')
+  // Self-service readers (expenses.self) see, create and submit only their
+  // own reports; the list, this drawer, its employee picker and every
+  // expense API agree on the same access.
+  const [readAccess, editAccess] = await Promise.all([expenseAccess(authz, 'read'), expenseAccess(authz, 'edit')])
+  const canCreate = editAccess !== null && (editAccess.scope === 'all' || editAccess.partyId !== null)
   const canPost = can(authz, 'ap.post')
   const expenseId = pickString(sp.expense)
 
@@ -101,10 +106,17 @@ export async function loadExpenseReports(
   // is numbered until its first Save. The shared reader scopes the document to
   // the caller before its correlated line query, so a foreign id yields null
   // and the drawer stays shut — same guard as the native page.
-  const createRequested = expenseId === 'new' && canSubmit
+  const createRequested = expenseId === 'new' && canCreate
+  const ownEmployee = editAccess?.scope === 'own' ? editAccess.partyId : null
   const openReport = createRequested
-    ? await blankExpenseReport(authz.user.orgId)
-    : expenseId && isUuid(expenseId) ? await loadExpenseReport(expenseId, authz.user.orgId, authz.allowedSubsidiaryIds) : null
+    ? await blankExpenseReport(authz.user.orgId, ownEmployee)
+    : expenseId && isUuid(expenseId) && readAccess
+      ? await loadExpenseReport(expenseId, authz.user.orgId, authz.allowedSubsidiaryIds, readAccess)
+      : null
+  // Editing reaches the open report when the caller enters everyone's
+  // reports, or enters their own and this report is theirs.
+  const canSubmit = editAccess !== null && (createRequested
+    || (openReport !== null && expenseAccessAllows(editAccess, (openReport.doc as { party_id?: string | null }).party_id ?? null)))
   const pickers = openReport
     ? await Promise.all([
         db.execute<{ id: string; display_name: string }>(sql`
@@ -112,6 +124,7 @@ export async function loadExpenseReports(
            where p.is_active and p.org_id = ${authz.user.orgId}
              and exists (select 1 from employee_roles er where er.org_id = p.org_id and er.party_id = p.id and er.is_active)
              ${subsidiaryVisibleFilter(sql`p.subsidiary_id`, authz.allowedSubsidiaryIds, { orgWideNull: true })}
+             ${editAccess?.scope === 'all' ? sql`` : sql`and p.id = ${ownEmployee}`}
            order by p.display_name`),
         db.execute<{ id: string; number: string | null; name: string }>(sql`
           select id, number, name from accounts
@@ -194,7 +207,7 @@ export async function loadExpenseReports(
     title: t('list.title'),
     description: t('list.description'),
     currentParams: sp,
-    canSubmit,
+    canSubmit: canCreate,
     canPost,
     newLabel: t('actions.newReport'),
     newCreatingLabel: tCommon('actions.creating'),

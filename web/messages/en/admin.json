@@ -1395,6 +1395,7 @@
     "banking_review_sign_off": "Review retained bank sign-offs",
     "expenses_read": "View expense reports",
     "expenses_create": "Enter expense reports",
+    "expenses_self": "Create and submit own expense reports",
     "admin_custom_fields_manage": "Manage custom fields",
     "admin_users_manage": "Manage users and role assignments",
     "admin_roles_manage": "Manage roles and permissions",
@@ -1867,6 +1868,13 @@
       "removeKey": "Remove document provider key",
       "keyRemoved": "Document provider key removed.",
       "model": "Invoice model",
+      "provider": "Document reader",
+      "providers": {"azure_document_intelligence": "Azure Document Intelligence", "llm_vision": "AI model ({provider})"},
+      "azureHint": "Reads bills and receipts with your Azure Document Intelligence resource and key.",
+      "llmHint": "Reads bills and receipts with the AI provider, key and models configured below ({provider}). Each field carries the model's confidence; fields below the threshold stay blank for review.",
+      "llmNoVision": "{provider} reads no images. Choose a provider with vision models below, or use Azure Document Intelligence.",
+      "llmModel": "Capture model",
+      "llmModelHint": "A vision-capable model id. Leave blank to use the provider's smart model.",
       "confidence": "Review confidence threshold",
       "confidenceHint": "Values below this 0–1 threshold are flagged for review.",
       "autoDraft": "Automatically create drafts only for fully matched purchase orders",
@@ -1874,7 +1882,8 @@
       "testResult": {
         "connected": "Connected to the document provider.",
         "failed": "The document provider test failed.",
-        "missing": "Enter an endpoint and API key first."
+        "missing": "Enter an endpoint and API key first.",
+        "missingAi": "Add the AI provider and its API key below first."
       }
     },
     "models": {
@@ -3918,9 +3927,11 @@
         "title": "GL Audit Number Policies",
         "description": "GL Audit Number Policies"
       },
-      "project-loss-policies": {"title": "Project Loss Policies", "description": "When projects forecasting a loss are flagged at close, and whether the close waits for their loss assessment."}
+      "project-loss-policies": {"title": "Project Loss Policies", "description": "When projects forecasting a loss are flagged at close, and whether the close waits for their loss assessment."},
+      "expense-fx-policies": {"title": "Expense FX Policies", "description": "Whether a foreign-currency expense line may convert at an explicit exchange rate with a reason instead of the dated rate."}
     },
     "fields": {
+      "allowRateOverride": "Allow explicit exchange rates",
       "commonStockAccountId": "Common stock account",
       "preferredStockAccountId": "Preferred stock account",
       "apicAccountId": "Additional paid-in capital account",

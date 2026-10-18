@@ -9,6 +9,14 @@ import {
   guardedFetch,
   type AddressLookup,
 } from "../../app/api/platform/connections/_connector-guard";
+import {
+  defaultModel,
+  isOrgControlledAiEndpoint,
+  providerSpec,
+  validateAiBaseUrl,
+  type AiProvider,
+  type ModelTier,
+} from "@openbooks/engine/platform/ai-providers";
 
 /**
  * Config-driven AI client.
@@ -26,18 +34,8 @@ import {
 // finish that final response.
 const AI_REQUEST_TIMEOUT_MS = 240_000;
 
-export type AiProvider =
-  | "anthropic"
-  | "openai"
-  | "google"
-  | "openrouter"
-  | "groq"
-  | "xai"
-  | "deepseek"
-  | "mistral"
-  | "custom";
-
-export type ModelTier = "fast" | "smart";
+export type { AiProvider, ModelTier, ProviderSpec } from "@openbooks/engine/platform/ai-providers";
+export { AI_PROVIDER_SPECS, defaultModel, isAiProvider, providerSpec, validateAiBaseUrl } from "@openbooks/engine/platform/ai-providers";
 
 export type AiConfig = {
   provider: AiProvider;
@@ -52,190 +50,6 @@ export type AiConfig = {
   /** Org identity for prompt grounding (real name instead of a placeholder). */
   org?: { name: string } | null;
 };
-
-// How a provider's language model is constructed. The OpenAI-compatible kind
-// covers OpenRouter, Groq, xAI, DeepSeek, Mistral and any user `custom` endpoint.
-type ProviderKind = "anthropic" | "openai" | "google" | "openai-compatible";
-
-export type ProviderSpec = {
-  value: AiProvider;
-  label: string;
-  kind: ProviderKind;
-  /** Built-in endpoint for a named OpenAI-compatible provider (null otherwise). */
-  baseUrl: string | null;
-  /** True when the org MUST supply their own base URL (i.e. `custom`). */
-  requiresBaseUrl: boolean;
-  /** Default fast/smart model ids (placeholders + fallbacks). Empty for `custom`. */
-  fast: string;
-  smart: string;
-  /** Placeholder shown in the API-key field. */
-  keyHint: string;
-  /** Optional note about the model-id format for this provider. */
-  modelHint?: string;
-};
-
-/**
- * Provider catalogue — single source of truth for the settings UI, the model
- * factory and config validation. Add a provider here and it lights up everywhere.
- */
-export const AI_PROVIDER_SPECS: ProviderSpec[] = [
-  {
-    value: "anthropic",
-    label: "Anthropic — Claude",
-    kind: "anthropic",
-    baseUrl: null,
-    requiresBaseUrl: false,
-    fast: "claude-haiku-4-5-20251001",
-    smart: "claude-sonnet-4-6",
-    keyHint: "sk-ant-…",
-  },
-  {
-    value: "openai",
-    label: "OpenAI — GPT",
-    kind: "openai",
-    baseUrl: null,
-    requiresBaseUrl: false,
-    fast: "gpt-4o-mini",
-    smart: "gpt-4o",
-    keyHint: "sk-…",
-  },
-  {
-    value: "google",
-    label: "Google — Gemini",
-    kind: "google",
-    baseUrl: null,
-    requiresBaseUrl: false,
-    fast: "gemini-2.5-flash",
-    smart: "gemini-2.5-pro",
-    keyHint: "AIza…",
-  },
-  {
-    value: "openrouter",
-    label: "OpenRouter — any model, one key",
-    kind: "openai-compatible",
-    baseUrl: "https://openrouter.ai/api/v1",
-    requiresBaseUrl: false,
-    fast: "anthropic/claude-3.5-haiku",
-    smart: "anthropic/claude-3.5-sonnet",
-    keyHint: "sk-or-…",
-    modelHint: "Use vendor/model slugs, e.g. anthropic/claude-3.5-sonnet or openai/gpt-4o.",
-  },
-  {
-    value: "groq",
-    label: "Groq — fast inference",
-    kind: "openai-compatible",
-    baseUrl: "https://api.groq.com/openai/v1",
-    requiresBaseUrl: false,
-    fast: "llama-3.1-8b-instant",
-    smart: "llama-3.3-70b-versatile",
-    keyHint: "gsk_…",
-  },
-  {
-    value: "xai",
-    label: "xAI — Grok",
-    kind: "openai-compatible",
-    baseUrl: "https://api.x.ai/v1",
-    requiresBaseUrl: false,
-    fast: "grok-2-1212",
-    smart: "grok-2-vision-1212",
-    keyHint: "xai-…",
-  },
-  {
-    value: "deepseek",
-    label: "DeepSeek",
-    kind: "openai-compatible",
-    baseUrl: "https://api.deepseek.com",
-    requiresBaseUrl: false,
-    fast: "deepseek-chat",
-    smart: "deepseek-chat",
-    keyHint: "sk-…",
-  },
-  {
-    value: "mistral",
-    label: "Mistral",
-    kind: "openai-compatible",
-    baseUrl: "https://api.mistral.ai/v1",
-    requiresBaseUrl: false,
-    fast: "mistral-small-latest",
-    smart: "mistral-large-latest",
-    keyHint: "Your Mistral API key",
-  },
-  {
-    value: "custom",
-    label: "Custom (OpenAI-compatible)",
-    kind: "openai-compatible",
-    baseUrl: null,
-    requiresBaseUrl: true,
-    fast: "",
-    smart: "",
-    keyHint: "Your provider API key",
-    modelHint:
-      "Use a public HTTPS OpenAI-compatible endpoint (for example Together, Fireworks, Perplexity, or hosted vLLM) and set explicit model ids.",
-  },
-];
-
-const SPEC_BY_VALUE = Object.fromEntries(AI_PROVIDER_SPECS.map((s) => [s.value, s])) as Record<
-  AiProvider,
-  ProviderSpec
->;
-
-export function isAiProvider(value: unknown): value is AiProvider {
-  return typeof value === "string" && Object.hasOwn(SPEC_BY_VALUE, value);
-}
-
-export function providerSpec(provider: AiProvider): ProviderSpec {
-  return SPEC_BY_VALUE[provider];
-}
-
-function withoutTrailingSlashes(value: string): string {
-  let end = value.length;
-  while (end > 0 && value.charCodeAt(end - 1) === 47) end -= 1;
-  return value.slice(0, end);
-}
-
-const PRIVATE_HOST_RE =
-  /^(localhost|127\.|0\.|10\.|192\.168\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.|\[?::1\]?$|\[?f[cd])/i;
-
-/** Validate and canonicalize a persisted AI endpoint override. */
-export function validateAiBaseUrl(
-  provider: AiProvider,
-  rawBaseUrl: string | null | undefined,
-): string | null {
-  const spec = providerSpec(provider);
-  const raw = rawBaseUrl?.trim() ?? "";
-  if (spec.kind !== "openai-compatible") {
-    if (raw) throw new Error(`${spec.label} does not support a custom base URL.`);
-    return null;
-  }
-  if (!raw) {
-    if (spec.requiresBaseUrl) throw new Error("A public HTTPS base URL is required.");
-    return null;
-  }
-
-  let submitted: URL;
-  try {
-    submitted = new URL(raw);
-  } catch {
-    throw new Error("The AI base URL is not valid.");
-  }
-  if (submitted.protocol !== "https:") {
-    throw new Error("The AI base URL must use HTTPS.");
-  }
-  if (submitted.search || submitted.hash) {
-    throw new Error("The AI base URL must not include a query string or fragment.");
-  }
-  if (submitted.username || submitted.password) {
-    throw new Error("The AI base URL must not include credentials.");
-  }
-  if (PRIVATE_HOST_RE.test(submitted.hostname)) {
-    throw new Error("The AI base URL must point at a public host.");
-  }
-
-  const path = withoutTrailingSlashes(submitted.pathname);
-  submitted.pathname = path || "/";
-  const canonical = withoutTrailingSlashes(submitted.href);
-  return canonical || submitted.origin;
-}
 
 /**
  * Live validation of a persisted AI endpoint override: the shape check
@@ -262,10 +76,7 @@ export async function validateAiBaseUrlLive(
  *  or a base-URL override): responses and errors from it are untrusted. */
 export function isOrgControlledEndpoint(config: AiConfig | null | undefined): boolean {
   if (!config) return true;
-  const spec = SPEC_BY_VALUE[config.provider];
-  if (!spec) return true;
-  if (spec.kind !== "openai-compatible") return false;
-  return spec.requiresBaseUrl || Boolean(config.baseUrl?.trim());
+  return isOrgControlledAiEndpoint(config.provider, config.baseUrl);
 }
 
 /**
@@ -307,14 +118,9 @@ export const guardedAiFetch: typeof globalThis.fetch = async (input, init) => {
   return guardedFetch(new Request(request, { signal }));
 };
 
-export function defaultModel(provider: AiProvider, tier: ModelTier): string {
-  const spec = SPEC_BY_VALUE[provider] ?? SPEC_BY_VALUE.anthropic;
-  return tier === "smart" ? spec.smart : spec.fast;
-}
-
 export function isAiConfigured(config: AiConfig | null | undefined): config is AiConfig {
   if (!config || !config.apiKey) return false;
-  const spec = SPEC_BY_VALUE[config.provider];
+  const spec = providerSpec(config.provider);
   if (!spec) return false;
   if (spec.requiresBaseUrl && !config.baseUrl?.trim()) return false;
   return true;
@@ -326,7 +132,7 @@ export function getModel(
   tier: ModelTier = "fast",
 ): LanguageModel | null {
   if (!isAiConfigured(config)) return null;
-  const spec = SPEC_BY_VALUE[config.provider];
+  const spec = providerSpec(config.provider);
   const modelId =
     (tier === "smart" ? config.modelSmart : config.modelFast) ||
     defaultModel(config.provider, tier);

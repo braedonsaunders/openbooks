@@ -319,7 +319,7 @@ export function generateCopySql(
       exprs.push(`(select p.prefix from gl_audit_number_policies p where p.org_id='${prod}'::uuid and p.id="gl_audit_number_assignments".policy_id) || '-' || replace(${auditScope}, ':', '-') || '-' || lpad("ordinal"::text, greatest(6,length("ordinal"::text)), '0')`);
       continue;
     }
-    if (["fx_rate_types", "account_translation_policies", "subsidiary_accounting_preferences", "segment_balancing_policies", "gl_audit_number_policies", "project_loss_policies", "payroll_us_filing_account_employer_lineage"].includes(t.name)
+    if (["fx_rate_types", "account_translation_policies", "subsidiary_accounting_preferences", "segment_balancing_policies", "gl_audit_number_policies", "project_loss_policies", "expense_fx_policies", "payroll_us_filing_account_employer_lineage"].includes(t.name)
         && c.isUuid && ["created_by", "updated_by"].includes(c.name)) {
       exprs.push(`(case when "${c.name}" is null then null else ob_rebase("${c.name}", '${seed}'::uuid) end)`);
       continue;
@@ -339,6 +339,18 @@ export function generateCopySql(
         throw new Error("sandbox clone: recorded exchange rate evidence requires subsidiaries in the copy plan; include subsidiaries before retrying");
       }
       exprs.push(`public.document_fx_rate_evidence_for_clone("document_fx_rate_evidence", '${seed}'::uuid, ${opts.masked ? "true" : "false"})`);
+      continue;
+    }
+    // An expense line's exchange-rate evidence names the rate observation it
+    // read: the copy points at the rebased observation, and a masked copy
+    // redacts an operator's reason for an explicit rate.
+    if (t.name === "document_lines" && c.name === "original_fx_evidence") {
+      if (tableMask?.has(c.name)) throw new Error("Expense line exchange rate evidence requires native identity rebasing; remove its whole-column masking policy.");
+      const observation = `case when "original_fx_evidence"->>'observationId' is null then null else ob_rebase(("original_fx_evidence"->>'observationId')::uuid, '${seed}'::uuid)::text end`;
+      const reason = opts.masked
+        ? ` || case when "original_fx_evidence"->>'reason' is null then '{}'::jsonb else jsonb_build_object('reason', 'REDACTED') end`
+        : "";
+      exprs.push(`(case when "original_fx_evidence" is null then null else "original_fx_evidence" || jsonb_build_object('observationId', ${observation})${reason} end)`);
       continue;
     }
     if ((t.name === "performance_obligations" && c.name === "allocation_basis")
@@ -380,7 +392,7 @@ export function generateCopySql(
       exprs.push("'REDACTED'::text");
       continue;
     }
-    if (opts.masked && ["fx_rate_types", "account_translation_policies", "subsidiary_accounting_preferences", "segment_balancing_policies", "gl_audit_number_policies", "project_loss_policies", "rebate_agreements", "rebate_cost_attestations", "rebate_claims", "rebate_settlement_reversals", "recognition_control_events", "journal_lines"].includes(t.name)
+    if (opts.masked && ["fx_rate_types", "account_translation_policies", "subsidiary_accounting_preferences", "segment_balancing_policies", "gl_audit_number_policies", "project_loss_policies", "expense_fx_policies", "rebate_agreements", "rebate_cost_attestations", "rebate_claims", "rebate_settlement_reversals", "recognition_control_events", "journal_lines"].includes(t.name)
         && ["name", "reason", "memo", "evidence"].includes(c.name)) {
       const redacted = t.name === "rebate_cost_attestations" && c.name === "evidence" ? "REDACTED FINANCIAL EVIDENCE" : "REDACTED";
       exprs.push(`(case when "${c.name}" is null then null else '${redacted}' end)`);

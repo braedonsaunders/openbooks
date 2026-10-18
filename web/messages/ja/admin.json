@@ -1387,6 +1387,7 @@
     "banking_review_sign_off": "署名済み銀行照合をレビュー",
     "expenses_read": "経費精算を表示",
     "expenses_create": "経費精算を入力",
+    "expenses_self": "自分の経費精算を作成・提出",
     "admin_custom_fields_manage": "カスタムフィールドを管理",
     "admin_users_manage": "ユーザーとロール割り当てを管理",
     "admin_roles_manage": "ロールと権限を管理",
@@ -1864,6 +1865,13 @@
       "removeKey": "書類プロバイダーのキーを削除",
       "keyRemoved": "書類プロバイダーのキーを削除しました。",
       "model": "請求書モデル",
+      "provider": "書類の読み取り方法",
+      "providers": {"azure_document_intelligence": "Azure Document Intelligence", "llm_vision": "AIモデル（{provider}）"},
+      "azureHint": "Azure Document Intelligence のリソースとキーで請求書と領収書を読み取ります。",
+      "llmHint": "下で設定したAIプロバイダー、キー、モデル（{provider}）で請求書と領収書を読み取ります。各項目にモデルの信頼度が付き、しきい値未満の項目は確認用に空欄のままになります。",
+      "llmNoVision": "{provider} は画像を読み取れません。下で画像対応モデルのあるプロバイダーを選ぶか、Azure Document Intelligence を使用してください。",
+      "llmModel": "読み取りモデル",
+      "llmModelHint": "画像を読めるモデルのID。空欄にするとプロバイダーの高性能モデルを使用します。",
       "confidence": "レビュー用の信頼度しきい値",
       "confidenceHint": "この0〜1のしきい値を下回る値はレビュー対象としてフラグ付けされます。",
       "autoDraft": "完全に一致した発注書についてのみ自動的に下書きを作成する",
@@ -1871,7 +1879,8 @@
       "testResult": {
         "connected": "書類プロバイダーに接続しました。",
         "failed": "書類プロバイダーのテストが失敗しました。",
-        "missing": "先にエンドポイントとAPIキーを入力してください。"
+        "missing": "先にエンドポイントとAPIキーを入力してください。",
+        "missingAi": "先に下でAIプロバイダーとAPIキーを追加してください。"
       }
     },
     "models": {
@@ -4005,9 +4014,11 @@
         "title": "サブスクリプション更新方針",
         "description": "有効日付きの更新条件、担当者、および期限前のリマインダー。"
       },
-      "project-loss-policies": {"title": "損失プロジェクト方針", "description": "損失が見込まれるプロジェクトを決算時に警告するか、また損失評価まで決算を保留するかを定めます。"}
+      "project-loss-policies": {"title": "損失プロジェクト方針", "description": "損失が見込まれるプロジェクトを決算時に警告するか、また損失評価まで決算を保留するかを定めます。"},
+      "expense-fx-policies": {"title": "経費の為替方針", "description": "外貨建ての経費明細を、日付の為替レートではなく理由付きの指定レートで換算できるかどうか。"}
     },
     "fields": {
+      "allowRateOverride": "指定為替レートを許可",
       "commonStockAccountId": "普通株式勘定",
       "preferredStockAccountId": "優先株式勘定",
       "apicAccountId": "資本剰余金勘定",

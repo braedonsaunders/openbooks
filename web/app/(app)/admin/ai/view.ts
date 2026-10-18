@@ -35,6 +35,7 @@ export async function loadAdminAi(rawParams?: Record<string, string | string[] |
     smart: p.smart,
     keyHint: p.keyHint,
     modelHint: p.modelHint,
+    vision: p.vision,
   }))
 
   // Pack policies live under Setup → Agents: allowlist the provider fields

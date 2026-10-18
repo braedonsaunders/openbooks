@@ -10,7 +10,7 @@ import {
 } from "@openbooks/engine/flows/module";
 import { lockFlowSubjectScope, requireFlowsRecordReader } from "../_lib";
 import { can } from "../../../../lib/authz";
-import { canReadFlowSubject } from "../../../../lib/flow-subject-authz";
+import { canReadSubjectRecord } from "../../../../lib/flow-subject-authz";
 import { isUuid } from "../../../../lib/list-params";
 
 export const runtime = "nodejs";
@@ -152,7 +152,7 @@ async function legacyGET(req: Request) {
   // meets the same answer as for a nonexistent record, so approval
   // participants, decisions, comments and failure reasons stay inside the
   // domain that owns them.
-  if (!canReadFlowSubject(authz, subjectKind)) {
+  if (!(await canReadSubjectRecord(authz, subjectKind, subjectId))) {
     return NextResponse.json({ error: "record not found" }, { status: 404 });
   }
   return withOrgTransaction(orgId, async () => {

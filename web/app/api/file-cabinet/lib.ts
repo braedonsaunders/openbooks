@@ -1,8 +1,9 @@
-import { loadAttachmentTarget, attachmentTargetInScope } from '@openbooks/engine/records/file-attachment-target'
+import { loadAttachmentTarget, attachmentTargetInScope, type AttachmentTarget } from '@openbooks/engine/records/file-attachment-target'
 import { NextResponse } from 'next/server'
 import type { SqlExecutor } from '@openbooks/engine/platform/db'
 import { can, getAuthz, type Authz } from '../../../lib/authz'
-import { accessAtLeast, fileAccessLevel, folderAccessLevel, getFile, listAttachments, type AttachedFile, type AccessLevel, type FileViewer } from '../../../lib/file-cabinet'
+import { accessAtLeast, attachmentReadPermission, fileAccessLevel, folderAccessLevel, getFile, listAttachments, type AttachedFile, type AccessLevel, type FileViewer } from '../../../lib/file-cabinet'
+import { expenseAccess, expenseAccessAllows } from '../../../lib/expense-access'
 
 export const MAX_BYTES = 25 * 1024 * 1024 // 25 MB
 
@@ -80,6 +81,43 @@ export function canMutateFiles(authz: Authz, targetTable?: string, kind?: string
   return permission !== undefined && can(authz, permission)
 }
 
+/**
+ * Whether the caller may attach to or detach from this loaded record: the
+ * kind's write grant, or the self-service grant on their own expense report.
+ */
+export async function canMutateAttachmentTarget(authz: Authz, target: AttachmentTarget, executor?: SqlExecutor): Promise<boolean> {
+  if (canMutateFiles(authz, target.targetTable, target.kind)) return true
+  return ownExpenseReportTarget(authz, target, 'edit', executor)
+}
+
+/**
+ * Whether the caller may read this loaded record's attachments: the owning
+ * record's read grant, or the self-service grant on their own expense report.
+ */
+export async function canReadAttachmentTarget(authz: Authz, target: AttachmentTarget, executor?: SqlExecutor): Promise<boolean> {
+  const permission = attachmentReadPermission(target.targetTable, target.kind)
+  if (!permission) return false
+  if (can(authz, permission)) return true
+  return ownExpenseReportTarget(authz, target, 'read', executor)
+}
+
+async function ownExpenseReportTarget(authz: Authz, target: AttachmentTarget, authority: 'read' | 'edit', executor?: SqlExecutor): Promise<boolean> {
+  if (target.targetTable !== 'documents' || target.kind !== 'expense_report') return false
+  const access = await expenseAccess(authz, authority, executor)
+  return access !== null && expenseAccessAllows(access, target.documentPartyId)
+}
+
+/**
+ * The cabinet viewer for a record's attachments. Evidence attached to an
+ * expense report the caller may read is readable with the report, so its
+ * reader needs no cabinet-wide grant to open their own receipts.
+ */
+export function attachmentViewer(authz: Authz, target: AttachmentTarget): FileViewer {
+  const viewer = fileViewer(authz)
+  if (viewer.baseline !== 'none' || target.targetTable !== 'documents' || target.kind !== 'expense_report') return viewer
+  return { ...viewer, baseline: 'viewer' }
+}
+
 export { ATTACHABLE_TARGET_TABLES, isAttachableTargetTable } from './target-tables'
 
 export { loadAttachmentTarget, attachmentTargetInScope, type AttachmentTarget } from '@openbooks/engine/records/file-attachment-target'
@@ -105,7 +143,7 @@ export async function authorizeAttachmentTargetMutation(
 ): Promise<void> {
   const target = await loadAttachmentTarget(authz.user.orgId, targetTable, targetId, executor, true)
   if (!target || !attachmentTargetInScope(authz, target)) throw new AttachmentMutationRefusal(404)
-  if (!canMutateFiles(authz, targetTable, target.kind)) throw new AttachmentMutationRefusal(403)
+  if (!(await canMutateAttachmentTarget(authz, target, executor))) throw new AttachmentMutationRefusal(403)
 }
 
 export function attachmentMutationRefusal(error: unknown): NextResponse | null {
@@ -113,7 +151,7 @@ export function attachmentMutationRefusal(error: unknown): NextResponse | null {
   return NextResponse.json({ error: error.message }, { status: error.status })
 }
 
-export { attachmentReadPermission } from '../../../lib/file-cabinet'
+export { attachmentReadPermission }
 
 /**
  * List only attachment metadata whose file is visible to this caller. The

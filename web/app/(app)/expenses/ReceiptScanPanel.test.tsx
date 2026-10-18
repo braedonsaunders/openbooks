@@ -2,8 +2,9 @@ import assert from 'node:assert/strict'
 import test, { type TestContext } from 'node:test'
 
 // The receipt review card: blank, highlighted fields for low-confidence
-// readings, a suggestion the reviewer must accept, the currency refusal, and
-// the line it hands to the drawer. Only the API boundary (fetch) is scripted.
+// readings, a suggestion the reviewer must accept, foreign-currency
+// conversion, and the line it hands to the drawer. Only the API boundary
+// (fetch) is scripted.
 
 const { bootJsdomEnvironment } = await import('../../../testing/jsdom-env')
 await bootJsdomEnvironment({ url: 'http://localhost:4800/expenses/reports', matchMediaMatches: false, scrollIntoView: false, resizeObserver: false })
@@ -73,16 +74,31 @@ function capture(overrides: Record<string, unknown> = {}) {
   }
 }
 
-async function mount(t: TestContext, captures: unknown[]) {
+const usdQuote = {
+  reportCurrency: 'CAD',
+  minorUnits: 2,
+  allowRateOverride: false,
+  quote: { rate: '1.3650000000', rateType: 'spot', observationDate: '2026-10-02', source: 'manual' },
+  refusal: null,
+}
+
+async function mount(t: TestContext, captures: unknown[], fxRequests: string[] = []) {
   const prior = globalThis.fetch
-  globalThis.fetch = (async () => Response.json({
-    captures,
-    reportCurrency: 'CAD',
-    canScan: true,
-    captureOperational: true,
-    canConfigure: false,
-    configureHref: '/admin/ai',
-  })) as typeof fetch
+  globalThis.fetch = (async (input: string | URL | Request) => {
+    const url = String(input)
+    if (url.startsWith('/api/expenses/fx-rate')) {
+      fxRequests.push(url)
+      return Response.json(usdQuote)
+    }
+    return Response.json({
+      captures,
+      reportCurrency: 'CAD',
+      canScan: true,
+      captureOperational: true,
+      canConfigure: false,
+      configureHref: '/admin/ai',
+    })
+  }) as typeof fetch
   t.after(() => { globalThis.fetch = prior })
   const added: Array<{ captureId: string; line: Record<string, unknown>; facts: Record<string, unknown> }> = []
   const host = document.createElement('div')
@@ -162,6 +178,7 @@ test('accepting the reading and suggestion adds a taxed line that splits the tot
       taxOverridden: true,
       taxAmount: '10.9900',
       settlementType: 'out_of_pocket',
+      foreign: null,
     },
     facts: { transactionDate: '2026-10-03', merchantName: 'The Keg', merchantPartyId: null },
   }])
@@ -177,22 +194,63 @@ test('without a tax code the whole receipt total is the line amount', async (t) 
   assert.equal(added[0]?.line.taxAmount, '')
 })
 
-test('a receipt in another currency cannot be added and names the remedy', async (t) => {
-  const { host } = await mount(t, [capture({
-    issues: [{ code: 'currency_mismatch', severity: 'blocking', field: 'currency', actual: 'USD', expected: 'CAD' }],
+function usdCapture() {
+  return capture({
+    issues: [{ code: 'foreign_currency', severity: 'warning', field: 'currency', actual: 'USD', expected: 'CAD' }],
     draft: {
       ...capture().draft,
       merchantName: field('Uber', 'Uber', '0.9900', false),
       currency: field('USD', 'USD', '0.9800', false),
-      total: field(null, '24.1000', '0.9900', true),
+      total: field('24.1000', '24.1000', '0.9900', false),
+      taxAmount: field(null, null, null, false),
       currencyMatchesReport: false,
     },
-  })])
-  assert.match(host.textContent ?? '', /This receipt is in USD but the report is in CAD/)
+  })
+}
+
+test('a receipt in another currency converts at the dated rate into the report currency', async (t) => {
+  const fxRequests: string[] = []
+  const { host, added } = await mount(t, [usdCapture()], fxRequests)
+  assert.match(host.textContent ?? '', /This receipt is in USD\. Its line converts into CAD at the dated exchange rate/)
+  assert.match(host.textContent ?? '', /Spent in USD, converted into CAD/)
   const total = host.querySelector<HTMLInputElement>(`#${CSS.escape(`${CAPTURE_ID}-total`)}`)!
-  assert.equal(total.value, '')
+  assert.equal(total.value, '24.10', 'the receipt total stays in its own currency')
+  await act(async () => { await tick() })
+  assert.ok(fxRequests.some((url) => url.includes('currency=USD') && url.includes('date=2026-10-03') && url.includes(`reportId=${REPORT_ID}`)),
+    'the dated rate is read for the receipt date and this report')
+  assert.match(host.textContent ?? '', /Converts to CA\$32\.90 at 1 USD = 1\.3650000000 CAD\./)
   await act(async () => { button(host, 'Use suggestion').click() })
-  await act(async () => { setInput(total, '33.10') })
+  await act(async () => { button(host, 'Add to report').click() })
+  assert.equal(added.length, 1)
+  assert.equal(added[0]!.line.amount, '32.9000')
+  const foreign = added[0]!.line.foreign as { state: Record<string, unknown>; original: Record<string, unknown> }
+  assert.deepEqual(foreign.original, { amount: '24.1000', taxAmount: null })
+  assert.equal(foreign.state.currency, 'USD')
+  assert.equal(foreign.state.method, 'rate_table')
+  assert.equal(foreign.state.rateDate, '2026-10-03')
+  assert.equal(foreign.state.quotedRate, '1.3650000000')
+})
+
+test('a card statement amount in the report currency becomes the line exactly', async (t) => {
+  const { host, added } = await mount(t, [usdCapture()])
+  await act(async () => { await tick() })
+  await act(async () => { pickOption(host, `${CAPTURE_ID}-fx-method`, 'billed_amount') })
+  const billed = host.querySelector<HTMLInputElement>(`#${CSS.escape(`${CAPTURE_ID}-fx-billed`)}`)!
+  await act(async () => { setInput(billed, '33.10') })
+  assert.match(host.textContent ?? '', /Converts to CA\$33\.10 at 1 USD = 1\.3734439834 CAD\./, 'the rate is derived from the billed amount')
+  await act(async () => { button(host, 'Use suggestion').click() })
+  await act(async () => { button(host, 'Add to report').click() })
+  assert.equal(added[0]!.line.amount, '33.1000')
+  assert.equal((added[0]!.line.foreign as { state: { billedAmount: string } }).state.billedAmount, '33.10')
+})
+
+test('conflicting currency readings block the line until the reviewer settles the currency', async (t) => {
+  const { host } = await mount(t, [capture({
+    issues: [{ code: 'currency_conflict', severity: 'blocking', field: 'currency', actual: 'CAD, USD' }],
+    draft: { ...capture().draft, merchantName: field('Uber', 'Uber', '0.9900', false), currency: field(null, null, null, true), currencyMatchesReport: null },
+  })])
+  assert.match(host.textContent ?? '', /different currencies \(CAD, USD\)/)
+  await act(async () => { button(host, 'Use suggestion').click() })
   assert.equal(button(host, 'Add to report').disabled, true)
 })
 

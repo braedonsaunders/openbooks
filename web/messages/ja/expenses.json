@@ -150,7 +150,8 @@
       "currency": "通貨",
       "taxCode": "税コード",
       "account": "費用勘定",
-      "description": "摘要"
+      "description": "摘要",
+      "taxIn": "税額（{currency}）"
     },
     "noTaxCode": "税コードなし",
     "readAs": "領収書の読み取り値: {value}",
@@ -184,16 +185,49 @@
       "nonPositiveTotal": "合計 {value} が正の金額ではありません。",
       "amountOutOfRange": "{field}が大きすぎて記録できません。",
       "currencyUnread": "領収書に通貨が記載されていません。金額が {currency} であることを確認してください。",
-      "currencyMismatch": "この領収書は {actual} ですが、レポートは {currency} です。その通貨のレポートに記録するか、{currency} での請求額で明細を手入力してください。",
       "currencyConflict": "領収書の金額に異なる通貨({actual})が含まれています。請求された通貨を確認してください。",
       "invalidCurrency": "「{actual}」は有効な通貨コードではありません。",
       "duplicateFile": "この領収書ファイルは {report} で既にスキャンされています。別の経費でなければ破棄してください。",
-      "duplicateReceipt": "同じ店舗・日付・合計の領収書が {report} に既にあります。別の経費でなければ破棄してください。"
+      "duplicateReceipt": "同じ店舗・日付・合計の領収書が {report} に既にあります。別の経費でなければ破棄してください。",
+      "foreignCurrency": "この領収書は {actual} です。明細は日付の為替レート、または明細書で請求された {currency} 金額で {currency} に換算されます。",
+      "duplicateElsewhere": "同様の領収書が別の従業員の経費精算に既にあります。別の支出でない限り破棄してください。"
     },
     "toasts": {
       "added": "領収書から明細を追加しました。確認してレポートを保存してください。",
       "discarded": "領収書を破棄しました。",
       "actionFailed": "領収書の操作に失敗しました。"
-    }
+    },
+    "foreignTitle": "{currency} で支払い、{reportCurrency} に換算"
+  },
+  "currency": {
+    "column": "通貨",
+    "edit": "編集",
+    "change": "他の通貨",
+    "panelTitle": "明細 {line} の通貨",
+    "remove": "{currency} を使用",
+    "done": "完了",
+    "amountIn": "金額（{currency}）",
+    "taxIn": "領収書の税額（{currency}）",
+    "taxHint": "空欄にすると税コードから {currency} で税額を計算します。",
+    "domestic": "この明細は精算書の通貨 {currency} です。",
+    "start": "他の通貨で入力",
+    "currency": "支払通貨",
+    "expenseDate": "経費日",
+    "method": "換算方法",
+    "methods": {
+      "rate_table": "日付の為替レート",
+      "billed_amount": "{currency} での請求額",
+      "override": "指定レート"
+    },
+    "billedAmount": "請求額（{currency}）",
+    "billedHint": "カードまたは銀行の明細書の金額です。為替レートはここから算出されます。",
+    "rate": "レート（1 {from} あたりの {to}）",
+    "reason": "レートの理由",
+    "reasonPlaceholder": "例：購入時の銀行の換算通知",
+    "converted": "1 {from} = {rate} {to} で {amount} に換算されます。",
+    "convertedWithTax": "1 {from} = {rate} {to} で {amount}（税額 {tax}）に換算されます。",
+    "conversionPending": "金額と換算方法を入力すると換算後の金額が表示されます。",
+    "rateSource": "{date} のレート（{rateType}）。",
+    "quoteFailed": "為替レートを読み込めませんでした。もう一度お試しください。"
   }
 }

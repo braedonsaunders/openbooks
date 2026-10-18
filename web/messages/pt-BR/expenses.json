@@ -150,7 +150,8 @@
       "currency": "Moeda",
       "taxCode": "Código de imposto",
       "account": "Conta de despesa",
-      "description": "Descrição"
+      "description": "Descrição",
+      "taxIn": "Imposto ({currency})"
     },
     "noTaxCode": "Sem código de imposto",
     "readAs": "O recibo indica {value}",
@@ -184,16 +185,49 @@
       "nonPositiveTotal": "O total {value} não é um valor positivo.",
       "amountOutOfRange": "{field} é grande demais para ser registrado.",
       "currencyUnread": "O recibo não informa uma moeda. Confirme que o valor está em {currency}.",
-      "currencyMismatch": "Este recibo está em {actual}, mas o relatório está em {currency}. Registre-o em um relatório nessa moeda ou adicione a linha manualmente com o valor cobrado em {currency}.",
       "currencyConflict": "Os valores do recibo mostram moedas diferentes ({actual}). Confirme a moeda cobrada.",
       "invalidCurrency": "\"{actual}\" não é um código de moeda válido.",
       "duplicateFile": "Este arquivo de recibo já foi digitalizado em {report}. Descarte-o, a menos que seja uma despesa separada.",
-      "duplicateReceipt": "Já existe um recibo com o mesmo estabelecimento, data e total em {report}. Descarte-o, a menos que seja uma despesa separada."
+      "duplicateReceipt": "Já existe um recibo com o mesmo estabelecimento, data e total em {report}. Descarte-o, a menos que seja uma despesa separada.",
+      "foreignCurrency": "Este recibo está em {actual}. A linha é convertida para {currency} pela taxa de câmbio datada ou pelo valor em {currency} cobrado no seu extrato.",
+      "duplicateElsewhere": "Um recibo como este já está no relatório de despesas de outro funcionário. Descarte-o, a menos que seja uma despesa diferente."
     },
     "toasts": {
       "added": "Linha adicionada a partir do recibo. Revise-a e salve o relatório.",
       "discarded": "Recibo descartado.",
       "actionFailed": "A ação no recibo falhou."
-    }
+    },
+    "foreignTitle": "Gasto em {currency}, convertido para {reportCurrency}"
+  },
+  "currency": {
+    "column": "Moeda",
+    "edit": "Editar",
+    "change": "Outra moeda",
+    "panelTitle": "Moeda da linha {line}",
+    "remove": "Usar {currency}",
+    "done": "Concluído",
+    "amountIn": "Valor ({currency})",
+    "taxIn": "Imposto do recibo ({currency})",
+    "taxHint": "Deixe em branco para calcular o imposto em {currency} pelo código de imposto.",
+    "domestic": "Esta linha está em {currency}, a moeda do relatório.",
+    "start": "Informar em outra moeda",
+    "currency": "Moeda do gasto",
+    "expenseDate": "Data da despesa",
+    "method": "Convertida pela",
+    "methods": {
+      "rate_table": "Taxa de câmbio datada",
+      "billed_amount": "Valor cobrado em {currency}",
+      "override": "Taxa explícita"
+    },
+    "billedAmount": "Valor cobrado ({currency})",
+    "billedHint": "O valor no extrato do cartão ou do banco. A taxa de câmbio é derivada dele.",
+    "rate": "Taxa (1 {from} em {to})",
+    "reason": "Justificativa da taxa",
+    "reasonPlaceholder": "Por exemplo, o aviso de conversão do banco para a compra",
+    "converted": "Convertido para {amount} a 1 {from} = {rate} {to}.",
+    "convertedWithTax": "Convertido para {amount} mais {tax} de imposto a 1 {from} = {rate} {to}.",
+    "conversionPending": "Informe o valor e como ele é convertido para ver o valor convertido.",
+    "rateSource": "Taxa de {date} ({rateType}).",
+    "quoteFailed": "Não foi possível carregar a taxa de câmbio. Tente novamente."
   }
 }

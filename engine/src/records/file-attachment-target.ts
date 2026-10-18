@@ -14,6 +14,8 @@ export interface AttachmentTarget {
   targetId: string
   kind: string | null
   subsidiaryId: string | null
+  /** A document's party (an expense report's employee); null for other tables. */
+  documentPartyId: string | null
   partySubsidiaryId: string | null
   projectSubsidiaryId: string | null
 }
@@ -30,6 +32,7 @@ export async function loadAttachmentTarget(
   type RawTarget = {
     kind?: string | null
     subsidiaryId?: string | null
+    partyId?: string | null
     partySubsidiaryId?: string | null
     projectSubsidiaryId?: string | null
     projectId?: string | null
@@ -37,8 +40,8 @@ export async function loadAttachmentTarget(
   const row = (
     targetTable === 'documents'
       ? (
-          await executor.execute<{ kind: string; subsidiaryId: string | null }>(sql`
-        select kind, subsidiary_id as "subsidiaryId"
+          await executor.execute<{ kind: string; subsidiaryId: string | null; partyId: string | null }>(sql`
+        select kind, subsidiary_id as "subsidiaryId", party_id as "partyId"
           from documents
          where id = ${targetId} and org_id = ${orgId} ${lock}`)
         ).rows[0]
@@ -107,6 +110,7 @@ export async function loadAttachmentTarget(
     targetId,
     kind: targetTable === 'documents' ? (row.kind ?? null) : null,
     subsidiaryId: targetTable === 'documents' || targetTable === 'parties' || targetTable === 'fixed_assets' ? (row.subsidiaryId ?? null) : null,
+    documentPartyId: targetTable === 'documents' ? (row.partyId ?? null) : null,
     partySubsidiaryId: targetTable === 'compliance_records' || targetTable === 'lien_waivers' ? (row.partySubsidiaryId ?? null) : null,
     projectSubsidiaryId: targetTable === 'compliance_records' || targetTable === 'lien_waivers' ? (row.projectSubsidiaryId ?? null) : null,
   }

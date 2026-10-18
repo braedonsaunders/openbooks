@@ -15,7 +15,16 @@ export const GET = defineRoute({
     const source = (params as { source?: string } | undefined)?.source ?? ''
     const route = listDrawerRoute(source)
     if (!route) return notFound('list')
-    return 'feature' in route ? guardFeaturePermission(route.permission, route.feature) : guardPermission(route.permission)
+    const gate = (permission: string) => 'feature' in route ? guardFeaturePermission(permission, route.feature) : guardPermission(permission)
+    const primary = await gate(route.permission)
+    // A record-scoped grant (an own-records permission) opens the drawer;
+    // the native loader then reads only the records that grant reaches.
+    if (!(primary instanceof NextResponse) || primary.status !== 403 || !('alternatePermissions' in route)) return primary
+    for (const permission of route.alternatePermissions) {
+      const alternative = await gate(permission)
+      if (!(alternative instanceof NextResponse)) return alternative
+    }
+    return primary
   },
   feature: { none: 'Each registered drawer enforces its native page permission and feature before reading the record.' },
   params: z.object({ source: z.enum(Object.keys(LIST_DRAWER_ROUTES) as [ListDrawerSource, ...ListDrawerSource[]]) }),

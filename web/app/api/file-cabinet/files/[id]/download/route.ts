@@ -11,6 +11,22 @@ import { isUuid } from "../../../../../../lib/list-params";
 import { can } from "../../../../../../lib/authz";
 import { fileViewer } from "../../../lib";
 import { notFound } from "@/lib/api/responses";
+import { expenseAccess, expenseAccessAllows } from "../../../../../../lib/expense-access";
+import { subsidiaryScopeAllows } from "@openbooks/engine/organization/scope";
+import type { Authz } from "../../../../../../lib/authz";
+
+/** True when the file is attached to an expense report the caller may read. */
+async function readsAttachedExpenseEvidence(gate: Authz, fileId: string): Promise<boolean> {
+  const access = await expenseAccess(gate, "read");
+  if (!access) return false;
+  const reports = await db.execute<{ partyId: string | null; subsidiaryId: string | null }>(sql`
+    select d.party_id as "partyId", d.subsidiary_id as "subsidiaryId"
+      from file_attachments fa
+      join documents d on d.id = fa.target_id and d.org_id = fa.org_id and d.kind = 'expense_report'
+     where fa.org_id = ${gate.user.orgId} and fa.file_id = ${fileId} and fa.target_table = 'documents'`);
+  return reports.rows.some((report) => subsidiaryScopeAllows(gate.allowedSubsidiaryIds, report.subsidiaryId)
+    && expenseAccessAllows(access, report.partyId));
+}
 
 export const runtime = "nodejs";
 
@@ -30,7 +46,11 @@ export const GET = defineRoute({
       return notFound("record");
 
     let viewer = fileViewer(gate);
-    if (!can(gate, "documents.read")) {
+    if (!can(gate, "documents.read") && await readsAttachedExpenseEvidence(gate, id)) {
+      // Evidence attached to an expense report the caller may read opens
+      // with the report; it confers no cabinet-wide visibility.
+      viewer = { ...viewer, baseline: "viewer" };
+    } else if (!can(gate, "documents.read")) {
       if (!can(gate, "assets.read"))
         return NextResponse.json({ error: "forbidden" }, { status: 403 });
       const attachedAsset = await db.execute(sql`

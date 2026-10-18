@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { FileImage, Loader2, ReceiptText, RotateCcw, Trash2, UploadCloud } from 'lucide-react'
 import { Alert, AlertDescription, Badge, Button, Input, Label, SearchSelect, Select, cn } from '@openbooks/ui'
+import { SUPPORTED_CURRENCIES } from '@openbooks/engine/fx/currencies'
 import { add, neg } from '@openbooks/engine/money/money'
 import { canonicalDecimal } from '@openbooks/engine/money/decimal'
 import { isIsoCalendarDate } from '@openbooks/engine/platform/iso-date'
@@ -15,6 +16,14 @@ import { MoneyInput, moneyFieldError } from '../../../components/money-input'
 import { editableMoneyDecimal } from '../../../lib/exact-decimal'
 import { readApiErrorMessage } from '../../../lib/api-error'
 import { confirmDialog } from '../../../lib/confirm'
+import {
+  blankForeignLine,
+  convertForeignLine,
+  ExpenseLineCurrency,
+  foreignLineReady,
+  type ForeignLineState,
+  type ForeignOriginal,
+} from './ExpenseLineCurrency'
 import { DateField } from '../../../components/date-field'
 
 /** A confirmed receipt reading, as the expense line it becomes. */
@@ -22,10 +31,13 @@ export interface ReceiptLineInput {
   accountId: string
   description: string
   taxProfileId: string
+  /** Report-currency amounts; converted from the receipt's currency for a foreign receipt. */
   amount: string
   taxOverridden: boolean
   taxAmount: string
   settlementType: string
+  /** A receipt in another currency than the report: how its line converts. */
+  foreign: { state: ForeignLineState; original: ForeignOriginal } | null
 }
 
 /** Receipt facts the reviewer confirmed; saved with the line. */
@@ -50,8 +62,8 @@ type Upload = { key: string; filename: string; status: 'queued' | 'scanning' | '
 
 const ACCEPT = 'application/pdf,image/jpeg,image/png,image/tiff'
 const PREVIEWABLE_IMAGES = new Set(['image/jpeg', 'image/png'])
-/** Readings that cannot become a line in this report's currency. */
-const CURRENCY_BLOCKS = new Set(['currency_mismatch', 'currency_conflict', 'invalid_currency'])
+/** Readings whose currency must be settled before they can become a line. */
+const CURRENCY_BLOCKS = new Set(['currency_conflict', 'invalid_currency'])
 
 function percent(confidence: string | null): string | null {
   if (!confidence) return null
@@ -304,6 +316,7 @@ export function ReceiptScanPanel({
         <ReceiptCard
           key={`${capture.id}:${capture.status}:${capture.attempts}`}
           capture={capture}
+          documentId={documentId}
           reportCurrency={data.reportCurrency}
           canAdd={canAdd && data.canScan}
           canManage={data.canScan}
@@ -320,6 +333,7 @@ export function ReceiptScanPanel({
 
 function ReceiptCard({
   capture,
+  documentId,
   reportCurrency,
   canAdd,
   canManage,
@@ -330,6 +344,7 @@ function ReceiptCard({
   onAction,
 }: {
   capture: ReceiptCaptureView
+  documentId: string
   reportCurrency: string
   canAdd: boolean
   canManage: boolean
@@ -351,6 +366,11 @@ function ReceiptCard({
   const [accountId, setAccountId] = useState('')
   const [description, setDescription] = useState('')
   const [settlementType, setSettlementType] = useState('out_of_pocket')
+  // The currency the receipt was spent in: what it states, else the report's.
+  const [currency, setCurrency] = useState(draft?.currency.value ?? reportCurrency)
+  // The expense date follows the receipt date until the reviewer sets its own.
+  const [foreignState, setForeignState] = useState<ForeignLineState>(() =>
+    blankForeignLine(draft?.currency.value ?? reportCurrency, ''))
   const [touched, setTouched] = useState<ReadonlySet<string>>(new Set())
   const touch = (key: string) => setTouched((current) => new Set(current).add(key))
 
@@ -375,10 +395,12 @@ function ReceiptCard({
       case 'non_positive_total': return t('receipts.issues.nonPositiveTotal', { value: money(issue.actual ?? '0') })
       case 'amount_out_of_range': return t('receipts.issues.amountOutOfRange', { field })
       case 'currency_unread': return t('receipts.issues.currencyUnread', { currency: reportCurrency })
-      case 'currency_mismatch': return t('receipts.issues.currencyMismatch', { actual: issue.actual ?? '', currency: reportCurrency })
+      case 'foreign_currency':
+      case 'currency_mismatch': return t('receipts.issues.foreignCurrency', { actual: issue.actual ?? '', currency: reportCurrency })
       case 'currency_conflict': return t('receipts.issues.currencyConflict', { actual: issue.actual ?? '' })
       case 'invalid_currency': return t('receipts.issues.invalidCurrency', { actual: issue.actual ?? '' })
       case 'possible_duplicate':
+        if (!issue.detail) return t('receipts.issues.duplicateElsewhere')
         return issue.cause === 'same_file'
           ? t('receipts.issues.duplicateFile', { report: issue.detail ?? '' })
           : t('receipts.issues.duplicateReceipt', { report: issue.detail ?? '' })
@@ -411,13 +433,22 @@ function ReceiptCard({
   const totalCanonical = canonicalDecimal(total.trim(), 4)
   const taxCanonical = tax.trim() === '' ? null : canonicalDecimal(tax.trim(), 4)
   const withTax = taxProfileId !== '' && taxCanonical !== null
-  const lineAmount = totalCanonical === null ? null : withTax ? add(totalCanonical, neg(taxCanonical!)) : add(totalCanonical, '0')
+  const receiptAmount = totalCanonical === null ? null : withTax ? add(totalCanonical, neg(taxCanonical!)) : add(totalCanonical, '0')
+  // A receipt in another currency converts into the report currency; its
+  // expense date defaults to the receipt date until the reviewer sets one.
+  const foreign = currency !== reportCurrency
+  const foreignLine: ForeignLineState = { ...foreignState, currency, rateDate: foreignState.rateDate || date }
+  const original: ForeignOriginal = { amount: receiptAmount, taxAmount: withTax ? add(taxCanonical!, '0') : null }
+  const conversion = foreign ? convertForeignLine(foreignLine, original, reportCurrency) : null
+  const lineAmount = foreign ? conversion?.amount ?? null : receiptAmount
+  const lineTax = foreign ? conversion?.taxAmount ?? null : withTax ? add(taxCanonical!, '0') : null
   const ready = canAdd && !pending && !currencyBlocked
     && isIsoCalendarDate(date)
     && merchant.trim() !== ''
     && totalCanonical !== null
     && (tax.trim() === '' || taxCanonical !== null)
     && accountId !== ''
+    && (!foreign || foreignLineReady(foreignLine, original, reportCurrency))
   const suggestion = draft?.suggestedAccount ?? null
   const suggestionLabel = suggestion ? accounts.find((account) => account.value === suggestion.accountId)?.label ?? null : null
 
@@ -430,8 +461,9 @@ function ReceiptCard({
       taxProfileId,
       amount: lineAmount,
       taxOverridden: withTax,
-      taxAmount: withTax ? add(taxCanonical!, '0') : '',
+      taxAmount: lineTax ?? '',
       settlementType,
+      foreign: foreign ? { state: foreignLine, original } : null,
     }, { transactionDate: date, merchantName, merchantPartyId: vendorId || null })
   }
 
@@ -526,13 +558,23 @@ function ReceiptCard({
                   ) : null}
                 </div>
                 <div className="space-y-1">
-                  <Label htmlFor={`${capture.id}-total`}>{t('receipts.fields.totalIn', { currency: reportCurrency })}</Label>
+                  <Label htmlFor={`${capture.id}-currency`}>{t('receipts.fields.currency')}</Label>
+                  <Select id={`${capture.id}-currency`} value={currency} className={flagged(draft.currency, 'currency')}
+                    onChange={(event) => { setCurrency(event.target.value); touch('currency') }}>
+                    {SUPPORTED_CURRENCIES.map((entry) => (
+                      <option key={entry.code} value={entry.code}>{entry.code} · {entry.name}</option>
+                    ))}
+                  </Select>
+                  {reading(draft.currency, 'currency', setCurrency, draft.currency.reading !== null && SUPPORTED_CURRENCIES.some((entry) => entry.code === draft.currency.reading))}
+                </div>
+                <div className="space-y-1">
+                  <Label htmlFor={`${capture.id}-total`}>{t('receipts.fields.totalIn', { currency })}</Label>
                   <MoneyInput id={`${capture.id}-total`} value={total} required field={t('receipts.fields.total')}
                     className={flagged(draft.total, 'total')} onChange={(value) => { setTotal(value); touch('total') }} />
                   {reading(draft.total, 'total', (value) => setTotal(editableMoneyDecimal(value)), !currencyBlocked && canonicalDecimal(draft.total.reading, 4) !== null)}
                 </div>
                 <div className="space-y-1">
-                  <Label htmlFor={`${capture.id}-tax`}>{t('receipts.fields.tax')}</Label>
+                  <Label htmlFor={`${capture.id}-tax`}>{t('receipts.fields.taxIn', { currency })}</Label>
                   <MoneyInput id={`${capture.id}-tax`} value={tax} field={t('receipts.fields.tax')}
                     className={flagged(draft.taxAmount, 'tax')} onChange={(value) => { setTax(value); touch('tax') }} />
                   {reading(draft.taxAmount, 'tax', (value) => setTax(editableMoneyDecimal(value)), !currencyBlocked && canonicalDecimal(draft.taxAmount.reading, 4) !== null)}
@@ -571,12 +613,29 @@ function ReceiptCard({
                     placeholder={merchant.trim() && date ? `${merchant.trim()} · ${date}` : undefined}
                     onChange={(event) => setDescription(event.target.value)} />
                 </div>
+                {foreign ? (
+                  <div className="space-y-2 rounded-md border border-slate-200 p-3 sm:col-span-2 dark:border-slate-800">
+                    <p className="text-xs font-medium text-slate-600 dark:text-slate-300">
+                      {t('receipts.foreignTitle', { currency, reportCurrency })}
+                    </p>
+                    <ExpenseLineCurrency
+                      idPrefix={`${capture.id}-fx`}
+                      reportCurrency={reportCurrency}
+                      reportId={documentId}
+                      state={foreignLine}
+                      original={original}
+                      editable={canAdd && !pending}
+                      showCurrency={false}
+                      onChange={setForeignState}
+                    />
+                  </div>
+                ) : null}
                 <div className="flex flex-wrap items-center justify-between gap-2 sm:col-span-2">
                   <span className="text-xs text-slate-600 tabular-nums dark:text-slate-300">
                     {lineAmount === null || moneyFieldError('', '', total, 4, { required: true }) !== null
                       ? t('receipts.requiredHint')
-                      : withTax
-                        ? t('receipts.lineAmount', { amount: money(lineAmount, { currency: reportCurrency }), tax: money(taxCanonical!, { currency: reportCurrency }) })
+                      : lineTax !== null
+                        ? t('receipts.lineAmount', { amount: money(lineAmount, { currency: reportCurrency }), tax: money(lineTax, { currency: reportCurrency }) })
                         : t('receipts.lineAmountNoTax', { amount: money(lineAmount, { currency: reportCurrency }) })}
                   </span>
                   <Button size="sm" disabled={!ready} onClick={addLine}>{t('receipts.addToReport')}</Button>

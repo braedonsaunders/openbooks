@@ -4,8 +4,10 @@ import {
   chooseAccountSuggestion,
   draftExpenseLineFromReceipt,
   extractAzureReceipt,
+  extractLlmReceipt,
   isReceiptContentType,
   normalizeAzureReceipt,
+  normalizeLlmReceipt,
   receiptDuplicateIssues,
   receiptMerchantKey,
   validateNormalizedReceipt,
@@ -110,11 +112,12 @@ test("a euro receipt keeps its own currency and decimal-comma text is read exact
   assert.equal(normalized.total, "23.4000");
   assert.equal(normalized.subtotal, null);
   const draft = draftExpenseLineFromReceipt({ receipt: normalized, confidenceThreshold: THRESHOLD, reportCurrency: "CAD", merchantPartyId: null, suggestedAccount: null });
-  // A receipt in another currency than the report never drafts an amount.
+  // A receipt in another currency drafts its own amounts; the line converts
+  // into the report currency when the reviewer adds it.
   assert.equal(draft.currencyMatchesReport, false);
-  assert.equal(draft.total.value, null);
-  assert.equal(draft.total.reading, "23.4000");
-  assert.equal(draft.total.needsReview, true);
+  assert.equal(draft.currency.value, "EUR");
+  assert.equal(draft.total.value, "23.4000");
+  assert.equal(draft.total.needsReview, false);
 });
 
 test("a currency symbol alone is never read as a currency code", () => {
@@ -357,4 +360,109 @@ test("a provider failure surfaces the provider's structured message", async () =
 
 test("an analysis with no recognized receipt is refused by name", () => {
   assert.throws(() => normalizeAzureReceipt({ status: "succeeded", analyzeResult: { documents: [] } }), /no recognized receipt/);
+});
+
+const llmAnswer = {
+  merchantName: { value: "Café de Flore", confidence: 0.97 },
+  merchantAddress: { value: "172 Bd Saint-Germain, Paris", confidence: 0.9 },
+  merchantPhone: { value: null, confidence: 0 },
+  transactionDate: { value: "2026-09-28", text: "28/09/2026", confidence: 0.95 },
+  currency: { value: "EUR", symbol: "€", confidence: 0.96 },
+  subtotal: { value: "19.50", confidence: 0.93 },
+  taxTotal: { value: "3.90", confidence: 0.92 },
+  tip: { value: null, confidence: 0 },
+  total: { value: "23.40", confidence: 0.98 },
+  taxDetails: [{ amount: "3.90", rate: "20%", netAmount: "19.50", description: "TVA" }],
+  items: [{ description: "Croque monsieur", quantity: "1", unitPrice: "12.50", amount: "12.50", confidence: 0.9 }, { description: "Café crème", quantity: "2", unitPrice: "3.50", amount: "7.00", confidence: 0.88 }],
+};
+
+test("an AI model's receipt answer normalizes into the same contract with its stated confidence", () => {
+  const { normalized, evidence, overallConfidence } = normalizeLlmReceipt(llmAnswer);
+  assert.equal(normalized.merchantName, "Café de Flore");
+  assert.equal(normalized.transactionDate, "2026-09-28");
+  assert.equal(normalized.currency, "EUR");
+  assert.deepEqual(normalized.currencyReadings, ["EUR"]);
+  assert.equal(normalized.total, "23.4000");
+  assert.equal(normalized.taxTotal, "3.9000");
+  assert.equal(normalized.tip, null);
+  assert.equal(normalized.items.length, 2);
+  assert.equal(normalized.confidence.total, "0.9800");
+  assert.equal(overallConfidence, "0.9500", "the weakest identifying field");
+  assert.ok(evidence.every((field) => field.pageNumber === null && field.polygon === null), "a model gives no page geometry");
+  assert.deepEqual(validateNormalizedReceipt(normalized, { confidenceThreshold: THRESHOLD, today: "2026-10-17" }), []);
+});
+
+test("an AI reading below the threshold or without a stated confidence stays blank and is flagged", () => {
+  const { normalized } = normalizeLlmReceipt({
+    ...llmAnswer,
+    merchantName: { value: "Cafe de Flore", confidence: 0.42 },
+    total: { value: "23.40" },
+    currency: { value: null, symbol: "€", confidence: 0.9 },
+  });
+  assert.equal(normalized.confidence.merchantName, "0.4200");
+  assert.equal(normalized.confidence.total, null);
+  assert.equal(normalized.currency, null, "a symbol is never read as a currency code");
+  assert.equal(normalized.currencySymbol, "€");
+  const issues = validateNormalizedReceipt(normalized, { confidenceThreshold: THRESHOLD });
+  assert.deepEqual(issues.filter((issue) => issue.code === "low_confidence").map((issue) => issue.field).sort(), ["merchantName", "total"]);
+  const draft = draftExpenseLineFromReceipt({ receipt: normalized, confidenceThreshold: THRESHOLD, reportCurrency: "CAD", merchantPartyId: null, suggestedAccount: null });
+  assert.equal(draft.merchantName.value, null);
+  assert.equal(draft.merchantName.reading, "Cafe de Flore");
+  assert.equal(draft.total.value, null);
+  assert.equal(draft.total.needsReview, true);
+});
+
+test("an AI reading copies printed amounts exactly and refuses ambiguous text by name", () => {
+  const { normalized } = normalizeLlmReceipt({
+    ...llmAnswer,
+    total: { value: "1.234.567", confidence: 0.99 },
+    subtotal: { value: 19.5, confidence: 0.99 },
+    taxTotal: { value: 0.1 + 0.2, confidence: 0.99 },
+  });
+  assert.equal(normalized.total, "1.234.567", "refused text rides through for the reviewer");
+  assert.equal(normalized.subtotal, "19.5000", "a short exact number is kept");
+  assert.equal(normalized.taxTotal, null, "a float that lost its digits is not read");
+  const issues = validateNormalizedReceipt(normalized, { confidenceThreshold: THRESHOLD });
+  assert.ok(issues.some((issue) => issue.code === "invalid_amount" && issue.field === "total" && issue.severity === "blocking"));
+});
+
+test("an answer that is not a receipt reading fails the capture instead of drafting", () => {
+  assert.throws(() => normalizeLlmReceipt({ note: "I cannot read this" }), /not a receipt reading/);
+});
+
+test("the AI receipt adapter sends the image with the strict contract and reads the fenced answer", async () => {
+  let body: Record<string, unknown> = {};
+  let headers = new Headers();
+  const fakeFetch: typeof fetch = async (url, init) => {
+    assert.equal(String(url), "https://api.anthropic.com/v1/messages");
+    headers = new Headers(init?.headers);
+    body = JSON.parse(String(init?.body)) as Record<string, unknown>;
+    return Response.json({ content: [{ type: "text", text: "Here you go:\n```json\n" + JSON.stringify(llmAnswer) + "\n```" }] });
+  };
+  const result = await extractLlmReceipt({
+    config: { provider: "anthropic", apiKey: "sk-ant-test", model: "claude-sonnet-4-6", baseUrl: null },
+    contentType: "image/jpeg",
+    bytes: new Uint8Array([0xff, 0xd8, 0xff]),
+    fetchImpl: fakeFetch,
+  });
+  assert.equal(headers.get("x-api-key"), "sk-ant-test");
+  assert.equal(body.model, "claude-sonnet-4-6");
+  const content = ((body.messages as Array<{ content: Array<Record<string, unknown>> }>)[0]!).content;
+  assert.equal(content[0]!.type, "image");
+  assert.deepEqual((content[0]!.source as Record<string, unknown>).media_type, "image/jpeg");
+  assert.match(String(content[1]!.text), /ONLY a JSON object/);
+  assert.match(String(content[1]!.text), /Never guess/);
+  assert.equal(result.normalized.total, "23.4000");
+});
+
+test("an AI answer with no JSON object fails with a retryable reason", async () => {
+  await assert.rejects(
+    extractLlmReceipt({
+      config: { provider: "openai", apiKey: "sk-test", model: "gpt-4o", baseUrl: null },
+      contentType: "image/png",
+      bytes: new Uint8Array([0x89]),
+      fetchImpl: async () => Response.json({ choices: [{ message: { content: "Sorry, the image is too blurry." } }] }),
+    }),
+    /did not answer with a receipt reading/,
+  );
 });

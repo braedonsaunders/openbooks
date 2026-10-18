@@ -39,7 +39,7 @@ export const expenseReceiptCaptures = pgTable(
     originalFilename: text("original_filename").notNull(),
     status: text("status", { enum: ["extracting", "extracted", "failed", "confirmed", "discarded"] }).notNull(),
     attempts: integer("attempts").notNull().default(1),
-    provider: text("provider", { enum: ["azure_document_intelligence"] }).notNull(),
+    provider: text("provider", { enum: ["azure_document_intelligence", "llm_vision"] }).notNull(),
     model: text("model").notNull(),
     apiVersion: text("api_version").notNull(),
     normalized: jsonb("normalized").$type<Record<string, unknown>>(),

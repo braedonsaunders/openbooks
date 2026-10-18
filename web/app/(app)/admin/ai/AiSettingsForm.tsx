@@ -26,6 +26,8 @@ export type ProviderSpecLite = {
   smart: string
   keyHint: string
   modelHint?: string
+  /** Document formats the provider's models read; empty when it reads no images. */
+  vision?: readonly string[]
 }
 
 export type AiFormInitial = {
@@ -40,7 +42,7 @@ export type AiFormInitial = {
 
 type DocumentCapturePolicy = {
   enabled: boolean
-  provider: 'azure_document_intelligence'
+  provider: 'azure_document_intelligence' | 'llm_vision'
   endpoint: string
   model: string
   confidenceThreshold: string
@@ -68,7 +70,7 @@ export function AiSettingsForm({ specs, initial }: { specs: ProviderSpecLite[]; 
   const [documentCapture, setDocumentCapture] = useState(initial.documentCapture)
   const [documentCaptureKey, setDocumentCaptureKey] = useState('')
   const [testingCapture, startCaptureTest] = useTransition()
-  const [captureTestResult, setCaptureTestResult] = useState<{ ok: boolean; code: 'connected' | 'failed' | 'missing' } | null>(null)
+  const [captureTestResult, setCaptureTestResult] = useState<{ ok: boolean; code: 'connected' | 'failed' | 'missing' | 'missingAi' } | null>(null)
 
   const [models, setModels] = useState<ModelListItem[]>([])
   const [modelsError, setModelsError] = useState<string | null>(null)
@@ -258,13 +260,16 @@ export function AiSettingsForm({ specs, initial }: { specs: ProviderSpecLite[]; 
         const response = await fetch('/api/admin/ai/document-capture/test', {
           method: 'POST',
           headers: { 'content-type': 'application/json' },
-          body: JSON.stringify({
-            endpoint: documentCapture.endpoint,
-            model: documentCapture.model,
-            apiKey: documentCaptureKey || undefined,
-          }),
+          body: JSON.stringify(documentCapture.provider === 'llm_vision'
+            ? { provider: 'llm_vision', ...(documentCapture.model.trim() ? { model: documentCapture.model.trim() } : {}) }
+            : {
+                provider: 'azure_document_intelligence',
+                endpoint: documentCapture.endpoint,
+                model: documentCapture.model,
+                apiKey: documentCaptureKey || undefined,
+              }),
         })
-        setCaptureTestResult((await response.json()) as { ok: boolean; code: 'connected' | 'failed' | 'missing' })
+        setCaptureTestResult((await response.json()) as { ok: boolean; code: 'connected' | 'failed' | 'missing' | 'missingAi' })
       } catch {
         setCaptureTestResult({ ok: false, code: 'failed' })
       }
@@ -373,6 +378,34 @@ export function AiSettingsForm({ specs, initial }: { specs: ProviderSpecLite[]; 
           {!enabled ? <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300">{t('documentCapture.globallyDisabled')}</p> : null}
           <div className="grid gap-3 sm:grid-cols-2">
             <div className="space-y-1.5 sm:col-span-2">
+              <Label htmlFor="document-capture-provider">{t('documentCapture.provider')}</Label>
+              <select
+                id="document-capture-provider"
+                value={documentCapture.provider}
+                onChange={(event) => {
+                  const next = event.target.value === 'llm_vision' ? 'llm_vision' : 'azure_document_intelligence'
+                  setDocumentCapture({
+                    ...documentCapture,
+                    provider: next,
+                    model: next === initial.documentCapture.provider ? initial.documentCapture.model : next === 'llm_vision' ? '' : 'prebuilt-invoice',
+                  })
+                  setCaptureTestResult(null)
+                }}
+                className="h-9 w-full rounded-md border border-slate-300 bg-white px-3 text-sm dark:border-slate-700 dark:bg-slate-900"
+              >
+                <option value="azure_document_intelligence">{t('documentCapture.providers.azure_document_intelligence')}</option>
+                <option value="llm_vision">{t('documentCapture.providers.llm_vision', { provider: spec.label })}</option>
+              </select>
+              <p className="text-xs text-slate-400 dark:text-slate-500">
+                {documentCapture.provider === 'llm_vision'
+                  ? (spec.vision ?? []).length === 0
+                    ? t('documentCapture.llmNoVision', { provider: spec.label })
+                    : t('documentCapture.llmHint', { provider: spec.label })
+                  : t('documentCapture.azureHint')}
+              </p>
+            </div>
+            {documentCapture.provider === 'azure_document_intelligence' ? (<>
+            <div className="space-y-1.5 sm:col-span-2">
               <Label>{t('documentCapture.endpoint')}</Label>
               <Input
                 value={documentCapture.endpoint}
@@ -414,6 +447,23 @@ export function AiSettingsForm({ specs, initial }: { specs: ProviderSpecLite[]; 
                 spellCheck={false}
               />
             </div>
+            </>) : (
+            <div className="space-y-1.5 sm:col-span-2">
+              <Label htmlFor="document-capture-llm-model">{t('documentCapture.llmModel')}</Label>
+              <Input
+                id="document-capture-llm-model"
+                value={documentCapture.model}
+                onChange={(event) => {
+                  setDocumentCapture({ ...documentCapture, model: event.target.value })
+                  setCaptureTestResult(null)
+                }}
+                placeholder={modelSmart || spec.smart}
+                autoComplete="off"
+                spellCheck={false}
+              />
+              <p className="text-xs text-slate-400 dark:text-slate-500">{t('documentCapture.llmModelHint')}</p>
+            </div>
+            )}
             <div className="space-y-1.5">
               <Label>{t('documentCapture.confidence')}</Label>
               <Input

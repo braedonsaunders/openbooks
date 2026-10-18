@@ -11,6 +11,7 @@ import { useRouter, useSearchParams } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Badge, Button, Input, Label, SearchSelect } from '@openbooks/ui'
+import { MoneyInput } from '../../../components/money-input'
 import { LineGrid, type LineGridColumn } from '../../../components/line-grid'
 import { TransactionDrawer } from '../../../components/transaction-drawer'
 import { CustomFieldInputs, customFieldColumns, type CustomFieldDefClient } from '../../../components/custom-field-inputs'
@@ -38,6 +39,15 @@ import { FlowManualButtons } from '../../../components/flow-manual-buttons'
 import { ApprovalActions } from '../../../components/approval-actions'
 import { ApprovalHistory } from '../../../components/approval-history'
 import { ReceiptScanPanel, type ReceiptLineFacts, type ReceiptLineInput } from './ReceiptScanPanel'
+import {
+  blankForeignLine,
+  convertForeignLine,
+  ExpenseLineCurrency,
+  foreignLinePayload,
+  type ForeignLineState,
+} from './ExpenseLineCurrency'
+import { isExpenseFxMethod } from '@openbooks/engine/payables/expense-line-currency'
+import { canonicalDecimal } from '@openbooks/engine/money/decimal'
 import {
   customFieldDefKey,
   isCustomFieldKey,
@@ -80,6 +90,14 @@ interface LineRow extends Record<string, unknown> {
   settlementType: string
   /** The scanned receipt this unsaved row came from; confirmed when the report saves. */
   receiptCaptureId: string
+  /**
+   * A line spent in another currency than the report: how it converts, and
+   * its original amounts. `amount` and `taxAmount` then hold the converted
+   * report-currency figures, which the server recomputes on save.
+   */
+  foreign: ForeignLineState | null
+  originalAmount: string
+  originalTaxAmount: string
 }
 interface ExpensePayload {
   doc: Record<string, unknown>
@@ -176,6 +194,9 @@ const emptyLine = (): LineRow => ({
   taxAmount: '',
   settlementType: DEFAULT_SETTLEMENT_TYPE,
   receiptCaptureId: '',
+  foreign: null,
+  originalAmount: '',
+  originalTaxAmount: '',
 })
 
 /** A single expense grid cell carries user content when it is anything but blank. */
@@ -210,6 +231,7 @@ export function isBlankExpenseLine(row: Record<string, unknown>): boolean {
     if (!isBlankExpenseCell(row[key])) return false
   }
   if (row.taxOverridden === true) return false
+  if (row.foreign != null) return false
   const settlement = row.settlementType
   if (typeof settlement === 'string') {
     if (settlement !== '' && settlement !== DEFAULT_SETTLEMENT_TYPE) return false
@@ -254,6 +276,29 @@ function isLineMap(v: unknown): v is Record<string, unknown> {
   return typeof v === 'object' && v !== null
 }
 
+/** The stored conversion of a foreign-currency line, as the editor's state. */
+function foreignFromLine(l: Record<string, unknown>): ForeignLineState | null {
+  if (typeof l.original_currency !== 'string' || !l.original_currency) return null
+  const evidence = isLineMap(l.original_fx_evidence) ? l.original_fx_evidence : {}
+  const method = isExpenseFxMethod(evidence.method) ? evidence.method : 'rate_table'
+  const rate = l.original_fx_rate != null ? String(l.original_fx_rate) : ''
+  return {
+    ...blankForeignLine(l.original_currency, typeof evidence.rateDate === 'string' ? evidence.rateDate : ''),
+    method,
+    rate: method === 'override' ? rate : '',
+    reason: typeof evidence.reason === 'string' ? evidence.reason : '',
+    billedAmount: typeof evidence.billedAmount === 'string' ? evidence.billedAmount : '',
+    quotedRate: method === 'rate_table' ? rate : null,
+  }
+}
+
+/** A row's original amounts in canonical form, for conversion. */
+function foreignOriginal(row: LineRow) {
+  const amount = canonicalDecimal(row.originalAmount.trim(), 4)
+  const tax = row.originalTaxAmount.trim() === '' ? null : canonicalDecimal(row.originalTaxAmount.trim(), 4)
+  return { amount, taxAmount: tax }
+}
+
 function toRow(l: Record<string, unknown>, lineDefs: CustomFieldDefClient[], segments: SegmentOpt[]): LineRow {
   const row: LineRow = {
     accountId: lineText(l.account_id),
@@ -269,6 +314,9 @@ function toRow(l: Record<string, unknown>, lineDefs: CustomFieldDefClient[], seg
     taxAmount: l.tax_amount != null ? String(l.tax_amount) : '',
     settlementType: lineText(l.settlement_type ?? DEFAULT_SETTLEMENT_TYPE),
     receiptCaptureId: '',
+    foreign: foreignFromLine(l),
+    originalAmount: l.original_amount != null ? String(l.original_amount) : '',
+    originalTaxAmount: l.original_tax_amount != null ? String(l.original_tax_amount) : '',
   }
   const custom = isLineMap(l.custom) ? l.custom : null
   const extraDims = isLineMap(l.extra_dims) ? l.extra_dims : null
@@ -399,6 +447,8 @@ export function ExpenseDrawer({
   // receipts, keyed by capture; they ride with the next save.
   const [receiptFacts, setReceiptFacts] = useState<Record<string, ReceiptLineFacts>>({})
   const [receiptsRefreshKey, setReceiptsRefreshKey] = useState('')
+  // The line whose foreign-currency conversion is open beneath the grid.
+  const [currencyLine, setCurrencyLine] = useState<number | null>(null)
   const searchParams = useSearchParams()
   const [activeTab, setActiveTab] = useState(() => {
     const requested = searchParams.get('transactionTab') ?? ''
@@ -477,6 +527,7 @@ export function ExpenseDrawer({
           taxOverridden: r.taxOverridden,
           taxAmount: r.taxOverridden ? r.taxAmount : null,
           settlementType: r.settlementType,
+          ...(r.foreign ? { foreignCurrency: foreignLinePayload(r.foreign, foreignOriginal(r)) } : {}),
           departmentId: r.departmentId || null,
           projectId: r.projectId || null,
           extraDims: segmentAssignmentsFromCells(r, segments.map(segment => segment.key)),
@@ -558,9 +609,17 @@ export function ExpenseDrawer({
   function addReceiptLine(captureId: string, line: ReceiptLineInput, facts: ReceiptLineFacts) {
     if (!canScanReceipts) return
     setMode('edit')
+    const { foreign, ...amounts } = line
     setRows((current) => [
       ...current.filter((row) => !isBlankExpenseLine(row) && row.receiptCaptureId !== captureId),
-      { ...emptyLine(), ...line, receiptCaptureId: captureId },
+      {
+        ...emptyLine(),
+        ...amounts,
+        receiptCaptureId: captureId,
+        foreign: foreign?.state ?? null,
+        originalAmount: foreign?.original.amount ?? '',
+        originalTaxAmount: foreign?.original.taxAmount ?? '',
+      },
     ])
     setReceiptFacts((current) => ({ ...current, [captureId]: facts }))
     setActiveTab('details')
@@ -984,8 +1043,43 @@ export function ExpenseDrawer({
     router.refresh()
   }
 
+  // -- foreign-currency lines -----------------------------------------------
+  /** Apply a change to a line's conversion and refresh its converted amounts. */
+  function updateForeign(index: number, patch: Partial<Pick<LineRow, 'foreign' | 'originalAmount' | 'originalTaxAmount'>>) {
+    setRows((current) => current.map((row, j) => {
+      if (j !== index) return row
+      const next = { ...row, ...patch }
+      if (!next.foreign) return next
+      const conversion = convertForeignLine(next.foreign, foreignOriginal(next), doc.currency)
+      return {
+        ...next,
+        amount: conversion?.amount ?? '',
+        taxOverridden: conversion?.taxAmount != null,
+        taxAmount: conversion?.taxAmount ?? '',
+      }
+    }))
+  }
+
+  function startForeign(index: number) {
+    const row = rows[index]
+    if (!row) return
+    const currency = doc.currency === 'USD' ? 'EUR' : 'USD'
+    updateForeign(index, {
+      foreign: blankForeignLine(currency, documentDate),
+      originalAmount: row.amount,
+      originalTaxAmount: row.taxOverridden ? row.taxAmount : '',
+    })
+  }
+
+  function clearForeign(index: number) {
+    setRows((current) => current.map((row, j) => (j === index
+      ? { ...row, foreign: null, originalAmount: '', originalTaxAmount: '' }
+      : row)))
+  }
+
   // -- grid columns ----------------------------------------------------------
   const hasReceiptRows = rows.some((row) => row.receiptCaptureId !== '')
+  const hasForeignRows = rows.some((row) => row.foreign !== null)
   const columns = useMemo<LineGridColumn<LineRow>[]>(
     () => {
       const builtIn: Record<string, LineGridColumn<LineRow>> = {
@@ -1022,7 +1116,12 @@ export function ExpenseDrawer({
         type: 'select',
         options: [{ value: '', label: t('drawer.noTax') }, ...taxProfiles.map((profile) => ({ value: profile.value, label: profile.code ?? '' }))],
       },
-      amount: { key: 'amount', label: tCommon('labels.amount'), width: '120px', type: 'amount', align: 'right', required: true },
+      // A foreign-currency line's amount is its conversion, not typed here.
+      amount: {
+        key: 'amount', label: tCommon('labels.amount'), width: '120px', type: 'amount', align: 'right', required: true,
+        isCellEditable: (row) => row.foreign === null,
+        lockedRender: (row) => (row.amount ? money(row.amount, { currency: doc.currency }) : '—'),
+      },
       // Who fronted the money (0171). Required on every line: the save API
       // refuses a line without one, so an unsettled line can never be saved
       // by leaving the cell alone.
@@ -1045,6 +1144,8 @@ export function ExpenseDrawer({
         type: 'tax',
         align: 'right',
         computeTax: lineTax,
+        isCellEditable: (row) => row.foreign === null,
+        lockedRender: (row) => money(row.taxOverridden ? row.taxAmount || '0' : lineTax(row), { currency: doc.currency }),
         onTaxChange: (index, next) =>
           setRows((prev) =>
             prev.map((r, j) =>
@@ -1066,7 +1167,29 @@ export function ExpenseDrawer({
         type: 'readonly',
         render: (row) => row.receiptCaptureId ? <Badge variant="outline">{t('receipts.fromReceipt')}</Badge> : null,
       }] : []
-      if (!layout) return [...receiptColumns, ...Object.values(builtIn), ...segmentColumns, ...custom.values(), ...prepaidColumns]
+      // Original currency of each line, with the conversion opened beneath the grid.
+      const currencyColumns: LineGridColumn<LineRow>[] = hasForeignRows || editable ? [{
+        key: 'foreign',
+        label: t('currency.column'),
+        width: '170px',
+        type: 'readonly',
+        render: (row, index) => (
+          <span className="flex min-w-0 items-center gap-1.5">
+            <span className={row.foreign ? 'truncate tabular-nums' : 'text-slate-400 dark:text-slate-500'}>
+              {row.foreign && row.originalAmount
+                ? money(row.originalAmount, { currency: row.foreign.currency, currencyDisplay: 'code' })
+                : row.foreign ? row.foreign.currency : doc.currency}
+            </span>
+            {editable ? (
+              <button type="button" className="shrink-0 text-xs font-medium text-sky-700 underline dark:text-sky-300"
+                onClick={() => setCurrencyLine(index)}>
+                {row.foreign ? t('currency.edit') : t('currency.change')}
+              </button>
+            ) : null}
+          </span>
+        ),
+      }] : []
+      if (!layout) return [...receiptColumns, ...Object.values(builtIn), ...currencyColumns, ...segmentColumns, ...custom.values(), ...prepaidColumns]
       const configured = layout.lines.columns.flatMap((placement) => {
         if (!placement.visible) return []
         const base = isCustomFieldKey(placement.key) ? custom.get(placement.key) : builtIn[placement.key]
@@ -1077,10 +1200,10 @@ export function ExpenseDrawer({
           label: placement.labelOverride?.trim() || base.label,
         }]
       })
-      return [...receiptColumns, ...configured, ...segmentColumns, ...prepaidColumns]
+      return [...receiptColumns, ...configured, ...currencyColumns, ...segmentColumns, ...prepaidColumns]
     },
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [accounts, departments, projects, taxProfiles, lineDefs, segments, layout, t, tCommon, amortizationTemplates, tAmortization, hasReceiptRows],
+    [accounts, departments, projects, taxProfiles, lineDefs, segments, layout, t, tCommon, amortizationTemplates, tAmortization, hasReceiptRows, hasForeignRows, editable, doc.currency],
   )
 
   const field = 'space-y-1.5'
@@ -1328,6 +1451,59 @@ export function ExpenseDrawer({
             formatAmount={(value) => money(value, { currency: doc.currency })}
           />
         </div>
+
+        {editable && currencyLine !== null && rows[currencyLine] ? (() => {
+          const index = currencyLine
+          const row = rows[index]!
+          return (
+            <section className="space-y-3 rounded-lg border border-slate-200 p-3 dark:border-slate-800" aria-label={t('currency.panelTitle', { line: index + 1 })}>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h3 className="text-sm font-semibold">{t('currency.panelTitle', { line: index + 1 })}</h3>
+                <span className="flex items-center gap-2">
+                  {row.foreign ? (
+                    <Button variant="ghost" size="sm" onClick={() => clearForeign(index)}>{t('currency.remove', { currency: doc.currency })}</Button>
+                  ) : null}
+                  <Button variant="outline" size="sm" onClick={() => setCurrencyLine(null)}>{t('currency.done')}</Button>
+                </span>
+              </div>
+              {row.foreign ? (
+                <>
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <div className="space-y-1">
+                      <Label htmlFor={`line-${index}-original-amount`}>{t('currency.amountIn', { currency: row.foreign.currency })}</Label>
+                      <MoneyInput id={`line-${index}-original-amount`} value={row.originalAmount} required
+                        field={t('currency.amountIn', { currency: row.foreign.currency })}
+                        onChange={(value) => updateForeign(index, { originalAmount: value })} />
+                    </div>
+                    {row.taxProfileId ? (
+                      <div className="space-y-1">
+                        <Label htmlFor={`line-${index}-original-tax`}>{t('currency.taxIn', { currency: row.foreign.currency })}</Label>
+                        <MoneyInput id={`line-${index}-original-tax`} value={row.originalTaxAmount}
+                          field={t('currency.taxIn', { currency: row.foreign.currency })}
+                          onChange={(value) => updateForeign(index, { originalTaxAmount: value })} />
+                        <p className="text-xs text-slate-500 dark:text-slate-400">{t('currency.taxHint', { currency: doc.currency })}</p>
+                      </div>
+                    ) : null}
+                  </div>
+                  <ExpenseLineCurrency
+                    idPrefix={`line-${index}-fx`}
+                    reportCurrency={doc.currency}
+                    reportId={isCreate ? undefined : String(doc.id)}
+                    state={row.foreign}
+                    original={foreignOriginal(row)}
+                    editable={editable}
+                    onChange={(next) => updateForeign(index, { foreign: next })}
+                  />
+                </>
+              ) : (
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="text-sm text-slate-600 dark:text-slate-300">{t('currency.domestic', { currency: doc.currency })}</p>
+                  <Button size="sm" onClick={() => startForeign(index)}>{t('currency.start')}</Button>
+                </div>
+              )}
+            </section>
+          )
+        })() : null}
 
       </div>
     </TransactionDrawer>

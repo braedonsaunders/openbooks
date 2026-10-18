@@ -15,6 +15,8 @@ import { assertReportEmployee, type ExpenseEditBody, persistExpenseEdit, prepare
 import { loadExpenseReport } from '../../../../lib/expenses'
 import { notFound } from "@/lib/api/responses";
 import { confirmReceiptLines, ReceiptCaptureRefusal } from '@openbooks/engine/payables/receipt-capture-service'
+import { authorizeExpenses, expenseAccess } from '../../../../lib/expense-access'
+import { expenseAccessAllows, expenseEmployeeForAccess, ExpenseSelfServiceRefusal } from '@openbooks/engine/records/expense-access'
 const DELETEBodySchema1 = z.object({
   // An omitted token reaches the named revision refusal below; a supplied
   // token must still be a non-empty string.
@@ -68,7 +70,7 @@ function malformedId(id: string): NextResponse | null {
 export const GET = defineRoute({
   params: z.object({ id: z.string().refine(isUuid) }),
   invalidParamsNotFound: 'record',
-  permission: 'expenses.read',
+  authorize: authorizeExpenses('read'),
   feature: 'expenses',
   handler: async ({ authz: routeAuthz, params: routeParams }) => {
     const params = Promise.resolve(routeParams as { id: string });
@@ -76,7 +78,9 @@ export const GET = defineRoute({
     const { id } = await params
     const malformed = malformedId(id)
     if (malformed) return malformed
-    const report = await loadExpenseReport(id, gate.user.orgId, gate.allowedSubsidiaryIds)
+    const access = await expenseAccess(gate, 'read')
+    if (!access) return notFound("record")
+    const report = await loadExpenseReport(id, gate.user.orgId, gate.allowedSubsidiaryIds, access)
     if (!report) return notFound("record")
     const denied = guardSubsidiaryScope(gate, report.doc.subsidiary_id as string | null)
     if (denied) return denied
@@ -92,11 +96,14 @@ export const GET = defineRoute({
  * `updated_at` token it loaded, and the write happens only when that token
  * still matches the row locked FOR UPDATE inside the same transaction — so
  * two concurrent saves can never silently overwrite one another.
+ *
+ * Self-service callers save only their own draft, and cannot hand it to
+ * another employee.
  */
 export const PATCH = defineRoute({
   params: z.object({ id: z.string().refine(isUuid) }),
   invalidParamsNotFound: 'record',
-  permission: 'expenses.create',
+  authorize: authorizeExpenses('edit'),
   feature: 'expenses',
   body: PATCHBodySchema1,
   opaque: {
@@ -110,10 +117,12 @@ export const PATCH = defineRoute({
     const { id } = await params
     const malformedPatch = malformedId(id)
     if (malformedPatch) return malformedPatch
-    const existing = (await db.execute<{ status: string; document_date: string; subsidiaryId: string | null; custom: Record<string, unknown> | null; payment_card_id: string | null }>(
-        sql`select status, document_date, subsidiary_id as "subsidiaryId", custom, payment_card_id from documents where id = ${id} and kind = 'expense_report' and org_id = ${user.orgId}`,
+    const access = await expenseAccess(gate, 'edit')
+    if (!access) return notFound("record")
+    const existing = (await db.execute<{ status: string; document_date: string; subsidiaryId: string | null; partyId: string | null; currency: string; custom: Record<string, unknown> | null; payment_card_id: string | null }>(
+        sql`select status, document_date, subsidiary_id as "subsidiaryId", party_id as "partyId", currency, custom, payment_card_id from documents where id = ${id} and kind = 'expense_report' and org_id = ${user.orgId}`,
       ))
-    if (!existing.rows[0]) return notFound("record")
+    if (!existing.rows[0] || !expenseAccessAllows(access, existing.rows[0].partyId)) return notFound("record")
     const denied = guardSubsidiaryScope(gate, existing.rows[0].subsidiaryId)
     if (denied) return denied
     if (existing.rows[0].status !== 'draft') {
@@ -123,7 +132,17 @@ export const PATCH = defineRoute({
         )
       }
 
-    const body = (routeBody) as ExpenseEditBody
+    const requested = (routeBody) as ExpenseEditBody
+    let body: ExpenseEditBody
+    try {
+      // A self-service save may restate its own employee but never name another.
+      body = access.scope === 'own' && requested.partyId != null
+        ? { ...requested, partyId: expenseEmployeeForAccess(access, requested.partyId) }
+        : requested
+    } catch (e) {
+      if (e instanceof ExpenseSelfServiceRefusal) return apiErrorResponse(e)
+      throw e
+    }
     let expectedRevision: string
     try {
         expectedRevision = requireDocumentEditRevision(body.expectedUpdatedAt)
@@ -143,6 +162,7 @@ export const PATCH = defineRoute({
           // The report's locked subsidiary: an employee of another legal entity
           // is refused below with the scope-opaque not-found refusal.
           reportSubsidiaryId: existing.rows[0].subsidiaryId,
+          reportCurrency: existing.rows[0].currency,
         })
       } catch (e) {
         if (e instanceof DocumentEditError) {
@@ -169,9 +189,10 @@ export const PATCH = defineRoute({
                where id = ${id} and kind = 'expense_report' and org_id = ${user.orgId}
                for update
             `)).rows[0]
-            // Scope precedes revision comparison so a rehomed document remains
-            // indistinguishable from a missing row, even with a stale token.
-            return row && !guardSubsidiaryScope(gate, row.subsidiaryId) ? row : null
+            // Scope and ownership precede revision comparison so a rehomed or
+            // reassigned document remains indistinguishable from a missing
+            // row, even with a stale token.
+            return row && !guardSubsidiaryScope(gate, row.subsidiaryId) && expenseAccessAllows(access, row.partyId) ? row : null
           },
           mutate: async (tx, locked) => {
             if (locked.status !== 'draft') {
@@ -209,7 +230,14 @@ export const PATCH = defineRoute({
                 documentId: id,
                 reportCurrency: locked.currency,
                 actorId: user.id,
-                lines: prepared.preparedLines.map((line) => ({ accountId: line.accountId, amount: line.amount, taxAmount: line.taxAmount })),
+                lines: prepared.preparedLines.map((line) => ({
+                  accountId: line.accountId,
+                  amount: line.amount,
+                  taxAmount: line.taxAmount,
+                  originalCurrency: line.foreign?.currency ?? null,
+                  originalAmount: line.foreign?.originalAmount ?? null,
+                  originalTaxAmount: line.foreign?.originalTaxAmount ?? null,
+                })),
                 confirmations: receiptLines,
               })
             }
@@ -234,7 +262,7 @@ export const PATCH = defineRoute({
         if (e instanceof ReceiptCaptureRefusal) return apiErrorResponse(e)
         throw e
       }
-    const report = await loadExpenseReport(id, user.orgId, gate.allowedSubsidiaryIds)
+    const report = await loadExpenseReport(id, user.orgId, gate.allowedSubsidiaryIds, access)
     if (!report) return notFound("record")
     const responseDenied = guardSubsidiaryScope(gate, report.doc.subsidiary_id as string | null)
     if (responseDenied) return responseDenied
@@ -242,11 +270,14 @@ export const PATCH = defineRoute({
   },
 });
 
-/** Delete an expense report (guarded: open period, no applied payments, no downstream conversion). */
+/**
+ * Delete an expense report (guarded: open period, no applied payments, no
+ * downstream conversion). Self-service callers delete only their own report.
+ */
 export const DELETE = defineRoute({
   params: z.object({ id: z.string().refine(isUuid) }),
   invalidParamsNotFound: 'record',
-  permission: 'expenses.create',
+  authorize: authorizeExpenses('edit'),
   feature: 'expenses',
   body: DELETEBodySchema1,
   opaque: {
@@ -258,10 +289,12 @@ export const DELETE = defineRoute({
     const { id } = await params
     const malformedDelete = malformedId(id)
     if (malformedDelete) return malformedDelete
-    const owned = (await db.execute<{ subsidiaryId: string | null }>(
-        sql`select subsidiary_id as "subsidiaryId" from documents where id = ${id} and kind = 'expense_report' and org_id = ${gate.user.orgId}`,
+    const access = await expenseAccess(gate, 'edit')
+    if (!access) return notFound("record")
+    const owned = (await db.execute<{ subsidiaryId: string | null; partyId: string | null }>(
+        sql`select subsidiary_id as "subsidiaryId", party_id as "partyId" from documents where id = ${id} and kind = 'expense_report' and org_id = ${gate.user.orgId}`,
       ))
-    if (!owned.rows[0]) return notFound("record")
+    if (!owned.rows[0] || !expenseAccessAllows(access, owned.rows[0].partyId)) return notFound("record")
     const denied = guardSubsidiaryScope(gate, owned.rows[0].subsidiaryId)
     if (denied) return denied
 

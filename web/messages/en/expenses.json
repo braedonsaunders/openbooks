@@ -150,7 +150,8 @@
       "currency": "Currency",
       "taxCode": "Tax code",
       "account": "Expense account",
-      "description": "Description"
+      "description": "Description",
+      "taxIn": "Tax ({currency})"
     },
     "noTaxCode": "No tax code",
     "readAs": "Receipt reads {value}",
@@ -184,16 +185,49 @@
       "nonPositiveTotal": "The total {value} is not a positive amount.",
       "amountOutOfRange": "{field} is too large to record.",
       "currencyUnread": "The receipt does not state a currency. Confirm the amount is in {currency}.",
-      "currencyMismatch": "This receipt is in {actual} but the report is in {currency}. Record it on a report in that currency, or add the line by hand with the {currency} amount charged.",
       "currencyConflict": "The receipt amounts show different currencies ({actual}). Confirm the currency charged.",
       "invalidCurrency": "\"{actual}\" is not a valid currency code.",
       "duplicateFile": "This receipt file was already scanned on {report}. Discard it unless this is a separate expense.",
-      "duplicateReceipt": "A receipt with the same merchant, date and total is already on {report}. Discard it unless this is a separate expense."
+      "duplicateReceipt": "A receipt with the same merchant, date and total is already on {report}. Discard it unless this is a separate expense.",
+      "foreignCurrency": "This receipt is in {actual}. Its line converts into {currency} at the dated exchange rate, or at the {currency} amount your statement billed.",
+      "duplicateElsewhere": "A receipt like this one is already on another employee's expense report. Discard it unless this is a separate expense."
     },
     "toasts": {
       "added": "Line added from the receipt. Review it and save the report.",
       "discarded": "Receipt discarded.",
       "actionFailed": "The receipt action failed."
-    }
+    },
+    "foreignTitle": "Spent in {currency}, converted into {reportCurrency}"
+  },
+  "currency": {
+    "column": "Currency",
+    "edit": "Edit",
+    "change": "Other currency",
+    "panelTitle": "Line {line} currency",
+    "remove": "Use {currency}",
+    "done": "Done",
+    "amountIn": "Amount ({currency})",
+    "taxIn": "Tax on the receipt ({currency})",
+    "taxHint": "Leave blank to compute the tax in {currency} from the tax code.",
+    "domestic": "This line is in {currency}, the report currency.",
+    "start": "Enter in another currency",
+    "currency": "Currency spent",
+    "expenseDate": "Expense date",
+    "method": "Converts at",
+    "methods": {
+      "rate_table": "Dated exchange rate",
+      "billed_amount": "Amount billed in {currency}",
+      "override": "Explicit rate"
+    },
+    "billedAmount": "Billed amount ({currency})",
+    "billedHint": "The amount on your card or bank statement. The exchange rate is derived from it.",
+    "rate": "Rate (1 {from} in {to})",
+    "reason": "Reason for the rate",
+    "reasonPlaceholder": "For example, the bank's conversion advice for the purchase",
+    "converted": "Converts to {amount} at 1 {from} = {rate} {to}.",
+    "convertedWithTax": "Converts to {amount} plus {tax} tax at 1 {from} = {rate} {to}.",
+    "conversionPending": "Enter the amount and how it converts to see the converted amount.",
+    "rateSource": "Rate dated {date} ({rateType}).",
+    "quoteFailed": "The exchange rate could not be loaded. Try again."
   }
 }

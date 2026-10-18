@@ -2,6 +2,9 @@ import 'server-only'
 import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/platform/db'
 import { PDF_RECORD_TYPE_BY_KEY } from '../../../lib/pdf-templates/catalog'
+import { NextResponse } from 'next/server'
+import { guardPermission, type Authz } from '../../../lib/authz'
+import { authorizeExpenses, expenseAccess, expenseAccessAllows } from '../../../lib/expense-access'
 
 /**
  * The printed/emailed record is the disclosure: resolve its subsidiary scope
@@ -14,7 +17,7 @@ export async function loadRecordSubsidiaryScope(
   recordType: string,
   orgId: string,
   id: string,
-): Promise<{ subsidiaryId: string | null } | null> {
+): Promise<{ subsidiaryId: string | null; partyId?: string | null } | null> {
   if (recordType === 'journal_entry') {
     return (
       await db.execute<{ subsidiaryId: string | null }>(
@@ -36,8 +39,24 @@ export async function loadRecordSubsidiaryScope(
   const meta = PDF_RECORD_TYPE_BY_KEY[recordType]
   if (!meta?.docKind) return { subsidiaryId: null }
   return (
-    await db.execute<{ subsidiaryId: string | null }>(
-      sql`select subsidiary_id as "subsidiaryId" from documents where id = ${id} and kind = ${meta.docKind} and org_id = ${orgId}`,
+    await db.execute<{ subsidiaryId: string | null; partyId: string | null }>(
+      sql`select subsidiary_id as "subsidiaryId", party_id as "partyId" from documents where id = ${id} and kind = ${meta.docKind} and org_id = ${orgId}`,
     )
   ).rows[0] ?? null
+}
+
+/**
+ * The read gate for one record type's prints: its catalog read grant, or for
+ * expense reports also the self-service grant, which the handler then limits
+ * to the caller's own report.
+ */
+export async function guardRecordTypeRead(recordType: string, readPermission: string): Promise<Authz | NextResponse> {
+  return recordType === 'expense_report' ? authorizeExpenses('read')() : guardPermission(readPermission)
+}
+
+/** Whether a self-service reader reaches this printed record (always true for org-wide grants). */
+export async function recordOwnedByReader(authz: Authz, recordType: string, owned: { partyId?: string | null }): Promise<boolean> {
+  if (recordType !== 'expense_report') return true
+  const access = await expenseAccess(authz, 'read')
+  return access !== null && expenseAccessAllows(access, owned.partyId ?? null)
 }

@@ -12,10 +12,13 @@ import { canonicalDecimal } from "../money/exact-decimal.ts";
 import { cmp, fromUnits, sum, toUnits } from "../money/money.ts";
 import type { Quantity } from "../money/brands.ts";
 import {
+  AZURE_DOCUMENT_INTELLIGENCE_API_VERSION,
   extractAzureInvoice,
+  extractLlmInvoice,
   validatePurchaseOrderQuantities,
   validateNormalizedCapture,
   type AddressLookup,
+  type CaptureEvidence,
   type CaptureIssue,
   type CaptureLine,
   type NormalizedCapture,
@@ -483,23 +486,40 @@ export async function processCaptureItem(input: {
     if (!nativeEnabled && ['application/xml','text/xml'].includes(blob.contentType)) throw new Error('Enable E-invoicing in Company Settings → Features before processing this XML invoice.');
     const native = nativeEnabled ? await extractNativeInvoice(blob.bytes, blob.contentType) : null;
     const settings = native ? null : await getDocumentCaptureRuntimeConfig(input.orgId, input.lookup);
+    // The run records the reader that produced it: the native e-invoice
+    // parser, Azure Document Intelligence, or the organization's AI model.
+    const reader = native
+      ? { provider: 'en16931', model: 'native', apiVersion: 'EN16931:2017' }
+      : settings
+        ? { provider: settings.provider, model: settings.model, apiVersion: settings.apiVersion }
+        : { provider: 'azure_document_intelligence', model: 'prebuilt-invoice', apiVersion: AZURE_DOCUMENT_INTELLIGENCE_API_VERSION };
     const run = await db.execute<{ id: string }>(sql`
       insert into ap_capture_runs (org_id, capture_item_id, attempt, provider, model, api_version, created_by)
-      values (${input.orgId}, ${item.id}, ${attempt}, ${native ? 'en16931' : 'azure_document_intelligence'},
-              ${native ? 'native' : settings?.model ?? "prebuilt-invoice"}, ${native ? 'EN16931:2017' : '2024-11-30'}, ${input.actorId ?? item.created_by})
+      values (${input.orgId}, ${item.id}, ${attempt}, ${reader.provider},
+              ${reader.model}, ${reader.apiVersion}, ${input.actorId ?? item.created_by})
       returning id
     `);
     runId = run.rows[0]!.id;
     if (!native && !settings) throw new Error("Document capture is disabled or not configured under Platform → AI");
-    const extracted = native ?? await extractAzureInvoice({
-      endpoint: settings!.endpoint,
-      apiKey: settings!.apiKey,
-      model: settings!.model,
-      contentType: blob.contentType,
-      bytes: blob.bytes,
-      fetchImpl: input.fetchImpl,
-      lookup: input.lookup,
-    });
+    const extracted: { raw: unknown; normalized: NormalizedCapture; evidence: CaptureEvidence[]; overallConfidence: string | null; issues?: CaptureIssue[] } = native
+      ?? (settings!.provider === 'llm_vision'
+        ? await extractLlmInvoice({
+            config: settings!.llm,
+            confidenceThreshold: settings!.confidenceThreshold,
+            contentType: blob.contentType,
+            bytes: blob.bytes,
+            fetchImpl: input.fetchImpl,
+            lookup: input.lookup,
+          })
+        : await extractAzureInvoice({
+            endpoint: settings!.endpoint,
+            apiKey: settings!.apiKey,
+            model: settings!.model,
+            contentType: blob.contentType,
+            bytes: blob.bytes,
+            fetchImpl: input.fetchImpl,
+            lookup: input.lookup,
+          }));
     const resolved = await resolveAndValidateCapture({
       orgId: input.orgId,
       captureItemId: item.id,
@@ -510,6 +530,8 @@ export async function processCaptureItem(input: {
     if (extracted.overallConfidence && cmp(extracted.overallConfidence, settings?.confidenceThreshold ?? "1.0000") < 0) {
       resolved.issues.push(issue("document_low_confidence", "warning", { field: "document" }));
     }
+    // Fields the reader left blank for low confidence are flagged by name.
+    resolved.issues.push(...(extracted.issues ?? []));
     await db.transaction(async (tx) => {
       const owner = (await tx.execute<{ attempts: number }>(sql`
         select attempts from ap_capture_items

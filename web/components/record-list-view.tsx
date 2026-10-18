@@ -183,7 +183,12 @@ export async function RecordListView({
   const joins = source.joins ?? sql``
   // Role-based subsidiary visibility (null = unrestricted).
   const allowedSubs = await allowedSubsidiaryIds(userId, orgId)
-  const whereBuilder = source.where ?? documentWhere
+  const baseWhereBuilder = source.where ?? documentWhere
+  // A viewer limited to their own records sees only those, in every count too.
+  const ownerFilter = source.ownerScope ? await source.ownerScope(orgId, userId) : null
+  const whereBuilder: typeof baseWhereBuilder = ownerFilter
+    ? (...args) => sql`(${baseWhereBuilder(...args)}) and ${ownerFilter}`
+    : baseWhereBuilder
   const where = whereBuilder(source.kinds, view, { q: params.q, status, kind, from, to, filters: extraQuickValues }, orgId, allowedSubs)
   const statusCountView = { ...view, filters: view.filters.filter((filter) => filter.key !== 'status') }
   const statusCountWhere = whereBuilder(source.kinds, statusCountView, { kind, from, to, filters: extraQuickValues }, orgId, allowedSubs)
@@ -229,7 +234,7 @@ export async function RecordListView({
 
   const extraQuickFilters = await Promise.all((source.quickFilters ?? []).map(async (quick) => {
     const filterMeta = meta.listFilters.find((filter) => filter.key === quick.filterKey)
-    const options = quick.loadOptions ? await quick.loadOptions(orgId, allowedSubs) : (filterMeta?.options ?? []).map((option) => ({
+    const options = quick.loadOptions ? await quick.loadOptions(orgId, allowedSubs, ownerFilter) : (filterMeta?.options ?? []).map((option) => ({
       value: option.value,
       label: option.labelKey ? label(option.labelKey) : option.value.replace(/_/g, ' '),
     }))

@@ -2,7 +2,9 @@ import 'server-only'
 
 import { getTranslations } from 'next-intl/server'
 import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
-import { can, requirePermission } from '../../../lib/authz'
+import { redirect } from 'next/navigation'
+import { can, getAuthz, requirePermission } from '../../../lib/authz'
+import { expenseScope } from '../../../lib/expense-access'
 import { requireFeatureEnabled } from '../../../lib/feature-gates'
 import { groupTabs } from '../../../components/module-home/group-tabs'
 import { expensesDashboard, type ExpensesDashboardData } from '../../../lib/expenses-dashboard'
@@ -40,6 +42,10 @@ export interface ExpensesData {
 }
 
 export async function loadExpenses(): Promise<ExpensesData> {
+  // The cockpit analyses every employee's spending. A self-service reader
+  // works with their own reports, which the report list shows.
+  const viewer = await getAuthz()
+  if (viewer && expenseScope(viewer, 'read') === 'own') redirect('/expenses/reports')
   const authz = await requirePermission('expenses.read')
   await requireFeatureEnabled(authz.user.orgId, 'expenses')
   const t = await getTranslations('expenses')

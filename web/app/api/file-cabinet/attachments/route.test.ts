@@ -62,6 +62,15 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
+    // Expense self-service is covered by its own integration tests; this
+    // caller holds no expense grant.
+    'mock:expense-access',
+    `
+      export async function expenseAccess() { return null }
+      export function expenseAccessAllows() { return false }
+    `,
+  ],
+  [
     'mock:file-cabinet',
     `
       import { attachmentReadPermission } from '@/lib/file-cabinet'
@@ -85,6 +94,7 @@ const mockSources = new Map<string, string>([
 
 const mockUrls = new Map<string, string>([
   ['@openbooks/engine/platform/db', 'mock:db'],
+  ['../../../lib/expense-access', 'mock:expense-access'],
   ['../../../../lib/authz', 'mock:authz'],
   ['@/lib/authz', 'mock:authz'],
   ['../../../lib/authz', 'mock:authz'],

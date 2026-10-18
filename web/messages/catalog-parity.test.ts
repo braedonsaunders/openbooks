@@ -3913,6 +3913,10 @@ const COGNATES = new Set<string>([
   'zh:shell.dateEntry.monthSymbol|mm',
   'zh:shell.dateEntry.daySymbol|dd',
 ])
+// The Azure Document Intelligence service name is a product name in every locale that does not localize it.
+for (const locale of ['de', 'es', 'fr', 'ja', 'pt-BR']) {
+  COGNATES.add(`${locale}:admin.ai.documentCapture.providers.azure_document_intelligence|Azure Document Intelligence`)
+}
 // Official payment provider names and SFTP keep their shared spelling across locales.
 for (const locale of ['de', 'es', 'fr', 'ja', 'pt-BR', 'zh']) {
   for (const [provider, term] of [['plaid', 'Plaid'], ['gocardless', 'GoCardless'], ['truelayer', 'TrueLayer'], ['sftp', 'SFTP']] as const) {

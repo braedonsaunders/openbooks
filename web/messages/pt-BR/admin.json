@@ -1401,6 +1401,7 @@
     "banking_review_sign_off": "Revisar conciliações bancárias assinadas",
     "expenses_read": "Ver relatórios de despesas",
     "expenses_create": "Registrar relatórios de despesas",
+    "expenses_self": "Criar e enviar os próprios relatórios de despesas",
     "admin_custom_fields_manage": "Gerenciar campos personalizados",
     "admin_users_manage": "Gerenciar usuários e atribuições de função",
     "admin_roles_manage": "Gerenciar funções e permissões",
@@ -1867,6 +1868,13 @@
       "removeKey": "Remover chave do provedor de documentos",
       "keyRemoved": "Chave do provedor de documentos removida.",
       "model": "Modelo de fatura",
+      "provider": "Leitor de documentos",
+      "providers": {"azure_document_intelligence": "Azure Document Intelligence", "llm_vision": "Modelo de IA ({provider})"},
+      "azureHint": "Lê faturas e recibos com o seu recurso e chave do Azure Document Intelligence.",
+      "llmHint": "Lê faturas e recibos com o provedor de IA, a chave e os modelos configurados abaixo ({provider}). Cada campo traz a confiança do modelo; campos abaixo do limite ficam em branco para revisão.",
+      "llmNoVision": "{provider} não lê imagens. Escolha abaixo um provedor com modelos de visão ou use o Azure Document Intelligence.",
+      "llmModel": "Modelo de captura",
+      "llmModelHint": "O id de um modelo com visão. Deixe em branco para usar o modelo avançado do provedor.",
       "confidence": "Limite de confiança para revisão",
       "confidenceHint": "Valores abaixo deste limite de 0 a 1 são sinalizados para revisão.",
       "autoDraft": "Criar rascunhos automaticamente apenas para pedidos de compra totalmente correspondidos",
@@ -1874,7 +1882,8 @@
       "testResult": {
         "connected": "Conectado ao provedor de documentos.",
         "failed": "O teste do provedor de documentos falhou.",
-        "missing": "Insira primeiro um endpoint e uma chave de API."
+        "missing": "Insira primeiro um endpoint e uma chave de API.",
+        "missingAi": "Adicione primeiro abaixo o provedor de IA e a chave de API."
       }
     },
     "models": {
@@ -3918,9 +3927,11 @@
         "title": "Políticas de renovação de assinaturas",
         "description": "Condições de renovação com vigência, responsável e lembretes antes do vencimento."
       },
-      "project-loss-policies": {"title": "Políticas de projetos deficitários", "description": "Se projetos que preveem perda são sinalizados no fechamento e se o fechamento aguarda a avaliação de perda."}
+      "project-loss-policies": {"title": "Políticas de projetos deficitários", "description": "Se projetos que preveem perda são sinalizados no fechamento e se o fechamento aguarda a avaliação de perda."},
+      "expense-fx-policies": {"title": "Políticas de câmbio de despesas", "description": "Se uma linha de despesa em moeda estrangeira pode ser convertida por uma taxa de câmbio explícita com justificativa em vez da taxa datada."}
     },
     "fields": {
+      "allowRateOverride": "Permitir taxas de câmbio explícitas",
       "commonStockAccountId": "Conta de ações ordinárias",
       "preferredStockAccountId": "Conta de ações preferenciais",
       "apicAccountId": "Conta de reserva de capital",

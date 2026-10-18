@@ -11,7 +11,8 @@ export const LIST_DRAWER_ROUTES = {
   sales_order: { path: '/sales-orders', param: 'order', widget: 'order-drawer', permission: 'ar.read', feature: 'orders' },
   purchase_order: { path: '/purchase-orders', param: 'order', widget: 'order-drawer', permission: 'purchase_orders.read', feature: 'orders' },
   rma: { path: '/returns', param: 'doc', widget: 'document-drawer', permission: 'orders.fulfill', feature: 'returnAuthorizations' },
-  expense_report: { path: '/expenses/reports', param: 'expense', widget: 'expense-drawer', permission: 'expenses.read', feature: 'expenses' },
+  // expenses.self opens the drawer too; the expense loader then reads only the holder's own reports.
+  expense_report: { path: '/expenses/reports', param: 'expense', widget: 'expense-drawer', permission: 'expenses.read', alternatePermissions: ['expenses.self'], feature: 'expenses' },
   field_ticket: { path: '/field-tickets', param: 'ticket', widget: 'field-ticket-drawer', permission: 'time.read', feature: 'fieldTickets' },
   pick_list: { path: '/picks', param: 'pick', widget: 'pick-list-drawer', permission: 'orders.fulfill', feature: 'fulfillment' },
   shipment: { path: '/shipments', param: 'shipment', widget: 'shipment-drawer', permission: 'orders.fulfill', feature: 'fulfillment' },

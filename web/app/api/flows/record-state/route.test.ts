@@ -115,6 +115,10 @@ const mockSources = new Map<string, string>([
         state.readChecks.push(subjectKind)
         return state.canRead ?? true
       }
+      export async function canReadSubjectRecord(authz, subjectKind) {
+        state.readChecks.push(subjectKind)
+        return state.canRead ?? true
+      }
     `,
   ],
 ]);

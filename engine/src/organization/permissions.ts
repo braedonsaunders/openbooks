@@ -424,9 +424,15 @@ export const PERMISSION_CATALOGUE = [
   "banking.read",
   "banking.reconcile",
   "banking.review_sign_off",
-  // Expense reports
+  // Expense reports. expenses.read and expenses.create are the org-wide
+  // grants over every employee's reports inside the actor's subsidiary scope.
+  // expenses.self is the employee's own reports: list, read, create, edit,
+  // scan receipts on and submit only the reports whose employee is the
+  // person linked to the login (enforced where every expense command loads
+  // its report). Posting and voiding stay with ap.post.
   "expenses.create",
   "expenses.read",
+  "expenses.self",
   // Admin
   "admin.custom_fields.manage",
   "admin.users.manage",
@@ -932,6 +938,7 @@ export const PERMISSION_GROUPS: {
     permissions: [
       { key: "expenses.read", labelKey: permissionLabelKey("expenses.read") },
       { key: "expenses.create", labelKey: permissionLabelKey("expenses.create") },
+      { key: "expenses.self", labelKey: permissionLabelKey("expenses.self") },
     ],
   },
   {
@@ -972,6 +979,8 @@ export const PERMISSION_IMPLICATIONS: Partial<Record<CataloguePermission, readon
   "time.self": [{ key: "time.read", scope: "own" }, { key: "time.manage", scope: "own" }],
   // Clocking in shows the holder's own resulting timesheets, read-only.
   "time.clock": [{ key: "time.read", scope: "own" }],
+  // Self-service expenses read, enter and submit the holder's own reports.
+  "expenses.self": [{ key: "expenses.read", scope: "own" }, { key: "expenses.create", scope: "own" }],
 };
 
 /**
@@ -1411,7 +1420,7 @@ export const BUILT_IN_ROLES: Record<
     name: "Production",
     description:
       "Manages manufacturing masters and shop-floor work, and posts inventory movements. Cannot reverse inventory postings or see the ledger.",
-    permissions: ["manufacturing.read", "manufacturing.manage", "items.read", "items.post", "time.self", "time.clock", "hrm.self.read", "hrm.self.request", "hrm.leave.request"],
+    permissions: ["manufacturing.read", "manufacturing.manage", "items.read", "items.post", "time.self", "time.clock", "expenses.self", "hrm.self.read", "hrm.self.request", "hrm.leave.request"],
   },
   approver: {
     name: "Approver",
@@ -1503,6 +1512,7 @@ export const BUILT_IN_ROLES: Record<
       "time.self",
       "time.clock",
       // HR-20 end
+      "expenses.self",
     ],
   },
   sales_rep: {
@@ -1524,6 +1534,7 @@ export const BUILT_IN_ROLES: Record<
       "time.self",
       "time.clock",
       // HR-20 end
+      "expenses.self",
     ],
   },
   // Purchasing desk: raises purchase orders and receives goods against them.
@@ -1537,7 +1548,7 @@ export const BUILT_IN_ROLES: Record<
       "purchase_orders.read", "purchase_orders.create", "goods_receipts.create",
       "ap.read", "parties.read", "items.read", "reports.read",
       "documents.read", "feedback.use", "assistant.use",
-      "hrm.self.read", "hrm.self.request", "hrm.leave.request", "time.self", "time.clock",
+      "hrm.self.read", "hrm.self.request", "hrm.leave.request", "time.self", "time.clock", "expenses.self",
     ],
   },
   // Till operator: sells and refunds at the counter. Posting a paid-at-sale
@@ -1550,7 +1561,7 @@ export const BUILT_IN_ROLES: Record<
       "cash_sales.read", "cash_sales.create", "cash_sales.post", "cash_sales.deposit",
       "pos.sell", "pos.refund", "pos.drawer",
       "stored_value.read", "items.read",
-      "feedback.use", "hrm.self.read", "hrm.self.request", "hrm.leave.request", "time.self", "time.clock",
+      "feedback.use", "hrm.self.read", "hrm.self.request", "hrm.leave.request", "time.self", "time.clock", "expenses.self",
     ],
   },
   // Project billing coordinator: time, project visibility and invoice drafts.
@@ -1561,7 +1572,7 @@ export const BUILT_IN_ROLES: Record<
     description:
       "Logs their own time, follows projects and drafts customer invoices for approval. Cannot see coworkers' time, post invoices, take or make payments, or see banking or the ledger.",
     permissions: [
-      "projects.read", "time.self", "time.clock",
+      "projects.read", "time.self", "time.clock", "expenses.self",
       "ar.read", "ar.create", "estimates.read", "estimates.create", "estimates.issue", "usage.read", "usage.manage", "usage.bill",
       "parties.read", "items.read", "reports.read",
       "documents.read", "feedback.use", "assistant.use",

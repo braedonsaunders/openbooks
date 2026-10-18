@@ -6,7 +6,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/platform/db'
 import { withScopeSnapshot } from '@openbooks/engine/organization/scope'
 import { documentRevisionCounterSql } from '@openbooks/engine/records/revision'
-import { getDocumentCaptureSettings } from '@openbooks/engine/payables/ap-capture-config'
+import { documentCaptureOperational } from '@openbooks/engine/payables/ap-capture-config'
 import {
   grid,
   page,
@@ -117,7 +117,7 @@ export async function loadApCapture(
         ? sql`nullif(ci.normalized->>'total','')::numeric ${list.dir === 'asc' ? sql`asc` : sql`desc`} nulls last`
         : sql`ci.received_at ${list.dir === 'asc' ? sql`asc` : sql`desc`}`
   const offset = (list.page - 1) * list.perPage
-  const [rowsResult, totalResult, countsResult, captureSettings, globalResult] = await Promise.all([
+  const [rowsResult, totalResult, countsResult, providerOperational] = await Promise.all([
     db.execute(sql`
       select ci.id, ci.status, ci.original_filename as "filename", ci.document_kind as "documentKind",
              ci.normalized->>'vendorName' as "vendorName", ci.normalized->>'invoiceNumber' as "invoiceNumber",
@@ -144,8 +144,7 @@ export async function loadApCapture(
          ${subsidiaryScope}
        group by ci.status
     `),
-    getDocumentCaptureSettings(authz.user.orgId),
-    db.execute(sql`select coalesce((settings->'ai'->>'enabled')::boolean, true) as enabled from orgs where id = ${authz.user.orgId}`),
+    documentCaptureOperational(authz.user.orgId),
   ])
   const rows = (rowsResult as unknown as { rows: CaptureListRow[] }).rows
   const total = Number(((totalResult) as unknown as { rows: { n: number }[] }).rows[0]?.n ?? 0)
@@ -224,8 +223,8 @@ export async function loadApCapture(
     }
   }
   const structuredInvoicesEnabled = await isFeatureEnabled(authz.user.orgId, 'einvoicing')
-  const captureOperational = structuredInvoicesEnabled || (Boolean(((globalResult) as unknown as { rows: { enabled: boolean }[] }).rows[0]?.enabled)
-    && captureSettings.enabled && captureSettings.hasKey && Boolean(captureSettings.endpoint))
+  // Either provider (Azure or the AI model) counts, by the same rule the capture APIs use.
+  const captureOperational = structuredInvoicesEnabled || providerOperational
   const drawer: ApCaptureDrawer | null = detail && options
     ? {
         remountKey: String(detail.id),

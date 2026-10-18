@@ -14,6 +14,7 @@ import {
   CURATED_QUICK_ACTIONS,
   mergeQuickActionsSave,
   normalizeQuickActions,
+  quickActionPermitted,
   type QuickActionOption,
 } from './_quick-actions-shared'
 import { QuickActionsSchema } from './_quick-actions-input'
@@ -194,7 +195,7 @@ export async function listQuickActionOptions(): Promise<{
   const hiddenModules = hiddenNavModules(featureState)
 
   for (const action of CURATED_QUICK_ACTIONS) {
-    if (action.requiredPermission && !can(authz, action.requiredPermission)) continue
+    if (!quickActionPermitted(action, (permission) => can(authz, permission))) continue
     if (action.requiredFeature && !featureEnabled(featureState, action.requiredFeature)) continue
     common.push({
       id: action.id,

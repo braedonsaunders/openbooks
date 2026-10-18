@@ -20,6 +20,7 @@ import {
   type AdhocFilters,
 } from '../customization/list-query'
 import { isRecordTypeEnabled } from '../customization/gates'
+import { expenseListOwnerFilter } from '../expense-access'
 
 /**
  * Document-list data sources — the SQL half of the universal list page. Every
@@ -60,6 +61,13 @@ export interface DocListSource {
   /** Suppress the built-in document-status chips (sources whose quick filters
    *  present a richer merged status, e.g. the pay-run lifecycle). */
   hideStatusFilter?: boolean
+  /**
+   * Records the viewer reaches by ownership rather than an org-wide grant:
+   * an extra predicate over `d` for a viewer limited to their own records,
+   * null for a viewer who reads every record. Applied to the rows, counts
+   * and quick-filter options alike.
+   */
+  ownerScope?: (orgId: string, userId: string) => Promise<SQL | null>
   /** Source-specific WHERE extension for list-only aggregates. */
   where?: (
     kinds: readonly string[],
@@ -76,6 +84,7 @@ export interface DocQuickFilter {
   loadOptions?: (
     orgId: string,
     allowedSubsidiaryIds?: Set<string> | null,
+    ownerFilter?: SQL | null,
   ) => Promise<{ value: string; label: string; count?: number }[]>
   searchSelect?: boolean
 }
@@ -103,6 +112,7 @@ function documentSource(cfg: {
   links?: Record<string, (row: Record<string, unknown>) => string | null>
   quickFilters?: DocQuickFilter[]
   where?: DocListSource['where']
+  ownerScope?: DocListSource['ownerScope']
 }): DocListSource {
   return {
     recordType: cfg.recordType,
@@ -111,6 +121,7 @@ function documentSource(cfg: {
     multiKind: cfg.multiKind,
     joins: cfg.joins,
     where: cfg.where,
+    ownerScope: cfg.ownerScope,
     builtInExpr: cfg.builtInExpr ?? DOCUMENT_BUILT_IN_EXPR,
     sorts: DOCUMENT_SORTS,
     extraSelect: cfg.extraSelect ?? sql`d.party_id`,
@@ -263,14 +274,17 @@ const SOURCES: Record<string, DocListSource> = {
     kinds: ['expense_report'],
     drawerParam: 'expense',
     partyRole: 'employee',
+    // expenses.self lists only the viewer's own reports.
+    ownerScope: expenseListOwnerFilter,
     quickFilters: [{
       paramKey: 'employee',
       filterKey: 'party_id',
-      loadOptions: async (orgId, allowedSubsidiaryIds) => {
+      loadOptions: async (orgId, allowedSubsidiaryIds, ownerFilter) => {
         const result = await db.execute<{ value: string; label: string; count?: number } & Record<string, unknown>>(sql`
           select p.id::text as value, p.display_name as label, count(*)::int as count
             from documents d join parties p on p.id = d.party_id and p.org_id = d.org_id
            where d.org_id = ${orgId} and d.kind = 'expense_report'${subsidiaryVisibleFilter(sql`d.subsidiary_id`, allowedSubsidiaryIds ?? null)}
+             ${ownerFilter ? sql`and ${ownerFilter}` : sql``}
            group by p.id, p.display_name
            order by p.display_name`)
         return result.rows

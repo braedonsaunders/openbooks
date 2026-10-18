@@ -427,10 +427,10 @@ test('expense lines without an explicit settlement are refused at the edit API',
     const line={accountId:org.accounts.cogs,description:'Mileage',amount:'10.00'};
     await withBypassContext(async()=>{
       await assert.rejects(
-        prepareExpenseEdit({lines:[line]}, {orgId:org.orgId,existingCustom:{},existingDocumentDate:org.date}),
+        prepareExpenseEdit({lines:[line]}, {orgId:org.orgId,existingCustom:{},existingDocumentDate:org.date,reportCurrency:'CAD'}),
         /settlement is required/,
       );
-      const ok=await prepareExpenseEdit({lines:[{...line,settlementType:'out_of_pocket'}]}, {orgId:org.orgId,existingCustom:{},existingDocumentDate:org.date});
+      const ok=await prepareExpenseEdit({lines:[{...line,settlementType:'out_of_pocket'}]}, {orgId:org.orgId,existingCustom:{},existingDocumentDate:org.date,reportCurrency:'CAD'});
       assert.equal(ok.preparedLines!.length,1);
       assert.equal(ok.preparedLines![0]!.settlementType,'out_of_pocket');
     });

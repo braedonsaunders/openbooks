@@ -1,4 +1,4 @@
-import { requirePermission } from '../../../../lib/authz'
+import { requireExpensePermission } from '../../../../lib/expense-access'
 import { requireFeatureEnabled } from '../../../../lib/feature-gates'
 import { ModuleView } from '../../../../components/viewspec/module-view'
 import { loadExpenseReports, expenseReportsSpec } from './view'
@@ -12,7 +12,7 @@ export default async function Expenses({
 }: {
   searchParams: Promise<Record<string, string | string[] | undefined>>
 }) {
-  const authz = await requirePermission('expenses.read')
+  const authz = await requireExpensePermission('read')
   await requireFeatureEnabled(authz.user.orgId, 'expenses')
   const sp = await searchParams
   const data = await loadExpenseReports(sp)

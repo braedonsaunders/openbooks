@@ -52,6 +52,7 @@ const requestBodySchema = z.object({
   "baseUrl": z.string().optional(),
   "documentCapture": z.object({
     enabled: z.boolean().optional(),
+    provider: z.enum(["azure_document_intelligence", "llm_vision"]).optional(),
     endpoint: z.string().optional(),
     model: z.string().optional(),
     confidenceThreshold: z.string().optional(),
@@ -120,9 +121,9 @@ export const PUT = defineRoute({
       agents: [],
       documentCapture: {
         enabled: body.documentCapture?.enabled === true,
-        provider: "azure_document_intelligence",
+        provider: body.documentCapture?.provider === "llm_vision" ? "llm_vision" : "azure_document_intelligence",
         endpoint: String(body.documentCapture?.endpoint ?? "").trim(),
-        model: String(body.documentCapture?.model ?? "prebuilt-invoice").trim(),
+        model: String(body.documentCapture?.model ?? (body.documentCapture?.provider === "llm_vision" ? "" : "prebuilt-invoice")).trim(),
         confidenceThreshold: String(body.documentCapture?.confidenceThreshold ?? "0.9000").trim(),
         autoCreatePoMatchedDrafts: body.documentCapture?.autoCreatePoMatchedDrafts === true,
         apiKey: String(body.documentCapture?.apiKey ?? "").trim() || undefined,

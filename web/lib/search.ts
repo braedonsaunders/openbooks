@@ -9,6 +9,7 @@ import { subsidiaryVisibleFilter } from './subsidiaries'
 import { formatMoney } from '@openbooks/engine/money/money'
 import { JOURNAL_GL_NATIVE_ORIGINS, journalScopeWhere } from './customization/entity-list-query/journal-entries'
 import { canonicalDecimal } from './exact-decimal'
+import { expenseAccess } from './expense-access'
 import type { RecentRef, SearchGroup, SearchHit, SearchResponse, SearchType } from './search-types'
 import {
   moduleDrawerHref,
@@ -225,11 +226,16 @@ async function coreLegs(
     transactionMatch && (transactionKinds.length > 0 || canJournals)
       ? visibleTransactionKinds(orgId, transactionKinds)
       : Promise.resolve([] as string[])
+  // A self-service expense reader finds their own expense reports, and no
+  // other employee's, beside whatever their module grants show.
+  const ownExpenses = transactionMatch && !transactionKinds.includes('expense_report')
+    ? await ownExpenseSearchScope(authz)
+    : null
 
   const [contacts, txns, accounts, items, projects, journals] = await Promise.all([
     contactMatch ? searchContacts(orgId, contactMatch, scope) : empty(),
-    transactionMatch && transactionKinds.length
-      ? visibleKinds.then((kinds) => searchTransactions(orgId, transactionMatch, scope, kinds))
+    transactionMatch && (transactionKinds.length || ownExpenses)
+      ? visibleKinds.then((kinds) => searchTransactions(orgId, transactionMatch, scope, kinds, ownExpenses?.partyId))
       : empty(),
     accountMatch ? searchAccounts(orgId, accountMatch, scope) : empty(),
     itemMatch ? searchItems(orgId, itemMatch) : empty(),
@@ -413,6 +419,14 @@ async function searchContacts(
  * the journal exact arm, so an exact JE number for a subledger posting
  * resolves only inside the posting module's own gate.
  */
+/** The employee whose expense reports a self-service reader may find, when expense reports are enabled. */
+async function ownExpenseSearchScope(authz: Authz): Promise<{ partyId: string | null } | null> {
+  const access = await expenseAccess(authz, 'read')
+  if (access?.scope !== 'own') return null
+  if (!(await visibleTransactionKinds(authz.user.orgId, ['expense_report'])).includes('expense_report')) return null
+  return { partyId: access.partyId }
+}
+
 async function visibleTransactionKinds(orgId: string, allowedKinds: string[]): Promise<string[]> {
   const navigationFeatures = [...new Set(allowedKinds.flatMap((kind) => {
     const feature = transactionNavigationOnlyFeature(kind)
@@ -438,6 +452,8 @@ async function searchTransactions(
   match: Match,
   scope: ReadonlySet<string> | null,
   visibleKinds: string[],
+  /** Set for a self-service expense reader: their own expense reports are also visible (none when null). */
+  ownExpenseParty?: string | null,
 ): Promise<SearchHit[]> {
   // Amounts live on document_lines (documents.total is often 0). A numeric query
   // matches any transaction that HAS a line of that amount (±sign), and every
@@ -455,8 +471,15 @@ async function searchTransactions(
   // Visibility is the shared POSITIVE kind allowlist: every candidate leg
   // and the final sensitive-field read repeat the same allowlist — a shared
   // CTE alone would leak across module boundaries.
-  if (visibleKinds.length === 0) return []
-  const visibleKindFilter = sql`and d.kind in (${sql.join(visibleKinds.map((value) => sql`${value}`), sql`, `)})`
+  const ownExpenses = ownExpenseParty !== undefined
+  if (visibleKinds.length === 0 && !ownExpenses) return []
+  const kindAllowlist = visibleKinds.length > 0
+    ? sql`d.kind in (${sql.join(visibleKinds.map((value) => sql`${value}`), sql`, `)})`
+    : sql`false`
+  const ownExpenseArm = ownExpenses && ownExpenseParty !== null
+    ? sql` or (d.kind = 'expense_report' and d.party_id = ${ownExpenseParty})`
+    : sql``
+  const visibleKindFilter = sql`and (${kindAllowlist}${ownExpenseArm})`
   // Fail closed exactly like the documents lists (`d.subsidiary_id = any(...)`
   // — null-subsidiary documents are invisible to restricted callers); parties
   // keep their org-wide-null master-data semantics.

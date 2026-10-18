@@ -490,7 +490,10 @@ export const NAV_MODULES: NavModule[] = [
     iconKey: 'scroll',
     group: 'purchasing',
     subgroup: 'pay',
+    // Search and record links resolve through the org-wide read grant;
+    // expenses.self holders also open the list, which shows their own reports.
     requiredPermission: 'expenses.read',
+    requiredPermissionsAny: ['expenses.read', 'expenses.self'],
     featureKey: 'expenses',
     recordTarget: { kind: 'query', param: 'expense' },
   },

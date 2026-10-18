@@ -77,6 +77,12 @@ export interface LineGridColumn<Row extends Record<string, unknown>> {
    * grids and readonly columns are unaffected. Defaults to editable.
    */
   isCellEditable?: (row: Row, index: number) => boolean
+  /**
+   * What a cell shows on a row whose `isCellEditable` is false, when the
+   * value is still meaningful there but derived rather than typed (an
+   * expense line's converted amount). Without it the cell stays empty.
+   */
+  lockedRender?: (row: Row, index: number) => React.ReactNode
   /** Renderer for readonly columns (computed cells, e.g. line tax). */
   render?: (row: Row, index: number) => React.ReactNode
   /**
@@ -1053,8 +1059,10 @@ function RowCells<Row extends Record<string, unknown>>({
               data-lg-row={i}
               data-lg-col={colIndex}
               role="gridcell"
-              className={cn(cellBase, 'px-2.5 text-sm')}
-            />
+              className={cn(cellBase, 'px-2.5 text-sm', c.lockedRender && c.align === 'right' && 'justify-end tabular-nums')}
+            >
+              {c.lockedRender?.(row, i)}
+            </div>
           )
         }
         return (

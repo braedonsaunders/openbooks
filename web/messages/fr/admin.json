@@ -1387,6 +1387,7 @@
     "banking_review_sign_off": "Réviser les rapprochements bancaires signés",
     "expenses_read": "Consulter les notes de frais",
     "expenses_create": "Saisir des notes de frais",
+    "expenses_self": "Créer et soumettre ses propres notes de frais",
     "admin_custom_fields_manage": "Gérer les champs personnalisés",
     "admin_users_manage": "Gérer les utilisateurs et l’attribution des rôles",
     "admin_roles_manage": "Gérer les rôles et les permissions",
@@ -1867,6 +1868,13 @@
       "removeKey": "Supprimer la clé du fournisseur documentaire",
       "keyRemoved": "Clé du fournisseur documentaire supprimée.",
       "model": "Modèle de facture",
+      "provider": "Lecteur de documents",
+      "providers": {"azure_document_intelligence": "Azure Document Intelligence", "llm_vision": "Modèle d’IA ({provider})"},
+      "azureHint": "Lit les factures et les reçus avec votre ressource et votre clé Azure Document Intelligence.",
+      "llmHint": "Lit les factures et les reçus avec le fournisseur d’IA, la clé et les modèles configurés ci-dessous ({provider}). Chaque champ porte la confiance du modèle ; les champs sous le seuil restent vides pour vérification.",
+      "llmNoVision": "{provider} ne lit pas d’images. Choisissez ci-dessous un fournisseur doté de modèles de vision, ou utilisez Azure Document Intelligence.",
+      "llmModel": "Modèle de capture",
+      "llmModelHint": "Identifiant d’un modèle capable de lire des images. Laissez vide pour utiliser le modèle avancé du fournisseur.",
       "confidence": "Seuil de confiance pour la révision",
       "confidenceHint": "Les valeurs sous ce seuil de 0 à 1 sont signalées pour révision.",
       "autoDraft": "Créer automatiquement des brouillons uniquement pour les bons de commande entièrement appariés",
@@ -1874,7 +1882,8 @@
       "testResult": {
         "connected": "Connexion au fournisseur documentaire établie.",
         "failed": "Le test du fournisseur documentaire a échoué.",
-        "missing": "Saisissez d’abord un point de terminaison et une clé API."
+        "missing": "Saisissez d’abord un point de terminaison et une clé API.",
+        "missingAi": "Ajoutez d’abord ci-dessous le fournisseur d’IA et sa clé API."
       }
     },
     "models": {
@@ -3843,9 +3852,11 @@
         "title": "Politiques de renouvellement des abonnements",
         "description": "Conditions de renouvellement datées, responsable et rappels avant l’expiration."
       },
-      "project-loss-policies": {"title": "Politiques des projets déficitaires", "description": "Si les projets prévoyant une perte sont signalés à la clôture et si la clôture attend leur évaluation de perte."}
+      "project-loss-policies": {"title": "Politiques des projets déficitaires", "description": "Si les projets prévoyant une perte sont signalés à la clôture et si la clôture attend leur évaluation de perte."},
+      "expense-fx-policies": {"title": "Politiques de change des frais", "description": "Indique si une ligne de frais en devise peut être convertie à un taux de change explicite motivé plutôt qu’au taux daté."}
     },
     "fields": {
+      "allowRateOverride": "Autoriser les taux de change explicites",
       "commonStockAccountId": "Compte des actions ordinaires",
       "preferredStockAccountId": "Compte des actions privilégiées",
       "apicAccountId": "Compte de primes d’émission",

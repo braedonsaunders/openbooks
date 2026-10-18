@@ -8,15 +8,15 @@ import {
   uploadAndAttach,
 } from "../../../../lib/file-cabinet";
 import { isUuid } from "../../../../lib/list-params";
-import { can } from "../../../../lib/authz";
 import {
   attachmentMutationRefusal,
   authorizeAttachmentTargetMutation,
 } from "../lib";
 import {
-  attachmentReadPermission,
   attachmentTargetInScope,
-  canMutateFiles,
+  attachmentViewer,
+  canMutateAttachmentTarget,
+  canReadAttachmentTarget,
   fileViewer,
   isAllowedContentType,
   isAttachableTargetTable,
@@ -63,16 +63,13 @@ export const GET = defineRoute({
     if (!target || !attachmentTargetInScope(gate, target)) {
       return notFound("record");
     }
-    const permission = attachmentReadPermission(targetTable, target.kind);
-    if (!permission)
-      return notFound("record");
-    if (!can(gate, permission))
+    if (!(await canReadAttachmentTarget(gate, target)))
       return NextResponse.json({ error: "forbidden" }, { status: 403 });
     const items = await listVisibleAttachments(
       gate.user.orgId,
       targetTable,
       targetId,
-      fileViewer(gate),
+      attachmentViewer(gate, target),
     );
     return NextResponse.json({ attachments: items });
   },
@@ -123,7 +120,7 @@ export const POST = defineRoute({
       );
       if (!target || !attachmentTargetInScope(gate, target))
         return notFound("record");
-      if (!canMutateFiles(gate, targetTable, target.kind))
+      if (!(await canMutateAttachmentTarget(gate, target)))
         return NextResponse.json({ error: "forbidden" }, { status: 403 });
       if (!isAllowedContentType(file.type)) {
         return NextResponse.json(
@@ -179,7 +176,7 @@ export const POST = defineRoute({
     );
     if (!target || !attachmentTargetInScope(gate, target))
       return notFound("record");
-    if (!canMutateFiles(gate, targetTable, target.kind))
+    if (!(await canMutateAttachmentTarget(gate, target)))
       return NextResponse.json({ error: "forbidden" }, { status: 403 });
     // The file must belong to the caller's org and be visible to them —
     // blocks cross-org links and attaching out of someone else's private folder.

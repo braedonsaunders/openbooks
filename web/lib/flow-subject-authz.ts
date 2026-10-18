@@ -9,6 +9,7 @@ import {
 import type { FlowSubjectPermissions } from '@openbooks/engine/flows/types'
 import { can, type Authz } from './authz'
 import { createPermission } from './document-kinds'
+import { expenseReportReachable } from './expense-access'
 
 /**
  * Domain permissions for generic flow/document endpoints.
@@ -36,6 +37,30 @@ export function flowSubjectPermissions(subjectKind: string): FlowSubjectPermissi
 export function canReadFlowSubject(authz: Authz, subjectKind: string): boolean {
   const perms = flowSubjectPermissions(subjectKind)
   return perms !== null && can(authz, perms.read)
+}
+
+/**
+ * A kind's domain grant on one record: the grant itself, or the self-service
+ * grant that confers it over the caller's own records (`expenses.self` on
+ * the caller's own expense report). Record-level endpoints use this so a
+ * self-service holder reaches exactly their own record and nothing else.
+ */
+export async function holdsSubjectGrant(
+  authz: Authz,
+  subjectKind: string,
+  subjectId: string,
+  permission: string,
+): Promise<boolean> {
+  if (can(authz, permission)) return true
+  if (subjectKind !== 'expense_report') return false
+  const authority = permission === 'expenses.read' ? 'read' : permission === 'expenses.create' ? 'edit' : null
+  return authority !== null && expenseReportReachable(authz, authority, subjectId)
+}
+
+/** True when the caller may read this record of the kind (see holdsSubjectGrant). */
+export async function canReadSubjectRecord(authz: Authz, subjectKind: string, subjectId: string): Promise<boolean> {
+  const perms = flowSubjectPermissions(subjectKind)
+  return perms !== null && holdsSubjectGrant(authz, subjectKind, subjectId, perms.read)
 }
 
 /**

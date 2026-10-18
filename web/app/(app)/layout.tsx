@@ -9,6 +9,7 @@ import { SandboxBanner } from '../../components/sandbox-banner'
 import { ThemeProvider } from '../../components/theme-provider'
 import { NavigationProvider } from '../../components/navigation-provider'
 import { getAuthz, can } from '../../lib/authz'
+import { expenseScope } from '../../lib/expense-access'
 import { resolveLocalNavigation } from '../../lib/nav/local'
 import { ViewTabsProvider } from '../../components/module-home/view-tabs'
 import { resolveNav } from '../../lib/nav/resolve'
@@ -110,7 +111,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             journal: can(authz, 'gl.post'),
             customerPayments: can(authz, 'ar.pay'),
             vendorPayments: can(authz, 'ap.pay'),
-            expenses: can(authz, 'expenses.create') && expensesEnabled,
+            expenses: expenseScope(authz, 'edit') !== null && expensesEnabled,
             parties: can(authz, 'parties.manage'),
             items: can(authz, 'items.manage'),
             projects: can(authz, 'projects.manage') && projectsEnabled,

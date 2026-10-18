@@ -3201,6 +3201,11 @@ export const TENANT_RETIREMENT_TRIGGER_CONTRACTS = [
     "function": "close_append_only_guard"
   },
   {
+    "table": "expense_fx_policies",
+    "trigger": "expense_fx_policies_immutable",
+    "function": "financial_policy_version_immutable"
+  },
+  {
     "table": "gl_audit_number_assignments",
     "trigger": "gl_audit_number_assignments_immutable",
     "function": "financial_policy_version_immutable"

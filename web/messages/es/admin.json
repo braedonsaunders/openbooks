@@ -1387,6 +1387,7 @@
     "banking_review_sign_off": "Revisar conciliaciones bancarias firmadas",
     "expenses_read": "Ver informes de gastos",
     "expenses_create": "Registrar informes de gastos",
+    "expenses_self": "Crear y enviar sus propios informes de gastos",
     "admin_custom_fields_manage": "Administrar campos personalizados",
     "admin_users_manage": "Administrar usuarios y asignaciones de roles",
     "admin_roles_manage": "Administrar roles y permisos",
@@ -1867,6 +1868,13 @@
       "removeKey": "Quitar la clave del proveedor documental",
       "keyRemoved": "Se quitó la clave del proveedor documental.",
       "model": "Modelo de factura",
+      "provider": "Lector de documentos",
+      "providers": {"azure_document_intelligence": "Azure Document Intelligence", "llm_vision": "Modelo de IA ({provider})"},
+      "azureHint": "Lee facturas y recibos con su recurso y clave de Azure Document Intelligence.",
+      "llmHint": "Lee facturas y recibos con el proveedor de IA, la clave y los modelos configurados abajo ({provider}). Cada campo lleva la confianza del modelo; los campos por debajo del umbral quedan vacíos para revisión.",
+      "llmNoVision": "{provider} no lee imágenes. Elija abajo un proveedor con modelos de visión o use Azure Document Intelligence.",
+      "llmModel": "Modelo de captura",
+      "llmModelHint": "Identificador de un modelo con visión. Déjelo vacío para usar el modelo avanzado del proveedor.",
       "confidence": "Umbral de confianza para revisión",
       "confidenceHint": "Los valores inferiores a este umbral de 0 a 1 se marcan para revisión.",
       "autoDraft": "Crear borradores automáticamente solo para órdenes de compra totalmente conciliadas",
@@ -1874,7 +1882,8 @@
       "testResult": {
         "connected": "Conectado al proveedor documental.",
         "failed": "La prueba del proveedor documental falló.",
-        "missing": "Introduzca primero un punto de conexión y una clave API."
+        "missing": "Introduzca primero un punto de conexión y una clave API.",
+        "missingAi": "Agregue primero abajo el proveedor de IA y su clave API."
       }
     },
     "models": {
@@ -3843,9 +3852,11 @@
         "title": "Políticas de renovación de suscripciones",
         "description": "Condiciones de renovación con fecha de vigencia, responsable y recordatorios antes del vencimiento."
       },
-      "project-loss-policies": {"title": "Políticas de proyectos con pérdida", "description": "Si los proyectos que prevén pérdidas se señalan en el cierre y si el cierre espera su evaluación de pérdida."}
+      "project-loss-policies": {"title": "Políticas de proyectos con pérdida", "description": "Si los proyectos que prevén pérdidas se señalan en el cierre y si el cierre espera su evaluación de pérdida."},
+      "expense-fx-policies": {"title": "Políticas de cambio de gastos", "description": "Si una línea de gasto en moneda extranjera puede convertirse a un tipo de cambio explícito con un motivo en lugar del tipo fechado."}
     },
     "fields": {
+      "allowRateOverride": "Permitir tipos de cambio explícitos",
       "commonStockAccountId": "Cuenta de acciones ordinarias",
       "preferredStockAccountId": "Cuenta de acciones preferentes",
       "apicAccountId": "Cuenta de prima de emisión",

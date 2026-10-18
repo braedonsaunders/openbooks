@@ -4,6 +4,7 @@ import { sql } from 'drizzle-orm'
 import { db } from '@openbooks/engine/platform/db'
 import { assertAnyPermission, ScopeNotFoundError } from '@openbooks/engine/organization/scope'
 import { can, guardSubsidiaryScope } from '../../../../lib/authz';
+import { holdsSubjectGrant } from '../../../../lib/flow-subject-authz';
 import { isFeatureEnabled } from '../../../../lib/features'
 import { isUuid } from '../../../../lib/list-params'
 import { notFound } from "@/lib/api/responses";
@@ -52,7 +53,7 @@ export const GET = defineRoute({
       : (table === 'hrm_benefit_enrollments' || table === 'hrm_benefit_programs' || table === 'hrm_benefit_plans' || table === 'entitlement_plans') ? ['hrm.benefits.read']
       : table === 'item_rate_versions'
         ? ['admin.setup.manage']
-        : ['ar.read', 'ap.read', 'gl.read', 'expenses.read', 'cash_sales.read', 'purchase_orders.read', 'payroll.read']
+        : ['ar.read', 'ap.read', 'gl.read', 'expenses.read', 'expenses.self', 'cash_sales.read', 'purchase_orders.read', 'payroll.read']
     try {
       assertAnyPermission((permission) => can(authz, permission), family)
     } catch (error) {
@@ -148,7 +149,9 @@ export const GET = defineRoute({
       // Wrong-kind callers learn nothing either: the kind-specific permission
       // fails closed with the same uniform 404, so an ar.read-only caller cannot
       // distinguish an existing AP bill from a missing id (and symmetrically).
-      if (!can(authz, permission)) return notFound("record")
+      // A self-service holder reads the history of their own expense report only.
+      if (!can(authz, permission) && !(table === 'documents' && metadata.kind === 'expense_report'
+        && await holdsSubjectGrant(authz, 'expense_report', recordId, permission))) return notFound("record")
 
       if (table === 'documents' && metadata.kind === 'pay_run') {
         if (!await isFeatureEnabled(authz.user.orgId, 'payroll')) return notFound('record')

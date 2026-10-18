@@ -87,7 +87,7 @@ function createRequest(key: string, body: Record<string, unknown>): Request {
 }
 
 function lineBody(accountId: string): Record<string, unknown> {
-  return { lines: [{ accountId, description: 'Taxi', amount: '25', settlementType: 'out_of_pocket' }] }
+  return { documentDate: '2026-10-01', lines: [{ accountId, description: 'Taxi', amount: '25', settlementType: 'out_of_pocket' }] }
 }
 
 test('a restricted expense report is created in their own subsidiary', async () => {
@@ -127,7 +127,7 @@ test('an untouched Save refuses without numbering, and a replayed Save returns t
   try {
     gate(null)
     const blankKey = randomUUID()
-    const blank = await POST(createRequest(blankKey, { lines: [] }))
+    const blank = await POST(createRequest(blankKey, { documentDate: '2026-10-01', lines: [] }))
     assert.equal(blank.status, 422)
     assert.deepEqual(await expenseReports(org.orgId), [])
 

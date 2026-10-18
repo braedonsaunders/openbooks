@@ -19,6 +19,13 @@ import { isFeatureEnabled } from '../../../../lib/features'
 import { isUuid } from '../../../../lib/list-params'
 import { ApprovalRoutingError } from '../../../../lib/approval-routing-error'
 import { notFound } from "@/lib/api/responses";
+import {
+  ALL_EXPENSE_REPORTS,
+  expenseAccessAllows,
+  expenseAccessForScope,
+  expenseGrantScope,
+  type ExpenseAccess,
+} from '@openbooks/engine/records/expense-access'
 const POSTBodySchema1 = z.discriminatedUnion('action', [
   z.object({ action: z.literal('submit'), documentId: z.string() }),
   z.object({ action: z.literal('post'), documentId: z.string() }),
@@ -31,8 +38,9 @@ export const runtime = 'nodejs'
 
 /**
  * Expense report lifecycle: draft → submit (Flows approval) → approved → post.
- * Per-action permission gates: submit = expenses.create, post = ap.post,
- * recall = expenses.create plus submitter-or-admin on the report.
+ * Per-action permission gates: submit = expenses.create (or expenses.self on
+ * the caller's own report), post = ap.post, recall = the submit grant plus
+ * submitter-or-admin on the report.
  * Approval decisions are owned by the Flows engine (via the /inbox worklist
  * and the record flyout → /api/flows/gates/decide), not this route.
  */
@@ -42,15 +50,24 @@ export const runtime = 'nodejs'
  * caller's subsidiary scope — submit and post both resolve through here, so a
  * restricted caller can never route an out-of-scope report to the GL.
  */
-async function expenseReport(id: string, authz: Authz) {
+/**
+ * Whose reports the caller submits and recalls: everyone's under
+ * expenses.create, only their own under expenses.self. Null without either.
+ */
+async function submitAccess(authz: Authz): Promise<ExpenseAccess | null> {
+  const scope = expenseGrantScope((permission) => can(authz, permission), 'edit')
+  return scope === null ? null : expenseAccessForScope(db, authz.user.orgId, authz.user.id, scope)
+}
+
+async function expenseReport(id: string, authz: Authz, access: ExpenseAccess = ALL_EXPENSE_REPORTS) {
   // A malformed id would surface as a Postgres uuid throw and a raw 500;
   // resolve it through the same not-found contract as an unknown id.
   if (!isUuid(id)) return null
-  const r = (await db.execute<{ id: string; status: string; subsidiaryId: string | null }>(
-    sql`select id, status, subsidiary_id as "subsidiaryId" from documents where id = ${id} and kind = 'expense_report' and org_id = ${authz.user.orgId}`,
+  const r = (await db.execute<{ id: string; status: string; subsidiaryId: string | null; partyId: string | null }>(
+    sql`select id, status, subsidiary_id as "subsidiaryId", party_id as "partyId" from documents where id = ${id} and kind = 'expense_report' and org_id = ${authz.user.orgId}`,
   ))
   const row = r.rows[0]
-  if (!row) return null
+  if (!row || !expenseAccessAllows(access, row.partyId)) return null
   return guardSubsidiaryScope(authz, row.subsidiaryId) ? null : row
 }
 
@@ -61,14 +78,15 @@ async function expenseReport(id: string, authz: Authz) {
  * transaction, so the verdict sees the latest committed subsidiary and the
  * rehome blocks until the write commits.
  */
-async function lockedExpenseInScope(documentId: string, authz: Authz): Promise<boolean> {
+async function lockedExpenseInScope(documentId: string, authz: Authz, access: ExpenseAccess = ALL_EXPENSE_REPORTS): Promise<boolean> {
   if (!isUuid(documentId)) return false
-  const locked = (await db.execute<{ subsidiaryId: string | null }>(
-    sql`select subsidiary_id as "subsidiaryId" from documents
+  const locked = (await db.execute<{ subsidiaryId: string | null; partyId: string | null }>(
+    sql`select subsidiary_id as "subsidiaryId", party_id as "partyId" from documents
          where id = ${documentId} and kind = 'expense_report' and org_id = ${authz.user.orgId}
          for update`,
   )).rows[0]
   return !!locked && subsidiaryScopeAllows(authz.allowedSubsidiaryIds, locked.subsidiaryId)
+    && expenseAccessAllows(access, locked.partyId)
 }
 
 /**
@@ -87,6 +105,7 @@ async function recallExpenseReport(input: {
   expectedUpdatedAt: unknown
   isAdmin: boolean
   allowedSubsidiaryIds: ReadonlySet<string> | null
+  access: ExpenseAccess
 }): Promise<{ cancelledGates: number; cancelledRuns: number }> {
   const expectedRevision = requireDocumentEditRevision(input.expectedUpdatedAt)
   return withOrgTransaction(input.orgId, async () => {
@@ -96,17 +115,19 @@ async function recallExpenseReport(input: {
       createdBy: string | null
       voidRequestedAt: string | null
       subsidiaryId: string | null
+      partyId: string | null
       revision: string
     }>(sql`
       select status, submitted_by as "submittedBy", created_by as "createdBy",
              void_requested_at as "voidRequestedAt",
-             subsidiary_id as "subsidiaryId",
+             subsidiary_id as "subsidiaryId", party_id as "partyId",
              ${documentRevisionCounterSql(sql.raw('revision_seq'))} as "revision"
         from documents
        where id = ${input.documentId} and kind = 'expense_report' and org_id = ${input.orgId}
        for update
     `)).rows[0]
-    if (!locked || !subsidiaryScopeAllows(input.allowedSubsidiaryIds, locked.subsidiaryId)) {
+    if (!locked || !subsidiaryScopeAllows(input.allowedSubsidiaryIds, locked.subsidiaryId)
+      || !expenseAccessAllows(input.access, locked.partyId)) {
       throw new DocumentEditError(404, 'expense report not found')
     }
     if (locked.status !== 'pending_approval' && locked.status !== 'approved') {
@@ -191,10 +212,11 @@ export const POST = defineRoute({
     try {
         switch (body.action) {
           case 'submit': {
-            if (!can(authz, 'expenses.create')) {
+            const access = await submitAccess(authz)
+            if (!access) {
               return NextResponse.json({ error: 'missing permission: expenses.create' }, { status: 403 })
             }
-            if (!body.documentId || !(await expenseReport(body.documentId, authz))) {
+            if (!body.documentId || !(await expenseReport(body.documentId, authz, access))) {
               return notFound('record')
             }
             const documentId: string = body.documentId
@@ -206,7 +228,7 @@ export const POST = defineRoute({
             // submit joins this transaction): a rehome that lands after the
             // expenseReport probe blocks here instead of riding the submit.
             const submission = await withOrgTransaction(user.orgId, async () => {
-              if (!(await lockedExpenseInScope(documentId, authz))) return null
+              if (!(await lockedExpenseInScope(documentId, authz, access))) return null
               const inner = await submitAndReleaseIfUngated('expense_report', documentId, user.id)
               if (inner.flowError) {
                 throw new ApprovalRoutingError(inner.flowError)
@@ -246,10 +268,11 @@ export const POST = defineRoute({
             return NextResponse.json({ ok: true, entryId })
           }
           case 'recall': {
-            if (!can(authz, 'expenses.create')) {
+            const access = await submitAccess(authz)
+            if (!access) {
               return NextResponse.json({ error: 'missing permission: expenses.create' }, { status: 403 })
             }
-            if (!body.documentId || !(await expenseReport(body.documentId, authz))) {
+            if (!body.documentId || !(await expenseReport(body.documentId, authz, access))) {
               return notFound('record')
             }
             try {
@@ -260,6 +283,7 @@ export const POST = defineRoute({
                 expectedUpdatedAt: body.expectedUpdatedAt,
                 isAdmin: user.isSuperAdmin || user.roles.some((role) => role.key === 'admin'),
                 allowedSubsidiaryIds: authz.allowedSubsidiaryIds,
+                access,
               })
               return NextResponse.json({ ok: true, ...outcome })
             } catch (e) {

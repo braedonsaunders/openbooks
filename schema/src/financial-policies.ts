@@ -76,3 +76,15 @@ export const glAuditNumberAssignments = pgTable("gl_audit_number_assignments", {
   uniqueIndex("gl_audit_number_assignments_entry").on(t.orgId, t.bookId, t.subsidiaryId, t.entryId),
   uniqueIndex("gl_audit_number_assignments_sequence").on(t.orgId, t.bookId, t.subsidiaryId, t.scopeKey, t.ordinal),
   uniqueIndex("gl_audit_number_assignments_org_id_id_unique").on(t.orgId, t.id), check("gl_audit_number_assignments_positive", sql`${t.ordinal} > 0`)]);
+
+/**
+ * Expense FX policy versions (0739): whether an operator may replace the
+ * dated exchange rate on a foreign-currency expense line with an explicit
+ * rate and reason. Append-only; no version reads as refused.
+ */
+export const expenseFxPolicies = pgTable("expense_fx_policies", {
+  id: id(), orgId: orgRef(), effectiveFrom: date("effective_from").notNull(),
+  allowRateOverride: boolean("allow_rate_override").notNull().default(false),
+  reason: text("reason").notNull(), ...auditColumns,
+}, t => [uniqueIndex("expense_fx_policies_org_id_effective_from_key").on(t.orgId, t.effectiveFrom),
+  uniqueIndex("expense_fx_policies_org_id_id_key").on(t.orgId, t.id)]);

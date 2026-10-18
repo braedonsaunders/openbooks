@@ -127,8 +127,19 @@ type CuratedQuickAction = Omit<QuickActionOption, 'label' | 'id' | 'hint'> & {
   /** Key into quickActions.hints, resolved in the request locale by the picker. */
   hintKey: 'create' | 'open'
   requiredPermission: string | null
+  /** Grants that open the action as well, such as a self-service grant over the holder's own records. */
+  alsoPermittedBy?: readonly string[]
   /** Features switch — omit from the catalog and live chips when off. */
   requiredFeature?: string
+}
+
+/** Whether a holder of these permissions may use a curated quick action. */
+export function quickActionPermitted(
+  action: Pick<CuratedQuickAction, 'requiredPermission' | 'alsoPermittedBy'>,
+  holds: (permission: string) => boolean,
+): boolean {
+  if (!action.requiredPermission) return true
+  return holds(action.requiredPermission) || (action.alsoPermittedBy ?? []).some(holds)
 }
 
 export const CURATED_QUICK_ACTIONS: readonly CuratedQuickAction[] = [
@@ -184,6 +195,8 @@ export const CURATED_QUICK_ACTIONS: readonly CuratedQuickAction[] = [
     tone: 'amber',
     hintKey: 'create',
     requiredPermission: 'expenses.create',
+    // Employees file their own reports through the self-service grant.
+    alsoPermittedBy: ['expenses.self'],
     // Same switch as the shell create menu: the draft API 404s when Expenses is off.
     requiredFeature: 'expenses',
   },

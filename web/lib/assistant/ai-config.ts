@@ -4,6 +4,7 @@ import { db } from "@openbooks/engine/platform/db";
 import { sealSecret, SecretIntegrityError, unsealSecret } from "../secrets";
 import {
   isAiProvider,
+  providerSpec,
   validateAiBaseUrlLive,
   type AiConfig,
   type AiProvider,
@@ -167,11 +168,22 @@ function normalizeDocumentCaptureInput(
   orgId: string,
   input: DocumentCaptureSettingsInput,
   previous: StoredDocumentCapture | undefined,
+  ai: { provider: AiProvider; hasKey: boolean },
 ): StoredDocumentCapture {
+  const llm = input.provider === "llm_vision";
   const endpoint = input.endpoint.trim();
-  if (endpoint) validateAzureDocumentEndpoint(endpoint);
-  const model = input.model.trim() || DEFAULT_INVOICE_MODEL;
-  if (!/^[a-zA-Z0-9][a-zA-Z0-9._~-]{1,63}$/.test(model)) throw new Error("invalid document capture model id");
+  if (endpoint && !llm) validateAzureDocumentEndpoint(endpoint);
+  // Azure models are short ids; AI model ids may carry vendor slugs and versions.
+  const model = llm ? input.model.trim() : input.model.trim() || DEFAULT_INVOICE_MODEL;
+  if (llm ? model !== "" && !/^[A-Za-z0-9][A-Za-z0-9._:/@~-]{0,127}$/.test(model) : !/^[a-zA-Z0-9][a-zA-Z0-9._~-]{1,63}$/.test(model)) {
+    throw new Error("invalid document capture model id");
+  }
+  if (llm && input.enabled) {
+    const spec = providerSpec(ai.provider);
+    if (spec.vision.length === 0) throw new Error(`document capture with the AI model needs a provider with vision models; ${spec.label} reads no images`);
+    if (!ai.hasKey) throw new Error("document capture with the AI model needs the AI provider's API key");
+    if (!model && !(spec.smart)) throw new Error("document capture with the AI model needs a model id for this provider");
+  }
   const threshold = String(input.confidenceThreshold).trim();
   if (!/^0(?:\.\d{1,4})?$|^1(?:\.0{1,4})?$/.test(threshold)) {
     throw new Error("document capture confidence must be between 0 and 1");
@@ -179,8 +191,10 @@ function normalizeDocumentCaptureInput(
   const [whole, fraction = ""] = threshold.split(".");
   const next: StoredDocumentCapture = {
     enabled: input.enabled,
-    provider: "azure_document_intelligence",
-    endpoint,
+    provider: llm ? "llm_vision" : "azure_document_intelligence",
+    // The Azure endpoint and key are kept when the AI model reads instead,
+    // so switching back restores them.
+    endpoint: llm ? previous?.endpoint ?? "" : endpoint,
     model,
     confidenceThreshold: `${whole}.${fraction.padEnd(4, "0")}`,
     autoCreatePoMatchedDrafts: input.autoCreatePoMatchedDrafts,
@@ -189,7 +203,7 @@ function normalizeDocumentCaptureInput(
   if (input.apiKey?.trim()) {
     next.keyEncrypted = sealSecret(input.apiKey.trim(), { orgId, purpose: "payables.ap-capture.key" });
   }
-  if (input.enabled && (!endpoint || !next.keyEncrypted)) {
+  if (input.enabled && !llm && (!endpoint || !next.keyEncrypted)) {
     throw new Error("document capture requires an endpoint and API key");
   }
   return next;
@@ -334,11 +348,14 @@ export async function saveOrgAiSettings(
       modelSmart: input.modelSmart || undefined,
       baseUrl: baseUrl || undefined,
       keyEncrypted: prev.keyEncrypted,
-      documentCapture: normalizeDocumentCaptureInput(orgId, input.documentCapture, prev.documentCapture),
     };
     if (input.apiKey && input.apiKey.trim()) {
       next.keyEncrypted = sealSecret(input.apiKey.trim(), { orgId, purpose: "assistant.ai.key" });
     }
+    next.documentCapture = normalizeDocumentCaptureInput(orgId, input.documentCapture, prev.documentCapture, {
+      provider: input.provider,
+      hasKey: Boolean(next.keyEncrypted),
+    });
     await tx.execute(sql`
       update orgs
          set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{ai}', ${JSON.stringify(next)}::jsonb),
@@ -355,6 +372,11 @@ export async function saveOrgAiSettings(
         modelSmart: input.modelSmart || null,
         baseUrl: baseUrl || null,
         keyReplaced: Boolean(input.apiKey),
+        documentCaptureBefore: {
+          enabled: prev.documentCapture?.enabled === true,
+          provider: prev.documentCapture?.provider ?? "azure_document_intelligence",
+          model: prev.documentCapture?.model ?? null,
+        },
         documentCapture: {
           enabled: input.documentCapture.enabled,
           provider: input.documentCapture.provider,

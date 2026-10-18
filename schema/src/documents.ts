@@ -405,6 +405,17 @@ export const documentLines = pgTable(
      */
     taxOverridden: boolean("tax_overridden").notNull().default(false),
     /**
+     * Expense lines spent in another currency than their report (0739): the
+     * original currency and amounts, the rate that converted them into the
+     * report currency (`amount` and `tax_amount`), and the rate's evidence.
+     * All null for a line in the report currency.
+     */
+    originalCurrency: currencyCode("original_currency"),
+    originalAmount: money("original_amount"),
+    originalTaxAmount: money("original_tax_amount"),
+    originalFxRate: fxRate("original_fx_rate"),
+    originalFxEvidence: jsonb("original_fx_evidence"),
+    /**
      * How a bill line counts toward contractor withholding (CIS, § 48 EStG,
      * RCT): labour, materials the subcontractor supplied, or a supply
      * outside the scheme. Unset lines are classified from the item.

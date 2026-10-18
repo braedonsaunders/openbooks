@@ -1401,6 +1401,7 @@
     "banking_review_sign_off": "复核已签署的银行对账",
     "expenses_read": "查看费用报告",
     "expenses_create": "录入费用报告",
+    "expenses_self": "创建并提交本人的费用报告",
     "admin_custom_fields_manage": "管理自定义字段",
     "admin_users_manage": "管理用户和角色分配",
     "admin_roles_manage": "管理角色和权限",
@@ -1867,6 +1868,13 @@
       "removeKey": "移除文档服务商密钥",
       "keyRemoved": "文档服务商密钥已移除。",
       "model": "发票模型",
+      "provider": "文档读取方式",
+      "providers": {"azure_document_intelligence": "Azure 文档智能", "llm_vision": "AI 模型（{provider}）"},
+      "azureHint": "使用您的 Azure 文档智能资源和密钥读取账单和收据。",
+      "llmHint": "使用下方配置的 AI 提供商、密钥和模型（{provider}）读取账单和收据。每个字段都带有模型的置信度；低于阈值的字段保持空白以供审核。",
+      "llmNoVision": "{provider} 无法读取图像。请在下方选择具备视觉模型的提供商，或使用 Azure 文档智能。",
+      "llmModel": "采集模型",
+      "llmModelHint": "支持图像的模型 ID。留空则使用提供商的高级模型。",
       "confidence": "复核置信度阈值",
       "confidenceHint": "低于此 0–1 阈值的值将被标记以供复核。",
       "autoDraft": "仅为完全匹配的采购订单自动创建草稿",
@@ -1874,7 +1882,8 @@
       "testResult": {
         "connected": "已连接到文档服务商。",
         "failed": "文档服务商测试失败。",
-        "missing": "请先输入端点和 API 密钥。"
+        "missing": "请先输入端点和 API 密钥。",
+        "missingAi": "请先在下方添加 AI 提供商及其 API 密钥。"
       }
     },
     "models": {
@@ -3918,9 +3927,11 @@
         "title": "订阅续订策略",
         "description": "按生效日期管理续订条款、负责人和到期前提醒。"
       },
-      "project-loss-policies": {"title": "亏损项目政策", "description": "决定在结账时是否标记预计亏损的项目，以及结账是否需等待其亏损评估。"}
+      "project-loss-policies": {"title": "亏损项目政策", "description": "决定在结账时是否标记预计亏损的项目，以及结账是否需等待其亏损评估。"},
+      "expense-fx-policies": {"title": "费用汇率政策", "description": "外币费用行是否可以使用附理由的指定汇率，而不是按日期的汇率进行换算。"}
     },
     "fields": {
+      "allowRateOverride": "允许指定汇率",
       "commonStockAccountId": "普通股科目",
       "preferredStockAccountId": "优先股科目",
       "apicAccountId": "资本公积科目",

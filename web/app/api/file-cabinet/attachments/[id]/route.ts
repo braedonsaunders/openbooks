@@ -5,14 +5,14 @@ import {
   detachAttachment,
   getAttachmentLink,
 } from "../../../../../lib/file-cabinet";
-import { can } from "../../../../../lib/authz";
 import { isUuid } from "../../../../../lib/list-params";
 import {
   attachmentReadPermission,
   attachmentMutationRefusal,
   attachmentTargetInScope,
   authorizeAttachmentTargetMutation,
-  canMutateFiles,
+  canMutateAttachmentTarget,
+  canReadAttachmentTarget,
   loadAttachmentTarget,
 } from "../../lib";
 import { notFound } from "@/lib/api/responses";
@@ -49,12 +49,11 @@ export const DELETE = defineRoute({
     if (!target || !attachmentTargetInScope(gate, target)) {
       return notFound("record");
     }
-    const permission = attachmentReadPermission(link.targetTable, target.kind);
-    if (!permission)
+    if (!attachmentReadPermission(link.targetTable, target.kind))
       return notFound("record");
     if (
-      !can(gate, permission) ||
-      !canMutateFiles(gate, link.targetTable, target.kind)
+      !(await canReadAttachmentTarget(gate, target)) ||
+      !(await canMutateAttachmentTarget(gate, target))
     ) {
       return NextResponse.json({ error: "forbidden" }, { status: 403 });
     }

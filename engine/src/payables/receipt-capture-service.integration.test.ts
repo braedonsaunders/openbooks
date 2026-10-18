@@ -12,11 +12,18 @@ import {
   extractReceiptCapture,
   listReceiptCaptures,
   ReceiptCaptureRefusal,
+  receiptReader,
   registerReceiptCapture,
   requireEditableReceiptReport,
 } from "./receipt-capture-service.ts";
+import { getDocumentCaptureRuntimeConfig } from "./ap-capture-config.ts";
 
 const ENDPOINT = "https://receipts-proof.cognitiveservices.azure.com";
+const AZURE_READER = { provider: "azure_document_intelligence", model: "prebuilt-receipt", apiVersion: "2024-11-30" };
+/** Saved report-currency line facts with no original currency. */
+function cadLine(accountId: string, amount: string, taxAmount: string) {
+  return { accountId, amount, taxAmount, originalCurrency: null, originalAmount: null, originalTaxAmount: null };
+}
 const lookup = async () => ["20.50.100.1"];
 
 function money(amount: number, code: string) {
@@ -115,6 +122,15 @@ async function teardown(fixture: Fixture) {
 
 /** Store a receipt file and register its capture on a report, returning the capture and attempt. */
 async function scan(fixture: Fixture, documentId: string, bytes = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3])) {
+  return registerScan(fixture, documentId, AZURE_READER, bytes);
+}
+
+async function registerScan(
+  fixture: Fixture,
+  documentId: string,
+  reader: { provider: string; model: string; apiVersion: string },
+  bytes = Buffer.from([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3]),
+) {
   const folderId = randomUUID();
   const fileId = randomUUID();
   const versionId = randomUUID();
@@ -135,6 +151,7 @@ async function scan(fixture: Fixture, documentId: string, bytes = Buffer.from([0
     contentHash: createHash("sha256").update(bytes).digest("hex"),
     originalFilename: "receipt.jpg",
     actorId: fixture.actorId,
+    reader,
   });
 }
 
@@ -155,7 +172,7 @@ test("extraction drafts a reviewed line, matches the vendor, suggests the employ
       documentId: fixture.reportA,
       reportCurrency: "CAD",
       actorId: fixture.actorId,
-      lines: [{ accountId: fixture.mealsAccountId, amount: "99.5000", taxAmount: "10.9900" }],
+      lines: [cadLine(fixture.mealsAccountId, "99.5000", "10.9900")],
       confirmations: [{ captureId: earlier.id, lineIndex: 0, transactionDate: "2026-10-03", merchantName: "The Keg Steakhouse", merchantPartyId: null }],
     });
 
@@ -197,20 +214,37 @@ test("a different photo of the same receipt warns by merchant, date and total", 
   }
 });
 
-test("confirmation records the saved line and refuses foreign-currency, repeated and other-report receipts", async () => {
+test("a foreign-currency receipt drafts its own amounts and confirms only a line in its currency", async () => {
   const fixture = await setup();
   try {
     const usd = await scan(fixture, fixture.reportB, Buffer.from([0xff, 0xd8, 0xff, 7]));
     await extractReceiptCapture({ orgId: fixture.org.orgId, captureId: usd.id, attempt: usd.attempt, actorId: fixture.actorId, fetchImpl: providerFetch(receiptPayload("USD")), lookup });
     const usdView = await captureView(fixture, fixture.reportB, usd.id);
-    assert.equal(usdView.draft?.total.value, null, "a foreign-currency receipt drafts no amount");
-    assert.ok(usdView.issues.some((issue) => issue.code === "currency_mismatch" && issue.severity === "blocking"));
-    const line = { accountId: fixture.mealsAccountId, amount: "99.5000", taxAmount: "10.9900" };
+    assert.equal(usdView.draft?.total.value, "110.4900", "the receipt's own total is drafted");
+    assert.equal(usdView.draft?.currency.value, "USD");
+    assert.equal(usdView.draft?.currencyMatchesReport, false);
+    assert.ok(usdView.issues.some((issue) => issue.code === "foreign_currency" && issue.severity === "warning"));
     const confirmation = { lineIndex: 0, transactionDate: "2026-10-03", merchantName: "The Keg", merchantPartyId: null };
     await assert.rejects(
-      confirmReceiptLines(db, { orgId: fixture.org.orgId, documentId: fixture.reportB, reportCurrency: "CAD", actorId: fixture.actorId, lines: [line], confirmations: [{ captureId: usd.id, ...confirmation }] }),
+      confirmReceiptLines(db, { orgId: fixture.org.orgId, documentId: fixture.reportB, reportCurrency: "CAD", actorId: fixture.actorId, lines: [cadLine(fixture.mealsAccountId, "99.5000", "10.9900")], confirmations: [{ captureId: usd.id, ...confirmation }] }),
       (error: unknown) => error instanceof ReceiptCaptureRefusal && error.status === 422 && error.code === "currency_mismatch",
+      "a USD receipt cannot back a line entered in CAD",
     );
+    await assert.rejects(
+      confirmReceiptLines(db, { orgId: fixture.org.orgId, documentId: fixture.reportB, reportCurrency: "CAD", actorId: fixture.actorId,
+        lines: [{ accountId: fixture.mealsAccountId, amount: "136.9300", taxAmount: "15.1200", originalCurrency: "EUR", originalAmount: "99.5000", originalTaxAmount: "10.9900" }],
+        confirmations: [{ captureId: usd.id, ...confirmation }] }),
+      (error: unknown) => error instanceof ReceiptCaptureRefusal && error.code === "currency_mismatch",
+      "nor a line in a third currency",
+    );
+    await confirmReceiptLines(db, { orgId: fixture.org.orgId, documentId: fixture.reportB, reportCurrency: "CAD", actorId: fixture.actorId,
+      lines: [{ accountId: fixture.mealsAccountId, amount: "136.9300", taxAmount: "15.1200", originalCurrency: "USD", originalAmount: "99.5000", originalTaxAmount: "10.9900" }],
+      confirmations: [{ captureId: usd.id, ...confirmation }] });
+    const usdRow = (await db.execute<{ currency: string; total: string; confirmed_amount: string; confirmed_tax_amount: string }>(sql`
+      select currency, total::text, confirmed_amount::text, confirmed_tax_amount::text from expense_receipt_captures where id = ${usd.id}`)).rows[0]!;
+    assert.deepEqual(usdRow, { currency: "USD", total: "110.4900", confirmed_amount: "136.9300", confirmed_tax_amount: "15.1200" },
+      "the receipt keeps its own currency and total; the confirmation records the converted line");
+    const line = cadLine(fixture.mealsAccountId, "99.5000", "10.9900");
 
     const cad = await scan(fixture, fixture.reportB, Buffer.from([0xff, 0xd8, 0xff, 8]));
     await extractReceiptCapture({ orgId: fixture.org.orgId, captureId: cad.id, attempt: cad.attempt, actorId: fixture.actorId, fetchImpl: providerFetch(receiptPayload("CAD")), lookup });
@@ -300,6 +334,97 @@ test("receipt operations require an in-scope draft report and stay inside the or
     assert.equal((await listReceiptCaptures(other.org.orgId, fixture.reportB)).length, 0);
   } finally {
     await teardown(other);
+    await teardown(fixture);
+  }
+});
+
+test("the organization's AI model reads a receipt when it is the configured capture provider", async () => {
+  const fixture = await setup({ configure: false });
+  try {
+    await db.execute(sql`
+      update orgs set settings = coalesce(settings, '{}'::jsonb) || jsonb_build_object('ai', ${JSON.stringify({
+        enabled: true,
+        provider: "anthropic",
+        modelSmart: "claude-sonnet-4-6",
+        keyEncrypted: sealSecret("sk-ant-receipts", { orgId: fixture.org.orgId, purpose: "assistant.ai.key" }),
+        documentCapture: { enabled: true, provider: "llm_vision", model: "", confidenceThreshold: "0.8000" },
+      })}::jsonb)
+       where id = ${fixture.org.orgId}`);
+    const config = await getDocumentCaptureRuntimeConfig(fixture.org.orgId);
+    assert.equal(config?.provider, "llm_vision");
+    assert.equal(config?.model, "claude-sonnet-4-6", "the provider's smart model reads when no capture model is set");
+    const captured = await registerScan(fixture, fixture.reportA, receiptReader(config!));
+    const requests: Array<{ url: string; key: string | null }> = [];
+    const anthropic: typeof fetch = async (url, init) => {
+      requests.push({ url: String(url), key: new Headers(init?.headers).get("x-api-key") });
+      return Response.json({ content: [{ type: "text", text: JSON.stringify({
+        merchantName: { value: "The Keg Steakhouse #214", confidence: 0.96 },
+        transactionDate: { value: "2026-10-03", text: "Oct 3, 2026", confidence: 0.95 },
+        currency: { value: "CAD", symbol: "$", confidence: 0.94 },
+        subtotal: { value: "84.50", confidence: 0.93 },
+        taxTotal: { value: "10.99", confidence: 0.93 },
+        tip: { value: "15.00", confidence: 0.9 },
+        total: { value: "110.49", confidence: 0.97 },
+        taxDetails: [],
+        items: [],
+      }) }] });
+    };
+    await extractReceiptCapture({ orgId: fixture.org.orgId, captureId: captured.id, attempt: captured.attempt, actorId: fixture.actorId, fetchImpl: anthropic, lookup });
+    assert.deepEqual(requests, [{ url: "https://api.anthropic.com/v1/messages", key: "sk-ant-receipts" }]);
+    const view = await captureView(fixture, fixture.reportA, captured.id);
+    assert.equal(view.status, "extracted");
+    assert.equal(view.draft?.total.value, "110.4900");
+    assert.equal(view.draft?.merchantPartyId, fixture.vendorId);
+    assert.equal(view.overallConfidence, "0.9500");
+    const row = (await db.execute<{ provider: string; model: string; api_version: string }>(sql`
+      select provider, model, api_version from expense_receipt_captures where id = ${captured.id}`)).rows[0]!;
+    assert.deepEqual(row, { provider: "llm_vision", model: "claude-sonnet-4-6", api_version: "anthropic-messages-2023-06-01" });
+
+    // An answer that is not the contract fails the capture; it can be retried.
+    const retry = await registerScan(fixture, fixture.reportB, receiptReader(config!));
+    await extractReceiptCapture({ orgId: fixture.org.orgId, captureId: retry.id, attempt: retry.attempt, actorId: fixture.actorId,
+      fetchImpl: async () => Response.json({ content: [{ type: "text", text: "I can't read this receipt." }] }), lookup });
+    const failed = await captureView(fixture, fixture.reportB, retry.id);
+    assert.equal(failed.status, "failed");
+    assert.match(failed.lastError ?? "", /did not answer with a receipt reading/);
+  } finally {
+    await teardown(fixture);
+  }
+});
+
+test("self-service access reaches only the employee's own reports and hides other reports behind duplicates", async () => {
+  const fixture = await setup();
+  try {
+    const coworker = randomUUID();
+    await db.execute(sql`insert into parties (id, org_id, kind, display_name, is_active, custom) values (${coworker}, ${fixture.org.orgId}, 'employee', 'Sam Coworker', true, '{}'::jsonb)`);
+    await db.execute(sql`update documents set party_id = ${coworker} where id = ${fixture.reportA} and org_id = ${fixture.org.orgId}`);
+    const own = { scope: "own" as const, partyId: fixture.employeeId };
+    await requireEditableReceiptReport(db, { orgId: fixture.org.orgId, documentId: fixture.reportB, allowedSubsidiaryIds: null, access: own });
+    await assert.rejects(
+      requireEditableReceiptReport(db, { orgId: fixture.org.orgId, documentId: fixture.reportA, allowedSubsidiaryIds: null, access: own }),
+      (error: unknown) => error instanceof ReceiptCaptureRefusal && error.status === 404,
+      "a coworker's report reads as missing",
+    );
+    await assert.rejects(
+      requireEditableReceiptReport(db, { orgId: fixture.org.orgId, documentId: fixture.reportB, allowedSubsidiaryIds: null, access: { scope: "own", partyId: null } }),
+      (error: unknown) => error instanceof ReceiptCaptureRefusal && error.status === 404,
+      "a login linked to no person has no reports",
+    );
+
+    // The same receipt on the coworker's report warns the employee without naming it.
+    const theirs = await scan(fixture, fixture.reportA);
+    await extractReceiptCapture({ orgId: fixture.org.orgId, captureId: theirs.id, attempt: theirs.attempt, actorId: fixture.actorId, fetchImpl: providerFetch(receiptPayload("CAD")), lookup });
+    const mine = await scan(fixture, fixture.reportB);
+    await extractReceiptCapture({ orgId: fixture.org.orgId, captureId: mine.id, attempt: mine.attempt, actorId: fixture.actorId, fetchImpl: providerFetch(receiptPayload("CAD")), lookup });
+    const reviewer = (await listReceiptCaptures(fixture.org.orgId, fixture.reportB)).find((view) => view.id === mine.id)!;
+    assert.equal(reviewer.issues.find((issue) => issue.code === "possible_duplicate")?.detail, "EXP-RCPT-A", "an org-wide reviewer sees which report");
+    const employee = (await listReceiptCaptures(fixture.org.orgId, fixture.reportB, new Date(), own)).find((view) => view.id === mine.id)!;
+    const hidden = employee.issues.find((issue) => issue.code === "possible_duplicate")!;
+    assert.equal(hidden.detail, undefined);
+    assert.equal(hidden.severity, "warning");
+    assert.match(hidden.message ?? "", /another employee's expense report/);
+    assert.ok(!JSON.stringify(employee).includes("EXP-RCPT-A"), "the coworker's report number never reaches the employee");
+  } finally {
     await teardown(fixture);
   }
 });

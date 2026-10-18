@@ -4,6 +4,7 @@ import { db } from '@openbooks/engine/platform/db'
 import { documentRevisionCounterSql } from '@openbooks/engine/records/revision'
 import { subsidiaryVisibleFilter } from '@openbooks/engine/organization/scope'
 import { businessToday } from '@openbooks/engine/platform/business-date/module'
+import { ALL_EXPENSE_REPORTS, expenseOwnerPredicate, type ExpenseAccess } from '@openbooks/engine/records/expense-access'
 
 /**
  * Recall eligibility for an expense report: a pending_approval
@@ -42,12 +43,14 @@ export function canRecallExpenseReport(
 /**
  * One statement gives the drawer one MVCC snapshot of its header, lines and
  * exact revision. A later token lookup could bless stale content with a
- * concurrent writer's revision and defeat optimistic concurrency.
+ * concurrent writer's revision and defeat optimistic concurrency. Under
+ * self-service access another employee's report reads as missing.
  */
 export async function loadExpenseReport(
   id: string,
   orgId: string,
   allowedSubsidiaryIds?: ReadonlySet<string> | null,
+  access: ExpenseAccess = ALL_EXPENSE_REPORTS,
 ) {
   const scope = allowedSubsidiaryIds === undefined
     ? sql``
@@ -64,7 +67,10 @@ export async function loadExpenseReport(
                         l.tax_amount::text as tax_amount, l.tax_overridden,
                         l.settlement_type, l.amortization_template_id,
                         l.amortization_start_on::text as amortization_start_on, l.amortization_end_on::text as amortization_end_on,
-                        l.department_id, l.project_id, l.extra_dims, l.custom
+                        l.department_id, l.project_id, l.extra_dims, l.custom,
+                        l.original_currency, l.original_amount::text as original_amount,
+                        l.original_tax_amount::text as original_tax_amount,
+                        l.original_fx_rate::text as original_fx_rate, l.original_fx_evidence
                    from document_lines l
                   where l.document_id = d.id and l.org_id = d.org_id
                ) line
@@ -73,21 +79,32 @@ export async function loadExpenseReport(
       left join parties p on p.id = d.party_id and p.org_id = d.org_id
       left join journal_entries e on e.id = d.posted_entry_id and e.org_id = d.org_id
      where d.id = ${id} and d.org_id = ${orgId} and d.kind = 'expense_report' ${scope}
+       and ${expenseOwnerPredicate(access, sql`d.party_id`)}
   `)
   if (!result.rows[0]) return null
   const { __lines: lines, ...doc } = result.rows[0]
   return { doc, lines }
 }
 
+/** The currency new expense reports are kept in: the organization base currency, or null when unset. */
+export async function expenseReportCurrency(orgId: string): Promise<string | null> {
+  return (await db.execute<{ base_currency: string | null }>(sql`
+    select base_currency from orgs where id = ${orgId}`)).rows[0]?.base_currency ?? null
+}
+
 /**
  * The unsaved-create seed for an expense report: the same `{ doc, lines }`
  * shape as loadExpenseReport, with no row behind it. Nothing is numbered or
- * written until the drawer's first Save POSTs /api/expenses.
+ * written until the drawer's first Save POSTs /api/expenses. `employeeId`
+ * seeds the employee for a self-service author.
  */
-export async function blankExpenseReport(orgId: string) {
-  const [org, today] = await Promise.all([
+export async function blankExpenseReport(orgId: string, employeeId: string | null = null) {
+  const [org, today, employee] = await Promise.all([
     db.execute<{ base_currency: string }>(sql`select base_currency from orgs where id = ${orgId}`),
     businessToday(orgId),
+    employeeId
+      ? db.execute<{ display_name: string }>(sql`select display_name from parties where id = ${employeeId} and org_id = ${orgId}`)
+      : Promise.resolve(null),
   ])
   const doc: Record<string, unknown> = {
     id: '',
@@ -96,9 +113,10 @@ export async function blankExpenseReport(orgId: string) {
     status: 'draft',
     document_number: null,
     subsidiary_id: null,
-    party_id: null,
+    // A self-service report is always its author's own; the seed names them.
+    party_id: employeeId,
     payment_card_id: null,
-    employee_name: null,
+    employee_name: employee?.rows[0]?.display_name ?? null,
     entry_id: null,
     document_date: today,
     memo: null,

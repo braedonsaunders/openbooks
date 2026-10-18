@@ -9,9 +9,11 @@ import {
   discardReceiptCapture,
   extractReceiptCapture,
   listReceiptCaptures,
+  ReceiptCaptureRefusal,
   requireEditableReceiptReport,
 } from '@openbooks/engine/payables/receipt-capture-service'
 import { isUuid } from '../../../../../../lib/list-params'
+import { authorizeExpenses, expenseAccess } from '../../../../../../lib/expense-access'
 
 export const runtime = 'nodejs'
 
@@ -22,18 +24,20 @@ const bodySchema = z.strictObject({
 /**
  * Retry a failed or interrupted receipt scan, or discard a receipt so it no
  * longer drafts a line or warns as a duplicate. Both require the report to
- * be a draft the caller may edit.
+ * be a draft the caller may edit; self-service callers act only on their own.
  */
 export const POST = defineRoute({
   params: z.object({ id: z.string().refine(isUuid), captureId: z.string().refine(isUuid) }),
   invalidParamsNotFound: 'record',
-  permission: 'expenses.create',
+  authorize: authorizeExpenses('edit'),
   feature: 'expenses',
   body: bodySchema,
   handler: async ({ authz: gate, params: routeParams, body }) => {
     const { id, captureId } = routeParams as { id: string; captureId: string }
     const orgId = gate.user.orgId
-    const scope = { orgId, documentId: id, allowedSubsidiaryIds: gate.allowedSubsidiaryIds }
+    const access = await expenseAccess(gate, 'edit')
+    if (!access) return apiErrorResponse(new ReceiptCaptureRefusal(404, 'not_found', 'Expense report not found'))
+    const scope = { orgId, documentId: id, allowedSubsidiaryIds: gate.allowedSubsidiaryIds, access }
     try {
       if (body.action === 'discard') {
         await db.transaction(async (tx) => {
@@ -54,7 +58,7 @@ export const POST = defineRoute({
         return claimReceiptRetry(tx, { orgId, documentId: id, captureId, actorId: gate.user.id })
       })
       await extractReceiptCapture({ orgId, captureId, attempt, actorId: gate.user.id })
-      const capture = (await listReceiptCaptures(orgId, id)).find((entry) => entry.id === captureId) ?? null
+      const capture = (await listReceiptCaptures(orgId, id, new Date(), access)).find((entry) => entry.id === captureId) ?? null
       return NextResponse.json({ capture })
     } catch (error) {
       // Receipt refusals and endpoint misconfiguration are typed 4xx with

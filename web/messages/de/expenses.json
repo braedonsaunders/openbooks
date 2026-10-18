@@ -150,7 +150,8 @@
       "currency": "Währung",
       "taxCode": "Steuerschlüssel",
       "account": "Aufwandskonto",
-      "description": "Beschreibung"
+      "description": "Beschreibung",
+      "taxIn": "Steuer ({currency})"
     },
     "noTaxCode": "Kein Steuerschlüssel",
     "readAs": "Beleg zeigt {value}",
@@ -184,16 +185,49 @@
       "nonPositiveTotal": "Der Gesamtbetrag {value} ist nicht positiv.",
       "amountOutOfRange": "{field} ist zu groß zum Erfassen.",
       "currencyUnread": "Der Beleg nennt keine Währung. Bestätigen Sie, dass der Betrag in {currency} ist.",
-      "currencyMismatch": "Dieser Beleg ist in {actual}, der Bericht aber in {currency}. Erfassen Sie ihn auf einem Bericht in dieser Währung oder fügen Sie die Zeile manuell mit dem belasteten Betrag in {currency} hinzu.",
       "currencyConflict": "Die Beträge auf dem Beleg zeigen verschiedene Währungen ({actual}). Bestätigen Sie die belastete Währung.",
       "invalidCurrency": "„{actual}“ ist kein gültiger Währungscode.",
       "duplicateFile": "Diese Belegdatei wurde bereits auf {report} gescannt. Verwerfen Sie sie, sofern es keine separate Ausgabe ist.",
-      "duplicateReceipt": "Ein Beleg mit gleichem Händler, Datum und Gesamtbetrag ist bereits auf {report}. Verwerfen Sie ihn, sofern es keine separate Ausgabe ist."
+      "duplicateReceipt": "Ein Beleg mit gleichem Händler, Datum und Gesamtbetrag ist bereits auf {report}. Verwerfen Sie ihn, sofern es keine separate Ausgabe ist.",
+      "foreignCurrency": "Dieser Beleg lautet auf {actual}. Seine Position wird zum datierten Wechselkurs oder zum auf Ihrer Abrechnung belasteten {currency}-Betrag in {currency} umgerechnet.",
+      "duplicateElsewhere": "Ein solcher Beleg ist bereits in der Spesenabrechnung eines anderen Mitarbeiters erfasst. Verwerfen Sie ihn, sofern es keine gesonderte Ausgabe ist."
     },
     "toasts": {
       "added": "Zeile aus dem Beleg hinzugefügt. Prüfen Sie sie und speichern Sie den Bericht.",
       "discarded": "Beleg verworfen.",
       "actionFailed": "Die Belegaktion ist fehlgeschlagen."
-    }
+    },
+    "foreignTitle": "In {currency} ausgegeben, umgerechnet in {reportCurrency}"
+  },
+  "currency": {
+    "column": "Währung",
+    "edit": "Bearbeiten",
+    "change": "Andere Währung",
+    "panelTitle": "Währung der Position {line}",
+    "remove": "{currency} verwenden",
+    "done": "Fertig",
+    "amountIn": "Betrag ({currency})",
+    "taxIn": "Steuer laut Beleg ({currency})",
+    "taxHint": "Leer lassen, um die Steuer in {currency} aus dem Steuercode zu berechnen.",
+    "domestic": "Diese Position lautet auf {currency}, die Währung der Abrechnung.",
+    "start": "In anderer Währung erfassen",
+    "currency": "Ausgabewährung",
+    "expenseDate": "Ausgabedatum",
+    "method": "Umrechnung zum",
+    "methods": {
+      "rate_table": "Datierten Wechselkurs",
+      "billed_amount": "Belasteten Betrag in {currency}",
+      "override": "Expliziten Kurs"
+    },
+    "billedAmount": "Belasteter Betrag ({currency})",
+    "billedHint": "Der Betrag auf Ihrer Karten- oder Kontoabrechnung. Der Wechselkurs wird daraus abgeleitet.",
+    "rate": "Kurs (1 {from} in {to})",
+    "reason": "Begründung des Kurses",
+    "reasonPlaceholder": "Zum Beispiel die Umrechnungsanzeige der Bank für den Kauf",
+    "converted": "Umgerechnet {amount} zu 1 {from} = {rate} {to}.",
+    "convertedWithTax": "Umgerechnet {amount} zuzüglich {tax} Steuer zu 1 {from} = {rate} {to}.",
+    "conversionPending": "Geben Sie den Betrag und die Umrechnungsart ein, um den umgerechneten Betrag zu sehen.",
+    "rateSource": "Kurs vom {date} ({rateType}).",
+    "quoteFailed": "Der Wechselkurs konnte nicht geladen werden. Versuchen Sie es erneut."
   }
 }

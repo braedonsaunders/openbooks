@@ -150,7 +150,8 @@
       "currency": "Moneda",
       "taxCode": "Código de impuesto",
       "account": "Cuenta de gasto",
-      "description": "Descripción"
+      "description": "Descripción",
+      "taxIn": "Impuesto ({currency})"
     },
     "noTaxCode": "Sin código de impuesto",
     "readAs": "El recibo indica {value}",
@@ -184,16 +185,49 @@
       "nonPositiveTotal": "El total {value} no es un importe positivo.",
       "amountOutOfRange": "{field} es demasiado grande para registrarlo.",
       "currencyUnread": "El recibo no indica una moneda. Confirme que el importe está en {currency}.",
-      "currencyMismatch": "Este recibo está en {actual}, pero el informe está en {currency}. Regístrelo en un informe en esa moneda o añada la línea manualmente con el importe cobrado en {currency}.",
       "currencyConflict": "Los importes del recibo muestran monedas distintas ({actual}). Confirme la moneda cobrada.",
       "invalidCurrency": "«{actual}» no es un código de moneda válido.",
       "duplicateFile": "Este archivo de recibo ya se escaneó en {report}. Descártelo salvo que sea un gasto distinto.",
-      "duplicateReceipt": "Ya hay un recibo con el mismo comercio, fecha y total en {report}. Descártelo salvo que sea un gasto distinto."
+      "duplicateReceipt": "Ya hay un recibo con el mismo comercio, fecha y total en {report}. Descártelo salvo que sea un gasto distinto.",
+      "foreignCurrency": "Este recibo está en {actual}. Su línea se convierte a {currency} al tipo de cambio fechado o al importe en {currency} cobrado en su extracto.",
+      "duplicateElsewhere": "Ya hay un recibo como este en el informe de gastos de otro empleado. Descártelo salvo que sea un gasto distinto."
     },
     "toasts": {
       "added": "Línea añadida desde el recibo. Revísela y guarde el informe.",
       "discarded": "Recibo descartado.",
       "actionFailed": "La acción sobre el recibo falló."
-    }
+    },
+    "foreignTitle": "Gastado en {currency}, convertido a {reportCurrency}"
+  },
+  "currency": {
+    "column": "Moneda",
+    "edit": "Editar",
+    "change": "Otra moneda",
+    "panelTitle": "Moneda de la línea {line}",
+    "remove": "Usar {currency}",
+    "done": "Listo",
+    "amountIn": "Importe ({currency})",
+    "taxIn": "Impuesto del recibo ({currency})",
+    "taxHint": "Déjelo vacío para calcular el impuesto en {currency} a partir del código de impuesto.",
+    "domestic": "Esta línea está en {currency}, la moneda del informe.",
+    "start": "Registrar en otra moneda",
+    "currency": "Moneda del gasto",
+    "expenseDate": "Fecha del gasto",
+    "method": "Se convierte al",
+    "methods": {
+      "rate_table": "Tipo de cambio fechado",
+      "billed_amount": "Importe cobrado en {currency}",
+      "override": "Tipo explícito"
+    },
+    "billedAmount": "Importe cobrado ({currency})",
+    "billedHint": "El importe de su extracto de tarjeta o banco. El tipo de cambio se deriva de él.",
+    "rate": "Tipo (1 {from} en {to})",
+    "reason": "Motivo del tipo",
+    "reasonPlaceholder": "Por ejemplo, el aviso de conversión del banco para la compra",
+    "converted": "Se convierte a {amount} a 1 {from} = {rate} {to}.",
+    "convertedWithTax": "Se convierte a {amount} más {tax} de impuesto a 1 {from} = {rate} {to}.",
+    "conversionPending": "Introduzca el importe y cómo se convierte para ver el importe convertido.",
+    "rateSource": "Tipo del {date} ({rateType}).",
+    "quoteFailed": "No se pudo cargar el tipo de cambio. Inténtelo de nuevo."
   }
 }

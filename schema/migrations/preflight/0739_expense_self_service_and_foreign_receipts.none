@@ -1,0 +1,1 @@
+The migration adds nullable expense-line currency columns that every existing line satisfies as null, creates an empty policy table, widens a provider constraint every existing capture already satisfies, and extends built-in role grants; no tenant row can violate a new constraint, so there is no precondition to probe.

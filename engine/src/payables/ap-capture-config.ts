@@ -1,21 +1,52 @@
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { unsealSecret } from "../platform/secrets.ts";
-import { DEFAULT_INVOICE_MODEL, verifyAzureDocumentEndpoint, type AddressLookup } from "./ap-capture.ts";
+import { defaultModel, isAiProvider, isOrgControlledAiEndpoint, providerSpec, validateAiBaseUrl, type AiProvider } from "../platform/ai-providers.ts";
+import { resolveVerifiedAddresses } from "../connectors/ssrf-guard.ts";
+import { DEFAULT_INVOICE_MODEL, DocumentEndpointError, verifyAzureDocumentEndpoint, type AddressLookup } from "./ap-capture.ts";
+import { LLM_VISION_API_VERSIONS, type LlmVisionConfig } from "./document-capture-llm.ts";
+import { AZURE_DOCUMENT_INTELLIGENCE_API_VERSION } from "./document-capture-azure.ts";
+
+/**
+ * Document capture configuration (Platform → AI → Document capture): which
+ * provider reads bills and receipts, the confidence a reading needs before it
+ * fills a draft field, and the provider's credentials.
+ *
+ * - `azure_document_intelligence`: the organization's Azure endpoint and key,
+ *   sealed with the capture purpose.
+ * - `llm_vision`: the organization's AI model provider (the provider, key and
+ *   base URL configured for the assistant), with an optional model chosen
+ *   for document capture; without one the provider's smart model reads.
+ */
+
+export const DOCUMENT_CAPTURE_PROVIDERS = ["azure_document_intelligence", "llm_vision"] as const;
+export type DocumentCaptureProvider = (typeof DOCUMENT_CAPTURE_PROVIDERS)[number];
+
+export function isDocumentCaptureProvider(value: unknown): value is DocumentCaptureProvider {
+  return typeof value === "string" && (DOCUMENT_CAPTURE_PROVIDERS as readonly string[]).includes(value);
+}
 
 export type DocumentCaptureSettings = {
   enabled: boolean;
-  provider: "azure_document_intelligence";
+  provider: DocumentCaptureProvider;
   endpoint: string;
+  /** Azure: the invoice model. AI model provider: the capture model, blank for the provider's smart model. */
   model: string;
   confidenceThreshold: string;
   autoCreatePoMatchedDrafts: boolean;
+  /** Azure: a sealed capture key exists. */
   hasKey: boolean;
 };
 
-export type DocumentCaptureRuntimeConfig = Omit<DocumentCaptureSettings, "hasKey"> & {
-  apiKey: string;
+type CaptureCommon = {
+  enabled: boolean;
+  confidenceThreshold: string;
+  autoCreatePoMatchedDrafts: boolean;
 };
+
+export type DocumentCaptureRuntimeConfig =
+  | (CaptureCommon & { provider: "azure_document_intelligence"; endpoint: string; model: string; apiKey: string; apiVersion: string })
+  | (CaptureCommon & { provider: "llm_vision"; model: string; llm: LlmVisionConfig; apiVersion: string });
 
 export type StoredDocumentCapture = {
   enabled?: boolean;
@@ -25,6 +56,15 @@ export type StoredDocumentCapture = {
   confidenceThreshold?: string;
   autoCreatePoMatchedDrafts?: boolean;
   keyEncrypted?: string;
+};
+
+type StoredAi = {
+  enabled?: boolean;
+  provider?: string;
+  modelSmart?: string;
+  baseUrl?: string;
+  keyEncrypted?: string;
+  documentCapture?: StoredDocumentCapture;
 };
 
 function normalizeThreshold(value: unknown): string {
@@ -38,31 +78,67 @@ export function normalizeStoredDocumentCapture(raw: unknown): DocumentCaptureSet
   const row = raw && typeof raw === "object" && !Array.isArray(raw)
     ? raw as StoredDocumentCapture
     : {};
+  const provider: DocumentCaptureProvider = row.provider === "llm_vision" ? "llm_vision" : "azure_document_intelligence";
+  const model = typeof row.model === "string" ? row.model.trim() : "";
   return {
     enabled: row.enabled === true,
-    provider: "azure_document_intelligence",
+    provider,
     endpoint: typeof row.endpoint === "string" ? row.endpoint : "",
-    model: typeof row.model === "string" && row.model.trim() ? row.model.trim() : DEFAULT_INVOICE_MODEL,
+    model: provider === "azure_document_intelligence" ? model || DEFAULT_INVOICE_MODEL : model,
     confidenceThreshold: normalizeThreshold(row.confidenceThreshold),
     autoCreatePoMatchedDrafts: row.autoCreatePoMatchedDrafts === true,
     hasKey: Boolean(row.keyEncrypted),
   };
 }
 
-async function readStored(orgId: string): Promise<{ globalEnabled: boolean; capture: StoredDocumentCapture }> {
+async function readStored(orgId: string): Promise<{ globalEnabled: boolean; ai: StoredAi; capture: StoredDocumentCapture }> {
   const result = (await db.execute<{ ai: Record<string, unknown> | null }>(sql`
     select settings->'ai' as ai from orgs where id = ${orgId}
   `));
-  const ai = result.rows[0]?.ai ?? {};
+  const ai = (result.rows[0]?.ai ?? {}) as StoredAi;
   const capture = ai.documentCapture;
   return {
     globalEnabled: ai.enabled !== false,
+    ai,
     capture: capture && typeof capture === "object" && !Array.isArray(capture)
       ? capture as StoredDocumentCapture
       : {},
   };
 }
 
+/** The AI provider and model document capture reads with, before its key is unsealed. */
+function llmTarget(ai: StoredAi, captureModel: string): { provider: AiProvider; model: string; baseUrl: string | null } | null {
+  if (!isAiProvider(ai.provider) || !ai.keyEncrypted) return null;
+  const provider = ai.provider;
+  const model = captureModel || ai.modelSmart?.trim() || defaultModel(provider, "smart");
+  if (!model) return null;
+  const spec = providerSpec(provider);
+  if (spec.vision.length === 0) return null;
+  const baseUrl = spec.kind === "openai-compatible" ? ai.baseUrl?.trim() || spec.baseUrl : null;
+  if (spec.kind === "openai-compatible" && !baseUrl) return null;
+  return { provider, model, baseUrl };
+}
+
+/** Re-verify an organization-configured AI endpoint before its key travels there. */
+async function verifyLlmEndpoint(target: { provider: AiProvider; baseUrl: string | null }, overridden: boolean, lookup?: AddressLookup): Promise<void> {
+  if (!overridden || !target.baseUrl) return;
+  let endpoint: URL;
+  try {
+    endpoint = new URL(validateAiBaseUrl(target.provider, target.baseUrl) ?? target.baseUrl);
+  } catch (error) {
+    throw new DocumentEndpointError(`The AI base URL is not usable for document capture — ${error instanceof Error ? error.message : "check it under Platform → AI"}`, { cause: error });
+  }
+  try {
+    await resolveVerifiedAddresses(endpoint, lookup);
+  } catch (error) {
+    throw new DocumentEndpointError(
+      `The AI base URL ${endpoint.hostname} did not resolve to a public address — check it under Platform → AI`,
+      { cause: error },
+    );
+  }
+}
+
+/** The Azure endpoint, model and key an administrator is testing, from the form or the stored settings. */
 export async function getDocumentCaptureTestConfig(
   orgId: string,
   override: { endpoint?: string; model?: string; apiKey?: string },
@@ -70,7 +146,7 @@ export async function getDocumentCaptureTestConfig(
   const { capture } = await readStored(orgId);
   const settings = normalizeStoredDocumentCapture(capture);
   const endpoint = override.endpoint?.trim() || settings.endpoint;
-  const model = override.model?.trim() || settings.model;
+  const model = override.model?.trim() || (settings.provider === "azure_document_intelligence" ? settings.model : DEFAULT_INVOICE_MODEL);
   const apiKey =
     override.apiKey?.trim() ||
     (capture.keyEncrypted == null
@@ -81,6 +157,17 @@ export async function getDocumentCaptureTestConfig(
   return { endpoint, model, apiKey };
 }
 
+/** The AI model configuration an administrator is testing for document capture, or null without a usable provider. */
+export async function getLlmCaptureTestConfig(orgId: string, override: { model?: string }, lookup?: AddressLookup): Promise<LlmVisionConfig | null> {
+  const { ai, capture } = await readStored(orgId);
+  const settings = normalizeStoredDocumentCapture(capture);
+  const target = llmTarget(ai, override.model?.trim() || (settings.provider === "llm_vision" ? settings.model : ""));
+  if (!target) return null;
+  await verifyLlmEndpoint(target, isOrgControlledAiEndpoint(target.provider, ai.baseUrl), lookup);
+  const apiKey = unsealSecret(ai.keyEncrypted!, { orgId, purpose: "assistant.ai.key" });
+  return apiKey ? { ...target, apiKey } : null;
+}
+
 export async function getDocumentCaptureSettings(orgId: string): Promise<DocumentCaptureSettings> {
   const { capture } = await readStored(orgId);
   return normalizeStoredDocumentCapture(capture);
@@ -88,20 +175,42 @@ export async function getDocumentCaptureSettings(orgId: string): Promise<Documen
 
 /**
  * Whether document capture can run for the organization: AI enabled, capture
- * enabled, an endpoint and a sealed key present. Reads configuration only;
- * the endpoint is verified when a capture runs.
+ * enabled, and the chosen provider configured (Azure: an endpoint and a
+ * sealed key; AI model: a provider with vision models, its key and a model).
+ * Reads configuration only; endpoints are verified when a capture runs.
  */
 export async function documentCaptureOperational(orgId: string): Promise<boolean> {
-  const { globalEnabled, capture } = await readStored(orgId);
+  const { globalEnabled, ai, capture } = await readStored(orgId);
   const settings = normalizeStoredDocumentCapture(capture);
-  return globalEnabled && settings.enabled && Boolean(settings.endpoint) && settings.hasKey;
+  if (!globalEnabled || !settings.enabled) return false;
+  if (settings.provider === "llm_vision") return llmTarget(ai, settings.model) !== null;
+  return Boolean(settings.endpoint) && settings.hasKey;
 }
 
 /** The worker's only config resolver. Disabled/missing/tampered secrets fail closed. */
 export async function getDocumentCaptureRuntimeConfig(orgId: string, lookup?: AddressLookup): Promise<DocumentCaptureRuntimeConfig | null> {
-  const { globalEnabled, capture } = await readStored(orgId);
+  const { globalEnabled, ai, capture } = await readStored(orgId);
   const settings = normalizeStoredDocumentCapture(capture);
   if (!globalEnabled || !settings.enabled) return null;
+  const common = {
+    enabled: settings.enabled,
+    confidenceThreshold: settings.confidenceThreshold,
+    autoCreatePoMatchedDrafts: settings.autoCreatePoMatchedDrafts,
+  };
+  if (settings.provider === "llm_vision") {
+    const target = llmTarget(ai, settings.model);
+    if (!target) return null;
+    await verifyLlmEndpoint(target, isOrgControlledAiEndpoint(target.provider, ai.baseUrl), lookup);
+    const apiKey = unsealSecret(ai.keyEncrypted!, { orgId, purpose: "assistant.ai.key" });
+    if (!apiKey) return null;
+    return {
+      ...common,
+      provider: "llm_vision",
+      model: target.model,
+      llm: { ...target, apiKey },
+      apiVersion: LLM_VISION_API_VERSIONS[providerSpec(target.provider).kind],
+    };
+  }
   if (!settings.endpoint) return null;
   await verifyAzureDocumentEndpoint(settings.endpoint, lookup);
   const apiKey =
@@ -109,5 +218,12 @@ export async function getDocumentCaptureRuntimeConfig(orgId: string, lookup?: Ad
       ? null
       : unsealSecret(capture.keyEncrypted, { orgId, purpose: "payables.ap-capture.key" });
   if (!apiKey) return null;
-  return { ...settings, apiKey };
+  return {
+    ...common,
+    provider: "azure_document_intelligence",
+    endpoint: settings.endpoint,
+    model: settings.model,
+    apiKey,
+    apiVersion: AZURE_DOCUMENT_INTELLIGENCE_API_VERSION,
+  };
 }

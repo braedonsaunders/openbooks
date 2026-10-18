@@ -13,7 +13,7 @@ import { getAuthz, can, guardSubsidiaryScope, type Authz } from '../../../../lib
 import { isUuid } from '../../../../lib/list-params'
 import { controlDeps } from "@openbooks/engine/ledger/document-service";
 import { DOC_KINDS, createPermission, postPermission } from "../../../../lib/document-kinds.ts";
-import { canReadDocumentKind } from "../../../../lib/flow-subject-authz.ts";
+import { canReadDocumentKind, holdsSubjectGrant } from "../../../../lib/flow-subject-authz.ts";
 import { ApprovalRoutingError } from '../../../../lib/approval-routing-error'
 import { isDocKindEnabled } from "../../../../lib/documents.ts";
 import { toActionFailure } from './action-failure'
@@ -115,7 +115,11 @@ export const POST = defineRoute({
     if (!cfg && !withdrawable) {
       return NextResponse.json({ error: `kind "${doc.kind}" is not actionable here` }, { status: 422 })
     }
-    if (!canReadDocumentKind(authz, doc.kind)) {
+    // A self-service holder withdraws only their own submission: the
+    // record-level grant reaches their own expense report and nothing else.
+    const ownWithdrawal = action === 'withdraw' && !canReadDocumentKind(authz, doc.kind)
+      && await holdsSubjectGrant(authz, doc.kind, doc.id, documentKindPermissions(doc.kind)?.read ?? '')
+    if (!canReadDocumentKind(authz, doc.kind) && !ownWithdrawal) {
         return notFound("record")
       }
     // Return-to-draft undoes an approval, so it requires the same
@@ -130,7 +134,7 @@ export const POST = defineRoute({
     // same permission table instead; registry kinds keep their helper.
     const submitPerm = kindPerms && !DOC_KINDS[doc.kind] ? kindPerms.edit : createPermission(doc.kind)
     if (action === 'withdraw') {
-      if (!can(authz, submitPerm) && !can(authz, approvePerm)) {
+      if (!(await holdsSubjectGrant(authz, doc.kind, doc.id, submitPerm)) && !can(authz, approvePerm)) {
         return NextResponse.json({ error: `missing permission: ${submitPerm}` }, { status: 403 })
       }
     } else {

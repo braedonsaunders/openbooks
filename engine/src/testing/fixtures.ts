@@ -1107,6 +1107,7 @@ const GUARDED_EVIDENCE: { table: string; trigger: string }[] = [
   { table: "gl_audit_number_assignments", trigger: "gl_audit_number_assignments_immutable" },
   { table: "gl_audit_number_policies", trigger: "gl_audit_number_policies_immutable" },
   { table: "project_loss_policies", trigger: "project_loss_policies_immutable" },
+  { table: "expense_fx_policies", trigger: "expense_fx_policies_immutable" },
   // Equity history leaves child-first: runs and events before securities,
   // securities before rounds and plans, everything before its share class.
   { table: "equity_compensation_run_releases", trigger: "equity_compensation_run_releases_immutable" },

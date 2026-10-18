@@ -510,6 +510,21 @@ test("hourly roles enter their own time through time.self, never the supervisory
   }
 });
 
+test("employee roles file their own expense reports through expenses.self, never the org-wide expense grants", () => {
+  const holds = (role: string, perm: string) => permissionSetCovers(new Set(BUILT_IN_ROLES[role]!.permissions), perm);
+  for (const role of ["production", "sales_manager", "sales_rep", "buyer", "cashier", "project_coordinator"]) {
+    assert.equal(holds(role, "expenses.self"), true, `${role} files its own expense reports`);
+    assert.equal(holds(role, "expenses.read"), false, `${role} does not read coworkers' expense reports`);
+    assert.equal(holds(role, "expenses.create"), false, `${role} does not enter coworkers' expense reports`);
+    assert.equal(holds(role, "ap.post"), false, `${role} does not post expense reports`);
+  }
+  assert.equal(holds("controller", "expenses.read"), true, "the controller keeps org-wide expense review");
+  assert.deepEqual(grantsConferring("expenses.read", "all"), ["expenses.read"], "only the read grant reads everyone's reports");
+  assert.deepEqual(grantsConferring("expenses.create", "all"), ["expenses.create"]);
+  assert.deepEqual(grantsConferring("expenses.read", "own"), ["expenses.self"], "self-service reads the holder's reports");
+  assert.deepEqual(grantsConferring("expenses.create", "own"), ["expenses.self"], "self-service enters the holder's reports");
+});
+
 test("the accountant reviews bank and card reconciliations but never performs them", () => {
   const holds = (role: string, perm: string) => permissionSetCovers(new Set(BUILT_IN_ROLES[role]!.permissions), perm);
   assert.equal(holds("accountant", "banking.read"), true, "the monthly review opens reconciliations");

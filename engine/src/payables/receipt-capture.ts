@@ -18,6 +18,17 @@ import {
   type CaptureEvidence,
   type CaptureIssue,
 } from "./document-capture-azure.ts";
+import {
+  extractJsonObject,
+  llmDate,
+  llmEvidence,
+  llmMoney,
+  llmOverallConfidence,
+  readLlmField,
+  requestLlmVision,
+  type LlmField,
+  type LlmVisionConfig,
+} from "./document-capture-llm.ts";
 
 /**
  * Expense receipt capture: the Azure Document Intelligence receipt model's
@@ -361,7 +372,7 @@ export type ReceiptLineDraft = {
   taxAmount: DraftField;
   tip: DraftField;
   reportCurrency: string;
-  /** Null while the receipt currency is unknown. */
+  /** Null while the receipt currency is unknown; false drafts a foreign-currency line. */
   currencyMatchesReport: boolean | null;
   /** A suggestion for the reviewer to accept or change; never applied silently. */
   suggestedAccount: AccountSuggestion | null;
@@ -375,9 +386,9 @@ function draftField(reading: string | null, confidence: string | null, threshold
 
 /**
  * The draft expense line for one receipt. Low-confidence, unread or invalid
- * fields are blank and flagged. A receipt in another currency than the
- * report leaves the amounts blank: an expense report carries one currency,
- * and the amount charged in it is not on the receipt.
+ * fields are blank and flagged. Amounts are in the receipt's own currency;
+ * a receipt in another currency than the report drafts a foreign-currency
+ * line that converts into the report currency when the reviewer adds it.
  */
 export function draftExpenseLineFromReceipt(input: {
   receipt: NormalizedReceipt;
@@ -390,11 +401,8 @@ export function draftExpenseLineFromReceipt(input: {
   const currencyValid = receipt.currency !== null && isIso4217CurrencyCode(receipt.currency);
   const currency = draftField(receipt.currency, receipt.confidence.currency, threshold, currencyValid, true);
   const currencyMatchesReport = currency.value === null ? null : currency.value === input.reportCurrency;
-  const foreign = currencyMatchesReport === false;
-  const money = (field: "total" | "taxTotal" | "tip", required: boolean): DraftField => {
-    const drafted = draftField(receipt[field], receipt.confidence[field], threshold, usableMoney(receipt[field]), required);
-    return foreign && drafted.reading !== null ? { ...drafted, value: null, needsReview: true } : drafted;
-  };
+  const money = (field: "total" | "taxTotal" | "tip", required: boolean): DraftField =>
+    draftField(receipt[field], receipt.confidence[field], threshold, usableMoney(receipt[field]), required);
   const merchant = draftField(receipt.merchantName, receipt.confidence.merchantName, threshold, true, true);
   return {
     transactionDate: draftField(
@@ -466,6 +474,169 @@ export function receiptDuplicateIssues(candidates: readonly ReceiptDuplicateCand
     });
   }
   return issues;
+}
+
+/**
+ * The receipt reading contract an AI model answers. Values are copied as
+ * printed and nothing is inferred: a currency is the ISO code the receipt
+ * prints, never one guessed from a symbol or a country.
+ */
+export const RECEIPT_LLM_PROMPT = [
+  "You read one expense receipt. Answer with ONLY a JSON object: no prose, no code fences.",
+  "Every field is an object {\"value\": ..., \"confidence\": number from 0 to 1} giving your confidence that the value is exactly what the receipt prints.",
+  "Use null for any value that is not visible or not legible. Never guess, infer, compute or default a value.",
+  "Use exactly these keys:",
+  "{",
+  '  "merchantName": {"value": string|null, "confidence": number},',
+  '  "merchantAddress": {"value": string|null, "confidence": number},',
+  '  "merchantPhone": {"value": string|null, "confidence": number},',
+  '  "transactionDate": {"value": "YYYY-MM-DD"|null, "text": string|null, "confidence": number},',
+  '  "currency": {"value": string|null, "symbol": string|null, "confidence": number},',
+  '  "subtotal": {"value": string|null, "confidence": number},',
+  '  "taxTotal": {"value": string|null, "confidence": number},',
+  '  "tip": {"value": string|null, "confidence": number},',
+  '  "total": {"value": string|null, "confidence": number},',
+  '  "taxDetails": [{"amount": string|null, "rate": string|null, "netAmount": string|null, "description": string|null}],',
+  '  "items": [{"description": string, "quantity": string|null, "unitPrice": string|null, "amount": string|null, "confidence": number}]',
+  "}",
+  "transactionDate.value is set only when the printed date has exactly one reading; otherwise null, with the printed text in transactionDate.text.",
+  "currency.value is the three-letter ISO 4217 code only when the receipt prints it; otherwise null, with any printed symbol such as $ in currency.symbol.",
+  "Amounts are strings with the digits as printed, using a dot as the decimal point and no currency symbols or thousands separators; total is the grand total paid including tax and tip.",
+  "List at most 50 items.",
+].join("\n");
+
+function llmObject(raw: unknown): Record<string, unknown> {
+  return raw && typeof raw === "object" && !Array.isArray(raw) ? raw as Record<string, unknown> : {};
+}
+
+/**
+ * Translate an AI model's receipt answer into the stable receipt contract.
+ * Throws when the answer is not the contract, so the capture fails with a
+ * retryable reason instead of drafting from an unreadable answer.
+ */
+export function normalizeLlmReceipt(answer: Record<string, unknown>): {
+  normalized: NormalizedReceipt;
+  evidence: CaptureEvidence[];
+  overallConfidence: string | null;
+} {
+  if (!("total" in answer) && !("merchantName" in answer)) {
+    throw new Error("The AI model's answer was not a receipt reading — retry the scan, or enter the line by hand");
+  }
+  const evidence: CaptureEvidence[] = [];
+  const text = (key: string): LlmField => {
+    const field = readLlmField(answer[key]);
+    if (field.value !== null) evidence.push(llmEvidence(key, field, field.value));
+    return field;
+  };
+  const money = (key: string): { field: LlmField; value: string | null } => {
+    const field = readLlmField(answer[key]);
+    const reading = llmMoney(field);
+    const value = reading.canonical ?? reading.supplied;
+    if (field.value !== null) evidence.push(llmEvidence(key, field, value));
+    return { field, value };
+  };
+
+  const merchant = text("merchantName");
+  const address = text("merchantAddress");
+  const phone = text("merchantPhone");
+  const dateRaw = llmObject(answer.transactionDate);
+  const dateField = readLlmField(dateRaw);
+  const date = llmDate(dateField);
+  const printedDate = typeof dateRaw.text === "string" && dateRaw.text.trim() ? dateRaw.text.trim() : null;
+  if (dateField.value !== null || printedDate) evidence.push(llmEvidence("transactionDate", { ...dateField, raw: printedDate ?? dateField.raw }, date.date));
+
+  const currencyRaw = llmObject(answer.currency);
+  const currencyField = readLlmField(currencyRaw);
+  const code = currencyField.value?.toUpperCase() ?? null;
+  const symbol = typeof currencyRaw.symbol === "string" && currencyRaw.symbol.trim() ? currencyRaw.symbol.trim() : null;
+  if (code !== null) evidence.push(llmEvidence("currency", currencyField, code));
+
+  const subtotal = money("subtotal");
+  const taxTotal = money("taxTotal");
+  const tip = money("tip");
+  const total = money("total");
+
+  const taxDetails: ReceiptTaxDetail[] = (Array.isArray(answer.taxDetails) ? answer.taxDetails : []).slice(0, 50).map((entry, index) => {
+    const detail = llmObject(entry);
+    const amountField = readLlmField({ value: detail.amount, confidence: null });
+    const reading = llmMoney(amountField);
+    const amount = reading.canonical ?? reading.supplied;
+    if (amountField.value !== null) evidence.push(llmEvidence("taxDetails.amount", amountField, amount, index));
+    const net = llmMoney(readLlmField({ value: detail.netAmount }));
+    return {
+      amount,
+      rate: typeof detail.rate === "string" ? detail.rate.trim() || null : null,
+      netAmount: net.canonical ?? net.supplied,
+      description: typeof detail.description === "string" ? detail.description.trim() || null : null,
+    };
+  });
+
+  const items: ReceiptItem[] = [];
+  for (const entry of (Array.isArray(answer.items) ? answer.items : []).slice(0, 50)) {
+    const item = llmObject(entry);
+    const description = typeof item.description === "string" ? item.description.trim() : "";
+    const amountField = readLlmField({ value: item.amount, confidence: item.confidence });
+    const reading = llmMoney(amountField);
+    const amount = reading.canonical ?? reading.supplied;
+    if (!description && amount === null) continue;
+    const index = items.length;
+    if (description) evidence.push(llmEvidence("items.description", { value: description, confidence: amountField.confidence, raw: description }, description, index));
+    if (amountField.value !== null) evidence.push(llmEvidence("items.amount", amountField, amount, index));
+    const quantity = llmMoney(readLlmField({ value: item.quantity }));
+    const unitPrice = llmMoney(readLlmField({ value: item.unitPrice }));
+    items.push({
+      description,
+      quantity: quantity.canonical ?? quantity.supplied,
+      unitPrice: unitPrice.canonical ?? unitPrice.supplied,
+      amount,
+      confidence: amountField.confidence,
+    });
+  }
+
+  return {
+    normalized: {
+      receiptType: null,
+      merchantName: merchant.value,
+      merchantAddress: address.value,
+      merchantPhone: phone.value,
+      transactionDate: date.date,
+      transactionDateText: date.date ? null : (date.text ?? printedDate),
+      currency: code,
+      currencyReadings: code ? [code] : [],
+      currencySymbol: symbol,
+      subtotal: subtotal.value,
+      taxTotal: taxTotal.value,
+      tip: tip.value,
+      total: total.value,
+      taxDetails,
+      items,
+      confidence: {
+        merchantName: merchant.confidence,
+        transactionDate: dateField.confidence,
+        currency: currencyField.confidence,
+        subtotal: subtotal.field.confidence,
+        taxTotal: taxTotal.field.confidence,
+        tip: tip.field.confidence,
+        total: total.field.confidence,
+      },
+    },
+    evidence,
+    overallConfidence: llmOverallConfidence([merchant, dateField, total.field]),
+  };
+}
+
+/** Read one receipt through the organization's AI model and normalize the answer. */
+export async function extractLlmReceipt(input: {
+  config: LlmVisionConfig;
+  contentType: string;
+  bytes: Uint8Array;
+  fetchImpl?: typeof fetch;
+  lookup?: AddressLookup;
+}): Promise<{ raw: { answer: string }; normalized: NormalizedReceipt; evidence: CaptureEvidence[]; overallConfidence: string | null }> {
+  const answer = await requestLlmVision({ ...input, prompt: RECEIPT_LLM_PROMPT });
+  const parsed = extractJsonObject(answer);
+  if (!parsed) throw new Error("The AI model did not answer with a receipt reading — retry the scan, or enter the line by hand");
+  return { raw: { answer }, ...normalizeLlmReceipt(parsed) };
 }
 
 /** Submit one receipt to the configured Azure endpoint and normalize the result. */

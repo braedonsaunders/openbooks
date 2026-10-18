@@ -5,7 +5,7 @@ import { PdfTemplateValidationError } from '@openbooks/pdf'
 import { apiErrorResponse } from '@/lib/api/error-response'
 import { NextResponse } from "next/server";
 import { businessToday } from "@openbooks/engine/platform/business-date/module";
-import { guardPermission, guardSubsidiaryScope } from "../../../../../lib/authz";
+import { guardSubsidiaryScope } from "../../../../../lib/authz";
 import { rendererUnavailableResponse } from "../../../../../lib/api/pdf-renderer";
 import { unexpectedServerError } from "../../../../../lib/api/unexpected";
 import { isDocKindEnabled } from "../../../../../lib/documents.ts";
@@ -15,7 +15,7 @@ import { PDF_RECORD_TYPE_BY_KEY } from "../../../../../lib/pdf-templates/catalog
 import { mergeAndPrintPdf } from "../../../../../lib/pdf-templates/render";
 import { loadRecordDesignatedTemplateName, resolvePdfTemplate } from "../../../../../lib/pdf-templates/store";
 import { loadPdfRecordValues } from "../../../../../lib/pdf-templates/values";
-import { loadRecordSubsidiaryScope } from "../../lib";
+import { guardRecordTypeRead, loadRecordSubsidiaryScope, recordOwnedByReader } from "../../lib";
 import { notFound } from "@/lib/api/responses";
 import { defineRoute } from '@/lib/api/route'
 import { z } from 'zod'
@@ -35,7 +35,7 @@ async function renderRecordPdf(
   const meta = PDF_RECORD_TYPE_BY_KEY[recordType];
   if (!meta) return NextResponse.json({ error: "unknown record type" }, { status: 400 });
 
-  const gate = await guardPermission(meta.readPermission);
+  const gate = await guardRecordTypeRead(recordType, meta.readPermission);
   if (gate instanceof NextResponse) return gate;
   const { user } = gate;
   if (!(await isDocKindEnabled(user.orgId, meta.docKind ?? meta.key))) {
@@ -48,7 +48,9 @@ async function renderRecordPdf(
 
   const templateId = new URL(req.url).searchParams.get("template");
   const owned = await loadRecordSubsidiaryScope(recordType, user.orgId, id);
-  if (!owned) return NextResponse.json({ error: "record not found" }, { status: 404 });
+  if (!owned || !(await recordOwnedByReader(gate, recordType, owned))) {
+    return NextResponse.json({ error: "record not found" }, { status: 404 });
+  }
   const denied = guardSubsidiaryScope(gate, owned.subsidiaryId);
   if (denied) return denied;
   // A present template query (including empty) that is not a UUID is the
@@ -99,7 +101,7 @@ export const GET = defineRoute({
     const recordType = (params as { recordType?: string } | undefined)?.recordType ?? ''
     const meta = PDF_RECORD_TYPE_BY_KEY[recordType]
     if (!meta) return NextResponse.json({ error: 'unknown record type' }, { status: 400 })
-    return guardPermission(meta.readPermission)
+    return guardRecordTypeRead(recordType, meta.readPermission)
   },
   feature: { none: 'Record-type availability is enforced by the document-kind gate in the PDF handler.' },
   params: pdfParams,

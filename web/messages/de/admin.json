@@ -1387,6 +1387,7 @@
     "banking_review_sign_off": "Unterzeichnete Bankabstimmungen prüfen",
     "expenses_read": "Spesenabrechnungen anzeigen",
     "expenses_create": "Spesenabrechnungen erfassen",
+    "expenses_self": "Eigene Spesenabrechnungen erstellen und einreichen",
     "admin_custom_fields_manage": "Benutzerdefinierte Felder verwalten",
     "admin_users_manage": "Benutzer und Rollenzuweisungen verwalten",
     "admin_roles_manage": "Rollen und Berechtigungen verwalten",
@@ -1864,6 +1865,13 @@
       "removeKey": "Schlüssel des Dokumentenanbieters entfernen",
       "keyRemoved": "Schlüssel des Dokumentenanbieters entfernt.",
       "model": "Rechnungsmodell",
+      "provider": "Dokumentleser",
+      "providers": {"azure_document_intelligence": "Azure Document Intelligence", "llm_vision": "KI-Modell ({provider})"},
+      "azureHint": "Liest Rechnungen und Belege mit Ihrer Azure-Document-Intelligence-Ressource und Ihrem Schlüssel.",
+      "llmHint": "Liest Rechnungen und Belege mit dem unten konfigurierten KI-Anbieter, Schlüssel und Modellen ({provider}). Jedes Feld trägt die Konfidenz des Modells; Felder unter dem Schwellenwert bleiben zur Prüfung leer.",
+      "llmNoVision": "{provider} liest keine Bilder. Wählen Sie unten einen Anbieter mit Bildmodellen oder verwenden Sie Azure Document Intelligence.",
+      "llmModel": "Erfassungsmodell",
+      "llmModelHint": "Die ID eines bildfähigen Modells. Leer lassen, um das leistungsstarke Modell des Anbieters zu verwenden.",
       "confidence": "Konfidenzschwelle für die Prüfung",
       "confidenceHint": "Werte unterhalb dieser Schwelle von 0–1 werden zur Prüfung gekennzeichnet.",
       "autoDraft": "Entwürfe nur für vollständig abgeglichene Bestellungen automatisch erstellen",
@@ -1871,7 +1879,8 @@
       "testResult": {
         "connected": "Mit dem Dokumentenanbieter verbunden.",
         "failed": "Der Test des Dokumentenanbieters ist fehlgeschlagen.",
-        "missing": "Geben Sie zuerst einen Endpunkt und einen API-Schlüssel ein."
+        "missing": "Geben Sie zuerst einen Endpunkt und einen API-Schlüssel ein.",
+        "missingAi": "Hinterlegen Sie zuerst unten den KI-Anbieter und seinen API-Schlüssel."
       }
     },
     "models": {
@@ -4005,9 +4014,11 @@
         "title": "Richtlinien für Abonnementverlängerungen",
         "description": "Zeitlich gültige Verlängerungsbedingungen, Verantwortliche und Erinnerungen vor Ablauf."
       },
-      "project-loss-policies": {"title": "Richtlinien für Verlustprojekte", "description": "Ob Projekte mit erwartetem Verlust beim Abschluss gemeldet werden und ob der Abschluss auf ihre Verlustbewertung wartet."}
+      "project-loss-policies": {"title": "Richtlinien für Verlustprojekte", "description": "Ob Projekte mit erwartetem Verlust beim Abschluss gemeldet werden und ob der Abschluss auf ihre Verlustbewertung wartet."},
+      "expense-fx-policies": {"title": "Währungsrichtlinien für Spesen", "description": "Ob eine Spesenposition in Fremdwährung statt zum datierten Kurs zu einem expliziten, begründeten Wechselkurs umgerechnet werden darf."}
     },
     "fields": {
+      "allowRateOverride": "Explizite Wechselkurse zulassen",
       "commonStockAccountId": "Konto Stammaktien",
       "preferredStockAccountId": "Konto Vorzugsaktien",
       "apicAccountId": "Konto Kapitalrücklage",

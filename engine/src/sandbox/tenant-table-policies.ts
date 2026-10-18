@@ -8,6 +8,7 @@ export const TENANT_TABLE_POLICIES = {
   "gl_audit_number_policies": "clone:catalog-uuid-rebase",
   "gl_audit_number_assignments": "clone:catalog-uuid-rebase",
   "project_loss_policies": "clone:catalog-uuid-rebase",
+  "expense_fx_policies": "clone:catalog-uuid-rebase",
   // Equity records copy with the ledger they posted to, under rebased identities.
   "equity_share_classes": "clone:catalog-uuid-rebase",
   "equity_class_amendments": "clone:catalog-uuid-rebase",

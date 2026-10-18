@@ -16,6 +16,7 @@ import {
   CURATED_QUICK_ACTIONS,
   DEFAULT_QUICK_ACTIONS,
   hiddenCuratedQuickActionIds,
+  quickActionPermitted,
 } from './_quick-actions-shared'
 import {
   dashboardSourceKeyForRole,
@@ -76,7 +77,7 @@ export async function resolveDashboardDefault(authz: Authz): Promise<DashboardDe
     layout.widgets = layout.widgets.filter((widget) => canSeeWidget(authz, widget.id))
     layout.quickActions = layout.quickActions?.filter((action) => {
       const definition = CURATED_QUICK_ACTIONS.find((candidate) => candidate.id === action.id)
-      return definition != null && (!definition.requiredPermission || can(authz, definition.requiredPermission))
+      return definition != null && quickActionPermitted(definition, (permission) => can(authz, permission))
     })
     return { layout, sourceKey: `workspace:${role}`, isSystemDefault: true }
   }
@@ -96,7 +97,7 @@ export async function resolveDashboardDefault(authz: Authz): Promise<DashboardDe
   const layout = personaDefaultLayout(persona, { payroll, hrm, announcements, quals })
   layout.quickActions = DEFAULT_QUICK_ACTIONS.filter((action) => {
     const definition = CURATED_QUICK_ACTIONS.find((candidate) => candidate.id === action.id)
-    return definition != null && (!definition.requiredPermission || can(authz, definition.requiredPermission))
+    return definition != null && quickActionPermitted(definition, (permission) => can(authz, permission))
   })
   return {
     layout,

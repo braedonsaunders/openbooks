@@ -12,9 +12,11 @@ import { captureTransactionAuditSnapshot, recordTransactionAudit } from '@openbo
 import { DocumentEditError } from '@openbooks/engine/records/document-edit-policy'
 import { isUuid } from '../../../lib/list-params'
 import { assertReportEmployee, type ExpenseEditBody, persistExpenseEdit, prepareExpenseEdit } from '../../../lib/expense-edit'
-import { loadExpenseReport } from '../../../lib/expenses'
+import { expenseReportCurrency, loadExpenseReport } from '../../../lib/expenses'
 import { DocumentCreateConflict } from '../../../lib/documents.ts'
 import { notFound } from '@/lib/api/responses'
+import { authorizeExpenses, expenseAccess } from '../../../lib/expense-access'
+import { expenseEmployeeForAccess, ExpenseSelfServiceRefusal } from '@openbooks/engine/records/expense-access'
 
 const nullableId = z.string().uuid().nullable();
 const POSTBodySchema = z.object({
@@ -39,9 +41,12 @@ export const runtime = 'nodejs'
  * The caller's UUID Idempotency-Key becomes the report id. A retry with the
  * same key and body returns the report the first attempt created; the same
  * key with a different body is a 409 conflict.
+ *
+ * Self-service callers (expenses.self) create only their own report: the
+ * employee is the person linked to their login, whatever the body names.
  */
 export const POST = defineRoute({
-  permission: 'expenses.create',
+  authorize: authorizeExpenses('edit'),
   feature: 'expenses',
   body: POSTBodySchema,
   opaque: {
@@ -55,13 +60,31 @@ export const POST = defineRoute({
     if (!isUuid(key)) {
       return NextResponse.json({ error: 'invalid_idempotency_key' }, { status: 400 });
     }
-    const body = routeBody as ExpenseEditBody;
+    const access = await expenseAccess(gate, 'edit');
+    if (!access) return NextResponse.json({ error: 'missing permission: expenses.create' }, { status: 403 });
+    const requested = routeBody as ExpenseEditBody;
+    let employeeId: string | null | undefined;
+    try {
+      employeeId = expenseEmployeeForAccess(access, requested.partyId);
+    } catch (e) {
+      if (e instanceof ExpenseSelfServiceRefusal) return apiErrorResponse(e);
+      throw e;
+    }
+    const body: ExpenseEditBody = employeeId === requested.partyId ? requested : { ...requested, partyId: employeeId };
     const resolved = resolveDraftSubsidiary(gate.allowedSubsidiaryIds);
     if (!resolved.ok) return NextResponse.json({ error: resolved.error }, { status: 422 });
     const subsidiaryId = resolved.subsidiaryId;
     const contentRefusal = documentCreateContentRefusal('expense_report', body.lines);
     if (contentRefusal) return NextResponse.json({ error: contentRefusal }, { status: 422 });
     const today = await businessToday(user.orgId);
+    const reportCurrency = await expenseReportCurrency(user.orgId);
+    if (!reportCurrency) {
+      return NextResponse.json({
+        error: 'The organization has no base currency for its expense reports',
+        code: 'expense_report_currency_missing',
+        remedy: 'Set the organization base currency under Company Settings before creating expense reports.',
+      }, { status: 422 });
+    }
 
     // Validation runs before any write, so a refused Save allocates nothing.
     let prepared: Awaited<ReturnType<typeof prepareExpenseEdit>>;
@@ -72,6 +95,7 @@ export const POST = defineRoute({
         existingDocumentDate: today,
         existingPaymentCardId: null,
         reportSubsidiaryId: subsidiaryId,
+        reportCurrency,
       });
     } catch (e) {
       if (e instanceof DocumentEditError) {
@@ -102,14 +126,12 @@ export const POST = defineRoute({
         }
 
         const documentNumber = await allocateDocumentNumber(tx, user.orgId, 'expense_report', 'EXP-');
-        const currencyRow = (await tx.execute<{ base_currency: string }>(sql`
-          select base_currency from orgs where id = ${user.orgId}`)).rows[0];
         const inserted = await tx.execute<{ id: string }>(sql`
           insert into documents
             (id, org_id, kind, subsidiary_id, document_number, document_date,
              currency, subtotal, tax_total, total, created_by)
           values (${key}, ${user.orgId}, 'expense_report', ${subsidiaryId}, ${documentNumber},
-                  ${body.documentDate ?? today}, ${currencyRow?.base_currency ?? 'CAD'}, '0', '0', '0', ${user.id})
+                  ${body.documentDate ?? today}, ${reportCurrency}, '0', '0', '0', ${user.id})
           -- A conflicting key is rejected below; it never completes a create.
           on conflict (id) do nothing
           returning id`);
@@ -160,7 +182,7 @@ export const POST = defineRoute({
       throw e;
     }
 
-    const report = await loadExpenseReport(key, user.orgId, gate.allowedSubsidiaryIds);
+    const report = await loadExpenseReport(key, user.orgId, gate.allowedSubsidiaryIds, access);
     if (!report) return notFound("record");
     return NextResponse.json(report, { status: outcome === 'created' ? 201 : 200 });
   },

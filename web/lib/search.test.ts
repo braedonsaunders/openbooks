@@ -245,6 +245,14 @@ const mockSources = new Map<string, string>([
     `,
   ],
   [
+    // Self-service expense search is covered with the expense routes; these
+    // readers search through module grants alone.
+    'mock:expense-access',
+    `
+      export async function expenseAccess() { return null }
+    `,
+  ],
+  [
     'mock:documents',
     `
       const state = globalThis[Symbol.for('openbooks.search-permission-test')]
@@ -279,6 +287,7 @@ const hooks = registerHooks({
       ['drizzle-orm', 'mock:drizzle'],
       ['@openbooks/engine/platform/db', 'mock:db'],
       ['./authz', 'mock:authz'],
+      ['./expense-access', 'mock:expense-access'],
       ['./documents.ts', 'mock:documents'],
       ['./features', 'mock:features'],
     ]).get(specifier)
