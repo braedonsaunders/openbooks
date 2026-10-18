@@ -456,6 +456,31 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
     },
   },
   {
+    // The as-of date is the asOf control: movements effective on or before
+    // it, summed per class, position and holder, are the cap table on that
+    // date. Without one, every recorded movement counts.
+    slug: 'equity-cap-table',
+    name: 'Cap table as of a date',
+    description: 'Outstanding and fully diluted shares by share class and holder, with awards and plan pools, from the position ledger as of the asOf date.',
+    urlFilters: [{ param: 'asOf', field: 'effective_on', op: 'lte', valueKind: 'date' }],
+    query: {
+      entity: 'equity_cap_table_positions', mode: 'summarize', columns: [],
+      breakouts: [
+        { column: 'share_class' },
+        { column: 'position_kind' },
+        { column: 'holder' },
+      ],
+      measures: [
+        { fn: 'sum', column: 'outstanding', label: 'Outstanding shares' },
+        { fn: 'sum', column: 'as_converted_outstanding', label: 'Outstanding, as converted' },
+        { fn: 'sum', column: 'awards_outstanding', label: 'Awards outstanding' },
+        { fn: 'sum', column: 'pool_available', label: 'Pool available' },
+        { fn: 'sum', column: 'fully_diluted', label: 'Fully diluted' },
+      ],
+      filters: null, groupBy: null, periodField: null, limit: 1000,
+    },
+  },
+  {
     slug: 'prepaid-expense-waterfall',
     name: 'Prepaid expense waterfall',
     description: 'Amortized and scheduled prepaid and deferred expense by month, deferral account and currency.',

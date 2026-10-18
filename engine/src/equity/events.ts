@@ -42,10 +42,10 @@
  * from that date. Later activity on the security that relied on the event
  * is reversed first; the refusal names it.
  *
- * Exercising, settling, forfeiting, expiring, cancelling awards,
- * transferring, converting and recording an 83(b) election are bookkeeping
- * duties (equity.manage); repurchases, repayments, cancelling a SAFE or note,
- * voids and reversals are approvals (equity.approve).
+ * Every event is the equity.manage duty. Repurchases, repayments,
+ * cancelling a SAFE or note, voids and reversals are governed actions: an
+ * Equity action Flow may require approval before they apply (see
+ * governance.ts).
  */
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction, type SqlExecutor } from "../platform/db.ts";
@@ -60,6 +60,7 @@ import {
 } from "./cap-table.ts";
 import { EquityError } from "./errors.ts";
 import { functionalUnits, restate, spotRate } from "./fx.ts";
+import { governEquityAction, type EquityAction, type GovernedStatus } from "./governance.ts";
 import { currencyExponent, requireReason, writeEquityAudit } from "./internal.ts";
 import {
   instrumentBalance,
@@ -121,12 +122,30 @@ export interface RecordEventInput extends EquityCommand {
   idempotencyKey?: string | null;
 }
 
-export interface RecordEventResult {
+/** An applied event. */
+export interface AppliedEventResult {
   eventId: string;
   resultingSecurityId: string | null;
   journalEntryId: string | null;
   reversalEntryId: string | null;
   /** Interest accrued to the settlement date of a note, posted before the settlement. */
+  accrualEntryId: string | null;
+  replayed: boolean;
+}
+
+/**
+ * The outcome of recording an event: applied (with its records), or, for a
+ * governed event an Equity action Flow gates, awaiting approval (its records
+ * are null until the request is approved).
+ */
+export interface RecordEventResult {
+  status: GovernedStatus;
+  /** The action request of a governed event; null for an ungoverned one. */
+  requestId: string | null;
+  eventId: string | null;
+  resultingSecurityId: string | null;
+  journalEntryId: string | null;
+  reversalEntryId: string | null;
   accrualEntryId: string | null;
   replayed: boolean;
 }
@@ -147,11 +166,14 @@ const ALLOWED: Record<SecurityEventKind, readonly SecurityRecord["kind"][]> = {
   election_83b: ["share"],
 };
 
-/** The duty an event needs: money leaving the company and corrections are approvals. */
-export function eventPermission(kind: SecurityEventKind, securityKind: SecurityRecord["kind"]): "equity.manage" | "equity.approve" {
-  if (kind === "repurchase" || kind === "void" || kind === "reverse" || kind === "repay") return "equity.approve";
-  if (kind === "cancel" && (securityKind === "safe" || securityKind === "note")) return "equity.approve";
-  return "equity.manage";
+/**
+ * The governed action an event is, if any: money leaving the company and
+ * corrections may need approval in Flows.
+ */
+export function governedEventAction(kind: SecurityEventKind, securityKind: SecurityRecord["kind"]): EquityAction | null {
+  if (kind === "void" || kind === "reverse" || kind === "repurchase" || kind === "repay") return kind;
+  if (kind === "cancel" && (securityKind === "safe" || securityKind === "note")) return "cancel_convertible";
+  return null;
 }
 
 function refuse(message: string, remedy: string, options: { field?: string; status?: 404 | 409 | 422; code?: string } = {}): never {
@@ -240,8 +262,46 @@ function dependentEvents(book: EquityBook, security: SecurityRecord, target: Sec
     .filter((event) => event.id !== target.id && event.effectiveOn >= target.effectiveOn && (order.get(event.id) ?? 0) > targetIndex);
 }
 
-/** Record one security event. */
+/**
+ * Record one security event (equity.manage). A governed event is submitted
+ * to any Equity action Flow and applies when no Flow gates it, or when its
+ * gate approves.
+ */
 export async function recordSecurityEvent(input: RecordEventInput): Promise<RecordEventResult> {
+  if (!isUuid(input.securityId)) refuse("The security does not exist.", "Choose a security.", { status: 404, code: "equity_security_unknown" });
+  const located = await withOrgTransaction(input.orgId, async () => (await db.execute<{
+    subsidiary_id: string; kind: SecurityRecord["kind"]; security_number: string; holder_name: string | null; class_code: string | null; currency: string;
+  }>(sql`
+    select s.subsidiary_id, s.kind, s.security_number, p.display_name as holder_name, c.code as class_code, s.currency
+      from equity_securities s
+      left join parties p on p.org_id = s.org_id and p.id = s.holder_party_id
+      left join equity_share_classes c on c.org_id = s.org_id and c.id = s.share_class_id
+     where s.org_id = ${input.orgId} and s.id = ${input.securityId}`)).rows[0]);
+  if (!located) refuse("The security does not exist.", "Choose a security.", { status: 404, code: "equity_security_unknown" });
+  const action = input.kind in ALLOWED ? governedEventAction(input.kind, located!.kind) : null;
+  if (!action) return { status: "applied", requestId: null, ...(await applySecurityEvent(input)) };
+  const { orgId: _org, actorId: _actor, ...payload } = input;
+  const outcome = await governEquityAction({
+    orgId: input.orgId, actorId: input.actorId, subsidiaryId: located!.subsidiary_id, action,
+    subjectId: input.securityId, subjectLabel: located!.security_number,
+    effectiveOn: requireDate(input.effectiveOn, "effectiveOn", "The event date"),
+    reason: typeof input.reason === "string" && input.reason.trim() !== "" ? input.reason.trim().slice(0, 2000) : null,
+    summary: {
+      securityKind: located!.kind, holderName: located!.holder_name, shareClassCode: located!.class_code,
+      quantity: input.quantity ?? null, amount: input.amount ?? null, currency: located!.currency,
+    },
+    payload, idempotencyKey: typeof input.idempotencyKey === "string" && input.idempotencyKey.trim() !== "" ? `event:${input.idempotencyKey.trim()}` : null,
+  }, (actorId) => applySecurityEvent({ ...input, actorId }));
+  const result = outcome.result;
+  return {
+    status: outcome.status, requestId: outcome.requestId,
+    eventId: result?.eventId ?? null, resultingSecurityId: result?.resultingSecurityId ?? null, journalEntryId: result?.journalEntryId ?? null,
+    reversalEntryId: result?.reversalEntryId ?? null, accrualEntryId: result?.accrualEntryId ?? null, replayed: outcome.replayed || (result?.replayed ?? false),
+  };
+}
+
+/** Apply one security event: the command a governed event's approval releases. */
+export async function applySecurityEvent(input: RecordEventInput): Promise<AppliedEventResult> {
   const kind = input.kind;
   if (!(kind in ALLOWED)) refuse("Choose what happened to the security.", "Choose an event kind.", { field: "kind" });
   const effectiveOn = requireDate(input.effectiveOn, "effectiveOn", "The event date");
@@ -254,7 +314,7 @@ export async function recordSecurityEvent(input: RecordEventInput): Promise<Reco
     select subsidiary_id, kind from equity_securities where org_id = ${input.orgId} and id = ${input.securityId}`)).rows[0]);
   if (!located) refuse("The security does not exist.", "Choose a security.", { status: 404, code: "equity_security_unknown" });
   const subsidiaryId = located!.subsidiary_id;
-  return inEquityCommand({ ...input, subsidiaryId }, eventPermission(kind, located!.kind), async ({ book, currency: functional }) => {
+  return inEquityCommand({ ...input, subsidiaryId }, "equity.manage", async ({ book, currency: functional }) => {
     if (idempotencyKey) {
       const existing = (await db.execute<{ id: string; security_id: string; kind: string; resulting_security_id: string | null; journal_entry_id: string | null; reversal_entry_id: string | null; interest_accrual_entry_id: string | null }>(sql`
         select id, security_id, kind, resulting_security_id, journal_entry_id, reversal_entry_id, interest_accrual_entry_id from equity_security_events
@@ -513,7 +573,7 @@ export async function recordSecurityEvent(input: RecordEventInput): Promise<Reco
           const target = book.classes.find((row) => row.id === targetId);
           if (!target || target.kind !== "common") refuse("Choose the common class the shares convert into.", "Choose a common class of the legal entity.", { field: "targetShareClassId" });
           if (named && target!.id !== named) {
-            refuse(`Class ${shareClass!.code} converts into ${book.classes.find((row) => row.id === named)?.code ?? "its conversion class"}.`, "Convert into the class's conversion class, or amend the conversion class first (an approval).", { field: "targetShareClassId", status: 409 });
+            refuse(`Class ${shareClass!.code} converts into ${book.classes.find((row) => row.id === named)?.code ?? "its conversion class"}.`, "Convert into the class's conversion class, or amend the conversion class first.", { field: "targetShareClassId", status: 409 });
           }
           if (effectiveOn < target!.effectiveOn) refuse(`Class ${target!.code} is not effective until ${target!.effectiveOn}.`, `Date the conversion on or after ${target!.effectiveOn}.`, { field: "effectiveOn" });
           const units = quantity();

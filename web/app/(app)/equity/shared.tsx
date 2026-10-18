@@ -2,7 +2,8 @@
 
 import type { ReactNode } from 'react'
 import Link from 'next/link'
-import { useLocale } from 'next-intl'
+import { useLocale, useTranslations } from 'next-intl'
+import type { PendingRequest } from '@openbooks/engine/equity'
 import { readApiErrorMessage } from '@/lib/api-error'
 
 export const CELL = 'px-4 py-2.5'
@@ -126,4 +127,40 @@ export function withParams(base: string, params: Record<string, string | string[
   }
   const query = next.toString()
   return query ? `${base}?${query}` : base
+}
+
+/** A governed command's answer: applied now, or held by an Equity action Flow for approval. */
+export function isPendingApproval(result: unknown): boolean {
+  return typeof result === 'object' && result !== null && (result as { status?: unknown }).status === 'pending_approval'
+}
+
+/**
+ * Governed actions held by an Equity action Flow for a decision, shown where
+ * they apply until an approver decides them in Approvals. Nothing renders
+ * when none is pending.
+ */
+export function PendingActions({ pending, filter }: { pending: readonly PendingRequest[]; filter?: (request: PendingRequest) => boolean }) {
+  const t = useTranslations('equity')
+  const rows = filter ? pending.filter(filter) : pending
+  if (rows.length === 0) return null
+  return (
+    <section className="rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm dark:border-amber-900 dark:bg-amber-950/40" aria-label={t('approval.pendingTitle')}>
+      <div className="flex items-center justify-between gap-3">
+        <h3 className="font-semibold text-amber-900 dark:text-amber-200">{t('approval.pendingTitle')}</h3>
+        <Link className={LINK} href="/approvals">{t('approval.openApprovals')}</Link>
+      </div>
+      <ul className="mt-2 space-y-1 text-amber-900 dark:text-amber-100">
+        {rows.map((row) => (
+          <li key={row.id}>
+            {t('approval.pendingItem', {
+              action: t(`approval.action.${row.action}`),
+              subject: row.subjectLabel,
+              date: row.effectiveOn,
+              requester: row.requestedByName ?? t('approval.unknownRequester'),
+            })}
+          </li>
+        ))}
+      </ul>
+    </section>
+  )
 }

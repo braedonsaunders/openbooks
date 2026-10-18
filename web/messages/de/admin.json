@@ -1485,8 +1485,8 @@
     "amortization_read": "Abgrenzungspläne und Berichte anzeigen",
     "amortization_manage": "Auflösung ausführen und Pläne ändern",
     "equity_read": "Cap Table, Wertpapiere und aktienbasierte Vergütung anzeigen",
-    "equity_manage": "Aktiengattungen, Pläne, Ausgaben und Zuteilungsvorgänge erfassen",
-    "equity_approve": "Stornos, Aktiensplits, Rückkäufe und Läufe der aktienbasierten Vergütung genehmigen",
+    "equity_manage": "Aktiengattungen, Pläne, Ausgaben, Zuteilungsvorgänge und genehmigungspflichtige Eigenkapitalvorgänge erfassen",
+    "equity_approve": "Über Eigenkapitalvorgänge entscheiden, die in Flows zur Genehmigung geleitet werden",
     "assets_capitalize": "Anlagenvorschläge übernehmen und Anlagen im Bau aktivieren",
     "assets_maintain": "Wartungspläne und Versicherungspolicen für Anlagen pflegen"
   },
@@ -2647,6 +2647,7 @@
     "searchPlaceholder": "Suchen…",
     "created": "Erstellt",
     "updated": "Gespeichert",
+    "submittedForApproval": "Zur Genehmigung eingereicht. Der Vorgang wird angewendet, sobald ein Genehmiger ihn unter Genehmigungen genehmigt.",
     "deleted": "Gelöscht",
     "confirmDelete": "Diesen Datensatz löschen? Dies kann nicht rückgängig gemacht werden.",
     "validation": {

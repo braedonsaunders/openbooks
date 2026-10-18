@@ -144,6 +144,13 @@ test('non-document subjects resolve to their domain grant', () => {
   assert.deepEqual(flowSubjectPermissions('hrm_leave_request')?.read, 'hrm.leave.read')
   assert.deepEqual(flowSubjectPermissions('hrm_comp_cycle')?.read, 'hrm.compensation.read')
   assert.deepEqual(flowSubjectPermissions('crew_time_batch')?.edit, 'time.crew.enter')
+  // Recording a governed equity action is the bookkeeping duty; equity.approve
+  // only lets a Flow approver decide one.
+  assert.deepEqual(flowSubjectPermissions('equity_action'), {
+    read: 'equity.read',
+    edit: 'equity.manage',
+    approve: 'equity.approve',
+  })
 })
 
 test('kinds with no single domain grant fail closed', () => {

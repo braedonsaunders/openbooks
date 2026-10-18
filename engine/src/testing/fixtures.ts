@@ -1110,6 +1110,8 @@ const GUARDED_EVIDENCE: { table: string; trigger: string }[] = [
   { table: "expense_fx_policies", trigger: "expense_fx_policies_immutable" },
   // Equity history leaves child-first: runs and events before securities,
   // securities before rounds and plans, everything before its share class.
+  { table: "equity_action_requests", trigger: "equity_action_requests_immutable" },
+  { table: "equity_position_movements", trigger: "equity_position_movements_immutable" },
   { table: "equity_compensation_run_releases", trigger: "equity_compensation_run_releases_immutable" },
   { table: "equity_compensation_run_lines", trigger: "equity_compensation_run_lines_immutable" },
   { table: "equity_interest_run_lines", trigger: "equity_interest_run_lines_immutable" },

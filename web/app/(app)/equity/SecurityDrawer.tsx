@@ -10,27 +10,26 @@ import { DrawerTabStrip } from '@/components/drawer-tab-strip'
 import { useMoney } from '@/components/money-provider'
 import type { RecordEventResult } from '@openbooks/engine/equity'
 import type { SecurityDrawerData } from './view'
-import { Field, LINK, STATUS_VARIANT, SegmentTabs, Stat, percentText, postJson, priceText, useShares, withParams } from './shared'
+import { Field, LINK, PendingActions, STATUS_VARIANT, SegmentTabs, Stat, isPendingApproval, percentText, postJson, priceText, useShares, withParams } from './shared'
 import { DateField } from '@/components/date-field'
 
 type ActionKind = 'exercise' | 'settle' | 'forfeit' | 'expire' | 'cancel' | 'transfer' | 'convert' | 'repurchase' | 'void' | 'repay' | 'election_83b'
 type Panel = 'overview' | 'vesting' | 'history' | 'mfn' | 'actions'
 
-const MANAGE_ACTIONS: Record<string, ActionKind[]> = {
-  option: ['exercise', 'forfeit', 'expire', 'cancel'],
-  rsu: ['settle', 'forfeit', 'cancel'],
-  warrant: ['exercise', 'expire', 'cancel', 'transfer'],
-  share: ['transfer', 'convert', 'election_83b'],
-  safe: ['convert'],
-  note: ['convert'],
-}
-const APPROVE_ACTIONS: Record<string, ActionKind[]> = {
-  option: ['void'], rsu: ['void'], warrant: ['void'], share: ['repurchase', 'void'], safe: ['repay', 'cancel', 'void'], note: ['repay', 'cancel', 'void'],
+/**
+ * The events each kind admits (equity.manage). Voids, repurchases and the
+ * repayment or cancellation of a SAFE or note are governed: an Equity
+ * action Flow may hold them for approval.
+ */
+const ACTIONS: Record<string, ActionKind[]> = {
+  option: ['exercise', 'forfeit', 'expire', 'cancel', 'void'],
+  rsu: ['settle', 'forfeit', 'cancel', 'void'],
+  warrant: ['exercise', 'expire', 'cancel', 'transfer', 'void'],
+  share: ['transfer', 'convert', 'election_83b', 'repurchase', 'void'],
+  safe: ['convert', 'repay', 'cancel', 'void'],
+  note: ['convert', 'repay', 'cancel', 'void'],
 }
 const NEEDS_REASON: ActionKind[] = ['forfeit', 'expire', 'cancel', 'repurchase', 'void']
-/** Actions recorded through the approvals endpoint (equity.approve). */
-const APPROVAL_ACTIONS = (kind: ActionKind, convertible: boolean): boolean =>
-  kind === 'repurchase' || kind === 'void' || kind === 'repay' || (kind === 'cancel' && convertible)
 
 const str = (value: unknown): string | null => (typeof value === 'string' && value !== '' ? value : null)
 
@@ -40,8 +39,9 @@ const str = (value: unknown): string | null => (typeof value === 'string' && val
  * for an MFN SAFE, and the events it admits for the reader's duties.
  * Overview, vesting, history, MFN and actions are sibling tabs; one body
  * shows at a time. A recorded forfeiture, expiry, cancellation, repurchase,
- * repayment or 83(b) election can be reversed from the history by an
- * approver.
+ * repayment or 83(b) election can be reversed from the history. Governed
+ * actions an Equity action Flow holds for approval are listed above the
+ * tabs until decided.
  */
 export function SecurityDrawer({ context, detail, closeHref, holders, rounds, commonClasses, considerationAccounts }: SecurityDrawerData) {
   const t = useTranslations('equity')
@@ -53,7 +53,7 @@ export function SecurityDrawer({ context, detail, closeHref, holders, rounds, co
   const status = detail.state?.status ?? detail.convertible?.status ?? 'outstanding'
   const live = !['void', 'converted', 'repaid', 'cancelled'].includes(status)
   const actions = live
-    ? [...(context.canManage ? MANAGE_ACTIONS[kind] ?? [] : []), ...(context.canApprove ? APPROVE_ACTIONS[kind] ?? [] : [])]
+    ? (context.canManage ? ACTIONS[kind] ?? [] : [])
       .filter((action) => !(action === 'convert' && kind === 'share' && detail.shareClass?.kind !== 'preferred'))
       .filter((action) => action !== 'election_83b' || detail.election83b?.state === 'open')
     : []
@@ -149,6 +149,7 @@ export function SecurityDrawer({ context, detail, closeHref, holders, rounds, co
             </>
           )}
         </section>
+        <PendingActions pending={context.pending} filter={(request) => request.subjectId === String(s.id)} />
         <DrawerTabStrip
           ariaLabel={t('drawer.tabs')}
           activeKey={panel}
@@ -234,7 +235,7 @@ export function SecurityDrawer({ context, detail, closeHref, holders, rounds, co
                     <TableHead className="text-right">{t('drawer.eventAmount')}</TableHead>
                     <TableHead>{t('drawer.eventEntry')}</TableHead>
                     <TableHead>{t('drawer.eventReason')}</TableHead>
-                    {context.canApprove && live && <TableHead><span className="sr-only">{t('capTable.columns.actions')}</span></TableHead>}
+                    {context.canManage && live && <TableHead><span className="sr-only">{t('capTable.columns.actions')}</span></TableHead>}
                   </TableRow>
                 </TableHeader>
                 <TableBody>
@@ -255,7 +256,7 @@ export function SecurityDrawer({ context, detail, closeHref, holders, rounds, co
                         </span>
                       </TableCell>
                       <TableCell className="text-sm">{str(event.reason) ?? ''}</TableCell>
-                      {context.canApprove && live && (
+                      {context.canManage && live && (
                         <TableCell className="text-right">
                           {event.reversible === true && (
                             <Button size="sm" variant="ghost" onClick={() => setReversing({ id: String(event.id), kind: String(event.kind), effectiveOn: String(event.effective_on) })}>
@@ -275,7 +276,7 @@ export function SecurityDrawer({ context, detail, closeHref, holders, rounds, co
           )
         )}
         {panel === 'mfn' && detail.mfn && (
-          <MfnPanel securityId={String(s.id)} mfn={detail.mfn} asOf={context.asOf} canApprove={context.canApprove && live} currency={currency} params={context.params} />
+          <MfnPanel securityId={String(s.id)} mfn={detail.mfn} asOf={context.asOf} canRecord={context.canManage && live} currency={currency} params={context.params} />
         )}
         {panel === 'actions' && actions.length > 0 && (
           <ActionForm
@@ -298,7 +299,7 @@ export function SecurityDrawer({ context, detail, closeHref, holders, rounds, co
   )
 }
 
-/** An approver's reversal of one recorded event: its entry reverses on the date and its units or balance return. */
+/** The reversal of one recorded event: its entry reverses on the date and its units or balance return. */
 function ReversalForm({ securityId, target, asOf, onDone }: { securityId: string; target: { id: string; kind: string; effectiveOn: string }; asOf: string; onDone: () => void }) {
   const t = useTranslations('equity')
   const router = useRouter()
@@ -307,10 +308,10 @@ function ReversalForm({ securityId, target, asOf, onDone }: { securityId: string
   async function submit() {
     setBusy(true)
     try {
-      await postJson<RecordEventResult>(`/api/equity/securities/${securityId}/approvals`, {
+      const result = await postJson<RecordEventResult>(`/api/equity/securities/${securityId}/events`, {
         kind: 'reverse', reversesEventId: target.id, effectiveOn: form.effectiveOn, reason: form.reason, idempotencyKey: `${target.id}:reverse:${crypto.randomUUID()}`,
       }, t('events.failed'))
-      toast.success(t('events.reversed', { kind: t(`eventKind.${target.kind}`) }))
+      toast.success(isPendingApproval(result) ? t('approval.submitted') : t('events.reversed', { kind: t(`eventKind.${target.kind}`) }))
       onDone()
       router.refresh()
     } catch (error) {
@@ -336,11 +337,11 @@ function ReversalForm({ securityId, target, asOf, onDone }: { securityId: string
 }
 
 /** An MFN SAFE: later instruments whose better terms its holder may adopt, and the elections recorded. */
-function MfnPanel({ securityId, mfn, asOf, canApprove, currency, params }: {
+function MfnPanel({ securityId, mfn, asOf, canRecord, currency, params }: {
   securityId: string
   mfn: NonNullable<SecurityDrawerData['detail']['mfn']>
   asOf: string
-  canApprove: boolean
+  canRecord: boolean
   currency: string
   params: Record<string, string | string[] | undefined>
 }) {
@@ -356,10 +357,10 @@ function MfnPanel({ securityId, mfn, asOf, canApprove, currency, params }: {
     if (!choice) return
     setBusy(true)
     try {
-      await postJson(`/api/equity/securities/${securityId}/mfn-elections`, {
+      const result = await postJson(`/api/equity/securities/${securityId}/mfn-elections`, {
         sourceSecurityId: choice, effectiveOn: form.effectiveOn, reason: form.reason, idempotencyKey: `${securityId}:mfn:${crypto.randomUUID()}`,
       }, t('mfn.failed'))
-      toast.success(t('mfn.saved'))
+      toast.success(isPendingApproval(result) ? t('approval.submitted') : t('mfn.saved'))
       setChoice(null)
       router.refresh()
     } catch (error) {
@@ -383,7 +384,7 @@ function MfnPanel({ securityId, mfn, asOf, canApprove, currency, params }: {
               <TableHead className="text-right">{t('fields.discountPercent')}</TableHead>
               <TableHead>{t('fields.safeType')}</TableHead>
               <TableHead>{t('mfn.changes')}</TableHead>
-              {canApprove && <TableHead><span className="sr-only">{t('capTable.columns.actions')}</span></TableHead>}
+              {canRecord && <TableHead><span className="sr-only">{t('capTable.columns.actions')}</span></TableHead>}
             </TableRow>
           </TableHeader>
           <TableBody>
@@ -398,7 +399,7 @@ function MfnPanel({ securityId, mfn, asOf, canApprove, currency, params }: {
                   {row.improves.map((term) => <Badge key={term} variant="success" className="mr-1">{t(`mfn.better.${term}`)}</Badge>)}
                   {row.concedes.map((term) => <Badge key={term} variant="warning" className="mr-1">{t(`mfn.worse.${term}`)}</Badge>)}
                 </TableCell>
-                {canApprove && (
+                {canRecord && (
                   <TableCell className="text-right">
                     <Button size="sm" variant={choice === row.sourceSecurityId ? 'default' : 'ghost'} onClick={() => setChoice(row.sourceSecurityId)}>{t('mfn.adopt')}</Button>
                   </TableCell>
@@ -408,7 +409,7 @@ function MfnPanel({ securityId, mfn, asOf, canApprove, currency, params }: {
           </TableBody>
         </Table>
       )}
-      {choice && canApprove && (
+      {choice && canRecord && (
         <section className="space-y-3 rounded-lg border border-slate-200 p-3 dark:border-slate-800">
           <p className="text-sm">{t('mfn.adoptHelp', { number: mfn.candidates.find((row) => row.sourceSecurityId === choice)?.securityNumber ?? '' })}</p>
           <div className="grid grid-cols-2 gap-3">
@@ -483,7 +484,6 @@ function ActionForm({ securityId, convertible, restricted, repurchaseBasis, earl
   const needsReason = NEEDS_REASON.includes(action)
   async function submit() {
     setBusy(true)
-    const approval = APPROVAL_ACTIONS(action, convertible)
     const body: Record<string, unknown> = { kind: action, effectiveOn: form.effectiveOn, idempotencyKey: `${securityId}:${action}:${crypto.randomUUID()}` }
     if (needsQuantity) body.quantity = form.quantity
     if (needsReason || form.reason.trim()) body.reason = form.reason
@@ -497,8 +497,8 @@ function ActionForm({ securityId, convertible, restricted, repurchaseBasis, earl
       else if (form.targetShareClassId) body.targetShareClassId = form.targetShareClassId
     }
     try {
-      await postJson<RecordEventResult>(`/api/equity/securities/${securityId}/${approval ? 'approvals' : 'events'}`, body, t('events.failed'))
-      toast.success(t('events.saved', { kind: t(`eventKind.${action}`) }))
+      const result = await postJson<RecordEventResult>(`/api/equity/securities/${securityId}/events`, body, t('events.failed'))
+      toast.success(isPendingApproval(result) ? t('approval.submitted') : t('events.saved', { kind: t(`eventKind.${action}`) }))
       router.refresh()
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t('events.failed'))

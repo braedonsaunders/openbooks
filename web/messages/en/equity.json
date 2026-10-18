@@ -213,6 +213,7 @@
     },
     "byLabel": "Cap table view",
     "report": "Open the securities register",
+    "asOfReport": "Cap table report as of {date}",
     "emptyClasses": "No share classes yet. Use New to record the legal entity's first class.",
     "emptyHolders": "No holders yet. Issue shares or awards to put holders on the cap table.",
     "amend": "Amend",
@@ -479,15 +480,15 @@
       "forfeit": "Unvested units leave the award; the cost recognized for them reverses in the next stock compensation run.",
       "expire": "Vested, unexercised units lapse. Their recognized cost stays.",
       "cancel": "Units are cancelled, unvested units first. Cancelling unvested units without a replacement recognizes their remaining cost.",
-      "repurchase": "The company buys shares back into treasury at the amount paid (an approval).",
+      "repurchase": "The company buys shares back into treasury at the amount paid. A Flow may require approval before it applies.",
       "transfer": "Vested units move to another holder on a new certificate.",
       "convert": "SAFEs and notes convert at a round's price on its closing date; preferred shares convert into common at the class's conversion ratio.",
-      "void": "Corrects a record entered in error: its entry is reversed on the void date and the event that produced it is undone (an approval).",
-      "repay": "Repay a SAFE at its purchase amount, or a note at its principal and the interest accrued to the date, which accrues first. A note's premium or discount posts to interest expense. This is an approval.",
+      "void": "Corrects a record entered in error: its entry is reversed on the void date and the event that produced it is undone. A Flow may require approval before it applies.",
+      "repay": "Repay a SAFE at its purchase amount, or a note at its principal and the interest accrued to the date, which accrues first. A note's premium or discount posts to interest expense. A Flow may require approval before it applies.",
       "election_83b": "Record the date the holder filed an 83(b) election for these restricted shares. The election must be filed within 30 days of the issue date.",
       "exerciseEarly": "This grant admits early exercise: vested units are exercised first, then the earliest unvested installments. Unvested shares are issued as restricted stock the company may repurchase until they vest; their cash is held as a deposit and released to capital as they vest.",
-      "repurchaseRestricted": "Unvested restricted shares are repurchased on the grant's terms, settling their deposit. Enter the fair market value per share when the grant prices at the lower of cost and fair market value. This is an approval.",
-      "cancelConvertible": "Cancel the SAFE or note without payment: its principal and accrued interest move to additional paid-in capital. This is an approval."
+      "repurchaseRestricted": "Unvested restricted shares are repurchased on the grant's terms, settling their deposit. Enter the fair market value per share when the grant prices at the lower of cost and fair market value. A Flow may require approval before it applies.",
+      "cancelConvertible": "Cancel the SAFE or note without payment: its principal and accrued interest move to additional paid-in capital. A Flow may require approval before it applies."
     },
     "reversed": "{kind} reversed",
     "carryingHint": "Carrying amount on the as-of date: {amount}",
@@ -580,7 +581,7 @@
   },
   "reversal": {
     "title": "Reverse the {kind} of {date}",
-    "help": "The event's entry is reversed on the reversal date and its units or balance return from that date; history before it stands. Later activity that relies on the event must be reversed first. This is an approval."
+    "help": "The event's entry is reversed on the reversal date and its units or balance return from that date; history before it stands. Later activity that relies on the event must be reversed first. A Flow may require approval before it applies."
   },
   "mfn": {
     "description": "This SAFE may adopt the terms of a convertible instrument issued after it, in its currency, while it is outstanding: a cap where it has none or a lower one, a discount where it has none or a higher one, or post-money conversion. The later instrument's cap, discount and SAFE type are adopted together from the election date.",
@@ -598,12 +599,33 @@
       "post_money": "Pre-money"
     },
     "adopt": "Adopt",
-    "adoptHelp": "Record the holder's election to adopt the terms of {number}. Conversions from the election date use them. This is an approval.",
+    "adoptHelp": "Record the holder's election to adopt the terms of {number}. Conversions from the election date use them. A Flow may require approval before it applies.",
     "electedOn": "Election date",
     "record": "Record election",
     "elections": "Elections recorded",
     "source": "Terms of",
     "saved": "MFN election recorded",
     "failed": "The election was not recorded."
+  },
+  "approval": {
+    "pendingTitle": "Awaiting approval",
+    "openApprovals": "Open Approvals",
+    "pendingItem": "{action} · {subject} · effective {date} · requested by {requester}",
+    "unknownRequester": "a former user",
+    "submitted": "Submitted for approval. It applies when an approver approves it in Approvals.",
+    "action": {
+      "void": "Void",
+      "reverse": "Reversal",
+      "repurchase": "Repurchase",
+      "repay": "Repayment",
+      "cancel_convertible": "Cancellation",
+      "class_amendment": "Class amendment",
+      "split": "Stock split",
+      "reserve_change": "Reserve change",
+      "mfn_election": "MFN election",
+      "compensation_run": "Stock compensation run",
+      "interest_run": "Note interest run",
+      "account_policy": "Account policy version"
+    }
   }
 }

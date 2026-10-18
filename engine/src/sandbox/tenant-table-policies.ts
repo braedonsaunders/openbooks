@@ -25,6 +25,10 @@ export const TENANT_TABLE_POLICIES = {
   "equity_security_amendments": "clone:catalog-uuid-rebase",
   "equity_interest_runs": "clone:catalog-uuid-rebase",
   "equity_interest_run_lines": "clone:catalog-uuid-rebase",
+  // Pending action requests wait on the source environment's Flow gates; the
+  // position ledger copies with the securities and plans it restates.
+  "equity_action_requests": "skip:no-copy",
+  "equity_position_movements": "clone:catalog-uuid-rebase",
   "payroll_us_filing_account_employer_lineage": "clone:catalog-uuid-rebase",
   // Closing rate quotes price the copied ledger, so they copy with rebased
   // identities (masked copies redact the authored source and reason).

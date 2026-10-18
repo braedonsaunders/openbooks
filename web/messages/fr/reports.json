@@ -744,6 +744,10 @@
         "label": "Registre des titres de capital",
         "description": "Chaque certificat d’actions, option, RSU, bon de souscription, SAFE et billet convertible tel qu’émis : détenteur, catégorie, plan, tour de financement, quantité, prix et contrepartie."
       },
+      "equity_cap_table_positions": {
+        "label": "Mouvements des positions de la table de capitalisation",
+        "description": "Chaque variation de la position d’un certificat d’actions, d’une attribution ou d’une réserve de plan : actions en circulation retraitées des divisions et ces mêmes actions converties en actions ordinaires. Cumulés jusqu’à une date, les mouvements forment la table de capitalisation à cette date."
+      },
       "ledger_lines": {
         "label": "Lignes du grand livre",
         "description": "Détail des lignes d’écriture joint à l’écriture, au compte, au tiers et aux dimensions — le grand livre brut. Une ligne par ligne d’écriture de journal comptabilisée (ou en brouillon)."
@@ -1267,6 +1271,28 @@
         "voided": "Annulé",
         "security_id": "Titre (id)",
         "journal_entry_id": "Écriture d’émission (id)"
+      },
+      "equity_cap_table_positions": {
+        "effective_on": "Date d’effet",
+        "share_class": "Catégorie d’actions",
+        "class_kind": "Type de catégorie",
+        "position_kind": "Type de position",
+        "holder": "Détenteur",
+        "security_number": "Titre",
+        "security_kind": "Type de titre",
+        "plan_pool": "Réserve du plan",
+        "subsidiary": "Filiale",
+        "outstanding": "Actions en circulation",
+        "as_converted_outstanding": "En circulation, après conversion",
+        "awards_outstanding": "Attributions en cours",
+        "pool_available": "Réserve disponible, après conversion",
+        "fully_diluted": "Entièrement dilué",
+        "shares_delta": "Variation des actions",
+        "as_converted_delta": "Variation après conversion",
+        "security_id": "Titre (id)",
+        "plan_id": "Plan d’actions (id)",
+        "holder_party_id": "Détenteur (id)",
+        "movement_id": "Mouvement (id)"
       },
       "ledger_lines": {
         "posting_date": "Date de comptabilisation",
@@ -3313,6 +3339,10 @@
     "equity-stock-compensation-schedule": {
       "name": "Échéancier de charge de rémunération en actions",
       "description": "Rémunération en actions comptabilisée par période et par devise, à partir des calculs comptabilisés."
+    },
+    "equity-cap-table": {
+      "name": "Table de capitalisation à une date",
+      "description": "Actions en circulation et entièrement diluées par catégorie d’actions et détenteur, avec les attributions et les réserves de plans, d’après le registre des positions à la date asOf."
     },
     "ap-aging-by-vendor": {
       "name": "Âge des comptes fournisseurs par fournisseur",

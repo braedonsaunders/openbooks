@@ -1485,8 +1485,8 @@
     "amortization_read": "配分スケジュールとレポートを表示",
     "amortization_manage": "配分を実行しスケジュールを変更",
     "equity_read": "資本政策表、証券、株式報酬を表示",
-    "equity_manage": "株式種類、プラン、発行、付与の異動を記録",
-    "equity_approve": "取消、株式分割、買戻し、株式報酬の計上を承認",
+    "equity_manage": "株式種類、プラン、発行、付与の異動、承認対象の資本取引を記録",
+    "equity_approve": "Flows で承認に回された資本取引を決定",
     "assets_capitalize": "資産計上候補の承認と建設仮勘定の資産計上",
     "assets_maintain": "資産の保守スケジュールと保険契約の管理"
   },
@@ -2647,6 +2647,7 @@
     "searchPlaceholder": "検索…",
     "created": "作成しました",
     "updated": "保存しました",
+    "submittedForApproval": "承認に回されました。承認者が承認画面で承認すると適用されます。",
     "deleted": "削除しました",
     "confirmDelete": "このレコードを削除しますか？この操作は取り消せません。",
     "validation": {

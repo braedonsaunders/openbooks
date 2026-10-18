@@ -36,7 +36,10 @@ export {
   type CreateRoundInput,
 } from "./structure.ts";
 export { issueSecurity, type IssueSecurityInput, type ValuationInput } from "./securities.ts";
-export { recordSecurityEvent, eventPermission, type RecordEventInput, type RecordEventResult } from "./events.ts";
+export { recordSecurityEvent, governedEventAction, type RecordEventInput, type RecordEventResult } from "./events.ts";
+export { EQUITY_ACTIONS, locateEquityAction, pendingEquityActions, type EquityAction, type GovernedStatus, type PendingRequest } from "./governance.ts";
+export { recordEquityAccountPolicy, type RecordAccountPolicyInput } from "./account-policy.ts";
+export { syncPositionLedger } from "./positions.ts";
 export { electMfnTerms, mfnCandidates, type ElectMfnInput, type MfnCandidate, type MfnTerm } from "./mfn.ts";
 export {
   previewInterestRun,

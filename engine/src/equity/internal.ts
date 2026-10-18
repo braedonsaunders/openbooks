@@ -9,7 +9,7 @@ import type { SqlExecutor } from "../platform/db.ts";
 import { isUuid } from "../platform/uuid.ts";
 import { EQUITY_FEATURE_KEY, EQUITY_FEATURE_REMEDY, EquityError } from "./errors.ts";
 
-export type EquityPermission = "equity.read" | "equity.manage" | "equity.approve";
+export type EquityPermission = "equity.read" | "equity.manage";
 
 const featureOff = (): EquityError => new EquityError("Equity & cap table is not enabled for this organization.", {
   status: 403,

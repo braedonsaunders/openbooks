@@ -491,6 +491,13 @@ export const TENANT_RETIREMENT_GUARDS = [
     "patch": false
   },
   {
+    "name": "equity_action_request_guard",
+    "source": "0742_equity_flows_and_position_ledger.sql",
+    "sha256": "a69f2e94189a414ac3ed1928979bc3e070fbdc52069006a3726f07106e7c5f39",
+    "newSha256": "a69f2e94189a414ac3ed1928979bc3e070fbdc52069006a3726f07106e7c5f39",
+    "patch": false
+  },
+  {
     "name": "financial_policy_version_immutable",
     "source": "0691_financial_rate_preferences_versions.sql",
     "sha256": "f1817fdfc45950978c79b5f91e43a65fcc897189ddb6c5a4a6d25d484d08690a",
@@ -2079,6 +2086,12 @@ export const TENANT_RETIREMENT_GUARD_ATTRIBUTES = [
     ]
   },
   {
+    "name": "equity_action_request_guard",
+    "config": [
+      "search_path=public,pg_catalog"
+    ]
+  },
+  {
     "name": "financial_policy_version_immutable",
     "config": [
       "search_path=public,pg_catalog"
@@ -2988,6 +3001,16 @@ export const TENANT_RETIREMENT_TRIGGER_CONTRACTS = [
   {
     "table": "equity_compensation_run_releases",
     "trigger": "equity_compensation_run_releases_immutable",
+    "function": "equity_record_immutable"
+  },
+  {
+    "table": "equity_action_requests",
+    "trigger": "equity_action_requests_immutable",
+    "function": "equity_action_request_guard"
+  },
+  {
+    "table": "equity_position_movements",
+    "trigger": "equity_position_movements_immutable",
     "function": "equity_record_immutable"
   },
   {

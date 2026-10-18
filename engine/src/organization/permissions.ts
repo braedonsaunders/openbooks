@@ -1346,8 +1346,8 @@ export const BUILT_IN_ROLES: Record<
       // Amortization runs and schedule upkeep are bookkeeping duties.
       "amortization.read",
       "amortization.manage",
-      // Recording issuances and award activity is bookkeeping; voids,
-      // splits, repurchases and compensation runs stay with an approver.
+      // Recording equity activity, including the governed actions an Equity
+      // action Flow may route for approval, is the bookkeeping duty.
       "equity.read",
       "equity.manage",
       "reports.read",
@@ -1458,8 +1458,8 @@ export const BUILT_IN_ROLES: Record<
       "contract_costs.read",
       "contract_costs.approve",
       "amortization.read",
-      // The approver reviews equity governance (read + approve) without the
-      // day-to-day recording duty.
+      // The approver decides the equity actions an Equity action Flow routes
+      // to it (read + approve), without the day-to-day recording duty.
       "equity.read",
       "equity.approve",
       "nonprofit.report",

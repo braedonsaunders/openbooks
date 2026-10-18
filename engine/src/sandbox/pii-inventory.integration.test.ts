@@ -879,6 +879,7 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "equity_security_amendments.idempotency_key",
   "equity_interest_runs.currency",
   "equity_interest_run_lines.currency",
+  "equity_position_movements.position_kind",
   "crew_time_batch_events.kind",
   "crew_time_batch_events.reason",
   "crew_time_batch_lines.cost_code_ref",

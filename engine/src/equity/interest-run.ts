@@ -15,13 +15,16 @@
  * Runs are sequential per legal entity: each run's date follows the last
  * one, and a run for a date already run returns that run instead of posting
  * again. A run with no change records a zero total and posts nothing.
- * Posting a run is an approval (equity.approve).
+ * Posting a run is a governed action an Equity action Flow may require
+ * approval for.
  */
 import { sql } from "drizzle-orm";
 import { toUnits } from "../money/money.ts";
 import { db, withOrgTransaction } from "../platform/db.ts";
 import { convertibleState } from "./cap-table.ts";
+import type { GovernedRunResult } from "./compensation-run.ts";
 import { EquityError } from "./errors.ts";
+import { governEquityAction } from "./governance.ts";
 import { functionalUnits, spotRate } from "./fx.ts";
 import { noteInterest } from "./interest.ts";
 import { assertEquityReadable, currencyExponent, loadLegalEntity, requireEquityReader, writeEquityAudit } from "./internal.ts";
@@ -168,10 +171,31 @@ export interface InterestRunResult {
   replayed: boolean;
 }
 
-/** Post the note interest run through a date (equity.approve). */
-export async function postInterestRun(input: EquityCommand & { subsidiaryId: string; throughDate: string }): Promise<InterestRunResult> {
+/**
+ * Post the note interest run through a date (equity.manage; a governed
+ * action an Equity action Flow may require approval for).
+ */
+export async function postInterestRun(input: EquityCommand & { subsidiaryId: string; throughDate: string }): Promise<GovernedRunResult<InterestRunResult>> {
   const throughDate = requireDate(input.throughDate, "throughDate", "The run date");
-  return inEquityCommand(input, "equity.approve", async ({ book, currency, entityName }) => {
+  // A run already posted for the date is returned as it stands; nothing is submitted again.
+  const posted = await withOrgTransaction(input.orgId, async () => (await db.execute<{ id: string }>(sql`
+    select id from equity_interest_runs
+     where org_id = ${input.orgId} and subsidiary_id = ${input.subsidiaryId} and through_date = ${throughDate}::date`)).rows.length > 0);
+  if (posted) return { ...(await applyInterestRun(input)), status: "applied", requestId: null };
+  const outcome = await governEquityAction({
+    orgId: input.orgId, actorId: input.actorId, subsidiaryId: input.subsidiaryId, action: "interest_run",
+    subjectId: null, subjectLabel: `Note interest through ${throughDate}`, effectiveOn: throughDate, reason: null,
+    summary: {}, payload: { subsidiaryId: input.subsidiaryId, throughDate }, idempotencyKey: null,
+  }, (actorId) => applyInterestRun({ ...input, actorId }));
+  return outcome.result
+    ? { ...outcome.result, status: "applied", requestId: outcome.requestId }
+    : { status: "pending_approval", requestId: outcome.requestId, throughDate };
+}
+
+/** Apply the note interest run: the command its approval releases. */
+export async function applyInterestRun(input: EquityCommand & { subsidiaryId: string; throughDate: string }): Promise<InterestRunResult> {
+  const throughDate = requireDate(input.throughDate, "throughDate", "The run date");
+  return inEquityCommand(input, "equity.manage", async ({ book, currency, entityName }) => {
     const existing = (await db.execute<{ id: string; total_amount: string; journal_entry_id: string | null; lines: number }>(sql`
       select r.id, r.total_amount::text as total_amount, r.journal_entry_id,
              (select count(*)::int from equity_interest_run_lines l where l.org_id = r.org_id and l.run_id = r.id) as lines

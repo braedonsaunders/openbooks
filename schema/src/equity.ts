@@ -21,7 +21,7 @@ import { parties } from "./parties";
 import { subsidiaries } from "./subsidiaries";
 
 /**
- * Equity and cap table records (migrations 0733 and 0738). Every row belongs to one
+ * Equity and cap table records (migrations 0733, 0738 and 0742). Every row belongs to one
  * organization and one legal entity; children reference their parents by
  * (org_id, subsidiary_id, id) so a record cannot attach to another entity's
  * class, plan, round or security. Records are retained history: corrections
@@ -576,6 +576,83 @@ export const equityInterestRunLines = pgTable(
       name: "equity_interest_run_lines_security_fkey",
       columns: [t.orgId, t.subsidiaryId, t.securityId],
       foreignColumns: [equitySecurities.orgId, equitySecurities.subsidiaryId, equitySecurities.id],
+    }),
+  ],
+);
+
+/**
+ * A governed equity action submitted to any enabled Equity action Flow: the
+ * frozen command input, the figures a Flow condition reads, and its single
+ * decision (applied, with or without an approval, or rejected).
+ */
+export const equityActionRequests = pgTable(
+  "equity_action_requests",
+  {
+    id: id(),
+    orgId: orgRef(),
+    subsidiaryId: uuid("subsidiary_id").notNull(),
+    action: text("action").notNull(),
+    subjectId: uuid("subject_id"),
+    subjectLabel: text("subject_label").notNull(),
+    effectiveOn: date("effective_on").notNull(),
+    reason: text("reason"),
+    payload: jsonb("payload").notNull(),
+    summary: jsonb("summary").notNull().default(sql`'{}'::jsonb`),
+    status: text("status").notNull(),
+    releasedWithoutApproval: boolean("released_without_approval").notNull().default(false),
+    requestedBy: uuid("requested_by").notNull(),
+    decidedBy: uuid("decided_by"),
+    decidedAt: timestamp("decided_at", { withTimezone: true }),
+    decisionComment: text("decision_comment"),
+    result: jsonb("result"),
+    appliedAt: timestamp("applied_at", { withTimezone: true }),
+    idempotencyKey: text("idempotency_key"),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("equity_action_requests_org_id_id_unique").on(t.orgId, t.id),
+    uniqueIndex("equity_action_requests_idempotency_unique").on(t.orgId, t.idempotencyKey),
+    index("equity_action_requests_pending").on(t.orgId, t.subsidiaryId, t.status, t.createdAt),
+    index("equity_action_requests_subject").on(t.orgId, t.subjectId).where(sql`subject_id IS NOT NULL`),
+    foreignKey({ name: "equity_action_requests_subsidiary_fkey", columns: [t.orgId, t.subsidiaryId], foreignColumns: [subsidiaries.orgId, subsidiaries.id] }),
+  ],
+);
+
+/**
+ * The cap table as append-only movements: each row is one change of a share
+ * certificate's, award's or plan pool's outstanding shares (restated through
+ * splits) and of those shares as converted into common. The sum of a
+ * position's rows effective on or before a date is its position that day.
+ */
+export const equityPositionMovements = pgTable(
+  "equity_position_movements",
+  {
+    id: id(),
+    orgId: orgRef(),
+    subsidiaryId: uuid("subsidiary_id").notNull(),
+    positionKind: text("position_kind").notNull(),
+    securityId: uuid("security_id"),
+    planId: uuid("plan_id"),
+    effectiveOn: date("effective_on").notNull(),
+    sharesDelta: bigint("shares_delta", { mode: "bigint" }).notNull(),
+    asConvertedDelta: bigint("as_converted_delta", { mode: "bigint" }).notNull(),
+    recordedAt: timestamp("recorded_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [
+    uniqueIndex("equity_position_movements_org_id_id_unique").on(t.orgId, t.id),
+    index("equity_position_movements_entity").on(t.orgId, t.subsidiaryId, t.effectiveOn),
+    index("equity_position_movements_security").on(t.orgId, t.securityId).where(sql`security_id IS NOT NULL`),
+    index("equity_position_movements_plan").on(t.orgId, t.planId).where(sql`plan_id IS NOT NULL`),
+    foreignKey({ name: "equity_position_movements_subsidiary_fkey", columns: [t.orgId, t.subsidiaryId], foreignColumns: [subsidiaries.orgId, subsidiaries.id] }),
+    foreignKey({
+      name: "equity_position_movements_security_fkey",
+      columns: [t.orgId, t.subsidiaryId, t.securityId],
+      foreignColumns: [equitySecurities.orgId, equitySecurities.subsidiaryId, equitySecurities.id],
+    }),
+    foreignKey({
+      name: "equity_position_movements_plan_fkey",
+      columns: [t.orgId, t.subsidiaryId, t.planId],
+      foreignColumns: [equityPlans.orgId, equityPlans.subsidiaryId, equityPlans.id],
     }),
   ],
 );

@@ -1485,8 +1485,8 @@
     "amortization_read": "Ver calendarios de amortización e informes",
     "amortization_manage": "Ejecutar la amortización y modificar calendarios",
     "equity_read": "Ver la tabla de capitalización, los valores y la compensación en acciones",
-    "equity_manage": "Registrar clases de acciones, planes, emisiones y movimientos de adjudicaciones",
-    "equity_approve": "Aprobar anulaciones, desdoblamientos, recompras y cálculos de compensación en acciones",
+    "equity_manage": "Registrar clases de acciones, planes, emisiones, movimientos de adjudicaciones y acciones de patrimonio gobernadas",
+    "equity_approve": "Decidir las acciones de patrimonio enviadas a aprobación en Flows",
     "assets_capitalize": "Aceptar propuestas de activos y capitalizar obras en curso",
     "assets_maintain": "Gestionar planes de mantenimiento de activos y pólizas de seguro"
   },
@@ -2281,6 +2281,7 @@
     "searchPlaceholder": "Buscar…",
     "created": "Creado",
     "updated": "Guardado",
+    "submittedForApproval": "Enviado para aprobación. Se aplica cuando un aprobador lo aprueba en Aprobaciones.",
     "deleted": "Eliminado",
     "confirmDelete": "¿Eliminar este registro? Esta acción no se puede deshacer.",
     "validation": {

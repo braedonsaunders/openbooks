@@ -1485,8 +1485,8 @@
     "amortization_read": "Voir les échéanciers d’étalement et les rapports",
     "amortization_manage": "Exécuter l’étalement et modifier les échéanciers",
     "equity_read": "Voir la table de capitalisation, les titres et la rémunération en actions",
-    "equity_manage": "Enregistrer les catégories d’actions, les plans, les émissions et les mouvements d’attributions",
-    "equity_approve": "Approuver les annulations, divisions, rachats et calculs de rémunération en actions",
+    "equity_manage": "Enregistrer les catégories d’actions, les plans, les émissions, les mouvements d’attributions et les opérations sur capitaux propres encadrées",
+    "equity_approve": "Statuer sur les opérations sur capitaux propres soumises à approbation dans Flows",
     "assets_capitalize": "Accepter les propositions d’immobilisation et immobiliser les immobilisations en cours",
     "assets_maintain": "Gérer les plans d’entretien et les polices d’assurance des immobilisations"
   },
@@ -2281,6 +2281,7 @@
     "searchPlaceholder": "Rechercher…",
     "created": "Créé",
     "updated": "Enregistré",
+    "submittedForApproval": "Soumis à approbation. L’opération s’applique lorsqu’un approbateur l’approuve dans Approbations.",
     "deleted": "Supprimé",
     "confirmDelete": "Supprimer cet enregistrement ? Cette action est irréversible.",
     "validation": {

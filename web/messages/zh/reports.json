@@ -744,6 +744,10 @@
         "label": "权益证券登记簿",
         "description": "按发行时条款列出每份股票凭证、期权、RSU、认股权证、SAFE 和可转换票据：持有人、股份类别、计划、融资轮次、数量、价格和对价。"
       },
+      "equity_cap_table_positions": {
+        "label": "股权结构表持仓变动",
+        "description": "股票凭证、授予或计划池持仓的每一次变动：按拆股重述的流通股数，以及同一股份折算为普通股的数量。截至某日累计，即为该日的股权结构表。"
+      },
       "ledger_lines": {
         "label": "总账行",
         "description": "每条分录行及其分录、科目、往来方和维度——完整的总账明细，含已过账或草稿。"
@@ -1267,6 +1271,28 @@
         "voided": "已作废",
         "security_id": "证券 (ID)",
         "journal_entry_id": "发行分录 (ID)"
+      },
+      "equity_cap_table_positions": {
+        "effective_on": "生效日期",
+        "share_class": "股份类别",
+        "class_kind": "类别类型",
+        "position_kind": "持仓类型",
+        "holder": "持有人",
+        "security_number": "证券",
+        "security_kind": "证券类型",
+        "plan_pool": "计划池",
+        "subsidiary": "子公司",
+        "outstanding": "流通股数",
+        "as_converted_outstanding": "流通股（折算后）",
+        "awards_outstanding": "未行权授予",
+        "pool_available": "计划池可用（折算后）",
+        "fully_diluted": "完全稀释",
+        "shares_delta": "股数变动",
+        "as_converted_delta": "折算后变动",
+        "security_id": "证券 (ID)",
+        "plan_id": "计划 (ID)",
+        "holder_party_id": "持有人 (ID)",
+        "movement_id": "变动 (ID)"
       },
       "ledger_lines": {
         "posting_date": "过账日期",
@@ -3333,6 +3359,10 @@
     "equity-stock-compensation-schedule": {
       "name": "股权激励费用明细表",
       "description": "根据已过账的计提，按期间和币种列示的已过账股权激励费用。"
+    },
+    "equity-cap-table": {
+      "name": "指定日期的股权结构表",
+      "description": "根据持仓台账，按股份类别和持有人列示截至 asOf 日期的流通股和完全稀释股份，含授予和计划池。"
     },
     "ap-aging-by-vendor": {
       "name": "按供应商列示应付账龄",

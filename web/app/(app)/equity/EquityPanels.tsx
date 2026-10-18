@@ -13,12 +13,15 @@ import { capTableExportHref } from '@/lib/equity-cap-table-export'
 import { ExportMenu } from '../reports/ExportMenu'
 import type { CapTableViewData, CompensationViewData, SecuritiesViewData, StakeholdersViewData, StructureViewData, EquityContext } from './view'
 import {
-  CELL, Field, HEAD, LINK, NUM_CELL, NUM_HEAD, PillTabs, STATUS_VARIANT, SegmentTabs, Stat,
-  percentText, postJson, priceText, searchText, useShares, withParams,
+  CELL, Field, HEAD, LINK, NUM_CELL, NUM_HEAD, PendingActions, PillTabs, STATUS_VARIANT, SegmentTabs, Stat,
+  isPendingApproval, percentText, postJson, priceText, searchText, useShares, withParams,
 } from './shared'
 import { DateField } from '@/components/date-field'
 
 const BASE = '/equity'
+
+/** A posted run, or a run an Equity action Flow holds for approval. */
+type GovernedRun<T> = (T & { status: 'applied' }) | { status: 'pending_approval'; throughDate: string }
 
 /** The as-of date every tab reads the cap table on. */
 export function EquityAsOf({ value, label }: { value: string; label: string }) {
@@ -63,9 +66,11 @@ export function EquityCapTablePanel({ view }: { view: CapTableViewData | null })
   return (
     <div className="space-y-4">
       {!view.hasAccountPolicy && <PolicyBanner href={view.accountsSetupHref} />}
+      <PendingActions pending={view.context.pending} />
       <div className="flex flex-wrap items-center justify-between gap-2">
         <PillTabs tabs={view.byTabs} label={t('capTable.byLabel')} />
         <div className="flex items-center gap-3">
+          {view.asOfReportHref && <Link href={view.asOfReportHref} className={`text-xs ${LINK}`}>{t('capTable.asOfReport', { date: view.context.asOf })}</Link>}
           {view.reportHref && <Link href={view.reportHref} className={`text-xs ${LINK}`}>{t('capTable.report')}</Link>}
           <ExportMenu baseHref={capTableExportHref(view.context.subsidiaryId, view.context.asOf, view.by)} kind="cap-table" />
         </div>
@@ -97,7 +102,7 @@ export function EquityCapTablePanel({ view }: { view: CapTableViewData | null })
             { key: 'fullyDilutedPercent', header: <>{t('capTable.columns.fullyDilutedPercent')}</>, headerClassName: NUM_HEAD, className: NUM_CELL, cell: (row) => <>{percentText(row.fullyDilutedPercent)}</> },
             {
               key: 'actions', header: <span className="sr-only">{t('capTable.columns.actions')}</span>, headerClassName: HEAD, className: `${CELL} text-right`,
-              cell: (row) => view.context.canApprove
+              cell: (row) => view.context.canManage
                 ? <Button size="sm" variant="ghost" onClick={() => setClassAction(row)}>{t('capTable.amend')}</Button>
                 : null,
             },
@@ -181,22 +186,24 @@ function ClassActionDrawer({ shareClass, code, context, commonClasses, onClose }
   async function submit() {
     setBusy(true)
     try {
+      let pending = false
       if (mode === 'split') {
-        const split = await postJson<{ adjustedClasses: { code: string; conversionPriceAfter: string | null }[] }>(
+        const split = await postJson<{ status: string; adjustedClasses: { code: string; conversionPriceAfter: string | null }[] }>(
           `/api/equity/classes/${shareClass.shareClassId}/splits`,
           { effectiveOn: form.effectiveOn, ratioNumerator: form.numerator, ratioDenominator: form.denominator, reason: form.reason },
           t('classActions.failed'),
         )
+        pending = isPendingApproval(split)
         if (split.adjustedClasses.length > 0) {
           toast.success(t('classActions.splitAdjusted', { classes: split.adjustedClasses.map((row) => `${row.code} → ${priceText(row.conversionPriceAfter)}`).join(', ') }))
         }
       } else {
-        await postJson(`/api/equity/classes/${shareClass.shareClassId}/amendments`, {
+        pending = isPendingApproval(await postJson(`/api/equity/classes/${shareClass.shareClassId}/amendments`, {
           kind: mode, effectiveOn: form.effectiveOn, reason: form.reason,
           ...(mode === 'authorized_shares' ? { authorizedShares: form.value } : mode === 'conversion_price' ? { conversionPrice: form.value } : { conversionShareClassId: form.conversionShareClassId }),
-        }, t('classActions.failed'))
+        }, t('classActions.failed')))
       }
-      toast.success(t('classActions.saved'))
+      toast.success(pending ? t('approval.submitted') : t('classActions.saved'))
       onClose()
       router.refresh()
     } catch (error) {
@@ -351,6 +358,7 @@ export function EquityPlansPanel({ view }: { view: StructureViewData | null }) {
   const classCodes = new Map(view.structure.classes.map((row) => [row.id, row.code]))
   return (
     <div className="space-y-3">
+      <PendingActions pending={view.context.pending} filter={(request) => request.action === 'reserve_change'} />
       <RegisteredListTable
         source="equity_plans"
         rows={view.structure.plans}
@@ -370,7 +378,7 @@ export function EquityPlansPanel({ view }: { view: StructureViewData | null }) {
           },
           {
             key: 'actions', header: <span className="sr-only">{t('capTable.columns.actions')}</span>, headerClassName: HEAD, className: `${CELL} text-right`,
-            cell: (row) => view.context.canApprove ? <Button size="sm" variant="ghost" onClick={() => setReservePlan({ id: row.id, code: row.code })}>{t('plans.changeReserve')}</Button> : null,
+            cell: (row) => view.context.canManage ? <Button size="sm" variant="ghost" onClick={() => setReservePlan({ id: row.id, code: row.code })}>{t('plans.changeReserve')}</Button> : null,
           },
         ]}
       />
@@ -387,8 +395,8 @@ function ReserveDrawer({ plan, context, onClose }: { plan: { id: string; code: s
   async function submit() {
     setBusy(true)
     try {
-      await postJson(`/api/equity/plans/${plan.id}/reserve-changes`, form, t('plans.reserveFailed'))
-      toast.success(t('plans.reserveSaved'))
+      const result = await postJson(`/api/equity/plans/${plan.id}/reserve-changes`, form, t('plans.reserveFailed'))
+      toast.success(isPendingApproval(result) ? t('approval.submitted') : t('plans.reserveSaved'))
       onClose()
       router.refresh()
     } catch (error) {
@@ -421,6 +429,7 @@ export function EquityRoundsPanel({ view }: { view: StructureViewData | null }) 
   if (!view) return null
   return (
     <div className="space-y-4">
+      <PendingActions pending={view.context.pending} filter={(request) => ['interest_run', 'mfn_election', 'repay', 'cancel_convertible'].includes(request.action)} />
       <SegmentTabs
         value={section}
         onChange={setSection}
@@ -515,8 +524,9 @@ function InterestRun({ view }: { view: StructureViewData }) {
     if (!preview) return
     setBusy(true)
     try {
-      const run = await postJson<InterestRunResult>('/api/equity/interest/runs', { subsidiaryId: context.subsidiaryId, throughDate: preview.throughDate }, t('interest.failed'))
-      toast.success(run.replayed ? t('interest.replayed', { date: run.throughDate }) : t('interest.posted', { date: run.throughDate }))
+      const run = await postJson<GovernedRun<InterestRunResult>>('/api/equity/interest/runs', { subsidiaryId: context.subsidiaryId, throughDate: preview.throughDate }, t('interest.failed'))
+      toast.success(run.status === 'pending_approval' ? t('approval.submitted')
+        : run.replayed ? t('interest.replayed', { date: run.throughDate }) : t('interest.posted', { date: run.throughDate }))
       router.refresh()
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t('interest.failed'))
@@ -529,7 +539,7 @@ function InterestRun({ view }: { view: StructureViewData }) {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <SegmentTabs value={section} onChange={setSection} label={t('rounds.sections.interest')} tabs={[{ key: 'schedule', label: t('interest.schedule') }, { key: 'runs', label: t('interest.runs') }]} />
-        {context.canApprove && section === 'schedule' && preview && (
+        {context.canManage && section === 'schedule' && preview && (
           <Button onClick={post} disabled={busy || alreadyRun || (preview.lastRunThrough !== null && preview.throughDate < preview.lastRunThrough)}>
             {t('interest.post', { date: preview.throughDate })}
           </Button>
@@ -785,8 +795,9 @@ export function EquityCompensationPanel({ view }: { view: CompensationViewData |
   async function post() {
     setBusy(true)
     try {
-      const run = await postJson<CompensationRunResult>('/api/equity/compensation/runs', { subsidiaryId: context.subsidiaryId, throughDate: preview.throughDate }, t('compensation.failed'))
-      toast.success(run.replayed ? t('compensation.replayed', { date: run.throughDate }) : t('compensation.posted', { date: run.throughDate }))
+      const run = await postJson<GovernedRun<CompensationRunResult>>('/api/equity/compensation/runs', { subsidiaryId: context.subsidiaryId, throughDate: preview.throughDate }, t('compensation.failed'))
+      toast.success(run.status === 'pending_approval' ? t('approval.submitted')
+        : run.replayed ? t('compensation.replayed', { date: run.throughDate }) : t('compensation.posted', { date: run.throughDate }))
       router.refresh()
     } catch (error) {
       toast.error(error instanceof Error ? error.message : t('compensation.failed'))
@@ -797,6 +808,7 @@ export function EquityCompensationPanel({ view }: { view: CompensationViewData |
   const alreadyRun = view.runs.some((run) => run.throughDate === preview.throughDate)
   return (
     <div className="space-y-4">
+      <PendingActions pending={context.pending} filter={(request) => request.action === 'compensation_run'} />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <SegmentTabs
           value={section}
@@ -810,7 +822,7 @@ export function EquityCompensationPanel({ view }: { view: CompensationViewData |
         />
         <div className="flex items-center gap-3">
           {view.reportHref && <Link href={view.reportHref} className={`text-xs ${LINK}`}>{t('compensation.report')}</Link>}
-          {context.canApprove && section !== 'runs' && (
+          {context.canManage && section !== 'runs' && (
             <Button onClick={post} disabled={busy || alreadyRun || (preview.lastRunThrough !== null && preview.throughDate < preview.lastRunThrough)}>
               {t('compensation.post', { date: preview.throughDate })}
             </Button>

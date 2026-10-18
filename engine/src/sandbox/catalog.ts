@@ -100,6 +100,8 @@ export const EXCLUDE = new Set([
   "warehouse_execution_tasks", "warehouse_scan_events", "pick_waves", "pick_wave_members",
   // Carts parked at a register are working state of the source environment.
   "pos_held_carts",
+  // Equity action requests wait on the source environment's Flow gates.
+  "equity_action_requests",
   // Issued e-invoices and filed withholding returns belong to the source environment.
   "einvoice_documents",
   "withholding_returns",

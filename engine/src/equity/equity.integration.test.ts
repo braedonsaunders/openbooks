@@ -5,6 +5,7 @@ import { db } from "../platform/db.ts";
 import { dropScratchOrgReporting } from "../testing/fixtures.ts";
 import {
   accountBalance,
+  applied,
   entryLines,
   equityRefusal as refusal,
   setEquityFeature as setFeature,
@@ -86,7 +87,7 @@ test("equity records are retained history: updates and deletes refuse at the dat
   }
 });
 
-test("voids are approvals: the manager is refused, the approver's void reverses the entry and removes the shares", { skip: !DB }, async () => {
+test("a void with no Equity action Flow applies at once on the bookkeeping duty, reverses the entry and removes the shares", { skip: !DB }, async () => {
   const w = await setupWorld();
   try {
     const issued = await issueSecurity({
@@ -94,16 +95,22 @@ test("voids are approvals: the manager is refused, the approver's void reverses 
       issueDate: w.org.date, shareClassId: w.commonClassId, quantity: "1000", pricePerShare: "1", considerationAccountId: w.org.accounts.bank,
     });
     const voidInput = { orgId: w.org.orgId, securityId: issued.id, kind: "void" as const, effectiveOn: w.org.date, reason: "Entered against the wrong holder" };
-    await assert.rejects(recordSecurityEvent({ ...voidInput, actorId: w.managerId }), refusal("equity_forbidden"));
-    const voided = await recordSecurityEvent({ ...voidInput, actorId: w.approverId });
+    // Deciding Flow approvals is not the duty to record equity actions.
+    await assert.rejects(recordSecurityEvent({ ...voidInput, actorId: w.approverId }), refusal("equity_forbidden"));
+    const voided = await recordSecurityEvent({ ...voidInput, actorId: w.managerId });
+    assert.equal(voided.status, "applied");
     assert.ok(voided.reversalEntryId, "the issuance entry is reversed");
+    const request = (await db.execute<{ status: string; released_without_approval: boolean; decided_by: string | null; requested_by: string }>(sql`
+      select status, released_without_approval, decided_by, requested_by from equity_action_requests
+       where org_id = ${w.org.orgId} and id = ${voided.requestId}`)).rows[0]!;
+    assert.deepEqual(request, { status: "applied", released_without_approval: true, decided_by: null, requested_by: w.managerId }, "the request records that no approval applied");
     const original = (await db.execute<{ status: string }>(sql`
       select status from journal_entries where org_id = ${w.org.orgId} and id = ${issued.journalEntryId}`)).rows[0]!;
     assert.equal(original.status, "reversed");
     assert.equal(await accountBalance(w.org.orgId, w.org.accounts.bank), "0.0000");
     const view = await loadCapTableView({ orgId: w.org.orgId, actorId: w.approverId, subsidiaryId: w.org.subsidiaryId, asOf: w.org.date });
     assert.equal(view.table.totals.outstanding, "0");
-    await assert.rejects(recordSecurityEvent({ ...voidInput, actorId: w.approverId }), refusal("equity_security_void"));
+    await assert.rejects(recordSecurityEvent({ ...voidInput, actorId: w.managerId }), refusal("equity_security_void"));
   } finally {
     await dropScratchOrgReporting(w.org.orgId);
   }
@@ -119,7 +126,7 @@ test("equity reads and writes stay inside the organization and require the equit
     });
     await assert.rejects(loadSecurityDetail({ orgId: b.org.orgId, actorId: b.managerId, securityId: issued.id, asOf: a.org.date }), refusal("equity_security_unknown"));
     await assert.rejects(
-      recordSecurityEvent({ orgId: b.org.orgId, actorId: b.approverId, securityId: issued.id, kind: "void", effectiveOn: b.org.date, reason: "Cross-tenant attempt" }),
+      recordSecurityEvent({ orgId: b.org.orgId, actorId: b.managerId, securityId: issued.id, kind: "void", effectiveOn: b.org.date, reason: "Cross-tenant attempt" }),
       refusal("equity_security_unknown"),
     );
     await assert.rejects(
@@ -160,18 +167,18 @@ test("an option exercise reclassifies its grant-date value and the compensation 
     assert.equal(option.journalEntryId, null, "a grant posts nothing");
     const preview = await previewCompensationRun({ orgId: w.org.orgId, actorId: w.managerId, subsidiaryId: w.org.subsidiaryId, throughDate: w.org.date });
     assert.equal(preview.lines.length, 1);
-    const run = await postCompensationRun({ orgId: w.org.orgId, actorId: w.approverId, subsidiaryId: w.org.subsidiaryId, throughDate: w.org.date });
+    const run = applied(await postCompensationRun({ orgId: w.org.orgId, actorId: w.managerId, subsidiaryId: w.org.subsidiaryId, throughDate: w.org.date }));
     assert.equal(run.total, preview.total, "the run posts what the preview measured");
     assert.ok(run.journalEntryId);
     const lines = await entryLines(w.org.orgId, run.journalEntryId!);
     assert.deepEqual(lines.map((line) => line.account_id).sort(), [w.accounts.apicShareBased, w.accounts.expense].sort());
     assert.equal(await accountBalance(w.org.orgId, w.accounts.expense), run.total);
-    const replay = await postCompensationRun({ orgId: w.org.orgId, actorId: w.approverId, subsidiaryId: w.org.subsidiaryId, throughDate: w.org.date });
+    const replay = applied(await postCompensationRun({ orgId: w.org.orgId, actorId: w.managerId, subsidiaryId: w.org.subsidiaryId, throughDate: w.org.date }));
     assert.equal(replay.replayed, true);
     assert.equal(replay.runId, run.runId);
     assert.equal(await accountBalance(w.org.orgId, w.accounts.expense), run.total, "a replay posts nothing more");
     await assert.rejects(
-      postCompensationRun({ orgId: w.org.orgId, actorId: w.managerId, subsidiaryId: w.org.subsidiaryId, throughDate: w.org.date }),
+      postCompensationRun({ orgId: w.org.orgId, actorId: w.approverId, subsidiaryId: w.org.subsidiaryId, throughDate: w.org.date }),
       refusal("equity_forbidden"),
     );
     const exercised = await recordSecurityEvent({

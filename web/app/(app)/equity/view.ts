@@ -1,5 +1,6 @@
 import 'server-only'
 
+import { redirect } from 'next/navigation'
 import { getLocale, getTranslations } from 'next-intl/server'
 import { sql } from 'drizzle-orm'
 import { page, pageHeader, ref, widget, widgetBlock, type PageSpec } from '@braedonsaunders/appkit-viewspec'
@@ -11,6 +12,8 @@ import {
   listSecurities,
   listStakeholders,
   loadCapTableView,
+  locateEquityAction,
+  pendingEquityActions,
   loadSecurityDetail,
   loadStructure,
   previewCompensationRun,
@@ -20,6 +23,7 @@ import {
   type CompensationRunRow,
   type InterestPreview,
   type InterestRunRow,
+  type PendingRequest,
   type SecurityDetail,
   type SecurityKind,
   type SecurityRow,
@@ -42,7 +46,10 @@ import { builtInReportDefinitionId } from '../../../lib/custom-reports'
  * modeller, the exit waterfall, and stock compensation. The legal entity
  * and the as-of date travel in the URL. Every read checks equity.read and
  * the reader's reach to the legal entity in the engine; every command does
- * the same for its own duty.
+ * the same for its own duty. Governed actions an Equity action Flow holds
+ * for approval are listed with the views they concern until decided in
+ * Approvals; `?request=<id>` (the Flow's link) opens the view an action
+ * request concerns.
  */
 
 export const EQUITY_BASE = '/equity'
@@ -60,7 +67,8 @@ export interface EquityContext {
   currency: string
   asOf: string
   canManage: boolean
-  canApprove: boolean
+  /** Governed actions of the legal entity awaiting a Flow decision. */
+  pending: PendingRequest[]
   /** The current URL parameters, so in-page links keep the entity and date. */
   params: Record<string, string | string[] | undefined>
 }
@@ -74,6 +82,8 @@ export interface CapTableViewData {
   hasAccountPolicy: boolean
   accountsSetupHref: string
   reportHref: string | null
+  /** The Reports-hub cap table on the as-of date, from the position ledger. */
+  asOfReportHref: string | null
 }
 
 export interface SecuritiesViewData {
@@ -198,8 +208,18 @@ export async function loadEquity(sp: Record<string, string | string[] | undefine
   await requireFeatureEnabled(orgId, 'equity')
   const actor = { orgId, actorId: authz.user.id }
   const canManage = can(authz, 'equity.manage')
-  const canApprove = can(authz, 'equity.approve')
   const localeTag = await getLocale()
+
+  const requestParam = pickString(sp.request)
+  if (requestParam) {
+    let target: string | null = null
+    try {
+      target = await locateEquityAction({ ...actor, requestId: requestParam })
+    } catch (error) {
+      if (!(error instanceof EquityError) || error.status !== 404) throw error
+    }
+    redirect(target ?? EQUITY_BASE)
+  }
 
   const entities = await listEquityEntities(actor)
   const requestedSub = pickString(sp.sub)
@@ -241,7 +261,8 @@ export async function loadEquity(sp: Record<string, string | string[] | undefine
       compensation: null, drawerOpen: false, drawer: null, newRecord: null,
     }
   }
-  const context: EquityContext = { subsidiaryId: entity.id, currency: entity.currency, asOf, canManage, canApprove, params: { sub: entity.id, asOf: requestedAsOf } }
+  const pending = await pendingEquityActions({ ...actor, subsidiaryId: entity.id })
+  const context: EquityContext = { subsidiaryId: entity.id, currency: entity.currency, asOf, canManage, pending, params: { sub: entity.id, asOf: requestedAsOf } }
   const scope = { ...actor, subsidiaryId: entity.id, asOf }
 
   // The vitals row reads the cap table on every view, so the tabs share one frame of reference.
@@ -273,6 +294,7 @@ export async function loadEquity(sp: Record<string, string | string[] | undefine
       hasAccountPolicy: capView.hasAccountPolicy,
       accountsSetupHref: '/admin/setup/equity-account-policies',
       reportHref: await reportHref(orgId, 'equity-securities-register'),
+      asOfReportHref: await reportHref(orgId, 'equity-cap-table', { asOf }),
     }
   }
   if (view === 'securities') {
@@ -329,7 +351,7 @@ export async function loadEquity(sp: Record<string, string | string[] | undefine
     try {
       const detail = await loadSecurityDetail({ ...actor, securityId: securityParam, asOf })
       if (detail.entity.id === entity.id) {
-        const structureView = canManage || canApprove ? await loadStructure(scope) : null
+        const structureView = canManage ? await loadStructure(scope) : null
         drawer = {
           context,
           detail,
@@ -337,7 +359,7 @@ export async function loadEquity(sp: Record<string, string | string[] | undefine
           holders: canManage ? await holderOptions(orgId, authz.allowedSubsidiaryIds) : [],
           rounds: structureView?.rounds.map((row) => ({ value: row.id, label: `${row.name} · ${row.closedOn}` })) ?? [],
           commonClasses: structureView?.classes.filter((row) => row.kind === 'common').map((row) => ({ value: row.id, label: `${row.code} · ${row.name}` })) ?? [],
-          considerationAccounts: canManage || canApprove ? await considerationAccounts(orgId) : [],
+          considerationAccounts: canManage ? await considerationAccounts(orgId) : [],
         }
       }
     } catch (error) {
@@ -375,9 +397,11 @@ export async function loadEquity(sp: Record<string, string | string[] | undefine
   }
 }
 
-async function reportHref(orgId: string, key: string): Promise<string | null> {
+async function reportHref(orgId: string, key: string, params: Record<string, string> = {}): Promise<string | null> {
   const id = await builtInReportDefinitionId(orgId, key)
-  return id ? `/reports/custom/run/${id}` : null
+  if (!id) return null
+  const query = new URLSearchParams(params).toString()
+  return `/reports/custom/run/${id}${query ? `?${query}` : ''}`
 }
 
 const f = ref<EquityPageData>()

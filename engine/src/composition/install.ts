@@ -48,6 +48,8 @@ import {
   OUTBOUND_PAYMENT_RUN_SUBJECT_KIND,
 } from "../flows/payment-runs-adapter.ts";
 import { releasePaymentRunFlowApproval } from "../payments/flow-release.ts";
+import { EQUITY_ACTION_SUBJECT_KIND } from "../flows/equity-actions-adapter.ts";
+import { releaseEquityActionFlowApproval } from "../equity/action-release.ts";
 import { INTERCOMPANY_NETTING_RUN_SUBJECT_KIND } from "../flows/intercompany-netting-runs-adapter.ts";
 import { releaseNettingRunFlowApproval } from "../intercompany/flow-release.ts";
 import { crossSubsidiaryFulfillmentHandlerImpl } from "../intercompany/fulfillment.ts";
@@ -202,6 +204,8 @@ export function installEngineSeams(): void {
   registerFlowApprovalReleaseHandler(WORK_ORDER_SUBJECT_KIND, releaseWorkOrderApproval);
   registerFlowApprovalReleaseHandler(OUTBOUND_PAYMENT_RUN_SUBJECT_KIND, releasePaymentRunFlowApproval);
   registerFlowApprovalReleaseHandler(INBOUND_PAYMENT_RUN_SUBJECT_KIND, releasePaymentRunFlowApproval);
+  // Governed equity actions apply through the equity module when their Flow approves.
+  registerFlowApprovalReleaseHandler(EQUITY_ACTION_SUBJECT_KIND, releaseEquityActionFlowApproval);
   registerFlowApprovalReleaseHandler(INTERCOMPANY_NETTING_RUN_SUBJECT_KIND, releaseNettingRunFlowApproval);
   // Cross-subsidiary fulfillment: inventory hands a line shipped from another
   // entity's warehouse to the intercompany handler, which sits above it.

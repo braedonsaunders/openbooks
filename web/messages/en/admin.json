@@ -1485,8 +1485,8 @@
     "amortization_read": "View amortization schedules and reports",
     "amortization_manage": "Run amortization and change schedules",
     "equity_read": "View the cap table, securities and stock compensation",
-    "equity_manage": "Record share classes, plans, issuances and award activity",
-    "equity_approve": "Approve voids, splits, repurchases and stock compensation runs",
+    "equity_manage": "Record share classes, plans, issuances, award activity and governed equity actions",
+    "equity_approve": "Decide equity actions routed for approval in Flows",
     "assets_capitalize": "Accept asset proposals and capitalize construction in progress",
     "assets_maintain": "Maintain asset maintenance schedules and insurance policies"
   },
@@ -2356,6 +2356,7 @@
     "searchPlaceholder": "Search…",
     "created": "Created",
     "updated": "Saved",
+    "submittedForApproval": "Submitted for approval. It applies when an approver approves it in Approvals.",
     "deleted": "Deleted",
     "confirmDelete": "Delete this record? This cannot be undone.",
     "validation": {

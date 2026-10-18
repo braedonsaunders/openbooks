@@ -466,15 +466,17 @@ export function SetupDrawer({
         return
       }
       let destination = closeHref
+      const saved = (creating && entity.createDestination) || commanded ? await res.json().catch(() => ({})) as { id?: unknown; status?: unknown } : {}
+      // A governed command answers pending_approval when a Flow holds it for a decision.
+      const pendingApproval = saved.status === 'pending_approval'
       if (creating && entity.createDestination) {
-        const saved = await res.json() as { id?: unknown }
         if (typeof saved.id !== 'string' || !saved.id) throw new Error(tCommon('feedback.saveFailed'))
         const target = new URL(closeHref, window.location.origin)
         target.searchParams.set(entity.createDestination.rowParam, saved.id)
         if (entity.createDestination.tabKey) target.searchParams.set(setupNavigationKeys(navigationPrefix).tab, entity.createDestination.tabKey)
         destination = `${target.pathname}${target.search}`
       }
-      toast.success(creating ? t('created') : t('updated'))
+      toast.success(pendingApproval ? t('submittedForApproval') : creating ? t('created') : t('updated'))
       if (creating) router.push(destination)
       else { setInitialForm(form); setInitialMoneyLocked(moneyLocked); setEditing(false); setFieldError(null) }
       onSaved?.()

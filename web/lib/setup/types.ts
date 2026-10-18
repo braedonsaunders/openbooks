@@ -343,18 +343,20 @@ export type SetupCommandName =
   | 'upsertChannelLocation'
   | 'savePortalSettings'
   | 'recordChannelAdSpend'
+  | 'recordEquityAccountPolicy'
 
 export interface SetupCommandDescriptor {
   /** Exhaustive dispatch key — one literal per domain command, dispatched in the command route. */
   name: SetupCommandName
   /** Mutation grant the command endpoint enforces (least privilege per domain). */
-  permission: 'funds.manage' | 'channels.manage' | 'documents.manage'
+  permission: 'funds.manage' | 'channels.manage' | 'documents.manage' | 'equity.manage'
   /** Authoritative Company Settings → Features key enforced server-side. */
   feature:
     | "fundAccounting"
     | "functionalExpenses"
     | "salesChannels"
-    | "customerPortal";
+    | "customerPortal"
+    | "equity";
 }
 
 /**

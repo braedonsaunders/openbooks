@@ -9,7 +9,8 @@
  * cumulative cost. Runs are sequential per legal entity: each run's date
  * follows the last one, and a run for a date already run returns that run
  * instead of posting again. A run with no change records a zero total and
- * posts nothing. Posting a run is an approval (equity.approve). An award
+ * posts nothing. Posting a run is a governed action an Equity action Flow
+ * may require approval for. An award
  * stated in a foreign currency is expensed at its grant-date rate.
  *
  * The run also releases early-exercise deposits as restricted shares vest
@@ -23,6 +24,7 @@
 import { sql } from "drizzle-orm";
 import { db, withOrgTransaction } from "../platform/db.ts";
 import { cumulativeCompensation, isCompensatory } from "./compensation.ts";
+import { governEquityAction } from "./governance.ts";
 import { EquityError } from "./errors.ts";
 import { assertEquityReadable, currencyExponent, loadLegalEntity, requireEquityReader, writeEquityAudit } from "./internal.ts";
 import { restate } from "./fx.ts";
@@ -193,10 +195,34 @@ export interface CompensationRunResult {
   replayed: boolean;
 }
 
-/** Post the stock compensation run through a date (equity.approve). */
-export async function postCompensationRun(input: EquityCommand & { subsidiaryId: string; throughDate: string }): Promise<CompensationRunResult> {
+/** A run's outcome: posted (or already posted), or awaiting approval in Flows. */
+export type GovernedRunResult<T> = (T & { status: "applied"; requestId: string | null }) | { status: "pending_approval"; requestId: string; throughDate: string };
+
+/**
+ * Post the stock compensation run through a date (equity.manage; a governed
+ * action an Equity action Flow may require approval for).
+ */
+export async function postCompensationRun(input: EquityCommand & { subsidiaryId: string; throughDate: string }): Promise<GovernedRunResult<CompensationRunResult>> {
   const throughDate = requireDate(input.throughDate, "throughDate", "The run date");
-  return inEquityCommand(input, "equity.approve", async ({ book, currency, entityName }) => {
+  // A run already posted for the date is returned as it stands; nothing is submitted again.
+  const posted = await withOrgTransaction(input.orgId, async () => (await db.execute<{ id: string }>(sql`
+    select id from equity_compensation_runs
+     where org_id = ${input.orgId} and subsidiary_id = ${input.subsidiaryId} and through_date = ${throughDate}::date`)).rows.length > 0);
+  if (posted) return { ...(await applyCompensationRun(input)), status: "applied", requestId: null };
+  const outcome = await governEquityAction({
+    orgId: input.orgId, actorId: input.actorId, subsidiaryId: input.subsidiaryId, action: "compensation_run",
+    subjectId: null, subjectLabel: `Stock compensation through ${throughDate}`, effectiveOn: throughDate, reason: null,
+    summary: {}, payload: { subsidiaryId: input.subsidiaryId, throughDate }, idempotencyKey: null,
+  }, (actorId) => applyCompensationRun({ ...input, actorId }));
+  return outcome.result
+    ? { ...outcome.result, status: "applied", requestId: outcome.requestId }
+    : { status: "pending_approval", requestId: outcome.requestId, throughDate };
+}
+
+/** Apply the stock compensation run: the command its approval releases. */
+export async function applyCompensationRun(input: EquityCommand & { subsidiaryId: string; throughDate: string }): Promise<CompensationRunResult> {
+  const throughDate = requireDate(input.throughDate, "throughDate", "The run date");
+  return inEquityCommand(input, "equity.manage", async ({ book, currency, entityName }) => {
     const existing = (await db.execute<{ id: string; total_amount: string; journal_entry_id: string | null; lines: number; release_amount: string; release_journal_entry_id: string | null; releases: number }>(sql`
       select r.id, r.total_amount::text as total_amount, r.journal_entry_id, r.release_amount::text as release_amount, r.release_journal_entry_id,
              (select count(*)::int from equity_compensation_run_lines l where l.org_id = r.org_id and l.run_id = r.id) as lines,

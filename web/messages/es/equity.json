@@ -213,6 +213,7 @@
     },
     "byLabel": "Vista de la tabla de capitalización",
     "report": "Abrir el registro de valores",
+    "asOfReport": "Informe de capitalización al {date}",
     "emptyClasses": "Aún no hay clases de acciones. Use Nuevo para registrar la primera clase de la entidad jurídica.",
     "emptyHolders": "Aún no hay titulares. Emita acciones u otorgamientos para incorporar titulares a la tabla de capitalización.",
     "amend": "Modificar",
@@ -479,15 +480,15 @@
       "forfeit": "Las unidades no consolidadas salen del otorgamiento; el costo reconocido por ellas se revierte en la siguiente ejecución de compensación en acciones.",
       "expire": "Las unidades consolidadas no ejercidas caducan. Su costo reconocido se mantiene.",
       "cancel": "Las unidades se cancelan, primero las no consolidadas. Cancelar unidades no consolidadas sin reemplazo reconoce su costo restante.",
-      "repurchase": "La empresa recompra acciones a tesorería por el importe pagado (requiere aprobación).",
+      "repurchase": "La empresa recompra acciones a tesorería por el importe pagado. Un Flow puede exigir aprobación antes de su aplicación.",
       "transfer": "Las unidades consolidadas pasan a otro titular con un nuevo certificado.",
       "convert": "Los SAFE y las notas se convierten al precio de una ronda en su fecha de cierre; las acciones preferentes se convierten en comunes según la razón de conversión de la clase.",
-      "void": "Corrige un registro ingresado por error: su asiento se revierte en la fecha de anulación y se deshace el evento que lo generó (requiere aprobación).",
-      "repay": "Reembolse un SAFE por su importe de compra, o una nota por su principal y los intereses devengados hasta la fecha, que se devengan primero. La prima o el descuento de una nota se contabiliza en gasto por intereses. Requiere aprobación.",
+      "void": "Corrige un registro ingresado por error: su asiento se revierte en la fecha de anulación y se deshace el evento que lo generó. Un Flow puede exigir aprobación antes de su aplicación.",
+      "repay": "Reembolse un SAFE por su importe de compra, o una nota por su principal y los intereses devengados hasta la fecha, que se devengan primero. La prima o el descuento de una nota se contabiliza en gasto por intereses. Un Flow puede exigir aprobación antes de su aplicación.",
       "election_83b": "Registre la fecha en que el titular presentó una elección 83(b) para estas acciones restringidas. La elección debe presentarse dentro de los 30 días siguientes a la fecha de emisión.",
       "exerciseEarly": "Este otorgamiento admite el ejercicio anticipado: primero se ejercen las unidades consolidadas y luego los tramos no consolidados más próximos. Las acciones no consolidadas se emiten como acciones restringidas que la empresa puede recomprar hasta que se consoliden; su efectivo se mantiene como depósito y se libera al capital a medida que se consolidan.",
-      "repurchaseRestricted": "Las acciones restringidas no consolidadas se recompran según las condiciones del otorgamiento, liquidando su depósito. Ingrese el valor justo de mercado por acción cuando el otorgamiento fije el precio al menor entre el costo y el valor justo de mercado. Requiere aprobación.",
-      "cancelConvertible": "Cancele el SAFE o la nota sin pago: su principal y los intereses devengados pasan a capital adicional pagado. Requiere aprobación."
+      "repurchaseRestricted": "Las acciones restringidas no consolidadas se recompran según las condiciones del otorgamiento, liquidando su depósito. Ingrese el valor justo de mercado por acción cuando el otorgamiento fije el precio al menor entre el costo y el valor justo de mercado. Un Flow puede exigir aprobación antes de su aplicación.",
+      "cancelConvertible": "Cancele el SAFE o la nota sin pago: su principal y los intereses devengados pasan a capital adicional pagado. Un Flow puede exigir aprobación antes de su aplicación."
     },
     "reversed": "{kind} revertido",
     "carryingHint": "Importe en libros a la fecha de referencia: {amount}",
@@ -580,7 +581,7 @@
   },
   "reversal": {
     "title": "Revertir {kind} del {date}",
-    "help": "El asiento del evento se revierte en la fecha de reversión y sus unidades o su saldo se restituyen desde esa fecha; el historial anterior se mantiene. La actividad posterior que depende del evento debe revertirse primero. Requiere aprobación."
+    "help": "El asiento del evento se revierte en la fecha de reversión y sus unidades o su saldo se restituyen desde esa fecha; el historial anterior se mantiene. La actividad posterior que depende del evento debe revertirse primero. Un Flow puede exigir aprobación antes de su aplicación."
   },
   "mfn": {
     "description": "Este SAFE puede adoptar las condiciones de un instrumento convertible emitido después de él, en su moneda, mientras esté en circulación: un tope cuando no tiene ninguno o tiene uno superior, un descuento cuando no tiene ninguno o tiene uno inferior, o la conversión post-money. El tope, el descuento y el tipo de SAFE del instrumento posterior se adoptan en conjunto desde la fecha de elección.",
@@ -598,12 +599,33 @@
       "post_money": "Pre-money"
     },
     "adopt": "Adoptar",
-    "adoptHelp": "Registre la elección del titular de adoptar las condiciones de {number}. Las conversiones desde la fecha de elección las utilizan. Requiere aprobación.",
+    "adoptHelp": "Registre la elección del titular de adoptar las condiciones de {number}. Las conversiones desde la fecha de elección las utilizan. Un Flow puede exigir aprobación antes de su aplicación.",
     "electedOn": "Fecha de elección",
     "record": "Registrar elección",
     "elections": "Elecciones registradas",
     "source": "Condiciones de",
     "saved": "Elección MFN registrada",
     "failed": "La elección no se registró."
+  },
+  "approval": {
+    "pendingTitle": "Pendiente de aprobación",
+    "openApprovals": "Abrir aprobaciones",
+    "pendingItem": "{action} · {subject} · vigente desde {date} · solicitado por {requester}",
+    "unknownRequester": "un usuario anterior",
+    "submitted": "Enviado para aprobación. Se aplica cuando un aprobador lo aprueba en Aprobaciones.",
+    "action": {
+      "void": "Anulación",
+      "reverse": "Reversión",
+      "repurchase": "Recompra",
+      "repay": "Reembolso",
+      "cancel_convertible": "Cancelación",
+      "class_amendment": "Modificación de clase",
+      "split": "Desdoblamiento de acciones",
+      "reserve_change": "Cambio de reserva",
+      "mfn_election": "Elección MFN",
+      "compensation_run": "Cálculo de compensación en acciones",
+      "interest_run": "Cálculo de intereses de notas",
+      "account_policy": "Versión de la política de cuentas"
+    }
   }
 }

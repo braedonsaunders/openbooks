@@ -15,8 +15,10 @@ const shared = {
  * runs posted and the change this run posted — so the expense schedule sums
  * the change by period and the latest cumulative per award is the cost
  * recognized to date. The register lists every security as issued, with its
- * terms; positions as of a date (after splits, events and vesting) are the
- * cap table's to compute, so the register states issued terms only.
+ * terms. Positions as of a date come from the position ledger: every change
+ * of a certificate's, award's or plan pool's position, restated through
+ * splits and converted into common at the ratio in force, so the sum of the
+ * movements effective on or before a date is the cap table on that date.
  */
 export const EQUITY_REPORT_ENTITIES: ReportEntity[] = [
   {
@@ -85,5 +87,48 @@ export const EQUITY_REPORT_ENTITIES: ReportEntity[] = [
       { key: 'journal_entry_id', label: 'Issuance entry (id)', kind: 'uuid', expr: 's.journal_entry_id' },
     ],
     defaultSort: { column: 'issue_date', direction: 'asc' },
+  },
+  {
+    category: shared.category,
+    featureKey: shared.featureKey,
+    requiredPermission: shared.requiredPermission,
+    key: 'equity_cap_table_positions',
+    label: 'Cap table position movements',
+    description: 'Every change of a share certificate, award or plan pool position: outstanding shares restated through splits and the same shares as converted into common. Summed through a date, the movements are the cap table on that date.',
+    from: `equity_position_movements m
+      left join equity_securities s on s.org_id = m.org_id and s.id = m.security_id
+      left join equity_plans pl on pl.org_id = m.org_id and pl.id = m.plan_id
+      join equity_share_classes c on c.org_id = m.org_id and c.id = coalesce(s.share_class_id, pl.share_class_id)
+      left join parties holder on holder.org_id = s.org_id and holder.id = s.holder_party_id
+      left join subsidiaries sub on sub.org_id = m.org_id and sub.id = m.subsidiary_id`,
+    orgColumn: 'm.org_id',
+    subsidiaryScope: { column: 'm.subsidiary_id' },
+    timeKey: 'effective_on',
+    // Positions are cumulative: a fiscal window would drop the movements
+    // before it. The as-of date bounds the movements from above only.
+    defaultPeriodField: null,
+    columns: [
+      { key: 'effective_on', label: 'Effective date', kind: 'date', expr: 'm.effective_on' },
+      { key: 'share_class', label: 'Share class', kind: 'text', expr: 'c.code' },
+      { key: 'class_kind', label: 'Class kind', kind: 'enum', expr: 'c.kind', options: ['common', 'preferred'] },
+      { key: 'position_kind', label: 'Position type', kind: 'enum', expr: 'm.position_kind', options: ['share', 'award', 'pool'] },
+      { key: 'holder', label: 'Holder', kind: 'text', expr: 'holder.display_name' },
+      { key: 'security_number', label: 'Security', kind: 'text', expr: 's.security_number' },
+      { key: 'security_kind', label: 'Security kind', kind: 'enum', expr: 's.kind', options: ['share', 'option', 'rsu', 'warrant'] },
+      { key: 'plan_pool', label: 'Plan pool', kind: 'text', expr: 'pl.code' },
+      { key: 'subsidiary', label: 'Subsidiary', kind: 'text', expr: 'sub.name' },
+      { key: 'outstanding', label: 'Outstanding shares', kind: 'number', expr: "case when m.position_kind = 'share' then m.shares_delta else 0 end" },
+      { key: 'as_converted_outstanding', label: 'Outstanding, as converted', kind: 'number', expr: "case when m.position_kind = 'share' then m.as_converted_delta else 0 end" },
+      { key: 'awards_outstanding', label: 'Awards outstanding', kind: 'number', expr: "case when m.position_kind = 'award' then m.shares_delta else 0 end" },
+      { key: 'pool_available', label: 'Pool available, as converted', kind: 'number', expr: "case when m.position_kind = 'pool' then m.as_converted_delta else 0 end" },
+      { key: 'fully_diluted', label: 'Fully diluted', kind: 'number', expr: 'm.as_converted_delta' },
+      { key: 'shares_delta', label: 'Share change', kind: 'number', expr: 'm.shares_delta' },
+      { key: 'as_converted_delta', label: 'As-converted change', kind: 'number', expr: 'm.as_converted_delta' },
+      { key: 'security_id', label: 'Security (id)', kind: 'uuid', expr: 'm.security_id' },
+      { key: 'plan_id', label: 'Plan (id)', kind: 'uuid', expr: 'm.plan_id' },
+      { key: 'holder_party_id', label: 'Holder (id)', kind: 'uuid', expr: 's.holder_party_id' },
+      { key: 'movement_id', label: 'Movement (id)', kind: 'uuid', expr: 'm.id' },
+    ],
+    defaultSort: { column: 'effective_on', direction: 'asc' },
   },
 ]

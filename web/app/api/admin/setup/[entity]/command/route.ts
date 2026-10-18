@@ -21,6 +21,7 @@ import {
   upsertChannelLocation,
 } from "@openbooks/engine/commerce";
 import { savePortalSettings } from "@openbooks/engine/portal";
+import { recordEquityAccountPolicy } from "@openbooks/engine/equity";
 
 export const runtime = "nodejs";
 
@@ -113,6 +114,26 @@ const channelAdSpendBody = z.strictObject({
   source: z.string().trim().max(120).nullish(),
 });
 
+const uuidText = z.string().uuid();
+const equityAccountPolicyBody = z.strictObject({
+  // The drawer posts the id of the version it was opened from; a version is
+  // always a new row, so the id is accepted and ignored.
+  id: z.string().uuid().nullish(),
+  subsidiaryId: uuidText,
+  effectiveFrom: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  commonStockAccountId: uuidText,
+  preferredStockAccountId: uuidText,
+  apicAccountId: uuidText,
+  apicShareBasedAccountId: uuidText,
+  compensationExpenseAccountId: uuidText,
+  treasuryStockAccountId: uuidText,
+  convertibleInstrumentsAccountId: uuidText,
+  interestExpenseAccountId: z.union([uuidText, z.literal("")]).nullish(),
+  accruedInterestAccountId: z.union([uuidText, z.literal("")]).nullish(),
+  earlyExerciseDepositAccountId: z.union([uuidText, z.literal("")]).nullish(),
+  reason: z.string().trim().min(1).max(2000),
+});
+
 /** Domain refusals keep typed status with message, code, remedy, and field. */
 
 /** Shape failures map through the same typed refusal path as domain refusals. */
@@ -185,6 +206,18 @@ async function runCommandBody(
         fulfilsOrders: parsed.data.fulfilsOrders ?? undefined,
         bufferQuantity: parsed.data.bufferQuantity ?? null,
         stopSellingAtZero: parsed.data.stopSellingAtZero ?? undefined,
+      });
+    }
+    case "recordEquityAccountPolicy": {
+      const parsed = equityAccountPolicyBody.safeParse(raw);
+      if (!parsed.success) throw invalidCommandBody();
+      const { id: _ignored, interestExpenseAccountId, accruedInterestAccountId, earlyExerciseDepositAccountId, ...data } = parsed.data;
+      // Governed: the answer is the new version, or the request an Equity action Flow holds for approval.
+      return recordEquityAccountPolicy({
+        orgId, actorId, ...data,
+        interestExpenseAccountId: interestExpenseAccountId || null,
+        accruedInterestAccountId: accruedInterestAccountId || null,
+        earlyExerciseDepositAccountId: earlyExerciseDepositAccountId || null,
       });
     }
     case "savePortalSettings": {
@@ -298,7 +331,7 @@ async function handler(request: Request, params: { entity: string }, authz: Auth
 }
 
 /** Every grant a command descriptor may name. The handler re-asserts the entity's own. */
-const COMMAND_PERMISSIONS = ["funds.manage", "channels.manage"] as const;
+const COMMAND_PERMISSIONS = ["funds.manage", "channels.manage", "equity.manage"] as const;
 
 export const POST = defineRoute({
   authorize: async () => {

@@ -213,6 +213,7 @@
     },
     "byLabel": "Visão da tabela de capitalização",
     "report": "Abrir o registro de valores mobiliários",
+    "asOfReport": "Relatório de capitalização em {date}",
     "emptyClasses": "Ainda não há classes de ações. Use Novo para registrar a primeira classe da entidade jurídica.",
     "emptyHolders": "Ainda não há titulares. Emita ações ou outorgas para incluir titulares na tabela de capitalização.",
     "amend": "Alterar",
@@ -479,15 +480,15 @@
       "forfeit": "As unidades não adquiridas saem da outorga; o custo reconhecido para elas é estornado na próxima execução da remuneração em ações.",
       "expire": "As unidades adquiridas e não exercidas caducam. O custo reconhecido permanece.",
       "cancel": "As unidades são canceladas, começando pelas não adquiridas. Cancelar unidades não adquiridas sem substituição reconhece o custo restante.",
-      "repurchase": "A empresa recompra ações para a tesouraria pelo valor pago (requer aprovação).",
+      "repurchase": "A empresa recompra ações para a tesouraria pelo valor pago. Um Flow pode exigir aprovação antes da aplicação.",
       "transfer": "As unidades adquiridas passam para outro titular em um novo certificado.",
       "convert": "SAFEs e notas são convertidos pelo preço de uma rodada na data de fechamento; ações preferenciais são convertidas em ordinárias pela razão de conversão da classe.",
-      "void": "Corrige um registro lançado por engano: o lançamento é estornado na data da anulação e o evento que o gerou é desfeito (requer aprovação).",
-      "repay": "Reembolsa um SAFE pelo valor de compra, ou uma nota pelo principal e pelos juros acumulados até a data, que são apropriados primeiro. O ágio ou deságio de uma nota é contabilizado em despesa de juros. Requer aprovação.",
+      "void": "Corrige um registro lançado por engano: o lançamento é estornado na data da anulação e o evento que o gerou é desfeito. Um Flow pode exigir aprovação antes da aplicação.",
+      "repay": "Reembolsa um SAFE pelo valor de compra, ou uma nota pelo principal e pelos juros acumulados até a data, que são apropriados primeiro. O ágio ou deságio de uma nota é contabilizado em despesa de juros. Um Flow pode exigir aprovação antes da aplicação.",
       "election_83b": "Registra a data em que o titular apresentou uma eleição 83(b) para essas ações restritas. A eleição deve ser apresentada em até 30 dias após a data de emissão.",
       "exerciseEarly": "Esta outorga admite exercício antecipado: as unidades adquiridas são exercidas primeiro e, em seguida, as parcelas não adquiridas mais próximas. As ações não adquiridas são emitidas como ações restritas que a empresa pode recomprar até serem adquiridas; o dinheiro é mantido como depósito e liberado para o capital à medida que são adquiridas.",
-      "repurchaseRestricted": "As ações restritas não adquiridas são recompradas nas condições da outorga, liquidando seu depósito. Informe o valor justo de mercado por ação quando a outorga precificar pelo menor valor entre o custo e o valor justo de mercado. Requer aprovação.",
-      "cancelConvertible": "Cancela o SAFE ou a nota sem pagamento: o principal e os juros acumulados passam para a reserva de capital. Requer aprovação."
+      "repurchaseRestricted": "As ações restritas não adquiridas são recompradas nas condições da outorga, liquidando seu depósito. Informe o valor justo de mercado por ação quando a outorga precificar pelo menor valor entre o custo e o valor justo de mercado. Um Flow pode exigir aprovação antes da aplicação.",
+      "cancelConvertible": "Cancela o SAFE ou a nota sem pagamento: o principal e os juros acumulados passam para a reserva de capital. Um Flow pode exigir aprovação antes da aplicação."
     },
     "reversed": "{kind} estornado",
     "carryingHint": "Valor contábil na data de referência: {amount}",
@@ -580,7 +581,7 @@
   },
   "reversal": {
     "title": "Estornar {kind} de {date}",
-    "help": "O lançamento do evento é estornado na data do estorno e suas unidades ou seu saldo retornam a partir dessa data; o histórico anterior permanece. A atividade posterior que depende do evento deve ser estornada primeiro. Requer aprovação."
+    "help": "O lançamento do evento é estornado na data do estorno e suas unidades ou seu saldo retornam a partir dessa data; o histórico anterior permanece. A atividade posterior que depende do evento deve ser estornada primeiro. Um Flow pode exigir aprovação antes da aplicação."
   },
   "mfn": {
     "description": "Este SAFE pode adotar as condições de um instrumento conversível emitido depois dele, em sua moeda, enquanto estiver em aberto: um teto quando não tem nenhum ou tem um maior, um desconto quando não tem nenhum ou tem um menor, ou a conversão pós-money. O teto, o desconto e o tipo de SAFE do instrumento posterior são adotados em conjunto a partir da data da eleição.",
@@ -598,12 +599,33 @@
       "post_money": "Pré-money"
     },
     "adopt": "Adotar",
-    "adoptHelp": "Registre a eleição do titular de adotar as condições de {number}. As conversões a partir da data da eleição as utilizam. Requer aprovação.",
+    "adoptHelp": "Registre a eleição do titular de adotar as condições de {number}. As conversões a partir da data da eleição as utilizam. Um Flow pode exigir aprovação antes da aplicação.",
     "electedOn": "Data da eleição",
     "record": "Registrar eleição",
     "elections": "Eleições registradas",
     "source": "Condições de",
     "saved": "Eleição MFN registrada",
     "failed": "A eleição não foi registrada."
+  },
+  "approval": {
+    "pendingTitle": "Aguardando aprovação",
+    "openApprovals": "Abrir aprovações",
+    "pendingItem": "{action} · {subject} · vigente em {date} · solicitado por {requester}",
+    "unknownRequester": "um usuário anterior",
+    "submitted": "Enviado para aprovação. É aplicado quando um aprovador o aprova em Aprovações.",
+    "action": {
+      "void": "Anulação",
+      "reverse": "Estorno",
+      "repurchase": "Recompra",
+      "repay": "Reembolso",
+      "cancel_convertible": "Cancelamento",
+      "class_amendment": "Alteração de classe",
+      "split": "Desdobramento de ações",
+      "reserve_change": "Alteração de reserva",
+      "mfn_election": "Eleição MFN",
+      "compensation_run": "Execução de remuneração em ações",
+      "interest_run": "Execução de juros de notas",
+      "account_policy": "Versão da política de contas"
+    }
   }
 }

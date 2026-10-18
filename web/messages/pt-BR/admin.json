@@ -1485,8 +1485,8 @@
     "amortization_read": "Ver cronogramas de apropriação e relatórios",
     "amortization_manage": "Executar a apropriação e alterar cronogramas",
     "equity_read": "Ver a tabela de capitalização, os títulos e a remuneração em ações",
-    "equity_manage": "Registrar classes de ações, planos, emissões e movimentações de outorgas",
-    "equity_approve": "Aprovar anulações, desdobramentos, recompras e execuções de remuneração em ações",
+    "equity_manage": "Registrar classes de ações, planos, emissões, movimentações de outorgas e ações de patrimônio governadas",
+    "equity_approve": "Decidir as ações de patrimônio encaminhadas para aprovação no Flows",
     "assets_capitalize": "Aceitar propostas de ativos e capitalizar imobilizado em andamento",
     "assets_maintain": "Manter planos de manutenção de ativos e apólices de seguro"
   },
@@ -2356,6 +2356,7 @@
     "searchPlaceholder": "Buscar…",
     "created": "Criado",
     "updated": "Salvo",
+    "submittedForApproval": "Enviado para aprovação. É aplicado quando um aprovador o aprova em Aprovações.",
     "deleted": "Excluído",
     "confirmDelete": "Excluir este registro? Esta ação não pode ser desfeita.",
     "validation": {

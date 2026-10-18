@@ -1485,8 +1485,8 @@
     "amortization_read": "查看摊销计划和报表",
     "amortization_manage": "运行摊销并变更摊销计划",
     "equity_read": "查看股权结构表、证券和股权激励",
-    "equity_manage": "记录股份类别、计划、发行和授予变动",
-    "equity_approve": "批准作废、拆股、回购和股权激励过账",
+    "equity_manage": "记录股份类别、计划、发行、授予变动和受管控的权益操作",
+    "equity_approve": "决定在 Flows 中提交审批的权益操作",
     "assets_capitalize": "接受资产建议并将在建工程资本化",
     "assets_maintain": "管理资产维护计划和保险单"
   },
@@ -2356,6 +2356,7 @@
     "searchPlaceholder": "搜索……",
     "created": "已创建",
     "updated": "已保存",
+    "submittedForApproval": "已提交审批。审批人在审批中批准后即生效。",
     "deleted": "已删除",
     "confirmDelete": "删除此记录？此操作无法撤销。",
     "validation": {

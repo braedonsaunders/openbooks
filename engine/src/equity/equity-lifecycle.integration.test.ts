@@ -6,6 +6,7 @@ import { db } from "../platform/db.ts";
 import { dropScratchOrgReporting } from "../testing/fixtures.ts";
 import {
   accountBalance,
+  applied,
   entryLines,
   equityRefusal as refusal,
   linesBalance,
@@ -51,7 +52,7 @@ async function note(w: EquityWorld, overrides: Partial<Parameters<typeof issueSe
   });
 }
 
-test("an MFN SAFE adopts a later SAFE's better terms by an approved election and converts on them", { skip: !DB }, async () => {
+test("an MFN SAFE adopts a later SAFE's better terms by a recorded election and converts on them", { skip: !DB }, async () => {
   const w = await setupEquityWorld();
   try {
     await issueSecurity({
@@ -64,11 +65,11 @@ test("an MFN SAFE adopts a later SAFE's better terms by an approved election and
     const detail = await loadSecurityDetail({ ...manage(w), securityId: mfn.id, asOf: "2026-07-12" });
     assert.deepEqual(detail.mfn?.candidates.map((row) => [row.sourceSecurityId, row.improves]), [[later.id, ["cap", "discount"]]]);
     const election = { securityId: mfn.id, sourceSecurityId: later.id, effectiveOn: "2026-07-12", reason: "Holder elected the Seed SAFE terms", idempotencyKey: `mfn-${randomUUID()}` };
-    await assert.rejects(electMfnTerms({ ...manage(w), ...election }), refusal("equity_forbidden"), "an election is an approval");
-    const elected = await electMfnTerms({ ...approve(w), ...election });
+    await assert.rejects(electMfnTerms({ ...approve(w), ...election }), refusal("equity_forbidden"), "the approval grant alone cannot record an election");
+    const elected = await electMfnTerms({ ...manage(w), ...election });
     assert.equal(elected.replayed, false);
-    assert.equal((await electMfnTerms({ ...approve(w), ...election })).replayed, true, "a retried election returns the one recorded");
-    await assert.rejects(electMfnTerms({ ...approve(w), ...election, idempotencyKey: null }), refusal("equity_mfn_not_better"), "terms already adopted are not better");
+    assert.equal((await electMfnTerms({ ...manage(w), ...election })).replayed, true, "a retried election returns the one recorded");
+    await assert.rejects(electMfnTerms({ ...manage(w), ...election, idempotencyKey: null }), refusal("equity_mfn_not_better"), "terms already adopted are not better");
     const audit = (await db.execute<{ n: string }>(sql`
       select count(*)::text as n from audit_log where org_id = ${w.org.orgId} and row_id = ${mfn.id} and action = 'equity.mfn.elect'`)).rows[0]!;
     assert.equal(audit.n, "1");
@@ -83,7 +84,7 @@ test("an MFN SAFE adopts a later SAFE's better terms by an approved election and
     const lines = await entryLines(w.org.orgId, converted.journalEntryId!);
     assert.equal(linesBalance(lines), 0n);
     assert.deepEqual(lines.map((line) => line.amount), ["100000.0000", "-12.5000", "-99987.5000"]);
-    await assert.rejects(electMfnTerms({ ...approve(w), ...election, idempotencyKey: null }), refusal("equity_mfn_closed"));
+    await assert.rejects(electMfnTerms({ ...manage(w), ...election, idempotencyKey: null }), refusal("equity_mfn_closed"));
   } finally {
     await dropScratchOrgReporting(w.org.orgId);
   }
@@ -94,20 +95,20 @@ test("note interest accrues by idempotent runs on its day count and a conversion
   try {
     const issued = await note(w);
     await assert.rejects(
-      postInterestRun({ ...approve(w), subsidiaryId: w.org.subsidiaryId, throughDate: "2026-07-31" }),
+      postInterestRun({ ...manage(w), subsidiaryId: w.org.subsidiaryId, throughDate: "2026-07-31" }),
       (error: unknown) => refusal("equity_account_policy_incomplete")(error) && (error as EquityError).remedy.includes("Setup → Equity accounts"),
     );
     await seedEquityPolicy(w, "2026-07-02", { lifecycle: true });
-    await assert.rejects(postInterestRun({ ...manage(w), subsidiaryId: w.org.subsidiaryId, throughDate: "2026-07-31" }), refusal("equity_forbidden"));
-    const july = await postInterestRun({ ...approve(w), subsidiaryId: w.org.subsidiaryId, throughDate: "2026-07-31" });
+    await assert.rejects(postInterestRun({ ...approve(w), subsidiaryId: w.org.subsidiaryId, throughDate: "2026-07-31" }), refusal("equity_forbidden"));
+    const july = applied(await postInterestRun({ ...manage(w), subsidiaryId: w.org.subsidiaryId, throughDate: "2026-07-31" }));
     // 100,000 × 8% × 30 / 365 = 657.534… rounded to the cent.
     assert.equal(july.total, "657.5300");
     assert.equal(await accountBalance(w.org.orgId, w.accounts.interestExpense), "657.5300");
     assert.equal(await accountBalance(w.org.orgId, w.accounts.accruedInterest), "-657.5300");
-    const replay = await postInterestRun({ ...approve(w), subsidiaryId: w.org.subsidiaryId, throughDate: "2026-07-31" });
+    const replay = applied(await postInterestRun({ ...manage(w), subsidiaryId: w.org.subsidiaryId, throughDate: "2026-07-31" }));
     assert.equal(replay.replayed, true);
     assert.equal(await accountBalance(w.org.orgId, w.accounts.interestExpense), "657.5300", "a replay accrues nothing more");
-    await assert.rejects(postInterestRun({ ...approve(w), subsidiaryId: w.org.subsidiaryId, throughDate: "2026-07-15" }), refusal("equity_interest_run_backdated"));
+    await assert.rejects(postInterestRun({ ...manage(w), subsidiaryId: w.org.subsidiaryId, throughDate: "2026-07-15" }), refusal("equity_interest_run_backdated"));
     const preview = await previewInterestRun({ ...manage(w), subsidiaryId: w.org.subsidiaryId, throughDate: "2026-08-31" });
     assert.equal(preview.lines[0]!.period, "679.4600", "61 days accrue 1,336.99; 657.53 is already posted");
 
@@ -128,7 +129,7 @@ test("note interest accrues by idempotent runs on its day count and a conversion
     assert.equal(await accountBalance(w.org.orgId, w.accounts.convertible), "0.0000");
     const certificate = await loadSecurityDetail({ ...manage(w), securityId: converted.resultingSecurityId!, asOf: "2026-08-31" });
     assert.equal(certificate.security.quantity, "101336", "101,336.99 converts at 1.00 into whole shares");
-    const after = await postInterestRun({ ...approve(w), subsidiaryId: w.org.subsidiaryId, throughDate: "2026-09-30" });
+    const after = applied(await postInterestRun({ ...manage(w), subsidiaryId: w.org.subsidiaryId, throughDate: "2026-09-30" }));
     assert.equal(after.total, "0.0000", "a converted note stops accruing");
     assert.equal(after.journalEntryId, null);
   } finally {
@@ -136,41 +137,41 @@ test("note interest accrues by idempotent runs on its day count and a conversion
   }
 });
 
-test("a note is repaid with its accrued interest, a SAFE repays only its purchase amount, and a cancellation is an approval a reversal undoes", { skip: !DB }, async () => {
+test("a note is repaid with its accrued interest, a SAFE repays only its purchase amount, and a reversal undoes a cancellation", { skip: !DB }, async () => {
   const w = await setupEquityWorld({ lifecycle: true });
   try {
     const issued = await note(w, { considerationAmount: "50000", interestRatePercent: "6" });
     const repayment = { securityId: issued.id, kind: "repay" as const, effectiveOn: "2026-07-31", considerationAccountId: w.org.accounts.bank };
-    await assert.rejects(recordSecurityEvent({ ...manage(w), ...repayment, amount: "50346.58" }), refusal("equity_forbidden"));
+    await assert.rejects(recordSecurityEvent({ ...approve(w), ...repayment, amount: "50346.58" }), refusal("equity_forbidden"));
     // 50,000 × 6% × 30 / 365 = 246.58 accrued; 100.00 above the carrying amount is a repayment premium.
-    const repaid = await recordSecurityEvent({ ...approve(w), ...repayment, amount: "50346.58" });
+    const repaid = await recordSecurityEvent({ ...manage(w), ...repayment, amount: "50346.58" });
     assert.ok(repaid.accrualEntryId);
     const lines = await entryLines(w.org.orgId, repaid.journalEntryId!);
     assert.equal(linesBalance(lines), 0n);
     assert.equal(await accountBalance(w.org.orgId, w.accounts.convertible), "0.0000");
     assert.equal(await accountBalance(w.org.orgId, w.accounts.accruedInterest), "0.0000");
     assert.equal(await accountBalance(w.org.orgId, w.accounts.interestExpense), "346.5800");
-    await assert.rejects(recordSecurityEvent({ ...approve(w), ...repayment, amount: "1" }), refusal("equity_convertible_settled"));
+    await assert.rejects(recordSecurityEvent({ ...manage(w), ...repayment, amount: "1" }), refusal("equity_convertible_settled"));
 
     const instrument = await safe(w, { considerationAmount: "25000" });
     await assert.rejects(
-      recordSecurityEvent({ ...approve(w), securityId: instrument.id, kind: "repay", effectiveOn: "2026-07-31", amount: "24000", considerationAccountId: w.org.accounts.bank }),
+      recordSecurityEvent({ ...manage(w), securityId: instrument.id, kind: "repay", effectiveOn: "2026-07-31", amount: "24000", considerationAccountId: w.org.accounts.bank }),
       refusal("equity_repayment_amount"),
     );
     const cancellation = { securityId: instrument.id, kind: "cancel" as const, effectiveOn: "2026-07-20", reason: "Investor released the SAFE" };
-    await assert.rejects(recordSecurityEvent({ ...manage(w), ...cancellation }), refusal("equity_forbidden"));
-    const cancelled = await recordSecurityEvent({ ...approve(w), ...cancellation });
+    await assert.rejects(recordSecurityEvent({ ...approve(w), ...cancellation }), refusal("equity_forbidden"));
+    const cancelled = await recordSecurityEvent({ ...manage(w), ...cancellation });
     assert.deepEqual((await entryLines(w.org.orgId, cancelled.journalEntryId!)).map((line) => [line.account_id, line.amount]), [
       [w.accounts.convertible, "25000.0000"], [w.accounts.apic, "-25000.0000"],
     ]);
     const table = await loadCapTableView({ ...manage(w), subsidiaryId: w.org.subsidiaryId, asOf: "2026-07-25" });
     assert.equal(table.table.convertibles.find((row) => row.securityId === instrument.id)?.status, "cancelled");
-    const reversed = await recordSecurityEvent({ ...approve(w), securityId: instrument.id, kind: "reverse", effectiveOn: "2026-07-25", reversesEventId: cancelled.eventId, reason: "Cancellation recorded against the wrong SAFE" });
+    const reversed = await recordSecurityEvent({ ...manage(w), securityId: instrument.id, kind: "reverse", effectiveOn: "2026-07-25", reversesEventId: cancelled.eventId, reason: "Cancellation recorded against the wrong SAFE" });
     assert.ok(reversed.reversalEntryId);
     assert.equal(await accountBalance(w.org.orgId, w.accounts.apic), "0.0000");
     const restored = await loadCapTableView({ ...manage(w), subsidiaryId: w.org.subsidiaryId, asOf: "2026-07-25" });
     assert.equal(restored.table.convertibles.find((row) => row.securityId === instrument.id)?.status, "outstanding");
-    await recordSecurityEvent({ ...approve(w), securityId: instrument.id, kind: "repay", effectiveOn: "2026-07-31", amount: "25000", considerationAccountId: w.org.accounts.bank });
+    await recordSecurityEvent({ ...manage(w), securityId: instrument.id, kind: "repay", effectiveOn: "2026-07-31", amount: "25000", considerationAccountId: w.org.accounts.bank });
   } finally {
     await dropScratchOrgReporting(w.org.orgId);
   }
@@ -215,7 +216,7 @@ test("an early exercise issues restricted stock, holds the deposit, releases it 
     await recordSecurityEvent({ ...manage(w), securityId: certificateId, kind: "election_83b", effectiveOn: "2026-07-20" });
     await assert.rejects(recordSecurityEvent({ ...manage(w), securityId: certificateId, kind: "election_83b", effectiveOn: "2026-07-21" }), refusal("equity_83b_recorded"));
 
-    const run = await postCompensationRun({ ...approve(w), subsidiaryId: w.org.subsidiaryId, throughDate: "2026-09-30" });
+    const run = applied(await postCompensationRun({ ...manage(w), subsidiaryId: w.org.subsidiaryId, throughDate: "2026-09-30" }));
     assert.equal(run.releases, 1);
     assert.ok(run.releaseJournalEntryId);
     assert.equal(linesBalance(await entryLines(w.org.orgId, run.releaseJournalEntryId!)), 0n);
@@ -224,13 +225,13 @@ test("an early exercise issues restricted stock, holds the deposit, releases it 
     const released = (await db.execute<{ period_reclass: string }>(sql`
       select period_reclass::text as period_reclass from equity_compensation_run_releases where org_id = ${w.org.orgId} and run_id = ${run.runId}`)).rows[0]!;
     assert.equal(BigInt(released.period_reclass.replace(".", "")), reclass200, "the released units' grant-date value moves to share capital with them");
-    assert.equal((await postCompensationRun({ ...approve(w), subsidiaryId: w.org.subsidiaryId, throughDate: "2026-09-30" })).replayed, true);
+    assert.equal((applied(await postCompensationRun({ ...manage(w), subsidiaryId: w.org.subsidiaryId, throughDate: "2026-09-30" }))).replayed, true);
 
     const repurchase = { securityId: certificateId, kind: "repurchase" as const, effectiveOn: "2026-10-15", quantity: "1000", considerationAccountId: w.org.accounts.bank, reason: "Holder left before vesting" };
-    await assert.rejects(recordSecurityEvent({ ...manage(w), ...repurchase, fairMarketValuePerShare: "0.50" }), refusal("equity_forbidden"));
-    await assert.rejects(recordSecurityEvent({ ...approve(w), ...repurchase }), (error: unknown) => (error as EquityError).field === "fairMarketValuePerShare");
-    await assert.rejects(recordSecurityEvent({ ...approve(w), ...repurchase, quantity: "4400" }), refusal("equity_restricted_repurchase_mixed"));
-    const bought = await recordSecurityEvent({ ...approve(w), ...repurchase, fairMarketValuePerShare: "0.50" });
+    await assert.rejects(recordSecurityEvent({ ...approve(w), ...repurchase, fairMarketValuePerShare: "0.50" }), refusal("equity_forbidden"));
+    await assert.rejects(recordSecurityEvent({ ...manage(w), ...repurchase }), (error: unknown) => (error as EquityError).field === "fairMarketValuePerShare");
+    await assert.rejects(recordSecurityEvent({ ...manage(w), ...repurchase, quantity: "4400" }), refusal("equity_restricted_repurchase_mixed"));
+    const bought = await recordSecurityEvent({ ...manage(w), ...repurchase, fairMarketValuePerShare: "0.50" });
     // The lower of cost (1.00) and fair market value (0.50): 500.00 for 1,000 shares whose deposit was 1,000.00.
     assert.deepEqual((await entryLines(w.org.orgId, bought.journalEntryId!)).map((line) => [line.account_id, line.amount]), [
       [w.accounts.deposit, "1000.0000"], [w.org.accounts.bank, "-500.0000"], [w.accounts.apic, "-500.0000"],
@@ -252,7 +253,7 @@ test("an early exercise issues restricted stock, holds the deposit, releases it 
   }
 });
 
-test("one forfeiture, cancellation or repurchase is undone by an approved reversal; dependent activity refuses by name", { skip: !DB }, async () => {
+test("one forfeiture, cancellation or repurchase is undone by a reversal; dependent activity refuses by name", { skip: !DB }, async () => {
   const w = await setupEquityWorld();
   try {
     const plan = await createPlan({
@@ -266,27 +267,27 @@ test("one forfeiture, cancellation or repurchase is undone by an approved revers
     const rsu = await award("1000");
     const forfeit = await recordSecurityEvent({ ...manage(w), securityId: rsu.id, kind: "forfeit", effectiveOn: "2026-07-10", quantity: "500", reason: "Recorded against the wrong award" });
     const reversal = { securityId: rsu.id, kind: "reverse" as const, effectiveOn: "2026-07-12", reversesEventId: forfeit.eventId, reason: "The forfeiture was recorded in error" };
-    await assert.rejects(recordSecurityEvent({ ...manage(w), ...reversal }), refusal("equity_forbidden"));
-    await recordSecurityEvent({ ...approve(w), ...reversal });
+    await assert.rejects(recordSecurityEvent({ ...approve(w), ...reversal }), refusal("equity_forbidden"));
+    await recordSecurityEvent({ ...manage(w), ...reversal });
     assert.equal((await loadSecurityDetail({ ...manage(w), securityId: rsu.id, asOf: "2026-07-11" })).state?.outstanding, "500", "history before the reversal stands");
     assert.equal((await loadSecurityDetail({ ...manage(w), securityId: rsu.id, asOf: "2026-07-12" })).state?.outstanding, "1000");
-    await assert.rejects(recordSecurityEvent({ ...approve(w), ...reversal }), refusal("equity_event_reversed"));
+    await assert.rejects(recordSecurityEvent({ ...manage(w), ...reversal }), refusal("equity_event_reversed"));
 
     const second = await recordSecurityEvent({ ...manage(w), securityId: rsu.id, kind: "forfeit", effectiveOn: "2026-07-15", quantity: "200", reason: "Partial forfeiture" });
     const cancel = await recordSecurityEvent({ ...manage(w), securityId: rsu.id, kind: "cancel", effectiveOn: "2026-07-20", quantity: "100", reason: "Partial cancellation" });
     await assert.rejects(
-      recordSecurityEvent({ ...approve(w), securityId: rsu.id, kind: "reverse", effectiveOn: "2026-07-21", reversesEventId: second.eventId, reason: "Forfeiture in error" }),
+      recordSecurityEvent({ ...manage(w), securityId: rsu.id, kind: "reverse", effectiveOn: "2026-07-21", reversesEventId: second.eventId, reason: "Forfeiture in error" }),
       (error: unknown) => refusal("equity_reversal_has_dependents")(error) && (error as EquityError).remedy.includes("cancel on 2026-07-20 (100)"),
     );
-    await recordSecurityEvent({ ...approve(w), securityId: rsu.id, kind: "reverse", effectiveOn: "2026-07-21", reversesEventId: cancel.eventId, reason: "Cancellation in error" });
-    await recordSecurityEvent({ ...approve(w), securityId: rsu.id, kind: "reverse", effectiveOn: "2026-07-22", reversesEventId: second.eventId, reason: "Forfeiture in error" });
+    await recordSecurityEvent({ ...manage(w), securityId: rsu.id, kind: "reverse", effectiveOn: "2026-07-21", reversesEventId: cancel.eventId, reason: "Cancellation in error" });
+    await recordSecurityEvent({ ...manage(w), securityId: rsu.id, kind: "reverse", effectiveOn: "2026-07-22", reversesEventId: second.eventId, reason: "Forfeiture in error" });
     assert.equal((await loadSecurityDetail({ ...manage(w), securityId: rsu.id, asOf: "2026-07-22" })).state?.outstanding, "1000");
 
     // A forfeiture returns units to the pool; once they are granted again, undoing it would overdraw the pool.
     const forfeitAll = await recordSecurityEvent({ ...manage(w), securityId: rsu.id, kind: "forfeit", effectiveOn: "2026-07-25", quantity: "900", reason: "Holder left" });
     await award("900", "2026-07-26");
     await assert.rejects(
-      recordSecurityEvent({ ...approve(w), securityId: rsu.id, kind: "reverse", effectiveOn: "2026-07-27", reversesEventId: forfeitAll.eventId, reason: "Holder stayed" }),
+      recordSecurityEvent({ ...manage(w), securityId: rsu.id, kind: "reverse", effectiveOn: "2026-07-27", reversesEventId: forfeitAll.eventId, reason: "Holder stayed" }),
       refusal("equity_pool_exhausted"),
     );
 
@@ -294,9 +295,9 @@ test("one forfeiture, cancellation or repurchase is undone by an approved revers
       ...entity(w), kind: "share", holderPartyId: w.holderId, issueDate: "2026-07-01", shareClassId: w.commonClassId, quantity: "1000", pricePerShare: "1",
       considerationAccountId: w.org.accounts.bank,
     });
-    const buyback = await recordSecurityEvent({ ...approve(w), securityId: shares.id, kind: "repurchase", effectiveOn: "2026-07-10", quantity: "400", amount: "400", considerationAccountId: w.org.accounts.bank, reason: "Buyback" });
+    const buyback = await recordSecurityEvent({ ...manage(w), securityId: shares.id, kind: "repurchase", effectiveOn: "2026-07-10", quantity: "400", amount: "400", considerationAccountId: w.org.accounts.bank, reason: "Buyback" });
     assert.equal(await accountBalance(w.org.orgId, w.accounts.treasury), "400.0000");
-    const undone = await recordSecurityEvent({ ...approve(w), securityId: shares.id, kind: "reverse", effectiveOn: "2026-07-11", reversesEventId: buyback.eventId, reason: "Buyback was not completed" });
+    const undone = await recordSecurityEvent({ ...manage(w), securityId: shares.id, kind: "reverse", effectiveOn: "2026-07-11", reversesEventId: buyback.eventId, reason: "Buyback was not completed" });
     const original = (await db.execute<{ status: string }>(sql`select status from journal_entries where org_id = ${w.org.orgId} and id = ${buyback.journalEntryId}`)).rows[0]!;
     assert.equal(original.status, "reversed");
     assert.ok(undone.reversalEntryId);
@@ -307,7 +308,7 @@ test("one forfeiture, cancellation or repurchase is undone by an approved revers
     });
     const exercised = await recordSecurityEvent({ ...manage(w), securityId: warrant.id, kind: "exercise", effectiveOn: "2026-07-05", quantity: "10", considerationAccountId: w.org.accounts.bank });
     await assert.rejects(
-      recordSecurityEvent({ ...approve(w), securityId: warrant.id, kind: "reverse", effectiveOn: "2026-07-06", reversesEventId: exercised.eventId, reason: "Exercise in error" }),
+      recordSecurityEvent({ ...manage(w), securityId: warrant.id, kind: "reverse", effectiveOn: "2026-07-06", reversesEventId: exercised.eventId, reason: "Exercise in error" }),
       refusal("equity_event_not_reversible"),
     );
   } finally {
@@ -328,7 +329,7 @@ test("a common split adjusts the conversion price of preferred converting into i
     });
     await issue(w.commonClassId);
     const preferredShares = await issue(seriesA);
-    const split = await recordSplit({ ...approve(w), shareClassId: w.commonClassId, effectiveOn: "2026-07-15", ratioNumerator: "2", ratioDenominator: "1", reason: "Two-for-one forward split" });
+    const split = await recordSplit({ ...manage(w), shareClassId: w.commonClassId, effectiveOn: "2026-07-15", ratioNumerator: "2", ratioDenominator: "1", reason: "Two-for-one forward split" });
     assert.deepEqual(split.adjustedClasses.map((row) => [row.code, row.conversionPriceBefore, row.conversionPriceAfter]), [["SA", "1.0000000000", "0.5000000000"]]);
     const table = await loadCapTableView({ ...manage(w), subsidiaryId: w.org.subsidiaryId, asOf: "2026-07-15" });
     assert.equal(table.table.classes.find((row) => row.shareClassId === seriesA)?.asConvertedOutstanding, "2000");
@@ -339,13 +340,13 @@ test("a common split adjusts the conversion price of preferred converting into i
       insert into equity_share_classes (id, org_id, subsidiary_id, code, name, kind, effective_on, initial_authorized_shares, par_value,
         original_issue_price, initial_conversion_price, liquidation_multiple, created_by)
       values (${legacy}, ${w.org.orgId}, ${w.org.subsidiaryId}, 'SB', 'Series B', 'preferred', '2026-01-01', 1000, 0.0001, 1, 1, 1, ${w.managerId})`);
-    const nextSplit = { ...approve(w), shareClassId: w.commonClassId, effectiveOn: "2026-07-25", ratioNumerator: "3", ratioDenominator: "2", reason: "Three-for-two forward split" };
+    const nextSplit = { ...manage(w), shareClassId: w.commonClassId, effectiveOn: "2026-07-25", ratioNumerator: "3", ratioDenominator: "2", reason: "Three-for-two forward split" };
     await assert.rejects(recordSplit(nextSplit), (error: unknown) => refusal("equity_conversion_class_missing")(error) && (error as EquityError).message.includes("SB"));
     await assert.rejects(
-      amendShareClass({ ...manage(w), shareClassId: legacy, kind: "conversion_class", effectiveOn: "2026-07-20", conversionShareClassId: w.commonClassId, reason: "Converts into common" }),
+      amendShareClass({ ...approve(w), shareClassId: legacy, kind: "conversion_class", effectiveOn: "2026-07-20", conversionShareClassId: w.commonClassId, reason: "Converts into common" }),
       refusal("equity_forbidden"),
     );
-    await amendShareClass({ ...approve(w), shareClassId: legacy, kind: "conversion_class", effectiveOn: "2026-07-20", conversionShareClassId: w.commonClassId, reason: "Converts into common" });
+    await amendShareClass({ ...manage(w), shareClassId: legacy, kind: "conversion_class", effectiveOn: "2026-07-20", conversionShareClassId: w.commonClassId, reason: "Converts into common" });
     const adjusted = await recordSplit(nextSplit);
     assert.deepEqual(adjusted.adjustedClasses.map((row) => row.code).sort(), ["SA", "SB"]);
 
@@ -376,11 +377,11 @@ test("a SAFE stated in a foreign currency posts at its issue-date rate, refuses 
     ]);
     const repayment = { securityId: issued.id, kind: "repay" as const, effectiveOn: "2026-07-20", amount: "10000", considerationAccountId: w.org.accounts.bank };
     await db.execute(sql`update orgs set settings = settings #- '{controlAccounts,fxRealizedGainLoss}' where id = ${w.org.orgId}`);
-    await assert.rejects(recordSecurityEvent({ ...approve(w), ...repayment }), refusal("equity_fx_account_missing"));
+    await assert.rejects(recordSecurityEvent({ ...manage(w), ...repayment }), refusal("equity_fx_account_missing"));
     await db.execute(sql`
       update orgs set settings = jsonb_set(coalesce(settings, '{}'::jsonb), '{controlAccounts,fxRealizedGainLoss}', to_jsonb(${w.org.accounts.fxGainLoss}::text), true)
        where id = ${w.org.orgId}`);
-    const repaid = await recordSecurityEvent({ ...approve(w), ...repayment });
+    const repaid = await recordSecurityEvent({ ...manage(w), ...repayment });
     const lines = await entryLines(w.org.orgId, repaid.journalEntryId!);
     assert.equal(linesBalance(lines), 0n);
     assert.equal(await accountBalance(w.org.orgId, w.accounts.convertible), "0.0000");
@@ -401,14 +402,14 @@ test("a voided note's accrued interest reverses in the next run, and a foreign n
     await seedSpotRate(w.org.orgId, "USD", "CAD", "2026-07-31", "1.3600000000");
     const local = await note(w);
     await note(w, { currency: "USD", considerationAmount: "10000", interestRatePercent: "6" });
-    const july = await postInterestRun({ ...approve(w), subsidiaryId: w.org.subsidiaryId, throughDate: "2026-07-31" });
+    const july = applied(await postInterestRun({ ...manage(w), subsidiaryId: w.org.subsidiaryId, throughDate: "2026-07-31" }));
     // 657.53 CAD, and 49.32 USD (10,000 × 6% × 30 / 365) at 1.36.
     assert.equal(july.total, "724.6052");
     const lines = await entryLines(w.org.orgId, july.journalEntryId!);
     assert.ok(lines.some((line) => line.currency === "USD" && line.txn_amount === "-49.3200" && line.amount === "-67.0752"), "the foreign accrual carries its USD amount and rate");
     await seedSpotRate(w.org.orgId, "USD", "CAD", "2026-08-31", "1.3700000000");
-    await recordSecurityEvent({ ...approve(w), securityId: local.id, kind: "void", effectiveOn: "2026-08-05", reason: "Note recorded in error" });
-    const august = await postInterestRun({ ...approve(w), subsidiaryId: w.org.subsidiaryId, throughDate: "2026-08-31" });
+    await recordSecurityEvent({ ...manage(w), securityId: local.id, kind: "void", effectiveOn: "2026-08-05", reason: "Note recorded in error" });
+    const august = applied(await postInterestRun({ ...manage(w), subsidiaryId: w.org.subsidiaryId, throughDate: "2026-08-31" }));
     const reversed = (await db.execute<{ period_amount: string; fx_rate: string | null; functional_amount: string }>(sql`
       select period_amount::text as period_amount, fx_rate::text as fx_rate, functional_amount::text as functional_amount
         from equity_interest_run_lines where org_id = ${w.org.orgId} and run_id = ${august.runId} and security_id = ${local.id}`)).rows[0]!;
@@ -432,11 +433,11 @@ test("voiding an early-exercise certificate returns its units and the next run r
     });
     const exercised = await recordSecurityEvent({ ...manage(w), securityId: option.id, kind: "exercise", effectiveOn: "2026-07-01", quantity: "1200", considerationAccountId: w.org.accounts.bank });
     assert.equal(await accountBalance(w.org.orgId, w.accounts.deposit), "-1100.0000");
-    await postCompensationRun({ ...approve(w), subsidiaryId: w.org.subsidiaryId, throughDate: "2026-08-31" });
+    applied(await postCompensationRun({ ...manage(w), subsidiaryId: w.org.subsidiaryId, throughDate: "2026-08-31" }));
     assert.equal(await accountBalance(w.org.orgId, w.accounts.deposit), "-1000.0000", "August releases 100 shares' deposit");
-    await recordSecurityEvent({ ...approve(w), securityId: exercised.resultingSecurityId!, kind: "void", effectiveOn: "2026-09-05", reason: "Exercise recorded against the wrong grant" });
+    await recordSecurityEvent({ ...manage(w), securityId: exercised.resultingSecurityId!, kind: "void", effectiveOn: "2026-09-05", reason: "Exercise recorded against the wrong grant" });
     assert.equal((await loadSecurityDetail({ ...manage(w), securityId: option.id, asOf: "2026-09-05" })).state?.outstanding, "1200", "the voided certificate returns its units to the option");
-    const run = await postCompensationRun({ ...approve(w), subsidiaryId: w.org.subsidiaryId, throughDate: "2026-09-30" });
+    const run = applied(await postCompensationRun({ ...manage(w), subsidiaryId: w.org.subsidiaryId, throughDate: "2026-09-30" }));
     assert.ok(run.releaseJournalEntryId);
     assert.equal(await accountBalance(w.org.orgId, w.accounts.deposit), "0.0000");
     assert.equal(await accountBalance(w.org.orgId, w.accounts.common), "0.0000");

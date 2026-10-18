@@ -1,14 +1,19 @@
 /**
  * A scratch legal entity for equity suites: the equity duties split across a
- * manager, an approver and an outsider, a holder, the equity accounts and an
- * account policy, a common class, and the monthly periods of the second half
- * of 2026 (July already exists on the scratch calendar).
+ * manager (records every equity action), an approver (reads and may decide
+ * the actions an Equity action Flow routes to it) and an outsider, a holder,
+ * the equity accounts and an account policy, a common class, and the monthly
+ * periods of the second half of 2026 (July already exists on the scratch
+ * calendar).
  */
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
-import { createShareClass } from "../equity/structure.ts";
+import { recordSecurityEvent } from "../equity/events.ts";
+import { loadCapTableView } from "../equity/read-model.ts";
+import { issueSecurity } from "../equity/securities.ts";
+import { createPlan, createShareClass, recordSplit } from "../equity/structure.ts";
 import { EquityError } from "../equity/errors.ts";
 import { createScratchOrg, createScratchUser, seedPostingAccount, type ScratchOrg } from "./fixtures.ts";
 
@@ -33,6 +38,12 @@ export interface EquityWorld {
   holderId: string;
   accounts: EquityAccounts;
   commonClassId: string;
+}
+
+/** The applied outcome of a governed command; fails when an Equity action Flow holds it for approval. */
+export function applied<T extends { status: string }>(result: T): Extract<T, { status: "applied" }> {
+  assert.equal(result.status, "applied", "no Equity action Flow holds the action");
+  return result as Extract<T, { status: "applied" }>;
 }
 
 export async function setEquityFeature(orgId: string, key: string, on: boolean): Promise<void> {
@@ -145,4 +156,90 @@ export async function accountBalance(orgId: string, accountId: string): Promise<
 /** Sum of an entry's lines in ledger units: zero for a balanced entry. */
 export function linesBalance(lines: readonly { amount: string }[]): bigint {
   return lines.reduce((sum, line) => sum + BigInt(line.amount.replace(".", "")), 0n);
+}
+
+export interface PositionScenario {
+  preferredClassId: string;
+  planId: string;
+  optionId: string;
+  founderSharesId: string;
+  preferredSharesId: string;
+  exerciseCertificateId: string;
+  investorId: string;
+  /** Dates on and between the recorded activity, before and after each change. */
+  checkDates: string[];
+}
+
+/**
+ * One legal entity's history through every kind of position change: a
+ * plan pool, an option grant, common and preferred issuances, an exercise,
+ * a forfeiture and its reversal, a two-for-one common split (which doubles
+ * the preferred's as-converted shares) and the void of the exercise's
+ * certificate, all recorded through the equity commands.
+ */
+export async function seedPositionScenario(w: EquityWorld): Promise<PositionScenario> {
+  const actor = { orgId: w.org.orgId, actorId: w.managerId };
+  const entity = { ...actor, subsidiaryId: w.org.subsidiaryId };
+  const preferredClassId = (await createShareClass({
+    ...entity, code: "SA", name: "Series A Preferred", kind: "preferred", effectiveOn: "2026-01-01", authorizedShares: "5000000",
+    parValue: "0.0001", originalIssuePrice: "1.0000", conversionShareClassId: w.commonClassId,
+  })).id;
+  const planId = (await createPlan({
+    ...entity, code: "EIP", name: "Equity incentive plan", shareClassId: w.commonClassId, effectiveOn: "2026-01-01",
+    reservedShares: "100000", recycleForfeited: true, recycleExpired: true, recycleRepurchased: false,
+  })).id;
+  const optionId = (await issueSecurity({
+    ...entity, kind: "option", holderPartyId: w.holderId, issueDate: "2026-01-01", shareClassId: w.commonClassId, planId,
+    quantity: "4800", pricePerShare: "0.5000", optionType: "nso", expirationDate: "2036-01-01",
+    vestingStart: "2026-01-01", vestingMonths: 48, cliffMonths: 0, vestingFrequency: "monthly",
+    valuation: { sharePrice: "1", volatilityPercent: "50", riskFreeRatePercent: "4", expectedTermYears: "6", dividendYieldPercent: "0", attribution: "straight_line" },
+  })).id;
+  const founderSharesId = (await issueSecurity({
+    ...entity, kind: "share", holderPartyId: w.holderId, issueDate: "2026-07-01", shareClassId: w.commonClassId, quantity: "1000000",
+    pricePerShare: "0.0001", considerationAccountId: w.org.accounts.bank,
+  })).id;
+  const investorId = await seedHolder(w.org.orgId, "Seed Investor");
+  const preferredSharesId = (await issueSecurity({
+    ...entity, kind: "share", holderPartyId: investorId, issueDate: "2026-07-05", shareClassId: preferredClassId, quantity: "500000",
+    pricePerShare: "1", considerationAccountId: w.org.accounts.bank,
+  })).id;
+  const exercised = await recordSecurityEvent({
+    ...actor, securityId: optionId, kind: "exercise", effectiveOn: "2026-08-01", quantity: "100", considerationAccountId: w.org.accounts.bank,
+  });
+  const forfeited = await recordSecurityEvent({ ...actor, securityId: optionId, kind: "forfeit", effectiveOn: "2026-08-15", quantity: "50", reason: "Recorded against the wrong grant" });
+  await recordSecurityEvent({ ...actor, securityId: optionId, kind: "reverse", effectiveOn: "2026-08-20", reversesEventId: forfeited.eventId, reason: "The forfeiture was recorded in error" });
+  await recordSplit({ ...actor, shareClassId: w.commonClassId, effectiveOn: "2026-09-01", ratioNumerator: "2", ratioDenominator: "1", reason: "Two-for-one forward split" });
+  await recordSecurityEvent({ ...actor, securityId: exercised.resultingSecurityId!, kind: "void", effectiveOn: "2026-09-15", reason: "Exercise recorded against the wrong grant" });
+  return {
+    preferredClassId, planId, optionId, founderSharesId, preferredSharesId, exerciseCertificateId: exercised.resultingSecurityId!, investorId,
+    checkDates: ["2025-12-31", "2026-01-01", "2026-06-30", "2026-07-01", "2026-07-05", "2026-08-01", "2026-08-15", "2026-08-19", "2026-08-20",
+      "2026-08-31", "2026-09-01", "2026-09-14", "2026-09-15", "2026-12-31"],
+  };
+}
+
+/**
+ * The replayed cap table's positions on a date, keyed like the position
+ * ledger: `s:<security>` (outstanding and as converted) and `p:<plan>`
+ * (available pool, as converted at the plan class's ratio). Zero positions
+ * are omitted.
+ */
+export async function replayedPositions(w: EquityWorld, asOf: string): Promise<Map<string, { shares: bigint; asConverted: bigint }>> {
+  const view = await loadCapTableView({ orgId: w.org.orgId, actorId: w.managerId, subsidiaryId: w.org.subsidiaryId, asOf });
+  const positions = new Map<string, { shares: bigint; asConverted: bigint }>();
+  for (const row of view.table.holdings) {
+    if (row.outstanding !== "0") positions.set(`s:${row.securityId}`, { shares: BigInt(row.outstanding), asConverted: BigInt(row.asConverted) });
+  }
+  for (const plan of view.table.plans) {
+    const shares = BigInt(plan.available) > 0n ? BigInt(plan.available) : 0n;
+    if (shares === 0n) continue;
+    const shareClass = view.table.classes.find((row) => row.shareClassId === plan.shareClassId);
+    assert.equal(shareClass?.kind, "common", "scenario pools draw on common, which converts one for one");
+    positions.set(`p:${plan.planId}`, { shares, asConverted: shares });
+  }
+  return positions;
+}
+
+/** Positions without their zero entries, for comparison with the replay. */
+export function nonZero(positions: ReadonlyMap<string, { shares: bigint; asConverted: bigint }>): Map<string, { shares: bigint; asConverted: bigint }> {
+  return new Map([...positions].filter(([, value]) => value.shares !== 0n || value.asConverted !== 0n).sort(([a], [b]) => (a < b ? -1 : 1)));
 }

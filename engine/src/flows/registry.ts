@@ -13,6 +13,7 @@ import { BENEFIT_AWARD_SUBJECT_KIND } from "@openbooks/schema/src/benefits-progr
 import { benefitAwardsFlowAdapter, benefitAwardSubjectProfile } from "./benefit-awards-adapter.ts";
 import { FINANCIAL_CHANGE_SUBJECT_KIND, financialChangeSubjectProfile, financialChangesFlowAdapter } from "./financial-changes-adapter.ts";
 import type { FlowSubjectAdapter } from "./types.ts";
+import { EQUITY_ACTION_SUBJECT_KIND, equityActionSubjectProfile, equityActionsFlowAdapter } from "./equity-actions-adapter.ts";
 import { COMPENSATION_VERSION_SUBJECT_KIND, COMPENSATION_ASSIGNMENT_SUBJECT_KIND } from "@openbooks/schema/src/payroll-compensation.ts";
 import { compensationVersionsFlowAdapter, compensationAssignmentsFlowAdapter, compensationVersionSubjectProfile, compensationAssignmentSubjectProfile } from "./compensation-packages-adapter.ts";
 import { createDocumentsFlowAdapter } from "./documents-adapter.ts";
@@ -137,6 +138,7 @@ export function getFlowAdapter(subjectKind: string): FlowSubjectAdapter | null {
   if (subjectKind === BENEFIT_ENROLLMENT_SUBJECT_KIND) return benefitEnrollmentsFlowAdapter;
   if (subjectKind === BENEFIT_AWARD_SUBJECT_KIND) return benefitAwardsFlowAdapter;
   if (subjectKind === FINANCIAL_CHANGE_SUBJECT_KIND) return financialChangesFlowAdapter;
+  if (subjectKind === EQUITY_ACTION_SUBJECT_KIND) return equityActionsFlowAdapter;
   if (subjectKind === BANK_ACCOUNT_SUBJECT_KIND) return bankAccountsFlowAdapter;
   if (subjectKind === BUDGET_SCENARIO_SUBJECT_KIND) return budgetScenariosFlowAdapter;
   if (subjectKind === CLOSE_RUN_SUBJECT_KIND) return closeRunsFlowAdapter;
@@ -211,6 +213,7 @@ export function listFlowSubjectProfiles(): FlowSubjectProfile[] {
     benefitAwardSubjectProfile,
     benefitEnrollmentSubjectProfile,
     financialChangeSubjectProfile,
+    equityActionSubjectProfile,
     bankAccountSubjectProfile,
     budgetScenarioSubjectProfile,
     closeRunSubjectProfile,

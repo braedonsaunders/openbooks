@@ -213,6 +213,7 @@
     },
     "byLabel": "Vue de la table de capitalisation",
     "report": "Ouvrir le registre des titres",
+    "asOfReport": "Rapport de capitalisation au {date}",
     "emptyClasses": "Aucune catégorie d’actions pour l’instant. Utilisez Nouveau pour enregistrer la première catégorie de l’entité juridique.",
     "emptyHolders": "Aucun porteur pour l’instant. Émettez des actions ou des attributions pour inscrire des porteurs à la table de capitalisation.",
     "amend": "Modifier",
@@ -479,15 +480,15 @@
       "forfeit": "Les unités non acquises quittent l’attribution ; le coût comptabilisé pour elles est extourné lors du prochain traitement de rémunération en actions.",
       "expire": "Les unités acquises non exercées deviennent caduques. Leur coût comptabilisé est maintenu.",
       "cancel": "Les unités sont annulées, en commençant par les non acquises. L’annulation d’unités non acquises sans remplacement comptabilise leur coût restant.",
-      "repurchase": "La société rachète des actions en autodétention au montant payé (soumis à approbation).",
+      "repurchase": "La société rachète des actions en autodétention au montant payé. Un Flow peut exiger une approbation avant l’application.",
       "transfer": "Les unités acquises passent à un autre porteur sur un nouveau certificat.",
       "convert": "Les SAFE et obligations sont convertis au prix d’une levée à sa date de clôture ; les actions de préférence sont converties en actions ordinaires selon le ratio de conversion de la catégorie.",
-      "void": "Corrige un enregistrement saisi par erreur : son écriture est extournée à la date d’annulation et l’événement qui l’a produit est annulé (soumis à approbation).",
-      "repay": "Rembourser un SAFE à son montant d’achat, ou une obligation à son capital majoré des intérêts courus à la date, constatés au préalable. La prime ou la décote d’une obligation est comptabilisée en charge d’intérêts. Soumis à approbation.",
+      "void": "Corrige un enregistrement saisi par erreur : son écriture est extournée à la date d’annulation et l’événement qui l’a produit est annulé. Un Flow peut exiger une approbation avant l’application.",
+      "repay": "Rembourser un SAFE à son montant d’achat, ou une obligation à son capital majoré des intérêts courus à la date, constatés au préalable. La prime ou la décote d’une obligation est comptabilisée en charge d’intérêts. Un Flow peut exiger une approbation avant l’application.",
       "election_83b": "Enregistrer la date à laquelle le porteur a déposé une élection 83(b) pour ces actions restreintes. L’élection doit être déposée dans les 30 jours suivant la date d’émission.",
       "exerciseEarly": "Cette attribution admet l’exercice anticipé : les unités acquises sont exercées en premier, puis les tranches non acquises les plus proches. Les actions non acquises sont émises en actions restreintes que la société peut racheter jusqu’à leur acquisition ; leur trésorerie est conservée en dépôt et libérée en capital à mesure de leur acquisition.",
-      "repurchaseRestricted": "Les actions restreintes non acquises sont rachetées aux conditions de l’attribution, en soldant leur dépôt. Saisissez la juste valeur de marché par action lorsque l’attribution fixe le prix au plus bas du coût et de la juste valeur de marché. Soumis à approbation.",
-      "cancelConvertible": "Annuler le SAFE ou l’obligation sans paiement : son capital et ses intérêts courus passent en prime d’émission. Soumis à approbation."
+      "repurchaseRestricted": "Les actions restreintes non acquises sont rachetées aux conditions de l’attribution, en soldant leur dépôt. Saisissez la juste valeur de marché par action lorsque l’attribution fixe le prix au plus bas du coût et de la juste valeur de marché. Un Flow peut exiger une approbation avant l’application.",
+      "cancelConvertible": "Annuler le SAFE ou l’obligation sans paiement : son capital et ses intérêts courus passent en prime d’émission. Un Flow peut exiger une approbation avant l’application."
     },
     "reversed": "{kind} extourné",
     "carryingHint": "Valeur comptable à la date de référence : {amount}",
@@ -580,7 +581,7 @@
   },
   "reversal": {
     "title": "Extourner : {kind} du {date}",
-    "help": "L’écriture de l’événement est extournée à la date d’extourne et ses unités ou son solde sont rétablis à compter de cette date ; l’historique antérieur est conservé. L’activité ultérieure qui dépend de l’événement doit d’abord être extournée. Soumis à approbation."
+    "help": "L’écriture de l’événement est extournée à la date d’extourne et ses unités ou son solde sont rétablis à compter de cette date ; l’historique antérieur est conservé. L’activité ultérieure qui dépend de l’événement doit d’abord être extournée. Un Flow peut exiger une approbation avant l’application."
   },
   "mfn": {
     "description": "Ce SAFE peut adopter les conditions d’un instrument convertible émis après lui, dans sa devise, tant qu’il est en cours : un plafond s’il n’en a pas ou si le sien est plus élevé, une décote s’il n’en a pas ou si la sienne est plus faible, ou la conversion post-money. Le plafond, la décote et le type de SAFE de l’instrument ultérieur sont adoptés ensemble à compter de la date d’élection.",
@@ -598,12 +599,33 @@
       "post_money": "Pré-money"
     },
     "adopt": "Adopter",
-    "adoptHelp": "Enregistrer l’élection du porteur d’adopter les conditions de {number}. Les conversions à compter de la date d’élection les utilisent. Soumis à approbation.",
+    "adoptHelp": "Enregistrer l’élection du porteur d’adopter les conditions de {number}. Les conversions à compter de la date d’élection les utilisent. Un Flow peut exiger une approbation avant l’application.",
     "electedOn": "Date d’élection",
     "record": "Enregistrer l’élection",
     "elections": "Élections enregistrées",
     "source": "Conditions de",
     "saved": "Élection MFN enregistrée",
     "failed": "L’élection n’a pas été enregistrée."
+  },
+  "approval": {
+    "pendingTitle": "En attente d’approbation",
+    "openApprovals": "Ouvrir les approbations",
+    "pendingItem": "{action} · {subject} · en vigueur le {date} · demandé par {requester}",
+    "unknownRequester": "un ancien utilisateur",
+    "submitted": "Soumis à approbation. L’opération s’applique lorsqu’un approbateur l’approuve dans Approbations.",
+    "action": {
+      "void": "Annulation",
+      "reverse": "Extourne",
+      "repurchase": "Rachat",
+      "repay": "Remboursement",
+      "cancel_convertible": "Annulation sans paiement",
+      "class_amendment": "Modification de catégorie",
+      "split": "Division d’actions",
+      "reserve_change": "Modification de la réserve",
+      "mfn_election": "Élection NPF",
+      "compensation_run": "Calcul de rémunération en actions",
+      "interest_run": "Calcul des intérêts d’obligations",
+      "account_policy": "Version de la politique de comptes"
+    }
   }
 }

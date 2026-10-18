@@ -20,7 +20,12 @@ import type { SqlExecutor } from "../platform/db.ts";
 import { isIsoCalendarDate } from "../platform/civil-date.ts";
 import { isUuid } from "../platform/uuid.ts";
 import { EQUITY_TYPES, LIABILITY_TYPES, PNL_COST_TYPES } from "../records/account-types.ts";
+import { db, withOrgTransaction } from "../platform/db.ts";
+import { EquityError } from "./errors.ts";
+import { governEquityAction, type GovernedStatus } from "./governance.ts";
+import { requireReason, writeEquityAudit } from "./internal.ts";
 import { EQUITY_JOURNAL_ORIGIN } from "./posting.ts";
+import { inEquityCommand } from "./structure.ts";
 
 export const EQUITY_POLICY_ACCOUNT_FIELDS: readonly { key: string; label: string; types: readonly string[] }[] = [
   { key: "commonStockAccountId", label: "common stock", types: EQUITY_TYPES },
@@ -70,4 +75,66 @@ export async function equityAccountPolicyRefusal(runner: SqlExecutor, orgId: str
     return `Equity entries are posted through ${latest.posting_date}; a new policy version must take effect after that date so posted history keeps its accounts.`;
   }
   return null;
+}
+
+export interface RecordAccountPolicyInput {
+  orgId: string;
+  actorId: string;
+  subsidiaryId: string;
+  effectiveFrom: string;
+  commonStockAccountId: string;
+  preferredStockAccountId: string;
+  apicAccountId: string;
+  apicShareBasedAccountId: string;
+  compensationExpenseAccountId: string;
+  treasuryStockAccountId: string;
+  convertibleInstrumentsAccountId: string;
+  interestExpenseAccountId?: string | null;
+  accruedInterestAccountId?: string | null;
+  earlyExerciseDepositAccountId?: string | null;
+  reason: string;
+}
+
+/**
+ * Record a new equity account policy version (equity.manage; a governed
+ * action an Equity action Flow may require approval for). Versions are
+ * retained: a change is a new version from its date.
+ */
+export async function recordEquityAccountPolicy(input: RecordAccountPolicyInput): Promise<{ id: string | null; status: GovernedStatus; requestId: string }> {
+  const reason = requireReason(input.reason, "the account policy version");
+  const refusal = await withOrgTransaction(input.orgId, () => equityAccountPolicyRefusal(db, input.orgId, input as unknown as Record<string, unknown>));
+  if (refusal) throw new EquityError(refusal, { code: "equity_account_policy_invalid", remedy: "Correct the policy version, then save it again." });
+  const { orgId: _org, actorId: _actor, ...payload } = input;
+  const outcome = await governEquityAction({
+    orgId: input.orgId, actorId: input.actorId, subsidiaryId: input.subsidiaryId, action: "account_policy",
+    subjectId: null, subjectLabel: `Equity accounts from ${input.effectiveFrom}`, effectiveOn: input.effectiveFrom, reason,
+    summary: {}, payload, idempotencyKey: null,
+  }, (actorId) => applyEquityAccountPolicy({ ...input, actorId }));
+  return { id: outcome.result?.id ?? null, status: outcome.status, requestId: outcome.requestId };
+}
+
+/** Apply an account policy version: the command its approval releases. */
+export async function applyEquityAccountPolicy(input: RecordAccountPolicyInput): Promise<{ id: string }> {
+  const reason = requireReason(input.reason, "the account policy version");
+  return inEquityCommand(input, "equity.manage", async () => {
+    const refusal = await equityAccountPolicyRefusal(db, input.orgId, input as unknown as Record<string, unknown>);
+    if (refusal) throw new EquityError(refusal, { status: 409, code: "equity_account_policy_invalid", remedy: "Record a new policy version that satisfies the current ledger." });
+    const optional = (value: string | null | undefined) => (typeof value === "string" && value !== "" ? value : null);
+    const row = (await db.execute<{ id: string }>(sql`
+      insert into equity_account_policies (org_id, subsidiary_id, effective_from, common_stock_account_id, preferred_stock_account_id,
+        apic_account_id, apic_share_based_account_id, compensation_expense_account_id, treasury_stock_account_id,
+        convertible_instruments_account_id, interest_expense_account_id, accrued_interest_account_id, early_exercise_deposit_account_id,
+        reason, created_by, updated_by)
+      values (${input.orgId}, ${input.subsidiaryId}, ${input.effectiveFrom}::date, ${input.commonStockAccountId}, ${input.preferredStockAccountId},
+        ${input.apicAccountId}, ${input.apicShareBasedAccountId}, ${input.compensationExpenseAccountId}, ${input.treasuryStockAccountId},
+        ${input.convertibleInstrumentsAccountId}, ${optional(input.interestExpenseAccountId)}, ${optional(input.accruedInterestAccountId)},
+        ${optional(input.earlyExerciseDepositAccountId)}, ${reason}, ${input.actorId}, ${input.actorId})
+      returning id`)).rows[0];
+    if (!row) throw new EquityError("The policy version was not saved.", { status: 409, code: "equity_write_failed", remedy: "Try again." });
+    await writeEquityAudit(db, {
+      orgId: input.orgId, table: "equity_account_policies", rowId: row.id, action: "equity.account_policy.create", actorId: input.actorId,
+      changes: { before: null, after: { ...input, orgId: undefined, actorId: undefined }, reason },
+    });
+    return { id: row.id };
+  });
 }

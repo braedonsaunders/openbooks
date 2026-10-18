@@ -744,6 +744,10 @@
         "label": "株式等証券台帳",
         "description": "発行時点の株券、ストックオプション、RSU、ワラント、SAFE、転換社債の一覧です。保有者、種類株式、プラン、ラウンド、数量、価格、対価を示します。"
       },
+      "equity_cap_table_positions": {
+        "label": "資本政策表ポジションの異動",
+        "description": "株券、付与、プラン枠の各ポジションの変動。株式分割で修正した発行済株式数と、同じ株式の普通株式換算数です。日付までを合計すると、その日の資本政策表になります。"
+      },
       "ledger_lines": {
         "label": "元帳明細",
         "description": "仕訳、勘定、取引先、ディメンションを含むすべての仕訳明細 — 記帳済みまたは下書きの総勘定元帳の全明細。"
@@ -1267,6 +1271,28 @@
         "voided": "取消済み",
         "security_id": "証券 (ID)",
         "journal_entry_id": "発行仕訳 (ID)"
+      },
+      "equity_cap_table_positions": {
+        "effective_on": "発効日",
+        "share_class": "株式の種類",
+        "class_kind": "種類区分",
+        "position_kind": "ポジション種別",
+        "holder": "保有者",
+        "security_number": "証券",
+        "security_kind": "証券の種類",
+        "plan_pool": "プラン枠",
+        "subsidiary": "子会社",
+        "outstanding": "発行済株式数",
+        "as_converted_outstanding": "発行済（換算後）",
+        "awards_outstanding": "付与残高",
+        "pool_available": "利用可能なプラン枠（換算後）",
+        "fully_diluted": "完全希薄化後",
+        "shares_delta": "株式数の変動",
+        "as_converted_delta": "換算後の変動",
+        "security_id": "証券 (ID)",
+        "plan_id": "プラン (ID)",
+        "holder_party_id": "保有者 (ID)",
+        "movement_id": "異動 (ID)"
       },
       "ledger_lines": {
         "posting_date": "記帳日",
@@ -3333,6 +3359,10 @@
     "equity-stock-compensation-schedule": {
       "name": "株式報酬費用スケジュール",
       "description": "転記済みの計算に基づく、期間別・通貨別の株式報酬費用です。"
+    },
+    "equity-cap-table": {
+      "name": "基準日時点の資本政策表",
+      "description": "ポジション台帳から、asOf 日時点の株式の種類と保有者別の発行済株式数と完全希薄化後株式数（付与とプラン枠を含む）を示します。"
     },
     "ap-aging-by-vendor": {
       "name": "仕入先別買掛金年齢分析",

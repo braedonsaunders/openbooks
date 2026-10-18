@@ -744,6 +744,10 @@
         "label": "Equity securities register",
         "description": "Every share certificate, option, RSU, warrant, SAFE and convertible note as issued: holder, class, plan, round, quantity, price and consideration."
       },
+      "equity_cap_table_positions": {
+        "label": "Cap table position movements",
+        "description": "Every change of a share certificate, award or plan pool position: outstanding shares restated through splits and the same shares as converted into common. Summed through a date, the movements are the cap table on that date."
+      },
       "ledger_lines": {
         "label": "Ledger lines",
         "description": "Every journal line with its entry, account, party and dimensions — the full general-ledger detail, posted or draft."
@@ -1267,6 +1271,28 @@
         "voided": "Voided",
         "security_id": "Security (id)",
         "journal_entry_id": "Issuance entry (id)"
+      },
+      "equity_cap_table_positions": {
+        "effective_on": "Effective date",
+        "share_class": "Share class",
+        "class_kind": "Class kind",
+        "position_kind": "Position type",
+        "holder": "Holder",
+        "security_number": "Security",
+        "security_kind": "Security kind",
+        "plan_pool": "Plan pool",
+        "subsidiary": "Subsidiary",
+        "outstanding": "Outstanding shares",
+        "as_converted_outstanding": "Outstanding, as converted",
+        "awards_outstanding": "Awards outstanding",
+        "pool_available": "Pool available, as converted",
+        "fully_diluted": "Fully diluted",
+        "shares_delta": "Share change",
+        "as_converted_delta": "As-converted change",
+        "security_id": "Security (id)",
+        "plan_id": "Plan (id)",
+        "holder_party_id": "Holder (id)",
+        "movement_id": "Movement (id)"
       },
       "ledger_lines": {
         "posting_date": "Posting date",
@@ -3333,6 +3359,10 @@
     "equity-stock-compensation-schedule": {
       "name": "Stock compensation expense schedule",
       "description": "Stock compensation posted by period and currency, from the posted runs."
+    },
+    "equity-cap-table": {
+      "name": "Cap table as of a date",
+      "description": "Outstanding and fully diluted shares by share class and holder, with awards and plan pools, from the position ledger as of the asOf date."
     },
     "ap-aging-by-vendor": {
       "name": "AP aging by vendor",

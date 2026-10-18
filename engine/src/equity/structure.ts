@@ -7,9 +7,10 @@
  * checks the actor's live authority for the legal entity, takes the
  * entity's equity lock, re-reads the entity's history and validates against
  * it, writes one retained row, and audits it with the actor, the before and
- * after state and the reason. Recording a class, plan or round is a
- * bookkeeping duty (equity.manage); amending a class, changing a plan
- * reserve and recording a split are approvals (equity.approve).
+ * after state and the reason. Every command is the equity.manage duty;
+ * amending a class, changing a plan reserve and recording a split are
+ * governed actions an Equity action Flow may require approval for (see
+ * governance.ts).
  *
  * A preferred class names the common class it converts into and whether its
  * conversion price adjusts for that class's splits. A split of a common
@@ -25,6 +26,7 @@ import { isUuid } from "../platform/uuid.ts";
 import { authorizedShares, classCommitted, conversionClassOf, conversionPrice, planPool } from "./cap-table.ts";
 import { EquityError } from "./errors.ts";
 import { spotRate } from "./fx.ts";
+import { governEquityAction, type GovernedStatus } from "./governance.ts";
 import {
   assertEquityFeature,
   currencyExponent,
@@ -37,6 +39,7 @@ import {
 } from "./internal.ts";
 import { compareRational, formatPrice, parseDecimal, parsePrice, parseShares, PERCENT_SCALE, rational } from "./quantities.ts";
 import { validateSplitRatio } from "./splits.ts";
+import { syncPositionLedger } from "./positions.ts";
 import { loadEquityBook } from "./store.ts";
 import type { AntiDilution, EquityBook, Participation, ShareClassKind } from "./types.ts";
 
@@ -72,7 +75,10 @@ export async function inEquityCommand<T>(
     await requireEquityAuthority(db, input.orgId, input.actorId, input.subsidiaryId, permission);
     await lockEquityEntity(db, input.orgId, input.subsidiaryId);
     const book = await loadEquityBook(db, input.orgId, input.subsidiaryId);
-    return work({ currency: entity.currency, entityName: entity.name, book });
+    const result = await work({ currency: entity.currency, entityName: entity.name, book });
+    // Every equity write leaves the position ledger reconciled to the replayed history.
+    await syncPositionLedger(db, input.orgId, input.subsidiaryId);
+    return result;
   });
 }
 
@@ -104,7 +110,7 @@ export function assertWithinAuthorized(book: EquityBook, shareClassId: string, f
       throw new EquityError(`Class ${shareClass.code} would commit ${committed} shares on ${date} but authorizes ${authorized}.`, {
         status: 409,
         code: "equity_authorized_exceeded",
-        remedy: `Record an authorized-share amendment for class ${shareClass.code} (an approval), or reduce the quantity.`,
+        remedy: `Record an authorized-share amendment for class ${shareClass.code}, or reduce the quantity.`,
       });
     }
   }
@@ -121,7 +127,7 @@ export function assertPoolsCovered(book: EquityBook, planId: string, from: strin
       throw new EquityError(`Plan ${plan.code} would have ${pool.available} shares available on ${date}.`, {
         status: 409,
         code: "equity_pool_exhausted",
-        remedy: `Increase plan ${plan.code}'s reserve (an approval) or grant fewer units.`,
+        remedy: `Increase plan ${plan.code}'s reserve or grant fewer units.`,
       });
     }
   }
@@ -223,12 +229,28 @@ export async function createShareClass(input: CreateShareClassInput): Promise<{ 
 
 /** Load a share class with its legal entity; unknown classes refuse with a 404. */
 async function classEntity(orgId: string, shareClassId: string): Promise<string> {
-  if (!isUuid(shareClassId)) throw new EquityError("The share class does not exist.", { status: 404, code: "equity_class_unknown", remedy: "Choose a share class." });
-  const row = (await withOrgTransaction(orgId, async () => (await db.execute<{ subsidiary_id: string }>(sql`
-    select subsidiary_id from equity_share_classes where org_id = ${orgId} and id = ${shareClassId}`)).rows[0]));
-  if (!row) throw new EquityError("The share class does not exist.", { status: 404, code: "equity_class_unknown", remedy: "Choose a share class." });
-  return row.subsidiary_id;
+  return (await classOwner(orgId, shareClassId)).subsidiaryId;
 }
+
+async function classOwner(orgId: string, shareClassId: string): Promise<{ subsidiaryId: string; code: string }> {
+  if (!isUuid(shareClassId)) throw new EquityError("The share class does not exist.", { status: 404, code: "equity_class_unknown", remedy: "Choose a share class." });
+  const row = (await withOrgTransaction(orgId, async () => (await db.execute<{ subsidiary_id: string; code: string }>(sql`
+    select subsidiary_id, code from equity_share_classes where org_id = ${orgId} and id = ${shareClassId}`)).rows[0]));
+  if (!row) throw new EquityError("The share class does not exist.", { status: 404, code: "equity_class_unknown", remedy: "Choose a share class." });
+  return { subsidiaryId: row.subsidiary_id, code: row.code };
+}
+
+/** A governed structure change's outcome: its record once applied, null while it awaits approval. */
+export interface GovernedRecord {
+  id: string | null;
+  status: GovernedStatus;
+  requestId: string;
+}
+
+const payloadOf = <T extends EquityCommand>(input: T): Omit<T, "orgId" | "actorId"> => {
+  const { orgId: _org, actorId: _actor, ...rest } = input;
+  return rest;
+};
 
 export interface AmendShareClassInput extends EquityCommand {
   shareClassId: string;
@@ -241,12 +263,29 @@ export interface AmendShareClassInput extends EquityCommand {
   reason: string;
 }
 
-/** Amend a class's authorized shares, conversion price or conversion class from a date (an approval). */
-export async function amendShareClass(input: AmendShareClassInput): Promise<{ id: string }> {
+/**
+ * Amend a class's authorized shares, conversion price or conversion class
+ * from a date (a governed action: an Equity action Flow may require approval).
+ */
+export async function amendShareClass(input: AmendShareClassInput): Promise<GovernedRecord> {
+  const effectiveOn = requireDate(input.effectiveOn, "effectiveOn", "The effective date");
+  const reason = requireReason(input.reason, "the class amendment");
+  const owner = await classOwner(input.orgId, input.shareClassId);
+  const outcome = await governEquityAction({
+    orgId: input.orgId, actorId: input.actorId, subsidiaryId: owner.subsidiaryId, action: "class_amendment",
+    subjectId: input.shareClassId, subjectLabel: `Class ${owner.code}`, effectiveOn, reason,
+    summary: { shareClassCode: owner.code, quantity: input.authorizedShares ?? null, amount: input.conversionPrice ?? null },
+    payload: payloadOf(input), idempotencyKey: null,
+  }, (actorId) => applyShareClassAmendment({ ...input, actorId }));
+  return { id: outcome.result?.id ?? null, status: outcome.status, requestId: outcome.requestId };
+}
+
+/** Apply a class amendment: the command its approval releases. */
+export async function applyShareClassAmendment(input: AmendShareClassInput): Promise<{ id: string }> {
   const effectiveOn = requireDate(input.effectiveOn, "effectiveOn", "The effective date");
   const reason = requireReason(input.reason, "the class amendment");
   const subsidiaryId = await classEntity(input.orgId, input.shareClassId);
-  return inEquityCommand({ ...input, subsidiaryId }, "equity.approve", async ({ book }) => {
+  return inEquityCommand({ ...input, subsidiaryId }, "equity.manage", async ({ book }) => {
     const shareClass = book.classes.find((row) => row.id === input.shareClassId)!;
     if (effectiveOn < shareClass.effectiveOn) {
       throw new EquityError("An amendment cannot precede the class's effective date.", { code: "equity_date_invalid", remedy: `Date the amendment on or after ${shareClass.effectiveOn}.`, field: "effectiveOn" });
@@ -312,18 +351,37 @@ export interface RecordSplitInput extends EquityCommand {
 }
 
 /**
- * Record a stock split (an approval). It must postdate every recorded
+ * Record a stock split (a governed action). It must postdate every recorded
  * activity of the class, so quantities already recorded keep the terms they
  * were stated in.
  */
-export async function recordSplit(input: RecordSplitInput): Promise<{ id: string; adjustedClasses: { shareClassId: string; code: string; conversionPriceBefore: string | null; conversionPriceAfter: string | null }[] }> {
+export interface SplitResult {
+  id: string;
+  adjustedClasses: { shareClassId: string; code: string; conversionPriceBefore: string | null; conversionPriceAfter: string | null }[];
+}
+
+export async function recordSplit(input: RecordSplitInput): Promise<Omit<SplitResult, "id"> & GovernedRecord> {
+  const effectiveOn = requireDate(input.effectiveOn, "effectiveOn", "The effective date");
+  const reason = requireReason(input.reason, "the split");
+  const owner = await classOwner(input.orgId, input.shareClassId);
+  const outcome = await governEquityAction({
+    orgId: input.orgId, actorId: input.actorId, subsidiaryId: owner.subsidiaryId, action: "split",
+    subjectId: input.shareClassId, subjectLabel: `Class ${owner.code} ${input.ratioNumerator}:${input.ratioDenominator}`, effectiveOn, reason,
+    summary: { shareClassCode: owner.code, quantity: null, amount: null },
+    payload: payloadOf(input), idempotencyKey: null,
+  }, (actorId) => applySplit({ ...input, actorId }));
+  return { id: outcome.result?.id ?? null, adjustedClasses: outcome.result?.adjustedClasses ?? [], status: outcome.status, requestId: outcome.requestId };
+}
+
+/** Apply a stock split: the command its approval releases. */
+export async function applySplit(input: RecordSplitInput): Promise<SplitResult> {
   const effectiveOn = requireDate(input.effectiveOn, "effectiveOn", "The effective date");
   const reason = requireReason(input.reason, "the split");
   const numerator = parseShares(input.ratioNumerator, "the new share count");
   const denominator = parseShares(input.ratioDenominator, "the old share count");
   validateSplitRatio(numerator, denominator);
   const subsidiaryId = await classEntity(input.orgId, input.shareClassId);
-  return inEquityCommand({ ...input, subsidiaryId }, "equity.approve", async ({ book }) => {
+  return inEquityCommand({ ...input, subsidiaryId }, "equity.manage", async ({ book }) => {
     const shareClass = book.classes.find((row) => row.id === input.shareClassId)!;
     const latest = latestClassActivity(book, shareClass.id);
     if (latest !== null && effectiveOn <= latest) {
@@ -343,7 +401,7 @@ export async function recordSplit(input: RecordSplitInput): Promise<{ id: string
         throw new EquityError(`Preferred ${unnamed.map((row) => row.code).join(", ")} ${unnamed.length === 1 ? "does" : "do"} not name the common class ${unnamed.length === 1 ? "it converts" : "they convert"} into, so the split's effect on ${unnamed.length === 1 ? "its" : "their"} conversion price is unknown.`, {
           status: 409,
           code: "equity_conversion_class_missing",
-          remedy: "Record each preferred class's conversion class (Cap table → Amend → Conversion class, an approval), then record the split.",
+          remedy: "Record each preferred class's conversion class (Cap table → Amend → Conversion class), then record the split.",
         });
       }
       const pendingSplit: EquityBook = { ...book, splits: [...book.splits, { id: "pending", shareClassId: shareClass.id, effectiveOn, ratioNumerator: numerator, ratioDenominator: denominator }] };
@@ -435,8 +493,25 @@ export interface ChangePlanReserveInput extends EquityCommand {
   reason: string;
 }
 
-/** Increase or reduce a plan's reserve from a date (an approval). */
-export async function changePlanReserve(input: ChangePlanReserveInput): Promise<{ id: string }> {
+/** Increase or reduce a plan's reserve from a date (a governed action). */
+export async function changePlanReserve(input: ChangePlanReserveInput): Promise<GovernedRecord> {
+  const effectiveOn = requireDate(input.effectiveOn, "effectiveOn", "The effective date");
+  const reason = requireReason(input.reason, "the reserve change");
+  if (!isUuid(input.planId)) throw new EquityError("The plan does not exist.", { status: 404, code: "equity_plan_unknown", remedy: "Choose a plan." });
+  const plan = await withOrgTransaction(input.orgId, async () => (await db.execute<{ subsidiary_id: string; code: string }>(sql`
+    select subsidiary_id, code from equity_plans where org_id = ${input.orgId} and id = ${input.planId}`)).rows[0]);
+  if (!plan) throw new EquityError("The plan does not exist.", { status: 404, code: "equity_plan_unknown", remedy: "Choose a plan." });
+  const outcome = await governEquityAction({
+    orgId: input.orgId, actorId: input.actorId, subsidiaryId: plan.subsidiary_id, action: "reserve_change",
+    subjectId: input.planId, subjectLabel: `Plan ${plan.code}`, effectiveOn, reason,
+    summary: { quantity: typeof input.shareDelta === "string" ? input.shareDelta.trim() : null, amount: null },
+    payload: payloadOf(input), idempotencyKey: null,
+  }, (actorId) => applyReserveChange({ ...input, actorId }));
+  return { id: outcome.result?.id ?? null, status: outcome.status, requestId: outcome.requestId };
+}
+
+/** Apply a plan reserve change: the command its approval releases. */
+export async function applyReserveChange(input: ChangePlanReserveInput): Promise<{ id: string }> {
   const effectiveOn = requireDate(input.effectiveOn, "effectiveOn", "The effective date");
   const reason = requireReason(input.reason, "the reserve change");
   const text = typeof input.shareDelta === "string" ? input.shareDelta.trim() : "";
@@ -448,7 +523,7 @@ export async function changePlanReserve(input: ChangePlanReserveInput): Promise<
   const plan = await withOrgTransaction(input.orgId, async () => (await db.execute<{ subsidiary_id: string }>(sql`
     select subsidiary_id from equity_plans where org_id = ${input.orgId} and id = ${input.planId}`)).rows[0]);
   if (!plan) throw new EquityError("The plan does not exist.", { status: 404, code: "equity_plan_unknown", remedy: "Choose a plan." });
-  return inEquityCommand({ ...input, subsidiaryId: plan.subsidiary_id }, "equity.approve", async ({ book }) => {
+  return inEquityCommand({ ...input, subsidiaryId: plan.subsidiary_id }, "equity.manage", async ({ book }) => {
     const record = book.plans.find((row) => row.id === input.planId)!;
     if (effectiveOn < record.effectiveOn) throw new EquityError("A reserve change cannot precede the plan.", { code: "equity_date_invalid", remedy: `Date the change on or after ${record.effectiveOn}.`, field: "effectiveOn" });
     const before = planPool(book, record, effectiveOn);

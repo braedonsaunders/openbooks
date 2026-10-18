@@ -15,7 +15,13 @@ export const EQUITY_ENTITIES: SetupEntity[] = [
     table: 'equity_account_policies',
     groupKey: 'accounting',
     featureKey: 'equity',
-    writePermission: 'equity.approve',
+    writePermission: 'equity.manage',
+    // A version is a governed equity action: the equity engine validates it
+    // and submits it to any enabled Equity action Flow, which may hold it for
+    // approval before it applies.
+    command: { name: 'recordEquityAccountPolicy', permission: 'equity.manage', feature: 'equity' },
+    // Governed versions are recorded one at a time through the command, never in bulk.
+    importVia: 'none',
     iconKey: 'book-open',
     orgScoped: true,
     actorCols: true,

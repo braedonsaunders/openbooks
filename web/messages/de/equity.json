@@ -213,6 +213,7 @@
     },
     "byLabel": "Ansicht der Kapitaltabelle",
     "report": "Wertpapierregister öffnen",
+    "asOfReport": "Cap-Table-Bericht zum {date}",
     "emptyClasses": "Noch keine Anteilsklassen. Erfassen Sie über „Neu“ die erste Klasse des Rechtsträgers.",
     "emptyHolders": "Noch keine Inhaber. Geben Sie Anteile oder Zuteilungen aus, um Inhaber in die Kapitaltabelle aufzunehmen.",
     "amend": "Ändern",
@@ -479,15 +480,15 @@
       "forfeit": "Nicht unverfallbare Einheiten scheiden aus der Zuteilung aus; die für sie erfassten Kosten werden im nächsten Lauf der aktienbasierten Vergütung storniert.",
       "expire": "Unverfallbare, nicht ausgeübte Einheiten verfallen. Ihre erfassten Kosten bleiben bestehen.",
       "cancel": "Einheiten werden storniert, nicht unverfallbare zuerst. Die Stornierung nicht unverfallbarer Einheiten ohne Ersatz erfasst deren verbleibende Kosten.",
-      "repurchase": "Das Unternehmen kauft Anteile zum gezahlten Betrag als eigene Anteile zurück (genehmigungspflichtig).",
+      "repurchase": "Das Unternehmen kauft Anteile zum gezahlten Betrag als eigene Anteile zurück. Ein Flow kann vor der Anwendung eine Genehmigung verlangen.",
       "transfer": "Unverfallbare Einheiten gehen auf einem neuen Zertifikat an einen anderen Inhaber über.",
       "convert": "SAFEs und Wandeldarlehen werden zum Preis einer Runde an deren Abschlussdatum gewandelt; Vorzugsanteile werden zum Wandlungsverhältnis der Klasse in Stammanteile gewandelt.",
-      "void": "Korrigiert einen irrtümlich erfassten Datensatz: Seine Buchung wird zum Ungültigkeitsdatum storniert und das Ereignis, das ihn erzeugt hat, wird rückgängig gemacht (genehmigungspflichtig).",
-      "repay": "Einen SAFE zu seinem Kaufbetrag oder ein Wandeldarlehen zu seinem Nennbetrag zuzüglich der bis zum Datum aufgelaufenen Zinsen zurückzahlen; die Zinsen werden zuerst abgegrenzt. Ein Agio oder Disagio des Darlehens wird in den Zinsaufwand gebucht. Dies ist genehmigungspflichtig.",
+      "void": "Korrigiert einen irrtümlich erfassten Datensatz: Seine Buchung wird zum Ungültigkeitsdatum storniert und das Ereignis, das ihn erzeugt hat, wird rückgängig gemacht. Ein Flow kann vor der Anwendung eine Genehmigung verlangen.",
+      "repay": "Einen SAFE zu seinem Kaufbetrag oder ein Wandeldarlehen zu seinem Nennbetrag zuzüglich der bis zum Datum aufgelaufenen Zinsen zurückzahlen; die Zinsen werden zuerst abgegrenzt. Ein Agio oder Disagio des Darlehens wird in den Zinsaufwand gebucht. Ein Flow kann vor der Anwendung eine Genehmigung verlangen.",
       "election_83b": "Das Datum erfassen, an dem der Inhaber eine 83(b)-Wahl für diese gesperrten Anteile eingereicht hat. Die Wahl muss innerhalb von 30 Tagen nach dem Ausgabedatum eingereicht werden.",
       "exerciseEarly": "Diese Gewährung erlaubt die vorzeitige Ausübung: Zuerst werden unverfallbare Einheiten ausgeübt, dann die frühesten nicht unverfallbaren Tranchen. Nicht unverfallbare Anteile werden als gesperrte Anteile ausgegeben, die das Unternehmen bis zur Unverfallbarkeit zurückkaufen kann; ihre Barmittel werden als Einlage gehalten und mit Eintritt der Unverfallbarkeit in das Kapital freigegeben.",
-      "repurchaseRestricted": "Nicht unverfallbare gesperrte Anteile werden zu den Bedingungen der Gewährung zurückgekauft, wobei ihre Einlage ausgeglichen wird. Geben Sie den Verkehrswert je Anteil ein, wenn die Gewährung zum niedrigeren Wert aus Anschaffungskosten und Verkehrswert bepreist. Dies ist genehmigungspflichtig.",
-      "cancelConvertible": "Den SAFE oder das Wandeldarlehen ohne Zahlung stornieren: Nennbetrag und aufgelaufene Zinsen werden in die Kapitalrücklage umgebucht. Dies ist genehmigungspflichtig."
+      "repurchaseRestricted": "Nicht unverfallbare gesperrte Anteile werden zu den Bedingungen der Gewährung zurückgekauft, wobei ihre Einlage ausgeglichen wird. Geben Sie den Verkehrswert je Anteil ein, wenn die Gewährung zum niedrigeren Wert aus Anschaffungskosten und Verkehrswert bepreist. Ein Flow kann vor der Anwendung eine Genehmigung verlangen.",
+      "cancelConvertible": "Den SAFE oder das Wandeldarlehen ohne Zahlung stornieren: Nennbetrag und aufgelaufene Zinsen werden in die Kapitalrücklage umgebucht. Ein Flow kann vor der Anwendung eine Genehmigung verlangen."
     },
     "reversed": "{kind} rückabgewickelt",
     "carryingHint": "Buchwert zum Stichtag: {amount}",
@@ -580,7 +581,7 @@
   },
   "reversal": {
     "title": "{kind} vom {date} rückabwickeln",
-    "help": "Die Buchung des Ereignisses wird zum Rückabwicklungsdatum storniert, und seine Einheiten oder sein Saldo werden ab diesem Datum zurückgeführt; die Historie davor bleibt bestehen. Spätere Aktivitäten, die auf dem Ereignis beruhen, müssen zuerst rückabgewickelt werden. Dies ist genehmigungspflichtig."
+    "help": "Die Buchung des Ereignisses wird zum Rückabwicklungsdatum storniert, und seine Einheiten oder sein Saldo werden ab diesem Datum zurückgeführt; die Historie davor bleibt bestehen. Spätere Aktivitäten, die auf dem Ereignis beruhen, müssen zuerst rückabgewickelt werden. Ein Flow kann vor der Anwendung eine Genehmigung verlangen."
   },
   "mfn": {
     "description": "Dieser SAFE kann, solange er aussteht, die Bedingungen eines nach ihm in seiner Währung ausgegebenen Wandelinstruments übernehmen: eine Bewertungsobergrenze, wenn er keine oder eine höhere hat, einen Abschlag, wenn er keinen oder einen niedrigeren hat, oder die Post-Money-Wandlung. Bewertungsobergrenze, Abschlag und SAFE-Art des späteren Instruments werden ab dem Wahldatum gemeinsam übernommen.",
@@ -598,12 +599,33 @@
       "post_money": "Pre-Money"
     },
     "adopt": "Übernehmen",
-    "adoptHelp": "Die Wahl des Inhabers erfassen, die Bedingungen von {number} zu übernehmen. Wandlungen ab dem Wahldatum verwenden sie. Dies ist genehmigungspflichtig.",
+    "adoptHelp": "Die Wahl des Inhabers erfassen, die Bedingungen von {number} zu übernehmen. Wandlungen ab dem Wahldatum verwenden sie. Ein Flow kann vor der Anwendung eine Genehmigung verlangen.",
     "electedOn": "Wahldatum",
     "record": "Wahl erfassen",
     "elections": "Erfasste Wahlen",
     "source": "Bedingungen von",
     "saved": "MFN-Wahl erfasst",
     "failed": "Die Wahl wurde nicht erfasst."
+  },
+  "approval": {
+    "pendingTitle": "Wartet auf Genehmigung",
+    "openApprovals": "Genehmigungen öffnen",
+    "pendingItem": "{action} · {subject} · gültig ab {date} · angefordert von {requester}",
+    "unknownRequester": "einem ehemaligen Benutzer",
+    "submitted": "Zur Genehmigung eingereicht. Der Vorgang wird angewendet, sobald ein Genehmiger ihn unter Genehmigungen genehmigt.",
+    "action": {
+      "void": "Ungültigmachung",
+      "reverse": "Rückabwicklung",
+      "repurchase": "Rückkauf",
+      "repay": "Rückzahlung",
+      "cancel_convertible": "Stornierung",
+      "class_amendment": "Gattungsänderung",
+      "split": "Aktiensplit",
+      "reserve_change": "Reserveänderung",
+      "mfn_election": "MFN-Wahl",
+      "compensation_run": "Lauf der aktienbasierten Vergütung",
+      "interest_run": "Zinslauf für Wandeldarlehen",
+      "account_policy": "Version der Kontenrichtlinie"
+    }
   }
 }

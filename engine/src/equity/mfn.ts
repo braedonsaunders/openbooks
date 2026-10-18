@@ -11,8 +11,9 @@
  *    divides by a capitalization that already counts every converting
  *    instrument, so the holder is not diluted by them).
  * The holder adopts the later instrument's cap, discount and SAFE type
- * together; a later note converts pre-money. Elections are approvals
- * (equity.approve), dated, reasoned and audited, and take effect from their
+ * together; a later note converts pre-money. Elections are governed actions
+ * (an Equity action Flow may require approval), dated, reasoned and audited,
+ * and take effect from their
  * date: a conversion on or after that date converts on the adopted terms,
  * and nothing dated earlier is reinterpreted. A later instrument is compared
  * with the terms in force on the election date, in the SAFE's own currency.
@@ -23,6 +24,7 @@ import { isUuid } from "../platform/uuid.ts";
 import { convertibleState, convertibleTerms, effectiveConvertibleTerms, voidedSecurities } from "./cap-table.ts";
 import type { ConvertibleTerms } from "./convertibles.ts";
 import { EquityError } from "./errors.ts";
+import { governEquityAction, type GovernedStatus } from "./governance.ts";
 import { requireReason, writeEquityAudit } from "./internal.ts";
 import { compareRational, parseMoney, parsePercent } from "./quantities.ts";
 import { newEquityId } from "./securities.ts";
@@ -99,8 +101,32 @@ export interface ElectMfnInput extends EquityCommand {
   idempotencyKey?: string | null;
 }
 
-/** Record an MFN SAFE holder's election to adopt a later instrument's terms (equity.approve). */
-export async function electMfnTerms(input: ElectMfnInput): Promise<{ amendmentId: string; replayed: boolean }> {
+/**
+ * Record an MFN SAFE holder's election to adopt a later instrument's terms
+ * (equity.manage; a governed action an Equity action Flow may require
+ * approval for).
+ */
+export async function electMfnTerms(input: ElectMfnInput): Promise<{ amendmentId: string | null; replayed: boolean; status: GovernedStatus; requestId: string }> {
+  const effectiveOn = requireDate(input.effectiveOn, "effectiveOn", "The election date");
+  const reason = requireReason(input.reason, "the MFN election");
+  if (!isUuid(input.securityId)) throw new EquityError("The SAFE does not exist.", { status: 404, code: "equity_security_unknown", remedy: "Choose a SAFE." });
+  const located = await withOrgTransaction(input.orgId, async () => (await db.execute<{ subsidiary_id: string; security_number: string; currency: string; holder_name: string | null; amount: string | null }>(sql`
+    select s.subsidiary_id, s.security_number, s.currency, p.display_name as holder_name, s.consideration_amount::text as amount
+      from equity_securities s left join parties p on p.org_id = s.org_id and p.id = s.holder_party_id
+     where s.org_id = ${input.orgId} and s.id = ${input.securityId}`)).rows[0]);
+  if (!located) throw new EquityError("The SAFE does not exist.", { status: 404, code: "equity_security_unknown", remedy: "Choose a SAFE." });
+  const { orgId: _org, actorId: _actor, ...payload } = input;
+  const outcome = await governEquityAction({
+    orgId: input.orgId, actorId: input.actorId, subsidiaryId: located.subsidiary_id, action: "mfn_election",
+    subjectId: input.securityId, subjectLabel: located.security_number, effectiveOn, reason,
+    summary: { securityKind: "safe", holderName: located.holder_name, amount: located.amount, currency: located.currency },
+    payload, idempotencyKey: typeof input.idempotencyKey === "string" && input.idempotencyKey.trim() !== "" ? `mfn:${input.idempotencyKey.trim()}` : null,
+  }, (actorId) => applyMfnElection({ ...input, actorId }));
+  return { amendmentId: outcome.result?.amendmentId ?? null, replayed: outcome.replayed || (outcome.result?.replayed ?? false), status: outcome.status, requestId: outcome.requestId };
+}
+
+/** Apply an MFN election: the command its approval releases. */
+export async function applyMfnElection(input: ElectMfnInput): Promise<{ amendmentId: string; replayed: boolean }> {
   const effectiveOn = requireDate(input.effectiveOn, "effectiveOn", "The election date");
   const reason = requireReason(input.reason, "the MFN election");
   const idempotencyKey = typeof input.idempotencyKey === "string" && input.idempotencyKey.trim() !== "" ? input.idempotencyKey.trim() : null;
@@ -109,7 +135,7 @@ export async function electMfnTerms(input: ElectMfnInput): Promise<{ amendmentId
   const located = await withOrgTransaction(input.orgId, async () => (await db.execute<{ subsidiary_id: string }>(sql`
     select subsidiary_id from equity_securities where org_id = ${input.orgId} and id = ${input.securityId}`)).rows[0]);
   if (!located) throw unknown();
-  return inEquityCommand({ ...input, subsidiaryId: located.subsidiary_id }, "equity.approve", async ({ book }) => {
+  return inEquityCommand({ ...input, subsidiaryId: located.subsidiary_id }, "equity.manage", async ({ book }) => {
     if (idempotencyKey) {
       const existing = (await db.execute<{ id: string; security_id: string; source_security_id: string }>(sql`
         select id, security_id, source_security_id from equity_security_amendments where org_id = ${input.orgId} and idempotency_key = ${idempotencyKey}`)).rows[0];
