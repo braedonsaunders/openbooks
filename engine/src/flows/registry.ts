@@ -3,6 +3,7 @@ import {
   scheduleBoardSubjectProfile,
 } from "./schedule-board-adapter.ts";
 import {SCHEDULE_DISTRIBUTION_SUBJECT_KIND,scheduleDistributionSubjectProfile,scheduleDistributionsFlowAdapter} from './schedule-distribution-adapter.ts';
+import { SCHEDULE_REQUEST_SUBJECT_KIND, scheduleRequestSubjectProfile, scheduleRequestsFlowAdapter } from './schedule-request-adapter.ts';
 import { CHECKLIST_STEP_SUBJECT_KIND } from "@openbooks/forms-core";
 import { checklistStepsFlowAdapter, checklistStepSubjectProfile } from "./checklist-steps-adapter.ts";
 import { BENEFIT_ENROLLMENT_SUBJECT_KIND } from "@openbooks/schema/src/hrm-benefits.ts";
@@ -129,6 +130,7 @@ export function getFlowAdapter(subjectKind: string): FlowSubjectAdapter | null {
   if (subjectKind === COMPENSATION_VERSION_SUBJECT_KIND) return compensationVersionsFlowAdapter;
   if (subjectKind === COMPENSATION_ASSIGNMENT_SUBJECT_KIND) return compensationAssignmentsFlowAdapter;
   if(subjectKind===SCHEDULE_DISTRIBUTION_SUBJECT_KIND)return scheduleDistributionsFlowAdapter;
+  if (subjectKind === SCHEDULE_REQUEST_SUBJECT_KIND) return scheduleRequestsFlowAdapter;
   if(subjectKind===CHECKLIST_STEP_SUBJECT_KIND) return checklistStepsFlowAdapter;
   if (subjectKind === BENEFIT_ENROLLMENT_SUBJECT_KIND) return benefitEnrollmentsFlowAdapter;
   if (subjectKind === BENEFIT_AWARD_SUBJECT_KIND) return benefitAwardsFlowAdapter;
@@ -195,6 +197,7 @@ const DEDICATED_PROFILE_KINDS: ReadonlySet<string> = new Set([PAY_RUN_SUBJECT_KI
 export function listFlowSubjectProfiles(): FlowSubjectProfile[] {
   return [
     scheduleDistributionSubjectProfile,
+    scheduleRequestSubjectProfile,
     scheduleBoardSubjectProfile,
     checklistStepSubjectProfile,
     ...DOCUMENT_FLOW_KINDS.filter((kind) => !DEDICATED_PROFILE_KINDS.has(kind)).map((kind) =>

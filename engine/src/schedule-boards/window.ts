@@ -71,6 +71,24 @@ export interface BoardEntry {
   readonly supersedesId: string | null;
   readonly updatedAt: string;
   readonly updatedByName: string | null;
+  /** Published only through an independent approver; changes only through approved revisions. */
+  readonly governed: boolean;
+  /** A draft revision removing the governed booking it supersedes. */
+  readonly removesPredecessor: boolean;
+  readonly patternAssignmentId: string | null;
+  readonly patternOverride: boolean;
+  readonly closedAt: string | null;
+  /** The current attendance observation, when one was processed. */
+  readonly attendance: BoardAttendance | null;
+  /** An open shift request naming this booking. */
+  readonly openRequest: { readonly id: string; readonly kind: "release" | "change" | "swap"; readonly status: "awaiting_counterpart" | "pending" } | null;
+}
+
+export interface BoardAttendance {
+  readonly status: "waiting_for_sync" | "absent" | "present" | "voided";
+  readonly late: boolean | null;
+  readonly leftEarly: boolean | null;
+  readonly overBreak: boolean | null;
 }
 
 export type BoardAbsence = {
@@ -158,7 +176,15 @@ export const ENTRY_COLUMNS = sql`e.id, e.revision, e.board_id as "boardId", eb.n
   e.time_zone as "timeZone", e.break_minutes as "breakMinutes",
   greatest(0, (extract(epoch from e.ends_at - e.starts_at)::integer / 60) - e.break_minutes) as "workedMinutes",
   e.series_id as "seriesId", e.supersedes_id as "supersedesId",
-  to_char(e.updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as "updatedAt", uu.name as "updatedByName"`;
+  to_char(e.updated_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as "updatedAt", uu.name as "updatedByName",
+  e.governed, e.removes_predecessor as "removesPredecessor", e.pattern_assignment_id as "patternAssignmentId", e.pattern_override as "patternOverride",
+  to_char(e.closed_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as "closedAt",
+  (select jsonb_build_object('status', o.status, 'late', o.late, 'leftEarly', o.left_early, 'overBreak', o.over_break)
+     from schedule_attendance_observations o where o.org_id = e.org_id and o.entry_id = e.id
+      and not exists (select 1 from schedule_attendance_observations n where n.org_id = o.org_id and n.supersedes_id = o.id)) as attendance,
+  (select jsonb_build_object('id', r.id, 'kind', r.kind, 'status', r.status) from schedule_entry_requests r
+    where r.org_id = e.org_id and r.status in ('awaiting_counterpart', 'pending') and e.id in (r.entry_id, r.counterpart_entry_id)
+    order by r.created_at, r.id limit 1) as "openRequest"`;
 
 export const ENTRY_JOINS = sql`from schedule_entries e
   join schedule_boards eb on eb.org_id = e.org_id and eb.id = e.board_id

@@ -203,6 +203,13 @@ export const DEFAULT_POLICIES: MaskingPolicy[] = [
   { tableName: "schedule_source_records", columnName: "source_notes", transform: "redact" },
   { tableName: "schedule_source_records", columnName: "reason", transform: "redact" },
   { tableName: "schedule_resource_recipients", columnName: "reason", transform: "redact" },
+  // Employee shift requests and occurrence decisions explain personal circumstances.
+  { tableName: "schedule_entry_requests", columnName: "reason", transform: "redact" },
+  { tableName: "schedule_entry_requests", columnName: "decision_reason", transform: "redact" },
+  { tableName: "schedule_pattern_exceptions", columnName: "reason", transform: "redact" },
+  { tableName: "schedule_pattern_exceptions", columnName: "revoke_reason", transform: "redact" },
+  { tableName: "schedule_pattern_assignments", columnName: "reason", transform: "redact" },
+  { tableName: "schedule_entries", columnName: "close_reason", transform: "redact" },
   { tableName: "hrm_comp_cycles", columnName: "source_key", transform: "hash" },
   { tableName: "hrm_comp_cycles", columnName: "source_evidence", transform: "null_out" },
   // Checklist responses are employee-authored evidence; publication reasons may name people.

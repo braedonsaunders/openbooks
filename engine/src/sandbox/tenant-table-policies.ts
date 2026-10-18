@@ -77,6 +77,23 @@ export const TENANT_TABLE_POLICIES = {
   "schedule_resource_recipients": "clone:catalog-uuid-rebase",
   "schedule_source_records": "clone:catalog-uuid-rebase",
   // Native offering inserts recreate these identities using the rebased native ids.
+  // Shift roster definitions copy with the bookings they generated and the
+  // requests those bookings answered.
+  "schedule_patterns": "clone:catalog-uuid-rebase",
+  "schedule_pattern_assignments": "clone:catalog-uuid-rebase",
+  "schedule_pattern_exceptions": "clone:catalog-uuid-rebase",
+  "schedule_entry_requests": "clone:catalog-uuid-rebase",
+  "schedule_attendance_policies": "clone:catalog-uuid-rebase",
+  // Time-clock devices, their identities and source check-in evidence are
+  // environment-specific; a sandbox establishes its own attendance sources.
+  "schedule_attendance_devices": "skip:no-copy",
+  "schedule_attendance_identities": "skip:no-copy",
+  "schedule_attendance_batches": "skip:no-copy",
+  "schedule_attendance_events": "skip:no-copy",
+  "schedule_attendance_watermarks": "skip:no-copy",
+  "schedule_attendance_observations": "skip:no-copy",
+  "schedule_attendance_event_claims": "skip:no-copy",
+  "schedule_attendance_observation_events": "skip:no-copy",
   "hrm_benefit_catalog": "skip:no-copy",
   // Production device identities, roster decisions and source evidence are
   // environment-specific. Sandboxes establish their own operational records.

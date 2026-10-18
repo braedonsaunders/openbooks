@@ -39,6 +39,7 @@ const DOCUMENTS_SUBJECT_KINDS = new Set([
   'journal',
 ])
 const PEOPLE_SUBJECT_KINDS = new Set([
+  'schedule_entry_request',
   'timesheet_week',
   'hrm_employment_change_request',
   'hrm_leave_request',

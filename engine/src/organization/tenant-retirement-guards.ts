@@ -1423,10 +1423,24 @@ export const TENANT_RETIREMENT_GUARDS = [
   },
   {
     "name": "schedule_entries_guard",
-    "source": "0592_schedule_board_resources_and_display_rules.sql",
-    "sha256": "7519afe666e358d487c3f7e5b55d562431507770d1ad35d598b67f462d217122",
-    "newSha256": "252d1f24f9f634435b71e1f9fb8fa2d608d0187c2d4d8266d50282d594f4e01a",
-    "patch": true
+    "source": "0737_unified_scheduling_patterns_requests_attendance.sql",
+    "sha256": "44e76a50bd4ac02f66911d259e4074be5dc7c8e5e55f3445ac54cd32bdcecd6e",
+    "newSha256": "44e76a50bd4ac02f66911d259e4074be5dc7c8e5e55f3445ac54cd32bdcecd6e",
+    "patch": false
+  },
+  {
+    "name": "schedule_roster_guard",
+    "source": "0737_unified_scheduling_patterns_requests_attendance.sql",
+    "sha256": "4eea52941c99f015a5ac2bc20ba5885b80273ed945a767a27e4b56219f02126f",
+    "newSha256": "4eea52941c99f015a5ac2bc20ba5885b80273ed945a767a27e4b56219f02126f",
+    "patch": false
+  },
+  {
+    "name": "schedule_attendance_guard",
+    "source": "0737_unified_scheduling_patterns_requests_attendance.sql",
+    "sha256": "8ade53a31ede08e83da2f91d97e9cae5723b7cdbee811c5c526f72849bc3ebc6",
+    "newSha256": "8ade53a31ede08e83da2f91d97e9cae5723b7cdbee811c5c526f72849bc3ebc6",
+    "patch": false
   },
   {
     "name": "schedule_source_records_guard",
@@ -2675,6 +2689,18 @@ export const TENANT_RETIREMENT_GUARD_ATTRIBUTES = [
   },
   {
     "name": "schedule_entries_guard",
+    "config": [
+      "search_path=public,pg_catalog"
+    ]
+  },
+  {
+    "name": "schedule_roster_guard",
+    "config": [
+      "search_path=public,pg_catalog"
+    ]
+  },
+  {
+    "name": "schedule_attendance_guard",
     "config": [
       "search_path=public,pg_catalog"
     ]
@@ -4446,6 +4472,71 @@ export const TENANT_RETIREMENT_TRIGGER_CONTRACTS = [
     "table": "schedule_source_records",
     "trigger": "schedule_source_records_guard",
     "function": "schedule_source_records_guard"
+  },
+  {
+    "table": "schedule_patterns",
+    "trigger": "schedule_roster_guard",
+    "function": "schedule_roster_guard"
+  },
+  {
+    "table": "schedule_pattern_assignments",
+    "trigger": "schedule_roster_guard",
+    "function": "schedule_roster_guard"
+  },
+  {
+    "table": "schedule_pattern_exceptions",
+    "trigger": "schedule_roster_guard",
+    "function": "schedule_roster_guard"
+  },
+  {
+    "table": "schedule_entry_requests",
+    "trigger": "schedule_roster_guard",
+    "function": "schedule_roster_guard"
+  },
+  {
+    "table": "schedule_attendance_devices",
+    "trigger": "schedule_attendance_guard",
+    "function": "schedule_attendance_guard"
+  },
+  {
+    "table": "schedule_attendance_identities",
+    "trigger": "schedule_attendance_guard",
+    "function": "schedule_attendance_guard"
+  },
+  {
+    "table": "schedule_attendance_policies",
+    "trigger": "schedule_attendance_guard",
+    "function": "schedule_attendance_guard"
+  },
+  {
+    "table": "schedule_attendance_batches",
+    "trigger": "schedule_attendance_guard",
+    "function": "schedule_attendance_guard"
+  },
+  {
+    "table": "schedule_attendance_events",
+    "trigger": "schedule_attendance_guard",
+    "function": "schedule_attendance_guard"
+  },
+  {
+    "table": "schedule_attendance_watermarks",
+    "trigger": "schedule_attendance_guard",
+    "function": "schedule_attendance_guard"
+  },
+  {
+    "table": "schedule_attendance_observations",
+    "trigger": "schedule_attendance_guard",
+    "function": "schedule_attendance_guard"
+  },
+  {
+    "table": "schedule_attendance_event_claims",
+    "trigger": "schedule_attendance_guard",
+    "function": "schedule_attendance_guard"
+  },
+  {
+    "table": "schedule_attendance_observation_events",
+    "trigger": "schedule_attendance_guard",
+    "function": "schedule_attendance_guard"
   },
   {
     "table": "schedule_distributions",

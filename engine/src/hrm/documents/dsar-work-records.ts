@@ -27,8 +27,38 @@ export async function gatherWorkRecords(orgId: string, partyId: string, project:
     { key: "attendanceObservations", table: "hrm_attendance_observations", where: sql`id in (${observations})`, denied: person },
     { key: "attendanceEventClaims", table: "hrm_attendance_event_claims", where: sql`id in (${claims})`, denied: ["released_by"] },
     { key: "attendanceObservationEvents", table: "hrm_attendance_observation_events", where: sql`observation_id in (${observations}) and event_claim_id in (${claims})`, denied: [] },
+    ...rosterCollections(orgId, partyId),
   ];
   return gatherCollections(orgId, collections, project);
+}
+
+/**
+ * Shift roster records keyed on the person: recurring assignments and their
+ * patterns and occurrence decisions, the person's own shift requests, swaps
+ * offered to them (without the requester's reason), device identities,
+ * check-ins and attendance observations with their attribution.
+ */
+function rosterCollections(orgId: string, partyId: string): Collection[] {
+  const assignments = sql`select id from schedule_pattern_assignments where org_id=${orgId} and worker_party_id=${partyId}`;
+  const events = sql`select id from schedule_attendance_events where org_id=${orgId} and worker_party_id=${partyId}`;
+  const observations = sql`select id from schedule_attendance_observations where org_id=${orgId} and worker_party_id=${partyId}`;
+  const claims = sql`select id from schedule_attendance_event_claims where org_id=${orgId} and event_id in (${events})`;
+  const person = ["worker_party_id", "employment_id"];
+  return [
+    { key: "shiftPatternAssignments", table: "schedule_pattern_assignments", where: sql`id in (${assignments})`, denied: person, updated: true },
+    { key: "shiftPatterns", table: "schedule_patterns", where: sql`id in (select pattern_id from schedule_pattern_assignments where org_id=${orgId} and id in (${assignments}))`,
+      denied: ["customer_party_id"], updated: true },
+    { key: "shiftPatternExceptions", table: "schedule_pattern_exceptions", where: sql`assignment_id in (${assignments})`, denied: ["revoked_by"] },
+    { key: "shiftRequestsMade", table: "schedule_entry_requests", where: sql`worker_party_id=${partyId}`,
+      denied: ["worker_party_id", "counterpart_party_id", "counterpart_responded_by", "decided_by"], updated: true },
+    { key: "shiftSwapsOffered", table: "schedule_entry_requests", where: sql`counterpart_party_id=${partyId}`,
+      denied: ["worker_party_id", "counterpart_party_id", "counterpart_responded_by", "decided_by", "reason", "decision_reason"], updated: true },
+    { key: "attendanceDeviceIdentities", table: "schedule_attendance_identities", where: sql`worker_party_id=${partyId}`, denied: person, updated: true },
+    { key: "attendanceCheckIns", table: "schedule_attendance_events", where: sql`id in (${events})`, denied: person },
+    { key: "attendanceShiftObservations", table: "schedule_attendance_observations", where: sql`id in (${observations})`, denied: person },
+    { key: "attendanceCheckInClaims", table: "schedule_attendance_event_claims", where: sql`id in (${claims})`, denied: ["released_by"] },
+    { key: "attendanceObservationCheckIns", table: "schedule_attendance_observation_events", where: sql`observation_id in (${observations}) and event_claim_id in (${claims})`, denied: [] },
+  ];
 }
 
 export async function gatherTrainingRecords(orgId: string, partyId: string, project: Projection): Promise<Record<string, unknown>> {

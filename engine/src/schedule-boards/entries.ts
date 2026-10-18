@@ -8,6 +8,16 @@ import {scheduleBoardLifecycle} from './distribution-hooks.ts';
  * board collects drafts until the board is published. A published booking
  * is never rewritten — changing it cancels it and records a successor that
  * names it, so the history of who was sent where is preserved.
+ *
+ * Governed bookings (a governed board's bookings from its governed-from
+ * date) publish only through an approver independent of the people who
+ * prepared the change and of the people it schedules. Once published they
+ * change only through a draft revision — a replacement or a removal — that
+ * an independent approver publishes, or through an approved shift request.
+ *
+ * Pattern-generated bookings keep their assignment, date and slot. Editing
+ * one marks it as a manual override that regeneration keeps; removing a
+ * published one records an omission, so regeneration does not book it again.
  */
 import { createHash } from "node:crypto";
 import { sql } from "drizzle-orm";
@@ -70,29 +80,34 @@ function hoursLabel(entry: BoardEntry): string {
   return entry.spanMode === "timed" ? `${entry.startClock}–${entry.endClock}` : "";
 }
 
-function noticeFor(entry: BoardEntry, change: ScheduleNotice["change"]): ScheduleNotice {
+export function noticeFor(entry: BoardEntry, change: ScheduleNotice["change"]): ScheduleNotice {
   const label = [entry.target?.code ?? entry.target?.label ?? "", entry.detail ? `/${entry.detail}` : ""].join("").trim() || "—";
   if (!entry.workerPartyId) throw new ScheduleError("Only people bookings send employee notifications.");
   return { workerPartyId: entry.workerPartyId, onDate: entry.startsOn, change, label, hours: hoursLabel(entry) || null };
 }
 
-type StoredEntry = {
+export type StoredEntry = {
   id: string; revision: number; boardId: string; workerPartyId: string | null; subjectId: string; subjectKind: "person" | "equipment" | "location"; status: "draft" | "published" | "cancelled";
   targetKind: TargetRef["kind"] | null; targetId: string | null; projectTaskId: string | null; departmentId: string | null;
   detail: string | null; notes: string | null; spanMode: "day" | "timed"; timeZone: string; startsOn: string; endsOn: string;
   startsAt: string; endsAt: string; breakMinutes: number; seriesId: string | null; supersedesId: string | null;
+  employmentId: string | null; governed: boolean; patternAssignmentId: string | null; patternOccursOn: string | null; patternSlot: number | null;
+  patternOverride: boolean; removesPredecessor: boolean; closed: boolean; requiredQualificationTypeIds: string[]; started: boolean;
 };
 
-const STORED_COLUMNS = sql`id, revision, board_id as "boardId", worker_party_id as "workerPartyId", coalesce(worker_party_id,equipment_unit_id,resource_location_id) as "subjectId",
+export const STORED_COLUMNS = sql`id, revision, board_id as "boardId", worker_party_id as "workerPartyId", coalesce(worker_party_id,equipment_unit_id,resource_location_id) as "subjectId",
   case when worker_party_id is not null then 'person' when equipment_unit_id is not null then 'equipment' else 'location' end as "subjectKind", status,
   target_kind as "targetKind", coalesce(customer_party_id, project_id, location_id, schedule_code_id) as "targetId",
   project_task_id as "projectTaskId", department_id as "departmentId", detail, notes, span_mode as "spanMode",
   time_zone as "timeZone", starts_on::text as "startsOn", ends_on::text as "endsOn",
   to_char(starts_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as "startsAt",
   to_char(ends_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.MS"Z"') as "endsAt",
-  break_minutes as "breakMinutes", series_id as "seriesId", supersedes_id as "supersedesId"`;
+  break_minutes as "breakMinutes", series_id as "seriesId", supersedes_id as "supersedesId",
+  employment_id as "employmentId", governed, pattern_assignment_id as "patternAssignmentId", pattern_occurs_on::text as "patternOccursOn",
+  pattern_slot as "patternSlot", pattern_override as "patternOverride", removes_predecessor as "removesPredecessor",
+  closed_at is not null as closed, required_qualification_type_ids::text[] as "requiredQualificationTypeIds", starts_at <= now() as started`;
 
-function hash(value: unknown): string {
+export function hash(value: unknown): string {
   return createHash("sha256").update(canonicalJson(value)).digest("hex");
 }
 
@@ -110,7 +125,7 @@ function requireId(value: unknown, field: string): string {
   return value;
 }
 
-async function readEntry(orgId: string, id: string): Promise<BoardEntry> {
+export async function readEntry(orgId: string, id: string): Promise<BoardEntry> {
   const row = (await db.execute<Parameters<typeof shapeEntry>[0]>(sql`select ${ENTRY_COLUMNS} ${ENTRY_JOINS}
     where e.org_id = ${orgId} and e.id = ${id}`)).rows[0];
   if (!row) throw new ScopeNotFoundError();
@@ -119,7 +134,7 @@ async function readEntry(orgId: string, id: string): Promise<BoardEntry> {
 
 type Person = { partyId: string; name: string; subsidiaryId: string | null };
 
-async function bookablePerson(orgId: string, allowed: ReadonlySet<string> | null, partyId: string): Promise<Person> {
+export async function bookablePerson(orgId: string, allowed: ReadonlySet<string> | null, partyId: string): Promise<Person> {
   const row = (await db.execute<Person>(sql`select p.id as "partyId", p.display_name as name, p.subsidiary_id as "subsidiaryId"
     from parties p join employee_roles er on er.org_id = p.org_id and er.party_id = p.id
     where p.org_id = ${orgId} and p.id = ${requireId(partyId, "Person")} and p.is_active and er.is_active
@@ -162,7 +177,7 @@ function spanFor(board: ScheduleBoard, onDate: string, span: SpanInput): Booking
   throw new ScheduleError("Choose a whole-day or timed booking.", { code: "schedule_invalid" });
 }
 
-interface Normalized {
+export interface Normalized {
   subject: Subject;
   target: Awaited<ReturnType<typeof resolveTarget>>;
   departmentId: string | null;
@@ -172,7 +187,7 @@ interface Normalized {
   seriesId: string | null;
 }
 
-async function normalize(board: ScheduleBoard, orgId: string, allowed: ReadonlySet<string> | null, fields: BookingFields): Promise<Normalized> {
+export async function normalize(board: ScheduleBoard, orgId: string, allowed: ReadonlySet<string> | null, fields: BookingFields): Promise<Normalized> {
   const onDate = requireDate(fields.onDate, "Booking date");
   const subject = await bookableSubject(board, orgId, allowed, fields, onDate);
   const target = await resolveTarget(db, orgId, allowed, fields.target, fields.projectTaskId ?? null);
@@ -201,28 +216,100 @@ function definition(board: ScheduleBoard, booking: Normalized) {
   };
 }
 
-async function insertEntry(input: {
+/** Provenance a booking keeps for its life: its pattern occurrence, request outcome or removal of a predecessor. */
+export interface EntryOrigin {
+  readonly pattern?: { readonly assignmentId: string; readonly occursOn: string; readonly slot: number; readonly override: boolean } | null;
+  readonly requestId?: string | null;
+  readonly removesPredecessor?: boolean;
+}
+
+export async function insertEntry(input: {
   actor: ScheduleActor; board: ScheduleBoard; id: string; booking: Normalized; status: "draft" | "published";
   supersedesId: string | null; reason: string; requestHash: string;
+  employmentId?: string | null; requiredQualificationTypeIds?: readonly string[]; origin?: EntryOrigin;
 }): Promise<void> {
   const { actor, board, booking } = input;
   const target = booking.target;
   const published = input.status === "published";
+  const pattern = input.origin?.pattern ?? null;
+  const qualifications = `{${(input.requiredQualificationTypeIds ?? []).join(",")}}`;
   const rows = (await db.execute(sql`insert into schedule_entries
-    (id, org_id, board_id, worker_party_id, equipment_unit_id, resource_location_id, subsidiary_id, target_kind, customer_party_id, project_id, project_task_id, location_id, schedule_code_id,
+    (id, org_id, board_id, worker_party_id, equipment_unit_id, resource_location_id, employment_id, subsidiary_id, target_kind, customer_party_id, project_id, project_task_id, location_id, schedule_code_id,
      department_id, detail, notes, span_mode, time_zone, starts_on, ends_on, starts_at, ends_at, break_minutes, series_id, supersedes_id,
-     status, published_by, published_at, reason, request_hash, created_by, updated_by)
-    values (${input.id}, ${actor.orgId}, ${board.id}, ${booking.subject.kind === "person" ? booking.subject.id : null}, ${booking.subject.kind === "equipment" ? booking.subject.id : null}, ${booking.subject.kind === "location" ? booking.subject.id : null}, ${booking.subject.subsidiaryId},
+     status, published_by, published_at, reason, request_hash, created_by, updated_by,
+     pattern_assignment_id, pattern_occurs_on, pattern_slot, pattern_override, origin_request_id, removes_predecessor, required_qualification_type_ids)
+    values (${input.id}, ${actor.orgId}, ${board.id}, ${booking.subject.kind === "person" ? booking.subject.id : null}, ${booking.subject.kind === "equipment" ? booking.subject.id : null}, ${booking.subject.kind === "location" ? booking.subject.id : null},
+     ${input.employmentId ?? null}, ${booking.subject.subsidiaryId},
      ${target?.kind ?? null}, ${target?.customerPartyId ?? null}, ${target?.projectId ?? null}, ${target?.projectTaskId ?? null},
      ${target?.locationId ?? null}, ${target?.scheduleCodeId ?? null}, ${booking.departmentId}, ${booking.detail}, ${booking.notes},
      ${booking.span.spanMode}, ${booking.span.timeZone}, ${booking.span.startsOn}, ${booking.span.endsOn}, ${booking.span.startsAt}, ${booking.span.endsAt},
      ${booking.span.breakMinutes}, ${booking.seriesId}, ${input.supersedesId}, ${input.status},
-     ${published ? actor.actorId : null}, ${published ? sql`now()` : null}, ${input.reason}, ${input.requestHash}, ${actor.actorId}, ${actor.actorId})
+     ${published ? actor.actorId : null}, ${published ? sql`now()` : null}, ${input.reason}, ${input.requestHash}, ${actor.actorId}, ${actor.actorId},
+     ${pattern?.assignmentId ?? null}, ${pattern?.occursOn ?? null}, ${pattern?.slot ?? null}, ${pattern?.override ?? false},
+     ${input.origin?.requestId ?? null}, ${input.origin?.removesPredecessor ?? false}, ${qualifications}::uuid[])
     returning id`)).rows;
   if (rows.length !== 1) throw new ScheduleError("The booking was not saved.", { code: "schedule_not_saved", remedy: "Reload the board and try again." });
 }
 
-async function lockStored(orgId: string, boardId: string, id: string): Promise<StoredEntry> {
+/**
+ * When a published pattern booking leaves its occurrence — removed, or
+ * replaced by a booking that no longer belongs to the pattern — record an
+ * omission so regeneration does not book the occurrence again.
+ */
+export async function recordPatternOmission(actor: ScheduleActor, row: Pick<StoredEntry, "patternAssignmentId" | "patternOccursOn" | "patternSlot">, reason: string): Promise<void> {
+  if (!row.patternAssignmentId || !row.patternOccursOn || row.patternSlot === null) return;
+  await db.execute(sql`insert into schedule_pattern_exceptions (org_id, assignment_id, occurs_on, slot_index, kind, reason, created_by)
+    select ${actor.orgId}, ${row.patternAssignmentId}, ${row.patternOccursOn}, ${row.patternSlot}, 'omit', ${reason}, ${actor.actorId}
+    where not exists (select 1 from schedule_pattern_exceptions x where x.org_id = ${actor.orgId} and x.assignment_id = ${row.patternAssignmentId}
+      and x.occurs_on = ${row.patternOccursOn} and x.slot_index = ${row.patternSlot} and x.revoked_at is null)`);
+}
+
+/** Cancel the unpublished revisions waiting on a published booking. */
+export async function cancelPendingRevisions(actor: ScheduleActor, rowId: string, reason: string): Promise<void> {
+  const pending = (await db.execute<StoredEntry>(sql`select ${STORED_COLUMNS} from schedule_entries
+    where org_id = ${actor.orgId} and supersedes_id = ${rowId} and status = 'draft' for update`)).rows;
+  for (const draft of pending) await setStatus(actor, draft, "cancelled", reason);
+}
+
+/**
+ * Remove a published booking. A governed booking records a removal revision
+ * for an independent approver to publish; any other booking is cancelled now.
+ * Returns the removal revision's id when one was recorded.
+ */
+export async function removePublished(actor: ScheduleActor, board: ScheduleBoard, row: StoredEntry, reason: string): Promise<string | null> {
+  await cancelPendingRevisions(actor, row.id, reason);
+  if (row.governed) {
+    const booking = await exactStoredBooking(actor.orgId, row);
+    const removalId = crypto.randomUUID();
+    await insertEntry({ actor, board, id: removalId, booking, status: "draft", supersedesId: row.id, reason,
+      requestHash: hash({ removes: row.id, revision: row.revision }), employmentId: row.employmentId,
+      requiredQualificationTypeIds: row.requiredQualificationTypeIds, origin: { removesPredecessor: true } });
+    return removalId;
+  }
+  await setStatus(actor, row, "cancelled", reason);
+  await recordPatternOmission(actor, row, reason);
+  return null;
+}
+
+/**
+ * A removal revision copies the booking it removes exactly, even when its
+ * person, target or code has since become unavailable for new bookings.
+ */
+export async function exactStoredBooking(orgId: string, row: StoredEntry): Promise<Normalized> {
+  const stored = (await db.execute<{ subsidiaryId: string | null; customerPartyId: string | null; projectId: string | null; locationId: string | null; scheduleCodeId: string | null }>(sql`
+    select subsidiary_id as "subsidiaryId", customer_party_id as "customerPartyId", project_id as "projectId", location_id as "locationId", schedule_code_id as "scheduleCodeId"
+      from schedule_entries where org_id = ${orgId} and id = ${row.id}`)).rows[0]!;
+  return {
+    subject: { id: row.subjectId, kind: row.subjectKind, subsidiaryId: stored.subsidiaryId },
+    target: row.targetKind ? { kind: row.targetKind, customerPartyId: stored.customerPartyId, projectId: stored.projectId, projectTaskId: row.projectTaskId,
+      locationId: stored.locationId, scheduleCodeId: stored.scheduleCodeId, label: "" } : null,
+    departmentId: row.departmentId, detail: row.detail, notes: row.notes,
+    span: { spanMode: row.spanMode, timeZone: row.timeZone, startsOn: row.startsOn, endsOn: row.endsOn, startsAt: row.startsAt, endsAt: row.endsAt, breakMinutes: row.breakMinutes },
+    seriesId: row.seriesId,
+  };
+}
+
+export async function lockStored(orgId: string, boardId: string, id: string): Promise<StoredEntry> {
   const row = (await db.execute<StoredEntry>(sql`select ${STORED_COLUMNS} from schedule_entries
     where org_id = ${orgId} and id = ${requireId(id, "Booking")} for update`)).rows[0];
   if (!row) throw new ScopeNotFoundError();
@@ -230,23 +317,24 @@ async function lockStored(orgId: string, boardId: string, id: string): Promise<S
     throw new ScheduleError("This booking belongs to another board.", { code: "schedule_other_board", remedy: "Open the board it was booked on to change it." });
   }
   if (row.status === "cancelled") throw new ScheduleError("This booking was already removed.", { status: 409, code: "schedule_stale", remedy: "Reload the board." });
+  if (row.closed) throw new ScheduleError("This shift is closed.", { status: 409, code: "schedule_closed", remedy: "A closed shift is final history; book a new shift instead." });
   return row;
 }
 
-function checkRevision(row: StoredEntry, expected: unknown): void {
+export function checkRevision(row: StoredEntry, expected: unknown): void {
   if (!Number.isSafeInteger(expected) || row.revision !== expected) {
     throw new ScheduleError("Someone changed this booking since the board was loaded.", { status: 409, code: "schedule_stale", remedy: "Reload the board and make the change again." });
   }
 }
 
-async function setStatus(actor: ScheduleActor, row: StoredEntry, status: "cancelled", reason: string): Promise<void> {
+export async function setStatus(actor: ScheduleActor, row: Pick<StoredEntry, "id" | "revision">, status: "cancelled", reason: string): Promise<void> {
   const updated = (await db.execute(sql`update schedule_entries set status = ${status}, revision = revision + 1, reason = ${reason},
     updated_at = now(), updated_by = ${actor.actorId}
     where org_id = ${actor.orgId} and id = ${row.id} and revision = ${row.revision} returning id`)).rows;
   if (updated.length !== 1) throw new ScheduleError("Someone changed this booking since the board was loaded.", { status: 409, code: "schedule_stale", remedy: "Reload the board." });
 }
 
-function storedFields(row: StoredEntry): BookingFields {
+export function storedFields(row: StoredEntry): BookingFields {
   return {
     ...(row.workerPartyId ? { workerPartyId: row.workerPartyId } : { subject: { kind: row.subjectKind, id: row.subjectId } }),
     onDate: row.startsOn,
@@ -290,6 +378,9 @@ async function updateOne(actor: ScheduleActor, board: ScheduleBoard, allowed: Re
   if (change.fields.subject && change.fields.workerPartyId) throw new ScheduleError("Name one booking subject.", { code: "schedule_invalid" });
   const row = await lockStored(actor.orgId, board.id, change.id);
   checkRevision(row, change.expectedRevision);
+  if (row.removesPredecessor) {
+    throw new ScheduleError("This removal is waiting for approval.", { status: 409, code: "schedule_pending_change", remedy: "Discard the removal to keep the booking, then change it." });
+  }
   const current = storedFields(row);
   const patch = change.fields ?? {};
   const merged: BookingFields = {
@@ -303,25 +394,36 @@ async function updateOne(actor: ScheduleActor, board: ScheduleBoard, allowed: Re
   const booking = await normalize(board, actor.orgId, allowed, merged);
   const requestHash = hash(definition(board, booking));
   const notesOnly = Object.keys(patch).every((key) => key === "notes");
+  const samePerson = booking.subject.kind === "person" && booking.subject.id === row.workerPartyId;
+  const employmentId = samePerson ? row.employmentId : null;
+  const pattern = row.patternAssignmentId && samePerson
+    ? { assignmentId: row.patternAssignmentId, occursOn: row.patternOccursOn!, slot: row.patternSlot!, override: true } : null;
 
   if (row.status === "draft") {
     const target = booking.target;
+    // A draft keeps its pattern occurrence only while it books the pattern's person.
+    if (row.patternAssignmentId && !samePerson) {
+      throw new ScheduleError("A pattern booking keeps its person.", { code: "schedule_pattern_person", remedy: "Remove this booking and book the other person, or change the person's pattern assignment." });
+    }
     const updated = (await db.execute(sql`update schedule_entries set
       worker_party_id = ${booking.subject.kind === "person" ? booking.subject.id : null},
       equipment_unit_id = ${booking.subject.kind === "equipment" ? booking.subject.id : null}, resource_location_id = ${booking.subject.kind === "location" ? booking.subject.id : null}, subsidiary_id = ${booking.subject.subsidiaryId},
+      employment_id = ${employmentId},
       target_kind = ${target?.kind ?? null}, customer_party_id = ${target?.customerPartyId ?? null}, project_id = ${target?.projectId ?? null},
       project_task_id = ${target?.projectTaskId ?? null}, location_id = ${target?.locationId ?? null}, schedule_code_id = ${target?.scheduleCodeId ?? null},
       department_id = ${booking.departmentId}, detail = ${booking.detail}, notes = ${booking.notes}, span_mode = ${booking.span.spanMode},
       time_zone = ${booking.span.timeZone}, starts_on = ${booking.span.startsOn}, ends_on = ${booking.span.endsOn},
       starts_at = ${booking.span.startsAt}, ends_at = ${booking.span.endsAt}, break_minutes = ${booking.span.breakMinutes},
-      series_id = ${booking.seriesId}, reason = ${reason ?? `Changed on ${board.name}`},
+      series_id = ${booking.seriesId}, pattern_override = ${row.patternAssignmentId !== null}, reason = ${reason ?? `Changed on ${board.name}`},
       revision = revision + 1, updated_at = now(), updated_by = ${actor.actorId}
       where org_id = ${actor.orgId} and id = ${row.id} and revision = ${row.revision} returning id`)).rows;
     if (updated.length !== 1) throw new ScheduleError("Someone changed this booking since the board was loaded.", { status: 409, code: "schedule_stale", remedy: "Reload the board." });
     return { id: row.id, op: "update", ok: true, entry: await readEntry(actor.orgId, row.id), replacedId: null };
   }
 
-  if (notesOnly) {
+  // Notes are informational on ungoverned bookings; a governed booking's
+  // notes are part of its approved history and change through a revision.
+  if (notesOnly && !row.governed) {
     const updated = (await db.execute(sql`update schedule_entries set notes = ${booking.notes}, reason = ${reason ?? "Notes changed"},
       revision = revision + 1, updated_at = now(), updated_by = ${actor.actorId}
       where org_id = ${actor.orgId} and id = ${row.id} and revision = ${row.revision} returning id`)).rows;
@@ -335,11 +437,14 @@ async function updateOne(actor: ScheduleActor, board: ScheduleBoard, allowed: Re
   }
   const successorId = crypto.randomUUID();
   const changeReason = reason ?? `Changed on ${board.name}`;
-  if (board.publishPolicy === "live") {
+  const successor = { actor, board, id: successorId, booking, supersedesId: row.id, reason: changeReason, requestHash,
+    employmentId, requiredQualificationTypeIds: samePerson ? row.requiredQualificationTypeIds : [], origin: { pattern } };
+  if (board.publishPolicy === "live" && !row.governed) {
     await setStatus(actor, row, "cancelled", changeReason);
-    await insertEntry({ actor, board, id: successorId, booking, status: "published", supersedesId: row.id, reason: changeReason, requestHash });
+    await insertEntry({ ...successor, status: "published" });
+    if (!pattern) await recordPatternOmission(actor, row, changeReason);
   } else {
-    await insertEntry({ actor, board, id: successorId, booking, status: "draft", supersedesId: row.id, reason: changeReason, requestHash });
+    await insertEntry({ ...successor, status: "draft" });
   }
   return { id: row.id, op: "update", ok: true, entry: await readEntry(actor.orgId, successorId), replacedId: row.id };
 }
@@ -348,12 +453,13 @@ async function cancelOne(actor: ScheduleActor, board: ScheduleBoard, change: Ext
   const row = await lockStored(actor.orgId, board.id, change.id);
   checkRevision(row, change.expectedRevision);
   const cancelReason = reason ?? `Removed from ${board.name}`;
+  if (row.status === "draft") {
+    await setStatus(actor, row, "cancelled", cancelReason);
+    return { id: row.id, op: "cancel", ok: true, entry: null, replacedId: null };
+  }
   // Removing a published booking also discards a change still waiting for publication.
-  const pending = (await db.execute<StoredEntry>(sql`select ${STORED_COLUMNS} from schedule_entries
-    where org_id = ${actor.orgId} and supersedes_id = ${row.id} and status = 'draft' for update`)).rows;
-  for (const draft of pending) await setStatus(actor, draft, "cancelled", cancelReason);
-  await setStatus(actor, row, "cancelled", cancelReason);
-  return { id: row.id, op: "cancel", ok: true, entry: null, replacedId: null };
+  const removalId = await removePublished(actor, board, row, cancelReason);
+  return { id: row.id, op: "cancel", ok: true, entry: removalId ? await readEntry(actor.orgId, removalId) : null, replacedId: removalId ? row.id : null };
 }
 
 async function personName(orgId: string, change: BoardChange): Promise<string | undefined> {
@@ -390,7 +496,7 @@ export async function applyBoardChanges(actor: ScheduleActor & { boardId: string
           if(result.entry?.status==='published'){changedDates.add(result.entry.startsOn);changedDates.add(result.entry.endsOn);changedSubjects.add(result.entry.subjectId);}
         }
         if (notify && result.ok) {
-          if (change.op === "cancel" && before?.status === "published") notices.push(noticeFor(before, "removed"));
+          if (change.op === "cancel" && before?.status === "published" && !result.entry) notices.push(noticeFor(before, "removed"));
           else if (result.entry?.status === "published") {
             notices.push(noticeFor(result.entry, change.op === "create" ? "booked" : "changed"));
             if (before && before.status === "published" && before.workerPartyId !== result.entry.workerPartyId) notices.push(noticeFor(before, "removed"));
@@ -439,7 +545,7 @@ export async function publishBoard(actor: ScheduleActor & { boardId: string; fro
   return withOrgTransaction(actor.orgId, async () => {
     const board = await getBoard(actor, actor.boardId);
     if (board.rowKind === "tasks") throw new ScheduleError("This board schedules project tasks.", { code: "schedule_wrong_board" });
-    if (board.publishPolicy !== "staged") throw new ScheduleError("This board publishes each booking as it is made.", { code: "schedule_live_board" });
+    if (board.publishPolicy === "live") throw new ScheduleError("This board publishes each booking as it is made.", { code: "schedule_live_board" });
     await boardAuthority(actor, board, "publish");
     await db.execute(sql`select pg_advisory_xact_lock(hashtextextended(${`schedule-publish:${actor.orgId}:${board.id}`}, 0))`);
     const drafts = (await db.execute<StoredEntry & { personName: string }>(sql`select ${STORED_COLUMNS},
@@ -458,11 +564,21 @@ export async function publishBoard(actor: ScheduleActor & { boardId: string; fro
           if (draft.supersedesId) {
             const prior = (await db.execute<StoredEntry>(sql`select ${STORED_COLUMNS} from schedule_entries
               where org_id = ${actor.orgId} and id = ${draft.supersedesId} for update`)).rows[0];
-            if (prior?.status === "published") await setStatus(actor, prior, "cancelled", publishReason);
+            if (prior?.status === "published") {
+              await setStatus(actor, prior, "cancelled", publishReason);
+              if (prior.patternAssignmentId && (draft.removesPredecessor || draft.patternAssignmentId !== prior.patternAssignmentId)) {
+                await recordPatternOmission(actor, prior, publishReason);
+              }
+            }
           }
-          const updated = (await db.execute(sql`update schedule_entries set status = 'published', published_by = ${actor.actorId}, published_at = now(),
-            reason = ${publishReason}, revision = revision + 1, updated_at = now(), updated_by = ${actor.actorId}
-            where org_id = ${actor.orgId} and id = ${draft.id} and revision = ${draft.revision} returning id`)).rows;
+          // A removal revision is applied by the cancellation above; it is
+          // closed as history rather than published as a booking.
+          const updated = draft.removesPredecessor
+            ? (await db.execute(sql`update schedule_entries set status = 'cancelled', reason = ${publishReason}, revision = revision + 1, updated_at = now(), updated_by = ${actor.actorId}
+                where org_id = ${actor.orgId} and id = ${draft.id} and revision = ${draft.revision} returning id`)).rows
+            : (await db.execute(sql`update schedule_entries set status = 'published', published_by = ${actor.actorId}, published_at = now(),
+                reason = ${publishReason}, revision = revision + 1, updated_at = now(), updated_by = ${actor.actorId}
+                where org_id = ${actor.orgId} and id = ${draft.id} and revision = ${draft.revision} returning id`)).rows;
           if (updated.length !== 1) throw new ScheduleError("A booking changed during publication.", { status: 409, code: "schedule_stale" });
         });
       } catch (error) {
@@ -481,11 +597,17 @@ export async function publishBoard(actor: ScheduleActor & { boardId: string; fro
     const notices: ScheduleNotice[] = [];
     if (board.notifyAssignees) {
       for (const draft of drafts) {
+        if (draft.removesPredecessor) {
+          const prior = await readEntry(actor.orgId, draft.supersedesId!);
+          if (prior.workerPartyId) notices.push(noticeFor(prior, "removed"));
+          continue;
+        }
         const entry = await readEntry(actor.orgId, draft.id);
+        if (!entry.workerPartyId) continue;
         notices.push(noticeFor(entry, draft.supersedesId ? "changed" : "booked"));
         if (draft.supersedesId) {
           const prior = await readEntry(actor.orgId, draft.supersedesId);
-          if (prior.workerPartyId !== entry.workerPartyId) notices.push(noticeFor(prior, "removed"));
+          if (prior.workerPartyId && prior.workerPartyId !== entry.workerPartyId) notices.push(noticeFor(prior, "removed"));
         }
       }
     }

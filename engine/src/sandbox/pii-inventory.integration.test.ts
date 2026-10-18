@@ -2483,6 +2483,7 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "schedule_baselines.kind",
   "schedule_baselines.name",
   "schedule_boards.code",
+  "schedule_boards.board_type", // registered board-type key
   "schedule_boards.default_view",
   "schedule_boards.distribution_visibility", // constrained personal/whole-board audience policy
   "schedule_boards.description",
@@ -2498,6 +2499,22 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "schedule_codes.description",
   "schedule_codes.label",
   "schedule_entries.detail",
+  "schedule_entry_requests.kind",
+  "schedule_entry_requests.status",
+  "schedule_entry_requests.request_hash",
+  "schedule_pattern_assignments.status",
+  "schedule_pattern_assignments.request_hash",
+  "schedule_pattern_assignments.last_generation", // generation counts, occurrence dates and refusal messages
+  "schedule_pattern_exceptions.kind",
+  "schedule_patterns.code",
+  "schedule_patterns.name",
+  "schedule_patterns.description",
+  "schedule_patterns.time_zone",
+  "schedule_patterns.slots", // cycle days, clock times, breaks and qualification type ids
+  "schedule_patterns.target_kind",
+  "schedule_patterns.detail",
+  "schedule_patterns.reason",
+  "schedule_attendance_policies.reason",
   "schedule_entries.notes",
   "schedule_entries.reason",
   "schedule_entries.request_hash",

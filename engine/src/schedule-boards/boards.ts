@@ -13,6 +13,7 @@ import {actorHasPermission} from "../organization/actor-permissions.ts";
 import { actorAllowedSubsidiaryIds } from "../organization/actor-subsidiaries.ts";
 import { ScopeNotFoundError } from "../organization/subsidiary-scope.ts";
 import { ScheduleError } from "./errors.ts";
+import { boardHasCapability, SCHEDULE_CAPABILITY_FEATURES, type ScheduleBoardCapability } from "./board-types.ts";
 
 export interface ScheduleActor {
   readonly orgId: string;
@@ -27,6 +28,8 @@ export type ScheduleBoard = {
   readonly name: string;
   readonly description: string | null;
   readonly rowKind: "people" | "tasks" | "resources";
+  /** The registered board type (see board-types.ts); fixed for the board's life. */
+  readonly boardType: string;
   readonly resourceKind: "equipment" | "location" | null;
   readonly showTotals: boolean;
   readonly automaticDeliveryPolicy: unknown;
@@ -54,7 +57,9 @@ export type ScheduleBoard = {
   readonly dayPolicyKnown: boolean;
   readonly dayEnds: string;
   readonly dayBreakMinutes: number;
-  readonly publishPolicy: "live" | "staged";
+  readonly publishPolicy: "live" | "staged" | "governed";
+  /** First booking date that needs independent publication; set when the policy is governed. */
+  readonly governedFrom: string | null;
   readonly prefillTimesheets: boolean;
   readonly prefillCrewTime: boolean;
   readonly prefillFieldTickets: boolean;
@@ -70,7 +75,7 @@ export function scheduleReportWeekendDays(board: Pick<ScheduleBoard, "weekendDay
   return board.weekendDays.map(day => Number(day) % 7);
 }
 
-export const BOARD_COLUMNS = sql`b.id, b.code, b.name, b.description, b.row_kind as "rowKind", b.resource_kind as "resourceKind",
+export const BOARD_COLUMNS = sql`b.id, b.code, b.name, b.description, b.row_kind as "rowKind", b.board_type as "boardType", b.resource_kind as "resourceKind",
   b.automatic_delivery_policy as "automaticDeliveryPolicy", b.show_totals as "showTotals", b.show_hours_column as "showHoursColumn", b.distribution_visibility as "distributionVisibility", b.weekend_days as "weekendDays", b.cell_color_rules as "cellColorRules",
   b.subsidiary_id as "subsidiaryId", s.name as "subsidiaryName",
   b.department_id as "departmentId", d.name as "departmentName",
@@ -79,7 +84,7 @@ export const BOARD_COLUMNS = sql`b.id, b.code, b.name, b.description, b.row_kind
   b.grain, b.views, b.default_view as "defaultView", b.range_days as "rangeDays", b.week_starts_on as "weekStartsOn",
   b.show_weekends as "showWeekends", b.time_zone as "timeZone",
   to_char(b.day_starts, 'HH24:MI') as "dayStarts", to_char(b.day_ends, 'HH24:MI') as "dayEnds",
-  b.day_break_minutes as "dayBreakMinutes", b.day_policy_known as "dayPolicyKnown", b.publish_policy as "publishPolicy",
+  b.day_break_minutes as "dayBreakMinutes", b.day_policy_known as "dayPolicyKnown", b.publish_policy as "publishPolicy", b.governed_from::text as "governedFrom",
   b.prefill_timesheets as "prefillTimesheets", b.prefill_crew_time as "prefillCrewTime",
   b.prefill_field_tickets as "prefillFieldTickets", b.notify_assignees as "notifyAssignees",
   b.sort_order as "sortOrder", b.is_active as "isActive"`;
@@ -197,4 +202,26 @@ export async function getBoard(actor: ScheduleActor, idOrCode: string): Promise<
   if (!visibleTo(allowed, board)) throw new ScopeNotFoundError();
   if(board.projectId)await lockActorCommandAuthority(db,actor.orgId,actor.actorId,board.projectSubsidiaryId,"projects.read");
   return board;
+}
+
+/**
+ * Refuse a command that needs a capability the board's type does not
+ * declare, or whose capability features are switched off.
+ */
+export async function requireBoardCapability(actor: ScheduleActor, board: ScheduleBoard, capability: ScheduleBoardCapability): Promise<void> {
+  if (!boardHasCapability(board, capability)) {
+    throw new ScheduleError("This board's type does not offer that capability.", {
+      code: "schedule_capability_unavailable",
+      remedy: "Use a shift roster board for recurring patterns, shift requests, governed publication and attendance.",
+    });
+  }
+  for (const feature of SCHEDULE_CAPABILITY_FEATURES[capability]) {
+    if (!(await lockAndCheckOrgFeature(db, actor.orgId, feature))) {
+      throw new ScheduleError("A feature this board capability needs is switched off.", {
+        status: 404,
+        code: "schedule_capability_disabled",
+        remedy: "Enable it on Company Settings → Features; existing history is preserved.",
+      });
+    }
+  }
 }

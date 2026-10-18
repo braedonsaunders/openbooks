@@ -75,6 +75,15 @@ const IMMUTABLE_PARTY_REFS: readonly (readonly [table: string, column: string])[
   // booking keeps both, so the history of who went where is never rewritten.
   ["schedule_entries", "worker_party_id"],
   ["schedule_entries", "customer_party_id"],
+  // Recurring assignments, shift requests and attendance evidence name the
+  // person scheduled, asked or observed; their history is never re-pointed.
+  ["schedule_patterns", "customer_party_id"],
+  ["schedule_pattern_assignments", "worker_party_id"],
+  ["schedule_entry_requests", "worker_party_id"],
+  ["schedule_entry_requests", "counterpart_party_id"],
+  ["schedule_attendance_identities", "worker_party_id"],
+  ["schedule_attendance_events", "worker_party_id"],
+  ["schedule_attendance_observations", "worker_party_id"],
   // Deductions are filed statutory evidence of payments to the named payee.
   ["withholding_deductions", "party_id"],
 ];
@@ -90,6 +99,12 @@ const IMMUTABLE_PARTY_REF_LABELS: Readonly<Record<string, string>> = {
   hrm_shifts: "shift authorship evidence",
   hrm_shift_requests: "shift request authorship evidence",
   schedule_entries: "booking history",
+  schedule_patterns: "recurring shift pattern targets",
+  schedule_pattern_assignments: "recurring shift assignments",
+  schedule_entry_requests: "shift request history",
+  schedule_attendance_identities: "attendance device identities",
+  schedule_attendance_events: "attendance check-in evidence",
+  schedule_attendance_observations: "attendance observations",
   withholding_deductions: "contractor withholding deductions",
 };
 

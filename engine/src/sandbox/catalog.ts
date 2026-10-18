@@ -235,6 +235,16 @@ export const EXCLUDE = new Set([
   "hrm_attendance_observations",
   "hrm_attendance_event_claims",
   "hrm_attendance_observation_events",
+  // Time-clock sources and their check-in evidence belong to the source
+  // environment; a sandbox maps its own devices and imports its own check-ins.
+  "schedule_attendance_devices",
+  "schedule_attendance_identities",
+  "schedule_attendance_batches",
+  "schedule_attendance_events",
+  "schedule_attendance_watermarks",
+  "schedule_attendance_observations",
+  "schedule_attendance_event_claims",
+  "schedule_attendance_observation_events",
 ]);
 
 /**

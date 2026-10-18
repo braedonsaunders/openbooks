@@ -34,6 +34,26 @@ const CHECK_REFUSALS: Record<string, readonly [string, string]> = {
   schedule_boards_weekend_days: ["The weekend days are not valid.", "Select days of the week in Board settings."],
   schedule_boards_distribution_entity: ["Whole-board reports need a legal entity.", "Choose a legal entity in Board Settings or use personal reports."],
   schedule_entries_subject: ["A booking needs exactly one person or resource.", "Reload the board and select a row belonging to its resource kind."],
+  schedule_boards_governed_from: ["Governed publication needs the first governed booking date.", "Choose the date from which bookings need an independent approver, or choose live or staged publishing."],
+  schedule_patterns_slots: ["The pattern's slots are not valid.", "Give each slot a cycle day, start, end and break that leaves working time, with no overlapping slots."],
+  schedule_pattern_assignments_ended: ["An ended assignment needs its end date.", "Choose the first date the person no longer works the pattern."],
+};
+
+const CONFLICT_REFUSALS: Record<string, readonly [string, string]> = {
+  schedule_patterns_code_key: ["Another shift pattern already uses this code.", "Choose a different pattern code."],
+  schedule_attendance_devices_org_id_code_key: ["Another attendance device already uses this code.", "Choose a different device code."],
+  schedule_attendance_policies_org_id_board_id_effective_from_key: ["An attendance policy version already starts on this date.", "Choose a later effective date for the new version."],
+  schedule_pattern_exceptions_active: ["This occurrence already has an exception.", "Revoke the existing exception first."],
+  schedule_entry_requests_open_entry: ["This shift already has an open request.", "Withdraw the open request or wait for its decision."],
+  schedule_entry_requests_open_counterpart: ["Your colleague's shift already has an open request.", "Choose another shift or wait for that request's decision."],
+  schedule_entries_pattern_published: ["This pattern occurrence is already booked.", "Reload the board and generate again."],
+  schedule_entries_pattern_draft: ["This pattern occurrence already has an unpublished booking.", "Reload the board and generate again."],
+};
+
+const EXCLUSION_REFUSALS: Record<string, readonly [string, string]> = {
+  schedule_pattern_assignments_no_overlap: ["This person already works this pattern in an overlapping period.", "End the existing assignment first, or start the new one after it ends."],
+  schedule_attendance_identities_source_window: ["This device identifier is already mapped for an overlapping period.", "End the existing mapping first, or start the new one after it ends."],
+  schedule_attendance_identities_person_window: ["This person already has an identifier on this device for an overlapping period.", "End the existing mapping first, or start the new one after it ends."],
 };
 
 type DatabaseCause ={ code?: string; constraint?: string; message?: string; where?: string; cause?: unknown };
@@ -52,11 +72,11 @@ export function scheduleDatabaseRefusal(error: unknown, context: { personName?: 
     const detail = cause as DatabaseCause;
     if (
       (detail.code === "42P01" &&
-        /schedule_(?:boards|codes|entries|source_records|distributions|distribution_recipients|resource_recipients)/.test(
+        /schedule_(?:boards|codes|entries|source_records|distributions|distribution_recipients|resource_recipients|patterns|pattern_assignments|pattern_exceptions|entry_requests|attendance_[a-z_]+)|openbooks_schedule_board_types/.test(
           detail.message ?? "",
         )) ||
       (detail.code === "42703" &&
-        /automatic_delivery_policy|show_hours_column|distribution_visibility|resource_kind|cell_color_rules|show_totals|weekend_days|equipment_unit_id|resource_location_id|day_policy_known/.test(
+        /automatic_delivery_policy|show_hours_column|distribution_visibility|resource_kind|cell_color_rules|show_totals|weekend_days|equipment_unit_id|resource_location_id|day_policy_known|board_type|governed_from|governed|pattern_assignment_id|origin_request_id|removes_predecessor|required_qualification_type_ids|closed_at/.test(
           detail.message ?? "",
         ))
     ) {
@@ -66,7 +86,7 @@ export function scheduleDatabaseRefusal(error: unknown, context: { personName?: 
         remedy: "Ask an administrator to apply the pending database migrations.",
       });
     }
-    if ((detail.code === "23514" || detail.code === "P0001") && /schedule_(?:entr|board|code|source_record|distribution|resource_recipient)|schedule_entry_assert/.test(`${detail.where ?? ""} ${detail.constraint ?? ""}`) && detail.message && !detail.constraint) {
+    if ((detail.code === "23514" || detail.code === "P0001") && /schedule_(?:entr|board|code|source_record|distribution|resource_recipient|roster|attendance|assert|pattern)|schedule_entry_assert/.test(`${detail.where ?? ""} ${detail.constraint ?? ""}`) && detail.message && !detail.constraint) {
       return new ScheduleError(detail.message, { code: "schedule_refused" });
     }
     if (detail.code === "23514" && detail.constraint && CHECK_REFUSALS[detail.constraint]) {
@@ -78,6 +98,14 @@ export function scheduleDatabaseRefusal(error: unknown, context: { personName?: 
         code: "schedule_double_booked",
         remedy: "Remove or move the other booking first, or choose another person, resource or time.",
       });
+    }
+    if (detail.code === "23505" && CONFLICT_REFUSALS[detail.constraint ?? ""]) {
+      const [message, remedy] = CONFLICT_REFUSALS[detail.constraint!]!;
+      return new ScheduleError(message, { status: 409, code: "schedule_conflict", remedy });
+    }
+    if (detail.code === "23P01" && EXCLUSION_REFUSALS[detail.constraint ?? ""]) {
+      const [message, remedy] = EXCLUSION_REFUSALS[detail.constraint!]!;
+      return new ScheduleError(message, { status: 409, code: "schedule_conflict", remedy });
     }
     if (detail.code === "23505" && /schedule_resource_recipients_(equipment|location)/.test(detail.constraint ?? "")) {
       return new ScheduleError("This resource already has an active board contact.", {status:409,code:"schedule_stale",remedy:"Edit the existing association or retire it before choosing another contact."});

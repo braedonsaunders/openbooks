@@ -14,6 +14,7 @@ import { registerWorkerDuty } from "@openbooks/engine/scheduling/duties";
 import { installEngineSeams } from "@openbooks/engine/composition/install";
 import { AUTOMATION_TICK_LOCK_KEY, runAutomationTickClaimed } from "@openbooks/engine/automations/tick";
 import { runQualificationAlertScan } from "@openbooks/engine/hrm/qualifications/alerts";
+import { maintainPatternAssignments } from "@openbooks/engine/schedule-boards/pattern-store";
 import { runMaintenanceAlertScan } from "@openbooks/engine/assets/asset-maintenance";
 import { runInsuranceRenewalScan } from "@openbooks/engine/assets/asset-insurance";
 import { runAssetProposalScanDuty } from "@openbooks/engine/assets/asset-proposals";
@@ -98,7 +99,7 @@ async function orgsWithFeature(feature: string): Promise<string[]> {
  */
 export async function runHrmOrganizationDuty(
   key: string,
-  feature: "hrmDocuments" | "hrmRecruiting",
+  feature: "hrmDocuments" | "hrmRecruiting" | "hrmShiftPlanning",
   run: (orgId: string, today: string) => Promise<void>,
 ): Promise<void> {
   const failures: Error[] = [];
@@ -186,6 +187,16 @@ export async function runRecruitingRetentionDuty(): Promise<void> {
       }
     }
     if (failures.length) throw new AggregateError(failures, failures.map((error) => error.message).join("; "));
+  });
+}
+
+/** Keep recurring shift patterns generated through their horizons as the calendar advances. */
+export async function runSchedulePatternDuty(): Promise<void> {
+  await runHrmOrganizationDuty("schedule-pattern-maintenance", "hrmShiftPlanning", async (orgId, today) => {
+    await withOrgClaim("schedule-pattern-maintenance", orgId, today, async () => {
+      const result = await maintainPatternAssignments(orgId);
+      if (result.assignments > 0) console.log(`[worker] schedule-pattern-maintenance ${orgId}: ${JSON.stringify(result)}`);
+    });
   });
 }
 
@@ -354,6 +365,8 @@ export function registerWorkerDuties(): void {
       await runRecruitingRetentionDuty();
     },
   });
+  console.log("[worker] duty registered: schedule-pattern-maintenance");
+  registerWorkerDuty({ key: "schedule-pattern-maintenance", run: hourly("schedule-pattern-maintenance", runSchedulePatternDuty) });
   console.log("[worker] duty registered: hrm-dsar-exports");
   registerWorkerDuty({
     key: "hrm-dsar-exports",
