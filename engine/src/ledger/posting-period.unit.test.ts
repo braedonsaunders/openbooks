@@ -16,7 +16,9 @@ function scripted(rows: unknown[][]) {
   } } as unknown as Pick<typeof db, "execute">;
   return { runner, calls, done: () => assert.equal(calls.length, rows.length, "all expected database reads must occur") };
 }
-const document = (postingPeriodId: string | null): Doc => ({ orgId: "org-a", postingPeriodId }) as Doc;
+const document = (postingPeriodId: string | null): Doc => ({ orgId: "org-a", subsidiaryId: "child", postingPeriodId }) as Doc;
+/** The explicit period belongs to the entity's effective posting calendar on the posting date. */
+const calendarMatches = [{ matches: true }];
 const args = { orgId: "org-a", docCurrency: "CAD", docSubsidiaryId: "child", postingDate: "2026-09-20" };
 const root = [{ id: "root", base_currency: "USD" }];
 const chain = [
@@ -30,20 +32,27 @@ const window = (is_adjustment: boolean, window_start: string, window_end: string
   [{ is_adjustment, period_name: is_adjustment ? "FY26 ADJ" : "2026-09", fiscal_year: 2026, window_start, window_end }];
 
 test("explicit posting period is scoped to the organization and the posting date's window; date fallback excludes adjustment periods", async () => {
-  const explicit = scripted([window(false, "2026-09-01", "2026-09-30")]);
+  const explicit = scripted([window(false, "2026-09-01", "2026-09-30"), calendarMatches]);
   assert.deepEqual(await resolvePostingPeriod(explicit.runner, document("override"), args.postingDate), { id: "override" });
   assert.deepEqual(explicit.calls[0]!.params, ["org-a", "override"]);
+  assert.deepEqual(explicit.calls[1]!.params, ["org-a", "child", args.postingDate, "org-a", "override"]);
   explicit.done();
+  const foreignCalendar = scripted([window(false, "2026-09-01", "2026-09-30"), [{ matches: false }]]);
+  await assert.rejects(resolvePostingPeriod(foreignCalendar.runner, document("override"), args.postingDate),
+    (e: unknown) => e instanceof PostingError && /does not belong to the entity's effective fiscal calendar/.test(e.message));
+  foreignCalendar.done();
   const outside = scripted([window(false, "2026-10-01", "2026-10-31")]);
   await assert.rejects(resolvePostingPeriod(outside.runner, document("override"), args.postingDate),
     (e: unknown) => e instanceof PostingError && /override does not cover posting date 2026-09-20/.test(e.message));
   const dated = scripted([[{ id: "regular" }]]);
   assert.deepEqual(await resolvePostingPeriod(dated.runner, document(null), args.postingDate), { id: "regular" });
   // Date-derived resolution goes through the shared covering-period
-  // resolver: org-scoped, date-windowed, restricted to the default active
-  // calendar's regular periods, deterministic under overlaps.
-  assert.deepEqual(dated.calls[0]!.params, ["org-a", args.postingDate, args.postingDate]);
-  assert.match(dated.calls[0]!.sql, /fc\.is_default and fc\.is_active/);
+  // resolver: org-scoped, date-windowed, restricted to the regular periods
+  // of the entity's effective active posting calendar, deterministic under
+  // overlaps.
+  assert.deepEqual(dated.calls[0]!.params, ["org-a", "child", args.postingDate, "org-a", args.postingDate, args.postingDate]);
+  assert.match(dated.calls[0]!.sql, /fc\.is_active/);
+  assert.match(dated.calls[0]!.sql, /fc\.id = public\.subsidiary_posting_calendar\(/);
   assert.match(dated.calls[0]!.sql, /not p\.is_adjustment/);
   assert.match(dated.calls[0]!.sql, /order by p\.starts_on, p\.ends_on, p\.id/);
   dated.done();
@@ -53,7 +62,7 @@ test("an explicit adjustment period admits only postings dated inside its own fi
   // Adjustments keep their economic date inside the year they close; a date
   // in another year would post into that year by date while the period
   // belongs to this one.
-  const inside = scripted([window(true, "2026-01-01", "2026-12-31")]);
+  const inside = scripted([window(true, "2026-01-01", "2026-12-31"), calendarMatches]);
   assert.deepEqual(await resolvePostingPeriod(inside.runner, document("adj-13"), "2026-06-30"), { id: "adj-13" });
   const outside = scripted([window(true, "2026-01-01", "2026-12-31")]);
   await assert.rejects(resolvePostingPeriod(outside.runner, document("adj-13"), "2025-06-30"),

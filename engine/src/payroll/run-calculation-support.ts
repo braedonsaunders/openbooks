@@ -16,6 +16,12 @@ import { effectivePayRateSql } from "./rate.ts";
 import { requirePayRateBasis, type PayRateBasis } from "../projects/pay-rate-basis.ts";
 import { convertLaborWage } from "../projects/labor-costing.ts";
 import { type EntitlementWarning } from "./entitlements.ts";
+import type { CaBonusIncomeReferenceSource } from "./canada/bonus-income-reference.ts";
+import type { EmployeePayrollContext, PayrollRunContext, SupplementalTaxMethod } from "./packs.ts";
+import type { StatutoryRateResolution } from "./statutory-rates.ts";
+import type { StatutoryHolidayEligibilityFacts } from "./holidays.ts";
+import type { PayrollSubsidiaryScope } from "./scope.ts";
+import type { PayPeriodPriors } from "./period-priors.ts";
 export interface StubComputation {
   employeePartyId: string;
   province: string;
@@ -261,3 +267,49 @@ export async function resolveStubStatutoryHours(
   }
   return { regular, extra };
 }
+
+/** Everything one stub computation reads, resolved once per run by the calculation driver. */
+export type StubComputationInput = {
+  orgId: string; actorId: string; documentId: string;
+  run: Record<string, string>; emp: Record<string, string | null>;
+  /** The run's resolved jurisdiction — one country, entity, currency, year. */
+  runContext: PayrollRunContext;
+  /** This employee's place in it, already asserted to agree with the run's. */
+  jurisdiction: EmployeePayrollContext;
+  periodsPerYear: number | undefined;
+  employerEmployeeCount: number;
+  need: (systemKey: string, kind: string) => Record<string, unknown>;
+  components: Record<string, unknown>[];
+  /** Org wage expense default, read once per calculate: the last rung of
+   * time-driven earning line expense resolution. */
+  wageExpenseAccountId: string | null;
+  /**
+   * The run's statutory-rate resolution per (country, year), built once and
+   * shared by every stub — never a query per employee.
+   */
+  statutoryRatesFor: (country: string, taxYear: number) => Promise<StatutoryRateResolution>;
+  /** orgs.settings.payroll.eftFallbackToCheque, read once for the run. */
+  eftFallbackToCheque: boolean;
+  /**
+   * Holiday-schema availability, resolved once per calculation by the
+   * driver: the to_regclass probe is identical for every stub, so it must
+   * not repeat per employee (it was observed firing per stub line).
+   */
+  holidayObligationsAvailable: boolean;
+  /** orgs.settings.payroll.statutoryHolidayPay, read once for the run. */
+  statHolidayPay: boolean;
+  /** Authoritative statutory holiday eligibility facts by employee. */
+  holidayEligibility?: Readonly<Record<string, StatutoryHolidayEligibilityFacts>>;
+  /** Rolled-back re-derivation of a COMMITTED run; writes no ledger rows. */
+  simulate: boolean;
+  allowedSubsidiaryIds?: PayrollSubsidiaryScope;
+  /**
+   * This employee's period-to-date priors from earlier runs of the same
+   * period and schedule (undefined for the period's first run), resolved
+   * once per run by the calculation driver.
+   */
+  periodPriors?: PayPeriodPriors;
+  /** The org's supplemental income-tax method, resolved once per run. */
+  supplementalTaxMethod?: SupplementalTaxMethod;
+  onBonusIncomeReference?: (source: CaBonusIncomeReferenceSource) => void;
+};

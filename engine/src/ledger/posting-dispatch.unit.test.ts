@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import test, { type TestContext } from "node:test";
+import { PgDialect } from "drizzle-orm/pg-core";
+import type { SQL } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { postingEffectSubsidiaryId, runPostDocumentEffects } from "./posting-dispatch.ts";
 import { PostingEffectsTerminalFailureError, type PostingEffectsRow } from "./posting-effects.ts";
@@ -20,7 +22,13 @@ function reads(t: TestContext, results: unknown[][]) {
     };
     return query;
   });
-  t.mock.method(db, "execute", () => { throw new Error("unexpected execute"); });
+  // The only direct read on these paths is the organization's feature
+  // switches: asset proposals stay off, so capitalization is a no-op.
+  t.mock.method(db, "execute", async (query: SQL) => {
+    const text = new PgDialect().sqlToQuery(query).sql.trim();
+    if (/^select settings->'features' as features from orgs where id = \$1$/.test(text)) return { rows: [{ features: {} }] };
+    throw new Error(`unexpected execute: ${text}`);
+  });
   return () => assert.equal(count, results.length, "all expected selects must occur");
 }
 

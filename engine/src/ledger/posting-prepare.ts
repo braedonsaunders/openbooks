@@ -19,7 +19,6 @@ import { PayrollError as PayrollRemittanceError } from "../payroll/error.ts";
 import { assertPayrollRemittanceBillCurrent } from "../payroll/remittance.ts";
 import { isZero, toUnits } from "../money/money.ts";
 import { parseMoney, sumMoney } from "../money/brands.ts";
-import { isIso4217CurrencyCode } from "../fx/currencies.ts";
 import { CustomGlLinesError, beforePostCustomControlsChanged, mergeBeforePostCustomMutation, resolveScriptUser, runCustomGlLineScripts, runTriggerScripts, type ScriptContext } from "../scripting/scripting.ts";
 import type { ContributedLine } from "../allocations/types.ts";
 import { assertContributorBalance, collectPostContributions, PostAllocationError, type PostContributionResult } from "../allocations/post.ts";
@@ -48,37 +47,14 @@ import { applySubsidiaries } from "./posting-subsidiaries.ts";
 import { resolveInternalBillingPostingContext } from "./internal-billing-posting.ts";
 import { documentControlChoice, resolveDocumentControlAccount } from "./posting-control-account.ts";
 import { assertPartylessControlPolicy } from "./partyless-control-policy.ts";
-import { DocumentDefaultsError, resolveTermsDueDate } from "./document-defaults.ts";
-import { docKindConfig } from "../records/document-kinds.ts";
 import { withNoChargeUnitsAccount } from "./posting-no-charge.ts";
 
 import { postingEffectSubsidiaryId } from "./posting-dispatch.ts";
 import { AmortizationError } from "../amortization/errors.ts";
 import { resolveAmortizationRouting, type AmortizationRouting } from "../amortization/source-posting.ts";
 import type { PostDocumentOptions } from "../journal/posting-contracts.ts";
-
-/**
- * A pre-post inventory refusal reaches the kernel wrapped as a PostingError
- * so the posting boundary speaks one error family — but the operator-facing
- * identity a typed refusal carries (its machine `code`, `remedy`, and
- * `details`, which the bill drawer reads to offer the matching next step)
- * must survive the wrap. Only string codes/remedies and plain-object
- * details pass through; anything else stays out of the response body.
- */
-export function carryRefusalIdentity(refusal: PostingError, source: unknown): PostingError {
-  const record = source as { code?: unknown; remedy?: unknown; details?: unknown } | null;
-  const carried = refusal as PostingError & { code?: string; remedy?: string; details?: unknown };
-  if (record && typeof record.code === "string" && record.code.trim() !== "") {
-    carried.code = record.code;
-  }
-  if (record && typeof record.remedy === "string" && record.remedy.trim() !== "") {
-    carried.remedy = record.remedy;
-  }
-  if (record && record.details !== null && typeof record.details === "object" && !Array.isArray(record.details)) {
-    carried.details = record.details;
-  }
-  return refusal;
-}
+import { carryRefusalIdentity } from "./posting-refusal-identity.ts";
+import { finalizePostingHeader } from "./posting-header.ts";
 
 /** Resolve inputs and automation before opening the accounting transaction. */
 export async function prepareDocumentPosting(documentId: string, deps: PostingDeps, options: PostDocumentOptions) {
@@ -528,40 +504,9 @@ export async function prepareDocumentPosting(documentId: string, deps: PostingDe
     throw new PostingError((error as Error).message);
   }
 
-  // A kind that declares dueDateFromTerms (invoices and bills) posts with a due
-  // date: the one the document states, else the one its party's payment terms
-  // (then the organization default) imply on the document date — the resolver
-  // the drawer previews. With no terms at all the document is due on receipt,
-  // its document date. The date is stamped with the posting, so the open item
-  // and the document header agree and aging never sees an undated item.
-  // Historical replay keeps the stored header untouched.
-  let dueDateFromTerms: { dueDate: string } | null = null;
-  if (!deps.migration && docKindConfig(effectiveDoc.kind)?.dueDateFromTerms && effectiveDoc.dueDate == null) {
-    try {
-      dueDateFromTerms = await resolveTermsDueDate(db, effectiveDoc.orgId, {
-        kind: effectiveDoc.kind,
-        partyId: effectiveDoc.partyId,
-        documentDate: effectiveDoc.documentDate,
-      });
-    } catch (error) {
-      if (error instanceof DocumentDefaultsError) throw new PostingError(error.message);
-      throw error;
-    }
-    dueDateFromTerms ??= { dueDate: effectiveDoc.documentDate };
-    effectiveDoc = { ...effectiveDoc, dueDate: dueDateFromTerms.dueDate };
-  }
-
-  // The ledger boundary shares capture's ISO 4217 gate: no path posts a
-  // non-ISO currency, whatever wrote the header (capture, API, sync, a
-  // before_post script or flow — all merged into effectiveDoc above). Shape
-  // is not membership: "ZZZ" is three uppercase letters and denominates
-  // nothing, so it refuses here instead of posting untranslatable units.
-  if (!isIso4217CurrencyCode(effectiveDoc.currency)) {
-    throw new PostingError(
-      `document ${effectiveDoc.documentNumber} has currency ${JSON.stringify(effectiveDoc.currency)} ` +
-        `which is not an ISO 4217 code — correct the document currency to the 3-letter code before posting`,
-    );
-  }
+  const finalHeader = await finalizePostingHeader(effectiveDoc, deps.migration === true);
+  effectiveDoc = finalHeader.header;
+  const dueDateFromTerms = finalHeader.dueDateFromTerms;
 
   // -- receivable/payable control account ---------------------------------
   // A party document posts its open item to the document's own choice, else

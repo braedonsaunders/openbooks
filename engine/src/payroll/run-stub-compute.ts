@@ -1,16 +1,8 @@
 import { vacationBaseIncluded } from './component-statutory-treatment.ts';
 import type { CaBonusIncomeReferenceSource } from './canada/bonus-income-reference.ts';
-import type { PayRunType } from './run-contracts.ts';
 import { historicalWithholdingProfile } from './historical-withholding.ts';
 import { prepareCompensationPackages, appendCompensationPackageStage, persistCompensationPackageCalculations } from './compensation-package-payroll.ts';
-import { ONE_OFF_RUN_TYPES } from "./run-contracts.ts";
-/**
- * Single-stub computation orchestrating the earning phases, statutory passes, and protection.
- *
- * Extracted verbatim from engine/src/payroll/run.ts; bodies preserve exact
- * math, transaction/lock sequencing, and refusal identity.
- */
-import { type PayrollSubsidiaryScope } from "./scope.ts";
+import { ONE_OFF_RUN_TYPES, type PayRunType } from "./run-contracts.ts";
 import { sql } from "drizzle-orm";
 import { db } from "../platform/db.ts";
 import { PayrollError } from "./error.ts";
@@ -18,14 +10,11 @@ import { aggregateUsSupplementalWageAmounts } from "./supplemental-wages.ts";
 import { aggregateUsStatutoryExemptionAmounts } from "./statutory-exemptions.ts";
 import { cmp, sum } from "../money/money.ts";
 import { revalidateStoredCertificates } from "./certificates.ts";
-import { type StatutoryRateResolution } from "./statutory-rates.ts";
-import { assertPayrollRegionSupported, type EmployeePayrollContext, type PayrollRunContext, type PayrollTaxBaseKey, type SupplementalTaxMethod } from "./packs.ts";
-import type { PayPeriodPriors } from "./period-priors.ts";
+import { assertPayrollRegionSupported, type PayrollTaxBaseKey } from "./packs.ts";
 import { createPushStatutory } from "./push-statutory.ts";
 import { assessStubAggregateLevies } from "./employer-aggregate-priors.ts";
 import { assertSettlementFactorsMergeable, settleAnnualSettlement } from "./annual-settlement-run.ts";
 import { EMPTY_EMPLOYER_LEVY_FACTORS } from "./statutory-context.ts";
-import { type StatutoryHolidayEligibilityFacts } from "./holidays.ts";
 import { payRateIsUsable, payrollHourlyWage } from "./rate.ts";
 import { alternateDayPlanOf, assertComponentServiceEligibility, entitlementPlans, planMovementsForStub, resolveVacationTerms, resolveServiceTier, vacationPlanOf, type EntitlementWarning } from "./entitlements.ts";
 import { grantRemembranceAlternateDay } from "./remembrance-grants.ts";
@@ -33,7 +22,7 @@ import { resolvePayrollPaymentMethod } from "./payment-method.ts";
 import { assertEarningsAssessedStable, dropIncomeAssessedLines, type EarningsAssessedLine } from "./limits.ts";
 import { reduceTaxBases } from "./treatment-bases.ts";
 import { assertVacationPlanResolved } from "./run-setup.ts";
-import { type StubComputation, storedTaxCertificates, resolvePayRate, resolveStubStatutoryHours } from "./run-calculation-support.ts";
+import { type StubComputation, type StubComputationInput, storedTaxCertificates, resolvePayRate, resolveStubStatutoryHours } from "./run-calculation-support.ts";
 import { assertPackStatutoryRatesConfigured, createStubCertificateResolver } from "./run-stub-preflight.ts";
 import { type Line, installablePackOrThrow, insertPayStubRow, insertPayStubLineRows, persistEntitlementMovements, earningsAssessedSnapshot, resolveEmployeeJurisdiction, stampDepartmentExpenseAccounts, stampEntitlementSettlementAccounts, employeeHomeDepartment, stampEarningLineStatutoryTreatments } from "./run-stub-records.ts";
 import { appendPeriodicEarnings, appendRetroSettlementLines, appendDerivedEarningLines, appendStatutoryHolidayEarningLines, applyAssignedComponentLines, applyRunLineAdjustments } from "./run-earning-lines.ts";
@@ -47,52 +36,10 @@ import { resolveProtectionExemptFloors } from "./protection-classes.ts";
 import { applyEarningPaymentKinds, payableStubTotals } from "./non-cash-earnings.ts";
 import { appendRecurringBenefitLines, recurringBenefitSource } from './benefit-plan-inputs.ts';
 import { appendApprovedHolidaySettlements } from './holiday-settlements.ts';
+/** Compute one employee's stub: earning phases, statutory passes and deduction protection. */
 export async function calculateStub(
   tx: Pick<typeof db, "execute">,
-  ctx: {
-    orgId: string; actorId: string; documentId: string;
-    run: Record<string, string>; emp: Record<string, string | null>;
-    /** The run's resolved jurisdiction — one country, entity, currency, year. */
-    runContext: PayrollRunContext;
-    /** This employee's place in it, already asserted to agree with the run's. */
-    jurisdiction: EmployeePayrollContext;
-    periodsPerYear: number | undefined;
-    employerEmployeeCount: number;
-    need: (systemKey: string, kind: string) => Record<string, unknown>;
-    components: Record<string, unknown>[];
-    /** Org wage expense default, read once per calculate: the last rung of
-     * time-driven earning line expense resolution. */
-    wageExpenseAccountId: string | null;
-    /**
-     * The run's statutory-rate resolution per (country, year), built once and
-     * shared by every stub — never a query per employee.
-     */
-    statutoryRatesFor: (country: string, taxYear: number) => Promise<StatutoryRateResolution>;
-    /** orgs.settings.payroll.eftFallbackToCheque, read once for the run. */
-    eftFallbackToCheque: boolean;
-    /**
-     * Holiday-schema availability, resolved once per calculation by the
-     * driver: the to_regclass probe is identical for every stub, so it must
-     * not repeat per employee (it was observed firing per stub line).
-     */
-    holidayObligationsAvailable: boolean;
-    /** orgs.settings.payroll.statutoryHolidayPay, read once for the run. */
-    statHolidayPay: boolean;
-    /** Authoritative statutory holiday eligibility facts by employee. */
-    holidayEligibility?: Readonly<Record<string, StatutoryHolidayEligibilityFacts>>;
-    /** Rolled-back re-derivation of a COMMITTED run; writes no ledger rows. */
-    simulate: boolean;
-    allowedSubsidiaryIds?: PayrollSubsidiaryScope;
-    /**
-     * This employee's period-to-date priors from earlier runs of the same
-     * period and schedule (undefined for the period's first run), resolved
-     * once per run by the calculation driver.
-     */
-    periodPriors?: PayPeriodPriors;
-    /** The org's supplemental income-tax method, resolved once per run. */
-    supplementalTaxMethod?: SupplementalTaxMethod;
-    onBonusIncomeReference?: (source: CaBonusIncomeReferenceSource) => void;
-  },
+  ctx: StubComputationInput,
 ): Promise<StubComputation> {
   const { orgId, actorId, documentId, run, emp: storedEmp, jurisdiction } = ctx;
   let emp = storedEmp;
