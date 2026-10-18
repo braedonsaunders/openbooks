@@ -16,7 +16,7 @@ stubModules({
   authz: false,
   features: false,
   extra: {
-    'next-intl': 'const t = (key) => key; export function useTranslations() { return t } export function useLocale() { return "en" }',
+    'next-intl': 'const t = (key) => key; t.rich = (key) => key; t.has = () => true; export function useTranslations() { return t } export function useLocale() { return "en" }',
   },
 })
 

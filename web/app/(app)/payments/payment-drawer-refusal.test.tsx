@@ -64,6 +64,8 @@ const { act } = await import("react");
 const { NextIntlClientProvider } = await import("next-intl");
 const messages = (await import("../../../messages/en")).default;
 const { MoneyProvider } = await import("../../../components/money-provider");
+// The application shell supplies the organization's business day.
+const { BusinessDateProvider } = await import("../../../components/business-date-provider");
 const { PaymentDrawer } = await import("./PaymentDrawer");
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
@@ -121,7 +123,7 @@ async function mountPayment(
   await act(async () => {
     root.render(
       <NextIntlClientProvider locale={locale} messages={localeMessages} timeZone="UTC">
-        <MoneyProvider currency="USD">
+        <BusinessDateProvider today="2026-07-15"><MoneyProvider currency="USD">
           <PaymentDrawer
             payment={{ doc, bankAccountId, allocations: allocations as never, applied: [] }}
             initialOpenItems={initialOpenItems as never}
@@ -131,7 +133,7 @@ async function mountPayment(
             basePath="/ap/payments"
             initialMode={initialMode as never}
           />
-        </MoneyProvider>
+        </MoneyProvider></BusinessDateProvider>
       </NextIntlClientProvider>,
     );
     await tick();
@@ -451,11 +453,11 @@ test('opening another prefilled payment resets the header, applications and fail
   t.after(async()=>{await act(async()=>root.unmount());host.remove()});
   const render = async (party: string, line: string, amount: string, date: string, reference: string) => {
     await act(async()=>{
-      root.render(<NextIntlClientProvider locale="en" messages={messages} timeZone="UTC"><MoneyProvider currency="USD">
+      root.render(<NextIntlClientProvider locale="en" messages={messages} timeZone="UTC"><BusinessDateProvider today="2026-07-15"><MoneyProvider currency="USD">
         <PaymentDrawer createMode payment={{doc:{id:'',kind:'vendor_payment',status:'draft',currency:'USD',party_id:party,subsidiary_id:entity,document_date:date,reference_number:reference,updated_at:'',total:'0'},bankAccountId:bank,applied:[],allocations:[{openLineId:line,sourceTransactionAmount:amount,targetTransactionAmount:amount,settlementRate:'1',settlementRateSource:'same_currency',settlementRateReference:'same transaction currency'}]}}
           initialOpenItems={[{lineId:line,entryNumber:line,postingDate:date,dueDate:null,documentNumber:line,documentKind:'vendor_bill',referenceNumber:null,amount,applied:'0',open:amount,currency:'USD',transactionAmount:amount,transactionApplied:'0',transactionOpen:amount}]}
           parties={[{id:firstParty,display_name:'Rent vendor'},{id:nextParty,display_name:'Utility vendor'}]} bankAccounts={[{id:bank,number:'1000',name:'Bank'}]} side="ap" basePath="/payments" />
-      </MoneyProvider></NextIntlClientProvider>);
+      </MoneyProvider></BusinessDateProvider></NextIntlClientProvider>);
       await tick();
     });
     await tick();

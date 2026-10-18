@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
+import { db, withBypassContext } from '@openbooks/engine/platform/db'
 import { createScratchOrg, dropScratchOrg } from '@openbooks/engine/testing/fixtures'
 
 const stateKey = Symbol.for('openbooks.file-bulk-route-test')
@@ -76,21 +76,21 @@ async function isInactive(orgId: string, id: string): Promise<boolean | null> {
  * and keep exactly the refused rows selected.
  */
 test('bulk delete reports per-row verdicts with counts that add up', async () => {
-  const org = await createScratchOrg()
+  const org = await withBypassContext(() => createScratchOrg())
   const actorId = randomUUID()
   const folder = randomUUID()
   const fileA = randomUUID()
   const fileB = randomUUID()
   try {
-    await db.execute(sql`
+    await withBypassContext(() => db.execute(sql`
       insert into folders (id, org_id, parent_folder_id, name)
       values (${folder}, ${org.orgId}, null, 'F')
-    `)
-    await db.execute(sql`
+    `))
+    await withBypassContext(() => db.execute(sql`
       insert into files (id, org_id, folder_id, name, content_type, size_bytes)
       values (${fileA}, ${org.orgId}, ${folder}, 'a.txt', 'text/plain', 3),
              (${fileB}, ${org.orgId}, ${folder}, 'b.txt', 'text/plain', 3)
-    `)
+    `))
 
     // A documents.read caller is a viewer, not a manager: both rows refuse
     // with the access reason and nothing is trashed.

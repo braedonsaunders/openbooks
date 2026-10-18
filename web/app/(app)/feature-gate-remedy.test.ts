@@ -91,6 +91,9 @@ test('permission denial stays separate from the feature remedy', () => {
       !source.includes('requirePermission(') &&
       !source.includes('getAuthz(') &&
       !source.includes('guardFeaturePermission(') &&
+      // Expense views require the org-wide or self-service expense grant,
+      // which throws the same access denial as requirePermission.
+      !source.includes('requireExpensePermission(') &&
       !source.includes('can(')
     ) {
       violations.push(file)

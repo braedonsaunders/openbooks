@@ -26,6 +26,7 @@ test("the position ledger summed through any date is the replayed cap table, thr
   const w = await setupEquityWorld();
   try {
     const scenario = await seedPositionScenario(w);
+    assert.ok(scenario.checkDates.length > 0, 'the scenario names the dates the cap table is checked on');
     for (const on of scenario.checkDates) {
       assert.deepEqual(nonZero(await ledgerPositions(db, w.org.orgId, w.org.subsidiaryId, on)), nonZero(await replayedPositions(w, on)), `the ledger is the cap table on ${on}`);
     }
@@ -60,6 +61,7 @@ test("the migration's backfill computes the same positions from recorded history
       select security_id, plan_id, effective_on::text as effective_on, shares_delta::text as shares_delta, as_converted_delta::text as as_converted_delta
         from public.equity_position_backfill(${w.org.orgId}::uuid, ${w.org.subsidiaryId}::uuid, false)`)).rows;
     assert.ok(rows.length > 0);
+    assert.ok(scenario.checkDates.length > 0, 'the scenario names the dates the cap table is checked on');
     for (const on of scenario.checkDates) {
       assert.deepEqual(sumThrough(rows, on), nonZero(await replayedPositions(w, on)), `the backfill is the cap table on ${on}`);
     }

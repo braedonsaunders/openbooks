@@ -50,6 +50,8 @@ test('CoA balances drill the current period as newest-first flow, P&L and balanc
     to: WINDOW.to,
     period: 'this_period',
     newestFirst: true,
+    // A chart-of-accounts balance includes period-end journals, so its drill does too.
+    includePeriodEndJournals: true,
   }
   assert.deepEqual(income, { ...expected, label: '4000 Sales' })
   assert.deepEqual(bank, { ...expected, label: '1000 Cash' })
@@ -62,6 +64,7 @@ test('CoA balances drill the current period as newest-first flow, P&L and balanc
   assert.equal(parsedIncome.from, WINDOW.from)
   assert.equal(parsedIncome.period, 'this_period')
   assert.equal(parsedIncome.newestFirst, true)
+  assert.equal(parsedIncome.includePeriodEndJournals, true)
   assert.deepEqual(parsedIncome.accountIds, [ACCOUNT_ID])
   assert.equal(parsedBank.mode, 'flow')
   assert.equal(parsedBank.newestFirst, true)

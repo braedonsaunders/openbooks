@@ -73,7 +73,6 @@ const hooks = registerHooks({
     return nextLoad(url, context);
   },
 });
-test.after(() => hooks.deregister());
 
 const routeUrl = "./route.ts?ir-recipient-freeze-test";
 const { PATCH } = (await import(routeUrl)) as typeof import("./route.ts");
@@ -94,6 +93,7 @@ const {
   recomputeFiling,
 } = await import("@openbooks/engine/compliance/information-returns");
 const { createScratchOrg } = await import("@openbooks/engine/testing/fixtures");
+test.after(() => hooks.deregister());
 
 
 interface ComputedFiling {

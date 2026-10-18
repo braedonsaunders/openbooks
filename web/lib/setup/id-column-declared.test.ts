@@ -36,8 +36,14 @@ function tablesWithIdColumn(): Set<string> {
   // first made every table written in the second style INVISIBLE to this
   // check, which reports invisibility as an offence; two tax tables that do
   // declare `id uuid` were flagged that way.
-  for (const m of sql.matchAll(/create\s+table\s+(?:if\s+not\s+exists\s+)?(?:only\s+)?(?:public\.)?"?([a-z_]+)"?\s*\(([\s\S]*?)\n\);/gi)) {
-    if (/(?:^|,)\s*"?id"?\s+uuid/im.test(m[2]!)) out.add(m[1]!);
+  // A table body ends at its closing `);`, whether that sits on its own line
+  // or ends the last column line; reading past it would swallow the next
+  // table's definition and hide its columns.
+  for (const m of sql.matchAll(/create\s+table\s+(?:if\s+not\s+exists\s+)?(?:only\s+)?(?:public\.)?"?([a-z_]+)"?\s*\(/gi)) {
+    const rest = sql.slice(m.index! + m[0].length);
+    const end = rest.search(/\);\s*(?:\n|$)/);
+    const body = end < 0 ? rest : rest.slice(0, end);
+    if (/(?:^|,)\s*"?id"?\s+uuid/im.test(body)) out.add(m[1]!);
   }
   for (const m of sql.matchAll(/alter\s+table\s+(?:only\s+)?(?:public\.)?"?([a-z_]+)"?\s+add\s+column\s+(?:if\s+not\s+exists\s+)?"?id"?\b/gi)) {
     out.add(m[1]!);

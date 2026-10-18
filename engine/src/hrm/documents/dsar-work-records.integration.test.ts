@@ -66,6 +66,7 @@ test("native subject ZIP retains roster and device evidence while excluding neig
         }
         const json = JSON.stringify(rows);
         assert.ok(!json.includes(neighbor.workerPartyId), `${key} excludes a worker sharing the same device`);
+        assert.equal(foreign.subjects.length, 2, 'the foreign tenant has its own workers');
         for (const other of foreign.subjects) assert.ok(!json.includes(other.workerPartyId), `${key} excludes another tenant`);
       }
       assert.equal((exported.attendanceDeviceIdentities as Record<string, unknown>[])[0]!.id, subject.identityId);

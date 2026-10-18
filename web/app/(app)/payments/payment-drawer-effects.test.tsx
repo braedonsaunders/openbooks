@@ -26,6 +26,8 @@ const { createRoot } = await import('react-dom/client')
 const { NextIntlClientProvider } = await import('next-intl')
 const messages = (await import('../../../messages/en')).default
 const { MoneyProvider } = await import('../../../components/money-provider')
+// The application shell supplies the organization's business day.
+const { BusinessDateProvider } = await import('../../../components/business-date-provider')
 const { PaymentDrawer } = await import('./PaymentDrawer')
 const tick = () => new Promise(resolve => setTimeout(resolve, 30))
 const buttons = (label: string) => [...document.querySelectorAll('button')].filter(button => button.textContent?.trim() === label) as HTMLButtonElement[]
@@ -44,10 +46,10 @@ async function mount(options: { effect?: string; canRetry?: boolean; status?: st
     posting_effect_error: 'Receipt projection could not complete', posting_effect_updated_at: '2026-07-15 12:00:00+00' }
   const render = async (next = doc) => {
     await act(async () => {
-      root.render(<NextIntlClientProvider locale="en" messages={messages} timeZone="UTC"><MoneyProvider currency="CAD">
+      root.render(<NextIntlClientProvider locale="en" messages={messages} timeZone="UTC"><BusinessDateProvider today="2026-07-15"><MoneyProvider currency="CAD">
         <PaymentDrawer payment={{ doc: next, bankAccountId: null, allocations: [], applied: [], canRetryPostingEffects: options.canRetry ?? true }}
           initialOpenItems={[]} parties={[]} bankAccounts={[]} side={side} basePath={side === 'ar' ? '/receipts' : '/payments'} />
-      </MoneyProvider></NextIntlClientProvider>)
+      </MoneyProvider></BusinessDateProvider></NextIntlClientProvider>)
       await tick()
     })
   }

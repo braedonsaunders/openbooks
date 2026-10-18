@@ -44,7 +44,6 @@ const hooks = registerHooks({
     return nextLoad(url, context);
   },
 });
-test.after(() => hooks.deregister());
 
 const routeUrl = "./route.ts?asset-reverse-event-test";
 const { GET, POST } = (await import(routeUrl)) as typeof import("./route.ts");
@@ -62,6 +61,7 @@ const {
   seedFlowActors,
   seedApprovalFlow,
 } = await import("@openbooks/engine/testing/fixtures");
+test.after(() => hooks.deregister());
 
 
 interface Fixture {

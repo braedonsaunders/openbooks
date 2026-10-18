@@ -36,6 +36,7 @@ test("the Reports-hub cap table as of a date equals the replayed cap table by cl
     const definition = BUILT_IN_REPORT_DEFINITION_MAP["equity-cap-table"];
     assert.ok(definition, "the built-in cap table report is registered");
     const entity = REPORT_ENTITY_MAP.equity_cap_table_positions!;
+    assert.ok(scenario.checkDates.length > 0, "the scenario names the dates the cap table is checked on");
     for (const asOf of scenario.checkDates) {
       // The as-of control's date is the plan's; the run's own business date never widens it.
       const query = validateCustomQuery({ ...definition.query, asOf });

@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto'
 import { registerHooks } from 'node:module'
 import test from 'node:test'
 import { sql } from 'drizzle-orm'
-import { db } from '@openbooks/engine/platform/db'
+import { db, withBypassContext } from '@openbooks/engine/platform/db'
 import { createScratchOrg, dropScratchOrg } from '@openbooks/engine/testing/fixtures'
 
 const stateKey = Symbol.for('openbooks.file-patch-route-test')
@@ -79,7 +79,7 @@ async function fileName(orgId: string, id: string): Promise<{ name: string; fold
  * stored. Both edits must validate up front and commit atomically.
  */
 test('file rename+move validates up front and commits atomically', async () => {
-  const org = await createScratchOrg()
+  const org = await withBypassContext(() => createScratchOrg())
   const actorId = randomUUID()
   const folderA = randomUUID()
   const folderB = randomUUID()
@@ -90,14 +90,14 @@ test('file rename+move validates up front and commits atomically', async () => {
     allowedSubsidiaryIds: null,
   }
   try {
-    await db.execute(sql`
+    await withBypassContext(() => db.execute(sql`
       insert into folders (id, org_id, parent_folder_id, name)
       values (${folderA}, ${org.orgId}, null, 'A'), (${folderB}, ${org.orgId}, null, 'B')
-    `)
-    await db.execute(sql`
+    `))
+    await withBypassContext(() => db.execute(sql`
       insert into files (id, org_id, folder_id, name, content_type, size_bytes)
       values (${fileId}, ${org.orgId}, ${folderA}, 'orig.txt', 'text/plain', 3)
-    `)
+    `))
 
     // Valid name + malformed folderId: refused, and the name is unchanged.
     {

@@ -189,7 +189,8 @@ test('an offset equal to the asset account shows an inline refusal without submi
   await chooseAccount('cogsAccount')
   assert.equal(recordSave?.dirty, true, 'the edited profile marks the item dirty')
   assert.deepEqual(await saveRecord(), { ok: false, key: 'costing' }, 'the item Save stops on the refused section')
-  assert.deepEqual(requests.map((request) => request.method), ['GET'], 'the invalid account pair never reaches the PUT route')
+  // Reads (the profile and its shortfall accounts) may load; no write is sent.
+  assert.deepEqual(requests.filter((request) => request.method !== 'GET').map((request) => request.method), [], 'the invalid account pair never reaches the PUT route')
   assert.match(document.querySelector('[role="alert"]')?.textContent ?? '', /separationConflict/)
 })
 
@@ -210,7 +211,8 @@ test('a malformed conversion row is refused inline before the costing PUT', asyn
     factor.dispatchEvent(new window.Event('input', { bubbles: true }))
   })
   assert.deepEqual(await saveRecord(), { ok: false, key: 'costing' })
-  assert.deepEqual(requests.map((request) => request.method), ['GET'], 'an invalid factor never reaches the PUT route')
+  // Reads (the profile and its shortfall accounts) may load; no write is sent.
+  assert.deepEqual(requests.filter((request) => request.method !== 'GET').map((request) => request.method), [], 'an invalid factor never reaches the PUT route')
   assert.match(document.querySelector('[role="alert"]')?.textContent ?? '', /conversionFactorInvalid|conversionsBlocked/)
 })
 

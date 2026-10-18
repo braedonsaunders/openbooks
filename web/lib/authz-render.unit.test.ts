@@ -21,6 +21,7 @@ test('server renders share authority without retaining it across requests or ver
       const database = 'data:text/javascript,' + encodeURIComponent(
         'export const db={execute:async()=>({rows:[]})};' +
         'export const ambientTenantOrgId=()=>null;' +
+        'export const pinnedTransactionExecutor=()=>undefined;' +
         'const unexpected=()=>{throw new Error("Unexpected database operation during authority rendering");};' +
         'export const withOrgTransaction=unexpected,withOrgContext=unexpected,withOrg=unexpected,' +
         'withMaintenanceTransaction=unexpected,withBypass=unexpected,withBypassContext=unexpected,' +

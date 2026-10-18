@@ -62,8 +62,27 @@ test("reversalJournalLines negates amounts and quantity and preserves unit and c
     contributorRef: null,
     dueDate: null,
     isOpenItem: false,
+    eliminate: false,
+    isCurrencyAdjustment: false,
     custom: { lot: "A" },
   });
+});
+
+test("reversalJournalLines keeps elimination and currency-adjustment flags on the reversing line", () => {
+  const [reversal] = reversalJournalLines(
+    [
+      {
+        lineNumber: 1, accountId: ACCOUNT_ID, subsidiaryId: SUBSIDIARY_ID, amount: "40.0000", currency: "CAD",
+        txnAmount: "40.0000", fxRate: "1", partyId: null, departmentId: null, projectId: null, locationId: null,
+        classId: null, equipmentUnitId: null, extraDims: {}, paymentCardId: null, taxCodeId: null, memo: null,
+        eliminate: true, isCurrencyAdjustment: true,
+      },
+    ],
+    { entryId: ENTRY_ID, orgId: ORG_ID },
+  );
+  assert.equal(reversal!.amount, "-40.0000");
+  assert.equal(reversal!.eliminate, true);
+  assert.equal(reversal!.isCurrencyAdjustment, true);
 });
 
 test("reversalJournalLines preserves contributor stamps", () => {

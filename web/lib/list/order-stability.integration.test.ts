@@ -7,7 +7,7 @@ import { sql } from "drizzle-orm";
 // clauses: five bills sharing one date/status/total must page out exactly
 // once each, in a repeatable order, and four vendors sharing one name must
 // do the same. Only the session seam is stubbed; SQL and storage are real.
-const { db } = await import("@openbooks/engine/platform/db");
+const { db, withBypassContext } = await import("@openbooks/engine/platform/db");
 const { createScratchOrg, dropScratchOrg } = await import("@openbooks/engine/testing/fixtures");
 const { listOrderClause } = await import("./sources.ts");
 const { entityListSource, entityOrderClause } = await import("./entity-sources.ts");
@@ -31,14 +31,14 @@ async function pageIds(
 }
 
 test("tied document rows page out exactly once in a repeatable order", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => createScratchOrg());
   try {
     const ids: string[] = [];
     for (let i = 0; i < 5; i++) {
       const id = randomUUID();
       ids.push(id);
-      await db.execute(sql`insert into documents (id, org_id, kind, status, document_number, document_date, subsidiary_id, currency, subtotal, tax_total, total, custom)
-        values (${id}, ${org.orgId}, 'vendor_bill', 'draft', ${`BILL-T${i}`}, ${org.date}, ${org.subsidiaryId}, 'CAD', '10', '0', '10', '{}'::jsonb)`);
+      await withBypassContext(() => db.execute(sql`insert into documents (id, org_id, kind, status, document_number, document_date, subsidiary_id, currency, subtotal, tax_total, total, custom)
+        values (${id}, ${org.orgId}, 'vendor_bill', 'draft', ${`BILL-T${i}`}, ${org.date}, ${org.subsidiaryId}, 'CAD', '10', '0', '10', '{}'::jsonb)`));
     }
     const base = {
       select: "d.id",
@@ -57,7 +57,7 @@ test("tied document rows page out exactly once in a repeatable order", { skip: !
 });
 
 test("tied entity rows page out exactly once in a repeatable order", { skip: !DB }, async () => {
-  const org = await createScratchOrg();
+  const org = await withBypassContext(() => createScratchOrg());
   try {
     const vendor = entityListSource("vendor");
     assert.ok(vendor, "vendor entity source exists");
@@ -65,8 +65,8 @@ test("tied entity rows page out exactly once in a repeatable order", { skip: !DB
     for (let i = 0; i < 4; i++) {
       const id = randomUUID();
       ids.push(id);
-      await db.execute(sql`insert into parties (id, org_id, kind, display_name, is_active)
-        values (${id}, ${org.orgId}, 'vendor', 'Tied Vendor', true)`);
+      await withBypassContext(() => db.execute(sql`insert into parties (id, org_id, kind, display_name, is_active)
+        values (${id}, ${org.orgId}, 'vendor', 'Tied Vendor', true)`));
     }
     const base = {
       select: "p.id",

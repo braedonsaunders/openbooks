@@ -22,6 +22,7 @@ const { act } = await import("react");
 const { NextIntlClientProvider } = await import("next-intl");
 const messages = (await import("../messages/en")).default;
 const { LineGrid } = await import("./line-grid");
+const businessDate = await import("./business-date-provider");
 type LineGridColumn<Row extends Record<string, unknown>> = import("./line-grid").LineGridColumn<Row>;
 
 const tick = () => new Promise((resolve) => setTimeout(resolve, 30));
@@ -497,7 +498,6 @@ function DatedProbe({ initial }: { initial: DatedRow[] }) {
   );
 }
 
-const businessDate = await import("./business-date-provider");
 
 test("date columns read typed dates and keys, and keep the grid's row commands", async (t) => {
   dated.rows = [{ clientKey: "a", workFrom: "2026-01-05" }, { clientKey: "b", workFrom: "" }];

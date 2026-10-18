@@ -470,7 +470,7 @@ test("Canada withholding uses effective TD1ON dependants and TP-1015 fund purcha
     let reads = 0;
     await computeCaStatutory({ tx: { execute: async () => {
       reads += 1;
-      if (reads === 1) return { rows: [{ id: "legal-employer", currency: "CAD" }] };
+      if (reads === 1) return { rows: [{ id: "legal-employer", currency: "CAD", payDate: "2026-02-13" }] };
       if (reads === 2 || reads === 3 || reads === 5) return { rows: [] };
       if (reads === 4) return { rows: [{
         pensionable: "0", insurable: "0", cpp: "0", cpp2: "0", ei: "0", qpip: "0",

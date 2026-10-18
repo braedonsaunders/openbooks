@@ -17,6 +17,7 @@ interface MasterImportState {
   scopedAccountLabelLookups: string[]
   auditInsertCalls: number
   readRows: Record<string, Record<string, unknown>[]>
+  writtenPartyKind?: string | null
   unscopedLabelLookups: number
   customDefs: { key: string; label: string; fieldType: string; isRequired: boolean; config: Record<string, unknown> }[]
 }
@@ -105,11 +106,18 @@ const mockSources = new Map<string, string>([
         return text.match(/from\\s+(accounts|items|parties)\\b/i)?.[1]?.toLowerCase() ?? null
       }
 
-      function mutationFromInsert(text, pending) {
+      function mutationFromInsert(text, pending, query) {
         const table = tableFromInsert(text)
         if (!table) throw new Error('unexpected mutation statement: ' + text)
         const id = ids[table]
         const mutation = { table, id }
+        // Remember the identity kind a party row was written with: the role
+        // ensure re-reads it under lock before backing an employee role.
+        if (table === 'parties') {
+          const written = text.match(/insert\\s+into\\s+parties\\s*\\(([^)]*)\\)\\s*values\\s*\\(([^)]*)\\)/i)
+          const columns = written ? written[1].split(',').map((column) => column.trim()) : []
+          state.writtenPartyKind = written ? (written[2].split(',')[columns.indexOf('kind')] ?? '').trim() || null : null
+        }
         state.attemptedMutations.push(table)
         state.masterInserts.push(text)
         if (pending) pending.push(mutation)
@@ -121,7 +129,7 @@ const mockSources = new Map<string, string>([
         const text = statementText(query)
         const insertedTable = tableFromInsert(text)
         if (insertedTable === 'accounts' || insertedTable === 'items' || insertedTable === 'parties') {
-          return mutationFromInsert(text, pending)
+          return mutationFromInsert(text, pending, query)
         }
         // The resource backs an imported role kind with its canonical
         // role row. Record the ensure so the kind/role pairing stays honest.
@@ -138,6 +146,9 @@ const mockSources = new Map<string, string>([
         if (/select\\s+number\\s+as\\s+label\\s+from\\s+accounts\\s+where\\s+id\\s*=.*and\\s+org_id\\s*=/i.test(text)) {
           state.scopedAccountLabelLookups.push(text)
           return { rows: [] }
+        }
+        if (/select\\s+kind\\s+from\\s+parties\\s+where\\s+org_id\\s*=.*for\\s+share/i.test(text) && state.writtenPartyKind) {
+          return { rows: [{ kind: state.writtenPartyKind }] }
         }
         const table = tableFromRead(text)
         if (table) return { rows: state.readRows[table] ?? [] }
@@ -293,6 +304,7 @@ function resetImportState(failAudit: boolean): void {
   importState.scopedAccountLabelLookups.length = 0
   importState.auditInsertCalls = 0
   importState.readRows = {}
+  importState.writtenPartyKind = null
   importState.unscopedLabelLookups = 0
   importState.customDefs = []
 }

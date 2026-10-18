@@ -119,6 +119,7 @@ test("before-post scripts refuse each protected custom mutation without document
     const source = await document(org, actorId, "journal", { marker: "posted source" });
     await post(org, actorId, source);
     const retainedSource = await evidence(org, source);
+    assert.ok(protectedKeys.length > 0, 'the protected custom keys are named');
     for (const key of protectedKeys) {
       const approved = { marker: "approved", [key]: key === "closeout" ? closeout : "retained" };
       const id = await document(org, actorId, "journal", approved);
