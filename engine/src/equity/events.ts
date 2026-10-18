@@ -658,7 +658,11 @@ export async function recordSecurityEvent(input: RecordEventInput): Promise<Reco
           const dependents = dependentEvents(book, security, target!);
           if (dependents.length > 0) {
             const named = dependents.map((row) => `${row.kind} on ${row.effectiveOn}${row.quantity !== null ? ` (${row.quantity})` : ""}`).join(", ");
-            refuse(`Later activity on ${security.securityNumber} relies on the ${target!.kind} of ${target!.effectiveOn}: ${named}.`, "Reverse those events (or void the certificates they produced), latest first, then reverse this one.", { status: 409, code: "equity_reversal_has_dependents" });
+            refuse(
+              `Later activity on ${security.securityNumber} relies on the ${target!.kind} of ${target!.effectiveOn}: ${named}.`,
+              `Reverse the ${named} first, latest first (or void the certificates they produced), then reverse this ${target!.kind}.`,
+              { status: 409, code: "equity_reversal_has_dependents" },
+            );
           }
         }
         const targetRow = (await db.execute<{ journal_entry_id: string | null }>(sql`
