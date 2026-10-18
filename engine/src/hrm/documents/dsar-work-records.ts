@@ -2,7 +2,8 @@ import { sql, type SQL } from "drizzle-orm";
 import { db } from "../../platform/db.ts";
 
 type Projection = (table: string, denied: ReadonlySet<string>) => Promise<SQL>;
-type Collection = { key: string; table: string; where: SQL; denied: readonly string[]; updated?: true };
+/** `unattributed` marks a table that records no audit actor columns, so none are withheld by default. */
+type Collection = { key: string; table: string; where: SQL; denied: readonly string[]; updated?: true; unattributed?: true };
 
 /** Gather subject records and their historical parents without exporting other workers or audit operators. */
 export async function gatherWorkRecords(orgId: string, partyId: string, project: Projection): Promise<Record<string, unknown>> {
@@ -35,7 +36,45 @@ function rosterCollections(orgId: string, partyId: string): Collection[] {
     { key: "attendanceShiftObservations", table: "schedule_attendance_observations", where: sql`id in (${observations})`, denied: person },
     { key: "attendanceCheckInClaims", table: "schedule_attendance_event_claims", where: sql`id in (${claims})`, denied: ["released_by"] },
     { key: "attendanceObservationCheckIns", table: "schedule_attendance_observation_events", where: sql`observation_id in (${observations}) and event_claim_id in (${claims})`, denied: [] },
+    // Earlier roster and attendance rows carried into Unified Scheduling for this person.
+    { key: "rosterSourceRecords", table: "schedule_source_records", where: sql`worker_party_id=${partyId}`, denied: ["worker_party_id"] },
+    // The person's own published schedule as it was delivered, whoever received it.
+    { key: "scheduleDeliveries", table: "schedule_distribution_recipients", where: sql`worker_party_id=${partyId}`,
+      denied: ["party_id", "worker_party_id"], unattributed: true },
+    // Equipment and location schedules delivered to the person: the delivery
+    // and its address are theirs, the report describes other people's work.
+    { key: "resourceScheduleDeliveries", table: "schedule_distribution_recipients", where: sql`party_id=${partyId} and worker_party_id is null`,
+      denied: ["party_id", "worker_party_id", "report"], unattributed: true },
   ];
+}
+
+/**
+ * Payroll source evidence keyed on the employee: statutory holiday pay
+ * obligations, adopted opening-balance employer and levy authorities, and the
+ * Record of Employment history, line evidence, issued-slip sources and return
+ * to work facts. Source files are referenced by id only; no file bytes export.
+ */
+export async function gatherPayrollEvidenceRecords(orgId: string, partyId: string, project: Projection): Promise<Record<string, unknown>> {
+  const subject = sql`employee_party_id=${partyId}`;
+  const person = ["employee_party_id"];
+  const employment = ["employee_party_id", "employment_id"];
+  const result = await gatherCollections(orgId, [
+    { key: "holidayPayObligations", table: "payroll_holiday_obligations", where: subject, denied: employment },
+    { key: "openingEmployerAuthorities", table: "payroll_opening_employer_authorities", where: subject, denied: person },
+    { key: "openingLevySourceAuthorities", table: "payroll_opening_levy_source_authorities", where: subject, denied: person },
+    { key: "openingReportingAuthorities", table: "payroll_ca_opening_reporting_authorities", where: subject, denied: person },
+    { key: "roeHistoricalPeriods", table: "payroll_roe_historical_periods", where: subject, denied: employment, updated: true },
+    { key: "roeLineEvidence", table: "payroll_roe_line_evidence", where: subject, denied: employment, updated: true },
+    { key: "roeIssuedEventSources", table: "payroll_roe_issued_event_sources", where: subject, denied: person },
+    { key: "roeSubsequentServiceSources", table: "payroll_roe_subsequent_service_sources", where: subject, denied: employment, updated: true },
+  ], project);
+  // Occurrences are keyed by their obligation and date rather than a row id.
+  result.holidayPayOccurrences = (await db.execute<Record<string, unknown>>(sql`
+    select ${await project("payroll_holiday_occurrences", new Set(["org_id", "employee_party_id"]))}
+      from payroll_holiday_occurrences
+     where org_id=${orgId} and employee_party_id=${partyId}
+     order by holiday_date, obligation_id`)).rows;
+  return result;
 }
 
 export async function gatherTrainingRecords(orgId: string, partyId: string, project: Projection): Promise<Record<string, unknown>> {
@@ -75,7 +114,8 @@ async function gatherCollections(orgId: string, collections: Collection[], proje
   const result: Record<string, unknown> = {};
   for (const collection of collections) {
     // Catalog projection retains dated evidence and exact decimals as the schema grows.
-    const columns = await project(collection.table, new Set(["org_id", "created_by", ...(collection.updated ? ["updated_by"] : []), ...collection.denied]));
+    const actors = collection.unattributed ? [] : ["created_by", ...(collection.updated ? ["updated_by"] : [])];
+    const columns = await project(collection.table, new Set(["org_id", ...actors, ...collection.denied]));
     const rows: Record<string, unknown>[] = [];
     let lastId: string | null = null;
     for (;;) {

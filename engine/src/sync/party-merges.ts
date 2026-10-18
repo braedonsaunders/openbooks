@@ -82,6 +82,22 @@ const IMMUTABLE_PARTY_REFS: readonly (readonly [table: string, column: string])[
   ["schedule_attendance_observations", "worker_party_id"],
   // Deductions are filed statutory evidence of payments to the named payee.
   ["withholding_deductions", "party_id"],
+  // Prior-provider earnings, approved holiday pay entitlements, adopted
+  // opening-balance authorities and Record of Employment evidence are sealed
+  // statutory sources for the named employee.
+  ["payroll_prior_earnings", "employee_party_id"],
+  ["payroll_holiday_obligations", "employee_party_id"],
+  ["payroll_opening_employer_authorities", "employee_party_id"],
+  ["payroll_opening_levy_source_authorities", "employee_party_id"],
+  ["payroll_ca_opening_reporting_authorities", "employee_party_id"],
+  ["payroll_roe_historical_periods", "employee_party_id"],
+  ["payroll_roe_line_evidence", "employee_party_id"],
+  ["payroll_roe_issued_event_sources", "employee_party_id"],
+  // Carried-in roster rows and delivered schedule snapshots record who was
+  // scheduled and who received the schedule.
+  ["schedule_source_records", "worker_party_id"],
+  ["schedule_distribution_recipients", "worker_party_id"],
+  ["schedule_distribution_recipients", "party_id"],
 ];
 
 const IMMUTABLE_PARTY_REF_LABELS: Readonly<Record<string, string>> = {
@@ -98,7 +114,42 @@ const IMMUTABLE_PARTY_REF_LABELS: Readonly<Record<string, string>> = {
   schedule_attendance_events: "attendance check-in evidence",
   schedule_attendance_observations: "attendance observations",
   withholding_deductions: "contractor withholding deductions",
+  payroll_prior_earnings: "prior-provider earnings history",
+  payroll_holiday_obligations: "approved holiday pay entitlements",
+  payroll_opening_employer_authorities: "payroll opening employer authorities",
+  payroll_opening_levy_source_authorities: "payroll opening levy source authorities",
+  payroll_ca_opening_reporting_authorities: "payroll opening reporting authorities",
+  payroll_roe_historical_periods: "Record of Employment history",
+  payroll_roe_line_evidence: "Record of Employment line evidence",
+  payroll_roe_issued_event_sources: "issued Record of Employment sources",
+  schedule_source_records: "carried-in roster records",
+  schedule_distribution_recipients: "delivered schedule history",
 };
+
+/**
+ * Counterparty references the database keeps immutable once recorded:
+ * custody, outside-processing and rebate facts name the customer or vendor
+ * they were agreed with. A merge refuses while any exists instead of
+ * failing inside the move or splitting the counterparty's history.
+ */
+const IMMUTABLE_COUNTERPARTY_REFS: readonly { table: string; column: string; label: string; remedy: string }[] = [
+  { table: "consignment_stock", column: "owner_party_id", label: "consigned stock custody history",
+    remedy: "Keep the parties separate to preserve the recorded owner." },
+  { table: "stock_locations", column: "owner_party_id", label: "inventory locations it owns",
+    remedy: "Keep the parties separate to preserve the location's recorded ownership." },
+  { table: "stock_locations", column: "custodian_party_id", label: "inventory locations in its custody",
+    remedy: "Keep the parties separate to preserve the location's recorded custodian." },
+  { table: "mfg_subcontracts", column: "vendor_id", label: "outside-processing subcontracts",
+    remedy: "Keep the parties separate to preserve the subcontracted vendor." },
+  { table: "rebate_agreements", column: "party_id", label: "rebate agreements",
+    remedy: "Keep the parties separate to preserve the agreed counterparty." },
+  { table: "rebate_accruals", column: "party_id", label: "rebate accruals",
+    remedy: "Keep the parties separate to preserve the accrued counterparty." },
+  { table: "rebate_claims", column: "party_id", label: "rebate claims",
+    remedy: "Keep the parties separate to preserve the claimed counterparty." },
+  { table: "schedule_resource_recipients", column: "party_id", label: "schedule resource recipient settings",
+    remedy: "Choose the surviving contact as the recipient on the schedule board, then retry the merge." },
+];
 
 const SIMPLE_PARTY_REFS: readonly (readonly [table: string, column: string])[] = [
   ["addresses", "party_id"],
@@ -140,6 +191,9 @@ const SIMPLE_PARTY_REFS: readonly (readonly [table: string, column: string])[] =
   ["demand_item_policies", "preferred_supplier_id"],
   ["field_ticket_policies", "customer_party_id"],
   ["field_tickets", "foreman_party_id"],
+  ["field_tickets", "superintendent_party_id"],
+  // Benefit program measurement scopes name the customer whose work counts.
+  ["hrm_benefit_program_scopes", "customer_id"],
   ["fixed_assets", "custodian_party_id"],
   ["asset_proposals", "vendor_party_id"],
   ["asset_maintenance_schedules", "vendor_party_id"],
@@ -312,6 +366,13 @@ interface GuardedPartyRef {
  * rows the index actually constrains can conflict.
  */
 const GUARDED_PARTY_REFS: readonly GuardedPartyRef[] = [
+  {
+    // One statement delivery per customer in a statement run. When both
+    // parties were in the same run, the absorbed delivery stays with it.
+    table: "statement_batch_items",
+    column: "party_id",
+    conflict: "s.run_id = d.run_id",
+  },
   {
     // Active standings under one scheme never overlap for a payee. A
     // conflicting standing stays with the absorbed party for review.
@@ -865,6 +926,11 @@ async function applyMergeTx(
       where org_id=${orgId} and ${sql.identifier(column)}=${absorbedId} limit 1`)).rows;
     if (referenced.length) throw new PartyMergeError(`This person has ${IMMUTABLE_PARTY_REF_LABELS[table]}. Keep the employee identities separate to preserve recorded subjects and authorship.`);
   }
+  for (const ref of IMMUTABLE_COUNTERPARTY_REFS) {
+    const referenced = (await tx.execute(sql`select id from ${sql.identifier(ref.table)}
+      where org_id=${orgId} and ${sql.identifier(ref.column)}=${absorbedId} limit 1`)).rows;
+    if (referenced.length) throw new PartyMergeError(`This party has ${ref.label}. ${ref.remedy}`);
+  }
 
   {
     const moved: Record<string, number> = {};
@@ -971,6 +1037,7 @@ async function applyMergeTx(
  */
 export const PARTY_MERGE_REF_COVERAGE: readonly (readonly [table: string, column: string])[] = [
   ...IMMUTABLE_PARTY_REFS,
+  ...IMMUTABLE_COUNTERPARTY_REFS.map((ref) => [ref.table, ref.column] as const),
   ...SIMPLE_PARTY_REFS,
   ...ROLE_PARTY_REFS,
   ...GUARDED_PARTY_REFS.map((ref) => [ref.table, ref.column] as const),
@@ -985,6 +1052,7 @@ export async function findPartyReferences(
 ): Promise<PartyMergeMove[]> {
   const branches = [
     ...IMMUTABLE_PARTY_REFS,
+    ...IMMUTABLE_COUNTERPARTY_REFS.map((ref) => [ref.table, ref.column] as const),
     ...SIMPLE_PARTY_REFS,
     ...ROLE_PARTY_REFS,
     ...GUARDED_PARTY_REFS.map((ref) => [ref.table, ref.column] as const),

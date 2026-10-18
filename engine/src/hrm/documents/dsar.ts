@@ -17,7 +17,7 @@ import { storeCabinetFile } from "./cabinet.ts";
 import { buildStoredZip, type ZipEntry } from "./zip-store.ts";
 import { decryptRespondentLink } from "../surveys/responses.ts";
 import { dsarCoverageManifest } from "./dsar-coverage.ts";
-import { gatherCompensationRecords, gatherTrainingRecords, gatherWorkRecords } from "./dsar-work-records.ts";
+import { gatherCompensationRecords, gatherPayrollEvidenceRecords, gatherTrainingRecords, gatherWorkRecords } from "./dsar-work-records.ts";
 
 /**
  * HR-19 data-subject (DSAR) exports.
@@ -1348,6 +1348,7 @@ export async function buildExport(orgId: string, exportId: string, opts?: { owne
     }
     await gather("payroll", async () => {
       Object.assign(payload, await gatherCompensationRecords(orgId, partyId, heldDataProjection));
+      Object.assign(payload, await gatherPayrollEvidenceRecords(orgId, partyId, heldDataProjection));
       // The persisted stub records (snapshots at calculate time — the
       // payroll read seam), never live re-resolution. Stubs paginate by
       // (pay_date, id) and lines fetch per stub chunk: a lifetime of pay

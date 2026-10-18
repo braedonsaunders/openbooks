@@ -76,6 +76,8 @@ export const DSAR_GATHERED_TABLES: readonly DsarGatheredTable[] = [
   { table: "schedule_attendance_observations", domain: "time", linkage: "direct" },
   { table: "schedule_attendance_event_claims", domain: "time", linkage: "transitive" },
   { table: "schedule_attendance_observation_events", domain: "time", linkage: "transitive" },
+  { table: "schedule_source_records", domain: "time", linkage: "direct" },
+  { table: "schedule_distribution_recipients", domain: "time", linkage: "direct" },
   { table: "hrm_reviews", domain: "reviews", linkage: "direct" },
   { table: "hrm_review_answers", domain: "reviews", linkage: "transitive" },
   { table: "hrm_goals", domain: "reviews", linkage: "direct" },
@@ -128,6 +130,15 @@ export const DSAR_GATHERED_TABLES: readonly DsarGatheredTable[] = [
   { table: "work_schedules", domain: "payroll", linkage: "direct" },
   { table: "payroll_compensation_assignments", domain: "payroll", linkage: "direct" },
   { table: "payroll_compensation_calculations", domain: "payroll", linkage: "direct" },
+  { table: "payroll_holiday_obligations", domain: "payroll", linkage: "direct" },
+  { table: "payroll_holiday_occurrences", domain: "payroll", linkage: "direct" },
+  { table: "payroll_opening_employer_authorities", domain: "payroll", linkage: "direct" },
+  { table: "payroll_opening_levy_source_authorities", domain: "payroll", linkage: "direct" },
+  { table: "payroll_ca_opening_reporting_authorities", domain: "payroll", linkage: "direct" },
+  { table: "payroll_roe_historical_periods", domain: "payroll", linkage: "direct" },
+  { table: "payroll_roe_line_evidence", domain: "payroll", linkage: "direct" },
+  { table: "payroll_roe_issued_event_sources", domain: "payroll", linkage: "direct" },
+  { table: "payroll_roe_subsequent_service_sources", domain: "payroll", linkage: "direct" },
   { table: "hrm_candidates", domain: "recruiting", linkage: "direct" },
   { table: "hrm_candidate_consents", domain: "recruiting", linkage: "transitive" },
   { table: "hrm_applications", domain: "recruiting", linkage: "transitive" },
@@ -410,6 +421,24 @@ export const DSAR_EXCLUDED_TABLES: readonly DsarExcludedTable[] = [
   {
     table: "hrm_process_template_steps",
     reason: "template defaults; instances on subject processes are deferred above.",
+  },
+  { table: "consignment_stock", reason: "consigned inventory balances; the owner is the customer or vendor counterparty. Inventory remit." },
+  {
+    table: "stock_locations",
+    reason:
+      "inventory location configuration; the owner and custodian links are counterparty or " +
+      "assignment references, not subject records. Inventory remit.",
+  },
+  { table: "mfg_subcontracts", reason: "outside-processing orders; the vendor is the counterparty. Manufacturing remit." },
+  { table: "rebate_agreements", reason: "rebate programs; the customer or vendor is the counterparty. Finance remit." },
+  { table: "rebate_accruals", reason: "rebate accruals under an agreement; customer or vendor counterparty. Finance remit." },
+  { table: "rebate_claims", reason: "rebate claims under an agreement; customer or vendor counterparty. Finance remit." },
+  { table: "statement_batch_items", reason: "customer statement deliveries; the customer is the counterparty. Finance remit." },
+  {
+    table: "schedule_resource_recipients",
+    reason:
+      "board configuration naming the contact who receives an equipment or location schedule; " +
+      "the deliveries made to that person gather from schedule_distribution_recipients.",
   },
   {
     table: "party_subsidiaries",

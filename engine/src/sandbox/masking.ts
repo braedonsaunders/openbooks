@@ -440,6 +440,7 @@ export const DEFAULT_POLICIES: MaskingPolicy[] = [
   { tableName: 'payroll_prior_earnings', columnName: 'reason', transform: 'redact' },
   { tableName: 'payroll_prior_earnings', columnName: 'periods', transform: 'null_out' },
   { tableName: 'payroll_employee_employer_assignments', columnName: 'source_reference', transform: 'redact' },
+  { tableName: 'payroll_roe_separation_events', columnName: 'source_reference', transform: 'redact' },
   { tableName: 'payroll_employee_employer_assignments', columnName: 'reason', transform: 'redact' },
   { tableName: "payroll_compensation_packages", columnName: "description", transform: "redact" },
   { tableName: "payroll_compensation_packages", columnName: "reason", transform: "redact" },

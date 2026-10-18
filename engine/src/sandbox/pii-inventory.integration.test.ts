@@ -41,6 +41,7 @@ const CONSTRUCTION_COVERED: ReadonlySet<string> = new Set([
   // Financial clone projections redact authored prose and rebase retained evidence.
   "account_translation_policies.reason",
   "documents.document_fx_rate_evidence",
+  "documents.payment_terms_snapshot", // native projection rebases the vendor identity
   "document_lines.original_fx_evidence",
   "fx_rate_types.name",
   "gl_audit_number_policies.reason",
@@ -2179,6 +2180,8 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "payroll_roe_separation_events.status",
   "payroll_roe_separation_payments.change_reason",
   "payroll_roe_separation_payments.payment_status",
+  "payroll_roe_separation_payments.reporting_block", // statutory ROE block number
+  "payroll_roe_separation_payments.reporting_category_code", // statutory ROE category code
   "payroll_retro_allocations.description",
   "payroll_retro_settlements.quantified_source_snapshot",
   "payroll_retro_settlements.reasons",
@@ -2631,7 +2634,6 @@ const ALLOW_LISTED_NON_PERSONAL: ReadonlySet<string> = new Set([
   "pos_cash_reasons.name",
   "pos_quick_keys.label",
   "pos_registers.code",
-  "pos_registers.denominations",
   "pos_registers.name",
   "pos_registers.receipt_footer",
   "pos_registers.receipt_header",

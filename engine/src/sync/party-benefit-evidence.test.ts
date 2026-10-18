@@ -41,7 +41,7 @@ const hook = registerHooks({
   },
 });
 const { applySourcePartyMerge } = await import('./party-merges.ts');
-test('recorded payroll subjects and approval authors refuse party merges before any identity or history mutation', async () => {
+test('recorded payroll subjects, approval authors and immutable counterparty facts refuse party merges before any identity or history mutation', async () => {
   try {
     for (const [table, label] of [
       ['pay_run_benefit_allocations', 'native benefit payroll evidence'],
@@ -59,6 +59,18 @@ test('recorded payroll subjects and approval authors refuse party merges before 
       const evidence = queries.find(query => query.sql.includes(`"${table}"`));
       assert.ok(evidence, table);
       assert.deepEqual(evidence.params, [orgId, absorbedId]);
+      assert.ok(!queries.some(query => /^\s*(update|insert|delete)\b/i.test(query.sql)), table);
+    }
+    for (const [table, message] of [
+      ['payroll_roe_line_evidence', 'Record of Employment line evidence.*Keep the employee identities separate'],
+      ['schedule_distribution_recipients', 'delivered schedule history.*Keep the employee identities separate'],
+      ['rebate_accruals', 'This party has rebate accruals.*Keep the parties separate'],
+      ['stock_locations', 'This party has inventory locations it owns.*Keep the parties separate'],
+      ['schedule_resource_recipients', 'schedule resource recipient settings.*Choose the surviving contact'],
+    ] as const) {
+      protectedTable = table;
+      queries.length = 0;
+      await assert.rejects(applySourcePartyMerge({ orgId, absorbedId, survivorId, sourceName: 'native', absorbedRef: 'party-a', survivorRef: 'party-b', actorId: null, runId: null }), new RegExp(message));
       assert.ok(!queries.some(query => /^\s*(update|insert|delete)\b/i.test(query.sql)), table);
     }
   } finally {
