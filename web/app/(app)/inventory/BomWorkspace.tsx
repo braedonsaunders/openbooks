@@ -295,15 +295,13 @@ export function BomDrawer({
       key: 'effectiveFrom',
       label: tInventory('bom.columns.effectiveFrom'),
       width: '145px',
-      type: 'text',
-      placeholder: 'YYYY-MM-DD',
+      type: 'date',
     },
     {
       key: 'effectiveTo',
       label: tInventory('bom.columns.effectiveTo'),
       width: '145px',
-      type: 'text',
-      placeholder: 'YYYY-MM-DD',
+      type: 'date',
     },
     ...(showManufacturing ? [
       {

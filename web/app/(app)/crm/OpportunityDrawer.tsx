@@ -11,6 +11,7 @@ import { computeOpportunityTotals } from '@openbooks/engine/crm/crm-math'
 import { formatMoney } from '@openbooks/engine/money/money'
 import { apiJson, ApiResponseError } from '../../../lib/api-error'
 import { displayOpportunityStatusName } from '../../../lib/crm-status-display'
+import { DateField } from '../../../components/date-field'
 
 type Option = { id: string; name: string }
 type ContactOption = Option & { party_id: string }
@@ -101,7 +102,7 @@ export function OpportunityDrawer({ data, statuses, accounts, contacts, owners, 
       <Field label={t('fields.status')}><Select value={form.statusId} onChange={e=>{set('statusId',e.target.value);setLossReasonError(false)}} disabled={!canManage}>{statuses.map(o=><option key={o.id} value={o.id}>{displayOpportunityStatusName(o.name,(key)=>t(`opportunities.statuses.${key}`))}</option>)}</Select></Field>
       <Field label={t('fields.probability')}><Input type="number" min="0" max="100" value={form.probability} onChange={e=>set('probability',e.target.value)} disabled={!canManage}/></Field>
       <Field label={t('fields.forecastCategory')}><Select value={form.forecastCategory} onChange={e=>set('forecastCategory',e.target.value)} disabled={!canManage}>{['omitted','worst_case','most_likely','upside'].map(v=><option key={v} value={v}>{t(`forecastCategories.${v}`)}</option>)}</Select></Field>
-      <Field label={t('fields.expectedClose')} hint={t('fields.expectedCloseHint')} hintId="expected-close-hint"><Input type="date" value={form.expectedCloseDate} onChange={e=>set('expectedCloseDate',e.target.value)} disabled={!canManage} aria-describedby="expected-close-hint"/></Field>
+      <Field label={t('fields.expectedClose')} hint={t('fields.expectedCloseHint')} hintId="expected-close-hint"><DateField value={form.expectedCloseDate} onChange={value=>set('expectedCloseDate',value)} disabled={!canManage} aria-describedby="expected-close-hint"/></Field>
       {multiCurrency ? <Field label={t('fields.currency')}><SearchSelect value={form.currency} onChange={value=>set('currency',value)} options={currencies.map(currency=>({value:currency.code,label:`${currency.code} · ${currency.name}`}))} ariaLabel={t('fields.currency')} disabled={!canManage}/></Field> : null}
       <Field label={t('fields.leadSource')}><Select value={form.leadSourceId} onChange={e=>set('leadSourceId',e.target.value)} disabled={!canManage}><option value="">{tc('labels.none')}</option>{sources.map(o=><option key={o.id} value={o.id}>{o.name}</option>)}</Select></Field>
       <div className="sm:col-span-3"><Field label={t('fields.nextStep')}><Input value={form.nextStep} onChange={e=>set('nextStep',e.target.value)} disabled={!canManage}/></Field></div>

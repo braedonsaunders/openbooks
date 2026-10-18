@@ -14,6 +14,7 @@ import { useAppAction } from '@/lib/use-app-action'
 import { newRequestKey, postJson, sumCents } from '../depth-client'
 import type { ProposalRow, ProposalsData } from './_data'
 import { ProposalDrawer } from './ProposalDrawer'
+import { DateField } from '@/components/date-field'
 
 const STATUS_VARIANT: Record<string, 'warning' | 'success' | 'secondary' | 'outline'> = {
   pending: 'warning',
@@ -138,7 +139,7 @@ export function ProposalsWorkspace({
                       {data.categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
                     </Select>
                   </div>
-                  <div className="space-y-1.5"><Label htmlFor="merge-date">{t('proposals.fields.acceptedOn')}</Label><Input id="merge-date" type="date" value={mergeDate} onChange={(event) => setMergeDate(event.target.value)} /></div>
+                  <div className="space-y-1.5"><Label htmlFor="merge-date">{t('proposals.fields.acceptedOn')}</Label><DateField id="merge-date" value={mergeDate} onChange={(value) => setMergeDate(value)} /></div>
                   <Button className="w-full" disabled={action.busy || !mergeName.trim() || !mergeCategory || !mergeTotal} onClick={merge}>{t('proposals.merge.confirm')}</Button>
                 </div>
               </Popover>
@@ -147,8 +148,8 @@ export function ProposalsWorkspace({
               <Popover open={scanOpen} onOpenChange={setScanOpen} trigger={<Button size="sm" variant="outline" onClick={() => setScanOpen((value) => !value)}>{t('proposals.scan')}</Button>}>
                 <div className="w-72 space-y-3 p-3">
                   <p className="text-xs text-slate-500 dark:text-slate-400">{t('proposals.scanHelp')}</p>
-                  <div className="space-y-1.5"><Label htmlFor="scan-from">{t('proposals.fields.from')}</Label><Input id="scan-from" type="date" value={scanFrom} onChange={(event) => setScanFrom(event.target.value)} /></div>
-                  <div className="space-y-1.5"><Label htmlFor="scan-to">{t('proposals.fields.to')}</Label><Input id="scan-to" type="date" value={scanTo} onChange={(event) => setScanTo(event.target.value)} /></div>
+                  <div className="space-y-1.5"><Label htmlFor="scan-from">{t('proposals.fields.from')}</Label><DateField id="scan-from" value={scanFrom} onChange={(value) => setScanFrom(value)} /></div>
+                  <div className="space-y-1.5"><Label htmlFor="scan-to">{t('proposals.fields.to')}</Label><DateField id="scan-to" value={scanTo} onChange={(value) => setScanTo(value)} /></div>
                   <Button className="w-full" disabled={action.busy} onClick={scan}>{t('proposals.scanRun')}</Button>
                 </div>
               </Popover>

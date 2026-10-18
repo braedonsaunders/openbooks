@@ -12,6 +12,7 @@ import {
 import { toast } from "sonner";
 import { useTranslations } from "next-intl";
 import { useDirtyClose } from "@/lib/use-dirty-close";
+import { DateField } from '@/components/date-field'
 type Event = {
   id: string;
   date: string;
@@ -182,14 +183,13 @@ export function GroupValuationButton({ assetId }: { assetId: string }) {
             <legend>{t("planLegend")}</legend>
             {plan.map((line, index) => (
               <div key={index} className="grid grid-cols-[1fr_1fr_auto] gap-2">
-                <Input
+                <DateField
                   aria-label={t("periodEnd")}
-                  type="date"
                   value={line.date}
-                  onChange={(e) => {
+                  onChange={(value) => {
                     setPlan((rows) =>
                       rows.map((r, i) =>
-                        i === index ? { ...r, date: e.target.value } : r,
+                        i === index ? { ...r, date: value } : r,
                       ),
                     );
                     changed();

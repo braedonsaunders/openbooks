@@ -6,6 +6,7 @@ import { useTranslations } from 'next-intl'
 import { Button, Drawer, Input, Label, Select } from '@openbooks/ui'
 import { useBusinessToday } from '../../../../components/business-date-provider'
 import { readApiErrorMessage } from '../../../../lib/api-error'
+import { DateField } from '../../../../components/date-field'
 
 const WAIVER_TYPES = [
   'conditional_progress',
@@ -181,10 +182,9 @@ export function LienWaiverToolbar({
           <div className="grid grid-cols-2 gap-3">
             <div>
               <Label>{t('lienWaivers.columns.through')}</Label>
-              <Input
-                type="date"
+              <DateField
                 value={form.throughDate}
-                onChange={(event) => setForm({ ...form, throughDate: event.target.value })}
+                onChange={(value) => setForm({ ...form, throughDate: value })}
               />
             </div>
             <div>

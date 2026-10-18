@@ -12,6 +12,7 @@ import { useBusinessToday } from '@/components/business-date-provider'
 import { readApiErrorMessage } from '@/lib/api-error'
 import { useAppAction } from '@/lib/use-app-action'
 import { postJson } from './depth-client'
+import { DateField } from '@/components/date-field'
 
 interface CompoundMember {
   id: string
@@ -170,7 +171,7 @@ export function AssetComponentsPanel({
               <h3 className="text-sm font-semibold text-slate-900 dark:text-slate-100">{t('components.disposeTitle')}</h3>
               <p className="text-xs text-slate-500 dark:text-slate-400">{t('components.disposeHelp')}</p>
               <div className="grid gap-3 sm:grid-cols-2">
-                {field('compound-date', t('dispose.date'), <Input id="compound-date" type="date" value={disposeDate} onChange={(event) => setDisposeDate(event.target.value)} />)}
+                {field('compound-date', t('dispose.date'), <DateField id="compound-date" value={disposeDate} onChange={(value) => setDisposeDate(value)} />)}
                 <label className="flex items-center gap-2 self-end text-sm"><input type="checkbox" checked={writeOff} onChange={(event) => setWriteOff(event.target.checked)} />{t('dispose.writeOff')}</label>
                 {!writeOff ? field('compound-proceeds', t('dispose.proceeds'), <Input id="compound-proceeds" inputMode="decimal" value={proceeds} onChange={(event) => setProceeds(event.target.value)} />) : null}
                 {!writeOff ? field('compound-account', t('dispose.account'), (

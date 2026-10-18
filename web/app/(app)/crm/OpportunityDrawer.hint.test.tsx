@@ -116,7 +116,7 @@ function estimateButton(): HTMLButtonElement {
 async function editTitle() {
   // The title field is the drawer's first text input; a harmless unsaved edit
   // makes the drawer dirty, which is the precondition.
-  const input = document.querySelector('input:not([type="number"]):not([type="date"]):not([type="hidden"])') as HTMLInputElement | null
+  const input = document.querySelector('input:not([type="number"]):not([data-date-field]):not([type="hidden"])') as HTMLInputElement | null
   assert.ok(input, 'the title input must render')
   await act(async () => {
     const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!
@@ -207,7 +207,7 @@ test('a successful save re-enables estimate conversion from the visible revision
 
 test('missing expected close date exposes the forecast exclusion reason beside its field', async (t) => {
   await mountDrawer(t)
-  const date = document.querySelector('input[type="date"]')
+  const date = document.querySelector('input[data-date-field]')
   assert.ok(date, 'the expected close date field renders')
   assert.equal(date.getAttribute('aria-describedby'), 'expected-close-hint')
   assert.match(

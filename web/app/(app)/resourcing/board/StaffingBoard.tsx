@@ -4,7 +4,7 @@ import { useMemo, useRef, useState, useTransition, type DragEvent, type Keyboard
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { ArrowLeft, ArrowRight } from 'lucide-react'
-import { Badge, Button, ContextMenu, Input, Select, useContextMenu } from '@openbooks/ui'
+import { Badge, Button, ContextMenu, Select, useContextMenu } from '@openbooks/ui'
 import { formatTicketHours } from '../../../../lib/format'
 import { PagedTable, type PagedColumn } from '../../../../components/paged-table'
 import { ListFilterSelect } from '../../../../components/list-filter-select'
@@ -12,6 +12,7 @@ import { nextCell, boardCell, type CellArrow, type CellPosition } from '../../..
 import { sum } from '@openbooks/engine/money/money'
 import type { PersonWeekForecast } from '@openbooks/engine/resourcing/forecast'
 import type { ResourcingBoard } from '../../../../lib/resourcing/queries'
+import { DateField } from '../../../../components/date-field'
 
 type Assignment = ResourcingBoard['rows'][number]
 type Labels = Record<string, string> & {
@@ -281,7 +282,7 @@ export function StaffingBoard({
     <div className="flex flex-wrap items-end gap-3">
       <label className="inline-flex flex-col gap-1 text-xs text-slate-600 dark:text-slate-300">
         <span>{labels.startDate}</span>
-        <Input type="date" value={String(currentParams.from ?? weeks[0])} disabled={pending} onChange={(event) => router.push(hrefWith(currentParams, { from: event.target.value, page: '1' }) as never)} />
+        <DateField value={String(currentParams.from ?? weeks[0])} disabled={pending} onChange={(value) => router.push(hrefWith(currentParams, { from: value, page: '1' }) as never)} />
       </label>
       <label className="inline-flex flex-col gap-1 text-xs text-slate-600 dark:text-slate-300">
         <span>{labels.weeks}</span>

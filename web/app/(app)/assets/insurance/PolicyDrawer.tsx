@@ -13,6 +13,7 @@ import { useAppAction } from '@/lib/use-app-action'
 import { postJson } from '../depth-client'
 import type { InsuranceData, PolicyDetail } from './_data'
 import { PolicyFields, policyBody, type PolicyFormValues } from './PolicyFields'
+import { DateField } from '@/components/date-field'
 
 type Tab = 'coverage' | 'terms' | 'renew'
 
@@ -127,8 +128,8 @@ export function PolicyDrawer({ policy, data, closeHref }: { policy: PolicyDetail
           <div className="space-y-3">
             <p className="text-sm text-slate-600 dark:text-slate-300">{t('insurance.renewHelp')}</p>
             <div className="grid gap-3 sm:grid-cols-3">
-              {field('renew-start', t('insurance.fields.coverageStartsOn'), <Input id="renew-start" type="date" value={renewStart} onChange={(event) => setRenewStart(event.target.value)} />)}
-              {field('renew-end', t('insurance.fields.coverageEndsOn'), <Input id="renew-end" type="date" value={renewEnd} onChange={(event) => setRenewEnd(event.target.value)} />)}
+              {field('renew-start', t('insurance.fields.coverageStartsOn'), <DateField id="renew-start" value={renewStart} onChange={(value) => setRenewStart(value)} />)}
+              {field('renew-end', t('insurance.fields.coverageEndsOn'), <DateField id="renew-end" value={renewEnd} onChange={(value) => setRenewEnd(value)} />)}
               {field('renew-premium', t('insurance.fields.premium'), <Input id="renew-premium" inputMode="decimal" value={renewPremium} onChange={(event) => setRenewPremium(event.target.value)} />)}
             </div>
             <Button disabled={action.busy || !renewEnd} onClick={() => run(`/api/assets/insurance/policies/${policy.id}`, {

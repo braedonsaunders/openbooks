@@ -17,6 +17,7 @@ import { useDirtyClose } from "@/lib/use-dirty-close";
 import { promptDialog } from "@/lib/prompt";
 import { readApiErrorMessage } from "@/lib/api-error";
 import type { InventoryInquiry } from "@openbooks/engine/inventory/contracts";
+import { DateField } from '@/components/date-field'
 
 type Row = Record<string, unknown>;
 export interface StockControlPickers {
@@ -630,10 +631,9 @@ function CustodyForm({
         </div>
         <div>
           <Label>{t("columns.date")}</Label>
-          <Input
-            type="date"
+          <DateField
             value={date}
-            onChange={(e) => setDate(e.target.value)}
+            onChange={(value) => setDate(value)}
           />
         </div>
         {action === "take_ownership" ? (

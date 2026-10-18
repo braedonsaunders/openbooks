@@ -16,6 +16,7 @@ import {
 import { useBusinessToday } from "@/components/business-date-provider";
 import { useDirtyClose } from "@/lib/use-dirty-close";
 import { useTranslations } from "next-intl";
+import { DateField } from '@/components/date-field'
 type Option = { value: string; label: string };
 type Setup = {
   subsidiaries: {
@@ -108,16 +109,25 @@ export function AssetChangeButton({
       setBusy(false);
     }
   }
-  const field = (name: string, label: string, type = "text") => (
+  const field = (name: string, label: string, kind: "text" | "number" | "date" = "text") => (
     <div className="space-y-1.5" key={name}>
       <Label htmlFor={`asset-change-${name}`}>{label}</Label>
-      <Input
-        id={`asset-change-${name}`}
-        disabled={busy}
-        type={type}
-        value={values[name] ?? ""}
-        onChange={(e) => set(name, e.target.value)}
-      />
+      {kind === "date" ? (
+        <DateField
+          id={`asset-change-${name}`}
+          disabled={busy}
+          value={values[name] ?? ""}
+          onChange={(next) => set(name, next)}
+        />
+      ) : (
+        <Input
+          id={`asset-change-${name}`}
+          disabled={busy}
+          type={kind === "number" ? "number" : "text"}
+          value={values[name] ?? ""}
+          onChange={(e) => set(name, e.target.value)}
+        />
+      )}
     </div>
   );
   const choice = (name: string, label: string, options: Option[]) => (
@@ -438,15 +448,14 @@ export function AssetChangeButton({
                     <legend>{b.name}</legend>
                     {(plans[b.id] ?? []).map((line, i) => (
                       <div key={i} className="flex gap-2">
-                        <Input
+                        <DateField
                           aria-label={t("planDate")}
-                          type="date"
                           value={line.date}
-                          onChange={(e) => {
+                          onChange={(value) => {
                             setPlans((p) => ({
                               ...p,
                               [b.id]: p[b.id]!.map((l, j) =>
-                                j === i ? { ...l, date: e.target.value } : l,
+                                j === i ? { ...l, date: value } : l,
                               ),
                             }));
                             setKey(crypto.randomUUID());

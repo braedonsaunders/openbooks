@@ -9,7 +9,6 @@ import {
   Badge,
   Button,
   EmptyState,
-  Input,
   Label,
   Select,
   Table,
@@ -24,6 +23,7 @@ import { useAppAction } from '@/lib/use-app-action'
 import { createMoneyFormatter } from '@/lib/money-format'
 import type { ShippingAccountOption } from '../../_fulfillment/types'
 import { addExact } from '../_fulfillment/shipping-display'
+import { DateField } from '@/components/date-field'
 
 interface CandidateView {
   shipmentId: string
@@ -271,7 +271,7 @@ export function BulkBuyClient({
             {rule === 'cheapest_by_date' ? (
               <div className="space-y-1.5">
                 <Label htmlFor="bulk-date">{t('shipping.bulk.promisedDate')}</Label>
-                <Input id="bulk-date" type="date" value={promisedDate} onChange={(event) => { setPromisedDate(event.target.value); invalidatePreview() }} />
+                <DateField id="bulk-date" value={promisedDate} onChange={(value) => { setPromisedDate(value); invalidatePreview() }} />
               </div>
             ) : null}
             <div className="flex items-end gap-2">

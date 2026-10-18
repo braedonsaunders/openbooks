@@ -2,6 +2,7 @@
 import { useTranslations } from "next-intl";
 import { Button, Input, Label } from "@openbooks/ui";
 import type { GroupComponentInput } from "@openbooks/engine/assets/group-component";
+import { DateField } from '../../../components/date-field'
 /** Native field composition shared with the surrounding asset workpaper. */
 export function GroupComponentFields({
   value,
@@ -38,14 +39,13 @@ export function GroupComponentFields({
         <legend>{label}</legend>
         {rows.map((line, index) => (
           <div className="flex gap-2" key={index}>
-            <Input
-              type="date"
+            <DateField
               aria-label={t("periodEnd", { label })}
               value={line.date}
-              onChange={(e) =>
+              onChange={(value) =>
                 set({
                   [key]: rows.map((r, i) =>
-                    i === index ? { ...r, date: e.target.value } : r,
+                    i === index ? { ...r, date: value } : r,
                   ),
                 })
               }

@@ -20,6 +20,7 @@ import { OperatingProfilePicker } from "@/components/operating-profile-picker";
 import type { OperatingProfileChoice } from "@openbooks/engine/organization/operating-profiles";
 import type { ManufacturingRecordData } from "@openbooks/engine/manufacturing/workspace";
 import { commandBody, type Choice, type Command, type Field } from "./commands";
+import { DateField } from '@/components/date-field';
 
 type Line = Record<string, string> & { key: string };
 export function CommandForm({
@@ -171,17 +172,19 @@ export function CommandForm({
             disabled={busy || uncertain}
             onChange={(e) => set(f.key, e.target.value)}
           />
+        ) : f.type === "date" ? (
+          <DateField
+            id={id + "-" + f.key}
+            value={String(value ?? "")}
+            required={f.required}
+            disabled={busy || uncertain}
+            onChange={(next) => set(f.key, next)}
+          />
         ) : (
           <Input
             id={id + "-" + f.key}
             value={String(value ?? "")}
-            type={
-              f.type === "date"
-                ? "date"
-                : f.type === "integer"
-                  ? "number"
-                  : "text"
-            }
+            type={f.type === "integer" ? "number" : "text"}
             inputMode={
               f.type === "decimal"
                 ? "decimal"
@@ -538,18 +541,27 @@ function CaptureLine({
       });
     return () => controller.abort();
   }, [mode, itemId, t, attempt, setTracking, setError, setLoading]);
-  const input = (key: string, required = false, type = "text") => (
+  const input = (key: string, required = false, kind: "text" | "date" = "text") => (
     <div className="space-y-1.5">
       <Label htmlFor={id + "-" + key}>{t("fields." + key)}</Label>
-      <Input
-        id={id + "-" + key}
-        value={line[key] ?? ""}
-        required={required}
-        type={type}
-        disabled={disabled}
-        inputMode={key === "quantity" ? "decimal" : undefined}
-        onChange={(e) => onChange({ [key]: e.target.value })}
-      />
+      {kind === "date" ? (
+        <DateField
+          id={id + "-" + key}
+          value={line[key] ?? ""}
+          required={required}
+          disabled={disabled}
+          onChange={(next) => onChange({ [key]: next })}
+        />
+      ) : (
+        <Input
+          id={id + "-" + key}
+          value={line[key] ?? ""}
+          required={required}
+          disabled={disabled}
+          inputMode={key === "quantity" ? "decimal" : undefined}
+          onChange={(e) => onChange({ [key]: e.target.value })}
+        />
+      )}
     </div>
   );
   const choice = (key: string, options: Choice[], required = false) => (

@@ -3,6 +3,7 @@
 import type { ReactNode } from 'react'
 import { useTranslations } from 'next-intl'
 import { Input, Label, Select } from '@openbooks/ui'
+import { DateField } from '../../../../components/date-field'
 
 export interface PolicyFormValues {
   insurerPartyId: string
@@ -45,8 +46,11 @@ export function PolicyFields({
   const field = (key: keyof PolicyFormValues, label: string, control: ReactNode) => (
     <div className="space-y-1.5"><Label htmlFor={`${idPrefix}-${key}`}>{label}</Label>{control}</div>
   )
-  const input = (key: keyof PolicyFormValues, props: { type?: string; inputMode?: 'numeric' | 'decimal' } = {}) => (
+  const input = (key: keyof PolicyFormValues, props: { inputMode?: 'numeric' | 'decimal' } = {}) => (
     <Input id={`${idPrefix}-${key}`} {...props} value={values[key]} onChange={(event) => onChange({ [key]: event.target.value })} />
+  )
+  const date = (key: keyof PolicyFormValues) => (
+    <DateField id={`${idPrefix}-${key}`} value={values[key]} onChange={(value) => onChange({ [key]: value })} />
   )
   return (
     <div className="grid gap-3 sm:grid-cols-2">
@@ -57,8 +61,8 @@ export function PolicyFields({
         </Select>
       ))}
       {field('policyNumber', t('insurance.fields.policyNumber'), input('policyNumber'))}
-      {field('coverageStartsOn', t('insurance.fields.coverageStartsOn'), input('coverageStartsOn', { type: 'date' }))}
-      {field('coverageEndsOn', t('insurance.fields.coverageEndsOn'), input('coverageEndsOn', { type: 'date' }))}
+      {field('coverageStartsOn', t('insurance.fields.coverageStartsOn'), date('coverageStartsOn'))}
+      {field('coverageEndsOn', t('insurance.fields.coverageEndsOn'), date('coverageEndsOn'))}
       {field('premium', t('insurance.fields.premium'), input('premium', { inputMode: 'decimal' }))}
       {field('deductible', t('insurance.fields.deductible'), input('deductible', { inputMode: 'decimal' }))}
       {field('renewalLeadDays', t('insurance.fields.renewalLeadDays'), input('renewalLeadDays', { inputMode: 'numeric' }))}

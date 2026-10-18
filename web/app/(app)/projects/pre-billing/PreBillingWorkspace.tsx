@@ -48,6 +48,7 @@ import {
   prebillDisplayAmount, projectWorkspace,
   type WorkspaceEntry,
 } from "./workspace-model";
+import { DateField } from '../../../../components/date-field'
 
 type ProjectOption = {
   id: string;
@@ -636,11 +637,11 @@ function BillRunDrawer({
           <div className="grid gap-4 sm:grid-cols-2">
             <div className="space-y-1.5">
               <Label htmlFor="bill-run-end">{t("billRun.cutoff")}</Label>
-              <Input id="bill-run-end" type="date" value={periodEnd} onChange={(event) => setPeriodEnd(event.target.value)} />
+              <DateField id="bill-run-end" value={periodEnd} onChange={(value) => setPeriodEnd(value)} />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="bill-run-start">{t("billRun.start")}</Label>
-              <Input id="bill-run-start" type="date" value={periodStart} onChange={(event) => setPeriodStart(event.target.value)} />
+              <DateField id="bill-run-start" value={periodStart} onChange={(value) => setPeriodStart(value)} />
             </div>
           </div>
           <div>

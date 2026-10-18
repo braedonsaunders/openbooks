@@ -11,6 +11,7 @@ import { PagedTable, type PagedColumn } from '@/components/paged-table'
 import { DirtyUrlDrawer, useDirtyUrlDrawer } from '@/components/dirty-url-drawer'
 import { confirmDialog } from '@/lib/confirm'
 import { refusalMessageFromBody } from '@/lib/api-error'
+import { DateField } from '@/components/date-field'
 
 type DemandForm = {
   departmentId: string
@@ -231,11 +232,11 @@ export function DemandDrawer({ drawer }: { drawer: DemandDrawerData }) {
         </div>
         <div className={fieldClass}>
           <Label htmlFor={`${fieldId}-first-week`}>{t('demandLines.fields.firstWeek')}</Label>
-          <Input id={`${fieldId}-first-week`} type="date" value={form.firstWeek} onChange={(event) => change('firstWeek', event.target.value)} disabled={!editable} />
+          <DateField id={`${fieldId}-first-week`} value={form.firstWeek} onChange={(value) => change('firstWeek', value)} disabled={!editable} />
         </div>
         <div className={fieldClass}>
           <Label htmlFor={`${fieldId}-last-week`}>{t('demandLines.fields.lastWeek')}</Label>
-          <Input id={`${fieldId}-last-week`} type="date" value={form.lastWeek} onChange={(event) => change('lastWeek', event.target.value)} disabled={!editable} />
+          <DateField id={`${fieldId}-last-week`} value={form.lastWeek} onChange={(value) => change('lastWeek', value)} disabled={!editable} />
         </div>
         <div className={fieldClass}>
           <Label htmlFor={`${fieldId}-hours`}>{t('demandLines.fields.hoursPerWeek')}</Label>

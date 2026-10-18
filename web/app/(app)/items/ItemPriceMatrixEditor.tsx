@@ -12,6 +12,7 @@ import { useSublistRows } from '@/components/drawer-sublist'
 import { confirmDialog } from '@/lib/confirm'
 import { promptDialog } from '@/lib/prompt'
 import { refusalMessageFromBody } from '@/lib/api-error'
+import { DateField } from '@/components/date-field'
 
 interface PriceBreak extends Record<string, unknown> { id?: string; minimumQuantity: string; unitPrice: string }
 interface Level { id: string; code: string; name: string; pricing_method: string; percentage: string | null; cost_basis: string | null; is_base: boolean }
@@ -251,8 +252,8 @@ export function ItemPriceMatrixEditor({ itemId, familyId, canManage }: { itemId?
             {scope === 'customer' ? <div className="space-y-1"><Label>{t('customer')}</Label><Select value={customerId} onChange={(event) => setCustomerId(event.target.value)}><option value="">{t('selectCustomer')}</option>{data?.customers.map((customer) => <option key={customer.id} value={customer.id}>{customer.display_name}</option>)}</Select></div> : null}
             <div className="space-y-1"><Label>{t('currency')}</Label><Select value={currency} onChange={(event) => setCurrency(event.target.value)}>{data?.currencies.map((entry) => <option key={entry.code} value={entry.code}>{entry.code} · {entry.name}</option>)}</Select></div>
             <div className="space-y-1"><Label>{t('quantityBasis')}</Label><Select value={quantityBasis} onChange={(event) => setQuantityBasis(event.target.value as typeof quantityBasis)}><option value="line_quantity">{t('quantityBases.line')}</option><option value="overall_item_quantity">{t('quantityBases.overallItem')}</option></Select></div>
-            <div className="space-y-1"><Label>{t('effectiveFrom')}</Label><Input type="date" value={effectiveFrom} onChange={(event) => setEffectiveFrom(event.target.value)} /></div>
-            <div className="space-y-1"><Label>{t('effectiveTo')}</Label><Input type="date" value={effectiveTo} onChange={(event) => setEffectiveTo(event.target.value)} /></div>
+            <div className="space-y-1"><Label>{t('effectiveFrom')}</Label><DateField value={effectiveFrom} onChange={(value) => setEffectiveFrom(value)} /></div>
+            <div className="space-y-1"><Label>{t('effectiveTo')}</Label><DateField value={effectiveTo} onChange={(value) => setEffectiveTo(value)} /></div>
             <label className="flex items-end gap-2 pb-2 text-sm"><input type="checkbox" checked={isActive} onChange={(event) => setIsActive(event.target.checked)} />{common('status.active')}</label>
           </div>
           {reasonVisible ? (

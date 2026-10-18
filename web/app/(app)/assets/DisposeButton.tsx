@@ -8,6 +8,7 @@ import { PackageX } from 'lucide-react'
 import { Button, Input, Label, Popover, Select } from '@openbooks/ui'
 import { useBusinessToday } from '../../../components/business-date-provider'
 import { readApiErrorMessage } from '../../../lib/api-error'
+import { DateField } from '../../../components/date-field'
 
 type AccountOpt = { value: string; label: string }
 
@@ -87,7 +88,7 @@ export function DisposeButton({ assetId, accountOptions }: { assetId: string; ac
         ) : null}
         <div className="space-y-1.5">
           <Label htmlFor="disp-date">{t('dispose.date')}</Label>
-          <Input id="disp-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+          <DateField id="disp-date" value={date} onChange={(value) => setDate(value)} />
         </div>
         <Button className="w-full" onClick={submit} disabled={busy}>
           {busy ? t('dispose.working') : writeOff ? t('dispose.writeOffAction') : t('dispose.action')}

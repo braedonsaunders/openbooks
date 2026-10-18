@@ -6,6 +6,7 @@ import { Read, Small } from "./workspace-ui";
 import { Field } from "./workspace-ui";
 import { ChargesSection, DepositSection, EscalationsSection } from "./LeaseSections";
 import type { LeaseForm, LeaseRow, Money, PropertyAction, PropertyPermissions, PropertyWorkspace, WorkspaceOptions } from "./types";
+import { DateField } from '../../../components/date-field'
 
 function LeaseEditFields({ lease, data, options, form, setForm }: {
   lease: LeaseRow;
@@ -49,10 +50,10 @@ function LeaseEditFields({ lease, data, options, form, setForm }: {
           </Select>
         </Field>
         <Field label="Starts">
-          <Input disabled={!draft} type="date" value={form.startsOn} onChange={(e) => setForm({ ...form, startsOn: e.target.value })} />
+          <DateField disabled={!draft} value={form.startsOn} onChange={(value) => setForm({ ...form, startsOn: value })} />
         </Field>
         <Field label="Ends">
-          <Input disabled={!draft && !lease.endsOn} type="date" value={form.endsOn} onChange={(e) => setForm({ ...form, endsOn: e.target.value })} />
+          <DateField disabled={!draft && !lease.endsOn} value={form.endsOn} onChange={(value) => setForm({ ...form, endsOn: value })} />
         </Field>
         <Field label="Monthly base rent" hint={draft ? undefined : "Use an escalation to change active rent."}>
           <Input disabled={!draft} type="number" min="0" step="0.01" value={form.baseRent} onChange={(e) => setForm({ ...form, baseRent: e.target.value })} />

@@ -9,7 +9,8 @@ import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { Badge, Button, Drawer, Input, Label, Select, TableCell, TableRow } from '@openbooks/ui'
+import { Badge, Button, Drawer, Label, Select, TableCell, TableRow } from '@openbooks/ui'
+import { DateField } from '@/components/date-field'
 
 export interface DepreciationCandidate {
   id: string
@@ -524,23 +525,21 @@ export function RunDepreciationDrawer({
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="depreciation-review-through">{t('run.asOf')}</Label>
-              <Input
+              <DateField
                 id="depreciation-review-through"
-                type="date"
                 value={throughDate}
                 disabled={busy}
-                onChange={(event) => setThroughDate(event.target.value)}
+                onChange={(value) => setThroughDate(value)}
                 placeholder={t('review.throughHint')}
               />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="depreciation-review-posting">{t('review.postingDate')}</Label>
-              <Input
+              <DateField
                 id="depreciation-review-posting"
-                type="date"
                 value={postingDate}
                 disabled={busy}
-                onChange={(event) => setPostingDate(event.target.value)}
+                onChange={(value) => setPostingDate(value)}
                 placeholder={t('review.postingHint')}
               />
             </div>

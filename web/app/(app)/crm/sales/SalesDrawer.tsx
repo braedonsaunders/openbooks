@@ -34,6 +34,7 @@ import type {
 import { EMPTY_TERRITORY_GEOGRAPHY } from "@openbooks/engine/crm/sales/contracts";
 import type { TerritoryRule } from "@openbooks/engine/crm/sales/contracts";
 import type { TerritoryPreview } from "@openbooks/engine/crm/sales";
+import { DateField } from '@/components/date-field'
 const TerritoryMap = dynamic(
   () => import("./TerritoryMap").then((m) => m.TerritoryMap),
   { ssr: false },
@@ -480,11 +481,10 @@ export function SalesDrawer({
                   </Select>
                 </Field>
                 <Field label={t("effectiveFrom")}>
-                  <Input
-                    type="date"
+                  <DateField
                     value={since}
                     disabled={!editable}
-                    onChange={(e) => setSince(e.target.value)}
+                    onChange={(value) => setSince(value)}
                   />
                 </Field>
               </Panel>
@@ -582,11 +582,10 @@ export function SalesDrawer({
                           ),
                         )}
                       </Select>
-                      <Input
-                        type="date"
+                      <DateField
                         aria-label={t("effectiveFrom")}
                         value={memberDate}
-                        onChange={(e) => setMemberDate(e.target.value)}
+                        onChange={(value) => setMemberDate(value)}
                       />
                       <Button
                         variant="outline"
@@ -674,17 +673,15 @@ export function SalesDrawer({
                       </Field>
                     )}
                     <Field label={t("from")}>
-                      <Input
-                        type="date"
+                      <DateField
                         value={start}
-                        onChange={(e) => setStart(e.target.value)}
+                        onChange={(value) => setStart(value)}
                       />
                     </Field>
                     <Field label={t("to")}>
-                      <Input
-                        type="date"
+                      <DateField
                         value={end}
-                        onChange={(e) => setEnd(e.target.value)}
+                        onChange={(value) => setEnd(value)}
                       />
                     </Field>
                     <Field label={t("quota")}>
@@ -788,10 +785,9 @@ export function SalesDrawer({
                       </Select>
                     </Field>
                     <Field label={t("effectiveFrom")}>
-                      <Input
-                        type="date"
+                      <DateField
                         value={effective}
-                        onChange={(e) => setEffective(e.target.value)}
+                        onChange={(value) => setEffective(value)}
                       />
                     </Field>
                     <Field label={t("priority")}>

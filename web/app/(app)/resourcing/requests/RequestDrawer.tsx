@@ -17,6 +17,7 @@ import { confirmDialog } from '../../../../lib/confirm'
 import { promptDialog } from '../../../../lib/prompt'
 import { refusalMessageFromBody } from '../../../../lib/api-error'
 import type { RequestDrawerData, RequestWeekPreview } from './view'
+import { DateField } from '../../../../components/date-field'
 
 type RequestFields = {
   projectId: string
@@ -262,11 +263,11 @@ export function RequestDrawer({ drawer }: { drawer: RequestDrawerData }) {
           : <p className="text-sm">{fields.jobTitle || '—'}</p>}</>
       case 'first_week':
         return <>{fieldLabel(t('drawer.fields.firstWeek'))}{editable
-          ? <Input id={id} type="date" value={fields.firstWeek} onChange={(event) => change('firstWeek', event.target.value)} />
+          ? <DateField id={id} value={fields.firstWeek} onChange={(value) => change('firstWeek', value)} />
           : <p className="font-mono text-sm">{fields.firstWeek}</p>}</>
       case 'last_week':
         return <>{fieldLabel(t('drawer.fields.lastWeek'))}{editable
-          ? <Input id={id} type="date" value={fields.lastWeek} onChange={(event) => change('lastWeek', event.target.value)} />
+          ? <DateField id={id} value={fields.lastWeek} onChange={(value) => change('lastWeek', value)} />
           : <p className="font-mono text-sm">{fields.lastWeek}</p>}</>
       case 'hours_per_week':
         return <>{fieldLabel(t('drawer.fields.hoursPerWeek'))}{editable

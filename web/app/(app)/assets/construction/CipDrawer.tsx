@@ -13,6 +13,7 @@ import { useMoney } from '@/components/money-provider'
 import { useAppAction } from '@/lib/use-app-action'
 import { newRequestKey, postJson, sumCents, toCents } from '../depth-client'
 import type { CipDetail, ConstructionData } from './_data'
+import { DateField } from '@/components/date-field'
 
 type Tab = 'costs' | 'link' | 'capitalize' | 'history'
 type Line =
@@ -137,7 +138,7 @@ export function CipDrawer({ record, data, closeHref }: { record: CipDetail; data
           <div className="space-y-4">
             <p className="text-sm text-slate-600 dark:text-slate-300">{t('construction.capitalizeHelp')}</p>
             <div className="grid gap-4 sm:grid-cols-2">
-              {field('cap-date', t('construction.fields.capitalizedOn'), <Input id="cap-date" type="date" value={capitalizedOn} onChange={(event) => setCapitalizedOn(event.target.value)} />)}
+              {field('cap-date', t('construction.fields.capitalizedOn'), <DateField id="cap-date" value={capitalizedOn} onChange={(value) => setCapitalizedOn(value)} />)}
               <label className="flex items-center gap-2 self-end text-sm"><input type="checkbox" checked={closeWhenEmpty} onChange={(event) => setCloseWhenEmpty(event.target.checked)} />{t('construction.fields.closeWhenEmpty')}</label>
             </div>
             {lines.map((line, index) => (
@@ -228,7 +229,7 @@ export function CipDrawer({ record, data, closeHref }: { record: CipDetail; data
                 <p className="text-sm"><JournalEntryLink entryId={entry.entryId} className="text-teal-700 hover:underline dark:text-teal-300">{t('construction.capitalizationEntry')}</JournalEntryLink></p>
                 {entry.status === 'posted' && manage ? (
                   <div className="grid gap-3 border-t border-slate-200 pt-3 sm:grid-cols-[10rem_1fr_auto] sm:items-end dark:border-slate-800">
-                    {field(`rev-date-${entry.id}`, t('construction.fields.reversalDate'), <Input id={`rev-date-${entry.id}`} type="date" value={reverseDate} onChange={(event) => setReverseDate(event.target.value)} />)}
+                    {field(`rev-date-${entry.id}`, t('construction.fields.reversalDate'), <DateField id={`rev-date-${entry.id}`} value={reverseDate} onChange={(value) => setReverseDate(value)} />)}
                     {field(`rev-reason-${entry.id}`, t('construction.fields.reason'), <Input id={`rev-reason-${entry.id}`} value={reverseReason} onChange={(event) => setReverseReason(event.target.value)} />)}
                     <Button variant="outline" disabled={action.busy || !reverseReason.trim()} onClick={() => run(`/api/assets/construction/capitalizations/${entry.id}/reverse`, { date: reverseDate, reason: reverseReason }, t('construction.reversedDone'))}>{t('construction.reverse')}</Button>
                   </div>

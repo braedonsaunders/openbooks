@@ -26,6 +26,7 @@ import type {
   ExceptionRow,
   MatrixRow,
 } from '../../../../lib/compliance'
+import { DateField } from '@/components/date-field'
 
 export interface VendorDrawerData {
   vendor: {
@@ -419,18 +420,16 @@ export function VendorComplianceDrawer({
                     </div>
                     <div>
                       <Label>{t('fields.effectiveFrom')}</Label>
-                      <Input
-                        type="date"
+                      <DateField
                         value={newCert.effectiveFrom}
-                        onChange={(event) => setNewCert({ ...newCert, effectiveFrom: event.target.value })}
+                        onChange={(value) => setNewCert({ ...newCert, effectiveFrom: value })}
                       />
                     </div>
                     <div>
                       <Label>{t('fields.expiresOn')}</Label>
-                      <Input
-                        type="date"
+                      <DateField
                         value={newCert.expiresOn}
-                        onChange={(event) => setNewCert({ ...newCert, expiresOn: event.target.value })}
+                        onChange={(value) => setNewCert({ ...newCert, expiresOn: value })}
                       />
                       {selectedPolicy?.requiresExpiry ? (
                         <p className="mt-1 text-xs text-slate-500 dark:text-slate-400">{t('fields.expiryRequired')}</p>
@@ -751,10 +750,9 @@ export function VendorComplianceDrawer({
                   </div>
                   <div>
                     <Label>{t('fields.expiresOn')}</Label>
-                    <Input
-                      type="date"
+                    <DateField
                       value={exception.expiresOn}
-                      onChange={(event) => setException({ ...exception, expiresOn: event.target.value })}
+                      onChange={(value) => setException({ ...exception, expiresOn: value })}
                     />
                   </div>
                   <div className="sm:col-span-2">

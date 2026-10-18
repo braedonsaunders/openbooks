@@ -15,6 +15,7 @@ import {
   ApplicationsBillingWorkspace,
   type ApplicationIncomeAccount,
 } from '../../construction/ConstructionClient'
+import { DateField } from '@/components/date-field'
 /** The banner's figure on the project's billing basis (see lib/project-available-to-bill). */
 export type AvailableToBillClient =
   | { basis: 'rates'; amount: string }
@@ -372,11 +373,11 @@ export function BillingSection({
                 <>
                   <div className={field}>
                     <Label>{t('startDate')}</Label>
-                    <Input type="date" disabled={busy} value={startDate} onChange={(e) => setStartDate(e.target.value)} />
+                    <DateField disabled={busy} value={startDate} onChange={(value) => setStartDate(value)} />
                   </div>
                   <div className={field}>
                     <Label>{t('cutoffDate')}</Label>
-                    <Input type="date" disabled={busy} value={cutoffDate} onChange={(e) => setCutoffDate(e.target.value)} />
+                    <DateField disabled={busy} value={cutoffDate} onChange={(value) => setCutoffDate(value)} />
                   </div>
                 </>
               ) : null}

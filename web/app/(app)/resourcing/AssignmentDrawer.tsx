@@ -11,6 +11,7 @@ import { confirmDialog } from '../../../lib/confirm'
 import { refusalMessageFromBody } from '../../../lib/api-error'
 import { formatTicketHours } from '../../../lib/format'
 import type { AssignmentDrawerData } from '../../../lib/resourcing/assignment-drawer'
+import { DateField } from '../../../components/date-field'
 
 type FormState = {
   projectId: string
@@ -276,7 +277,7 @@ function AssignmentDrawerContent({
               </Field>
             )}
             <Field label={t('assignments.week')}>
-              <Input type="date" value={form.weekStart} disabled={!canManage || busy || Boolean(assignment)} onChange={(event) => change('weekStart', event.target.value)} />
+              <DateField value={form.weekStart} disabled={!canManage || busy || Boolean(assignment)} onChange={(value) => change('weekStart', value)} />
             </Field>
             <Field label={t('assignments.hours')}>
               <Input inputMode="decimal" value={form.plannedHours} disabled={!canManage || busy} onChange={(event) => change('plannedHours', event.target.value)} />

@@ -10,6 +10,7 @@ import { DrawerSublist, SublistAddButton, SublistEmpty, SublistLoadError, Sublis
 import { useAppAction } from '../../../lib/use-app-action'
 import { confirmDialog } from '@/lib/confirm'
 import { apiJson, ApiResponseError } from '@/lib/api-error'
+import { DateField } from '@/components/date-field'
 
 interface Price {
   id: string
@@ -205,11 +206,11 @@ export function FairValuePricesEditor({ itemId, canManage }: { itemId: string; c
             </div>
             <div className={field}>
               <Label>{t('effectiveFrom')}</Label>
-              <Input type="date" value={form.effectiveFrom} onChange={(e) => setForm({ ...form, effectiveFrom: e.target.value })} />
+              <DateField value={form.effectiveFrom} onChange={(value) => setForm({ ...form, effectiveFrom: value })} />
             </div>
             <div className={field}>
               <Label>{t('effectiveTo')}</Label>
-              <Input type="date" value={form.effectiveTo} onChange={(e) => setForm({ ...form, effectiveTo: e.target.value })} />
+              <DateField value={form.effectiveTo} onChange={(value) => setForm({ ...form, effectiveTo: value })} />
             </div>
             <label className="flex items-center gap-2 self-end pb-2 text-sm sm:col-span-2">
               <input type="checkbox" checked={form.isActive} onChange={(e) => setForm({ ...form, isActive: e.target.checked })}

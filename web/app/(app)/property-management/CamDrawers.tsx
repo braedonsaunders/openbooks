@@ -7,6 +7,7 @@ import { useBusinessToday } from "@/components/business-date-provider";
 import type { Option } from "./workspace-ui";
 import { Field } from "./workspace-ui";
 import type { CamPool, PropertyWorkspace, SaveAction } from "./types";
+import { DateField } from '@/components/date-field'
 
 export function CamDrawer({
   open,
@@ -159,20 +160,18 @@ export function CamDrawer({
             </Select>
           </Field>
           <Field label="Period starts">
-            <Input
-              type="date"
+            <DateField
               value={form.periodStartsOn}
-              onChange={(e) =>
-                setForm({ ...form, periodStartsOn: e.target.value })
+              onChange={(value) =>
+                setForm({ ...form, periodStartsOn: value })
               }
             />
           </Field>
           <Field label="Period ends">
-            <Input
-              type="date"
+            <DateField
               value={form.periodEndsOn}
-              onChange={(e) =>
-                setForm({ ...form, periodEndsOn: e.target.value })
+              onChange={(value) =>
+                setForm({ ...form, periodEndsOn: value })
               }
             />
           </Field>

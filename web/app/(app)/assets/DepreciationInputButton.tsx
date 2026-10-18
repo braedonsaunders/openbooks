@@ -7,6 +7,7 @@ import { toast } from 'sonner'
 import { Gauge, ListPlus } from 'lucide-react'
 import { Button, Input, Label, Popover, SearchSelect, Select } from '@openbooks/ui'
 import { useBusinessToday } from '../../../components/business-date-provider'
+import { DateField } from '../../../components/date-field'
 
 export function DepreciationInputButton({
   assetId,
@@ -95,7 +96,7 @@ export function DepreciationInputButton({
         </div> : null}
         <div className="space-y-1.5">
           <Label htmlFor="depr-input-date">{t('effectiveDate')}</Label>
-          <Input id="depr-input-date" type="date" value={effectiveDate} onChange={(event) => setEffectiveDate(event.target.value)} />
+          <DateField id="depr-input-date" value={effectiveDate} onChange={(value) => setEffectiveDate(value)} />
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="depr-input-value">{production ? t('productionUnits') : t('manualAmount')}</Label>

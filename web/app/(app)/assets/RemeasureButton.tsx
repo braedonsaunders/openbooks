@@ -8,6 +8,7 @@ import { Scale } from 'lucide-react'
 import { Button, Input, Label, Popover } from '@openbooks/ui'
 import { useBusinessToday } from '../../../components/business-date-provider'
 import { readApiErrorMessage } from '../../../lib/api-error'
+import { DateField } from '../../../components/date-field'
 
 type RemeasurementKindKey = 'revalued' | 'impaired' | 'unknown'
 
@@ -80,7 +81,7 @@ export function RemeasureButton({ assetId }: { assetId: string }) {
         </div>
         <div className="space-y-1.5">
           <Label htmlFor="rm-date">{t('remeasure.date')}</Label>
-          <Input id="rm-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+          <DateField id="rm-date" value={date} onChange={(value) => setDate(value)} />
         </div>
         <Button className="w-full" onClick={submit} disabled={busy}>
           {busy ? t('remeasure.working') : t('remeasure.action')}

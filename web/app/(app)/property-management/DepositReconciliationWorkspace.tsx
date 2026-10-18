@@ -2,12 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Input, cn } from "@openbooks/ui";
+import { cn } from "@openbooks/ui";
 import { PagedTable } from "../../../components/paged-table";
 import { useBusinessToday } from "@/components/business-date-provider";
 import { readApiErrorMessage } from "../../../lib/api-error";
 import { Empty, Field, Small, Status, formatGroupedMoney, sumByCurrency } from "./workspace-ui";
 import type { Money } from "./types";
+import { DateField } from '@/components/date-field'
 
 type ReconciliationRow = {
   propertyId: string;
@@ -148,10 +149,9 @@ export function DepositReconciliationWorkspace({ money, onOpenProperty }: { mone
         toolbarAfter={(
           <div className="w-44">
             <Field label="As of">
-              <Input
-                type="date"
+              <DateField
                 value={asOf}
-                onChange={(event) => setAsOf(event.target.value)}
+                onChange={(value) => setAsOf(value)}
               />
             </Field>
           </div>

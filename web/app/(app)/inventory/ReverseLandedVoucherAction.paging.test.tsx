@@ -186,6 +186,8 @@ function setInputValue(input: HTMLInputElement, value: string) {
   const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')!.set!
   setter.call(input, value)
   input.dispatchEvent(new window.Event('input', { bubbles: true }))
+  // A date field settles its typed text when the entry is finished.
+  input.dispatchEvent(new window.Event('change', { bubbles: true }))
 }
 
 function setTextareaValue(input: HTMLTextAreaElement, value: string) {
@@ -249,7 +251,7 @@ test('searching the picker queries posted vouchers on the server', async (t) => 
   await openVoucherMenu()
   await tick()
   const search = [...document.querySelectorAll('input')].find(
-    (input) => (input as HTMLInputElement).type !== 'date',
+    (input) => !input.hasAttribute('data-date-field') && (input as HTMLInputElement).type !== 'hidden',
   ) as HTMLInputElement | undefined
   assert.ok(search, 'a picker search box must exist')
   const before = script.getUrls.length
@@ -286,7 +288,7 @@ test('a refused reversal shows the server reason and submits the selected date a
     option.dispatchEvent(new window.MouseEvent('click', { bubbles: true }))
     await tick()
   })
-  const date = document.querySelector('input[type="date"]') as HTMLInputElement | null
+  const date = document.querySelector('input[data-date-field]') as HTMLInputElement | null
   const reason = document.querySelector('textarea') as HTMLTextAreaElement | null
   assert.ok(date, 'a reversal date must be editable')
   assert.ok(reason, 'a reversal reason must be editable')

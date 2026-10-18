@@ -32,6 +32,7 @@ import {
 } from "@openbooks/engine/platform/financial-change-labels";
 import type { LeasePayload, LeaseDisplay } from "./_lib";
 import { enumLabel } from "@/lib/enum-label";
+import { DateField } from '@/components/date-field'
 type Option = { value: string; label: string };
 const frequencyMonths: Record<string, number> = {
   monthly: 1,
@@ -249,12 +250,19 @@ function LeaseCreateForm({
             ] as const
           ).map(([key, label]) => (
             <Field key={key} label={label}>
-              <Input
-                aria-label={label}
-                type={key === "commencementOn" ? "date" : "text"}
-                value={f[key] ?? ""}
-                onChange={(e) => set(key, e.target.value)}
-              />
+              {key === "commencementOn" ? (
+                <DateField
+                  aria-label={label}
+                  value={f[key] ?? ""}
+                  onChange={(next) => set(key, next)}
+                />
+              ) : (
+                <Input
+                  aria-label={label}
+                  value={f[key] ?? ""}
+                  onChange={(e) => set(key, e.target.value)}
+                />
+              )}
             </Field>
           ))}
           <Field label={t("leases.fieldFrequency")}>
@@ -592,10 +600,9 @@ function ChangeLease({
           </Select>
         </Field>
         <Field label={t("leases.fieldEffectiveDate")}>
-          <Input
-            type="date"
+          <DateField
             value={date}
-            onChange={(e) => setDate(e.target.value)}
+            onChange={(value) => setDate(value)}
           />
         </Field>
         {operation !== "termination" ? (
@@ -837,12 +844,11 @@ export function LeaseDrawer({
               </Button>
             ) : l.status === "active" ? (
               <>
-                <Input
+                <DateField
                   className="w-40"
-                  type="date"
                   value={date}
                   aria-label={t("leases.postThroughDate")}
-                  onChange={(e) => setDate(e.target.value)}
+                  onChange={(value) => setDate(value)}
                 />
                 <Button disabled={busy} onClick={() => act("post")}>
                   {t("leases.postThroughDate")}

@@ -251,7 +251,7 @@ test('changing the create inputs after a failure rotates the retry identity', as
   // New intended create after an input change: a reused key with different
   // input would 409, so the drawer must rotate.
   const inputs = [...document.querySelectorAll('input')] as HTMLInputElement[]
-  const memo = inputs.find((input) => input.type === 'text')
+  const memo = inputs.find((input) => input.type === 'text' && !input.hasAttribute('data-date-field'))
   assert.ok(memo, 'a memo input must exist')
   await act(async () => {
     setInputValue(memo, 'second attempt note')

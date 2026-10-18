@@ -27,6 +27,7 @@ import { KpiStrip, type Kpi } from '../../../../components/kpi-strip'
 import { PagedTable } from '../../../../components/paged-table'
 import { roundDecimal } from '@openbooks/engine/projects/earned-value-math'
 import { compareDecimal } from '@openbooks/engine/money/decimal'
+import { DateField } from '@/components/date-field'
 
 /**
  * Progress & earned value for one project: installed quantities against the
@@ -179,12 +180,11 @@ export function ProgressTab({ projectId, canManage }: { projectId: string; canMa
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="space-y-1">
           <Label htmlFor="progress-as-of" className="text-xs">{t('asOf')}</Label>
-          <Input
+          <DateField
             id="progress-as-of"
-            type="date"
             className="w-44"
             value={asOf || data?.asOf || ''}
-            onChange={(event) => setAsOf(event.target.value)}
+            onChange={(value) => setAsOf(value)}
           />
         </div>
         {canManage ? (
@@ -358,7 +358,7 @@ function RecordProgressForm({
       <div className="grid grid-cols-[1fr_8rem_6rem] items-end gap-3">
         <div className="space-y-1">
           <Label htmlFor={`progress-date-${fixedTaskId ?? 'any'}`}>{t('entryDate')}</Label>
-          <Input id={`progress-date-${fixedTaskId ?? 'any'}`} type="date" value={entryDate} onChange={(event) => setEntryDate(event.target.value)} />
+          <DateField id={`progress-date-${fixedTaskId ?? 'any'}`} value={entryDate} onChange={(value) => setEntryDate(value)} />
         </div>
         <div className="space-y-1">
           <Label htmlFor={`progress-qty-${fixedTaskId ?? 'any'}`}>{t('quantity')}</Label>

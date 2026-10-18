@@ -4,9 +4,10 @@ import { useRef, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { Button, Drawer, Input, Label, SearchSelect, Textarea } from '@openbooks/ui'
+import { Button, Drawer, Label, SearchSelect, Textarea } from '@openbooks/ui'
 import { useBusinessToday } from '@/components/business-date-provider'
 import { readApiErrorMessage } from '../../../lib/api-error'
+import { DateField } from '@/components/date-field'
 
 interface VoucherOpt {
   id: string
@@ -212,7 +213,7 @@ export function ReverseLandedVoucherAction() {
           </div>
           <div className={field}>
             <Label>{t('advanced.landed.reverse.reversalDate')}<span className="text-red-500"> *</span></Label>
-            <Input type="date" value={date} onChange={(e) => { setDate(e.target.value); touchKey() }} />
+            <DateField value={date} onChange={(value) => { setDate(value); touchKey() }} />
           </div>
           <div className={field}>
             <Label>{t('advanced.landed.reverse.reason')}<span className="text-red-500"> *</span></Label>

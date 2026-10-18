@@ -8,6 +8,7 @@ import { confirmDialog } from "@/lib/confirm";
 import { Field, RecordTabs, Status } from "./workspace-ui";
 import { LeaseDetail } from "./LeaseDetail";
 import type { LeaseForm, LeaseRow, Money, PropertyAction, PropertyPermissions, PropertyWorkspace, SaveAction, WorkspaceOptions } from "./types";
+import { DateField } from '@/components/date-field'
 
 type LeaseTab = "overview" | "charges" | "escalations" | "deposits";
 
@@ -185,7 +186,7 @@ export function LeaseRecordDrawer({
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label="Termination date">
-                <Input type="date" value={termination.terminatedOn} onChange={(e) => setTermination({ ...termination, terminatedOn: e.target.value })} />
+                <DateField value={termination.terminatedOn} onChange={(value) => setTermination({ ...termination, terminatedOn: value })} />
               </Field>
               <Field label="Reason">
                 <Input value={termination.reason} onChange={(e) => setTermination({ ...termination, reason: e.target.value })} />

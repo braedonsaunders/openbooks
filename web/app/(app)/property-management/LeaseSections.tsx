@@ -7,6 +7,7 @@ import { useBusinessToday } from "@/components/business-date-provider";
 import { Empty, Field, Small, Status } from "./workspace-ui";
 import { DepositTable } from "./LeaseTables";
 import type { ChargeRow, DepositRow, EscalationRow, LeaseRow, Money, PropertyAction, PropertyPermissions, WorkspaceOptions } from "./types";
+import { DateField } from '@/components/date-field'
 
 export function ChargesSection({
   lease,
@@ -117,20 +118,18 @@ export function ChargesSection({
                 </Select>
               </Field>
               <Field label={t("leaseSections.charges.labels.effectiveFrom")}>
-                <Input
-                  type="date"
+                <DateField
                   value={form.effectiveFrom}
-                  onChange={(e) =>
-                    setForm({ ...form, effectiveFrom: e.target.value })
+                  onChange={(value) =>
+                    setForm({ ...form, effectiveFrom: value })
                   }
                 />
               </Field>
               <Field label={t("leaseSections.charges.labels.effectiveTo")}>
-                <Input
-                  type="date"
+                <DateField
                   value={form.effectiveTo}
-                  onChange={(e) =>
-                    setForm({ ...form, effectiveTo: e.target.value })
+                  onChange={(value) =>
+                    setForm({ ...form, effectiveTo: value })
                   }
                 />
               </Field>
@@ -262,11 +261,10 @@ export function EscalationsSection({ lease, rows, permissions, busy, act }: { le
             <div className="font-medium">{t("leaseSections.escalations.scheduleTitle")}</div>
             <div className="grid gap-3 sm:grid-cols-3">
               <Field label={t("leaseSections.escalations.labels.effectiveOn")}>
-                <Input
-                  type="date"
+                <DateField
                   value={form.effectiveOn}
-                  onChange={(e) =>
-                    setForm({ ...form, effectiveOn: e.target.value })
+                  onChange={(value) =>
+                    setForm({ ...form, effectiveOn: value })
                   }
                 />
               </Field>
@@ -385,7 +383,7 @@ export function DepositSection({
             </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <Field label={t("leaseSections.deposits.reverseLabels.reversalDate")}>
-                <Input type="date" value={reversal.occurredOn} onChange={(e) => setReversal({ ...reversal, occurredOn: e.target.value })} />
+                <DateField value={reversal.occurredOn} onChange={(value) => setReversal({ ...reversal, occurredOn: value })} />
               </Field>
               <Field label={t("leaseSections.deposits.reverseLabels.reason")}>
                 <Input value={reversal.reason} onChange={(e) => setReversal({ ...reversal, reason: e.target.value })} />
@@ -444,11 +442,10 @@ export function DepositSection({
                 </Select>
               </Field>
               <Field label={t("leaseSections.deposits.labels.date")}>
-                <Input
-                  type="date"
+                <DateField
                   value={form.occurredOn}
-                  onChange={(e) =>
-                    setForm({ ...form, occurredOn: e.target.value })
+                  onChange={(value) =>
+                    setForm({ ...form, occurredOn: value })
                   }
                 />
               </Field>

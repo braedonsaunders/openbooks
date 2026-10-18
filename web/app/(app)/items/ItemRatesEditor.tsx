@@ -12,6 +12,7 @@ import { DrawerSublist, SublistAddButton, SublistLoadError, SublistLoading, useS
 import { LineGrid, type LineGridColumn } from '../../../components/line-grid'
 import { PagedTable } from '../../../components/paged-table'
 import { enumLabel } from '../../../lib/enum-label'
+import { DateField } from '@/components/date-field'
 
 type RateVersionStatus = 'draft' | 'active' | 'retired'
 
@@ -305,7 +306,7 @@ export function ItemRatesEditor({
               <div className="space-y-1"><Label>{t('rateBook')}</Label><Select value={rateBookId} onChange={(event) => setRateBookId(event.target.value)}>
                 <option value="">{t('standardBook')}</option>{data?.books.map((book) => <option key={book.id} value={book.id}>{book.name} · {book.currency}</option>)}
               </Select></div>
-              <div className="space-y-1"><Label>{t('effectiveFrom')}</Label><Input type="date" value={effectiveFrom} onChange={(event) => setEffectiveFrom(event.target.value)} /></div>
+              <div className="space-y-1"><Label>{t('effectiveFrom')}</Label><DateField value={effectiveFrom} onChange={(value) => setEffectiveFrom(value)} /></div>
               <div className="space-y-1"><Label>{t('baseUnit')}</Label><Input value={baseUnit} onChange={(event) => setBaseUnit(event.target.value)} /></div>
               <div className="space-y-1"><Label>{t('policy')}</Label><Select value={pricingPolicy} onChange={(event) => setPricingPolicy(event.target.value)}>
                 <option value="capped_ladder">{t('policies.capped_ladder')}</option><option value="lowest_cost">{t('policies.lowest_cost')}</option>

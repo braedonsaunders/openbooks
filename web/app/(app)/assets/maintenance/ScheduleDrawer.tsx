@@ -13,6 +13,7 @@ import { useAppAction } from '@/lib/use-app-action'
 import { postJson } from '../depth-client'
 import type { MaintenanceData, ScheduleDetail } from './_data'
 import { ScheduleFields, scheduleBody, type ScheduleFormValues } from './ScheduleFields'
+import { DateField } from '@/components/date-field'
 
 type Tab = 'record' | 'history' | 'schedule' | 'meter'
 
@@ -81,7 +82,7 @@ export function ScheduleDrawer({ schedule, data, closeHref }: { schedule: Schedu
         {tab === 'record' ? (
           <div className="space-y-3">
             <div className="grid gap-3 sm:grid-cols-2">
-              {field('rec-date', t('maintenance.fields.performedOn'), <Input id="rec-date" type="date" value={performedOn} onChange={(event) => setPerformedOn(event.target.value)} />)}
+              {field('rec-date', t('maintenance.fields.performedOn'), <DateField id="rec-date" value={performedOn} onChange={(value) => setPerformedOn(value)} />)}
               {field('rec-cost', t('maintenance.fields.cost'), <Input id="rec-cost" inputMode="decimal" value={cost} onChange={(event) => setCost(event.target.value)} />)}
               {schedule.usageUnit ? field('rec-usage', t('maintenance.fields.meterAtService', { unit: schedule.usageUnit }), <Input id="rec-usage" inputMode="decimal" value={usage} onChange={(event) => setUsage(event.target.value)} />) : null}
               {field('rec-vendor', t('maintenance.fields.vendor'), (
@@ -161,7 +162,7 @@ export function ScheduleDrawer({ schedule, data, closeHref }: { schedule: Schedu
           <div className="space-y-3">
             <p className="text-sm text-slate-600 dark:text-slate-300">{schedule.currentUsage ? t('maintenance.currentReading', { reading: schedule.currentUsage, unit: schedule.usageUnit ?? '' }) : t('maintenance.noReading')}</p>
             <div className="grid gap-3 sm:grid-cols-3">
-              {field('meter-date', t('maintenance.fields.readOn'), <Input id="meter-date" type="date" value={readOn} onChange={(event) => setReadOn(event.target.value)} />)}
+              {field('meter-date', t('maintenance.fields.readOn'), <DateField id="meter-date" value={readOn} onChange={(value) => setReadOn(value)} />)}
               {field('meter-reading', t('maintenance.fields.reading'), <Input id="meter-reading" inputMode="decimal" value={reading} onChange={(event) => setReading(event.target.value)} />)}
               {field('meter-unit', t('maintenance.fields.usageUnit'), <Input id="meter-unit" value={unit} onChange={(event) => setUnit(event.target.value)} />)}
             </div>

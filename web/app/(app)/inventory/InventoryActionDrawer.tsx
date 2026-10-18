@@ -11,6 +11,7 @@ import { useDirtyClose } from '@/lib/use-dirty-close'
 import { refusalMessageFromBody } from '@/lib/api-error'
 import { readApiErrorMessage } from '@/lib/api-error'
 import type { InventoryOperationOption } from '@openbooks/engine/inventory'
+import { DateField } from '@/components/date-field'
 
 interface ItemOpt { id: string; code?: string | null; name?: string | null }
 interface LocOpt { id: string; code?: string | null }
@@ -340,7 +341,7 @@ export function InventoryActionDrawer({
           ) : null}
           <div className={field}>
             <Label htmlFor="inventory-posting-date">{t('drawer.postingDate')}</Label>
-            <Input id="inventory-posting-date" type="date" disabled={busy} value={postingDate} onChange={(e) => setPostingDate(e.target.value)} />
+            <DateField id="inventory-posting-date" disabled={busy} value={postingDate} onChange={(value) => setPostingDate(value)} />
           </div>
           <div className={`${field} sm:col-span-2`}>
             <Label>{usesSource ? t('drawer.movementReason') : tCommon('labels.memo')}</Label>

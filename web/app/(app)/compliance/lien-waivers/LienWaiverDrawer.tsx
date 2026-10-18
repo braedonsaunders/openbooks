@@ -10,6 +10,7 @@ import { promptDialog } from '../../../../lib/prompt'
 import { readApiErrorMessage } from '../../../../lib/api-error'
 import type { LienWaiverRow } from '../../../../lib/compliance'
 import { LienWaiverLegacyNotice } from './LienWaiverLegacyNotice'
+import { DateField } from '../../../../components/date-field'
 
 /**
  * One lien waiver, and the transitions available from where it stands.
@@ -184,10 +185,9 @@ export function LienWaiverDrawer({
             <div className="grid gap-3 sm:grid-cols-2">
               <div>
                 <Label>{t('lienWaivers.columns.through')}</Label>
-                <Input
-                  type="date"
+                <DateField
                   value={edit.throughDate}
-                  onChange={(event) => setEdit({ ...edit, throughDate: event.target.value })}
+                  onChange={(value) => setEdit({ ...edit, throughDate: value })}
                 />
               </div>
               <div>
@@ -277,10 +277,9 @@ export function LienWaiverDrawer({
               </div>
               <div>
                 <Label>{t('lienWaivers.signedAt')}</Label>
-                <Input
-                  type="date"
+                <DateField
                   value={sign.signedAt}
-                  onChange={(event) => setSign({ ...sign, signedAt: event.target.value })}
+                  onChange={(value) => setSign({ ...sign, signedAt: value })}
                 />
               </div>
               <div className="flex items-center gap-2 pt-6">

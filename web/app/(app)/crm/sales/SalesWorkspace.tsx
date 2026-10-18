@@ -22,6 +22,7 @@ import { HomePanel, HomeStatTile } from "@/components/module-home/client";
 import { useMoney } from "@/components/money-provider";
 import { mergeHref } from "@/lib/list-params";
 import { SalesDrawer } from "./SalesDrawer";
+import { DateField } from '@/components/date-field'
 const TerritoryMap = dynamic(
   () => import("./TerritoryMap").then((m) => m.TerritoryMap),
   {
@@ -349,16 +350,14 @@ export function SalesWorkspace({
               >
                 <label className="text-xs">
                   {t("from")}
-                  <Input
-                    type="date"
+                  <DateField
                     name="periodStart"
                     defaultValue={data.periodStart}
                   />
                 </label>
                 <label className="text-xs">
                   {t("to")}
-                  <Input
-                    type="date"
+                  <DateField
                     name="periodEnd"
                     defaultValue={data.periodEnd}
                   />

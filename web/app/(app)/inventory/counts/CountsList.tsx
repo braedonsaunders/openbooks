@@ -18,6 +18,7 @@ import { optionalScanResolver } from '../../../../lib/scan'
 import { readApiErrorMessage } from '../../../../lib/api-error'
 import type { StockCountDetail, StockCountSummary } from '@openbooks/engine/inventory/stock-count-queries'
 import { hasUnsavedObservation, SECOND_COUNT_REASON_MIN_LENGTH, secondObservationNeedsReason } from './observation-reason'
+import { DateField } from '@/components/date-field'
 
 /** Source id under which the count editor reports unsaved observations to the drawer guard. */
 const COUNT_DETAIL_DIRTY_SOURCE = 'count-detail'
@@ -502,7 +503,7 @@ function CreateCountDrawer({
             <Label>
               {t('counts.columns.date')} <span className="text-red-500">*</span>
             </Label>
-            <Input type="date" disabled={busy} value={date} onChange={(e) => setDate(e.target.value)} />
+            <DateField disabled={busy} value={date} onChange={(value) => setDate(value)} />
           </div>
           <div className={field}>
             <Label>{t('counts.columns.memo')}</Label>
@@ -928,12 +929,11 @@ function CountDetailBody({
           {header.status === 'draft' || header.status === 'counting' || header.status === 'review' ? (
             <>
               <span className="inline-flex items-center gap-1">
-                <Input
-                  type="date"
+                <DateField
                   disabled={busy}
                   className="w-40"
                   value={countDate}
-                  onChange={(e) => setCountDate(e.target.value)}
+                  onChange={(value) => setCountDate(value)}
                 />
                 <Button
                   size="sm"

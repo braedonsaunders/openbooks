@@ -16,6 +16,7 @@ import { confirmDialog } from '../../../../lib/confirm'
 import { promptDialog } from '../../../../lib/prompt'
 import { isRetainerItemEligible } from '../../../../lib/resourcing/retainer-items'
 import type { RetainerDrawerData, RetainerDrawdownRow, RetainerEvidenceRow, RetainerRecognitionRow } from './view'
+import { DateField } from '../../../../components/date-field'
 
 type RetainerFields = {
   projectId: string
@@ -300,11 +301,11 @@ export function RetainerDrawer({ drawer }: { drawer: RetainerDrawerData }) {
           : <p className="text-sm tabular-nums">{fields.unitRate}</p>}</>
       case 'starts_on':
         return <>{fieldLabel(t('drawer.fields.startsOn'))}{editable
-          ? <Input id={id} type="date" value={fields.startsOn} onChange={(event) => change('startsOn', event.target.value)} />
+          ? <DateField id={id} value={fields.startsOn} onChange={(value) => change('startsOn', value)} />
           : <p className="font-mono text-sm">{fields.startsOn}</p>}</>
       case 'ends_on':
         return <>{fieldLabel(t('drawer.fields.endsOn'))}{editable
-          ? <Input id={id} type="date" value={fields.endsOn} onChange={(event) => change('endsOn', event.target.value)} />
+          ? <DateField id={id} value={fields.endsOn} onChange={(value) => change('endsOn', value)} />
           : <p className="font-mono text-sm">{fields.endsOn}</p>}</>
       case 'retainer_item_id':
         return <>{fieldLabel(t('drawer.fields.retainerItem'))}{editable

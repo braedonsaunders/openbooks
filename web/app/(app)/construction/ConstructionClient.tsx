@@ -27,6 +27,7 @@ import { useTranslations } from "next-intl";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { cmp } from "@openbooks/engine/money/money";
+import { DateField } from '@/components/date-field'
 
 export interface ApplicationIncomeAccount {
   id: string;
@@ -881,7 +882,7 @@ function PayApplicationsSection({
           </div>
         }
       >
-        <Field label={t("periodEnding")}><Input type="date" disabled={busy} value={periodEnd} onChange={(event) => setPeriodEnd(event.target.value)} /></Field>
+        <Field label={t("periodEnding")}><DateField disabled={busy} value={periodEnd} onChange={(value) => setPeriodEnd(value)} /></Field>
       </Drawer>
 
       {drawApp ? (
@@ -1061,7 +1062,7 @@ function RetainageSection({
       >
         <div className="space-y-4">
           <Field label={t("amount")}><Input type="number" inputMode="decimal" disabled={busy} value={amount} onChange={(event) => setAmount(event.target.value)} /></Field>
-          <Field label={t("periodEnding")}><Input type="date" disabled={busy} value={periodEnd} onChange={(event) => setPeriodEnd(event.target.value)} /></Field>
+          <Field label={t("periodEnding")}><DateField disabled={busy} value={periodEnd} onChange={(value) => setPeriodEnd(value)} /></Field>
         </div>
       </Drawer>
     </>

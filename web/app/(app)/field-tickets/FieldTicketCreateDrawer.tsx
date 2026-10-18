@@ -3,11 +3,12 @@
 import { useId, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
-import { Button, Input, Label, SearchSelect, Select } from '@openbooks/ui'
+import { Button, Label, SearchSelect, Select } from '@openbooks/ui'
 import { TransactionDrawer } from '../../../components/transaction-drawer'
 import { readApiErrorMessage } from '../../../lib/api-error'
 import { confirmDialog } from '@/lib/confirm'
 import type { FieldTicketDrawerProps } from './FieldTicketDrawer'
+import { DateField } from '@/components/date-field'
 
 const PERIODS = ['shift', 'daily', 'weekly'] as const
 type Period = (typeof PERIODS)[number]
@@ -150,7 +151,7 @@ export function FieldTicketCreateDrawer({ projects, today }: FieldTicketCreateDr
         </div>
         <div className="space-y-1.5">
           <Label htmlFor={`${fieldId}-date`}>{tCommon('labels.date')}</Label>
-          <Input id={`${fieldId}-date`} type="date" value={date} onChange={(event) => setDate(event.target.value)} />
+          <DateField id={`${fieldId}-date`} value={date} onChange={(value) => setDate(value)} />
         </div>
         {error ? (
           <p role="alert" className="text-sm text-red-600 sm:col-span-2 dark:text-red-400">{error}</p>

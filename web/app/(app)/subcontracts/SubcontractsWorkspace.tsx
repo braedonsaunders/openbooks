@@ -34,6 +34,7 @@ import {
 } from "../../../lib/statement-format";
 import { readApiErrorMessage } from "../../../lib/api-error";
 import { PagedTable } from "../../../components/paged-table";
+import { DateField } from '@/components/date-field'
 
 type Option = { id: string; name: string; currency?: string | null };
 type Permissions = {
@@ -650,20 +651,18 @@ function Overview({
                 />
               </Field>
               <Field label={t("overview.fieldStarts")}>
-                <Input
-                  type="date"
+                <DateField
                   value={form.startsOn}
-                  onChange={(event) =>
-                    setForm({ ...form, startsOn: event.target.value })
+                  onChange={(value) =>
+                    setForm({ ...form, startsOn: value })
                   }
                 />
               </Field>
               <Field label={t("overview.fieldEnds")}>
-                <Input
-                  type="date"
+                <DateField
                   value={form.endsOn}
-                  onChange={(event) =>
-                    setForm({ ...form, endsOn: event.target.value })
+                  onChange={(value) =>
+                    setForm({ ...form, endsOn: value })
                   }
                 />
               </Field>
@@ -1211,10 +1210,9 @@ function ApplicationsSection({
         <Card>
           <CardContent className="flex flex-wrap items-end gap-3 p-4">
             <Field label={t("applications.periodEnding")}>
-              <Input
-                type="date"
+              <DateField
                 value={periodEnd}
-                onChange={(e) => setPeriodEnd(e.target.value)}
+                onChange={(value) => setPeriodEnd(value)}
               />
             </Field>
             <Field label={t("applications.vendorInvoice")}>
@@ -1590,10 +1588,9 @@ function RetainageSection({
               />
             </Field>
             <Field label={t("retainage.billDate")}>
-              <Input
-                type="date"
+              <DateField
                 value={periodEnd}
-                onChange={(e) => setPeriodEnd(e.target.value)}
+                onChange={(value) => setPeriodEnd(value)}
               />
             </Field>
             <Button
@@ -1847,20 +1844,18 @@ function ControlsSection({
                 />
               </Field>
               <Field label={t("controls.fieldEffective")}>
-                <Input
-                  type="date"
+                <DateField
                   value={form.effectiveOn}
-                  onChange={(e) =>
-                    setForm({ ...form, effectiveOn: e.target.value })
+                  onChange={(value) =>
+                    setForm({ ...form, effectiveOn: value })
                   }
                 />
               </Field>
               <Field label={t("controls.fieldExpires")}>
-                <Input
-                  type="date"
+                <DateField
                   value={form.expiresOn}
-                  onChange={(e) =>
-                    setForm({ ...form, expiresOn: e.target.value })
+                  onChange={(value) =>
+                    setForm({ ...form, expiresOn: value })
                   }
                 />
               </Field>
@@ -2099,17 +2094,15 @@ function CreateSubcontractDrawer({
           </Field>
         ) : null}
         <Field label={t("create.starts")}>
-          <Input
-            type="date"
+          <DateField
             value={form.startsOn}
-            onChange={(e) => setForm({ ...form, startsOn: e.target.value })}
+            onChange={(value) => setForm({ ...form, startsOn: value })}
           />
         </Field>
         <Field label={t("create.ends")}>
-          <Input
-            type="date"
+          <DateField
             value={form.endsOn}
-            onChange={(e) => setForm({ ...form, endsOn: e.target.value })}
+            onChange={(value) => setForm({ ...form, endsOn: value })}
           />
         </Field>
         <div className="sm:col-span-2">

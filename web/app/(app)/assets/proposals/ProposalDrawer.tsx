@@ -12,6 +12,7 @@ import { useMoney } from '@/components/money-provider'
 import { useAppAction } from '@/lib/use-app-action'
 import { evenSplit, newRequestKey, postJson, sumCents, toCents } from '../depth-client'
 import type { ProposalRow, ProposalsData } from './_data'
+import { DateField } from '@/components/date-field'
 
 type Mode = 'asset' | 'split' | 'component' | 'cip' | 'reject'
 type SplitLine = { name: string; amount: string }
@@ -117,7 +118,7 @@ export function ProposalDrawer({ proposal, data, closeHref }: { proposal: Propos
           <section className="space-y-4 rounded-xl border border-slate-200 p-4 dark:border-slate-800">
             <p className="text-sm text-slate-600 dark:text-slate-300">{t(`proposals.modeHelp.${mode}`)}</p>
             <div className="grid gap-4 sm:grid-cols-2">
-              {field('accept-date', t('proposals.fields.acceptedOn'), <Input id="accept-date" type="date" value={acceptedOn} onChange={(event) => setAcceptedOn(event.target.value)} />)}
+              {field('accept-date', t('proposals.fields.acceptedOn'), <DateField id="accept-date" value={acceptedOn} onChange={(value) => setAcceptedOn(value)} />)}
               {mode === 'asset' || mode === 'component' ? field('accept-name', t('proposals.fields.assetName'), <Input id="accept-name" value={name} onChange={(event) => setName(event.target.value)} />) : null}
               {mode !== 'cip' ? field('accept-category', t('proposals.fields.category'), categorySelect('accept-category')) : null}
               {mode === 'component' ? field('accept-parent', t('proposals.fields.parent'), (
@@ -157,7 +158,7 @@ export function ProposalDrawer({ proposal, data, closeHref }: { proposal: Propos
             {mode === 'asset' || mode === 'component' ? (
               <div className="flex flex-wrap items-end gap-4">
                 <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={placeInService} onChange={(event) => setPlaceInService(event.target.checked)} />{t('proposals.fields.placeInService')}</label>
-                {placeInService ? field('accept-in-service', t('proposals.fields.inServiceOn'), <Input id="accept-in-service" type="date" value={inServiceOn} onChange={(event) => setInServiceOn(event.target.value)} />) : null}
+                {placeInService ? field('accept-in-service', t('proposals.fields.inServiceOn'), <DateField id="accept-in-service" value={inServiceOn} onChange={(value) => setInServiceOn(value)} />) : null}
               </div>
             ) : null}
             {field('accept-reason', t('proposals.fields.note'), <Textarea id="accept-reason" rows={2} value={reason} onChange={(event) => setReason(event.target.value)} />)}
@@ -191,7 +192,7 @@ export function ProposalDrawer({ proposal, data, closeHref }: { proposal: Propos
             ) : <p className="text-xs text-slate-500 dark:text-slate-400">{t('proposals.noReclass')}</p>}
             {proposal.acceptance.status === 'posted' && data.canCapitalize ? (
               <div className="grid gap-3 border-t border-slate-200 pt-3 sm:grid-cols-[10rem_1fr_auto] sm:items-end dark:border-slate-800">
-                {field('reverse-date', t('proposals.fields.reversalDate'), <Input id="reverse-date" type="date" value={reverseDate} onChange={(event) => setReverseDate(event.target.value)} />)}
+                {field('reverse-date', t('proposals.fields.reversalDate'), <DateField id="reverse-date" value={reverseDate} onChange={(value) => setReverseDate(value)} />)}
                 {field('reverse-reason', t('proposals.fields.reason'), <Input id="reverse-reason" value={reverseReason} onChange={(event) => setReverseReason(event.target.value)} />)}
                 <Button variant="outline" disabled={action.busy || !reverseReason.trim()} onClick={reverse}>{t('proposals.reverse')}</Button>
               </div>

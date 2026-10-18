@@ -6,6 +6,7 @@ import { useBusinessToday } from "@/components/business-date-provider";
 import type { Option } from "./workspace-ui";
 import { Field } from "./workspace-ui";
 import type { PropertyWorkspace, SaveAction } from "./types";
+import { DateField } from '@/components/date-field'
 
 export function LeaseDrawer({ open, stacked, initialPropertyId, initialUnitId, onClose, data, tenants, busy, onSave }: {
   open: boolean;
@@ -145,17 +146,15 @@ export function LeaseDrawer({ open, stacked, initialPropertyId, initialUnitId, o
             </Select>
           </Field>
           <Field label="Starts">
-            <Input
-              type="date"
+            <DateField
               value={form.startsOn}
-              onChange={(e) => setForm({ ...form, startsOn: e.target.value })}
+              onChange={(value) => setForm({ ...form, startsOn: value })}
             />
           </Field>
           <Field label="Ends">
-            <Input
-              type="date"
+            <DateField
               value={form.endsOn}
-              onChange={(e) => setForm({ ...form, endsOn: e.target.value })}
+              onChange={(value) => setForm({ ...form, endsOn: value })}
             />
           </Field>
           <Field label="Monthly base rent">

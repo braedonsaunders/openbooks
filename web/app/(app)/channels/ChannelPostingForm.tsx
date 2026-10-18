@@ -9,6 +9,7 @@ import { Button, DisclosureSection, SearchSelect, TagInput } from '@openbooks/ui
 import { Switch } from '../../../components/switch'
 import { useAppAction } from '@/lib/use-app-action'
 import { channelRequest } from './channel-client'
+import { DateField } from '@/components/date-field'
 
 interface PolicyView {
   mode: string
@@ -148,13 +149,12 @@ function ChannelPolicyCard({
         </label>
         <label className="text-sm">
           <span className="mb-1 block font-medium">{t('posting.effectiveFrom')}</span>
-          <input
-            type="date"
+          <DateField
             className="w-full rounded-md border px-2 py-1.5"
             value={effectiveFrom}
             min={today}
             disabled={!canManage || busy}
-            onChange={(e) => setEffectiveFrom(e.target.value)}
+            onChange={(value) => setEffectiveFrom(value)}
           />
         </label>
       </div>

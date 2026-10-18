@@ -5,7 +5,7 @@ import { stubModules } from '../../../testing/stub-modules'
 
 await bootJsdomEnvironment()
 stubModules({ navigation: true, intl: false, authz: false, features: false, extra: {
-  'next-intl': 'const t = (key) => key; export function useTranslations() { return t }',
+  'next-intl': 'const t = (key) => key; export function useTranslations() { return t }; export function useLocale() { return "en" }',
   sonner: 'export const toast = { success() {}, error() {} }',
 } })
 const React = await import('react')

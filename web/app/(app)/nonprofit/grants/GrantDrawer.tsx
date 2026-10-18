@@ -30,6 +30,7 @@ import { DrawerSublist, SublistAddButton, SublistEmpty, SublistPager, useSublist
 import { confirmDialog } from '@/lib/confirm'
 import { useAppAction } from '@/lib/use-app-action'
 import type { GrantDrawerData, GrantGroupOption } from './view'
+import { DateField } from '@/components/date-field'
 
 type GrantTab = 'terms' | 'budget' | 'drawdowns' | 'reports' | 'activity'
 
@@ -366,8 +367,8 @@ function CreateGrantForm({
         </Select>
       </Field>
       <Field label={t('grants.awardAmount')}><Input value={form.awardAmount} onChange={(e) => set('awardAmount')(e.target.value)} inputMode="decimal" /></Field>
-      <Field label={t('grants.periodFrom')}><Input type="date" value={form.periodFrom} onChange={(e) => set('periodFrom')(e.target.value)} /></Field>
-      <Field label={t('grants.periodTo')}><Input type="date" value={form.periodTo} onChange={(e) => set('periodTo')(e.target.value)} /></Field>
+      <Field label={t('grants.periodFrom')}><DateField value={form.periodFrom} onChange={(value) => set('periodFrom')(value)} /></Field>
+      <Field label={t('grants.periodTo')}><DateField value={form.periodTo} onChange={(value) => set('periodTo')(value)} /></Field>
       <Field label={t('grants.fund')}>
         <Select value={form.fundId} onChange={(e) => set('fundId')(e.target.value)}>
           {drawer.fundOptions.map((opt) => (
@@ -475,7 +476,7 @@ function GrantTermsTab({
           {terms.status === 'draft' ? (
             <div className="space-y-3">
               <PostingAccountsForm t={t} options={drawer.accountOptions} value={accounts} onChange={setAccounts} />
-              <Field label={t('grants.postingDate')}><Input type="date" value={postingDate} onChange={(e) => setPostingDate(e.target.value)} /></Field>
+              <Field label={t('grants.postingDate')}><DateField value={postingDate} onChange={(value) => setPostingDate(value)} /></Field>
               <Button disabled={busy} onClick={() => onPosting({ action: 'award', grantId: terms.id, accounts, postingDate }, t('grants.awarded'))}>
                 {t('grants.awardAction')}
               </Button>
@@ -525,7 +526,7 @@ function GrantTermsTab({
           {!['closed_out', 'closed', 'void'].includes(terms.status) ? (
             <div className="flex flex-wrap items-end gap-2">
               <div className="min-w-40">
-                <Field label={t('grants.postingDate')}><Input type="date" value={postingDate} onChange={(e) => setPostingDate(e.target.value)} /></Field>
+                <Field label={t('grants.postingDate')}><DateField value={postingDate} onChange={(value) => setPostingDate(value)} /></Field>
               </div>
               <div className="min-w-52 flex-1">
                 <Field label={t('grants.reason')}><Input value={reason} onChange={(e) => setReason(e.target.value)} /></Field>
@@ -675,7 +676,7 @@ function GrantDrawdownsTab({
           <PostingAccountsForm t={t} options={drawer.accountOptions} value={accounts} onChange={setAccounts} />
           <div className="flex flex-wrap items-end gap-2">
             <div className="min-w-40">
-              <Field label={t('grants.postingDate')}><Input type="date" value={postingDate} onChange={(e) => setPostingDate(e.target.value)} /></Field>
+              <Field label={t('grants.postingDate')}><DateField value={postingDate} onChange={(value) => setPostingDate(value)} /></Field>
             </div>
             <Button
               disabled={busy}
@@ -808,7 +809,7 @@ function GrantReportsTab({
         >
           <div className="grid gap-4 sm:grid-cols-2">
             <Field label={t('grants.reportTitle')}><Input value={title} onChange={(e) => setTitle(e.target.value)} /></Field>
-            <Field label={t('grants.dueOn')}><Input type="date" value={dueOn} onChange={(e) => setDueOn(e.target.value)} /></Field>
+            <Field label={t('grants.dueOn')}><DateField value={dueOn} onChange={(value) => setDueOn(value)} /></Field>
           </div>
         </Drawer>
       ) : null}

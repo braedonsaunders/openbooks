@@ -36,6 +36,7 @@ import { TransactionDrawer } from '../../../components/transaction-drawer'
 import { HeaderFields } from '../../../components/transaction-form/header-fields'
 import { PdfButton } from '../../../components/pdf-button'
 import { ApprovalActions } from '../../../components/approval-actions'
+import { DateField } from '@/components/date-field'
 /**
  * The field-ticket flyout — the standard transaction drawer: configurable
  * header form (project → derives customer/PO/period), then the ticket's own
@@ -901,7 +902,7 @@ export function FieldTicketDrawer(props: FieldTicketDrawerProps) {
           <>
             <Label id={labelId} htmlFor={controlId}>{label || tCommon('labels.date')}</Label>
             {isEditable ? (
-              <Input id={controlId} aria-labelledby={labelId} type="date" value={documentDate} onChange={(e) => markHeader(setDocumentDate)(e.target.value)} />
+              <DateField id={controlId} aria-labelledby={labelId} value={documentDate} onChange={(value) => markHeader(setDocumentDate)(value)} />
             ) : (
               <p className="text-sm">{ticket.documentDate}</p>
             )}

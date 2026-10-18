@@ -15,6 +15,7 @@ import { useViewerFormat } from '../../../../lib/viewer-format'
 import { formatExactPercent } from '../../../../lib/format'
 import { equipmentRoiPercent } from '../../../../lib/equipment-roi'
 import { useDirtyClose } from '../../../../lib/use-dirty-close'
+import { DateField } from '@/components/date-field'
 type Opt = { id: string; name: string; code?: string | null; number?: string | null };
 
 // Every stable refusal code POST /api/equipment can emit. The
@@ -276,6 +277,7 @@ export function EquipmentDrawer({ payload, items, assets, books, subsidiaries, c
   }
   const editable = mode === 'edit' && canManage && !busy
   const input = (label: string, value: string, set: (v:string)=>void, props = {}) => <div className="space-y-1.5"><Label>{label}</Label>{editable ? <Input value={value} onChange={(ev) => set(ev.target.value)} {...props}/> : <p className="text-sm">{value || '—'}</p>}</div>
+  const dateInput = (label: string, value: string, set: (v:string)=>void) => <div className="space-y-1.5"><Label>{label}</Label>{editable ? <DateField aria-label={label} value={value} onChange={set}/> : <p className="text-sm">{value || '—'}</p>}</div>
   const roi = equipmentRoiPercent(m.billed_revenue, m.recovery, m.direct_costs, m.depreciation, e.purchase_price)
   const utilization = Number(e.capacity_quantity) > 0 ? Math.min(100, Number(m.usage) / Number(e.capacity_quantity) * 100) : 0
   return <UrlDrawer open closeHref={closeHref} beforeClose={closeGuard.beforeClose} size="2xl" title={<span className="flex items-center gap-2">{name || t('new')}<Badge variant={status === 'active' ? 'success' : 'secondary'}>{t(`statuses.${status}`)}</Badge></span>}
@@ -293,7 +295,7 @@ export function EquipmentDrawer({ payload, items, assets, books, subsidiaries, c
         {projectsEnabled ? (
           <div className="space-y-1.5"><Label>{t('rateBook')}</Label>{editable ? <SearchSelect value={rateBookId} onChange={setRateBookId} options={opts(books)} clearable sheetTitle={t('rateBook')} ariaLabel={t('rateBook')}/> : <p className="text-sm">{e.rate_book_name ?? t('defaultRateBook')}</p>}</div>
         ) : null}
-        {input(t('purchasePrice'), purchasePrice, setPurchasePrice, {inputMode:'decimal',className:'text-right tabular-nums'})}{input(t('acquiredOn'), acquiredOn, setAcquiredOn, {type:'date'})}{input(t('inServiceOn'), inServiceOn, setInServiceOn, {type:'date'})}
+        {input(t('purchasePrice'), purchasePrice, setPurchasePrice, {inputMode:'decimal',className:'text-right tabular-nums'})}{dateInput(t('acquiredOn'), acquiredOn, setAcquiredOn)}{dateInput(t('inServiceOn'), inServiceOn, setInServiceOn)}
         {input(t('capacityQuantity'), String(capacityQuantity), setCapacityQuantity, {inputMode:'decimal'})}{input(t('capacityUnit'), capacityUnit, setCapacityUnit)}
         <div className="space-y-1.5 sm:col-span-2 lg:col-span-3"><Label>{t('description')}</Label>{editable ? <Input value={description} onChange={(x)=>setDescription(x.target.value)}/> : <p className="text-sm">{description || '—'}</p>}</div>
       </section>

@@ -5,9 +5,10 @@ import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { History } from 'lucide-react'
-import { Button, Input, Label, Popover, Select, Textarea } from '@openbooks/ui'
+import { Button, Label, Popover, Select, Textarea } from '@openbooks/ui'
 import { useBusinessToday } from '../../../components/business-date-provider'
 import { readApiErrorMessage } from '../../../lib/api-error'
+import { DateField } from '../../../components/date-field'
 
 type EventKindKey = 'revalued' | 'impaired' | 'disposed' | 'written_off' | 'reversed' | 'unknown'
 type BlockReasonKey = 'already_reversed' | 'accounting_change' | 'entry_not_posted' | 'later_event' | 'no_reversal_workflow'
@@ -145,7 +146,7 @@ export function ReverseEventButton({ assetId }: { assetId: string }) {
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="rev-date">{t('reverseEvent.date')}</Label>
-              <Input id="rev-date" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
+              <DateField id="rev-date" value={date} onChange={(value) => setDate(value)} />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="rev-reason">{t('reverseEvent.reason')}</Label>

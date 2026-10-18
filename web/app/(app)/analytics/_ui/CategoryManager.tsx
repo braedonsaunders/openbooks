@@ -11,6 +11,7 @@ import { useBusinessToday } from '../../../../components/business-date-provider'
 import { useMoney } from '../../../../components/money-provider'
 import { readApiErrorMessage } from '../../../../lib/api-error'
 import { Panel } from './Panel'
+import { DateField } from '../../../../components/date-field'
 
 export interface CatOption { id: string; name: string }
 export interface AccountOption { id: string; number: string | null; name: string; type?: string }
@@ -420,7 +421,7 @@ export function CategoryManager({
                 </div>
                 <div>
                   <label className={labelCls}>{tForm('anchorDate')}</label>
-                  <input type="date" value={draft.anchorDate ?? ''} onChange={(e) => set({ anchorDate: e.target.value || undefined })} className={inputCls} />
+                  <DateField value={draft.anchorDate ?? ''} onChange={(value) => set({ anchorDate: value || undefined })} className={inputCls} />
                   <span className={helpCls}>{tForm('anchorDateHelp')}</span>
                 </div>
               </div>

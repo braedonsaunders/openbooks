@@ -53,6 +53,7 @@ import { ActionAlert } from '@braedonsaunders/appkit-errors/react'
 import { useMoney } from '@/components/money-provider'
 import { useAppAction } from '@/lib/use-app-action'
 import { ReadOnlyValue } from '../../../components/read-only-value'
+import { DateField } from '@/components/date-field'
 
 interface PartyOpt {
   id: string
@@ -624,14 +625,14 @@ export function ProjectDrawer({
         return (
           <>
             <Label>{lbl || t('labels.startDate')}</Label>
-            {editable ? <Input type="date" value={startsOn} onChange={(e) => setStartsOn(e.target.value)} /> : <ReadOnlyValue value={startsOn} />}
+            {editable ? <DateField value={startsOn} onChange={(value) => setStartsOn(value)} /> : <ReadOnlyValue value={startsOn} />}
           </>
         )
       case 'ends_on':
         return (
           <>
             <Label>{lbl || t('labels.endDate')}</Label>
-            {editable ? <Input type="date" value={endsOn} onChange={(e) => setEndsOn(e.target.value)} /> : <ReadOnlyValue value={endsOn} />}
+            {editable ? <DateField value={endsOn} onChange={(value) => setEndsOn(value)} /> : <ReadOnlyValue value={endsOn} />}
           </>
         )
       case 'site_jurisdiction': {

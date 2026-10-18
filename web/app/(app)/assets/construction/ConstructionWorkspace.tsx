@@ -13,6 +13,7 @@ import { useAppAction } from '@/lib/use-app-action'
 import { postJson } from '../depth-client'
 import type { CipRecordRow, ConstructionData } from './_data'
 import { CipDrawer } from './CipDrawer'
+import { DateField } from '@/components/date-field'
 
 /** Open a construction-in-progress record on its CIP account. */
 export function NewCipButton({ data }: { data: ConstructionData }) {
@@ -58,7 +59,7 @@ export function NewCipButton({ data }: { data: ConstructionData }) {
             {data.categories.map((category) => <option key={category.id} value={category.id}>{category.name}</option>)}
           </Select>
         </div>
-        <div className="space-y-1.5"><Label htmlFor="cip-started">{t('construction.fields.startedOn')}</Label><Input id="cip-started" type="date" value={startedOn} onChange={(event) => setStartedOn(event.target.value)} /></div>
+        <div className="space-y-1.5"><Label htmlFor="cip-started">{t('construction.fields.startedOn')}</Label><DateField id="cip-started" value={startedOn} onChange={(value) => setStartedOn(value)} /></div>
         <Button className="w-full" disabled={action.busy || !name.trim() || !subsidiaryId || !categoryId || !cipAccountId} onClick={create}>{t('construction.create')}</Button>
       </div>
     </Popover>
@@ -111,7 +112,7 @@ export function ConstructionWorkspace({
         <div className="space-y-3">
           <form className="flex items-end gap-2" action="/assets/construction">
             <input type="hidden" name="tab" value="reconciliation" />
-            <div className="space-y-1.5"><Label htmlFor="recon-as-of">{t('construction.fields.asOf')}</Label><Input id="recon-as-of" name="asOf" type="date" defaultValue={data.asOf} /></div>
+            <div className="space-y-1.5"><Label htmlFor="recon-as-of">{t('construction.fields.asOf')}</Label><DateField id="recon-as-of" name="asOf" defaultValue={data.asOf} /></div>
             <Button type="submit" variant="outline">{t('construction.refresh')}</Button>
           </form>
           <PagedTable
