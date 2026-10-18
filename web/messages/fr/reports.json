@@ -738,15 +738,15 @@
     "entities": {
       "equity_compensation_run_lines": {
         "label": "Lignes des calculs de rémunération en actions",
-        "description": "Chaque ligne comptabilisée d’un calcul de rémunération en actions : l’attribution, son coût cumulé à la date du calcul, le montant comptabilisé par les calculs précédents et la variation comptabilisée par ce calcul."
+        "description": "Lignes de rémunération en actions comptabilisées : coût constaté à ce jour et variation par calcul."
       },
       "equity_securities_register": {
         "label": "Registre des titres de capital",
-        "description": "Chaque certificat d’actions, option, RSU, bon de souscription, SAFE et billet convertible tel qu’émis : détenteur, catégorie, plan, tour de financement, quantité, prix et contrepartie."
+        "description": "Chaque certificat d’actions, attribution, SAFE et obligation tels qu’émis, avec détenteur, catégorie et conditions."
       },
       "equity_cap_table_positions": {
         "label": "Mouvements des positions de la table de capitalisation",
-        "description": "Chaque variation de la position d’un certificat d’actions, d’une attribution ou d’une réserve de plan : actions en circulation retraitées des divisions et ces mêmes actions converties en actions ordinaires. Cumulés jusqu’à une date, les mouvements forment la table de capitalisation à cette date."
+        "description": "Chaque variation d’une position de certificat, d’attribution ou de réserve, retraitée et convertie."
       },
       "ledger_lines": {
         "label": "Lignes du grand livre",
@@ -3344,7 +3344,7 @@
     },
     "equity-cap-table": {
       "name": "Table de capitalisation à une date",
-      "description": "Actions en circulation et entièrement diluées par catégorie d’actions et détenteur, avec les attributions et les réserves de plans, d’après le registre des positions à la date asOf."
+      "description": "Actions en circulation et entièrement diluées par catégorie et détenteur à la date choisie."
     },
     "ap-aging-by-vendor": {
       "name": "Âge des comptes fournisseurs par fournisseur",

@@ -131,6 +131,11 @@ export type ReportCustomQuery = {
   entity: string
   /** Explicit period ownership; null keeps a current-state report unfiltered. */
   periodField?: string | null
+  /**
+   * The date a point-in-time entity (one declaring `asOfField`) is read as
+   * of. Absent, the run's business date. Refused on any other entity.
+   */
+  asOf?: string
   /** 'rows' (default) = detail rows; 'summarize' = GROUP BY breakouts + measures. */
   mode?: 'rows' | 'summarize'
   columns: string[]

@@ -184,6 +184,28 @@ export function compileExpenseRowScope(
   return `(${notExpense} OR ${employee.expr} = ${bind(reach.partyId)}::uuid)`
 }
 
+/**
+ * The point-in-time bound of an entity declaring `asOfField`: its rows are
+ * movements, so the plan's as-of date (the run's business date when the plan
+ * names none) bounds the field from above and nothing bounds it from below.
+ * A point-in-time entity compiled without any as-of date refuses.
+ */
+export function compileAsOfBound(
+  entity: ReportEntity,
+  q: Pick<ReportCustomQuery, 'asOf'>,
+  opts: Pick<CompileCustomQueryOpts, 'asOf'>,
+  bind: (value: unknown) => string,
+): string | null {
+  if (!entity.asOfField) return null
+  const column = entityColumn(entity, entity.asOfField)
+  if (!column || column.kind !== 'date') throw new Error(`Report entity ${entity.key} declares an as-of field it does not carry as a date`)
+  const asOf = q.asOf ?? opts.asOf
+  if (typeof asOf !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(asOf)) {
+    throw new Error(`Report entity ${entity.key} is read as of a date, and the run supplied none`)
+  }
+  return `${column.expr} <= ${bind(asOf)}::date`
+}
+
 /** Shared server-owned accounting-book policy for reports. Only entities
  *  that declare `bookScope` are clampable; book-independent sources (no
  *  book_id by design) ignore any allowlist so transaction balances stay
@@ -614,9 +636,9 @@ export function resolveNormalization(entity: ReportEntity, counts: Normalization
 }
 
 /** The entity's implicit predicates: org scope + subsidiary/book allowlists
- *  + optional baseFilter. Lifting the book clamp (null allowlist) never
- *  touches the org or subsidiary fences. */
-function implicitWhere(entity: ReportEntity, orgId: string, params: SqlParams, opts: CompileCustomQueryOpts): string[] {
+ *  + optional baseFilter + a point-in-time entity's as-of bound. Lifting the
+ *  book clamp (null allowlist) never touches the org or subsidiary fences. */
+function implicitWhere(entity: ReportEntity, q: ReportCustomQuery, orgId: string, params: SqlParams, opts: CompileCustomQueryOpts): string[] {
   const parts = [`${entity.orgColumn} = ${params.add(orgId)}`]
   const subsidiary = compileSubsidiaryScope(entity, opts.allowedSubsidiaryIds, (value) => params.add(value))
   if (subsidiary) parts.push(subsidiary)
@@ -628,6 +650,8 @@ function implicitWhere(entity: ReportEntity, orgId: string, params: SqlParams, o
     const base = compileRuleGroup(entity, entity.baseFilter, params, opts)
     if (base) parts.push(base)
   }
+  const asOf = compileAsOfBound(entity, q, opts, (value) => params.add(value))
+  if (asOf) parts.push(asOf)
   return parts
 }
 
@@ -645,7 +669,7 @@ function compileRows(
   }
 
   const params = new SqlParams()
-  const whereParts = implicitWhere(entity, orgId, params, opts)
+  const whereParts = implicitWhere(entity, q, orgId, params, opts)
   const from = bindReportFromAsOf(entity.from, opts.asOf, (value) => params.add(value))
   const countFrom = from.replace(/\r?\n/g, ' ')
   const filters = compileCustomFilters(entity, q, params, opts)
@@ -890,7 +914,7 @@ function compileSummarize(
 
   const startMonth = opts.fiscalStartMonth && opts.fiscalStartMonth >= 1 && opts.fiscalStartMonth <= 12 ? opts.fiscalStartMonth : 1
   const params = new SqlParams()
-  const whereParts = implicitWhere(entity, orgId, params, opts)
+  const whereParts = implicitWhere(entity, q, orgId, params, opts)
   const from = bindReportFromAsOf(entity.from, opts.asOf, (value) => params.add(value))
   const filters = compileCustomFilters(entity, q, params, opts)
   if (filters) whereParts.push(`(${filters})`)

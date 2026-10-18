@@ -182,6 +182,7 @@
     "./pos/cart": "./src/pos/cart.ts",
     "./tax-returns": "./src/tax-returns/public.ts",
     "./payroll/compensation-patterns": "./src/payroll/compensation-package-pattern.ts",
+    "./testing/equity-world": "./src/testing/equity-world.ts",
     "./testing/hrm": "./src/testing/public-hrm.ts",
     "./platform/time-zone": "./src/platform/time-zone.ts",
     "./payroll/business-calendars": "./src/payroll/business-calendars.ts",

@@ -294,7 +294,8 @@ export async function loadEquity(sp: Record<string, string | string[] | undefine
       hasAccountPolicy: capView.hasAccountPolicy,
       accountsSetupHref: '/admin/setup/equity-account-policies',
       reportHref: await reportHref(orgId, 'equity-securities-register'),
-      asOfReportHref: await reportHref(orgId, 'equity-cap-table', { asOf }),
+      // The report's as-of control, set to this page's date.
+      asOfReportHref: await reportHref(orgId, 'equity-cap-table', { period: 'custom', from: asOf, to: asOf }),
     }
   }
   if (view === 'securities') {

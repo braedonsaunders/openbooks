@@ -738,15 +738,15 @@
     "entities": {
       "equity_compensation_run_lines": {
         "label": "Stock compensation run lines",
-        "description": "Every posted stock compensation run line: the award, its cumulative cost through the run date, the amount earlier runs posted and the change this run posted."
+        "description": "Posted stock compensation run lines: cost recognized to date and each run's change."
       },
       "equity_securities_register": {
         "label": "Equity securities register",
-        "description": "Every share certificate, option, RSU, warrant, SAFE and convertible note as issued: holder, class, plan, round, quantity, price and consideration."
+        "description": "Every share certificate, award, SAFE and note as issued, with holder, class and terms."
       },
       "equity_cap_table_positions": {
         "label": "Cap table position movements",
-        "description": "Every change of a share certificate, award or plan pool position: outstanding shares restated through splits and the same shares as converted into common. Summed through a date, the movements are the cap table on that date."
+        "description": "Each change of a certificate, award or pool position, split-restated and as converted."
       },
       "ledger_lines": {
         "label": "Ledger lines",
@@ -3364,7 +3364,7 @@
     },
     "equity-cap-table": {
       "name": "Cap table as of a date",
-      "description": "Outstanding and fully diluted shares by share class and holder, with awards and plan pools, from the position ledger as of the asOf date."
+      "description": "Outstanding and fully diluted shares by class and holder on the chosen date."
     },
     "ap-aging-by-vendor": {
       "name": "AP aging by vendor",

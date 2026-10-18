@@ -153,6 +153,10 @@ export const PERIOD_PRESETS: PeriodPreset[] = [
 ]
 
 export const PERIOD_PRESET_IDS = PERIOD_PRESETS.map((p) => p.id)
+/** The presets a point-in-time report offers: single days, then a custom date. */
+export const POINT_IN_TIME_PERIOD_PRESETS: readonly string[] = [...PERIOD_PRESETS.filter((p) => p.pointInTime).map((p) => p.id), 'custom']
+/** A point-in-time report with no date chosen reads as of the business day. */
+export const POINT_IN_TIME_DEFAULT_PERIOD_PRESET = 'today'
 export const DEFAULT_PERIOD_PRESET = 'this_fiscal_year'
 /**
  * Default window for point-in-time statements (balance sheet, trial

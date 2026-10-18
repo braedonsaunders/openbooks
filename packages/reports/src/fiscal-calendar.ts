@@ -47,6 +47,21 @@ function parts(dateIso: string): [number, number, number] {
 }
 
 /** Last calendar day of month `m` (1-12) in year `y`. */
+/** A literal YYYY-MM-DD civil date that exists on the calendar. */
+export function isCalendarDate(value: string): boolean {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)
+  if (!match) return false
+  const year = Number(match[1])
+  const month = Number(match[2])
+  const day = Number(match[3])
+  // utcCivilDate keeps literal years 0001-0099 that Date.UTC would remap onto
+  // 1900-1999 (an 0096 filter value used to fail validation as "not a date").
+  const date = utcCivilDate(year, month - 1, day)
+  return date.getUTCFullYear() === year
+    && date.getUTCMonth() === month - 1
+    && date.getUTCDate() === day
+}
+
 export function lastDayOfMonth(y: number, m: number): number {
   // Month arg is 0-based, so month `m` day 0 == last day of month m.
   return utcCivilDate(y, m, 0).getUTCDate()

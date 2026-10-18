@@ -4,6 +4,7 @@
 // CRUD routes and the run/preview route.
 
 import { REPORT_ENTITY_MAP, entityColumn, type ReportEntity } from './entities'
+import { isCalendarDate } from './fiscal-calendar'
 import { isMoneyBlendingMeasure, normalizeReportLimit } from './custom-query'
 import {
   REPORT_AGG_FNS,
@@ -223,6 +224,14 @@ export function validateCustomQuery(
   if (q.periodField !== undefined && q.periodField !== null &&
       (typeof q.periodField !== 'string' || entityColumn(entityMeta, q.periodField)?.kind !== 'date')) {
     throw new ReportQueryValidationError('The report period field must name a date column, or be null for a current-state report')
+  }
+  if (q.asOf !== undefined && q.asOf !== null) {
+    if (!entityMeta.asOfField) {
+      throw new ReportQueryValidationError(`${entityMeta.label} is not read as of a date; remove the as-of date from the report`)
+    }
+    if (typeof q.asOf !== 'string' || !isCalendarDate(q.asOf)) {
+      throw new ReportQueryValidationError('The report as-of date must be a calendar date (YYYY-MM-DD)')
+    }
   }
 
   const mode: 'rows' | 'summarize' = q.mode === 'summarize' ? 'summarize' : 'rows'
@@ -470,6 +479,7 @@ export function validateCustomQuery(
   return {
     entity,
     ...(q.periodField !== undefined ? { periodField: q.periodField as string | null } : {}),
+    ...(typeof q.asOf === 'string' ? { asOf: q.asOf } : {}),
     mode,
     columns,
     breakouts,

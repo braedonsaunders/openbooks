@@ -243,6 +243,12 @@ export type ReportEntity = {
    *  out. Event-history sources such as lot recall must not acquire a fiscal
    *  window merely because they expose an expiry date. */
   defaultPeriodField?: string | null
+  /** Point-in-time sources: the date column of rows that are movements, whose
+   *  sum through a date is a position on that date. Every execution bounds
+   *  the column from above by the plan's `asOf` (the run's business date when
+   *  the plan names none) and never from below, and the report viewer offers
+   *  the point-in-time as-of control instead of a period window on it. */
+  asOfField?: string
   /** Rows-mode page policy. Absence means this entity is intentionally run as
    *  one bounded result; present means callers may request successive pages
    *  without applying the saved query's legacy 10,000-row materialization cap. */

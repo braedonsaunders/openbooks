@@ -20,7 +20,7 @@ import { FIXED_ASSET_REPORT_ENTITIES } from './fixed-asset-entities'
 import { BILLING_IMPORT_REPORT_ENTITIES } from './billing-import-entities'
 import { DEMAND_REPORT_ENTITIES } from './demand-entities'
 import { defaultRowsQuery } from './custom-query'
-import { utcCivilDate } from './fiscal-calendar'
+import { isCalendarDate } from './fiscal-calendar'
 import { BENEFITS_REPORT_ENTITIES } from './benefits-entities'
 import { RECOVERY_REPORT_ENTITIES } from './recovery-entities'
 import { SHIPPING_REPORT_ENTITIES } from './shipping-entities'
@@ -456,13 +456,12 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
     },
   },
   {
-    // The as-of date is the asOf control: movements effective on or before
-    // it, summed per class, position and holder, are the cap table on that
-    // date. Without one, every recorded movement counts.
+    // The position ledger is a point-in-time source: the viewer's as-of date
+    // (today when none is chosen) bounds the movements summed per class,
+    // position and holder, and those sums are the cap table on that date.
     slug: 'equity-cap-table',
     name: 'Cap table as of a date',
-    description: 'Outstanding and fully diluted shares by share class and holder, with awards and plan pools, from the position ledger as of the asOf date.',
-    urlFilters: [{ param: 'asOf', field: 'effective_on', op: 'lte', valueKind: 'date' }],
+    description: 'Outstanding and fully diluted shares by class and holder on the chosen date.',
     query: {
       entity: 'equity_cap_table_positions', mode: 'summarize', columns: [],
       breakouts: [
@@ -477,13 +476,13 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
         { fn: 'sum', column: 'pool_available', label: 'Pool available' },
         { fn: 'sum', column: 'fully_diluted', label: 'Fully diluted' },
       ],
-      filters: null, groupBy: null, periodField: null, limit: 1000,
+      filters: null, groupBy: null, limit: 1000,
     },
   },
   {
     slug: 'prepaid-expense-waterfall',
     name: 'Prepaid expense waterfall',
-    description: 'Amortized and scheduled prepaid and deferred expense by month, deferral account and currency.',
+    description: 'Amortized and scheduled prepaid expense by month, deferral account and currency.',
     query: {
       entity: 'prepaid_amortization_plan', mode: 'summarize', columns: [],
       breakouts: [
@@ -501,7 +500,7 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
   {
     slug: 'prepaid-expense-reconciliation',
     name: 'Prepaid expense reconciliation',
-    description: 'Deferral account balances in the general ledger against the unamortized balance of their schedules, by account, subsidiary, book and currency.',
+    description: 'Deferral ledger balances against unamortized schedule balances, by account and book.',
     query: {
       entity: 'prepaid_amortization_reconciliation', mode: 'summarize', columns: [],
       breakouts: [
@@ -610,7 +609,7 @@ export const BUILT_IN_REPORT_DEFINITIONS: BuiltInReportDefinition[] = [
   },
   {
     slug: 'register-sales-by-register-and-cashier',
-    name: 'Register sales by register and cashier',
+    name: 'Sales by register and cashier',
     description: 'Posted register sales, refunds and net sales by register and cashier.',
     query: {
       entity: 'pos_transactions',
@@ -1353,20 +1352,6 @@ function readUrlValue(values: BuiltInReportUrlValues, param: string): string | n
   return typeof raw === 'string' ? raw : null
 }
 
-function isIsoDate(value: string): boolean {
-  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value)
-  if (!match) return false
-  const year = Number(match[1])
-  const month = Number(match[2])
-  const day = Number(match[3])
-  // utcCivilDate keeps literal years 0001-0099 that Date.UTC would remap onto
-  // 1900-1999 (an 0096 filter value used to fail validation as "not a date").
-  const date = utcCivilDate(year, month - 1, day)
-  return date.getUTCFullYear() === year
-    && date.getUTCMonth() === month - 1
-    && date.getUTCDate() === day
-}
-
 /** Apply a built-in's catalog-authored URL controls to its query. Screen,
  *  export, and saved-view paths call this same pure helper, so none can drift
  *  onto a different effective filter set. Invalid active values fail closed;
@@ -1412,7 +1397,7 @@ export function applyBuiltInUrlFilters(
     if (binding.valueKind === 'uuid' && !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(value)) {
       throw new Error(`Invalid report parameter: ${binding.param}`)
     }
-    if (binding.valueKind === 'date' && !isIsoDate(value)) {
+    if (binding.valueKind === 'date' && !isCalendarDate(value)) {
       throw new Error(`Invalid report parameter: ${binding.param}`)
     }
     rules.push({ field: binding.field, op: binding.op, value })

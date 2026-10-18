@@ -738,15 +738,15 @@
     "entities": {
       "equity_compensation_run_lines": {
         "label": "Positionen der Läufe für aktienbasierte Vergütung",
-        "description": "Jede gebuchte Position eines Laufs für aktienbasierte Vergütung: die Zuteilung, ihr kumulierter Aufwand bis zum Laufdatum, der von früheren Läufen gebuchte Betrag und die in diesem Lauf gebuchte Änderung."
+        "description": "Gebuchte Zeilen der aktienbasierten Vergütung: bisher erfasste Kosten und die Änderung je Lauf."
       },
       "equity_securities_register": {
         "label": "Wertpapierregister Eigenkapital",
-        "description": "Jedes Aktienzertifikat, jede Option, RSU, jeder Optionsschein, SAFE und jedes Wandeldarlehen wie ausgegeben: Inhaber, Gattung, Plan, Finanzierungsrunde, Menge, Preis und Gegenleistung."
+        "description": "Jedes Aktienzertifikat, jede Zuteilung, jeder SAFE und jedes Wandeldarlehen wie ausgegeben, mit Inhaber, Gattung und Bedingungen."
       },
       "equity_cap_table_positions": {
         "label": "Bewegungen der Cap-Table-Positionen",
-        "description": "Jede Änderung der Position eines Aktienzertifikats, einer Zuteilung oder eines Planpools: ausstehende Anteile, über Aktiensplits angepasst, und dieselben Anteile umgerechnet in Stammaktien. Bis zu einem Datum summiert, ergeben die Bewegungen die Cap Table zu diesem Datum."
+        "description": "Jede Änderung einer Zertifikats-, Zuteilungs- oder Poolposition, split-bereinigt und umgerechnet."
       },
       "ledger_lines": {
         "label": "Hauptbuchzeilen",
@@ -3364,7 +3364,7 @@
     },
     "equity-cap-table": {
       "name": "Cap Table zu einem Stichtag",
-      "description": "Ausstehende und voll verwässerte Anteile nach Aktiengattung und Inhaber, mit Zuteilungen und Planpools, aus dem Positionsjournal zum asOf-Datum."
+      "description": "Ausstehende und voll verwässerte Anteile nach Gattung und Inhaber zum gewählten Stichtag."
     },
     "ap-aging-by-vendor": {
       "name": "Fälligkeitsanalyse Verbindlichkeiten nach Lieferant",

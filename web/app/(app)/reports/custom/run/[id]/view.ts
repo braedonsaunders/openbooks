@@ -17,13 +17,15 @@ import {
 import {
   applyBuiltInUrlFilters,
   BUILT_IN_REPORT_DEFINITION_MAP,
+  POINT_IN_TIME_DEFAULT_PERIOD_PRESET,
+  POINT_IN_TIME_PERIOD_PRESETS,
   type ReportRunResult,
 } from '@openbooks/reports'
 import { requirePermission } from '../../../../../../lib/authz'
 import { canRunReportEntity, requireReportEntityFeature } from '../../../../../../lib/report-authz'
 import { clamp, isUuid, pickString } from '../../../../../../lib/list-params'
 import {
-  applyPeriodOverride, executeReport, executeReportPage, loadReportDefinition, reportPeriodField,
+  applyPeriodOverride, executeReport, executeReportPage, loadReportDefinition, reportAsOfField, reportPeriodField, resolveReportAsOf,
 } from '../../../../../../lib/custom-reports'
 import { statementPageHref } from '../../../../../../lib/report-run'
 import { orgBranding } from '../../../../../../lib/report-pdf'
@@ -51,10 +53,12 @@ import { statementReportSpec } from '@/lib/reports/statement-report-spec'
  *
  * 1. The filter bar's `period` control is data-driven (`Boolean(periodField)`
  *    — a persisted-plan property, not a URL value), and the spec's controls
- *    are static booleans by design. So the spec places TWO filter bars with
- *    complementary loader flags (`hasPeriodField` / `noPeriodField`), the
- *    same treatment the budget page gives its sections control. Both bars
- *    carry the same actions; only the flag differs.
+ *    are static booleans by design. So the spec places THREE filter bars with
+ *    complementary loader flags (`hasPeriodField` / `hasAsOfField` /
+ *    `noPeriodField`), the same treatment the budget page gives its sections
+ *    control. A point-in-time source (an entity declaring `asOfField`) gets
+ *    the balance sheet's as-of control: one date, the point-in-time presets,
+ *    today by default. All bars carry the same actions; only the flag differs.
  * 2. The extra period rows — pay periods sitting above the fiscal presets in
  *    their own optgroup — bind through the filter bar's `extraPeriods`,
  *    which the language gained for this page.
@@ -70,6 +74,10 @@ export interface ReportRunData {
   backHref: string
   backLabel: string
   hasPeriodField: boolean
+  /** The report is read as of one date (a point-in-time source). */
+  hasAsOfField: boolean
+  /** The presets the as-of control offers: single days and a custom date. */
+  asOfPeriodPresets: string[]
   noPeriodField: boolean
   /** Payroll pay periods offered atop the fiscal presets; undefined otherwise. */
   extraPeriods: ExtraPeriodOption[] | undefined
@@ -152,6 +160,7 @@ export async function loadReportRun(
   // feeding those back into period detection would replace the user's cutoff
   // with an implicit fiscal window.
   const periodField = reportPeriodField(definition.query, entityMap)
+  const asOfField = reportAsOfField(definition.query, entityMap)
   let query = definition.query
   let periodPhrase: string | undefined
   let periodLabel: string | undefined
@@ -168,6 +177,14 @@ export async function loadReportRun(
       query = applyPeriodOverride(query, periodField, { from: period.from, to: period.to })
       periodPhrase = t('pnl.dateRange', { from: period.from, to: period.to })
       periodLabel = period.label
+    }
+    // A point-in-time source reads as of the as-of control's date, today
+    // when none is chosen; the cumulative movements are bounded by it alone.
+    if (asOfField && !periodField) {
+      const asOf = await resolveReportAsOf(sp)
+      query = { ...query, asOf: asOf.to }
+      periodPhrase = t('balanceSheet.asOf', { date: asOf.to })
+      periodLabel = asOf.label
     }
   } catch (err) {
     queryError = err instanceof Error ? err : new Error('Invalid report filters')
@@ -238,7 +255,9 @@ export async function loadReportRun(
     backHref: '/reports',
     backLabel: t('hub.title'),
     hasPeriodField: Boolean(periodField),
-    noPeriodField: !periodField,
+    hasAsOfField: !periodField && Boolean(asOfField),
+    asOfPeriodPresets: [...POINT_IN_TIME_PERIOD_PRESETS],
+    noPeriodField: !periodField && !asOfField,
     extraPeriods,
     canCreate,
     editHref: `/reports/custom/builder/${definition.id}`,
@@ -286,6 +305,14 @@ export function reportRunSpec(data: ReportRunData): PageSpec {
       {
         controls: { period: true },
         options: { extraPeriods: f('extraPeriods'), when: f('hasPeriodField') },
+      },
+      {
+        controls: { period: true, asOf: true },
+        options: {
+          defaultPeriod: POINT_IN_TIME_DEFAULT_PERIOD_PRESET,
+          periodPresets: f('asOfPeriodPresets'),
+          when: f('hasAsOfField'),
+        },
       },
       {
         controls: { period: false },

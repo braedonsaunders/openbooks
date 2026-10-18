@@ -6,6 +6,7 @@ import { canRunReportEntity } from './report-authz'
 import { sql } from 'drizzle-orm'
 import { db, pool } from '@openbooks/engine/platform/db'
 import {
+  POINT_IN_TIME_DEFAULT_PERIOD_PRESET,
   REPORT_ENTITY_MAP,
   customQueryReferencesBook,
   ReportQueryValidationError,
@@ -35,6 +36,7 @@ import {
 import { exportSummaryFooterRows } from './report-pdf'
 import { reportCsvOptions, reportRunLabels, type PagedExportLabels } from './report-labels'
 import { resolvePeriod } from './periods'
+import { parseReportQuery } from './report-filters'
 import { fiscalStartMonth } from './fiscal'
 import { isFeatureEnabled } from './features'
 import { reportEntityFeatureKey } from './report-authz'
@@ -67,7 +69,9 @@ export const TEMPORAL_OPS: ReadonlySet<string> = new Set([
  * recall must remain complete history rather than silently becoming fiscal).
  */
 export function reportPeriodField(query: ReportCustomQuery, entityMap: Record<string, ReportEntity> = REPORT_ENTITY_MAP): string | null {
-  if (query.periodField !== undefined) return query.periodField
+  // A point-in-time field is read as of a date, never through a window.
+  const asOfField = entityMap[query.entity]?.asOfField ?? null
+  if (query.periodField !== undefined) return query.periodField === asOfField ? null : query.periodField
   const entity = entityMap[query.entity]
   if (!entity) return null
   const dateColumns = new Set(
@@ -81,17 +85,32 @@ export function reportPeriodField(query: ReportCustomQuery, entityMap: Record<st
         walk(r as ReportRuleGroup)
       } else {
         const leaf = r as ReportRule
-        if (dateColumns.has(leaf.field) && TEMPORAL_OPS.has(leaf.op)) found = leaf.field
+        if (dateColumns.has(leaf.field) && leaf.field !== asOfField && TEMPORAL_OPS.has(leaf.op)) found = leaf.field
       }
     }
   }
   walk(query.filters ?? undefined)
   if (found) return found
-  if (entity.defaultPeriodField === null) return null
+  if (asOfField || entity.defaultPeriodField === null) return null
   if (entity.defaultPeriodField !== undefined) {
     return dateColumns.has(entity.defaultPeriodField) ? entity.defaultPeriodField : null
   }
   return entity.columns.find((c) => c.kind === 'date')?.key ?? null
+}
+
+/** The point-in-time field a report is read as of, or null for a period report. */
+export function reportAsOfField(query: ReportCustomQuery, entityMap: Record<string, ReportEntity> = REPORT_ENTITY_MAP): string | null {
+  return entityMap[query.entity]?.asOfField ?? null
+}
+
+/**
+ * The viewer's point-in-time selection for a report read as of a date: a
+ * single-day preset or a custom date, today when nothing is chosen. The
+ * report is read as of the selection's end.
+ */
+export async function resolveReportAsOf(sp: Parameters<typeof parseReportQuery>[0]): Promise<Awaited<ReturnType<typeof resolvePeriod>>> {
+  const q = parseReportQuery(sp, { defaultPeriod: POINT_IN_TIME_DEFAULT_PERIOD_PRESET })
+  return resolvePeriod(q.period, { customFrom: q.from ?? q.to, customTo: q.to ?? q.from })
 }
 
 /**

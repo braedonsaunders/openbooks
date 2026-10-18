@@ -3,7 +3,6 @@ import test from "node:test";
 import {
   BUILT_IN_REPORT_DEFINITION_MAP,
   REPORT_ENTITY_MAP,
-  applyBuiltInUrlFilters,
   compileCustomQuery,
   runCustomQuery,
   validateCustomQuery,
@@ -38,8 +37,9 @@ test("the Reports-hub cap table as of a date equals the replayed cap table by cl
     assert.ok(definition, "the built-in cap table report is registered");
     const entity = REPORT_ENTITY_MAP.equity_cap_table_positions!;
     for (const asOf of scenario.checkDates) {
-      const query = validateCustomQuery(applyBuiltInUrlFilters(definition, { asOf }));
-      const compiled = compileCustomQuery(entity, query, w.org.orgId, { asOf });
+      // The as-of control's date is the plan's; the run's own business date never widens it.
+      const query = validateCustomQuery({ ...definition.query, asOf });
+      const compiled = compileCustomQuery(entity, query, w.org.orgId, { asOf: "2099-12-31" });
       const rows = await withOrgContext(w.org.orgId, async () => (await pool.query(compiled.text, compiled.values)).rows as Record<string, unknown>[]);
       const byClass = new Map<string, Totals>();
       const byHolder = new Map<string, Totals>();
@@ -74,7 +74,7 @@ test("the Reports-hub cap table as of a date equals the replayed cap table by cl
       assert.equal(total.pool, BigInt(view.table.totals.poolAvailable), `pool on ${asOf}`);
     }
     // The shaped report path runs the same plan.
-    const shaped = await withOrgContext(w.org.orgId, () => runCustomQuery(pool, applyBuiltInUrlFilters(definition, { asOf: "2026-09-15" }), {
+    const shaped = await withOrgContext(w.org.orgId, () => runCustomQuery(pool, { ...definition.query, asOf: "2026-09-15" }, {
       orgId: w.org.orgId, entityMap: REPORT_ENTITY_MAP, asOf: "2026-09-15",
     }));
     assert.ok(shaped.rowCount > 0);

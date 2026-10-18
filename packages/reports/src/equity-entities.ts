@@ -25,7 +25,7 @@ export const EQUITY_REPORT_ENTITIES: ReportEntity[] = [
     ...shared,
     key: 'equity_compensation_run_lines',
     label: 'Stock compensation run lines',
-    description: 'Every posted stock compensation run line: the award, its cumulative cost through the run date, the amount earlier runs posted and the change this run posted.',
+    description: "Posted stock compensation run lines: cost recognized to date and each run's change.",
     from: `equity_compensation_run_lines l
       join equity_compensation_runs r on r.org_id = l.org_id and r.id = l.run_id
       join equity_securities s on s.org_id = l.org_id and s.id = l.security_id
@@ -58,7 +58,7 @@ export const EQUITY_REPORT_ENTITIES: ReportEntity[] = [
     ...shared,
     key: 'equity_securities_register',
     label: 'Equity securities register',
-    description: 'Every share certificate, option, RSU, warrant, SAFE and convertible note as issued: holder, class, plan, round, quantity, price and consideration.',
+    description: "Every share certificate, award, SAFE and note as issued, with holder, class and terms.",
     from: `equity_securities s
       left join parties holder on holder.org_id = s.org_id and holder.id = s.holder_party_id
       left join equity_share_classes c on c.org_id = s.org_id and c.id = s.share_class_id
@@ -94,7 +94,7 @@ export const EQUITY_REPORT_ENTITIES: ReportEntity[] = [
     requiredPermission: shared.requiredPermission,
     key: 'equity_cap_table_positions',
     label: 'Cap table position movements',
-    description: 'Every change of a share certificate, award or plan pool position: outstanding shares restated through splits and the same shares as converted into common. Summed through a date, the movements are the cap table on that date.',
+    description: "Each change of a certificate, award or pool position, split-restated and as converted.",
     from: `equity_position_movements m
       left join equity_securities s on s.org_id = m.org_id and s.id = m.security_id
       left join equity_plans pl on pl.org_id = m.org_id and pl.id = m.plan_id
@@ -104,9 +104,9 @@ export const EQUITY_REPORT_ENTITIES: ReportEntity[] = [
     orgColumn: 'm.org_id',
     subsidiaryScope: { column: 'm.subsidiary_id' },
     timeKey: 'effective_on',
-    // Positions are cumulative: a fiscal window would drop the movements
-    // before it. The as-of date bounds the movements from above only.
-    defaultPeriodField: null,
+    // Positions are cumulative: the as-of date bounds the movements from
+    // above only, and no fiscal window ever bounds them from below.
+    asOfField: 'effective_on',
     columns: [
       { key: 'effective_on', label: 'Effective date', kind: 'date', expr: 'm.effective_on' },
       { key: 'share_class', label: 'Share class', kind: 'text', expr: 'c.code' },

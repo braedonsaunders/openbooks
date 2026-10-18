@@ -60,7 +60,9 @@ import {
   applyPeriodOverride,
   executeReportAllPages,
   mergeReportFilters,
+  reportAsOfField,
   reportPeriodField,
+  resolveReportAsOf,
   streamPagedReportCsv,
   streamPagedReportXlsx,
 } from './custom-reports'
@@ -736,10 +738,14 @@ async function planDefinitionQuery(
   if (periodField) {
     query = applyPeriodOverride(query, periodField, { from: ctx.period.from, to: ctx.period.to })
   }
+  // A point-in-time source reads as of the request's as-of date, today when
+  // none is chosen, exactly as the report screen does.
+  const asOf = !reportPeriodField(query, entityMap) && reportAsOfField(query, entityMap) ? await resolveReportAsOf(p) : null
+  if (asOf) query = { ...query, asOf: asOf.to }
   return {
     query,
     title: builtIn ? ctx.t(`builtIns.${row.slug}.name`) : row.name,
-    dateRangeLabel: periodField ? ctx.period.label ?? '' : '',
+    dateRangeLabel: periodField ? ctx.period.label ?? '' : asOf ? ctx.t('balanceSheet.asOf', { date: asOf.to }) : '',
   }
 }
 

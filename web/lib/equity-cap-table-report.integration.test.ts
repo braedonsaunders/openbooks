@@ -1,0 +1,75 @@
+import assert from 'node:assert/strict'
+import test from 'node:test'
+import type { Authz } from './authz.ts'
+
+// The report executor and its as-of resolution are server-only; they load
+// dynamically after the database-bypass hooks, like the other report suites.
+const { withOrgContext } = await import('@openbooks/engine/platform/db')
+const { businessToday } = await import('@openbooks/engine/platform/business-date/module')
+const { dropScratchOrgReporting } = await import('@openbooks/engine/testing/fixtures')
+const { seedPositionScenario, setupEquityWorld } = await import('@openbooks/engine/testing/equity-world')
+const { issueSecurity, loadCapTableView } = await import('@openbooks/engine/equity')
+const { BUILT_IN_REPORT_DEFINITION_MAP, addDays } = await import('@openbooks/reports')
+
+const DB = !!process.env.OPENBOOKS_DB_URL
+
+type Result = { groups: { columns: string[]; rows: (string | number | null | undefined)[][] }[] }
+
+/** Column totals of the summarized cap table, by measure label. */
+function totals(result: Result, labels: string[]): Record<string, bigint> {
+  const group = result.groups.find((candidate) => labels.every((label) => candidate.columns.includes(label)))
+  assert.ok(group, `the summary carries ${labels.join(', ')}`)
+  return Object.fromEntries(labels.map((label) => {
+    const index = group.columns.indexOf(label)
+    return [label, group.rows.reduce((sum, row) => sum + BigInt(String(row[index] ?? '0').replace(/[,\s]/g, '') || '0'), 0n)]
+  }))
+}
+
+test('the Reports-hub cap table with no date chosen reads as of today, not every recorded movement', { skip: !DB }, async () => {
+  const w = await setupEquityWorld()
+  try {
+    await seedPositionScenario(w)
+    const today = await businessToday(w.org.orgId)
+    const later = addDays(today, 1)
+    // A grant dated after today: it is history the cap table reaches only from its date.
+    await issueSecurity({
+      orgId: w.org.orgId, actorId: w.managerId, subsidiaryId: w.org.subsidiaryId, kind: 'rsu', holderPartyId: w.holderId, issueDate: later,
+      shareClassId: w.commonClassId, quantity: '7000', vestingStart: later, vestingMonths: 12, cliffMonths: 0, vestingFrequency: 'monthly',
+      valuation: { sharePrice: '1', attribution: 'straight_line' },
+    })
+    const { executeReport, resolveReportAsOf } = await import('./custom-reports.ts')
+    const { withReportAuthz } = await import('./report-execution-context.ts')
+    const reader: Authz = {
+      user: {
+        id: w.managerId, email: 'equity.reader@example.test', name: 'Equity Reader', roles: [], orgId: w.org.orgId, envKind: 'production',
+        productionOrgId: w.org.orgId, homeUserId: w.managerId, homeOrgId: w.org.orgId, isSuperAdmin: false,
+      },
+      permissions: new Set(['reports.read', 'equity.read']),
+      allowedSubsidiaryIds: null,
+    } as Authz
+    const definition = BUILT_IN_REPORT_DEFINITION_MAP['equity-cap-table']!
+    const run = (query: typeof definition.query) => withOrgContext(w.org.orgId, () => withReportAuthz(reader, () => executeReport(w.org.orgId, query, undefined, {}))) as Promise<Result>
+    const labels = ['Outstanding shares', 'Awards outstanding', 'Fully diluted']
+    const replay = async (asOf: string) => {
+      const view = await loadCapTableView({ orgId: w.org.orgId, actorId: w.managerId, subsidiaryId: w.org.subsidiaryId, asOf })
+      return { 'Outstanding shares': BigInt(view.table.totals.outstanding), 'Awards outstanding': BigInt(view.table.totals.awardsOutstanding), 'Fully diluted': BigInt(view.table.totals.fullyDiluted) }
+    }
+
+    // The run page with no as-of selection resolves the as-of control to today.
+    const selection = await withOrgContext(w.org.orgId, () => withReportAuthz(reader, () => resolveReportAsOf({})))
+    assert.equal(selection.to, today)
+    const hub = await run({ ...definition.query, asOf: selection.to })
+    const expectedToday = await replay(today)
+    assert.deepEqual(totals(hub, labels), expectedToday, 'the hub run equals the replayed cap table today')
+    // A stored plan with no as-of (a schedule, a dashboard) reads as of the business day too.
+    assert.deepEqual(totals(await run(definition.query), labels), expectedToday)
+    // A chosen later date reaches the later grant: the bound is the date alone.
+    const expectedLater = await replay(later)
+    assert.notDeepEqual(expectedLater, expectedToday, 'the later grant changes the cap table')
+    assert.deepEqual(totals(await run({ ...definition.query, asOf: later }), labels), expectedLater)
+    const custom = await withOrgContext(w.org.orgId, () => withReportAuthz(reader, () => resolveReportAsOf({ period: 'custom', from: later, to: later })))
+    assert.equal(custom.to, later)
+  } finally {
+    await dropScratchOrgReporting(w.org.orgId)
+  }
+})

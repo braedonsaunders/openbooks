@@ -738,15 +738,15 @@
     "entities": {
       "equity_compensation_run_lines": {
         "label": "股权激励计提明细",
-        "description": "每条已过账的股权激励计提明细：授予、截至计提日的累计成本、以往计提已过账金额以及本次计提过账的变动。"
+        "description": "已过账的股权激励明细：累计确认成本及每次过账的变动。"
       },
       "equity_securities_register": {
         "label": "权益证券登记簿",
-        "description": "按发行时条款列出每份股票凭证、期权、RSU、认股权证、SAFE 和可转换票据：持有人、股份类别、计划、融资轮次、数量、价格和对价。"
+        "description": "按发行时状态列示的每份股票凭证、授予、SAFE 和票据，含持有人、类别和条款。"
       },
       "equity_cap_table_positions": {
         "label": "股权结构表持仓变动",
-        "description": "股票凭证、授予或计划池持仓的每一次变动：按拆股重述的流通股数，以及同一股份折算为普通股的数量。截至某日累计，即为该日的股权结构表。"
+        "description": "股票凭证、授予或计划池持仓的每次变动（拆股重述并折算为普通股）。"
       },
       "ledger_lines": {
         "label": "总账行",
@@ -3364,7 +3364,7 @@
     },
     "equity-cap-table": {
       "name": "指定日期的股权结构表",
-      "description": "根据持仓台账，按股份类别和持有人列示截至 asOf 日期的流通股和完全稀释股份，含授予和计划池。"
+      "description": "截至所选日期，按类别和持有人列示的流通股和完全稀释股份。"
     },
     "ap-aging-by-vendor": {
       "name": "按供应商列示应付账龄",

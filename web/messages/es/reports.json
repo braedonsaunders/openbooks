@@ -738,15 +738,15 @@
     "entities": {
       "equity_compensation_run_lines": {
         "label": "Líneas de ejecuciones de compensación en acciones",
-        "description": "Cada línea contabilizada de una ejecución de compensación en acciones: la adjudicación, su costo acumulado hasta la fecha de la ejecución, el importe contabilizado por ejecuciones anteriores y la variación contabilizada en esta ejecución."
+        "description": "Líneas de compensación en acciones contabilizadas: costo reconocido y el cambio de cada cálculo."
       },
       "equity_securities_register": {
         "label": "Registro de valores de patrimonio",
-        "description": "Cada certificado de acciones, opción, RSU, warrant, SAFE y nota convertible tal como se emitió: titular, clase, plan, ronda, cantidad, precio y contraprestación."
+        "description": "Cada certificado de acciones, adjudicación, SAFE y nota tal como se emitió, con titular, clase y condiciones."
       },
       "equity_cap_table_positions": {
         "label": "Movimientos de posiciones de la tabla de capitalización",
-        "description": "Cada cambio de la posición de un certificado de acciones, una adjudicación o una reserva de plan: acciones en circulación reexpresadas por los desdoblamientos y las mismas acciones convertidas a ordinarias. Sumados hasta una fecha, los movimientos son la tabla de capitalización en esa fecha."
+        "description": "Cada cambio de la posición de un certificado, adjudicación o reserva, reexpresado y convertido."
       },
       "ledger_lines": {
         "label": "Líneas del mayor",
@@ -3344,7 +3344,7 @@
     },
     "equity-cap-table": {
       "name": "Tabla de capitalización a una fecha",
-      "description": "Acciones en circulación y totalmente diluidas por clase de acciones y titular, con adjudicaciones y reservas de planes, a partir del registro de posiciones a la fecha asOf."
+      "description": "Acciones en circulación y totalmente diluidas por clase y titular a la fecha elegida."
     },
     "ap-aging-by-vendor": {
       "name": "Antigüedad de cuentas por pagar por proveedor",

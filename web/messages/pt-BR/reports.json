@@ -738,15 +738,15 @@
     "entities": {
       "equity_compensation_run_lines": {
         "label": "Linhas das execuções de remuneração em ações",
-        "description": "Cada linha lançada de uma execução de remuneração em ações: a outorga, seu custo acumulado até a data da execução, o valor lançado por execuções anteriores e a variação lançada nesta execução."
+        "description": "Linhas de remuneração em ações lançadas: custo reconhecido até a data e a variação de cada execução."
       },
       "equity_securities_register": {
         "label": "Registro de valores mobiliários de patrimônio",
-        "description": "Cada certificado de ações, opção, RSU, warrant, SAFE e nota conversível conforme emitido: titular, classe, plano, rodada, quantidade, preço e contraprestação."
+        "description": "Cada certificado de ações, outorga, SAFE e nota conforme emitidos, com titular, classe e condições."
       },
       "equity_cap_table_positions": {
         "label": "Movimentações de posições da tabela de capitalização",
-        "description": "Cada alteração da posição de um certificado de ações, de uma outorga ou da reserva de um plano: ações em circulação reapresentadas pelos desdobramentos e as mesmas ações convertidas em ordinárias. Somadas até uma data, as movimentações são a tabela de capitalização nessa data."
+        "description": "Cada alteração de posição de certificado, outorga ou reserva, reapresentada e convertida."
       },
       "ledger_lines": {
         "label": "Linhas do razão",
@@ -3364,7 +3364,7 @@
     },
     "equity-cap-table": {
       "name": "Tabela de capitalização em uma data",
-      "description": "Ações em circulação e totalmente diluídas por classe de ações e titular, com outorgas e reservas de planos, a partir do registro de posições na data asOf."
+      "description": "Ações em circulação e totalmente diluídas por classe e titular na data escolhida."
     },
     "ap-aging-by-vendor": {
       "name": "Aging de contas a pagar por fornecedor",

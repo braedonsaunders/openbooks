@@ -4,7 +4,7 @@ import { REPORT_FILTER_OPERATORS } from '@openbooks/reports'
 
 // custom-reports is server-only in production; this suite runs the one pure
 // export it needs with that guard stubbed.
-const { TEMPORAL_OPS, reportPeriodField } = await import('./custom-reports.ts')
+const { TEMPORAL_OPS, reportAsOfField, reportPeriodField } = await import('./custom-reports.ts')
 
 test('every viewer-override temporal op is a real filter operator', () => {
   // E47: a dead 'between' sat in the override set while no compiler or
@@ -22,4 +22,13 @@ test('current-state reports stay complete while explicit and legacy date reports
   assert.equal(reportPeriodField(snapshot), null, 'current project counts must not become a start-date cohort')
   assert.equal(reportPeriodField({ ...snapshot, periodField: 'starts_on' }), 'starts_on')
   assert.equal(reportPeriodField({ entity: 'pay_stubs', columns: [], filters: { combinator: 'and', rules: [{ field: 'pay_date', op: 'period_preset', value: 'this_fiscal_year' }] } }), 'pay_date')
+})
+
+test('a point-in-time source is read as of a date and never acquires a period window on its as-of field', () => {
+  const positions = { entity: 'equity_cap_table_positions', columns: [] }
+  assert.equal(reportAsOfField(positions), 'effective_on')
+  assert.equal(reportPeriodField(positions), null, 'no implicit fiscal window over cumulative movements')
+  assert.equal(reportPeriodField({ ...positions, periodField: 'effective_on' }), null, 'an explicit window on the as-of field is not honored')
+  assert.equal(reportPeriodField({ ...positions, filters: { combinator: 'and', rules: [{ field: 'effective_on', op: 'gte', value: '2026-01-01' }] } }), null)
+  assert.equal(reportAsOfField({ entity: 'pay_stubs', columns: [] }), null, 'period sources keep their period picker')
 })
